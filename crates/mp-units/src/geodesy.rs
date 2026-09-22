@@ -140,6 +140,48 @@ impl LatLon {
     }
 }
 
+/// Web Mercator (EPSG:3857) projected coordinates, normalised to 0..1.
+///
+/// This is the projection every slippy map tile server uses, so a map that draws tiles must work
+/// in it: at zoom `z` the world is `2^z` tiles across, and tile `(x, y)` covers
+/// `[x/2^z, (x+1)/2^z]` of this unit square.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Default)]
+pub struct WebMercator {
+    /// Easting, 0 at 180°W and 1 at 180°E.
+    pub x: f64,
+    /// Northing, 0 at the north edge and 1 at the south edge - y grows downward, matching tile
+    /// and screen coordinates rather than latitude.
+    pub y: f64,
+}
+
+/// The latitude beyond which Web Mercator is not defined, because the projection sends the poles
+/// to infinity. Tile servers clip here and so do we.
+pub const WEB_MERCATOR_MAX_LATITUDE: f64 = 85.051_128_779_806_59;
+
+impl LatLon {
+    /// Projects to Web Mercator, clamping latitude to the projection's limit.
+    #[must_use]
+    pub fn to_web_mercator(self) -> WebMercator {
+        let lat = self
+            .latitude()
+            .clamp(-WEB_MERCATOR_MAX_LATITUDE, WEB_MERCATOR_MAX_LATITUDE);
+        let lat_rad = lat.to_radians();
+        let y = (1.0 - ((lat_rad.tan() + 1.0 / lat_rad.cos()).ln() / std::f64::consts::PI)) / 2.0;
+        WebMercator {
+            x: (self.longitude() + 180.0) / 360.0,
+            y,
+        }
+    }
+
+    /// Inverse of [`LatLon::to_web_mercator`].
+    pub fn from_web_mercator(projected: WebMercator) -> Result<Self, PositionError> {
+        let lon = projected.x.mul_add(360.0, -180.0);
+        let n = std::f64::consts::PI * 2.0f64.mul_add(-projected.y, 1.0);
+        let lat = n.sinh().atan().to_degrees();
+        Self::new(lat, lon)
+    }
+}
+
 /// A position with an altitude.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct LatLonAlt {
@@ -227,6 +269,75 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn web_mercator_anchors_are_exact() {
+        // Null Island is the centre of the unit square.
+        let origin = LatLon::new(0.0, 0.0).expect("valid").to_web_mercator();
+        assert!((origin.x - 0.5).abs() < 1e-12, "x was {}", origin.x);
+        assert!((origin.y - 0.5).abs() < 1e-12, "y was {}", origin.y);
+
+        // The corners of the projected world.
+        let nw = LatLon::new(WEB_MERCATOR_MAX_LATITUDE, -180.0)
+            .expect("valid")
+            .to_web_mercator();
+        assert!(
+            nw.x.abs() < 1e-12 && nw.y.abs() < 1e-9,
+            "north-west was {nw:?}"
+        );
+        let se = LatLon::new(-WEB_MERCATOR_MAX_LATITUDE, 180.0)
+            .expect("valid")
+            .to_web_mercator();
+        assert!(
+            (se.x - 1.0).abs() < 1e-12 && (se.y - 1.0).abs() < 1e-9,
+            "south-east was {se:?}"
+        );
+    }
+
+    #[test]
+    fn web_mercator_y_grows_southward() {
+        // Screen and tile coordinates grow downward; latitude grows upward. Getting this backwards
+        // flips the map vertically, which looks plausible enough to ship.
+        let north = LatLon::new(40.0, 0.0).expect("valid").to_web_mercator();
+        let south = LatLon::new(-40.0, 0.0).expect("valid").to_web_mercator();
+        assert!(
+            north.y < south.y,
+            "north {} should be above south {}",
+            north.y,
+            south.y
+        );
+    }
+
+    #[test]
+    fn web_mercator_round_trips() {
+        for (lat, lon) in [
+            (0.0, 0.0),
+            (-35.363_262, 149.165_237),
+            (51.477_9, -0.001_5),
+            (-33.868_8, 151.209_3),
+            (78.0, -170.0),
+        ] {
+            let original = LatLon::new(lat, lon).expect("valid");
+            let back = LatLon::from_web_mercator(original.to_web_mercator()).expect("valid");
+            assert!(
+                (back.latitude() - lat).abs() < 1e-9,
+                "latitude {lat} came back as {}",
+                back.latitude()
+            );
+            assert!(
+                (back.longitude() - lon).abs() < 1e-9,
+                "longitude {lon} came back as {}",
+                back.longitude()
+            );
+        }
+    }
+
+    #[test]
+    fn web_mercator_clamps_the_poles_rather_than_producing_infinity() {
+        let pole = LatLon::new(90.0, 0.0).expect("valid").to_web_mercator();
+        assert!(pole.y.is_finite(), "the north pole projected to {}", pole.y);
+        assert!((0.0..=1.0).contains(&pole.y));
     }
 
     #[test]

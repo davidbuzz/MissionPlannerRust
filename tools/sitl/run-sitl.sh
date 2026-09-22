@@ -24,5 +24,13 @@ WORK="${SITL_WORKDIR:-$(mktemp -d -t mp-sitl-XXXXXX)}"
 mkdir -p "$WORK"
 cd "$WORK"
 
-echo "SITL $VEHICLE in $WORK, listening on tcp:127.0.0.1:5760"
-exec "$BIN" --model "$MODEL" --speedup 1 --defaults "$PARAMS" "$@"
+# SITL serves exactly one TCP client on SERIAL0 (tcp:5760). SITL_EXTRA_OUT adds a second link on
+# SERIAL1 so a GUI can watch while a script flies the vehicle.
+#
+# Note this is the *binary's* flag, not sim_vehicle.py's: `--out` belongs to MAVProxy and makes
+# the binary print its usage and exit. Device strings look like `udpclient:127.0.0.1:14550`.
+EXTRA=()
+[ -n "${SITL_EXTRA_OUT:-}" ] && EXTRA=(--serial1 "$SITL_EXTRA_OUT")
+
+echo "SITL $VEHICLE in $WORK, listening on tcp:127.0.0.1:5760 (speedup ${SITL_SPEEDUP:-1})"
+exec "$BIN" --model "$MODEL" --speedup "${SITL_SPEEDUP:-1}" --defaults "$PARAMS" "${EXTRA[@]}" "$@"

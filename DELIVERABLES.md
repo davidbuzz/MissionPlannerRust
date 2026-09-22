@@ -30,7 +30,7 @@ Reference clone: [referneces/zed](referneces/zed).
 | [D13](#d13-initial-setup-calibration-and-firmware) | 2 | Setup, calibration, firmware flashing | P1 | Not started | Not started |
 | [D14](#d14-log-engine-and-analysis) | 2 | Dataflash log parsing, plots | P1 | Not started | Not started |
 | [D15](#d15-can-peripherals-and-outboard-features) | 2 | DroneCAN, peripherals, video, joystick | P2 | Not started | Not started |
-| [D16](#d16-extension-and-scripting-system) | 2 | WASM extensions and scripting | P2 | Not started | Not started |
+| [D16](#d16-extension-and-scripting-system) | 2 | Python scripting, WASM extensions | P2 | Not started | Not started |
 | [D17](#d17-localization-settings-and-data-compatibility) | 2 | i18n, settings, data compatibility | P1 | Not started | Not started |
 | [D18](#d18-translation-factory-and-porting-ledger) | 3 | Translation factory, file ledger | P0 | In progress | Unit |
 | [D19](#d19-verification-suite) | 3 | Differential, SITL, fuzz verification | P0 | In progress | Differential vs C# |

@@ -18,8 +18,9 @@
 use std::time::{Duration, Instant};
 
 use gpui::{
-    App, Bounds, Hsla, Path, PathBuilder, Pixels, Window, canvas, point, px, quad, rgb, size,
+    App, Bounds, Hsla, Path, PathBuilder, Pixels, Point, Window, canvas, point, px, quad, rgb, size,
 };
+use mp_units::{Bearing, LatLon, WebMercator};
 
 /// A synthetic flight track and the state needed to draw it.
 pub struct MapViewport {
@@ -49,6 +50,12 @@ pub struct MapViewport {
     phases: [Duration; 4],
     /// Points actually submitted after decimation.
     drawn_points: usize,
+    /// The vehicle's flight path in projected world coordinates.
+    path: Vec<WebMercator>,
+    /// Where the vehicle is now, and which way it is pointing.
+    vehicle: Option<(WebMercator, Bearing)>,
+    /// The home point, once the vehicle reports one.
+    home: Option<WebMercator>,
 }
 
 /// Tiles across and down. 8x6 at 256px covers a 2048x1536 viewport.
@@ -125,6 +132,9 @@ impl MapViewport {
             used_cache: false,
             phases: [Duration::ZERO; 4],
             drawn_points: 0,
+            path: Vec::new(),
+            vehicle: None,
+            home: None,
         }
     }
 
@@ -171,8 +181,9 @@ impl MapViewport {
         self.track_path_failures
     }
 
-    /// Whether the last paint reused cached tessellation.
+    /// Whether the last paint reused cached tessellation. Used by the synthetic benchmark path.
     #[must_use]
+    #[allow(dead_code)]
     pub const fn used_cache(&self) -> bool {
         self.used_cache
     }
@@ -194,6 +205,64 @@ impl MapViewport {
         self.drawn_points
     }
 
+    /// Records where the vehicle is.
+    ///
+    /// Positions are appended to the flight path only when the vehicle has actually moved. A
+    /// hovering aircraft reports its position several times a second, and storing every report
+    /// would grow the path without drawing anything new.
+    pub fn observe(&mut self, position: LatLon, heading: Bearing) {
+        let projected = position.to_web_mercator();
+        self.vehicle = Some((projected, heading));
+
+        // A world-space threshold of 1e-8 is roughly a metre near the equator - small enough to
+        // trace a taxi, large enough to reject GPS jitter on a stationary vehicle.
+        const MOVED: f64 = 1e-8;
+        let moved = self.path.last().is_none_or(|last| {
+            (last.x - projected.x).abs() > MOVED || (last.y - projected.y).abs() > MOVED
+        });
+        if moved {
+            self.path.push(projected);
+        }
+    }
+
+    /// Records the home point.
+    pub fn set_home(&mut self, home: LatLon) {
+        self.home = Some(home.to_web_mercator());
+    }
+
+    /// Points in the recorded flight path.
+    #[must_use]
+    pub fn path_len(&self) -> usize {
+        self.path.len()
+    }
+
+    /// Whether anything real has been observed yet.
+    #[must_use]
+    pub const fn has_fix(&self) -> bool {
+        self.vehicle.is_some()
+    }
+
+    /// The world-space rectangle to display: everything observed, with margin, never narrower
+    /// than a minimum span so a stationary vehicle does not zoom to infinity.
+    fn view_box(&self) -> Option<(f64, f64, f64, f64)> {
+        let mut points = self.path.iter().chain(self.home.iter());
+        let first = points.next().or(self.vehicle.as_ref().map(|(p, _)| p))?;
+        let (mut min_x, mut max_x) = (first.x, first.x);
+        let (mut min_y, mut max_y) = (first.y, first.y);
+        for p in points.chain(self.vehicle.as_ref().map(|(p, _)| p)) {
+            min_x = min_x.min(p.x);
+            max_x = max_x.max(p.x);
+            min_y = min_y.min(p.y);
+            max_y = max_y.max(p.y);
+        }
+
+        // About 400 m at the equator; enough context around a parked aircraft to be useful.
+        const MIN_SPAN: f64 = 3.5e-6;
+        let span = (max_x - min_x).max(max_y - min_y).max(MIN_SPAN) * 1.25;
+        let (cx, cy) = ((min_x + max_x) / 2.0, (min_y + max_y) / 2.0);
+        Some((cx - span / 2.0, cy - span / 2.0, span, span))
+    }
+
     fn record(&mut self, elapsed: Duration) {
         self.paints += 1;
         // Ignore the first few paints: shader compilation and atlas warm-up are one-off costs
@@ -208,6 +277,150 @@ impl MapViewport {
             (self.paint_ema * 7 + elapsed) / 8
         };
     }
+}
+
+/// Paints the live map: the vehicle's real flight path, home, and the vehicle itself.
+///
+/// Screen mapping goes through Web Mercator, the projection tile servers use, so the same
+/// transform will place raster tiles when D8 adds them.
+fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window) {
+    let started = Instant::now();
+    let origin = bounds.origin;
+    let w = f32::from(bounds.size.width);
+    let h = f32::from(bounds.size.height);
+
+    let Some((vx, vy, vw, vh)) = map.view_box() else {
+        return;
+    };
+    // Projection maths is f64 because Web Mercator near the poles needs the range; screen
+    // coordinates are f32 because that is what the renderer takes. The narrowing is deliberate
+    // and happens once, here, rather than being scattered through the painter.
+    #[allow(clippy::cast_possible_truncation)]
+    let to_screen = |p: WebMercator| -> Point<Pixels> {
+        point(
+            origin.x + px(((p.x - vx) / vw) as f32 * w),
+            origin.y + px(((p.y - vy) / vh) as f32 * h),
+        )
+    };
+
+    // Graticule, standing in for raster tiles until the tile pipeline exists.
+    let phase_tiles = Instant::now();
+    let tile_w = w / TILE_COLS as f32;
+    let tile_h = h / TILE_ROWS as f32;
+    for row in 0..TILE_ROWS {
+        for col in 0..TILE_COLS {
+            let shade = if (row + col) % 2 == 0 {
+                0x20_2a_33
+            } else {
+                0x1c_25_2d
+            };
+            window.paint_quad(quad(
+                Bounds {
+                    origin: point(
+                        origin.x + px(col as f32 * tile_w),
+                        origin.y + px(row as f32 * tile_h),
+                    ),
+                    size: size(px(tile_w), px(tile_h)),
+                },
+                gpui::Corners::default(),
+                rgb(shade),
+                gpui::Edges::default(),
+                rgb(0x00_00_00),
+                gpui::BorderStyle::default(),
+            ));
+        }
+    }
+    map.phases[0] = phase_tiles.elapsed();
+
+    // The flown path. Decimated to screen resolution for the reasons measured in ADR 0001, and
+    // chunked because a gpui path holds at most 65,535 vertices.
+    map.track_paths = 0;
+    map.track_path_failures = 0;
+    map.drawn_points = 0;
+    if map.path.len() > 1 {
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let budget = (w * POINTS_PER_PIXEL).clamp(2.0, 1_000_000.0) as usize;
+        let stride = map.path.len().div_ceil(budget).max(1);
+        let mut screen: Vec<Point<Pixels>> = map
+            .path
+            .iter()
+            .step_by(stride)
+            .map(|p| to_screen(*p))
+            .collect();
+        // Keep the newest position so the track always reaches the vehicle - but only if
+        // decimation actually dropped it, or the last point gets drawn twice.
+        if !map.path.len().saturating_sub(1).is_multiple_of(stride)
+            && let Some(last) = map.path.last()
+        {
+            screen.push(to_screen(*last));
+        }
+        map.drawn_points = screen.len();
+
+        let submit = Instant::now();
+        for chunk in screen.chunks(TRACK_CHUNK) {
+            if chunk.len() < 2 {
+                continue;
+            }
+            let mut builder = PathBuilder::stroke(px(2.0));
+            let mut points = chunk.iter();
+            if let Some(first) = points.next() {
+                builder.move_to(*first);
+            }
+            for p in points {
+                builder.line_to(*p);
+            }
+            match builder.build() {
+                Ok(path) => {
+                    map.track_paths += 1;
+                    window.paint_path(path, Hsla::from(rgb(0x3f_b9_50)));
+                }
+                Err(_) => map.track_path_failures += 1,
+            }
+        }
+        map.phases[2] = submit.elapsed();
+    }
+
+    // Home.
+    if let Some(home) = map.home {
+        let at = to_screen(home);
+        window.paint_quad(quad(
+            Bounds {
+                origin: point(at.x - px(5.0), at.y - px(5.0)),
+                size: size(px(10.0), px(10.0)),
+            },
+            gpui::Corners::all(px(2.0)),
+            rgb(0x58_a6_ff),
+            gpui::Edges::all(px(1.0)),
+            rgb(0xe6_ed_f3),
+            gpui::BorderStyle::Solid,
+        ));
+    }
+
+    // The vehicle, as an arrow pointing where it is heading. Bearing is clockwise from north and
+    // screen y grows downward, so north is -y and east is +x.
+    let phase_vehicle = Instant::now();
+    if let Some((position, heading)) = map.vehicle {
+        let at = to_screen(position);
+        #[allow(clippy::cast_possible_truncation)]
+        let theta = (heading.degrees() as f32).to_radians();
+        let arm = |angle_deg: f32, radius: f32| -> Point<Pixels> {
+            let a = theta + angle_deg.to_radians();
+            point(at.x + px(a.sin() * radius), at.y - px(a.cos() * radius))
+        };
+
+        let mut nose = PathBuilder::fill();
+        nose.move_to(arm(0.0, 12.0));
+        nose.line_to(arm(140.0, 9.0));
+        nose.line_to(arm(180.0, 3.0));
+        nose.line_to(arm(-140.0, 9.0));
+        nose.line_to(arm(0.0, 12.0));
+        if let Ok(path) = nose.build() {
+            window.paint_path(path, Hsla::from(rgb(0xf8_51_49)));
+        }
+    }
+    map.phases[3] = phase_vehicle.elapsed();
+
+    map.record(started.elapsed());
 }
 
 /// Paints one frame of the map into `bounds`.
@@ -385,7 +598,14 @@ pub fn map_element(map: std::rc::Rc<std::cell::RefCell<MapViewport>>) -> impl gp
     canvas(
         |_bounds, _window, _cx| (),
         move |bounds: Bounds<Pixels>, (), window: &mut Window, _cx: &mut App| {
-            paint_map(&mut map.borrow_mut(), bounds, window);
+            let mut map = map.borrow_mut();
+            // The synthetic 100k-point scene stays available for benchmarking the renderer;
+            // MP_MAP_DEMO=1 selects it. Everything else draws the real vehicle.
+            if std::env::var("MP_MAP_DEMO").is_ok() || !map.has_fix() {
+                paint_map(&mut map, bounds, window);
+            } else {
+                paint_live(&mut map, bounds, window);
+            }
         },
     )
     .size_full()

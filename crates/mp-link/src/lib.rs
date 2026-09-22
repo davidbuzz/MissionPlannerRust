@@ -110,6 +110,10 @@ pub struct LinkStats {
 /// Shared between the link thread and its owners.
 #[derive(Debug, Default)]
 struct Shared {
+    /// How the transport describes itself *now*. A UDP link learns its peer from the first
+    /// datagram, so a description captured at connect time says "no peer yet" for the rest of the
+    /// session - which is exactly wrong on the one screen a pilot looks at.
+    description: Mutex<String>,
     handles: Mutex<BTreeMap<VehicleId, StateHandle>>,
     stats: Mutex<LinkStats>,
     running: AtomicBool,
@@ -139,6 +143,11 @@ impl Link {
         let shared = Arc::new(Shared::default());
         shared.running.store(true, Ordering::Release);
         let description = transport.description();
+        shared
+            .description
+            .lock()
+            .map(|mut d| *d = description.clone())
+            .unwrap_or(());
         let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
 
         let thread_shared = Arc::clone(&shared);
@@ -233,10 +242,14 @@ impl Link {
             .is_some_and(|bytes| self.outbound.send(bytes.to_vec()).is_ok())
     }
 
-    /// How the link describes itself, e.g. `udp:0.0.0.0:14550 <-> 127.0.0.1:52341`.
+    /// How the link describes itself right now, e.g. `udp:0.0.0.0:14550 <-> 127.0.0.1:52341`.
     #[must_use]
-    pub fn description(&self) -> &str {
-        &self.description
+    pub fn description(&self) -> String {
+        self.shared
+            .description
+            .lock()
+            .map(|d| d.clone())
+            .unwrap_or_else(|_| self.description.clone())
     }
 
     /// Stops the link thread and waits for it.
@@ -357,6 +370,12 @@ fn run_link(
         // one state per frame, so per-packet publishing is pure overhead.
         if last_publish.elapsed() >= config.publish_interval {
             registry.publish_all();
+            if let Ok(mut description) = shared.description.lock() {
+                let current = transport.description();
+                if *description != current {
+                    *description = current;
+                }
+            }
             stats.publishes += 1;
             last_publish = Instant::now();
 

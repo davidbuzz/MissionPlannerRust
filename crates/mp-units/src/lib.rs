@@ -15,7 +15,7 @@
 
 pub mod geodesy;
 
-pub use geodesy::{Bearing, LatLon, LatLonAlt, PositionError};
+pub use geodesy::{Bearing, LatLon, LatLonAlt, PositionError, WebMercator};
 
 /// Angle in degrees.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Default)]

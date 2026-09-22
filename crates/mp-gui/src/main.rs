@@ -265,6 +265,18 @@ impl Render for MissionPlanner {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         let view = self.telemetry.view();
 
+        // Feed the map from the same snapshot the panels read, so the two can never disagree
+        // about where the vehicle is.
+        if let Some(state) = view.state.as_ref() {
+            let mut map = self.map.borrow_mut();
+            if let Some(position) = state.position {
+                map.observe(position, state.heading);
+            }
+            if let Some(home) = state.home {
+                map.set_home(home);
+            }
+        }
+
         let (status, status_colour) = if let Some(err) = self.telemetry.error() {
             (format!("link failed: {err}"), theme::ALERT)
         } else if !view.connected && view.target.is_empty() {
@@ -288,21 +300,26 @@ impl Render for MissionPlanner {
 
         let map_stats = {
             let map = self.map.borrow();
-            format!(
-                "map: {} track points in {} paths ({} refused), {} markers  -  paint {:.2} ms avg, {:.2} ms worst over {} frames  -  tessellation {}",
-                map.track_len(),
-                map.track_paths(),
-                map.track_path_failures(),
-                map.marker_len(),
-                map.paint_ema().as_secs_f64() * 1000.0,
-                map.paint_worst().as_secs_f64() * 1000.0,
-                map.paints(),
-                if map.used_cache() {
-                    "cached"
-                } else {
-                    "per-frame"
-                },
-            )
+            if map.has_fix() {
+                format!(
+                    "flight path: {} points recorded, {} drawn in {} path(s), {} refused  -  paint {:.2} ms avg, {:.2} ms worst over {} frames",
+                    map.path_len(),
+                    map.drawn_points(),
+                    map.track_paths(),
+                    map.track_path_failures(),
+                    map.paint_ema().as_secs_f64() * 1000.0,
+                    map.paint_worst().as_secs_f64() * 1000.0,
+                    map.paints(),
+                )
+            } else {
+                format!(
+                    "no position yet  -  synthetic scene: {} points, {} markers  -  paint {:.2} ms avg over {} frames",
+                    map.track_len(),
+                    map.marker_len(),
+                    map.paint_ema().as_secs_f64() * 1000.0,
+                    map.paints(),
+                )
+            }
         };
 
         let vehicle_label = view
