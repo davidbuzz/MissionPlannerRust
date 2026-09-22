@@ -15,6 +15,12 @@ existed. Once it left the map's stats line describing a synthetic scene while cl
 a real flight, which is a worse failure than a compile error because it produces confident wrong
 output.
 
-**How to apply:** after a replace, assert the string changed (`assert s2 != s`), or replace by line
-range located at runtime rather than by literal text. Prefer the Edit tool, which fails loudly when
-`old_string` is absent. Be especially careful immediately after running `cargo fmt`.
+**How to apply:** prefer the **Edit tool**, which fails loudly when `old_string` is absent. When
+scripting, assert every replacement changed something (`assert s2 != s`) and assert the *count* when
+making several, because a loop that `break`s early silently skips the rest — that variant cost a
+commit too. Be especially careful immediately after `cargo fmt`, which is when the text most often
+stops matching.
+
+**And verify before committing, not after.** Three commits went out with lints because the check ran
+in the same command chain as the commit, so a failed edit still reached git. Run clippy and the
+tests, look at the numbers, *then* commit.
