@@ -22,6 +22,7 @@ fn run() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("verify-mavlink") => verify_mavlink(args.get(1).map(String::as_str)),
+        Some("dump-tlog") => dump_tlog(args.get(1).map(String::as_str)),
         Some("codegen") => {
             let check = args.iter().any(|a| a == "--check");
             let dialect = args
@@ -47,6 +48,7 @@ fn usage() {
         "cargo xtask <command>\n\n\
          commands:\n  \
          codegen [dialect]         regenerate the MAVLink dialect crate from the XML definitions\n  \
+         dump-tlog <file>          decode a tlog and print the same CSV the C# reference emits\n  \
          verify-mavlink [dialect]  check generated MAVLink metadata against the C# reference\n  \
          help                      show this message"
     );
@@ -205,5 +207,64 @@ fn codegen_mavlink(dialect: Option<&str>, check_only: bool) -> Result<()> {
         parsed.enums.len(),
         source.len() / 1024
     );
+    Ok(())
+}
+
+/// Decodes a tlog and prints the same CSV shape `MpRefDump tlog` produces, so the two can be
+/// diffed line by line when they disagree.
+fn dump_tlog(path: Option<&str>) -> Result<()> {
+    use mp_mavlink::parse;
+
+    let path = path.context("usage: cargo xtask dump-tlog <file.tlog>")?;
+    let log = std::fs::read(path).with_context(|| format!("reading {path}"))?;
+    let dialect = &mp_mavlink_dialects::all::DIALECT;
+
+    println!("index,msgid,seq,sysid,compid,payload_len,crc16,frame_hex");
+
+    const MAX_SCAN: usize = 280;
+    let mut pos = 0usize;
+    let mut index = 0u64;
+    while pos + 8 <= log.len() {
+        pos += 8;
+        let mut scan = pos;
+        let limit = (pos + MAX_SCAN).min(log.len());
+        while scan < limit
+            && log.get(scan) != Some(&mp_mavlink::STX_V2)
+            && log.get(scan) != Some(&mp_mavlink::STX_V1)
+        {
+            scan += 1;
+        }
+        if scan >= limit {
+            if limit <= pos {
+                break;
+            }
+            pos = limit;
+            continue;
+        }
+        let Some(window) = log.get(scan..) else { break };
+        match parse(window, dialect) {
+            Ok((frame, used)) => {
+                let hex: String = frame
+                    .raw
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<Vec<_>>()
+                    .join("");
+                println!(
+                    "{index},{},{},{},{},{},{},{hex}",
+                    frame.msgid,
+                    frame.seq,
+                    frame.sysid,
+                    frame.compid,
+                    frame.payload.len(),
+                    frame.checksum
+                );
+                pos = scan + used;
+                index += 1;
+            }
+            Err(_) => pos = scan + 1,
+        }
+    }
+    eprintln!("# frames={index}");
     Ok(())
 }

@@ -12,6 +12,7 @@
 #![allow(clippy::struct_excessive_bools)]
 
 use mp_mavlink::dialect::{MessageInfo, StaticDialect};
+use mp_mavlink::field::FieldValue;
 use mp_mavlink::message::Message;
 use mp_mavlink::payload::{
     get_f32, get_f64, get_i8, get_i16, get_i32, get_i64, get_u8, get_u16, get_u32, get_u64,
@@ -8408,6 +8409,27 @@ impl Message for Heartbeat {
     }
 }
 
+impl Heartbeat {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("custom_mode", FieldValue::Unsigned(self.custom_mode.into())),
+            ("type", FieldValue::Unsigned(self.r#type.into())),
+            ("autopilot", FieldValue::Unsigned(self.autopilot.into())),
+            ("base_mode", FieldValue::Unsigned(self.base_mode.into())),
+            (
+                "system_status",
+                FieldValue::Unsigned(self.system_status.into()),
+            ),
+            (
+                "mavlink_version",
+                FieldValue::Unsigned(self.mavlink_version.into()),
+            ),
+        ]
+    }
+}
+
 /// The general system state. If the system is following the MAVLink standard, the system state is mainly defined by three orthogonal states/modes: The system mode, which is either LOCKED (motors shut down and locked), MANUAL (system under RC control), GUIDED (system with autonomous position control, position setpoint controlled manually) or AUTO (system guided by path/waypoint planner). The NAV_MODE defined the current flight state: LIFTOFF (often an open-loop maneuver), LANDING, WAYPOINTS or VECTOR. This represents the internal navigation state machine. The system status shows whether the system is currently active or not and if an emergency occurred. During the CRITICAL and EMERGENCY states the MAV is still considered to be active, but should start emergency procedures autonomously. After a failure occurred it should first move from active to critical to allow manual intervention and then move to emergency after a certain timeout.
 ///
 /// MAVLink message 1 (`SYS_STATUS`), from `common.xml`.
@@ -8487,6 +8509,61 @@ impl Message for SysStatus {
     }
 }
 
+impl SysStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "onboard_control_sensors_present",
+                FieldValue::Unsigned(self.onboard_control_sensors_present.into()),
+            ),
+            (
+                "onboard_control_sensors_enabled",
+                FieldValue::Unsigned(self.onboard_control_sensors_enabled.into()),
+            ),
+            (
+                "onboard_control_sensors_health",
+                FieldValue::Unsigned(self.onboard_control_sensors_health.into()),
+            ),
+            ("load", FieldValue::Unsigned(self.load.into())),
+            (
+                "voltage_battery",
+                FieldValue::Unsigned(self.voltage_battery.into()),
+            ),
+            (
+                "current_battery",
+                FieldValue::Signed(self.current_battery.into()),
+            ),
+            (
+                "drop_rate_comm",
+                FieldValue::Unsigned(self.drop_rate_comm.into()),
+            ),
+            ("errors_comm", FieldValue::Unsigned(self.errors_comm.into())),
+            (
+                "errors_count1",
+                FieldValue::Unsigned(self.errors_count1.into()),
+            ),
+            (
+                "errors_count2",
+                FieldValue::Unsigned(self.errors_count2.into()),
+            ),
+            (
+                "errors_count3",
+                FieldValue::Unsigned(self.errors_count3.into()),
+            ),
+            (
+                "errors_count4",
+                FieldValue::Unsigned(self.errors_count4.into()),
+            ),
+            (
+                "battery_remaining",
+                FieldValue::Signed(self.battery_remaining.into()),
+            ),
+        ]
+    }
+}
+
 /// The system time is the time of the master clock, typically the computer clock of the main onboard computer.
 ///
 /// MAVLink message 2 (`SYSTEM_TIME`), from `common.xml`.
@@ -8516,6 +8593,20 @@ impl Message for SystemTime {
         put_bytes(out, 0, &self.time_unix_usec.to_le_bytes());
         put_bytes(out, 8, &self.time_boot_ms.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl SystemTime {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_unix_usec", FieldValue::Unsigned(self.time_unix_usec)),
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+        ]
     }
 }
 
@@ -8556,6 +8647,25 @@ impl Message for Ping {
         put_bytes(out, 12, &self.target_system.to_le_bytes());
         put_bytes(out, 13, &self.target_component.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl Ping {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("seq", FieldValue::Unsigned(self.seq.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+        ]
     }
 }
 
@@ -8601,6 +8711,28 @@ impl Message for ChangeOperatorControl {
     }
 }
 
+impl ChangeOperatorControl {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "control_request",
+                FieldValue::Unsigned(self.control_request.into()),
+            ),
+            ("version", FieldValue::Unsigned(self.version.into())),
+            (
+                "passkey",
+                FieldValue::UnsignedArray(self.passkey.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Accept / deny control of this MAV
 ///
 /// MAVLink message 6 (`CHANGE_OPERATOR_CONTROL_ACK`), from `common.xml`.
@@ -8637,6 +8769,24 @@ impl Message for ChangeOperatorControlAck {
     }
 }
 
+impl ChangeOperatorControlAck {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "gcs_system_id",
+                FieldValue::Unsigned(self.gcs_system_id.into()),
+            ),
+            (
+                "control_request",
+                FieldValue::Unsigned(self.control_request.into()),
+            ),
+            ("ack", FieldValue::Unsigned(self.ack.into())),
+        ]
+    }
+}
+
 /// Emit an encrypted signature / key identifying this system. PLEASE NOTE: This protocol has been kept simple, so transmitting the key requires an encrypted channel for true safety.
 ///
 /// MAVLink message 7 (`AUTH_KEY`), from `common.xml`.
@@ -8664,6 +8814,17 @@ impl Message for AuthKey {
             put_bytes(out, i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl AuthKey {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![(
+            "key",
+            FieldValue::UnsignedArray(self.key.iter().map(|v| (*v).into()).collect()),
+        )]
     }
 }
 
@@ -8701,6 +8862,21 @@ impl Message for SetMode {
         put_bytes(out, 4, &self.target_system.to_le_bytes());
         put_bytes(out, 5, &self.base_mode.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl SetMode {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("custom_mode", FieldValue::Unsigned(self.custom_mode.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            ("base_mode", FieldValue::Unsigned(self.base_mode.into())),
+        ]
     }
 }
 
@@ -8746,6 +8922,28 @@ impl Message for ParamRequestRead {
     }
 }
 
+impl ParamRequestRead {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("param_index", FieldValue::Signed(self.param_index.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "param_id",
+                FieldValue::UnsignedArray(self.param_id.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Request all parameters of this component. After this request, all parameters are emitted. The parameter microservice is documented at https://mavlink.io/en/services/parameter.html
 ///
 /// MAVLink message 21 (`PARAM_REQUEST_LIST`), from `common.xml`.
@@ -8775,6 +8973,23 @@ impl Message for ParamRequestList {
         put_bytes(out, 0, &self.target_system.to_le_bytes());
         put_bytes(out, 1, &self.target_component.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl ParamRequestList {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+        ]
     }
 }
 
@@ -8825,6 +9040,23 @@ impl Message for ParamValue {
     }
 }
 
+impl ParamValue {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("param_value", FieldValue::Float(self.param_value.into())),
+            ("param_count", FieldValue::Unsigned(self.param_count.into())),
+            ("param_index", FieldValue::Unsigned(self.param_index.into())),
+            (
+                "param_id",
+                FieldValue::UnsignedArray(self.param_id.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("param_type", FieldValue::Unsigned(self.param_type.into())),
+        ]
+    }
+}
+
 /// Set a parameter value (write new value to permanent storage). The receiving component should acknowledge the new parameter value by broadcasting a PARAM_VALUE message (broadcasting ensures that multiple GCS all have an up-to-date list of all parameters). If the sending GCS did not receive a PARAM_VALUE within its timeout time, it should re-send the PARAM_SET message. The parameter microservice is documented at https://mavlink.io/en/services/parameter.html.
 ///
 /// MAVLink message 23 (`PARAM_SET`), from `common.xml`.
@@ -8869,6 +9101,29 @@ impl Message for ParamSet {
         }
         put_bytes(out, 22, &self.param_type.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl ParamSet {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("param_value", FieldValue::Float(self.param_value.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "param_id",
+                FieldValue::UnsignedArray(self.param_id.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("param_type", FieldValue::Unsigned(self.param_type.into())),
+        ]
     }
 }
 
@@ -8967,6 +9222,37 @@ impl Message for GpsRawInt {
     }
 }
 
+impl GpsRawInt {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lon", FieldValue::Signed(self.lon.into())),
+            ("alt", FieldValue::Signed(self.alt.into())),
+            ("eph", FieldValue::Unsigned(self.eph.into())),
+            ("epv", FieldValue::Unsigned(self.epv.into())),
+            ("vel", FieldValue::Unsigned(self.vel.into())),
+            ("cog", FieldValue::Unsigned(self.cog.into())),
+            ("fix_type", FieldValue::Unsigned(self.fix_type.into())),
+            (
+                "satellites_visible",
+                FieldValue::Unsigned(self.satellites_visible.into()),
+            ),
+            (
+                "alt_ellipsoid",
+                FieldValue::Signed(self.alt_ellipsoid.into()),
+            ),
+            ("h_acc", FieldValue::Unsigned(self.h_acc.into())),
+            ("v_acc", FieldValue::Unsigned(self.v_acc.into())),
+            ("vel_acc", FieldValue::Unsigned(self.vel_acc.into())),
+            ("hdg_acc", FieldValue::Unsigned(self.hdg_acc.into())),
+            ("yaw", FieldValue::Unsigned(self.yaw.into())),
+        ]
+    }
+}
+
 /// The positioning status, as reported by GPS. This message is intended to display status information about each satellite visible to the receiver. See message GLOBAL_POSITION_INT for the global position estimate. This message can contain information for up to 20 satellites.
 ///
 /// MAVLink message 25 (`GPS_STATUS`), from `common.xml`.
@@ -9022,6 +9308,48 @@ impl Message for GpsStatus {
             put_bytes(out, 81 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl GpsStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "satellites_visible",
+                FieldValue::Unsigned(self.satellites_visible.into()),
+            ),
+            (
+                "satellite_prn",
+                FieldValue::UnsignedArray(self.satellite_prn.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "satellite_used",
+                FieldValue::UnsignedArray(
+                    self.satellite_used.iter().map(|v| (*v).into()).collect(),
+                ),
+            ),
+            (
+                "satellite_elevation",
+                FieldValue::UnsignedArray(
+                    self.satellite_elevation
+                        .iter()
+                        .map(|v| (*v).into())
+                        .collect(),
+                ),
+            ),
+            (
+                "satellite_azimuth",
+                FieldValue::UnsignedArray(
+                    self.satellite_azimuth.iter().map(|v| (*v).into()).collect(),
+                ),
+            ),
+            (
+                "satellite_snr",
+                FieldValue::UnsignedArray(self.satellite_snr.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -9091,6 +9419,29 @@ impl Message for ScaledImu {
         put_bytes(out, 20, &self.zmag.to_le_bytes());
         put_bytes(out, 22, &self.temperature.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl ScaledImu {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("xacc", FieldValue::Signed(self.xacc.into())),
+            ("yacc", FieldValue::Signed(self.yacc.into())),
+            ("zacc", FieldValue::Signed(self.zacc.into())),
+            ("xgyro", FieldValue::Signed(self.xgyro.into())),
+            ("ygyro", FieldValue::Signed(self.ygyro.into())),
+            ("zgyro", FieldValue::Signed(self.zgyro.into())),
+            ("xmag", FieldValue::Signed(self.xmag.into())),
+            ("ymag", FieldValue::Signed(self.ymag.into())),
+            ("zmag", FieldValue::Signed(self.zmag.into())),
+            ("temperature", FieldValue::Signed(self.temperature.into())),
+        ]
     }
 }
 
@@ -9168,6 +9519,27 @@ impl Message for RawImu {
     }
 }
 
+impl RawImu {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("xacc", FieldValue::Signed(self.xacc.into())),
+            ("yacc", FieldValue::Signed(self.yacc.into())),
+            ("zacc", FieldValue::Signed(self.zacc.into())),
+            ("xgyro", FieldValue::Signed(self.xgyro.into())),
+            ("ygyro", FieldValue::Signed(self.ygyro.into())),
+            ("zgyro", FieldValue::Signed(self.zgyro.into())),
+            ("xmag", FieldValue::Signed(self.xmag.into())),
+            ("ymag", FieldValue::Signed(self.ymag.into())),
+            ("zmag", FieldValue::Signed(self.zmag.into())),
+            ("id", FieldValue::Unsigned(self.id.into())),
+            ("temperature", FieldValue::Signed(self.temperature.into())),
+        ]
+    }
+}
+
 /// The RAW pressure readings for the typical setup of one absolute pressure and one differential pressure sensor. The sensor values should be the raw, UNSCALED ADC values.
 ///
 /// MAVLink message 28 (`RAW_PRESSURE`), from `common.xml`.
@@ -9209,6 +9581,20 @@ impl Message for RawPressure {
         put_bytes(out, 12, &self.press_diff2.to_le_bytes());
         put_bytes(out, 14, &self.temperature.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl RawPressure {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("press_abs", FieldValue::Signed(self.press_abs.into())),
+            ("press_diff1", FieldValue::Signed(self.press_diff1.into())),
+            ("press_diff2", FieldValue::Signed(self.press_diff2.into())),
+            ("temperature", FieldValue::Signed(self.temperature.into())),
+        ]
     }
 }
 
@@ -9254,6 +9640,26 @@ impl Message for ScaledPressure {
         put_bytes(out, 12, &self.temperature.to_le_bytes());
         put_bytes(out, 14, &self.temperature_press_diff.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl ScaledPressure {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("press_abs", FieldValue::Float(self.press_abs.into())),
+            ("press_diff", FieldValue::Float(self.press_diff.into())),
+            ("temperature", FieldValue::Signed(self.temperature.into())),
+            (
+                "temperature_press_diff",
+                FieldValue::Signed(self.temperature_press_diff.into()),
+            ),
+        ]
     }
 }
 
@@ -9306,6 +9712,25 @@ impl Message for Attitude {
         put_bytes(out, 20, &self.pitchspeed.to_le_bytes());
         put_bytes(out, 24, &self.yawspeed.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl Attitude {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("roll", FieldValue::Float(self.roll.into())),
+            ("pitch", FieldValue::Float(self.pitch.into())),
+            ("yaw", FieldValue::Float(self.yaw.into())),
+            ("rollspeed", FieldValue::Float(self.rollspeed.into())),
+            ("pitchspeed", FieldValue::Float(self.pitchspeed.into())),
+            ("yawspeed", FieldValue::Float(self.yawspeed.into())),
+        ]
     }
 }
 
@@ -9372,6 +9797,30 @@ impl Message for AttitudeQuaternion {
     }
 }
 
+impl AttitudeQuaternion {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("q1", FieldValue::Float(self.q1.into())),
+            ("q2", FieldValue::Float(self.q2.into())),
+            ("q3", FieldValue::Float(self.q3.into())),
+            ("q4", FieldValue::Float(self.q4.into())),
+            ("rollspeed", FieldValue::Float(self.rollspeed.into())),
+            ("pitchspeed", FieldValue::Float(self.pitchspeed.into())),
+            ("yawspeed", FieldValue::Float(self.yawspeed.into())),
+            (
+                "repr_offset_q",
+                FieldValue::FloatArray(self.repr_offset_q.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// The filtered local position (e.g. fused computer vision and accelerometers). Coordinate frame is right-handed, Z-axis down (aeronautical frame, NED / north-east-down convention)
 ///
 /// MAVLink message 32 (`LOCAL_POSITION_NED`), from `common.xml`.
@@ -9421,6 +9870,25 @@ impl Message for LocalPositionNed {
         put_bytes(out, 20, &self.vy.to_le_bytes());
         put_bytes(out, 24, &self.vz.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl LocalPositionNed {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("x", FieldValue::Float(self.x.into())),
+            ("y", FieldValue::Float(self.y.into())),
+            ("z", FieldValue::Float(self.z.into())),
+            ("vx", FieldValue::Float(self.vx.into())),
+            ("vy", FieldValue::Float(self.vy.into())),
+            ("vz", FieldValue::Float(self.vz.into())),
+        ]
     }
 }
 
@@ -9481,6 +9949,27 @@ impl Message for GlobalPositionInt {
         put_bytes(out, 24, &self.vz.to_le_bytes());
         put_bytes(out, 26, &self.hdg.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl GlobalPositionInt {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lon", FieldValue::Signed(self.lon.into())),
+            ("alt", FieldValue::Signed(self.alt.into())),
+            ("relative_alt", FieldValue::Signed(self.relative_alt.into())),
+            ("vx", FieldValue::Signed(self.vx.into())),
+            ("vy", FieldValue::Signed(self.vy.into())),
+            ("vz", FieldValue::Signed(self.vz.into())),
+            ("hdg", FieldValue::Unsigned(self.hdg.into())),
+        ]
     }
 }
 
@@ -9552,6 +10041,29 @@ impl Message for RcChannelsScaled {
     }
 }
 
+impl RcChannelsScaled {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("chan1_scaled", FieldValue::Signed(self.chan1_scaled.into())),
+            ("chan2_scaled", FieldValue::Signed(self.chan2_scaled.into())),
+            ("chan3_scaled", FieldValue::Signed(self.chan3_scaled.into())),
+            ("chan4_scaled", FieldValue::Signed(self.chan4_scaled.into())),
+            ("chan5_scaled", FieldValue::Signed(self.chan5_scaled.into())),
+            ("chan6_scaled", FieldValue::Signed(self.chan6_scaled.into())),
+            ("chan7_scaled", FieldValue::Signed(self.chan7_scaled.into())),
+            ("chan8_scaled", FieldValue::Signed(self.chan8_scaled.into())),
+            ("port", FieldValue::Unsigned(self.port.into())),
+            ("rssi", FieldValue::Unsigned(self.rssi.into())),
+        ]
+    }
+}
+
 /// The RAW values of the RC channels received. The standard PPM modulation is as follows: 1000 microseconds: 0%, 2000 microseconds: 100%. A value of UINT16_MAX implies the channel is unused. Individual receivers/transmitters might violate this specification.
 ///
 /// MAVLink message 35 (`RC_CHANNELS_RAW`), from `common.xml`.
@@ -9617,6 +10129,29 @@ impl Message for RcChannelsRaw {
         put_bytes(out, 20, &self.port.to_le_bytes());
         put_bytes(out, 21, &self.rssi.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl RcChannelsRaw {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("chan1_raw", FieldValue::Unsigned(self.chan1_raw.into())),
+            ("chan2_raw", FieldValue::Unsigned(self.chan2_raw.into())),
+            ("chan3_raw", FieldValue::Unsigned(self.chan3_raw.into())),
+            ("chan4_raw", FieldValue::Unsigned(self.chan4_raw.into())),
+            ("chan5_raw", FieldValue::Unsigned(self.chan5_raw.into())),
+            ("chan6_raw", FieldValue::Unsigned(self.chan6_raw.into())),
+            ("chan7_raw", FieldValue::Unsigned(self.chan7_raw.into())),
+            ("chan8_raw", FieldValue::Unsigned(self.chan8_raw.into())),
+            ("port", FieldValue::Unsigned(self.port.into())),
+            ("rssi", FieldValue::Unsigned(self.rssi.into())),
+        ]
     }
 }
 
@@ -9724,6 +10259,33 @@ impl Message for ServoOutputRaw {
     }
 }
 
+impl ServoOutputRaw {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec.into())),
+            ("servo1_raw", FieldValue::Unsigned(self.servo1_raw.into())),
+            ("servo2_raw", FieldValue::Unsigned(self.servo2_raw.into())),
+            ("servo3_raw", FieldValue::Unsigned(self.servo3_raw.into())),
+            ("servo4_raw", FieldValue::Unsigned(self.servo4_raw.into())),
+            ("servo5_raw", FieldValue::Unsigned(self.servo5_raw.into())),
+            ("servo6_raw", FieldValue::Unsigned(self.servo6_raw.into())),
+            ("servo7_raw", FieldValue::Unsigned(self.servo7_raw.into())),
+            ("servo8_raw", FieldValue::Unsigned(self.servo8_raw.into())),
+            ("port", FieldValue::Unsigned(self.port.into())),
+            ("servo9_raw", FieldValue::Unsigned(self.servo9_raw.into())),
+            ("servo10_raw", FieldValue::Unsigned(self.servo10_raw.into())),
+            ("servo11_raw", FieldValue::Unsigned(self.servo11_raw.into())),
+            ("servo12_raw", FieldValue::Unsigned(self.servo12_raw.into())),
+            ("servo13_raw", FieldValue::Unsigned(self.servo13_raw.into())),
+            ("servo14_raw", FieldValue::Unsigned(self.servo14_raw.into())),
+            ("servo15_raw", FieldValue::Unsigned(self.servo15_raw.into())),
+            ("servo16_raw", FieldValue::Unsigned(self.servo16_raw.into())),
+        ]
+    }
+}
+
 /// Request a partial list of mission items from the system/component. https://mavlink.io/en/services/mission.html. If start and end index are the same, just send one waypoint.
 ///
 /// MAVLink message 37 (`MISSION_REQUEST_PARTIAL_LIST`), from `common.xml`.
@@ -9770,6 +10332,29 @@ impl Message for MissionRequestPartialList {
     }
 }
 
+impl MissionRequestPartialList {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("start_index", FieldValue::Signed(self.start_index.into())),
+            ("end_index", FieldValue::Signed(self.end_index.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "mission_type",
+                FieldValue::Unsigned(self.mission_type.into()),
+            ),
+        ]
+    }
+}
+
 /// This message is sent to the MAV to write a partial list. If start index == end index, only one item will be transmitted / updated. If the start index is NOT 0 and above the current list size, this request should be REJECTED!
 ///
 /// MAVLink message 38 (`MISSION_WRITE_PARTIAL_LIST`), from `common.xml`.
@@ -9813,6 +10398,29 @@ impl Message for MissionWritePartialList {
         put_bytes(out, 5, &self.target_component.to_le_bytes());
         put_bytes(out, 6, &self.mission_type.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl MissionWritePartialList {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("start_index", FieldValue::Signed(self.start_index.into())),
+            ("end_index", FieldValue::Signed(self.end_index.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "mission_type",
+                FieldValue::Unsigned(self.mission_type.into()),
+            ),
+        ]
     }
 }
 
@@ -9904,6 +10512,42 @@ impl Message for MissionItem {
     }
 }
 
+impl MissionItem {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("param1", FieldValue::Float(self.param1.into())),
+            ("param2", FieldValue::Float(self.param2.into())),
+            ("param3", FieldValue::Float(self.param3.into())),
+            ("param4", FieldValue::Float(self.param4.into())),
+            ("x", FieldValue::Float(self.x.into())),
+            ("y", FieldValue::Float(self.y.into())),
+            ("z", FieldValue::Float(self.z.into())),
+            ("seq", FieldValue::Unsigned(self.seq.into())),
+            ("command", FieldValue::Unsigned(self.command.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("frame", FieldValue::Unsigned(self.frame.into())),
+            ("current", FieldValue::Unsigned(self.current.into())),
+            (
+                "autocontinue",
+                FieldValue::Unsigned(self.autocontinue.into()),
+            ),
+            (
+                "mission_type",
+                FieldValue::Unsigned(self.mission_type.into()),
+            ),
+        ]
+    }
+}
+
 /// Request the information of the mission item with the sequence number seq. The response of the system to this message should be a MISSION_ITEM message. https://mavlink.io/en/services/mission.html
 ///
 /// MAVLink message 40 (`MISSION_REQUEST`), from `common.xml`.
@@ -9946,6 +10590,28 @@ impl Message for MissionRequest {
     }
 }
 
+impl MissionRequest {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("seq", FieldValue::Unsigned(self.seq.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "mission_type",
+                FieldValue::Unsigned(self.mission_type.into()),
+            ),
+        ]
+    }
+}
+
 /// Set the mission item with sequence number seq as current item. This means that the MAV will continue to this mission item on the shortest path (not following the mission items in-between).
 ///
 /// MAVLink message 41 (`MISSION_SET_CURRENT`), from `common.xml`.
@@ -9979,6 +10645,24 @@ impl Message for MissionSetCurrent {
         put_bytes(out, 2, &self.target_system.to_le_bytes());
         put_bytes(out, 3, &self.target_component.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl MissionSetCurrent {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("seq", FieldValue::Unsigned(self.seq.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+        ]
     }
 }
 
@@ -10026,6 +10710,25 @@ impl Message for MissionCurrent {
     }
 }
 
+impl MissionCurrent {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("seq", FieldValue::Unsigned(self.seq.into())),
+            ("total", FieldValue::Unsigned(self.total.into())),
+            (
+                "mission_state",
+                FieldValue::Unsigned(self.mission_state.into()),
+            ),
+            (
+                "mission_mode",
+                FieldValue::Unsigned(self.mission_mode.into()),
+            ),
+        ]
+    }
+}
+
 /// Request the overall list of mission items from the system/component.
 ///
 /// MAVLink message 43 (`MISSION_REQUEST_LIST`), from `common.xml`.
@@ -10061,6 +10764,27 @@ impl Message for MissionRequestList {
         put_bytes(out, 1, &self.target_component.to_le_bytes());
         put_bytes(out, 2, &self.mission_type.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl MissionRequestList {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "mission_type",
+                FieldValue::Unsigned(self.mission_type.into()),
+            ),
+        ]
     }
 }
 
@@ -10106,6 +10830,28 @@ impl Message for MissionCount {
     }
 }
 
+impl MissionCount {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("count", FieldValue::Unsigned(self.count.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "mission_type",
+                FieldValue::Unsigned(self.mission_type.into()),
+            ),
+        ]
+    }
+}
+
 /// Delete all mission items at once.
 ///
 /// MAVLink message 45 (`MISSION_CLEAR_ALL`), from `common.xml`.
@@ -10144,6 +10890,27 @@ impl Message for MissionClearAll {
     }
 }
 
+impl MissionClearAll {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "mission_type",
+                FieldValue::Unsigned(self.mission_type.into()),
+            ),
+        ]
+    }
+}
+
 /// A certain mission item has been reached. The system will either hold this position (or circle on the orbit) or (if the autocontinue on the WP was set) continue to the next waypoint.
 ///
 /// MAVLink message 46 (`MISSION_ITEM_REACHED`), from `common.xml`.
@@ -10169,6 +10936,14 @@ impl Message for MissionItemReached {
     fn encode(&self, out: &mut [u8]) -> usize {
         put_bytes(out, 0, &self.seq.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl MissionItemReached {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![("seq", FieldValue::Unsigned(self.seq.into()))]
     }
 }
 
@@ -10212,6 +10987,28 @@ impl Message for MissionAck {
         put_bytes(out, 2, &self.r#type.to_le_bytes());
         put_bytes(out, 3, &self.mission_type.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl MissionAck {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("type", FieldValue::Unsigned(self.r#type.into())),
+            (
+                "mission_type",
+                FieldValue::Unsigned(self.mission_type.into()),
+            ),
+        ]
     }
 }
 
@@ -10260,6 +11057,23 @@ impl Message for SetGpsGlobalOrigin {
     }
 }
 
+impl SetGpsGlobalOrigin {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("latitude", FieldValue::Signed(self.latitude.into())),
+            ("longitude", FieldValue::Signed(self.longitude.into())),
+            ("altitude", FieldValue::Signed(self.altitude.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+        ]
+    }
+}
+
 /// Publishes the GPS coordinates of the vehicle local origin (0,0,0) position. Emitted whenever a new GPS-Local position mapping is requested or set - e.g. following SET_GPS_GLOBAL_ORIGIN message.
 ///
 /// MAVLink message 49 (`GPS_GLOBAL_ORIGIN`), from `common.xml`.
@@ -10298,6 +11112,19 @@ impl Message for GpsGlobalOrigin {
         put_bytes(out, 8, &self.altitude.to_le_bytes());
         put_bytes(out, 12, &self.time_usec.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl GpsGlobalOrigin {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("latitude", FieldValue::Signed(self.latitude.into())),
+            ("longitude", FieldValue::Signed(self.longitude.into())),
+            ("altitude", FieldValue::Signed(self.altitude.into())),
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+        ]
     }
 }
 
@@ -10363,6 +11190,42 @@ impl Message for ParamMapRc {
     }
 }
 
+impl ParamMapRc {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("param_value0", FieldValue::Float(self.param_value0.into())),
+            ("scale", FieldValue::Float(self.scale.into())),
+            (
+                "param_value_min",
+                FieldValue::Float(self.param_value_min.into()),
+            ),
+            (
+                "param_value_max",
+                FieldValue::Float(self.param_value_max.into()),
+            ),
+            ("param_index", FieldValue::Signed(self.param_index.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "param_id",
+                FieldValue::UnsignedArray(self.param_id.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "parameter_rc_channel_index",
+                FieldValue::Unsigned(self.parameter_rc_channel_index.into()),
+            ),
+        ]
+    }
+}
+
 /// Request the information of the mission item with the sequence number seq. The response of the system to this message should be a MISSION_ITEM_INT message. https://mavlink.io/en/services/mission.html
 ///
 /// MAVLink message 51 (`MISSION_REQUEST_INT`), from `common.xml`.
@@ -10405,6 +11268,28 @@ impl Message for MissionRequestInt {
     }
 }
 
+impl MissionRequestInt {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("seq", FieldValue::Unsigned(self.seq.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "mission_type",
+                FieldValue::Unsigned(self.mission_type.into()),
+            ),
+        ]
+    }
+}
+
 /// Checksum for the current mission, rally point or geofence plan, or for the "combined" plan (a GCS can use these checksums to determine if it has matching plans). This message must be broadcast with the appropriate checksum following any change to a mission, geofence or rally point definition (immediately after the MISSION_ACK that completes the upload sequence). It may also be requested using MAV_CMD_REQUEST_MESSAGE, where param 2 indicates the plan type for which the checksum is required. The checksum must be calculated on the autopilot, but may also be calculated by the GCS. The checksum uses the same CRC32 algorithm as MAVLink FTP (https://mavlink.io/en/services/ftp.html#crc32-implementation). The checksum for a mission, geofence or rally point definition is run over each item in the plan in seq order (excluding the home location if present in the plan), and covers the following fields (in order): frame, command, autocontinue, param1, param2, param3, param4, param5, param6, param7. The checksum for the whole plan (MAV_MISSION_TYPE_ALL) is calculated using the same approach, running over each sub-plan in the following order: mission, geofence then rally point.
 ///
 /// MAVLink message 53 (`MISSION_CHECKSUM`), from `development.xml`.
@@ -10435,6 +11320,20 @@ impl Message for MissionChecksum {
         put_bytes(out, 0, &self.checksum.to_le_bytes());
         put_bytes(out, 4, &self.mission_type.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl MissionChecksum {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("checksum", FieldValue::Unsigned(self.checksum.into())),
+            (
+                "mission_type",
+                FieldValue::Unsigned(self.mission_type.into()),
+            ),
+        ]
     }
 }
 
@@ -10499,6 +11398,30 @@ impl Message for SafetySetAllowedArea {
     }
 }
 
+impl SafetySetAllowedArea {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("p1x", FieldValue::Float(self.p1x.into())),
+            ("p1y", FieldValue::Float(self.p1y.into())),
+            ("p1z", FieldValue::Float(self.p1z.into())),
+            ("p2x", FieldValue::Float(self.p2x.into())),
+            ("p2y", FieldValue::Float(self.p2y.into())),
+            ("p2z", FieldValue::Float(self.p2z.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("frame", FieldValue::Unsigned(self.frame.into())),
+        ]
+    }
+}
+
 /// Read out the safety zone the MAV currently assumes.
 ///
 /// MAVLink message 55 (`SAFETY_ALLOWED_AREA`), from `common.xml`.
@@ -10552,6 +11475,22 @@ impl Message for SafetyAllowedArea {
     }
 }
 
+impl SafetyAllowedArea {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("p1x", FieldValue::Float(self.p1x.into())),
+            ("p1y", FieldValue::Float(self.p1y.into())),
+            ("p1z", FieldValue::Float(self.p1z.into())),
+            ("p2x", FieldValue::Float(self.p2x.into())),
+            ("p2y", FieldValue::Float(self.p2y.into())),
+            ("p2z", FieldValue::Float(self.p2z.into())),
+            ("frame", FieldValue::Unsigned(self.frame.into())),
+        ]
+    }
+}
+
 /// The attitude in the aeronautical frame (right-handed, Z-down, X-front, Y-right), expressed as quaternion. Quaternion order is w, x, y, z and a zero rotation would be expressed as (1 0 0 0).
 ///
 /// MAVLink message 61 (`ATTITUDE_QUATERNION_COV`), from `common.xml`.
@@ -10601,6 +11540,27 @@ impl Message for AttitudeQuaternionCov {
             put_bytes(out, 36 + i * 4, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl AttitudeQuaternionCov {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            (
+                "q",
+                FieldValue::FloatArray(self.q.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("rollspeed", FieldValue::Float(self.rollspeed.into())),
+            ("pitchspeed", FieldValue::Float(self.pitchspeed.into())),
+            ("yawspeed", FieldValue::Float(self.yawspeed.into())),
+            (
+                "covariance",
+                FieldValue::FloatArray(self.covariance.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -10657,6 +11617,26 @@ impl Message for NavControllerOutput {
         put_bytes(out, 22, &self.target_bearing.to_le_bytes());
         put_bytes(out, 24, &self.wp_dist.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl NavControllerOutput {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("nav_roll", FieldValue::Float(self.nav_roll.into())),
+            ("nav_pitch", FieldValue::Float(self.nav_pitch.into())),
+            ("alt_error", FieldValue::Float(self.alt_error.into())),
+            ("aspd_error", FieldValue::Float(self.aspd_error.into())),
+            ("xtrack_error", FieldValue::Float(self.xtrack_error.into())),
+            ("nav_bearing", FieldValue::Signed(self.nav_bearing.into())),
+            (
+                "target_bearing",
+                FieldValue::Signed(self.target_bearing.into()),
+            ),
+            ("wp_dist", FieldValue::Unsigned(self.wp_dist.into())),
+        ]
     }
 }
 
@@ -10724,6 +11704,31 @@ impl Message for GlobalPositionIntCov {
         }
         put_bytes(out, 180, &self.estimator_type.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl GlobalPositionIntCov {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lon", FieldValue::Signed(self.lon.into())),
+            ("alt", FieldValue::Signed(self.alt.into())),
+            ("relative_alt", FieldValue::Signed(self.relative_alt.into())),
+            ("vx", FieldValue::Float(self.vx.into())),
+            ("vy", FieldValue::Float(self.vy.into())),
+            ("vz", FieldValue::Float(self.vz.into())),
+            (
+                "covariance",
+                FieldValue::FloatArray(self.covariance.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "estimator_type",
+                FieldValue::Unsigned(self.estimator_type.into()),
+            ),
+        ]
     }
 }
 
@@ -10799,6 +11804,33 @@ impl Message for LocalPositionNedCov {
         }
         put_bytes(out, 224, &self.estimator_type.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl LocalPositionNedCov {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("x", FieldValue::Float(self.x.into())),
+            ("y", FieldValue::Float(self.y.into())),
+            ("z", FieldValue::Float(self.z.into())),
+            ("vx", FieldValue::Float(self.vx.into())),
+            ("vy", FieldValue::Float(self.vy.into())),
+            ("vz", FieldValue::Float(self.vz.into())),
+            ("ax", FieldValue::Float(self.ax.into())),
+            ("ay", FieldValue::Float(self.ay.into())),
+            ("az", FieldValue::Float(self.az.into())),
+            (
+                "covariance",
+                FieldValue::FloatArray(self.covariance.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "estimator_type",
+                FieldValue::Unsigned(self.estimator_type.into()),
+            ),
+        ]
     }
 }
 
@@ -10910,6 +11942,39 @@ impl Message for RcChannels {
     }
 }
 
+impl RcChannels {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("chan1_raw", FieldValue::Unsigned(self.chan1_raw.into())),
+            ("chan2_raw", FieldValue::Unsigned(self.chan2_raw.into())),
+            ("chan3_raw", FieldValue::Unsigned(self.chan3_raw.into())),
+            ("chan4_raw", FieldValue::Unsigned(self.chan4_raw.into())),
+            ("chan5_raw", FieldValue::Unsigned(self.chan5_raw.into())),
+            ("chan6_raw", FieldValue::Unsigned(self.chan6_raw.into())),
+            ("chan7_raw", FieldValue::Unsigned(self.chan7_raw.into())),
+            ("chan8_raw", FieldValue::Unsigned(self.chan8_raw.into())),
+            ("chan9_raw", FieldValue::Unsigned(self.chan9_raw.into())),
+            ("chan10_raw", FieldValue::Unsigned(self.chan10_raw.into())),
+            ("chan11_raw", FieldValue::Unsigned(self.chan11_raw.into())),
+            ("chan12_raw", FieldValue::Unsigned(self.chan12_raw.into())),
+            ("chan13_raw", FieldValue::Unsigned(self.chan13_raw.into())),
+            ("chan14_raw", FieldValue::Unsigned(self.chan14_raw.into())),
+            ("chan15_raw", FieldValue::Unsigned(self.chan15_raw.into())),
+            ("chan16_raw", FieldValue::Unsigned(self.chan16_raw.into())),
+            ("chan17_raw", FieldValue::Unsigned(self.chan17_raw.into())),
+            ("chan18_raw", FieldValue::Unsigned(self.chan18_raw.into())),
+            ("chancount", FieldValue::Unsigned(self.chancount.into())),
+            ("rssi", FieldValue::Unsigned(self.rssi.into())),
+        ]
+    }
+}
+
 /// Request a data stream.
 ///
 /// MAVLink message 66 (`REQUEST_DATA_STREAM`), from `common.xml`.
@@ -10954,6 +12019,32 @@ impl Message for RequestDataStream {
     }
 }
 
+impl RequestDataStream {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "req_message_rate",
+                FieldValue::Unsigned(self.req_message_rate.into()),
+            ),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "req_stream_id",
+                FieldValue::Unsigned(self.req_stream_id.into()),
+            ),
+            ("start_stop", FieldValue::Unsigned(self.start_stop.into())),
+        ]
+    }
+}
+
 /// Data stream status information.
 ///
 /// MAVLink message 67 (`DATA_STREAM`), from `common.xml`.
@@ -10987,6 +12078,21 @@ impl Message for DataStream {
         put_bytes(out, 2, &self.stream_id.to_le_bytes());
         put_bytes(out, 3, &self.on_off.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl DataStream {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "message_rate",
+                FieldValue::Unsigned(self.message_rate.into()),
+            ),
+            ("stream_id", FieldValue::Unsigned(self.stream_id.into())),
+            ("on_off", FieldValue::Unsigned(self.on_off.into())),
+        ]
     }
 }
 
@@ -11085,6 +12191,34 @@ impl Message for ManualControl {
         put_bytes(out, 26, &self.aux5.to_le_bytes());
         put_bytes(out, 28, &self.aux6.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl ManualControl {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("x", FieldValue::Signed(self.x.into())),
+            ("y", FieldValue::Signed(self.y.into())),
+            ("z", FieldValue::Signed(self.z.into())),
+            ("r", FieldValue::Signed(self.r.into())),
+            ("buttons", FieldValue::Unsigned(self.buttons.into())),
+            ("target", FieldValue::Unsigned(self.target.into())),
+            ("buttons2", FieldValue::Unsigned(self.buttons2.into())),
+            (
+                "enabled_extensions",
+                FieldValue::Unsigned(self.enabled_extensions.into()),
+            ),
+            ("s", FieldValue::Signed(self.s.into())),
+            ("t", FieldValue::Signed(self.t.into())),
+            ("aux1", FieldValue::Signed(self.aux1.into())),
+            ("aux2", FieldValue::Signed(self.aux2.into())),
+            ("aux3", FieldValue::Signed(self.aux3.into())),
+            ("aux4", FieldValue::Signed(self.aux4.into())),
+            ("aux5", FieldValue::Signed(self.aux5.into())),
+            ("aux6", FieldValue::Signed(self.aux6.into())),
+        ]
     }
 }
 
@@ -11202,6 +12336,41 @@ impl Message for RcChannelsOverride {
     }
 }
 
+impl RcChannelsOverride {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("chan1_raw", FieldValue::Unsigned(self.chan1_raw.into())),
+            ("chan2_raw", FieldValue::Unsigned(self.chan2_raw.into())),
+            ("chan3_raw", FieldValue::Unsigned(self.chan3_raw.into())),
+            ("chan4_raw", FieldValue::Unsigned(self.chan4_raw.into())),
+            ("chan5_raw", FieldValue::Unsigned(self.chan5_raw.into())),
+            ("chan6_raw", FieldValue::Unsigned(self.chan6_raw.into())),
+            ("chan7_raw", FieldValue::Unsigned(self.chan7_raw.into())),
+            ("chan8_raw", FieldValue::Unsigned(self.chan8_raw.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("chan9_raw", FieldValue::Unsigned(self.chan9_raw.into())),
+            ("chan10_raw", FieldValue::Unsigned(self.chan10_raw.into())),
+            ("chan11_raw", FieldValue::Unsigned(self.chan11_raw.into())),
+            ("chan12_raw", FieldValue::Unsigned(self.chan12_raw.into())),
+            ("chan13_raw", FieldValue::Unsigned(self.chan13_raw.into())),
+            ("chan14_raw", FieldValue::Unsigned(self.chan14_raw.into())),
+            ("chan15_raw", FieldValue::Unsigned(self.chan15_raw.into())),
+            ("chan16_raw", FieldValue::Unsigned(self.chan16_raw.into())),
+            ("chan17_raw", FieldValue::Unsigned(self.chan17_raw.into())),
+            ("chan18_raw", FieldValue::Unsigned(self.chan18_raw.into())),
+        ]
+    }
+}
+
 /// Message encoding a mission item. This message is emitted to announce the presence of a mission item and to set a mission item on the system. The mission item can be either in x, y, z meters (type: LOCAL) or x:lat, y:lon, z:altitude. Local frame is Z-down, right handed (NED), global frame is Z-up, right handed (ENU). NaN or INT32_MAX may be used in float/integer params (respectively) to indicate optional/default values (e.g. to use the component's current latitude, yaw rather than a specific value). See also https://mavlink.io/en/services/mission.html.
 ///
 /// MAVLink message 73 (`MISSION_ITEM_INT`), from `common.xml`.
@@ -11290,6 +12459,42 @@ impl Message for MissionItemInt {
     }
 }
 
+impl MissionItemInt {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("param1", FieldValue::Float(self.param1.into())),
+            ("param2", FieldValue::Float(self.param2.into())),
+            ("param3", FieldValue::Float(self.param3.into())),
+            ("param4", FieldValue::Float(self.param4.into())),
+            ("x", FieldValue::Signed(self.x.into())),
+            ("y", FieldValue::Signed(self.y.into())),
+            ("z", FieldValue::Float(self.z.into())),
+            ("seq", FieldValue::Unsigned(self.seq.into())),
+            ("command", FieldValue::Unsigned(self.command.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("frame", FieldValue::Unsigned(self.frame.into())),
+            ("current", FieldValue::Unsigned(self.current.into())),
+            (
+                "autocontinue",
+                FieldValue::Unsigned(self.autocontinue.into()),
+            ),
+            (
+                "mission_type",
+                FieldValue::Unsigned(self.mission_type.into()),
+            ),
+        ]
+    }
+}
+
 /// Metrics typically displayed on a HUD for fixed wing aircraft.
 ///
 /// MAVLink message 74 (`VFR_HUD`), from `common.xml`.
@@ -11335,6 +12540,21 @@ impl Message for VfrHud {
         put_bytes(out, 16, &self.heading.to_le_bytes());
         put_bytes(out, 18, &self.throttle.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl VfrHud {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("airspeed", FieldValue::Float(self.airspeed.into())),
+            ("groundspeed", FieldValue::Float(self.groundspeed.into())),
+            ("alt", FieldValue::Float(self.alt.into())),
+            ("climb", FieldValue::Float(self.climb.into())),
+            ("heading", FieldValue::Signed(self.heading.into())),
+            ("throttle", FieldValue::Unsigned(self.throttle.into())),
+        ]
     }
 }
 
@@ -11416,6 +12636,37 @@ impl Message for CommandInt {
     }
 }
 
+impl CommandInt {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("param1", FieldValue::Float(self.param1.into())),
+            ("param2", FieldValue::Float(self.param2.into())),
+            ("param3", FieldValue::Float(self.param3.into())),
+            ("param4", FieldValue::Float(self.param4.into())),
+            ("x", FieldValue::Signed(self.x.into())),
+            ("y", FieldValue::Signed(self.y.into())),
+            ("z", FieldValue::Float(self.z.into())),
+            ("command", FieldValue::Unsigned(self.command.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("frame", FieldValue::Unsigned(self.frame.into())),
+            ("current", FieldValue::Unsigned(self.current.into())),
+            (
+                "autocontinue",
+                FieldValue::Unsigned(self.autocontinue.into()),
+            ),
+        ]
+    }
+}
+
 /// Send a command with up to seven parameters to the MAV. The command microservice is documented at https://mavlink.io/en/services/command.html
 ///
 /// MAVLink message 76 (`COMMAND_LONG`), from `common.xml`.
@@ -11485,6 +12736,35 @@ impl Message for CommandLong {
     }
 }
 
+impl CommandLong {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("param1", FieldValue::Float(self.param1.into())),
+            ("param2", FieldValue::Float(self.param2.into())),
+            ("param3", FieldValue::Float(self.param3.into())),
+            ("param4", FieldValue::Float(self.param4.into())),
+            ("param5", FieldValue::Float(self.param5.into())),
+            ("param6", FieldValue::Float(self.param6.into())),
+            ("param7", FieldValue::Float(self.param7.into())),
+            ("command", FieldValue::Unsigned(self.command.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "confirmation",
+                FieldValue::Unsigned(self.confirmation.into()),
+            ),
+        ]
+    }
+}
+
 /// Report status of a command. Includes feedback whether the command was executed. The command microservice is documented at https://mavlink.io/en/services/command.html
 ///
 /// MAVLink message 77 (`COMMAND_ACK`), from `common.xml`.
@@ -11539,6 +12819,30 @@ impl Message for CommandAck {
     }
 }
 
+impl CommandAck {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("command", FieldValue::Unsigned(self.command.into())),
+            ("result", FieldValue::Unsigned(self.result.into())),
+            ("progress", FieldValue::Unsigned(self.progress.into())),
+            (
+                "result_param2",
+                FieldValue::Signed(self.result_param2.into()),
+            ),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+        ]
+    }
+}
+
 /// Setpoint in roll, pitch, yaw and thrust from the operator
 ///
 /// MAVLink message 81 (`MANUAL_SETPOINT`), from `common.xml`.
@@ -11588,6 +12892,28 @@ impl Message for ManualSetpoint {
         put_bytes(out, 20, &self.mode_switch.to_le_bytes());
         put_bytes(out, 21, &self.manual_override_switch.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl ManualSetpoint {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("roll", FieldValue::Float(self.roll.into())),
+            ("pitch", FieldValue::Float(self.pitch.into())),
+            ("yaw", FieldValue::Float(self.yaw.into())),
+            ("thrust", FieldValue::Float(self.thrust.into())),
+            ("mode_switch", FieldValue::Unsigned(self.mode_switch.into())),
+            (
+                "manual_override_switch",
+                FieldValue::Unsigned(self.manual_override_switch.into()),
+            ),
+        ]
     }
 }
 
@@ -11654,6 +12980,45 @@ impl Message for SetAttitudeTarget {
     }
 }
 
+impl SetAttitudeTarget {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            (
+                "q",
+                FieldValue::FloatArray(self.q.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "body_roll_rate",
+                FieldValue::Float(self.body_roll_rate.into()),
+            ),
+            (
+                "body_pitch_rate",
+                FieldValue::Float(self.body_pitch_rate.into()),
+            ),
+            (
+                "body_yaw_rate",
+                FieldValue::Float(self.body_yaw_rate.into()),
+            ),
+            ("thrust", FieldValue::Float(self.thrust.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("type_mask", FieldValue::Unsigned(self.type_mask.into())),
+        ]
+    }
+}
+
 /// Reports the current commanded attitude of the vehicle as specified by the autopilot. This should match the commands sent in a SET_ATTITUDE_TARGET message if the vehicle is being controlled this way.
 ///
 /// MAVLink message 83 (`ATTITUDE_TARGET`), from `common.xml`.
@@ -11706,6 +13071,37 @@ impl Message for AttitudeTarget {
         put_bytes(out, 32, &self.thrust.to_le_bytes());
         put_bytes(out, 36, &self.type_mask.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl AttitudeTarget {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            (
+                "q",
+                FieldValue::FloatArray(self.q.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "body_roll_rate",
+                FieldValue::Float(self.body_roll_rate.into()),
+            ),
+            (
+                "body_pitch_rate",
+                FieldValue::Float(self.body_pitch_rate.into()),
+            ),
+            (
+                "body_yaw_rate",
+                FieldValue::Float(self.body_yaw_rate.into()),
+            ),
+            ("thrust", FieldValue::Float(self.thrust.into())),
+            ("type_mask", FieldValue::Unsigned(self.type_mask.into())),
+        ]
     }
 }
 
@@ -11799,6 +13195,43 @@ impl Message for SetPositionTargetLocalNed {
     }
 }
 
+impl SetPositionTargetLocalNed {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("x", FieldValue::Float(self.x.into())),
+            ("y", FieldValue::Float(self.y.into())),
+            ("z", FieldValue::Float(self.z.into())),
+            ("vx", FieldValue::Float(self.vx.into())),
+            ("vy", FieldValue::Float(self.vy.into())),
+            ("vz", FieldValue::Float(self.vz.into())),
+            ("afx", FieldValue::Float(self.afx.into())),
+            ("afy", FieldValue::Float(self.afy.into())),
+            ("afz", FieldValue::Float(self.afz.into())),
+            ("yaw", FieldValue::Float(self.yaw.into())),
+            ("yaw_rate", FieldValue::Float(self.yaw_rate.into())),
+            ("type_mask", FieldValue::Unsigned(self.type_mask.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "coordinate_frame",
+                FieldValue::Unsigned(self.coordinate_frame.into()),
+            ),
+        ]
+    }
+}
+
 /// Reports the current commanded vehicle position, velocity, and acceleration as specified by the autopilot. This should match the commands sent in SET_POSITION_TARGET_LOCAL_NED if the vehicle is being controlled this way.
 ///
 /// MAVLink message 85 (`POSITION_TARGET_LOCAL_NED`), from `common.xml`.
@@ -11878,6 +13311,35 @@ impl Message for PositionTargetLocalNed {
         put_bytes(out, 48, &self.type_mask.to_le_bytes());
         put_bytes(out, 50, &self.coordinate_frame.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl PositionTargetLocalNed {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("x", FieldValue::Float(self.x.into())),
+            ("y", FieldValue::Float(self.y.into())),
+            ("z", FieldValue::Float(self.z.into())),
+            ("vx", FieldValue::Float(self.vx.into())),
+            ("vy", FieldValue::Float(self.vy.into())),
+            ("vz", FieldValue::Float(self.vz.into())),
+            ("afx", FieldValue::Float(self.afx.into())),
+            ("afy", FieldValue::Float(self.afy.into())),
+            ("afz", FieldValue::Float(self.afz.into())),
+            ("yaw", FieldValue::Float(self.yaw.into())),
+            ("yaw_rate", FieldValue::Float(self.yaw_rate.into())),
+            ("type_mask", FieldValue::Unsigned(self.type_mask.into())),
+            (
+                "coordinate_frame",
+                FieldValue::Unsigned(self.coordinate_frame.into()),
+            ),
+        ]
     }
 }
 
@@ -11971,6 +13433,43 @@ impl Message for SetPositionTargetGlobalInt {
     }
 }
 
+impl SetPositionTargetGlobalInt {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("lat_int", FieldValue::Signed(self.lat_int.into())),
+            ("lon_int", FieldValue::Signed(self.lon_int.into())),
+            ("alt", FieldValue::Float(self.alt.into())),
+            ("vx", FieldValue::Float(self.vx.into())),
+            ("vy", FieldValue::Float(self.vy.into())),
+            ("vz", FieldValue::Float(self.vz.into())),
+            ("afx", FieldValue::Float(self.afx.into())),
+            ("afy", FieldValue::Float(self.afy.into())),
+            ("afz", FieldValue::Float(self.afz.into())),
+            ("yaw", FieldValue::Float(self.yaw.into())),
+            ("yaw_rate", FieldValue::Float(self.yaw_rate.into())),
+            ("type_mask", FieldValue::Unsigned(self.type_mask.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "coordinate_frame",
+                FieldValue::Unsigned(self.coordinate_frame.into()),
+            ),
+        ]
+    }
+}
+
 /// Reports the current commanded vehicle position, velocity, and acceleration as specified by the autopilot. This should match the commands sent in SET_POSITION_TARGET_GLOBAL_INT if the vehicle is being controlled this way.
 ///
 /// MAVLink message 87 (`POSITION_TARGET_GLOBAL_INT`), from `common.xml`.
@@ -12053,6 +13552,35 @@ impl Message for PositionTargetGlobalInt {
     }
 }
 
+impl PositionTargetGlobalInt {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("lat_int", FieldValue::Signed(self.lat_int.into())),
+            ("lon_int", FieldValue::Signed(self.lon_int.into())),
+            ("alt", FieldValue::Float(self.alt.into())),
+            ("vx", FieldValue::Float(self.vx.into())),
+            ("vy", FieldValue::Float(self.vy.into())),
+            ("vz", FieldValue::Float(self.vz.into())),
+            ("afx", FieldValue::Float(self.afx.into())),
+            ("afy", FieldValue::Float(self.afy.into())),
+            ("afz", FieldValue::Float(self.afz.into())),
+            ("yaw", FieldValue::Float(self.yaw.into())),
+            ("yaw_rate", FieldValue::Float(self.yaw_rate.into())),
+            ("type_mask", FieldValue::Unsigned(self.type_mask.into())),
+            (
+                "coordinate_frame",
+                FieldValue::Unsigned(self.coordinate_frame.into()),
+            ),
+        ]
+    }
+}
+
 /// The offset in X, Y, Z and yaw between the LOCAL_POSITION_NED messages of MAV X and the global coordinate frame in NED coordinates. Coordinate frame is right-handed, Z-axis down (aeronautical frame, NED / north-east-down convention)
 ///
 /// MAVLink message 89 (`LOCAL_POSITION_NED_SYSTEM_GLOBAL_OFFSET`), from `common.xml`.
@@ -12102,6 +13630,25 @@ impl Message for LocalPositionNedSystemGlobalOffset {
         put_bytes(out, 20, &self.pitch.to_le_bytes());
         put_bytes(out, 24, &self.yaw.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl LocalPositionNedSystemGlobalOffset {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("x", FieldValue::Float(self.x.into())),
+            ("y", FieldValue::Float(self.y.into())),
+            ("z", FieldValue::Float(self.z.into())),
+            ("roll", FieldValue::Float(self.roll.into())),
+            ("pitch", FieldValue::Float(self.pitch.into())),
+            ("yaw", FieldValue::Float(self.yaw.into())),
+        ]
     }
 }
 
@@ -12193,6 +13740,31 @@ impl Message for HilState {
     }
 }
 
+impl HilState {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("roll", FieldValue::Float(self.roll.into())),
+            ("pitch", FieldValue::Float(self.pitch.into())),
+            ("yaw", FieldValue::Float(self.yaw.into())),
+            ("rollspeed", FieldValue::Float(self.rollspeed.into())),
+            ("pitchspeed", FieldValue::Float(self.pitchspeed.into())),
+            ("yawspeed", FieldValue::Float(self.yawspeed.into())),
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lon", FieldValue::Signed(self.lon.into())),
+            ("alt", FieldValue::Signed(self.alt.into())),
+            ("vx", FieldValue::Signed(self.vx.into())),
+            ("vy", FieldValue::Signed(self.vy.into())),
+            ("vz", FieldValue::Signed(self.vz.into())),
+            ("xacc", FieldValue::Signed(self.xacc.into())),
+            ("yacc", FieldValue::Signed(self.yacc.into())),
+            ("zacc", FieldValue::Signed(self.zacc.into())),
+        ]
+    }
+}
+
 /// Sent from autopilot to simulation. Hardware in the loop control outputs
 ///
 /// MAVLink message 91 (`HIL_CONTROLS`), from `common.xml`.
@@ -12259,6 +13831,32 @@ impl Message for HilControls {
         put_bytes(out, 40, &self.mode.to_le_bytes());
         put_bytes(out, 41, &self.nav_mode.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl HilControls {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            (
+                "roll_ailerons",
+                FieldValue::Float(self.roll_ailerons.into()),
+            ),
+            (
+                "pitch_elevator",
+                FieldValue::Float(self.pitch_elevator.into()),
+            ),
+            ("yaw_rudder", FieldValue::Float(self.yaw_rudder.into())),
+            ("throttle", FieldValue::Float(self.throttle.into())),
+            ("aux1", FieldValue::Float(self.aux1.into())),
+            ("aux2", FieldValue::Float(self.aux2.into())),
+            ("aux3", FieldValue::Float(self.aux3.into())),
+            ("aux4", FieldValue::Float(self.aux4.into())),
+            ("mode", FieldValue::Unsigned(self.mode.into())),
+            ("nav_mode", FieldValue::Unsigned(self.nav_mode.into())),
+        ]
     }
 }
 
@@ -12342,6 +13940,29 @@ impl Message for HilRcInputsRaw {
     }
 }
 
+impl HilRcInputsRaw {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("chan1_raw", FieldValue::Unsigned(self.chan1_raw.into())),
+            ("chan2_raw", FieldValue::Unsigned(self.chan2_raw.into())),
+            ("chan3_raw", FieldValue::Unsigned(self.chan3_raw.into())),
+            ("chan4_raw", FieldValue::Unsigned(self.chan4_raw.into())),
+            ("chan5_raw", FieldValue::Unsigned(self.chan5_raw.into())),
+            ("chan6_raw", FieldValue::Unsigned(self.chan6_raw.into())),
+            ("chan7_raw", FieldValue::Unsigned(self.chan7_raw.into())),
+            ("chan8_raw", FieldValue::Unsigned(self.chan8_raw.into())),
+            ("chan9_raw", FieldValue::Unsigned(self.chan9_raw.into())),
+            ("chan10_raw", FieldValue::Unsigned(self.chan10_raw.into())),
+            ("chan11_raw", FieldValue::Unsigned(self.chan11_raw.into())),
+            ("chan12_raw", FieldValue::Unsigned(self.chan12_raw.into())),
+            ("rssi", FieldValue::Unsigned(self.rssi.into())),
+        ]
+    }
+}
+
 /// Sent from autopilot to simulation. Hardware in the loop control outputs (replacement for HIL_CONTROLS)
 ///
 /// MAVLink message 93 (`HIL_ACTUATOR_CONTROLS`), from `common.xml`.
@@ -12382,6 +14003,22 @@ impl Message for HilActuatorControls {
         }
         put_bytes(out, 80, &self.mode.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl HilActuatorControls {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("flags", FieldValue::Unsigned(self.flags)),
+            (
+                "controls",
+                FieldValue::FloatArray(self.controls.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("mode", FieldValue::Unsigned(self.mode.into())),
+        ]
     }
 }
 
@@ -12451,6 +14088,34 @@ impl Message for OpticalFlow {
     }
 }
 
+impl OpticalFlow {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            (
+                "flow_comp_m_x",
+                FieldValue::Float(self.flow_comp_m_x.into()),
+            ),
+            (
+                "flow_comp_m_y",
+                FieldValue::Float(self.flow_comp_m_y.into()),
+            ),
+            (
+                "ground_distance",
+                FieldValue::Float(self.ground_distance.into()),
+            ),
+            ("flow_x", FieldValue::Signed(self.flow_x.into())),
+            ("flow_y", FieldValue::Signed(self.flow_y.into())),
+            ("sensor_id", FieldValue::Unsigned(self.sensor_id.into())),
+            ("quality", FieldValue::Unsigned(self.quality.into())),
+            ("flow_rate_x", FieldValue::Float(self.flow_rate_x.into())),
+            ("flow_rate_y", FieldValue::Float(self.flow_rate_y.into())),
+        ]
+    }
+}
+
 /// Global position/attitude estimate from a vision source.
 ///
 /// MAVLink message 101 (`GLOBAL_VISION_POSITION_ESTIMATE`), from `common.xml`.
@@ -12512,6 +14177,30 @@ impl Message for GlobalVisionPositionEstimate {
         }
         put_bytes(out, 116, &self.reset_counter.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl GlobalVisionPositionEstimate {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("usec", FieldValue::Unsigned(self.usec)),
+            ("x", FieldValue::Float(self.x.into())),
+            ("y", FieldValue::Float(self.y.into())),
+            ("z", FieldValue::Float(self.z.into())),
+            ("roll", FieldValue::Float(self.roll.into())),
+            ("pitch", FieldValue::Float(self.pitch.into())),
+            ("yaw", FieldValue::Float(self.yaw.into())),
+            (
+                "covariance",
+                FieldValue::FloatArray(self.covariance.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "reset_counter",
+                FieldValue::Unsigned(self.reset_counter.into()),
+            ),
+        ]
     }
 }
 
@@ -12579,6 +14268,30 @@ impl Message for VisionPositionEstimate {
     }
 }
 
+impl VisionPositionEstimate {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("usec", FieldValue::Unsigned(self.usec)),
+            ("x", FieldValue::Float(self.x.into())),
+            ("y", FieldValue::Float(self.y.into())),
+            ("z", FieldValue::Float(self.z.into())),
+            ("roll", FieldValue::Float(self.roll.into())),
+            ("pitch", FieldValue::Float(self.pitch.into())),
+            ("yaw", FieldValue::Float(self.yaw.into())),
+            (
+                "covariance",
+                FieldValue::FloatArray(self.covariance.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "reset_counter",
+                FieldValue::Unsigned(self.reset_counter.into()),
+            ),
+        ]
+    }
+}
+
 /// Speed estimate from a vision source.
 ///
 /// MAVLink message 103 (`VISION_SPEED_ESTIMATE`), from `common.xml`.
@@ -12628,6 +14341,27 @@ impl Message for VisionSpeedEstimate {
         }
         put_bytes(out, 56, &self.reset_counter.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl VisionSpeedEstimate {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("usec", FieldValue::Unsigned(self.usec)),
+            ("x", FieldValue::Float(self.x.into())),
+            ("y", FieldValue::Float(self.y.into())),
+            ("z", FieldValue::Float(self.z.into())),
+            (
+                "covariance",
+                FieldValue::FloatArray(self.covariance.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "reset_counter",
+                FieldValue::Unsigned(self.reset_counter.into()),
+            ),
+        ]
     }
 }
 
@@ -12687,6 +14421,26 @@ impl Message for ViconPositionEstimate {
             put_bytes(out, 32 + i * 4, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl ViconPositionEstimate {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("usec", FieldValue::Unsigned(self.usec)),
+            ("x", FieldValue::Float(self.x.into())),
+            ("y", FieldValue::Float(self.y.into())),
+            ("z", FieldValue::Float(self.z.into())),
+            ("roll", FieldValue::Float(self.roll.into())),
+            ("pitch", FieldValue::Float(self.pitch.into())),
+            ("yaw", FieldValue::Float(self.yaw.into())),
+            (
+                "covariance",
+                FieldValue::FloatArray(self.covariance.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -12779,6 +14533,37 @@ impl Message for HighresImu {
     }
 }
 
+impl HighresImu {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("xacc", FieldValue::Float(self.xacc.into())),
+            ("yacc", FieldValue::Float(self.yacc.into())),
+            ("zacc", FieldValue::Float(self.zacc.into())),
+            ("xgyro", FieldValue::Float(self.xgyro.into())),
+            ("ygyro", FieldValue::Float(self.ygyro.into())),
+            ("zgyro", FieldValue::Float(self.zgyro.into())),
+            ("xmag", FieldValue::Float(self.xmag.into())),
+            ("ymag", FieldValue::Float(self.ymag.into())),
+            ("zmag", FieldValue::Float(self.zmag.into())),
+            ("abs_pressure", FieldValue::Float(self.abs_pressure.into())),
+            (
+                "diff_pressure",
+                FieldValue::Float(self.diff_pressure.into()),
+            ),
+            ("pressure_alt", FieldValue::Float(self.pressure_alt.into())),
+            ("temperature", FieldValue::Float(self.temperature.into())),
+            (
+                "fields_updated",
+                FieldValue::Unsigned(self.fields_updated.into()),
+            ),
+            ("id", FieldValue::Unsigned(self.id.into())),
+        ]
+    }
+}
+
 /// Optical flow from an angular rate flow sensor (e.g. PX4FLOW or mouse sensor)
 ///
 /// MAVLink message 106 (`OPTICAL_FLOW_RAD`), from `common.xml`.
@@ -12848,6 +14633,42 @@ impl Message for OpticalFlowRad {
         put_bytes(out, 42, &self.sensor_id.to_le_bytes());
         put_bytes(out, 43, &self.quality.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl OpticalFlowRad {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            (
+                "integration_time_us",
+                FieldValue::Unsigned(self.integration_time_us.into()),
+            ),
+            ("integrated_x", FieldValue::Float(self.integrated_x.into())),
+            ("integrated_y", FieldValue::Float(self.integrated_y.into())),
+            (
+                "integrated_xgyro",
+                FieldValue::Float(self.integrated_xgyro.into()),
+            ),
+            (
+                "integrated_ygyro",
+                FieldValue::Float(self.integrated_ygyro.into()),
+            ),
+            (
+                "integrated_zgyro",
+                FieldValue::Float(self.integrated_zgyro.into()),
+            ),
+            (
+                "time_delta_distance_us",
+                FieldValue::Unsigned(self.time_delta_distance_us.into()),
+            ),
+            ("distance", FieldValue::Float(self.distance.into())),
+            ("temperature", FieldValue::Signed(self.temperature.into())),
+            ("sensor_id", FieldValue::Unsigned(self.sensor_id.into())),
+            ("quality", FieldValue::Unsigned(self.quality.into())),
+        ]
     }
 }
 
@@ -12937,6 +14758,37 @@ impl Message for HilSensor {
         put_bytes(out, 60, &self.fields_updated.to_le_bytes());
         put_bytes(out, 64, &self.id.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl HilSensor {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("xacc", FieldValue::Float(self.xacc.into())),
+            ("yacc", FieldValue::Float(self.yacc.into())),
+            ("zacc", FieldValue::Float(self.zacc.into())),
+            ("xgyro", FieldValue::Float(self.xgyro.into())),
+            ("ygyro", FieldValue::Float(self.ygyro.into())),
+            ("zgyro", FieldValue::Float(self.zgyro.into())),
+            ("xmag", FieldValue::Float(self.xmag.into())),
+            ("ymag", FieldValue::Float(self.ymag.into())),
+            ("zmag", FieldValue::Float(self.zmag.into())),
+            ("abs_pressure", FieldValue::Float(self.abs_pressure.into())),
+            (
+                "diff_pressure",
+                FieldValue::Float(self.diff_pressure.into()),
+            ),
+            ("pressure_alt", FieldValue::Float(self.pressure_alt.into())),
+            ("temperature", FieldValue::Float(self.temperature.into())),
+            (
+                "fields_updated",
+                FieldValue::Unsigned(self.fields_updated.into()),
+            ),
+            ("id", FieldValue::Unsigned(self.id.into())),
+        ]
     }
 }
 
@@ -13058,6 +14910,38 @@ impl Message for SimState {
     }
 }
 
+impl SimState {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("q1", FieldValue::Float(self.q1.into())),
+            ("q2", FieldValue::Float(self.q2.into())),
+            ("q3", FieldValue::Float(self.q3.into())),
+            ("q4", FieldValue::Float(self.q4.into())),
+            ("roll", FieldValue::Float(self.roll.into())),
+            ("pitch", FieldValue::Float(self.pitch.into())),
+            ("yaw", FieldValue::Float(self.yaw.into())),
+            ("xacc", FieldValue::Float(self.xacc.into())),
+            ("yacc", FieldValue::Float(self.yacc.into())),
+            ("zacc", FieldValue::Float(self.zacc.into())),
+            ("xgyro", FieldValue::Float(self.xgyro.into())),
+            ("ygyro", FieldValue::Float(self.ygyro.into())),
+            ("zgyro", FieldValue::Float(self.zgyro.into())),
+            ("lat", FieldValue::Float(self.lat.into())),
+            ("lon", FieldValue::Float(self.lon.into())),
+            ("alt", FieldValue::Float(self.alt.into())),
+            ("std_dev_horz", FieldValue::Float(self.std_dev_horz.into())),
+            ("std_dev_vert", FieldValue::Float(self.std_dev_vert.into())),
+            ("vn", FieldValue::Float(self.vn.into())),
+            ("ve", FieldValue::Float(self.ve.into())),
+            ("vd", FieldValue::Float(self.vd.into())),
+            ("lat_int", FieldValue::Signed(self.lat_int.into())),
+            ("lon_int", FieldValue::Signed(self.lon_int.into())),
+        ]
+    }
+}
+
 /// Status generated by radio and injected into MAVLink stream.
 ///
 /// MAVLink message 109 (`RADIO_STATUS`), from `common.xml`.
@@ -13110,6 +14994,22 @@ impl Message for RadioStatus {
     }
 }
 
+impl RadioStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("rxerrors", FieldValue::Unsigned(self.rxerrors.into())),
+            ("fixed", FieldValue::Unsigned(self.fixed.into())),
+            ("rssi", FieldValue::Unsigned(self.rssi.into())),
+            ("remrssi", FieldValue::Unsigned(self.remrssi.into())),
+            ("txbuf", FieldValue::Unsigned(self.txbuf.into())),
+            ("noise", FieldValue::Unsigned(self.noise.into())),
+            ("remnoise", FieldValue::Unsigned(self.remnoise.into())),
+        ]
+    }
+}
+
 /// File transfer protocol message: https://mavlink.io/en/services/ftp.html.
 ///
 /// MAVLink message 110 (`FILE_TRANSFER_PROTOCOL`), from `common.xml`.
@@ -13152,6 +15052,31 @@ impl Message for FileTransferProtocol {
     }
 }
 
+impl FileTransferProtocol {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "target_network",
+                FieldValue::Unsigned(self.target_network.into()),
+            ),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "payload",
+                FieldValue::UnsignedArray(self.payload.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Time synchronization message.
 ///
 /// MAVLink message 111 (`TIMESYNC`), from `common.xml`.
@@ -13184,6 +15109,17 @@ impl Message for Timesync {
     }
 }
 
+impl Timesync {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("tc1", FieldValue::Signed(self.tc1)),
+            ("ts1", FieldValue::Signed(self.ts1)),
+        ]
+    }
+}
+
 /// Camera-IMU triggering and synchronisation message.
 ///
 /// MAVLink message 112 (`CAMERA_TRIGGER`), from `common.xml`.
@@ -13213,6 +15149,17 @@ impl Message for CameraTrigger {
         put_bytes(out, 0, &self.time_usec.to_le_bytes());
         put_bytes(out, 8, &self.seq.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl CameraTrigger {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("seq", FieldValue::Unsigned(self.seq.into())),
+        ]
     }
 }
 
@@ -13302,6 +15249,33 @@ impl Message for HilGps {
     }
 }
 
+impl HilGps {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lon", FieldValue::Signed(self.lon.into())),
+            ("alt", FieldValue::Signed(self.alt.into())),
+            ("eph", FieldValue::Unsigned(self.eph.into())),
+            ("epv", FieldValue::Unsigned(self.epv.into())),
+            ("vel", FieldValue::Unsigned(self.vel.into())),
+            ("vn", FieldValue::Signed(self.vn.into())),
+            ("ve", FieldValue::Signed(self.ve.into())),
+            ("vd", FieldValue::Signed(self.vd.into())),
+            ("cog", FieldValue::Unsigned(self.cog.into())),
+            ("fix_type", FieldValue::Unsigned(self.fix_type.into())),
+            (
+                "satellites_visible",
+                FieldValue::Unsigned(self.satellites_visible.into()),
+            ),
+            ("id", FieldValue::Unsigned(self.id.into())),
+            ("yaw", FieldValue::Unsigned(self.yaw.into())),
+        ]
+    }
+}
+
 /// Simulated optical flow from a flow sensor (e.g. PX4FLOW or optical mouse sensor)
 ///
 /// MAVLink message 114 (`HIL_OPTICAL_FLOW`), from `common.xml`.
@@ -13371,6 +15345,42 @@ impl Message for HilOpticalFlow {
         put_bytes(out, 42, &self.sensor_id.to_le_bytes());
         put_bytes(out, 43, &self.quality.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl HilOpticalFlow {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            (
+                "integration_time_us",
+                FieldValue::Unsigned(self.integration_time_us.into()),
+            ),
+            ("integrated_x", FieldValue::Float(self.integrated_x.into())),
+            ("integrated_y", FieldValue::Float(self.integrated_y.into())),
+            (
+                "integrated_xgyro",
+                FieldValue::Float(self.integrated_xgyro.into()),
+            ),
+            (
+                "integrated_ygyro",
+                FieldValue::Float(self.integrated_ygyro.into()),
+            ),
+            (
+                "integrated_zgyro",
+                FieldValue::Float(self.integrated_zgyro.into()),
+            ),
+            (
+                "time_delta_distance_us",
+                FieldValue::Unsigned(self.time_delta_distance_us.into()),
+            ),
+            ("distance", FieldValue::Float(self.distance.into())),
+            ("temperature", FieldValue::Signed(self.temperature.into())),
+            ("sensor_id", FieldValue::Unsigned(self.sensor_id.into())),
+            ("quality", FieldValue::Unsigned(self.quality.into())),
+        ]
     }
 }
 
@@ -13464,6 +15474,45 @@ impl Message for HilStateQuaternion {
     }
 }
 
+impl HilStateQuaternion {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            (
+                "attitude_quaternion",
+                FieldValue::FloatArray(
+                    self.attitude_quaternion
+                        .iter()
+                        .map(|v| (*v).into())
+                        .collect(),
+                ),
+            ),
+            ("rollspeed", FieldValue::Float(self.rollspeed.into())),
+            ("pitchspeed", FieldValue::Float(self.pitchspeed.into())),
+            ("yawspeed", FieldValue::Float(self.yawspeed.into())),
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lon", FieldValue::Signed(self.lon.into())),
+            ("alt", FieldValue::Signed(self.alt.into())),
+            ("vx", FieldValue::Signed(self.vx.into())),
+            ("vy", FieldValue::Signed(self.vy.into())),
+            ("vz", FieldValue::Signed(self.vz.into())),
+            (
+                "ind_airspeed",
+                FieldValue::Unsigned(self.ind_airspeed.into()),
+            ),
+            (
+                "true_airspeed",
+                FieldValue::Unsigned(self.true_airspeed.into()),
+            ),
+            ("xacc", FieldValue::Signed(self.xacc.into())),
+            ("yacc", FieldValue::Signed(self.yacc.into())),
+            ("zacc", FieldValue::Signed(self.zacc.into())),
+        ]
+    }
+}
+
 /// The RAW IMU readings for secondary 9DOF sensor setup. This message should contain the scaled values to the described units
 ///
 /// MAVLink message 116 (`SCALED_IMU2`), from `common.xml`.
@@ -13533,6 +15582,29 @@ impl Message for ScaledImu2 {
     }
 }
 
+impl ScaledImu2 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("xacc", FieldValue::Signed(self.xacc.into())),
+            ("yacc", FieldValue::Signed(self.yacc.into())),
+            ("zacc", FieldValue::Signed(self.zacc.into())),
+            ("xgyro", FieldValue::Signed(self.xgyro.into())),
+            ("ygyro", FieldValue::Signed(self.ygyro.into())),
+            ("zgyro", FieldValue::Signed(self.zgyro.into())),
+            ("xmag", FieldValue::Signed(self.xmag.into())),
+            ("ymag", FieldValue::Signed(self.ymag.into())),
+            ("zmag", FieldValue::Signed(self.zmag.into())),
+            ("temperature", FieldValue::Signed(self.temperature.into())),
+        ]
+    }
+}
+
 /// Request a list of available logs. On some systems calling this may stop on-board logging until LOG_REQUEST_END is called. If there are no log files available this request shall be answered with one LOG_ENTRY message with id = 0 and num_logs = 0.
 ///
 /// MAVLink message 117 (`LOG_REQUEST_LIST`), from `common.xml`.
@@ -13570,6 +15642,25 @@ impl Message for LogRequestList {
         put_bytes(out, 4, &self.target_system.to_le_bytes());
         put_bytes(out, 5, &self.target_component.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl LogRequestList {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("start", FieldValue::Unsigned(self.start.into())),
+            ("end", FieldValue::Unsigned(self.end.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+        ]
     }
 }
 
@@ -13617,6 +15708,23 @@ impl Message for LogEntry {
     }
 }
 
+impl LogEntry {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_utc", FieldValue::Unsigned(self.time_utc.into())),
+            ("size", FieldValue::Unsigned(self.size.into())),
+            ("id", FieldValue::Unsigned(self.id.into())),
+            ("num_logs", FieldValue::Unsigned(self.num_logs.into())),
+            (
+                "last_log_num",
+                FieldValue::Unsigned(self.last_log_num.into()),
+            ),
+        ]
+    }
+}
+
 /// Request a chunk of a log
 ///
 /// MAVLink message 119 (`LOG_REQUEST_DATA`), from `common.xml`.
@@ -13658,6 +15766,26 @@ impl Message for LogRequestData {
         put_bytes(out, 10, &self.target_system.to_le_bytes());
         put_bytes(out, 11, &self.target_component.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl LogRequestData {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("ofs", FieldValue::Unsigned(self.ofs.into())),
+            ("count", FieldValue::Unsigned(self.count.into())),
+            ("id", FieldValue::Unsigned(self.id.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+        ]
     }
 }
 
@@ -13703,6 +15831,22 @@ impl Message for LogData {
     }
 }
 
+impl LogData {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("ofs", FieldValue::Unsigned(self.ofs.into())),
+            ("id", FieldValue::Unsigned(self.id.into())),
+            ("count", FieldValue::Unsigned(self.count.into())),
+            (
+                "data",
+                FieldValue::UnsignedArray(self.data.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Erase all logs
 ///
 /// MAVLink message 121 (`LOG_ERASE`), from `common.xml`.
@@ -13735,6 +15879,23 @@ impl Message for LogErase {
     }
 }
 
+impl LogErase {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+        ]
+    }
+}
+
 /// Stop log transfer and resume normal logging
 ///
 /// MAVLink message 122 (`LOG_REQUEST_END`), from `common.xml`.
@@ -13764,6 +15925,23 @@ impl Message for LogRequestEnd {
         put_bytes(out, 0, &self.target_system.to_le_bytes());
         put_bytes(out, 1, &self.target_component.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl LogRequestEnd {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+        ]
     }
 }
 
@@ -13806,6 +15984,28 @@ impl Message for GpsInjectData {
             put_bytes(out, 3 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl GpsInjectData {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("len", FieldValue::Unsigned(self.len.into())),
+            (
+                "data",
+                FieldValue::UnsignedArray(self.data.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -13912,6 +16112,39 @@ impl Message for Gps2Raw {
     }
 }
 
+impl Gps2Raw {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lon", FieldValue::Signed(self.lon.into())),
+            ("alt", FieldValue::Signed(self.alt.into())),
+            ("dgps_age", FieldValue::Unsigned(self.dgps_age.into())),
+            ("eph", FieldValue::Unsigned(self.eph.into())),
+            ("epv", FieldValue::Unsigned(self.epv.into())),
+            ("vel", FieldValue::Unsigned(self.vel.into())),
+            ("cog", FieldValue::Unsigned(self.cog.into())),
+            ("fix_type", FieldValue::Unsigned(self.fix_type.into())),
+            (
+                "satellites_visible",
+                FieldValue::Unsigned(self.satellites_visible.into()),
+            ),
+            ("dgps_numch", FieldValue::Unsigned(self.dgps_numch.into())),
+            ("yaw", FieldValue::Unsigned(self.yaw.into())),
+            (
+                "alt_ellipsoid",
+                FieldValue::Signed(self.alt_ellipsoid.into()),
+            ),
+            ("h_acc", FieldValue::Unsigned(self.h_acc.into())),
+            ("v_acc", FieldValue::Unsigned(self.v_acc.into())),
+            ("vel_acc", FieldValue::Unsigned(self.vel_acc.into())),
+            ("hdg_acc", FieldValue::Unsigned(self.hdg_acc.into())),
+        ]
+    }
+}
+
 /// Power supply status
 ///
 /// MAVLink message 125 (`POWER_STATUS`), from `common.xml`.
@@ -13946,6 +16179,18 @@ impl Message for PowerStatus {
         put_bytes(out, 2, &self.vservo.to_le_bytes());
         put_bytes(out, 4, &self.flags.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl PowerStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("Vcc", FieldValue::Unsigned(self.vcc.into())),
+            ("Vservo", FieldValue::Unsigned(self.vservo.into())),
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+        ]
     }
 }
 
@@ -13998,6 +16243,24 @@ impl Message for SerialControl {
             put_bytes(out, 9 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl SerialControl {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("baudrate", FieldValue::Unsigned(self.baudrate.into())),
+            ("timeout", FieldValue::Unsigned(self.timeout.into())),
+            ("device", FieldValue::Unsigned(self.device.into())),
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+            ("count", FieldValue::Unsigned(self.count.into())),
+            (
+                "data",
+                FieldValue::UnsignedArray(self.data.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -14078,6 +16341,49 @@ impl Message for GpsRtk {
     }
 }
 
+impl GpsRtk {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_last_baseline_ms",
+                FieldValue::Unsigned(self.time_last_baseline_ms.into()),
+            ),
+            ("tow", FieldValue::Unsigned(self.tow.into())),
+            (
+                "baseline_a_mm",
+                FieldValue::Signed(self.baseline_a_mm.into()),
+            ),
+            (
+                "baseline_b_mm",
+                FieldValue::Signed(self.baseline_b_mm.into()),
+            ),
+            (
+                "baseline_c_mm",
+                FieldValue::Signed(self.baseline_c_mm.into()),
+            ),
+            ("accuracy", FieldValue::Unsigned(self.accuracy.into())),
+            (
+                "iar_num_hypotheses",
+                FieldValue::Signed(self.iar_num_hypotheses.into()),
+            ),
+            ("wn", FieldValue::Unsigned(self.wn.into())),
+            (
+                "rtk_receiver_id",
+                FieldValue::Unsigned(self.rtk_receiver_id.into()),
+            ),
+            ("rtk_health", FieldValue::Unsigned(self.rtk_health.into())),
+            ("rtk_rate", FieldValue::Unsigned(self.rtk_rate.into())),
+            ("nsats", FieldValue::Unsigned(self.nsats.into())),
+            (
+                "baseline_coords_type",
+                FieldValue::Unsigned(self.baseline_coords_type.into()),
+            ),
+        ]
+    }
+}
+
 /// RTK GPS data. Gives information on the relative baseline calculation the GPS is reporting
 ///
 /// MAVLink message 128 (`GPS2_RTK`), from `common.xml`.
@@ -14155,6 +16461,49 @@ impl Message for Gps2Rtk {
     }
 }
 
+impl Gps2Rtk {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_last_baseline_ms",
+                FieldValue::Unsigned(self.time_last_baseline_ms.into()),
+            ),
+            ("tow", FieldValue::Unsigned(self.tow.into())),
+            (
+                "baseline_a_mm",
+                FieldValue::Signed(self.baseline_a_mm.into()),
+            ),
+            (
+                "baseline_b_mm",
+                FieldValue::Signed(self.baseline_b_mm.into()),
+            ),
+            (
+                "baseline_c_mm",
+                FieldValue::Signed(self.baseline_c_mm.into()),
+            ),
+            ("accuracy", FieldValue::Unsigned(self.accuracy.into())),
+            (
+                "iar_num_hypotheses",
+                FieldValue::Signed(self.iar_num_hypotheses.into()),
+            ),
+            ("wn", FieldValue::Unsigned(self.wn.into())),
+            (
+                "rtk_receiver_id",
+                FieldValue::Unsigned(self.rtk_receiver_id.into()),
+            ),
+            ("rtk_health", FieldValue::Unsigned(self.rtk_health.into())),
+            ("rtk_rate", FieldValue::Unsigned(self.rtk_rate.into())),
+            ("nsats", FieldValue::Unsigned(self.nsats.into())),
+            (
+                "baseline_coords_type",
+                FieldValue::Unsigned(self.baseline_coords_type.into()),
+            ),
+        ]
+    }
+}
+
 /// The RAW IMU readings for 3rd 9DOF sensor setup. This message should contain the scaled values to the described units
 ///
 /// MAVLink message 129 (`SCALED_IMU3`), from `common.xml`.
@@ -14224,6 +16573,29 @@ impl Message for ScaledImu3 {
     }
 }
 
+impl ScaledImu3 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("xacc", FieldValue::Signed(self.xacc.into())),
+            ("yacc", FieldValue::Signed(self.yacc.into())),
+            ("zacc", FieldValue::Signed(self.zacc.into())),
+            ("xgyro", FieldValue::Signed(self.xgyro.into())),
+            ("ygyro", FieldValue::Signed(self.ygyro.into())),
+            ("zgyro", FieldValue::Signed(self.zgyro.into())),
+            ("xmag", FieldValue::Signed(self.xmag.into())),
+            ("ymag", FieldValue::Signed(self.ymag.into())),
+            ("zmag", FieldValue::Signed(self.zmag.into())),
+            ("temperature", FieldValue::Signed(self.temperature.into())),
+        ]
+    }
+}
+
 /// Handshake message to initiate, control and stop image streaming when using the Image Transmission Protocol: https://mavlink.io/en/services/image_transmission.html.
 ///
 /// MAVLink message 130 (`DATA_TRANSMISSION_HANDSHAKE`), from `common.xml`.
@@ -14277,6 +16649,22 @@ impl Message for DataTransmissionHandshake {
     }
 }
 
+impl DataTransmissionHandshake {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("size", FieldValue::Unsigned(self.size.into())),
+            ("width", FieldValue::Unsigned(self.width.into())),
+            ("height", FieldValue::Unsigned(self.height.into())),
+            ("packets", FieldValue::Unsigned(self.packets.into())),
+            ("type", FieldValue::Unsigned(self.r#type.into())),
+            ("payload", FieldValue::Unsigned(self.payload.into())),
+            ("jpg_quality", FieldValue::Unsigned(self.jpg_quality.into())),
+        ]
+    }
+}
+
 /// Data packet for images sent using the Image Transmission Protocol: https://mavlink.io/en/services/image_transmission.html.
 ///
 /// MAVLink message 131 (`ENCAPSULATED_DATA`), from `common.xml`.
@@ -14308,6 +16696,20 @@ impl Message for EncapsulatedData {
             put_bytes(out, 2 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl EncapsulatedData {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("seqnr", FieldValue::Unsigned(self.seqnr.into())),
+            (
+                "data",
+                FieldValue::UnsignedArray(self.data.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -14391,6 +16793,48 @@ impl Message for DistanceSensor {
     }
 }
 
+impl DistanceSensor {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            (
+                "min_distance",
+                FieldValue::Unsigned(self.min_distance.into()),
+            ),
+            (
+                "max_distance",
+                FieldValue::Unsigned(self.max_distance.into()),
+            ),
+            (
+                "current_distance",
+                FieldValue::Unsigned(self.current_distance.into()),
+            ),
+            ("type", FieldValue::Unsigned(self.r#type.into())),
+            ("id", FieldValue::Unsigned(self.id.into())),
+            ("orientation", FieldValue::Unsigned(self.orientation.into())),
+            ("covariance", FieldValue::Unsigned(self.covariance.into())),
+            (
+                "horizontal_fov",
+                FieldValue::Float(self.horizontal_fov.into()),
+            ),
+            ("vertical_fov", FieldValue::Float(self.vertical_fov.into())),
+            (
+                "quaternion",
+                FieldValue::FloatArray(self.quaternion.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "signal_quality",
+                FieldValue::Unsigned(self.signal_quality.into()),
+            ),
+        ]
+    }
+}
+
 /// Request for terrain data and terrain status. See terrain protocol docs: https://mavlink.io/en/services/terrain.html
 ///
 /// MAVLink message 133 (`TERRAIN_REQUEST`), from `common.xml`.
@@ -14428,6 +16872,22 @@ impl Message for TerrainRequest {
         put_bytes(out, 12, &self.lon.to_le_bytes());
         put_bytes(out, 16, &self.grid_spacing.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl TerrainRequest {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("mask", FieldValue::Unsigned(self.mask)),
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lon", FieldValue::Signed(self.lon.into())),
+            (
+                "grid_spacing",
+                FieldValue::Unsigned(self.grid_spacing.into()),
+            ),
+        ]
     }
 }
 
@@ -14477,6 +16937,26 @@ impl Message for TerrainData {
     }
 }
 
+impl TerrainData {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lon", FieldValue::Signed(self.lon.into())),
+            (
+                "grid_spacing",
+                FieldValue::Unsigned(self.grid_spacing.into()),
+            ),
+            (
+                "data",
+                FieldValue::SignedArray(self.data.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("gridbit", FieldValue::Unsigned(self.gridbit.into())),
+        ]
+    }
+}
+
 /// Request that the vehicle report terrain height at the given location (expected response is a TERRAIN_REPORT). Used by GCS to check if vehicle has all terrain data needed for a mission.
 ///
 /// MAVLink message 135 (`TERRAIN_CHECK`), from `common.xml`.
@@ -14506,6 +16986,17 @@ impl Message for TerrainCheck {
         put_bytes(out, 0, &self.lat.to_le_bytes());
         put_bytes(out, 4, &self.lon.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl TerrainCheck {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lon", FieldValue::Signed(self.lon.into())),
+        ]
     }
 }
 
@@ -14561,6 +17052,28 @@ impl Message for TerrainReport {
     }
 }
 
+impl TerrainReport {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lon", FieldValue::Signed(self.lon.into())),
+            (
+                "terrain_height",
+                FieldValue::Float(self.terrain_height.into()),
+            ),
+            (
+                "current_height",
+                FieldValue::Float(self.current_height.into()),
+            ),
+            ("spacing", FieldValue::Unsigned(self.spacing.into())),
+            ("pending", FieldValue::Unsigned(self.pending.into())),
+            ("loaded", FieldValue::Unsigned(self.loaded.into())),
+        ]
+    }
+}
+
 /// Barometer readings for 2nd barometer
 ///
 /// MAVLink message 137 (`SCALED_PRESSURE2`), from `common.xml`.
@@ -14603,6 +17116,26 @@ impl Message for ScaledPressure2 {
         put_bytes(out, 12, &self.temperature.to_le_bytes());
         put_bytes(out, 14, &self.temperature_press_diff.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl ScaledPressure2 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("press_abs", FieldValue::Float(self.press_abs.into())),
+            ("press_diff", FieldValue::Float(self.press_diff.into())),
+            ("temperature", FieldValue::Signed(self.temperature.into())),
+            (
+                "temperature_press_diff",
+                FieldValue::Signed(self.temperature_press_diff.into()),
+            ),
+        ]
     }
 }
 
@@ -14659,6 +17192,27 @@ impl Message for AttPosMocap {
     }
 }
 
+impl AttPosMocap {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            (
+                "q",
+                FieldValue::FloatArray(self.q.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("x", FieldValue::Float(self.x.into())),
+            ("y", FieldValue::Float(self.y.into())),
+            ("z", FieldValue::Float(self.z.into())),
+            (
+                "covariance",
+                FieldValue::FloatArray(self.covariance.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Set the vehicle attitude and body angular rates.
 ///
 /// MAVLink message 139 (`SET_ACTUATOR_CONTROL_TARGET`), from `common.xml`.
@@ -14705,6 +17259,29 @@ impl Message for SetActuatorControlTarget {
     }
 }
 
+impl SetActuatorControlTarget {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            (
+                "controls",
+                FieldValue::FloatArray(self.controls.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("group_mlx", FieldValue::Unsigned(self.group_mlx.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+        ]
+    }
+}
+
 /// Set the vehicle attitude and body angular rates.
 ///
 /// MAVLink message 140 (`ACTUATOR_CONTROL_TARGET`), from `common.xml`.
@@ -14740,6 +17317,21 @@ impl Message for ActuatorControlTarget {
         }
         put_bytes(out, 40, &self.group_mlx.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl ActuatorControlTarget {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            (
+                "controls",
+                FieldValue::FloatArray(self.controls.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("group_mlx", FieldValue::Unsigned(self.group_mlx.into())),
+        ]
     }
 }
 
@@ -14795,6 +17387,40 @@ impl Message for Altitude {
     }
 }
 
+impl Altitude {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            (
+                "altitude_monotonic",
+                FieldValue::Float(self.altitude_monotonic.into()),
+            ),
+            (
+                "altitude_amsl",
+                FieldValue::Float(self.altitude_amsl.into()),
+            ),
+            (
+                "altitude_local",
+                FieldValue::Float(self.altitude_local.into()),
+            ),
+            (
+                "altitude_relative",
+                FieldValue::Float(self.altitude_relative.into()),
+            ),
+            (
+                "altitude_terrain",
+                FieldValue::Float(self.altitude_terrain.into()),
+            ),
+            (
+                "bottom_clearance",
+                FieldValue::Float(self.bottom_clearance.into()),
+            ),
+        ]
+    }
+}
+
 /// The autopilot is requesting a resource (file, binary, other type of data)
 ///
 /// MAVLink message 142 (`RESOURCE_REQUEST`), from `common.xml`.
@@ -14843,6 +17469,29 @@ impl Message for ResourceRequest {
     }
 }
 
+impl ResourceRequest {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("request_id", FieldValue::Unsigned(self.request_id.into())),
+            ("uri_type", FieldValue::Unsigned(self.uri_type.into())),
+            (
+                "uri",
+                FieldValue::UnsignedArray(self.uri.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "transfer_type",
+                FieldValue::Unsigned(self.transfer_type.into()),
+            ),
+            (
+                "storage",
+                FieldValue::UnsignedArray(self.storage.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Barometer readings for 3rd barometer
 ///
 /// MAVLink message 143 (`SCALED_PRESSURE3`), from `common.xml`.
@@ -14885,6 +17534,26 @@ impl Message for ScaledPressure3 {
         put_bytes(out, 12, &self.temperature.to_le_bytes());
         put_bytes(out, 14, &self.temperature_press_diff.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl ScaledPressure3 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("press_abs", FieldValue::Float(self.press_abs.into())),
+            ("press_diff", FieldValue::Float(self.press_diff.into())),
+            ("temperature", FieldValue::Signed(self.temperature.into())),
+            (
+                "temperature_press_diff",
+                FieldValue::Signed(self.temperature_press_diff.into()),
+            ),
+        ]
     }
 }
 
@@ -14963,6 +17632,44 @@ impl Message for FollowTarget {
         }
         put_bytes(out, 92, &self.est_capabilities.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl FollowTarget {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("timestamp", FieldValue::Unsigned(self.timestamp)),
+            ("custom_state", FieldValue::Unsigned(self.custom_state)),
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lon", FieldValue::Signed(self.lon.into())),
+            ("alt", FieldValue::Float(self.alt.into())),
+            (
+                "vel",
+                FieldValue::FloatArray(self.vel.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "acc",
+                FieldValue::FloatArray(self.acc.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "attitude_q",
+                FieldValue::FloatArray(self.attitude_q.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "rates",
+                FieldValue::FloatArray(self.rates.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "position_cov",
+                FieldValue::FloatArray(self.position_cov.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "est_capabilities",
+                FieldValue::Unsigned(self.est_capabilities.into()),
+            ),
+        ]
     }
 }
 
@@ -15064,6 +17771,41 @@ impl Message for ControlSystemState {
     }
 }
 
+impl ControlSystemState {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("x_acc", FieldValue::Float(self.x_acc.into())),
+            ("y_acc", FieldValue::Float(self.y_acc.into())),
+            ("z_acc", FieldValue::Float(self.z_acc.into())),
+            ("x_vel", FieldValue::Float(self.x_vel.into())),
+            ("y_vel", FieldValue::Float(self.y_vel.into())),
+            ("z_vel", FieldValue::Float(self.z_vel.into())),
+            ("x_pos", FieldValue::Float(self.x_pos.into())),
+            ("y_pos", FieldValue::Float(self.y_pos.into())),
+            ("z_pos", FieldValue::Float(self.z_pos.into())),
+            ("airspeed", FieldValue::Float(self.airspeed.into())),
+            (
+                "vel_variance",
+                FieldValue::FloatArray(self.vel_variance.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "pos_variance",
+                FieldValue::FloatArray(self.pos_variance.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "q",
+                FieldValue::FloatArray(self.q.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("roll_rate", FieldValue::Float(self.roll_rate.into())),
+            ("pitch_rate", FieldValue::Float(self.pitch_rate.into())),
+            ("yaw_rate", FieldValue::Float(self.yaw_rate.into())),
+        ]
+    }
+}
+
 /// Battery information
 ///
 /// MAVLink message 147 (`BATTERY_STATUS`), from `common.xml`.
@@ -15158,6 +17900,59 @@ impl Message for BatteryStatus {
     }
 }
 
+impl BatteryStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "current_consumed",
+                FieldValue::Signed(self.current_consumed.into()),
+            ),
+            (
+                "energy_consumed",
+                FieldValue::Signed(self.energy_consumed.into()),
+            ),
+            ("temperature", FieldValue::Signed(self.temperature.into())),
+            (
+                "voltages",
+                FieldValue::UnsignedArray(self.voltages.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "current_battery",
+                FieldValue::Signed(self.current_battery.into()),
+            ),
+            ("id", FieldValue::Unsigned(self.id.into())),
+            (
+                "battery_function",
+                FieldValue::Unsigned(self.battery_function.into()),
+            ),
+            ("type", FieldValue::Unsigned(self.r#type.into())),
+            (
+                "battery_remaining",
+                FieldValue::Signed(self.battery_remaining.into()),
+            ),
+            (
+                "time_remaining",
+                FieldValue::Signed(self.time_remaining.into()),
+            ),
+            (
+                "charge_state",
+                FieldValue::Unsigned(self.charge_state.into()),
+            ),
+            (
+                "voltages_ext",
+                FieldValue::UnsignedArray(self.voltages_ext.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("mode", FieldValue::Unsigned(self.mode.into())),
+            (
+                "fault_bitmask",
+                FieldValue::Unsigned(self.fault_bitmask.into()),
+            ),
+        ]
+    }
+}
+
 /// Version and capability of autopilot software. This should be emitted in response to a request with MAV_CMD_REQUEST_MESSAGE.
 ///
 /// MAVLink message 148 (`AUTOPILOT_VERSION`), from `standard.xml`.
@@ -15237,6 +18032,63 @@ impl Message for AutopilotVersion {
             put_bytes(out, 60 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl AutopilotVersion {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("capabilities", FieldValue::Unsigned(self.capabilities)),
+            ("uid", FieldValue::Unsigned(self.uid)),
+            (
+                "flight_sw_version",
+                FieldValue::Unsigned(self.flight_sw_version.into()),
+            ),
+            (
+                "middleware_sw_version",
+                FieldValue::Unsigned(self.middleware_sw_version.into()),
+            ),
+            (
+                "os_sw_version",
+                FieldValue::Unsigned(self.os_sw_version.into()),
+            ),
+            (
+                "board_version",
+                FieldValue::Unsigned(self.board_version.into()),
+            ),
+            ("vendor_id", FieldValue::Unsigned(self.vendor_id.into())),
+            ("product_id", FieldValue::Unsigned(self.product_id.into())),
+            (
+                "flight_custom_version",
+                FieldValue::UnsignedArray(
+                    self.flight_custom_version
+                        .iter()
+                        .map(|v| (*v).into())
+                        .collect(),
+                ),
+            ),
+            (
+                "middleware_custom_version",
+                FieldValue::UnsignedArray(
+                    self.middleware_custom_version
+                        .iter()
+                        .map(|v| (*v).into())
+                        .collect(),
+                ),
+            ),
+            (
+                "os_custom_version",
+                FieldValue::UnsignedArray(
+                    self.os_custom_version.iter().map(|v| (*v).into()).collect(),
+                ),
+            ),
+            (
+                "uid2",
+                FieldValue::UnsignedArray(self.uid2.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -15331,6 +18183,35 @@ impl Message for LandingTarget {
     }
 }
 
+impl LandingTarget {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("angle_x", FieldValue::Float(self.angle_x.into())),
+            ("angle_y", FieldValue::Float(self.angle_y.into())),
+            ("distance", FieldValue::Float(self.distance.into())),
+            ("size_x", FieldValue::Float(self.size_x.into())),
+            ("size_y", FieldValue::Float(self.size_y.into())),
+            ("target_num", FieldValue::Unsigned(self.target_num.into())),
+            ("frame", FieldValue::Unsigned(self.frame.into())),
+            ("x", FieldValue::Float(self.x.into())),
+            ("y", FieldValue::Float(self.y.into())),
+            ("z", FieldValue::Float(self.z.into())),
+            (
+                "q",
+                FieldValue::FloatArray(self.q.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("type", FieldValue::Unsigned(self.r#type.into())),
+            (
+                "position_valid",
+                FieldValue::Unsigned(self.position_valid.into()),
+            ),
+        ]
+    }
+}
+
 /// Offsets and calibrations values for hardware sensors. This makes it easier to debug the calibration process.
 ///
 /// MAVLink message 150 (`SENSOR_OFFSETS`), from `ardupilotmega.xml`.
@@ -15403,6 +18284,30 @@ impl Message for SensorOffsets {
     }
 }
 
+impl SensorOffsets {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "mag_declination",
+                FieldValue::Float(self.mag_declination.into()),
+            ),
+            ("raw_press", FieldValue::Signed(self.raw_press.into())),
+            ("raw_temp", FieldValue::Signed(self.raw_temp.into())),
+            ("gyro_cal_x", FieldValue::Float(self.gyro_cal_x.into())),
+            ("gyro_cal_y", FieldValue::Float(self.gyro_cal_y.into())),
+            ("gyro_cal_z", FieldValue::Float(self.gyro_cal_z.into())),
+            ("accel_cal_x", FieldValue::Float(self.accel_cal_x.into())),
+            ("accel_cal_y", FieldValue::Float(self.accel_cal_y.into())),
+            ("accel_cal_z", FieldValue::Float(self.accel_cal_z.into())),
+            ("mag_ofs_x", FieldValue::Signed(self.mag_ofs_x.into())),
+            ("mag_ofs_y", FieldValue::Signed(self.mag_ofs_y.into())),
+            ("mag_ofs_z", FieldValue::Signed(self.mag_ofs_z.into())),
+        ]
+    }
+}
+
 /// Set the magnetometer offsets
 ///
 /// MAVLink message 151 (`SET_MAG_OFFSETS`), from `ardupilotmega.xml`.
@@ -15447,6 +18352,26 @@ impl Message for SetMagOffsets {
     }
 }
 
+impl SetMagOffsets {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("mag_ofs_x", FieldValue::Signed(self.mag_ofs_x.into())),
+            ("mag_ofs_y", FieldValue::Signed(self.mag_ofs_y.into())),
+            ("mag_ofs_z", FieldValue::Signed(self.mag_ofs_z.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+        ]
+    }
+}
+
 /// State of autopilot RAM.
 ///
 /// MAVLink message 152 (`MEMINFO`), from `ardupilotmega.xml`.
@@ -15481,6 +18406,18 @@ impl Message for Meminfo {
         put_bytes(out, 2, &self.freemem.to_le_bytes());
         put_bytes(out, 4, &self.freemem32.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl Meminfo {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("brkval", FieldValue::Unsigned(self.brkval.into())),
+            ("freemem", FieldValue::Unsigned(self.freemem.into())),
+            ("freemem32", FieldValue::Unsigned(self.freemem32.into())),
+        ]
     }
 }
 
@@ -15529,6 +18466,21 @@ impl Message for ApAdc {
         put_bytes(out, 8, &self.adc5.to_le_bytes());
         put_bytes(out, 10, &self.adc6.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl ApAdc {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("adc1", FieldValue::Unsigned(self.adc1.into())),
+            ("adc2", FieldValue::Unsigned(self.adc2.into())),
+            ("adc3", FieldValue::Unsigned(self.adc3.into())),
+            ("adc4", FieldValue::Unsigned(self.adc4.into())),
+            ("adc5", FieldValue::Unsigned(self.adc5.into())),
+            ("adc6", FieldValue::Unsigned(self.adc6.into())),
+        ]
     }
 }
 
@@ -15600,6 +18552,41 @@ impl Message for DigicamConfigure {
     }
 }
 
+impl DigicamConfigure {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("extra_value", FieldValue::Float(self.extra_value.into())),
+            (
+                "shutter_speed",
+                FieldValue::Unsigned(self.shutter_speed.into()),
+            ),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("mode", FieldValue::Unsigned(self.mode.into())),
+            ("aperture", FieldValue::Unsigned(self.aperture.into())),
+            ("iso", FieldValue::Unsigned(self.iso.into())),
+            (
+                "exposure_type",
+                FieldValue::Unsigned(self.exposure_type.into()),
+            ),
+            ("command_id", FieldValue::Unsigned(self.command_id.into())),
+            (
+                "engine_cut_off",
+                FieldValue::Unsigned(self.engine_cut_off.into()),
+            ),
+            ("extra_param", FieldValue::Unsigned(self.extra_param.into())),
+        ]
+    }
+}
+
 /// Control on-board Camera Control System to take shots.
 ///
 /// MAVLink message 155 (`DIGICAM_CONTROL`), from `ardupilotmega.xml`.
@@ -15664,6 +18651,31 @@ impl Message for DigicamControl {
     }
 }
 
+impl DigicamControl {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("extra_value", FieldValue::Float(self.extra_value.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("session", FieldValue::Unsigned(self.session.into())),
+            ("zoom_pos", FieldValue::Unsigned(self.zoom_pos.into())),
+            ("zoom_step", FieldValue::Signed(self.zoom_step.into())),
+            ("focus_lock", FieldValue::Unsigned(self.focus_lock.into())),
+            ("shot", FieldValue::Unsigned(self.shot.into())),
+            ("command_id", FieldValue::Unsigned(self.command_id.into())),
+            ("extra_param", FieldValue::Unsigned(self.extra_param.into())),
+        ]
+    }
+}
+
 /// Message to configure a camera mount, directional antenna, etc.
 ///
 /// MAVLink message 156 (`MOUNT_CONFIGURE`), from `ardupilotmega.xml`.
@@ -15713,6 +18725,27 @@ impl Message for MountConfigure {
     }
 }
 
+impl MountConfigure {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("mount_mode", FieldValue::Unsigned(self.mount_mode.into())),
+            ("stab_roll", FieldValue::Unsigned(self.stab_roll.into())),
+            ("stab_pitch", FieldValue::Unsigned(self.stab_pitch.into())),
+            ("stab_yaw", FieldValue::Unsigned(self.stab_yaw.into())),
+        ]
+    }
+}
+
 /// Message to control a camera mount, directional antenna, etc.
 ///
 /// MAVLink message 157 (`MOUNT_CONTROL`), from `ardupilotmega.xml`.
@@ -15758,6 +18791,30 @@ impl Message for MountControl {
         put_bytes(out, 13, &self.target_component.to_le_bytes());
         put_bytes(out, 14, &self.save_position.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl MountControl {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("input_a", FieldValue::Signed(self.input_a.into())),
+            ("input_b", FieldValue::Signed(self.input_b.into())),
+            ("input_c", FieldValue::Signed(self.input_c.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "save_position",
+                FieldValue::Unsigned(self.save_position.into()),
+            ),
+        ]
     }
 }
 
@@ -15811,6 +18868,27 @@ impl Message for MountStatus {
     }
 }
 
+impl MountStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("pointing_a", FieldValue::Signed(self.pointing_a.into())),
+            ("pointing_b", FieldValue::Signed(self.pointing_b.into())),
+            ("pointing_c", FieldValue::Signed(self.pointing_c.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("mount_mode", FieldValue::Unsigned(self.mount_mode.into())),
+        ]
+    }
+}
+
 /// A fence point. Used to set a point when from GCS -> MAV. Also used to return a point from MAV -> GCS.
 ///
 /// MAVLink message 160 (`FENCE_POINT`), from `ardupilotmega.xml`.
@@ -15859,6 +18937,27 @@ impl Message for FencePoint {
     }
 }
 
+impl FencePoint {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("lat", FieldValue::Float(self.lat.into())),
+            ("lng", FieldValue::Float(self.lng.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("idx", FieldValue::Unsigned(self.idx.into())),
+            ("count", FieldValue::Unsigned(self.count.into())),
+        ]
+    }
+}
+
 /// Request a current fence point from MAV.
 ///
 /// MAVLink message 161 (`FENCE_FETCH_POINT`), from `ardupilotmega.xml`.
@@ -15892,6 +18991,24 @@ impl Message for FenceFetchPoint {
         put_bytes(out, 1, &self.target_component.to_le_bytes());
         put_bytes(out, 2, &self.idx.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl FenceFetchPoint {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("idx", FieldValue::Unsigned(self.idx.into())),
+        ]
     }
 }
 
@@ -15939,6 +19056,29 @@ impl Message for FenceStatus {
         put_bytes(out, 7, &self.breach_type.to_le_bytes());
         put_bytes(out, 8, &self.breach_mitigation.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl FenceStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("breach_time", FieldValue::Unsigned(self.breach_time.into())),
+            (
+                "breach_count",
+                FieldValue::Unsigned(self.breach_count.into()),
+            ),
+            (
+                "breach_status",
+                FieldValue::Unsigned(self.breach_status.into()),
+            ),
+            ("breach_type", FieldValue::Unsigned(self.breach_type.into())),
+            (
+                "breach_mitigation",
+                FieldValue::Unsigned(self.breach_mitigation.into()),
+            ),
+        ]
     }
 }
 
@@ -15991,6 +19131,22 @@ impl Message for Ahrs {
         put_bytes(out, 20, &self.error_rp.to_le_bytes());
         put_bytes(out, 24, &self.error_yaw.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl Ahrs {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("omegaIx", FieldValue::Float(self.omegaix.into())),
+            ("omegaIy", FieldValue::Float(self.omegaiy.into())),
+            ("omegaIz", FieldValue::Float(self.omegaiz.into())),
+            ("accel_weight", FieldValue::Float(self.accel_weight.into())),
+            ("renorm_val", FieldValue::Float(self.renorm_val.into())),
+            ("error_rp", FieldValue::Float(self.error_rp.into())),
+            ("error_yaw", FieldValue::Float(self.error_yaw.into())),
+        ]
     }
 }
 
@@ -16062,6 +19218,26 @@ impl Message for Simstate {
     }
 }
 
+impl Simstate {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("roll", FieldValue::Float(self.roll.into())),
+            ("pitch", FieldValue::Float(self.pitch.into())),
+            ("yaw", FieldValue::Float(self.yaw.into())),
+            ("xacc", FieldValue::Float(self.xacc.into())),
+            ("yacc", FieldValue::Float(self.yacc.into())),
+            ("zacc", FieldValue::Float(self.zacc.into())),
+            ("xgyro", FieldValue::Float(self.xgyro.into())),
+            ("ygyro", FieldValue::Float(self.ygyro.into())),
+            ("zgyro", FieldValue::Float(self.zgyro.into())),
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lng", FieldValue::Signed(self.lng.into())),
+        ]
+    }
+}
+
 /// Status of key hardware.
 ///
 /// MAVLink message 165 (`HWSTATUS`), from `ardupilotmega.xml`.
@@ -16091,6 +19267,17 @@ impl Message for Hwstatus {
         put_bytes(out, 0, &self.vcc.to_le_bytes());
         put_bytes(out, 2, &self.i2cerr.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl Hwstatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("Vcc", FieldValue::Unsigned(self.vcc.into())),
+            ("I2Cerr", FieldValue::Unsigned(self.i2cerr.into())),
+        ]
     }
 }
 
@@ -16143,6 +19330,22 @@ impl Message for Radio {
         put_bytes(out, 7, &self.noise.to_le_bytes());
         put_bytes(out, 8, &self.remnoise.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl Radio {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("rxerrors", FieldValue::Unsigned(self.rxerrors.into())),
+            ("fixed", FieldValue::Unsigned(self.fixed.into())),
+            ("rssi", FieldValue::Unsigned(self.rssi.into())),
+            ("remrssi", FieldValue::Unsigned(self.remrssi.into())),
+            ("txbuf", FieldValue::Unsigned(self.txbuf.into())),
+            ("noise", FieldValue::Unsigned(self.noise.into())),
+            ("remnoise", FieldValue::Unsigned(self.remnoise.into())),
+        ]
     }
 }
 
@@ -16210,6 +19413,45 @@ impl Message for LimitsStatus {
     }
 }
 
+impl LimitsStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "last_trigger",
+                FieldValue::Unsigned(self.last_trigger.into()),
+            ),
+            ("last_action", FieldValue::Unsigned(self.last_action.into())),
+            (
+                "last_recovery",
+                FieldValue::Unsigned(self.last_recovery.into()),
+            ),
+            ("last_clear", FieldValue::Unsigned(self.last_clear.into())),
+            (
+                "breach_count",
+                FieldValue::Unsigned(self.breach_count.into()),
+            ),
+            (
+                "limits_state",
+                FieldValue::Unsigned(self.limits_state.into()),
+            ),
+            (
+                "mods_enabled",
+                FieldValue::Unsigned(self.mods_enabled.into()),
+            ),
+            (
+                "mods_required",
+                FieldValue::Unsigned(self.mods_required.into()),
+            ),
+            (
+                "mods_triggered",
+                FieldValue::Unsigned(self.mods_triggered.into()),
+            ),
+        ]
+    }
+}
+
 /// Wind estimation.
 ///
 /// MAVLink message 168 (`WIND`), from `ardupilotmega.xml`.
@@ -16243,6 +19485,18 @@ impl Message for Wind {
         put_bytes(out, 4, &self.speed.to_le_bytes());
         put_bytes(out, 8, &self.speed_z.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl Wind {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("direction", FieldValue::Float(self.direction.into())),
+            ("speed", FieldValue::Float(self.speed.into())),
+            ("speed_z", FieldValue::Float(self.speed_z.into())),
+        ]
     }
 }
 
@@ -16284,6 +19538,21 @@ impl Message for Data16 {
     }
 }
 
+impl Data16 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("type", FieldValue::Unsigned(self.r#type.into())),
+            ("len", FieldValue::Unsigned(self.len.into())),
+            (
+                "data",
+                FieldValue::UnsignedArray(self.data.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Data packet, size 32.
 ///
 /// MAVLink message 170 (`DATA32`), from `ardupilotmega.xml`.
@@ -16319,6 +19588,21 @@ impl Message for Data32 {
             put_bytes(out, 2 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl Data32 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("type", FieldValue::Unsigned(self.r#type.into())),
+            ("len", FieldValue::Unsigned(self.len.into())),
+            (
+                "data",
+                FieldValue::UnsignedArray(self.data.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -16360,6 +19644,21 @@ impl Message for Data64 {
     }
 }
 
+impl Data64 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("type", FieldValue::Unsigned(self.r#type.into())),
+            ("len", FieldValue::Unsigned(self.len.into())),
+            (
+                "data",
+                FieldValue::UnsignedArray(self.data.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Data packet, size 96.
 ///
 /// MAVLink message 172 (`DATA96`), from `ardupilotmega.xml`.
@@ -16398,6 +19697,21 @@ impl Message for Data96 {
     }
 }
 
+impl Data96 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("type", FieldValue::Unsigned(self.r#type.into())),
+            ("len", FieldValue::Unsigned(self.len.into())),
+            (
+                "data",
+                FieldValue::UnsignedArray(self.data.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Rangefinder reporting.
 ///
 /// MAVLink message 173 (`RANGEFINDER`), from `ardupilotmega.xml`.
@@ -16427,6 +19741,17 @@ impl Message for Rangefinder {
         put_bytes(out, 0, &self.distance.to_le_bytes());
         put_bytes(out, 4, &self.voltage.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl Rangefinder {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("distance", FieldValue::Float(self.distance.into())),
+            ("voltage", FieldValue::Float(self.voltage.into())),
+        ]
     }
 }
 
@@ -16502,6 +19827,30 @@ impl Message for AirspeedAutocal {
     }
 }
 
+impl AirspeedAutocal {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("vx", FieldValue::Float(self.vx.into())),
+            ("vy", FieldValue::Float(self.vy.into())),
+            ("vz", FieldValue::Float(self.vz.into())),
+            (
+                "diff_pressure",
+                FieldValue::Float(self.diff_pressure.into()),
+            ),
+            ("EAS2TAS", FieldValue::Float(self.eas2tas.into())),
+            ("ratio", FieldValue::Float(self.ratio.into())),
+            ("state_x", FieldValue::Float(self.state_x.into())),
+            ("state_y", FieldValue::Float(self.state_y.into())),
+            ("state_z", FieldValue::Float(self.state_z.into())),
+            ("Pax", FieldValue::Float(self.pax.into())),
+            ("Pby", FieldValue::Float(self.pby.into())),
+            ("Pcz", FieldValue::Float(self.pcz.into())),
+        ]
+    }
+}
+
 /// A rally point. Used to set a point when from GCS -> MAV. Also used to return a point from MAV -> GCS.
 ///
 /// MAVLink message 175 (`RALLY_POINT`), from `ardupilotmega.xml`.
@@ -16567,6 +19916,31 @@ impl Message for RallyPoint {
     }
 }
 
+impl RallyPoint {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lng", FieldValue::Signed(self.lng.into())),
+            ("alt", FieldValue::Signed(self.alt.into())),
+            ("break_alt", FieldValue::Signed(self.break_alt.into())),
+            ("land_dir", FieldValue::Unsigned(self.land_dir.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("idx", FieldValue::Unsigned(self.idx.into())),
+            ("count", FieldValue::Unsigned(self.count.into())),
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+        ]
+    }
+}
+
 /// Request a current rally point from MAV. MAV should respond with a RALLY_POINT message. MAV should not respond if the request is invalid.
 ///
 /// MAVLink message 176 (`RALLY_FETCH_POINT`), from `ardupilotmega.xml`.
@@ -16600,6 +19974,24 @@ impl Message for RallyFetchPoint {
         put_bytes(out, 1, &self.target_component.to_le_bytes());
         put_bytes(out, 2, &self.idx.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl RallyFetchPoint {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("idx", FieldValue::Unsigned(self.idx.into())),
+        ]
     }
 }
 
@@ -16651,6 +20043,33 @@ impl Message for CompassmotStatus {
     }
 }
 
+impl CompassmotStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("current", FieldValue::Float(self.current.into())),
+            (
+                "CompensationX",
+                FieldValue::Float(self.compensationx.into()),
+            ),
+            (
+                "CompensationY",
+                FieldValue::Float(self.compensationy.into()),
+            ),
+            (
+                "CompensationZ",
+                FieldValue::Float(self.compensationz.into()),
+            ),
+            ("throttle", FieldValue::Unsigned(self.throttle.into())),
+            (
+                "interference",
+                FieldValue::Unsigned(self.interference.into()),
+            ),
+        ]
+    }
+}
+
 /// Status of secondary AHRS filter if available.
 ///
 /// MAVLink message 178 (`AHRS2`), from `ardupilotmega.xml`.
@@ -16696,6 +20115,21 @@ impl Message for Ahrs2 {
         put_bytes(out, 16, &self.lat.to_le_bytes());
         put_bytes(out, 20, &self.lng.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl Ahrs2 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("roll", FieldValue::Float(self.roll.into())),
+            ("pitch", FieldValue::Float(self.pitch.into())),
+            ("yaw", FieldValue::Float(self.yaw.into())),
+            ("altitude", FieldValue::Float(self.altitude.into())),
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lng", FieldValue::Signed(self.lng.into())),
+        ]
     }
 }
 
@@ -16757,6 +20191,27 @@ impl Message for CameraStatus {
         put_bytes(out, 27, &self.cam_idx.to_le_bytes());
         put_bytes(out, 28, &self.event_id.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl CameraStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("p1", FieldValue::Float(self.p1.into())),
+            ("p2", FieldValue::Float(self.p2.into())),
+            ("p3", FieldValue::Float(self.p3.into())),
+            ("p4", FieldValue::Float(self.p4.into())),
+            ("img_idx", FieldValue::Unsigned(self.img_idx.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            ("cam_idx", FieldValue::Unsigned(self.cam_idx.into())),
+            ("event_id", FieldValue::Unsigned(self.event_id.into())),
+        ]
     }
 }
 
@@ -16842,6 +20297,35 @@ impl Message for CameraFeedback {
     }
 }
 
+impl CameraFeedback {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lng", FieldValue::Signed(self.lng.into())),
+            ("alt_msl", FieldValue::Float(self.alt_msl.into())),
+            ("alt_rel", FieldValue::Float(self.alt_rel.into())),
+            ("roll", FieldValue::Float(self.roll.into())),
+            ("pitch", FieldValue::Float(self.pitch.into())),
+            ("yaw", FieldValue::Float(self.yaw.into())),
+            ("foc_len", FieldValue::Float(self.foc_len.into())),
+            ("img_idx", FieldValue::Unsigned(self.img_idx.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            ("cam_idx", FieldValue::Unsigned(self.cam_idx.into())),
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+            (
+                "completed_captures",
+                FieldValue::Unsigned(self.completed_captures.into()),
+            ),
+        ]
+    }
+}
+
 /// 2nd Battery status
 ///
 /// MAVLink message 181 (`BATTERY2`), from `ardupilotmega.xml`.
@@ -16871,6 +20355,20 @@ impl Message for Battery2 {
         put_bytes(out, 0, &self.voltage.to_le_bytes());
         put_bytes(out, 2, &self.current_battery.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl Battery2 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("voltage", FieldValue::Unsigned(self.voltage.into())),
+            (
+                "current_battery",
+                FieldValue::Signed(self.current_battery.into()),
+            ),
+        ]
     }
 }
 
@@ -16938,6 +20436,25 @@ impl Message for Ahrs3 {
     }
 }
 
+impl Ahrs3 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("roll", FieldValue::Float(self.roll.into())),
+            ("pitch", FieldValue::Float(self.pitch.into())),
+            ("yaw", FieldValue::Float(self.yaw.into())),
+            ("altitude", FieldValue::Float(self.altitude.into())),
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lng", FieldValue::Signed(self.lng.into())),
+            ("v1", FieldValue::Float(self.v1.into())),
+            ("v2", FieldValue::Float(self.v2.into())),
+            ("v3", FieldValue::Float(self.v3.into())),
+            ("v4", FieldValue::Float(self.v4.into())),
+        ]
+    }
+}
+
 /// Request the autopilot version from the system/component.
 ///
 /// MAVLink message 183 (`AUTOPILOT_VERSION_REQUEST`), from `ardupilotmega.xml`.
@@ -16967,6 +20484,23 @@ impl Message for AutopilotVersionRequest {
         put_bytes(out, 0, &self.target_system.to_le_bytes());
         put_bytes(out, 1, &self.target_component.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl AutopilotVersionRequest {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+        ]
     }
 }
 
@@ -17013,6 +20547,28 @@ impl Message for RemoteLogDataBlock {
     }
 }
 
+impl RemoteLogDataBlock {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("seqno", FieldValue::Unsigned(self.seqno.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "data",
+                FieldValue::UnsignedArray(self.data.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Send Status of each log block that autopilot board might have sent.
 ///
 /// MAVLink message 185 (`REMOTE_LOG_BLOCK_STATUS`), from `ardupilotmega.xml`.
@@ -17051,6 +20607,25 @@ impl Message for RemoteLogBlockStatus {
         put_bytes(out, 5, &self.target_component.to_le_bytes());
         put_bytes(out, 6, &self.status.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl RemoteLogBlockStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("seqno", FieldValue::Unsigned(self.seqno.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("status", FieldValue::Unsigned(self.status.into())),
+        ]
     }
 }
 
@@ -17101,6 +20676,30 @@ impl Message for LedControl {
             put_bytes(out, 5 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl LedControl {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("instance", FieldValue::Unsigned(self.instance.into())),
+            ("pattern", FieldValue::Unsigned(self.pattern.into())),
+            ("custom_len", FieldValue::Unsigned(self.custom_len.into())),
+            (
+                "custom_bytes",
+                FieldValue::UnsignedArray(self.custom_bytes.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -17164,6 +20763,32 @@ impl Message for MagCalProgress {
             put_bytes(out, 17 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl MagCalProgress {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("direction_x", FieldValue::Float(self.direction_x.into())),
+            ("direction_y", FieldValue::Float(self.direction_y.into())),
+            ("direction_z", FieldValue::Float(self.direction_z.into())),
+            ("compass_id", FieldValue::Unsigned(self.compass_id.into())),
+            ("cal_mask", FieldValue::Unsigned(self.cal_mask.into())),
+            ("cal_status", FieldValue::Unsigned(self.cal_status.into())),
+            ("attempt", FieldValue::Unsigned(self.attempt.into())),
+            (
+                "completion_pct",
+                FieldValue::Unsigned(self.completion_pct.into()),
+            ),
+            (
+                "completion_mask",
+                FieldValue::UnsignedArray(
+                    self.completion_mask.iter().map(|v| (*v).into()).collect(),
+                ),
+            ),
+        ]
     }
 }
 
@@ -17270,6 +20895,42 @@ impl Message for MagCalReport {
     }
 }
 
+impl MagCalReport {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("fitness", FieldValue::Float(self.fitness.into())),
+            ("ofs_x", FieldValue::Float(self.ofs_x.into())),
+            ("ofs_y", FieldValue::Float(self.ofs_y.into())),
+            ("ofs_z", FieldValue::Float(self.ofs_z.into())),
+            ("diag_x", FieldValue::Float(self.diag_x.into())),
+            ("diag_y", FieldValue::Float(self.diag_y.into())),
+            ("diag_z", FieldValue::Float(self.diag_z.into())),
+            ("offdiag_x", FieldValue::Float(self.offdiag_x.into())),
+            ("offdiag_y", FieldValue::Float(self.offdiag_y.into())),
+            ("offdiag_z", FieldValue::Float(self.offdiag_z.into())),
+            ("compass_id", FieldValue::Unsigned(self.compass_id.into())),
+            ("cal_mask", FieldValue::Unsigned(self.cal_mask.into())),
+            ("cal_status", FieldValue::Unsigned(self.cal_status.into())),
+            ("autosaved", FieldValue::Unsigned(self.autosaved.into())),
+            (
+                "orientation_confidence",
+                FieldValue::Float(self.orientation_confidence.into()),
+            ),
+            (
+                "old_orientation",
+                FieldValue::Unsigned(self.old_orientation.into()),
+            ),
+            (
+                "new_orientation",
+                FieldValue::Unsigned(self.new_orientation.into()),
+            ),
+            ("scale_factor", FieldValue::Float(self.scale_factor.into())),
+        ]
+    }
+}
+
 /// EKF Status message including flags and variances.
 ///
 /// MAVLink message 193 (`EKF_STATUS_REPORT`), from `ardupilotmega.xml`.
@@ -17321,6 +20982,40 @@ impl Message for EkfStatusReport {
         put_bytes(out, 20, &self.flags.to_le_bytes());
         put_bytes(out, 22, &self.airspeed_variance.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl EkfStatusReport {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "velocity_variance",
+                FieldValue::Float(self.velocity_variance.into()),
+            ),
+            (
+                "pos_horiz_variance",
+                FieldValue::Float(self.pos_horiz_variance.into()),
+            ),
+            (
+                "pos_vert_variance",
+                FieldValue::Float(self.pos_vert_variance.into()),
+            ),
+            (
+                "compass_variance",
+                FieldValue::Float(self.compass_variance.into()),
+            ),
+            (
+                "terrain_alt_variance",
+                FieldValue::Float(self.terrain_alt_variance.into()),
+            ),
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+            (
+                "airspeed_variance",
+                FieldValue::Float(self.airspeed_variance.into()),
+            ),
+        ]
     }
 }
 
@@ -17387,6 +21082,24 @@ impl Message for PidTuning {
     }
 }
 
+impl PidTuning {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("desired", FieldValue::Float(self.desired.into())),
+            ("achieved", FieldValue::Float(self.achieved.into())),
+            ("FF", FieldValue::Float(self.ff.into())),
+            ("P", FieldValue::Float(self.p.into())),
+            ("I", FieldValue::Float(self.i.into())),
+            ("D", FieldValue::Float(self.d.into())),
+            ("axis", FieldValue::Unsigned(self.axis.into())),
+            ("SRate", FieldValue::Float(self.srate.into())),
+            ("PDmod", FieldValue::Float(self.pdmod.into())),
+        ]
+    }
+}
+
 /// Deepstall path planning.
 ///
 /// MAVLink message 195 (`DEEPSTALL`), from `ardupilotmega.xml`.
@@ -17449,6 +21162,37 @@ impl Message for Deepstall {
         put_bytes(out, 32, &self.cross_track_error.to_le_bytes());
         put_bytes(out, 36, &self.stage.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl Deepstall {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("landing_lat", FieldValue::Signed(self.landing_lat.into())),
+            ("landing_lon", FieldValue::Signed(self.landing_lon.into())),
+            ("path_lat", FieldValue::Signed(self.path_lat.into())),
+            ("path_lon", FieldValue::Signed(self.path_lon.into())),
+            (
+                "arc_entry_lat",
+                FieldValue::Signed(self.arc_entry_lat.into()),
+            ),
+            (
+                "arc_entry_lon",
+                FieldValue::Signed(self.arc_entry_lon.into()),
+            ),
+            ("altitude", FieldValue::Float(self.altitude.into())),
+            (
+                "expected_travel_distance",
+                FieldValue::Float(self.expected_travel_distance.into()),
+            ),
+            (
+                "cross_track_error",
+                FieldValue::Float(self.cross_track_error.into()),
+            ),
+            ("stage", FieldValue::Unsigned(self.stage.into())),
+        ]
     }
 }
 
@@ -17524,6 +21268,51 @@ impl Message for GimbalReport {
     }
 }
 
+impl GimbalReport {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("delta_time", FieldValue::Float(self.delta_time.into())),
+            (
+                "delta_angle_x",
+                FieldValue::Float(self.delta_angle_x.into()),
+            ),
+            (
+                "delta_angle_y",
+                FieldValue::Float(self.delta_angle_y.into()),
+            ),
+            (
+                "delta_angle_z",
+                FieldValue::Float(self.delta_angle_z.into()),
+            ),
+            (
+                "delta_velocity_x",
+                FieldValue::Float(self.delta_velocity_x.into()),
+            ),
+            (
+                "delta_velocity_y",
+                FieldValue::Float(self.delta_velocity_y.into()),
+            ),
+            (
+                "delta_velocity_z",
+                FieldValue::Float(self.delta_velocity_z.into()),
+            ),
+            ("joint_roll", FieldValue::Float(self.joint_roll.into())),
+            ("joint_el", FieldValue::Float(self.joint_el.into())),
+            ("joint_az", FieldValue::Float(self.joint_az.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+        ]
+    }
+}
+
 /// Control message for rate gimbal.
 ///
 /// MAVLink message 201 (`GIMBAL_CONTROL`), from `ardupilotmega.xml`.
@@ -17565,6 +21354,35 @@ impl Message for GimbalControl {
         put_bytes(out, 12, &self.target_system.to_le_bytes());
         put_bytes(out, 13, &self.target_component.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl GimbalControl {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "demanded_rate_x",
+                FieldValue::Float(self.demanded_rate_x.into()),
+            ),
+            (
+                "demanded_rate_y",
+                FieldValue::Float(self.demanded_rate_y.into()),
+            ),
+            (
+                "demanded_rate_z",
+                FieldValue::Float(self.demanded_rate_z.into()),
+            ),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+        ]
     }
 }
 
@@ -17612,6 +21430,35 @@ impl Message for GimbalTorqueCmdReport {
     }
 }
 
+impl GimbalTorqueCmdReport {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "rl_torque_cmd",
+                FieldValue::Signed(self.rl_torque_cmd.into()),
+            ),
+            (
+                "el_torque_cmd",
+                FieldValue::Signed(self.el_torque_cmd.into()),
+            ),
+            (
+                "az_torque_cmd",
+                FieldValue::Signed(self.az_torque_cmd.into()),
+            ),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+        ]
+    }
+}
+
 /// Heartbeat from a HeroBus attached GoPro.
 ///
 /// MAVLink message 215 (`GOPRO_HEARTBEAT`), from `ardupilotmega.xml`.
@@ -17648,6 +21495,21 @@ impl Message for GoproHeartbeat {
         put_bytes(out, 1, &self.capture_mode.to_le_bytes());
         put_bytes(out, 2, &self.flags.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl GoproHeartbeat {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("status", FieldValue::Unsigned(self.status.into())),
+            (
+                "capture_mode",
+                FieldValue::Unsigned(self.capture_mode.into()),
+            ),
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+        ]
     }
 }
 
@@ -17688,6 +21550,24 @@ impl Message for GoproGetRequest {
     }
 }
 
+impl GoproGetRequest {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("cmd_id", FieldValue::Unsigned(self.cmd_id.into())),
+        ]
+    }
+}
+
 /// Response from a GOPRO_COMMAND get request.
 ///
 /// MAVLink message 217 (`GOPRO_GET_RESPONSE`), from `ardupilotmega.xml`.
@@ -17725,6 +21605,21 @@ impl Message for GoproGetResponse {
             put_bytes(out, 2 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl GoproGetResponse {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("cmd_id", FieldValue::Unsigned(self.cmd_id.into())),
+            ("status", FieldValue::Unsigned(self.status.into())),
+            (
+                "value",
+                FieldValue::UnsignedArray(self.value.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -17771,6 +21666,28 @@ impl Message for GoproSetRequest {
     }
 }
 
+impl GoproSetRequest {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("cmd_id", FieldValue::Unsigned(self.cmd_id.into())),
+            (
+                "value",
+                FieldValue::UnsignedArray(self.value.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Response from a GOPRO_COMMAND set request.
 ///
 /// MAVLink message 219 (`GOPRO_SET_RESPONSE`), from `ardupilotmega.xml`.
@@ -17802,6 +21719,17 @@ impl Message for GoproSetResponse {
         put_bytes(out, 0, &self.cmd_id.to_le_bytes());
         put_bytes(out, 1, &self.status.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl GoproSetResponse {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("cmd_id", FieldValue::Unsigned(self.cmd_id.into())),
+            ("status", FieldValue::Unsigned(self.status.into())),
+        ]
     }
 }
 
@@ -17854,6 +21782,22 @@ impl Message for NavFilterBias {
         put_bytes(out, 24, &self.gyro_1.to_le_bytes());
         put_bytes(out, 28, &self.gyro_2.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl NavFilterBias {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("usec", FieldValue::Unsigned(self.usec)),
+            ("accel_0", FieldValue::Float(self.accel_0.into())),
+            ("accel_1", FieldValue::Float(self.accel_1.into())),
+            ("accel_2", FieldValue::Float(self.accel_2.into())),
+            ("gyro_0", FieldValue::Float(self.gyro_0.into())),
+            ("gyro_1", FieldValue::Float(self.gyro_1.into())),
+            ("gyro_2", FieldValue::Float(self.gyro_2.into())),
+        ]
     }
 }
 
@@ -17917,6 +21861,39 @@ impl Message for RadioCalibration {
     }
 }
 
+impl RadioCalibration {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "aileron",
+                FieldValue::UnsignedArray(self.aileron.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "elevator",
+                FieldValue::UnsignedArray(self.elevator.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "rudder",
+                FieldValue::UnsignedArray(self.rudder.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "gyro",
+                FieldValue::UnsignedArray(self.gyro.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "pitch",
+                FieldValue::UnsignedArray(self.pitch.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "throttle",
+                FieldValue::UnsignedArray(self.throttle.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// System status specific to ualberta uav
 ///
 /// MAVLink message 222 (`UALBERTA_SYS_STATUS`), from `ualberta.xml`.
@@ -17950,6 +21927,18 @@ impl Message for UalbertaSysStatus {
         put_bytes(out, 1, &self.nav_mode.to_le_bytes());
         put_bytes(out, 2, &self.pilot.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl UalbertaSysStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("mode", FieldValue::Unsigned(self.mode.into())),
+            ("nav_mode", FieldValue::Unsigned(self.nav_mode.into())),
+            ("pilot", FieldValue::Unsigned(self.pilot.into())),
+        ]
     }
 }
 
@@ -18039,6 +22028,42 @@ impl Message for CommandIntStamped {
     }
 }
 
+impl CommandIntStamped {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "vehicle_timestamp",
+                FieldValue::Unsigned(self.vehicle_timestamp),
+            ),
+            ("utc_time", FieldValue::Unsigned(self.utc_time.into())),
+            ("param1", FieldValue::Float(self.param1.into())),
+            ("param2", FieldValue::Float(self.param2.into())),
+            ("param3", FieldValue::Float(self.param3.into())),
+            ("param4", FieldValue::Float(self.param4.into())),
+            ("x", FieldValue::Signed(self.x.into())),
+            ("y", FieldValue::Signed(self.y.into())),
+            ("z", FieldValue::Float(self.z.into())),
+            ("command", FieldValue::Unsigned(self.command.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("frame", FieldValue::Unsigned(self.frame.into())),
+            ("current", FieldValue::Unsigned(self.current.into())),
+            (
+                "autocontinue",
+                FieldValue::Unsigned(self.autocontinue.into()),
+            ),
+        ]
+    }
+}
+
 /// Send a command with up to seven parameters to the MAV and additional metadata
 ///
 /// MAVLink message 224 (`COMMAND_LONG_STAMPED`), from `ASLUAV.xml`.
@@ -18113,6 +22138,40 @@ impl Message for CommandLongStamped {
         put_bytes(out, 43, &self.target_component.to_le_bytes());
         put_bytes(out, 44, &self.confirmation.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl CommandLongStamped {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "vehicle_timestamp",
+                FieldValue::Unsigned(self.vehicle_timestamp),
+            ),
+            ("utc_time", FieldValue::Unsigned(self.utc_time.into())),
+            ("param1", FieldValue::Float(self.param1.into())),
+            ("param2", FieldValue::Float(self.param2.into())),
+            ("param3", FieldValue::Float(self.param3.into())),
+            ("param4", FieldValue::Float(self.param4.into())),
+            ("param5", FieldValue::Float(self.param5.into())),
+            ("param6", FieldValue::Float(self.param6.into())),
+            ("param7", FieldValue::Float(self.param7.into())),
+            ("command", FieldValue::Unsigned(self.command.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "confirmation",
+                FieldValue::Unsigned(self.confirmation.into()),
+            ),
+        ]
     }
 }
 
@@ -18218,6 +22277,73 @@ impl Message for EfiStatus {
     }
 }
 
+impl EfiStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("ecu_index", FieldValue::Float(self.ecu_index.into())),
+            ("rpm", FieldValue::Float(self.rpm.into())),
+            (
+                "fuel_consumed",
+                FieldValue::Float(self.fuel_consumed.into()),
+            ),
+            ("fuel_flow", FieldValue::Float(self.fuel_flow.into())),
+            ("engine_load", FieldValue::Float(self.engine_load.into())),
+            (
+                "throttle_position",
+                FieldValue::Float(self.throttle_position.into()),
+            ),
+            (
+                "spark_dwell_time",
+                FieldValue::Float(self.spark_dwell_time.into()),
+            ),
+            (
+                "barometric_pressure",
+                FieldValue::Float(self.barometric_pressure.into()),
+            ),
+            (
+                "intake_manifold_pressure",
+                FieldValue::Float(self.intake_manifold_pressure.into()),
+            ),
+            (
+                "intake_manifold_temperature",
+                FieldValue::Float(self.intake_manifold_temperature.into()),
+            ),
+            (
+                "cylinder_head_temperature",
+                FieldValue::Float(self.cylinder_head_temperature.into()),
+            ),
+            (
+                "ignition_timing",
+                FieldValue::Float(self.ignition_timing.into()),
+            ),
+            (
+                "injection_time",
+                FieldValue::Float(self.injection_time.into()),
+            ),
+            (
+                "exhaust_gas_temperature",
+                FieldValue::Float(self.exhaust_gas_temperature.into()),
+            ),
+            ("throttle_out", FieldValue::Float(self.throttle_out.into())),
+            (
+                "pt_compensation",
+                FieldValue::Float(self.pt_compensation.into()),
+            ),
+            ("health", FieldValue::Unsigned(self.health.into())),
+            (
+                "ignition_voltage",
+                FieldValue::Float(self.ignition_voltage.into()),
+            ),
+            (
+                "fuel_pressure",
+                FieldValue::Float(self.fuel_pressure.into()),
+            ),
+        ]
+    }
+}
+
 /// RPM sensor output.
 ///
 /// MAVLink message 226 (`RPM`), from `ardupilotmega.xml`.
@@ -18247,6 +22373,17 @@ impl Message for Rpm {
         put_bytes(out, 0, &self.rpm1.to_le_bytes());
         put_bytes(out, 4, &self.rpm2.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl Rpm {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("rpm1", FieldValue::Float(self.rpm1.into())),
+            ("rpm2", FieldValue::Float(self.rpm2.into())),
+        ]
     }
 }
 
@@ -18315,6 +22452,37 @@ impl Message for EstimatorStatus {
     }
 }
 
+impl EstimatorStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("vel_ratio", FieldValue::Float(self.vel_ratio.into())),
+            (
+                "pos_horiz_ratio",
+                FieldValue::Float(self.pos_horiz_ratio.into()),
+            ),
+            (
+                "pos_vert_ratio",
+                FieldValue::Float(self.pos_vert_ratio.into()),
+            ),
+            ("mag_ratio", FieldValue::Float(self.mag_ratio.into())),
+            ("hagl_ratio", FieldValue::Float(self.hagl_ratio.into())),
+            ("tas_ratio", FieldValue::Float(self.tas_ratio.into())),
+            (
+                "pos_horiz_accuracy",
+                FieldValue::Float(self.pos_horiz_accuracy.into()),
+            ),
+            (
+                "pos_vert_accuracy",
+                FieldValue::Float(self.pos_vert_accuracy.into()),
+            ),
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+        ]
+    }
+}
+
 /// Wind covariance estimate from vehicle.
 ///
 /// MAVLink message 231 (`WIND_COV`), from `common.xml`.
@@ -18372,6 +22540,30 @@ impl Message for WindCov {
         put_bytes(out, 32, &self.horiz_accuracy.to_le_bytes());
         put_bytes(out, 36, &self.vert_accuracy.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl WindCov {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("wind_x", FieldValue::Float(self.wind_x.into())),
+            ("wind_y", FieldValue::Float(self.wind_y.into())),
+            ("wind_z", FieldValue::Float(self.wind_z.into())),
+            ("var_horiz", FieldValue::Float(self.var_horiz.into())),
+            ("var_vert", FieldValue::Float(self.var_vert.into())),
+            ("wind_alt", FieldValue::Float(self.wind_alt.into())),
+            (
+                "horiz_accuracy",
+                FieldValue::Float(self.horiz_accuracy.into()),
+            ),
+            (
+                "vert_accuracy",
+                FieldValue::Float(self.vert_accuracy.into()),
+            ),
+        ]
     }
 }
 
@@ -18477,6 +22669,52 @@ impl Message for GpsInput {
     }
 }
 
+impl GpsInput {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            (
+                "time_week_ms",
+                FieldValue::Unsigned(self.time_week_ms.into()),
+            ),
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lon", FieldValue::Signed(self.lon.into())),
+            ("alt", FieldValue::Float(self.alt.into())),
+            ("hdop", FieldValue::Float(self.hdop.into())),
+            ("vdop", FieldValue::Float(self.vdop.into())),
+            ("vn", FieldValue::Float(self.vn.into())),
+            ("ve", FieldValue::Float(self.ve.into())),
+            ("vd", FieldValue::Float(self.vd.into())),
+            (
+                "speed_accuracy",
+                FieldValue::Float(self.speed_accuracy.into()),
+            ),
+            (
+                "horiz_accuracy",
+                FieldValue::Float(self.horiz_accuracy.into()),
+            ),
+            (
+                "vert_accuracy",
+                FieldValue::Float(self.vert_accuracy.into()),
+            ),
+            (
+                "ignore_flags",
+                FieldValue::Unsigned(self.ignore_flags.into()),
+            ),
+            ("time_week", FieldValue::Unsigned(self.time_week.into())),
+            ("gps_id", FieldValue::Unsigned(self.gps_id.into())),
+            ("fix_type", FieldValue::Unsigned(self.fix_type.into())),
+            (
+                "satellites_visible",
+                FieldValue::Unsigned(self.satellites_visible.into()),
+            ),
+            ("yaw", FieldValue::Unsigned(self.yaw.into())),
+        ]
+    }
+}
+
 /// RTCM message for injecting into the onboard GPS (used for DGPS)
 ///
 /// MAVLink message 233 (`GPS_RTCM_DATA`), from `common.xml`.
@@ -18512,6 +22750,21 @@ impl Message for GpsRtcmData {
             put_bytes(out, 2 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl GpsRtcmData {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+            ("len", FieldValue::Unsigned(self.len.into())),
+            (
+                "data",
+                FieldValue::UnsignedArray(self.data.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -18635,6 +22888,54 @@ impl Message for HighLatency {
         put_bytes(out, 38, &self.failsafe.to_le_bytes());
         put_bytes(out, 39, &self.wp_num.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl HighLatency {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("custom_mode", FieldValue::Unsigned(self.custom_mode.into())),
+            ("latitude", FieldValue::Signed(self.latitude.into())),
+            ("longitude", FieldValue::Signed(self.longitude.into())),
+            ("roll", FieldValue::Signed(self.roll.into())),
+            ("pitch", FieldValue::Signed(self.pitch.into())),
+            ("heading", FieldValue::Unsigned(self.heading.into())),
+            ("heading_sp", FieldValue::Signed(self.heading_sp.into())),
+            (
+                "altitude_amsl",
+                FieldValue::Signed(self.altitude_amsl.into()),
+            ),
+            ("altitude_sp", FieldValue::Signed(self.altitude_sp.into())),
+            ("wp_distance", FieldValue::Unsigned(self.wp_distance.into())),
+            ("base_mode", FieldValue::Unsigned(self.base_mode.into())),
+            (
+                "landed_state",
+                FieldValue::Unsigned(self.landed_state.into()),
+            ),
+            ("throttle", FieldValue::Signed(self.throttle.into())),
+            ("airspeed", FieldValue::Unsigned(self.airspeed.into())),
+            ("airspeed_sp", FieldValue::Unsigned(self.airspeed_sp.into())),
+            ("groundspeed", FieldValue::Unsigned(self.groundspeed.into())),
+            ("climb_rate", FieldValue::Signed(self.climb_rate.into())),
+            ("gps_nsat", FieldValue::Unsigned(self.gps_nsat.into())),
+            (
+                "gps_fix_type",
+                FieldValue::Unsigned(self.gps_fix_type.into()),
+            ),
+            (
+                "battery_remaining",
+                FieldValue::Unsigned(self.battery_remaining.into()),
+            ),
+            ("temperature", FieldValue::Signed(self.temperature.into())),
+            (
+                "temperature_air",
+                FieldValue::Signed(self.temperature_air.into()),
+            ),
+            ("failsafe", FieldValue::Unsigned(self.failsafe.into())),
+            ("wp_num", FieldValue::Unsigned(self.wp_num.into())),
+        ]
     }
 }
 
@@ -18773,6 +23074,60 @@ impl Message for HighLatency2 {
     }
 }
 
+impl HighLatency2 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("timestamp", FieldValue::Unsigned(self.timestamp.into())),
+            ("latitude", FieldValue::Signed(self.latitude.into())),
+            ("longitude", FieldValue::Signed(self.longitude.into())),
+            ("custom_mode", FieldValue::Unsigned(self.custom_mode.into())),
+            ("altitude", FieldValue::Signed(self.altitude.into())),
+            (
+                "target_altitude",
+                FieldValue::Signed(self.target_altitude.into()),
+            ),
+            (
+                "target_distance",
+                FieldValue::Unsigned(self.target_distance.into()),
+            ),
+            ("wp_num", FieldValue::Unsigned(self.wp_num.into())),
+            (
+                "failure_flags",
+                FieldValue::Unsigned(self.failure_flags.into()),
+            ),
+            ("type", FieldValue::Unsigned(self.r#type.into())),
+            ("autopilot", FieldValue::Unsigned(self.autopilot.into())),
+            ("heading", FieldValue::Unsigned(self.heading.into())),
+            (
+                "target_heading",
+                FieldValue::Unsigned(self.target_heading.into()),
+            ),
+            ("throttle", FieldValue::Unsigned(self.throttle.into())),
+            ("airspeed", FieldValue::Unsigned(self.airspeed.into())),
+            ("airspeed_sp", FieldValue::Unsigned(self.airspeed_sp.into())),
+            ("groundspeed", FieldValue::Unsigned(self.groundspeed.into())),
+            ("windspeed", FieldValue::Unsigned(self.windspeed.into())),
+            (
+                "wind_heading",
+                FieldValue::Unsigned(self.wind_heading.into()),
+            ),
+            ("eph", FieldValue::Unsigned(self.eph.into())),
+            ("epv", FieldValue::Unsigned(self.epv.into())),
+            (
+                "temperature_air",
+                FieldValue::Signed(self.temperature_air.into()),
+            ),
+            ("climb_rate", FieldValue::Signed(self.climb_rate.into())),
+            ("battery", FieldValue::Signed(self.battery.into())),
+            ("custom0", FieldValue::Signed(self.custom0.into())),
+            ("custom1", FieldValue::Signed(self.custom1.into())),
+            ("custom2", FieldValue::Signed(self.custom2.into())),
+        ]
+    }
+}
+
 /// Vibration levels and accelerometer clipping
 ///
 /// MAVLink message 241 (`VIBRATION`), from `common.xml`.
@@ -18822,6 +23177,22 @@ impl Message for Vibration {
         put_bytes(out, 24, &self.clipping_1.to_le_bytes());
         put_bytes(out, 28, &self.clipping_2.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl Vibration {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("vibration_x", FieldValue::Float(self.vibration_x.into())),
+            ("vibration_y", FieldValue::Float(self.vibration_y.into())),
+            ("vibration_z", FieldValue::Float(self.vibration_z.into())),
+            ("clipping_0", FieldValue::Unsigned(self.clipping_0.into())),
+            ("clipping_1", FieldValue::Unsigned(self.clipping_1.into())),
+            ("clipping_2", FieldValue::Unsigned(self.clipping_2.into())),
+        ]
     }
 }
 
@@ -18893,6 +23264,29 @@ impl Message for HomePosition {
         put_bytes(out, 48, &self.approach_z.to_le_bytes());
         put_bytes(out, 52, &self.time_usec.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl HomePosition {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("latitude", FieldValue::Signed(self.latitude.into())),
+            ("longitude", FieldValue::Signed(self.longitude.into())),
+            ("altitude", FieldValue::Signed(self.altitude.into())),
+            ("x", FieldValue::Float(self.x.into())),
+            ("y", FieldValue::Float(self.y.into())),
+            ("z", FieldValue::Float(self.z.into())),
+            (
+                "q",
+                FieldValue::FloatArray(self.q.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("approach_x", FieldValue::Float(self.approach_x.into())),
+            ("approach_y", FieldValue::Float(self.approach_y.into())),
+            ("approach_z", FieldValue::Float(self.approach_z.into())),
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+        ]
     }
 }
 
@@ -18971,6 +23365,33 @@ impl Message for SetHomePosition {
     }
 }
 
+impl SetHomePosition {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("latitude", FieldValue::Signed(self.latitude.into())),
+            ("longitude", FieldValue::Signed(self.longitude.into())),
+            ("altitude", FieldValue::Signed(self.altitude.into())),
+            ("x", FieldValue::Float(self.x.into())),
+            ("y", FieldValue::Float(self.y.into())),
+            ("z", FieldValue::Float(self.z.into())),
+            (
+                "q",
+                FieldValue::FloatArray(self.q.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("approach_x", FieldValue::Float(self.approach_x.into())),
+            ("approach_y", FieldValue::Float(self.approach_y.into())),
+            ("approach_z", FieldValue::Float(self.approach_z.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+        ]
+    }
+}
+
 /// The interval between messages for a particular MAVLink message ID. This message is sent in response to the MAV_CMD_REQUEST_MESSAGE command with param1=244 (this message) and param2=message_id (the id of the message for which the interval is required). It may also be sent in response to MAV_CMD_GET_MESSAGE_INTERVAL. This interface replaces DATA_STREAM.
 ///
 /// MAVLink message 244 (`MESSAGE_INTERVAL`), from `common.xml`.
@@ -19000,6 +23421,17 @@ impl Message for MessageInterval {
         put_bytes(out, 0, &self.interval_us.to_le_bytes());
         put_bytes(out, 4, &self.message_id.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl MessageInterval {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("interval_us", FieldValue::Signed(self.interval_us.into())),
+            ("message_id", FieldValue::Unsigned(self.message_id.into())),
+        ]
     }
 }
 
@@ -19034,6 +23466,20 @@ impl Message for ExtendedSysState {
         put_bytes(out, 0, &self.vtol_state.to_le_bytes());
         put_bytes(out, 1, &self.landed_state.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl ExtendedSysState {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("vtol_state", FieldValue::Unsigned(self.vtol_state.into())),
+            (
+                "landed_state",
+                FieldValue::Unsigned(self.landed_state.into()),
+            ),
+        ]
     }
 }
 
@@ -19118,6 +23564,43 @@ impl Message for AdsbVehicle {
     }
 }
 
+impl AdsbVehicle {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "ICAO_address",
+                FieldValue::Unsigned(self.icao_address.into()),
+            ),
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lon", FieldValue::Signed(self.lon.into())),
+            ("altitude", FieldValue::Signed(self.altitude.into())),
+            ("heading", FieldValue::Unsigned(self.heading.into())),
+            (
+                "hor_velocity",
+                FieldValue::Unsigned(self.hor_velocity.into()),
+            ),
+            ("ver_velocity", FieldValue::Signed(self.ver_velocity.into())),
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+            ("squawk", FieldValue::Unsigned(self.squawk.into())),
+            (
+                "altitude_type",
+                FieldValue::Unsigned(self.altitude_type.into()),
+            ),
+            (
+                "callsign",
+                FieldValue::UnsignedArray(self.callsign.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "emitter_type",
+                FieldValue::Unsigned(self.emitter_type.into()),
+            ),
+            ("tslc", FieldValue::Unsigned(self.tslc.into())),
+        ]
+    }
+}
+
 /// Information about a potential collision
 ///
 /// MAVLink message 247 (`COLLISION`), from `common.xml`.
@@ -19173,6 +23656,34 @@ impl Message for Collision {
     }
 }
 
+impl Collision {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("id", FieldValue::Unsigned(self.id.into())),
+            (
+                "time_to_minimum_delta",
+                FieldValue::Float(self.time_to_minimum_delta.into()),
+            ),
+            (
+                "altitude_minimum_delta",
+                FieldValue::Float(self.altitude_minimum_delta.into()),
+            ),
+            (
+                "horizontal_minimum_delta",
+                FieldValue::Float(self.horizontal_minimum_delta.into()),
+            ),
+            ("src", FieldValue::Unsigned(self.src.into())),
+            ("action", FieldValue::Unsigned(self.action.into())),
+            (
+                "threat_level",
+                FieldValue::Unsigned(self.threat_level.into()),
+            ),
+        ]
+    }
+}
+
 /// Message implementing parts of the V2 payload specs in V1 frames for transitional support.
 ///
 /// MAVLink message 248 (`V2_EXTENSION`), from `common.xml`.
@@ -19219,6 +23730,35 @@ impl Message for V2Extension {
     }
 }
 
+impl V2Extension {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "message_type",
+                FieldValue::Unsigned(self.message_type.into()),
+            ),
+            (
+                "target_network",
+                FieldValue::Unsigned(self.target_network.into()),
+            ),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "payload",
+                FieldValue::UnsignedArray(self.payload.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Send raw controller memory. The use of this message is discouraged for normal packets, but a quite efficient way for testing new messages and getting experimental debug output.
 ///
 /// MAVLink message 249 (`MEMORY_VECT`), from `common.xml`.
@@ -19258,6 +23798,22 @@ impl Message for MemoryVect {
             put_bytes(out, 4 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl MemoryVect {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("address", FieldValue::Unsigned(self.address.into())),
+            ("ver", FieldValue::Unsigned(self.ver.into())),
+            ("type", FieldValue::Unsigned(self.r#type.into())),
+            (
+                "value",
+                FieldValue::SignedArray(self.value.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -19307,6 +23863,23 @@ impl Message for DebugVect {
     }
 }
 
+impl DebugVect {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("x", FieldValue::Float(self.x.into())),
+            ("y", FieldValue::Float(self.y.into())),
+            ("z", FieldValue::Float(self.z.into())),
+            (
+                "name",
+                FieldValue::UnsignedArray(self.name.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Send a key-value pair as float. The use of this message is discouraged for normal packets, but a quite efficient way for testing new messages and getting experimental debug output.
 ///
 /// MAVLink message 251 (`NAMED_VALUE_FLOAT`), from `common.xml`.
@@ -19345,6 +23918,24 @@ impl Message for NamedValueFloat {
     }
 }
 
+impl NamedValueFloat {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("value", FieldValue::Float(self.value.into())),
+            (
+                "name",
+                FieldValue::UnsignedArray(self.name.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Send a key-value pair as integer. The use of this message is discouraged for normal packets, but a quite efficient way for testing new messages and getting experimental debug output.
 ///
 /// MAVLink message 252 (`NAMED_VALUE_INT`), from `common.xml`.
@@ -19380,6 +23971,24 @@ impl Message for NamedValueInt {
             put_bytes(out, 8 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl NamedValueInt {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("value", FieldValue::Signed(self.value.into())),
+            (
+                "name",
+                FieldValue::UnsignedArray(self.name.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -19428,6 +24037,22 @@ impl Message for Statustext {
     }
 }
 
+impl Statustext {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("severity", FieldValue::Unsigned(self.severity.into())),
+            (
+                "text",
+                FieldValue::UnsignedArray(self.text.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("id", FieldValue::Unsigned(self.id.into())),
+            ("chunk_seq", FieldValue::Unsigned(self.chunk_seq.into())),
+        ]
+    }
+}
+
 /// Send a debug value. The index is used to discriminate between values. These values show up in the plot of QGroundControl as DEBUG N.
 ///
 /// MAVLink message 254 (`DEBUG`), from `common.xml`.
@@ -19461,6 +24086,21 @@ impl Message for Debug {
         put_bytes(out, 4, &self.value.to_le_bytes());
         put_bytes(out, 8, &self.ind.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl Debug {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("value", FieldValue::Float(self.value.into())),
+            ("ind", FieldValue::Unsigned(self.ind.into())),
+        ]
     }
 }
 
@@ -19506,6 +24146,31 @@ impl Message for SetupSigning {
     }
 }
 
+impl SetupSigning {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "initial_timestamp",
+                FieldValue::Unsigned(self.initial_timestamp),
+            ),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "secret_key",
+                FieldValue::UnsignedArray(self.secret_key.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Report button state change.
 ///
 /// MAVLink message 257 (`BUTTON_CHANGE`), from `common.xml`.
@@ -19539,6 +24204,24 @@ impl Message for ButtonChange {
         put_bytes(out, 4, &self.last_change_ms.to_le_bytes());
         put_bytes(out, 8, &self.state.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl ButtonChange {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            (
+                "last_change_ms",
+                FieldValue::Unsigned(self.last_change_ms.into()),
+            ),
+            ("state", FieldValue::Unsigned(self.state.into())),
+        ]
     }
 }
 
@@ -19584,6 +24267,31 @@ impl Message for PlayTune {
             put_bytes(out, 32 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl PlayTune {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "tune",
+                FieldValue::UnsignedArray(self.tune.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "tune2",
+                FieldValue::UnsignedArray(self.tune2.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -19675,6 +24383,67 @@ impl Message for CameraInformation {
     }
 }
 
+impl CameraInformation {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            (
+                "firmware_version",
+                FieldValue::Unsigned(self.firmware_version.into()),
+            ),
+            ("focal_length", FieldValue::Float(self.focal_length.into())),
+            (
+                "sensor_size_h",
+                FieldValue::Float(self.sensor_size_h.into()),
+            ),
+            (
+                "sensor_size_v",
+                FieldValue::Float(self.sensor_size_v.into()),
+            ),
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+            (
+                "resolution_h",
+                FieldValue::Unsigned(self.resolution_h.into()),
+            ),
+            (
+                "resolution_v",
+                FieldValue::Unsigned(self.resolution_v.into()),
+            ),
+            (
+                "cam_definition_version",
+                FieldValue::Unsigned(self.cam_definition_version.into()),
+            ),
+            (
+                "vendor_name",
+                FieldValue::UnsignedArray(self.vendor_name.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "model_name",
+                FieldValue::UnsignedArray(self.model_name.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("lens_id", FieldValue::Unsigned(self.lens_id.into())),
+            (
+                "cam_definition_uri",
+                FieldValue::UnsignedArray(
+                    self.cam_definition_uri
+                        .iter()
+                        .map(|v| (*v).into())
+                        .collect(),
+                ),
+            ),
+            (
+                "gimbal_device_id",
+                FieldValue::Unsigned(self.gimbal_device_id.into()),
+            ),
+        ]
+    }
+}
+
 /// Settings of a camera. Can be requested with a MAV_CMD_REQUEST_MESSAGE command.
 ///
 /// MAVLink message 260 (`CAMERA_SETTINGS`), from `common.xml`.
@@ -19715,6 +24484,22 @@ impl Message for CameraSettings {
         put_bytes(out, 5, &self.zoomlevel.to_le_bytes());
         put_bytes(out, 9, &self.focuslevel.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl CameraSettings {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("mode_id", FieldValue::Unsigned(self.mode_id.into())),
+            ("zoomLevel", FieldValue::Float(self.zoomlevel.into())),
+            ("focusLevel", FieldValue::Float(self.focuslevel.into())),
+        ]
     }
 }
 
@@ -19792,6 +24577,44 @@ impl Message for StorageInformation {
     }
 }
 
+impl StorageInformation {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            (
+                "total_capacity",
+                FieldValue::Float(self.total_capacity.into()),
+            ),
+            (
+                "used_capacity",
+                FieldValue::Float(self.used_capacity.into()),
+            ),
+            (
+                "available_capacity",
+                FieldValue::Float(self.available_capacity.into()),
+            ),
+            ("read_speed", FieldValue::Float(self.read_speed.into())),
+            ("write_speed", FieldValue::Float(self.write_speed.into())),
+            ("storage_id", FieldValue::Unsigned(self.storage_id.into())),
+            (
+                "storage_count",
+                FieldValue::Unsigned(self.storage_count.into()),
+            ),
+            ("status", FieldValue::Unsigned(self.status.into())),
+            ("type", FieldValue::Unsigned(self.r#type.into())),
+            (
+                "name",
+                FieldValue::UnsignedArray(self.name.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Information about the status of a capture. Can be requested with a MAV_CMD_REQUEST_MESSAGE command.
 ///
 /// MAVLink message 262 (`CAMERA_CAPTURE_STATUS`), from `common.xml`.
@@ -19842,6 +24665,40 @@ impl Message for CameraCaptureStatus {
         put_bytes(out, 17, &self.video_status.to_le_bytes());
         put_bytes(out, 18, &self.image_count.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl CameraCaptureStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            (
+                "image_interval",
+                FieldValue::Float(self.image_interval.into()),
+            ),
+            (
+                "recording_time_ms",
+                FieldValue::Unsigned(self.recording_time_ms.into()),
+            ),
+            (
+                "available_capacity",
+                FieldValue::Float(self.available_capacity.into()),
+            ),
+            (
+                "image_status",
+                FieldValue::Unsigned(self.image_status.into()),
+            ),
+            (
+                "video_status",
+                FieldValue::Unsigned(self.video_status.into()),
+            ),
+            ("image_count", FieldValue::Signed(self.image_count.into())),
+        ]
     }
 }
 
@@ -19918,6 +24775,38 @@ impl Message for CameraImageCaptured {
     }
 }
 
+impl CameraImageCaptured {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_utc", FieldValue::Unsigned(self.time_utc)),
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lon", FieldValue::Signed(self.lon.into())),
+            ("alt", FieldValue::Signed(self.alt.into())),
+            ("relative_alt", FieldValue::Signed(self.relative_alt.into())),
+            (
+                "q",
+                FieldValue::FloatArray(self.q.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("image_index", FieldValue::Signed(self.image_index.into())),
+            ("camera_id", FieldValue::Unsigned(self.camera_id.into())),
+            (
+                "capture_result",
+                FieldValue::Signed(self.capture_result.into()),
+            ),
+            (
+                "file_url",
+                FieldValue::UnsignedArray(self.file_url.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Information about flight since last arming.
 ///
 /// MAVLink message 264 (`FLIGHT_INFORMATION`), from `common.xml`.
@@ -19955,6 +24844,28 @@ impl Message for FlightInformation {
         put_bytes(out, 16, &self.flight_uuid.to_le_bytes());
         put_bytes(out, 24, &self.time_boot_ms.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl FlightInformation {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "arming_time_utc",
+                FieldValue::Unsigned(self.arming_time_utc),
+            ),
+            (
+                "takeoff_time_utc",
+                FieldValue::Unsigned(self.takeoff_time_utc),
+            ),
+            ("flight_uuid", FieldValue::Unsigned(self.flight_uuid)),
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+        ]
     }
 }
 
@@ -20000,6 +24911,23 @@ impl Message for MountOrientation {
         put_bytes(out, 12, &self.yaw.to_le_bytes());
         put_bytes(out, 16, &self.yaw_absolute.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl MountOrientation {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("roll", FieldValue::Float(self.roll.into())),
+            ("pitch", FieldValue::Float(self.pitch.into())),
+            ("yaw", FieldValue::Float(self.yaw.into())),
+            ("yaw_absolute", FieldValue::Float(self.yaw_absolute.into())),
+        ]
     }
 }
 
@@ -20053,6 +24981,33 @@ impl Message for LoggingData {
     }
 }
 
+impl LoggingData {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("sequence", FieldValue::Unsigned(self.sequence.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("length", FieldValue::Unsigned(self.length.into())),
+            (
+                "first_message_offset",
+                FieldValue::Unsigned(self.first_message_offset.into()),
+            ),
+            (
+                "data",
+                FieldValue::UnsignedArray(self.data.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// A message containing logged data which requires a LOGGING_ACK to be sent back
 ///
 /// MAVLink message 267 (`LOGGING_DATA_ACKED`), from `common.xml`.
@@ -20103,6 +25058,33 @@ impl Message for LoggingDataAcked {
     }
 }
 
+impl LoggingDataAcked {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("sequence", FieldValue::Unsigned(self.sequence.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("length", FieldValue::Unsigned(self.length.into())),
+            (
+                "first_message_offset",
+                FieldValue::Unsigned(self.first_message_offset.into()),
+            ),
+            (
+                "data",
+                FieldValue::UnsignedArray(self.data.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// An ack for a LOGGING_DATA_ACKED message
 ///
 /// MAVLink message 268 (`LOGGING_ACK`), from `common.xml`.
@@ -20136,6 +25118,24 @@ impl Message for LoggingAck {
         put_bytes(out, 2, &self.target_system.to_le_bytes());
         put_bytes(out, 3, &self.target_component.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl LoggingAck {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("sequence", FieldValue::Unsigned(self.sequence.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+        ]
     }
 }
 
@@ -20223,6 +25223,40 @@ impl Message for VideoStreamInformation {
     }
 }
 
+impl VideoStreamInformation {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("framerate", FieldValue::Float(self.framerate.into())),
+            ("bitrate", FieldValue::Unsigned(self.bitrate.into())),
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+            (
+                "resolution_h",
+                FieldValue::Unsigned(self.resolution_h.into()),
+            ),
+            (
+                "resolution_v",
+                FieldValue::Unsigned(self.resolution_v.into()),
+            ),
+            ("rotation", FieldValue::Unsigned(self.rotation.into())),
+            ("hfov", FieldValue::Unsigned(self.hfov.into())),
+            ("stream_id", FieldValue::Unsigned(self.stream_id.into())),
+            ("count", FieldValue::Unsigned(self.count.into())),
+            ("type", FieldValue::Unsigned(self.r#type.into())),
+            (
+                "name",
+                FieldValue::UnsignedArray(self.name.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "uri",
+                FieldValue::UnsignedArray(self.uri.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("encoding", FieldValue::Unsigned(self.encoding.into())),
+        ]
+    }
+}
+
 /// Information about the status of a video stream. It may be requested using MAV_CMD_REQUEST_MESSAGE.
 ///
 /// MAVLink message 270 (`VIDEO_STREAM_STATUS`), from `common.xml`.
@@ -20277,6 +25311,29 @@ impl Message for VideoStreamStatus {
         put_bytes(out, 16, &self.hfov.to_le_bytes());
         put_bytes(out, 18, &self.stream_id.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl VideoStreamStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("framerate", FieldValue::Float(self.framerate.into())),
+            ("bitrate", FieldValue::Unsigned(self.bitrate.into())),
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+            (
+                "resolution_h",
+                FieldValue::Unsigned(self.resolution_h.into()),
+            ),
+            (
+                "resolution_v",
+                FieldValue::Unsigned(self.resolution_v.into()),
+            ),
+            ("rotation", FieldValue::Unsigned(self.rotation.into())),
+            ("hfov", FieldValue::Unsigned(self.hfov.into())),
+            ("stream_id", FieldValue::Unsigned(self.stream_id.into())),
+        ]
     }
 }
 
@@ -20346,6 +25403,31 @@ impl Message for CameraFovStatus {
     }
 }
 
+impl CameraFovStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("lat_camera", FieldValue::Signed(self.lat_camera.into())),
+            ("lon_camera", FieldValue::Signed(self.lon_camera.into())),
+            ("alt_camera", FieldValue::Signed(self.alt_camera.into())),
+            ("lat_image", FieldValue::Signed(self.lat_image.into())),
+            ("lon_image", FieldValue::Signed(self.lon_image.into())),
+            ("alt_image", FieldValue::Signed(self.alt_image.into())),
+            (
+                "q",
+                FieldValue::FloatArray(self.q.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("hfov", FieldValue::Float(self.hfov.into())),
+            ("vfov", FieldValue::Float(self.vfov.into())),
+        ]
+    }
+}
+
 /// Camera tracking status, sent while in active tracking. Use MAV_CMD_SET_MESSAGE_INTERVAL to define message interval.
 ///
 /// MAVLink message 275 (`CAMERA_TRACKING_IMAGE_STATUS`), from `common.xml`.
@@ -20410,6 +25492,31 @@ impl Message for CameraTrackingImageStatus {
         put_bytes(out, 29, &self.tracking_mode.to_le_bytes());
         put_bytes(out, 30, &self.target_data.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl CameraTrackingImageStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("point_x", FieldValue::Float(self.point_x.into())),
+            ("point_y", FieldValue::Float(self.point_y.into())),
+            ("radius", FieldValue::Float(self.radius.into())),
+            ("rec_top_x", FieldValue::Float(self.rec_top_x.into())),
+            ("rec_top_y", FieldValue::Float(self.rec_top_y.into())),
+            ("rec_bottom_x", FieldValue::Float(self.rec_bottom_x.into())),
+            ("rec_bottom_y", FieldValue::Float(self.rec_bottom_y.into())),
+            (
+                "tracking_status",
+                FieldValue::Unsigned(self.tracking_status.into()),
+            ),
+            (
+                "tracking_mode",
+                FieldValue::Unsigned(self.tracking_mode.into()),
+            ),
+            ("target_data", FieldValue::Unsigned(self.target_data.into())),
+        ]
     }
 }
 
@@ -20490,6 +25597,31 @@ impl Message for CameraTrackingGeoStatus {
     }
 }
 
+impl CameraTrackingGeoStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lon", FieldValue::Signed(self.lon.into())),
+            ("alt", FieldValue::Float(self.alt.into())),
+            ("h_acc", FieldValue::Float(self.h_acc.into())),
+            ("v_acc", FieldValue::Float(self.v_acc.into())),
+            ("vel_n", FieldValue::Float(self.vel_n.into())),
+            ("vel_e", FieldValue::Float(self.vel_e.into())),
+            ("vel_d", FieldValue::Float(self.vel_d.into())),
+            ("vel_acc", FieldValue::Float(self.vel_acc.into())),
+            ("dist", FieldValue::Float(self.dist.into())),
+            ("hdg", FieldValue::Float(self.hdg.into())),
+            ("hdg_acc", FieldValue::Float(self.hdg_acc.into())),
+            (
+                "tracking_status",
+                FieldValue::Unsigned(self.tracking_status.into()),
+            ),
+        ]
+    }
+}
+
 /// Camera absolute thermal range. This can be streamed when the associated `VIDEO_STREAM_STATUS.flag` bit `VIDEO_STREAM_STATUS_FLAGS_THERMAL_RANGE_ENABLED` is set, but a GCS may choose to only request it for the current active stream. Use MAV_CMD_SET_MESSAGE_INTERVAL to define message interval (param3 indicates the stream id of the current camera, or 0 for all streams, param4 indicates the target camera_device_id for autopilot-attached cameras or 0 for MAVLink cameras).
 ///
 /// MAVLink message 277 (`CAMERA_THERMAL_RANGE`), from `common.xml`.
@@ -20547,6 +25679,30 @@ impl Message for CameraThermalRange {
         put_bytes(out, 28, &self.stream_id.to_le_bytes());
         put_bytes(out, 29, &self.camera_device_id.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl CameraThermalRange {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("max", FieldValue::Float(self.max.into())),
+            ("max_point_x", FieldValue::Float(self.max_point_x.into())),
+            ("max_point_y", FieldValue::Float(self.max_point_y.into())),
+            ("min", FieldValue::Float(self.min.into())),
+            ("min_point_x", FieldValue::Float(self.min_point_x.into())),
+            ("min_point_y", FieldValue::Float(self.min_point_y.into())),
+            ("stream_id", FieldValue::Unsigned(self.stream_id.into())),
+            (
+                "camera_device_id",
+                FieldValue::Unsigned(self.camera_device_id.into()),
+            ),
+        ]
     }
 }
 
@@ -20611,6 +25767,30 @@ impl Message for GimbalManagerInformation {
     }
 }
 
+impl GimbalManagerInformation {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("cap_flags", FieldValue::Unsigned(self.cap_flags.into())),
+            ("roll_min", FieldValue::Float(self.roll_min.into())),
+            ("roll_max", FieldValue::Float(self.roll_max.into())),
+            ("pitch_min", FieldValue::Float(self.pitch_min.into())),
+            ("pitch_max", FieldValue::Float(self.pitch_max.into())),
+            ("yaw_min", FieldValue::Float(self.yaw_min.into())),
+            ("yaw_max", FieldValue::Float(self.yaw_max.into())),
+            (
+                "gimbal_device_id",
+                FieldValue::Unsigned(self.gimbal_device_id.into()),
+            ),
+        ]
+    }
+}
+
 /// Current status about a high level gimbal manager. This message should be broadcast at a low regular rate (e.g. 5Hz).
 ///
 /// MAVLink message 281 (`GIMBAL_MANAGER_STATUS`), from `common.xml`.
@@ -20661,6 +25841,40 @@ impl Message for GimbalManagerStatus {
         put_bytes(out, 11, &self.secondary_control_sysid.to_le_bytes());
         put_bytes(out, 12, &self.secondary_control_compid.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl GimbalManagerStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+            (
+                "gimbal_device_id",
+                FieldValue::Unsigned(self.gimbal_device_id.into()),
+            ),
+            (
+                "primary_control_sysid",
+                FieldValue::Unsigned(self.primary_control_sysid.into()),
+            ),
+            (
+                "primary_control_compid",
+                FieldValue::Unsigned(self.primary_control_compid.into()),
+            ),
+            (
+                "secondary_control_sysid",
+                FieldValue::Unsigned(self.secondary_control_sysid.into()),
+            ),
+            (
+                "secondary_control_compid",
+                FieldValue::Unsigned(self.secondary_control_compid.into()),
+            ),
+        ]
     }
 }
 
@@ -20720,6 +25934,44 @@ impl Message for GimbalManagerSetAttitude {
         put_bytes(out, 33, &self.target_component.to_le_bytes());
         put_bytes(out, 34, &self.gimbal_device_id.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl GimbalManagerSetAttitude {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+            (
+                "q",
+                FieldValue::FloatArray(self.q.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "angular_velocity_x",
+                FieldValue::Float(self.angular_velocity_x.into()),
+            ),
+            (
+                "angular_velocity_y",
+                FieldValue::Float(self.angular_velocity_y.into()),
+            ),
+            (
+                "angular_velocity_z",
+                FieldValue::Float(self.angular_velocity_z.into()),
+            ),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "gimbal_device_id",
+                FieldValue::Unsigned(self.gimbal_device_id.into()),
+            ),
+        ]
     }
 }
 
@@ -20819,6 +26071,55 @@ impl Message for GimbalDeviceInformation {
     }
 }
 
+impl GimbalDeviceInformation {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("uid", FieldValue::Unsigned(self.uid)),
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            (
+                "firmware_version",
+                FieldValue::Unsigned(self.firmware_version.into()),
+            ),
+            (
+                "hardware_version",
+                FieldValue::Unsigned(self.hardware_version.into()),
+            ),
+            ("roll_min", FieldValue::Float(self.roll_min.into())),
+            ("roll_max", FieldValue::Float(self.roll_max.into())),
+            ("pitch_min", FieldValue::Float(self.pitch_min.into())),
+            ("pitch_max", FieldValue::Float(self.pitch_max.into())),
+            ("yaw_min", FieldValue::Float(self.yaw_min.into())),
+            ("yaw_max", FieldValue::Float(self.yaw_max.into())),
+            ("cap_flags", FieldValue::Unsigned(self.cap_flags.into())),
+            (
+                "custom_cap_flags",
+                FieldValue::Unsigned(self.custom_cap_flags.into()),
+            ),
+            (
+                "vendor_name",
+                FieldValue::UnsignedArray(self.vendor_name.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "model_name",
+                FieldValue::UnsignedArray(self.model_name.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "custom_name",
+                FieldValue::UnsignedArray(self.custom_name.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "gimbal_device_id",
+                FieldValue::Unsigned(self.gimbal_device_id.into()),
+            ),
+        ]
+    }
+}
+
 /// Low level message to control a gimbal device's attitude. This message is to be sent from the gimbal manager to the gimbal device component. The quaternion and angular velocities can be set to NaN according to use case. For the angles encoded in the quaternion and the angular velocities holds: If the flag GIMBAL_DEVICE_FLAGS_YAW_IN_VEHICLE_FRAME is set, then they are relative to the vehicle heading (vehicle frame). If the flag GIMBAL_DEVICE_FLAGS_YAW_IN_EARTH_FRAME is set, then they are relative to absolute North (earth frame). If neither of these flags are set, then (for backwards compatibility) it holds: If the flag GIMBAL_DEVICE_FLAGS_YAW_LOCK is set, then they are relative to absolute North (earth frame), else they are relative to the vehicle heading (vehicle frame). Setting both GIMBAL_DEVICE_FLAGS_YAW_IN_VEHICLE_FRAME and GIMBAL_DEVICE_FLAGS_YAW_IN_EARTH_FRAME is not allowed. These rules are to ensure backwards compatibility. New implementations should always set either GIMBAL_DEVICE_FLAGS_YAW_IN_VEHICLE_FRAME or GIMBAL_DEVICE_FLAGS_YAW_IN_EARTH_FRAME.
 ///
 /// MAVLink message 284 (`GIMBAL_DEVICE_SET_ATTITUDE`), from `common.xml`.
@@ -20871,6 +26172,40 @@ impl Message for GimbalDeviceSetAttitude {
         put_bytes(out, 30, &self.target_system.to_le_bytes());
         put_bytes(out, 31, &self.target_component.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl GimbalDeviceSetAttitude {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "q",
+                FieldValue::FloatArray(self.q.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "angular_velocity_x",
+                FieldValue::Float(self.angular_velocity_x.into()),
+            ),
+            (
+                "angular_velocity_y",
+                FieldValue::Float(self.angular_velocity_y.into()),
+            ),
+            (
+                "angular_velocity_z",
+                FieldValue::Float(self.angular_velocity_z.into()),
+            ),
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+        ]
     }
 }
 
@@ -20950,6 +26285,57 @@ impl Message for GimbalDeviceAttitudeStatus {
         put_bytes(out, 44, &self.delta_yaw_velocity.to_le_bytes());
         put_bytes(out, 48, &self.gimbal_device_id.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl GimbalDeviceAttitudeStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            (
+                "q",
+                FieldValue::FloatArray(self.q.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "angular_velocity_x",
+                FieldValue::Float(self.angular_velocity_x.into()),
+            ),
+            (
+                "angular_velocity_y",
+                FieldValue::Float(self.angular_velocity_y.into()),
+            ),
+            (
+                "angular_velocity_z",
+                FieldValue::Float(self.angular_velocity_z.into()),
+            ),
+            (
+                "failure_flags",
+                FieldValue::Unsigned(self.failure_flags.into()),
+            ),
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("delta_yaw", FieldValue::Float(self.delta_yaw.into())),
+            (
+                "delta_yaw_velocity",
+                FieldValue::Float(self.delta_yaw_velocity.into()),
+            ),
+            (
+                "gimbal_device_id",
+                FieldValue::Unsigned(self.gimbal_device_id.into()),
+            ),
+        ]
     }
 }
 
@@ -21034,6 +26420,55 @@ impl Message for AutopilotStateForGimbalDevice {
     }
 }
 
+impl AutopilotStateForGimbalDevice {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_boot_us", FieldValue::Unsigned(self.time_boot_us)),
+            (
+                "q",
+                FieldValue::FloatArray(self.q.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "q_estimated_delay_us",
+                FieldValue::Unsigned(self.q_estimated_delay_us.into()),
+            ),
+            ("vx", FieldValue::Float(self.vx.into())),
+            ("vy", FieldValue::Float(self.vy.into())),
+            ("vz", FieldValue::Float(self.vz.into())),
+            (
+                "v_estimated_delay_us",
+                FieldValue::Unsigned(self.v_estimated_delay_us.into()),
+            ),
+            (
+                "feed_forward_angular_velocity_z",
+                FieldValue::Float(self.feed_forward_angular_velocity_z.into()),
+            ),
+            (
+                "estimator_status",
+                FieldValue::Unsigned(self.estimator_status.into()),
+            ),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "landed_state",
+                FieldValue::Unsigned(self.landed_state.into()),
+            ),
+            (
+                "angular_velocity_z",
+                FieldValue::Float(self.angular_velocity_z.into()),
+            ),
+        ]
+    }
+}
+
 /// Set gimbal manager pitch and yaw angles (high rate message). This message is to be sent to the gimbal manager (e.g. from a ground station) and will be ignored by gimbal devices. Angles and rates can be set to NaN according to use case. Use MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW for low-rate adjustments that require confirmation.
 ///
 /// MAVLink message 287 (`GIMBAL_MANAGER_SET_PITCHYAW`), from `common.xml`.
@@ -21088,6 +26523,32 @@ impl Message for GimbalManagerSetPitchyaw {
         put_bytes(out, 21, &self.target_component.to_le_bytes());
         put_bytes(out, 22, &self.gimbal_device_id.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl GimbalManagerSetPitchyaw {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+            ("pitch", FieldValue::Float(self.pitch.into())),
+            ("yaw", FieldValue::Float(self.yaw.into())),
+            ("pitch_rate", FieldValue::Float(self.pitch_rate.into())),
+            ("yaw_rate", FieldValue::Float(self.yaw_rate.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "gimbal_device_id",
+                FieldValue::Unsigned(self.gimbal_device_id.into()),
+            ),
+        ]
     }
 }
 
@@ -21148,6 +26609,32 @@ impl Message for GimbalManagerSetManualControl {
     }
 }
 
+impl GimbalManagerSetManualControl {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+            ("pitch", FieldValue::Float(self.pitch.into())),
+            ("yaw", FieldValue::Float(self.yaw.into())),
+            ("pitch_rate", FieldValue::Float(self.pitch_rate.into())),
+            ("yaw_rate", FieldValue::Float(self.yaw_rate.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "gimbal_device_id",
+                FieldValue::Unsigned(self.gimbal_device_id.into()),
+            ),
+        ]
+    }
+}
+
 /// Airspeed information from a sensor.
 ///
 /// MAVLink message 295 (`AIRSPEED`), from `development.xml`.
@@ -21193,6 +26680,20 @@ impl Message for Airspeed {
     }
 }
 
+impl Airspeed {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("airspeed", FieldValue::Float(self.airspeed.into())),
+            ("raw_press", FieldValue::Float(self.raw_press.into())),
+            ("temperature", FieldValue::Signed(self.temperature.into())),
+            ("id", FieldValue::Unsigned(self.id.into())),
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+        ]
+    }
+}
+
 /// Configure WiFi AP SSID, password, and mode. This message is re-emitted as an acknowledgement by the AP. The message may also be explicitly requested using MAV_CMD_REQUEST_MESSAGE
 ///
 /// MAVLink message 299 (`WIFI_CONFIG_AP`), from `common.xml`.
@@ -21226,6 +26727,23 @@ impl Message for WifiConfigAp {
             put_bytes(out, 32 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl WifiConfigAp {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "ssid",
+                FieldValue::UnsignedArray(self.ssid.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "password",
+                FieldValue::UnsignedArray(self.password.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -21328,6 +26846,53 @@ impl Message for AisVessel {
     }
 }
 
+impl AisVessel {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("MMSI", FieldValue::Unsigned(self.mmsi.into())),
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lon", FieldValue::Signed(self.lon.into())),
+            ("COG", FieldValue::Unsigned(self.cog.into())),
+            ("heading", FieldValue::Unsigned(self.heading.into())),
+            ("velocity", FieldValue::Unsigned(self.velocity.into())),
+            (
+                "dimension_bow",
+                FieldValue::Unsigned(self.dimension_bow.into()),
+            ),
+            (
+                "dimension_stern",
+                FieldValue::Unsigned(self.dimension_stern.into()),
+            ),
+            ("tslc", FieldValue::Unsigned(self.tslc.into())),
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+            ("turn_rate", FieldValue::Signed(self.turn_rate.into())),
+            (
+                "navigational_status",
+                FieldValue::Unsigned(self.navigational_status.into()),
+            ),
+            ("type", FieldValue::Unsigned(self.r#type.into())),
+            (
+                "dimension_port",
+                FieldValue::Unsigned(self.dimension_port.into()),
+            ),
+            (
+                "dimension_starboard",
+                FieldValue::Unsigned(self.dimension_starboard.into()),
+            ),
+            (
+                "callsign",
+                FieldValue::UnsignedArray(self.callsign.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "name",
+                FieldValue::UnsignedArray(self.name.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// General status information of an UAVCAN node. Please refer to the definition of the UAVCAN message "uavcan.protocol.NodeStatus" for the background information. The UAVCAN specification is available at http://uavcan.org.
 ///
 /// MAVLink message 310 (`UAVCAN_NODE_STATUS`), from `common.xml`.
@@ -21375,6 +26940,24 @@ impl Message for UavcanNodeStatus {
         put_bytes(out, 15, &self.mode.to_le_bytes());
         put_bytes(out, 16, &self.sub_mode.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl UavcanNodeStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("uptime_sec", FieldValue::Unsigned(self.uptime_sec.into())),
+            (
+                "vendor_specific_status_code",
+                FieldValue::Unsigned(self.vendor_specific_status_code.into()),
+            ),
+            ("health", FieldValue::Unsigned(self.health.into())),
+            ("mode", FieldValue::Unsigned(self.mode.into())),
+            ("sub_mode", FieldValue::Unsigned(self.sub_mode.into())),
+        ]
     }
 }
 
@@ -21442,6 +27025,45 @@ impl Message for UavcanNodeInfo {
     }
 }
 
+impl UavcanNodeInfo {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("uptime_sec", FieldValue::Unsigned(self.uptime_sec.into())),
+            (
+                "sw_vcs_commit",
+                FieldValue::Unsigned(self.sw_vcs_commit.into()),
+            ),
+            (
+                "name",
+                FieldValue::UnsignedArray(self.name.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "hw_version_major",
+                FieldValue::Unsigned(self.hw_version_major.into()),
+            ),
+            (
+                "hw_version_minor",
+                FieldValue::Unsigned(self.hw_version_minor.into()),
+            ),
+            (
+                "hw_unique_id",
+                FieldValue::UnsignedArray(self.hw_unique_id.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "sw_version_major",
+                FieldValue::Unsigned(self.sw_version_major.into()),
+            ),
+            (
+                "sw_version_minor",
+                FieldValue::Unsigned(self.sw_version_minor.into()),
+            ),
+        ]
+    }
+}
+
 /// Request to read the value of a parameter with either the param_id string id or param_index. PARAM_EXT_VALUE should be emitted in response.
 ///
 /// MAVLink message 320 (`PARAM_EXT_REQUEST_READ`), from `common.xml`.
@@ -21484,6 +27106,28 @@ impl Message for ParamExtRequestRead {
     }
 }
 
+impl ParamExtRequestRead {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("param_index", FieldValue::Signed(self.param_index.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "param_id",
+                FieldValue::UnsignedArray(self.param_id.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Request all parameters of this component. All parameters should be emitted in response as PARAM_EXT_VALUE.
 ///
 /// MAVLink message 321 (`PARAM_EXT_REQUEST_LIST`), from `common.xml`.
@@ -21513,6 +27157,23 @@ impl Message for ParamExtRequestList {
         put_bytes(out, 0, &self.target_system.to_le_bytes());
         put_bytes(out, 1, &self.target_component.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl ParamExtRequestList {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+        ]
     }
 }
 
@@ -21565,6 +27226,26 @@ impl Message for ParamExtValue {
     }
 }
 
+impl ParamExtValue {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("param_count", FieldValue::Unsigned(self.param_count.into())),
+            ("param_index", FieldValue::Unsigned(self.param_index.into())),
+            (
+                "param_id",
+                FieldValue::UnsignedArray(self.param_id.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "param_value",
+                FieldValue::UnsignedArray(self.param_value.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("param_type", FieldValue::Unsigned(self.param_type.into())),
+        ]
+    }
+}
+
 /// Set a parameter value. In order to deal with message loss (and retransmission of PARAM_EXT_SET), when setting a parameter value and the new value is the same as the current value, you will immediately get a PARAM_ACK_ACCEPTED response. If the current state is PARAM_ACK_IN_PROGRESS, you will accordingly receive a PARAM_ACK_IN_PROGRESS in response.
 ///
 /// MAVLink message 323 (`PARAM_EXT_SET`), from `common.xml`.
@@ -21614,6 +27295,32 @@ impl Message for ParamExtSet {
     }
 }
 
+impl ParamExtSet {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "param_id",
+                FieldValue::UnsignedArray(self.param_id.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "param_value",
+                FieldValue::UnsignedArray(self.param_value.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("param_type", FieldValue::Unsigned(self.param_type.into())),
+        ]
+    }
+}
+
 /// Response from a PARAM_EXT_SET message.
 ///
 /// MAVLink message 324 (`PARAM_EXT_ACK`), from `common.xml`.
@@ -21657,6 +27364,28 @@ impl Message for ParamExtAck {
         put_bytes(out, 144, &self.param_type.to_le_bytes());
         put_bytes(out, 145, &self.param_result.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl ParamExtAck {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "param_id",
+                FieldValue::UnsignedArray(self.param_id.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "param_value",
+                FieldValue::UnsignedArray(self.param_value.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("param_type", FieldValue::Unsigned(self.param_type.into())),
+            (
+                "param_result",
+                FieldValue::Unsigned(self.param_result.into()),
+            ),
+        ]
     }
 }
 
@@ -21724,6 +27453,33 @@ impl Message for ObstacleDistance {
         put_bytes(out, 162, &self.angle_offset.to_le_bytes());
         put_bytes(out, 166, &self.frame.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl ObstacleDistance {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            (
+                "distances",
+                FieldValue::UnsignedArray(self.distances.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "min_distance",
+                FieldValue::Unsigned(self.min_distance.into()),
+            ),
+            (
+                "max_distance",
+                FieldValue::Unsigned(self.max_distance.into()),
+            ),
+            ("sensor_type", FieldValue::Unsigned(self.sensor_type.into())),
+            ("increment", FieldValue::Unsigned(self.increment.into())),
+            ("increment_f", FieldValue::Float(self.increment_f.into())),
+            ("angle_offset", FieldValue::Float(self.angle_offset.into())),
+            ("frame", FieldValue::Unsigned(self.frame.into())),
+        ]
     }
 }
 
@@ -21835,6 +27591,56 @@ impl Message for Odometry {
     }
 }
 
+impl Odometry {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("x", FieldValue::Float(self.x.into())),
+            ("y", FieldValue::Float(self.y.into())),
+            ("z", FieldValue::Float(self.z.into())),
+            (
+                "q",
+                FieldValue::FloatArray(self.q.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("vx", FieldValue::Float(self.vx.into())),
+            ("vy", FieldValue::Float(self.vy.into())),
+            ("vz", FieldValue::Float(self.vz.into())),
+            ("rollspeed", FieldValue::Float(self.rollspeed.into())),
+            ("pitchspeed", FieldValue::Float(self.pitchspeed.into())),
+            ("yawspeed", FieldValue::Float(self.yawspeed.into())),
+            (
+                "pose_covariance",
+                FieldValue::FloatArray(self.pose_covariance.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "velocity_covariance",
+                FieldValue::FloatArray(
+                    self.velocity_covariance
+                        .iter()
+                        .map(|v| (*v).into())
+                        .collect(),
+                ),
+            ),
+            ("frame_id", FieldValue::Unsigned(self.frame_id.into())),
+            (
+                "child_frame_id",
+                FieldValue::Unsigned(self.child_frame_id.into()),
+            ),
+            (
+                "reset_counter",
+                FieldValue::Unsigned(self.reset_counter.into()),
+            ),
+            (
+                "estimator_type",
+                FieldValue::Unsigned(self.estimator_type.into()),
+            ),
+            ("quality", FieldValue::Signed(self.quality.into())),
+        ]
+    }
+}
+
 /// Describe a trajectory using an array of up-to 5 waypoints in the local frame (MAV_FRAME_LOCAL_NED).
 ///
 /// MAVLink message 332 (`TRAJECTORY_REPRESENTATION_WAYPOINTS`), from `common.xml`.
@@ -21940,6 +27746,68 @@ impl Message for TrajectoryRepresentationWaypoints {
     }
 }
 
+impl TrajectoryRepresentationWaypoints {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            (
+                "pos_x",
+                FieldValue::FloatArray(self.pos_x.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "pos_y",
+                FieldValue::FloatArray(self.pos_y.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "pos_z",
+                FieldValue::FloatArray(self.pos_z.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "vel_x",
+                FieldValue::FloatArray(self.vel_x.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "vel_y",
+                FieldValue::FloatArray(self.vel_y.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "vel_z",
+                FieldValue::FloatArray(self.vel_z.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "acc_x",
+                FieldValue::FloatArray(self.acc_x.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "acc_y",
+                FieldValue::FloatArray(self.acc_y.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "acc_z",
+                FieldValue::FloatArray(self.acc_z.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "pos_yaw",
+                FieldValue::FloatArray(self.pos_yaw.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "vel_yaw",
+                FieldValue::FloatArray(self.vel_yaw.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "command",
+                FieldValue::UnsignedArray(self.command.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "valid_points",
+                FieldValue::Unsigned(self.valid_points.into()),
+            ),
+        ]
+    }
+}
+
 /// Describe a trajectory using an array of up-to 5 bezier control points in the local frame (MAV_FRAME_LOCAL_NED).
 ///
 /// MAVLink message 333 (`TRAJECTORY_REPRESENTATION_BEZIER`), from `common.xml`.
@@ -22002,6 +27870,40 @@ impl Message for TrajectoryRepresentationBezier {
     }
 }
 
+impl TrajectoryRepresentationBezier {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            (
+                "pos_x",
+                FieldValue::FloatArray(self.pos_x.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "pos_y",
+                FieldValue::FloatArray(self.pos_y.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "pos_z",
+                FieldValue::FloatArray(self.pos_z.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "delta",
+                FieldValue::FloatArray(self.delta.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "pos_yaw",
+                FieldValue::FloatArray(self.pos_yaw.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "valid_points",
+                FieldValue::Unsigned(self.valid_points.into()),
+            ),
+        ]
+    }
+}
+
 /// Status of the Iridium SBD link.
 ///
 /// MAVLink message 335 (`ISBD_LINK_STATUS`), from `common.xml`.
@@ -22058,6 +27960,41 @@ impl Message for IsbdLinkStatus {
     }
 }
 
+impl IsbdLinkStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("timestamp", FieldValue::Unsigned(self.timestamp)),
+            ("last_heartbeat", FieldValue::Unsigned(self.last_heartbeat)),
+            (
+                "failed_sessions",
+                FieldValue::Unsigned(self.failed_sessions.into()),
+            ),
+            (
+                "successful_sessions",
+                FieldValue::Unsigned(self.successful_sessions.into()),
+            ),
+            (
+                "signal_quality",
+                FieldValue::Unsigned(self.signal_quality.into()),
+            ),
+            (
+                "ring_pending",
+                FieldValue::Unsigned(self.ring_pending.into()),
+            ),
+            (
+                "tx_session_pending",
+                FieldValue::Unsigned(self.tx_session_pending.into()),
+            ),
+            (
+                "rx_session_pending",
+                FieldValue::Unsigned(self.rx_session_pending.into()),
+            ),
+        ]
+    }
+}
+
 /// RPM sensor data message.
 ///
 /// MAVLink message 339 (`RAW_RPM`), from `common.xml`.
@@ -22087,6 +28024,17 @@ impl Message for RawRpm {
         put_bytes(out, 0, &self.frequency.to_le_bytes());
         put_bytes(out, 4, &self.index.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl RawRpm {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("frequency", FieldValue::Float(self.frequency.into())),
+            ("index", FieldValue::Unsigned(self.index.into())),
+        ]
     }
 }
 
@@ -22190,6 +28138,39 @@ impl Message for UtmGlobalPosition {
     }
 }
 
+impl UtmGlobalPosition {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time", FieldValue::Unsigned(self.time)),
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lon", FieldValue::Signed(self.lon.into())),
+            ("alt", FieldValue::Signed(self.alt.into())),
+            ("relative_alt", FieldValue::Signed(self.relative_alt.into())),
+            ("next_lat", FieldValue::Signed(self.next_lat.into())),
+            ("next_lon", FieldValue::Signed(self.next_lon.into())),
+            ("next_alt", FieldValue::Signed(self.next_alt.into())),
+            ("vx", FieldValue::Signed(self.vx.into())),
+            ("vy", FieldValue::Signed(self.vy.into())),
+            ("vz", FieldValue::Signed(self.vz.into())),
+            ("h_acc", FieldValue::Unsigned(self.h_acc.into())),
+            ("v_acc", FieldValue::Unsigned(self.v_acc.into())),
+            ("vel_acc", FieldValue::Unsigned(self.vel_acc.into())),
+            ("update_rate", FieldValue::Unsigned(self.update_rate.into())),
+            (
+                "uas_id",
+                FieldValue::UnsignedArray(self.uas_id.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "flight_state",
+                FieldValue::Unsigned(self.flight_state.into()),
+            ),
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+        ]
+    }
+}
+
 /// Parameter set/get error. Returned from a MAVLink node in response to an error in the parameter protocol, for example failing to set a parameter because it does not exist.
 ///
 /// MAVLink message 345 (`PARAM_ERROR`), from `common.xml`.
@@ -22237,6 +28218,29 @@ impl Message for ParamError {
     }
 }
 
+impl ParamError {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("param_index", FieldValue::Signed(self.param_index.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "param_id",
+                FieldValue::UnsignedArray(self.param_id.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("error", FieldValue::Unsigned(self.error.into())),
+        ]
+    }
+}
+
 /// Large debug/prototyping array. The message uses the maximum available payload for data. The array_id and name fields are used to discriminate between messages in code and in user interfaces (respectively). Do not use in production code.
 ///
 /// MAVLink message 350 (`DEBUG_FLOAT_ARRAY`), from `common.xml`.
@@ -22279,6 +28283,25 @@ impl Message for DebugFloatArray {
             put_bytes(out, 20 + i * 4, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl DebugFloatArray {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("array_id", FieldValue::Unsigned(self.array_id.into())),
+            (
+                "name",
+                FieldValue::UnsignedArray(self.name.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "data",
+                FieldValue::FloatArray(self.data.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -22387,6 +28410,73 @@ impl Message for SmartBatteryInfo {
     }
 }
 
+impl SmartBatteryInfo {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "capacity_full_specification",
+                FieldValue::Signed(self.capacity_full_specification.into()),
+            ),
+            (
+                "capacity_full",
+                FieldValue::Signed(self.capacity_full.into()),
+            ),
+            ("cycle_count", FieldValue::Unsigned(self.cycle_count.into())),
+            ("weight", FieldValue::Unsigned(self.weight.into())),
+            (
+                "discharge_minimum_voltage",
+                FieldValue::Unsigned(self.discharge_minimum_voltage.into()),
+            ),
+            (
+                "charging_minimum_voltage",
+                FieldValue::Unsigned(self.charging_minimum_voltage.into()),
+            ),
+            (
+                "resting_minimum_voltage",
+                FieldValue::Unsigned(self.resting_minimum_voltage.into()),
+            ),
+            ("id", FieldValue::Unsigned(self.id.into())),
+            (
+                "battery_function",
+                FieldValue::Unsigned(self.battery_function.into()),
+            ),
+            ("type", FieldValue::Unsigned(self.r#type.into())),
+            (
+                "serial_number",
+                FieldValue::UnsignedArray(self.serial_number.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "device_name",
+                FieldValue::UnsignedArray(self.device_name.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "charging_maximum_voltage",
+                FieldValue::Unsigned(self.charging_maximum_voltage.into()),
+            ),
+            (
+                "cells_in_series",
+                FieldValue::Unsigned(self.cells_in_series.into()),
+            ),
+            (
+                "discharge_maximum_current",
+                FieldValue::Unsigned(self.discharge_maximum_current.into()),
+            ),
+            (
+                "discharge_maximum_burst_current",
+                FieldValue::Unsigned(self.discharge_maximum_burst_current.into()),
+            ),
+            (
+                "manufacture_date",
+                FieldValue::UnsignedArray(
+                    self.manufacture_date.iter().map(|v| (*v).into()).collect(),
+                ),
+            ),
+        ]
+    }
+}
+
 /// Telemetry of power generation system. Alternator or mechanical generator.
 ///
 /// MAVLink message 373 (`GENERATOR_STATUS`), from `common.xml`.
@@ -22456,6 +28546,47 @@ impl Message for GeneratorStatus {
     }
 }
 
+impl GeneratorStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("status", FieldValue::Unsigned(self.status)),
+            (
+                "battery_current",
+                FieldValue::Float(self.battery_current.into()),
+            ),
+            ("load_current", FieldValue::Float(self.load_current.into())),
+            (
+                "power_generated",
+                FieldValue::Float(self.power_generated.into()),
+            ),
+            ("bus_voltage", FieldValue::Float(self.bus_voltage.into())),
+            (
+                "bat_current_setpoint",
+                FieldValue::Float(self.bat_current_setpoint.into()),
+            ),
+            ("runtime", FieldValue::Unsigned(self.runtime.into())),
+            (
+                "time_until_maintenance",
+                FieldValue::Signed(self.time_until_maintenance.into()),
+            ),
+            (
+                "generator_speed",
+                FieldValue::Unsigned(self.generator_speed.into()),
+            ),
+            (
+                "rectifier_temperature",
+                FieldValue::Signed(self.rectifier_temperature.into()),
+            ),
+            (
+                "generator_temperature",
+                FieldValue::Signed(self.generator_temperature.into()),
+            ),
+        ]
+    }
+}
+
 /// The raw values of the actuator outputs (e.g. on Pixhawk, from MAIN, AUX ports). This message supersedes SERVO_OUTPUT_RAW.
 ///
 /// MAVLink message 375 (`ACTUATOR_OUTPUT_STATUS`), from `common.xml`.
@@ -22494,6 +28625,21 @@ impl Message for ActuatorOutputStatus {
     }
 }
 
+impl ActuatorOutputStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("active", FieldValue::Unsigned(self.active.into())),
+            (
+                "actuator",
+                FieldValue::FloatArray(self.actuator.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Reports the on/off state of relays, as controlled by MAV_CMD_DO_SET_RELAY.
 ///
 /// MAVLink message 376 (`RELAY_STATUS`), from `common.xml`.
@@ -22527,6 +28673,21 @@ impl Message for RelayStatus {
         put_bytes(out, 4, &self.on.to_le_bytes());
         put_bytes(out, 6, &self.present.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl RelayStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("on", FieldValue::Unsigned(self.on.into())),
+            ("present", FieldValue::Unsigned(self.present.into())),
+        ]
     }
 }
 
@@ -22574,6 +28735,35 @@ impl Message for Tunnel {
             put_bytes(out, 5 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl Tunnel {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "payload_type",
+                FieldValue::Unsigned(self.payload_type.into()),
+            ),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "payload_length",
+                FieldValue::Unsigned(self.payload_length.into()),
+            ),
+            (
+                "payload",
+                FieldValue::UnsignedArray(self.payload.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -22627,6 +28817,30 @@ impl Message for CanFrame {
     }
 }
 
+impl CanFrame {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("id", FieldValue::Unsigned(self.id.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("bus", FieldValue::Unsigned(self.bus.into())),
+            ("len", FieldValue::Unsigned(self.len.into())),
+            (
+                "data",
+                FieldValue::UnsignedArray(self.data.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// A forwarded CANFD frame as requested by MAV_CMD_CAN_FORWARD. These are separated from CAN_FRAME as they need different handling (eg. TAO handling)
 ///
 /// MAVLink message 387 (`CANFD_FRAME`), from `common.xml`.
@@ -22674,6 +28888,30 @@ impl Message for CanfdFrame {
             put_bytes(out, 8 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl CanfdFrame {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("id", FieldValue::Unsigned(self.id.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("bus", FieldValue::Unsigned(self.bus.into())),
+            ("len", FieldValue::Unsigned(self.len.into())),
+            (
+                "data",
+                FieldValue::UnsignedArray(self.data.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -22725,6 +28963,30 @@ impl Message for CanFilterModify {
         put_bytes(out, 35, &self.operation.to_le_bytes());
         put_bytes(out, 36, &self.num_ids.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl CanFilterModify {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "ids",
+                FieldValue::UnsignedArray(self.ids.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("bus", FieldValue::Unsigned(self.bus.into())),
+            ("operation", FieldValue::Unsigned(self.operation.into())),
+            ("num_ids", FieldValue::Unsigned(self.num_ids.into())),
+        ]
     }
 }
 
@@ -22780,6 +29042,33 @@ impl Message for RadioRcChannels {
     }
 }
 
+impl RadioRcChannels {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_last_update_ms",
+                FieldValue::Unsigned(self.time_last_update_ms.into()),
+            ),
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("count", FieldValue::Unsigned(self.count.into())),
+            (
+                "channels",
+                FieldValue::SignedArray(self.channels.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Get information about a particular flight modes. The message can be enumerated or requested for a particular mode using MAV_CMD_REQUEST_MESSAGE. Specify 0 in param2 to request that the message is emitted for all available modes or the specific index for just one mode. The modes must be available/settable for the current vehicle/frame type. Each modes should only be emitted once (even if it is both standard and custom).
 ///
 /// MAVLink message 435 (`AVAILABLE_MODES`), from `development.xml`.
@@ -22832,6 +29121,30 @@ impl Message for AvailableModes {
     }
 }
 
+impl AvailableModes {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("custom_mode", FieldValue::Unsigned(self.custom_mode.into())),
+            ("properties", FieldValue::Unsigned(self.properties.into())),
+            (
+                "number_modes",
+                FieldValue::Unsigned(self.number_modes.into()),
+            ),
+            ("mode_index", FieldValue::Unsigned(self.mode_index.into())),
+            (
+                "standard_mode",
+                FieldValue::Unsigned(self.standard_mode.into()),
+            ),
+            (
+                "mode_name",
+                FieldValue::UnsignedArray(self.mode_name.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Get the current mode. This should be emitted on any mode change, and broadcast at low rate (nominally 0.5 Hz). It may be requested using MAV_CMD_REQUEST_MESSAGE.
 ///
 /// MAVLink message 436 (`CURRENT_MODE`), from `development.xml`.
@@ -22869,6 +29182,24 @@ impl Message for CurrentMode {
     }
 }
 
+impl CurrentMode {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("custom_mode", FieldValue::Unsigned(self.custom_mode.into())),
+            (
+                "intended_custom_mode",
+                FieldValue::Unsigned(self.intended_custom_mode.into()),
+            ),
+            (
+                "standard_mode",
+                FieldValue::Unsigned(self.standard_mode.into()),
+            ),
+        ]
+    }
+}
+
 /// A change to the sequence number indicates that the set of AVAILABLE_MODES has changed. A receiver must re-request all available modes whenever the sequence number changes. This is only emitted after the first change and should then be broadcast at low rate (nominally 0.3 Hz) and on change.
 ///
 /// MAVLink message 437 (`AVAILABLE_MODES_MONITOR`), from `development.xml`.
@@ -22894,6 +29225,14 @@ impl Message for AvailableModesMonitor {
     fn encode(&self, out: &mut [u8]) -> usize {
         put_bytes(out, 0, &self.seq.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl AvailableModesMonitor {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![("seq", FieldValue::Unsigned(self.seq.into()))]
     }
 }
 
@@ -22974,6 +29313,51 @@ impl Message for GnssIntegrity {
     }
 }
 
+impl GnssIntegrity {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "system_errors",
+                FieldValue::Unsigned(self.system_errors.into()),
+            ),
+            ("raim_hfom", FieldValue::Unsigned(self.raim_hfom.into())),
+            ("raim_vfom", FieldValue::Unsigned(self.raim_vfom.into())),
+            ("id", FieldValue::Unsigned(self.id.into())),
+            (
+                "authentication_state",
+                FieldValue::Unsigned(self.authentication_state.into()),
+            ),
+            (
+                "jamming_state",
+                FieldValue::Unsigned(self.jamming_state.into()),
+            ),
+            (
+                "spoofing_state",
+                FieldValue::Unsigned(self.spoofing_state.into()),
+            ),
+            ("raim_state", FieldValue::Unsigned(self.raim_state.into())),
+            (
+                "corrections_quality",
+                FieldValue::Unsigned(self.corrections_quality.into()),
+            ),
+            (
+                "system_status_summary",
+                FieldValue::Unsigned(self.system_status_summary.into()),
+            ),
+            (
+                "gnss_signal_quality",
+                FieldValue::Unsigned(self.gnss_signal_quality.into()),
+            ),
+            (
+                "post_processing_quality",
+                FieldValue::Unsigned(self.post_processing_quality.into()),
+            ),
+        ]
+    }
+}
+
 /// Voltage and current sensor data
 ///
 /// MAVLink message 8002 (`SENS_POWER`), from `ASLUAV.xml`.
@@ -23011,6 +29395,31 @@ impl Message for SensPower {
         put_bytes(out, 8, &self.adc121_cs1_amp.to_le_bytes());
         put_bytes(out, 12, &self.adc121_cs2_amp.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl SensPower {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "adc121_vspb_volt",
+                FieldValue::Float(self.adc121_vspb_volt.into()),
+            ),
+            (
+                "adc121_cspb_amp",
+                FieldValue::Float(self.adc121_cspb_amp.into()),
+            ),
+            (
+                "adc121_cs1_amp",
+                FieldValue::Float(self.adc121_cs1_amp.into()),
+            ),
+            (
+                "adc121_cs2_amp",
+                FieldValue::Float(self.adc121_cs2_amp.into()),
+            ),
+        ]
     }
 }
 
@@ -23087,6 +29496,37 @@ impl Message for SensMppt {
         put_bytes(out, 39, &self.mppt2_status.to_le_bytes());
         put_bytes(out, 40, &self.mppt3_status.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl SensMppt {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("mppt_timestamp", FieldValue::Unsigned(self.mppt_timestamp)),
+            ("mppt1_volt", FieldValue::Float(self.mppt1_volt.into())),
+            ("mppt1_amp", FieldValue::Float(self.mppt1_amp.into())),
+            ("mppt2_volt", FieldValue::Float(self.mppt2_volt.into())),
+            ("mppt2_amp", FieldValue::Float(self.mppt2_amp.into())),
+            ("mppt3_volt", FieldValue::Float(self.mppt3_volt.into())),
+            ("mppt3_amp", FieldValue::Float(self.mppt3_amp.into())),
+            ("mppt1_pwm", FieldValue::Unsigned(self.mppt1_pwm.into())),
+            ("mppt2_pwm", FieldValue::Unsigned(self.mppt2_pwm.into())),
+            ("mppt3_pwm", FieldValue::Unsigned(self.mppt3_pwm.into())),
+            (
+                "mppt1_status",
+                FieldValue::Unsigned(self.mppt1_status.into()),
+            ),
+            (
+                "mppt2_status",
+                FieldValue::Unsigned(self.mppt2_status.into()),
+            ),
+            (
+                "mppt3_status",
+                FieldValue::Unsigned(self.mppt3_status.into()),
+            ),
+        ]
     }
 }
 
@@ -23214,6 +29654,49 @@ impl Message for AslctrlData {
     }
 }
 
+impl AslctrlData {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("timestamp", FieldValue::Unsigned(self.timestamp)),
+            ("h", FieldValue::Float(self.h.into())),
+            ("hRef", FieldValue::Float(self.href.into())),
+            ("hRef_t", FieldValue::Float(self.href_t.into())),
+            ("PitchAngle", FieldValue::Float(self.pitchangle.into())),
+            (
+                "PitchAngleRef",
+                FieldValue::Float(self.pitchangleref.into()),
+            ),
+            ("q", FieldValue::Float(self.q.into())),
+            ("qRef", FieldValue::Float(self.qref.into())),
+            ("uElev", FieldValue::Float(self.uelev.into())),
+            ("uThrot", FieldValue::Float(self.uthrot.into())),
+            ("uThrot2", FieldValue::Float(self.uthrot2.into())),
+            ("nZ", FieldValue::Float(self.nz.into())),
+            ("AirspeedRef", FieldValue::Float(self.airspeedref.into())),
+            ("YawAngle", FieldValue::Float(self.yawangle.into())),
+            ("YawAngleRef", FieldValue::Float(self.yawangleref.into())),
+            ("RollAngle", FieldValue::Float(self.rollangle.into())),
+            ("RollAngleRef", FieldValue::Float(self.rollangleref.into())),
+            ("p", FieldValue::Float(self.p.into())),
+            ("pRef", FieldValue::Float(self.pref.into())),
+            ("r", FieldValue::Float(self.r.into())),
+            ("rRef", FieldValue::Float(self.rref.into())),
+            ("uAil", FieldValue::Float(self.uail.into())),
+            ("uRud", FieldValue::Float(self.urud.into())),
+            (
+                "aslctrl_mode",
+                FieldValue::Unsigned(self.aslctrl_mode.into()),
+            ),
+            (
+                "SpoilersEngaged",
+                FieldValue::Unsigned(self.spoilersengaged.into()),
+            ),
+        ]
+    }
+}
+
 /// ASL-fixed-wing controller debug data
 ///
 /// MAVLink message 8005 (`ASLCTRL_DEBUG`), from `ASLUAV.xml`.
@@ -23282,6 +29765,26 @@ impl Message for AslctrlDebug {
     }
 }
 
+impl AslctrlDebug {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("i32_1", FieldValue::Unsigned(self.i32_1.into())),
+            ("f_1", FieldValue::Float(self.f_1.into())),
+            ("f_2", FieldValue::Float(self.f_2.into())),
+            ("f_3", FieldValue::Float(self.f_3.into())),
+            ("f_4", FieldValue::Float(self.f_4.into())),
+            ("f_5", FieldValue::Float(self.f_5.into())),
+            ("f_6", FieldValue::Float(self.f_6.into())),
+            ("f_7", FieldValue::Float(self.f_7.into())),
+            ("f_8", FieldValue::Float(self.f_8.into())),
+            ("i8_1", FieldValue::Unsigned(self.i8_1.into())),
+            ("i8_2", FieldValue::Unsigned(self.i8_2.into())),
+        ]
+    }
+}
+
 /// Extended state information for ASLUAVs
 ///
 /// MAVLink message 8006 (`ASLUAV_STATUS`), from `ASLUAV.xml`.
@@ -23321,6 +29824,25 @@ impl Message for AsluavStatus {
             put_bytes(out, 6 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl AsluavStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("Motor_rpm", FieldValue::Float(self.motor_rpm.into())),
+            ("LED_status", FieldValue::Unsigned(self.led_status.into())),
+            (
+                "SATCOM_status",
+                FieldValue::Unsigned(self.satcom_status.into()),
+            ),
+            (
+                "Servo_status",
+                FieldValue::UnsignedArray(self.servo_status.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -23373,6 +29895,22 @@ impl Message for EkfExt {
         put_bytes(out, 24, &self.beta.to_le_bytes());
         put_bytes(out, 28, &self.alpha.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl EkfExt {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("timestamp", FieldValue::Unsigned(self.timestamp)),
+            ("Windspeed", FieldValue::Float(self.windspeed.into())),
+            ("WindDir", FieldValue::Float(self.winddir.into())),
+            ("WindZ", FieldValue::Float(self.windz.into())),
+            ("Airspeed", FieldValue::Float(self.airspeed.into())),
+            ("beta", FieldValue::Float(self.beta.into())),
+            ("alpha", FieldValue::Float(self.alpha.into())),
+        ]
     }
 }
 
@@ -23432,6 +29970,26 @@ impl Message for AslObctrl {
     }
 }
 
+impl AslObctrl {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("timestamp", FieldValue::Unsigned(self.timestamp)),
+            ("uElev", FieldValue::Float(self.uelev.into())),
+            ("uThrot", FieldValue::Float(self.uthrot.into())),
+            ("uThrot2", FieldValue::Float(self.uthrot2.into())),
+            ("uAilL", FieldValue::Float(self.uaill.into())),
+            ("uAilR", FieldValue::Float(self.uailr.into())),
+            ("uRud", FieldValue::Float(self.urud.into())),
+            (
+                "obctrl_status",
+                FieldValue::Unsigned(self.obctrl_status.into()),
+            ),
+        ]
+    }
+}
+
 /// Atmospheric sensors (temperature, humidity, ...)
 ///
 /// MAVLink message 8009 (`SENS_ATMOS`), from `ASLUAV.xml`.
@@ -23465,6 +30023,18 @@ impl Message for SensAtmos {
         put_bytes(out, 8, &self.tempambient.to_le_bytes());
         put_bytes(out, 12, &self.humidity.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl SensAtmos {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("timestamp", FieldValue::Unsigned(self.timestamp)),
+            ("TempAmbient", FieldValue::Float(self.tempambient.into())),
+            ("Humidity", FieldValue::Float(self.humidity.into())),
+        ]
     }
 }
 
@@ -23549,6 +30119,63 @@ impl Message for SensBatmon {
         put_bytes(out, 38, &self.cellvoltage6.to_le_bytes());
         put_bytes(out, 40, &self.soc.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl SensBatmon {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "batmon_timestamp",
+                FieldValue::Unsigned(self.batmon_timestamp),
+            ),
+            ("temperature", FieldValue::Float(self.temperature.into())),
+            (
+                "safetystatus",
+                FieldValue::Unsigned(self.safetystatus.into()),
+            ),
+            (
+                "operationstatus",
+                FieldValue::Unsigned(self.operationstatus.into()),
+            ),
+            ("voltage", FieldValue::Unsigned(self.voltage.into())),
+            ("current", FieldValue::Signed(self.current.into())),
+            (
+                "batterystatus",
+                FieldValue::Unsigned(self.batterystatus.into()),
+            ),
+            (
+                "serialnumber",
+                FieldValue::Unsigned(self.serialnumber.into()),
+            ),
+            (
+                "cellvoltage1",
+                FieldValue::Unsigned(self.cellvoltage1.into()),
+            ),
+            (
+                "cellvoltage2",
+                FieldValue::Unsigned(self.cellvoltage2.into()),
+            ),
+            (
+                "cellvoltage3",
+                FieldValue::Unsigned(self.cellvoltage3.into()),
+            ),
+            (
+                "cellvoltage4",
+                FieldValue::Unsigned(self.cellvoltage4.into()),
+            ),
+            (
+                "cellvoltage5",
+                FieldValue::Unsigned(self.cellvoltage5.into()),
+            ),
+            (
+                "cellvoltage6",
+                FieldValue::Unsigned(self.cellvoltage6.into()),
+            ),
+            ("SoC", FieldValue::Unsigned(self.soc.into())),
+        ]
     }
 }
 
@@ -23676,6 +30303,58 @@ impl Message for FwSoaringData {
     }
 }
 
+impl FwSoaringData {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("timestamp", FieldValue::Unsigned(self.timestamp)),
+            (
+                "timestampModeChanged",
+                FieldValue::Unsigned(self.timestampmodechanged),
+            ),
+            ("xW", FieldValue::Float(self.xw.into())),
+            ("xR", FieldValue::Float(self.xr.into())),
+            ("xLat", FieldValue::Float(self.xlat.into())),
+            ("xLon", FieldValue::Float(self.xlon.into())),
+            ("VarW", FieldValue::Float(self.varw.into())),
+            ("VarR", FieldValue::Float(self.varr.into())),
+            ("VarLat", FieldValue::Float(self.varlat.into())),
+            ("VarLon", FieldValue::Float(self.varlon.into())),
+            ("LoiterRadius", FieldValue::Float(self.loiterradius.into())),
+            (
+                "LoiterDirection",
+                FieldValue::Float(self.loiterdirection.into()),
+            ),
+            (
+                "DistToSoarPoint",
+                FieldValue::Float(self.disttosoarpoint.into()),
+            ),
+            ("vSinkExp", FieldValue::Float(self.vsinkexp.into())),
+            (
+                "z1_LocalUpdraftSpeed",
+                FieldValue::Float(self.z1_localupdraftspeed.into()),
+            ),
+            ("z2_DeltaRoll", FieldValue::Float(self.z2_deltaroll.into())),
+            ("z1_exp", FieldValue::Float(self.z1_exp.into())),
+            ("z2_exp", FieldValue::Float(self.z2_exp.into())),
+            (
+                "ThermalGSNorth",
+                FieldValue::Float(self.thermalgsnorth.into()),
+            ),
+            (
+                "ThermalGSEast",
+                FieldValue::Float(self.thermalgseast.into()),
+            ),
+            ("TSE_dot", FieldValue::Float(self.tse_dot.into())),
+            ("DebugVar1", FieldValue::Float(self.debugvar1.into())),
+            ("DebugVar2", FieldValue::Float(self.debugvar2.into())),
+            ("ControlMode", FieldValue::Unsigned(self.controlmode.into())),
+            ("valid", FieldValue::Unsigned(self.valid.into())),
+        ]
+    }
+}
+
 /// Monitoring of sensorpod status
 ///
 /// MAVLink message 8012 (`SENSORPOD_STATUS`), from `ASLUAV.xml`.
@@ -23729,6 +30408,38 @@ impl Message for SensorpodStatus {
         put_bytes(out, 14, &self.recording_nodes_count.to_le_bytes());
         put_bytes(out, 15, &self.cpu_temp.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl SensorpodStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("timestamp", FieldValue::Unsigned(self.timestamp)),
+            ("free_space", FieldValue::Unsigned(self.free_space.into())),
+            (
+                "visensor_rate_1",
+                FieldValue::Unsigned(self.visensor_rate_1.into()),
+            ),
+            (
+                "visensor_rate_2",
+                FieldValue::Unsigned(self.visensor_rate_2.into()),
+            ),
+            (
+                "visensor_rate_3",
+                FieldValue::Unsigned(self.visensor_rate_3.into()),
+            ),
+            (
+                "visensor_rate_4",
+                FieldValue::Unsigned(self.visensor_rate_4.into()),
+            ),
+            (
+                "recording_nodes_count",
+                FieldValue::Unsigned(self.recording_nodes_count.into()),
+            ),
+            ("cpu_temp", FieldValue::Unsigned(self.cpu_temp.into())),
+        ]
     }
 }
 
@@ -23804,6 +30515,60 @@ impl Message for SensPowerBoard {
     }
 }
 
+impl SensPowerBoard {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("timestamp", FieldValue::Unsigned(self.timestamp)),
+            (
+                "pwr_brd_system_volt",
+                FieldValue::Float(self.pwr_brd_system_volt.into()),
+            ),
+            (
+                "pwr_brd_servo_volt",
+                FieldValue::Float(self.pwr_brd_servo_volt.into()),
+            ),
+            (
+                "pwr_brd_digital_volt",
+                FieldValue::Float(self.pwr_brd_digital_volt.into()),
+            ),
+            (
+                "pwr_brd_mot_l_amp",
+                FieldValue::Float(self.pwr_brd_mot_l_amp.into()),
+            ),
+            (
+                "pwr_brd_mot_r_amp",
+                FieldValue::Float(self.pwr_brd_mot_r_amp.into()),
+            ),
+            (
+                "pwr_brd_analog_amp",
+                FieldValue::Float(self.pwr_brd_analog_amp.into()),
+            ),
+            (
+                "pwr_brd_digital_amp",
+                FieldValue::Float(self.pwr_brd_digital_amp.into()),
+            ),
+            (
+                "pwr_brd_ext_amp",
+                FieldValue::Float(self.pwr_brd_ext_amp.into()),
+            ),
+            (
+                "pwr_brd_aux_amp",
+                FieldValue::Float(self.pwr_brd_aux_amp.into()),
+            ),
+            (
+                "pwr_brd_status",
+                FieldValue::Unsigned(self.pwr_brd_status.into()),
+            ),
+            (
+                "pwr_brd_led_status",
+                FieldValue::Unsigned(self.pwr_brd_led_status.into()),
+            ),
+        ]
+    }
+}
+
 /// Status of GSM modem (connected to onboard computer)
 ///
 /// MAVLink message 8014 (`GSM_LINK_STATUS`), from `ASLUAV.xml`.
@@ -23855,6 +30620,28 @@ impl Message for GsmLinkStatus {
         put_bytes(out, 12, &self.sinr_ecio.to_le_bytes());
         put_bytes(out, 13, &self.rsrq.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl GsmLinkStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("timestamp", FieldValue::Unsigned(self.timestamp)),
+            (
+                "gsm_modem_type",
+                FieldValue::Unsigned(self.gsm_modem_type.into()),
+            ),
+            (
+                "gsm_link_type",
+                FieldValue::Unsigned(self.gsm_link_type.into()),
+            ),
+            ("rssi", FieldValue::Unsigned(self.rssi.into())),
+            ("rsrp_rscp", FieldValue::Unsigned(self.rsrp_rscp.into())),
+            ("sinr_ecio", FieldValue::Unsigned(self.sinr_ecio.into())),
+            ("rsrq", FieldValue::Unsigned(self.rsrq.into())),
+        ]
     }
 }
 
@@ -23914,6 +30701,41 @@ impl Message for SatcomLinkStatus {
     }
 }
 
+impl SatcomLinkStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("timestamp", FieldValue::Unsigned(self.timestamp)),
+            ("last_heartbeat", FieldValue::Unsigned(self.last_heartbeat)),
+            (
+                "failed_sessions",
+                FieldValue::Unsigned(self.failed_sessions.into()),
+            ),
+            (
+                "successful_sessions",
+                FieldValue::Unsigned(self.successful_sessions.into()),
+            ),
+            (
+                "signal_quality",
+                FieldValue::Unsigned(self.signal_quality.into()),
+            ),
+            (
+                "ring_pending",
+                FieldValue::Unsigned(self.ring_pending.into()),
+            ),
+            (
+                "tx_session_pending",
+                FieldValue::Unsigned(self.tx_session_pending.into()),
+            ),
+            (
+                "rx_session_pending",
+                FieldValue::Unsigned(self.rx_session_pending.into()),
+            ),
+        ]
+    }
+}
+
 /// Calibrated airflow angle measurements
 ///
 /// MAVLink message 8016 (`SENSOR_AIRFLOW_ANGLES`), from `ASLUAV.xml`.
@@ -23958,6 +30780,29 @@ impl Message for SensorAirflowAngles {
     }
 }
 
+impl SensorAirflowAngles {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("timestamp", FieldValue::Unsigned(self.timestamp)),
+            (
+                "angleofattack",
+                FieldValue::Float(self.angleofattack.into()),
+            ),
+            ("sideslip", FieldValue::Float(self.sideslip.into())),
+            (
+                "angleofattack_valid",
+                FieldValue::Unsigned(self.angleofattack_valid.into()),
+            ),
+            (
+                "sideslip_valid",
+                FieldValue::Unsigned(self.sideslip_valid.into()),
+            ),
+        ]
+    }
+}
+
 /// Cumulative distance traveled for each reported wheel.
 ///
 /// MAVLink message 9000 (`WHEEL_DISTANCE`), from `common.xml`.
@@ -23993,6 +30838,18 @@ impl Message for WheelDistance {
         }
         put_bytes(out, 136, &self.count.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl WheelDistance {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("distance", FieldValue::FloatArray(self.distance.to_vec())),
+            ("count", FieldValue::Unsigned(self.count.into())),
+        ]
     }
 }
 
@@ -24050,6 +30907,23 @@ impl Message for WinchStatus {
         put_bytes(out, 28, &self.status.to_le_bytes());
         put_bytes(out, 32, &self.temperature.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl WinchStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("line_length", FieldValue::Float(self.line_length.into())),
+            ("speed", FieldValue::Float(self.speed.into())),
+            ("tension", FieldValue::Float(self.tension.into())),
+            ("voltage", FieldValue::Float(self.voltage.into())),
+            ("current", FieldValue::Float(self.current.into())),
+            ("status", FieldValue::Unsigned(self.status.into())),
+            ("temperature", FieldValue::Signed(self.temperature.into())),
+        ]
     }
 }
 
@@ -24113,6 +30987,35 @@ impl Message for UavionixAdsbOutCfg {
         put_bytes(out, 18, &self.gpsoffsetlon.to_le_bytes());
         put_bytes(out, 19, &self.rfselect.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl UavionixAdsbOutCfg {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("ICAO", FieldValue::Unsigned(self.icao.into())),
+            ("stallSpeed", FieldValue::Unsigned(self.stallspeed.into())),
+            (
+                "callsign",
+                FieldValue::UnsignedArray(self.callsign.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("emitterType", FieldValue::Unsigned(self.emittertype.into())),
+            (
+                "aircraftSize",
+                FieldValue::Unsigned(self.aircraftsize.into()),
+            ),
+            (
+                "gpsOffsetLat",
+                FieldValue::Unsigned(self.gpsoffsetlat.into()),
+            ),
+            (
+                "gpsOffsetLon",
+                FieldValue::Unsigned(self.gpsoffsetlon.into()),
+            ),
+            ("rfSelect", FieldValue::Unsigned(self.rfselect.into())),
+        ]
     }
 }
 
@@ -24207,6 +31110,37 @@ impl Message for UavionixAdsbOutDynamic {
     }
 }
 
+impl UavionixAdsbOutDynamic {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("utcTime", FieldValue::Unsigned(self.utctime.into())),
+            ("gpsLat", FieldValue::Signed(self.gpslat.into())),
+            ("gpsLon", FieldValue::Signed(self.gpslon.into())),
+            ("gpsAlt", FieldValue::Signed(self.gpsalt.into())),
+            ("baroAltMSL", FieldValue::Signed(self.baroaltmsl.into())),
+            ("accuracyHor", FieldValue::Unsigned(self.accuracyhor.into())),
+            (
+                "accuracyVert",
+                FieldValue::Unsigned(self.accuracyvert.into()),
+            ),
+            ("accuracyVel", FieldValue::Unsigned(self.accuracyvel.into())),
+            ("velVert", FieldValue::Signed(self.velvert.into())),
+            ("velNS", FieldValue::Signed(self.velns.into())),
+            ("VelEW", FieldValue::Signed(self.velew.into())),
+            ("state", FieldValue::Unsigned(self.state.into())),
+            ("squawk", FieldValue::Unsigned(self.squawk.into())),
+            ("gpsFix", FieldValue::Unsigned(self.gpsfix.into())),
+            ("numSats", FieldValue::Unsigned(self.numsats.into())),
+            (
+                "emergencyStatus",
+                FieldValue::Unsigned(self.emergencystatus.into()),
+            ),
+        ]
+    }
+}
+
 /// Transceiver heartbeat with health report (updated every 10s)
 ///
 /// MAVLink message 10003 (`UAVIONIX_ADSB_TRANSCEIVER_HEALTH_REPORT`), from `uAvionix.xml`.
@@ -24233,6 +31167,14 @@ impl Message for UavionixAdsbTransceiverHealthReport {
     fn encode(&self, out: &mut [u8]) -> usize {
         put_bytes(out, 0, &self.rfhealth.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl UavionixAdsbTransceiverHealthReport {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![("rfHealth", FieldValue::Unsigned(self.rfhealth.into()))]
     }
 }
 
@@ -24266,6 +31208,17 @@ impl Message for UavionixAdsbOutCfgRegistration {
     }
 }
 
+impl UavionixAdsbOutCfgRegistration {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![(
+            "registration",
+            FieldValue::UnsignedArray(self.registration.iter().map(|v| (*v).into()).collect()),
+        )]
+    }
+}
+
 /// Flight Identification for ADSB-Out vehicles.
 ///
 /// MAVLink message 10005 (`UAVIONIX_ADSB_OUT_CFG_FLIGHTID`), from `uAvionix.xml`.
@@ -24296,6 +31249,17 @@ impl Message for UavionixAdsbOutCfgFlightid {
     }
 }
 
+impl UavionixAdsbOutCfgFlightid {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![(
+            "flight_id",
+            FieldValue::UnsignedArray(self.flight_id.iter().map(|v| (*v).into()).collect()),
+        )]
+    }
+}
+
 /// Request messages.
 ///
 /// MAVLink message 10006 (`UAVIONIX_ADSB_GET`), from `uAvionix.xml`.
@@ -24321,6 +31285,17 @@ impl Message for UavionixAdsbGet {
     fn encode(&self, out: &mut [u8]) -> usize {
         put_bytes(out, 0, &self.reqmessageid.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl UavionixAdsbGet {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![(
+            "ReqMessageId",
+            FieldValue::Unsigned(self.reqmessageid.into()),
+        )]
     }
 }
 
@@ -24377,6 +31352,27 @@ impl Message for UavionixAdsbOutControl {
     }
 }
 
+impl UavionixAdsbOutControl {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("baroAltMSL", FieldValue::Signed(self.baroaltmsl.into())),
+            ("squawk", FieldValue::Unsigned(self.squawk.into())),
+            ("state", FieldValue::Unsigned(self.state.into())),
+            (
+                "emergencyStatus",
+                FieldValue::Unsigned(self.emergencystatus.into()),
+            ),
+            (
+                "flight_id",
+                FieldValue::UnsignedArray(self.flight_id.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("x_bit", FieldValue::Unsigned(self.x_bit.into())),
+        ]
+    }
+}
+
 /// Status message with information from UCP Heartbeat and Status messages.
 ///
 /// MAVLink message 10008 (`UAVIONIX_ADSB_OUT_STATUS`), from `uAvionix.xml`.
@@ -24427,6 +31423,24 @@ impl Message for UavionixAdsbOutStatus {
             put_bytes(out, 6 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl UavionixAdsbOutStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("squawk", FieldValue::Unsigned(self.squawk.into())),
+            ("state", FieldValue::Unsigned(self.state.into())),
+            ("NIC_NACp", FieldValue::Unsigned(self.nic_nacp.into())),
+            ("boardTemp", FieldValue::Unsigned(self.boardtemp.into())),
+            ("fault", FieldValue::Unsigned(self.fault.into())),
+            (
+                "flight_id",
+                FieldValue::UnsignedArray(self.flight_id.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -24546,6 +31560,59 @@ impl Message for LoweheiserGovEfi {
     }
 }
 
+impl LoweheiserGovEfi {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("volt_batt", FieldValue::Float(self.volt_batt.into())),
+            ("curr_batt", FieldValue::Float(self.curr_batt.into())),
+            ("curr_gen", FieldValue::Float(self.curr_gen.into())),
+            ("curr_rot", FieldValue::Float(self.curr_rot.into())),
+            ("fuel_level", FieldValue::Float(self.fuel_level.into())),
+            ("throttle", FieldValue::Float(self.throttle.into())),
+            ("runtime", FieldValue::Unsigned(self.runtime.into())),
+            (
+                "until_maintenance",
+                FieldValue::Signed(self.until_maintenance.into()),
+            ),
+            (
+                "rectifier_temp",
+                FieldValue::Float(self.rectifier_temp.into()),
+            ),
+            (
+                "generator_temp",
+                FieldValue::Float(self.generator_temp.into()),
+            ),
+            ("efi_batt", FieldValue::Float(self.efi_batt.into())),
+            ("efi_rpm", FieldValue::Float(self.efi_rpm.into())),
+            ("efi_pw", FieldValue::Float(self.efi_pw.into())),
+            (
+                "efi_fuel_flow",
+                FieldValue::Float(self.efi_fuel_flow.into()),
+            ),
+            (
+                "efi_fuel_consumed",
+                FieldValue::Float(self.efi_fuel_consumed.into()),
+            ),
+            ("efi_baro", FieldValue::Float(self.efi_baro.into())),
+            ("efi_mat", FieldValue::Float(self.efi_mat.into())),
+            ("efi_clt", FieldValue::Float(self.efi_clt.into())),
+            ("efi_tps", FieldValue::Float(self.efi_tps.into())),
+            (
+                "efi_exhaust_gas_temperature",
+                FieldValue::Float(self.efi_exhaust_gas_temperature.into()),
+            ),
+            (
+                "generator_status",
+                FieldValue::Unsigned(self.generator_status.into()),
+            ),
+            ("efi_status", FieldValue::Unsigned(self.efi_status.into())),
+            ("efi_index", FieldValue::Unsigned(self.efi_index.into())),
+        ]
+    }
+}
+
 /// Read registers for a device.
 ///
 /// MAVLink message 11000 (`DEVICE_OP_READ`), from `ardupilotmega.xml`.
@@ -24614,6 +31681,34 @@ impl Message for DeviceOpRead {
     }
 }
 
+impl DeviceOpRead {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("request_id", FieldValue::Unsigned(self.request_id.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("bustype", FieldValue::Unsigned(self.bustype.into())),
+            ("bus", FieldValue::Unsigned(self.bus.into())),
+            ("address", FieldValue::Unsigned(self.address.into())),
+            (
+                "busname",
+                FieldValue::UnsignedArray(self.busname.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("regstart", FieldValue::Unsigned(self.regstart.into())),
+            ("count", FieldValue::Unsigned(self.count.into())),
+            ("bank", FieldValue::Unsigned(self.bank.into())),
+        ]
+    }
+}
+
 /// Read registers reply.
 ///
 /// MAVLink message 11001 (`DEVICE_OP_READ_REPLY`), from `ardupilotmega.xml`.
@@ -24662,6 +31757,24 @@ impl Message for DeviceOpReadReply {
         }
         put_bytes(out, 135, &self.bank.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl DeviceOpReadReply {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("request_id", FieldValue::Unsigned(self.request_id.into())),
+            ("result", FieldValue::Unsigned(self.result.into())),
+            ("regstart", FieldValue::Unsigned(self.regstart.into())),
+            ("count", FieldValue::Unsigned(self.count.into())),
+            (
+                "data",
+                FieldValue::UnsignedArray(self.data.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("bank", FieldValue::Unsigned(self.bank.into())),
+        ]
     }
 }
 
@@ -24739,6 +31852,38 @@ impl Message for DeviceOpWrite {
     }
 }
 
+impl DeviceOpWrite {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("request_id", FieldValue::Unsigned(self.request_id.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("bustype", FieldValue::Unsigned(self.bustype.into())),
+            ("bus", FieldValue::Unsigned(self.bus.into())),
+            ("address", FieldValue::Unsigned(self.address.into())),
+            (
+                "busname",
+                FieldValue::UnsignedArray(self.busname.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("regstart", FieldValue::Unsigned(self.regstart.into())),
+            ("count", FieldValue::Unsigned(self.count.into())),
+            (
+                "data",
+                FieldValue::UnsignedArray(self.data.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("bank", FieldValue::Unsigned(self.bank.into())),
+        ]
+    }
+}
+
 /// Write registers reply.
 ///
 /// MAVLink message 11003 (`DEVICE_OP_WRITE_REPLY`), from `ardupilotmega.xml`.
@@ -24768,6 +31913,17 @@ impl Message for DeviceOpWriteReply {
         put_bytes(out, 0, &self.request_id.to_le_bytes());
         put_bytes(out, 4, &self.result.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl DeviceOpWriteReply {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("request_id", FieldValue::Unsigned(self.request_id.into())),
+            ("result", FieldValue::Unsigned(self.result.into())),
+        ]
     }
 }
 
@@ -24826,6 +31982,31 @@ impl Message for SecureCommand {
     }
 }
 
+impl SecureCommand {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("sequence", FieldValue::Unsigned(self.sequence.into())),
+            ("operation", FieldValue::Unsigned(self.operation.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("data_length", FieldValue::Unsigned(self.data_length.into())),
+            ("sig_length", FieldValue::Unsigned(self.sig_length.into())),
+            (
+                "data",
+                FieldValue::UnsignedArray(self.data.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Reply from secure command.
 ///
 /// MAVLink message 11005 (`SECURE_COMMAND_REPLY`), from `ardupilotmega.xml`.
@@ -24871,6 +32052,23 @@ impl Message for SecureCommandReply {
             put_bytes(out, 10 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl SecureCommandReply {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("sequence", FieldValue::Unsigned(self.sequence.into())),
+            ("operation", FieldValue::Unsigned(self.operation.into())),
+            ("result", FieldValue::Unsigned(self.result.into())),
+            ("data_length", FieldValue::Unsigned(self.data_length.into())),
+            (
+                "data",
+                FieldValue::UnsignedArray(self.data.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -24951,6 +32149,28 @@ impl Message for AdapTuning {
     }
 }
 
+impl AdapTuning {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("desired", FieldValue::Float(self.desired.into())),
+            ("achieved", FieldValue::Float(self.achieved.into())),
+            ("error", FieldValue::Float(self.error.into())),
+            ("theta", FieldValue::Float(self.theta.into())),
+            ("omega", FieldValue::Float(self.omega.into())),
+            ("sigma", FieldValue::Float(self.sigma.into())),
+            ("theta_dot", FieldValue::Float(self.theta_dot.into())),
+            ("omega_dot", FieldValue::Float(self.omega_dot.into())),
+            ("sigma_dot", FieldValue::Float(self.sigma_dot.into())),
+            ("f", FieldValue::Float(self.f.into())),
+            ("f_dot", FieldValue::Float(self.f_dot.into())),
+            ("u", FieldValue::Float(self.u.into())),
+            ("axis", FieldValue::Unsigned(self.axis.into())),
+        ]
+    }
+}
+
 /// Camera vision based attitude and position deltas.
 ///
 /// MAVLink message 11011 (`VISION_POSITION_DELTA`), from `ardupilotmega.xml`.
@@ -24999,6 +32219,29 @@ impl Message for VisionPositionDelta {
     }
 }
 
+impl VisionPositionDelta {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            (
+                "time_delta_usec",
+                FieldValue::Unsigned(self.time_delta_usec),
+            ),
+            (
+                "angle_delta",
+                FieldValue::FloatArray(self.angle_delta.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "position_delta",
+                FieldValue::FloatArray(self.position_delta.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("confidence", FieldValue::Float(self.confidence.into())),
+        ]
+    }
+}
+
 /// Angle of Attack and Side Slip Angle.
 ///
 /// MAVLink message 11020 (`AOA_SSA`), from `ardupilotmega.xml`.
@@ -25032,6 +32275,18 @@ impl Message for AoaSsa {
         put_bytes(out, 8, &self.aoa.to_le_bytes());
         put_bytes(out, 12, &self.ssa.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl AoaSsa {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("AOA", FieldValue::Float(self.aoa.into())),
+            ("SSA", FieldValue::Float(self.ssa.into())),
+        ]
     }
 }
 
@@ -25095,6 +32350,39 @@ impl Message for EscTelemetry1To4 {
     }
 }
 
+impl EscTelemetry1To4 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "voltage",
+                FieldValue::UnsignedArray(self.voltage.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "current",
+                FieldValue::UnsignedArray(self.current.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "totalcurrent",
+                FieldValue::UnsignedArray(self.totalcurrent.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "rpm",
+                FieldValue::UnsignedArray(self.rpm.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "count",
+                FieldValue::UnsignedArray(self.count.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "temperature",
+                FieldValue::UnsignedArray(self.temperature.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// ESC Telemetry Data for ESCs 5 to 8, matching data sent by BLHeli ESCs.
 ///
 /// MAVLink message 11031 (`ESC_TELEMETRY_5_TO_8`), from `ardupilotmega.xml`.
@@ -25155,6 +32443,39 @@ impl Message for EscTelemetry5To8 {
     }
 }
 
+impl EscTelemetry5To8 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "voltage",
+                FieldValue::UnsignedArray(self.voltage.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "current",
+                FieldValue::UnsignedArray(self.current.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "totalcurrent",
+                FieldValue::UnsignedArray(self.totalcurrent.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "rpm",
+                FieldValue::UnsignedArray(self.rpm.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "count",
+                FieldValue::UnsignedArray(self.count.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "temperature",
+                FieldValue::UnsignedArray(self.temperature.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// ESC Telemetry Data for ESCs 9 to 12, matching data sent by BLHeli ESCs.
 ///
 /// MAVLink message 11032 (`ESC_TELEMETRY_9_TO_12`), from `ardupilotmega.xml`.
@@ -25212,6 +32533,39 @@ impl Message for EscTelemetry9To12 {
             put_bytes(out, 40 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl EscTelemetry9To12 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "voltage",
+                FieldValue::UnsignedArray(self.voltage.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "current",
+                FieldValue::UnsignedArray(self.current.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "totalcurrent",
+                FieldValue::UnsignedArray(self.totalcurrent.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "rpm",
+                FieldValue::UnsignedArray(self.rpm.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "count",
+                FieldValue::UnsignedArray(self.count.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "temperature",
+                FieldValue::UnsignedArray(self.temperature.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -25282,6 +32636,34 @@ impl Message for OsdParamConfig {
     }
 }
 
+impl OsdParamConfig {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("request_id", FieldValue::Unsigned(self.request_id.into())),
+            ("min_value", FieldValue::Float(self.min_value.into())),
+            ("max_value", FieldValue::Float(self.max_value.into())),
+            ("increment", FieldValue::Float(self.increment.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("osd_screen", FieldValue::Unsigned(self.osd_screen.into())),
+            ("osd_index", FieldValue::Unsigned(self.osd_index.into())),
+            (
+                "param_id",
+                FieldValue::UnsignedArray(self.param_id.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("config_type", FieldValue::Unsigned(self.config_type.into())),
+        ]
+    }
+}
+
 /// Configure OSD parameter reply.
 ///
 /// MAVLink message 11034 (`OSD_PARAM_CONFIG_REPLY`), from `ardupilotmega.xml`.
@@ -25312,6 +32694,17 @@ impl Message for OsdParamConfigReply {
         put_bytes(out, 0, &self.request_id.to_le_bytes());
         put_bytes(out, 4, &self.result.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl OsdParamConfigReply {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("request_id", FieldValue::Unsigned(self.request_id.into())),
+            ("result", FieldValue::Unsigned(self.result.into())),
+        ]
     }
 }
 
@@ -25356,6 +32749,26 @@ impl Message for OsdParamShowConfig {
         put_bytes(out, 6, &self.osd_screen.to_le_bytes());
         put_bytes(out, 7, &self.osd_index.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl OsdParamShowConfig {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("request_id", FieldValue::Unsigned(self.request_id.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("osd_screen", FieldValue::Unsigned(self.osd_screen.into())),
+            ("osd_index", FieldValue::Unsigned(self.osd_index.into())),
+        ]
     }
 }
 
@@ -25412,6 +32825,25 @@ impl Message for OsdParamShowConfigReply {
         }
         put_bytes(out, 33, &self.config_type.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl OsdParamShowConfigReply {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("request_id", FieldValue::Unsigned(self.request_id.into())),
+            ("min_value", FieldValue::Float(self.min_value.into())),
+            ("max_value", FieldValue::Float(self.max_value.into())),
+            ("increment", FieldValue::Float(self.increment.into())),
+            ("result", FieldValue::Unsigned(self.result.into())),
+            (
+                "param_id",
+                FieldValue::UnsignedArray(self.param_id.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("config_type", FieldValue::Unsigned(self.config_type.into())),
+        ]
     }
 }
 
@@ -25474,6 +32906,27 @@ impl Message for ObstacleDistance3d {
         put_bytes(out, 26, &self.sensor_type.to_le_bytes());
         put_bytes(out, 27, &self.frame.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl ObstacleDistance3d {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("x", FieldValue::Float(self.x.into())),
+            ("y", FieldValue::Float(self.y.into())),
+            ("z", FieldValue::Float(self.z.into())),
+            ("min_distance", FieldValue::Float(self.min_distance.into())),
+            ("max_distance", FieldValue::Float(self.max_distance.into())),
+            ("obstacle_id", FieldValue::Unsigned(self.obstacle_id.into())),
+            ("sensor_type", FieldValue::Unsigned(self.sensor_type.into())),
+            ("frame", FieldValue::Unsigned(self.frame.into())),
+        ]
     }
 }
 
@@ -25545,6 +32998,29 @@ impl Message for WaterDepth {
     }
 }
 
+impl WaterDepth {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lng", FieldValue::Signed(self.lng.into())),
+            ("alt", FieldValue::Float(self.alt.into())),
+            ("roll", FieldValue::Float(self.roll.into())),
+            ("pitch", FieldValue::Float(self.pitch.into())),
+            ("yaw", FieldValue::Float(self.yaw.into())),
+            ("distance", FieldValue::Float(self.distance.into())),
+            ("temperature", FieldValue::Float(self.temperature.into())),
+            ("id", FieldValue::Unsigned(self.id.into())),
+            ("healthy", FieldValue::Unsigned(self.healthy.into())),
+        ]
+    }
+}
+
 /// The MCU status, giving MCU temperature and voltage. The min and max voltages are to allow for detecting power supply instability.
 ///
 /// MAVLink message 11039 (`MCU_STATUS`), from `ardupilotmega.xml`.
@@ -25586,6 +33062,29 @@ impl Message for McuStatus {
         put_bytes(out, 6, &self.mcu_voltage_max.to_le_bytes());
         put_bytes(out, 8, &self.id.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl McuStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "MCU_temperature",
+                FieldValue::Signed(self.mcu_temperature.into()),
+            ),
+            ("MCU_voltage", FieldValue::Unsigned(self.mcu_voltage.into())),
+            (
+                "MCU_voltage_min",
+                FieldValue::Unsigned(self.mcu_voltage_min.into()),
+            ),
+            (
+                "MCU_voltage_max",
+                FieldValue::Unsigned(self.mcu_voltage_max.into()),
+            ),
+            ("id", FieldValue::Unsigned(self.id.into())),
+        ]
     }
 }
 
@@ -25649,6 +33148,39 @@ impl Message for EscTelemetry13To16 {
     }
 }
 
+impl EscTelemetry13To16 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "voltage",
+                FieldValue::UnsignedArray(self.voltage.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "current",
+                FieldValue::UnsignedArray(self.current.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "totalcurrent",
+                FieldValue::UnsignedArray(self.totalcurrent.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "rpm",
+                FieldValue::UnsignedArray(self.rpm.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "count",
+                FieldValue::UnsignedArray(self.count.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "temperature",
+                FieldValue::UnsignedArray(self.temperature.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// ESC Telemetry Data for ESCs 17 to 20, matching data sent by BLHeli ESCs.
 ///
 /// MAVLink message 11041 (`ESC_TELEMETRY_17_TO_20`), from `ardupilotmega.xml`.
@@ -25706,6 +33238,39 @@ impl Message for EscTelemetry17To20 {
             put_bytes(out, 40 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl EscTelemetry17To20 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "voltage",
+                FieldValue::UnsignedArray(self.voltage.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "current",
+                FieldValue::UnsignedArray(self.current.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "totalcurrent",
+                FieldValue::UnsignedArray(self.totalcurrent.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "rpm",
+                FieldValue::UnsignedArray(self.rpm.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "count",
+                FieldValue::UnsignedArray(self.count.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "temperature",
+                FieldValue::UnsignedArray(self.temperature.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -25769,6 +33334,39 @@ impl Message for EscTelemetry21To24 {
     }
 }
 
+impl EscTelemetry21To24 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "voltage",
+                FieldValue::UnsignedArray(self.voltage.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "current",
+                FieldValue::UnsignedArray(self.current.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "totalcurrent",
+                FieldValue::UnsignedArray(self.totalcurrent.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "rpm",
+                FieldValue::UnsignedArray(self.rpm.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "count",
+                FieldValue::UnsignedArray(self.count.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "temperature",
+                FieldValue::UnsignedArray(self.temperature.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// ESC Telemetry Data for ESCs 25 to 28, matching data sent by BLHeli ESCs.
 ///
 /// MAVLink message 11043 (`ESC_TELEMETRY_25_TO_28`), from `ardupilotmega.xml`.
@@ -25826,6 +33424,39 @@ impl Message for EscTelemetry25To28 {
             put_bytes(out, 40 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl EscTelemetry25To28 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "voltage",
+                FieldValue::UnsignedArray(self.voltage.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "current",
+                FieldValue::UnsignedArray(self.current.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "totalcurrent",
+                FieldValue::UnsignedArray(self.totalcurrent.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "rpm",
+                FieldValue::UnsignedArray(self.rpm.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "count",
+                FieldValue::UnsignedArray(self.count.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "temperature",
+                FieldValue::UnsignedArray(self.temperature.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -25889,6 +33520,39 @@ impl Message for EscTelemetry29To32 {
     }
 }
 
+impl EscTelemetry29To32 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "voltage",
+                FieldValue::UnsignedArray(self.voltage.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "current",
+                FieldValue::UnsignedArray(self.current.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "totalcurrent",
+                FieldValue::UnsignedArray(self.totalcurrent.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "rpm",
+                FieldValue::UnsignedArray(self.rpm.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "count",
+                FieldValue::UnsignedArray(self.count.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "temperature",
+                FieldValue::UnsignedArray(self.temperature.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Send a key-value pair as string. The use of this message is discouraged for normal packets, but a quite efficient way for testing new messages and getting experimental debug output.
 ///
 /// MAVLink message 11060 (`NAMED_VALUE_STRING`), from `ardupilotmega.xml`.
@@ -25926,6 +33590,27 @@ impl Message for NamedValueString {
             put_bytes(out, 14 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl NamedValueString {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            (
+                "name",
+                FieldValue::UnsignedArray(self.name.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "value",
+                FieldValue::UnsignedArray(self.value.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -25980,6 +33665,33 @@ impl Message for OpenDroneIdBasicId {
             put_bytes(out, 24 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl OpenDroneIdBasicId {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "id_or_mac",
+                FieldValue::UnsignedArray(self.id_or_mac.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("id_type", FieldValue::Unsigned(self.id_type.into())),
+            ("ua_type", FieldValue::Unsigned(self.ua_type.into())),
+            (
+                "uas_id",
+                FieldValue::UnsignedArray(self.uas_id.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -26092,6 +33804,73 @@ impl Message for OpenDroneIdLocation {
     }
 }
 
+impl OpenDroneIdLocation {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("latitude", FieldValue::Signed(self.latitude.into())),
+            ("longitude", FieldValue::Signed(self.longitude.into())),
+            (
+                "altitude_barometric",
+                FieldValue::Float(self.altitude_barometric.into()),
+            ),
+            (
+                "altitude_geodetic",
+                FieldValue::Float(self.altitude_geodetic.into()),
+            ),
+            ("height", FieldValue::Float(self.height.into())),
+            ("timestamp", FieldValue::Float(self.timestamp.into())),
+            ("direction", FieldValue::Unsigned(self.direction.into())),
+            (
+                "speed_horizontal",
+                FieldValue::Unsigned(self.speed_horizontal.into()),
+            ),
+            (
+                "speed_vertical",
+                FieldValue::Signed(self.speed_vertical.into()),
+            ),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "id_or_mac",
+                FieldValue::UnsignedArray(self.id_or_mac.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("status", FieldValue::Unsigned(self.status.into())),
+            (
+                "height_reference",
+                FieldValue::Unsigned(self.height_reference.into()),
+            ),
+            (
+                "horizontal_accuracy",
+                FieldValue::Unsigned(self.horizontal_accuracy.into()),
+            ),
+            (
+                "vertical_accuracy",
+                FieldValue::Unsigned(self.vertical_accuracy.into()),
+            ),
+            (
+                "barometer_accuracy",
+                FieldValue::Unsigned(self.barometer_accuracy.into()),
+            ),
+            (
+                "speed_accuracy",
+                FieldValue::Unsigned(self.speed_accuracy.into()),
+            ),
+            (
+                "timestamp_accuracy",
+                FieldValue::Unsigned(self.timestamp_accuracy.into()),
+            ),
+        ]
+    }
+}
+
 /// Data for filling the OpenDroneID Authentication message. The Authentication Message defines a field that can provide a means of authenticity for the identity of the UAS (Unmanned Aircraft System). The Authentication message can have two different formats. For data page 0, the fields PageCount, Length and TimeStamp are present and AuthData is only 17 bytes. For data page 1 through 15, PageCount, Length and TimeStamp are not present and the size of AuthData is 23 bytes.
 ///
 /// MAVLink message 12902 (`OPEN_DRONE_ID_AUTHENTICATION`), from `common.xml`.
@@ -26157,6 +33936,47 @@ impl Message for OpenDroneIdAuthentication {
     }
 }
 
+impl OpenDroneIdAuthentication {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("timestamp", FieldValue::Unsigned(self.timestamp.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "id_or_mac",
+                FieldValue::UnsignedArray(self.id_or_mac.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "authentication_type",
+                FieldValue::Unsigned(self.authentication_type.into()),
+            ),
+            ("data_page", FieldValue::Unsigned(self.data_page.into())),
+            (
+                "last_page_index",
+                FieldValue::Unsigned(self.last_page_index.into()),
+            ),
+            ("length", FieldValue::Unsigned(self.length.into())),
+            (
+                "authentication_data",
+                FieldValue::UnsignedArray(
+                    self.authentication_data
+                        .iter()
+                        .map(|v| (*v).into())
+                        .collect(),
+                ),
+            ),
+        ]
+    }
+}
+
 /// Data for filling the OpenDroneID Self ID message. The Self ID Message is an opportunity for the operator to (optionally) declare their identity and purpose of the flight. This message can provide additional information that could reduce the threat profile of a UA (Unmanned Aircraft) flying in a particular area or manner. This message can also be used to provide optional additional clarification in an emergency/remote ID system failure situation.
 ///
 /// MAVLink message 12903 (`OPEN_DRONE_ID_SELF_ID`), from `common.xml`.
@@ -26203,6 +34023,35 @@ impl Message for OpenDroneIdSelfId {
             put_bytes(out, 23 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl OpenDroneIdSelfId {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "id_or_mac",
+                FieldValue::UnsignedArray(self.id_or_mac.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "description_type",
+                FieldValue::Unsigned(self.description_type.into()),
+            ),
+            (
+                "description",
+                FieldValue::UnsignedArray(self.description.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -26296,6 +34145,54 @@ impl Message for OpenDroneIdSystem {
     }
 }
 
+impl OpenDroneIdSystem {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "operator_latitude",
+                FieldValue::Signed(self.operator_latitude.into()),
+            ),
+            (
+                "operator_longitude",
+                FieldValue::Signed(self.operator_longitude.into()),
+            ),
+            ("area_ceiling", FieldValue::Float(self.area_ceiling.into())),
+            ("area_floor", FieldValue::Float(self.area_floor.into())),
+            (
+                "operator_altitude_geo",
+                FieldValue::Float(self.operator_altitude_geo.into()),
+            ),
+            ("timestamp", FieldValue::Unsigned(self.timestamp.into())),
+            ("area_count", FieldValue::Unsigned(self.area_count.into())),
+            ("area_radius", FieldValue::Unsigned(self.area_radius.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "id_or_mac",
+                FieldValue::UnsignedArray(self.id_or_mac.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "operator_location_type",
+                FieldValue::Unsigned(self.operator_location_type.into()),
+            ),
+            (
+                "classification_type",
+                FieldValue::Unsigned(self.classification_type.into()),
+            ),
+            ("category_eu", FieldValue::Unsigned(self.category_eu.into())),
+            ("class_eu", FieldValue::Unsigned(self.class_eu.into())),
+        ]
+    }
+}
+
 /// Data for filling the OpenDroneID Operator ID message, which contains the CAA (Civil Aviation Authority) issued operator ID.
 ///
 /// MAVLink message 12905 (`OPEN_DRONE_ID_OPERATOR_ID`), from `common.xml`.
@@ -26342,6 +34239,35 @@ impl Message for OpenDroneIdOperatorId {
             put_bytes(out, 23 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl OpenDroneIdOperatorId {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "id_or_mac",
+                FieldValue::UnsignedArray(self.id_or_mac.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "operator_id_type",
+                FieldValue::Unsigned(self.operator_id_type.into()),
+            ),
+            (
+                "operator_id",
+                FieldValue::UnsignedArray(self.operator_id.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -26397,6 +34323,39 @@ impl Message for OpenDroneIdMessagePack {
     }
 }
 
+impl OpenDroneIdMessagePack {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            (
+                "id_or_mac",
+                FieldValue::UnsignedArray(self.id_or_mac.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "single_message_size",
+                FieldValue::Unsigned(self.single_message_size.into()),
+            ),
+            (
+                "msg_pack_size",
+                FieldValue::Unsigned(self.msg_pack_size.into()),
+            ),
+            (
+                "messages",
+                FieldValue::UnsignedArray(self.messages.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Status from the transmitter telling the flight controller if the remote ID system is ready for arming.
 ///
 /// MAVLink message 12918 (`OPEN_DRONE_ID_ARM_STATUS`), from `common.xml`.
@@ -26429,6 +34388,20 @@ impl Message for OpenDroneIdArmStatus {
             put_bytes(out, 1 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl OpenDroneIdArmStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("status", FieldValue::Unsigned(self.status.into())),
+            (
+                "error",
+                FieldValue::UnsignedArray(self.error.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -26480,6 +34453,36 @@ impl Message for OpenDroneIdSystemUpdate {
     }
 }
 
+impl OpenDroneIdSystemUpdate {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "operator_latitude",
+                FieldValue::Signed(self.operator_latitude.into()),
+            ),
+            (
+                "operator_longitude",
+                FieldValue::Signed(self.operator_longitude.into()),
+            ),
+            (
+                "operator_altitude_geo",
+                FieldValue::Float(self.operator_altitude_geo.into()),
+            ),
+            ("timestamp", FieldValue::Unsigned(self.timestamp.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+        ]
+    }
+}
+
 /// Temperature and humidity from hygrometer.
 ///
 /// MAVLink message 12920 (`HYGROMETER_SENSOR`), from `common.xml`.
@@ -26513,6 +34516,18 @@ impl Message for HygrometerSensor {
         put_bytes(out, 2, &self.humidity.to_le_bytes());
         put_bytes(out, 4, &self.id.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl HygrometerSensor {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("temperature", FieldValue::Signed(self.temperature.into())),
+            ("humidity", FieldValue::Unsigned(self.humidity.into())),
+            ("id", FieldValue::Unsigned(self.id.into())),
+        ]
     }
 }
 
@@ -26650,6 +34665,67 @@ impl Message for TestTypes {
     }
 }
 
+impl TestTypes {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("u64", FieldValue::Unsigned(self.u64)),
+            ("s64", FieldValue::Signed(self.s64)),
+            ("d", FieldValue::Float(self.d)),
+            (
+                "u64_array",
+                FieldValue::UnsignedArray(self.u64_array.to_vec()),
+            ),
+            (
+                "s64_array",
+                FieldValue::SignedArray(self.s64_array.to_vec()),
+            ),
+            ("d_array", FieldValue::FloatArray(self.d_array.to_vec())),
+            ("u32", FieldValue::Unsigned(self.u32.into())),
+            ("s32", FieldValue::Signed(self.s32.into())),
+            ("f", FieldValue::Float(self.f.into())),
+            (
+                "u32_array",
+                FieldValue::UnsignedArray(self.u32_array.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "s32_array",
+                FieldValue::SignedArray(self.s32_array.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "f_array",
+                FieldValue::FloatArray(self.f_array.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("u16", FieldValue::Unsigned(self.u16.into())),
+            ("s16", FieldValue::Signed(self.s16.into())),
+            (
+                "u16_array",
+                FieldValue::UnsignedArray(self.u16_array.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "s16_array",
+                FieldValue::SignedArray(self.s16_array.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("c", FieldValue::Unsigned(self.c.into())),
+            (
+                "s",
+                FieldValue::UnsignedArray(self.s.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("u8", FieldValue::Unsigned(self.u8.into())),
+            ("s8", FieldValue::Signed(self.s8.into())),
+            (
+                "u8_array",
+                FieldValue::UnsignedArray(self.u8_array.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "s8_array",
+                FieldValue::SignedArray(self.s8_array.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Array test #0.
 ///
 /// MAVLink message 17150 (`ARRAY_TEST_0`), from `python_array_test.xml`.
@@ -26702,6 +34778,32 @@ impl Message for ArrayTest0 {
     }
 }
 
+impl ArrayTest0 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "ar_u32",
+                FieldValue::UnsignedArray(self.ar_u32.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "ar_u16",
+                FieldValue::UnsignedArray(self.ar_u16.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("v1", FieldValue::Unsigned(self.v1.into())),
+            (
+                "ar_i8",
+                FieldValue::SignedArray(self.ar_i8.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "ar_u8",
+                FieldValue::UnsignedArray(self.ar_u8.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Array test #1.
 ///
 /// MAVLink message 17151 (`ARRAY_TEST_1`), from `python_array_test.xml`.
@@ -26729,6 +34831,17 @@ impl Message for ArrayTest1 {
             put_bytes(out, i * 4, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl ArrayTest1 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![(
+            "ar_u32",
+            FieldValue::UnsignedArray(self.ar_u32.iter().map(|v| (*v).into()).collect()),
+        )]
     }
 }
 
@@ -26766,6 +34879,20 @@ impl Message for ArrayTest3 {
     }
 }
 
+impl ArrayTest3 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "ar_u32",
+                FieldValue::UnsignedArray(self.ar_u32.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("v", FieldValue::Unsigned(self.v.into())),
+        ]
+    }
+}
+
 /// Array test #4.
 ///
 /// MAVLink message 17154 (`ARRAY_TEST_4`), from `python_array_test.xml`.
@@ -26797,6 +34924,20 @@ impl Message for ArrayTest4 {
         }
         put_bytes(out, 16, &self.v.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl ArrayTest4 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "ar_u32",
+                FieldValue::UnsignedArray(self.ar_u32.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("v", FieldValue::Unsigned(self.v.into())),
+        ]
     }
 }
 
@@ -26833,6 +34974,23 @@ impl Message for ArrayTest5 {
             put_bytes(out, 5 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl ArrayTest5 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "c1",
+                FieldValue::UnsignedArray(self.c1.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "c2",
+                FieldValue::UnsignedArray(self.c2.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -26926,6 +35084,51 @@ impl Message for ArrayTest6 {
     }
 }
 
+impl ArrayTest6 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("ar_d", FieldValue::FloatArray(self.ar_d.to_vec())),
+            ("v3", FieldValue::Unsigned(self.v3.into())),
+            (
+                "ar_u32",
+                FieldValue::UnsignedArray(self.ar_u32.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "ar_i32",
+                FieldValue::SignedArray(self.ar_i32.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "ar_f",
+                FieldValue::FloatArray(self.ar_f.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("v2", FieldValue::Unsigned(self.v2.into())),
+            (
+                "ar_u16",
+                FieldValue::UnsignedArray(self.ar_u16.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "ar_i16",
+                FieldValue::SignedArray(self.ar_i16.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("v1", FieldValue::Unsigned(self.v1.into())),
+            (
+                "ar_u8",
+                FieldValue::UnsignedArray(self.ar_u8.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "ar_i8",
+                FieldValue::SignedArray(self.ar_i8.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "ar_c",
+                FieldValue::UnsignedArray(self.ar_c.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Array test #7.
 ///
 /// MAVLink message 17157 (`ARRAY_TEST_7`), from `python_array_test.xml`.
@@ -27004,6 +35207,48 @@ impl Message for ArrayTest7 {
     }
 }
 
+impl ArrayTest7 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("ar_d", FieldValue::FloatArray(self.ar_d.to_vec())),
+            (
+                "ar_f",
+                FieldValue::FloatArray(self.ar_f.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "ar_u32",
+                FieldValue::UnsignedArray(self.ar_u32.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "ar_i32",
+                FieldValue::SignedArray(self.ar_i32.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "ar_u16",
+                FieldValue::UnsignedArray(self.ar_u16.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "ar_i16",
+                FieldValue::SignedArray(self.ar_i16.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "ar_u8",
+                FieldValue::UnsignedArray(self.ar_u8.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "ar_i8",
+                FieldValue::SignedArray(self.ar_i8.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "ar_c",
+                FieldValue::UnsignedArray(self.ar_c.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Array test #8.
 ///
 /// MAVLink message 17158 (`ARRAY_TEST_8`), from `python_array_test.xml`.
@@ -27044,6 +35289,21 @@ impl Message for ArrayTest8 {
     }
 }
 
+impl ArrayTest8 {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("ar_d", FieldValue::FloatArray(self.ar_d.to_vec())),
+            ("v3", FieldValue::Unsigned(self.v3.into())),
+            (
+                "ar_u16",
+                FieldValue::UnsignedArray(self.ar_u16.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// ICAROUS heartbeat
 ///
 /// MAVLink message 42000 (`ICAROUS_HEARTBEAT`), from `icarous.xml`.
@@ -27070,6 +35330,14 @@ impl Message for IcarousHeartbeat {
     fn encode(&self, out: &mut [u8]) -> usize {
         put_bytes(out, 0, &self.status.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl IcarousHeartbeat {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![("status", FieldValue::Unsigned(self.status.into()))]
     }
 }
 
@@ -27166,6 +35434,31 @@ impl Message for IcarousKinematicBands {
     }
 }
 
+impl IcarousKinematicBands {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("min1", FieldValue::Float(self.min1.into())),
+            ("max1", FieldValue::Float(self.max1.into())),
+            ("min2", FieldValue::Float(self.min2.into())),
+            ("max2", FieldValue::Float(self.max2.into())),
+            ("min3", FieldValue::Float(self.min3.into())),
+            ("max3", FieldValue::Float(self.max3.into())),
+            ("min4", FieldValue::Float(self.min4.into())),
+            ("max4", FieldValue::Float(self.max4.into())),
+            ("min5", FieldValue::Float(self.min5.into())),
+            ("max5", FieldValue::Float(self.max5.into())),
+            ("numBands", FieldValue::Signed(self.numbands.into())),
+            ("type1", FieldValue::Unsigned(self.type1.into())),
+            ("type2", FieldValue::Unsigned(self.type2.into())),
+            ("type3", FieldValue::Unsigned(self.type3.into())),
+            ("type4", FieldValue::Unsigned(self.type4.into())),
+            ("type5", FieldValue::Unsigned(self.type5.into())),
+        ]
+    }
+}
+
 /// Raw RC Data
 ///
 /// MAVLink message 50001 (`CUBEPILOT_RAW_RC`), from `cubepilot.xml`.
@@ -27193,6 +35486,17 @@ impl Message for CubepilotRawRc {
             put_bytes(out, i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl CubepilotRawRc {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![(
+            "rc_raw",
+            FieldValue::UnsignedArray(self.rc_raw.iter().map(|v| (*v).into()).collect()),
+        )]
     }
 }
 
@@ -27254,6 +35558,32 @@ impl Message for HerelinkVideoStreamInformation {
     }
 }
 
+impl HerelinkVideoStreamInformation {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("framerate", FieldValue::Float(self.framerate.into())),
+            ("bitrate", FieldValue::Unsigned(self.bitrate.into())),
+            (
+                "resolution_h",
+                FieldValue::Unsigned(self.resolution_h.into()),
+            ),
+            (
+                "resolution_v",
+                FieldValue::Unsigned(self.resolution_v.into()),
+            ),
+            ("rotation", FieldValue::Unsigned(self.rotation.into())),
+            ("camera_id", FieldValue::Unsigned(self.camera_id.into())),
+            ("status", FieldValue::Unsigned(self.status.into())),
+            (
+                "uri",
+                FieldValue::UnsignedArray(self.uri.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Herelink Telemetry
 ///
 /// MAVLink message 50003 (`HERELINK_TELEM`), from `cubepilot.xml`.
@@ -27306,6 +35636,22 @@ impl Message for HerelinkTelem {
     }
 }
 
+impl HerelinkTelem {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("rf_freq", FieldValue::Unsigned(self.rf_freq.into())),
+            ("link_bw", FieldValue::Unsigned(self.link_bw.into())),
+            ("link_rate", FieldValue::Unsigned(self.link_rate.into())),
+            ("snr", FieldValue::Signed(self.snr.into())),
+            ("cpu_temp", FieldValue::Signed(self.cpu_temp.into())),
+            ("board_temp", FieldValue::Signed(self.board_temp.into())),
+            ("rssi", FieldValue::Unsigned(self.rssi.into())),
+        ]
+    }
+}
+
 /// Start firmware update with encapsulated data.
 ///
 /// MAVLink message 50004 (`CUBEPILOT_FIRMWARE_UPDATE_START`), from `cubepilot.xml`.
@@ -27346,6 +35692,25 @@ impl Message for CubepilotFirmwareUpdateStart {
     }
 }
 
+impl CubepilotFirmwareUpdateStart {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("size", FieldValue::Unsigned(self.size.into())),
+            ("crc", FieldValue::Unsigned(self.crc.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+        ]
+    }
+}
+
 /// offset response to encapsulated data.
 ///
 /// MAVLink message 50005 (`CUBEPILOT_FIRMWARE_UPDATE_RESP`), from `cubepilot.xml`.
@@ -27379,6 +35744,24 @@ impl Message for CubepilotFirmwareUpdateResp {
         put_bytes(out, 4, &self.target_system.to_le_bytes());
         put_bytes(out, 5, &self.target_component.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl CubepilotFirmwareUpdateResp {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("offset", FieldValue::Unsigned(self.offset.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+        ]
     }
 }
 
@@ -27418,6 +35801,23 @@ impl Message for AirlinkAuth {
     }
 }
 
+impl AirlinkAuth {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "login",
+                FieldValue::UnsignedArray(self.login.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "password",
+                FieldValue::UnsignedArray(self.password.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
+    }
+}
+
 /// Response to the authorization request
 ///
 /// MAVLink message 52001 (`AIRLINK_AUTH_RESPONSE`), from `csAirLink.xml`.
@@ -27444,6 +35844,14 @@ impl Message for AirlinkAuthResponse {
     fn encode(&self, out: &mut [u8]) -> usize {
         put_bytes(out, 0, &self.resp_type.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl AirlinkAuthResponse {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![("resp_type", FieldValue::Unsigned(self.resp_type.into()))]
     }
 }
 
@@ -27492,6 +35900,30 @@ impl Message for AutopilotStateForGimbalDeviceExt {
         put_bytes(out, 20, &self.target_system.to_le_bytes());
         put_bytes(out, 21, &self.target_component.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl AutopilotStateForGimbalDeviceExt {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_boot_us", FieldValue::Unsigned(self.time_boot_us)),
+            ("wind_x", FieldValue::Float(self.wind_x.into())),
+            ("wind_y", FieldValue::Float(self.wind_y.into())),
+            (
+                "wind_correction_angle",
+                FieldValue::Float(self.wind_correction_angle.into()),
+            ),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+        ]
     }
 }
 
@@ -27557,6 +35989,30 @@ impl Message for Storm32GimbalManagerInformation {
     }
 }
 
+impl Storm32GimbalManagerInformation {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "device_cap_flags",
+                FieldValue::Unsigned(self.device_cap_flags.into()),
+            ),
+            (
+                "manager_cap_flags",
+                FieldValue::Unsigned(self.manager_cap_flags.into()),
+            ),
+            ("roll_min", FieldValue::Float(self.roll_min.into())),
+            ("roll_max", FieldValue::Float(self.roll_max.into())),
+            ("pitch_min", FieldValue::Float(self.pitch_min.into())),
+            ("pitch_max", FieldValue::Float(self.pitch_max.into())),
+            ("yaw_min", FieldValue::Float(self.yaw_min.into())),
+            ("yaw_max", FieldValue::Float(self.yaw_max.into())),
+            ("gimbal_id", FieldValue::Unsigned(self.gimbal_id.into())),
+        ]
+    }
+}
+
 /// Message reporting the current status of a gimbal manager. This message should be broadcast at a low regular rate (e.g. 1 Hz, may be increase momentarily to e.g. 5 Hz for a period of 1 sec after a change).
 ///
 /// MAVLink message 60011 (`STORM32_GIMBAL_MANAGER_STATUS`), from `storm32.xml`.
@@ -27602,6 +36058,26 @@ impl Message for Storm32GimbalManagerStatus {
         put_bytes(out, 5, &self.supervisor.to_le_bytes());
         put_bytes(out, 6, &self.profile.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl Storm32GimbalManagerStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "device_flags",
+                FieldValue::Unsigned(self.device_flags.into()),
+            ),
+            (
+                "manager_flags",
+                FieldValue::Unsigned(self.manager_flags.into()),
+            ),
+            ("gimbal_id", FieldValue::Unsigned(self.gimbal_id.into())),
+            ("supervisor", FieldValue::Unsigned(self.supervisor.into())),
+            ("profile", FieldValue::Unsigned(self.profile.into())),
+        ]
     }
 }
 
@@ -27674,6 +36150,49 @@ impl Message for Storm32GimbalManagerControl {
     }
 }
 
+impl Storm32GimbalManagerControl {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "q",
+                FieldValue::FloatArray(self.q.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "angular_velocity_x",
+                FieldValue::Float(self.angular_velocity_x.into()),
+            ),
+            (
+                "angular_velocity_y",
+                FieldValue::Float(self.angular_velocity_y.into()),
+            ),
+            (
+                "angular_velocity_z",
+                FieldValue::Float(self.angular_velocity_z.into()),
+            ),
+            (
+                "device_flags",
+                FieldValue::Unsigned(self.device_flags.into()),
+            ),
+            (
+                "manager_flags",
+                FieldValue::Unsigned(self.manager_flags.into()),
+            ),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("gimbal_id", FieldValue::Unsigned(self.gimbal_id.into())),
+            ("client", FieldValue::Unsigned(self.client.into())),
+        ]
+    }
+}
+
 /// Message to a gimbal manager to control the gimbal tilt and pan angles. Angles and rates can be set to NaN according to use case. A gimbal device is never to react to this message.
 ///
 /// MAVLink message 60013 (`STORM32_GIMBAL_MANAGER_CONTROL_PITCHYAW`), from `storm32.xml`.
@@ -27741,6 +36260,37 @@ impl Message for Storm32GimbalManagerControlPitchyaw {
     }
 }
 
+impl Storm32GimbalManagerControlPitchyaw {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("pitch", FieldValue::Float(self.pitch.into())),
+            ("yaw", FieldValue::Float(self.yaw.into())),
+            ("pitch_rate", FieldValue::Float(self.pitch_rate.into())),
+            ("yaw_rate", FieldValue::Float(self.yaw_rate.into())),
+            (
+                "device_flags",
+                FieldValue::Unsigned(self.device_flags.into()),
+            ),
+            (
+                "manager_flags",
+                FieldValue::Unsigned(self.manager_flags.into()),
+            ),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("gimbal_id", FieldValue::Unsigned(self.gimbal_id.into())),
+            ("client", FieldValue::Unsigned(self.client.into())),
+        ]
+    }
+}
+
 /// Message to a gimbal manager to correct the gimbal roll angle. This message is typically used to manually correct for a tilted horizon in operation. A gimbal device is never to react to this message.
 ///
 /// MAVLink message 60014 (`STORM32_GIMBAL_MANAGER_CORRECT_ROLL`), from `storm32.xml`.
@@ -27786,6 +36336,26 @@ impl Message for Storm32GimbalManagerCorrectRoll {
     }
 }
 
+impl Storm32GimbalManagerCorrectRoll {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("roll", FieldValue::Float(self.roll.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("gimbal_id", FieldValue::Unsigned(self.gimbal_id.into())),
+            ("client", FieldValue::Unsigned(self.client.into())),
+        ]
+    }
+}
+
 /// Information about the shot operation.
 ///
 /// MAVLink message 60020 (`QSHOT_STATUS`), from `storm32.xml`.
@@ -27816,6 +36386,17 @@ impl Message for QshotStatus {
         put_bytes(out, 0, &self.mode.to_le_bytes());
         put_bytes(out, 2, &self.shot_state.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl QshotStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("mode", FieldValue::Unsigned(self.mode.into())),
+            ("shot_state", FieldValue::Unsigned(self.shot_state.into())),
+        ]
     }
 }
 
@@ -27854,6 +36435,24 @@ impl Message for FrskyPassthroughArray {
             put_bytes(out, 5 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl FrskyPassthroughArray {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("count", FieldValue::Unsigned(self.count.into())),
+            (
+                "packet_buf",
+                FieldValue::UnsignedArray(self.packet_buf.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -27900,6 +36499,29 @@ impl Message for ParamValueArray {
             put_bytes(out, 7 + i, &v.to_le_bytes());
         }
         Self::LEN
+    }
+}
+
+impl ParamValueArray {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("param_count", FieldValue::Unsigned(self.param_count.into())),
+            (
+                "param_index_first",
+                FieldValue::Unsigned(self.param_index_first.into()),
+            ),
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+            (
+                "param_array_len",
+                FieldValue::Unsigned(self.param_array_len.into()),
+            ),
+            (
+                "packet_buf",
+                FieldValue::UnsignedArray(self.packet_buf.iter().map(|v| (*v).into()).collect()),
+            ),
+        ]
     }
 }
 
@@ -27994,6 +36616,37 @@ impl Message for MlrsRadioLinkStats {
     }
 }
 
+impl MlrsRadioLinkStats {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("rx_LQ_rc", FieldValue::Unsigned(self.rx_lq_rc.into())),
+            ("rx_LQ_ser", FieldValue::Unsigned(self.rx_lq_ser.into())),
+            ("rx_rssi1", FieldValue::Unsigned(self.rx_rssi1.into())),
+            ("rx_snr1", FieldValue::Signed(self.rx_snr1.into())),
+            ("tx_LQ_ser", FieldValue::Unsigned(self.tx_lq_ser.into())),
+            ("tx_rssi1", FieldValue::Unsigned(self.tx_rssi1.into())),
+            ("tx_snr1", FieldValue::Signed(self.tx_snr1.into())),
+            ("rx_rssi2", FieldValue::Unsigned(self.rx_rssi2.into())),
+            ("rx_snr2", FieldValue::Signed(self.rx_snr2.into())),
+            ("tx_rssi2", FieldValue::Unsigned(self.tx_rssi2.into())),
+            ("tx_snr2", FieldValue::Signed(self.tx_snr2.into())),
+            ("frequency1", FieldValue::Float(self.frequency1.into())),
+            ("frequency2", FieldValue::Float(self.frequency2.into())),
+        ]
+    }
+}
+
 /// Radio link information. Tx: ground-side device, Rx: vehicle-side device. The values of the fields in this message do normally not or only slowly change with time, and for most times the message can be send at a low rate, like 0.2 Hz. If values change then the message should temporarily be send more often to inform the system about the changes. The target_system field should normally be set to the system id of the system the link is connected to, typically the flight controller. The target_component field can normally be set to 0, so that all components of the system can receive the message.
 ///
 /// MAVLink message 60046 (`MLRS_RADIO_LINK_INFORMATION`), from `storm32.xml`.
@@ -28079,6 +36732,59 @@ impl Message for MlrsRadioLinkInformation {
     }
 }
 
+impl MlrsRadioLinkInformation {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "tx_frame_rate",
+                FieldValue::Unsigned(self.tx_frame_rate.into()),
+            ),
+            (
+                "rx_frame_rate",
+                FieldValue::Unsigned(self.rx_frame_rate.into()),
+            ),
+            (
+                "tx_ser_data_rate",
+                FieldValue::Unsigned(self.tx_ser_data_rate.into()),
+            ),
+            (
+                "rx_ser_data_rate",
+                FieldValue::Unsigned(self.rx_ser_data_rate.into()),
+            ),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("type", FieldValue::Unsigned(self.r#type.into())),
+            ("mode", FieldValue::Unsigned(self.mode.into())),
+            ("tx_power", FieldValue::Signed(self.tx_power.into())),
+            ("rx_power", FieldValue::Signed(self.rx_power.into())),
+            (
+                "mode_str",
+                FieldValue::UnsignedArray(self.mode_str.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "band_str",
+                FieldValue::UnsignedArray(self.band_str.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "tx_receive_sensitivity",
+                FieldValue::Unsigned(self.tx_receive_sensitivity.into()),
+            ),
+            (
+                "rx_receive_sensitivity",
+                FieldValue::Unsigned(self.rx_receive_sensitivity.into()),
+            ),
+        ]
+    }
+}
+
 /// Injected by a radio link endpoint into the MAVLink stream for purposes of flow control. Should be emitted only by components with component id MAV_COMP_ID_TELEMETRY_RADIO.
 ///
 /// MAVLink message 60047 (`MLRS_RADIO_LINK_FLOW_CONTROL`), from `storm32.xml`.
@@ -28123,6 +36829,26 @@ impl Message for MlrsRadioLinkFlowControl {
     }
 }
 
+impl MlrsRadioLinkFlowControl {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("tx_ser_rate", FieldValue::Unsigned(self.tx_ser_rate.into())),
+            ("rx_ser_rate", FieldValue::Unsigned(self.rx_ser_rate.into())),
+            (
+                "tx_used_ser_bandwidth",
+                FieldValue::Unsigned(self.tx_used_ser_bandwidth.into()),
+            ),
+            (
+                "rx_used_ser_bandwidth",
+                FieldValue::Unsigned(self.rx_used_ser_bandwidth.into()),
+            ),
+            ("txbuf", FieldValue::Unsigned(self.txbuf.into())),
+        ]
+    }
+}
+
 /// AVSS PRS system status.
 ///
 /// MAVLink message 60050 (`AVSS_PRS_SYS_STATUS`), from `AVSSUAS.xml`.
@@ -28164,6 +36890,32 @@ impl Message for AvssPrsSysStatus {
         put_bytes(out, 12, &self.arm_status.to_le_bytes());
         put_bytes(out, 13, &self.charge_status.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl AvssPrsSysStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            (
+                "error_status",
+                FieldValue::Unsigned(self.error_status.into()),
+            ),
+            (
+                "battery_status",
+                FieldValue::Unsigned(self.battery_status.into()),
+            ),
+            ("arm_status", FieldValue::Unsigned(self.arm_status.into())),
+            (
+                "charge_status",
+                FieldValue::Unsigned(self.charge_status.into()),
+            ),
+        ]
     }
 }
 
@@ -28212,6 +36964,27 @@ impl Message for AvssDronePosition {
         put_bytes(out, 16, &self.ground_alt.to_le_bytes());
         put_bytes(out, 20, &self.barometer_alt.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl AvssDronePosition {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lon", FieldValue::Signed(self.lon.into())),
+            ("alt", FieldValue::Signed(self.alt.into())),
+            ("ground_alt", FieldValue::Float(self.ground_alt.into())),
+            (
+                "barometer_alt",
+                FieldValue::Float(self.barometer_alt.into()),
+            ),
+        ]
     }
 }
 
@@ -28283,6 +37056,29 @@ impl Message for AvssDroneImu {
     }
 }
 
+impl AvssDroneImu {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            ("q1", FieldValue::Float(self.q1.into())),
+            ("q2", FieldValue::Float(self.q2.into())),
+            ("q3", FieldValue::Float(self.q3.into())),
+            ("q4", FieldValue::Float(self.q4.into())),
+            ("xacc", FieldValue::Float(self.xacc.into())),
+            ("yacc", FieldValue::Float(self.yacc.into())),
+            ("zacc", FieldValue::Float(self.zacc.into())),
+            ("xgyro", FieldValue::Float(self.xgyro.into())),
+            ("ygyro", FieldValue::Float(self.ygyro.into())),
+            ("zgyro", FieldValue::Float(self.zgyro.into())),
+        ]
+    }
+}
+
 /// Drone operation mode.
 ///
 /// MAVLink message 60053 (`AVSS_DRONE_OPERATION_MODE`), from `AVSSUAS.xml`.
@@ -28316,6 +37112,27 @@ impl Message for AvssDroneOperationMode {
         put_bytes(out, 4, &self.m300_operation_mode.to_le_bytes());
         put_bytes(out, 5, &self.horsefly_operation_mode.to_le_bytes());
         Self::LEN
+    }
+}
+
+impl AvssDroneOperationMode {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            (
+                "time_boot_ms",
+                FieldValue::Unsigned(self.time_boot_ms.into()),
+            ),
+            (
+                "M300_operation_mode",
+                FieldValue::Unsigned(self.m300_operation_mode.into()),
+            ),
+            (
+                "horsefly_operation_mode",
+                FieldValue::Unsigned(self.horsefly_operation_mode.into()),
+            ),
+        ]
     }
 }
 
@@ -31007,6 +39824,362 @@ impl MavMessage {
             Self::AvssDronePosition(_) => 245,
             Self::AvssDroneImu(_) => 101,
             Self::AvssDroneOperationMode(_) => 45,
+        }
+    }
+
+    /// Every field of the contained message, by name.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        match self {
+            Self::Heartbeat(m) => m.fields(),
+            Self::SysStatus(m) => m.fields(),
+            Self::SystemTime(m) => m.fields(),
+            Self::Ping(m) => m.fields(),
+            Self::ChangeOperatorControl(m) => m.fields(),
+            Self::ChangeOperatorControlAck(m) => m.fields(),
+            Self::AuthKey(m) => m.fields(),
+            Self::SetMode(m) => m.fields(),
+            Self::ParamRequestRead(m) => m.fields(),
+            Self::ParamRequestList(m) => m.fields(),
+            Self::ParamValue(m) => m.fields(),
+            Self::ParamSet(m) => m.fields(),
+            Self::GpsRawInt(m) => m.fields(),
+            Self::GpsStatus(m) => m.fields(),
+            Self::ScaledImu(m) => m.fields(),
+            Self::RawImu(m) => m.fields(),
+            Self::RawPressure(m) => m.fields(),
+            Self::ScaledPressure(m) => m.fields(),
+            Self::Attitude(m) => m.fields(),
+            Self::AttitudeQuaternion(m) => m.fields(),
+            Self::LocalPositionNed(m) => m.fields(),
+            Self::GlobalPositionInt(m) => m.fields(),
+            Self::RcChannelsScaled(m) => m.fields(),
+            Self::RcChannelsRaw(m) => m.fields(),
+            Self::ServoOutputRaw(m) => m.fields(),
+            Self::MissionRequestPartialList(m) => m.fields(),
+            Self::MissionWritePartialList(m) => m.fields(),
+            Self::MissionItem(m) => m.fields(),
+            Self::MissionRequest(m) => m.fields(),
+            Self::MissionSetCurrent(m) => m.fields(),
+            Self::MissionCurrent(m) => m.fields(),
+            Self::MissionRequestList(m) => m.fields(),
+            Self::MissionCount(m) => m.fields(),
+            Self::MissionClearAll(m) => m.fields(),
+            Self::MissionItemReached(m) => m.fields(),
+            Self::MissionAck(m) => m.fields(),
+            Self::SetGpsGlobalOrigin(m) => m.fields(),
+            Self::GpsGlobalOrigin(m) => m.fields(),
+            Self::ParamMapRc(m) => m.fields(),
+            Self::MissionRequestInt(m) => m.fields(),
+            Self::MissionChecksum(m) => m.fields(),
+            Self::SafetySetAllowedArea(m) => m.fields(),
+            Self::SafetyAllowedArea(m) => m.fields(),
+            Self::AttitudeQuaternionCov(m) => m.fields(),
+            Self::NavControllerOutput(m) => m.fields(),
+            Self::GlobalPositionIntCov(m) => m.fields(),
+            Self::LocalPositionNedCov(m) => m.fields(),
+            Self::RcChannels(m) => m.fields(),
+            Self::RequestDataStream(m) => m.fields(),
+            Self::DataStream(m) => m.fields(),
+            Self::ManualControl(m) => m.fields(),
+            Self::RcChannelsOverride(m) => m.fields(),
+            Self::MissionItemInt(m) => m.fields(),
+            Self::VfrHud(m) => m.fields(),
+            Self::CommandInt(m) => m.fields(),
+            Self::CommandLong(m) => m.fields(),
+            Self::CommandAck(m) => m.fields(),
+            Self::ManualSetpoint(m) => m.fields(),
+            Self::SetAttitudeTarget(m) => m.fields(),
+            Self::AttitudeTarget(m) => m.fields(),
+            Self::SetPositionTargetLocalNed(m) => m.fields(),
+            Self::PositionTargetLocalNed(m) => m.fields(),
+            Self::SetPositionTargetGlobalInt(m) => m.fields(),
+            Self::PositionTargetGlobalInt(m) => m.fields(),
+            Self::LocalPositionNedSystemGlobalOffset(m) => m.fields(),
+            Self::HilState(m) => m.fields(),
+            Self::HilControls(m) => m.fields(),
+            Self::HilRcInputsRaw(m) => m.fields(),
+            Self::HilActuatorControls(m) => m.fields(),
+            Self::OpticalFlow(m) => m.fields(),
+            Self::GlobalVisionPositionEstimate(m) => m.fields(),
+            Self::VisionPositionEstimate(m) => m.fields(),
+            Self::VisionSpeedEstimate(m) => m.fields(),
+            Self::ViconPositionEstimate(m) => m.fields(),
+            Self::HighresImu(m) => m.fields(),
+            Self::OpticalFlowRad(m) => m.fields(),
+            Self::HilSensor(m) => m.fields(),
+            Self::SimState(m) => m.fields(),
+            Self::RadioStatus(m) => m.fields(),
+            Self::FileTransferProtocol(m) => m.fields(),
+            Self::Timesync(m) => m.fields(),
+            Self::CameraTrigger(m) => m.fields(),
+            Self::HilGps(m) => m.fields(),
+            Self::HilOpticalFlow(m) => m.fields(),
+            Self::HilStateQuaternion(m) => m.fields(),
+            Self::ScaledImu2(m) => m.fields(),
+            Self::LogRequestList(m) => m.fields(),
+            Self::LogEntry(m) => m.fields(),
+            Self::LogRequestData(m) => m.fields(),
+            Self::LogData(m) => m.fields(),
+            Self::LogErase(m) => m.fields(),
+            Self::LogRequestEnd(m) => m.fields(),
+            Self::GpsInjectData(m) => m.fields(),
+            Self::Gps2Raw(m) => m.fields(),
+            Self::PowerStatus(m) => m.fields(),
+            Self::SerialControl(m) => m.fields(),
+            Self::GpsRtk(m) => m.fields(),
+            Self::Gps2Rtk(m) => m.fields(),
+            Self::ScaledImu3(m) => m.fields(),
+            Self::DataTransmissionHandshake(m) => m.fields(),
+            Self::EncapsulatedData(m) => m.fields(),
+            Self::DistanceSensor(m) => m.fields(),
+            Self::TerrainRequest(m) => m.fields(),
+            Self::TerrainData(m) => m.fields(),
+            Self::TerrainCheck(m) => m.fields(),
+            Self::TerrainReport(m) => m.fields(),
+            Self::ScaledPressure2(m) => m.fields(),
+            Self::AttPosMocap(m) => m.fields(),
+            Self::SetActuatorControlTarget(m) => m.fields(),
+            Self::ActuatorControlTarget(m) => m.fields(),
+            Self::Altitude(m) => m.fields(),
+            Self::ResourceRequest(m) => m.fields(),
+            Self::ScaledPressure3(m) => m.fields(),
+            Self::FollowTarget(m) => m.fields(),
+            Self::ControlSystemState(m) => m.fields(),
+            Self::BatteryStatus(m) => m.fields(),
+            Self::AutopilotVersion(m) => m.fields(),
+            Self::LandingTarget(m) => m.fields(),
+            Self::SensorOffsets(m) => m.fields(),
+            Self::SetMagOffsets(m) => m.fields(),
+            Self::Meminfo(m) => m.fields(),
+            Self::ApAdc(m) => m.fields(),
+            Self::DigicamConfigure(m) => m.fields(),
+            Self::DigicamControl(m) => m.fields(),
+            Self::MountConfigure(m) => m.fields(),
+            Self::MountControl(m) => m.fields(),
+            Self::MountStatus(m) => m.fields(),
+            Self::FencePoint(m) => m.fields(),
+            Self::FenceFetchPoint(m) => m.fields(),
+            Self::FenceStatus(m) => m.fields(),
+            Self::Ahrs(m) => m.fields(),
+            Self::Simstate(m) => m.fields(),
+            Self::Hwstatus(m) => m.fields(),
+            Self::Radio(m) => m.fields(),
+            Self::LimitsStatus(m) => m.fields(),
+            Self::Wind(m) => m.fields(),
+            Self::Data16(m) => m.fields(),
+            Self::Data32(m) => m.fields(),
+            Self::Data64(m) => m.fields(),
+            Self::Data96(m) => m.fields(),
+            Self::Rangefinder(m) => m.fields(),
+            Self::AirspeedAutocal(m) => m.fields(),
+            Self::RallyPoint(m) => m.fields(),
+            Self::RallyFetchPoint(m) => m.fields(),
+            Self::CompassmotStatus(m) => m.fields(),
+            Self::Ahrs2(m) => m.fields(),
+            Self::CameraStatus(m) => m.fields(),
+            Self::CameraFeedback(m) => m.fields(),
+            Self::Battery2(m) => m.fields(),
+            Self::Ahrs3(m) => m.fields(),
+            Self::AutopilotVersionRequest(m) => m.fields(),
+            Self::RemoteLogDataBlock(m) => m.fields(),
+            Self::RemoteLogBlockStatus(m) => m.fields(),
+            Self::LedControl(m) => m.fields(),
+            Self::MagCalProgress(m) => m.fields(),
+            Self::MagCalReport(m) => m.fields(),
+            Self::EkfStatusReport(m) => m.fields(),
+            Self::PidTuning(m) => m.fields(),
+            Self::Deepstall(m) => m.fields(),
+            Self::GimbalReport(m) => m.fields(),
+            Self::GimbalControl(m) => m.fields(),
+            Self::GimbalTorqueCmdReport(m) => m.fields(),
+            Self::GoproHeartbeat(m) => m.fields(),
+            Self::GoproGetRequest(m) => m.fields(),
+            Self::GoproGetResponse(m) => m.fields(),
+            Self::GoproSetRequest(m) => m.fields(),
+            Self::GoproSetResponse(m) => m.fields(),
+            Self::NavFilterBias(m) => m.fields(),
+            Self::RadioCalibration(m) => m.fields(),
+            Self::UalbertaSysStatus(m) => m.fields(),
+            Self::CommandIntStamped(m) => m.fields(),
+            Self::CommandLongStamped(m) => m.fields(),
+            Self::EfiStatus(m) => m.fields(),
+            Self::Rpm(m) => m.fields(),
+            Self::EstimatorStatus(m) => m.fields(),
+            Self::WindCov(m) => m.fields(),
+            Self::GpsInput(m) => m.fields(),
+            Self::GpsRtcmData(m) => m.fields(),
+            Self::HighLatency(m) => m.fields(),
+            Self::HighLatency2(m) => m.fields(),
+            Self::Vibration(m) => m.fields(),
+            Self::HomePosition(m) => m.fields(),
+            Self::SetHomePosition(m) => m.fields(),
+            Self::MessageInterval(m) => m.fields(),
+            Self::ExtendedSysState(m) => m.fields(),
+            Self::AdsbVehicle(m) => m.fields(),
+            Self::Collision(m) => m.fields(),
+            Self::V2Extension(m) => m.fields(),
+            Self::MemoryVect(m) => m.fields(),
+            Self::DebugVect(m) => m.fields(),
+            Self::NamedValueFloat(m) => m.fields(),
+            Self::NamedValueInt(m) => m.fields(),
+            Self::Statustext(m) => m.fields(),
+            Self::Debug(m) => m.fields(),
+            Self::SetupSigning(m) => m.fields(),
+            Self::ButtonChange(m) => m.fields(),
+            Self::PlayTune(m) => m.fields(),
+            Self::CameraInformation(m) => m.fields(),
+            Self::CameraSettings(m) => m.fields(),
+            Self::StorageInformation(m) => m.fields(),
+            Self::CameraCaptureStatus(m) => m.fields(),
+            Self::CameraImageCaptured(m) => m.fields(),
+            Self::FlightInformation(m) => m.fields(),
+            Self::MountOrientation(m) => m.fields(),
+            Self::LoggingData(m) => m.fields(),
+            Self::LoggingDataAcked(m) => m.fields(),
+            Self::LoggingAck(m) => m.fields(),
+            Self::VideoStreamInformation(m) => m.fields(),
+            Self::VideoStreamStatus(m) => m.fields(),
+            Self::CameraFovStatus(m) => m.fields(),
+            Self::CameraTrackingImageStatus(m) => m.fields(),
+            Self::CameraTrackingGeoStatus(m) => m.fields(),
+            Self::CameraThermalRange(m) => m.fields(),
+            Self::GimbalManagerInformation(m) => m.fields(),
+            Self::GimbalManagerStatus(m) => m.fields(),
+            Self::GimbalManagerSetAttitude(m) => m.fields(),
+            Self::GimbalDeviceInformation(m) => m.fields(),
+            Self::GimbalDeviceSetAttitude(m) => m.fields(),
+            Self::GimbalDeviceAttitudeStatus(m) => m.fields(),
+            Self::AutopilotStateForGimbalDevice(m) => m.fields(),
+            Self::GimbalManagerSetPitchyaw(m) => m.fields(),
+            Self::GimbalManagerSetManualControl(m) => m.fields(),
+            Self::Airspeed(m) => m.fields(),
+            Self::WifiConfigAp(m) => m.fields(),
+            Self::AisVessel(m) => m.fields(),
+            Self::UavcanNodeStatus(m) => m.fields(),
+            Self::UavcanNodeInfo(m) => m.fields(),
+            Self::ParamExtRequestRead(m) => m.fields(),
+            Self::ParamExtRequestList(m) => m.fields(),
+            Self::ParamExtValue(m) => m.fields(),
+            Self::ParamExtSet(m) => m.fields(),
+            Self::ParamExtAck(m) => m.fields(),
+            Self::ObstacleDistance(m) => m.fields(),
+            Self::Odometry(m) => m.fields(),
+            Self::TrajectoryRepresentationWaypoints(m) => m.fields(),
+            Self::TrajectoryRepresentationBezier(m) => m.fields(),
+            Self::IsbdLinkStatus(m) => m.fields(),
+            Self::RawRpm(m) => m.fields(),
+            Self::UtmGlobalPosition(m) => m.fields(),
+            Self::ParamError(m) => m.fields(),
+            Self::DebugFloatArray(m) => m.fields(),
+            Self::SmartBatteryInfo(m) => m.fields(),
+            Self::GeneratorStatus(m) => m.fields(),
+            Self::ActuatorOutputStatus(m) => m.fields(),
+            Self::RelayStatus(m) => m.fields(),
+            Self::Tunnel(m) => m.fields(),
+            Self::CanFrame(m) => m.fields(),
+            Self::CanfdFrame(m) => m.fields(),
+            Self::CanFilterModify(m) => m.fields(),
+            Self::RadioRcChannels(m) => m.fields(),
+            Self::AvailableModes(m) => m.fields(),
+            Self::CurrentMode(m) => m.fields(),
+            Self::AvailableModesMonitor(m) => m.fields(),
+            Self::GnssIntegrity(m) => m.fields(),
+            Self::SensPower(m) => m.fields(),
+            Self::SensMppt(m) => m.fields(),
+            Self::AslctrlData(m) => m.fields(),
+            Self::AslctrlDebug(m) => m.fields(),
+            Self::AsluavStatus(m) => m.fields(),
+            Self::EkfExt(m) => m.fields(),
+            Self::AslObctrl(m) => m.fields(),
+            Self::SensAtmos(m) => m.fields(),
+            Self::SensBatmon(m) => m.fields(),
+            Self::FwSoaringData(m) => m.fields(),
+            Self::SensorpodStatus(m) => m.fields(),
+            Self::SensPowerBoard(m) => m.fields(),
+            Self::GsmLinkStatus(m) => m.fields(),
+            Self::SatcomLinkStatus(m) => m.fields(),
+            Self::SensorAirflowAngles(m) => m.fields(),
+            Self::WheelDistance(m) => m.fields(),
+            Self::WinchStatus(m) => m.fields(),
+            Self::UavionixAdsbOutCfg(m) => m.fields(),
+            Self::UavionixAdsbOutDynamic(m) => m.fields(),
+            Self::UavionixAdsbTransceiverHealthReport(m) => m.fields(),
+            Self::UavionixAdsbOutCfgRegistration(m) => m.fields(),
+            Self::UavionixAdsbOutCfgFlightid(m) => m.fields(),
+            Self::UavionixAdsbGet(m) => m.fields(),
+            Self::UavionixAdsbOutControl(m) => m.fields(),
+            Self::UavionixAdsbOutStatus(m) => m.fields(),
+            Self::LoweheiserGovEfi(m) => m.fields(),
+            Self::DeviceOpRead(m) => m.fields(),
+            Self::DeviceOpReadReply(m) => m.fields(),
+            Self::DeviceOpWrite(m) => m.fields(),
+            Self::DeviceOpWriteReply(m) => m.fields(),
+            Self::SecureCommand(m) => m.fields(),
+            Self::SecureCommandReply(m) => m.fields(),
+            Self::AdapTuning(m) => m.fields(),
+            Self::VisionPositionDelta(m) => m.fields(),
+            Self::AoaSsa(m) => m.fields(),
+            Self::EscTelemetry1To4(m) => m.fields(),
+            Self::EscTelemetry5To8(m) => m.fields(),
+            Self::EscTelemetry9To12(m) => m.fields(),
+            Self::OsdParamConfig(m) => m.fields(),
+            Self::OsdParamConfigReply(m) => m.fields(),
+            Self::OsdParamShowConfig(m) => m.fields(),
+            Self::OsdParamShowConfigReply(m) => m.fields(),
+            Self::ObstacleDistance3d(m) => m.fields(),
+            Self::WaterDepth(m) => m.fields(),
+            Self::McuStatus(m) => m.fields(),
+            Self::EscTelemetry13To16(m) => m.fields(),
+            Self::EscTelemetry17To20(m) => m.fields(),
+            Self::EscTelemetry21To24(m) => m.fields(),
+            Self::EscTelemetry25To28(m) => m.fields(),
+            Self::EscTelemetry29To32(m) => m.fields(),
+            Self::NamedValueString(m) => m.fields(),
+            Self::OpenDroneIdBasicId(m) => m.fields(),
+            Self::OpenDroneIdLocation(m) => m.fields(),
+            Self::OpenDroneIdAuthentication(m) => m.fields(),
+            Self::OpenDroneIdSelfId(m) => m.fields(),
+            Self::OpenDroneIdSystem(m) => m.fields(),
+            Self::OpenDroneIdOperatorId(m) => m.fields(),
+            Self::OpenDroneIdMessagePack(m) => m.fields(),
+            Self::OpenDroneIdArmStatus(m) => m.fields(),
+            Self::OpenDroneIdSystemUpdate(m) => m.fields(),
+            Self::HygrometerSensor(m) => m.fields(),
+            Self::TestTypes(m) => m.fields(),
+            Self::ArrayTest0(m) => m.fields(),
+            Self::ArrayTest1(m) => m.fields(),
+            Self::ArrayTest3(m) => m.fields(),
+            Self::ArrayTest4(m) => m.fields(),
+            Self::ArrayTest5(m) => m.fields(),
+            Self::ArrayTest6(m) => m.fields(),
+            Self::ArrayTest7(m) => m.fields(),
+            Self::ArrayTest8(m) => m.fields(),
+            Self::IcarousHeartbeat(m) => m.fields(),
+            Self::IcarousKinematicBands(m) => m.fields(),
+            Self::CubepilotRawRc(m) => m.fields(),
+            Self::HerelinkVideoStreamInformation(m) => m.fields(),
+            Self::HerelinkTelem(m) => m.fields(),
+            Self::CubepilotFirmwareUpdateStart(m) => m.fields(),
+            Self::CubepilotFirmwareUpdateResp(m) => m.fields(),
+            Self::AirlinkAuth(m) => m.fields(),
+            Self::AirlinkAuthResponse(m) => m.fields(),
+            Self::AutopilotStateForGimbalDeviceExt(m) => m.fields(),
+            Self::Storm32GimbalManagerInformation(m) => m.fields(),
+            Self::Storm32GimbalManagerStatus(m) => m.fields(),
+            Self::Storm32GimbalManagerControl(m) => m.fields(),
+            Self::Storm32GimbalManagerControlPitchyaw(m) => m.fields(),
+            Self::Storm32GimbalManagerCorrectRoll(m) => m.fields(),
+            Self::QshotStatus(m) => m.fields(),
+            Self::FrskyPassthroughArray(m) => m.fields(),
+            Self::ParamValueArray(m) => m.fields(),
+            Self::MlrsRadioLinkStats(m) => m.fields(),
+            Self::MlrsRadioLinkInformation(m) => m.fields(),
+            Self::MlrsRadioLinkFlowControl(m) => m.fields(),
+            Self::AvssPrsSysStatus(m) => m.fields(),
+            Self::AvssDronePosition(m) => m.fields(),
+            Self::AvssDroneImu(m) => m.fields(),
+            Self::AvssDroneOperationMode(m) => m.fields(),
         }
     }
 

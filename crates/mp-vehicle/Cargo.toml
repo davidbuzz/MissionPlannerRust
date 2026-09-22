@@ -1,17 +1,20 @@
 [package]
-name = "xtask"
-description = "Repository automation: codegen, ledger, invariants"
+name = "mp-vehicle"
+description = "Decoded vehicle state and the telemetry snapshot bus"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-publish = false
+repository.workspace = true
 
 [lints]
 workspace = true
 
 [dependencies]
-anyhow.workspace = true
 mp-mavlink.workspace = true
 mp-mavlink-dialects.workspace = true
-roxmltree.workspace = true
+mp-units.workspace = true
+arc-swap = "1.9"
+
+[dev-dependencies]
+mp-transport.workspace = true

@@ -72,6 +72,22 @@ struct Row {
     frame_hex: String,
 }
 
+impl Row {
+    /// Identity of a frame, ignoring its position in the stream: when we recover a frame the C#
+    /// parser dropped, every later index shifts by one, but the frames themselves are unchanged.
+    fn key(&self) -> (u32, u8, u8, u8, u8, u16, &str) {
+        (
+            self.msgid,
+            self.seq,
+            self.sysid,
+            self.compid,
+            self.payload_len,
+            self.crc16,
+            &self.frame_hex,
+        )
+    }
+}
+
 fn hex(bytes: &[u8]) -> String {
     let mut s = String::with_capacity(bytes.len() * 2);
     for b in bytes {
@@ -80,12 +96,52 @@ fn hex(bytes: &[u8]) -> String {
     s
 }
 
+/// Every `*.tlog` in the corpus that has a matching `*.csharp.csv` golden dump.
+///
+/// Corpus-driven on purpose: dropping a new log and its golden output into `testdata/` extends
+/// coverage without touching this file.
+fn corpus() -> Vec<(String, std::path::PathBuf, std::path::PathBuf)> {
+    let dir = std::path::Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../testdata/mavlink"
+    ));
+    let mut out = Vec::new();
+    let entries = std::fs::read_dir(dir).expect("testdata/mavlink must exist");
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("tlog") {
+            continue;
+        }
+        let golden = path.with_extension("tlog.csharp.csv");
+        if golden.exists() {
+            let name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("?")
+                .to_owned();
+            out.push((name, path, golden));
+        }
+    }
+    out.sort();
+    assert!(
+        !out.is_empty(),
+        "no tlog corpus found; run tools/csharp-reference/regen.sh"
+    );
+    out
+}
+
 #[test]
 fn rust_decode_matches_csharp_decode_frame_for_frame() {
+    for (name, log_path, golden_path) in corpus() {
+        println!("comparing {name}");
+        compare_one(&log_path, &golden_path, &name);
+    }
+}
+
+fn compare_one(log_path: &std::path::Path, golden_path: &std::path::Path, name: &str) {
     let dialect = binary_dialect();
-    let log = std::fs::read(testdata("autotest.tlog")).expect("tlog corpus");
-    let expected_csv =
-        std::fs::read_to_string(testdata("autotest.tlog.csharp.csv")).expect("C# golden output");
+    let log = std::fs::read(log_path).expect("tlog corpus");
+    let expected_csv = std::fs::read_to_string(golden_path).expect("C# golden output");
 
     let mut expected = Vec::new();
     for line in expected_csv.lines().skip(1) {
@@ -115,17 +171,42 @@ fn rust_decode_matches_csharp_decode_frame_for_frame() {
             ..frame
         });
     }
+    // The relationship we require is containment, not equality: every frame the C#
+    // implementation decoded must appear in ours, in the same order.
+    //
+    // We legitimately recover frames it drops. `MavlinkParse.ReadPacket` consumes 8 timestamp
+    // bytes on every call whether or not it is aligned, so after a corrupt frame it can lose
+    // sync and walk past good data - it reports badCRC=32 on the multisystem corpus. Our decoder
+    // resynchronises a byte at a time and accepts a frame only when its CRC passes with the
+    // correct per-message seed, so an "extra" frame is a recovered one, not an invented one.
+    let ours: Vec<_> = actual.iter().map(Row::key).collect();
+    let theirs: Vec<_> = expected.iter().map(Row::key).collect();
 
-    assert_eq!(
-        actual.len(),
-        expected.len(),
-        "frame count differs from the C# reference"
+    let mut cursor = 0usize;
+    let mut missed = Vec::new();
+    for want in &theirs {
+        match ours[cursor..].iter().position(|got| got == want) {
+            Some(offset) => cursor += offset + 1,
+            None if missed.len() < 5 => missed.push(format!("{want:?}")),
+            None => {}
+        }
+    }
+    assert!(
+        missed.is_empty(),
+        "{name}: frames the C# reference decoded that we missed:\n{}",
+        missed.join("\n")
     );
 
-    // Report the first divergence in full rather than a bare count mismatch.
-    for (a, e) in actual.iter().zip(&expected) {
-        assert_eq!(a, e, "divergence at frame {}", a.index);
-    }
+    let extra = ours.len().saturating_sub(theirs.len());
+    println!(
+        "  {name}: {} frames decoded, {extra} recovered beyond the C# reference",
+        ours.len()
+    );
+    assert!(
+        extra * 100 <= theirs.len(),
+        "{name}: {extra} extra frames exceeds 1% of {} - suspect false positives, not recovery",
+        theirs.len()
+    );
 }
 
 #[test]

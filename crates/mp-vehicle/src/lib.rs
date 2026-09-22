@@ -1,0 +1,30 @@
+//! Decoded vehicle state and the telemetry snapshot bus.
+//!
+//! Replaces `ExtLibs/ArduPilot/CurrentState.cs`, `MAVState` and `MAVList`.
+//!
+//! # The problem with how the C# does it
+//!
+//! In Mission Planner the UI binds directly to a mutable `CurrentState` that the telemetry thread
+//! writes to, with locks and `Invoke` marshalling scattered around it. A form can therefore read
+//! a half-updated position - latitude from one packet, longitude from the next - and the render
+//! path can block behind the I/O thread.
+//!
+//! # What this does instead
+//!
+//! The link thread owns a private [`VehicleState`] and mutates it per packet, allocation-free.
+//! Periodically it *publishes* an immutable snapshot. Readers take a snapshot with one atomic
+//! load, never block, and always observe a state that existed at a single instant. Snapshots are
+//! recycled through a small pool, so steady-state publishing does not allocate either - there is
+//! a test that asserts exactly that.
+
+#![forbid(unsafe_code)]
+
+pub mod link_quality;
+pub mod registry;
+pub mod snapshot;
+pub mod state;
+
+pub use link_quality::LinkQuality;
+pub use registry::{VehicleId, VehicleRegistry};
+pub use snapshot::{StateHandle, StatePublisher};
+pub use state::{Attitude, Battery, GpsInfo, VehicleState};

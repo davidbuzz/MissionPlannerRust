@@ -117,6 +117,7 @@ pub fn emit_dialect(dialect: &Dialect) -> String {
          #![allow(clippy::doc_markdown)]\n\
          #![allow(clippy::struct_excessive_bools)]\n\n\
          use mp_mavlink::dialect::{{MessageInfo, StaticDialect}};\n\
+         use mp_mavlink::field::FieldValue;\n\
          use mp_mavlink::message::Message;\n\
          use mp_mavlink::payload::{{get_f32, get_f64, get_i16, get_i32, get_i64, get_i8, get_u16, get_u32, get_u64, get_u8, put_bytes}};\n\n",
         dialect.name, dialect.name
@@ -304,6 +305,51 @@ fn emit_messages(dialect: &Dialect, out: &mut String) {
         let _ = writeln!(out, "        Self::LEN");
         let _ = writeln!(out, "    }}");
         let _ = writeln!(out, "}}\n");
+
+        // Named field access, used by the differential harness to compare against the C#
+        // implementation field by field.
+        let _ = writeln!(out, "impl {struct_name} {{");
+        let _ = writeln!(out, "    /// Every field, by name, in wire order.");
+        let _ = writeln!(out, "    #[must_use]");
+        let _ = writeln!(
+            out,
+            "    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {{"
+        );
+        let _ = writeln!(out, "        vec![");
+        for field in &ordered {
+            let name = ident(&field.name);
+            let scalar = scalar_type(&field.base_type);
+            let variant = match scalar {
+                "f32" | "f64" => "Float",
+                "i8" | "i16" | "i32" | "i64" => "Signed",
+                _ => "Unsigned",
+            };
+            // Only widen when the scalar is actually narrower than the FieldValue payload;
+            // an `into()` to the same type is a lint warning in generated code.
+            let already_wide = matches!(scalar, "u64" | "i64" | "f64");
+            if field.array_len.is_some() {
+                let mapper = if already_wide {
+                    "to_vec()"
+                } else {
+                    "iter().map(|v| (*v).into()).collect()"
+                };
+                let _ = writeln!(
+                    out,
+                    "            (\"{}\", FieldValue::{variant}Array(self.{name}.{mapper})),",
+                    field.name
+                );
+            } else {
+                let conv = if already_wide { "" } else { ".into()" };
+                let _ = writeln!(
+                    out,
+                    "            (\"{}\", FieldValue::{variant}(self.{name}{conv})),",
+                    field.name
+                );
+            }
+        }
+        let _ = writeln!(out, "        ]");
+        let _ = writeln!(out, "    }}");
+        let _ = writeln!(out, "}}\n");
     }
 }
 
@@ -399,6 +445,23 @@ fn emit_dispatch(dialect: &Dialect, out: &mut String) {
             "            Self::{variant}(_) => {},",
             msg.crc_extra()
         );
+    }
+    let _ = writeln!(out, "        }}");
+    let _ = writeln!(out, "    }}\n");
+
+    let _ = writeln!(
+        out,
+        "    /// Every field of the contained message, by name."
+    );
+    let _ = writeln!(out, "    #[must_use]");
+    let _ = writeln!(
+        out,
+        "    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {{"
+    );
+    let _ = writeln!(out, "        match self {{");
+    for msg in dialect.messages.values() {
+        let variant = pascal_case(&msg.name);
+        let _ = writeln!(out, "            Self::{variant}(m) => m.fields(),");
     }
     let _ = writeln!(out, "        }}");
     let _ = writeln!(out, "    }}\n");
