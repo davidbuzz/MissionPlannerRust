@@ -248,6 +248,11 @@ impl MissionPlanner {
         self.map.borrow_mut().set_mission(self.plan.items());
     }
 
+    /// Pushes the survey area to the map after an edit.
+    fn sync_map_polygon(&self) {
+        self.map.borrow_mut().set_polygon(self.plan.polygon());
+    }
+
     /// The tab strip.
     fn tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let current = self.screen;
@@ -255,7 +260,7 @@ impl MissionPlanner {
         for screen in Screen::ALL {
             let selected = screen == current;
             strip = strip.child(
-                div()
+                probe::measured(screen.id(), div())
                     .id(screen.id())
                     .px_4()
                     .py_2()
@@ -268,7 +273,6 @@ impl MissionPlanner {
                     .border_color(rgb(if selected { theme::ACCENT } else { theme::BG }))
                     .hover(|style| style.text_color(rgb(theme::TEXT)))
                     .child(screen.label())
-                    .children(probe::enabled().then(|| probe::marker(screen.id())))
                     .on_click(cx.listener(move |this, _event, _window, cx| {
                         this.screen = screen;
                         cx.notify();
@@ -321,6 +325,10 @@ impl MissionPlanner {
         let items = self.plan.items().to_vec();
         let origin = self.plan.origin().clone();
         let selected = self.plan.selected();
+        let draw_mode = self.plan.draw_mode();
+        let vertices = self.plan.polygon().len();
+        let survey = self.plan.survey_options();
+        let survey_error = self.plan.survey_error().map(ToOwned::to_owned);
 
         div()
             .id("plan-sidebar")
@@ -330,8 +338,15 @@ impl MissionPlanner {
             .gap_4()
             .pr_2()
             .overflow_y_scroll()
-            .w(px(440.0))
+            .w(px(400.0))
             .child(plan::actions_panel(&items, &origin, view, cx))
+            .child(plan::survey_panel(
+                draw_mode,
+                vertices,
+                survey,
+                survey_error.as_deref(),
+                cx,
+            ))
             .child(plan::items_panel(&items, selected, cx))
             .child(plan::editor_panel(&items, selected, cx))
             .child(plan::checks_panel(&items, view))
@@ -361,7 +376,7 @@ impl MissionPlanner {
             .overflow_hidden()
             .gap_2()
             .child(
-                div()
+                probe::measured("map", div())
                     .relative()
                     .flex()
                     .flex_1()
@@ -432,8 +447,16 @@ impl MissionPlanner {
                                 return;
                             };
                             if planning {
-                                this.plan.add_waypoint(position, plan::DEFAULT_ALTITUDE);
-                                this.sync_map_mission();
+                                match this.plan.draw_mode() {
+                                    plan::DrawMode::Waypoints => {
+                                        this.plan.add_waypoint(position, plan::DEFAULT_ALTITUDE);
+                                        this.sync_map_mission();
+                                    }
+                                    plan::DrawMode::Area => {
+                                        this.plan.add_area_vertex(position);
+                                        this.sync_map_polygon();
+                                    }
+                                }
                             } else {
                                 this.fly_here(position);
                             }
@@ -673,11 +696,10 @@ fn main() {
     let target = std::env::args().nth(1);
 
     platform::application().run(move |cx: &mut App| {
-        // Tall enough for the HUD plus all three panels without clipping. Grown twice from the
-        // original 760: once when the link panel was cut off, again when the HUD was added above
-        // it. Worth keeping generous - a control station that hides its bottom row is worse than
-        // one that needs a scroll.
-        let bounds = Bounds::centered(None, size(px(1180.0), px(980.0)), cx);
+        // 1024x768. Small enough to open sensibly on a laptop or a field tablet, which is where a
+        // ground station actually gets used. Nothing is cut off at this size: the panel columns
+        // scroll and the map takes what is left, which is what the scrolling was added for.
+        let bounds = Bounds::centered(None, size(px(1024.0), px(768.0)), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             titlebar: Some(TitlebarOptions {

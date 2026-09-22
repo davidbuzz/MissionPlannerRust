@@ -84,17 +84,18 @@ pub fn action(
     enabled: bool,
     on_click: impl Fn(&(), &mut Window, &mut App) + 'static,
 ) -> AnyElement {
-    let base = div()
+    // measured() wraps the plain div before `.id()`, because `.id()` yields a Stateful<Div> and
+    // the bounds hook lives on Div. It reports where this control ended up, so a test script can
+    // click it by name rather than by a coordinate that goes stale the next time the layout
+    // changes, and it adds nothing to the element tree when probing is off.
+    let base = crate::probe::measured(id, div())
         .id(id)
         .px_3()
         .py_2()
         .rounded_md()
         .border_1()
         .text_sm()
-        .child(label.into())
-        // Reports where this control ended up, so a test script can click it by name instead of
-        // by a coordinate that goes stale the next time the layout changes.
-        .children(crate::probe::enabled().then(|| crate::probe::marker(id)));
+        .child(label.into());
 
     if enabled {
         base.bg(rgb(theme::ACTION))

@@ -59,6 +59,8 @@ pub struct MapViewport {
     home: Option<WebMercator>,
     /// The planned mission, projected once when it is set rather than every frame.
     mission: Vec<(WebMercator, u16)>,
+    /// The survey area being drawn, if any.
+    polygon: Vec<WebMercator>,
     /// The view the user has chosen, or `None` while the map follows the vehicle.
     ///
     /// Follow-the-vehicle is right until the moment someone wants to look at something else, and
@@ -170,6 +172,7 @@ impl MapViewport {
             vehicle: None,
             home: None,
             mission: Vec::new(),
+            polygon: Vec::new(),
             camera: None,
             drag_from: None,
             last_viewport: (1.0, 1.0),
@@ -282,6 +285,14 @@ impl MapViewport {
                 let position = item.position().ok().flatten()?;
                 Some((position.to_web_mercator(), item.seq))
             })
+            .collect();
+    }
+
+    /// Replaces the survey area shown on the map.
+    pub fn set_polygon(&mut self, vertices: &[LatLon]) {
+        self.polygon = vertices
+            .iter()
+            .map(|vertex| vertex.to_web_mercator())
             .collect();
     }
 
@@ -591,6 +602,39 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
             }
         }
         map.phases[2] = submit.elapsed();
+    }
+
+    // The survey area, drawn first so the grid generated from it sits on top. Closed explicitly
+    // rather than relying on the path builder: an area whose last edge is missing looks like an
+    // open shape, and an operator would reasonably assume the survey will not cover it.
+    if map.polygon.len() > 1 {
+        let mut builder = PathBuilder::stroke(px(1.5));
+        let mut vertices = map.polygon.iter();
+        if let Some(first) = vertices.next() {
+            builder.move_to(to_screen(*first));
+            for vertex in vertices {
+                builder.line_to(to_screen(*vertex));
+            }
+            builder.line_to(to_screen(*first));
+        }
+        match builder.build() {
+            Ok(path) => window.paint_path(path, Hsla::from(rgb(0xd2_99_22))),
+            Err(_) => map.track_path_failures += 1,
+        }
+    }
+    for vertex in &map.polygon {
+        let at = to_screen(*vertex);
+        window.paint_quad(quad(
+            Bounds {
+                origin: point(at.x - px(3.0), at.y - px(3.0)),
+                size: size(px(6.0), px(6.0)),
+            },
+            gpui::Corners::all(px(1.0)),
+            rgb(0xd2_99_22),
+            gpui::Edges::default(),
+            rgb(0x00_00_00),
+            gpui::BorderStyle::default(),
+        ));
     }
 
     // The planned mission: a dashed-looking track plus a marker per waypoint, drawn beneath the

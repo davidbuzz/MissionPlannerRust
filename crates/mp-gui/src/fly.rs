@@ -8,7 +8,7 @@
 #![allow(unreachable_pub)]
 
 use gpui::{AnyElement, Context, div, prelude::*, px, rgb};
-use mp_link::messages::Severity;
+use mp_link::messages::{Severity, time_of_day};
 
 use crate::MissionPlanner;
 use crate::telemetry::TelemetryView;
@@ -150,7 +150,7 @@ fn mode_controls(view: &TelemetryView, cx: &mut Context<MissionPlanner>) -> AnyE
         let colour = if selected { theme::OK } else { theme::TEXT };
         let number = *number;
         row = row.child(
-            div()
+            crate::probe::measured(*name, div())
                 .id(*name)
                 .px_2()
                 .py_1()
@@ -167,7 +167,6 @@ fn mode_controls(view: &TelemetryView, cx: &mut Context<MissionPlanner>) -> AnyE
                 .cursor_pointer()
                 .hover(|style| style.bg(rgb(theme::BORDER)))
                 .child((*name).to_owned())
-                .children(crate::probe::enabled().then(|| crate::probe::marker(*name)))
                 .on_click(cx.listener(move |this, _event, _window, cx| {
                     this.telemetry.set_mode(number);
                     cx.notify();
@@ -199,9 +198,14 @@ const fn severity_colour(severity: Severity) -> u32 {
 
 /// What the aircraft has said.
 ///
-/// Newest last, matching every console the operator has ever used. `STATUSTEXT` is how ArduPilot
-/// explains a refusal, so this pane is the difference between a pilot who fixes a failed pre-arm
-/// check and one who keeps pressing the button.
+/// Newest first, with a UTC timestamp per line, and it scrolls. Newest-first rather than the
+/// console convention of appending at the bottom, because the pane has no way to follow the end on
+/// its own: oldest-first would put every new message below the fold, and an operator would have to
+/// scroll to see the one that just arrived - exactly when they have least attention to spare.
+/// Scrolling down is for history, which can wait.
+///
+/// `STATUSTEXT` is how ArduPilot explains a refusal, so this pane is the difference between a pilot
+/// who fixes a failed pre-arm check and one who keeps pressing the button.
 pub fn messages_panel(view: &TelemetryView) -> impl IntoElement {
     let mut lines = div().flex().flex_col().gap_1();
 
@@ -214,26 +218,35 @@ pub fn messages_panel(view: &TelemetryView) -> impl IntoElement {
         );
     }
 
-    // Newest first. The pane has a fixed height and no scrollbar yet, so anything past the
-    // bottom is invisible - and the line an operator needs is always the one that just arrived.
-    // Oldest-first with clipping would hide exactly the wrong end.
     for message in view.messages.iter().rev() {
         lines = lines.child(
             div()
                 .flex()
+                .flex_shrink_0()
                 .gap_2()
                 .text_xs()
                 .child(
                     div()
                         .flex_shrink_0()
-                        .w(px(64.0))
+                        .w(px(58.0))
+                        .text_color(rgb(theme::DIM))
+                        .child(time_of_day(message.received)),
+                )
+                .child(
+                    div()
+                        .flex_shrink_0()
+                        .w(px(52.0))
                         .text_color(rgb(theme::DIM))
                         .child(message.severity.label()),
                 )
                 .child(
+                    // One line per message, truncated. Wrapping would make each row a different
+                    // height, which rules out virtualising the list later and stops the timestamp
+                    // column lining up.
                     div()
                         .flex_1()
                         .min_w(px(0.0))
+                        .truncate()
                         .text_color(rgb(severity_colour(message.severity)))
                         .child(message.text.clone()),
                 ),
@@ -245,10 +258,39 @@ pub fn messages_panel(view: &TelemetryView) -> impl IntoElement {
         div()
             .flex()
             .flex_col()
-            .max_h(px(220.0))
-            .overflow_hidden()
-            .child(lines),
+            .child(
+                div()
+                    .id("messages")
+                    .flex()
+                    .flex_col()
+                    .h(px(190.0))
+                    .overflow_y_scroll()
+                    .child(lines),
+            )
+            .child(
+                div()
+                    .pt_1()
+                    .text_xs()
+                    .text_color(rgb(theme::DIM))
+                    .child(message_footer(view)),
+            ),
     )
+}
+
+/// The line under the message list: how much is shown, and how much was lost.
+///
+/// Saying what was dropped matters. A pane that silently discards the oldest messages implies the
+/// flight was quiet when it was not, and the discarded ones are usually the boot-time narration
+/// that explains everything after them.
+fn message_footer(view: &TelemetryView) -> String {
+    let shown = view.messages.len();
+    match view.messages_dropped {
+        0 if shown == 0 => "times are UTC".to_owned(),
+        0 => format!("{shown} messages, newest first, times UTC"),
+        dropped => format!(
+            "{shown} messages, newest first, times UTC - {dropped} older dropped; the telemetry log has all of them"
+        ),
+    }
 }
 
 pub fn hud_panel(view: &TelemetryView) -> impl IntoElement {

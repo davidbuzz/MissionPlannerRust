@@ -11,14 +11,26 @@
 # change silently moves the target, and a click that lands on the wrong control still produces a
 # screenshot, so the test goes green while testing nothing.
 #
-# usage: gui-click.sh <probe-file> <window-id> <control-name> [button]
+# A name may carry a position within the control: "map@0.25x0.75" clicks a quarter of the way
+# across and three quarters down it. That is how a point on the map is addressed - the map has no
+# named sub-controls, but a fraction of it stays correct when the window is resized or the layout
+# around it changes, which a raw pixel coordinate would not.
+#
+# The two fractions are separated by "x" rather than a comma because the caller's list of targets
+# is already comma separated, and a comma inside a target would split it in half.
+#
+# usage: gui-click.sh <probe-file> <window-id> <control-name>[@fxXfy] [button]
 #        button: 1 left (default), 2 middle, 3 right
 set -uo pipefail
 
-PROBE="${1:?usage: gui-click.sh <probe-file> <window-id> <control-name> [button]}"
+PROBE="${1:?usage: gui-click.sh <probe-file> <window-id> <control-name>[@fx,fy] [button]}"
 WIN_ID="${2:?window id}"
-NAME="${3:?control name}"
+TARGET="${3:?control name}"
 BUTTON="${4:-1}"
+
+NAME="${TARGET%%@*}"
+FRACTION=""
+[ "$TARGET" != "$NAME" ] && FRACTION="${TARGET#*@}"
 
 # The probe file is written when a control moves, so it may not exist the instant the window maps.
 for _ in $(seq 1 40); do
@@ -34,7 +46,15 @@ if ! grep -q "\"$NAME\"" "$PROBE" 2>/dev/null; then
 fi
 
 # One line per control, so a line-oriented read is enough and jq is not a dependency.
-COORDS=$(grep "\"$NAME\"" "$PROBE" | sed -n 's/.*"centre_x": \([0-9.-]*\), "centre_y": \([0-9.-]*\).*/\1 \2/p')
+LINE=$(grep "\"$NAME\"" "$PROBE")
+if [ -z "$FRACTION" ]; then
+    COORDS=$(echo "$LINE" | sed -n 's/.*"centre_x": \([0-9.-]*\), "centre_y": \([0-9.-]*\).*/\1 \2/p')
+else
+    BOX=$(echo "$LINE" | sed -n 's/.*"x": \([0-9.-]*\), "y": \([0-9.-]*\), "width": \([0-9.-]*\), "height": \([0-9.-]*\).*/\1 \2 \3 \4/p')
+    FX="${FRACTION%%[x,]*}"
+    FY="${FRACTION#*[x,]}"
+    COORDS=$(echo "$BOX $FX $FY" | awk '{printf "%.1f %.1f", $1 + $3 * $5, $2 + $4 * $6}')
+fi
 X=$(echo "$COORDS" | cut -d' ' -f1 | cut -d. -f1)
 Y=$(echo "$COORDS" | cut -d' ' -f2 | cut -d. -f1)
 
@@ -45,5 +65,5 @@ fi
 
 # Coordinates from the probe are relative to the window, which is what --window takes. Using
 # absolute screen coordinates would break the moment the window manager moved the window.
-echo "clicking '$NAME' (button $BUTTON) at window-relative $X,$Y"
+echo "clicking '$TARGET' (button $BUTTON) at window-relative $X,$Y"
 xdotool mousemove --window "$WIN_ID" "$X" "$Y" click "$BUTTON"

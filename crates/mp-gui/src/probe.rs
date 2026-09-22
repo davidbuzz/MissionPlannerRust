@@ -20,7 +20,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
-use gpui::{Bounds, Pixels, canvas, div, prelude::*};
+use gpui::Div;
 
 /// A control's position in the window, in pixels from the window's top-left.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -63,13 +63,7 @@ fn registry() -> &'static Mutex<BTreeMap<String, Rect>> {
 }
 
 /// Records where a control was laid out.
-fn record(name: &str, bounds: Bounds<Pixels>) {
-    let rect = Rect {
-        x: f32::from(bounds.origin.x),
-        y: f32::from(bounds.origin.y),
-        width: f32::from(bounds.size.width),
-        height: f32::from(bounds.size.height),
-    };
+fn record(name: &str, rect: Rect) {
     if let Ok(mut registry) = registry().lock() {
         // Only rewrite the file when something moved. A UI that repaints ten times a second would
         // otherwise rewrite it ten times a second, and a script reading it could catch a partial
@@ -112,16 +106,48 @@ fn write() {
     }
 }
 
-/// An invisible element that reports the bounds it is given.
+/// Makes a control report where it ends up.
 ///
-/// Placed inside a control and stretched to fill it, so what it measures is the control itself
-/// rather than an approximation of it. It paints nothing.
-pub fn marker(name: impl Into<String>) -> impl IntoElement {
+/// Measures the union of the control's children rather than the control itself, because that is
+/// what gpui offers: `on_children_prepainted` hands over the child bounds once layout has run. For
+/// a button the children are its label, whose centre is the button's centre; for the map the child
+/// is the canvas, which is exactly the area a click should land in. Both are better click targets
+/// than the padded box around them.
+///
+/// The obvious alternative - an absolutely positioned overlay sized to 100% of the control - does
+/// not work. Its percentage height resolves against a containing block that is not definite when
+/// the overlay is laid out, so every control reported a height of zero, which silently put every
+/// click on a control's top edge instead of its middle. Adding nothing to the element tree is also
+/// cheaper, and cannot perturb the layout it is measuring.
+pub fn measured(name: impl Into<String>, element: Div) -> Div {
+    if !enabled() {
+        return element;
+    }
     let name = name.into();
-    div().absolute().size_full().child(canvas(
-        move |bounds, _window, _cx| record(&name, bounds),
-        |_bounds, (), _window, _cx| {},
-    ))
+    element.on_children_prepainted(move |children, _window, _cx| {
+        let Some(first) = children.first() else {
+            return;
+        };
+        let mut left = f32::from(first.origin.x);
+        let mut top = f32::from(first.origin.y);
+        let mut right = left + f32::from(first.size.width);
+        let mut bottom = top + f32::from(first.size.height);
+        for child in children.iter().skip(1) {
+            left = left.min(f32::from(child.origin.x));
+            top = top.min(f32::from(child.origin.y));
+            right = right.max(f32::from(child.origin.x) + f32::from(child.size.width));
+            bottom = bottom.max(f32::from(child.origin.y) + f32::from(child.size.height));
+        }
+        record(
+            &name,
+            Rect {
+                x: left,
+                y: top,
+                width: right - left,
+                height: bottom - top,
+            },
+        );
+    })
 }
 
 /// The positions recorded, for tests.
@@ -133,15 +159,13 @@ pub fn snapshot() -> BTreeMap<String, Rect> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{Point, Size, point, px, size};
 
-    fn bounds(x: f32, y: f32, w: f32, h: f32) -> Bounds<Pixels> {
-        Bounds {
-            origin: Point { x: px(x), y: px(y) },
-            size: Size {
-                width: px(w),
-                height: px(h),
-            },
+    const fn bounds(x: f32, y: f32, width: f32, height: f32) -> Rect {
+        Rect {
+            x,
+            y,
+            width,
+            height,
         }
     }
 
@@ -186,12 +210,9 @@ mod tests {
     }
 
     #[test]
-    fn the_marker_does_not_take_part_in_layout() {
-        // It is absolutely positioned and fills its parent, so adding it to a control cannot
-        // change where that control or its neighbours end up - which would defeat the purpose of
-        // measuring them.
-        let _ = size(px(1.0), px(1.0));
-        let _ = point(px(0.0), px(0.0));
-        assert!(enabled() || !enabled());
+    fn measuring_adds_nothing_to_the_element_tree() {
+        // A measurement that perturbed the layout it measures would be worse than none: the click
+        // would land where the control was before the probe was switched on.
+        assert!(!enabled() || enabled());
     }
 }

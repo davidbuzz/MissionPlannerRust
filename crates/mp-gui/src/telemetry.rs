@@ -17,7 +17,10 @@ use mp_units::LatLon;
 use mp_vehicle::{VehicleFamily, VehicleId, VehicleState};
 
 /// How many log lines the flight screen shows.
-const MESSAGE_LINES: usize = 40;
+///
+/// The pane scrolls, so this is how much history is reachable rather than how much fits. The link
+/// keeps more than this; what is not shown is still in the telemetry log, and the pane says so.
+const MESSAGE_LINES: usize = 200;
 
 /// Everything one frame of UI needs to know.
 #[derive(Debug, Clone)]
@@ -40,6 +43,8 @@ pub struct TelemetryView {
     pub mission: Vec<MissionItem>,
     /// Recent `STATUSTEXT` and `COMMAND_ACK` lines, newest last.
     pub messages: Vec<LogMessage>,
+    /// How many messages the link had to discard to stay bounded.
+    pub messages_dropped: u64,
     /// What the mission transfer is doing, if one has been started.
     pub transfer: Option<TransferStatus>,
 }
@@ -74,6 +79,7 @@ impl TelemetryView {
             vehicle_count: 0,
             mission: Vec::new(),
             messages: Vec::new(),
+            messages_dropped: 0,
             transfer: None,
         }
     }
@@ -175,6 +181,7 @@ impl Telemetry {
             vehicle_count: vehicles.len(),
             mission,
             messages: link.recent_messages(MESSAGE_LINES),
+            messages_dropped: link.messages_dropped(),
             transfer,
         }
     }

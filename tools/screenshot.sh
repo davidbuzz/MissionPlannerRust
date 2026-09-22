@@ -7,8 +7,9 @@
 # usage: tools/screenshot.sh <output-name> [seconds-visible] [-- <binary args>]
 #
 # CLICK names controls to click before capturing, comma separated, each optionally suffixed with
-# :right for a right-click. Controls are addressed by name rather than coordinate; see
-# tools/gui-click.sh. Example:
+# :right for a right-click. Controls are addressed by name rather than coordinate, and a name may
+# carry a position within the control - "map@0.25x0.75:right" right-clicks a quarter of the way
+# across the map and three quarters down it. See tools/gui-click.sh. Example:
 #
 #     CLICK=tab-plan,plan-row-0 tools/screenshot.sh plan-editor 5 -- tcp:127.0.0.1:5760
 #

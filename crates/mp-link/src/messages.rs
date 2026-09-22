@@ -11,6 +11,7 @@
 //! as the flight went on, which is exactly what the Arc-pooled snapshot bus exists to avoid.
 
 use std::collections::VecDeque;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use mp_vehicle::VehicleId;
 
@@ -98,6 +99,37 @@ pub struct LogMessage {
     pub text: String,
     /// Monotonic sequence number, so a UI can tell new lines from redrawn ones.
     pub seq: u64,
+    /// When it arrived, as seconds since the Unix epoch.
+    ///
+    /// Arrival rather than origin: `STATUSTEXT` carries no timestamp of its own, so anything else
+    /// would be invented. The difference is the link's latency, which is milliseconds.
+    pub received: u64,
+}
+
+/// Formats a Unix timestamp as `HH:MM:SS` UTC.
+///
+/// UTC rather than local time, and labelled as such wherever it is shown. Converting to local
+/// needs a timezone database, which is a dependency and a portability problem; and the logs this
+/// will be read alongside - dataflash and telemetry - are in UTC anyway, so a local clock here
+/// would be the odd one out during the one task this exists for, which is lining up what the
+/// vehicle said with what the log recorded.
+#[must_use]
+pub fn time_of_day(seconds_since_epoch: u64) -> String {
+    let seconds_today = seconds_since_epoch % 86_400;
+    let hours = seconds_today / 3_600;
+    let minutes = (seconds_today % 3_600) / 60;
+    let seconds = seconds_today % 60;
+    format!("{hours:02}:{minutes:02}:{seconds:02}")
+}
+
+/// Now, as seconds since the Unix epoch.
+///
+/// A clock set before 1970 yields zero rather than an error: a wrong timestamp on a status message
+/// is not worth failing over, and the alternative is an `Option` every caller must handle.
+fn now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |since| since.as_secs())
 }
 
 /// A bounded, newest-last ring of messages.
@@ -130,6 +162,7 @@ impl MessageLog {
             severity,
             text: text.into(),
             seq,
+            received: now(),
         });
     }
 
@@ -275,6 +308,28 @@ mod tests {
         let mut log = MessageLog::new();
         log.push(id(), Severity::Warning, "only one");
         assert_eq!(log.recent(100).len(), 1);
+    }
+
+    #[test]
+    fn messages_are_stamped_with_when_they_arrived() {
+        let mut log = MessageLog::new();
+        log.push(id(), Severity::Warning, "PreArm: Compass not calibrated");
+        let message = log.recent(1).pop().expect("a message");
+        // Any plausible present-day time. The point is that it is stamped at all, not what the
+        // clock says.
+        assert!(message.received > 1_700_000_000, "{}", message.received);
+    }
+
+    #[test]
+    fn the_time_of_day_is_readable_and_fixed_width() {
+        // Fixed width matters: the timestamps form a column, and a column that jitters is harder
+        // to scan than no column at all.
+        assert_eq!(time_of_day(0), "00:00:00");
+        assert_eq!(time_of_day(3_661), "01:01:01");
+        assert_eq!(time_of_day(86_399), "23:59:59");
+        // Rolls over at midnight rather than running to 24 and beyond.
+        assert_eq!(time_of_day(86_400), "00:00:00");
+        assert_eq!(time_of_day(1_758_000_000).len(), 8);
     }
 
     #[test]
