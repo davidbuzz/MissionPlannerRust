@@ -12,9 +12,11 @@
 
 #![forbid(unsafe_code)]
 
+pub mod dataflash;
 pub mod reader;
 pub mod writer;
 
+pub use dataflash::{DataflashReader, DataflashStats, LogMessage, MessageFormat, Value};
 pub use reader::{TlogReader, TlogRecord};
 pub use writer::TlogWriter;
 
