@@ -50,6 +50,13 @@ fn main() -> std::process::ExitCode {
                 std::process::ExitCode::from(2)
             }
         },
+        Some("survey") => match (args.get(1), args.get(2)) {
+            (Some(url), Some(out)) => survey(url, out, args.get(3).and_then(|s| s.parse().ok())),
+            _ => {
+                eprintln!("usage: mpr survey <url> <out.waypoints> [spacing_m]");
+                std::process::ExitCode::from(2)
+            }
+        },
         Some("ports") => ports(),
         Some("help" | "--help" | "-h") | None => {
             usage();
@@ -72,6 +79,7 @@ fn usage() {
          mpr fly <url> [file]        fly a scripted mission (simulator only)\n  \
          mpr params <url> [NAME]     download the parameter set, or show one parameter\n  \
          mpr mission <url> [file]    download the mission, or upload one from a file\n  \
+         mpr survey <url> <file>     generate a survey grid around the vehicle\n  \
          mpr ports                   list serial ports\n\n\
          url forms:\n  \
          serial:/dev/ttyACM0:115200\n  \
@@ -541,4 +549,98 @@ fn await_transfer(link: &Link, id: VehicleId, what: &str) -> bool {
         }
         std::thread::sleep(Duration::from_millis(50));
     }
+}
+
+/// Generates a survey grid around the vehicle's current position and writes it as a mission.
+///
+/// Anchoring the survey on the vehicle rather than on a typed coordinate is the point: it makes
+/// the generated area somewhere the aircraft can actually fly, which is what makes this useful for
+/// testing the whole chain from grid to upload.
+fn survey(url: &str, out_path: &str, spacing: Option<f64>) -> std::process::ExitCode {
+    let config = LinkConfig {
+        stream_rate_hz: 4,
+        ..LinkConfig::default()
+    };
+    let link = match Link::connect(url, config) {
+        Ok(link) => link,
+        Err(err) => {
+            eprintln!("could not open {url}: {err}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+
+    let deadline = Instant::now() + Duration::from_secs(60);
+    let mut centre = None;
+    while Instant::now() < deadline && centre.is_none() {
+        if let Some((_, handle)) = link.primary_vehicle() {
+            centre = handle.load().position;
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    let Some(centre) = centre else {
+        eprintln!("no position from {url}; a survey needs somewhere to be");
+        return std::process::ExitCode::FAILURE;
+    };
+    println!(
+        "centre: {:.7}, {:.7}",
+        centre.latitude(),
+        centre.longitude()
+    );
+
+    // A square about 400 m on a side around the vehicle.
+    const HALF_SIDE_M: f64 = 200.0;
+    let corner = |bearing: f64| {
+        centre.offset(
+            mp_units::Bearing(mp_units::Degrees(bearing)),
+            mp_units::Metres(HALF_SIDE_M * std::f64::consts::SQRT_2),
+        )
+    };
+    let area = vec![corner(45.0), corner(135.0), corner(225.0), corner(315.0)];
+
+    let options = mp_mission::GridOptions {
+        spacing: spacing.unwrap_or(40.0),
+        angle: 0.0,
+        overshoot: 10.0,
+        altitude: 50.0,
+    };
+    let waypoints = match mp_mission::grid(&area, &options) {
+        Ok(points) => points,
+        Err(err) => {
+            eprintln!("could not generate a grid: {err}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    println!(
+        "generated {} survey waypoints at {} m spacing",
+        waypoints.len(),
+        options.spacing
+    );
+
+    // Item 0 is home, as every mission file expects.
+    let mut items = vec![mp_mission::MissionItem {
+        seq: 0,
+        current: 1,
+        frame: mp_mission::item::MAV_FRAME_GLOBAL,
+        command: mp_mission::item::MAV_CMD_NAV_WAYPOINT,
+        x: centre.latitude(),
+        y: centre.longitude(),
+        ..mp_mission::MissionItem::default()
+    }];
+    for (index, point) in waypoints.iter().enumerate() {
+        items.push(mp_mission::MissionItem {
+            seq: u16::try_from(index + 1).unwrap_or(u16::MAX),
+            command: mp_mission::item::MAV_CMD_NAV_WAYPOINT,
+            x: point.latitude(),
+            y: point.longitude(),
+            z: options.altitude,
+            ..mp_mission::MissionItem::default()
+        });
+    }
+
+    if let Err(err) = std::fs::write(out_path, mp_mission::write_waypoints(&items)) {
+        eprintln!("could not write {out_path}: {err}");
+        return std::process::ExitCode::FAILURE;
+    }
+    println!("wrote {} items to {out_path}", items.len());
+    std::process::ExitCode::SUCCESS
 }

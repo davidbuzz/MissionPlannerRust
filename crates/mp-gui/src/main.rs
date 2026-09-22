@@ -54,6 +54,14 @@ const REFRESH_BENCH: Duration = Duration::from_millis(1);
 struct MissionPlanner {
     telemetry: Telemetry,
     map: std::rc::Rc<std::cell::RefCell<MapViewport>>,
+    /// Whether to read the mission automatically once a vehicle appears.
+    ///
+    /// Off by default and on with `--read-mission`. A ground station that silently pulls the
+    /// mission on connect makes it impossible to tell whether what is on screen came from the
+    /// vehicle or from the operator, which is exactly the confusion that loses a flight plan.
+    auto_read_mission: bool,
+    /// Whether that automatic read has already happened.
+    mission_requested: bool,
 }
 
 impl MissionPlanner {
@@ -97,6 +105,8 @@ impl MissionPlanner {
                 track_points,
                 markers,
             ))),
+            auto_read_mission: std::env::args().any(|a| a == "--read-mission"),
+            mission_requested: false,
         }
     }
 
@@ -219,6 +229,29 @@ impl MissionPlanner {
                     .child(div().text_sm().text_color(rgb(theme::TEXT)).child(heading))
                     .child(div().text_sm().text_color(rgb(mode_colour)).child(mode)),
             )
+    }
+
+    /// A clickable control. gpui needs an id on anything interactive so it can track hover and
+    /// press state across frames.
+    fn button(
+        id: &'static str,
+        label: impl Into<SharedString>,
+        on_click: impl Fn(&(), &mut Window, &mut App) + 'static,
+    ) -> impl IntoElement {
+        div()
+            .id(id)
+            .px_3()
+            .py_1()
+            .rounded_md()
+            .bg(rgb(theme::PANEL))
+            .border_1()
+            .border_color(rgb(theme::BORDER))
+            .text_sm()
+            .text_color(rgb(theme::TEXT))
+            .cursor_pointer()
+            .hover(|style| style.bg(rgb(theme::BORDER)))
+            .child(label.into())
+            .on_click(move |_event, window, cx| on_click(&(), window, cx))
     }
 
     fn vehicle_panel(view: &TelemetryView) -> impl IntoElement {
@@ -350,7 +383,7 @@ impl MissionPlanner {
 }
 
 impl Render for MissionPlanner {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let view = self.telemetry.view();
 
         // Feed the map from the same snapshot the panels read, so the two can never disagree
@@ -363,6 +396,13 @@ impl Render for MissionPlanner {
             if let Some(home) = state.home {
                 map.set_home(home);
             }
+        }
+        if !view.mission.is_empty() {
+            self.map.borrow_mut().set_mission(&view.mission);
+        }
+        if self.auto_read_mission && !self.mission_requested && view.vehicle.is_some() {
+            self.mission_requested = true;
+            self.telemetry.request_mission();
         }
 
         let (status, status_colour) = if let Some(err) = self.telemetry.error() {
@@ -408,6 +448,12 @@ impl Render for MissionPlanner {
                     map.paints(),
                 )
             }
+        };
+
+        let mission_label = if view.mission.is_empty() {
+            "read mission".to_owned()
+        } else {
+            format!("mission: {} items", view.mission.len())
         };
 
         let vehicle_label = view
@@ -466,9 +512,23 @@ impl Render for MissionPlanner {
                             .w(px(400.0))
                             .child(
                                 div()
-                                    .text_sm()
-                                    .text_color(rgb(theme::DIM))
-                                    .child(vehicle_label),
+                                    .flex()
+                                    .items_center()
+                                    .justify_between()
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .text_color(rgb(theme::DIM))
+                                            .child(vehicle_label),
+                                    )
+                                    .child(Self::button(
+                                        "read-mission",
+                                        mission_label,
+                                        cx.listener(|this, _event: &(), _window, cx| {
+                                            this.telemetry.request_mission();
+                                            cx.notify();
+                                        }),
+                                    )),
                             )
                             .child(Self::hud_panel(&view))
                             .child(Self::vehicle_panel(&view))

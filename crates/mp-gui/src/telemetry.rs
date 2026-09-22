@@ -10,6 +10,7 @@
 use std::sync::Arc;
 
 use mp_link::{Link, LinkConfig};
+use mp_mission::MissionItem;
 use mp_vehicle::{VehicleId, VehicleState};
 
 /// Everything one frame of UI needs to know.
@@ -29,6 +30,8 @@ pub struct TelemetryView {
     pub crc_errors: u64,
     /// Vehicles seen on this link, including gimbals, companions and other ground stations.
     pub vehicle_count: usize,
+    /// The mission read back from the vehicle, once a download has completed.
+    pub mission: Vec<MissionItem>,
 }
 
 impl TelemetryView {
@@ -43,6 +46,7 @@ impl TelemetryView {
             frames: 0,
             crc_errors: 0,
             vehicle_count: 0,
+            mission: Vec::new(),
         }
     }
 }
@@ -101,14 +105,33 @@ impl Telemetry {
         let vehicles = link.vehicles();
         let primary = link.primary_vehicle();
 
+        // Fetch the mission the link holds, if a download has finished. The UI never triggers
+        // one itself: a ground station that silently pulls a mission whenever it connects makes
+        // it impossible to tell whether what is on screen came from the vehicle or the operator.
+        let mission = primary
+            .as_ref()
+            .and_then(|(id, _)| link.mission_transfer(*id))
+            .map(|transfer| transfer.items().to_vec())
+            .unwrap_or_default();
+
         TelemetryView {
-            target: link.description().to_owned(),
+            target: link.description(),
             connected: link.is_running(),
             vehicle: primary.as_ref().map(|(id, _)| *id),
             state: primary.map(|(_, handle)| handle.load()),
             frames: link.frames_received(),
             crc_errors: stats.decode.crc_errors,
             vehicle_count: vehicles.len(),
+            mission,
+        }
+    }
+
+    /// Asks the vehicle for its mission. Explicit, never automatic.
+    pub fn request_mission(&self) {
+        if let Some(link) = &self.link
+            && let Some((id, _)) = link.primary_vehicle()
+        {
+            link.download_mission(id);
         }
     }
 }

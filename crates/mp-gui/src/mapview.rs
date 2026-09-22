@@ -20,6 +20,7 @@ use std::time::{Duration, Instant};
 use gpui::{
     App, Bounds, Hsla, Path, PathBuilder, Pixels, Point, Window, canvas, point, px, quad, rgb, size,
 };
+use mp_mission::MissionItem;
 use mp_units::{Bearing, LatLon, WebMercator};
 
 /// A synthetic flight track and the state needed to draw it.
@@ -56,6 +57,8 @@ pub struct MapViewport {
     vehicle: Option<(WebMercator, Bearing)>,
     /// The home point, once the vehicle reports one.
     home: Option<WebMercator>,
+    /// The planned mission, projected once when it is set rather than every frame.
+    mission: Vec<(WebMercator, u16)>,
 }
 
 /// Tiles across and down. 8x6 at 256px covers a 2048x1536 viewport.
@@ -135,6 +138,7 @@ impl MapViewport {
             path: Vec::new(),
             vehicle: None,
             home: None,
+            mission: Vec::new(),
         }
     }
 
@@ -230,6 +234,27 @@ impl MapViewport {
         self.home = Some(home.to_web_mercator());
     }
 
+    /// Replaces the planned mission shown on the map.
+    ///
+    /// Only navigation commands are drawn. A DO_SET_SERVO item has zeroes in its coordinate
+    /// fields, and plotting those would hang a waypoint marker off the coast of Africa on every
+    /// mission that changes a servo.
+    pub fn set_mission(&mut self, items: &[MissionItem]) {
+        self.mission = items
+            .iter()
+            .filter_map(|item| {
+                let position = item.position().ok().flatten()?;
+                Some((position.to_web_mercator(), item.seq))
+            })
+            .collect();
+    }
+
+    /// How many mission waypoints are drawn.
+    #[must_use]
+    pub fn mission_len(&self) -> usize {
+        self.mission.len()
+    }
+
     /// Points in the recorded flight path.
     #[must_use]
     pub fn path_len(&self) -> usize {
@@ -245,7 +270,28 @@ impl MapViewport {
     /// The world-space rectangle to display: everything observed, with margin, never narrower
     /// than a minimum span so a stationary vehicle does not zoom to infinity.
     fn view_box(&self) -> Option<(f64, f64, f64, f64)> {
-        let mut points = self.path.iter().chain(self.home.iter());
+        // A mission loaded from a file can be on the other side of the planet from the vehicle -
+        // ArduPilot's own test missions are in Colorado while its default simulator sits in
+        // Canberra. Fitting both collapses the map to two dots and shows nothing useful, so a
+        // mission that far away is excluded from the framing rather than allowed to ruin it. It
+        // is still drawn; the view simply does not chase it.
+        const FAR_AWAY: f64 = 0.02; // about 2% of the world, several hundred kilometres
+
+        let anchor = self.vehicle.as_ref().map(|(p, _)| *p).or(self.home);
+        let mission_in_view: Vec<&WebMercator> = self
+            .mission
+            .iter()
+            .map(|(p, _)| p)
+            .filter(|p| {
+                anchor.is_none_or(|a| (p.x - a.x).abs() < FAR_AWAY && (p.y - a.y).abs() < FAR_AWAY)
+            })
+            .collect();
+
+        let mut points = self
+            .path
+            .iter()
+            .chain(self.home.iter())
+            .chain(mission_in_view.into_iter());
         let first = points.next().or(self.vehicle.as_ref().map(|(p, _)| p))?;
         let (mut min_x, mut max_x) = (first.x, first.x);
         let (mut min_y, mut max_y) = (first.y, first.y);
@@ -378,6 +424,37 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
             }
         }
         map.phases[2] = submit.elapsed();
+    }
+
+    // The planned mission: a dashed-looking track plus a marker per waypoint, drawn beneath the
+    // flown path so the two are distinguishable where they overlap.
+    if map.mission.len() > 1 {
+        let mut builder = PathBuilder::stroke(px(1.5));
+        let mut points = map.mission.iter();
+        if let Some((first, _)) = points.next() {
+            builder.move_to(to_screen(*first));
+        }
+        for (point, _) in points {
+            builder.line_to(to_screen(*point));
+        }
+        match builder.build() {
+            Ok(path) => window.paint_path(path, Hsla::from(rgb(0x58_a6_ff))),
+            Err(_) => map.track_path_failures += 1,
+        }
+    }
+    for (waypoint, _) in &map.mission {
+        let at = to_screen(*waypoint);
+        window.paint_quad(quad(
+            Bounds {
+                origin: point(at.x - px(3.0), at.y - px(3.0)),
+                size: size(px(6.0), px(6.0)),
+            },
+            gpui::Corners::all(px(3.0)),
+            rgb(0x58_a6_ff),
+            gpui::Edges::default(),
+            rgb(0x00_00_00),
+            gpui::BorderStyle::default(),
+        ));
     }
 
     // Home.

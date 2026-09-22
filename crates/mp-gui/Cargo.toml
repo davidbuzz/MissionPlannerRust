@@ -25,6 +25,7 @@ gpui = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f0c8a3a
 mp-link.workspace = true
 mp-vehicle.workspace = true
 mp-units.workspace = true
+mp-mission.workspace = true
 
 # Only for examples/tile_atlas_probe.rs: constructing a gpui RenderImage needs image::Frame,
 # and gpui does not re-export the image crate. Pinned to the same 0.25 line gpui resolves to.
