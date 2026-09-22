@@ -212,3 +212,55 @@ fn non_navigation_commands_are_not_treated_as_positions() {
     assert!(waypoint.is_navigation());
     assert!(waypoint.position().expect("valid").is_some());
 }
+
+#[test]
+fn validation_over_the_real_corpus_is_sane() {
+    // Running the checks across 129 missions written by other people is the test that catches a
+    // rule which is technically right and practically useless. A check that fires on most real
+    // missions is noise, and noise is what makes pilots ignore warnings.
+    use mp_mission::validate::{Severity, validate};
+
+    let mut with_danger = 0usize;
+    let mut total = 0usize;
+    let mut messages: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+
+    for (name, text) in corpus() {
+        let Ok(items) = mp_mission::read_waypoints(&text) else {
+            continue;
+        };
+        if items.is_empty() {
+            continue;
+        }
+        total += 1;
+
+        // Use the mission's own home as the reference, which is what a pilot flying it would do.
+        let home = items
+            .first()
+            .and_then(|item| item.position().ok().flatten());
+        let findings = validate(&items, home);
+
+        if findings.iter().any(|f| f.severity == Severity::Danger) {
+            with_danger += 1;
+            for finding in findings.iter().filter(|f| f.severity == Severity::Danger) {
+                let key: String = finding.message.chars().take(40).collect();
+                *messages.entry(key).or_default() += 1;
+                let _ = name;
+            }
+        }
+    }
+
+    println!("{with_danger} of {total} corpus missions raise a danger");
+    for (message, count) in &messages {
+        println!("  {count:>4}  {message}...");
+    }
+
+    assert!(total > 100, "expected the full corpus, checked {total}");
+    // Some of ArduPilot's test missions deliberately fly odd profiles, so a few dangers are
+    // expected. The rate was 27% before altitude checks became vehicle-aware - rover and boat
+    // missions were being warned about altitudes that are meaningless to them - and is 6% now.
+    // A ceiling of 15% catches a rule that starts firing on ordinary missions again.
+    assert!(
+        with_danger * 100 < total * 15,
+        "{with_danger} of {total} real missions raise a danger; the rules are too aggressive"
+    );
+}
