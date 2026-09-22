@@ -1,6 +1,8 @@
 //! Log inspection: summarise a recorded flight without opening a GUI.
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
+// Internal to the binary; `pub` here documents intent rather than exporting API.
+#![allow(unreachable_pub)]
 
 use std::collections::BTreeMap;
 
@@ -103,13 +105,15 @@ fn summarise_tlog(data: &[u8]) {
                 max_altitude = max_altitude.max(f64::from(m.relative_alt) / 1000.0);
             }
             MavMessage::VfrHud(m) => max_speed = max_speed.max(f64::from(m.groundspeed)),
-            MavMessage::Statustext(m) => {
-                if statustexts.len() < 400 {
-                    let end = m.text.iter().position(|b| *b == 0).unwrap_or(m.text.len());
-                    let text = String::from_utf8_lossy(&m.text[..end]).trim().to_owned();
-                    if !text.is_empty() {
-                        statustexts.push((m.severity, text));
-                    }
+            MavMessage::Statustext(m) if statustexts.len() < 400 => {
+                let end = m.text.iter().position(|b| *b == 0).unwrap_or(m.text.len());
+                let text = m
+                    .text
+                    .get(..end)
+                    .map(|bytes| String::from_utf8_lossy(bytes).trim().to_owned())
+                    .unwrap_or_default();
+                if !text.is_empty() {
+                    statustexts.push((m.severity, text));
                 }
             }
             _ => {}
@@ -145,10 +149,10 @@ fn summarise_dataflash(data: &[u8]) {
         *counts.entry(message.name.clone()).or_default() += 1;
         match message.name.as_str() {
             "MSG" => {
-                if let Some(Value::Text(text)) = message.field("Message") {
-                    if messages.len() < 200 {
-                        messages.push(text.clone());
-                    }
+                if let Some(Value::Text(text)) = message.field("Message")
+                    && messages.len() < 200
+                {
+                    messages.push(text.clone());
                 }
             }
             "MODE" => {
