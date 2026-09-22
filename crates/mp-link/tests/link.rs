@@ -51,8 +51,14 @@ fn vehicle_heartbeat_with_mode(seq: u8, base_mode: u8) -> Vec<u8> {
 }
 
 /// Waits for a condition, failing with a message rather than hanging forever.
+///
+/// Twenty seconds, not five. A port that accepts a connection is not the same as a vehicle that
+/// has started streaming: SITL binds 5760 immediately and can take several seconds more to emit
+/// its first heartbeat. A five-second deadline passed when run by hand and failed intermittently
+/// in a full suite run, which is the worst kind of test - one that fails for reasons unrelated to
+/// what it is testing.
 fn wait_for(what: &str, mut check: impl FnMut() -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(20);
     while Instant::now() < deadline {
         if check() {
             return;

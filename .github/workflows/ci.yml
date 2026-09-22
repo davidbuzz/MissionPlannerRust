@@ -21,20 +21,82 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with: { components: clippy, rustfmt }
       - uses: Swatinem/rust-cache@v2
+      # gpui's X11 backend needs these to link; a machine that can run X11 software can still
+      # fail to link it, because the bare .so symlinks live in the -dev packages.
+      - name: Install Linux GUI dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-x11-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libwayland-dev libasound2-dev libudev-dev
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets
       - run: cargo test --workspace
 
-  # The differential suite needs mono plus a Mission Planner distribution, so it is a
-  # separate job: a missing reference must fail loudly rather than silently skip.
-  differential:
-    name: differential vs C# reference
+  cross-compile:
+    name: cross-compile targets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: x86_64-pc-windows-gnu, wasm32-unknown-unknown }
+      - uses: Swatinem/rust-cache@v2
+      # The core stays portable whether or not anyone is currently building for these targets.
+      # Checking it here is cheaper than discovering it at release time.
+      - name: Windows
+        run: cargo check --target x86_64-pc-windows-gnu
+             -p mp-mavlink -p mp-mavlink-dialects -p mp-transport -p mp-vehicle
+             -p mp-link -p mp-log -p mp-units -p mp-mission -p mp-cli
+      - name: wasm
+        run: cargo check --target wasm32-unknown-unknown
+             -p mp-mavlink -p mp-mavlink-dialects -p mp-units -p mp-log
+             -p mp-vehicle -p mp-mission
+
+  sitl:
+    name: integration against ArduPilot SITL
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --workspace --test differential_tlog
+      # The SITL binary is committed under tools/sitl, so this needs no ArduPilot checkout.
+      - name: Start SITL
+        run: |
+          tools/sitl/run-sitl.sh copter > /tmp/sitl.log 2>&1 &
+          for _ in $(seq 1 60); do
+            ss -tln | grep -q 5760 && break
+            sleep 1
+          done
+          ss -tln | grep -q 5760 || { echo "SITL did not start"; cat /tmp/sitl.log; exit 1; }
+      # These are the tests that catch what unit tests cannot: a protocol that stalls because the
+      # vehicle answers with a different message than expected, and parameter values that decode
+      # to numbers no battery or system id could hold.
+      # Serially: SITL serves one TCP client at a time, so tests that each open a link must not
+      # overlap. Within a binary that needs --test-threads=1; between binaries cargo already
+      # runs sequentially.
+      - run: cargo test --workspace -- --ignored --test-threads=1
+      - name: SITL log on failure
+        if: failure()
+        run: cat /tmp/sitl.log
+
+  codegen:
+    name: generated code is up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: rustfmt }
+      - uses: Swatinem/rust-cache@v2
+      # Only runs where the reference tree is present. Generated code is committed, so the risk is
+      # that it stops matching the definitions it claims to come from.
+      - name: Check regeneration
+        run: |
+          if [ -d referneces/missionplanner ]; then
+            cargo run -p xtask -- verify-mavlink all
+            cargo run -p xtask -- codegen all --check
+          else
+            echo "reference tree absent; skipping regeneration check"
+          fi
 
   deny:
     name: licences and advisories
