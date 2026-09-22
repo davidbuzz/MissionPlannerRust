@@ -292,7 +292,7 @@ impl MapViewport {
             .path
             .iter()
             .chain(self.home.iter())
-            .chain(mission_in_view.into_iter());
+            .chain(mission_in_view);
         let first = points.next().or(self.vehicle.as_ref().map(|(p, _)| p))?;
         let (mut min_x, mut max_x) = (first.x, first.x);
         let (mut min_y, mut max_y) = (first.y, first.y);
