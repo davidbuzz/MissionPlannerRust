@@ -12,6 +12,7 @@ mod hud;
 mod mapview;
 mod plan;
 mod platform;
+mod probe;
 mod setup;
 mod telemetry;
 mod ui;
@@ -267,6 +268,7 @@ impl MissionPlanner {
                     .border_color(rgb(if selected { theme::ACCENT } else { theme::BG }))
                     .hover(|style| style.text_color(rgb(theme::TEXT)))
                     .child(screen.label())
+                    .children(probe::enabled().then(|| probe::marker(screen.id())))
                     .on_click(cx.listener(move |this, _event, _window, cx| {
                         this.screen = screen;
                         cx.notify();
@@ -331,6 +333,7 @@ impl MissionPlanner {
             .w(px(440.0))
             .child(plan::actions_panel(&items, &origin, view, cx))
             .child(plan::items_panel(&items, selected, cx))
+            .child(plan::editor_panel(&items, selected, cx))
             .child(plan::checks_panel(&items, view))
     }
 

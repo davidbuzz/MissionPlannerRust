@@ -167,6 +167,7 @@ fn mode_controls(view: &TelemetryView, cx: &mut Context<MissionPlanner>) -> AnyE
                 .cursor_pointer()
                 .hover(|style| style.bg(rgb(theme::BORDER)))
                 .child((*name).to_owned())
+                .children(crate::probe::enabled().then(|| crate::probe::marker(*name)))
                 .on_click(cx.listener(move |this, _event, _window, cx| {
                     this.telemetry.set_mode(number);
                     cx.notify();

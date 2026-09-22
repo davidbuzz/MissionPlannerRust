@@ -91,7 +91,10 @@ pub fn action(
         .rounded_md()
         .border_1()
         .text_sm()
-        .child(label.into());
+        .child(label.into())
+        // Reports where this control ended up, so a test script can click it by name instead of
+        // by a coordinate that goes stale the next time the layout changes.
+        .children(crate::probe::enabled().then(|| crate::probe::marker(id)));
 
     if enabled {
         base.bg(rgb(theme::ACTION))

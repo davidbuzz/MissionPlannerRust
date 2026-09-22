@@ -24,6 +24,10 @@ pub const CMD_WAYPOINT: u16 = 16;
 pub const FRAME_RELATIVE: u8 = 3;
 /// Altitude given to a waypoint created by clicking the map, in metres above home.
 pub const DEFAULT_ALTITUDE: f64 = 50.0;
+/// `MAV_CMD_NAV_RETURN_TO_LAUNCH`, which takes no position.
+const CMD_RTL: u16 = 20;
+/// `MAV_CMD_NAV_LAND` with no coordinates: land where the vehicle is.
+const CMD_LAND_NO_POSITION: u16 = 21;
 
 /// The mission being edited, separate from the vehicle's.
 #[derive(Debug, Default)]
@@ -162,6 +166,37 @@ impl Plan {
         self.selected = u16::try_from(target).ok();
     }
 
+    /// Changes an item's altitude by a step, clamped so a held button cannot run away.
+    ///
+    /// Negative altitudes are allowed: a relative-frame waypoint below home is meaningful on a
+    /// vehicle launched from a cliff or a rooftop, and refusing it would be the ground station
+    /// deciding it knows the terrain better than the operator.
+    pub fn nudge_altitude(&mut self, seq: u16, delta: f64) {
+        let Some(item) = self.items.iter_mut().find(|item| item.seq == seq) else {
+            return;
+        };
+        item.z = (item.z + delta).clamp(-MAX_STEPPED_ALTITUDE, MAX_STEPPED_ALTITUDE);
+        self.origin = Origin::Edited;
+    }
+
+    /// Changes what an item does.
+    ///
+    /// Return-to-launch and land take no position, so changing to one zeroes the coordinates.
+    /// Leaving stale coordinates on a command that ignores them is how a mission looks right on
+    /// the map and flies somewhere else: the map would keep drawing a waypoint the vehicle has no
+    /// intention of visiting.
+    pub fn set_command(&mut self, seq: u16, command: u16) {
+        let Some(item) = self.items.iter_mut().find(|item| item.seq == seq) else {
+            return;
+        };
+        item.command = command;
+        if matches!(command, CMD_RTL | CMD_LAND_NO_POSITION) {
+            item.x = 0.0;
+            item.y = 0.0;
+        }
+        self.origin = Origin::Edited;
+    }
+
     /// Discards everything.
     pub fn clear(&mut self) {
         self.items.clear();
@@ -176,6 +211,40 @@ impl Plan {
         }
     }
 }
+
+/// The commands the editor offers, and what their altitude means.
+///
+/// Not every `MAV_CMD` - there are hundreds, most of which belong in a full command editor rather
+/// than a list a pilot scans while planning. These are the navigation commands that make up the
+/// shape of a mission, which is what the map shows.
+pub const EDITABLE_COMMANDS: &[(u16, &str)] = &[
+    (16, "waypoint"),
+    (22, "takeoff"),
+    (21, "land"),
+    (20, "return to launch"),
+    (19, "loiter for time"),
+    (17, "loiter unlimited"),
+    (18, "loiter turns"),
+    (82, "spline waypoint"),
+];
+
+/// Altitude steps offered, in metres, with the name a test script clicks them by.
+///
+/// Coarse and fine, because both are needed and neither alone is enough: 10 m steps make setting a
+/// survey height quick, and 1 m steps matter near the ground.
+pub const ALTITUDE_STEPS: [(f64, &str); 4] = [
+    (-10.0, "alt-minus-10"),
+    (-1.0, "alt-minus-1"),
+    (1.0, "alt-plus-1"),
+    (10.0, "alt-plus-10"),
+];
+
+/// The highest altitude the stepper will reach, in metres above home.
+///
+/// Not a limit on what can be flown - a mission loaded from a file keeps whatever it holds. It
+/// stops a held button from walking a waypoint into the stratosphere, which is a data entry
+/// accident rather than a decision.
+pub const MAX_STEPPED_ALTITUDE: f64 = 1000.0;
 
 /// A short name for a mission command.
 ///
@@ -316,6 +385,10 @@ pub fn items_panel(
                 .child(div().w(px(150.0)).child(position))
                 .child(div().w(px(70.0)).child(format!("{:.0} m", item.z)))
                 .children(row_controls(seq, is_selected, cx))
+                .children(
+                    crate::probe::enabled()
+                        .then(|| crate::probe::marker(format!("plan-row-{seq}"))),
+                )
                 .on_click(cx.listener(move |this, _event, _window, cx| {
                     // Clicking the selected row clears the selection, so there is always a way
                     // back to "nothing selected" without hunting for empty space.
@@ -335,6 +408,110 @@ pub fn items_panel(
             .overflow_hidden()
             .child(rows),
     )
+}
+
+/// The editor for the selected item: what it does and how high.
+///
+/// Steppers rather than typed numbers. Text entry in gpui needs a focus-managing input element
+/// that does not exist here yet, and a stepper cannot produce a half-typed altitude that looks
+/// like a number - "5" on the way to "50" is a valid altitude, and a mission editor that can
+/// briefly hold one is a mission editor that can upload one.
+pub fn editor_panel(
+    plan_items: &[MissionItem],
+    selected: Option<u16>,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    let Some(item) = selected.and_then(|seq| plan_items.iter().find(|item| item.seq == seq)) else {
+        return panel(
+            "item",
+            div()
+                .text_xs()
+                .text_color(rgb(theme::DIM))
+                .child("select an item to change what it does"),
+        )
+        .into_any_element();
+    };
+    let seq = item.seq;
+    let current_command = item.command;
+
+    let mut commands = div().flex().flex_wrap().gap_1();
+    for (command, label) in EDITABLE_COMMANDS {
+        let chosen = *command == current_command;
+        let command = *command;
+        commands = commands.child(
+            div()
+                .id(("plan-cmd", usize::from(command)))
+                .px_2()
+                .py_1()
+                .rounded_md()
+                .border_1()
+                .border_color(rgb(if chosen { theme::ACCENT } else { theme::BORDER }))
+                .bg(rgb(if chosen { theme::ACTION } else { theme::PANEL }))
+                .text_xs()
+                .text_color(rgb(if chosen { theme::ACCENT } else { theme::TEXT }))
+                .cursor_pointer()
+                .hover(|style| style.bg(rgb(theme::BORDER)))
+                .child(*label)
+                .children(crate::probe::enabled().then(|| crate::probe::marker(*label)))
+                .on_click(cx.listener(move |this, _event, _window, cx| {
+                    this.plan.set_command(seq, command);
+                    this.sync_map_mission();
+                    cx.notify();
+                })),
+        );
+    }
+
+    let mut steppers = div().flex().items_center().gap_2().child(
+        div()
+            .w(px(80.0))
+            .text_lg()
+            .text_color(rgb(theme::TEXT))
+            .child(format!("{:.0} m", item.z)),
+    );
+    for (delta, name) in ALTITUDE_STEPS {
+        steppers = steppers.child(
+            div()
+                .id(name)
+                .px_2()
+                .py_1()
+                .rounded_md()
+                .border_1()
+                .border_color(rgb(theme::BORDER))
+                .text_xs()
+                .text_color(rgb(theme::TEXT))
+                .cursor_pointer()
+                .hover(|style| style.bg(rgb(theme::BORDER)))
+                .child(if delta > 0.0 {
+                    format!("+{delta:.0}")
+                } else {
+                    format!("{delta:.0}")
+                })
+                .children(crate::probe::enabled().then(|| crate::probe::marker(name)))
+                .on_click(cx.listener(move |this, _event, _window, cx| {
+                    this.plan.nudge_altitude(seq, delta);
+                    this.sync_map_mission();
+                    cx.notify();
+                })),
+        );
+    }
+
+    panel(
+        format!("item {seq}").as_str(),
+        div()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .child(div().text_xs().text_color(rgb(theme::DIM)).child("command"))
+            .child(commands)
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(theme::DIM))
+                    .child("altitude above home"),
+            )
+            .child(steppers),
+    )
+    .into_any_element()
 }
 
 /// What the validator says about the plan.
@@ -637,6 +814,117 @@ mod tests {
         assert_eq!(command_label(20), "return_to_launch");
         // An unknown command shows its number rather than a wrong name.
         assert_eq!(command_label(60_000), "cmd 60000");
+    }
+
+    #[test]
+    fn stepping_an_altitude_changes_only_that_item() {
+        let mut plan = Plan::default();
+        plan.add_waypoint(at(-35.36, 149.16), 50.0);
+        plan.add_waypoint(at(-35.37, 149.16), 50.0);
+
+        plan.nudge_altitude(1, 10.0);
+
+        assert!((plan.items()[0].z - 50.0).abs() < 1e-9);
+        assert!((plan.items()[1].z - 60.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_held_stepper_cannot_walk_a_waypoint_into_the_stratosphere() {
+        let mut plan = Plan::default();
+        plan.add_waypoint(at(-35.36, 149.16), 50.0);
+        for _ in 0..500 {
+            plan.nudge_altitude(0, 10.0);
+        }
+        assert!((plan.items()[0].z - MAX_STEPPED_ALTITUDE).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_waypoint_below_home_is_allowed() {
+        // Meaningful on a vehicle launched from a cliff or a rooftop. Refusing it would be the
+        // ground station deciding it knows the terrain better than the operator.
+        let mut plan = Plan::default();
+        plan.add_waypoint(at(-35.36, 149.16), 5.0);
+        plan.nudge_altitude(0, -10.0);
+        assert!(plan.items()[0].z < 0.0);
+    }
+
+    #[test]
+    fn changing_to_a_positionless_command_clears_the_coordinates() {
+        // Leaving stale coordinates on a command that ignores them is how a mission looks right
+        // on the map and flies somewhere else: the map would keep drawing a waypoint the vehicle
+        // has no intention of visiting.
+        let mut plan = Plan::default();
+        plan.add_waypoint(at(-35.36, 149.16), 50.0);
+        plan.set_command(0, CMD_RTL);
+        assert!((plan.items()[0].x).abs() < f64::EPSILON);
+        assert!((plan.items()[0].y).abs() < f64::EPSILON);
+        assert_eq!(plan.items()[0].command, CMD_RTL);
+    }
+
+    #[test]
+    fn changing_to_a_positioned_command_keeps_the_coordinates() {
+        let mut plan = Plan::default();
+        plan.add_waypoint(at(-35.36, 149.16), 50.0);
+        plan.set_command(0, 22);
+        assert!((plan.items()[0].x - -35.36).abs() < 1e-9);
+        assert_eq!(plan.items()[0].command, 22);
+    }
+
+    #[test]
+    fn editing_an_item_marks_the_plan_as_no_longer_the_vehicles() {
+        let mut plan = Plan::default();
+        plan.adopt_from_vehicle(vec![MissionItem {
+            seq: 0,
+            current: 0,
+            frame: FRAME_RELATIVE,
+            command: CMD_WAYPOINT,
+            param1: 0.0,
+            param2: 0.0,
+            param3: 0.0,
+            param4: 0.0,
+            x: -35.36,
+            y: 149.16,
+            z: 50.0,
+            autocontinue: 1,
+        }]);
+        plan.nudge_altitude(0, 10.0);
+        assert_eq!(*plan.origin(), Origin::Edited);
+    }
+
+    #[test]
+    fn editing_an_item_that_is_not_there_is_ignored() {
+        let mut plan = Plan::default();
+        plan.add_waypoint(at(-35.36, 149.16), 50.0);
+        plan.nudge_altitude(99, 10.0);
+        plan.set_command(99, 22);
+        assert!((plan.items()[0].z - 50.0).abs() < 1e-9);
+        assert_eq!(plan.items()[0].command, CMD_WAYPOINT);
+    }
+
+    #[test]
+    fn every_offered_command_has_a_readable_label() {
+        // The chips in the editor are how a command is chosen; one showing a bare number would be
+        // unusable.
+        for (command, label) in EDITABLE_COMMANDS {
+            assert!(!label.is_empty());
+            assert!(
+                !command_label(*command).starts_with("cmd "),
+                "command {command} has no name in this dialect"
+            );
+        }
+    }
+
+    #[test]
+    fn the_altitude_steps_are_coarse_and_fine_in_both_directions() {
+        let deltas: Vec<f64> = ALTITUDE_STEPS.iter().map(|(delta, _)| *delta).collect();
+        assert!(deltas.iter().any(|d| *d > 0.0));
+        assert!(deltas.iter().any(|d| *d < 0.0));
+        // Names must be unique: they address the controls a test script clicks.
+        let mut names: Vec<&str> = ALTITUDE_STEPS.iter().map(|(_, name)| *name).collect();
+        names.sort_unstable();
+        let count = names.len();
+        names.dedup();
+        assert_eq!(names.len(), count, "duplicate stepper names");
     }
 
     #[test]
