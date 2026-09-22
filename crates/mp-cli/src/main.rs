@@ -43,6 +43,13 @@ fn main() -> std::process::ExitCode {
                 std::process::ExitCode::from(2)
             }
         },
+        Some("mission") => match (args.get(1), args.get(2)) {
+            (Some(url), file) => mission(url, file.map(String::as_str)),
+            _ => {
+                eprintln!("usage: mpr mission <url> [file.waypoints]");
+                std::process::ExitCode::from(2)
+            }
+        },
         Some("ports") => ports(),
         Some("help" | "--help" | "-h") | None => {
             usage();
@@ -64,6 +71,7 @@ fn usage() {
          mpr record <url> <file> [s] record telemetry to a .tlog\n  \
          mpr fly <url> [file]        fly a scripted mission (simulator only)\n  \
          mpr params <url> [NAME]     download the parameter set, or show one parameter\n  \
+         mpr mission <url> [file]    download the mission, or upload one from a file\n  \
          mpr ports                   list serial ports\n\n\
          url forms:\n  \
          serial:/dev/ttyACM0:115200\n  \
@@ -420,4 +428,117 @@ fn params(url: &str, filter: Option<&str>) -> std::process::ExitCode {
         );
     }
     std::process::ExitCode::SUCCESS
+}
+
+/// Downloads the vehicle's mission, or uploads one from a `.waypoints` file and reads it back.
+///
+/// Reading back after an upload is the point: it is the only way to know the vehicle stored what
+/// was sent, rather than what it felt like storing.
+fn mission(url: &str, file: Option<&str>) -> std::process::ExitCode {
+    let config = LinkConfig {
+        stream_rate_hz: 0,
+        ..LinkConfig::default()
+    };
+    let link = match Link::connect(url, config) {
+        Ok(link) => link,
+        Err(err) => {
+            eprintln!("could not open {url}: {err}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    println!("connected: {}", link.description());
+
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while link.primary_vehicle().is_none() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let Some((id, _)) = link.primary_vehicle() else {
+        eprintln!("no vehicle appeared on {url}");
+        return std::process::ExitCode::FAILURE;
+    };
+
+    // Upload first, if a file was given.
+    if let Some(path) = file {
+        let text = match std::fs::read_to_string(path) {
+            Ok(text) => text,
+            Err(err) => {
+                eprintln!("could not read {path}: {err}");
+                return std::process::ExitCode::FAILURE;
+            }
+        };
+        let items = match mp_mission::read_waypoints(&text) {
+            Ok(items) => items,
+            Err(err) => {
+                eprintln!("{path}: {err}");
+                return std::process::ExitCode::FAILURE;
+            }
+        };
+        println!("uploading {} items from {path}", items.len());
+        link.upload_mission(id, items);
+        if !await_transfer(&link, id, "upload") {
+            return std::process::ExitCode::FAILURE;
+        }
+    }
+
+    println!("downloading mission from vehicle {id}");
+    link.download_mission(id);
+    if !await_transfer(&link, id, "download") {
+        return std::process::ExitCode::FAILURE;
+    }
+
+    let Some(transfer) = link.mission_transfer(id) else {
+        eprintln!("no transfer state");
+        return std::process::ExitCode::FAILURE;
+    };
+    let items = transfer.items();
+    println!("\nseq  cmd  frame        lat           lon          alt");
+    for item in items {
+        println!(
+            "{:>3}  {:>3}  {:>5}  {:>12.7}  {:>12.7}  {:>8.2}",
+            item.seq, item.command, item.frame, item.x, item.y, item.z
+        );
+    }
+    println!("\n{} items", items.len());
+
+    // Print the file form too, so it can be diffed against what was uploaded.
+    if file.is_some() {
+        print!("{}", mp_mission::write_waypoints(items));
+    }
+    std::process::ExitCode::SUCCESS
+}
+
+/// Waits for a mission transfer to finish, reporting progress.
+fn await_transfer(link: &Link, id: VehicleId, what: &str) -> bool {
+    let deadline = Instant::now() + Duration::from_secs(60);
+    let mut last_report = Instant::now();
+    loop {
+        let Some(transfer) = link.mission_transfer(id) else {
+            std::thread::sleep(Duration::from_millis(100));
+            if Instant::now() >= deadline {
+                eprintln!("{what}: never started");
+                return false;
+            }
+            continue;
+        };
+        match transfer.state() {
+            mp_link::mission_transfer::TransferState::Complete => {
+                println!("  {what}: complete, {} items", transfer.items().len());
+                return true;
+            }
+            mp_link::mission_transfer::TransferState::Failed(err) => {
+                eprintln!("  {what} failed: {err}");
+                return false;
+            }
+            _ => {}
+        }
+        if Instant::now() >= deadline {
+            eprintln!("  {what}: timed out at {:.0}%", transfer.progress() * 100.0);
+            return false;
+        }
+        if last_report.elapsed() >= Duration::from_secs(1) {
+            println!("  {what}: {:.0}%", transfer.progress() * 100.0);
+            last_report = Instant::now();
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
 }

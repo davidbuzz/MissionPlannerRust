@@ -20,4 +20,5 @@ mp-mavlink.workspace = true
 mp-mavlink-dialects.workspace = true
 mp-transport.workspace = true
 mp-vehicle.workspace = true
+mp-mission.workspace = true
 mp-units.workspace = true

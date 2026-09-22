@@ -5,9 +5,11 @@
 //! magic number has exactly one definition with a comment saying what it is.
 
 use mp_mavlink_dialects::all::{
-    CommandLong, MavMessage, ParamRequestList, ParamRequestRead, ParamSet, SetMode,
+    CommandLong, MavMessage, MissionAck, MissionCount, MissionItemInt, MissionRequestInt,
+    MissionRequestList, ParamRequestList, ParamRequestRead, ParamSet, SetMode,
     SetPositionTargetGlobalInt,
 };
+use mp_mission::{MISSION_TYPE_MISSION, MissionItem};
 use mp_vehicle::VehicleId;
 
 /// `MAV_CMD_NAV_TAKEOFF`.
@@ -200,5 +202,74 @@ pub fn request_param_by_name(target: VehicleId, name: &str) -> MavMessage {
         target_system: target.sysid,
         target_component: target.compid,
         param_id: crate::params::encode_param_id(name),
+    })
+}
+
+/// Asks the vehicle how many mission items it holds, starting a download.
+#[must_use]
+pub fn request_mission_list(target: VehicleId) -> MavMessage {
+    MavMessage::MissionRequestList(MissionRequestList {
+        target_system: target.sysid,
+        target_component: target.compid,
+        mission_type: MISSION_TYPE_MISSION,
+    })
+}
+
+/// Asks for one mission item by sequence number.
+///
+/// Always the `_INT` form. The float variant carries degrees in an `f32`, which has about a metre
+/// of resolution at the equator - enough to move a waypoint off a runway.
+#[must_use]
+pub fn request_mission_item(target: VehicleId, seq: u16) -> MavMessage {
+    MavMessage::MissionRequestInt(MissionRequestInt {
+        seq,
+        target_system: target.sysid,
+        target_component: target.compid,
+        mission_type: MISSION_TYPE_MISSION,
+    })
+}
+
+/// Announces how many items are about to be uploaded, starting an upload.
+#[must_use]
+pub fn send_mission_count(target: VehicleId, count: u16) -> MavMessage {
+    MavMessage::MissionCount(MissionCount {
+        count,
+        target_system: target.sysid,
+        target_component: target.compid,
+        mission_type: MISSION_TYPE_MISSION,
+    })
+}
+
+/// Sends one mission item during an upload.
+#[must_use]
+pub fn send_mission_item(target: VehicleId, item: &MissionItem) -> MavMessage {
+    let wire = item.to_wire();
+    MavMessage::MissionItemInt(MissionItemInt {
+        param1: wire.param1,
+        param2: wire.param2,
+        param3: wire.param3,
+        param4: wire.param4,
+        x: wire.x,
+        y: wire.y,
+        z: wire.z,
+        seq: wire.seq,
+        command: wire.command,
+        target_system: target.sysid,
+        target_component: target.compid,
+        frame: wire.frame,
+        current: wire.current,
+        autocontinue: wire.autocontinue,
+        mission_type: MISSION_TYPE_MISSION,
+    })
+}
+
+/// Acknowledges a completed transfer. `MAV_MISSION_ACCEPTED` is 0.
+#[must_use]
+pub fn send_mission_ack(target: VehicleId, result: u8) -> MavMessage {
+    MavMessage::MissionAck(MissionAck {
+        target_system: target.sysid,
+        target_component: target.compid,
+        r#type: result,
+        mission_type: MISSION_TYPE_MISSION,
     })
 }

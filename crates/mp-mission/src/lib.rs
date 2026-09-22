@@ -7,6 +7,8 @@
 
 pub mod item;
 pub mod waypoints;
+pub mod wire;
 
 pub use item::{MissionItem, MissionItemError};
 pub use waypoints::{WaypointFileError, read_waypoints, write_waypoints};
+pub use wire::{MISSION_TYPE_MISSION, WireItem};

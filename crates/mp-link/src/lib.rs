@@ -18,6 +18,7 @@
 #![forbid(unsafe_code)]
 
 pub mod commands;
+pub mod mission_transfer;
 pub mod params;
 
 use std::collections::BTreeMap;
@@ -25,8 +26,10 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use mission_transfer::{Action, MissionTransfer};
 use mp_mavlink::{DecodeStats, FrameDecoder, Message as _, encode_v2};
 use mp_mavlink_dialects::all::{DIALECT, Heartbeat, MavMessage, RequestDataStream};
+use mp_mission::{MissionItem, WireItem};
 use mp_transport::{OpenError, Transport};
 use mp_vehicle::{StateHandle, VehicleId, VehicleRegistry};
 use params::{ParamTable, ParamType, ParamValue, decode_param_id};
@@ -127,6 +130,10 @@ struct Shared {
     params: Mutex<BTreeMap<VehicleId, ParamTable>>,
     /// Vehicles whose parameter download the caller has asked for.
     param_downloads: Mutex<BTreeMap<VehicleId, bool>>,
+    /// Mission transfers the caller has started, and their current state.
+    missions: Mutex<BTreeMap<VehicleId, MissionTransfer>>,
+    /// Transfers the link thread has yet to pick up.
+    mission_requests: Mutex<Vec<MissionTransfer>>,
     stats: Mutex<LinkStats>,
     running: AtomicBool,
     frames_received: AtomicU64,
@@ -215,6 +222,31 @@ impl Link {
             downloads.insert(target, true);
         }
         self.send(&commands::request_param_list(target))
+    }
+
+    /// Starts downloading the vehicle's mission. Progress is observable through
+    /// [`Link::mission_transfer`].
+    pub fn download_mission(&self, target: VehicleId) -> bool {
+        self.queue_transfer(MissionTransfer::download(target))
+    }
+
+    /// Starts uploading a mission to the vehicle.
+    pub fn upload_mission(&self, target: VehicleId, items: Vec<MissionItem>) -> bool {
+        self.queue_transfer(MissionTransfer::upload(target, items))
+    }
+
+    fn queue_transfer(&self, transfer: MissionTransfer) -> bool {
+        self.shared
+            .mission_requests
+            .lock()
+            .map(|mut queue| queue.push(transfer))
+            .is_ok()
+    }
+
+    /// The state of a vehicle's mission transfer, if one has been started.
+    #[must_use]
+    pub fn mission_transfer(&self, target: VehicleId) -> Option<MissionTransfer> {
+        self.shared.missions.lock().ok()?.get(&target).cloned()
     }
 
     /// A snapshot of a vehicle's parameters.
@@ -317,6 +349,7 @@ fn run_link(
 
     let mut newly_seen: Vec<VehicleId> = Vec::new();
     let mut last_param = Instant::now();
+    let mut pending_actions: Vec<(VehicleId, Action)> = Vec::new();
     let mut last_publish = Instant::now();
     let mut last_heartbeat = Instant::now() - config.heartbeat_interval;
     let mut known: BTreeMap<VehicleId, ()> = BTreeMap::new();
@@ -352,6 +385,44 @@ fn run_link(
                             if known.insert(id, ()).is_none() {
                                 newly_seen.push(id);
                             }
+                            // Mission transfer is lock-step, so every relevant message may
+                            // produce exactly one reply. The state machine decides which.
+                            if let Ok(mut transfers) = shared.missions.lock()
+                                && let Some(transfer) = transfers.get_mut(&id)
+                            {
+                                let action = match msg {
+                                    MavMessage::MissionCount(m) => transfer.on_count(m.count),
+                                    MavMessage::MissionItemInt(m) => transfer.on_item(&WireItem {
+                                        seq: m.seq,
+                                        frame: m.frame,
+                                        command: m.command,
+                                        current: m.current,
+                                        autocontinue: m.autocontinue,
+                                        param1: m.param1,
+                                        param2: m.param2,
+                                        param3: m.param3,
+                                        param4: m.param4,
+                                        x: m.x,
+                                        y: m.y,
+                                        z: m.z,
+                                    }),
+                                    // ArduPilot answers a MISSION_COUNT with the request
+                                    // variant matching the protocol the GCS appears to be
+                                    // speaking, and it defaults to the older MISSION_REQUEST
+                                    // (id 40) rather than MISSION_REQUEST_INT (id 51).
+                                    // Handling only the _INT form makes an upload stall at
+                                    // zero percent with no error - the vehicle is waiting for
+                                    // us and we are waiting for it.
+                                    MavMessage::MissionRequestInt(m) => transfer.on_request(m.seq),
+                                    MavMessage::MissionRequest(m) => transfer.on_request(m.seq),
+                                    MavMessage::MissionAck(m) => transfer.on_ack(m.r#type),
+                                    _ => Action::Nothing,
+                                };
+                                if action != Action::Nothing {
+                                    pending_actions.push((id, action));
+                                }
+                            }
+
                             if let MavMessage::ParamValue(param) = msg {
                                 let name = decode_param_id(&param.param_id);
                                 if let (Some(kind), Ok(mut table)) =
@@ -406,6 +477,68 @@ fn run_link(
                         stats.bytes_written += bytes.len() as u64;
                         stats.frames_sent += 1;
                     }
+                }
+            }
+        }
+
+        // Pick up transfers the caller queued, and start them.
+        if let Ok(mut queued) = shared.mission_requests.lock() {
+            for transfer in queued.drain(..) {
+                let id = transfer.target;
+                let first = transfer.begin();
+                if let Ok(mut transfers) = shared.missions.lock() {
+                    transfers.insert(id, transfer);
+                }
+                pending_actions.push((id, first));
+            }
+        }
+
+        // Retry whatever step is outstanding.
+        if let Ok(mut transfers) = shared.missions.lock() {
+            for (id, transfer) in transfers.iter_mut() {
+                let action = transfer.on_tick();
+                if action != Action::Nothing {
+                    pending_actions.push((*id, action));
+                }
+            }
+        }
+
+        // Send whatever the state machines decided, outside their lock.
+        for (id, action) in pending_actions.drain(..) {
+            let message = match action {
+                Action::RequestList => Some(commands::request_mission_list(id)),
+                Action::RequestItem(seq) => Some(commands::request_mission_item(id, seq)),
+                Action::SendCount(count) => Some(commands::send_mission_count(id, count)),
+                Action::SendItem(item) => Some(commands::send_mission_item(id, &item)),
+                Action::SendAck => Some(commands::send_mission_ack(
+                    id,
+                    mission_transfer::MISSION_ACCEPTED,
+                )),
+                Action::Nothing => None,
+            };
+            let Some(message) = message else { continue };
+
+            let mut payload = [0u8; 255];
+            let len = message.encode(&mut payload);
+            let mut frame = [0u8; mp_mavlink::MAX_FRAME_LEN];
+            if let Some(body) = payload.get(..len)
+                && let Ok(n) = encode_v2(
+                    &mut frame,
+                    tx_seq,
+                    config.sysid,
+                    config.compid,
+                    message.id(),
+                    body,
+                    message.crc_extra(),
+                    0,
+                )
+            {
+                tx_seq = tx_seq.wrapping_add(1);
+                if let Some(bytes) = frame.get(..n)
+                    && transport.write_all(bytes).is_ok()
+                {
+                    stats.bytes_written += bytes.len() as u64;
+                    stats.frames_sent += 1;
                 }
             }
         }
