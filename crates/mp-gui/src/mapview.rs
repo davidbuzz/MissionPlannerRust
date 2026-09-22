@@ -59,6 +59,37 @@ pub struct MapViewport {
     home: Option<WebMercator>,
     /// The planned mission, projected once when it is set rather than every frame.
     mission: Vec<(WebMercator, u16)>,
+    /// The view the user has chosen, or `None` while the map follows the vehicle.
+    ///
+    /// Follow-the-vehicle is right until the moment someone wants to look at something else, and
+    /// then it is infuriating: every pan is undone on the next telemetry packet. Panning therefore
+    /// takes control, and keeps it until the user gives it back.
+    camera: Option<Camera>,
+    /// Where the last drag was, in screen pixels.
+    drag_from: Option<(f32, f32)>,
+    /// The viewport size at the last paint, needed to convert pixel drags into world units.
+    last_viewport: (f32, f32),
+    /// The world rectangle actually displayed at the last paint: (x, y, width, height).
+    ///
+    /// Recorded by the painter rather than recomputed on demand because the fit depends on the
+    /// viewport size, and a click handler that guessed at the size would place waypoints slightly
+    /// away from where the operator clicked - an error too small to see and too large to fly.
+    last_view: Option<(f64, f64, f64, f64)>,
+    /// Where the viewport sits in the window at the last paint.
+    ///
+    /// Mouse events arrive in window coordinates while the map thinks in viewport ones. Dragging
+    /// only needs the delta so the difference does not show, but zooming to the cursor does: an
+    /// uncorrected offset makes the map drift away from the pointer on every scroll.
+    last_origin: (f32, f32),
+}
+
+/// A user-chosen view of the world.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Camera {
+    /// Centre of the view in projected coordinates.
+    pub centre: WebMercator,
+    /// Width of the view in projected units; 1.0 is the whole world.
+    pub span: f64,
 }
 
 /// Tiles across and down. 8x6 at 256px covers a 2048x1536 viewport.
@@ -139,6 +170,11 @@ impl MapViewport {
             vehicle: None,
             home: None,
             mission: Vec::new(),
+            camera: None,
+            drag_from: None,
+            last_viewport: (1.0, 1.0),
+            last_view: None,
+            last_origin: (0.0, 0.0),
         }
     }
 
@@ -249,6 +285,120 @@ impl MapViewport {
             .collect();
     }
 
+    /// Whether the map is following the vehicle rather than a view the user chose.
+    #[must_use]
+    pub const fn is_following(&self) -> bool {
+        self.camera.is_none()
+    }
+
+    /// Returns to following the vehicle.
+    pub fn follow_vehicle(&mut self) {
+        self.camera = None;
+    }
+
+    /// Starts a drag at a screen position.
+    pub fn begin_drag(&mut self, x: f32, y: f32) {
+        self.drag_from = Some((x, y));
+        // Taking hold of the map stops it following, so the view does not snap back mid-gesture.
+        if self.camera.is_none() {
+            self.camera = self.current_view();
+        }
+    }
+
+    /// Continues a drag, moving the world under the cursor.
+    pub fn drag_to(&mut self, x: f32, y: f32) {
+        let (width, height) = self.last_viewport;
+        let (Some((from_x, from_y)), Some(camera)) = (self.drag_from, self.camera.as_mut()) else {
+            return;
+        };
+        if width <= 0.0 || height <= 0.0 {
+            return;
+        }
+
+        // The map moves with the cursor, so the world shifts opposite to the pointer.
+        let per_pixel = camera.span / f64::from(width);
+        camera.centre.x -= f64::from(x - from_x) * per_pixel;
+        camera.centre.y -= f64::from(y - from_y) * per_pixel;
+        self.drag_from = Some((x, y));
+    }
+
+    /// Ends a drag.
+    pub fn end_drag(&mut self) {
+        self.drag_from = None;
+    }
+
+    /// Converts a window position into one relative to the map viewport.
+    fn to_viewport(&self, x: f32, y: f32) -> (f32, f32) {
+        (x - self.last_origin.0, y - self.last_origin.1)
+    }
+
+    /// Zooms by a number of scroll steps, keeping the world under the cursor in place.
+    ///
+    /// Zooming to the window centre instead is the difference between a map that feels direct and
+    /// one that has to be re-panned after every scroll.
+    pub fn zoom(&mut self, window_x: f32, window_y: f32, steps: f32) {
+        let (cursor_x, cursor_y) = self.to_viewport(window_x, window_y);
+        let Some(view) = self.current_view() else {
+            return;
+        };
+        let (width, height) = self.last_viewport;
+        if width <= 0.0 || height <= 0.0 {
+            return;
+        }
+
+        // Each step is a factor of 1.2, clamped so the view cannot invert or exceed the world.
+        let factor = f64::from(1.2_f32.powf(-steps));
+        let new_span = (view.span * factor).clamp(1e-9, 1.5);
+
+        // Keep the world point under the cursor fixed: shift the centre by the difference between
+        // where that point sits before and after the zoom.
+        let offset_x = f64::from(cursor_x / width - 0.5);
+        let offset_y = f64::from(cursor_y / height - 0.5) * f64::from(height) / f64::from(width);
+        let centre = WebMercator {
+            x: view.centre.x + offset_x * (view.span - new_span),
+            y: view.centre.y + offset_y * (view.span - new_span),
+        };
+        self.camera = Some(Camera {
+            centre,
+            span: new_span,
+        });
+    }
+
+    /// The position under a window coordinate, or `None` if the map has not painted yet.
+    ///
+    /// The inverse of the painter's `to_screen`. It reads the rectangle the painter recorded
+    /// rather than recomputing one, so a click lands where it looks like it landed even while the
+    /// automatic fit is moving.
+    #[must_use]
+    pub fn position_at(&self, window_x: f32, window_y: f32) -> Option<LatLon> {
+        let (x, y, width, height) = self.last_view?;
+        let (cursor_x, cursor_y) = self.to_viewport(window_x, window_y);
+        let (view_width, view_height) = self.last_viewport;
+        if view_width <= 0.0 || view_height <= 0.0 {
+            return None;
+        }
+        let projected = WebMercator {
+            x: f64::from(cursor_x / view_width).mul_add(width, x),
+            y: f64::from(cursor_y / view_height).mul_add(height, y),
+        };
+        LatLon::from_web_mercator(projected).ok()
+    }
+
+    /// The view currently displayed, whether chosen by the user or fitted automatically.
+    fn current_view(&self) -> Option<Camera> {
+        if let Some(camera) = self.camera {
+            return Some(camera);
+        }
+        let (x, y, width, height) = self.view_box()?;
+        Some(Camera {
+            centre: WebMercator {
+                x: x + width / 2.0,
+                y: y + height / 2.0,
+            },
+            span: width,
+        })
+    }
+
     /// How many mission waypoints are drawn.
     #[must_use]
     #[allow(dead_code)] // surfaced in the status strip when a mission is loaded
@@ -336,7 +486,23 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
     let w = f32::from(bounds.size.width);
     let h = f32::from(bounds.size.height);
 
-    let Some((vx, vy, vw, vh)) = map.view_box() else {
+    map.last_viewport = (w, h);
+    map.last_origin = (f32::from(origin.x), f32::from(origin.y));
+    // A view the user chose wins over the automatic fit; that is what makes panning stick.
+    let fitted = map.camera.map_or_else(
+        || map.view_box(),
+        |camera| {
+            let height = camera.span * f64::from(h) / f64::from(w).max(1.0);
+            Some((
+                camera.centre.x - camera.span / 2.0,
+                camera.centre.y - height / 2.0,
+                camera.span,
+                height,
+            ))
+        },
+    );
+    map.last_view = fitted;
+    let Some((vx, vy, vw, vh)) = fitted else {
         return;
     };
     // Projection maths is f64 because Web Mercator near the poles needs the range; screen
@@ -687,4 +853,181 @@ pub fn map_element(map: std::rc::Rc<std::cell::RefCell<MapViewport>>) -> impl gp
         },
     )
     .size_full()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Puts a viewport into the state the painter would leave it in, so camera and projection
+    /// behaviour can be tested without a window. The numbers are a 800x600 pane at the origin,
+    /// looking at a span of the world around Canberra.
+    fn painted(map: &mut MapViewport, span: f64) {
+        let centre = LatLon::new(-35.363, 149.165)
+            .expect("valid position")
+            .to_web_mercator();
+        map.last_viewport = (800.0, 600.0);
+        map.last_origin = (0.0, 0.0);
+        let height = span * 600.0 / 800.0;
+        map.last_view = Some((centre.x - span / 2.0, centre.y - height / 2.0, span, height));
+        map.camera = Some(Camera { centre, span });
+    }
+
+    fn viewport() -> MapViewport {
+        // No synthetic scene: these tests are about the camera, not the demo content.
+        MapViewport::new(0, 0)
+    }
+
+    #[test]
+    fn a_fresh_viewport_follows_the_vehicle() {
+        let map = viewport();
+        assert!(map.is_following());
+    }
+
+    #[test]
+    fn dragging_takes_control_from_follow_mode() {
+        // Otherwise the next telemetry frame snaps the view back and the drag appears to fail.
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        map.camera = None;
+        map.observe(
+            LatLon::new(-35.363, 149.165).expect("valid position"),
+            Bearing(mp_units::Degrees(0.0)),
+        );
+        map.begin_drag(400.0, 300.0);
+        assert!(!map.is_following());
+    }
+
+    #[test]
+    fn follow_vehicle_gives_control_back() {
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        assert!(!map.is_following());
+        map.follow_vehicle();
+        assert!(map.is_following());
+    }
+
+    #[test]
+    fn the_map_moves_with_the_pointer() {
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        let before = map.camera.expect("camera").centre;
+
+        map.begin_drag(400.0, 300.0);
+        map.drag_to(500.0, 300.0);
+        let after = map.camera.expect("camera").centre;
+
+        // Dragging right moves the world right, so the centre moves left.
+        assert!(after.x < before.x, "{before:?} -> {after:?}");
+        let expected = 100.0 * 0.001 / 800.0;
+        assert!(
+            ((before.x - after.x) - expected).abs() < 1e-12,
+            "moved {} expected {expected}",
+            before.x - after.x
+        );
+    }
+
+    #[test]
+    fn a_drag_without_a_start_does_nothing() {
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        let before = map.camera.expect("camera").centre;
+        map.drag_to(500.0, 300.0);
+        assert_eq!(map.camera.expect("camera").centre.x, before.x);
+    }
+
+    #[test]
+    fn zooming_keeps_the_point_under_the_cursor_still() {
+        // The property that separates a map that feels direct from one that must be re-panned
+        // after every scroll.
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        let cursor = (620.0_f32, 180.0_f32);
+        let before = map
+            .position_at(cursor.0, cursor.1)
+            .expect("a position under the cursor");
+
+        map.zoom(cursor.0, cursor.1, 3.0);
+        // The painter would refresh this; do it by hand so the inverse projection matches.
+        let camera = map.camera.expect("camera");
+        let height = camera.span * 600.0 / 800.0;
+        map.last_view = Some((
+            camera.centre.x - camera.span / 2.0,
+            camera.centre.y - height / 2.0,
+            camera.span,
+            height,
+        ));
+
+        let after = map
+            .position_at(cursor.0, cursor.1)
+            .expect("a position under the cursor");
+        assert!(
+            (before.latitude() - after.latitude()).abs() < 1e-9,
+            "{before:?} -> {after:?}"
+        );
+        assert!(
+            (before.longitude() - after.longitude()).abs() < 1e-9,
+            "{before:?} -> {after:?}"
+        );
+    }
+
+    #[test]
+    fn zooming_in_narrows_the_span() {
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        map.zoom(400.0, 300.0, 1.0);
+        assert!(map.camera.expect("camera").span < 0.001);
+    }
+
+    #[test]
+    fn zoom_cannot_invert_or_swallow_the_world() {
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        for _ in 0..200 {
+            map.zoom(400.0, 300.0, 10.0);
+        }
+        assert!(map.camera.expect("camera").span > 0.0);
+        for _ in 0..200 {
+            map.zoom(400.0, 300.0, -10.0);
+        }
+        assert!(map.camera.expect("camera").span <= 1.5);
+    }
+
+    #[test]
+    fn the_centre_of_the_viewport_is_the_centre_of_the_view() {
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        let centre = map.position_at(400.0, 300.0).expect("a position");
+        assert!((centre.latitude() - -35.363).abs() < 1e-9, "{centre:?}");
+        assert!((centre.longitude() - 149.165).abs() < 1e-9, "{centre:?}");
+    }
+
+    #[test]
+    fn clicks_are_measured_from_the_viewport_not_the_window() {
+        // Mouse events arrive in window coordinates. An uncorrected offset puts every waypoint
+        // the same distance from where the operator clicked - too small to notice, too large to
+        // fly.
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        let at_origin = map.position_at(400.0, 300.0).expect("a position");
+
+        map.last_origin = (120.0, 80.0);
+        let offset = map.position_at(520.0, 380.0).expect("a position");
+
+        assert!(
+            (at_origin.latitude() - offset.latitude()).abs() < 1e-12,
+            "{at_origin:?} vs {offset:?}"
+        );
+        assert!(
+            (at_origin.longitude() - offset.longitude()).abs() < 1e-12,
+            "{at_origin:?} vs {offset:?}"
+        );
+    }
+
+    #[test]
+    fn a_click_before_the_first_paint_yields_nothing() {
+        // Better than a coordinate derived from a view that has never been shown.
+        let map = viewport();
+        assert!(map.position_at(400.0, 300.0).is_none());
+    }
 }

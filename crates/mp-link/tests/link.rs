@@ -4,9 +4,10 @@
 
 use std::time::{Duration, Instant};
 
+use mp_link::messages::Severity;
 use mp_link::{Link, LinkConfig};
 use mp_mavlink::{FrameDecoder, Message as _, encode_v2};
-use mp_mavlink_dialects::all::{DIALECT, Heartbeat, MavMessage};
+use mp_mavlink_dialects::all::{CommandAck, DIALECT, Heartbeat, MavMessage, Statustext};
 use mp_transport::Transport;
 use mp_transport::testing::Loopback;
 use mp_vehicle::VehicleId;
@@ -66,6 +67,143 @@ fn wait_for(what: &str, mut check: impl FnMut() -> bool) {
         std::thread::sleep(Duration::from_millis(5));
     }
     panic!("timed out waiting for {what}");
+}
+
+/// Builds a STATUSTEXT frame as ArduPilot sends one.
+fn vehicle_statustext(seq: u8, severity: u8, text: &str) -> Vec<u8> {
+    let mut raw = [0u8; 50];
+    let bytes = text.as_bytes();
+    let len = bytes.len().min(raw.len());
+    raw[..len].copy_from_slice(&bytes[..len]);
+    let message = Statustext {
+        severity,
+        text: raw,
+        id: 0,
+        chunk_seq: 0,
+    };
+    let mut payload = [0u8; Statustext::LEN];
+    message.encode(&mut payload);
+    let mut frame = [0u8; 128];
+    let n = encode_v2(
+        &mut frame,
+        seq,
+        1,
+        1,
+        Statustext::ID,
+        &payload,
+        Statustext::CRC_EXTRA,
+        0,
+    )
+    .unwrap();
+    frame[..n].to_vec()
+}
+
+/// Builds a COMMAND_ACK frame.
+fn vehicle_command_ack(seq: u8, command: u16, result: u8) -> Vec<u8> {
+    let message = CommandAck {
+        command,
+        result,
+        progress: 0,
+        result_param2: 0,
+        target_system: 255,
+        target_component: 190,
+    };
+    let mut payload = [0u8; CommandAck::LEN];
+    message.encode(&mut payload);
+    let mut frame = [0u8; 64];
+    let n = encode_v2(
+        &mut frame,
+        seq,
+        1,
+        1,
+        CommandAck::ID,
+        &payload,
+        CommandAck::CRC_EXTRA,
+        0,
+    )
+    .unwrap();
+    frame[..n].to_vec()
+}
+
+#[test]
+fn what_the_vehicle_says_reaches_the_message_log() {
+    // STATUSTEXT is how ArduPilot explains a refusal. Losing it means an operator who cannot see
+    // why the aircraft will not arm.
+    let (mut vehicle_side, gcs_side) = Loopback::pair();
+    let link = Link::from_transport(Box::new(gcs_side), LinkConfig::default());
+
+    vehicle_side.write_all(&vehicle_heartbeat(0)).unwrap();
+    vehicle_side
+        .write_all(&vehicle_statustext(1, 4, "PreArm: Compass not calibrated"))
+        .unwrap();
+
+    wait_for("the status text", || !link.recent_messages(10).is_empty());
+
+    let messages = link.recent_messages(10);
+    let last = messages.last().expect("a message");
+    assert_eq!(last.text, "PreArm: Compass not calibrated");
+    assert_eq!(last.severity, Severity::Warning);
+    assert!(last.severity.is_urgent());
+    assert_eq!(
+        last.from,
+        VehicleId {
+            sysid: 1,
+            compid: 1
+        }
+    );
+}
+
+#[test]
+fn a_rejected_command_is_logged_by_name_not_by_number() {
+    // "command 400: denied" tells an operator nothing they can act on.
+    let (mut vehicle_side, gcs_side) = Loopback::pair();
+    let link = Link::from_transport(Box::new(gcs_side), LinkConfig::default());
+
+    vehicle_side.write_all(&vehicle_heartbeat(0)).unwrap();
+    // 400 is MAV_CMD_COMPONENT_ARM_DISARM; 4 is MAV_RESULT_FAILED.
+    vehicle_side
+        .write_all(&vehicle_command_ack(1, 400, 4))
+        .unwrap();
+
+    wait_for("the command ack", || {
+        link.recent_messages(10)
+            .iter()
+            .any(|m| m.text.contains("ARM_DISARM"))
+    });
+
+    let messages = link.recent_messages(10);
+    let ack = messages
+        .iter()
+        .find(|m| m.text.contains("ARM_DISARM"))
+        .expect("the ack");
+    assert_eq!(ack.text, "MAV_CMD_COMPONENT_ARM_DISARM: failed");
+    assert_eq!(ack.severity, Severity::Error);
+}
+
+#[test]
+fn an_accepted_command_is_not_reported_as_an_error() {
+    let (mut vehicle_side, gcs_side) = Loopback::pair();
+    let link = Link::from_transport(Box::new(gcs_side), LinkConfig::default());
+
+    vehicle_side.write_all(&vehicle_heartbeat(0)).unwrap();
+    vehicle_side
+        .write_all(&vehicle_command_ack(1, 400, 0))
+        .unwrap();
+
+    wait_for("the command ack", || {
+        link.recent_messages(10)
+            .iter()
+            .any(|m| m.text.contains("ARM_DISARM"))
+    });
+
+    let messages = link.recent_messages(10);
+    let ack = messages
+        .iter()
+        .find(|m| m.text.contains("ARM_DISARM"))
+        .expect("the ack");
+    assert_eq!(ack.text, "MAV_CMD_COMPONENT_ARM_DISARM: accepted");
+    assert_eq!(ack.severity, Severity::Info);
+    assert!(!ack.severity.is_urgent());
 }
 
 #[test]

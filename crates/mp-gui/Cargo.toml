@@ -26,6 +26,7 @@ mp-link.workspace = true
 mp-vehicle.workspace = true
 mp-units.workspace = true
 mp-mission.workspace = true
+mp-mavlink-dialects.workspace = true
 
 # Only for examples/tile_atlas_probe.rs: constructing a gpui RenderImage needs image::Frame,
 # and gpui does not re-export the image crate. Pinned to the same 0.25 line gpui resolves to.

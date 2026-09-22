@@ -9,9 +9,15 @@
 
 use std::sync::Arc;
 
-use mp_link::{Link, LinkConfig};
+use mp_link::messages::LogMessage;
+use mp_link::mission_transfer::TransferState;
+use mp_link::{Link, LinkConfig, commands};
 use mp_mission::MissionItem;
-use mp_vehicle::{VehicleId, VehicleState};
+use mp_units::LatLon;
+use mp_vehicle::{VehicleFamily, VehicleId, VehicleState};
+
+/// How many log lines the flight screen shows.
+const MESSAGE_LINES: usize = 40;
 
 /// Everything one frame of UI needs to know.
 #[derive(Debug, Clone)]
@@ -32,6 +38,26 @@ pub struct TelemetryView {
     pub vehicle_count: usize,
     /// The mission read back from the vehicle, once a download has completed.
     pub mission: Vec<MissionItem>,
+    /// Recent `STATUSTEXT` and `COMMAND_ACK` lines, newest last.
+    pub messages: Vec<LogMessage>,
+    /// What the mission transfer is doing, if one has been started.
+    pub transfer: Option<TransferStatus>,
+}
+
+/// A mission transfer, as the UI needs to describe it.
+///
+/// A percentage on its own is not enough: an upload that reaches 100% and then fails looks
+/// identical to one that succeeded, and the difference is whether the aircraft has the mission.
+#[derive(Debug, Clone)]
+pub struct TransferStatus {
+    /// What is happening, in words.
+    pub label: String,
+    /// How far through, from zero to one.
+    pub fraction: f32,
+    /// Whether the transfer has stopped, either way.
+    pub finished: bool,
+    /// Whether it stopped because it failed.
+    pub failed: bool,
 }
 
 impl TelemetryView {
@@ -47,6 +73,8 @@ impl TelemetryView {
             crc_errors: 0,
             vehicle_count: 0,
             mission: Vec::new(),
+            messages: Vec::new(),
+            transfer: None,
         }
     }
 }
@@ -108,11 +136,34 @@ impl Telemetry {
         // Fetch the mission the link holds, if a download has finished. The UI never triggers
         // one itself: a ground station that silently pulls a mission whenever it connects makes
         // it impossible to tell whether what is on screen came from the vehicle or the operator.
-        let mission = primary
+        let transfer = primary
             .as_ref()
-            .and_then(|(id, _)| link.mission_transfer(*id))
+            .and_then(|(id, _)| link.mission_transfer(*id));
+        let mission = transfer
+            .as_ref()
             .map(|transfer| transfer.items().to_vec())
             .unwrap_or_default();
+        let transfer = transfer.as_ref().map(|transfer| {
+            let label = match transfer.state() {
+                TransferState::Idle => "idle".to_owned(),
+                TransferState::AwaitingCount => "asking the vehicle for its mission".to_owned(),
+                TransferState::Downloading { count, next } => {
+                    format!("reading item {next} of {count}")
+                }
+                TransferState::Uploading { last_requested } => {
+                    let done = last_requested.map_or(0, |seq| u32::from(seq) + 1);
+                    format!("writing item {done} of {}", transfer.items().len())
+                }
+                TransferState::Complete => "mission transferred".to_owned(),
+                TransferState::Failed(why) => format!("transfer failed: {why}"),
+            };
+            TransferStatus {
+                label,
+                fraction: transfer.progress(),
+                finished: transfer.is_finished(),
+                failed: matches!(transfer.state(), TransferState::Failed(_)),
+            }
+        });
 
         TelemetryView {
             target: link.description(),
@@ -123,6 +174,8 @@ impl Telemetry {
             crc_errors: stats.decode.crc_errors,
             vehicle_count: vehicles.len(),
             mission,
+            messages: link.recent_messages(MESSAGE_LINES),
+            transfer,
         }
     }
 
@@ -133,5 +186,79 @@ impl Telemetry {
         {
             link.download_mission(id);
         }
+    }
+
+    /// Sends the given mission to the vehicle, replacing what is on board.
+    pub fn upload_mission(&self, items: Vec<MissionItem>) {
+        if let Some(link) = &self.link
+            && let Some((id, _)) = link.primary_vehicle()
+        {
+            link.upload_mission(id, items);
+        }
+    }
+
+    /// The vehicle currently being flown, if any.
+    fn target(&self) -> Option<(&Link, VehicleId)> {
+        let link = self.link.as_ref()?;
+        let (id, _) = link.primary_vehicle()?;
+        Some((link, id))
+    }
+
+    /// Arms or disarms.
+    ///
+    /// Never forced. `MAV_CMD_COMPONENT_ARM_DISARM` takes a magic 21196 in param2 that bypasses
+    /// every pre-arm check, and a ground station that offers that behind an ordinary button is how
+    /// aircraft take off with an uncalibrated compass. Forcing belongs behind its own deliberate
+    /// control, which this is not.
+    pub fn arm(&self, arm: bool) {
+        if let Some((link, id)) = self.target() {
+            link.send(&commands::arm(id, arm, false));
+        }
+    }
+
+    /// Changes flight mode.
+    pub fn set_mode(&self, custom_mode: u32) {
+        if let Some((link, id)) = self.target() {
+            link.send(&commands::set_mode(id, custom_mode));
+        }
+    }
+
+    /// Takes off to the given height above home.
+    pub fn takeoff(&self, altitude_metres: f32) {
+        if let Some((link, id)) = self.target() {
+            link.send(&commands::takeoff(id, altitude_metres));
+        }
+    }
+
+    /// Lands where the vehicle is.
+    pub fn land(&self) {
+        if let Some((link, id)) = self.target() {
+            link.send(&commands::land(id));
+        }
+    }
+
+    /// Flies to a position at the given height, in Guided.
+    pub fn goto(&self, position: LatLon, altitude_metres: f32) {
+        if let Some((link, id)) = self.target() {
+            link.send(&commands::goto_position(
+                id,
+                position.latitude(),
+                position.longitude(),
+                altitude_metres,
+            ));
+        }
+    }
+
+    /// The flight modes this vehicle offers, as (number, name).
+    ///
+    /// Empty for a vehicle family we have no mode list for; the caller shows nothing rather than a
+    /// copter's modes on an unknown airframe. Derived entirely from the snapshot, so it needs no
+    /// link and stays correct when the vehicle disappears mid-flight.
+    #[must_use]
+    pub fn modes_for(view: &TelemetryView) -> &'static [(u32, &'static str)] {
+        view.state
+            .as_ref()
+            .and_then(|state| VehicleFamily::from_mav_type(state.vehicle_type))
+            .map_or(&[][..], VehicleFamily::modes)
     }
 }

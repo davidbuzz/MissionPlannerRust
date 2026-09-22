@@ -18,6 +18,7 @@
 #![forbid(unsafe_code)]
 
 pub mod commands;
+pub mod messages;
 pub mod mission_transfer;
 pub mod params;
 
@@ -28,7 +29,7 @@ use std::time::{Duration, Instant};
 
 use mission_transfer::{Action, MissionTransfer};
 use mp_mavlink::{DecodeStats, FrameDecoder, Message as _, encode_v2};
-use mp_mavlink_dialects::all::{DIALECT, Heartbeat, MavMessage, RequestDataStream};
+use mp_mavlink_dialects::all::{DIALECT, Heartbeat, MavCmd, MavMessage, RequestDataStream};
 use mp_mission::{MissionItem, WireItem};
 use mp_transport::{OpenError, Transport};
 use mp_vehicle::{StateHandle, VehicleId, VehicleRegistry};
@@ -138,6 +139,8 @@ struct Shared {
     missions: Mutex<BTreeMap<VehicleId, MissionTransfer>>,
     /// Transfers the link thread has yet to pick up.
     mission_requests: Mutex<Vec<MissionTransfer>>,
+    /// What the vehicle has said, and how it answered our commands.
+    messages: Mutex<messages::MessageLog>,
     stats: Mutex<LinkStats>,
     running: AtomicBool,
     frames_received: AtomicU64,
@@ -257,6 +260,29 @@ impl Link {
     #[must_use]
     pub fn params(&self, target: VehicleId) -> Option<ParamTable> {
         self.shared.params.lock().ok()?.get(&target).cloned()
+    }
+
+    /// The most recent messages from the vehicle, newest last.
+    ///
+    /// Bounded by `count` because the caller is usually a render pass, and a render pass that
+    /// copies an unbounded history gets slower the longer the flight lasts.
+    #[must_use]
+    pub fn recent_messages(&self, count: usize) -> Vec<messages::LogMessage> {
+        self.shared
+            .messages
+            .lock()
+            .map(|log| log.recent(count))
+            .unwrap_or_default()
+    }
+
+    /// How many messages the log had to evict.
+    #[must_use]
+    pub fn messages_dropped(&self) -> u64 {
+        self.shared
+            .messages
+            .lock()
+            .map(|log| log.dropped())
+            .unwrap_or(0)
     }
 
     /// Link counters.
@@ -425,6 +451,45 @@ fn run_link(
                                 if action != Action::Nothing {
                                     pending_actions.push((id, action));
                                 }
+                            }
+
+                            // What the vehicle says about itself, and about our commands. Both
+                            // go to one log because that is how an operator reads them: "Arm
+                            // denied" and "PreArm: Compass not calibrated" arrive together and
+                            // only make sense together.
+                            match &msg {
+                                MavMessage::Statustext(text) => {
+                                    if let Ok(mut log) = shared.messages.lock() {
+                                        log.push(
+                                            id,
+                                            messages::Severity::from_wire(text.severity),
+                                            messages::decode_status_text(&text.text),
+                                        );
+                                    }
+                                }
+                                MavMessage::CommandAck(ack) => {
+                                    if let Ok(mut log) = shared.messages.lock() {
+                                        let severity = if messages::command_failed(ack.result) {
+                                            messages::Severity::Error
+                                        } else {
+                                            messages::Severity::Info
+                                        };
+                                        let command =
+                                            MavCmd(u32::from(ack.command)).name().map_or_else(
+                                                || format!("command {}", ack.command),
+                                                ToOwned::to_owned,
+                                            );
+                                        log.push(
+                                            id,
+                                            severity,
+                                            format!(
+                                                "{command}: {}",
+                                                messages::command_result_name(ack.result)
+                                            ),
+                                        );
+                                    }
+                                }
+                                _ => {}
                             }
 
                             if let MavMessage::ParamValue(param) = msg {

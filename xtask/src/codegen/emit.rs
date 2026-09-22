@@ -180,6 +180,7 @@ fn emit_enums(dialect: &Dialect, out: &mut String) {
         let _ = writeln!(out, "pub struct {type_name}(pub u32);\n");
         let _ = writeln!(out, "impl {type_name} {{");
         let mut emitted = std::collections::HashSet::new();
+        let mut named: Vec<(u32, String)> = Vec::new();
         for entry in &e.entries {
             let Some(value) = entry.value else { continue };
             let Ok(value) = u32::try_from(value) else {
@@ -205,7 +206,38 @@ fn emit_enums(dialect: &Dialect, out: &mut String) {
                 out.push_str(&docs);
             }
             let _ = writeln!(out, "    pub const {const_name}: Self = Self({value});");
+            named.push((value, entry.name.clone()));
         }
+
+        // A reverse lookup, which the UI needs far more often than the constants do. A COMMAND_ACK
+        // carrying `22` is useless on screen; "MAV_CMD_NAV_TAKEOFF: denied" is the whole message.
+        // Generating it keeps the names tied to the same XML the wire format comes from, so a
+        // firmware that adds a command does not leave the UI printing bare numbers for it.
+        //
+        // `None` for an unknown value, never a guess: a newer autopilot's command shown under an
+        // older name would be worse than showing the number.
+        named.sort_unstable_by_key(|(value, _)| *value);
+        named.dedup_by_key(|(value, _)| *value);
+        let _ = writeln!(
+            out,
+            "\n    /// The name of a value, or `None` if this dialect does not define it."
+        );
+        let _ = writeln!(out, "    #[must_use]");
+        let _ = writeln!(
+            out,
+            "    pub const fn name(self) -> Option<&'static str> {{"
+        );
+        if named.is_empty() {
+            let _ = writeln!(out, "        None");
+        } else {
+            let _ = writeln!(out, "        Some(match self.0 {{");
+            for (value, name) in &named {
+                let _ = writeln!(out, "            {value} => \"{name}\",");
+            }
+            let _ = writeln!(out, "            _ => return None,");
+            let _ = writeln!(out, "        }})");
+        }
+        let _ = writeln!(out, "    }}");
         let _ = writeln!(out, "}}\n");
     }
 }

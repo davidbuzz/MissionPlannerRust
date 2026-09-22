@@ -2493,6 +2493,22 @@ impl AccelcalVehiclePos {
     pub const ACCELCAL_VEHICLE_POS_SUCCESS: Self = Self(16777215);
     /// `ACCELCAL_VEHICLE_POS_FAILED` = 16777216.
     pub const ACCELCAL_VEHICLE_POS_FAILED: Self = Self(16777216);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "ACCELCAL_VEHICLE_POS_LEVEL",
+            2 => "ACCELCAL_VEHICLE_POS_LEFT",
+            3 => "ACCELCAL_VEHICLE_POS_RIGHT",
+            4 => "ACCELCAL_VEHICLE_POS_NOSEDOWN",
+            5 => "ACCELCAL_VEHICLE_POS_NOSEUP",
+            6 => "ACCELCAL_VEHICLE_POS_BACK",
+            16777215 => "ACCELCAL_VEHICLE_POS_SUCCESS",
+            16777216 => "ACCELCAL_VEHICLE_POS_FAILED",
+            _ => return None,
+        })
+    }
 }
 
 /// Enumeration of the ADSB altimeter types
@@ -2507,6 +2523,16 @@ impl AdsbAltitudeType {
     pub const ADSB_ALTITUDE_TYPE_PRESSURE_QNH: Self = Self(0);
     /// Altitude reported from a GNSS source
     pub const ADSB_ALTITUDE_TYPE_GEOMETRIC: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "ADSB_ALTITUDE_TYPE_PRESSURE_QNH",
+            1 => "ADSB_ALTITUDE_TYPE_GEOMETRIC",
+            _ => return None,
+        })
+    }
 }
 
 /// ADSB classification for the type of vehicle emitting the transponder signal
@@ -2557,6 +2583,34 @@ impl AdsbEmitterType {
     pub const ADSB_EMITTER_TYPE_SERVICE_SURFACE: Self = Self(18);
     /// `ADSB_EMITTER_TYPE_POINT_OBSTACLE` = 19.
     pub const ADSB_EMITTER_TYPE_POINT_OBSTACLE: Self = Self(19);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "ADSB_EMITTER_TYPE_NO_INFO",
+            1 => "ADSB_EMITTER_TYPE_LIGHT",
+            2 => "ADSB_EMITTER_TYPE_SMALL",
+            3 => "ADSB_EMITTER_TYPE_LARGE",
+            4 => "ADSB_EMITTER_TYPE_HIGH_VORTEX_LARGE",
+            5 => "ADSB_EMITTER_TYPE_HEAVY",
+            6 => "ADSB_EMITTER_TYPE_HIGHLY_MANUV",
+            7 => "ADSB_EMITTER_TYPE_ROTOCRAFT",
+            8 => "ADSB_EMITTER_TYPE_UNASSIGNED",
+            9 => "ADSB_EMITTER_TYPE_GLIDER",
+            10 => "ADSB_EMITTER_TYPE_LIGHTER_AIR",
+            11 => "ADSB_EMITTER_TYPE_PARACHUTE",
+            12 => "ADSB_EMITTER_TYPE_ULTRA_LIGHT",
+            13 => "ADSB_EMITTER_TYPE_UNASSIGNED2",
+            14 => "ADSB_EMITTER_TYPE_UAV",
+            15 => "ADSB_EMITTER_TYPE_SPACE",
+            16 => "ADSB_EMITTER_TYPE_UNASSGINED3",
+            17 => "ADSB_EMITTER_TYPE_EMERGENCY_SURFACE",
+            18 => "ADSB_EMITTER_TYPE_SERVICE_SURFACE",
+            19 => "ADSB_EMITTER_TYPE_POINT_OBSTACLE",
+            _ => return None,
+        })
+    }
 }
 
 /// These flags indicate status such as data validity of each data source. Set = data valid
@@ -2587,6 +2641,24 @@ impl AdsbFlags {
     pub const ADSB_FLAGS_BARO_VALID: Self = Self(256);
     /// `ADSB_FLAGS_SOURCE_UAT` = 32768.
     pub const ADSB_FLAGS_SOURCE_UAT: Self = Self(32768);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "ADSB_FLAGS_VALID_COORDS",
+            2 => "ADSB_FLAGS_VALID_ALTITUDE",
+            4 => "ADSB_FLAGS_VALID_HEADING",
+            8 => "ADSB_FLAGS_VALID_VELOCITY",
+            16 => "ADSB_FLAGS_VALID_CALLSIGN",
+            32 => "ADSB_FLAGS_VALID_SQUAWK",
+            64 => "ADSB_FLAGS_SIMULATED",
+            128 => "ADSB_FLAGS_VERTICAL_VELOCITY_VALID",
+            256 => "ADSB_FLAGS_BARO_VALID",
+            32768 => "ADSB_FLAGS_SOURCE_UAT",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `AIRLINK_AUTH_RESPONSE_TYPE`.
@@ -2601,6 +2673,16 @@ impl AirlinkAuthResponseType {
     pub const AIRLINK_ERROR_LOGIN_OR_PASS: Self = Self(0);
     /// Auth successful
     pub const AIRLINK_AUTH_OK: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "AIRLINK_ERROR_LOGIN_OR_PASS",
+            1 => "AIRLINK_AUTH_OK",
+            _ => return None,
+        })
+    }
 }
 
 /// Airspeed sensor flags
@@ -2615,6 +2697,16 @@ impl AirspeedSensorFlags {
     pub const AIRSPEED_SENSOR_UNHEALTHY: Self = Self(1);
     /// True if the data from this sensor is being actively used by the flight controller for guidance, navigation or control.
     pub const AIRSPEED_SENSOR_USING: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "AIRSPEED_SENSOR_UNHEALTHY",
+            2 => "AIRSPEED_SENSOR_USING",
+            _ => return None,
+        })
+    }
 }
 
 /// These flags are used in the AIS_VESSEL.fields bitmask to indicate validity of data in the other message fields. When set, the data is valid.
@@ -2651,6 +2743,27 @@ impl AisFlags {
     pub const AIS_FLAGS_VALID_CALLSIGN: Self = Self(2048);
     /// `AIS_FLAGS_VALID_NAME` = 4096.
     pub const AIS_FLAGS_VALID_NAME: Self = Self(4096);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "AIS_FLAGS_POSITION_ACCURACY",
+            2 => "AIS_FLAGS_VALID_COG",
+            4 => "AIS_FLAGS_VALID_VELOCITY",
+            8 => "AIS_FLAGS_HIGH_VELOCITY",
+            16 => "AIS_FLAGS_VALID_TURN_RATE",
+            32 => "AIS_FLAGS_TURN_RATE_SIGN_ONLY",
+            64 => "AIS_FLAGS_VALID_DIMENSIONS",
+            128 => "AIS_FLAGS_LARGE_BOW_DIMENSION",
+            256 => "AIS_FLAGS_LARGE_STERN_DIMENSION",
+            512 => "AIS_FLAGS_LARGE_PORT_DIMENSION",
+            1024 => "AIS_FLAGS_LARGE_STARBOARD_DIMENSION",
+            2048 => "AIS_FLAGS_VALID_CALLSIGN",
+            4096 => "AIS_FLAGS_VALID_NAME",
+            _ => return None,
+        })
+    }
 }
 
 /// Navigational status of AIS vessel, enum duplicated from AIS standard, https://gpsd.gitlab.io/gpsd/AIVDM.html
@@ -2693,6 +2806,30 @@ impl AisNavStatus {
     pub const AIS_NAV_AIS_SART: Self = Self(14);
     /// Not available (default).
     pub const AIS_NAV_UNKNOWN: Self = Self(15);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "UNDER_WAY",
+            1 => "AIS_NAV_ANCHORED",
+            2 => "AIS_NAV_UN_COMMANDED",
+            3 => "AIS_NAV_RESTRICTED_MANOEUVERABILITY",
+            4 => "AIS_NAV_DRAUGHT_CONSTRAINED",
+            5 => "AIS_NAV_MOORED",
+            6 => "AIS_NAV_AGROUND",
+            7 => "AIS_NAV_FISHING",
+            8 => "AIS_NAV_SAILING",
+            9 => "AIS_NAV_RESERVED_HSC",
+            10 => "AIS_NAV_RESERVED_WIG",
+            11 => "AIS_NAV_RESERVED_1",
+            12 => "AIS_NAV_RESERVED_2",
+            13 => "AIS_NAV_RESERVED_3",
+            14 => "AIS_NAV_AIS_SART",
+            15 => "AIS_NAV_UNKNOWN",
+            _ => return None,
+        })
+    }
 }
 
 /// Type of AIS vessel, enum duplicated from AIS standard, https://gpsd.gitlab.io/gpsd/AIVDM.html
@@ -2903,6 +3040,114 @@ impl AisType {
     pub const AIS_TYPE_OTHER_RESERVED_4: Self = Self(98);
     /// `AIS_TYPE_OTHER_UNKNOWN` = 99.
     pub const AIS_TYPE_OTHER_UNKNOWN: Self = Self(99);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "AIS_TYPE_UNKNOWN",
+            1 => "AIS_TYPE_RESERVED_1",
+            2 => "AIS_TYPE_RESERVED_2",
+            3 => "AIS_TYPE_RESERVED_3",
+            4 => "AIS_TYPE_RESERVED_4",
+            5 => "AIS_TYPE_RESERVED_5",
+            6 => "AIS_TYPE_RESERVED_6",
+            7 => "AIS_TYPE_RESERVED_7",
+            8 => "AIS_TYPE_RESERVED_8",
+            9 => "AIS_TYPE_RESERVED_9",
+            10 => "AIS_TYPE_RESERVED_10",
+            11 => "AIS_TYPE_RESERVED_11",
+            12 => "AIS_TYPE_RESERVED_12",
+            13 => "AIS_TYPE_RESERVED_13",
+            14 => "AIS_TYPE_RESERVED_14",
+            15 => "AIS_TYPE_RESERVED_15",
+            16 => "AIS_TYPE_RESERVED_16",
+            17 => "AIS_TYPE_RESERVED_17",
+            18 => "AIS_TYPE_RESERVED_18",
+            19 => "AIS_TYPE_RESERVED_19",
+            20 => "AIS_TYPE_WIG",
+            21 => "AIS_TYPE_WIG_HAZARDOUS_A",
+            22 => "AIS_TYPE_WIG_HAZARDOUS_B",
+            23 => "AIS_TYPE_WIG_HAZARDOUS_C",
+            24 => "AIS_TYPE_WIG_HAZARDOUS_D",
+            25 => "AIS_TYPE_WIG_RESERVED_1",
+            26 => "AIS_TYPE_WIG_RESERVED_2",
+            27 => "AIS_TYPE_WIG_RESERVED_3",
+            28 => "AIS_TYPE_WIG_RESERVED_4",
+            29 => "AIS_TYPE_WIG_RESERVED_5",
+            30 => "AIS_TYPE_FISHING",
+            31 => "AIS_TYPE_TOWING",
+            32 => "AIS_TYPE_TOWING_LARGE",
+            33 => "AIS_TYPE_DREDGING",
+            34 => "AIS_TYPE_DIVING",
+            35 => "AIS_TYPE_MILITARY",
+            36 => "AIS_TYPE_SAILING",
+            37 => "AIS_TYPE_PLEASURE",
+            38 => "AIS_TYPE_RESERVED_20",
+            39 => "AIS_TYPE_RESERVED_21",
+            40 => "AIS_TYPE_HSC",
+            41 => "AIS_TYPE_HSC_HAZARDOUS_A",
+            42 => "AIS_TYPE_HSC_HAZARDOUS_B",
+            43 => "AIS_TYPE_HSC_HAZARDOUS_C",
+            44 => "AIS_TYPE_HSC_HAZARDOUS_D",
+            45 => "AIS_TYPE_HSC_RESERVED_1",
+            46 => "AIS_TYPE_HSC_RESERVED_2",
+            47 => "AIS_TYPE_HSC_RESERVED_3",
+            48 => "AIS_TYPE_HSC_RESERVED_4",
+            49 => "AIS_TYPE_HSC_UNKNOWN",
+            50 => "AIS_TYPE_PILOT",
+            51 => "AIS_TYPE_SAR",
+            52 => "AIS_TYPE_TUG",
+            53 => "AIS_TYPE_PORT_TENDER",
+            54 => "AIS_TYPE_ANTI_POLLUTION",
+            55 => "AIS_TYPE_LAW_ENFORCEMENT",
+            56 => "AIS_TYPE_SPARE_LOCAL_1",
+            57 => "AIS_TYPE_SPARE_LOCAL_2",
+            58 => "AIS_TYPE_MEDICAL_TRANSPORT",
+            59 => "AIS_TYPE_NONECOMBATANT",
+            60 => "AIS_TYPE_PASSENGER",
+            61 => "AIS_TYPE_PASSENGER_HAZARDOUS_A",
+            62 => "AIS_TYPE_PASSENGER_HAZARDOUS_B",
+            63 => "AIS_TYPE_AIS_TYPE_PASSENGER_HAZARDOUS_C",
+            64 => "AIS_TYPE_PASSENGER_HAZARDOUS_D",
+            65 => "AIS_TYPE_PASSENGER_RESERVED_1",
+            66 => "AIS_TYPE_PASSENGER_RESERVED_2",
+            67 => "AIS_TYPE_PASSENGER_RESERVED_3",
+            68 => "AIS_TYPE_AIS_TYPE_PASSENGER_RESERVED_4",
+            69 => "AIS_TYPE_PASSENGER_UNKNOWN",
+            70 => "AIS_TYPE_CARGO",
+            71 => "AIS_TYPE_CARGO_HAZARDOUS_A",
+            72 => "AIS_TYPE_CARGO_HAZARDOUS_B",
+            73 => "AIS_TYPE_CARGO_HAZARDOUS_C",
+            74 => "AIS_TYPE_CARGO_HAZARDOUS_D",
+            75 => "AIS_TYPE_CARGO_RESERVED_1",
+            76 => "AIS_TYPE_CARGO_RESERVED_2",
+            77 => "AIS_TYPE_CARGO_RESERVED_3",
+            78 => "AIS_TYPE_CARGO_RESERVED_4",
+            79 => "AIS_TYPE_CARGO_UNKNOWN",
+            80 => "AIS_TYPE_TANKER",
+            81 => "AIS_TYPE_TANKER_HAZARDOUS_A",
+            82 => "AIS_TYPE_TANKER_HAZARDOUS_B",
+            83 => "AIS_TYPE_TANKER_HAZARDOUS_C",
+            84 => "AIS_TYPE_TANKER_HAZARDOUS_D",
+            85 => "AIS_TYPE_TANKER_RESERVED_1",
+            86 => "AIS_TYPE_TANKER_RESERVED_2",
+            87 => "AIS_TYPE_TANKER_RESERVED_3",
+            88 => "AIS_TYPE_TANKER_RESERVED_4",
+            89 => "AIS_TYPE_TANKER_UNKNOWN",
+            90 => "AIS_TYPE_OTHER",
+            91 => "AIS_TYPE_OTHER_HAZARDOUS_A",
+            92 => "AIS_TYPE_OTHER_HAZARDOUS_B",
+            93 => "AIS_TYPE_OTHER_HAZARDOUS_C",
+            94 => "AIS_TYPE_OTHER_HAZARDOUS_D",
+            95 => "AIS_TYPE_OTHER_RESERVED_1",
+            96 => "AIS_TYPE_OTHER_RESERVED_2",
+            97 => "AIS_TYPE_OTHER_RESERVED_3",
+            98 => "AIS_TYPE_OTHER_RESERVED_4",
+            99 => "AIS_TYPE_OTHER_UNKNOWN",
+            _ => return None,
+        })
+    }
 }
 
 /// Bitmap to indicate which dimensions should be ignored by the vehicle: a value of 0b00000000 indicates that none of the setpoint dimensions should be ignored.
@@ -2923,6 +3168,19 @@ impl AttitudeTargetTypemask {
     pub const ATTITUDE_TARGET_TYPEMASK_THROTTLE_IGNORE: Self = Self(64);
     /// Ignore attitude
     pub const ATTITUDE_TARGET_TYPEMASK_ATTITUDE_IGNORE: Self = Self(128);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "ATTITUDE_TARGET_TYPEMASK_BODY_ROLL_RATE_IGNORE",
+            2 => "ATTITUDE_TARGET_TYPEMASK_BODY_PITCH_RATE_IGNORE",
+            4 => "ATTITUDE_TARGET_TYPEMASK_BODY_YAW_RATE_IGNORE",
+            64 => "ATTITUDE_TARGET_TYPEMASK_THROTTLE_IGNORE",
+            128 => "ATTITUDE_TARGET_TYPEMASK_ATTITUDE_IGNORE",
+            _ => return None,
+        })
+    }
 }
 
 /// Axes that will be autotuned by MAV_CMD_DO_AUTOTUNE_ENABLE. Note that at least one flag must be set in MAV_CMD_DO_AUTOTUNE_ENABLE.param2: if none are set, the flight stack will tune its default set of axes.
@@ -2939,6 +3197,17 @@ impl AutotuneAxis {
     pub const AUTOTUNE_AXIS_PITCH: Self = Self(2);
     /// Autotune yaw axis.
     pub const AUTOTUNE_AXIS_YAW: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "AUTOTUNE_AXIS_ROLL",
+            2 => "AUTOTUNE_AXIS_PITCH",
+            4 => "AUTOTUNE_AXIS_YAW",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `AVSS_HORSEFLY_OPERATION_MODE`.
@@ -2959,6 +3228,19 @@ impl AvssHorseflyOperationMode {
     pub const MODE_HORSEFLY_NAVI_GO_HOME: Self = Self(3);
     /// In drop mode
     pub const MODE_HORSEFLY_DROP: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MODE_HORSEFLY_MANUAL_CTRL",
+            1 => "MODE_HORSEFLY_AUTO_TAKEOFF",
+            2 => "MODE_HORSEFLY_AUTO_LANDING",
+            3 => "MODE_HORSEFLY_NAVI_GO_HOME",
+            4 => "MODE_HORSEFLY_DROP",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `AVSS_M300_OPERATION_MODE`.
@@ -2997,6 +3279,28 @@ impl AvssM300OperationMode {
     pub const MODE_M300_SEARCH_MODE: Self = Self(40);
     /// In engine mode
     pub const MODE_M300_ENGINE_START: Self = Self(41);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MODE_M300_MANUAL_CTRL",
+            1 => "MODE_M300_ATTITUDE",
+            6 => "MODE_M300_P_GPS",
+            9 => "MODE_M300_HOTPOINT_MODE",
+            10 => "MODE_M300_ASSISTED_TAKEOFF",
+            11 => "MODE_M300_AUTO_TAKEOFF",
+            12 => "MODE_M300_AUTO_LANDING",
+            15 => "MODE_M300_NAVI_GO_HOME",
+            17 => "MODE_M300_NAVI_SDK_CTRL",
+            31 => "MODE_M300_S_SPORT",
+            33 => "MODE_M300_FORCE_AUTO_LANDING",
+            38 => "MODE_M300_T_TRIPOD",
+            40 => "MODE_M300_SEARCH_MODE",
+            41 => "MODE_M300_ENGINE_START",
+            _ => return None,
+        })
+    }
 }
 
 /// Camera capability flags (Bitmap)
@@ -3033,6 +3337,27 @@ impl CameraCapFlags {
     pub const CAMERA_CAP_FLAGS_HAS_TRACKING_GEO_STATUS: Self = Self(2048);
     /// Camera supports absolute thermal range (request CAMERA_THERMAL_RANGE with MAV_CMD_REQUEST_MESSAGE).
     pub const CAMERA_CAP_FLAGS_HAS_THERMAL_RANGE: Self = Self(4096);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "CAMERA_CAP_FLAGS_CAPTURE_VIDEO",
+            2 => "CAMERA_CAP_FLAGS_CAPTURE_IMAGE",
+            4 => "CAMERA_CAP_FLAGS_HAS_MODES",
+            8 => "CAMERA_CAP_FLAGS_CAN_CAPTURE_IMAGE_IN_VIDEO_MODE",
+            16 => "CAMERA_CAP_FLAGS_CAN_CAPTURE_VIDEO_IN_IMAGE_MODE",
+            32 => "CAMERA_CAP_FLAGS_HAS_IMAGE_SURVEY_MODE",
+            64 => "CAMERA_CAP_FLAGS_HAS_BASIC_ZOOM",
+            128 => "CAMERA_CAP_FLAGS_HAS_BASIC_FOCUS",
+            256 => "CAMERA_CAP_FLAGS_HAS_VIDEO_STREAM",
+            512 => "CAMERA_CAP_FLAGS_HAS_TRACKING_POINT",
+            1024 => "CAMERA_CAP_FLAGS_HAS_TRACKING_RECTANGLE",
+            2048 => "CAMERA_CAP_FLAGS_HAS_TRACKING_GEO_STATUS",
+            4096 => "CAMERA_CAP_FLAGS_HAS_THERMAL_RANGE",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `CAMERA_FEEDBACK_FLAGS`.
@@ -3053,6 +3378,19 @@ impl CameraFeedbackFlags {
     pub const CAMERA_FEEDBACK_CLOSEDLOOP: Self = Self(3);
     /// Open loop camera, an image trigger has been requested but we can't know for sure it has successfully taken a picture.
     pub const CAMERA_FEEDBACK_OPENLOOP: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "CAMERA_FEEDBACK_PHOTO",
+            1 => "CAMERA_FEEDBACK_VIDEO",
+            2 => "CAMERA_FEEDBACK_BADEXPOSURE",
+            3 => "CAMERA_FEEDBACK_CLOSEDLOOP",
+            4 => "CAMERA_FEEDBACK_OPENLOOP",
+            _ => return None,
+        })
+    }
 }
 
 /// Camera Modes.
@@ -3069,6 +3407,17 @@ impl CameraMode {
     pub const CAMERA_MODE_VIDEO: Self = Self(1);
     /// Camera is in image survey capture mode. It allows for camera controller to do specific settings for surveys.
     pub const CAMERA_MODE_IMAGE_SURVEY: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "CAMERA_MODE_IMAGE",
+            1 => "CAMERA_MODE_VIDEO",
+            2 => "CAMERA_MODE_IMAGE_SURVEY",
+            _ => return None,
+        })
+    }
 }
 
 /// Camera sources for MAV_CMD_SET_CAMERA_SOURCE
@@ -3087,6 +3436,18 @@ impl CameraSource {
     pub const CAMERA_SOURCE_IR: Self = Self(2);
     /// NDVI camera source.
     pub const CAMERA_SOURCE_NDVI: Self = Self(3);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "CAMERA_SOURCE_DEFAULT",
+            1 => "CAMERA_SOURCE_RGB",
+            2 => "CAMERA_SOURCE_IR",
+            3 => "CAMERA_SOURCE_NDVI",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `CAMERA_STATUS_TYPES`.
@@ -3111,6 +3472,21 @@ impl CameraStatusTypes {
     pub const CAMERA_STATUS_TYPE_LOWSTORE: Self = Self(5);
     /// Camera storage low. Parameter p1 shows reported video minutes remaining.
     pub const CAMERA_STATUS_TYPE_LOWSTOREV: Self = Self(6);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "CAMERA_STATUS_TYPE_HEARTBEAT",
+            1 => "CAMERA_STATUS_TYPE_TRIGGER",
+            2 => "CAMERA_STATUS_TYPE_DISCONNECT",
+            3 => "CAMERA_STATUS_TYPE_ERROR",
+            4 => "CAMERA_STATUS_TYPE_LOWBATT",
+            5 => "CAMERA_STATUS_TYPE_LOWSTORE",
+            6 => "CAMERA_STATUS_TYPE_LOWSTOREV",
+            _ => return None,
+        })
+    }
 }
 
 /// Camera tracking modes
@@ -3127,6 +3503,17 @@ impl CameraTrackingMode {
     pub const CAMERA_TRACKING_MODE_POINT: Self = Self(1);
     /// Target is a rectangle
     pub const CAMERA_TRACKING_MODE_RECTANGLE: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "CAMERA_TRACKING_MODE_NONE",
+            1 => "CAMERA_TRACKING_MODE_POINT",
+            2 => "CAMERA_TRACKING_MODE_RECTANGLE",
+            _ => return None,
+        })
+    }
 }
 
 /// Camera tracking status flags
@@ -3143,6 +3530,17 @@ impl CameraTrackingStatusFlags {
     pub const CAMERA_TRACKING_STATUS_FLAGS_ACTIVE: Self = Self(1);
     /// Camera tracking in error state
     pub const CAMERA_TRACKING_STATUS_FLAGS_ERROR: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "CAMERA_TRACKING_STATUS_FLAGS_IDLE",
+            1 => "CAMERA_TRACKING_STATUS_FLAGS_ACTIVE",
+            2 => "CAMERA_TRACKING_STATUS_FLAGS_ERROR",
+            _ => return None,
+        })
+    }
 }
 
 /// Camera tracking target data (shows where tracked target is within image)
@@ -3159,6 +3557,17 @@ impl CameraTrackingTargetData {
     pub const CAMERA_TRACKING_TARGET_DATA_RENDERED: Self = Self(2);
     /// Target data within status message (Point or Rectangle)
     pub const CAMERA_TRACKING_TARGET_DATA_IN_STATUS: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "CAMERA_TRACKING_TARGET_DATA_EMBEDDED",
+            2 => "CAMERA_TRACKING_TARGET_DATA_RENDERED",
+            4 => "CAMERA_TRACKING_TARGET_DATA_IN_STATUS",
+            _ => return None,
+        })
+    }
 }
 
 /// Zoom types for MAV_CMD_SET_CAMERA_ZOOM
@@ -3177,6 +3586,18 @@ impl CameraZoomType {
     pub const ZOOM_TYPE_RANGE: Self = Self(2);
     /// Zoom value/variable focal length in millimetres. Note that there is no message to get the valid zoom range of the camera, so this can type can only be used for cameras where the zoom range is known (implying that this cannot reliably be used in a GCS for an arbitrary camera)
     pub const ZOOM_TYPE_FOCAL_LENGTH: Self = Self(3);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "ZOOM_TYPE_STEP",
+            1 => "ZOOM_TYPE_CONTINUOUS",
+            2 => "ZOOM_TYPE_RANGE",
+            3 => "ZOOM_TYPE_FOCAL_LENGTH",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `CAN_FILTER_OP`.
@@ -3193,6 +3614,17 @@ impl CanFilterOp {
     pub const CAN_FILTER_ADD: Self = Self(1);
     /// `CAN_FILTER_REMOVE` = 2.
     pub const CAN_FILTER_REMOVE: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "CAN_FILTER_REPLACE",
+            1 => "CAN_FILTER_ADD",
+            2 => "CAN_FILTER_REMOVE",
+            _ => return None,
+        })
+    }
 }
 
 /// A mapping of copter flight modes for custom_mode field of heartbeat.
@@ -3257,6 +3689,41 @@ impl CopterMode {
     pub const COPTER_MODE_TURTLE: Self = Self(28);
     /// RATE_ACRO
     pub const COPTER_MODE_RATE_ACRO: Self = Self(29);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "COPTER_MODE_STABILIZE",
+            1 => "COPTER_MODE_ACRO",
+            2 => "COPTER_MODE_ALT_HOLD",
+            3 => "COPTER_MODE_AUTO",
+            4 => "COPTER_MODE_GUIDED",
+            5 => "COPTER_MODE_LOITER",
+            6 => "COPTER_MODE_RTL",
+            7 => "COPTER_MODE_CIRCLE",
+            9 => "COPTER_MODE_LAND",
+            11 => "COPTER_MODE_DRIFT",
+            13 => "COPTER_MODE_SPORT",
+            14 => "COPTER_MODE_FLIP",
+            15 => "COPTER_MODE_AUTOTUNE",
+            16 => "COPTER_MODE_POSHOLD",
+            17 => "COPTER_MODE_BRAKE",
+            18 => "COPTER_MODE_THROW",
+            19 => "COPTER_MODE_AVOID_ADSB",
+            20 => "COPTER_MODE_GUIDED_NOGPS",
+            21 => "COPTER_MODE_SMART_RTL",
+            22 => "COPTER_MODE_FLOWHOLD",
+            23 => "COPTER_MODE_FOLLOW",
+            24 => "COPTER_MODE_ZIGZAG",
+            25 => "COPTER_MODE_SYSTEMID",
+            26 => "COPTER_MODE_AUTOROTATE",
+            27 => "COPTER_MODE_AUTO_RTL",
+            28 => "COPTER_MODE_TURTLE",
+            29 => "COPTER_MODE_RATE_ACRO",
+            _ => return None,
+        })
+    }
 }
 
 /// Deepstall flight stage.
@@ -3281,6 +3748,21 @@ impl DeepstallStage {
     pub const DEEPSTALL_STAGE_APPROACH: Self = Self(5);
     /// Stalling and steering towards the land point.
     pub const DEEPSTALL_STAGE_LAND: Self = Self(6);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "DEEPSTALL_STAGE_FLY_TO_LANDING",
+            1 => "DEEPSTALL_STAGE_ESTIMATE_WIND",
+            2 => "DEEPSTALL_STAGE_WAIT_FOR_BREAKOUT",
+            3 => "DEEPSTALL_STAGE_FLY_TO_ARC",
+            4 => "DEEPSTALL_STAGE_ARC",
+            5 => "DEEPSTALL_STAGE_APPROACH",
+            6 => "DEEPSTALL_STAGE_LAND",
+            _ => return None,
+        })
+    }
 }
 
 /// Bus types for device operations.
@@ -3295,6 +3777,16 @@ impl DeviceOpBustype {
     pub const DEVICE_OP_BUSTYPE_I2C: Self = Self(0);
     /// SPI Device operation.
     pub const DEVICE_OP_BUSTYPE_SPI: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "DEVICE_OP_BUSTYPE_I2C",
+            1 => "DEVICE_OP_BUSTYPE_SPI",
+            _ => return None,
+        })
+    }
 }
 
 /// Flags in EKF_STATUS message.
@@ -3329,6 +3821,26 @@ impl EkfStatusFlags {
     pub const EKF_GPS_GLITCHING: Self = Self(32768);
     /// Set if EKF has never been healthy.
     pub const EKF_UNINITIALIZED: Self = Self(1024);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "EKF_ATTITUDE",
+            2 => "EKF_VELOCITY_HORIZ",
+            4 => "EKF_VELOCITY_VERT",
+            8 => "EKF_POS_HORIZ_REL",
+            16 => "EKF_POS_HORIZ_ABS",
+            32 => "EKF_POS_VERT_ABS",
+            64 => "EKF_POS_VERT_AGL",
+            128 => "EKF_CONST_POS_MODE",
+            256 => "EKF_PRED_POS_HORIZ_REL",
+            512 => "EKF_PRED_POS_HORIZ_ABS",
+            1024 => "EKF_UNINITIALIZED",
+            32768 => "EKF_GPS_GLITCHING",
+            _ => return None,
+        })
+    }
 }
 
 /// Engine control options
@@ -3341,6 +3853,15 @@ pub struct EngineControlOptions(pub u32);
 impl EngineControlOptions {
     /// Allow starting the engine once while disarmed
     pub const ENGINE_CONTROL_OPTIONS_ALLOW_START_WHILE_DISARMED: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "ENGINE_CONTROL_OPTIONS_ALLOW_START_WHILE_DISARMED",
+            _ => return None,
+        })
+    }
 }
 
 /// Flags in ESTIMATOR_STATUS message
@@ -3375,6 +3896,26 @@ impl EstimatorStatusFlags {
     pub const ESTIMATOR_GPS_GLITCH: Self = Self(1024);
     /// True if the EKF has detected bad accelerometer data
     pub const ESTIMATOR_ACCEL_ERROR: Self = Self(2048);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "ESTIMATOR_ATTITUDE",
+            2 => "ESTIMATOR_VELOCITY_HORIZ",
+            4 => "ESTIMATOR_VELOCITY_VERT",
+            8 => "ESTIMATOR_POS_HORIZ_REL",
+            16 => "ESTIMATOR_POS_HORIZ_ABS",
+            32 => "ESTIMATOR_POS_VERT_ABS",
+            64 => "ESTIMATOR_POS_VERT_AGL",
+            128 => "ESTIMATOR_CONST_POS_MODE",
+            256 => "ESTIMATOR_PRED_POS_HORIZ_REL",
+            512 => "ESTIMATOR_PRED_POS_HORIZ_ABS",
+            1024 => "ESTIMATOR_GPS_GLITCH",
+            2048 => "ESTIMATOR_ACCEL_ERROR",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `FENCE_BREACH`.
@@ -3393,6 +3934,18 @@ impl FenceBreach {
     pub const FENCE_BREACH_MAXALT: Self = Self(2);
     /// Breached fence boundary
     pub const FENCE_BREACH_BOUNDARY: Self = Self(3);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "FENCE_BREACH_NONE",
+            1 => "FENCE_BREACH_MINALT",
+            2 => "FENCE_BREACH_MAXALT",
+            3 => "FENCE_BREACH_BOUNDARY",
+            _ => return None,
+        })
+    }
 }
 
 /// Actions being taken to mitigate/prevent fence breach
@@ -3409,6 +3962,17 @@ impl FenceMitigate {
     pub const FENCE_MITIGATE_NONE: Self = Self(1);
     /// Velocity limiting active to prevent breach
     pub const FENCE_MITIGATE_VEL_LIMIT: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "FENCE_MITIGATE_UNKNOWN",
+            1 => "FENCE_MITIGATE_NONE",
+            2 => "FENCE_MITIGATE_VEL_LIMIT",
+            _ => return None,
+        })
+    }
 }
 
 /// Fence types to enable or disable as a bitmask. Used in MAV_CMD_DO_FENCE_ENABLE.
@@ -3427,6 +3991,18 @@ impl FenceType {
     pub const FENCE_TYPE_POLYGON: Self = Self(4);
     /// Minimum altitude fence
     pub const FENCE_TYPE_ALT_MIN: Self = Self(8);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "FENCE_TYPE_ALT_MAX",
+            2 => "FENCE_TYPE_CIRCLE",
+            4 => "FENCE_TYPE_POLYGON",
+            8 => "FENCE_TYPE_ALT_MIN",
+            _ => return None,
+        })
+    }
 }
 
 /// These values define the type of firmware release. These values indicate the first version or release of this type. For example the first alpha release would be 64, the second would be 65.
@@ -3447,6 +4023,19 @@ impl FirmwareVersionType {
     pub const FIRMWARE_VERSION_TYPE_RC: Self = Self(192);
     /// official stable release
     pub const FIRMWARE_VERSION_TYPE_OFFICIAL: Self = Self(255);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "FIRMWARE_VERSION_TYPE_DEV",
+            64 => "FIRMWARE_VERSION_TYPE_ALPHA",
+            128 => "FIRMWARE_VERSION_TYPE_BETA",
+            192 => "FIRMWARE_VERSION_TYPE_RC",
+            255 => "FIRMWARE_VERSION_TYPE_OFFICIAL",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GIMBAL_AXIS`.
@@ -3463,6 +4052,17 @@ impl GimbalAxis {
     pub const GIMBAL_AXIS_PITCH: Self = Self(1);
     /// Gimbal roll axis.
     pub const GIMBAL_AXIS_ROLL: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GIMBAL_AXIS_YAW",
+            1 => "GIMBAL_AXIS_PITCH",
+            2 => "GIMBAL_AXIS_ROLL",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GIMBAL_AXIS_CALIBRATION_REQUIRED`.
@@ -3479,6 +4079,17 @@ impl GimbalAxisCalibrationRequired {
     pub const GIMBAL_AXIS_CALIBRATION_REQUIRED_TRUE: Self = Self(1);
     /// This axis does not require calibration.
     pub const GIMBAL_AXIS_CALIBRATION_REQUIRED_FALSE: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GIMBAL_AXIS_CALIBRATION_REQUIRED_UNKNOWN",
+            1 => "GIMBAL_AXIS_CALIBRATION_REQUIRED_TRUE",
+            2 => "GIMBAL_AXIS_CALIBRATION_REQUIRED_FALSE",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GIMBAL_AXIS_CALIBRATION_STATUS`.
@@ -3495,6 +4106,17 @@ impl GimbalAxisCalibrationStatus {
     pub const GIMBAL_AXIS_CALIBRATION_STATUS_SUCCEEDED: Self = Self(1);
     /// Axis calibration failed.
     pub const GIMBAL_AXIS_CALIBRATION_STATUS_FAILED: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GIMBAL_AXIS_CALIBRATION_STATUS_IN_PROGRESS",
+            1 => "GIMBAL_AXIS_CALIBRATION_STATUS_SUCCEEDED",
+            2 => "GIMBAL_AXIS_CALIBRATION_STATUS_FAILED",
+            _ => return None,
+        })
+    }
 }
 
 /// Gimbal device (low level) capability flags (bitmap).
@@ -3533,6 +4155,28 @@ impl GimbalDeviceCapFlags {
     pub const GIMBAL_DEVICE_CAP_FLAGS_SUPPORTS_YAW_IN_EARTH_FRAME: Self = Self(4096);
     /// Gimbal device supports radio control inputs as an alternative input for controlling the gimbal orientation.
     pub const GIMBAL_DEVICE_CAP_FLAGS_HAS_RC_INPUTS: Self = Self(8192);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "GIMBAL_DEVICE_CAP_FLAGS_HAS_RETRACT",
+            2 => "GIMBAL_DEVICE_CAP_FLAGS_HAS_NEUTRAL",
+            4 => "GIMBAL_DEVICE_CAP_FLAGS_HAS_ROLL_AXIS",
+            8 => "GIMBAL_DEVICE_CAP_FLAGS_HAS_ROLL_FOLLOW",
+            16 => "GIMBAL_DEVICE_CAP_FLAGS_HAS_ROLL_LOCK",
+            32 => "GIMBAL_DEVICE_CAP_FLAGS_HAS_PITCH_AXIS",
+            64 => "GIMBAL_DEVICE_CAP_FLAGS_HAS_PITCH_FOLLOW",
+            128 => "GIMBAL_DEVICE_CAP_FLAGS_HAS_PITCH_LOCK",
+            256 => "GIMBAL_DEVICE_CAP_FLAGS_HAS_YAW_AXIS",
+            512 => "GIMBAL_DEVICE_CAP_FLAGS_HAS_YAW_FOLLOW",
+            1024 => "GIMBAL_DEVICE_CAP_FLAGS_HAS_YAW_LOCK",
+            2048 => "GIMBAL_DEVICE_CAP_FLAGS_SUPPORTS_INFINITE_YAW",
+            4096 => "GIMBAL_DEVICE_CAP_FLAGS_SUPPORTS_YAW_IN_EARTH_FRAME",
+            8192 => "GIMBAL_DEVICE_CAP_FLAGS_HAS_RC_INPUTS",
+            _ => return None,
+        })
+    }
 }
 
 /// Gimbal device (low level) error flags (bitmap, 0 means no error)
@@ -3563,6 +4207,24 @@ impl GimbalDeviceErrorFlags {
     pub const GIMBAL_DEVICE_ERROR_FLAGS_CALIBRATION_RUNNING: Self = Self(256);
     /// Gimbal device is not assigned to a gimbal manager.
     pub const GIMBAL_DEVICE_ERROR_FLAGS_NO_MANAGER: Self = Self(512);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "GIMBAL_DEVICE_ERROR_FLAGS_AT_ROLL_LIMIT",
+            2 => "GIMBAL_DEVICE_ERROR_FLAGS_AT_PITCH_LIMIT",
+            4 => "GIMBAL_DEVICE_ERROR_FLAGS_AT_YAW_LIMIT",
+            8 => "GIMBAL_DEVICE_ERROR_FLAGS_ENCODER_ERROR",
+            16 => "GIMBAL_DEVICE_ERROR_FLAGS_POWER_ERROR",
+            32 => "GIMBAL_DEVICE_ERROR_FLAGS_MOTOR_ERROR",
+            64 => "GIMBAL_DEVICE_ERROR_FLAGS_SOFTWARE_ERROR",
+            128 => "GIMBAL_DEVICE_ERROR_FLAGS_COMMS_ERROR",
+            256 => "GIMBAL_DEVICE_ERROR_FLAGS_CALIBRATION_RUNNING",
+            512 => "GIMBAL_DEVICE_ERROR_FLAGS_NO_MANAGER",
+            _ => return None,
+        })
+    }
 }
 
 /// Flags for gimbal device (lower level) operation.
@@ -3593,6 +4255,24 @@ impl GimbalDeviceFlags {
     pub const GIMBAL_DEVICE_FLAGS_RC_EXCLUSIVE: Self = Self(256);
     /// The gimbal orientation is determined by combining/mixing the RC signals feed to the gimbal's radio control inputs and the MAVLink messages for setting the gimbal orientation (GIMBAL_DEVICE_SET_ATTITUDE). How these two controls are combined or mixed is not defined by the protocol but is up to the implementation.
     pub const GIMBAL_DEVICE_FLAGS_RC_MIXED: Self = Self(512);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "GIMBAL_DEVICE_FLAGS_RETRACT",
+            2 => "GIMBAL_DEVICE_FLAGS_NEUTRAL",
+            4 => "GIMBAL_DEVICE_FLAGS_ROLL_LOCK",
+            8 => "GIMBAL_DEVICE_FLAGS_PITCH_LOCK",
+            16 => "GIMBAL_DEVICE_FLAGS_YAW_LOCK",
+            32 => "GIMBAL_DEVICE_FLAGS_YAW_IN_VEHICLE_FRAME",
+            64 => "GIMBAL_DEVICE_FLAGS_YAW_IN_EARTH_FRAME",
+            128 => "GIMBAL_DEVICE_FLAGS_ACCEPTS_YAW_IN_EARTH_FRAME",
+            256 => "GIMBAL_DEVICE_FLAGS_RC_EXCLUSIVE",
+            512 => "GIMBAL_DEVICE_FLAGS_RC_MIXED",
+            _ => return None,
+        })
+    }
 }
 
 /// Gimbal manager high level capability flags (bitmap). The first 16 bits are identical to the GIMBAL_DEVICE_CAP_FLAGS. However, the gimbal manager does not need to copy the flags from the gimbal but can also enhance the capabilities and thus add flags.
@@ -3635,6 +4315,30 @@ impl GimbalManagerCapFlags {
     pub const GIMBAL_MANAGER_CAP_FLAGS_CAN_POINT_LOCATION_LOCAL: Self = Self(65536);
     /// Gimbal manager supports to point to a global latitude, longitude, altitude position.
     pub const GIMBAL_MANAGER_CAP_FLAGS_CAN_POINT_LOCATION_GLOBAL: Self = Self(131072);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "GIMBAL_MANAGER_CAP_FLAGS_HAS_RETRACT",
+            2 => "GIMBAL_MANAGER_CAP_FLAGS_HAS_NEUTRAL",
+            4 => "GIMBAL_MANAGER_CAP_FLAGS_HAS_ROLL_AXIS",
+            8 => "GIMBAL_MANAGER_CAP_FLAGS_HAS_ROLL_FOLLOW",
+            16 => "GIMBAL_MANAGER_CAP_FLAGS_HAS_ROLL_LOCK",
+            32 => "GIMBAL_MANAGER_CAP_FLAGS_HAS_PITCH_AXIS",
+            64 => "GIMBAL_MANAGER_CAP_FLAGS_HAS_PITCH_FOLLOW",
+            128 => "GIMBAL_MANAGER_CAP_FLAGS_HAS_PITCH_LOCK",
+            256 => "GIMBAL_MANAGER_CAP_FLAGS_HAS_YAW_AXIS",
+            512 => "GIMBAL_MANAGER_CAP_FLAGS_HAS_YAW_FOLLOW",
+            1024 => "GIMBAL_MANAGER_CAP_FLAGS_HAS_YAW_LOCK",
+            2048 => "GIMBAL_MANAGER_CAP_FLAGS_SUPPORTS_INFINITE_YAW",
+            4096 => "GIMBAL_MANAGER_CAP_FLAGS_SUPPORTS_YAW_IN_EARTH_FRAME",
+            8192 => "GIMBAL_MANAGER_CAP_FLAGS_HAS_RC_INPUTS",
+            65536 => "GIMBAL_MANAGER_CAP_FLAGS_CAN_POINT_LOCATION_LOCAL",
+            131072 => "GIMBAL_MANAGER_CAP_FLAGS_CAN_POINT_LOCATION_GLOBAL",
+            _ => return None,
+        })
+    }
 }
 
 /// Flags for high level gimbal manager operation The first 16 bits are identical to the GIMBAL_DEVICE_FLAGS.
@@ -3665,6 +4369,24 @@ impl GimbalManagerFlags {
     pub const GIMBAL_MANAGER_FLAGS_RC_EXCLUSIVE: Self = Self(256);
     /// Based on GIMBAL_DEVICE_FLAGS_RC_MIXED.
     pub const GIMBAL_MANAGER_FLAGS_RC_MIXED: Self = Self(512);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "GIMBAL_MANAGER_FLAGS_RETRACT",
+            2 => "GIMBAL_MANAGER_FLAGS_NEUTRAL",
+            4 => "GIMBAL_MANAGER_FLAGS_ROLL_LOCK",
+            8 => "GIMBAL_MANAGER_FLAGS_PITCH_LOCK",
+            16 => "GIMBAL_MANAGER_FLAGS_YAW_LOCK",
+            32 => "GIMBAL_MANAGER_FLAGS_YAW_IN_VEHICLE_FRAME",
+            64 => "GIMBAL_MANAGER_FLAGS_YAW_IN_EARTH_FRAME",
+            128 => "GIMBAL_MANAGER_FLAGS_ACCEPTS_YAW_IN_EARTH_FRAME",
+            256 => "GIMBAL_MANAGER_FLAGS_RC_EXCLUSIVE",
+            512 => "GIMBAL_MANAGER_FLAGS_RC_MIXED",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GOPRO_BURST_RATE`.
@@ -3693,6 +4415,23 @@ impl GoproBurstRate {
     pub const GOPRO_BURST_RATE_30_IN_3_SECOND: Self = Self(7);
     /// 30 Shots / 6 Second.
     pub const GOPRO_BURST_RATE_30_IN_6_SECOND: Self = Self(8);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GOPRO_BURST_RATE_3_IN_1_SECOND",
+            1 => "GOPRO_BURST_RATE_5_IN_1_SECOND",
+            2 => "GOPRO_BURST_RATE_10_IN_1_SECOND",
+            3 => "GOPRO_BURST_RATE_10_IN_2_SECOND",
+            4 => "GOPRO_BURST_RATE_10_IN_3_SECOND",
+            5 => "GOPRO_BURST_RATE_30_IN_1_SECOND",
+            6 => "GOPRO_BURST_RATE_30_IN_2_SECOND",
+            7 => "GOPRO_BURST_RATE_30_IN_3_SECOND",
+            8 => "GOPRO_BURST_RATE_30_IN_6_SECOND",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GOPRO_CAPTURE_MODE`.
@@ -3719,6 +4458,22 @@ impl GoproCaptureMode {
     pub const GOPRO_CAPTURE_MODE_SETUP: Self = Self(6);
     /// Mode not yet known.
     pub const GOPRO_CAPTURE_MODE_UNKNOWN: Self = Self(255);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GOPRO_CAPTURE_MODE_VIDEO",
+            1 => "GOPRO_CAPTURE_MODE_PHOTO",
+            2 => "GOPRO_CAPTURE_MODE_BURST",
+            3 => "GOPRO_CAPTURE_MODE_TIME_LAPSE",
+            4 => "GOPRO_CAPTURE_MODE_MULTI_SHOT",
+            5 => "GOPRO_CAPTURE_MODE_PLAYBACK",
+            6 => "GOPRO_CAPTURE_MODE_SETUP",
+            255 => "GOPRO_CAPTURE_MODE_UNKNOWN",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GOPRO_CHARGING`.
@@ -3733,6 +4488,16 @@ impl GoproCharging {
     pub const GOPRO_CHARGING_DISABLED: Self = Self(0);
     /// Charging enabled.
     pub const GOPRO_CHARGING_ENABLED: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GOPRO_CHARGING_DISABLED",
+            1 => "GOPRO_CHARGING_ENABLED",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GOPRO_COMMAND`.
@@ -3777,6 +4542,31 @@ impl GoproCommand {
     pub const GOPRO_COMMAND_TIME: Self = Self(15);
     /// (Get/Set).
     pub const GOPRO_COMMAND_CHARGING: Self = Self(16);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GOPRO_COMMAND_POWER",
+            1 => "GOPRO_COMMAND_CAPTURE_MODE",
+            2 => "GOPRO_COMMAND_SHUTTER",
+            3 => "GOPRO_COMMAND_BATTERY",
+            4 => "GOPRO_COMMAND_MODEL",
+            5 => "GOPRO_COMMAND_VIDEO_SETTINGS",
+            6 => "GOPRO_COMMAND_LOW_LIGHT",
+            7 => "GOPRO_COMMAND_PHOTO_RESOLUTION",
+            8 => "GOPRO_COMMAND_PHOTO_BURST_RATE",
+            9 => "GOPRO_COMMAND_PROTUNE",
+            10 => "GOPRO_COMMAND_PROTUNE_WHITE_BALANCE",
+            11 => "GOPRO_COMMAND_PROTUNE_COLOUR",
+            12 => "GOPRO_COMMAND_PROTUNE_GAIN",
+            13 => "GOPRO_COMMAND_PROTUNE_SHARPNESS",
+            14 => "GOPRO_COMMAND_PROTUNE_EXPOSURE",
+            15 => "GOPRO_COMMAND_TIME",
+            16 => "GOPRO_COMMAND_CHARGING",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GOPRO_FIELD_OF_VIEW`.
@@ -3793,6 +4583,17 @@ impl GoproFieldOfView {
     pub const GOPRO_FIELD_OF_VIEW_MEDIUM: Self = Self(1);
     /// 0x02: Narrow.
     pub const GOPRO_FIELD_OF_VIEW_NARROW: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GOPRO_FIELD_OF_VIEW_WIDE",
+            1 => "GOPRO_FIELD_OF_VIEW_MEDIUM",
+            2 => "GOPRO_FIELD_OF_VIEW_NARROW",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GOPRO_FRAME_RATE`.
@@ -3831,6 +4632,28 @@ impl GoproFrameRate {
     pub const GOPRO_FRAME_RATE_240: Self = Self(12);
     /// 12.5 FPS.
     pub const GOPRO_FRAME_RATE_12_5: Self = Self(13);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GOPRO_FRAME_RATE_12",
+            1 => "GOPRO_FRAME_RATE_15",
+            2 => "GOPRO_FRAME_RATE_24",
+            3 => "GOPRO_FRAME_RATE_25",
+            4 => "GOPRO_FRAME_RATE_30",
+            5 => "GOPRO_FRAME_RATE_48",
+            6 => "GOPRO_FRAME_RATE_50",
+            7 => "GOPRO_FRAME_RATE_60",
+            8 => "GOPRO_FRAME_RATE_80",
+            9 => "GOPRO_FRAME_RATE_90",
+            10 => "GOPRO_FRAME_RATE_100",
+            11 => "GOPRO_FRAME_RATE_120",
+            12 => "GOPRO_FRAME_RATE_240",
+            13 => "GOPRO_FRAME_RATE_12_5",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GOPRO_HEARTBEAT_FLAGS`.
@@ -3843,6 +4666,15 @@ pub struct GoproHeartbeatFlags(pub u32);
 impl GoproHeartbeatFlags {
     /// GoPro is currently recording.
     pub const GOPRO_FLAG_RECORDING: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "GOPRO_FLAG_RECORDING",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GOPRO_HEARTBEAT_STATUS`.
@@ -3861,6 +4693,18 @@ impl GoproHeartbeatStatus {
     pub const GOPRO_HEARTBEAT_STATUS_CONNECTED: Self = Self(2);
     /// An unrecoverable error was encountered with the connected GoPro, it may require a power cycle.
     pub const GOPRO_HEARTBEAT_STATUS_ERROR: Self = Self(3);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GOPRO_HEARTBEAT_STATUS_DISCONNECTED",
+            1 => "GOPRO_HEARTBEAT_STATUS_INCOMPATIBLE",
+            2 => "GOPRO_HEARTBEAT_STATUS_CONNECTED",
+            3 => "GOPRO_HEARTBEAT_STATUS_ERROR",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GOPRO_MODEL`.
@@ -3881,6 +4725,19 @@ impl GoproModel {
     pub const GOPRO_MODEL_HERO_4_SILVER: Self = Self(3);
     /// Hero 4 Black.
     pub const GOPRO_MODEL_HERO_4_BLACK: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GOPRO_MODEL_UNKNOWN",
+            1 => "GOPRO_MODEL_HERO_3_PLUS_SILVER",
+            2 => "GOPRO_MODEL_HERO_3_PLUS_BLACK",
+            3 => "GOPRO_MODEL_HERO_4_SILVER",
+            4 => "GOPRO_MODEL_HERO_4_BLACK",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GOPRO_PHOTO_RESOLUTION`.
@@ -3901,6 +4758,19 @@ impl GoproPhotoResolution {
     pub const GOPRO_PHOTO_RESOLUTION_10MP_WIDE: Self = Self(3);
     /// 12MP Wide.
     pub const GOPRO_PHOTO_RESOLUTION_12MP_WIDE: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GOPRO_PHOTO_RESOLUTION_5MP_MEDIUM",
+            1 => "GOPRO_PHOTO_RESOLUTION_7MP_MEDIUM",
+            2 => "GOPRO_PHOTO_RESOLUTION_7MP_WIDE",
+            3 => "GOPRO_PHOTO_RESOLUTION_10MP_WIDE",
+            4 => "GOPRO_PHOTO_RESOLUTION_12MP_WIDE",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GOPRO_PROTUNE_COLOUR`.
@@ -3915,6 +4785,16 @@ impl GoproProtuneColour {
     pub const GOPRO_PROTUNE_COLOUR_STANDARD: Self = Self(0);
     /// Neutral.
     pub const GOPRO_PROTUNE_COLOUR_NEUTRAL: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GOPRO_PROTUNE_COLOUR_STANDARD",
+            1 => "GOPRO_PROTUNE_COLOUR_NEUTRAL",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GOPRO_PROTUNE_EXPOSURE`.
@@ -3967,6 +4847,35 @@ impl GoproProtuneExposure {
     pub const GOPRO_PROTUNE_EXPOSURE_POS_4_5: Self = Self(19);
     /// +5.0 EV (Hero 3+ Only).
     pub const GOPRO_PROTUNE_EXPOSURE_POS_5_0: Self = Self(20);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GOPRO_PROTUNE_EXPOSURE_NEG_5_0",
+            1 => "GOPRO_PROTUNE_EXPOSURE_NEG_4_5",
+            2 => "GOPRO_PROTUNE_EXPOSURE_NEG_4_0",
+            3 => "GOPRO_PROTUNE_EXPOSURE_NEG_3_5",
+            4 => "GOPRO_PROTUNE_EXPOSURE_NEG_3_0",
+            5 => "GOPRO_PROTUNE_EXPOSURE_NEG_2_5",
+            6 => "GOPRO_PROTUNE_EXPOSURE_NEG_2_0",
+            7 => "GOPRO_PROTUNE_EXPOSURE_NEG_1_5",
+            8 => "GOPRO_PROTUNE_EXPOSURE_NEG_1_0",
+            9 => "GOPRO_PROTUNE_EXPOSURE_NEG_0_5",
+            10 => "GOPRO_PROTUNE_EXPOSURE_ZERO",
+            11 => "GOPRO_PROTUNE_EXPOSURE_POS_0_5",
+            12 => "GOPRO_PROTUNE_EXPOSURE_POS_1_0",
+            13 => "GOPRO_PROTUNE_EXPOSURE_POS_1_5",
+            14 => "GOPRO_PROTUNE_EXPOSURE_POS_2_0",
+            15 => "GOPRO_PROTUNE_EXPOSURE_POS_2_5",
+            16 => "GOPRO_PROTUNE_EXPOSURE_POS_3_0",
+            17 => "GOPRO_PROTUNE_EXPOSURE_POS_3_5",
+            18 => "GOPRO_PROTUNE_EXPOSURE_POS_4_0",
+            19 => "GOPRO_PROTUNE_EXPOSURE_POS_4_5",
+            20 => "GOPRO_PROTUNE_EXPOSURE_POS_5_0",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GOPRO_PROTUNE_GAIN`.
@@ -3987,6 +4896,19 @@ impl GoproProtuneGain {
     pub const GOPRO_PROTUNE_GAIN_3200: Self = Self(3);
     /// ISO 6400.
     pub const GOPRO_PROTUNE_GAIN_6400: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GOPRO_PROTUNE_GAIN_400",
+            1 => "GOPRO_PROTUNE_GAIN_800",
+            2 => "GOPRO_PROTUNE_GAIN_1600",
+            3 => "GOPRO_PROTUNE_GAIN_3200",
+            4 => "GOPRO_PROTUNE_GAIN_6400",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GOPRO_PROTUNE_SHARPNESS`.
@@ -4003,6 +4925,17 @@ impl GoproProtuneSharpness {
     pub const GOPRO_PROTUNE_SHARPNESS_MEDIUM: Self = Self(1);
     /// High Sharpness.
     pub const GOPRO_PROTUNE_SHARPNESS_HIGH: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GOPRO_PROTUNE_SHARPNESS_LOW",
+            1 => "GOPRO_PROTUNE_SHARPNESS_MEDIUM",
+            2 => "GOPRO_PROTUNE_SHARPNESS_HIGH",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GOPRO_PROTUNE_WHITE_BALANCE`.
@@ -4023,6 +4956,19 @@ impl GoproProtuneWhiteBalance {
     pub const GOPRO_PROTUNE_WHITE_BALANCE_6500K: Self = Self(3);
     /// Camera Raw.
     pub const GOPRO_PROTUNE_WHITE_BALANCE_RAW: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GOPRO_PROTUNE_WHITE_BALANCE_AUTO",
+            1 => "GOPRO_PROTUNE_WHITE_BALANCE_3000K",
+            2 => "GOPRO_PROTUNE_WHITE_BALANCE_5500K",
+            3 => "GOPRO_PROTUNE_WHITE_BALANCE_6500K",
+            4 => "GOPRO_PROTUNE_WHITE_BALANCE_RAW",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GOPRO_REQUEST_STATUS`.
@@ -4037,6 +4983,16 @@ impl GoproRequestStatus {
     pub const GOPRO_REQUEST_SUCCESS: Self = Self(0);
     /// The write message with ID indicated failed.
     pub const GOPRO_REQUEST_FAILED: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GOPRO_REQUEST_SUCCESS",
+            1 => "GOPRO_REQUEST_FAILED",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GOPRO_RESOLUTION`.
@@ -4075,6 +5031,28 @@ impl GoproResolution {
     pub const GOPRO_RESOLUTION_2_7K_SUPERVIEW: Self = Self(12);
     /// 3840 x 2160 (4k-SuperView).
     pub const GOPRO_RESOLUTION_4K_SUPERVIEW: Self = Self(13);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GOPRO_RESOLUTION_480p",
+            1 => "GOPRO_RESOLUTION_720p",
+            2 => "GOPRO_RESOLUTION_960p",
+            3 => "GOPRO_RESOLUTION_1080p",
+            4 => "GOPRO_RESOLUTION_1440p",
+            5 => "GOPRO_RESOLUTION_2_7k_17_9",
+            6 => "GOPRO_RESOLUTION_2_7k_16_9",
+            7 => "GOPRO_RESOLUTION_2_7k_4_3",
+            8 => "GOPRO_RESOLUTION_4k_16_9",
+            9 => "GOPRO_RESOLUTION_4k_17_9",
+            10 => "GOPRO_RESOLUTION_720p_SUPERVIEW",
+            11 => "GOPRO_RESOLUTION_1080p_SUPERVIEW",
+            12 => "GOPRO_RESOLUTION_2_7k_SUPERVIEW",
+            13 => "GOPRO_RESOLUTION_4k_SUPERVIEW",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GOPRO_VIDEO_SETTINGS_FLAGS`.
@@ -4087,6 +5065,15 @@ pub struct GoproVideoSettingsFlags(pub u32);
 impl GoproVideoSettingsFlags {
     /// 0=NTSC, 1=PAL.
     pub const GOPRO_VIDEO_SETTINGS_TV_MODE: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "GOPRO_VIDEO_SETTINGS_TV_MODE",
+            _ => return None,
+        })
+    }
 }
 
 /// Signal authentication state in a GPS receiver.
@@ -4107,6 +5094,19 @@ impl GpsAuthenticationState {
     pub const GPS_AUTHENTICATION_STATE_OK: Self = Self(3);
     /// GPS signal authentication is disabled on the receiver.
     pub const GPS_AUTHENTICATION_STATE_DISABLED: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GPS_AUTHENTICATION_STATE_UNKNOWN",
+            1 => "GPS_AUTHENTICATION_STATE_INITIALIZING",
+            2 => "GPS_AUTHENTICATION_STATE_ERROR",
+            3 => "GPS_AUTHENTICATION_STATE_OK",
+            4 => "GPS_AUTHENTICATION_STATE_DISABLED",
+            _ => return None,
+        })
+    }
 }
 
 /// Type of GPS fix
@@ -4135,6 +5135,23 @@ impl GpsFixType {
     pub const GPS_FIX_TYPE_STATIC: Self = Self(7);
     /// PPP, 3D position.
     pub const GPS_FIX_TYPE_PPP: Self = Self(8);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GPS_FIX_TYPE_NO_GPS",
+            1 => "GPS_FIX_TYPE_NO_FIX",
+            2 => "GPS_FIX_TYPE_2D_FIX",
+            3 => "GPS_FIX_TYPE_3D_FIX",
+            4 => "GPS_FIX_TYPE_DGPS",
+            5 => "GPS_FIX_TYPE_RTK_FLOAT",
+            6 => "GPS_FIX_TYPE_RTK_FIXED",
+            7 => "GPS_FIX_TYPE_STATIC",
+            8 => "GPS_FIX_TYPE_PPP",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GPS_INPUT_IGNORE_FLAGS`.
@@ -4161,6 +5178,22 @@ impl GpsInputIgnoreFlags {
     pub const GPS_INPUT_IGNORE_FLAG_HORIZONTAL_ACCURACY: Self = Self(64);
     /// ignore vertical accuracy field
     pub const GPS_INPUT_IGNORE_FLAG_VERTICAL_ACCURACY: Self = Self(128);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "GPS_INPUT_IGNORE_FLAG_ALT",
+            2 => "GPS_INPUT_IGNORE_FLAG_HDOP",
+            4 => "GPS_INPUT_IGNORE_FLAG_VDOP",
+            8 => "GPS_INPUT_IGNORE_FLAG_VEL_HORIZ",
+            16 => "GPS_INPUT_IGNORE_FLAG_VEL_VERT",
+            32 => "GPS_INPUT_IGNORE_FLAG_SPEED_ACCURACY",
+            64 => "GPS_INPUT_IGNORE_FLAG_HORIZONTAL_ACCURACY",
+            128 => "GPS_INPUT_IGNORE_FLAG_VERTICAL_ACCURACY",
+            _ => return None,
+        })
+    }
 }
 
 /// Signal jamming state in a GPS receiver.
@@ -4179,6 +5212,18 @@ impl GpsJammingState {
     pub const GPS_JAMMING_STATE_MITIGATED: Self = Self(2);
     /// The GPS receiver detected signal jamming.
     pub const GPS_JAMMING_STATE_DETECTED: Self = Self(3);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GPS_JAMMING_STATE_UNKNOWN",
+            1 => "GPS_JAMMING_STATE_OK",
+            2 => "GPS_JAMMING_STATE_MITIGATED",
+            3 => "GPS_JAMMING_STATE_DETECTED",
+            _ => return None,
+        })
+    }
 }
 
 /// State of RAIM processing.
@@ -4197,6 +5242,18 @@ impl GpsRaimState {
     pub const GPS_RAIM_STATE_OK: Self = Self(2);
     /// RAIM integrity check failed.
     pub const GPS_RAIM_STATE_FAILED: Self = Self(3);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GPS_RAIM_STATE_UNKNOWN",
+            1 => "GPS_RAIM_STATE_DISABLED",
+            2 => "GPS_RAIM_STATE_OK",
+            3 => "GPS_RAIM_STATE_FAILED",
+            _ => return None,
+        })
+    }
 }
 
 /// Signal spoofing state in a GPS receiver.
@@ -4215,6 +5272,18 @@ impl GpsSpoofingState {
     pub const GPS_SPOOFING_STATE_MITIGATED: Self = Self(2);
     /// The GPS receiver detected signal spoofing but still has a fix.
     pub const GPS_SPOOFING_STATE_DETECTED: Self = Self(3);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GPS_SPOOFING_STATE_UNKNOWN",
+            1 => "GPS_SPOOFING_STATE_OK",
+            2 => "GPS_SPOOFING_STATE_MITIGATED",
+            3 => "GPS_SPOOFING_STATE_DETECTED",
+            _ => return None,
+        })
+    }
 }
 
 /// Flags indicating errors in a GPS receiver.
@@ -4239,6 +5308,21 @@ impl GpsSystemErrorFlags {
     pub const GPS_SYSTEM_ERROR_CPU_OVERLOAD: Self = Self(32);
     /// The GPS receiver is experiencing output congestion.
     pub const GPS_SYSTEM_ERROR_OUTPUT_CONGESTION: Self = Self(64);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "GPS_SYSTEM_ERROR_INCOMING_CORRECTIONS",
+            2 => "GPS_SYSTEM_ERROR_CONFIGURATION",
+            4 => "GPS_SYSTEM_ERROR_SOFTWARE",
+            8 => "GPS_SYSTEM_ERROR_ANTENNA",
+            16 => "GPS_SYSTEM_ERROR_EVENT_CONGESTION",
+            32 => "GPS_SYSTEM_ERROR_CPU_OVERLOAD",
+            64 => "GPS_SYSTEM_ERROR_OUTPUT_CONGESTION",
+            _ => return None,
+        })
+    }
 }
 
 /// Gripper actions.
@@ -4253,6 +5337,16 @@ impl GripperActions {
     pub const GRIPPER_ACTION_RELEASE: Self = Self(0);
     /// Gripper grab onto cargo.
     pub const GRIPPER_ACTION_GRAB: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GRIPPER_ACTION_RELEASE",
+            1 => "GRIPPER_ACTION_GRAB",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GSM_LINK_TYPE`.
@@ -4273,6 +5367,19 @@ impl GsmLinkType {
     pub const GSM_LINK_TYPE_3G: Self = Self(3);
     /// 4G link (LTE)
     pub const GSM_LINK_TYPE_4G: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GSM_LINK_TYPE_NONE",
+            1 => "GSM_LINK_TYPE_UNKNOWN",
+            2 => "GSM_LINK_TYPE_2G",
+            3 => "GSM_LINK_TYPE_3G",
+            4 => "GSM_LINK_TYPE_4G",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `GSM_MODEM_TYPE`.
@@ -4287,6 +5394,16 @@ impl GsmModemType {
     pub const GSM_MODEM_TYPE_UNKNOWN: Self = Self(0);
     /// HUAWEI LTE USB Stick E3372
     pub const GSM_MODEM_TYPE_HUAWEI_E3372: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GSM_MODEM_TYPE_UNKNOWN",
+            1 => "GSM_MODEM_TYPE_HUAWEI_E3372",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `HEADING_TYPE`.
@@ -4303,6 +5420,17 @@ impl HeadingType {
     pub const HEADING_TYPE_HEADING: Self = Self(1);
     /// `HEADING_TYPE_DEFAULT` = 2.
     pub const HEADING_TYPE_DEFAULT: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "HEADING_TYPE_COURSE_OVER_GROUND",
+            1 => "HEADING_TYPE_HEADING",
+            2 => "HEADING_TYPE_DEFAULT",
+            _ => return None,
+        })
+    }
 }
 
 /// Flags to report failure cases over the high latency telemetry.
@@ -4341,6 +5469,28 @@ impl HlFailureFlag {
     pub const HL_FAILURE_FLAG_ESTIMATOR: Self = Self(4096);
     /// Mission failure.
     pub const HL_FAILURE_FLAG_MISSION: Self = Self(8192);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "HL_FAILURE_FLAG_GPS",
+            2 => "HL_FAILURE_FLAG_DIFFERENTIAL_PRESSURE",
+            4 => "HL_FAILURE_FLAG_ABSOLUTE_PRESSURE",
+            8 => "HL_FAILURE_FLAG_3D_ACCEL",
+            16 => "HL_FAILURE_FLAG_3D_GYRO",
+            32 => "HL_FAILURE_FLAG_3D_MAG",
+            64 => "HL_FAILURE_FLAG_TERRAIN",
+            128 => "HL_FAILURE_FLAG_BATTERY",
+            256 => "HL_FAILURE_FLAG_RC_RECEIVER",
+            512 => "HL_FAILURE_FLAG_OFFBOARD_LINK",
+            1024 => "HL_FAILURE_FLAG_ENGINE",
+            2048 => "HL_FAILURE_FLAG_GEOFENCE",
+            4096 => "HL_FAILURE_FLAG_ESTIMATOR",
+            8192 => "HL_FAILURE_FLAG_MISSION",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `ICAROUS_FMS_STATE`.
@@ -4363,6 +5513,20 @@ impl IcarousFmsState {
     pub const ICAROUS_FMS_STATE_APPROACH: Self = Self(4);
     /// `ICAROUS_FMS_STATE_LAND` = 5.
     pub const ICAROUS_FMS_STATE_LAND: Self = Self(5);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "ICAROUS_FMS_STATE_IDLE",
+            1 => "ICAROUS_FMS_STATE_TAKEOFF",
+            2 => "ICAROUS_FMS_STATE_CLIMB",
+            3 => "ICAROUS_FMS_STATE_CRUISE",
+            4 => "ICAROUS_FMS_STATE_APPROACH",
+            5 => "ICAROUS_FMS_STATE_LAND",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `ICAROUS_TRACK_BAND_TYPES`.
@@ -4379,6 +5543,17 @@ impl IcarousTrackBandTypes {
     pub const ICAROUS_TRACK_BAND_TYPE_NEAR: Self = Self(1);
     /// `ICAROUS_TRACK_BAND_TYPE_RECOVERY` = 2.
     pub const ICAROUS_TRACK_BAND_TYPE_RECOVERY: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "ICAROUS_TRACK_BAND_TYPE_NONE",
+            1 => "ICAROUS_TRACK_BAND_TYPE_NEAR",
+            2 => "ICAROUS_TRACK_BAND_TYPE_RECOVERY",
+            _ => return None,
+        })
+    }
 }
 
 /// Type of landing target
@@ -4397,6 +5572,18 @@ impl LandingTargetType {
     pub const LANDING_TARGET_TYPE_VISION_FIDUCIAL: Self = Self(2);
     /// Landing target represented by a pre-defined visual shape/feature (ex: X-marker, H-marker, square)
     pub const LANDING_TARGET_TYPE_VISION_OTHER: Self = Self(3);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "LANDING_TARGET_TYPE_LIGHT_BEACON",
+            1 => "LANDING_TARGET_TYPE_RADIO_BEACON",
+            2 => "LANDING_TARGET_TYPE_VISION_FIDUCIAL",
+            3 => "LANDING_TARGET_TYPE_VISION_OTHER",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `LED_CONTROL_PATTERN`.
@@ -4413,6 +5600,17 @@ impl LedControlPattern {
     pub const LED_CONTROL_PATTERN_FIRMWAREUPDATE: Self = Self(1);
     /// Custom Pattern using custom bytes fields.
     pub const LED_CONTROL_PATTERN_CUSTOM: Self = Self(255);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "LED_CONTROL_PATTERN_OFF",
+            1 => "LED_CONTROL_PATTERN_FIRMWAREUPDATE",
+            255 => "LED_CONTROL_PATTERN_CUSTOM",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `LIMITS_STATE`.
@@ -4435,6 +5633,20 @@ impl LimitsState {
     pub const LIMITS_RECOVERING: Self = Self(4);
     /// We're no longer in breach of a limit.
     pub const LIMITS_RECOVERED: Self = Self(5);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "LIMITS_INIT",
+            1 => "LIMITS_DISABLED",
+            2 => "LIMITS_ENABLED",
+            3 => "LIMITS_TRIGGERED",
+            4 => "LIMITS_RECOVERING",
+            5 => "LIMITS_RECOVERED",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `LIMIT_MODULE`.
@@ -4451,6 +5663,17 @@ impl LimitModule {
     pub const LIMIT_GEOFENCE: Self = Self(2);
     /// Checking limits.
     pub const LIMIT_ALTITUDE: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "LIMIT_GPSLOCK",
+            2 => "LIMIT_GEOFENCE",
+            4 => "LIMIT_ALTITUDE",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAG_CAL_STATUS`.
@@ -4477,6 +5700,22 @@ impl MagCalStatus {
     pub const MAG_CAL_BAD_ORIENTATION: Self = Self(6);
     /// `MAG_CAL_BAD_RADIUS` = 7.
     pub const MAG_CAL_BAD_RADIUS: Self = Self(7);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAG_CAL_NOT_STARTED",
+            1 => "MAG_CAL_WAITING_TO_START",
+            2 => "MAG_CAL_RUNNING_STEP_ONE",
+            3 => "MAG_CAL_RUNNING_STEP_TWO",
+            4 => "MAG_CAL_SUCCESS",
+            5 => "MAG_CAL_FAILED",
+            6 => "MAG_CAL_BAD_ORIENTATION",
+            7 => "MAG_CAL_BAD_RADIUS",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAVLINK_DATA_STREAM_TYPE`.
@@ -4499,6 +5738,20 @@ impl MavlinkDataStreamType {
     pub const MAVLINK_DATA_STREAM_IMG_PGM: Self = Self(4);
     /// `MAVLINK_DATA_STREAM_IMG_PNG` = 5.
     pub const MAVLINK_DATA_STREAM_IMG_PNG: Self = Self(5);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAVLINK_DATA_STREAM_IMG_JPEG",
+            1 => "MAVLINK_DATA_STREAM_IMG_BMP",
+            2 => "MAVLINK_DATA_STREAM_IMG_RAW8U",
+            3 => "MAVLINK_DATA_STREAM_IMG_RAW32U",
+            4 => "MAVLINK_DATA_STREAM_IMG_PGM",
+            5 => "MAVLINK_DATA_STREAM_IMG_PNG",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAV_ARM_AUTH_DENIED_REASON`.
@@ -4521,6 +5774,20 @@ impl MavArmAuthDeniedReason {
     pub const MAV_ARM_AUTH_DENIED_REASON_AIRSPACE_IN_USE: Self = Self(4);
     /// Weather is not good to fly
     pub const MAV_ARM_AUTH_DENIED_REASON_BAD_WEATHER: Self = Self(5);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_ARM_AUTH_DENIED_REASON_GENERIC",
+            1 => "MAV_ARM_AUTH_DENIED_REASON_NONE",
+            2 => "MAV_ARM_AUTH_DENIED_REASON_INVALID_WAYPOINT",
+            3 => "MAV_ARM_AUTH_DENIED_REASON_TIMEOUT",
+            4 => "MAV_ARM_AUTH_DENIED_REASON_AIRSPACE_IN_USE",
+            5 => "MAV_ARM_AUTH_DENIED_REASON_BAD_WEATHER",
+            _ => return None,
+        })
+    }
 }
 
 /// Micro air vehicle / autopilot classes. This identifies the individual model.
@@ -4573,6 +5840,35 @@ impl MavAutopilot {
     pub const MAV_AUTOPILOT_AIRRAILS: Self = Self(19);
     /// Fusion Reflex - https://fusion.engineering
     pub const MAV_AUTOPILOT_REFLEX: Self = Self(20);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_AUTOPILOT_GENERIC",
+            1 => "MAV_AUTOPILOT_RESERVED",
+            2 => "MAV_AUTOPILOT_SLUGS",
+            3 => "MAV_AUTOPILOT_ARDUPILOTMEGA",
+            4 => "MAV_AUTOPILOT_OPENPILOT",
+            5 => "MAV_AUTOPILOT_GENERIC_WAYPOINTS_ONLY",
+            6 => "MAV_AUTOPILOT_GENERIC_WAYPOINTS_AND_SIMPLE_NAVIGATION_ONLY",
+            7 => "MAV_AUTOPILOT_GENERIC_MISSION_FULL",
+            8 => "MAV_AUTOPILOT_INVALID",
+            9 => "MAV_AUTOPILOT_PPZ",
+            10 => "MAV_AUTOPILOT_UDB",
+            11 => "MAV_AUTOPILOT_FP",
+            12 => "MAV_AUTOPILOT_PX4",
+            13 => "MAV_AUTOPILOT_SMACCMPILOT",
+            14 => "MAV_AUTOPILOT_AUTOQUAD",
+            15 => "MAV_AUTOPILOT_ARMAZILA",
+            16 => "MAV_AUTOPILOT_AEROB",
+            17 => "MAV_AUTOPILOT_ASLUAV",
+            18 => "MAV_AUTOPILOT_SMARTAP",
+            19 => "MAV_AUTOPILOT_AIRRAILS",
+            20 => "MAV_AUTOPILOT_REFLEX",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAV_AVSS_COMMAND_FAILURE_REASON`.
@@ -4589,6 +5885,17 @@ impl MavAvssCommandFailureReason {
     pub const PRS_DTM_NOT_ARMED: Self = Self(2);
     /// AVSS defined command failure reason. PRS OTM not armed.
     pub const PRS_OTM_NOT_ARMED: Self = Self(3);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "PRS_NOT_STEADY",
+            2 => "PRS_DTM_NOT_ARMED",
+            3 => "PRS_OTM_NOT_ARMED",
+            _ => return None,
+        })
+    }
 }
 
 /// Enumeration for battery charge states.
@@ -4615,6 +5922,22 @@ impl MavBatteryChargeState {
     pub const MAV_BATTERY_CHARGE_STATE_UNHEALTHY: Self = Self(6);
     /// Battery is charging.
     pub const MAV_BATTERY_CHARGE_STATE_CHARGING: Self = Self(7);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_BATTERY_CHARGE_STATE_UNDEFINED",
+            1 => "MAV_BATTERY_CHARGE_STATE_OK",
+            2 => "MAV_BATTERY_CHARGE_STATE_LOW",
+            3 => "MAV_BATTERY_CHARGE_STATE_CRITICAL",
+            4 => "MAV_BATTERY_CHARGE_STATE_EMERGENCY",
+            5 => "MAV_BATTERY_CHARGE_STATE_FAILED",
+            6 => "MAV_BATTERY_CHARGE_STATE_UNHEALTHY",
+            7 => "MAV_BATTERY_CHARGE_STATE_CHARGING",
+            _ => return None,
+        })
+    }
 }
 
 /// Smart battery supply status/fault flags (bitmask) for health indication. The battery must also report either MAV_BATTERY_CHARGE_STATE_FAILED or MAV_BATTERY_CHARGE_STATE_UNHEALTHY if any of these are set.
@@ -4643,6 +5966,23 @@ impl MavBatteryFault {
     pub const MAV_BATTERY_FAULT_INCOMPATIBLE_FIRMWARE: Self = Self(128);
     /// Battery is not compatible due to cell configuration (e.g. 5s1p when vehicle requires 6s).
     pub const BATTERY_FAULT_INCOMPATIBLE_CELLS_CONFIGURATION: Self = Self(256);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "MAV_BATTERY_FAULT_DEEP_DISCHARGE",
+            2 => "MAV_BATTERY_FAULT_SPIKES",
+            4 => "MAV_BATTERY_FAULT_CELL_FAIL",
+            8 => "MAV_BATTERY_FAULT_OVER_CURRENT",
+            16 => "MAV_BATTERY_FAULT_OVER_TEMPERATURE",
+            32 => "MAV_BATTERY_FAULT_UNDER_TEMPERATURE",
+            64 => "MAV_BATTERY_FAULT_INCOMPATIBLE_VOLTAGE",
+            128 => "MAV_BATTERY_FAULT_INCOMPATIBLE_FIRMWARE",
+            256 => "BATTERY_FAULT_INCOMPATIBLE_CELLS_CONFIGURATION",
+            _ => return None,
+        })
+    }
 }
 
 /// Enumeration of battery functions
@@ -4663,6 +6003,19 @@ impl MavBatteryFunction {
     pub const MAV_BATTERY_FUNCTION_AVIONICS: Self = Self(3);
     /// Payload battery
     pub const MAV_BATTERY_TYPE_PAYLOAD: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_BATTERY_FUNCTION_UNKNOWN",
+            1 => "MAV_BATTERY_FUNCTION_ALL",
+            2 => "MAV_BATTERY_FUNCTION_PROPULSION",
+            3 => "MAV_BATTERY_FUNCTION_AVIONICS",
+            4 => "MAV_BATTERY_TYPE_PAYLOAD",
+            _ => return None,
+        })
+    }
 }
 
 /// Battery mode. Note, the normal operation mode (i.e. when flying) should be reported as MAV_BATTERY_MODE_UNKNOWN to allow message trimming in normal flight.
@@ -4679,6 +6032,17 @@ impl MavBatteryMode {
     pub const MAV_BATTERY_MODE_AUTO_DISCHARGING: Self = Self(1);
     /// Battery in hot-swap mode (current limited to prevent spikes that might damage sensitive electrical circuits).
     pub const MAV_BATTERY_MODE_HOT_SWAP: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_BATTERY_MODE_UNKNOWN",
+            1 => "MAV_BATTERY_MODE_AUTO_DISCHARGING",
+            2 => "MAV_BATTERY_MODE_HOT_SWAP",
+            _ => return None,
+        })
+    }
 }
 
 /// Enumeration of battery types
@@ -4699,6 +6063,19 @@ impl MavBatteryType {
     pub const MAV_BATTERY_TYPE_LION: Self = Self(3);
     /// Nickel metal hydride battery
     pub const MAV_BATTERY_TYPE_NIMH: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_BATTERY_TYPE_UNKNOWN",
+            1 => "MAV_BATTERY_TYPE_LIPO",
+            2 => "MAV_BATTERY_TYPE_LIFE",
+            3 => "MAV_BATTERY_TYPE_LION",
+            4 => "MAV_BATTERY_TYPE_NIMH",
+            _ => return None,
+        })
+    }
 }
 
 /// Enum used to indicate true or false (also: success or failure, enabled or disabled, active or inactive).
@@ -4713,6 +6090,16 @@ impl MavBool {
     pub const MAV_BOOL_FALSE: Self = Self(0);
     /// True.
     pub const MAV_BOOL_TRUE: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_BOOL_FALSE",
+            1 => "MAV_BOOL_TRUE",
+            _ => return None,
+        })
+    }
 }
 
 /// Commands to be executed by the MAV. They can be executed on user request, or as part of a mission script. If the action is used in a mission, the parameter mapping to the waypoint/mission message is as follows: Param 1, Param 2, Param 3, Param 4, X: Param 5, Y:Param 6, Z:Param 7. This command list is similar what ARINC 424 is for commercial aircraft: A data format how to interpret waypoint/mission data. NaN and INT32_MAX may be used in float/integer params (respectively) to indicate optional/default values (e.g. to use the component's current yaw or latitude rather than a specific value). See https://mavlink.io/en/guide/xml_schema.html#MAV_CMD for information about the structure of the MAV_CMD entries
@@ -5135,6 +6522,220 @@ impl MavCmd {
     pub const MAV_CMD_PRS_GET_ARM_ALTI: Self = Self(60071);
     /// AVSS defined command. Shuts down the PRS system.
     pub const MAV_CMD_PRS_SHUTDOWN: Self = Self(60072);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            16 => "MAV_CMD_NAV_WAYPOINT",
+            17 => "MAV_CMD_NAV_LOITER_UNLIM",
+            18 => "MAV_CMD_NAV_LOITER_TURNS",
+            19 => "MAV_CMD_NAV_LOITER_TIME",
+            20 => "MAV_CMD_NAV_RETURN_TO_LAUNCH",
+            21 => "MAV_CMD_NAV_LAND",
+            22 => "MAV_CMD_NAV_TAKEOFF",
+            23 => "MAV_CMD_NAV_LAND_LOCAL",
+            24 => "MAV_CMD_NAV_TAKEOFF_LOCAL",
+            25 => "MAV_CMD_NAV_FOLLOW",
+            30 => "MAV_CMD_NAV_CONTINUE_AND_CHANGE_ALT",
+            31 => "MAV_CMD_NAV_LOITER_TO_ALT",
+            32 => "MAV_CMD_DO_FOLLOW",
+            33 => "MAV_CMD_DO_FOLLOW_REPOSITION",
+            36 => "MAV_CMD_NAV_ARC_WAYPOINT",
+            80 => "MAV_CMD_NAV_ROI",
+            81 => "MAV_CMD_NAV_PATHPLANNING",
+            82 => "MAV_CMD_NAV_SPLINE_WAYPOINT",
+            83 => "MAV_CMD_NAV_ALTITUDE_WAIT",
+            84 => "MAV_CMD_NAV_VTOL_TAKEOFF",
+            85 => "MAV_CMD_NAV_VTOL_LAND",
+            92 => "MAV_CMD_NAV_GUIDED_ENABLE",
+            93 => "MAV_CMD_NAV_DELAY",
+            94 => "MAV_CMD_NAV_PAYLOAD_PLACE",
+            95 => "MAV_CMD_NAV_LAST",
+            112 => "MAV_CMD_CONDITION_DELAY",
+            113 => "MAV_CMD_CONDITION_CHANGE_ALT",
+            114 => "MAV_CMD_CONDITION_DISTANCE",
+            115 => "MAV_CMD_CONDITION_YAW",
+            159 => "MAV_CMD_CONDITION_LAST",
+            176 => "MAV_CMD_DO_SET_MODE",
+            177 => "MAV_CMD_DO_JUMP",
+            178 => "MAV_CMD_DO_CHANGE_SPEED",
+            179 => "MAV_CMD_DO_SET_HOME",
+            180 => "MAV_CMD_DO_SET_PARAMETER",
+            181 => "MAV_CMD_DO_SET_RELAY",
+            182 => "MAV_CMD_DO_REPEAT_RELAY",
+            183 => "MAV_CMD_DO_SET_SERVO",
+            184 => "MAV_CMD_DO_REPEAT_SERVO",
+            185 => "MAV_CMD_DO_FLIGHTTERMINATION",
+            186 => "MAV_CMD_DO_CHANGE_ALTITUDE",
+            188 => "MAV_CMD_DO_RETURN_PATH_START",
+            189 => "MAV_CMD_DO_LAND_START",
+            190 => "MAV_CMD_DO_RALLY_LAND",
+            191 => "MAV_CMD_DO_GO_AROUND",
+            192 => "MAV_CMD_DO_REPOSITION",
+            193 => "MAV_CMD_DO_PAUSE_CONTINUE",
+            194 => "MAV_CMD_DO_SET_REVERSE",
+            195 => "MAV_CMD_DO_SET_ROI_LOCATION",
+            196 => "MAV_CMD_DO_SET_ROI_WPNEXT_OFFSET",
+            197 => "MAV_CMD_DO_SET_ROI_NONE",
+            198 => "MAV_CMD_DO_SET_ROI_SYSID",
+            200 => "MAV_CMD_DO_CONTROL_VIDEO",
+            201 => "MAV_CMD_DO_SET_ROI",
+            202 => "MAV_CMD_DO_DIGICAM_CONFIGURE",
+            203 => "MAV_CMD_DO_DIGICAM_CONTROL",
+            204 => "MAV_CMD_DO_MOUNT_CONFIGURE",
+            205 => "MAV_CMD_DO_MOUNT_CONTROL",
+            206 => "MAV_CMD_DO_SET_CAM_TRIGG_DIST",
+            207 => "MAV_CMD_DO_FENCE_ENABLE",
+            208 => "MAV_CMD_DO_PARACHUTE",
+            209 => "MAV_CMD_DO_MOTOR_TEST",
+            210 => "MAV_CMD_DO_INVERTED_FLIGHT",
+            211 => "MAV_CMD_DO_GRIPPER",
+            212 => "MAV_CMD_DO_AUTOTUNE_ENABLE",
+            213 => "MAV_CMD_NAV_SET_YAW_SPEED",
+            214 => "MAV_CMD_DO_SET_CAM_TRIGG_INTERVAL",
+            215 => "MAV_CMD_DO_SET_RESUME_REPEAT_DIST",
+            216 => "MAV_CMD_DO_SPRAYER",
+            217 => "MAV_CMD_DO_SEND_SCRIPT_MESSAGE",
+            218 => "MAV_CMD_DO_AUX_FUNCTION",
+            220 => "MAV_CMD_DO_MOUNT_CONTROL_QUAT",
+            221 => "MAV_CMD_DO_GUIDED_MASTER",
+            222 => "MAV_CMD_DO_GUIDED_LIMITS",
+            223 => "MAV_CMD_DO_ENGINE_CONTROL",
+            224 => "MAV_CMD_DO_SET_MISSION_CURRENT",
+            240 => "MAV_CMD_DO_LAST",
+            241 => "MAV_CMD_PREFLIGHT_CALIBRATION",
+            242 => "MAV_CMD_PREFLIGHT_SET_SENSOR_OFFSETS",
+            243 => "MAV_CMD_PREFLIGHT_UAVCAN",
+            245 => "MAV_CMD_PREFLIGHT_STORAGE",
+            246 => "MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN",
+            252 => "MAV_CMD_OVERRIDE_GOTO",
+            260 => "MAV_CMD_OBLIQUE_SURVEY",
+            262 => "MAV_CMD_DO_SET_STANDARD_MODE",
+            300 => "MAV_CMD_MISSION_START",
+            400 => "MAV_CMD_COMPONENT_ARM_DISARM",
+            401 => "MAV_CMD_RUN_PREARM_CHECKS",
+            410 => "MAV_CMD_GET_HOME_POSITION",
+            500 => "MAV_CMD_START_RX_PAIR",
+            510 => "MAV_CMD_GET_MESSAGE_INTERVAL",
+            511 => "MAV_CMD_SET_MESSAGE_INTERVAL",
+            512 => "MAV_CMD_REQUEST_MESSAGE",
+            519 => "MAV_CMD_REQUEST_PROTOCOL_VERSION",
+            520 => "MAV_CMD_REQUEST_AUTOPILOT_CAPABILITIES",
+            521 => "MAV_CMD_REQUEST_CAMERA_INFORMATION",
+            522 => "MAV_CMD_REQUEST_CAMERA_SETTINGS",
+            525 => "MAV_CMD_REQUEST_STORAGE_INFORMATION",
+            526 => "MAV_CMD_STORAGE_FORMAT",
+            527 => "MAV_CMD_REQUEST_CAMERA_CAPTURE_STATUS",
+            528 => "MAV_CMD_REQUEST_FLIGHT_INFORMATION",
+            529 => "MAV_CMD_RESET_CAMERA_SETTINGS",
+            530 => "MAV_CMD_SET_CAMERA_MODE",
+            531 => "MAV_CMD_SET_CAMERA_ZOOM",
+            532 => "MAV_CMD_SET_CAMERA_FOCUS",
+            533 => "MAV_CMD_SET_STORAGE_USAGE",
+            534 => "MAV_CMD_SET_CAMERA_SOURCE",
+            600 => "MAV_CMD_JUMP_TAG",
+            601 => "MAV_CMD_DO_JUMP_TAG",
+            610 => "MAV_CMD_DO_SET_SYS_CMP_ID",
+            611 => "MAV_CMD_DO_SET_GLOBAL_ORIGIN",
+            1000 => "MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW",
+            1001 => "MAV_CMD_DO_GIMBAL_MANAGER_CONFIGURE",
+            2000 => "MAV_CMD_IMAGE_START_CAPTURE",
+            2001 => "MAV_CMD_IMAGE_STOP_CAPTURE",
+            2003 => "MAV_CMD_DO_TRIGGER_CONTROL",
+            2004 => "MAV_CMD_CAMERA_TRACK_POINT",
+            2005 => "MAV_CMD_CAMERA_TRACK_RECTANGLE",
+            2010 => "MAV_CMD_CAMERA_STOP_TRACKING",
+            2500 => "MAV_CMD_VIDEO_START_CAPTURE",
+            2501 => "MAV_CMD_VIDEO_STOP_CAPTURE",
+            2502 => "MAV_CMD_VIDEO_START_STREAMING",
+            2503 => "MAV_CMD_VIDEO_STOP_STREAMING",
+            2504 => "MAV_CMD_REQUEST_VIDEO_STREAM_INFORMATION",
+            2505 => "MAV_CMD_REQUEST_VIDEO_STREAM_STATUS",
+            2510 => "MAV_CMD_LOGGING_START",
+            2511 => "MAV_CMD_LOGGING_STOP",
+            2520 => "MAV_CMD_AIRFRAME_CONFIGURATION",
+            2600 => "MAV_CMD_CONTROL_HIGH_LATENCY",
+            2800 => "MAV_CMD_PANORAMA_CREATE",
+            3000 => "MAV_CMD_DO_VTOL_TRANSITION",
+            3001 => "MAV_CMD_ARM_AUTHORIZATION_REQUEST",
+            4000 => "MAV_CMD_SET_GUIDED_SUBMODE_STANDARD",
+            4001 => "MAV_CMD_SET_GUIDED_SUBMODE_CIRCLE",
+            5000 => "MAV_CMD_NAV_FENCE_RETURN_POINT",
+            5001 => "MAV_CMD_NAV_FENCE_POLYGON_VERTEX_INCLUSION",
+            5002 => "MAV_CMD_NAV_FENCE_POLYGON_VERTEX_EXCLUSION",
+            5003 => "MAV_CMD_NAV_FENCE_CIRCLE_INCLUSION",
+            5004 => "MAV_CMD_NAV_FENCE_CIRCLE_EXCLUSION",
+            5005 => "MAV_CMD_NAV_FENCE_HOME_CIRCLE_INCLUSION",
+            5100 => "MAV_CMD_NAV_RALLY_POINT",
+            5200 => "MAV_CMD_UAVCAN_GET_NODE_INFO",
+            5300 => "MAV_CMD_DO_SET_SAFETY_SWITCH_STATE",
+            10001 => "MAV_CMD_DO_ADSB_OUT_IDENT",
+            10151 => "MAV_CMD_LOWEHEISER_SET_STATE",
+            30001 => "MAV_CMD_PAYLOAD_PREPARE_DEPLOY",
+            30002 => "MAV_CMD_PAYLOAD_CONTROL_DEPLOY",
+            31000 => "MAV_CMD_WAYPOINT_USER_1",
+            31001 => "MAV_CMD_WAYPOINT_USER_2",
+            31002 => "MAV_CMD_WAYPOINT_USER_3",
+            31003 => "MAV_CMD_WAYPOINT_USER_4",
+            31004 => "MAV_CMD_WAYPOINT_USER_5",
+            31005 => "MAV_CMD_SPATIAL_USER_1",
+            31006 => "MAV_CMD_SPATIAL_USER_2",
+            31007 => "MAV_CMD_SPATIAL_USER_3",
+            31008 => "MAV_CMD_SPATIAL_USER_4",
+            31009 => "MAV_CMD_SPATIAL_USER_5",
+            31010 => "MAV_CMD_USER_1",
+            31011 => "MAV_CMD_USER_2",
+            31012 => "MAV_CMD_USER_3",
+            31013 => "MAV_CMD_USER_4",
+            31014 => "MAV_CMD_USER_5",
+            32000 => "MAV_CMD_CAN_FORWARD",
+            40001 => "MAV_CMD_RESET_MPPT",
+            40002 => "MAV_CMD_PAYLOAD_CONTROL",
+            42000 => "MAV_CMD_POWER_OFF_INITIATED",
+            42001 => "MAV_CMD_SOLO_BTN_FLY_CLICK",
+            42002 => "MAV_CMD_SOLO_BTN_FLY_HOLD",
+            42003 => "MAV_CMD_SOLO_BTN_PAUSE_CLICK",
+            42004 => "MAV_CMD_FIXED_MAG_CAL",
+            42005 => "MAV_CMD_FIXED_MAG_CAL_FIELD",
+            42006 => "MAV_CMD_FIXED_MAG_CAL_YAW",
+            42007 => "MAV_CMD_SET_EKF_SOURCE_SET",
+            42424 => "MAV_CMD_DO_START_MAG_CAL",
+            42425 => "MAV_CMD_DO_ACCEPT_MAG_CAL",
+            42426 => "MAV_CMD_DO_CANCEL_MAG_CAL",
+            42427 => "MAV_CMD_SET_FACTORY_TEST_MODE",
+            42428 => "MAV_CMD_DO_SEND_BANNER",
+            42429 => "MAV_CMD_ACCELCAL_VEHICLE_POS",
+            42501 => "MAV_CMD_GIMBAL_RESET",
+            42502 => "MAV_CMD_GIMBAL_AXIS_CALIBRATION_STATUS",
+            42503 => "MAV_CMD_GIMBAL_REQUEST_AXIS_CALIBRATION",
+            42505 => "MAV_CMD_GIMBAL_FULL_RESET",
+            42600 => "MAV_CMD_DO_WINCH",
+            42650 => "MAV_CMD_FLASH_BOOTLOADER",
+            42651 => "MAV_CMD_BATTERY_RESET",
+            42700 => "MAV_CMD_DEBUG_TRAP",
+            42701 => "MAV_CMD_SCRIPTING",
+            42702 => "MAV_CMD_NAV_SCRIPT_TIME",
+            42703 => "MAV_CMD_NAV_ATTITUDE_TIME",
+            43000 => "MAV_CMD_GUIDED_CHANGE_SPEED",
+            43001 => "MAV_CMD_GUIDED_CHANGE_ALTITUDE",
+            43002 => "MAV_CMD_GUIDED_CHANGE_HEADING",
+            43003 => "MAV_CMD_EXTERNAL_POSITION_ESTIMATE",
+            43004 => "MAV_CMD_EXTERNAL_WIND_ESTIMATE",
+            43005 => "MAV_CMD_SET_HAGL",
+            60002 => "MAV_CMD_STORM32_DO_GIMBAL_MANAGER_CONTROL_PITCHYAW",
+            60010 => "MAV_CMD_STORM32_DO_GIMBAL_MANAGER_SETUP",
+            60020 => "MAV_CMD_QSHOT_DO_CONFIGURE",
+            60050 => "MAV_CMD_PRS_SET_ARM",
+            60051 => "MAV_CMD_PRS_GET_ARM",
+            60052 => "MAV_CMD_PRS_GET_BATTERY",
+            60053 => "MAV_CMD_PRS_GET_ERR",
+            60070 => "MAV_CMD_PRS_SET_ARM_ALTI",
+            60071 => "MAV_CMD_PRS_GET_ARM_ALTI",
+            60072 => "MAV_CMD_PRS_SHUTDOWN",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAV_CMD_DO_AUX_FUNCTION_SWITCH_LEVEL`.
@@ -5151,6 +6752,17 @@ impl MavCmdDoAuxFunctionSwitchLevel {
     pub const MAV_CMD_DO_AUX_FUNCTION_SWITCH_LEVEL_MIDDLE: Self = Self(1);
     /// Switch High.
     pub const MAV_CMD_DO_AUX_FUNCTION_SWITCH_LEVEL_HIGH: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_CMD_DO_AUX_FUNCTION_SWITCH_LEVEL_LOW",
+            1 => "MAV_CMD_DO_AUX_FUNCTION_SWITCH_LEVEL_MIDDLE",
+            2 => "MAV_CMD_DO_AUX_FUNCTION_SWITCH_LEVEL_HIGH",
+            _ => return None,
+        })
+    }
 }
 
 /// Possible actions an aircraft can take to avoid a collision.
@@ -5175,6 +6787,21 @@ impl MavCollisionAction {
     pub const MAV_COLLISION_ACTION_RTL: Self = Self(5);
     /// Aircraft to stop in place
     pub const MAV_COLLISION_ACTION_HOVER: Self = Self(6);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_COLLISION_ACTION_NONE",
+            1 => "MAV_COLLISION_ACTION_REPORT",
+            2 => "MAV_COLLISION_ACTION_ASCEND_OR_DESCEND",
+            3 => "MAV_COLLISION_ACTION_MOVE_HORIZONTALLY",
+            4 => "MAV_COLLISION_ACTION_MOVE_PERPENDICULAR",
+            5 => "MAV_COLLISION_ACTION_RTL",
+            6 => "MAV_COLLISION_ACTION_HOVER",
+            _ => return None,
+        })
+    }
 }
 
 /// Source of information about this collision.
@@ -5189,6 +6816,16 @@ impl MavCollisionSrc {
     pub const MAV_COLLISION_SRC_ADSB: Self = Self(0);
     /// ID field references MAVLink SRC ID
     pub const MAV_COLLISION_SRC_MAVLINK_GPS_GLOBAL_INT: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_COLLISION_SRC_ADSB",
+            1 => "MAV_COLLISION_SRC_MAVLINK_GPS_GLOBAL_INT",
+            _ => return None,
+        })
+    }
 }
 
 /// Aircraft-rated danger from this threat.
@@ -5205,6 +6842,17 @@ impl MavCollisionThreatLevel {
     pub const MAV_COLLISION_THREAT_LEVEL_LOW: Self = Self(1);
     /// Craft is panicking, and may take actions to avoid threat
     pub const MAV_COLLISION_THREAT_LEVEL_HIGH: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_COLLISION_THREAT_LEVEL_NONE",
+            1 => "MAV_COLLISION_THREAT_LEVEL_LOW",
+            2 => "MAV_COLLISION_THREAT_LEVEL_HIGH",
+            _ => return None,
+        })
+    }
 }
 
 /// Component ids (values) for the different types and instances of onboard hardware/software that might make up a MAVLink system (autopilot, cameras, servos, GPS systems, avoidance systems etc.). Components must use the appropriate ID in their source address when sending messages. Components can also use IDs to determine if they are the intended recipient of an incoming message. The MAV_COMP_ID_ALL value is used to indicate messages that must be processed by all components. When creating new entries, components that can have multiple instances (e.g. cameras, servos etc.) should be allocated sequential values. An appropriate number of values should be left free after these components to allow the number of instances to be expanded.
@@ -5487,6 +7135,150 @@ impl MavComponent {
     pub const MAV_COMP_ID_ILLUMINATOR: Self = Self(243);
     /// Deprecated, don't use. Component for handling system messages (e.g. to ARM, takeoff, etc.).
     pub const MAV_COMP_ID_SYSTEM_CONTROL: Self = Self(250);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_COMP_ID_ALL",
+            1 => "MAV_COMP_ID_AUTOPILOT1",
+            25 => "MAV_COMP_ID_USER1",
+            26 => "MAV_COMP_ID_USER2",
+            27 => "MAV_COMP_ID_USER3",
+            28 => "MAV_COMP_ID_USER4",
+            29 => "MAV_COMP_ID_USER5",
+            30 => "MAV_COMP_ID_USER6",
+            31 => "MAV_COMP_ID_USER7",
+            32 => "MAV_COMP_ID_USER8",
+            33 => "MAV_COMP_ID_USER9",
+            34 => "MAV_COMP_ID_USER10",
+            35 => "MAV_COMP_ID_USER11",
+            36 => "MAV_COMP_ID_USER12",
+            37 => "MAV_COMP_ID_USER13",
+            38 => "MAV_COMP_ID_USER14",
+            39 => "MAV_COMP_ID_USER15",
+            40 => "MAV_COMP_ID_USER16",
+            41 => "MAV_COMP_ID_USER17",
+            42 => "MAV_COMP_ID_USER18",
+            43 => "MAV_COMP_ID_USER19",
+            44 => "MAV_COMP_ID_USER20",
+            45 => "MAV_COMP_ID_USER21",
+            46 => "MAV_COMP_ID_USER22",
+            47 => "MAV_COMP_ID_USER23",
+            48 => "MAV_COMP_ID_USER24",
+            49 => "MAV_COMP_ID_USER25",
+            50 => "MAV_COMP_ID_USER26",
+            51 => "MAV_COMP_ID_USER27",
+            52 => "MAV_COMP_ID_USER28",
+            53 => "MAV_COMP_ID_USER29",
+            54 => "MAV_COMP_ID_USER30",
+            55 => "MAV_COMP_ID_USER31",
+            56 => "MAV_COMP_ID_USER32",
+            57 => "MAV_COMP_ID_USER33",
+            58 => "MAV_COMP_ID_USER34",
+            59 => "MAV_COMP_ID_USER35",
+            60 => "MAV_COMP_ID_USER36",
+            61 => "MAV_COMP_ID_USER37",
+            62 => "MAV_COMP_ID_USER38",
+            63 => "MAV_COMP_ID_USER39",
+            64 => "MAV_COMP_ID_USER40",
+            65 => "MAV_COMP_ID_USER41",
+            66 => "MAV_COMP_ID_USER42",
+            67 => "MAV_COMP_ID_USER43",
+            68 => "MAV_COMP_ID_TELEMETRY_RADIO",
+            69 => "MAV_COMP_ID_USER45",
+            70 => "MAV_COMP_ID_USER46",
+            71 => "MAV_COMP_ID_USER47",
+            72 => "MAV_COMP_ID_USER48",
+            73 => "MAV_COMP_ID_USER49",
+            74 => "MAV_COMP_ID_USER50",
+            75 => "MAV_COMP_ID_USER51",
+            76 => "MAV_COMP_ID_USER52",
+            77 => "MAV_COMP_ID_USER53",
+            78 => "MAV_COMP_ID_USER54",
+            79 => "MAV_COMP_ID_USER55",
+            80 => "MAV_COMP_ID_USER56",
+            81 => "MAV_COMP_ID_USER57",
+            82 => "MAV_COMP_ID_USER58",
+            83 => "MAV_COMP_ID_USER59",
+            84 => "MAV_COMP_ID_USER60",
+            85 => "MAV_COMP_ID_USER61",
+            86 => "MAV_COMP_ID_USER62",
+            87 => "MAV_COMP_ID_USER63",
+            88 => "MAV_COMP_ID_USER64",
+            89 => "MAV_COMP_ID_USER65",
+            90 => "MAV_COMP_ID_USER66",
+            91 => "MAV_COMP_ID_USER67",
+            92 => "MAV_COMP_ID_USER68",
+            93 => "MAV_COMP_ID_USER69",
+            94 => "MAV_COMP_ID_USER70",
+            95 => "MAV_COMP_ID_USER71",
+            96 => "MAV_COMP_ID_USER72",
+            97 => "MAV_COMP_ID_USER73",
+            98 => "MAV_COMP_ID_USER74",
+            99 => "MAV_COMP_ID_USER75",
+            100 => "MAV_COMP_ID_CAMERA",
+            101 => "MAV_COMP_ID_CAMERA2",
+            102 => "MAV_COMP_ID_CAMERA3",
+            103 => "MAV_COMP_ID_CAMERA4",
+            104 => "MAV_COMP_ID_CAMERA5",
+            105 => "MAV_COMP_ID_CAMERA6",
+            140 => "MAV_COMP_ID_SERVO1",
+            141 => "MAV_COMP_ID_SERVO2",
+            142 => "MAV_COMP_ID_SERVO3",
+            143 => "MAV_COMP_ID_SERVO4",
+            144 => "MAV_COMP_ID_SERVO5",
+            145 => "MAV_COMP_ID_SERVO6",
+            146 => "MAV_COMP_ID_SERVO7",
+            147 => "MAV_COMP_ID_SERVO8",
+            148 => "MAV_COMP_ID_SERVO9",
+            149 => "MAV_COMP_ID_SERVO10",
+            150 => "MAV_COMP_ID_SERVO11",
+            151 => "MAV_COMP_ID_SERVO12",
+            152 => "MAV_COMP_ID_SERVO13",
+            153 => "MAV_COMP_ID_SERVO14",
+            154 => "MAV_COMP_ID_GIMBAL",
+            155 => "MAV_COMP_ID_LOG",
+            156 => "MAV_COMP_ID_ADSB",
+            157 => "MAV_COMP_ID_OSD",
+            158 => "MAV_COMP_ID_PERIPHERAL",
+            159 => "MAV_COMP_ID_QX1_GIMBAL",
+            160 => "MAV_COMP_ID_FLARM",
+            161 => "MAV_COMP_ID_PARACHUTE",
+            169 => "MAV_COMP_ID_WINCH",
+            171 => "MAV_COMP_ID_GIMBAL2",
+            172 => "MAV_COMP_ID_GIMBAL3",
+            173 => "MAV_COMP_ID_GIMBAL4",
+            174 => "MAV_COMP_ID_GIMBAL5",
+            175 => "MAV_COMP_ID_GIMBAL6",
+            180 => "MAV_COMP_ID_BATTERY",
+            181 => "MAV_COMP_ID_BATTERY2",
+            189 => "MAV_COMP_ID_MAVCAN",
+            190 => "MAV_COMP_ID_MISSIONPLANNER",
+            191 => "MAV_COMP_ID_ONBOARD_COMPUTER",
+            192 => "MAV_COMP_ID_ONBOARD_COMPUTER2",
+            193 => "MAV_COMP_ID_ONBOARD_COMPUTER3",
+            194 => "MAV_COMP_ID_ONBOARD_COMPUTER4",
+            195 => "MAV_COMP_ID_PATHPLANNER",
+            196 => "MAV_COMP_ID_OBSTACLE_AVOIDANCE",
+            197 => "MAV_COMP_ID_VISUAL_INERTIAL_ODOMETRY",
+            198 => "MAV_COMP_ID_PAIRING_MANAGER",
+            200 => "MAV_COMP_ID_IMU",
+            201 => "MAV_COMP_ID_IMU_2",
+            202 => "MAV_COMP_ID_IMU_3",
+            220 => "MAV_COMP_ID_GPS",
+            221 => "MAV_COMP_ID_GPS2",
+            236 => "MAV_COMP_ID_ODID_TXRX_1",
+            237 => "MAV_COMP_ID_ODID_TXRX_2",
+            238 => "MAV_COMP_ID_ODID_TXRX_3",
+            240 => "MAV_COMP_ID_UDP_BRIDGE",
+            241 => "MAV_COMP_ID_UART_BRIDGE",
+            242 => "MAV_COMP_ID_TUNNEL_NODE",
+            243 => "MAV_COMP_ID_ILLUMINATOR",
+            250 => "MAV_COMP_ID_SYSTEM_CONTROL",
+            _ => return None,
+        })
+    }
 }
 
 /// A data stream is not a fixed set of messages, but rather a recommendation to the autopilot software. Individual autopilots may or may not obey the recommended messages.
@@ -5515,6 +7307,23 @@ impl MavDataStream {
     pub const MAV_DATA_STREAM_EXTRA2: Self = Self(11);
     /// Dependent on the autopilot
     pub const MAV_DATA_STREAM_EXTRA3: Self = Self(12);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_DATA_STREAM_ALL",
+            1 => "MAV_DATA_STREAM_RAW_SENSORS",
+            2 => "MAV_DATA_STREAM_EXTENDED_STATUS",
+            3 => "MAV_DATA_STREAM_RC_CHANNELS",
+            4 => "MAV_DATA_STREAM_RAW_CONTROLLER",
+            6 => "MAV_DATA_STREAM_POSITION",
+            10 => "MAV_DATA_STREAM_EXTRA1",
+            11 => "MAV_DATA_STREAM_EXTRA2",
+            12 => "MAV_DATA_STREAM_EXTRA3",
+            _ => return None,
+        })
+    }
 }
 
 /// Enumeration of distance sensor types
@@ -5535,6 +7344,19 @@ impl MavDistanceSensor {
     pub const MAV_DISTANCE_SENSOR_RADAR: Self = Self(3);
     /// Broken or unknown type, e.g. analog units
     pub const MAV_DISTANCE_SENSOR_UNKNOWN: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_DISTANCE_SENSOR_LASER",
+            1 => "MAV_DISTANCE_SENSOR_ULTRASOUND",
+            2 => "MAV_DISTANCE_SENSOR_INFRARED",
+            3 => "MAV_DISTANCE_SENSOR_RADAR",
+            4 => "MAV_DISTANCE_SENSOR_UNKNOWN",
+            _ => return None,
+        })
+    }
 }
 
 /// Bitmap of options for the MAV_CMD_DO_REPOSITION
@@ -5547,6 +7369,15 @@ pub struct MavDoRepositionFlags(pub u32);
 impl MavDoRepositionFlags {
     /// The aircraft should immediately transition into guided. This should not be set for follow me applications
     pub const MAV_DO_REPOSITION_FLAGS_CHANGE_MODE: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "MAV_DO_REPOSITION_FLAGS_CHANGE_MODE",
+            _ => return None,
+        })
+    }
 }
 
 /// Enumeration of estimator types
@@ -5575,6 +7406,23 @@ impl MavEstimatorType {
     pub const MAV_ESTIMATOR_TYPE_LIDAR: Self = Self(7);
     /// Estimator on autopilot.
     pub const MAV_ESTIMATOR_TYPE_AUTOPILOT: Self = Self(8);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_ESTIMATOR_TYPE_UNKNOWN",
+            1 => "MAV_ESTIMATOR_TYPE_NAIVE",
+            2 => "MAV_ESTIMATOR_TYPE_VISION",
+            3 => "MAV_ESTIMATOR_TYPE_VIO",
+            4 => "MAV_ESTIMATOR_TYPE_GPS",
+            5 => "MAV_ESTIMATOR_TYPE_GPS_INS",
+            6 => "MAV_ESTIMATOR_TYPE_MOCAP",
+            7 => "MAV_ESTIMATOR_TYPE_LIDAR",
+            8 => "MAV_ESTIMATOR_TYPE_AUTOPILOT",
+            _ => return None,
+        })
+    }
 }
 
 /// Coordinate frames used by MAVLink. Not all frames are supported by all commands, messages, or vehicles. Global frames use the following naming conventions: - "GLOBAL": Global coordinate frame with WGS84 latitude/longitude and altitude positive over mean sea level (MSL) by default. The following modifiers may be used with "GLOBAL": - "RELATIVE_ALT": Altitude is relative to the vehicle home position rather than MSL. - "TERRAIN_ALT": Altitude is relative to ground level rather than MSL. - "INT": Latitude/longitude (in degrees) are scaled by multiplying by 1E7. Local frames use the following naming conventions: - "LOCAL": Origin of local frame is fixed relative to earth. Unless otherwise specified this origin is the origin of the vehicle position-estimator ("EKF"). - "BODY": Origin of local frame travels with the vehicle. NOTE, "BODY" does NOT indicate alignment of frame axis with vehicle attitude. - "OFFSET": Deprecated synonym for "BODY" (origin travels with the vehicle). Not to be used for new frames. Some deprecated frames do not follow these conventions (e.g. MAV_FRAME_BODY_NED and MAV_FRAME_BODY_OFFSET_NED).
@@ -5629,6 +7477,36 @@ impl MavFrame {
     pub const MAV_FRAME_LOCAL_FRD: Self = Self(20);
     /// FLU local tangent frame (x: Forward, y: Left, z: Up) with origin fixed relative to earth. The forward axis is aligned to the front of the vehicle in the horizontal plane.
     pub const MAV_FRAME_LOCAL_FLU: Self = Self(21);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_FRAME_GLOBAL",
+            1 => "MAV_FRAME_LOCAL_NED",
+            2 => "MAV_FRAME_MISSION",
+            3 => "MAV_FRAME_GLOBAL_RELATIVE_ALT",
+            4 => "MAV_FRAME_LOCAL_ENU",
+            5 => "MAV_FRAME_GLOBAL_INT",
+            6 => "MAV_FRAME_GLOBAL_RELATIVE_ALT_INT",
+            7 => "MAV_FRAME_LOCAL_OFFSET_NED",
+            8 => "MAV_FRAME_BODY_NED",
+            9 => "MAV_FRAME_BODY_OFFSET_NED",
+            10 => "MAV_FRAME_GLOBAL_TERRAIN_ALT",
+            11 => "MAV_FRAME_GLOBAL_TERRAIN_ALT_INT",
+            12 => "MAV_FRAME_BODY_FRD",
+            13 => "MAV_FRAME_RESERVED_13",
+            14 => "MAV_FRAME_RESERVED_14",
+            15 => "MAV_FRAME_RESERVED_15",
+            16 => "MAV_FRAME_RESERVED_16",
+            17 => "MAV_FRAME_RESERVED_17",
+            18 => "MAV_FRAME_RESERVED_18",
+            19 => "MAV_FRAME_RESERVED_19",
+            20 => "MAV_FRAME_LOCAL_FRD",
+            21 => "MAV_FRAME_LOCAL_FLU",
+            _ => return None,
+        })
+    }
 }
 
 /// Flags to report status/failure cases for a power generator (used in GENERATOR_STATUS). Note that FAULTS are conditions that cause the generator to fail. Warnings are conditions that require attention before the next use (they indicate the system is not operating properly).
@@ -5685,6 +7563,37 @@ impl MavGeneratorStatusFlag {
     pub const MAV_GENERATOR_STATUS_FLAG_WARMING_UP: Self = Self(2097152);
     /// Generator is idle.
     pub const MAV_GENERATOR_STATUS_FLAG_IDLE: Self = Self(4194304);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "MAV_GENERATOR_STATUS_FLAG_OFF",
+            2 => "MAV_GENERATOR_STATUS_FLAG_READY",
+            4 => "MAV_GENERATOR_STATUS_FLAG_GENERATING",
+            8 => "MAV_GENERATOR_STATUS_FLAG_CHARGING",
+            16 => "MAV_GENERATOR_STATUS_FLAG_REDUCED_POWER",
+            32 => "MAV_GENERATOR_STATUS_FLAG_MAXPOWER",
+            64 => "MAV_GENERATOR_STATUS_FLAG_OVERTEMP_WARNING",
+            128 => "MAV_GENERATOR_STATUS_FLAG_OVERTEMP_FAULT",
+            256 => "MAV_GENERATOR_STATUS_FLAG_ELECTRONICS_OVERTEMP_WARNING",
+            512 => "MAV_GENERATOR_STATUS_FLAG_ELECTRONICS_OVERTEMP_FAULT",
+            1024 => "MAV_GENERATOR_STATUS_FLAG_ELECTRONICS_FAULT",
+            2048 => "MAV_GENERATOR_STATUS_FLAG_POWERSOURCE_FAULT",
+            4096 => "MAV_GENERATOR_STATUS_FLAG_COMMUNICATION_WARNING",
+            8192 => "MAV_GENERATOR_STATUS_FLAG_COOLING_WARNING",
+            16384 => "MAV_GENERATOR_STATUS_FLAG_POWER_RAIL_FAULT",
+            32768 => "MAV_GENERATOR_STATUS_FLAG_OVERCURRENT_FAULT",
+            65536 => "MAV_GENERATOR_STATUS_FLAG_BATTERY_OVERCHARGE_CURRENT_FAULT",
+            131072 => "MAV_GENERATOR_STATUS_FLAG_OVERVOLTAGE_FAULT",
+            262144 => "MAV_GENERATOR_STATUS_FLAG_BATTERY_UNDERVOLT_FAULT",
+            524288 => "MAV_GENERATOR_STATUS_FLAG_START_INHIBITED",
+            1048576 => "MAV_GENERATOR_STATUS_FLAG_MAINTENANCE_REQUIRED",
+            2097152 => "MAV_GENERATOR_STATUS_FLAG_WARMING_UP",
+            4194304 => "MAV_GENERATOR_STATUS_FLAG_IDLE",
+            _ => return None,
+        })
+    }
 }
 
 /// Actions that may be specified in MAV_CMD_OVERRIDE_GOTO to override mission execution.
@@ -5703,6 +7612,18 @@ impl MavGoto {
     pub const MAV_GOTO_HOLD_AT_CURRENT_POSITION: Self = Self(2);
     /// Hold at the position specified in the parameters of the DO_HOLD action
     pub const MAV_GOTO_HOLD_AT_SPECIFIED_POSITION: Self = Self(3);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_GOTO_DO_HOLD",
+            1 => "MAV_GOTO_DO_CONTINUE",
+            2 => "MAV_GOTO_HOLD_AT_CURRENT_POSITION",
+            3 => "MAV_GOTO_HOLD_AT_SPECIFIED_POSITION",
+            _ => return None,
+        })
+    }
 }
 
 /// Enumeration of landed detector states
@@ -5723,6 +7644,19 @@ impl MavLandedState {
     pub const MAV_LANDED_STATE_TAKEOFF: Self = Self(3);
     /// MAV currently landing
     pub const MAV_LANDED_STATE_LANDING: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_LANDED_STATE_UNDEFINED",
+            1 => "MAV_LANDED_STATE_ON_GROUND",
+            2 => "MAV_LANDED_STATE_IN_AIR",
+            3 => "MAV_LANDED_STATE_TAKEOFF",
+            4 => "MAV_LANDED_STATE_LANDING",
+            _ => return None,
+        })
+    }
 }
 
 /// Result of mission operation (in a MISSION_ACK message).
@@ -5765,6 +7699,30 @@ impl MavMissionResult {
     pub const MAV_MISSION_DENIED: Self = Self(14);
     /// Current mission operation cancelled (e.g. mission upload, mission download).
     pub const MAV_MISSION_OPERATION_CANCELLED: Self = Self(15);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_MISSION_ACCEPTED",
+            1 => "MAV_MISSION_ERROR",
+            2 => "MAV_MISSION_UNSUPPORTED_FRAME",
+            3 => "MAV_MISSION_UNSUPPORTED",
+            4 => "MAV_MISSION_NO_SPACE",
+            5 => "MAV_MISSION_INVALID",
+            6 => "MAV_MISSION_INVALID_PARAM1",
+            7 => "MAV_MISSION_INVALID_PARAM2",
+            8 => "MAV_MISSION_INVALID_PARAM3",
+            9 => "MAV_MISSION_INVALID_PARAM4",
+            10 => "MAV_MISSION_INVALID_PARAM5_X",
+            11 => "MAV_MISSION_INVALID_PARAM6_Y",
+            12 => "MAV_MISSION_INVALID_PARAM7",
+            13 => "MAV_MISSION_INVALID_SEQUENCE",
+            14 => "MAV_MISSION_DENIED",
+            15 => "MAV_MISSION_OPERATION_CANCELLED",
+            _ => return None,
+        })
+    }
 }
 
 /// Type of mission items being requested/sent in mission protocol.
@@ -5783,6 +7741,18 @@ impl MavMissionType {
     pub const MAV_MISSION_TYPE_RALLY: Self = Self(2);
     /// Only used in MISSION_CLEAR_ALL to clear all mission types.
     pub const MAV_MISSION_TYPE_ALL: Self = Self(255);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_MISSION_TYPE_MISSION",
+            1 => "MAV_MISSION_TYPE_FENCE",
+            2 => "MAV_MISSION_TYPE_RALLY",
+            255 => "MAV_MISSION_TYPE_ALL",
+            _ => return None,
+        })
+    }
 }
 
 /// These defines are predefined OR-combined mode flags. There is no need to use values from this enum, but it simplifies the use of the mode flags. Note that manual input is enabled in all modes as a safety override.
@@ -5815,6 +7785,25 @@ impl MavMode {
     pub const MAV_MODE_TEST_DISARMED: Self = Self(66);
     /// UNDEFINED mode. This solely depends on the autopilot - use with caution, intended for developers only.
     pub const MAV_MODE_TEST_ARMED: Self = Self(194);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_MODE_PREFLIGHT",
+            64 => "MAV_MODE_MANUAL_DISARMED",
+            66 => "MAV_MODE_TEST_DISARMED",
+            80 => "MAV_MODE_STABILIZE_DISARMED",
+            88 => "MAV_MODE_GUIDED_DISARMED",
+            92 => "MAV_MODE_AUTO_DISARMED",
+            192 => "MAV_MODE_MANUAL_ARMED",
+            194 => "MAV_MODE_TEST_ARMED",
+            208 => "MAV_MODE_STABILIZE_ARMED",
+            216 => "MAV_MODE_GUIDED_ARMED",
+            220 => "MAV_MODE_AUTO_ARMED",
+            _ => return None,
+        })
+    }
 }
 
 /// These flags encode the MAV mode, see MAV_MODE enum for useful combinations.
@@ -5841,6 +7830,22 @@ impl MavModeFlag {
     pub const MAV_MODE_FLAG_TEST_ENABLED: Self = Self(2);
     /// 0b00000001 Reserved for future use.
     pub const MAV_MODE_FLAG_CUSTOM_MODE_ENABLED: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "MAV_MODE_FLAG_CUSTOM_MODE_ENABLED",
+            2 => "MAV_MODE_FLAG_TEST_ENABLED",
+            4 => "MAV_MODE_FLAG_AUTO_ENABLED",
+            8 => "MAV_MODE_FLAG_GUIDED_ENABLED",
+            16 => "MAV_MODE_FLAG_STABILIZE_ENABLED",
+            32 => "MAV_MODE_FLAG_HIL_ENABLED",
+            64 => "MAV_MODE_FLAG_MANUAL_INPUT_ENABLED",
+            128 => "MAV_MODE_FLAG_SAFETY_ARMED",
+            _ => return None,
+        })
+    }
 }
 
 /// These values encode the bit positions of the decode position. These values can be used to read the value of a flag bit by combining the base_mode variable with AND with the flag position value. The result will be either 0 or 1, depending on if the flag is set or not.
@@ -5867,6 +7872,22 @@ impl MavModeFlagDecodePosition {
     pub const MAV_MODE_FLAG_DECODE_POSITION_TEST: Self = Self(2);
     /// Eighth bit: 00000001
     pub const MAV_MODE_FLAG_DECODE_POSITION_CUSTOM_MODE: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "MAV_MODE_FLAG_DECODE_POSITION_CUSTOM_MODE",
+            2 => "MAV_MODE_FLAG_DECODE_POSITION_TEST",
+            4 => "MAV_MODE_FLAG_DECODE_POSITION_AUTO",
+            8 => "MAV_MODE_FLAG_DECODE_POSITION_GUIDED",
+            16 => "MAV_MODE_FLAG_DECODE_POSITION_STABILIZE",
+            32 => "MAV_MODE_FLAG_DECODE_POSITION_HIL",
+            64 => "MAV_MODE_FLAG_DECODE_POSITION_MANUAL",
+            128 => "MAV_MODE_FLAG_DECODE_POSITION_SAFETY",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAV_MODE_GIMBAL`.
@@ -5891,6 +7912,21 @@ impl MavModeGimbal {
     pub const MAV_MODE_GIMBAL_ACTIVE: Self = Self(5);
     /// Gimbal is relaxed because it missed more than 10 expected rate command messages in a row. Gimbal will move back to active mode when it receives a new rate command.
     pub const MAV_MODE_GIMBAL_RATE_CMD_TIMEOUT: Self = Self(6);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_MODE_GIMBAL_UNINITIALIZED",
+            1 => "MAV_MODE_GIMBAL_CALIBRATING_PITCH",
+            2 => "MAV_MODE_GIMBAL_CALIBRATING_ROLL",
+            3 => "MAV_MODE_GIMBAL_CALIBRATING_YAW",
+            4 => "MAV_MODE_GIMBAL_INITIALIZED",
+            5 => "MAV_MODE_GIMBAL_ACTIVE",
+            6 => "MAV_MODE_GIMBAL_RATE_CMD_TIMEOUT",
+            _ => return None,
+        })
+    }
 }
 
 /// Mode properties.
@@ -5905,6 +7941,16 @@ impl MavModeProperty {
     pub const MAV_MODE_PROPERTY_ADVANCED: Self = Self(1);
     /// If set, this mode should not be added to the list of selectable modes. The mode might still be selected by the FC directly (for example as part of a failsafe).
     pub const MAV_MODE_PROPERTY_NOT_USER_SELECTABLE: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "MAV_MODE_PROPERTY_ADVANCED",
+            2 => "MAV_MODE_PROPERTY_NOT_USER_SELECTABLE",
+            _ => return None,
+        })
+    }
 }
 
 /// Enumeration of possible mount operation modes. This message is used by obsolete/deprecated gimbal messages.
@@ -5929,6 +7975,21 @@ impl MavMountMode {
     pub const MAV_MOUNT_MODE_SYSID_TARGET: Self = Self(5);
     /// Gimbal tracks home position
     pub const MAV_MOUNT_MODE_HOME_LOCATION: Self = Self(6);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_MOUNT_MODE_RETRACT",
+            1 => "MAV_MOUNT_MODE_NEUTRAL",
+            2 => "MAV_MOUNT_MODE_MAVLINK_TARGETING",
+            3 => "MAV_MOUNT_MODE_RC_TARGETING",
+            4 => "MAV_MOUNT_MODE_GPS_POINT",
+            5 => "MAV_MOUNT_MODE_SYSID_TARGET",
+            6 => "MAV_MOUNT_MODE_HOME_LOCATION",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAV_ODID_ARM_STATUS`.
@@ -5943,6 +8004,16 @@ impl MavOdidArmStatus {
     pub const MAV_ODID_ARM_STATUS_GOOD_TO_ARM: Self = Self(0);
     /// Generic arming failure, see error string for details.
     pub const MAV_ODID_ARM_STATUS_PRE_ARM_FAIL_GENERIC: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_ODID_ARM_STATUS_GOOD_TO_ARM",
+            1 => "MAV_ODID_ARM_STATUS_PRE_ARM_FAIL_GENERIC",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAV_ODID_AUTH_TYPE`.
@@ -5965,6 +8036,20 @@ impl MavOdidAuthType {
     pub const MAV_ODID_AUTH_TYPE_NETWORK_REMOTE_ID: Self = Self(4);
     /// The exact authentication type is indicated by the first byte of authentication_data and these type values are managed by ICAO.
     pub const MAV_ODID_AUTH_TYPE_SPECIFIC_AUTHENTICATION: Self = Self(5);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_ODID_AUTH_TYPE_NONE",
+            1 => "MAV_ODID_AUTH_TYPE_UAS_ID_SIGNATURE",
+            2 => "MAV_ODID_AUTH_TYPE_OPERATOR_ID_SIGNATURE",
+            3 => "MAV_ODID_AUTH_TYPE_MESSAGE_SET_SIGNATURE",
+            4 => "MAV_ODID_AUTH_TYPE_NETWORK_REMOTE_ID",
+            5 => "MAV_ODID_AUTH_TYPE_SPECIFIC_AUTHENTICATION",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAV_ODID_CATEGORY_EU`.
@@ -5983,6 +8068,18 @@ impl MavOdidCategoryEu {
     pub const MAV_ODID_CATEGORY_EU_SPECIFIC: Self = Self(2);
     /// The category for the UA, according to the EU specification, is the Certified category.
     pub const MAV_ODID_CATEGORY_EU_CERTIFIED: Self = Self(3);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_ODID_CATEGORY_EU_UNDECLARED",
+            1 => "MAV_ODID_CATEGORY_EU_OPEN",
+            2 => "MAV_ODID_CATEGORY_EU_SPECIFIC",
+            3 => "MAV_ODID_CATEGORY_EU_CERTIFIED",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAV_ODID_CLASSIFICATION_TYPE`.
@@ -5997,6 +8094,16 @@ impl MavOdidClassificationType {
     pub const MAV_ODID_CLASSIFICATION_TYPE_UNDECLARED: Self = Self(0);
     /// The classification type for the UA follows EU (European Union) specifications.
     pub const MAV_ODID_CLASSIFICATION_TYPE_EU: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_ODID_CLASSIFICATION_TYPE_UNDECLARED",
+            1 => "MAV_ODID_CLASSIFICATION_TYPE_EU",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAV_ODID_CLASS_EU`.
@@ -6023,6 +8130,22 @@ impl MavOdidClassEu {
     pub const MAV_ODID_CLASS_EU_CLASS_5: Self = Self(6);
     /// The class for the UA, according to the EU specification, is Class 6.
     pub const MAV_ODID_CLASS_EU_CLASS_6: Self = Self(7);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_ODID_CLASS_EU_UNDECLARED",
+            1 => "MAV_ODID_CLASS_EU_CLASS_0",
+            2 => "MAV_ODID_CLASS_EU_CLASS_1",
+            3 => "MAV_ODID_CLASS_EU_CLASS_2",
+            4 => "MAV_ODID_CLASS_EU_CLASS_3",
+            5 => "MAV_ODID_CLASS_EU_CLASS_4",
+            6 => "MAV_ODID_CLASS_EU_CLASS_5",
+            7 => "MAV_ODID_CLASS_EU_CLASS_6",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAV_ODID_DESC_TYPE`.
@@ -6039,6 +8162,17 @@ impl MavOdidDescType {
     pub const MAV_ODID_DESC_TYPE_EMERGENCY: Self = Self(1);
     /// Optional additional clarification when status != MAV_ODID_STATUS_EMERGENCY.
     pub const MAV_ODID_DESC_TYPE_EXTENDED_STATUS: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_ODID_DESC_TYPE_TEXT",
+            1 => "MAV_ODID_DESC_TYPE_EMERGENCY",
+            2 => "MAV_ODID_DESC_TYPE_EXTENDED_STATUS",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAV_ODID_HEIGHT_REF`.
@@ -6053,6 +8187,16 @@ impl MavOdidHeightRef {
     pub const MAV_ODID_HEIGHT_REF_OVER_TAKEOFF: Self = Self(0);
     /// The height field is relative to ground.
     pub const MAV_ODID_HEIGHT_REF_OVER_GROUND: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_ODID_HEIGHT_REF_OVER_TAKEOFF",
+            1 => "MAV_ODID_HEIGHT_REF_OVER_GROUND",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAV_ODID_HOR_ACC`.
@@ -6089,6 +8233,27 @@ impl MavOdidHorAcc {
     pub const MAV_ODID_HOR_ACC_3_METER: Self = Self(11);
     /// The horizontal accuracy is smaller than 1 meter.
     pub const MAV_ODID_HOR_ACC_1_METER: Self = Self(12);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_ODID_HOR_ACC_UNKNOWN",
+            1 => "MAV_ODID_HOR_ACC_10NM",
+            2 => "MAV_ODID_HOR_ACC_4NM",
+            3 => "MAV_ODID_HOR_ACC_2NM",
+            4 => "MAV_ODID_HOR_ACC_1NM",
+            5 => "MAV_ODID_HOR_ACC_0_5NM",
+            6 => "MAV_ODID_HOR_ACC_0_3NM",
+            7 => "MAV_ODID_HOR_ACC_0_1NM",
+            8 => "MAV_ODID_HOR_ACC_0_05NM",
+            9 => "MAV_ODID_HOR_ACC_30_METER",
+            10 => "MAV_ODID_HOR_ACC_10_METER",
+            11 => "MAV_ODID_HOR_ACC_3_METER",
+            12 => "MAV_ODID_HOR_ACC_1_METER",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAV_ODID_ID_TYPE`.
@@ -6109,6 +8274,19 @@ impl MavOdidIdType {
     pub const MAV_ODID_ID_TYPE_UTM_ASSIGNED_UUID: Self = Self(3);
     /// A 20 byte ID for a specific flight/session. The exact ID type is indicated by the first byte of uas_id and these type values are managed by ICAO.
     pub const MAV_ODID_ID_TYPE_SPECIFIC_SESSION_ID: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_ODID_ID_TYPE_NONE",
+            1 => "MAV_ODID_ID_TYPE_SERIAL_NUMBER",
+            2 => "MAV_ODID_ID_TYPE_CAA_REGISTRATION_ID",
+            3 => "MAV_ODID_ID_TYPE_UTM_ASSIGNED_UUID",
+            4 => "MAV_ODID_ID_TYPE_SPECIFIC_SESSION_ID",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAV_ODID_OPERATOR_ID_TYPE`.
@@ -6121,6 +8299,15 @@ pub struct MavOdidOperatorIdType(pub u32);
 impl MavOdidOperatorIdType {
     /// CAA (Civil Aviation Authority) registered operator ID.
     pub const MAV_ODID_OPERATOR_ID_TYPE_CAA: Self = Self(0);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_ODID_OPERATOR_ID_TYPE_CAA",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAV_ODID_OPERATOR_LOCATION_TYPE`.
@@ -6137,6 +8324,17 @@ impl MavOdidOperatorLocationType {
     pub const MAV_ODID_OPERATOR_LOCATION_TYPE_LIVE_GNSS: Self = Self(1);
     /// The location of the operator is a fixed location.
     pub const MAV_ODID_OPERATOR_LOCATION_TYPE_FIXED: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_ODID_OPERATOR_LOCATION_TYPE_TAKEOFF",
+            1 => "MAV_ODID_OPERATOR_LOCATION_TYPE_LIVE_GNSS",
+            2 => "MAV_ODID_OPERATOR_LOCATION_TYPE_FIXED",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAV_ODID_SPEED_ACC`.
@@ -6157,6 +8355,19 @@ impl MavOdidSpeedAcc {
     pub const MAV_ODID_SPEED_ACC_1_METERS_PER_SECOND: Self = Self(3);
     /// The speed accuracy is smaller than 0.3 meters per second.
     pub const MAV_ODID_SPEED_ACC_0_3_METERS_PER_SECOND: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_ODID_SPEED_ACC_UNKNOWN",
+            1 => "MAV_ODID_SPEED_ACC_10_METERS_PER_SECOND",
+            2 => "MAV_ODID_SPEED_ACC_3_METERS_PER_SECOND",
+            3 => "MAV_ODID_SPEED_ACC_1_METERS_PER_SECOND",
+            4 => "MAV_ODID_SPEED_ACC_0_3_METERS_PER_SECOND",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAV_ODID_STATUS`.
@@ -6177,6 +8388,19 @@ impl MavOdidStatus {
     pub const MAV_ODID_STATUS_EMERGENCY: Self = Self(3);
     /// The remote ID system is failing or unreliable in some way.
     pub const MAV_ODID_STATUS_REMOTE_ID_SYSTEM_FAILURE: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_ODID_STATUS_UNDECLARED",
+            1 => "MAV_ODID_STATUS_GROUND",
+            2 => "MAV_ODID_STATUS_AIRBORNE",
+            3 => "MAV_ODID_STATUS_EMERGENCY",
+            4 => "MAV_ODID_STATUS_REMOTE_ID_SYSTEM_FAILURE",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAV_ODID_TIME_ACC`.
@@ -6219,6 +8443,30 @@ impl MavOdidTimeAcc {
     pub const MAV_ODID_TIME_ACC_1_4_SECOND: Self = Self(14);
     /// The timestamp accuracy is smaller than or equal to 1.5 second.
     pub const MAV_ODID_TIME_ACC_1_5_SECOND: Self = Self(15);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_ODID_TIME_ACC_UNKNOWN",
+            1 => "MAV_ODID_TIME_ACC_0_1_SECOND",
+            2 => "MAV_ODID_TIME_ACC_0_2_SECOND",
+            3 => "MAV_ODID_TIME_ACC_0_3_SECOND",
+            4 => "MAV_ODID_TIME_ACC_0_4_SECOND",
+            5 => "MAV_ODID_TIME_ACC_0_5_SECOND",
+            6 => "MAV_ODID_TIME_ACC_0_6_SECOND",
+            7 => "MAV_ODID_TIME_ACC_0_7_SECOND",
+            8 => "MAV_ODID_TIME_ACC_0_8_SECOND",
+            9 => "MAV_ODID_TIME_ACC_0_9_SECOND",
+            10 => "MAV_ODID_TIME_ACC_1_0_SECOND",
+            11 => "MAV_ODID_TIME_ACC_1_1_SECOND",
+            12 => "MAV_ODID_TIME_ACC_1_2_SECOND",
+            13 => "MAV_ODID_TIME_ACC_1_3_SECOND",
+            14 => "MAV_ODID_TIME_ACC_1_4_SECOND",
+            15 => "MAV_ODID_TIME_ACC_1_5_SECOND",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAV_ODID_UA_TYPE`.
@@ -6261,6 +8509,30 @@ impl MavOdidUaType {
     pub const MAV_ODID_UA_TYPE_GROUND_OBSTACLE: Self = Self(14);
     /// Other type of aircraft not listed earlier.
     pub const MAV_ODID_UA_TYPE_OTHER: Self = Self(15);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_ODID_UA_TYPE_NONE",
+            1 => "MAV_ODID_UA_TYPE_AEROPLANE",
+            2 => "MAV_ODID_UA_TYPE_HELICOPTER_OR_MULTIROTOR",
+            3 => "MAV_ODID_UA_TYPE_GYROPLANE",
+            4 => "MAV_ODID_UA_TYPE_HYBRID_LIFT",
+            5 => "MAV_ODID_UA_TYPE_ORNITHOPTER",
+            6 => "MAV_ODID_UA_TYPE_GLIDER",
+            7 => "MAV_ODID_UA_TYPE_KITE",
+            8 => "MAV_ODID_UA_TYPE_FREE_BALLOON",
+            9 => "MAV_ODID_UA_TYPE_CAPTIVE_BALLOON",
+            10 => "MAV_ODID_UA_TYPE_AIRSHIP",
+            11 => "MAV_ODID_UA_TYPE_FREE_FALL_PARACHUTE",
+            12 => "MAV_ODID_UA_TYPE_ROCKET",
+            13 => "MAV_ODID_UA_TYPE_TETHERED_POWERED_AIRCRAFT",
+            14 => "MAV_ODID_UA_TYPE_GROUND_OBSTACLE",
+            15 => "MAV_ODID_UA_TYPE_OTHER",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAV_ODID_VER_ACC`.
@@ -6285,6 +8557,21 @@ impl MavOdidVerAcc {
     pub const MAV_ODID_VER_ACC_3_METER: Self = Self(5);
     /// The vertical accuracy is smaller than 1 meter.
     pub const MAV_ODID_VER_ACC_1_METER: Self = Self(6);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_ODID_VER_ACC_UNKNOWN",
+            1 => "MAV_ODID_VER_ACC_150_METER",
+            2 => "MAV_ODID_VER_ACC_45_METER",
+            3 => "MAV_ODID_VER_ACC_25_METER",
+            4 => "MAV_ODID_VER_ACC_10_METER",
+            5 => "MAV_ODID_VER_ACC_3_METER",
+            6 => "MAV_ODID_VER_ACC_1_METER",
+            _ => return None,
+        })
+    }
 }
 
 /// Parameter protocol error types (see PARAM_ERROR).
@@ -6307,6 +8594,20 @@ impl MavParamError {
     pub const MAV_PARAM_ERROR_COMPONENT_NOT_FOUND: Self = Self(4);
     /// Parameter is read-only
     pub const MAV_PARAM_ERROR_READ_ONLY: Self = Self(5);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_PARAM_ERROR_NO_ERROR",
+            1 => "MAV_PARAM_ERROR_DOES_NOT_EXIST",
+            2 => "MAV_PARAM_ERROR_VALUE_OUT_OF_RANGE",
+            3 => "MAV_PARAM_ERROR_PERMISSION_DENIED",
+            4 => "MAV_PARAM_ERROR_COMPONENT_NOT_FOUND",
+            5 => "MAV_PARAM_ERROR_READ_ONLY",
+            _ => return None,
+        })
+    }
 }
 
 /// Specifies the datatype of a MAVLink extended parameter.
@@ -6339,6 +8640,25 @@ impl MavParamExtType {
     pub const MAV_PARAM_EXT_TYPE_REAL64: Self = Self(10);
     /// Custom Type
     pub const MAV_PARAM_EXT_TYPE_CUSTOM: Self = Self(11);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "MAV_PARAM_EXT_TYPE_UINT8",
+            2 => "MAV_PARAM_EXT_TYPE_INT8",
+            3 => "MAV_PARAM_EXT_TYPE_UINT16",
+            4 => "MAV_PARAM_EXT_TYPE_INT16",
+            5 => "MAV_PARAM_EXT_TYPE_UINT32",
+            6 => "MAV_PARAM_EXT_TYPE_INT32",
+            7 => "MAV_PARAM_EXT_TYPE_UINT64",
+            8 => "MAV_PARAM_EXT_TYPE_INT64",
+            9 => "MAV_PARAM_EXT_TYPE_REAL32",
+            10 => "MAV_PARAM_EXT_TYPE_REAL64",
+            11 => "MAV_PARAM_EXT_TYPE_CUSTOM",
+            _ => return None,
+        })
+    }
 }
 
 /// Specifies the datatype of a MAVLink parameter.
@@ -6369,6 +8689,24 @@ impl MavParamType {
     pub const MAV_PARAM_TYPE_REAL32: Self = Self(9);
     /// 64-bit floating-point
     pub const MAV_PARAM_TYPE_REAL64: Self = Self(10);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "MAV_PARAM_TYPE_UINT8",
+            2 => "MAV_PARAM_TYPE_INT8",
+            3 => "MAV_PARAM_TYPE_UINT16",
+            4 => "MAV_PARAM_TYPE_INT16",
+            5 => "MAV_PARAM_TYPE_UINT32",
+            6 => "MAV_PARAM_TYPE_INT32",
+            7 => "MAV_PARAM_TYPE_UINT64",
+            8 => "MAV_PARAM_TYPE_INT64",
+            9 => "MAV_PARAM_TYPE_REAL32",
+            10 => "MAV_PARAM_TYPE_REAL64",
+            _ => return None,
+        })
+    }
 }
 
 /// Power supply status flags (bitmask)
@@ -6391,6 +8729,20 @@ impl MavPowerStatus {
     pub const MAV_POWER_STATUS_PERIPH_HIPOWER_OVERCURRENT: Self = Self(16);
     /// Power status has changed since boot
     pub const MAV_POWER_STATUS_CHANGED: Self = Self(32);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "MAV_POWER_STATUS_BRICK_VALID",
+            2 => "MAV_POWER_STATUS_SERVO_VALID",
+            4 => "MAV_POWER_STATUS_USB_CONNECTED",
+            8 => "MAV_POWER_STATUS_PERIPH_OVERCURRENT",
+            16 => "MAV_POWER_STATUS_PERIPH_HIPOWER_OVERCURRENT",
+            32 => "MAV_POWER_STATUS_CHANGED",
+            _ => return None,
+        })
+    }
 }
 
 /// Bitmask of (optional) autopilot capabilities (64 bit). If a bit is set, the autopilot supports this capability.
@@ -6443,6 +8795,35 @@ impl MavProtocolCapability {
     pub const MAV_PROTOCOL_CAPABILITY_COMPONENT_ACCEPTS_GCS_CONTROL: Self = Self(524288);
     /// Autopilot has a connected gripper. MAVLink Grippers would set MAV_TYPE_GRIPPER instead.
     pub const MAV_PROTOCOL_CAPABILITY_GRIPPER: Self = Self(1048576);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "MAV_PROTOCOL_CAPABILITY_MISSION_FLOAT",
+            2 => "MAV_PROTOCOL_CAPABILITY_PARAM_FLOAT",
+            4 => "MAV_PROTOCOL_CAPABILITY_MISSION_INT",
+            8 => "MAV_PROTOCOL_CAPABILITY_COMMAND_INT",
+            16 => "MAV_PROTOCOL_CAPABILITY_PARAM_ENCODE_BYTEWISE",
+            32 => "MAV_PROTOCOL_CAPABILITY_FTP",
+            64 => "MAV_PROTOCOL_CAPABILITY_SET_ATTITUDE_TARGET",
+            128 => "MAV_PROTOCOL_CAPABILITY_SET_POSITION_TARGET_LOCAL_NED",
+            256 => "MAV_PROTOCOL_CAPABILITY_SET_POSITION_TARGET_GLOBAL_INT",
+            512 => "MAV_PROTOCOL_CAPABILITY_TERRAIN",
+            1024 => "MAV_PROTOCOL_CAPABILITY_RESERVED3",
+            2048 => "MAV_PROTOCOL_CAPABILITY_FLIGHT_TERMINATION",
+            4096 => "MAV_PROTOCOL_CAPABILITY_COMPASS_CALIBRATION",
+            8192 => "MAV_PROTOCOL_CAPABILITY_MAVLINK2",
+            16384 => "MAV_PROTOCOL_CAPABILITY_MISSION_FENCE",
+            32768 => "MAV_PROTOCOL_CAPABILITY_MISSION_RALLY",
+            65536 => "MAV_PROTOCOL_CAPABILITY_RESERVED2",
+            131072 => "MAV_PROTOCOL_CAPABILITY_PARAM_ENCODE_C_CAST",
+            262144 => "MAV_PROTOCOL_CAPABILITY_COMPONENT_IMPLEMENTS_GIMBAL_MANAGER",
+            524288 => "MAV_PROTOCOL_CAPABILITY_COMPONENT_ACCEPTS_GCS_CONTROL",
+            1048576 => "MAV_PROTOCOL_CAPABILITY_GRIPPER",
+            _ => return None,
+        })
+    }
 }
 
 /// Enumeration of possible shot modes.
@@ -6473,6 +8854,24 @@ impl MavQshotMode {
     pub const MAV_QSHOT_MODE_CABLECAM_2POINT: Self = Self(8);
     /// Start gimbal tracking the home location.
     pub const MAV_QSHOT_MODE_HOME_TARGETING: Self = Self(9);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_QSHOT_MODE_UNDEFINED",
+            1 => "MAV_QSHOT_MODE_DEFAULT",
+            2 => "MAV_QSHOT_MODE_GIMBAL_RETRACT",
+            3 => "MAV_QSHOT_MODE_GIMBAL_NEUTRAL",
+            4 => "MAV_QSHOT_MODE_GIMBAL_MISSION",
+            5 => "MAV_QSHOT_MODE_GIMBAL_RC_CONTROL",
+            6 => "MAV_QSHOT_MODE_POI_TARGETING",
+            7 => "MAV_QSHOT_MODE_SYSID_TARGETING",
+            8 => "MAV_QSHOT_MODE_CABLECAM_2POINT",
+            9 => "MAV_QSHOT_MODE_HOME_TARGETING",
+            _ => return None,
+        })
+    }
 }
 
 /// Special ACK block numbers control activation of dataflash log streaming.
@@ -6487,6 +8886,16 @@ impl MavRemoteLogDataBlockCommands {
     pub const MAV_REMOTE_LOG_DATA_BLOCK_STOP: Self = Self(2147483645);
     /// UAV to start sending DataFlash blocks.
     pub const MAV_REMOTE_LOG_DATA_BLOCK_START: Self = Self(2147483646);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            2147483645 => "MAV_REMOTE_LOG_DATA_BLOCK_STOP",
+            2147483646 => "MAV_REMOTE_LOG_DATA_BLOCK_START",
+            _ => return None,
+        })
+    }
 }
 
 /// Possible remote log data block statuses.
@@ -6501,6 +8910,16 @@ impl MavRemoteLogDataBlockStatuses {
     pub const MAV_REMOTE_LOG_DATA_BLOCK_NACK: Self = Self(0);
     /// This block has been received.
     pub const MAV_REMOTE_LOG_DATA_BLOCK_ACK: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_REMOTE_LOG_DATA_BLOCK_NACK",
+            1 => "MAV_REMOTE_LOG_DATA_BLOCK_ACK",
+            _ => return None,
+        })
+    }
 }
 
 /// Result from a MAVLink command (MAV_CMD)
@@ -6527,6 +8946,22 @@ impl MavResult {
     pub const MAV_RESULT_COMMAND_LONG_ONLY: Self = Self(7);
     /// Command is only accepted when sent as a COMMAND_INT.
     pub const MAV_RESULT_COMMAND_INT_ONLY: Self = Self(8);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_RESULT_ACCEPTED",
+            1 => "MAV_RESULT_TEMPORARILY_REJECTED",
+            2 => "MAV_RESULT_DENIED",
+            3 => "MAV_RESULT_UNSUPPORTED",
+            4 => "MAV_RESULT_FAILED",
+            5 => "MAV_RESULT_IN_PROGRESS",
+            7 => "MAV_RESULT_COMMAND_LONG_ONLY",
+            8 => "MAV_RESULT_COMMAND_INT_ONLY",
+            _ => return None,
+        })
+    }
 }
 
 /// The ROI (region of interest) for the vehicle. This can be be used by the vehicle for camera/vehicle attitude alignment (see MAV_CMD_NAV_ROI).
@@ -6547,6 +8982,19 @@ impl MavRoi {
     pub const MAV_ROI_LOCATION: Self = Self(3);
     /// Point toward of given id.
     pub const MAV_ROI_TARGET: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_ROI_NONE",
+            1 => "MAV_ROI_WPNEXT",
+            2 => "MAV_ROI_WPINDEX",
+            3 => "MAV_ROI_LOCATION",
+            4 => "MAV_ROI_TARGET",
+            _ => return None,
+        })
+    }
 }
 
 /// Enumeration of sensor orientation, according to its rotations
@@ -6641,6 +9089,56 @@ impl MavSensorOrientation {
     pub const MAV_SENSOR_ROTATION_ROLL_90_PITCH_315: Self = Self(40);
     /// Custom orientation
     pub const MAV_SENSOR_ROTATION_CUSTOM: Self = Self(100);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_SENSOR_ROTATION_NONE",
+            1 => "MAV_SENSOR_ROTATION_YAW_45",
+            2 => "MAV_SENSOR_ROTATION_YAW_90",
+            3 => "MAV_SENSOR_ROTATION_YAW_135",
+            4 => "MAV_SENSOR_ROTATION_YAW_180",
+            5 => "MAV_SENSOR_ROTATION_YAW_225",
+            6 => "MAV_SENSOR_ROTATION_YAW_270",
+            7 => "MAV_SENSOR_ROTATION_YAW_315",
+            8 => "MAV_SENSOR_ROTATION_ROLL_180",
+            9 => "MAV_SENSOR_ROTATION_ROLL_180_YAW_45",
+            10 => "MAV_SENSOR_ROTATION_ROLL_180_YAW_90",
+            11 => "MAV_SENSOR_ROTATION_ROLL_180_YAW_135",
+            12 => "MAV_SENSOR_ROTATION_PITCH_180",
+            13 => "MAV_SENSOR_ROTATION_ROLL_180_YAW_225",
+            14 => "MAV_SENSOR_ROTATION_ROLL_180_YAW_270",
+            15 => "MAV_SENSOR_ROTATION_ROLL_180_YAW_315",
+            16 => "MAV_SENSOR_ROTATION_ROLL_90",
+            17 => "MAV_SENSOR_ROTATION_ROLL_90_YAW_45",
+            18 => "MAV_SENSOR_ROTATION_ROLL_90_YAW_90",
+            19 => "MAV_SENSOR_ROTATION_ROLL_90_YAW_135",
+            20 => "MAV_SENSOR_ROTATION_ROLL_270",
+            21 => "MAV_SENSOR_ROTATION_ROLL_270_YAW_45",
+            22 => "MAV_SENSOR_ROTATION_ROLL_270_YAW_90",
+            23 => "MAV_SENSOR_ROTATION_ROLL_270_YAW_135",
+            24 => "MAV_SENSOR_ROTATION_PITCH_90",
+            25 => "MAV_SENSOR_ROTATION_PITCH_270",
+            26 => "MAV_SENSOR_ROTATION_PITCH_180_YAW_90",
+            27 => "MAV_SENSOR_ROTATION_PITCH_180_YAW_270",
+            28 => "MAV_SENSOR_ROTATION_ROLL_90_PITCH_90",
+            29 => "MAV_SENSOR_ROTATION_ROLL_180_PITCH_90",
+            30 => "MAV_SENSOR_ROTATION_ROLL_270_PITCH_90",
+            31 => "MAV_SENSOR_ROTATION_ROLL_90_PITCH_180",
+            32 => "MAV_SENSOR_ROTATION_ROLL_270_PITCH_180",
+            33 => "MAV_SENSOR_ROTATION_ROLL_90_PITCH_270",
+            34 => "MAV_SENSOR_ROTATION_ROLL_180_PITCH_270",
+            35 => "MAV_SENSOR_ROTATION_ROLL_270_PITCH_270",
+            36 => "MAV_SENSOR_ROTATION_ROLL_90_PITCH_180_YAW_90",
+            37 => "MAV_SENSOR_ROTATION_ROLL_90_YAW_270",
+            38 => "MAV_SENSOR_ROTATION_ROLL_90_PITCH_68_YAW_293",
+            39 => "MAV_SENSOR_ROTATION_PITCH_315",
+            40 => "MAV_SENSOR_ROTATION_ROLL_90_PITCH_315",
+            100 => "MAV_SENSOR_ROTATION_CUSTOM",
+            _ => return None,
+        })
+    }
 }
 
 /// Indicates the severity level, generally used for status messages to indicate their relative urgency. Based on RFC-5424 using expanded definitions at: http://www.kiwisyslog.com/kb/info:-syslog-message-levels/.
@@ -6667,6 +9165,22 @@ impl MavSeverity {
     pub const MAV_SEVERITY_INFO: Self = Self(6);
     /// Useful non-operational messages that can assist in debugging. These should not occur during normal operation.
     pub const MAV_SEVERITY_DEBUG: Self = Self(7);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_SEVERITY_EMERGENCY",
+            1 => "MAV_SEVERITY_ALERT",
+            2 => "MAV_SEVERITY_CRITICAL",
+            3 => "MAV_SEVERITY_ERROR",
+            4 => "MAV_SEVERITY_WARNING",
+            5 => "MAV_SEVERITY_NOTICE",
+            6 => "MAV_SEVERITY_INFO",
+            7 => "MAV_SEVERITY_DEBUG",
+            _ => return None,
+        })
+    }
 }
 
 /// Standard modes with a well understood meaning across flight stacks and vehicle types. For example, most flight stack have the concept of a "return" or "RTL" mode that takes a vehicle to safety, even though the precise mechanics of this mode may differ. Modes may be set using MAV_CMD_DO_SET_STANDARD_MODE.
@@ -6697,6 +9211,24 @@ impl MavStandardMode {
     pub const MAV_STANDARD_MODE_LAND: Self = Self(8);
     /// Takeoff mode (auto). Automatic takeoff mode. The precise takeoff behaviour depends on vehicle configuration and type.
     pub const MAV_STANDARD_MODE_TAKEOFF: Self = Self(9);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_STANDARD_MODE_NON_STANDARD",
+            1 => "MAV_STANDARD_MODE_POSITION_HOLD",
+            2 => "MAV_STANDARD_MODE_ORBIT",
+            3 => "MAV_STANDARD_MODE_CRUISE",
+            4 => "MAV_STANDARD_MODE_ALTITUDE_HOLD",
+            5 => "MAV_STANDARD_MODE_RETURN_HOME",
+            6 => "MAV_STANDARD_MODE_SAFE_RECOVERY",
+            7 => "MAV_STANDARD_MODE_MISSION",
+            8 => "MAV_STANDARD_MODE_LAND",
+            9 => "MAV_STANDARD_MODE_TAKEOFF",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAV_STATE`.
@@ -6725,6 +9257,23 @@ impl MavState {
     pub const MAV_STATE_POWEROFF: Self = Self(7);
     /// System is terminating itself (failsafe or commanded).
     pub const MAV_STATE_FLIGHT_TERMINATION: Self = Self(8);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_STATE_UNINIT",
+            1 => "MAV_STATE_BOOT",
+            2 => "MAV_STATE_CALIBRATING",
+            3 => "MAV_STATE_STANDBY",
+            4 => "MAV_STATE_ACTIVE",
+            5 => "MAV_STATE_CRITICAL",
+            6 => "MAV_STATE_EMERGENCY",
+            7 => "MAV_STATE_POWEROFF",
+            8 => "MAV_STATE_FLIGHT_TERMINATION",
+            _ => return None,
+        })
+    }
 }
 
 /// Gimbal manager capability flags.
@@ -6737,6 +9286,15 @@ pub struct MavStorm32GimbalManagerCapFlags(pub u32);
 impl MavStorm32GimbalManagerCapFlags {
     /// The gimbal manager supports several profiles.
     pub const MAV_STORM32_GIMBAL_MANAGER_CAP_FLAGS_HAS_PROFILES: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "MAV_STORM32_GIMBAL_MANAGER_CAP_FLAGS_HAS_PROFILES",
+            _ => return None,
+        })
+    }
 }
 
 /// Gimbal manager client ID. In a prioritizing profile, the priorities are determined by the implementation; they could e.g. be custom1 > onboard > GCS > autopilot/camera > GCS2 > custom2.
@@ -6765,6 +9323,23 @@ impl MavStorm32GimbalManagerClient {
     pub const MAV_STORM32_GIMBAL_MANAGER_CLIENT_CUSTOM: Self = Self(7);
     /// This is the custom2 client.
     pub const MAV_STORM32_GIMBAL_MANAGER_CLIENT_CUSTOM2: Self = Self(8);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_STORM32_GIMBAL_MANAGER_CLIENT_NONE",
+            1 => "MAV_STORM32_GIMBAL_MANAGER_CLIENT_ONBOARD",
+            2 => "MAV_STORM32_GIMBAL_MANAGER_CLIENT_AUTOPILOT",
+            3 => "MAV_STORM32_GIMBAL_MANAGER_CLIENT_GCS",
+            4 => "MAV_STORM32_GIMBAL_MANAGER_CLIENT_CAMERA",
+            5 => "MAV_STORM32_GIMBAL_MANAGER_CLIENT_GCS2",
+            6 => "MAV_STORM32_GIMBAL_MANAGER_CLIENT_CAMERA2",
+            7 => "MAV_STORM32_GIMBAL_MANAGER_CLIENT_CUSTOM",
+            8 => "MAV_STORM32_GIMBAL_MANAGER_CLIENT_CUSTOM2",
+            _ => return None,
+        })
+    }
 }
 
 /// Flags for gimbal manager operation. Used for setting and reporting, unless specified otherwise. If a setting has been accepted by the gimbal manager is reported in the STORM32_GIMBAL_MANAGER_STATUS message.
@@ -6797,6 +9372,25 @@ impl MavStorm32GimbalManagerFlags {
     pub const MAV_STORM32_GIMBAL_MANAGER_FLAGS_SET_SUPERVISON: Self = Self(512);
     /// Release supervision. This flag is only for setting, it is not reported.
     pub const MAV_STORM32_GIMBAL_MANAGER_FLAGS_SET_RELEASE: Self = Self(1024);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "MAV_STORM32_GIMBAL_MANAGER_FLAGS_RC_ACTIVE",
+            2 => "MAV_STORM32_GIMBAL_MANAGER_FLAGS_CLIENT_ONBOARD_ACTIVE",
+            4 => "MAV_STORM32_GIMBAL_MANAGER_FLAGS_CLIENT_AUTOPILOT_ACTIVE",
+            8 => "MAV_STORM32_GIMBAL_MANAGER_FLAGS_CLIENT_GCS_ACTIVE",
+            16 => "MAV_STORM32_GIMBAL_MANAGER_FLAGS_CLIENT_CAMERA_ACTIVE",
+            32 => "MAV_STORM32_GIMBAL_MANAGER_FLAGS_CLIENT_GCS2_ACTIVE",
+            64 => "MAV_STORM32_GIMBAL_MANAGER_FLAGS_CLIENT_CAMERA2_ACTIVE",
+            128 => "MAV_STORM32_GIMBAL_MANAGER_FLAGS_CLIENT_CUSTOM_ACTIVE",
+            256 => "MAV_STORM32_GIMBAL_MANAGER_FLAGS_CLIENT_CUSTOM2_ACTIVE",
+            512 => "MAV_STORM32_GIMBAL_MANAGER_FLAGS_SET_SUPERVISON",
+            1024 => "MAV_STORM32_GIMBAL_MANAGER_FLAGS_SET_RELEASE",
+            _ => return None,
+        })
+    }
 }
 
 /// Gimbal manager profiles. Only standard profiles are defined. Any implementation can define its own profile(s) in addition, and should use enum values > 16.
@@ -6819,6 +9413,20 @@ impl MavStorm32GimbalManagerProfile {
     pub const MAV_STORM32_GIMBAL_MANAGER_PROFILE_PRIORITY_COOPERATIVE: Self = Self(4);
     /// Profile with priority and exclusive behavior for equal priority.
     pub const MAV_STORM32_GIMBAL_MANAGER_PROFILE_PRIORITY_EXCLUSIVE: Self = Self(5);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_STORM32_GIMBAL_MANAGER_PROFILE_DEFAULT",
+            1 => "MAV_STORM32_GIMBAL_MANAGER_PROFILE_CUSTOM",
+            2 => "MAV_STORM32_GIMBAL_MANAGER_PROFILE_COOPERATIVE",
+            3 => "MAV_STORM32_GIMBAL_MANAGER_PROFILE_EXCLUSIVE",
+            4 => "MAV_STORM32_GIMBAL_MANAGER_PROFILE_PRIORITY_COOPERATIVE",
+            5 => "MAV_STORM32_GIMBAL_MANAGER_PROFILE_PRIORITY_EXCLUSIVE",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAV_STORM32_TUNNEL_PAYLOAD_TYPE`.
@@ -6841,6 +9449,20 @@ impl MavStorm32TunnelPayloadType {
     pub const MAV_STORM32_TUNNEL_PAYLOAD_TYPE_STORM32_CH3_IN: Self = Self(204);
     /// Registered for STorM32 gimbal controller. For communication with camera.
     pub const MAV_STORM32_TUNNEL_PAYLOAD_TYPE_STORM32_CH3_OUT: Self = Self(205);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            200 => "MAV_STORM32_TUNNEL_PAYLOAD_TYPE_STORM32_CH1_IN",
+            201 => "MAV_STORM32_TUNNEL_PAYLOAD_TYPE_STORM32_CH1_OUT",
+            202 => "MAV_STORM32_TUNNEL_PAYLOAD_TYPE_STORM32_CH2_IN",
+            203 => "MAV_STORM32_TUNNEL_PAYLOAD_TYPE_STORM32_CH2_OUT",
+            204 => "MAV_STORM32_TUNNEL_PAYLOAD_TYPE_STORM32_CH3_IN",
+            205 => "MAV_STORM32_TUNNEL_PAYLOAD_TYPE_STORM32_CH3_OUT",
+            _ => return None,
+        })
+    }
 }
 
 /// These encode the sensors whose status is sent as part of the SYS_STATUS message.
@@ -6913,6 +9535,45 @@ impl MavSysStatusSensor {
     pub const MAV_SYS_STATUS_OBSTACLE_AVOIDANCE: Self = Self(536870912);
     /// 0x40000000 propulsion (actuator, esc, motor or propellor)
     pub const MAV_SYS_STATUS_SENSOR_PROPULSION: Self = Self(1073741824);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "MAV_SYS_STATUS_SENSOR_3D_GYRO",
+            2 => "MAV_SYS_STATUS_SENSOR_3D_ACCEL",
+            4 => "MAV_SYS_STATUS_SENSOR_3D_MAG",
+            8 => "MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE",
+            16 => "MAV_SYS_STATUS_SENSOR_DIFFERENTIAL_PRESSURE",
+            32 => "MAV_SYS_STATUS_SENSOR_GPS",
+            64 => "MAV_SYS_STATUS_SENSOR_OPTICAL_FLOW",
+            128 => "MAV_SYS_STATUS_SENSOR_VISION_POSITION",
+            256 => "MAV_SYS_STATUS_SENSOR_LASER_POSITION",
+            512 => "MAV_SYS_STATUS_SENSOR_EXTERNAL_GROUND_TRUTH",
+            1024 => "MAV_SYS_STATUS_SENSOR_ANGULAR_RATE_CONTROL",
+            2048 => "MAV_SYS_STATUS_SENSOR_ATTITUDE_STABILIZATION",
+            4096 => "MAV_SYS_STATUS_SENSOR_YAW_POSITION",
+            8192 => "MAV_SYS_STATUS_SENSOR_Z_ALTITUDE_CONTROL",
+            16384 => "MAV_SYS_STATUS_SENSOR_XY_POSITION_CONTROL",
+            32768 => "MAV_SYS_STATUS_SENSOR_MOTOR_OUTPUTS",
+            65536 => "MAV_SYS_STATUS_SENSOR_RC_RECEIVER",
+            131072 => "MAV_SYS_STATUS_SENSOR_3D_GYRO2",
+            262144 => "MAV_SYS_STATUS_SENSOR_3D_ACCEL2",
+            524288 => "MAV_SYS_STATUS_SENSOR_3D_MAG2",
+            1048576 => "MAV_SYS_STATUS_GEOFENCE",
+            2097152 => "MAV_SYS_STATUS_AHRS",
+            4194304 => "MAV_SYS_STATUS_TERRAIN",
+            8388608 => "MAV_SYS_STATUS_REVERSE_MOTOR",
+            16777216 => "MAV_SYS_STATUS_LOGGING",
+            33554432 => "MAV_SYS_STATUS_SENSOR_BATTERY",
+            67108864 => "MAV_SYS_STATUS_SENSOR_PROXIMITY",
+            134217728 => "MAV_SYS_STATUS_SENSOR_SATCOM",
+            268435456 => "MAV_SYS_STATUS_PREARM_CHECK",
+            536870912 => "MAV_SYS_STATUS_OBSTACLE_AVOIDANCE",
+            1073741824 => "MAV_SYS_STATUS_SENSOR_PROPULSION",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `MAV_TUNNEL_PAYLOAD_TYPE`.
@@ -6945,6 +9606,25 @@ impl MavTunnelPayloadType {
     pub const MAV_TUNNEL_PAYLOAD_TYPE_STORM32_RESERVED8: Self = Self(208);
     /// Registered for STorM32 gimbal controller.
     pub const MAV_TUNNEL_PAYLOAD_TYPE_STORM32_RESERVED9: Self = Self(209);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_TUNNEL_PAYLOAD_TYPE_UNKNOWN",
+            200 => "MAV_TUNNEL_PAYLOAD_TYPE_STORM32_RESERVED0",
+            201 => "MAV_TUNNEL_PAYLOAD_TYPE_STORM32_RESERVED1",
+            202 => "MAV_TUNNEL_PAYLOAD_TYPE_STORM32_RESERVED2",
+            203 => "MAV_TUNNEL_PAYLOAD_TYPE_STORM32_RESERVED3",
+            204 => "MAV_TUNNEL_PAYLOAD_TYPE_STORM32_RESERVED4",
+            205 => "MAV_TUNNEL_PAYLOAD_TYPE_STORM32_RESERVED5",
+            206 => "MAV_TUNNEL_PAYLOAD_TYPE_STORM32_RESERVED6",
+            207 => "MAV_TUNNEL_PAYLOAD_TYPE_STORM32_RESERVED7",
+            208 => "MAV_TUNNEL_PAYLOAD_TYPE_STORM32_RESERVED8",
+            209 => "MAV_TUNNEL_PAYLOAD_TYPE_STORM32_RESERVED9",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLINK component type reported in HEARTBEAT message. Flight controllers must report the type of the vehicle on which they are mounted (e.g. MAV_TYPE_OCTOROTOR). All other components must report a value appropriate for their type (e.g. a camera must use MAV_TYPE_CAMERA).
@@ -7053,6 +9733,63 @@ impl MavType {
     pub const MAV_TYPE_VTOL_GYRODYNE: Self = Self(47);
     /// Gripper
     pub const MAV_TYPE_GRIPPER: Self = Self(48);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_TYPE_GENERIC",
+            1 => "MAV_TYPE_FIXED_WING",
+            2 => "MAV_TYPE_QUADROTOR",
+            3 => "MAV_TYPE_COAXIAL",
+            4 => "MAV_TYPE_HELICOPTER",
+            5 => "MAV_TYPE_ANTENNA_TRACKER",
+            6 => "MAV_TYPE_GCS",
+            7 => "MAV_TYPE_AIRSHIP",
+            8 => "MAV_TYPE_FREE_BALLOON",
+            9 => "MAV_TYPE_ROCKET",
+            10 => "MAV_TYPE_GROUND_ROVER",
+            11 => "MAV_TYPE_SURFACE_BOAT",
+            12 => "MAV_TYPE_SUBMARINE",
+            13 => "MAV_TYPE_HEXAROTOR",
+            14 => "MAV_TYPE_OCTOROTOR",
+            15 => "MAV_TYPE_TRICOPTER",
+            16 => "MAV_TYPE_FLAPPING_WING",
+            17 => "MAV_TYPE_KITE",
+            18 => "MAV_TYPE_ONBOARD_CONTROLLER",
+            19 => "MAV_TYPE_VTOL_DUOROTOR",
+            20 => "MAV_TYPE_VTOL_QUADROTOR",
+            21 => "MAV_TYPE_VTOL_TILTROTOR",
+            22 => "MAV_TYPE_VTOL_RESERVED2",
+            23 => "MAV_TYPE_VTOL_RESERVED3",
+            24 => "MAV_TYPE_VTOL_RESERVED4",
+            25 => "MAV_TYPE_VTOL_RESERVED5",
+            26 => "MAV_TYPE_GIMBAL",
+            27 => "MAV_TYPE_ADSB",
+            28 => "MAV_TYPE_PARAFOIL",
+            29 => "MAV_TYPE_DODECAROTOR",
+            30 => "MAV_TYPE_CAMERA",
+            31 => "MAV_TYPE_CHARGING_STATION",
+            32 => "MAV_TYPE_FLARM",
+            33 => "MAV_TYPE_SERVO",
+            34 => "MAV_TYPE_ODID",
+            35 => "MAV_TYPE_DECAROTOR",
+            36 => "MAV_TYPE_BATTERY",
+            37 => "MAV_TYPE_PARACHUTE",
+            38 => "MAV_TYPE_LOG",
+            39 => "MAV_TYPE_OSD",
+            40 => "MAV_TYPE_IMU",
+            41 => "MAV_TYPE_GPS",
+            42 => "MAV_TYPE_WINCH",
+            43 => "MAV_TYPE_GENERIC_MULTIROTOR",
+            44 => "MAV_TYPE_ILLUMINATOR",
+            45 => "MAV_TYPE_SPACECRAFT_ORBITER",
+            46 => "MAV_TYPE_GROUND_QUADRUPED",
+            47 => "MAV_TYPE_VTOL_GYRODYNE",
+            48 => "MAV_TYPE_GRIPPER",
+            _ => return None,
+        })
+    }
 }
 
 /// Enumeration of VTOL states
@@ -7073,6 +9810,19 @@ impl MavVtolState {
     pub const MAV_VTOL_STATE_MC: Self = Self(3);
     /// VTOL is in fixed-wing state
     pub const MAV_VTOL_STATE_FW: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_VTOL_STATE_UNDEFINED",
+            1 => "MAV_VTOL_STATE_TRANSITION_TO_FW",
+            2 => "MAV_VTOL_STATE_TRANSITION_TO_MC",
+            3 => "MAV_VTOL_STATE_MC",
+            4 => "MAV_VTOL_STATE_FW",
+            _ => return None,
+        })
+    }
 }
 
 /// Winch status flags used in WINCH_STATUS
@@ -7091,6 +9841,18 @@ impl MavWinchStatusFlag {
     pub const MAV_WINCH_STATUS_MOVING: Self = Self(4);
     /// Winch clutch is engaged allowing motor to move freely
     pub const MAV_WINCH_STATUS_CLUTCH_ENGAGED: Self = Self(8);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "MAV_WINCH_STATUS_HEALTHY",
+            2 => "MAV_WINCH_STATUS_FULLY_RETRACTED",
+            4 => "MAV_WINCH_STATUS_MOVING",
+            8 => "MAV_WINCH_STATUS_CLUTCH_ENGAGED",
+            _ => return None,
+        })
+    }
 }
 
 /// States of the mission state machine. Note that these states are independent of whether the mission is in a mode that can execute mission items or not (is suspended). They may not all be relevant on all vehicles.
@@ -7113,6 +9875,20 @@ impl MissionState {
     pub const MISSION_STATE_PAUSED: Self = Self(4);
     /// Mission has executed all mission items.
     pub const MISSION_STATE_COMPLETE: Self = Self(5);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MISSION_STATE_UNKNOWN",
+            1 => "MISSION_STATE_NO_MISSION",
+            2 => "MISSION_STATE_NOT_STARTED",
+            3 => "MISSION_STATE_ACTIVE",
+            4 => "MISSION_STATE_PAUSED",
+            5 => "MISSION_STATE_COMPLETE",
+            _ => return None,
+        })
+    }
 }
 
 /// RADIO_LINK_STATS flags (bitmask). The RX_RECEIVE and TX_RECEIVE flags indicate from which antenna the received data are taken for processing. If a flag is set then the data received on antenna2 is processed, else the data received on antenna1 is used. The RX_TRANSMIT and TX_TRANSMIT flags specify which antenna are transmitting data. Both antenna 1 and antenna 2 transmit flags can be set simultaneously, e.g., in case of dual-band or dual-frequency systems. If neither flag is set then antenna 1 should be assumed.
@@ -7137,6 +9913,21 @@ impl MlrsRadioLinkStatsFlags {
     pub const MLRS_RADIO_LINK_STATS_FLAGS_TX_TRANSMIT_ANTENNA1: Self = Self(32);
     /// Tx transmit antenna. Data are transmitted on antenna 2.
     pub const MLRS_RADIO_LINK_STATS_FLAGS_TX_TRANSMIT_ANTENNA2: Self = Self(64);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "MLRS_RADIO_LINK_STATS_FLAGS_RSSI_DBM",
+            2 => "MLRS_RADIO_LINK_STATS_FLAGS_RX_RECEIVE_ANTENNA2",
+            4 => "MLRS_RADIO_LINK_STATS_FLAGS_RX_TRANSMIT_ANTENNA1",
+            8 => "MLRS_RADIO_LINK_STATS_FLAGS_RX_TRANSMIT_ANTENNA2",
+            16 => "MLRS_RADIO_LINK_STATS_FLAGS_TX_RECEIVE_ANTENNA2",
+            32 => "MLRS_RADIO_LINK_STATS_FLAGS_TX_TRANSMIT_ANTENNA1",
+            64 => "MLRS_RADIO_LINK_STATS_FLAGS_TX_TRANSMIT_ANTENNA2",
+            _ => return None,
+        })
+    }
 }
 
 /// RADIO_LINK_TYPE enum.
@@ -7161,6 +9952,21 @@ impl MlrsRadioLinkType {
     pub const MLRS_RADIO_LINK_TYPE_EXPRESSLRS: Self = Self(5);
     /// Radio link is mLRS.
     pub const MLRS_RADIO_LINK_TYPE_MLRS: Self = Self(6);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MLRS_RADIO_LINK_TYPE_GENERIC",
+            1 => "MLRS_RADIO_LINK_TYPE_HERELINK",
+            2 => "MLRS_RADIO_LINK_TYPE_DRAGONLINK",
+            3 => "MLRS_RADIO_LINK_TYPE_RFD900",
+            4 => "MLRS_RADIO_LINK_TYPE_CROSSFIRE",
+            5 => "MLRS_RADIO_LINK_TYPE_EXPRESSLRS",
+            6 => "MLRS_RADIO_LINK_TYPE_MLRS",
+            _ => return None,
+        })
+    }
 }
 
 /// Sequence that motors are tested when using MAV_CMD_DO_MOTOR_TEST.
@@ -7177,6 +9983,17 @@ impl MotorTestOrder {
     pub const MOTOR_TEST_ORDER_SEQUENCE: Self = Self(1);
     /// Motor numbers are specified as the output as labeled on the board.
     pub const MOTOR_TEST_ORDER_BOARD: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MOTOR_TEST_ORDER_DEFAULT",
+            1 => "MOTOR_TEST_ORDER_SEQUENCE",
+            2 => "MOTOR_TEST_ORDER_BOARD",
+            _ => return None,
+        })
+    }
 }
 
 /// Defines how throttle value is represented in MAV_CMD_DO_MOTOR_TEST.
@@ -7195,6 +10012,18 @@ impl MotorTestThrottleType {
     pub const MOTOR_TEST_THROTTLE_PILOT: Self = Self(2);
     /// Per-motor compass calibration test.
     pub const MOTOR_TEST_COMPASS_CAL: Self = Self(3);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MOTOR_TEST_THROTTLE_PERCENT",
+            1 => "MOTOR_TEST_THROTTLE_PWM",
+            2 => "MOTOR_TEST_THROTTLE_PILOT",
+            3 => "MOTOR_TEST_COMPASS_CAL",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `NAV_VTOL_LAND_OPTIONS`.
@@ -7211,6 +10040,17 @@ impl NavVtolLandOptions {
     pub const NAV_VTOL_LAND_OPTIONS_FW_SPIRAL_APPROACH: Self = Self(1);
     /// Use a fixed wing approach before detransitioning and landing vertically.
     pub const NAV_VTOL_LAND_OPTIONS_FW_APPROACH: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "NAV_VTOL_LAND_OPTIONS_DEFAULT",
+            1 => "NAV_VTOL_LAND_OPTIONS_FW_SPIRAL_APPROACH",
+            2 => "NAV_VTOL_LAND_OPTIONS_FW_APPROACH",
+            _ => return None,
+        })
+    }
 }
 
 /// The error type for the OSD parameter editor.
@@ -7229,6 +10069,18 @@ impl OsdParamConfigError {
     pub const OSD_PARAM_INVALID_PARAMETER_INDEX: Self = Self(2);
     /// `OSD_PARAM_INVALID_PARAMETER` = 3.
     pub const OSD_PARAM_INVALID_PARAMETER: Self = Self(3);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "OSD_PARAM_SUCCESS",
+            1 => "OSD_PARAM_INVALID_SCREEN",
+            2 => "OSD_PARAM_INVALID_PARAMETER_INDEX",
+            3 => "OSD_PARAM_INVALID_PARAMETER",
+            _ => return None,
+        })
+    }
 }
 
 /// The type of parameter for the OSD parameter editor.
@@ -7257,6 +10109,23 @@ impl OsdParamConfigType {
     pub const OSD_PARAM_FAILSAFE_ACTION_2: Self = Self(7);
     /// `OSD_PARAM_NUM_TYPES` = 8.
     pub const OSD_PARAM_NUM_TYPES: Self = Self(8);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "OSD_PARAM_NONE",
+            1 => "OSD_PARAM_SERIAL_PROTOCOL",
+            2 => "OSD_PARAM_SERVO_FUNCTION",
+            3 => "OSD_PARAM_AUX_FUNCTION",
+            4 => "OSD_PARAM_FLIGHT_MODE",
+            5 => "OSD_PARAM_FAILSAFE_ACTION",
+            6 => "OSD_PARAM_FAILSAFE_ACTION_1",
+            7 => "OSD_PARAM_FAILSAFE_ACTION_2",
+            8 => "OSD_PARAM_NUM_TYPES",
+            _ => return None,
+        })
+    }
 }
 
 /// Parachute actions. Trigger release and enable/disable auto-release.
@@ -7273,6 +10142,17 @@ impl ParachuteAction {
     pub const PARACHUTE_ENABLE: Self = Self(1);
     /// Release parachute and kill motors.
     pub const PARACHUTE_RELEASE: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "PARACHUTE_DISABLE",
+            1 => "PARACHUTE_ENABLE",
+            2 => "PARACHUTE_RELEASE",
+            _ => return None,
+        })
+    }
 }
 
 /// Result from PARAM_EXT_SET message.
@@ -7291,6 +10171,18 @@ impl ParamAck {
     pub const PARAM_ACK_FAILED: Self = Self(2);
     /// Parameter value received but not yet set/accepted. A subsequent PARAM_EXT_ACK with the final result will follow once operation is completed. This is returned immediately for parameters that take longer to set, indicating that the the parameter was received and does not need to be resent.
     pub const PARAM_ACK_IN_PROGRESS: Self = Self(3);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "PARAM_ACK_ACCEPTED",
+            1 => "PARAM_ACK_VALUE_UNSUPPORTED",
+            2 => "PARAM_ACK_FAILED",
+            3 => "PARAM_ACK_IN_PROGRESS",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `PID_TUNING_AXIS`.
@@ -7313,6 +10205,20 @@ impl PidTuningAxis {
     pub const PID_TUNING_STEER: Self = Self(5);
     /// `PID_TUNING_LANDING` = 6.
     pub const PID_TUNING_LANDING: Self = Self(6);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "PID_TUNING_ROLL",
+            2 => "PID_TUNING_PITCH",
+            3 => "PID_TUNING_YAW",
+            4 => "PID_TUNING_ACCZ",
+            5 => "PID_TUNING_STEER",
+            6 => "PID_TUNING_LANDING",
+            _ => return None,
+        })
+    }
 }
 
 /// A mapping of plane flight modes for custom_mode field of heartbeat.
@@ -7375,6 +10281,40 @@ impl PlaneMode {
     pub const PLANE_MODE_LOITER_ALT_QLAND: Self = Self(25);
     /// AUTOLAND
     pub const PLANE_MODE_AUTOLAND: Self = Self(26);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "PLANE_MODE_MANUAL",
+            1 => "PLANE_MODE_CIRCLE",
+            2 => "PLANE_MODE_STABILIZE",
+            3 => "PLANE_MODE_TRAINING",
+            4 => "PLANE_MODE_ACRO",
+            5 => "PLANE_MODE_FLY_BY_WIRE_A",
+            6 => "PLANE_MODE_FLY_BY_WIRE_B",
+            7 => "PLANE_MODE_CRUISE",
+            8 => "PLANE_MODE_AUTOTUNE",
+            10 => "PLANE_MODE_AUTO",
+            11 => "PLANE_MODE_RTL",
+            12 => "PLANE_MODE_LOITER",
+            13 => "PLANE_MODE_TAKEOFF",
+            14 => "PLANE_MODE_AVOID_ADSB",
+            15 => "PLANE_MODE_GUIDED",
+            16 => "PLANE_MODE_INITIALIZING",
+            17 => "PLANE_MODE_QSTABILIZE",
+            18 => "PLANE_MODE_QHOVER",
+            19 => "PLANE_MODE_QLOITER",
+            20 => "PLANE_MODE_QLAND",
+            21 => "PLANE_MODE_QRTL",
+            22 => "PLANE_MODE_QAUTOTUNE",
+            23 => "PLANE_MODE_QACRO",
+            24 => "PLANE_MODE_THERMAL",
+            25 => "PLANE_MODE_LOITER_ALT_QLAND",
+            26 => "PLANE_MODE_AUTOLAND",
+            _ => return None,
+        })
+    }
 }
 
 /// Bitmap to indicate which dimensions should be ignored by the vehicle: a value of 0b0000000000000000 or 0b0000001000000000 indicates that none of the setpoint dimensions should be ignored. If bit 9 is set the floats afx afy afz should be interpreted as force instead of acceleration.
@@ -7409,6 +10349,26 @@ impl PositionTargetTypemask {
     pub const POSITION_TARGET_TYPEMASK_YAW_IGNORE: Self = Self(1024);
     /// Ignore yaw rate
     pub const POSITION_TARGET_TYPEMASK_YAW_RATE_IGNORE: Self = Self(2048);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "POSITION_TARGET_TYPEMASK_X_IGNORE",
+            2 => "POSITION_TARGET_TYPEMASK_Y_IGNORE",
+            4 => "POSITION_TARGET_TYPEMASK_Z_IGNORE",
+            8 => "POSITION_TARGET_TYPEMASK_VX_IGNORE",
+            16 => "POSITION_TARGET_TYPEMASK_VY_IGNORE",
+            32 => "POSITION_TARGET_TYPEMASK_VZ_IGNORE",
+            64 => "POSITION_TARGET_TYPEMASK_AX_IGNORE",
+            128 => "POSITION_TARGET_TYPEMASK_AY_IGNORE",
+            256 => "POSITION_TARGET_TYPEMASK_AZ_IGNORE",
+            512 => "POSITION_TARGET_TYPEMASK_FORCE_SET",
+            1024 => "POSITION_TARGET_TYPEMASK_YAW_IGNORE",
+            2048 => "POSITION_TARGET_TYPEMASK_YAW_RATE_IGNORE",
+            _ => return None,
+        })
+    }
 }
 
 /// Precision land modes (used in MAV_CMD_NAV_LAND).
@@ -7425,6 +10385,17 @@ impl PrecisionLandMode {
     pub const PRECISION_LAND_MODE_OPPORTUNISTIC: Self = Self(1);
     /// Use precision landing, searching for beacon if not found when land command accepted (land normally if beacon cannot be found).
     pub const PRECISION_LAND_MODE_REQUIRED: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "PRECISION_LAND_MODE_DISABLED",
+            1 => "PRECISION_LAND_MODE_OPPORTUNISTIC",
+            2 => "PRECISION_LAND_MODE_REQUIRED",
+            _ => return None,
+        })
+    }
 }
 
 /// RADIO_RC_CHANNELS flags (bitmask).
@@ -7439,6 +10410,16 @@ impl RadioRcChannelsFlags {
     pub const RADIO_RC_CHANNELS_FLAGS_FAILSAFE: Self = Self(1);
     /// Channel data may be out of date. This is set when the receiver is unable to validate incoming data from the transmitter and has therefore resent the last valid data it received.
     pub const RADIO_RC_CHANNELS_FLAGS_OUTDATED: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "RADIO_RC_CHANNELS_FLAGS_FAILSAFE",
+            2 => "RADIO_RC_CHANNELS_FLAGS_OUTDATED",
+            _ => return None,
+        })
+    }
 }
 
 /// Flags in RALLY_POINT message.
@@ -7457,6 +10438,18 @@ impl RallyFlags {
     pub const ALT_FRAME_VALID: Self = Self(4);
     /// 2 bit value representing altitude frame. 0: absolute, 1: relative home, 2: relative origin, 3: relative terrain
     pub const ALT_FRAME: Self = Self(24);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "FAVORABLE_WIND",
+            2 => "LAND_IMMEDIATELY",
+            4 => "ALT_FRAME_VALID",
+            24 => "ALT_FRAME",
+            _ => return None,
+        })
+    }
 }
 
 /// RC type
@@ -7471,6 +10464,16 @@ impl RcType {
     pub const RC_TYPE_SPEKTRUM_DSM2: Self = Self(0);
     /// Spektrum DSMX
     pub const RC_TYPE_SPEKTRUM_DSMX: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "RC_TYPE_SPEKTRUM_DSM2",
+            1 => "RC_TYPE_SPEKTRUM_DSMX",
+            _ => return None,
+        })
+    }
 }
 
 /// A mapping of rover flight modes for custom_mode field of heartbeat.
@@ -7509,6 +10512,28 @@ impl RoverMode {
     pub const ROVER_MODE_GUIDED: Self = Self(15);
     /// INITIALISING
     pub const ROVER_MODE_INITIALIZING: Self = Self(16);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "ROVER_MODE_MANUAL",
+            1 => "ROVER_MODE_ACRO",
+            3 => "ROVER_MODE_STEERING",
+            4 => "ROVER_MODE_HOLD",
+            5 => "ROVER_MODE_LOITER",
+            6 => "ROVER_MODE_FOLLOW",
+            7 => "ROVER_MODE_SIMPLE",
+            8 => "ROVER_MODE_DOCK",
+            9 => "ROVER_MODE_CIRCLE",
+            10 => "ROVER_MODE_AUTO",
+            11 => "ROVER_MODE_RTL",
+            12 => "ROVER_MODE_SMART_RTL",
+            15 => "ROVER_MODE_GUIDED",
+            16 => "ROVER_MODE_INITIALIZING",
+            _ => return None,
+        })
+    }
 }
 
 /// RTK GPS baseline coordinate system, used for RTK corrections
@@ -7523,6 +10548,16 @@ impl RtkBaselineCoordinateSystem {
     pub const RTK_BASELINE_COORDINATE_SYSTEM_ECEF: Self = Self(0);
     /// RTK basestation centered, north, east, down
     pub const RTK_BASELINE_COORDINATE_SYSTEM_NED: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "RTK_BASELINE_COORDINATE_SYSTEM_ECEF",
+            1 => "RTK_BASELINE_COORDINATE_SYSTEM_NED",
+            _ => return None,
+        })
+    }
 }
 
 /// Possible safety switch states.
@@ -7537,6 +10572,16 @@ impl SafetySwitchState {
     pub const SAFETY_SWITCH_STATE_SAFE: Self = Self(0);
     /// Safety switch is NOT engaged and motors, propellers and other actuators should be considered active.
     pub const SAFETY_SWITCH_STATE_DANGEROUS: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "SAFETY_SWITCH_STATE_SAFE",
+            1 => "SAFETY_SWITCH_STATE_DANGEROUS",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `SCRIPTING_CMD`.
@@ -7555,6 +10600,18 @@ impl ScriptingCmd {
     pub const SCRIPTING_CMD_STOP: Self = Self(2);
     /// Stop execution of scripts and restart.
     pub const SCRIPTING_CMD_STOP_AND_RESTART: Self = Self(3);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "SCRIPTING_CMD_REPL_START",
+            1 => "SCRIPTING_CMD_REPL_STOP",
+            2 => "SCRIPTING_CMD_STOP",
+            3 => "SCRIPTING_CMD_STOP_AND_RESTART",
+            _ => return None,
+        })
+    }
 }
 
 /// MAVLink enum `SECURE_COMMAND_OP`.
@@ -7581,6 +10638,22 @@ impl SecureCommandOp {
     pub const SECURE_COMMAND_SET_REMOTEID_CONFIG: Self = Self(6);
     /// Flash bootloader from local storage. Data is the filename to use for the bootloader. This is intended to be used with MAVFtp to upload a new bootloader to a microSD before flashing.
     pub const SECURE_COMMAND_FLASH_BOOTLOADER: Self = Self(7);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "SECURE_COMMAND_GET_SESSION_KEY",
+            1 => "SECURE_COMMAND_GET_REMOTEID_SESSION_KEY",
+            2 => "SECURE_COMMAND_REMOVE_PUBLIC_KEYS",
+            3 => "SECURE_COMMAND_GET_PUBLIC_KEYS",
+            4 => "SECURE_COMMAND_SET_PUBLIC_KEYS",
+            5 => "SECURE_COMMAND_GET_REMOTEID_CONFIG",
+            6 => "SECURE_COMMAND_SET_REMOTEID_CONFIG",
+            7 => "SECURE_COMMAND_FLASH_BOOTLOADER",
+            _ => return None,
+        })
+    }
 }
 
 /// SERIAL_CONTROL device types
@@ -7621,6 +10694,29 @@ impl SerialControlDev {
     pub const SERIAL_CONTROL_SERIAL8: Self = Self(108);
     /// SERIAL9
     pub const SERIAL_CONTROL_SERIAL9: Self = Self(109);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "SERIAL_CONTROL_DEV_TELEM1",
+            1 => "SERIAL_CONTROL_DEV_TELEM2",
+            2 => "SERIAL_CONTROL_DEV_GPS1",
+            3 => "SERIAL_CONTROL_DEV_GPS2",
+            10 => "SERIAL_CONTROL_DEV_SHELL",
+            100 => "SERIAL_CONTROL_SERIAL0",
+            101 => "SERIAL_CONTROL_SERIAL1",
+            102 => "SERIAL_CONTROL_SERIAL2",
+            103 => "SERIAL_CONTROL_SERIAL3",
+            104 => "SERIAL_CONTROL_SERIAL4",
+            105 => "SERIAL_CONTROL_SERIAL5",
+            106 => "SERIAL_CONTROL_SERIAL6",
+            107 => "SERIAL_CONTROL_SERIAL7",
+            108 => "SERIAL_CONTROL_SERIAL8",
+            109 => "SERIAL_CONTROL_SERIAL9",
+            _ => return None,
+        })
+    }
 }
 
 /// SERIAL_CONTROL flags (bitmask)
@@ -7641,6 +10737,19 @@ impl SerialControlFlag {
     pub const SERIAL_CONTROL_FLAG_BLOCKING: Self = Self(8);
     /// Send multiple replies until port is drained
     pub const SERIAL_CONTROL_FLAG_MULTI: Self = Self(16);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "SERIAL_CONTROL_FLAG_REPLY",
+            2 => "SERIAL_CONTROL_FLAG_RESPOND",
+            4 => "SERIAL_CONTROL_FLAG_EXCLUSIVE",
+            8 => "SERIAL_CONTROL_FLAG_BLOCKING",
+            16 => "SERIAL_CONTROL_FLAG_MULTI",
+            _ => return None,
+        })
+    }
 }
 
 /// Focus types for MAV_CMD_SET_CAMERA_FOCUS
@@ -7665,6 +10774,21 @@ impl SetFocusType {
     pub const FOCUS_TYPE_AUTO_SINGLE: Self = Self(5);
     /// Continuous auto focus. Mainly used for dynamic scenes. Abbreviated as AF-C.
     pub const FOCUS_TYPE_AUTO_CONTINUOUS: Self = Self(6);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "FOCUS_TYPE_STEP",
+            1 => "FOCUS_TYPE_CONTINUOUS",
+            2 => "FOCUS_TYPE_RANGE",
+            3 => "FOCUS_TYPE_METERS",
+            4 => "FOCUS_TYPE_AUTO",
+            5 => "FOCUS_TYPE_AUTO_SINGLE",
+            6 => "FOCUS_TYPE_AUTO_CONTINUOUS",
+            _ => return None,
+        })
+    }
 }
 
 /// Speed setpoint types used in MAV_CMD_DO_CHANGE_SPEED
@@ -7683,6 +10807,18 @@ impl SpeedType {
     pub const SPEED_TYPE_CLIMB_SPEED: Self = Self(2);
     /// Descent speed
     pub const SPEED_TYPE_DESCENT_SPEED: Self = Self(3);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "SPEED_TYPE_AIRSPEED",
+            1 => "SPEED_TYPE_GROUNDSPEED",
+            2 => "SPEED_TYPE_CLIMB_SPEED",
+            3 => "SPEED_TYPE_DESCENT_SPEED",
+            _ => return None,
+        })
+    }
 }
 
 /// Flags to indicate the status of camera storage.
@@ -7701,6 +10837,18 @@ impl StorageStatus {
     pub const STORAGE_STATUS_READY: Self = Self(2);
     /// Camera does not supply storage status information. Capacity information in STORAGE_INFORMATION fields will be ignored.
     pub const STORAGE_STATUS_NOT_SUPPORTED: Self = Self(3);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "STORAGE_STATUS_EMPTY",
+            1 => "STORAGE_STATUS_UNFORMATTED",
+            2 => "STORAGE_STATUS_READY",
+            3 => "STORAGE_STATUS_NOT_SUPPORTED",
+            _ => return None,
+        })
+    }
 }
 
 /// Flags to indicate the type of storage.
@@ -7729,6 +10877,23 @@ impl StorageType {
     pub const STORAGE_TYPE_HD: Self = Self(7);
     /// Storage type is other, not listed type.
     pub const STORAGE_TYPE_OTHER: Self = Self(254);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "STORAGE_TYPE_UNKNOWN",
+            1 => "STORAGE_TYPE_USB_STICK",
+            2 => "STORAGE_TYPE_SD",
+            3 => "STORAGE_TYPE_MICROSD",
+            4 => "STORAGE_TYPE_CF",
+            5 => "STORAGE_TYPE_CFE",
+            6 => "STORAGE_TYPE_XQD",
+            7 => "STORAGE_TYPE_HD",
+            254 => "STORAGE_TYPE_OTHER",
+            _ => return None,
+        })
+    }
 }
 
 /// Flags to indicate usage for a particular storage (see STORAGE_INFORMATION.storage_usage and MAV_CMD_SET_STORAGE_USAGE).
@@ -7747,6 +10912,18 @@ impl StorageUsageFlag {
     pub const STORAGE_USAGE_FLAG_VIDEO: Self = Self(4);
     /// Storage for saving logs.
     pub const STORAGE_USAGE_FLAG_LOGS: Self = Self(8);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "STORAGE_USAGE_FLAG_SET",
+            2 => "STORAGE_USAGE_FLAG_PHOTO",
+            4 => "STORAGE_USAGE_FLAG_VIDEO",
+            8 => "STORAGE_USAGE_FLAG_LOGS",
+            _ => return None,
+        })
+    }
 }
 
 /// A mapping of sub flight modes for custom_mode field of heartbeat.
@@ -7779,6 +10956,25 @@ impl SubMode {
     pub const SUB_MODE_MOTORDETECT: Self = Self(20);
     /// SURFTRAK
     pub const SUB_MODE_SURFTRAK: Self = Self(21);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "SUB_MODE_STABILIZE",
+            1 => "SUB_MODE_ACRO",
+            2 => "SUB_MODE_ALT_HOLD",
+            3 => "SUB_MODE_AUTO",
+            4 => "SUB_MODE_GUIDED",
+            7 => "SUB_MODE_CIRCLE",
+            9 => "SUB_MODE_SURFACE",
+            16 => "SUB_MODE_POSHOLD",
+            19 => "SUB_MODE_MANUAL",
+            20 => "SUB_MODE_MOTORDETECT",
+            21 => "SUB_MODE_SURFTRAK",
+            _ => return None,
+        })
+    }
 }
 
 /// A mapping of antenna tracker flight modes for custom_mode field of heartbeat.
@@ -7803,6 +10999,21 @@ impl TrackerMode {
     pub const TRACKER_MODE_AUTO: Self = Self(10);
     /// INITIALISING
     pub const TRACKER_MODE_INITIALIZING: Self = Self(16);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "TRACKER_MODE_MANUAL",
+            1 => "TRACKER_MODE_STOP",
+            2 => "TRACKER_MODE_SCAN",
+            3 => "TRACKER_MODE_SERVO_TEST",
+            4 => "TRACKER_MODE_GUIDED",
+            10 => "TRACKER_MODE_AUTO",
+            16 => "TRACKER_MODE_INITIALIZING",
+            _ => return None,
+        })
+    }
 }
 
 /// Available autopilot modes for ualberta uav
@@ -7823,6 +11034,19 @@ impl UalbertaAutopilotMode {
     pub const MODE_AUTO_PID_VEL: Self = Self(4);
     /// dfsdfsdfs
     pub const MODE_AUTO_PID_POS: Self = Self(5);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "MODE_MANUAL_DIRECT",
+            2 => "MODE_MANUAL_SCALED",
+            3 => "MODE_AUTO_PID_ATT",
+            4 => "MODE_AUTO_PID_VEL",
+            5 => "MODE_AUTO_PID_POS",
+            _ => return None,
+        })
+    }
 }
 
 /// Navigation filter mode
@@ -7841,6 +11065,18 @@ impl UalbertaNavMode {
     pub const NAV_INS_GPS_INIT: Self = Self(3);
     /// INS/GPS mode
     pub const NAV_INS_GPS: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "NAV_AHRS_INIT",
+            2 => "NAV_AHRS",
+            3 => "NAV_INS_GPS_INIT",
+            4 => "NAV_INS_GPS",
+            _ => return None,
+        })
+    }
 }
 
 /// Mode currently commanded by pilot
@@ -7857,6 +11093,17 @@ impl UalbertaPilotMode {
     pub const PILOT_AUTO: Self = Self(2);
     /// Rotomotion mode
     pub const PILOT_ROTO: Self = Self(3);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "PILOT_MANUAL",
+            2 => "PILOT_AUTO",
+            3 => "PILOT_ROTO",
+            _ => return None,
+        })
+    }
 }
 
 /// Generalized UAVCAN node health
@@ -7875,6 +11122,18 @@ impl UavcanNodeHealth {
     pub const UAVCAN_NODE_HEALTH_ERROR: Self = Self(2);
     /// The node has suffered a fatal malfunction.
     pub const UAVCAN_NODE_HEALTH_CRITICAL: Self = Self(3);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "UAVCAN_NODE_HEALTH_OK",
+            1 => "UAVCAN_NODE_HEALTH_WARNING",
+            2 => "UAVCAN_NODE_HEALTH_ERROR",
+            3 => "UAVCAN_NODE_HEALTH_CRITICAL",
+            _ => return None,
+        })
+    }
 }
 
 /// Generalized UAVCAN node mode
@@ -7895,6 +11154,19 @@ impl UavcanNodeMode {
     pub const UAVCAN_NODE_MODE_SOFTWARE_UPDATE: Self = Self(3);
     /// The node is no longer available online.
     pub const UAVCAN_NODE_MODE_OFFLINE: Self = Self(7);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "UAVCAN_NODE_MODE_OPERATIONAL",
+            1 => "UAVCAN_NODE_MODE_INITIALIZATION",
+            2 => "UAVCAN_NODE_MODE_MAINTENANCE",
+            3 => "UAVCAN_NODE_MODE_SOFTWARE_UPDATE",
+            7 => "UAVCAN_NODE_MODE_OFFLINE",
+            _ => return None,
+        })
+    }
 }
 
 /// Emergency status encoding
@@ -7921,6 +11193,22 @@ impl UavionixAdsbEmergencyStatus {
     pub const UAVIONIX_ADSB_OUT_DOWNED_AIRCRAFT_EMERGENCY: Self = Self(6);
     /// `UAVIONIX_ADSB_OUT_RESERVED` = 7.
     pub const UAVIONIX_ADSB_OUT_RESERVED: Self = Self(7);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "UAVIONIX_ADSB_OUT_NO_EMERGENCY",
+            1 => "UAVIONIX_ADSB_OUT_GENERAL_EMERGENCY",
+            2 => "UAVIONIX_ADSB_OUT_LIFEGUARD_EMERGENCY",
+            3 => "UAVIONIX_ADSB_OUT_MINIMUM_FUEL_EMERGENCY",
+            4 => "UAVIONIX_ADSB_OUT_NO_COMM_EMERGENCY",
+            5 => "UAVIONIX_ADSB_OUT_UNLAWFUL_INTERFERANCE_EMERGENCY",
+            6 => "UAVIONIX_ADSB_OUT_DOWNED_AIRCRAFT_EMERGENCY",
+            7 => "UAVIONIX_ADSB_OUT_RESERVED",
+            _ => return None,
+        })
+    }
 }
 
 /// Definitions for aircraft size
@@ -7963,6 +11251,30 @@ impl UavionixAdsbOutCfgAircraftSize {
     pub const UAVIONIX_ADSB_OUT_CFG_AIRCRAFT_SIZE_L85_W80M: Self = Self(14);
     /// `UAVIONIX_ADSB_OUT_CFG_AIRCRAFT_SIZE_L85_W90M` = 15.
     pub const UAVIONIX_ADSB_OUT_CFG_AIRCRAFT_SIZE_L85_W90M: Self = Self(15);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "UAVIONIX_ADSB_OUT_CFG_AIRCRAFT_SIZE_NO_DATA",
+            1 => "UAVIONIX_ADSB_OUT_CFG_AIRCRAFT_SIZE_L15M_W23M",
+            2 => "UAVIONIX_ADSB_OUT_CFG_AIRCRAFT_SIZE_L25M_W28P5M",
+            3 => "UAVIONIX_ADSB_OUT_CFG_AIRCRAFT_SIZE_L25_34M",
+            4 => "UAVIONIX_ADSB_OUT_CFG_AIRCRAFT_SIZE_L35_33M",
+            5 => "UAVIONIX_ADSB_OUT_CFG_AIRCRAFT_SIZE_L35_38M",
+            6 => "UAVIONIX_ADSB_OUT_CFG_AIRCRAFT_SIZE_L45_39P5M",
+            7 => "UAVIONIX_ADSB_OUT_CFG_AIRCRAFT_SIZE_L45_45M",
+            8 => "UAVIONIX_ADSB_OUT_CFG_AIRCRAFT_SIZE_L55_45M",
+            9 => "UAVIONIX_ADSB_OUT_CFG_AIRCRAFT_SIZE_L55_52M",
+            10 => "UAVIONIX_ADSB_OUT_CFG_AIRCRAFT_SIZE_L65_59P5M",
+            11 => "UAVIONIX_ADSB_OUT_CFG_AIRCRAFT_SIZE_L65_67M",
+            12 => "UAVIONIX_ADSB_OUT_CFG_AIRCRAFT_SIZE_L75_W72P5M",
+            13 => "UAVIONIX_ADSB_OUT_CFG_AIRCRAFT_SIZE_L75_W80M",
+            14 => "UAVIONIX_ADSB_OUT_CFG_AIRCRAFT_SIZE_L85_W80M",
+            15 => "UAVIONIX_ADSB_OUT_CFG_AIRCRAFT_SIZE_L85_W90M",
+            _ => return None,
+        })
+    }
 }
 
 /// GPS lataral offset encoding
@@ -7989,6 +11301,22 @@ impl UavionixAdsbOutCfgGpsOffsetLat {
     pub const UAVIONIX_ADSB_OUT_CFG_GPS_OFFSET_LAT_RIGHT_4M: Self = Self(6);
     /// `UAVIONIX_ADSB_OUT_CFG_GPS_OFFSET_LAT_RIGHT_6M` = 7.
     pub const UAVIONIX_ADSB_OUT_CFG_GPS_OFFSET_LAT_RIGHT_6M: Self = Self(7);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "UAVIONIX_ADSB_OUT_CFG_GPS_OFFSET_LAT_NO_DATA",
+            1 => "UAVIONIX_ADSB_OUT_CFG_GPS_OFFSET_LAT_LEFT_2M",
+            2 => "UAVIONIX_ADSB_OUT_CFG_GPS_OFFSET_LAT_LEFT_4M",
+            3 => "UAVIONIX_ADSB_OUT_CFG_GPS_OFFSET_LAT_LEFT_6M",
+            4 => "UAVIONIX_ADSB_OUT_CFG_GPS_OFFSET_LAT_RIGHT_0M",
+            5 => "UAVIONIX_ADSB_OUT_CFG_GPS_OFFSET_LAT_RIGHT_2M",
+            6 => "UAVIONIX_ADSB_OUT_CFG_GPS_OFFSET_LAT_RIGHT_4M",
+            7 => "UAVIONIX_ADSB_OUT_CFG_GPS_OFFSET_LAT_RIGHT_6M",
+            _ => return None,
+        })
+    }
 }
 
 /// GPS longitudinal offset encoding
@@ -8003,6 +11331,16 @@ impl UavionixAdsbOutCfgGpsOffsetLon {
     pub const UAVIONIX_ADSB_OUT_CFG_GPS_OFFSET_LON_NO_DATA: Self = Self(0);
     /// `UAVIONIX_ADSB_OUT_CFG_GPS_OFFSET_LON_APPLIED_BY_SENSOR` = 1.
     pub const UAVIONIX_ADSB_OUT_CFG_GPS_OFFSET_LON_APPLIED_BY_SENSOR: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "UAVIONIX_ADSB_OUT_CFG_GPS_OFFSET_LON_NO_DATA",
+            1 => "UAVIONIX_ADSB_OUT_CFG_GPS_OFFSET_LON_APPLIED_BY_SENSOR",
+            _ => return None,
+        })
+    }
 }
 
 /// State flags for ADS-B transponder dynamic report
@@ -8027,6 +11365,21 @@ impl UavionixAdsbOutControlState {
     pub const UAVIONIX_ADSB_OUT_CONTROL_STATE_MODE_S_ENABLED: Self = Self(64);
     /// `UAVIONIX_ADSB_OUT_CONTROL_STATE_1090ES_TX_ENABLED` = 128.
     pub const UAVIONIX_ADSB_OUT_CONTROL_STATE_1090ES_TX_ENABLED: Self = Self(128);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "UAVIONIX_ADSB_OUT_CONTROL_STATE_EXTERNAL_BARO_CROSSCHECKED",
+            4 => "UAVIONIX_ADSB_OUT_CONTROL_STATE_ON_GROUND",
+            8 => "UAVIONIX_ADSB_OUT_CONTROL_STATE_IDENT_BUTTON_ACTIVE",
+            16 => "UAVIONIX_ADSB_OUT_CONTROL_STATE_MODE_A_ENABLED",
+            32 => "UAVIONIX_ADSB_OUT_CONTROL_STATE_MODE_C_ENABLED",
+            64 => "UAVIONIX_ADSB_OUT_CONTROL_STATE_MODE_S_ENABLED",
+            128 => "UAVIONIX_ADSB_OUT_CONTROL_STATE_1090ES_TX_ENABLED",
+            _ => return None,
+        })
+    }
 }
 
 /// Status for ADS-B transponder dynamic input
@@ -8049,6 +11402,20 @@ impl UavionixAdsbOutDynamicGpsFix {
     pub const UAVIONIX_ADSB_OUT_DYNAMIC_GPS_FIX_DGPS: Self = Self(4);
     /// `UAVIONIX_ADSB_OUT_DYNAMIC_GPS_FIX_RTK` = 5.
     pub const UAVIONIX_ADSB_OUT_DYNAMIC_GPS_FIX_RTK: Self = Self(5);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "UAVIONIX_ADSB_OUT_DYNAMIC_GPS_FIX_NONE_0",
+            1 => "UAVIONIX_ADSB_OUT_DYNAMIC_GPS_FIX_NONE_1",
+            2 => "UAVIONIX_ADSB_OUT_DYNAMIC_GPS_FIX_2D",
+            3 => "UAVIONIX_ADSB_OUT_DYNAMIC_GPS_FIX_3D",
+            4 => "UAVIONIX_ADSB_OUT_DYNAMIC_GPS_FIX_DGPS",
+            5 => "UAVIONIX_ADSB_OUT_DYNAMIC_GPS_FIX_RTK",
+            _ => return None,
+        })
+    }
 }
 
 /// State flags for ADS-B transponder dynamic report
@@ -8069,6 +11436,19 @@ impl UavionixAdsbOutDynamicState {
     pub const UAVIONIX_ADSB_OUT_DYNAMIC_STATE_ON_GROUND: Self = Self(8);
     /// `UAVIONIX_ADSB_OUT_DYNAMIC_STATE_IDENT` = 16.
     pub const UAVIONIX_ADSB_OUT_DYNAMIC_STATE_IDENT: Self = Self(16);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "UAVIONIX_ADSB_OUT_DYNAMIC_STATE_INTENT_CHANGE",
+            2 => "UAVIONIX_ADSB_OUT_DYNAMIC_STATE_AUTOPILOT_ENABLED",
+            4 => "UAVIONIX_ADSB_OUT_DYNAMIC_STATE_NICBARO_CROSSCHECKED",
+            8 => "UAVIONIX_ADSB_OUT_DYNAMIC_STATE_ON_GROUND",
+            16 => "UAVIONIX_ADSB_OUT_DYNAMIC_STATE_IDENT",
+            _ => return None,
+        })
+    }
 }
 
 /// Transceiver RF control flags for ADS-B transponder dynamic reports
@@ -8083,6 +11463,16 @@ impl UavionixAdsbOutRfSelect {
     pub const UAVIONIX_ADSB_OUT_RF_SELECT_RX_ENABLED: Self = Self(1);
     /// `UAVIONIX_ADSB_OUT_RF_SELECT_TX_ENABLED` = 2.
     pub const UAVIONIX_ADSB_OUT_RF_SELECT_TX_ENABLED: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "UAVIONIX_ADSB_OUT_RF_SELECT_RX_ENABLED",
+            2 => "UAVIONIX_ADSB_OUT_RF_SELECT_TX_ENABLED",
+            _ => return None,
+        })
+    }
 }
 
 /// State flags for ADS-B transponder fault report
@@ -8103,6 +11493,19 @@ impl UavionixAdsbOutStatusFault {
     pub const UAVIONIX_ADSB_OUT_STATUS_FAULT_TX_SYSTEM_FAIL: Self = Self(64);
     /// `UAVIONIX_ADSB_OUT_STATUS_FAULT_MAINT_REQ` = 128.
     pub const UAVIONIX_ADSB_OUT_STATUS_FAULT_MAINT_REQ: Self = Self(128);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            8 => "UAVIONIX_ADSB_OUT_STATUS_FAULT_STATUS_MESSAGE_UNAVAIL",
+            16 => "UAVIONIX_ADSB_OUT_STATUS_FAULT_GPS_NO_POS",
+            32 => "UAVIONIX_ADSB_OUT_STATUS_FAULT_GPS_UNAVAIL",
+            64 => "UAVIONIX_ADSB_OUT_STATUS_FAULT_TX_SYSTEM_FAIL",
+            128 => "UAVIONIX_ADSB_OUT_STATUS_FAULT_MAINT_REQ",
+            _ => return None,
+        })
+    }
 }
 
 /// State flags for ADS-B transponder status report
@@ -8157,6 +11560,36 @@ impl UavionixAdsbOutStatusNicNacp {
     pub const UAVIONIX_ADSB_NACP_EPU_10_M: Self = Self(160);
     /// `UAVIONIX_ADSB_NACP_EPU_3_M` = 176.
     pub const UAVIONIX_ADSB_NACP_EPU_3_M: Self = Self(176);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "UAVIONIX_ADSB_NIC_CR_20_NM",
+            2 => "UAVIONIX_ADSB_NIC_CR_8_NM",
+            3 => "UAVIONIX_ADSB_NIC_CR_4_NM",
+            4 => "UAVIONIX_ADSB_NIC_CR_2_NM",
+            5 => "UAVIONIX_ADSB_NIC_CR_1_NM",
+            6 => "UAVIONIX_ADSB_NIC_CR_0_3_NM",
+            7 => "UAVIONIX_ADSB_NIC_CR_0_2_NM",
+            8 => "UAVIONIX_ADSB_NIC_CR_0_1_NM",
+            9 => "UAVIONIX_ADSB_NIC_CR_75_M",
+            10 => "UAVIONIX_ADSB_NIC_CR_25_M",
+            11 => "UAVIONIX_ADSB_NIC_CR_7_5_M",
+            16 => "UAVIONIX_ADSB_NACP_EPU_10_NM",
+            32 => "UAVIONIX_ADSB_NACP_EPU_4_NM",
+            48 => "UAVIONIX_ADSB_NACP_EPU_2_NM",
+            64 => "UAVIONIX_ADSB_NACP_EPU_1_NM",
+            80 => "UAVIONIX_ADSB_NACP_EPU_0_5_NM",
+            96 => "UAVIONIX_ADSB_NACP_EPU_0_3_NM",
+            112 => "UAVIONIX_ADSB_NACP_EPU_0_1_NM",
+            128 => "UAVIONIX_ADSB_NACP_EPU_0_05_NM",
+            144 => "UAVIONIX_ADSB_NACP_EPU_30_M",
+            160 => "UAVIONIX_ADSB_NACP_EPU_10_M",
+            176 => "UAVIONIX_ADSB_NACP_EPU_3_M",
+            _ => return None,
+        })
+    }
 }
 
 /// State flags for ADS-B transponder status report
@@ -8183,6 +11616,22 @@ impl UavionixAdsbOutStatusState {
     pub const UAVIONIX_ADSB_OUT_STATUS_STATE_MODE_S_ENABLED: Self = Self(64);
     /// `UAVIONIX_ADSB_OUT_STATUS_STATE_1090ES_TX_ENABLED` = 128.
     pub const UAVIONIX_ADSB_OUT_STATUS_STATE_1090ES_TX_ENABLED: Self = Self(128);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "UAVIONIX_ADSB_OUT_STATUS_STATE_ON_GROUND",
+            2 => "UAVIONIX_ADSB_OUT_STATUS_STATE_INTERROGATED_SINCE_LAST",
+            4 => "UAVIONIX_ADSB_OUT_STATUS_STATE_XBIT_ENABLED",
+            8 => "UAVIONIX_ADSB_OUT_STATUS_STATE_IDENT_ACTIVE",
+            16 => "UAVIONIX_ADSB_OUT_STATUS_STATE_MODE_A_ENABLED",
+            32 => "UAVIONIX_ADSB_OUT_STATUS_STATE_MODE_C_ENABLED",
+            64 => "UAVIONIX_ADSB_OUT_STATUS_STATE_MODE_S_ENABLED",
+            128 => "UAVIONIX_ADSB_OUT_STATUS_STATE_1090ES_TX_ENABLED",
+            _ => return None,
+        })
+    }
 }
 
 /// Status flags for ADS-B transponder dynamic output
@@ -8199,6 +11648,17 @@ impl UavionixAdsbRfHealth {
     pub const UAVIONIX_ADSB_RF_HEALTH_FAIL_TX: Self = Self(2);
     /// `UAVIONIX_ADSB_RF_HEALTH_FAIL_RX` = 16.
     pub const UAVIONIX_ADSB_RF_HEALTH_FAIL_RX: Self = Self(16);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "UAVIONIX_ADSB_RF_HEALTH_OK",
+            2 => "UAVIONIX_ADSB_RF_HEALTH_FAIL_TX",
+            16 => "UAVIONIX_ADSB_RF_HEALTH_FAIL_RX",
+            _ => return None,
+        })
+    }
 }
 
 /// State flags for X-Bit and reserved fields.
@@ -8211,6 +11671,15 @@ pub struct UavionixAdsbXbit(pub u32);
 impl UavionixAdsbXbit {
     /// `UAVIONIX_ADSB_XBIT_ENABLED` = 128.
     pub const UAVIONIX_ADSB_XBIT_ENABLED: Self = Self(128);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            128 => "UAVIONIX_ADSB_XBIT_ENABLED",
+            _ => return None,
+        })
+    }
 }
 
 /// Flags for the global position report.
@@ -8237,6 +11706,22 @@ impl UtmDataAvailFlags {
     pub const UTM_DATA_AVAIL_FLAGS_VERTICAL_VELO_AVAILABLE: Self = Self(64);
     /// The fields next_lat, next_lon and next_alt contain valid data.
     pub const UTM_DATA_AVAIL_FLAGS_NEXT_WAYPOINT_AVAILABLE: Self = Self(128);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "UTM_DATA_AVAIL_FLAGS_TIME_VALID",
+            2 => "UTM_DATA_AVAIL_FLAGS_UAS_ID_AVAILABLE",
+            4 => "UTM_DATA_AVAIL_FLAGS_POSITION_AVAILABLE",
+            8 => "UTM_DATA_AVAIL_FLAGS_ALTITUDE_AVAILABLE",
+            16 => "UTM_DATA_AVAIL_FLAGS_RELATIVE_ALTITUDE_AVAILABLE",
+            32 => "UTM_DATA_AVAIL_FLAGS_HORIZONTAL_VELO_AVAILABLE",
+            64 => "UTM_DATA_AVAIL_FLAGS_VERTICAL_VELO_AVAILABLE",
+            128 => "UTM_DATA_AVAIL_FLAGS_NEXT_WAYPOINT_AVAILABLE",
+            _ => return None,
+        })
+    }
 }
 
 /// Airborne status of UAS.
@@ -8257,6 +11742,19 @@ impl UtmFlightState {
     pub const UTM_FLIGHT_STATE_EMERGENCY: Self = Self(16);
     /// UAS has no active controls.
     pub const UTM_FLIGHT_STATE_NOCTRL: Self = Self(32);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "UTM_FLIGHT_STATE_UNKNOWN",
+            2 => "UTM_FLIGHT_STATE_GROUND",
+            3 => "UTM_FLIGHT_STATE_AIRBORNE",
+            16 => "UTM_FLIGHT_STATE_EMERGENCY",
+            32 => "UTM_FLIGHT_STATE_NOCTRL",
+            _ => return None,
+        })
+    }
 }
 
 /// Video stream encodings
@@ -8273,6 +11771,17 @@ impl VideoStreamEncoding {
     pub const VIDEO_STREAM_ENCODING_H264: Self = Self(1);
     /// Stream encoding is H.265
     pub const VIDEO_STREAM_ENCODING_H265: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "VIDEO_STREAM_ENCODING_UNKNOWN",
+            1 => "VIDEO_STREAM_ENCODING_H264",
+            2 => "VIDEO_STREAM_ENCODING_H265",
+            _ => return None,
+        })
+    }
 }
 
 /// Stream status flags (Bitmap)
@@ -8289,6 +11798,17 @@ impl VideoStreamStatusFlags {
     pub const VIDEO_STREAM_STATUS_FLAGS_THERMAL: Self = Self(2);
     /// Stream can report absolute thermal range (see CAMERA_THERMAL_RANGE).
     pub const VIDEO_STREAM_STATUS_FLAGS_THERMAL_RANGE_ENABLED: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "VIDEO_STREAM_STATUS_FLAGS_RUNNING",
+            2 => "VIDEO_STREAM_STATUS_FLAGS_THERMAL",
+            4 => "VIDEO_STREAM_STATUS_FLAGS_THERMAL_RANGE_ENABLED",
+            _ => return None,
+        })
+    }
 }
 
 /// Video stream types
@@ -8307,6 +11827,18 @@ impl VideoStreamType {
     pub const VIDEO_STREAM_TYPE_TCP_MPEG: Self = Self(2);
     /// Stream is MPEG TS (URI gives the port number)
     pub const VIDEO_STREAM_TYPE_MPEG_TS: Self = Self(3);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "VIDEO_STREAM_TYPE_RTSP",
+            1 => "VIDEO_STREAM_TYPE_RTPUDP",
+            2 => "VIDEO_STREAM_TYPE_TCP_MPEG",
+            3 => "VIDEO_STREAM_TYPE_MPEG_TS",
+            _ => return None,
+        })
+    }
 }
 
 /// Direction of VTOL transition
@@ -8327,6 +11859,19 @@ impl VtolTransitionHeading {
     pub const VTOL_TRANSITION_HEADING_SPECIFIED: Self = Self(3);
     /// Use the current heading when reaching takeoff altitude (potentially facing the wind when weather-vaning is active).
     pub const VTOL_TRANSITION_HEADING_ANY: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "VTOL_TRANSITION_HEADING_VEHICLE_DEFAULT",
+            1 => "VTOL_TRANSITION_HEADING_NEXT_WAYPOINT",
+            2 => "VTOL_TRANSITION_HEADING_TAKEOFF",
+            3 => "VTOL_TRANSITION_HEADING_SPECIFIED",
+            4 => "VTOL_TRANSITION_HEADING_ANY",
+            _ => return None,
+        })
+    }
 }
 
 /// Winch actions.
@@ -8355,6 +11900,23 @@ impl WinchActions {
     pub const WINCH_LOAD_LINE: Self = Self(7);
     /// Spool out the entire length of the line. Only action and instance command parameters are used, others are ignored.
     pub const WINCH_ABANDON_LINE: Self = Self(8);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "WINCH_RELAXED",
+            1 => "WINCH_RELATIVE_LENGTH_CONTROL",
+            2 => "WINCH_RATE_CONTROL",
+            3 => "WINCH_LOCK",
+            4 => "WINCH_DELIVER",
+            5 => "WINCH_HOLD",
+            6 => "WINCH_RETRACT",
+            7 => "WINCH_LOAD_LINE",
+            8 => "WINCH_ABANDON_LINE",
+            _ => return None,
+        })
+    }
 }
 
 /// The heartbeat message shows that a system or component is present and responding. The type and autopilot fields (along with the message component id), allow the receiving system to treat further messages from this system appropriately (e.g. by laying out the user interface based on the autopilot). This microservice is documented at https://mavlink.io/en/services/heartbeat.html

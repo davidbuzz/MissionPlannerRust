@@ -7,41 +7,25 @@
 
 #![allow(clippy::print_stderr)]
 
+mod fly;
 mod hud;
 mod mapview;
+mod plan;
 mod platform;
+mod setup;
 mod telemetry;
+mod ui;
 
 use std::time::Duration;
 
 use gpui::{
-    App, Bounds, Context, SharedString, TitlebarOptions, Window, WindowBounds, WindowOptions, div,
-    prelude::*, px, rgb, size,
+    App, Bounds, Context, MouseButton, SharedString, TitlebarOptions, Window, WindowBounds,
+    WindowOptions, div, prelude::*, px, rgb, size,
 };
 use mapview::MapViewport;
+use plan::Plan;
 use telemetry::{Telemetry, TelemetryView};
-
-/// Palette. Deliberately close to Mission Planner's dark theme so the port feels familiar rather
-/// than merely new.
-#[allow(unreachable_pub)] // a private module; pub here is documentation, not API
-mod theme {
-    /// Window background.
-    pub const BG: u32 = 0x1b1f23;
-    /// Panel background.
-    pub const PANEL: u32 = 0x24292e;
-    /// Panel border.
-    pub const BORDER: u32 = 0x3a4048;
-    /// Primary text.
-    pub const TEXT: u32 = 0xe6edf3;
-    /// Secondary text.
-    pub const DIM: u32 = 0x8b949e;
-    /// Good: link up, telemetry flowing.
-    pub const OK: u32 = 0x3fb950;
-    /// Caution: connected but incomplete.
-    pub const WARN: u32 = 0xd29922;
-    /// Bad: no link, or armed.
-    pub const ALERT: u32 = 0xf85149;
-}
+use ui::{action, theme};
 
 /// How often to repaint. 10 Hz is plenty for numeric readouts and keeps an idle GCS cheap; the
 /// map and HUD (D7-D9) will drive their own higher-rate rendering.
@@ -50,6 +34,41 @@ const REFRESH: Duration = Duration::from_millis(100);
 /// Repaint interval when measuring the renderer: as fast as the executor will schedule, so paint
 /// cost is measured rather than the timer.
 const REFRESH_BENCH: Duration = Duration::from_millis(1);
+
+/// Which screen is showing.
+///
+/// Mission Planner's tab order, and for the same reason: flying is what the application is for,
+/// planning is what you do before flying, and setup is what you do once.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Screen {
+    /// Flight data: what the aircraft is doing now.
+    Fly,
+    /// Flight plan: the mission.
+    Plan,
+    /// Initial setup and calibration.
+    Setup,
+}
+
+impl Screen {
+    /// The tabs, in order.
+    const ALL: [Self; 3] = [Self::Fly, Self::Plan, Self::Setup];
+
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Fly => "fly",
+            Self::Plan => "plan",
+            Self::Setup => "setup",
+        }
+    }
+
+    const fn id(self) -> &'static str {
+        match self {
+            Self::Fly => "tab-fly",
+            Self::Plan => "tab-plan",
+            Self::Setup => "tab-setup",
+        }
+    }
+}
 
 struct MissionPlanner {
     telemetry: Telemetry,
@@ -62,6 +81,17 @@ struct MissionPlanner {
     auto_read_mission: bool,
     /// Whether that automatic read has already happened.
     mission_requested: bool,
+    /// Which screen is showing.
+    screen: Screen,
+    /// The mission the operator is editing.
+    plan: Plan,
+    /// Whether the next completed download should replace the plan on screen.
+    ///
+    /// Set when the operator presses "read from vehicle" and cleared once the items arrive. Without
+    /// it, a download started for the map would silently overwrite an edit in progress.
+    adopt_vehicle_mission: bool,
+    /// The last thing a file operation did, shown so a save is not silent.
+    file_status: Option<String>,
 }
 
 impl MissionPlanner {
@@ -107,285 +137,344 @@ impl MissionPlanner {
             ))),
             auto_read_mission: std::env::args().any(|a| a == "--read-mission"),
             mission_requested: false,
+            screen: Screen::Fly,
+            plan: Plan::default(),
+            adopt_vehicle_mission: false,
+            file_status: None,
         }
     }
 
-    /// A labelled value, the unit this UI is mostly made of.
-    fn field(label: &str, value: impl Into<SharedString>, colour: u32) -> impl IntoElement {
-        div()
-            .flex()
-            .flex_col()
-            .gap_1()
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(theme::DIM))
-                    .child(label.to_owned()),
-            )
-            .child(div().text_lg().text_color(rgb(colour)).child(value.into()))
-    }
-
-    fn panel(title: &str, body: impl IntoElement) -> impl IntoElement {
-        div()
-            .flex()
-            .flex_col()
-            .gap_3()
-            .p_4()
-            .bg(rgb(theme::PANEL))
-            .border_1()
-            .border_color(rgb(theme::BORDER))
-            .rounded_md()
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(theme::DIM))
-                    .child(title.to_uppercase()),
-            )
-            .child(body)
-    }
-
-    /// The primary flight display: canvas graphics with numeric readouts overlaid.
+    /// Where missions are read and written.
     ///
-    /// Text is overlaid rather than painted inside the canvas because gpui shapes text through
-    /// its own element pipeline; reproducing that inside a paint callback would be a lot of work
-    /// for four numbers.
-    fn hud_panel(view: &TelemetryView) -> impl IntoElement {
-        let state = view.state.clone();
-        let (speed, altitude, heading, mode) = view.state.as_ref().map_or_else(
-            || {
-                (
-                    "--".to_owned(),
-                    "--".to_owned(),
-                    "--".to_owned(),
-                    "no vehicle".to_owned(),
-                )
+    /// A file dialog needs a platform integration gpui does not give us for free, so for now the
+    /// path is fixed and reported in the UI. Silently writing somewhere the operator cannot find
+    /// would be worse than a fixed location they can.
+    fn plan_path() -> std::path::PathBuf {
+        std::env::var("MP_PLAN_FILE").map_or_else(
+            |_| {
+                std::env::current_dir()
+                    .unwrap_or_else(|_| std::path::PathBuf::from("."))
+                    .join("mission.waypoints")
             },
-            |s| {
-                (
-                    format!("{:.0}", s.ground_speed.0),
-                    format!("{:.0}", s.altitude_relative.0),
-                    format!("{:03.0}", s.heading.degrees()),
-                    {
-                        // The flight mode matters more than the armed flag on a HUD, so show
-                        // both: the mode by name, with the armed state as a suffix and as the
-                        // colour. An unknown mode shows its number rather than nothing.
-                        let mode = mp_vehicle::flight_mode_name(s.vehicle_type, s.custom_mode)
-                            .map_or_else(|| format!("mode {}", s.custom_mode), ToOwned::to_owned);
-                        if s.armed {
-                            format!("{mode}  ARMED")
-                        } else {
-                            mode
-                        }
-                    },
-                )
-            },
-        );
-        let mode_colour = if view.state.as_ref().is_some_and(|s| s.armed) {
-            theme::ALERT
-        } else {
-            theme::DIM
-        };
-
-        div()
-            .relative()
-            .h(px(260.0))
-            .w_full()
-            .overflow_hidden()
-            .rounded_md()
-            .border_1()
-            .border_color(rgb(theme::BORDER))
-            .child(
-                gpui::canvas(
-                    |_bounds, _window, _cx| (),
-                    move |bounds, (), window, _cx| {
-                        hud::paint_hud(state.as_deref(), bounds, window);
-                    },
-                )
-                .size_full(),
-            )
-            .child(
-                div()
-                    .absolute()
-                    .top_2()
-                    .left_2()
-                    .flex()
-                    .flex_col()
-                    .child(div().text_xs().text_color(rgb(theme::DIM)).child("m/s"))
-                    .child(div().text_lg().text_color(rgb(theme::TEXT)).child(speed)),
-            )
-            .child(
-                div()
-                    .absolute()
-                    .top_2()
-                    .right_2()
-                    .flex()
-                    .flex_col()
-                    .items_end()
-                    .child(div().text_xs().text_color(rgb(theme::DIM)).child("m"))
-                    .child(div().text_lg().text_color(rgb(theme::TEXT)).child(altitude)),
-            )
-            .child(
-                div()
-                    .absolute()
-                    .bottom_2()
-                    .left_0()
-                    .w_full()
-                    .flex()
-                    .justify_center()
-                    .gap_4()
-                    .child(div().text_sm().text_color(rgb(theme::TEXT)).child(heading))
-                    .child(div().text_sm().text_color(rgb(mode_colour)).child(mode)),
-            )
-    }
-
-    /// A clickable control. gpui needs an id on anything interactive so it can track hover and
-    /// press state across frames.
-    fn button(
-        id: &'static str,
-        label: impl Into<SharedString>,
-        on_click: impl Fn(&(), &mut Window, &mut App) + 'static,
-    ) -> impl IntoElement {
-        div()
-            .id(id)
-            .px_3()
-            .py_1()
-            .rounded_md()
-            .bg(rgb(theme::PANEL))
-            .border_1()
-            .border_color(rgb(theme::BORDER))
-            .text_sm()
-            .text_color(rgb(theme::TEXT))
-            .cursor_pointer()
-            .hover(|style| style.bg(rgb(theme::BORDER)))
-            .child(label.into())
-            .on_click(move |_event, window, cx| on_click(&(), window, cx))
-    }
-
-    fn vehicle_panel(view: &TelemetryView) -> impl IntoElement {
-        let (armed, armed_colour) = match view.state.as_ref() {
-            Some(s) if s.armed => ("ARMED".to_owned(), theme::ALERT),
-            Some(_) => ("disarmed".to_owned(), theme::TEXT),
-            None => ("no vehicle".to_owned(), theme::DIM),
-        };
-        let position = view.state.as_ref().and_then(|s| s.position).map_or_else(
-            || "no position".to_owned(),
-            |p| format!("{:.6}, {:.6}", p.latitude(), p.longitude()),
-        );
-        let altitude = view.state.as_ref().map_or_else(
-            || "--".to_owned(),
-            |s| format!("{:.1} m", s.altitude_relative.0),
-        );
-        let speed = view.state.as_ref().map_or_else(
-            || "--".to_owned(),
-            |s| format!("{:.1} m/s", s.ground_speed.0),
-        );
-        let heading = view.state.as_ref().map_or_else(
-            || "--".to_owned(),
-            |s| format!("{:.0}°", s.heading.degrees()),
-        );
-
-        Self::panel(
-            "vehicle",
-            div()
-                .flex()
-                .flex_col()
-                .gap_3()
-                .child(Self::field("state", armed, armed_colour))
-                .child(Self::field("position", position, theme::TEXT))
-                .child(
-                    div()
-                        .flex()
-                        .gap_4()
-                        .child(Self::field("altitude", altitude, theme::TEXT))
-                        .child(Self::field("ground speed", speed, theme::TEXT))
-                        .child(Self::field("heading", heading, theme::TEXT)),
-                ),
+            std::path::PathBuf::from,
         )
     }
 
-    fn gps_panel(view: &TelemetryView) -> impl IntoElement {
-        let (fix_text, fix_colour) = match view.state.as_ref().map(|s| s.gps.fix_type) {
-            Some(0 | 1) | None => ("no fix".to_owned(), theme::ALERT),
-            Some(2) => ("2D".to_owned(), theme::WARN),
-            Some(3) => ("3D".to_owned(), theme::OK),
-            Some(4) => ("DGPS".to_owned(), theme::OK),
-            Some(5) => ("RTK float".to_owned(), theme::OK),
-            Some(other) if other >= 6 => ("RTK fixed".to_owned(), theme::OK),
-            Some(other) => (format!("fix {other}"), theme::WARN),
+    /// Writes the plan in QGC WPL 110 format, the one every ground station reads.
+    fn save_plan(&mut self) {
+        let path = Self::plan_path();
+        let text = mp_mission::write_waypoints(self.plan.items());
+        self.file_status = match std::fs::write(&path, text) {
+            Ok(()) => Some(format!(
+                "saved {} items to {}",
+                self.plan.items().len(),
+                path.display()
+            )),
+            Err(err) => Some(format!("could not save to {}: {err}", path.display())),
         };
-        let sats = view
-            .state
-            .as_ref()
-            .map_or_else(|| "--".to_owned(), |s| s.gps.satellites_visible.to_string());
-        let battery = view.state.as_ref().map_or_else(
-            || "--".to_owned(),
-            |s| {
-                format!(
-                    "{:.2} V  {}%",
-                    s.battery.voltage, s.battery.remaining_percent
-                )
-            },
-        );
-
-        Self::panel(
-            "gps and power",
-            div()
-                .flex()
-                .flex_col()
-                .gap_3()
-                .child(
-                    div()
-                        .flex()
-                        .gap_4()
-                        .child(Self::field("fix", fix_text, fix_colour))
-                        .child(Self::field("satellites", sats, theme::TEXT)),
-                )
-                .child(Self::field("battery", battery, theme::TEXT)),
-        )
     }
 
-    fn link_panel(view: &TelemetryView) -> impl IntoElement {
-        let loss = view.state.as_ref().map_or_else(
-            || "--".to_owned(),
-            |s| format!("{:.2} %", s.link.loss_percent()),
-        );
-        let loss_colour = view.state.as_ref().map_or(theme::DIM, |s| {
-            if s.link.loss_percent() > 5.0 {
-                theme::ALERT
-            } else {
-                theme::TEXT
+    /// Reads a plan from the same location.
+    fn load_plan(&mut self) {
+        let path = Self::plan_path();
+        let text = match std::fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(err) => {
+                self.file_status = Some(format!("could not read {}: {err}", path.display()));
+                return;
             }
-        });
-        let crc_colour = if view.crc_errors > 0 {
-            theme::WARN
+        };
+        match mp_mission::read_waypoints(&text) {
+            Ok(items) => {
+                let count = items.len();
+                let name = path.file_name().map_or_else(
+                    || path.display().to_string(),
+                    |n| n.to_string_lossy().into_owned(),
+                );
+                self.plan.adopt_from_file(name, items);
+                self.file_status = Some(format!("loaded {count} items from {}", path.display()));
+            }
+            Err(err) => {
+                self.file_status = Some(format!("{} is not a mission file: {err}", path.display()));
+            }
+        }
+    }
+
+    /// Commands a guided move to a position, holding the current height.
+    ///
+    /// Keeping the aircraft's own altitude is the only safe default: a fixed one would descend a
+    /// vehicle that is above it, and a click meant to redirect a flight is not a click meant to
+    /// change height. On the ground it does nothing beyond what the vehicle's own checks allow -
+    /// a disarmed vehicle refuses, and says so in the message pane.
+    fn fly_here(&mut self, position: mp_units::LatLon) {
+        let view = self.telemetry.view();
+        let Some(state) = view.state.as_ref() else {
+            self.file_status = Some("no vehicle to send anywhere".to_owned());
+            return;
+        };
+        #[allow(clippy::cast_possible_truncation)] // altitudes are metres; f32 is ample
+        let altitude = state.altitude_relative.0 as f32;
+        let altitude = if altitude > 1.0 {
+            altitude
         } else {
-            theme::TEXT
+            fly::TAKEOFF_ALTITUDE
+        };
+        self.telemetry.goto(position, altitude);
+        self.file_status = Some(format!(
+            "fly to {:.6}, {:.6} at {altitude:.0} m",
+            position.latitude(),
+            position.longitude()
+        ));
+    }
+
+    /// Pushes the plan to the map after an edit.
+    ///
+    /// The render pass does this too, but only on the next frame; doing it at the edit means the
+    /// map never shows a waypoint the operator has just deleted.
+    fn sync_map_mission(&self) {
+        self.map.borrow_mut().set_mission(self.plan.items());
+    }
+
+    /// The tab strip.
+    fn tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let current = self.screen;
+        let mut strip = div().flex().gap_1();
+        for screen in Screen::ALL {
+            let selected = screen == current;
+            strip = strip.child(
+                div()
+                    .id(screen.id())
+                    .px_4()
+                    .py_2()
+                    .rounded_t_md()
+                    .text_sm()
+                    .cursor_pointer()
+                    .bg(rgb(if selected { theme::PANEL } else { theme::BG }))
+                    .text_color(rgb(if selected { theme::ACCENT } else { theme::DIM }))
+                    .border_b_2()
+                    .border_color(rgb(if selected { theme::ACCENT } else { theme::BG }))
+                    .hover(|style| style.text_color(rgb(theme::TEXT)))
+                    .child(screen.label())
+                    .on_click(cx.listener(move |this, _event, _window, cx| {
+                        this.screen = screen;
+                        cx.notify();
+                    })),
+            );
+        }
+        strip
+    }
+}
+
+impl MissionPlanner {
+    /// The left column on the flight screen.
+    fn fly_sidebar(&self, view: &TelemetryView, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .flex()
+            .flex_col()
+            .flex_shrink_0()
+            .gap_4()
+            .w(px(400.0))
+            .child(fly::hud_panel(view))
+            .child(fly::actions_panel(view, cx))
+            .child(fly::vehicle_panel(view))
+            .child(fly::gps_panel(view))
+            .child(fly::link_panel(view))
+    }
+
+    /// The left column on the plan screen.
+    fn plan_sidebar(&self, view: &TelemetryView, cx: &mut Context<Self>) -> impl IntoElement {
+        // Copied out of the plan before building the elements: the listeners the panels install
+        // take `&mut self`, so holding a borrow of `self.plan` across them would not compile.
+        let items = self.plan.items().to_vec();
+        let origin = self.plan.origin().clone();
+        let selected = self.plan.selected();
+
+        div()
+            .flex()
+            .flex_col()
+            .flex_shrink_0()
+            .gap_4()
+            .w(px(440.0))
+            .child(plan::actions_panel(&items, &origin, view, cx))
+            .child(plan::items_panel(&items, selected, cx))
+            .child(plan::checks_panel(&items, view))
+    }
+
+    /// The setup screen, which is one column and no map.
+    fn setup_body(&self, view: &TelemetryView) -> impl IntoElement {
+        div()
+            .flex()
+            .flex_col()
+            .gap_4()
+            .p_4()
+            .child(setup::identity_panel(view))
+            .child(setup::calibration_panel())
+    }
+
+    /// The map, with the handlers that make it a map rather than a picture.
+    fn map_pane(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let following = self.map.borrow().is_following();
+        let planning = self.screen == Screen::Plan;
+
+        div()
+            .flex()
+            .flex_col()
+            .flex_1()
+            .min_w(px(0.0))
+            .overflow_hidden()
+            .gap_2()
+            .child(
+                div()
+                    .relative()
+                    .flex()
+                    .flex_1()
+                    .bg(rgb(theme::PANEL))
+                    .border_1()
+                    .border_color(rgb(theme::BORDER))
+                    .rounded_md()
+                    .id("map")
+                    // Dragging pans, the wheel zooms about the cursor. The handlers convert window
+                    // coordinates to viewport-relative ones using the bounds the painter recorded,
+                    // so the map does not need to know where it sits in the layout.
+                    .on_mouse_down(MouseButton::Left, {
+                        let map = self.map.clone();
+                        move |event, _window, _cx| {
+                            map.borrow_mut().begin_drag(
+                                f32::from(event.position.x),
+                                f32::from(event.position.y),
+                            );
+                        }
+                    })
+                    .on_mouse_move({
+                        let map = self.map.clone();
+                        move |event, window, _cx| {
+                            if event.pressed_button == Some(MouseButton::Left) {
+                                map.borrow_mut().drag_to(
+                                    f32::from(event.position.x),
+                                    f32::from(event.position.y),
+                                );
+                                // Repaint immediately: a map that only updates on the next
+                                // telemetry tick feels broken to drag.
+                                window.refresh();
+                            }
+                        }
+                    })
+                    .on_mouse_up(MouseButton::Left, {
+                        let map = self.map.clone();
+                        move |_event, _window, _cx| {
+                            map.borrow_mut().end_drag();
+                        }
+                    })
+                    .on_scroll_wheel({
+                        let map = self.map.clone();
+                        move |event, window, _cx| {
+                            let delta = event.delta.pixel_delta(px(20.0));
+                            let steps = f32::from(delta.y) / 20.0;
+                            map.borrow_mut().zoom(
+                                f32::from(event.position.x),
+                                f32::from(event.position.y),
+                                steps,
+                            );
+                            window.refresh();
+                        }
+                    })
+                    // Right-click adds a waypoint while planning. Not left-click: left is pan,
+                    // and a gesture that both moves the map and drops a waypoint would put one
+                    // down on every failed drag.
+                    // Right-click adds a waypoint while planning, and commands a guided move
+                    // while flying. Not left-click in either case: left is pan, and a gesture
+                    // that both moves the map and commits something would fire on every failed
+                    // drag - which while flying means the aircraft moves.
+                    .on_mouse_up(
+                        MouseButton::Right,
+                        cx.listener(move |this, event: &gpui::MouseUpEvent, _window, cx| {
+                            let Some(position) = this.map.borrow().position_at(
+                                f32::from(event.position.x),
+                                f32::from(event.position.y),
+                            ) else {
+                                return;
+                            };
+                            if planning {
+                                this.plan.add_waypoint(position, plan::DEFAULT_ALTITUDE);
+                                this.sync_map_mission();
+                            } else {
+                                this.fly_here(position);
+                            }
+                            cx.notify();
+                        }),
+                    )
+                    .child(mapview::map_element(self.map.clone()))
+                    .child(
+                        div()
+                            .absolute()
+                            .top_2()
+                            .right_2()
+                            .flex()
+                            .gap_2()
+                            .child(action(
+                                "map-follow",
+                                if following {
+                                    "following"
+                                } else {
+                                    "follow vehicle"
+                                },
+                                if following { theme::OK } else { theme::ACCENT },
+                                !following,
+                                {
+                                    let map = self.map.clone();
+                                    move |_event: &(), window: &mut Window, _cx: &mut gpui::App| {
+                                        map.borrow_mut().follow_vehicle();
+                                        window.refresh();
+                                    }
+                                },
+                            )),
+                    ),
+            )
+            .child(self.map_status())
+    }
+
+    /// The strip under the map: what it drew and how long it took.
+    fn map_status(&self) -> impl IntoElement {
+        let map = self.map.borrow();
+        let text = if map.has_fix() {
+            format!(
+                "flight path: {} points recorded, {} drawn in {} path(s), {} refused  -  paint {:.2} ms avg, {:.2} ms worst over {} frames",
+                map.path_len(),
+                map.drawn_points(),
+                map.track_paths(),
+                map.track_path_failures(),
+                map.paint_ema().as_secs_f64() * 1000.0,
+                map.paint_worst().as_secs_f64() * 1000.0,
+                map.paints(),
+            )
+        } else {
+            format!(
+                "no position yet  -  synthetic scene: {} points, {} markers  -  paint {:.2} ms avg over {} frames",
+                map.track_len(),
+                map.marker_len(),
+                map.paint_ema().as_secs_f64() * 1000.0,
+                map.paints(),
+            )
+        };
+        let text = match &self.file_status {
+            Some(status) => format!("{status}  -  {text}"),
+            None => text,
         };
 
-        Self::panel(
-            "link",
-            div()
-                .flex()
-                .flex_col()
-                .gap_3()
-                .child(
-                    div()
-                        .flex()
-                        .gap_4()
-                        .child(Self::field("frames", view.frames.to_string(), theme::TEXT))
-                        .child(Self::field("loss", loss, loss_colour))
-                        .child(Self::field(
-                            "crc errors",
-                            view.crc_errors.to_string(),
-                            crc_colour,
-                        )),
-                )
-                .child(Self::field(
-                    "systems on link",
-                    view.vehicle_count.to_string(),
-                    theme::TEXT,
-                )),
-        )
+        // min_w(0) plus truncation is load-bearing, not cosmetic: a flex item defaults to
+        // min-width:auto, so this line's intrinsic text width was widening the whole column
+        // whenever a number grew a digit. The map viewport resized with it - 744px to 755px
+        // between frames - which invalidated cached geometry every frame and made the renderer
+        // look four times slower than it is.
+        div()
+            .flex()
+            .w_full()
+            .min_w(px(0.0))
+            .px_2()
+            .text_xs()
+            .text_color(rgb(theme::DIM))
+            .truncate()
+            .child(text)
     }
 }
 
@@ -404,11 +493,32 @@ impl Render for MissionPlanner {
                 map.set_home(home);
             }
         }
-        if !view.mission.is_empty() {
-            self.map.borrow_mut().set_mission(&view.mission);
+
+        // A completed download replaces the plan only if the operator asked for one. Otherwise it
+        // just goes to the map, so a read started for display cannot overwrite an edit.
+        if !view.mission.is_empty() && self.adopt_vehicle_mission {
+            self.adopt_vehicle_mission = false;
+            self.plan.adopt_from_vehicle(view.mission.clone());
+            self.file_status = Some(format!(
+                "read {} items from the vehicle",
+                view.mission.len()
+            ));
         }
+
+        // The map shows the plan being edited when there is one, and what the vehicle holds
+        // otherwise. Showing the vehicle's mission while the operator draws a different one is
+        // how people fly the mission they thought they had replaced.
+        if self.plan.is_empty() {
+            if !view.mission.is_empty() {
+                self.map.borrow_mut().set_mission(&view.mission);
+            }
+        } else {
+            self.map.borrow_mut().set_mission(self.plan.items());
+        }
+
         if self.auto_read_mission && !self.mission_requested && view.vehicle.is_some() {
             self.mission_requested = true;
+            self.adopt_vehicle_mission = true;
             self.telemetry.request_mission();
         }
 
@@ -433,39 +543,34 @@ impl Render for MissionPlanner {
             (format!("{}  -  closed", view.target), theme::ALERT)
         };
 
-        let map_stats = {
-            let map = self.map.borrow();
-            if map.has_fix() {
-                format!(
-                    "flight path: {} points recorded, {} drawn in {} path(s), {} refused  -  paint {:.2} ms avg, {:.2} ms worst over {} frames",
-                    map.path_len(),
-                    map.drawn_points(),
-                    map.track_paths(),
-                    map.track_path_failures(),
-                    map.paint_ema().as_secs_f64() * 1000.0,
-                    map.paint_worst().as_secs_f64() * 1000.0,
-                    map.paints(),
+        let body = match self.screen {
+            Screen::Fly => div()
+                .flex()
+                .flex_1()
+                .gap_4()
+                .p_4()
+                .child(self.fly_sidebar(&view, cx))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .flex_1()
+                        .min_w(px(0.0))
+                        .gap_4()
+                        .child(self.map_pane(cx))
+                        .child(fly::messages_panel(&view)),
                 )
-            } else {
-                format!(
-                    "no position yet  -  synthetic scene: {} points, {} markers  -  paint {:.2} ms avg over {} frames",
-                    map.track_len(),
-                    map.marker_len(),
-                    map.paint_ema().as_secs_f64() * 1000.0,
-                    map.paints(),
-                )
-            }
+                .into_any_element(),
+            Screen::Plan => div()
+                .flex()
+                .flex_1()
+                .gap_4()
+                .p_4()
+                .child(self.plan_sidebar(&view, cx))
+                .child(self.map_pane(cx))
+                .into_any_element(),
+            Screen::Setup => self.setup_body(&view).into_any_element(),
         };
-
-        let mission_label = if view.mission.is_empty() {
-            "read mission".to_owned()
-        } else {
-            format!("mission: {} items", view.mission.len())
-        };
-
-        let vehicle_label = view
-            .vehicle
-            .map_or_else(|| "no vehicle".to_owned(), |id| format!("vehicle {id}"));
 
         div()
             .flex()
@@ -479,106 +584,41 @@ impl Render for MissionPlanner {
                     .items_center()
                     .justify_between()
                     .px_5()
-                    .py_3()
+                    .pt_3()
                     .bg(rgb(theme::PANEL))
                     .border_b_1()
                     .border_color(rgb(theme::BORDER))
                     .child(
                         div()
                             .flex()
-                            .flex_col()
-                            .child(div().text_xl().child("Mission Planner"))
+                            .items_end()
+                            .gap_6()
                             .child(
                                 div()
-                                    .text_xs()
-                                    .text_color(rgb(theme::DIM))
-                                    .child("Rust port - gpui"),
-                            ),
+                                    .flex()
+                                    .flex_col()
+                                    .pb_3()
+                                    .child(div().text_xl().child("Mission Planner"))
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(rgb(theme::DIM))
+                                            .child("Rust port - gpui"),
+                                    ),
+                            )
+                            .child(self.tabs(cx)),
                     )
                     .child(
                         div()
                             .flex()
                             .items_center()
                             .gap_2()
+                            .pb_3()
                             .child(div().size_2().rounded_full().bg(rgb(status_colour)))
                             .child(div().text_sm().text_color(rgb(theme::DIM)).child(status)),
                     ),
             )
-            .child(
-                div()
-                    .flex()
-                    .flex_1()
-                    .gap_4()
-                    .p_4()
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .flex_shrink_0()
-                            .gap_4()
-                            .w(px(400.0))
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .justify_between()
-                                    .child(
-                                        div()
-                                            .text_sm()
-                                            .text_color(rgb(theme::DIM))
-                                            .child(vehicle_label),
-                                    )
-                                    .child(Self::button(
-                                        "read-mission",
-                                        mission_label,
-                                        cx.listener(|this, _event: &(), _window, cx| {
-                                            this.telemetry.request_mission();
-                                            cx.notify();
-                                        }),
-                                    )),
-                            )
-                            .child(Self::hud_panel(&view))
-                            .child(Self::vehicle_panel(&view))
-                            .child(Self::gps_panel(&view))
-                            .child(Self::link_panel(&view)),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .flex_1()
-                            .min_w(px(0.0))
-                            .overflow_hidden()
-                            .gap_2()
-                            .child(
-                                div()
-                                    .flex()
-                                    .flex_1()
-                                    .bg(rgb(theme::PANEL))
-                                    .border_1()
-                                    .border_color(rgb(theme::BORDER))
-                                    .rounded_md()
-                                    .child(mapview::map_element(self.map.clone())),
-                            )
-                            .child(
-                                // min_w(0) plus truncation is load-bearing, not cosmetic: a flex
-                                // item defaults to min-width:auto, so this line's intrinsic text
-                                // width was widening the whole column whenever a number grew a
-                                // digit. The map viewport resized with it - 744px to 755px
-                                // between frames - which invalidated cached geometry every frame
-                                // and made the renderer look four times slower than it is.
-                                div()
-                                    .flex()
-                                    .w_full()
-                                    .min_w(px(0.0))
-                                    .px_2()
-                                    .text_xs()
-                                    .text_color(rgb(theme::DIM))
-                                    .truncate()
-                                    .child(map_stats),
-                            ),
-                    ),
-            )
+            .child(body)
     }
 }
 
