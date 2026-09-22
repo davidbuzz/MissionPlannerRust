@@ -3289,6 +3289,7 @@ name = "mp-cli"
 version = "0.1.0"
 dependencies = [
  "mp-link",
+ "mp-log",
  "mp-mavlink",
  "mp-mavlink-dialects",
  "mp-mission",

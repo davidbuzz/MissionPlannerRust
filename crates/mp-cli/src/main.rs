@@ -9,6 +9,8 @@
 
 use std::time::{Duration, Instant};
 
+mod logs;
+
 use mp_link::{Link, LinkConfig, commands};
 use mp_vehicle::{StateHandle, VehicleId};
 
@@ -57,6 +59,13 @@ fn main() -> std::process::ExitCode {
                 std::process::ExitCode::from(2)
             }
         },
+        Some("log") => match args.get(1) {
+            Some(path) => logs::summarise(path),
+            None => {
+                eprintln!("usage: mpr log <file.tlog|file.bin>");
+                std::process::ExitCode::from(2)
+            }
+        },
         Some("ports") => ports(),
         Some("help" | "--help" | "-h") | None => {
             usage();
@@ -80,6 +89,7 @@ fn usage() {
          mpr params <url> [NAME]     download the parameter set, or show one parameter\n  \
          mpr mission <url> [file]    download the mission, or upload one from a file\n  \
          mpr survey <url> <file>     generate a survey grid around the vehicle\n  \
+         mpr log <file>              summarise a telemetry or dataflash log\n  \
          mpr ports                   list serial ports\n\n\
          url forms:\n  \
          serial:/dev/ttyACM0:115200\n  \

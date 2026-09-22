@@ -61,7 +61,8 @@ fn frames_and_timestamps_round_trip() {
     assert_eq!(records.len(), written.len());
     for (record, (stamp, frame)) in records.iter().zip(&written) {
         assert_eq!(
-            record.timestamp_micros, *stamp,
+            record.timestamp_micros,
+            Some(*stamp),
             "timestamp must survive the round trip"
         );
         assert_eq!(
@@ -131,15 +132,40 @@ fn the_real_corpora_read_back_at_the_expected_frame_counts() {
         assert_eq!(records.len(), expected, "frame count for {name}");
 
         // Timestamps must be plausible Unix microseconds and broadly increasing.
-        let stamps: Vec<u64> = records.iter().map(|r| r.timestamp_micros).collect();
-        let sane = stamps
-            .iter()
-            .filter(|s| **s > 1_000_000_000_000_000)
-            .count();
+        let stamps: Vec<Option<u64>> = records.iter().map(|r| r.timestamp_micros).collect();
+        let sane = stamps.iter().filter(|s| s.is_some()).count();
         assert!(
             sane * 100 / stamps.len() > 90,
             "{name}: only {sane} of {} timestamps look like Unix microseconds",
             stamps.len()
         );
     }
+}
+
+#[test]
+fn timestamps_span_the_recording() {
+    // The summary tool reported a zero duration for a 36-second recording, so the reader's
+    // timestamps are worth asserting directly rather than only checking they look plausible.
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../testdata/mavlink/autotest.tlog"
+    );
+    let data = std::fs::read(path).expect("corpus");
+    let records = TlogReader::new(&data).records(&DIALECT);
+
+    // Only records that carry a real stamp; the first frame in this log follows console text,
+    // so the bytes before it are not a timestamp at all.
+    let stamps: Vec<u64> = records.iter().filter_map(|r| r.timestamp_micros).collect();
+    let first = *stamps.first().expect("records with stamps");
+    let last = *stamps.last().expect("records with stamps");
+    let span_seconds = (last.saturating_sub(first)) as f64 / 1e6;
+
+    assert!(
+        stamps.len() * 100 > records.len() * 95,
+        "most records should carry a stamp"
+    );
+    assert!(
+        span_seconds > 10.0 && span_seconds < 600.0,
+        "expected a recording of tens of seconds, measured {span_seconds}"
+    );
 }

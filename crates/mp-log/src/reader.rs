@@ -4,11 +4,22 @@ use mp_mavlink::{Dialect, STX_V1, STX_V2, parse};
 
 use crate::TIMESTAMP_LEN;
 
+/// Earliest timestamp treated as real: 2001-01-01, in Unix microseconds.
+pub const EARLIEST_PLAUSIBLE_MICROS: u64 = 1_000_000_000_000_000;
+/// Latest timestamp treated as real: roughly 2103.
+pub const LATEST_PLAUSIBLE_MICROS: u64 = 4_200_000_000_000_000;
+
 /// One record from a log.
 #[derive(Debug, Clone, Copy)]
 pub struct TlogRecord<'a> {
-    /// Unix epoch microseconds, as recorded.
-    pub timestamp_micros: u64,
+    /// Unix epoch microseconds, or `None` when the preceding bytes are not a plausible timestamp.
+    ///
+    /// This is an `Option` because it genuinely can be absent. A reader that resynchronises after
+    /// corruption - or past the console text a real log opens with - recovers a frame whose
+    /// preceding eight bytes are not a stamp at all. Returning those bytes as a number produced a
+    /// timestamp in the year 235,000, which then made a 36-second recording report a duration of
+    /// zero because the arithmetic underflowed.
+    pub timestamp_micros: Option<u64>,
     /// The raw MAVLink frame.
     pub frame: &'a [u8],
     /// Byte offset of the frame within the log, for diagnostics and seeking.
@@ -73,7 +84,10 @@ impl<'a> TlogReader<'a> {
                         .data
                         .get(stamp_at..stamp_at + TIMESTAMP_LEN)
                         .and_then(|b| <[u8; 8]>::try_from(b).ok())
-                        .map_or(0, u64::from_be_bytes);
+                        .map(u64::from_be_bytes)
+                        .filter(|micros| {
+                            (EARLIEST_PLAUSIBLE_MICROS..=LATEST_PLAUSIBLE_MICROS).contains(micros)
+                        });
                     self.pos = scan + used;
                     return Some(TlogRecord {
                         timestamp_micros: stamp,
