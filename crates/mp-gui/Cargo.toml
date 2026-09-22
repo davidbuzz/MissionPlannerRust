@@ -1,0 +1,18 @@
+[package]
+name = "mp-gui"
+description = "The graphical front end"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "mpr-gui"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+gpui = "0.2.2"
