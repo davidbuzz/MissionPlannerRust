@@ -304,6 +304,9 @@ pub fn hud_panel(view: &TelemetryView) -> impl IntoElement {
             )
             .size_full(),
         )
+        // The readouts sit on backing strips rather than directly on the artificial horizon.
+        // Without them the pitch ladder runs straight through the text at exactly the attitude
+        // where a pilot most wants to read it.
         .child(
             div()
                 .absolute()
@@ -311,6 +314,9 @@ pub fn hud_panel(view: &TelemetryView) -> impl IntoElement {
                 .left_2()
                 .flex()
                 .flex_col()
+                .px_2()
+                .rounded_md()
+                .bg(rgb(theme::PANEL))
                 .child(div().text_xs().text_color(rgb(theme::DIM)).child("m/s"))
                 .child(div().text_lg().text_color(rgb(theme::TEXT)).child(speed)),
         )
@@ -322,6 +328,9 @@ pub fn hud_panel(view: &TelemetryView) -> impl IntoElement {
                 .flex()
                 .flex_col()
                 .items_end()
+                .px_2()
+                .rounded_md()
+                .bg(rgb(theme::PANEL))
                 .child(div().text_xs().text_color(rgb(theme::DIM)).child("m"))
                 .child(div().text_lg().text_color(rgb(theme::TEXT)).child(altitude)),
         )
@@ -333,9 +342,19 @@ pub fn hud_panel(view: &TelemetryView) -> impl IntoElement {
                 .w_full()
                 .flex()
                 .justify_center()
-                .gap_4()
-                .child(div().text_sm().text_color(rgb(theme::TEXT)).child(heading))
-                .child(div().text_sm().text_color(rgb(mode_colour)).child(mode)),
+                .child(
+                    div()
+                        .flex()
+                        .gap_4()
+                        .px_3()
+                        .py(px(2.0))
+                        .rounded_md()
+                        .bg(rgb(theme::PANEL))
+                        .border_1()
+                        .border_color(rgb(theme::BORDER))
+                        .child(div().text_sm().text_color(rgb(theme::TEXT)).child(heading))
+                        .child(div().text_sm().text_color(rgb(mode_colour)).child(mode)),
+                ),
         )
 }
 

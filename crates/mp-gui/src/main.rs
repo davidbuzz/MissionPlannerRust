@@ -53,6 +53,18 @@ impl Screen {
     /// The tabs, in order.
     const ALL: [Self; 3] = [Self::Fly, Self::Plan, Self::Setup];
 
+    /// The screen to open on, from `MP_SCREEN`.
+    ///
+    /// Exists so a screenshot can be taken of any screen without driving the tab strip with
+    /// synthetic clicks, which is the sort of test that breaks whenever the layout moves.
+    fn initial() -> Self {
+        match std::env::var("MP_SCREEN").as_deref() {
+            Ok("plan") => Self::Plan,
+            Ok("setup") => Self::Setup,
+            _ => Self::Fly,
+        }
+    }
+
     const fn label(self) -> &'static str {
         match self {
             Self::Fly => "fly",
@@ -137,7 +149,7 @@ impl MissionPlanner {
             ))),
             auto_read_mission: std::env::args().any(|a| a == "--read-mission"),
             mission_requested: false,
-            screen: Screen::Fly,
+            screen: Screen::initial(),
             plan: Plan::default(),
             adopt_vehicle_mission: false,
             file_status: None,
@@ -267,18 +279,37 @@ impl MissionPlanner {
 
 impl MissionPlanner {
     /// The left column on the flight screen.
+    ///
+    /// The HUD is pinned and everything below it scrolls. The mode list is as long as the
+    /// airframe's - twenty-seven entries on a copter - so a fixed column cut off the panels below
+    /// it, and the link panel was unreachable at any window size anyone uses. Scrolling the whole
+    /// column instead was worse: the mode list appears only once a vehicle is heard from, and the
+    /// content growing under the scroll container dragged the view down, so the application
+    /// started with its primary flight display already off the top of the screen.
     fn fly_sidebar(&self, view: &TelemetryView, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .flex()
             .flex_col()
             .flex_shrink_0()
+            .min_h(px(0.0))
             .gap_4()
             .w(px(400.0))
             .child(fly::hud_panel(view))
-            .child(fly::actions_panel(view, cx))
-            .child(fly::vehicle_panel(view))
-            .child(fly::gps_panel(view))
-            .child(fly::link_panel(view))
+            .child(
+                div()
+                    .id("fly-sidebar")
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .min_h(px(0.0))
+                    .gap_4()
+                    .pr_2()
+                    .overflow_y_scroll()
+                    .child(fly::actions_panel(view, cx))
+                    .child(fly::vehicle_panel(view))
+                    .child(fly::gps_panel(view))
+                    .child(fly::link_panel(view)),
+            )
     }
 
     /// The left column on the plan screen.
@@ -290,10 +321,13 @@ impl MissionPlanner {
         let selected = self.plan.selected();
 
         div()
+            .id("plan-sidebar")
             .flex()
             .flex_col()
             .flex_shrink_0()
             .gap_4()
+            .pr_2()
+            .overflow_y_scroll()
             .w(px(440.0))
             .child(plan::actions_panel(&items, &origin, view, cx))
             .child(plan::items_panel(&items, selected, cx))
@@ -547,6 +581,7 @@ impl Render for MissionPlanner {
             Screen::Fly => div()
                 .flex()
                 .flex_1()
+                .min_h(px(0.0))
                 .gap_4()
                 .p_4()
                 .child(self.fly_sidebar(&view, cx))
@@ -556,26 +591,35 @@ impl Render for MissionPlanner {
                         .flex_col()
                         .flex_1()
                         .min_w(px(0.0))
+                        .min_h(px(0.0))
                         .gap_4()
                         .child(self.map_pane(cx))
-                        .child(fly::messages_panel(&view)),
+                        .child(div().flex_shrink_0().child(fly::messages_panel(&view))),
                 )
                 .into_any_element(),
             Screen::Plan => div()
                 .flex()
                 .flex_1()
+                .min_h(px(0.0))
                 .gap_4()
                 .p_4()
                 .child(self.plan_sidebar(&view, cx))
                 .child(self.map_pane(cx))
                 .into_any_element(),
-            Screen::Setup => self.setup_body(&view).into_any_element(),
+            Screen::Setup => div()
+                .id("setup-body")
+                .flex()
+                .flex_1()
+                .overflow_y_scroll()
+                .child(self.setup_body(&view))
+                .into_any_element(),
         };
 
         div()
             .flex()
             .flex_col()
             .size_full()
+            .overflow_hidden()
             .bg(rgb(theme::BG))
             .text_color(rgb(theme::TEXT))
             .child(
