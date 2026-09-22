@@ -14,8 +14,10 @@
 #![forbid(unsafe_code)]
 
 pub mod geodesy;
+pub mod tiles;
 
 pub use geodesy::{Bearing, LatLon, LatLonAlt, PositionError, WebMercator};
+pub use tiles::{TileId, tiles_for_view, zoom_for_span};
 
 /// Angle in degrees.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Default)]
