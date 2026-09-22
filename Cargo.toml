@@ -1,6 +1,9 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "xtask"]
+# `fuzz` is deliberately excluded: it needs a nightly toolchain and cargo-fuzz, and a normal
+# `cargo build --workspace` must not require either.
+exclude = ["fuzz"]
 
 [workspace.package]
 version = "0.1.0"

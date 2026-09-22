@@ -1,0 +1,44 @@
+[package]
+name = "mp-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "GPL-3.0-or-later"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+mp-mavlink = { path = "../crates/mp-mavlink" }
+mp-mavlink-dialects = { path = "../crates/mp-mavlink-dialects" }
+mp-mission = { path = "../crates/mp-mission" }
+mp-log = { path = "../crates/mp-log" }
+
+[[bin]]
+name = "frame_parse"
+path = "fuzz_targets/frame_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "frame_stream"
+path = "fuzz_targets/frame_stream.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "waypoint_file"
+path = "fuzz_targets/waypoint_file.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "tlog_reader"
+path = "fuzz_targets/tlog_reader.rs"
+test = false
+doc = false
+bench = false
