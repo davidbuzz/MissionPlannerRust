@@ -4,6 +4,9 @@
 //! nothing else. That is the whole point of the snapshot bus in `mp-vehicle` - a render pass
 //! cannot block on I/O, and cannot observe a half-updated vehicle.
 
+// This module is internal to the binary; `pub` here documents intent rather than exporting API.
+#![allow(unreachable_pub)]
+
 use std::sync::Arc;
 
 use mp_link::{Link, LinkConfig};
@@ -59,17 +62,27 @@ impl Telemetry {
     pub fn connect(url: &str) -> Self {
         let config = LinkConfig::default();
         match Link::connect(url, config) {
-            Ok(link) => Self { link: Some(link), target: url.to_owned(), error: None },
-            Err(err) => {
-                Self { link: None, target: url.to_owned(), error: Some(err.to_string()) }
-            }
+            Ok(link) => Self {
+                link: Some(link),
+                target: url.to_owned(),
+                error: None,
+            },
+            Err(err) => Self {
+                link: None,
+                target: url.to_owned(),
+                error: Some(err.to_string()),
+            },
         }
     }
 
     /// A telemetry-less instance, for launching the UI with no link.
     #[must_use]
     pub fn idle() -> Self {
-        Self { link: None, target: String::new(), error: None }
+        Self {
+            link: None,
+            target: String::new(),
+            error: None,
+        }
     }
 
     /// Why the link could not be opened, if it could not.

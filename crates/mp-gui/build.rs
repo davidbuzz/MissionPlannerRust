@@ -19,13 +19,20 @@ fn main() {
 fn link_stub_if_needed(lib: &str) {
     use std::path::{Path, PathBuf};
 
-    const SEARCH_DIRS: &[&str] =
-        &["/usr/lib/x86_64-linux-gnu", "/usr/lib64", "/usr/lib", "/lib/x86_64-linux-gnu"];
+    const SEARCH_DIRS: &[&str] = &[
+        "/usr/lib/x86_64-linux-gnu",
+        "/usr/lib64",
+        "/usr/lib",
+        "/lib/x86_64-linux-gnu",
+    ];
 
     let bare = format!("lib{lib}.so");
 
     // Nothing to do when the development symlink already exists.
-    if SEARCH_DIRS.iter().any(|dir| Path::new(dir).join(&bare).exists()) {
+    if SEARCH_DIRS
+        .iter()
+        .any(|dir| Path::new(dir).join(&bare).exists())
+    {
         return;
     }
 
@@ -51,18 +58,22 @@ fn link_stub_if_needed(lib: &str) {
         return;
     };
 
-    let Ok(out_dir) = std::env::var("OUT_DIR") else { return };
+    let Ok(out_dir) = std::env::var("OUT_DIR") else {
+        return;
+    };
     let stub_dir = PathBuf::from(out_dir).join("link-stubs");
     if std::fs::create_dir_all(&stub_dir).is_err() {
         return;
     }
     let stub = stub_dir.join(&bare);
-    if !stub.exists() {
-        if let Err(err) = std::os::unix::fs::symlink(&versioned, &stub) {
-            println!("cargo:warning=could not create link stub for {lib}: {err}");
-            return;
-        }
+    if !stub.exists()
+        && let Err(err) = std::os::unix::fs::symlink(&versioned, &stub)
+    {
+        println!("cargo:warning=could not create link stub for {lib}: {err}");
+        return;
     }
-    println!("cargo:warning=using a local link stub for lib{lib}; install lib{lib}-dev to avoid this");
+    println!(
+        "cargo:warning=using a local link stub for lib{lib}; install lib{lib}-dev to avoid this"
+    );
     println!("cargo:rustc-link-search=native={}", stub_dir.display());
 }

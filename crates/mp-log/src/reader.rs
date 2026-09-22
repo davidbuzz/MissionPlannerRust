@@ -64,7 +64,9 @@ impl<'a> TlogReader<'a> {
                 continue;
             }
 
-            let Some(window) = self.data.get(scan..) else { break };
+            let Some(window) = self.data.get(scan..) else {
+                break;
+            };
             match parse(window, dialect) {
                 Ok((frame, used)) => {
                     let stamp = self

@@ -3364,6 +3364,9 @@ name = "mp-gui"
 version = "0.1.0"
 dependencies = [
  "gpui",
+ "mp-link",
+ "mp-units",
+ "mp-vehicle",
 ]
 
 [[package]]

@@ -149,8 +149,10 @@ fn draw(link: &Link) {
 
 /// Records telemetry to a Mission Planner compatible `.tlog`.
 fn record(url: &str, path: &str, seconds: Option<u64>) -> std::process::ExitCode {
-    let config =
-        LinkConfig { record_path: Some(path.into()), ..LinkConfig::default() };
+    let config = LinkConfig {
+        record_path: Some(path.into()),
+        ..LinkConfig::default()
+    };
     let link = match Link::connect(url, config) {
         Ok(link) => link,
         Err(err) => {
@@ -223,7 +225,9 @@ fn fly(url: &str, record_path: Option<&str>) -> std::process::ExitCode {
     };
     println!("vehicle {id}");
 
-    if !await_state(&handle, "3D GPS fix", Duration::from_secs(60), |s| s.gps.has_3d_fix()) {
+    if !await_state(&handle, "3D GPS fix", Duration::from_secs(60), |s| {
+        s.gps.has_3d_fix()
+    }) {
         return std::process::ExitCode::FAILURE;
     }
     let Some(home) = handle.load().position else {
@@ -265,7 +269,12 @@ fn fly(url: &str, record_path: Option<&str>) -> std::process::ExitCode {
             mp_units::Metres(metres),
         );
         println!("leg: bearing {bearing}, {metres} m");
-        link.send(&commands::goto_position(id, target.latitude(), target.longitude(), 40.0));
+        link.send(&commands::goto_position(
+            id,
+            target.latitude(),
+            target.longitude(),
+            40.0,
+        ));
         await_state(&handle, "leg complete", Duration::from_secs(90), |s| {
             s.position.is_some_and(|p| p.distance_to(target).0 < 25.0)
         });
@@ -273,7 +282,12 @@ fn fly(url: &str, record_path: Option<&str>) -> std::process::ExitCode {
 
     println!("returning and landing");
     link.send(&commands::set_mode(id, commands::copter_mode::RTL));
-    await_state(&handle, "disarmed after landing", Duration::from_secs(180), |s| !s.armed);
+    await_state(
+        &handle,
+        "disarmed after landing",
+        Duration::from_secs(180),
+        |s| !s.armed,
+    );
 
     println!("flight complete: {} frames", link.frames_received());
     std::process::ExitCode::SUCCESS

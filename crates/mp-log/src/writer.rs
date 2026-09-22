@@ -23,7 +23,11 @@ impl TlogWriter {
         let path = path.as_ref();
         let file = File::create_new(path)
             .map_err(|e| LogError::io(format!("creating {}", path.display()), e))?;
-        Ok(Self { out: BufWriter::with_capacity(64 * 1024, file), frames: 0, bytes: 0 })
+        Ok(Self {
+            out: BufWriter::with_capacity(64 * 1024, file),
+            frames: 0,
+            bytes: 0,
+        })
     }
 
     /// Appends a frame stamped with the current time.
@@ -38,7 +42,9 @@ impl TlogWriter {
         self.out
             .write_all(&timestamp_micros.to_be_bytes())
             .map_err(|e| LogError::io("writing timestamp", e))?;
-        self.out.write_all(frame).map_err(|e| LogError::io("writing frame", e))?;
+        self.out
+            .write_all(frame)
+            .map_err(|e| LogError::io("writing frame", e))?;
         self.frames += 1;
         self.bytes += (TIMESTAMP_LEN + frame.len()) as u64;
         Ok(())
@@ -59,7 +65,9 @@ impl TlogWriter {
     /// Flushes buffered data. Called on drop, but a recorder should call it periodically so a
     /// crash loses seconds rather than minutes.
     pub fn flush(&mut self) -> Result<(), LogError> {
-        self.out.flush().map_err(|e| LogError::io("flushing log", e))
+        self.out
+            .flush()
+            .map_err(|e| LogError::io("flushing log", e))
     }
 }
 

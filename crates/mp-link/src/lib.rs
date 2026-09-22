@@ -423,11 +423,11 @@ fn run_link(
         }
 
         // Flush the recording periodically so a crash costs seconds, not the whole flight.
-        if let Some(writer) = recorder.as_mut() {
-            if last_flush.elapsed() >= Duration::from_secs(1) {
-                let _ = writer.flush();
-                last_flush = Instant::now();
-            }
+        if let Some(writer) = recorder.as_mut()
+            && last_flush.elapsed() >= Duration::from_secs(1)
+        {
+            let _ = writer.flush();
+            last_flush = Instant::now();
         }
 
         stats.decode = *decoder.stats();

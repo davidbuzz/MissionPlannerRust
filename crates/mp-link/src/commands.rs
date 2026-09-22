@@ -63,14 +63,26 @@ pub fn arm(target: VehicleId, arm: bool, force: bool) -> MavMessage {
     command(
         target,
         CMD_COMPONENT_ARM_DISARM,
-        [if arm { 1.0 } else { 0.0 }, force_magic, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [
+            if arm { 1.0 } else { 0.0 },
+            force_magic,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        ],
     )
 }
 
 /// Takes off to an altitude above the home point, in metres.
 #[must_use]
 pub fn takeoff(target: VehicleId, altitude_metres: f32) -> MavMessage {
-    command(target, CMD_NAV_TAKEOFF, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, altitude_metres])
+    command(
+        target,
+        CMD_NAV_TAKEOFF,
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, altitude_metres],
+    )
 }
 
 /// Lands where the vehicle currently is.
@@ -98,7 +110,9 @@ pub fn param_set(target: VehicleId, name: &str, value: f32) -> MavMessage {
     let mut param_id = [0u8; 16];
     let bytes = name.as_bytes();
     let n = bytes.len().min(16);
-    param_id[..n].copy_from_slice(&bytes[..n]);
+    if let (Some(dst), Some(src)) = (param_id.get_mut(..n), bytes.get(..n)) {
+        dst.copy_from_slice(src);
+    }
 
     MavMessage::ParamSet(ParamSet {
         param_value: value,

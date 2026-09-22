@@ -2,9 +2,9 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
+use mp_log::{TlogReader, TlogWriter};
 use mp_mavlink::{Message as _, encode_v2};
 use mp_mavlink_dialects::all::{DIALECT, Heartbeat};
-use mp_log::{TlogReader, TlogWriter};
 
 fn heartbeat(seq: u8) -> Vec<u8> {
     let hb = Heartbeat {
@@ -18,8 +18,17 @@ fn heartbeat(seq: u8) -> Vec<u8> {
     let mut payload = [0u8; Heartbeat::LEN];
     hb.encode(&mut payload);
     let mut frame = [0u8; 64];
-    let n = encode_v2(&mut frame, seq, 1, 1, Heartbeat::ID, &payload, Heartbeat::CRC_EXTRA, 0)
-        .unwrap();
+    let n = encode_v2(
+        &mut frame,
+        seq,
+        1,
+        1,
+        Heartbeat::ID,
+        &payload,
+        Heartbeat::CRC_EXTRA,
+        0,
+    )
+    .unwrap();
     frame[..n].to_vec()
 }
 
@@ -51,8 +60,15 @@ fn frames_and_timestamps_round_trip() {
     let records = TlogReader::new(&data).records(&DIALECT);
     assert_eq!(records.len(), written.len());
     for (record, (stamp, frame)) in records.iter().zip(&written) {
-        assert_eq!(record.timestamp_micros, *stamp, "timestamp must survive the round trip");
-        assert_eq!(record.frame, &frame[..], "frame bytes must survive the round trip");
+        assert_eq!(
+            record.timestamp_micros, *stamp,
+            "timestamp must survive the round trip"
+        );
+        assert_eq!(
+            record.frame,
+            &frame[..],
+            "frame bytes must survive the round trip"
+        );
     }
 }
 
@@ -61,7 +77,10 @@ fn creating_a_log_never_overwrites_an_existing_recording() {
     // Losing a flight recording to a re-run is unacceptable, so create is exclusive.
     let path = scratch("nooverwrite.tlog");
     let _writer = TlogWriter::create(&path).unwrap();
-    assert!(TlogWriter::create(&path).is_err(), "must refuse to clobber an existing log");
+    assert!(
+        TlogWriter::create(&path).is_err(),
+        "must refuse to clobber an existing log"
+    );
 }
 
 #[test]
@@ -71,7 +90,9 @@ fn a_corrupted_log_still_yields_its_good_records() {
         let mut writer = TlogWriter::create(&path).unwrap();
         writer.write_frame_at(&heartbeat(1), 1_000).unwrap();
         // Console text of the sort ArduPilot emits at boot, wrapped as a record.
-        writer.write_frame_at(b"\n\nInit ArduCopter V4.8.0\n", 2_000).unwrap();
+        writer
+            .write_frame_at(b"\n\nInit ArduCopter V4.8.0\n", 2_000)
+            .unwrap();
         writer.write_frame_at(&heartbeat(2), 3_000).unwrap();
         writer.flush().unwrap();
     }
@@ -83,9 +104,16 @@ fn a_corrupted_log_still_yields_its_good_records() {
     let records = TlogReader::new(&data).records(&DIALECT);
     let seqs: Vec<u8> = records
         .iter()
-        .filter_map(|r| mp_mavlink::parse(r.frame, &DIALECT).ok().map(|(f, _)| f.seq))
+        .filter_map(|r| {
+            mp_mavlink::parse(r.frame, &DIALECT)
+                .ok()
+                .map(|(f, _)| f.seq)
+        })
         .collect();
-    assert!(seqs.contains(&1) && seqs.contains(&2), "good records must survive: {seqs:?}");
+    assert!(
+        seqs.contains(&1) && seqs.contains(&2),
+        "good records must survive: {seqs:?}"
+    );
 }
 
 #[test]
@@ -93,16 +121,21 @@ fn the_real_corpora_read_back_at_the_expected_frame_counts() {
     // These counts are the ones the differential test established against the C# implementation,
     // so a regression in the reader shows up here rather than as a mysterious diff later.
     for (name, expected) in [("autotest.tlog", 35_750usize), ("multisystem.tlog", 34_775)] {
-        let path =
-            std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../testdata/mavlink"))
-                .join(name);
+        let path = std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../testdata/mavlink"
+        ))
+        .join(name);
         let data = std::fs::read(&path).expect("corpus");
         let records = TlogReader::new(&data).records(&DIALECT);
         assert_eq!(records.len(), expected, "frame count for {name}");
 
         // Timestamps must be plausible Unix microseconds and broadly increasing.
         let stamps: Vec<u64> = records.iter().map(|r| r.timestamp_micros).collect();
-        let sane = stamps.iter().filter(|s| **s > 1_000_000_000_000_000).count();
+        let sane = stamps
+            .iter()
+            .filter(|s| **s > 1_000_000_000_000_000)
+            .count();
         assert!(
             sane * 100 / stamps.len() > 90,
             "{name}: only {sane} of {} timestamps look like Unix microseconds",

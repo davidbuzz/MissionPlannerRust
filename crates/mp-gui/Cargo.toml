@@ -16,3 +16,6 @@ workspace = true
 
 [dependencies]
 gpui = "0.2.2"
+mp-link.workspace = true
+mp-vehicle.workspace = true
+mp-units.workspace = true

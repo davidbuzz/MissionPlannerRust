@@ -38,7 +38,10 @@ pub enum LogError {
 impl LogError {
     /// Attaches context to an I/O error.
     pub fn io(context: impl Into<String>, source: std::io::Error) -> Self {
-        Self::Io { context: context.into(), source }
+        Self::Io {
+            context: context.into(),
+            source,
+        }
     }
 }
 
