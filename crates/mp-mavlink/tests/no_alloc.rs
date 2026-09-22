@@ -7,7 +7,6 @@
 
 // Justification: a counting global allocator cannot be written in safe Rust.
 #![allow(unsafe_code)]
-
 // Test code deliberately uses unwrap/expect/indexing: a panic here is a test failure with a
 // useful message, which is exactly what we want. The production lint policy stays strict.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
@@ -76,7 +75,11 @@ fn decoding_ten_thousand_frames_allocates_nothing() {
     }
     let after = ALLOCATIONS.load(Ordering::Relaxed);
 
-    assert!(decoder.stats().frames >= 10_000, "expected a large run, got {}", decoder.stats().frames);
+    assert!(
+        decoder.stats().frames >= 10_000,
+        "expected a large run, got {}",
+        decoder.stats().frames
+    );
     assert_eq!(after - before, 0, "decode path must not allocate");
     assert!(checksum_acc > 0, "work must not be optimised away");
 }

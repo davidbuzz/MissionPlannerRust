@@ -178,7 +178,9 @@ where
 
     let header_len = version.header_len();
     if input.len() < header_len {
-        return Err(ParseError::Incomplete { needed: header_len - input.len() });
+        return Err(ParseError::Incomplete {
+            needed: header_len - input.len(),
+        });
     }
 
     let payload_len = input[1] as usize;
@@ -199,7 +201,9 @@ where
     let sig_len = if signed { SIGNATURE_LEN } else { 0 };
     let total = header_len + payload_len + CHECKSUM_LEN + sig_len;
     if input.len() < total {
-        return Err(ParseError::Incomplete { needed: total - input.len() });
+        return Err(ParseError::Incomplete {
+            needed: total - input.len(),
+        });
     }
 
     // Length is known, so the whole frame can be skipped even though we refuse to interpret it.
@@ -211,10 +215,15 @@ where
     let payload = &input[header_len..payload_end];
     let checksum = u16::from_le_bytes([input[payload_end], input[payload_end + 1]]);
 
-    let crc_extra = dialect.crc_extra(msgid).ok_or(ParseError::UnknownMessage { msgid })?;
+    let crc_extra = dialect
+        .crc_extra(msgid)
+        .ok_or(ParseError::UnknownMessage { msgid })?;
     let actual = crc::checksum(&input[1..payload_end], crc_extra);
     if actual != checksum {
-        return Err(ParseError::Crc { expected: checksum, actual });
+        return Err(ParseError::Crc {
+            expected: checksum,
+            actual,
+        });
     }
 
     let signature = if signed {
@@ -274,10 +283,14 @@ pub fn encode_v2(
     let trimmed = trim_payload(payload);
     let total = V2_HEADER_LEN + trimmed.len() + CHECKSUM_LEN;
     if out.len() < total {
-        return Err(EncodeError::BufferTooSmall { needed: total, have: out.len() });
+        return Err(EncodeError::BufferTooSmall {
+            needed: total,
+            have: out.len(),
+        });
     }
 
-    let len = u8::try_from(trimmed.len()).map_err(|_| EncodeError::PayloadTooLong(trimmed.len()))?;
+    let len =
+        u8::try_from(trimmed.len()).map_err(|_| EncodeError::PayloadTooLong(trimmed.len()))?;
     let id = msgid.to_le_bytes();
     out[0] = STX_V2;
     out[1] = len;
@@ -316,10 +329,14 @@ pub fn encode_v1(
     }
     let total = V1_HEADER_LEN + payload.len() + CHECKSUM_LEN;
     if out.len() < total {
-        return Err(EncodeError::BufferTooSmall { needed: total, have: out.len() });
+        return Err(EncodeError::BufferTooSmall {
+            needed: total,
+            have: out.len(),
+        });
     }
 
-    let len = u8::try_from(payload.len()).map_err(|_| EncodeError::PayloadTooLong(payload.len()))?;
+    let len =
+        u8::try_from(payload.len()).map_err(|_| EncodeError::PayloadTooLong(payload.len()))?;
     out[0] = STX_V1;
     out[1] = len;
     out[2] = seq;

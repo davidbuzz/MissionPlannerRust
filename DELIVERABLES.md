@@ -15,8 +15,8 @@ Reference clone: [referneces/zed](referneces/zed).
 
 | # | Layer | Deliverable | Priority | Implementation | Testing |
 |---|---|---|---|---|---|
-| [D1](#d1-workspace-crate-graph-and-build-system) | 0 | Cargo workspace and crate graph | P0 | Not started | Not started |
-| [D2](#d2-mavlink-protocol-crate) | 0 | MAVLink protocol codec crate | P0 | Not started | Not started |
+| [D1](#d1-workspace-crate-graph-and-build-system) | 0 | Cargo workspace and crate graph | P0 | In progress | Unit |
+| [D2](#d2-mavlink-protocol-crate) | 0 | MAVLink protocol codec crate | P0 | In progress | Differential vs C# |
 | [D3](#d3-transport-layer) | 0 | Serial, TCP, UDP, BLE transports | P0 | Not started | Not started |
 | [D4](#d4-link-engine-the-mavlinkinterface-equivalent) | 0 | Link engine, protocol machines | P0 | Not started | Not started |
 | [D5](#d5-vehicle-state-model--telemetry-bus) | 0 | Vehicle state snapshot bus | P0 | Not started | Not started |
@@ -32,8 +32,8 @@ Reference clone: [referneces/zed](referneces/zed).
 | [D15](#d15-can-peripherals-and-outboard-features) | 2 | DroneCAN, peripherals, video, joystick | P2 | Not started | Not started |
 | [D16](#d16-extension-and-scripting-system) | 2 | WASM extensions and scripting | P2 | Not started | Not started |
 | [D17](#d17-localization-settings-and-data-compatibility) | 2 | i18n, settings, data compatibility | P1 | Not started | Not started |
-| [D18](#d18-translation-factory-and-porting-ledger) | 3 | Translation factory, file ledger | P0 | Not started | Not started |
-| [D19](#d19-verification-suite) | 3 | Differential, SITL, fuzz verification | P0 | Not started | Not started |
+| [D18](#d18-translation-factory-and-porting-ledger) | 3 | Translation factory, file ledger | P0 | In progress | Unit |
+| [D19](#d19-verification-suite) | 3 | Differential, SITL, fuzz verification | P0 | In progress | Differential vs C# |
 | [D20](#d20-release-packaging-and-operations) | 3 | Installers, updates, crash reporting | P1 | Not started | Not started |
 
 **Layer** 0 = foundation (protocol/transport/state) · 1 = rendering and UI foundation · 2 = the application · 3 = the machine that builds the machine.

@@ -120,9 +120,27 @@ mod tests {
     use super::*;
 
     static TABLE: &[MessageInfo] = &[
-        MessageInfo { id: 0, name: "HEARTBEAT", crc_extra: 50, min_len: 9, len: 9 },
-        MessageInfo { id: 1, name: "SYS_STATUS", crc_extra: 124, min_len: 31, len: 31 },
-        MessageInfo { id: 30, name: "ATTITUDE", crc_extra: 39, min_len: 28, len: 28 },
+        MessageInfo {
+            id: 0,
+            name: "HEARTBEAT",
+            crc_extra: 50,
+            min_len: 9,
+            len: 9,
+        },
+        MessageInfo {
+            id: 1,
+            name: "SYS_STATUS",
+            crc_extra: 124,
+            min_len: 31,
+            len: 31,
+        },
+        MessageInfo {
+            id: 30,
+            name: "ATTITUDE",
+            crc_extra: 39,
+            min_len: 28,
+            len: 28,
+        },
     ];
 
     #[test]

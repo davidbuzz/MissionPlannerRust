@@ -39,7 +39,11 @@ impl Dialect for BinaryDialect {
 }
 
 fn testdata(name: &str) -> std::path::PathBuf {
-    std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../testdata/mavlink")).join(name)
+    std::path::Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../testdata/mavlink"
+    ))
+    .join(name)
 }
 
 fn binary_dialect() -> BinaryDialect {
@@ -98,14 +102,25 @@ fn rust_decode_matches_csharp_decode_frame_for_frame() {
             frame_hex: f[7].to_owned(),
         });
     }
-    assert!(expected.len() > 30_000, "golden corpus looks truncated: {}", expected.len());
+    assert!(
+        expected.len() > 30_000,
+        "golden corpus looks truncated: {}",
+        expected.len()
+    );
 
     let mut actual = Vec::with_capacity(expected.len());
     for (index, frame) in walk_tlog(&log, &dialect).into_iter().enumerate() {
-        actual.push(Row { index: index as u64, ..frame });
+        actual.push(Row {
+            index: index as u64,
+            ..frame
+        });
     }
 
-    assert_eq!(actual.len(), expected.len(), "frame count differs from the C# reference");
+    assert_eq!(
+        actual.len(),
+        expected.len(),
+        "frame count differs from the C# reference"
+    );
 
     // Report the first divergence in full rather than a bare count mismatch.
     for (a, e) in actual.iter().zip(&expected) {
@@ -118,10 +133,16 @@ fn every_message_in_a_real_flight_is_known_to_the_dialect() {
     let dialect = binary_dialect();
     let log = std::fs::read(testdata("autotest.tlog")).expect("tlog corpus");
 
-    let seen: std::collections::BTreeSet<u32> =
-        walk_tlog(&log, &dialect).into_iter().map(|r| r.msgid).collect();
+    let seen: std::collections::BTreeSet<u32> = walk_tlog(&log, &dialect)
+        .into_iter()
+        .map(|r| r.msgid)
+        .collect();
 
-    assert!(seen.len() > 20, "a real flight should exercise many message types, saw {}", seen.len());
+    assert!(
+        seen.len() > 20,
+        "a real flight should exercise many message types, saw {}",
+        seen.len()
+    );
 }
 
 #[test]
@@ -142,7 +163,10 @@ fn source_and_binary_message_tables_agree_where_they_overlap() {
             checked += 1;
         }
     }
-    assert!(checked > 300, "expected substantial overlap, checked {checked}");
+    assert!(
+        checked > 300,
+        "expected substantial overlap, checked {checked}"
+    );
 }
 
 /// Walks a tlog the way `MavlinkParse.ReadPacket(hasTimestamp: true)` does: consume the 8-byte

@@ -75,13 +75,26 @@ fn tampering_with_the_payload_breaks_the_signature() {
     bytes[payload_end..payload_end + 2].copy_from_slice(&ck.to_le_bytes());
 
     let (frame, _) = parse(&bytes, &dialect).expect("parse");
-    assert!(!verify(&key, &frame), "tampered frame must fail signature check");
+    assert!(
+        !verify(&key, &frame),
+        "tampered frame must fail signature check"
+    );
 }
 
 #[test]
 fn timestamp_conversion_matches_the_2015_epoch() {
     // 2015-01-01T00:00:00Z is timestamp 0; one second later is 100_000 ten-microsecond ticks.
-    assert_eq!(signing::timestamp_from_unix_micros(1_420_070_400_000_000), 0);
-    assert_eq!(signing::timestamp_from_unix_micros(1_420_070_401_000_000), 100_000);
-    assert_eq!(signing::timestamp_from_unix_micros(0), 0, "pre-epoch clamps to zero");
+    assert_eq!(
+        signing::timestamp_from_unix_micros(1_420_070_400_000_000),
+        0
+    );
+    assert_eq!(
+        signing::timestamp_from_unix_micros(1_420_070_401_000_000),
+        100_000
+    );
+    assert_eq!(
+        signing::timestamp_from_unix_micros(0),
+        0,
+        "pre-epoch clamps to zero"
+    );
 }

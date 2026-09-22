@@ -81,12 +81,18 @@ pub fn sign(key: &SigningKey, link_id: u8, timestamp: u64, signable: &[u8]) -> [
 /// Verifies a parsed frame's signature in constant time with respect to the digest bytes.
 #[must_use]
 pub fn verify(key: &SigningKey, frame: &Frame<'_>) -> bool {
-    let Some(sig) = frame.signature else { return false };
+    let Some(sig) = frame.signature else {
+        return false;
+    };
     if sig.len() != SIGNATURE_LEN {
         return false;
     }
-    let Some(link_id) = sig.first().copied() else { return false };
-    let Some(ts_bytes) = sig.get(1..7) else { return false };
+    let Some(link_id) = sig.first().copied() else {
+        return false;
+    };
+    let Some(ts_bytes) = sig.get(1..7) else {
+        return false;
+    };
     let mut ts = [0u8; 8];
     if let Some(dst) = ts.get_mut(..6) {
         dst.copy_from_slice(ts_bytes);
@@ -94,8 +100,12 @@ pub fn verify(key: &SigningKey, frame: &Frame<'_>) -> bool {
     let timestamp = u64::from_le_bytes(ts);
 
     let expected = sign(key, link_id, timestamp, frame.signable_bytes());
-    let Some(actual_tail) = sig.get(7..13) else { return false };
-    let Some(expected_tail) = expected.get(7..13) else { return false };
+    let Some(actual_tail) = sig.get(7..13) else {
+        return false;
+    };
+    let Some(expected_tail) = expected.get(7..13) else {
+        return false;
+    };
 
     let mut diff = 0u8;
     for (a, b) in actual_tail.iter().zip(expected_tail) {

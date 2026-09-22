@@ -55,12 +55,18 @@ fn resynchronises_after_leading_noise_and_recovers_every_frame() {
     decoder.push(&stream);
     // The leading garbage claims a 253-byte payload, so an in-order drain correctly waits.
     decoder.drain(&dialect, |f| seqs.push(f.seq));
-    assert!(seqs.is_empty(), "drain must not reorder around an unresolved candidate");
+    assert!(
+        seqs.is_empty(),
+        "drain must not reorder around an unresolved candidate"
+    );
 
     // At end-of-stream we know the candidate is noise; flush resynchronises past it.
     decoder.flush(&dialect, |f| seqs.push(f.seq));
     assert_eq!(seqs, vec![1, 2]);
-    assert!(decoder.stats().resync_bytes > 0, "should have skipped the noise");
+    assert!(
+        decoder.stats().resync_bytes > 0,
+        "should have skipped the noise"
+    );
 }
 
 #[test]
@@ -79,7 +85,10 @@ fn a_bogus_long_header_resolves_itself_once_enough_bytes_arrive() {
         decoder.push_and_drain(chunk, &dialect, |f| seqs.push(f.seq));
     }
 
-    assert!(seqs.contains(&12), "a live link must recover without an explicit flush: {seqs:?}");
+    assert!(
+        seqs.contains(&12),
+        "a live link must recover without an explicit flush: {seqs:?}"
+    );
 }
 
 #[test]
@@ -128,8 +137,15 @@ fn a_stream_of_pure_garbage_never_wedges_and_never_yields_frames() {
     }
 
     assert_eq!(count, 0);
-    assert!(decoder.buffered() < mp_mavlink::MAX_FRAME_LEN, "decoder must not wedge full");
-    assert_eq!(decoder.stats().overflow_bytes, 0, "buffer must keep draining");
+    assert!(
+        decoder.buffered() < mp_mavlink::MAX_FRAME_LEN,
+        "decoder must not wedge full"
+    );
+    assert_eq!(
+        decoder.stats().overflow_bytes,
+        0,
+        "buffer must keep draining"
+    );
 }
 
 #[test]
@@ -139,6 +155,9 @@ fn buffer_overflow_is_reported_rather_than_silently_dropping() {
     // Push far more than capacity without draining.
     let pushed = decoder.push(&vec![0u8; mp_mavlink::decoder::CAPACITY * 2]);
     assert_eq!(pushed, mp_mavlink::decoder::CAPACITY);
-    assert_eq!(decoder.stats().overflow_bytes as usize, mp_mavlink::decoder::CAPACITY);
+    assert_eq!(
+        decoder.stats().overflow_bytes as usize,
+        mp_mavlink::decoder::CAPACITY
+    );
     let _ = dialect;
 }

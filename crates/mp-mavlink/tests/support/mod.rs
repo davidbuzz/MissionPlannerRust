@@ -5,7 +5,8 @@
 //! checked against the shipping C# implementation's own metadata, not against our assumptions.
 
 #![allow(dead_code)]
-#![allow(unreachable_pub)] // shared test helper module, re-included per test binary
+#![allow(unreachable_pub)]
+// shared test helper module, re-included per test binary
 
 // Test code deliberately uses unwrap/expect/indexing: a panic here is a test failure with a
 // useful message, which is exactly what we want. The production lint policy stays strict.
@@ -43,14 +44,20 @@ impl Dialect for CsvDialect {
 
 impl CsvDialect {
     pub fn row(&self, name: &str) -> &Row {
-        self.rows.iter().find(|r| r.name == name).expect("message present in reference table")
+        self.rows
+            .iter()
+            .find(|r| r.name == name)
+            .expect("message present in reference table")
     }
 }
 
 /// Loads the reference table. Panics loudly if the corpus is missing: a silently skipped
 /// differential test is worse than a failing one.
 pub fn reference_dialect() -> CsvDialect {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../testdata/mavlink/csharp_message_infos.csv");
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../testdata/mavlink/csharp_message_infos.csv"
+    );
     let text = std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("reference corpus missing at {path}: {e}"));
 
@@ -72,6 +79,10 @@ pub fn reference_dialect() -> CsvDialect {
         out.crc.insert(row.id, row.crc_extra);
         out.rows.push(row);
     }
-    assert!(out.rows.len() > 300, "reference table looks truncated: {} rows", out.rows.len());
+    assert!(
+        out.rows.len() > 300,
+        "reference table looks truncated: {} rows",
+        out.rows.len()
+    );
     out
 }

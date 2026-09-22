@@ -17,6 +17,8 @@ pub mod crc;
 pub mod decoder;
 pub mod dialect;
 pub mod frame;
+pub mod message;
+pub mod payload;
 pub mod signing;
 
 pub use decoder::{DecodeStats, FrameDecoder};
@@ -25,4 +27,5 @@ pub use frame::{
     EncodeError, Frame, INCOMPAT_FLAG_SIGNED, MAX_FRAME_LEN, MAX_PAYLOAD_LEN, MavVersion,
     ParseError, SIGNATURE_LEN, STX_V1, STX_V2, encode_v1, encode_v2, parse, trim_payload,
 };
+pub use message::Message;
 pub use signing::{SigningKey, sign, verify};

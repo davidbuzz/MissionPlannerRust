@@ -50,7 +50,12 @@ impl FrameDecoder {
     /// Creates an empty decoder. The buffer is inline, so this does not allocate.
     #[must_use]
     pub const fn new() -> Self {
-        Self { buf: [0; CAPACITY], head: 0, tail: 0, stats: DecodeStats::new_const() }
+        Self {
+            buf: [0; CAPACITY],
+            head: 0,
+            tail: 0,
+            stats: DecodeStats::new_const(),
+        }
     }
 
     /// Link statistics accumulated so far.
@@ -110,8 +115,15 @@ impl FrameDecoder {
     {
         loop {
             // Disjoint field borrows: the frame borrows `buf` while `head`/`stats` are updated.
-            let Self { buf, head, tail, stats } = &mut *self;
-            let Some(window) = buf.get(*head..*tail) else { break };
+            let Self {
+                buf,
+                head,
+                tail,
+                stats,
+            } = &mut *self;
+            let Some(window) = buf.get(*head..*tail) else {
+                break;
+            };
             if window.is_empty() {
                 break;
             }
@@ -163,8 +175,15 @@ impl FrameDecoder {
         F: FnMut(&Frame<'_>),
     {
         loop {
-            let Self { buf, head, tail, stats } = &mut *self;
-            let Some(window) = buf.get(*head..*tail) else { break };
+            let Self {
+                buf,
+                head,
+                tail,
+                stats,
+            } = &mut *self;
+            let Some(window) = buf.get(*head..*tail) else {
+                break;
+            };
             if window.is_empty() {
                 break;
             }

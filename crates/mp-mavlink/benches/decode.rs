@@ -64,16 +64,20 @@ fn decode_throughput(c: &mut Criterion) {
 
     // Small reads: the live serial case, where framing overhead dominates.
     for read_size in [64usize, 256, 1024] {
-        group.bench_with_input(BenchmarkId::new("chunked", read_size), &read_size, |b, &sz| {
-            b.iter(|| {
-                let mut decoder = FrameDecoder::new();
-                let mut acc = 0u64;
-                for chunk in stream.chunks(sz) {
-                    decoder.push_and_drain(chunk, &dialect, |f| acc += u64::from(f.msgid));
-                }
-                acc
-            });
-        });
+        group.bench_with_input(
+            BenchmarkId::new("chunked", read_size),
+            &read_size,
+            |b, &sz| {
+                b.iter(|| {
+                    let mut decoder = FrameDecoder::new();
+                    let mut acc = 0u64;
+                    for chunk in stream.chunks(sz) {
+                        decoder.push_and_drain(chunk, &dialect, |f| acc += u64::from(f.msgid));
+                    }
+                    acc
+                });
+            },
+        );
     }
     group.finish();
 }
