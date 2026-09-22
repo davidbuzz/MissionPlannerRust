@@ -1,0 +1,3 @@
+# Built artefacts and the copied reference assembly - regenerate with regen.sh
+MpRefDump.exe
+*.dll

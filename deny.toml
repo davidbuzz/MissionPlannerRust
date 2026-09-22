@@ -1,0 +1,23 @@
+[licenses]
+# The port derives from GPLv3 Mission Planner, so the workspace ships GPLv3.
+# Inbound dependencies must be GPLv3-compatible.
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "MPL-2.0",
+    "GPL-3.0",
+    "GPL-3.0-or-later",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+
+[advisories]
+yanked = "deny"

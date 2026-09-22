@@ -1,0 +1,23 @@
+[package]
+name = "mp-mavlink"
+description = "MAVLink v1/v2 frame codec: zero-copy parse, allocation-free encode, v2 signing"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+criterion.workspace = true
+
+[[bench]]
+name = "decode"
+harness = false

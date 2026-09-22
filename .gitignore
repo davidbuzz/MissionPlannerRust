@@ -1,0 +1,9 @@
+/target
+**/*.rs.bk
+*.profraw
+.DS_Store
+
+# Read-only upstream reference trees (missionplanner C# source, zed/gpui source).
+# Huge, third-party, and each carries its own .git - never tracked here.
+/referneces
+/references
