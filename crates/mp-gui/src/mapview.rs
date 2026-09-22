@@ -12,6 +12,9 @@
 //! If the numbers here hold, D8's map needs no fork of gpui. If they do not, the abandon
 //! conditions in the plan apply.
 
+// This module is internal to the binary; `pub` here documents intent rather than exporting API.
+#![allow(unreachable_pub)]
+
 use std::time::{Duration, Instant};
 
 use gpui::{
@@ -87,9 +90,9 @@ impl MapViewport {
             let t = i as f32 / track_points.max(1) as f32;
             let leg = (t * legs).floor();
             let along = (t * legs) - leg;
-            // Alternate direction each leg, which is what a lawnmower survey does.
-            let leg_index = leg.max(0.0).min(f32::from(u16::MAX)) as u32;
-            let x = if leg_index.is_multiple_of(2) {
+            // Alternate direction each leg, which is what a lawnmower survey does. Tested on the
+            // float directly so there is no conversion to justify.
+            let x = if (leg % 2.0).abs() < 0.5 {
                 along
             } else {
                 1.0 - along
@@ -273,19 +276,20 @@ fn paint_map(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window)
 
         if !cache_valid {
             // Decimate to screen resolution before tessellating.
-            // Width is a viewport dimension in pixels, so the conversion cannot meaningfully
-            // overflow; clamp anyway rather than rely on that.
-            let budget = ((w * POINTS_PER_PIXEL).clamp(2.0, 1_000_000.0) as usize).max(2);
+            // Clamped to a sane range first, so the conversion is exact for any viewport a
+            // display can have.
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let budget = (w * POINTS_PER_PIXEL).clamp(2.0, 1_000_000.0) as usize;
             let stride = map.track.len().div_ceil(budget).max(1);
             let decimated: Vec<(f32, f32)> = if std::env::var("MP_MAP_DECIMATE")
                 .map_or(true, |v| v != "0")
             {
                 let mut out: Vec<(f32, f32)> = map.track.iter().step_by(stride).copied().collect();
                 // Always keep the final point: a track that stops short of the vehicle is wrong.
-                if let (Some(last), Some(end)) = (map.track.last(), out.last()) {
-                    if last != end {
-                        out.push(*last);
-                    }
+                if let (Some(last), Some(end)) = (map.track.last(), out.last())
+                    && last != end
+                {
+                    out.push(*last);
                 }
                 out
             } else {

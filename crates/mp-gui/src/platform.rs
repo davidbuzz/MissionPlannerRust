@@ -15,6 +15,9 @@
 //! | macOS | `gpui_macos` | Metal |
 //! | wasm | `gpui_web` | wgpu / WebGL |
 
+// This module is internal to the binary; `pub` here documents intent rather than exporting API.
+#![allow(unreachable_pub)]
+
 use std::rc::Rc;
 
 use gpui::{Application, Platform};
