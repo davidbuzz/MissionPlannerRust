@@ -7,6 +7,7 @@
 
 #![allow(clippy::print_stderr)]
 
+mod mapview;
 mod platform;
 mod telemetry;
 
@@ -16,6 +17,7 @@ use gpui::{
     App, Bounds, Context, SharedString, TitlebarOptions, Window, WindowBounds, WindowOptions, div,
     prelude::*, px, rgb, size,
 };
+use mapview::MapViewport;
 use telemetry::{Telemetry, TelemetryView};
 
 /// Palette. Deliberately close to Mission Planner's dark theme so the port feels familiar rather
@@ -44,8 +46,13 @@ mod theme {
 /// map and HUD (D7-D9) will drive their own higher-rate rendering.
 const REFRESH: Duration = Duration::from_millis(100);
 
+/// Repaint interval when measuring the renderer: as fast as the executor will schedule, so paint
+/// cost is measured rather than the timer.
+const REFRESH_BENCH: Duration = Duration::from_millis(1);
+
 struct MissionPlanner {
     telemetry: Telemetry,
+    map: std::rc::Rc<std::cell::RefCell<MapViewport>>,
 }
 
 impl MissionPlanner {
@@ -59,7 +66,12 @@ impl MissionPlanner {
         // ever reads one, so this cannot block on I/O.
         cx.spawn(async move |this, cx| {
             loop {
-                cx.background_executor().timer(REFRESH).await;
+                let interval = if std::env::var("MP_BENCH").is_ok() {
+                    REFRESH_BENCH
+                } else {
+                    REFRESH
+                };
+                cx.background_executor().timer(interval).await;
                 if this.update(cx, |_, cx| cx.notify()).is_err() {
                     break;
                 }
@@ -67,7 +79,24 @@ impl MissionPlanner {
         })
         .detach();
 
-        Self { telemetry }
+        // Spike sizes: a 100k-point survey track and 2,000 markers, which is heavier than a
+        // typical flight and in the range the plan sets as the map target.
+        let track_points = std::env::var("MP_TRACK_POINTS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(100_000);
+        let markers = std::env::var("MP_MARKERS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(2_000);
+
+        Self {
+            telemetry,
+            map: std::rc::Rc::new(std::cell::RefCell::new(MapViewport::new(
+                track_points,
+                markers,
+            ))),
+        }
     }
 
     /// A labelled value, the unit this UI is mostly made of.
@@ -257,6 +286,25 @@ impl Render for MissionPlanner {
             (format!("{}  -  closed", view.target), theme::ALERT)
         };
 
+        let map_stats = {
+            let map = self.map.borrow();
+            format!(
+                "map: {} track points in {} paths ({} refused), {} markers  -  paint {:.2} ms avg, {:.2} ms worst over {} frames  -  tessellation {}",
+                map.track_len(),
+                map.track_paths(),
+                map.track_path_failures(),
+                map.marker_len(),
+                map.paint_ema().as_secs_f64() * 1000.0,
+                map.paint_worst().as_secs_f64() * 1000.0,
+                map.paints(),
+                if map.used_cache() {
+                    "cached"
+                } else {
+                    "per-frame"
+                },
+            )
+        };
+
         let vehicle_label = view
             .vehicle
             .map_or_else(|| "no vehicle".to_owned(), |id| format!("vehicle {id}"));
@@ -308,6 +356,7 @@ impl Render for MissionPlanner {
                         div()
                             .flex()
                             .flex_col()
+                            .flex_shrink_0()
                             .gap_4()
                             .w(px(400.0))
                             .child(
@@ -323,17 +372,37 @@ impl Render for MissionPlanner {
                     .child(
                         div()
                             .flex()
+                            .flex_col()
                             .flex_1()
-                            .items_center()
-                            .justify_center()
-                            .bg(rgb(theme::PANEL))
-                            .border_1()
-                            .border_color(rgb(theme::BORDER))
-                            .rounded_md()
+                            .min_w(px(0.0))
+                            .overflow_hidden()
+                            .gap_2()
                             .child(
                                 div()
+                                    .flex()
+                                    .flex_1()
+                                    .bg(rgb(theme::PANEL))
+                                    .border_1()
+                                    .border_color(rgb(theme::BORDER))
+                                    .rounded_md()
+                                    .child(mapview::map_element(self.map.clone())),
+                            )
+                            .child(
+                                // min_w(0) plus truncation is load-bearing, not cosmetic: a flex
+                                // item defaults to min-width:auto, so this line's intrinsic text
+                                // width was widening the whole column whenever a number grew a
+                                // digit. The map viewport resized with it - 744px to 755px
+                                // between frames - which invalidated cached geometry every frame
+                                // and made the renderer look four times slower than it is.
+                                div()
+                                    .flex()
+                                    .w_full()
+                                    .min_w(px(0.0))
+                                    .px_2()
+                                    .text_xs()
                                     .text_color(rgb(theme::DIM))
-                                    .child("map / HUD viewport - D7, D8, D9"),
+                                    .truncate()
+                                    .child(map_stats),
                             ),
                     ),
             )
