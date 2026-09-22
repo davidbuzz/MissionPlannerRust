@@ -87,7 +87,9 @@ impl MapViewport {
             let t = i as f32 / track_points.max(1) as f32;
             let leg = (t * legs).floor();
             let along = (t * legs) - leg;
-            let x = if leg as u32 % 2 == 0 {
+            // Alternate direction each leg, which is what a lawnmower survey does.
+            let leg_index = leg.max(0.0).min(f32::from(u16::MAX)) as u32;
+            let x = if leg_index.is_multiple_of(2) {
                 along
             } else {
                 1.0 - along
@@ -271,7 +273,9 @@ fn paint_map(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window)
 
         if !cache_valid {
             // Decimate to screen resolution before tessellating.
-            let budget = ((w * POINTS_PER_PIXEL) as usize).max(2);
+            // Width is a viewport dimension in pixels, so the conversion cannot meaningfully
+            // overflow; clamp anyway rather than rely on that.
+            let budget = ((w * POINTS_PER_PIXEL).clamp(2.0, 1_000_000.0) as usize).max(2);
             let stride = map.track.len().div_ceil(budget).max(1);
             let decimated: Vec<(f32, f32)> = if std::env::var("MP_MAP_DECIMATE")
                 .map_or(true, |v| v != "0")
