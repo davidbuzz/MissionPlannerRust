@@ -7,3 +7,4 @@
 pub mod emit;
 pub mod mavlink;
 pub mod modes;
+pub mod param_meta;

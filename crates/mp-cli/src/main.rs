@@ -407,6 +407,51 @@ fn params(url: &str, filter: Option<&str>) -> std::process::ExitCode {
         Some(name) => match table.get(name) {
             Some(value) => {
                 println!("{name} = {} ({:?})", value.as_f64(), value.param_type());
+                // The number alone is rarely what someone needs; the documentation is the point.
+                if let Some(meta) = mp_vehicle::param_meta::lookup(name) {
+                    if !meta.display_name.is_empty() {
+                        println!("  {}", meta.display_name);
+                    }
+                    if !meta.units.is_empty() {
+                        println!("  units: {}", meta.units);
+                    }
+                    if let Some((low, high)) = meta.range {
+                        let ok = if meta.accepts(value.as_f64()) {
+                            ""
+                        } else {
+                            "  <-- OUT OF RANGE"
+                        };
+                        println!("  range: {low} to {high}{ok}");
+                    }
+                    if meta.is_enumeration() {
+                        #[allow(clippy::cast_possible_truncation)]
+                        let current = value.as_f64() as i64;
+                        let label = meta.value_name(current).unwrap_or("unnamed value");
+                        println!("  value: {current} = {label}");
+                        for (number, name) in meta.values {
+                            println!("    {number:>6}  {name}");
+                        }
+                    }
+                    if meta.is_bitmask() {
+                        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                        let bits = value.as_f64().max(0.0) as u32;
+                        let set = meta.bit_names(bits);
+                        println!(
+                            "  bits set: {}",
+                            if set.is_empty() {
+                                "none".to_owned()
+                            } else {
+                                set.join(", ")
+                            }
+                        );
+                    }
+                    if meta.reboot_required {
+                        println!("  changing this requires a reboot");
+                    }
+                    if !meta.description.is_empty() {
+                        println!("  {}", meta.description);
+                    }
+                }
             }
             None => {
                 eprintln!("no parameter named {name} ({} received)", table.len());

@@ -41,6 +41,10 @@ const MAV_TYPE_GCS: u8 = 6;
 /// `MAV_AUTOPILOT_INVALID`, which is what a GCS reports.
 const MAV_AUTOPILOT_INVALID: u8 = 8;
 
+/// `MAV_AUTOPILOT_ARDUPILOTMEGA`. ArduPilot encodes parameters differently from the
+/// specification, so which autopilot is on the other end is not a cosmetic detail.
+const MAV_AUTOPILOT_ARDUPILOTMEGA: u8 = 3;
+
 /// How long the parameter stream must be quiet before gaps are re-requested.
 const PARAM_GAP_TIMEOUT: Duration = Duration::from_millis(1500);
 
@@ -425,12 +429,25 @@ fn run_link(
 
                             if let MavMessage::ParamValue(param) = msg {
                                 let name = decode_param_id(&param.param_id);
+                                // ArduPilot sends every parameter as a float and uses param_type
+                                // only to describe how it stores the value; PX4 and the
+                                // specification put the declared type's bytes in the field.
+                                // Decoding with the wrong rule turns a 3,264 mAh battery capacity
+                                // into 1,162,756,096 - a number that looks like data.
+                                let is_ardupilot = registry.working(id).is_some_and(|state| {
+                                    state.autopilot == MAV_AUTOPILOT_ARDUPILOTMEGA
+                                });
                                 if let (Some(kind), Ok(mut table)) =
                                     (ParamType::from_wire(param.param_type), shared.params.lock())
                                 {
+                                    let value = if is_ardupilot {
+                                        ParamValue::from_ardupilot(param.param_value, kind)
+                                    } else {
+                                        ParamValue::from_param_value_field(param.param_value, kind)
+                                    };
                                     table.entry(id).or_default().insert(
                                         name,
-                                        ParamValue::from_param_value_field(param.param_value, kind),
+                                        value,
                                         param.param_index,
                                         param.param_count,
                                     );

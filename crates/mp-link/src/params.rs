@@ -2,13 +2,23 @@
 //!
 //! Replaces `ExtLibs/Mavlink/MAVLinkParam.cs` and the parameter half of `MAVLinkInterface`.
 //!
-//! # The encoding trap
+//! # The encoding trap, and the second trap inside it
 //!
-//! `PARAM_VALUE.param_value` is declared `float` on the wire, but it does not always *contain* a
-//! float. It carries four bytes whose interpretation is given by `param_type`: an `INT32`
-//! parameter with the value 5 arrives as the four bytes of the integer 5, which read as a float is
-//! 7e-45. Treating the field as a number rather than as bytes silently corrupts every integer
-//! parameter on the vehicle - and those include flight-mode numbers and failsafe actions.
+//! `PARAM_VALUE.param_value` is declared `float` on the wire, but whether it *contains* one
+//! depends on the autopilot:
+//!
+//! * **PX4 and the specification**: the field carries four bytes to be read as `param_type` says.
+//!   An `INT32` parameter of 5 arrives as the bytes of the integer 5, which read as a float is
+//!   7e-45. Treating it as a number corrupts every integer parameter, including flight-mode
+//!   numbers and failsafe actions.
+//! * **ArduPilot**: the field always carries the numeric value as a float, and `param_type`
+//!   describes only how the vehicle *stores* it. A 3264 mAh battery capacity declared `INT32`
+//!   arrives as the float 3264.0, whose bytes read as an integer are 1,162,756,096.
+//!
+//! Both readings are wrong for the other autopilot, and both produce numbers that look like data.
+//! Mission Planner handles this by carrying two types per parameter
+//! (`MAVLinkInterface.cs:1705`), and so do we: a wire type saying how to read the bytes, and a
+//! storage type saying what the vehicle keeps.
 //!
 //! # The rounding trap
 //!
@@ -80,7 +90,10 @@ impl ParamType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ParamValue {
     raw: [u8; 4],
-    param_type: ParamType,
+    /// How to read `raw`. `Real32` for ArduPilot, the declared type otherwise.
+    wire_type: ParamType,
+    /// What the vehicle stores, which drives display, rounding and validation.
+    storage_type: ParamType,
 }
 
 /// Significant digits kept for float parameters, matching Mission Planner's display and
@@ -88,20 +101,37 @@ pub struct ParamValue {
 const FLOAT_SIGNIFICANT_DIGITS: i32 = 7;
 
 impl ParamValue {
-    /// Wraps the raw wire bytes of a `PARAM_VALUE`.
+    /// Wraps raw wire bytes read according to `param_type`, as the specification describes.
     #[must_use]
     pub const fn from_wire_bytes(raw: [u8; 4], param_type: ParamType) -> Self {
-        Self { raw, param_type }
+        Self {
+            raw,
+            wire_type: param_type,
+            storage_type: param_type,
+        }
     }
 
-    /// Interprets `PARAM_VALUE.param_value` as delivered by a generated message struct.
+    /// Interprets `PARAM_VALUE.param_value` per the specification: bytes read as `param_type`.
     ///
-    /// The `f32` is treated as a carrier for four bytes, not as a number.
+    /// Correct for PX4 and anything following the standard. **Not** correct for ArduPilot, which
+    /// always sends a float; use [`ParamValue::from_ardupilot`] there.
     #[must_use]
     pub fn from_param_value_field(value: f32, param_type: ParamType) -> Self {
         Self {
             raw: value.to_le_bytes(),
-            param_type,
+            wire_type: param_type,
+            storage_type: param_type,
+        }
+    }
+
+    /// Interprets `PARAM_VALUE.param_value` the way ArduPilot sends it: always a float carrying
+    /// the numeric value, with `declared` describing only how the vehicle stores it.
+    #[must_use]
+    pub fn from_ardupilot(value: f32, declared: ParamType) -> Self {
+        Self {
+            raw: value.to_le_bytes(),
+            wire_type: ParamType::Real32,
+            storage_type: declared,
         }
     }
 
@@ -117,16 +147,34 @@ impl ParamValue {
         self.raw
     }
 
-    /// The type.
+    /// What the vehicle stores this parameter as.
     #[must_use]
     pub const fn param_type(self) -> ParamType {
-        self.param_type
+        self.storage_type
+    }
+
+    /// How the bytes on the wire are read, which differs from the storage type on ArduPilot.
+    #[must_use]
+    pub const fn wire_type(self) -> ParamType {
+        self.wire_type
     }
 
     /// The numeric value, rounded for floats the way Mission Planner rounds.
     #[must_use]
     pub fn as_f64(self) -> f64 {
-        match self.param_type {
+        let numeric = self.read_wire();
+        // An integer parameter carried as a float should read back as a whole number, not as
+        // 2.9999998. Rounding here rather than at every call site keeps comparisons working.
+        if self.storage_type.is_integer() {
+            numeric.round()
+        } else {
+            numeric
+        }
+    }
+
+    /// Reads the bytes according to the wire type.
+    fn read_wire(self) -> f64 {
+        match self.wire_type {
             ParamType::Uint8 => f64::from(self.raw[0]),
             ParamType::Int8 => f64::from(self.raw[0] as i8),
             ParamType::Uint16 => f64::from(u16::from_le_bytes([self.raw[0], self.raw[1]])),
@@ -167,7 +215,28 @@ impl ParamValue {
                 .to_le_bytes(),
             ParamType::Real32 => (value as f32).to_le_bytes(),
         };
-        Self { raw, param_type }
+        Self {
+            raw,
+            wire_type: param_type,
+            storage_type: param_type,
+        }
+    }
+
+    /// Builds the value to send to an ArduPilot vehicle: the number as a float, with the storage
+    /// type recorded so the editor still knows it is an integer.
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn for_ardupilot(value: f64, declared: ParamType) -> Self {
+        let clamped = if declared.is_integer() {
+            value.round()
+        } else {
+            value
+        };
+        Self {
+            raw: (clamped as f32).to_le_bytes(),
+            wire_type: ParamType::Real32,
+            storage_type: declared,
+        }
     }
 }
 
@@ -372,6 +441,78 @@ mod tests {
             wrong.as_f64() < 1e-40,
             "the naive reading is {}",
             wrong.as_f64()
+        );
+    }
+
+    #[test]
+    fn ardupilot_sends_integers_as_floats() {
+        // The case found against a real vehicle: BATT_CAPACITY is declared INT32 but arrives as
+        // the float 3300.0, ArduPilot's default. Reading its bytes as an integer gives
+        // 1,162,756,096, which is not a battery anyone owns.
+        let wire = 3300.0_f32;
+        assert_eq!(
+            u32::from_le_bytes(wire.to_le_bytes()),
+            1_162_756_096,
+            "this is the bit pattern that showed up in the field"
+        );
+
+        let ardupilot = ParamValue::from_ardupilot(wire, ParamType::Int32);
+        assert!(
+            (ardupilot.as_f64() - 3300.0).abs() < f64::EPSILON,
+            "got {}",
+            ardupilot.as_f64()
+        );
+        assert_eq!(
+            ardupilot.param_type(),
+            ParamType::Int32,
+            "storage type is still INT32"
+        );
+        assert_eq!(
+            ardupilot.wire_type(),
+            ParamType::Real32,
+            "but the bytes are a float"
+        );
+
+        // The specification reading of the same bytes, which is right for PX4 and wrong here.
+        let strict = ParamValue::from_param_value_field(wire, ParamType::Int32);
+        assert!((strict.as_f64() - 1_162_756_096.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn ardupilot_integer_parameters_read_back_as_whole_numbers() {
+        // A float carrying an integer can arrive slightly off; a config screen showing 2.4 for a
+        // mode number is alarming, and a comparison against the intended value fails.
+        let value = ParamValue::from_ardupilot(2.4_f32, ParamType::Int8);
+        assert!(
+            (value.as_f64() - 2.0).abs() < f64::EPSILON,
+            "got {}",
+            value.as_f64()
+        );
+
+        let up = ParamValue::from_ardupilot(2.6_f32, ParamType::Int8);
+        assert!(
+            (up.as_f64() - 3.0).abs() < f64::EPSILON,
+            "got {}",
+            up.as_f64()
+        );
+
+        // A genuine float keeps its fractional part.
+        let real = ParamValue::from_ardupilot(2.4_f32, ParamType::Real32);
+        assert!(
+            (real.as_f64() - 2.4).abs() < 1e-6,
+            "a REAL32 must not be rounded: {}",
+            real.as_f64()
+        );
+    }
+
+    #[test]
+    fn writing_back_to_ardupilot_uses_the_same_convention() {
+        let value = ParamValue::for_ardupilot(3264.0, ParamType::Int32);
+        assert_eq!(value.wire_type(), ParamType::Real32);
+        assert!((f64::from(value.to_param_value_field()) - 3264.0).abs() < f64::EPSILON);
+        assert!(
+            (value.as_f64() - 3264.0).abs() < f64::EPSILON,
+            "round trips through itself"
         );
     }
 
