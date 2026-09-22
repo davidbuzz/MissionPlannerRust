@@ -81,7 +81,9 @@ impl MissionItem {
     /// Converts from wire form.
     #[must_use]
     pub fn from_wire(wire: &WireItem) -> Self {
-        let navigation = wire.command >= 16 && wire.command <= 95;
+        // Same rule as MissionItem::is_navigation; fences and rally points carry coordinates
+        // despite sitting outside the classic navigation command block.
+        let navigation = matches!(wire.command, 16..=95 | 5000..=5006 | 5100);
         let (x, y) = if navigation {
             (f64::from(wire.x) / 1e7, f64::from(wire.y) / 1e7)
         } else {
@@ -220,6 +222,36 @@ mod tests {
                 "{:?} z moved to {}",
                 item.command,
                 back.z
+            );
+        }
+    }
+
+    #[test]
+    fn fence_and_rally_coordinates_are_scaled_like_waypoints() {
+        // These commands sit outside the 16-95 navigation block but carry real positions.
+        // Sending them unscaled puts a geofence off the coast of Africa.
+        for command in [5001u16, 5004, 5100] {
+            let item = MissionItem {
+                seq: 0,
+                command,
+                x: -35.363_262,
+                y: 149.165_237,
+                ..MissionItem::default()
+            };
+            let wire = item.to_wire();
+            assert_eq!(
+                wire.x, -353_632_620,
+                "command {command} latitude was not scaled"
+            );
+            assert_eq!(
+                wire.y, 1_491_652_370,
+                "command {command} longitude was not scaled"
+            );
+
+            let back = MissionItem::from_wire(&wire);
+            assert!(
+                (back.x - item.x).abs() < 1e-7,
+                "command {command} did not round trip"
             );
         }
     }

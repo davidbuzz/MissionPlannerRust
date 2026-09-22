@@ -5,10 +5,12 @@
 
 #![forbid(unsafe_code)]
 
+pub mod fence;
 pub mod item;
 pub mod waypoints;
 pub mod wire;
 
+pub use fence::{FenceError, FenceItem, RallyPoint, fences_from_items};
 pub use item::{MissionItem, MissionItemError};
 pub use waypoints::{WaypointFileError, read_waypoints, write_waypoints};
 pub use wire::{MISSION_TYPE_MISSION, WireItem};

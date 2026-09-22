@@ -75,14 +75,20 @@ impl Default for MissionItem {
 }
 
 impl MissionItem {
-    /// Whether this command navigates somewhere, and therefore whether x and y are coordinates.
+    /// Whether this command carries coordinates in `x` and `y`.
     ///
-    /// The distinction matters: `MAV_CMD_DO_SET_SERVO` puts a servo number in `param1` and leaves
-    /// x and y at zero, and treating that as a position at Null Island puts a phantom waypoint in
-    /// the Gulf of Guinea on the map. Navigation commands are the 16..95 range.
+    /// The distinction decides whether those fields are scaled by 1e7 on the wire, so getting it
+    /// wrong is not cosmetic in either direction:
+    ///
+    /// * `MAV_CMD_DO_SET_SERVO` puts a servo number in `param1` and leaves x and y at zero.
+    ///   Treating that as a position puts a phantom waypoint in the Gulf of Guinea.
+    /// * Fence vertices and rally points sit at 5000-5006 and 5100, well outside the classic
+    ///   16-95 navigation block, but they carry real latitude and longitude. Excluding them sends
+    ///   a fence at latitude 0.0000035 instead of 35 - a fence the vehicle cannot breach because
+    ///   it is off the coast of Africa.
     #[must_use]
     pub const fn is_navigation(&self) -> bool {
-        self.command >= 16 && self.command <= 95
+        matches!(self.command, 16..=95 | 5000..=5006 | 5100)
     }
 
     /// The position, if this item has one.
