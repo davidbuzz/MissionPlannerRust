@@ -17,6 +17,8 @@
 
 #![forbid(unsafe_code)]
 
+pub mod commands;
+
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -55,6 +57,8 @@ pub struct LinkConfig {
     pub heartbeat_interval: Duration,
     /// Whether to send heartbeats at all. A passive observer or log replay should not.
     pub send_heartbeat: bool,
+    /// Where to record every received frame, in Mission Planner's `.tlog` format.
+    pub record_path: Option<std::path::PathBuf>,
     /// Telemetry rate to request from each vehicle, in hertz. Zero disables the request.
     ///
     /// ArduPilot streams almost nothing until a GCS asks: a fresh SITL sends only heartbeats.
@@ -71,6 +75,7 @@ impl Default for LinkConfig {
             publish_interval: Duration::from_millis(20),
             heartbeat_interval: Duration::from_secs(1),
             send_heartbeat: true,
+            record_path: None,
             stream_rate_hz: 4,
         }
     }
@@ -258,6 +263,12 @@ fn run_link(
 ) {
     let mut decoder = FrameDecoder::new();
     let mut registry = VehicleRegistry::new();
+    let mut recorder = config.record_path.as_ref().and_then(|path| {
+        mp_log::TlogWriter::create(path)
+            .inspect_err(|e| eprintln!("recording disabled: {e}"))
+            .ok()
+    });
+    let mut last_flush = Instant::now();
     let mut buf = [0u8; 4096];
     let mut stats = LinkStats::default();
     let mut tx_seq: u8 = 0;
@@ -288,6 +299,11 @@ fn run_link(
                 if let Some(chunk) = buf.get(..n) {
                     decoder.push_and_drain(chunk, &DIALECT, |frame| {
                         shared.frames_received.fetch_add(1, Ordering::Relaxed);
+                        if let Some(writer) = recorder.as_mut() {
+                            // Record the frame exactly as received, before any interpretation:
+                            // a recording must not depend on our decoder understanding it.
+                            let _ = writer.write_frame(frame.raw);
+                        }
                         if let Some(msg) = MavMessage::decode(frame.msgid, frame.payload) {
                             let id = registry.apply(frame.sysid, frame.compid, frame.seq, &msg);
                             if known.insert(id, ()).is_none() {
@@ -406,12 +422,23 @@ fn run_link(
             }
         }
 
+        // Flush the recording periodically so a crash costs seconds, not the whole flight.
+        if let Some(writer) = recorder.as_mut() {
+            if last_flush.elapsed() >= Duration::from_secs(1) {
+                let _ = writer.flush();
+                last_flush = Instant::now();
+            }
+        }
+
         stats.decode = *decoder.stats();
         if let Ok(mut shared_stats) = shared.stats.lock() {
             *shared_stats = stats;
         }
     }
 
+    if let Some(writer) = recorder.as_mut() {
+        let _ = writer.flush();
+    }
     decoder.flush(&DIALECT, |_| {});
     registry.publish_all();
     stats.decode = *decoder.stats();

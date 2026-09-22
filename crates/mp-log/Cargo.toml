@@ -1,6 +1,6 @@
 [package]
-name = "mp-link"
-description = "The live MAVLink link: I/O thread, routing, state publishing, sending"
+name = "mp-log"
+description = "Telemetry log reading and writing (tlog), compatible with Mission Planner"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,8 +12,7 @@ workspace = true
 
 [dependencies]
 mp-mavlink.workspace = true
-mp-mavlink-dialects.workspace = true
-mp-transport.workspace = true
-mp-vehicle.workspace = true
-mp-log.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+mp-mavlink-dialects.workspace = true

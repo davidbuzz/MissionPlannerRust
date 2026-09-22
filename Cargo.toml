@@ -14,6 +14,7 @@ authors = ["Mission Planner Rust contributors"]
 mp-units = { path = "crates/mp-units" }
 mp-vehicle = { path = "crates/mp-vehicle" }
 mp-link = { path = "crates/mp-link" }
+mp-log = { path = "crates/mp-log" }
 mp-mavlink = { path = "crates/mp-mavlink" }
 mp-mavlink-dialects = { path = "crates/mp-mavlink-dialects" }
 mp-transport = { path = "crates/mp-transport" }
