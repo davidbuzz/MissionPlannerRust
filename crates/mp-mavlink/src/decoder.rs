@@ -81,6 +81,20 @@ impl FrameDecoder {
     /// A short return means the caller is not draining; the shortfall is counted in
     /// [`DecodeStats::overflow_bytes`] rather than silently ignored.
     pub fn push(&mut self, data: &[u8]) -> usize {
+        let n = self.push_inner(data);
+        let dropped = data.len() - n;
+        if dropped > 0 {
+            self.stats.overflow_bytes += dropped as u64;
+        }
+        n
+    }
+
+    /// Copies what fits without touching the overflow counter.
+    ///
+    /// [`push`](Self::push) treats a short accept as data loss, because for a caller that pushes
+    /// once and moves on it is. [`push_and_drain`](Self::push_and_drain) retries the remainder,
+    /// so for it a short accept is just backpressure and counting it would be a lie.
+    fn push_inner(&mut self, data: &[u8]) -> usize {
         self.compact();
         let free = CAPACITY - self.tail;
         let n = data.len().min(free);
@@ -89,10 +103,6 @@ impl FrameDecoder {
             dst.copy_from_slice(src);
         }
         self.tail += n;
-        let dropped = data.len() - n;
-        if dropped > 0 {
-            self.stats.overflow_bytes += dropped as u64;
-        }
         n
     }
 
@@ -211,15 +221,38 @@ impl FrameDecoder {
         self.compact();
     }
 
-    /// Convenience: [`push`](Self::push) followed by [`drain`](Self::drain).
-    pub fn push_and_drain<D, F>(&mut self, data: &[u8], dialect: &D, on_frame: F) -> usize
+    /// Feeds an arbitrarily large buffer through the decoder.
+    ///
+    /// The internal buffer is deliberately small and fixed, so a caller handing over more than
+    /// [`CAPACITY`] bytes at once - a 4 KiB socket read, a whole log file - must be consumed in
+    /// several passes. Doing that here rather than in every caller removes an easy way to lose
+    /// data silently: a plain `push` would accept only what fits and count the rest as overflow.
+    ///
+    /// Returns the number of bytes consumed, which is `data.len()` unless the link is wedged.
+    pub fn push_and_drain<D, F>(&mut self, data: &[u8], dialect: &D, mut on_frame: F) -> usize
     where
         D: Dialect + ?Sized,
         F: FnMut(&Frame<'_>),
     {
-        let n = self.push(data);
-        self.drain(dialect, on_frame);
-        n
+        let mut consumed = 0;
+        while consumed < data.len() {
+            let Some(rest) = data.get(consumed..) else {
+                break;
+            };
+            let n = self.push_inner(rest);
+            if n == 0 {
+                // Buffer full and nothing drainable: a single frame cannot exceed CAPACITY, so
+                // this means the buffer is wedged with garbage. Let drain resynchronise.
+                self.drain(dialect, &mut on_frame);
+                if self.buffered() >= CAPACITY {
+                    break;
+                }
+                continue;
+            }
+            consumed += n;
+            self.drain(dialect, &mut on_frame);
+        }
+        consumed
     }
 
     fn compact(&mut self) {

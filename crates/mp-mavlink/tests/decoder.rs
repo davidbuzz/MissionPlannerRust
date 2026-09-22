@@ -161,3 +161,27 @@ fn buffer_overflow_is_reported_rather_than_silently_dropping() {
     );
     let _ = dialect;
 }
+
+#[test]
+fn push_and_drain_consumes_buffers_larger_than_its_own_capacity() {
+    // Regression: `push` alone accepts only CAPACITY bytes and counts the rest as overflow, so a
+    // caller handing over a 4 KiB socket read used to lose most of it. Decoding must not depend
+    // on how the OS happened to chunk the stream.
+    let dialect = reference_dialect();
+    let mut stream = Vec::new();
+    for seq in 0..200u8 {
+        stream.extend_from_slice(&heartbeat(seq, &dialect));
+    }
+    assert!(
+        stream.len() > mp_mavlink::decoder::CAPACITY * 4,
+        "test needs a large buffer"
+    );
+
+    let mut decoder = FrameDecoder::new();
+    let mut seqs = Vec::new();
+    let consumed = decoder.push_and_drain(&stream, &dialect, |f| seqs.push(f.seq));
+
+    assert_eq!(consumed, stream.len(), "the whole buffer must be consumed");
+    assert_eq!(seqs.len(), 200, "every frame must be delivered");
+    assert_eq!(decoder.stats().overflow_bytes, 0, "no silent data loss");
+}

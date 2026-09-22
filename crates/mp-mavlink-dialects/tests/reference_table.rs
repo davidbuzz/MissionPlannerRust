@@ -10,13 +10,18 @@ use std::collections::BTreeMap;
 
 #[test]
 fn generated_table_matches_the_shipped_csharp_table() {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../testdata/mavlink/binary_message_infos.csv");
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../testdata/mavlink/binary_message_infos.csv"
+    );
     let csv = std::fs::read_to_string(path).expect("reference table");
 
     let mut reference = BTreeMap::new();
     for line in csv.lines().skip(1) {
         let f: Vec<&str> = line.split(',').collect();
-        let [id, name, crc, min_len, len] = f[..] else { continue };
+        let [id, name, crc, min_len, len] = f[..] else {
+            continue;
+        };
         reference.insert(
             id.parse::<u32>().unwrap(),
             (
@@ -36,7 +41,9 @@ fn generated_table_matches_the_shipped_csharp_table() {
             continue; // present in the XML but not in this build of the C# assembly
         };
         checked += 1;
-        if info.name != name || info.crc_extra != *crc || info.min_len != *min_len
+        if info.name != name
+            || info.crc_extra != *crc
+            || info.min_len != *min_len
             || info.len != *len
         {
             mismatches.push(format!(
@@ -46,6 +53,13 @@ fn generated_table_matches_the_shipped_csharp_table() {
         }
     }
 
-    assert!(mismatches.is_empty(), "generated table drifted:\n{}", mismatches.join("\n"));
-    assert!(checked > 300, "expected to check the whole table, checked {checked}");
+    assert!(
+        mismatches.is_empty(),
+        "generated table drifted:\n{}",
+        mismatches.join("\n")
+    );
+    assert!(
+        checked > 300,
+        "expected to check the whole table, checked {checked}"
+    );
 }

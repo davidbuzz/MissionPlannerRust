@@ -1,0 +1,24 @@
+[package]
+name = "mp-transport"
+description = "Link transports: serial, TCP, UDP, file replay, and test doubles"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = ["serial"]
+# Serial support pulls a native dependency; headless CI and replay-only builds can drop it.
+serial = ["dep:serialport"]
+
+[dependencies]
+thiserror.workspace = true
+serialport = { version = "4.10", optional = true }
+
+[dev-dependencies]
+mp-mavlink.workspace = true
+mp-mavlink-dialects.workspace = true

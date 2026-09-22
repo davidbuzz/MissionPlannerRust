@@ -14,6 +14,7 @@ authors = ["Mission Planner Rust contributors"]
 mp-units = { path = "crates/mp-units" }
 mp-mavlink = { path = "crates/mp-mavlink" }
 mp-mavlink-dialects = { path = "crates/mp-mavlink-dialects" }
+mp-transport = { path = "crates/mp-transport" }
 thiserror = "2"
 sha2 = "0.10"
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }

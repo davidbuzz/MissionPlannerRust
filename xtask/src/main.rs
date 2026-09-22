@@ -24,7 +24,10 @@ fn run() -> Result<()> {
         Some("verify-mavlink") => verify_mavlink(args.get(1).map(String::as_str)),
         Some("codegen") => {
             let check = args.iter().any(|a| a == "--check");
-            let dialect = args.get(1).filter(|a| !a.starts_with("--")).map(String::as_str);
+            let dialect = args
+                .get(1)
+                .filter(|a| !a.starts_with("--"))
+                .map(String::as_str);
             codegen_mavlink(dialect, check)
         }
         Some("") | Some("help") | None => {
@@ -166,8 +169,7 @@ fn codegen_mavlink(dialect: Option<&str>, check_only: bool) -> Result<()> {
     } else {
         out_file.clone()
     };
-    std::fs::write(&target, &source)
-        .with_context(|| format!("writing {}", target.display()))?;
+    std::fs::write(&target, &source).with_context(|| format!("writing {}", target.display()))?;
     let out_file = target;
 
     // Format the output so `cargo fmt --check` stays green and diffs stay readable.
