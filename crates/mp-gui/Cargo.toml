@@ -15,7 +15,26 @@ path = "src/main.rs"
 workspace = true
 
 [dependencies]
-gpui = "0.2.2"
+# Pinned to the zed tree rather than the crates.io release. The published gpui 0.2.2 is an older,
+# self-contained snapshot that still uses the blade renderer and has no web backend; the current
+# tree is wgpu on Linux and web, Direct3D 11 on Windows, Metal on macOS, and gpui_web makes a
+# WASM build structurally possible. Staying on the tree is also how Zed itself consumes it.
+#
+# gpui_platform cfg-selects the backend per target, so Windows and wasm need no changes here.
+gpui = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f0c8a3af8d5e7e9c4652490d468db8" }
 mp-link.workspace = true
 mp-vehicle.workspace = true
 mp-units.workspace = true
+
+# The backend crate per platform, mirroring what gpui_platform does. Selecting it here rather
+# than depending on gpui_platform avoids an inherited-dependency resolution problem: consumed as
+# a git dependency, gpui_platform's `gpui.workspace = true` resolves against crates.io, where an
+# unrelated crate of the same name exists at a higher version.
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
+gpui_linux = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f0c8a3af8d5e7e9c4652490d468db8" }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+gpui_windows = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f0c8a3af8d5e7e9c4652490d468db8" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+gpui_macos = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f0c8a3af8d5e7e9c4652490d468db8" }

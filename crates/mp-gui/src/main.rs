@@ -7,13 +7,14 @@
 
 #![allow(clippy::print_stderr)]
 
+mod platform;
 mod telemetry;
 
 use std::time::Duration;
 
 use gpui::{
-    App, Application, Bounds, Context, SharedString, TitlebarOptions, Window, WindowBounds,
-    WindowOptions, div, prelude::*, px, rgb, size,
+    App, Bounds, Context, SharedString, TitlebarOptions, Window, WindowBounds, WindowOptions, div,
+    prelude::*, px, rgb, size,
 };
 use telemetry::{Telemetry, TelemetryView};
 
@@ -342,7 +343,7 @@ impl Render for MissionPlanner {
 fn main() {
     let target = std::env::args().nth(1);
 
-    Application::new().run(move |cx: &mut App| {
+    platform::application().run(move |cx: &mut App| {
         // Tall enough that the left column's panels are fully visible without scrolling; the
         // first version clipped the link panel against the bottom edge.
         let bounds = Bounds::centered(None, size(px(1180.0), px(880.0)), cx);

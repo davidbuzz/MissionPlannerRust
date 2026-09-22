@@ -33,7 +33,7 @@ table of measured numbers rather than an adjective.
 | Android and iOS | No gpui Cargo.toml mentions `android`; `gpui_apple` is `cfg(target_os = "macos")` | The shipping Play Store app (`com.michaeloborne.MissionPlanner`, built by `.github/workflows/android.yml`) is **lost**. 39,234 LOC of real mobile app. Needs owner sign-off — see §12 D1 |
 | Browser GCS | Serial, raw TCP and UDP cannot exist in a browser | `gpui_web` exists; we keep the pure-compute crates wasm-clean in CI but promise nothing |
 | Bug-for-bug WinForms pixel fidelity | 2,766 resx + 805 designer `Location` entries vs 284 `Dock`; MP ships `<dpiAware>false</dpiAware>` | Screens are re-laid out, not traced. Layout debt tracked per screen |
-| In-process arbitrary-code plugins | `PluginLoader.cs` Roslyn-compiles loose `.cs` and `Assembly.Load`s it with full trust | Every existing third-party plugin and IronPython script breaks. Deliberate |
+| ~~In-process arbitrary-code plugins~~ | **Overruled by the owner, 2026-09-23: "when I said 100% of MissionPlanner, I didn't mean 99%."** Moved to Phase 12, after everything else | See §10.4 |
 | Reproducing MP's unsigned MD5 updater | `Utilities/Update.cs` trusts an MD5 list fetched over the network | Replaced by ed25519-signed artifacts |
 
 ### 1.3 The fidelity ↔ performance tension, resolved
@@ -828,6 +828,7 @@ decomposition), 1–3 engineers, an agent fleet of 8–14 concurrent units. Cale
 | **8** | BUS + FLEET (DroneCAN, RTK, swarm, joystick) | 10–13 | 100 | Real CAN bus ≥3 nodes enumerates + firmware-updates over SLCAN **and** SocketCAN; SLCAN mode-switch 50× without losing telemetry; RTK FIXED on 2 vehicles; stick→syscall p99 ≤5 ms on Linux **and** Windows; 20-vehicle SITL swarm at 120 fps | gilrs cannot expose raw HID axes → hidapi fallback (+~800 LOC) |
 | **9** | SHIP (i18n, packaging, update, crash) | 6–8 | 50 | 18 locales incl. RTL + CJK on 3 OSes; `cargo dist` emits MSI/dmg/deb/rpm/AppImage from one tag; **ed25519-signed** update installs and rejects a tampered artifact; minidump on all 3 OSes | Apple/EV identity not obtained → ship unsigned with a named regression |
 | **10** | EXTEND (plugins, scripting) | 5–6 | 50 | A malicious extension (infinite `loop()`, unauthorised `mavlink:send:COMMAND_LONG`, out-of-namespace file read) is **preempted or refused with no dropped frame**; 19 stock scripts run under rhai with a working kill switch | UI-capability decision (§12 D7) forced by FaceMap/Dowding |
+| **12** | NATIVE PLUGINS (`PluginLoader` parity) | 4–6 | 40 | A native plugin built out-of-tree loads, registers a panel and a menu action, reads telemetry and sends a command; an ABI-mismatched plugin is refused by version, not by crashing; a panicking plugin does not take the GCS with it; `--safe-mode` loads none; loose-source plugins compile and load when a toolchain is present | Owner may stop after the sandboxed host (Phase 10) if full-trust loading is judged not worth the failure modes |
 | **11** | CLOSE (the long tail + certification) | 8–12 | 80 | **3,678/3,678 in terminal state**, every `dropped` with an owner-ratified reason; full-corpus differential green 7 consecutive nightlies; mutants ≤10% on class-A/D; exhaustive 2^32 f32 param-rounding sweep clean; pilot flight test on 3 OSes | — |
 
 **Totals: 87–114 weeks with 2 engineers + owner ≈ 20–26 months** to full closure; **~35–47 months
@@ -871,6 +872,34 @@ That is ~50k C# ported + ~55k Rust greenfield ≈ **90–110k hand-written Rust*
 gated on v1 shipping — not obligation.
 
 ---
+
+### 10.4 Phase 12 — in-process arbitrary-code plugins, and what "equivalent" can mean
+
+An earlier draft of this plan listed this as a decided non-goal. The owner overruled it: the goal
+is 100% of Mission Planner, and `PluginLoader.cs` is part of Mission Planner. It goes last, after
+everything else, because it is the one capability whose *absence* costs nothing to a pilot and
+whose *presence* can cost everything to a flight.
+
+**What the C# does.** `PluginLoader` scans a directory, Roslyn-compiles loose `.cs` files at
+startup, `Assembly.Load`s prebuilt DLLs, instantiates anything deriving from `Plugin`, and calls
+`Init`/`Loaded`/`Loop`/`Exit` in-process with full trust and direct access to `MainV2` and
+`CurrentState`. There is no sandbox and no capability model: a plugin is the application.
+
+**What Rust can do, in descending order of fidelity.**
+
+| Mechanism | Fidelity to `PluginLoader` | Notes |
+|---|---|---|
+| Native `cdylib` via `libloading` | High | A versioned C ABI entry point, a host vtable for telemetry/send/UI registration. Truly in-process, truly arbitrary, exactly the same trust model |
+| Loose `.rs` compiled at load time | High | The literal analogue of Roslyn compiling loose `.cs`: invoke the toolchain, cache by content hash, `dlopen` the result. Requires a toolchain on the machine, which Roslyn did not |
+| Sandboxed WASM extension (Phase 10) | Medium | Safe and portable, but cannot do the arbitrary in-process things a `PluginLoader` plugin can, so it is a complement rather than a replacement |
+| Loading existing C# plugin assemblies | **Impossible without a CLR** | Stated plainly rather than promised. Existing plugins must be rewritten against the native or WASM API; a migration guide is part of the deliverable |
+
+**The failure modes are the deliverable.** Full trust in-process means a plugin can corrupt vehicle
+state, block the render thread, or crash the GCS mid-flight. The phase is therefore judged on its
+guard rails as much as its loader: an ABI version check that refuses rather than crashes,
+`catch_unwind` at every boundary crossing, a `--safe-mode` flag that loads nothing, per-plugin
+opt-in recorded on disk, and crash reports that name every loaded plugin. A GCS that silently dies
+because a third-party plugin dereferenced a null pointer is worse than one that never loaded it.
 
 ## 11. Risk register
 

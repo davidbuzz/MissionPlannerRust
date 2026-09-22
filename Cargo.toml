@@ -37,6 +37,13 @@ indexing_slicing = "warn"
 todo = "warn"
 cast_possible_truncation = "warn"
 
+# gpui's own workspace patches these two crates, and a git dependency does not carry its
+# consumer's patch table. Without them we would silently build gpui against different versions of
+# its executor and Linux event loop than upstream tests against.
+[patch.crates-io]
+async-task = { git = "https://github.com/smol-rs/async-task.git", rev = "b4486cd71e4e94fbda54ce6302444de14f4d190e" }
+calloop = { git = "https://github.com/zed-industries/calloop" }
+
 # Telemetry and render paths must stay allocation- and panic-free; release builds are
 # optimised hard because "extreme performance" is a stated goal (see DELIVERABLES.md).
 [profile.release]

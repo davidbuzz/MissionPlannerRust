@@ -35,9 +35,10 @@ Reference clone: [referneces/zed](referneces/zed).
 | [D18](#d18-translation-factory-and-porting-ledger) | 3 | Translation factory, file ledger | P0 | In progress | Unit |
 | [D19](#d19-verification-suite) | 3 | Differential, SITL, fuzz verification | P0 | In progress | Differential vs C# |
 | [D20](#d20-release-packaging-and-operations) | 3 | Installers, updates, crash reporting | P1 | Not started | Not started |
+| [D21](#d21-native-in-process-plugin-host) | 2 | Native in-process plugin host | P3 | Not started | Not started |
 
 **Layer** 0 = foundation (protocol/transport/state) · 1 = rendering and UI foundation · 2 = the application · 3 = the machine that builds the machine.
-**Priority** P0 = nothing ships without it · P1 = required for feature parity · P2 = required for 100% completeness, sequenced last.
+**Priority** P0 = nothing ships without it · P1 = required for feature parity · P2 = required for 100% completeness, sequenced last · P3 = the last thing of all, after P2.
 **Implementation** Not started → Spiked → In progress → Feature complete → Done.
 **Testing** Not started → Unit → Differential vs C# → Gated in CI → HIL signed off.
 
@@ -280,6 +281,29 @@ migration guide for existing Mission Planner users.
 - **Tests:** `tests/package_smoke.rs` per OS installs the built artefact in a clean container/VM, launches it headless, connects to SITL, and uninstalls, asserting no leftover files; `tests/update.rs` exercises update and rollback between two signed builds; `tests/crash_report.rs` forces a crash and asserts a symbolicated report; `tests/migration.rs` runs first-run migration against a real Mission Planner data directory fixture and asserts settings, map cache and mission files are imported intact; `benches/cold_start.rs` gates the <500 ms target.
 
 ---
+
+### D21. Native in-process plugin host
+
+Functional equivalence to `PluginLoader.cs`: loading arbitrary third-party code into the process
+with full trust, the way Mission Planner does today. Sequenced **after everything else** - D16's
+sandboxed WASM extensions are the safe default and cover most needs; this covers the rest, because
+100% of Mission Planner includes the part that can shoot you in the foot.
+- **Scope:** native `cdylib` plugins (`.so`/`.dll`/`.dylib`) loaded via `libloading` behind a
+  versioned C ABI, with a host vtable for telemetry, sending, and registering panels and menu
+  actions; plus load-time compilation of loose Rust source when a toolchain is present, which is
+  the direct analogue of Roslyn compiling loose `.cs`.
+- **Explicitly not promised:** loading existing *C# plugin assemblies*. That needs a CLR. Existing
+  plugins are rewritten against this API or D16's; a migration guide ships with it.
+- **DoD:** an out-of-tree sample plugin loads, registers a panel and a menu action, reads telemetry
+  and sends a command; an ABI-version mismatch is refused with a clear message rather than a crash;
+  a panicking plugin is contained at the boundary and named in the resulting report; `--safe-mode`
+  loads nothing; loading is per-plugin opt-in with consent recorded on disk.
+- **Tests:** `crates/mp-plugin-host/tests/load.rs` builds the sample plugin in CI and loads it;
+  `tests/abi.rs` asserts a deliberately mismatched ABI version is refused; `tests/panic.rs` asserts
+  a plugin that panics in each callback does not terminate the host and is reported by name;
+  `tests/safe_mode.rs` asserts nothing loads; `tests/source_plugin.rs` compiles and loads a loose
+  `.rs` plugin, and is skipped-with-a-message rather than silently passing when no toolchain exists.
+- **Replaces:** `Plugin/PluginLoader.cs`, `Plugin/Plugin.cs`, the full-trust half of `Plugins/`.
 
 ## Cross-cutting acceptance gates
 
