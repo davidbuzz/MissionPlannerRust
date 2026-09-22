@@ -7,10 +7,12 @@
 
 pub mod fence;
 pub mod item;
+pub mod survey;
 pub mod waypoints;
 pub mod wire;
 
 pub use fence::{FenceError, FenceItem, RallyPoint, fences_from_items};
 pub use item::{MissionItem, MissionItemError};
+pub use survey::{GridError, GridOptions, grid};
 pub use waypoints::{WaypointFileError, read_waypoints, write_waypoints};
 pub use wire::{MISSION_TYPE_MISSION, WireItem};
