@@ -1,0 +1,15 @@
+[package]
+name = "mp-mission"
+description = "Missions: items, the QGC WPL file format, and mission validation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+mp-units.workspace = true
+thiserror.workspace = true

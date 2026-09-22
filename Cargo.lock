@@ -3349,6 +3349,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "mp-mission"
+version = "0.1.0"
+dependencies = [
+ "mp-units",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "mp-transport"
 version = "0.1.0"
 dependencies = [

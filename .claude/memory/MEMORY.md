@@ -5,3 +5,4 @@ controlled; the per-project memory directory holds symlinks to them.
 
 - [No foreground waiting](no-foreground-waiting.md) — background long operations, poll cheaply, never block the session
 - [GUI runs stay short](gui-runs-stay-short.md) — windows live ~5s and clean up; never leave MP_BENCH on
+- [Verify edits applied](verify-edits-applied.md) — a replacement that matches nothing looks like success
