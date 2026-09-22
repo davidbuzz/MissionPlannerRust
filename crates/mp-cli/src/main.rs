@@ -142,6 +142,17 @@ fn watch(url: &str, seconds: Option<u64>) -> std::process::ExitCode {
     std::process::ExitCode::SUCCESS
 }
 
+/// Flight mode and armed state, the two things a pilot checks first.
+fn mode_label(state: &mp_vehicle::VehicleState) -> String {
+    let mode = mp_vehicle::flight_mode_name(state.vehicle_type, state.custom_mode)
+        .map_or_else(|| format!("mode {}", state.custom_mode), ToOwned::to_owned);
+    if state.armed {
+        format!("{mode} ARMED")
+    } else {
+        mode
+    }
+}
+
 fn draw(link: &Link) {
     let Some((id, handle)) = link.primary_vehicle() else {
         return;
@@ -155,10 +166,10 @@ fn draw(link: &Link) {
     );
 
     println!(
-        "{id} | {armed:<8} | {position} | alt {alt:>7.1} m | \
+        "{id} | {armed:<18} | {position} | alt {alt:>7.1} m | \
          spd {spd:>5.1} m/s | hdg {hdg:>5.1} | sats {sats:>2} fix {fix} | \
          batt {volts:>5.2} V | rx {rx} loss {loss:.1}% | crc_err {crc}",
-        armed = if s.armed { "ARMED" } else { "disarmed" },
+        armed = mode_label(&s),
         alt = s.altitude_relative.0,
         spd = s.ground_speed.0,
         hdg = s.heading.degrees(),

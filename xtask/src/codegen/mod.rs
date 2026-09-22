@@ -6,3 +6,4 @@
 
 pub mod emit;
 pub mod mavlink;
+pub mod modes;

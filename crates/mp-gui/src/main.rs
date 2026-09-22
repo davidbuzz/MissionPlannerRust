@@ -165,10 +165,17 @@ impl MissionPlanner {
                     format!("{:.0}", s.ground_speed.0),
                     format!("{:.0}", s.altitude_relative.0),
                     format!("{:03.0}", s.heading.degrees()),
-                    if s.armed {
-                        "ARMED".to_owned()
-                    } else {
-                        "disarmed".to_owned()
+                    {
+                        // The flight mode matters more than the armed flag on a HUD, so show
+                        // both: the mode by name, with the armed state as a suffix and as the
+                        // colour. An unknown mode shows its number rather than nothing.
+                        let mode = mp_vehicle::flight_mode_name(s.vehicle_type, s.custom_mode)
+                            .map_or_else(|| format!("mode {}", s.custom_mode), ToOwned::to_owned);
+                        if s.armed {
+                            format!("{mode}  ARMED")
+                        } else {
+                            mode
+                        }
                     },
                 )
             },

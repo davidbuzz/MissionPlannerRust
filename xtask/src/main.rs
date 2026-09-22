@@ -23,6 +23,7 @@ fn run() -> Result<()> {
     match args.first().map(String::as_str) {
         Some("verify-mavlink") => verify_mavlink(args.get(1).map(String::as_str)),
         Some("dump-tlog") => dump_tlog(args.get(1).map(String::as_str)),
+        Some("codegen-modes") => codegen_modes(),
         Some("codegen") => {
             let check = args.iter().any(|a| a == "--check");
             let dialect = args
@@ -49,6 +50,7 @@ fn usage() {
          commands:\n  \
          codegen [dialect]         regenerate the MAVLink dialect crate from the XML definitions\n  \
          dump-tlog <file>          decode a tlog and print the same CSV the C# reference emits\n  \
+         codegen-modes             regenerate flight mode tables from the parameter metadata\n  \
          verify-mavlink [dialect]  check generated MAVLink metadata against the C# reference\n  \
          help                      show this message"
     );
@@ -266,5 +268,37 @@ fn dump_tlog(path: Option<&str>) -> Result<()> {
         }
     }
     eprintln!("# frames={index}");
+    Ok(())
+}
+
+/// Regenerates the flight mode tables.
+fn codegen_modes() -> Result<()> {
+    let root = repo_root();
+    let metadata = root.join("referneces/missionplanner/ParameterMetaDataBackup.xml");
+    if !metadata.exists() {
+        bail!(
+            "parameter metadata not found at {}\nThe reference tree is git-excluded; clone \
+             Mission Planner into referneces/missionplanner to regenerate.",
+            metadata.display()
+        );
+    }
+
+    let source = codegen::modes::generate(&metadata)?;
+    let out_dir = root.join("crates/mp-vehicle/src/generated");
+    std::fs::create_dir_all(&out_dir)?;
+    let out_file = out_dir.join("modes.rs");
+    std::fs::write(&out_file, &source)?;
+
+    let status = std::process::Command::new("rustfmt")
+        .args(["--edition", "2024"])
+        .arg(&out_file)
+        .status();
+    match status {
+        Ok(s) if s.success() => {}
+        Ok(s) => bail!("rustfmt failed on generated output: {s}"),
+        Err(e) => eprintln!("warning: rustfmt not available ({e})"),
+    }
+
+    println!("generated {} ({} bytes)", out_file.display(), source.len());
     Ok(())
 }

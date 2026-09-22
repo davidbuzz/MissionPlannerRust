@@ -20,11 +20,15 @@
 #![forbid(unsafe_code)]
 
 pub mod link_quality;
+/// Flight mode names, generated from Mission Planner's parameter metadata.
+#[path = "generated/modes.rs"]
+pub mod modes;
 pub mod registry;
 pub mod snapshot;
 pub mod state;
 
 pub use link_quality::LinkQuality;
+pub use modes::{VehicleFamily, flight_mode_name};
 pub use registry::{VehicleId, VehicleRegistry};
 pub use snapshot::{StateHandle, StatePublisher};
 pub use state::{Attitude, Battery, GpsInfo, VehicleState};
