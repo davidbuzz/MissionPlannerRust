@@ -1,0 +1,18 @@
+[package]
+name = "mp-link"
+description = "The live MAVLink link: I/O thread, routing, state publishing, sending"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+mp-mavlink.workspace = true
+mp-mavlink-dialects.workspace = true
+mp-transport.workspace = true
+mp-vehicle.workspace = true
+thiserror.workspace = true

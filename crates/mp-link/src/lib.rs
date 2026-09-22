@@ -1,0 +1,436 @@
+//! The live link: one transport, one I/O thread, many vehicles.
+//!
+//! Replaces `ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs`.
+//!
+//! # Threading model
+//!
+//! One thread per link owns the transport, the frame decoder and every vehicle's working state.
+//! Nothing else touches them, so the hot path needs no locks at all. The thread publishes
+//! immutable snapshots on a fixed cadence; readers (the UI, a recorder, a script) take those
+//! with a single atomic load.
+//!
+//! Outbound messages go through a queue rather than being written by the caller's thread, so a
+//! slow or blocked link can never stall a UI frame.
+//!
+//! The C# design instead shares a mutable `MAVLinkInterface` across threads with locks around it,
+//! which is why Mission Planner's UI can hitch when a link degrades.
+
+#![forbid(unsafe_code)]
+
+use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+use mp_mavlink::{DecodeStats, FrameDecoder, Message as _, encode_v2};
+use mp_mavlink_dialects::all::{DIALECT, Heartbeat, MavMessage, RequestDataStream};
+use mp_transport::{OpenError, Transport};
+use mp_vehicle::{StateHandle, VehicleId, VehicleRegistry};
+
+/// MAVLink component id for a ground control station.
+pub const MAV_COMP_ID_MISSIONPLANNER: u8 = 190;
+/// `MAV_TYPE_GCS`.
+const MAV_TYPE_GCS: u8 = 6;
+/// `MAV_AUTOPILOT_INVALID`, which is what a GCS reports.
+const MAV_AUTOPILOT_INVALID: u8 = 8;
+
+/// Minimum time the I/O loop spends per iteration when there is nothing to read.
+const IDLE_POLL: Duration = Duration::from_millis(1);
+
+/// The `MAV_DATA_STREAM` ids Mission Planner turns on when it connects: raw sensors, extended
+/// status, RC channels, position and the three "extra" groups that carry attitude and VFR data.
+const STREAMS: &[u8] = &[1, 2, 3, 6, 10, 11, 12];
+
+/// How the link should behave.
+#[derive(Debug, Clone)]
+pub struct LinkConfig {
+    /// Our own system id, as seen by the vehicle.
+    pub sysid: u8,
+    /// Our own component id.
+    pub compid: u8,
+    /// How often to publish state snapshots. 50 Hz is well above any display refresh while
+    /// keeping publish overhead negligible.
+    pub publish_interval: Duration,
+    /// How often to announce ourselves. Vehicles use this to detect GCS loss (failsafe).
+    pub heartbeat_interval: Duration,
+    /// Whether to send heartbeats at all. A passive observer or log replay should not.
+    pub send_heartbeat: bool,
+    /// Telemetry rate to request from each vehicle, in hertz. Zero disables the request.
+    ///
+    /// ArduPilot streams almost nothing until a GCS asks: a fresh SITL sends only heartbeats.
+    /// Mission Planner sends `REQUEST_DATA_STREAM` on connect for exactly this reason, and a
+    /// port that omits it looks like a broken link rather than a quiet vehicle.
+    pub stream_rate_hz: u16,
+}
+
+impl Default for LinkConfig {
+    fn default() -> Self {
+        Self {
+            sysid: 255,
+            compid: MAV_COMP_ID_MISSIONPLANNER,
+            publish_interval: Duration::from_millis(20),
+            heartbeat_interval: Duration::from_secs(1),
+            send_heartbeat: true,
+            stream_rate_hz: 4,
+        }
+    }
+}
+
+/// Errors from running a link.
+#[derive(Debug, thiserror::Error)]
+pub enum LinkError {
+    /// The transport could not be opened.
+    #[error(transparent)]
+    Open(#[from] OpenError),
+    /// The link thread could not be started.
+    #[error("could not start link thread: {0}")]
+    Thread(String),
+}
+
+/// Counters describing the link as a whole.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct LinkStats {
+    /// Bytes read from the transport.
+    pub bytes_read: u64,
+    /// Bytes written to the transport.
+    pub bytes_written: u64,
+    /// Frames sent.
+    pub frames_sent: u64,
+    /// Snapshot publishes performed.
+    pub publishes: u64,
+    /// Decoder counters.
+    pub decode: DecodeStats,
+}
+
+/// Shared between the link thread and its owners.
+#[derive(Debug, Default)]
+struct Shared {
+    handles: Mutex<BTreeMap<VehicleId, StateHandle>>,
+    stats: Mutex<LinkStats>,
+    running: AtomicBool,
+    frames_received: AtomicU64,
+}
+
+/// A running link.
+#[derive(Debug)]
+pub struct Link {
+    shared: Arc<Shared>,
+    outbound: std::sync::mpsc::Sender<Vec<u8>>,
+    thread: Option<std::thread::JoinHandle<()>>,
+    description: String,
+    config: LinkConfig,
+}
+
+impl Link {
+    /// Opens a link from a URL such as `udp:14550`, `tcp:127.0.0.1:5760` or `file:flight.tlog`.
+    pub fn connect(url: &str, config: LinkConfig) -> Result<Self, LinkError> {
+        let transport = mp_transport::open(url)?;
+        Ok(Self::from_transport(transport, config))
+    }
+
+    /// Runs a link over an already-open transport. Used by tests with in-memory doubles.
+    #[must_use]
+    pub fn from_transport(transport: Box<dyn Transport>, config: LinkConfig) -> Self {
+        let shared = Arc::new(Shared::default());
+        shared.running.store(true, Ordering::Release);
+        let description = transport.description();
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+
+        let thread_shared = Arc::clone(&shared);
+        let thread_config = config.clone();
+        let thread = std::thread::Builder::new()
+            .name("mp-link".to_owned())
+            .spawn(move || run_link(transport, thread_config, &thread_shared, &rx))
+            .ok();
+
+        Self {
+            shared,
+            outbound: tx,
+            thread,
+            description,
+            config,
+        }
+    }
+
+    /// Every vehicle heard from so far.
+    #[must_use]
+    pub fn vehicles(&self) -> Vec<VehicleId> {
+        self.shared
+            .handles
+            .lock()
+            .map(|h| h.keys().copied().collect())
+            .unwrap_or_default()
+    }
+
+    /// A snapshot reader for one vehicle.
+    #[must_use]
+    pub fn vehicle(&self, id: VehicleId) -> Option<StateHandle> {
+        self.shared.handles.lock().ok()?.get(&id).cloned()
+    }
+
+    /// The first vehicle that looks like an autopilot, which is what a single-vehicle UI shows.
+    #[must_use]
+    pub fn primary_vehicle(&self) -> Option<(VehicleId, StateHandle)> {
+        let handles = self.shared.handles.lock().ok()?;
+        // Component 1 is the autopilot; prefer it over gimbals, companions and other GCSs.
+        handles
+            .iter()
+            .find(|(id, _)| id.compid == 1)
+            .or_else(|| handles.iter().next())
+            .map(|(id, handle)| (*id, handle.clone()))
+    }
+
+    /// Link counters.
+    #[must_use]
+    pub fn stats(&self) -> LinkStats {
+        self.shared.stats.lock().map(|s| *s).unwrap_or_default()
+    }
+
+    /// Total frames received.
+    #[must_use]
+    pub fn frames_received(&self) -> u64 {
+        self.shared.frames_received.load(Ordering::Relaxed)
+    }
+
+    /// Whether the link thread is still running.
+    #[must_use]
+    pub fn is_running(&self) -> bool {
+        self.shared.running.load(Ordering::Acquire)
+    }
+
+    /// Queues a message for transmission.
+    ///
+    /// Returns false if the link has stopped. Never blocks: a wedged link must not stall the
+    /// caller.
+    pub fn send(&self, message: &MavMessage) -> bool {
+        let mut payload = [0u8; 255];
+        let len = message.encode(&mut payload);
+        let mut frame = [0u8; mp_mavlink::MAX_FRAME_LEN];
+        let Some(payload) = payload.get(..len) else {
+            return false;
+        };
+
+        // Sequence numbering is the link thread's job, so it is applied there; zero here.
+        let Ok(n) = encode_v2(
+            &mut frame,
+            0,
+            self.config.sysid,
+            self.config.compid,
+            message.id(),
+            payload,
+            message.crc_extra(),
+            0,
+        ) else {
+            return false;
+        };
+        frame
+            .get(..n)
+            .is_some_and(|bytes| self.outbound.send(bytes.to_vec()).is_ok())
+    }
+
+    /// How the link describes itself, e.g. `udp:0.0.0.0:14550 <-> 127.0.0.1:52341`.
+    #[must_use]
+    pub fn description(&self) -> &str {
+        &self.description
+    }
+
+    /// Stops the link thread and waits for it.
+    pub fn close(&mut self) {
+        self.shared.running.store(false, Ordering::Release);
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
+impl Drop for Link {
+    fn drop(&mut self) {
+        self.close();
+    }
+}
+
+/// The link thread.
+fn run_link(
+    mut transport: Box<dyn Transport>,
+    config: LinkConfig,
+    shared: &Arc<Shared>,
+    outbound: &std::sync::mpsc::Receiver<Vec<u8>>,
+) {
+    let mut decoder = FrameDecoder::new();
+    let mut registry = VehicleRegistry::new();
+    let mut buf = [0u8; 4096];
+    let mut stats = LinkStats::default();
+    let mut tx_seq: u8 = 0;
+
+    let mut newly_seen: Vec<VehicleId> = Vec::new();
+    let mut last_publish = Instant::now();
+    let mut last_heartbeat = Instant::now() - config.heartbeat_interval;
+    let mut known: BTreeMap<VehicleId, ()> = BTreeMap::new();
+
+    while shared.running.load(Ordering::Acquire) {
+        // Inbound.
+        let read_started = Instant::now();
+        match transport.read(&mut buf) {
+            Ok(0) => {
+                if !transport.is_open() {
+                    break;
+                }
+                // A blocking transport has already spent its timeout here. One that returns
+                // immediately - an in-memory double, an exhausted replay, a non-blocking socket -
+                // would otherwise spin a core flat. Idle CPU is a stated budget for this port, so
+                // yield only when the read cost us nothing.
+                if read_started.elapsed() < IDLE_POLL {
+                    std::thread::sleep(IDLE_POLL);
+                }
+            }
+            Ok(n) => {
+                stats.bytes_read += n as u64;
+                if let Some(chunk) = buf.get(..n) {
+                    decoder.push_and_drain(chunk, &DIALECT, |frame| {
+                        shared.frames_received.fetch_add(1, Ordering::Relaxed);
+                        if let Some(msg) = MavMessage::decode(frame.msgid, frame.payload) {
+                            let id = registry.apply(frame.sysid, frame.compid, frame.seq, &msg);
+                            if known.insert(id, ()).is_none() {
+                                newly_seen.push(id);
+                            }
+                        }
+                    });
+                }
+            }
+            Err(_) => break,
+        }
+
+        // Ask a newly discovered vehicle to start streaming telemetry.
+        for id in newly_seen.drain(..) {
+            if config.stream_rate_hz == 0 || id.compid != 1 {
+                continue;
+            }
+            for stream_id in STREAMS {
+                let req = RequestDataStream {
+                    req_message_rate: config.stream_rate_hz,
+                    target_system: id.sysid,
+                    target_component: id.compid,
+                    req_stream_id: *stream_id,
+                    start_stop: 1,
+                };
+                let mut payload = [0u8; RequestDataStream::LEN];
+                req.encode(&mut payload);
+                let mut frame = [0u8; mp_mavlink::MAX_FRAME_LEN];
+                if let Ok(n) = encode_v2(
+                    &mut frame,
+                    tx_seq,
+                    config.sysid,
+                    config.compid,
+                    RequestDataStream::ID,
+                    &payload,
+                    RequestDataStream::CRC_EXTRA,
+                    0,
+                ) {
+                    tx_seq = tx_seq.wrapping_add(1);
+                    if let Some(bytes) = frame.get(..n)
+                        && transport.write_all(bytes).is_ok()
+                    {
+                        stats.bytes_written += bytes.len() as u64;
+                        stats.frames_sent += 1;
+                    }
+                }
+            }
+        }
+
+        // Publish snapshots on a cadence rather than per packet: no display can show more than
+        // one state per frame, so per-packet publishing is pure overhead.
+        if last_publish.elapsed() >= config.publish_interval {
+            registry.publish_all();
+            stats.publishes += 1;
+            last_publish = Instant::now();
+
+            // Expose handles for any newly discovered vehicle.
+            if let Ok(mut handles) = shared.handles.lock() {
+                for id in known.keys() {
+                    if !handles.contains_key(id)
+                        && let Some(handle) = registry.handle(*id)
+                    {
+                        handles.insert(*id, handle);
+                    }
+                }
+            }
+        }
+
+        // Heartbeat, so the vehicle does not declare GCS failsafe.
+        if config.send_heartbeat && last_heartbeat.elapsed() >= config.heartbeat_interval {
+            let hb = Heartbeat {
+                custom_mode: 0,
+                r#type: MAV_TYPE_GCS,
+                autopilot: MAV_AUTOPILOT_INVALID,
+                base_mode: 0,
+                system_status: 0,
+                mavlink_version: 3,
+            };
+            let mut payload = [0u8; Heartbeat::LEN];
+            hb.encode(&mut payload);
+            let mut frame = [0u8; mp_mavlink::MAX_FRAME_LEN];
+            if let Ok(n) = encode_v2(
+                &mut frame,
+                tx_seq,
+                config.sysid,
+                config.compid,
+                Heartbeat::ID,
+                &payload,
+                Heartbeat::CRC_EXTRA,
+                0,
+            ) {
+                tx_seq = tx_seq.wrapping_add(1);
+                if let Some(bytes) = frame.get(..n)
+                    && transport.write_all(bytes).is_ok()
+                {
+                    stats.bytes_written += bytes.len() as u64;
+                    stats.frames_sent += 1;
+                }
+            }
+            last_heartbeat = Instant::now();
+        }
+
+        // Outbound queue. Re-stamp the sequence number here, where it is owned.
+        while let Ok(mut bytes) = outbound.try_recv() {
+            if let Some(seq) = bytes.get_mut(4) {
+                *seq = tx_seq;
+                tx_seq = tx_seq.wrapping_add(1);
+            }
+            // The checksum covers the sequence byte, so it must be recomputed after re-stamping.
+            if let Some(fixed) = restamp_checksum(&bytes) {
+                bytes = fixed;
+            }
+            if transport.write_all(&bytes).is_ok() {
+                stats.bytes_written += bytes.len() as u64;
+                stats.frames_sent += 1;
+            }
+        }
+
+        stats.decode = *decoder.stats();
+        if let Ok(mut shared_stats) = shared.stats.lock() {
+            *shared_stats = stats;
+        }
+    }
+
+    decoder.flush(&DIALECT, |_| {});
+    registry.publish_all();
+    stats.decode = *decoder.stats();
+    if let Ok(mut shared_stats) = shared.stats.lock() {
+        *shared_stats = stats;
+    }
+    shared.running.store(false, Ordering::Release);
+}
+
+/// Recomputes a v2 frame's checksum after its sequence byte was re-stamped.
+fn restamp_checksum(frame: &[u8]) -> Option<Vec<u8>> {
+    let payload_len = usize::from(*frame.get(1)?);
+    let msgid = u32::from_le_bytes([*frame.get(7)?, *frame.get(8)?, *frame.get(9)?, 0]);
+    let crc_extra = mp_mavlink::Dialect::crc_extra(&DIALECT, msgid)?;
+    let payload_end = 10 + payload_len;
+    let checksum = mp_mavlink::crc::checksum(frame.get(1..payload_end)?, crc_extra);
+
+    let mut out = frame.to_vec();
+    out.get_mut(payload_end..payload_end + 2)?
+        .copy_from_slice(&checksum.to_le_bytes());
+    Some(out)
+}

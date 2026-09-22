@@ -1,0 +1,22 @@
+[package]
+name = "mp-cli"
+description = "Command line front end: connect to a vehicle and watch telemetry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "mpr"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+mp-link.workspace = true
+mp-mavlink.workspace = true
+mp-mavlink-dialects.workspace = true
+mp-transport.workspace = true
+mp-vehicle.workspace = true

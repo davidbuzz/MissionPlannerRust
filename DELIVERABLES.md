@@ -18,8 +18,8 @@ Reference clone: [referneces/zed](referneces/zed).
 | [D1](#d1-workspace-crate-graph-and-build-system) | 0 | Cargo workspace and crate graph | P0 | In progress | Unit |
 | [D2](#d2-mavlink-protocol-crate) | 0 | MAVLink protocol codec crate | P0 | In progress | Differential vs C# |
 | [D3](#d3-transport-layer) | 0 | Serial, TCP, UDP, BLE transports | P0 | In progress | Unit |
-| [D4](#d4-link-engine-the-mavlinkinterface-equivalent) | 0 | Link engine, protocol machines | P0 | Not started | Not started |
-| [D5](#d5-vehicle-state-model--telemetry-bus) | 0 | Vehicle state snapshot bus | P0 | Not started | Not started |
+| [D4](#d4-link-engine-the-mavlinkinterface-equivalent) | 0 | Link engine, protocol machines | P0 | In progress | Unit |
+| [D5](#d5-vehicle-state-model--telemetry-bus) | 0 | Vehicle state snapshot bus | P0 | In progress | Differential vs C# |
 | [D6](#d6-ui-kit-on-gpui) | 1 | gpui widget kit | P0 | Not started | Not started |
 | [D7](#d7-gpu-render-core) | 1 | Shared wgpu render core | P0 | Not started | Not started |
 | [D8](#d8-map-engine) | 2 | GPU slippy map engine | P0 | Not started | Not started |
