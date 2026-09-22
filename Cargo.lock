@@ -3304,6 +3304,7 @@ dependencies = [
  "gpui_linux",
  "gpui_macos",
  "gpui_windows",
+ "image",
  "mp-link",
  "mp-units",
  "mp-vehicle",

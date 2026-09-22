@@ -26,6 +26,11 @@ mp-link.workspace = true
 mp-vehicle.workspace = true
 mp-units.workspace = true
 
+# Only for examples/tile_atlas_probe.rs: constructing a gpui RenderImage needs image::Frame,
+# and gpui does not re-export the image crate. Pinned to the same 0.25 line gpui resolves to.
+[dev-dependencies]
+image = { version = "0.25", default-features = false }
+
 # The backend crate per platform, mirroring what gpui_platform does. Selecting it here rather
 # than depending on gpui_platform avoids an inherited-dependency resolution problem: consumed as
 # a git dependency, gpui_platform's `gpui.workspace = true` resolves against crates.io, where an
