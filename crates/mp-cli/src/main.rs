@@ -534,8 +534,11 @@ fn params(url: &str, filter: Option<&str>) -> std::process::ExitCode {
 /// Reading back after an upload is the point: it is the only way to know the vehicle stored what
 /// was sent, rather than what it felt like storing.
 fn mission(url: &str, file: Option<&str>) -> std::process::ExitCode {
+    // Telemetry is requested even though this command displays none, because the most
+    // valuable validation check - is this mission built for somewhere else entirely? - needs
+    // the vehicle's position. A check that silently skips is worse than one that is absent.
     let config = LinkConfig {
-        stream_rate_hz: 0,
+        stream_rate_hz: 2,
         ..LinkConfig::default()
     };
     let link = match Link::connect(url, config) {
@@ -556,6 +559,16 @@ fn mission(url: &str, file: Option<&str>) -> std::process::ExitCode {
         return std::process::ExitCode::FAILURE;
     };
 
+    // Wait briefly for a position so validation has a home to compare against.
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while Instant::now() < deadline
+        && link
+            .primary_vehicle()
+            .is_none_or(|(_, handle)| handle.load().position.is_none())
+    {
+        std::thread::sleep(Duration::from_millis(200));
+    }
+
     // Upload first, if a file was given.
     if let Some(path) = file {
         let text = match std::fs::read_to_string(path) {
@@ -572,6 +585,33 @@ fn mission(url: &str, file: Option<&str>) -> std::process::ExitCode {
                 return std::process::ExitCode::FAILURE;
             }
         };
+        // Validate before sending, and report it, but do not refuse. A ground station that
+        // second-guesses the pilot is one they work around; a ground station that stays silent
+        // about a first waypoint on another continent is one they should not trust.
+        let context = mp_mission::validate::Context {
+            home: link
+                .primary_vehicle()
+                .and_then(|(_, handle)| handle.load().position),
+            vehicle_type: link
+                .primary_vehicle()
+                .map(|(_, handle)| handle.load().vehicle_type),
+        };
+        if context.home.is_none() {
+            println!("  no position from the vehicle yet; site and distance checks skipped");
+        }
+        let findings = mp_mission::validate::validate_with(&items, context);
+        for finding in &findings {
+            let marker = match finding.severity {
+                mp_mission::Severity::Danger => "DANGER ",
+                mp_mission::Severity::Warning => "warning",
+                mp_mission::Severity::Note => "note   ",
+            };
+            match finding.seq {
+                Some(seq) => println!("  {marker} item {seq}: {}", finding.message),
+                None => println!("  {marker} {}", finding.message),
+            }
+        }
+
         println!("uploading {} items from {path}", items.len());
         link.upload_mission(id, items);
         if !await_transfer(&link, id, "upload") {
