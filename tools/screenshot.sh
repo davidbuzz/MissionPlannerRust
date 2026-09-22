@@ -5,10 +5,14 @@
 # changes what the user sees gets one, committed under docs/progress/.
 #
 # usage: tools/screenshot.sh <output-name> [seconds-visible] [-- <binary args>]
+#
+# Windows are left up for 5 seconds by default: long enough for a human to see what the screenshot
+# claims, short enough not to sit on someone's desktop. These run on a real desktop, not a
+# headless CI box.
 set -uo pipefail
 
 NAME="${1:?usage: screenshot.sh <output-name> [seconds] [-- args]}"
-SECONDS_VISIBLE="${2:-12}"
+SECONDS_VISIBLE="${2:-5}"
 shift 2 2>/dev/null || shift 1
 [ "${1:-}" = "--" ] && shift
 
@@ -21,10 +25,19 @@ WINDOW_TITLE="Mission Planner"
 : "${DISPLAY:=:0}"
 export DISPLAY
 
+# Never leave a window on someone's desktop. The trap covers a normal exit and the signals
+# `timeout` and Ctrl-C send; the pre-kill covers a previous run that was killed with -9 and so
+# never ran its own trap.
+pkill -f "$(basename "$BIN")" 2>/dev/null && sleep 1
+
 echo "launching $BIN $*"
 "$BIN" "$@" &
 APP_PID=$!
-trap 'kill $APP_PID 2>/dev/null' EXIT
+cleanup() {
+    kill "$APP_PID" 2>/dev/null
+    wait "$APP_PID" 2>/dev/null
+}
+trap cleanup EXIT INT TERM HUP
 
 # Wait for the window to map. A GPU-backed window can take a moment to appear.
 #
@@ -70,6 +83,11 @@ else
     exit 1
 fi
 
-# Keep the window visible so a human watching sees it too.
+# Keep the window visible so a human watching sees it too, then close it.
+#
+# Note MP_BENCH: it repaints as fast as the executor will schedule, which is how the renderer is
+# measured and also what makes the window appear to flicker. It is never set for an ordinary
+# screenshot, only when a number is being taken.
 echo "leaving the window up for ${SECONDS_VISIBLE}s"
 sleep "$SECONDS_VISIBLE"
+echo "closing"

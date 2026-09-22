@@ -7,6 +7,7 @@
 
 #![allow(clippy::print_stderr)]
 
+mod hud;
 mod mapview;
 mod platform;
 mod telemetry;
@@ -131,6 +132,93 @@ impl MissionPlanner {
                     .child(title.to_uppercase()),
             )
             .child(body)
+    }
+
+    /// The primary flight display: canvas graphics with numeric readouts overlaid.
+    ///
+    /// Text is overlaid rather than painted inside the canvas because gpui shapes text through
+    /// its own element pipeline; reproducing that inside a paint callback would be a lot of work
+    /// for four numbers.
+    fn hud_panel(view: &TelemetryView) -> impl IntoElement {
+        let state = view.state.clone();
+        let (speed, altitude, heading, mode) = view.state.as_ref().map_or_else(
+            || {
+                (
+                    "--".to_owned(),
+                    "--".to_owned(),
+                    "--".to_owned(),
+                    "no vehicle".to_owned(),
+                )
+            },
+            |s| {
+                (
+                    format!("{:.0}", s.ground_speed.0),
+                    format!("{:.0}", s.altitude_relative.0),
+                    format!("{:03.0}", s.heading.degrees()),
+                    if s.armed {
+                        "ARMED".to_owned()
+                    } else {
+                        "disarmed".to_owned()
+                    },
+                )
+            },
+        );
+        let mode_colour = if view.state.as_ref().is_some_and(|s| s.armed) {
+            theme::ALERT
+        } else {
+            theme::DIM
+        };
+
+        div()
+            .relative()
+            .h(px(260.0))
+            .w_full()
+            .overflow_hidden()
+            .rounded_md()
+            .border_1()
+            .border_color(rgb(theme::BORDER))
+            .child(
+                gpui::canvas(
+                    |_bounds, _window, _cx| (),
+                    move |bounds, (), window, _cx| {
+                        hud::paint_hud(state.as_deref(), bounds, window);
+                    },
+                )
+                .size_full(),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .top_2()
+                    .left_2()
+                    .flex()
+                    .flex_col()
+                    .child(div().text_xs().text_color(rgb(theme::DIM)).child("m/s"))
+                    .child(div().text_lg().text_color(rgb(theme::TEXT)).child(speed)),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .top_2()
+                    .right_2()
+                    .flex()
+                    .flex_col()
+                    .items_end()
+                    .child(div().text_xs().text_color(rgb(theme::DIM)).child("m"))
+                    .child(div().text_lg().text_color(rgb(theme::TEXT)).child(altitude)),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .bottom_2()
+                    .left_0()
+                    .w_full()
+                    .flex()
+                    .justify_center()
+                    .gap_4()
+                    .child(div().text_sm().text_color(rgb(theme::TEXT)).child(heading))
+                    .child(div().text_sm().text_color(rgb(mode_colour)).child(mode)),
+            )
     }
 
     fn vehicle_panel(view: &TelemetryView) -> impl IntoElement {
@@ -382,6 +470,7 @@ impl Render for MissionPlanner {
                                     .text_color(rgb(theme::DIM))
                                     .child(vehicle_label),
                             )
+                            .child(Self::hud_panel(&view))
                             .child(Self::vehicle_panel(&view))
                             .child(Self::gps_panel(&view))
                             .child(Self::link_panel(&view)),
@@ -430,9 +519,11 @@ fn main() {
     let target = std::env::args().nth(1);
 
     platform::application().run(move |cx: &mut App| {
-        // Tall enough that the left column's panels are fully visible without scrolling; the
-        // first version clipped the link panel against the bottom edge.
-        let bounds = Bounds::centered(None, size(px(1180.0), px(880.0)), cx);
+        // Tall enough for the HUD plus all three panels without clipping. Grown twice from the
+        // original 760: once when the link panel was cut off, again when the HUD was added above
+        // it. Worth keeping generous - a control station that hides its bottom row is worse than
+        // one that needs a scroll.
+        let bounds = Bounds::centered(None, size(px(1180.0), px(980.0)), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             titlebar: Some(TitlebarOptions {

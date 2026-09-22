@@ -15,7 +15,12 @@
 //!   MP_MODE=stable MP_TILES=60 cargo run -p mp-gui --example tile_atlas_probe
 //!   MP_MODE=churn  MP_TILES=60 cargo run -p mp-gui --example tile_atlas_probe
 
-#![allow(clippy::print_stderr, clippy::print_stdout, missing_docs, unreachable_pub)]
+#![allow(
+    clippy::print_stderr,
+    clippy::print_stdout,
+    missing_docs,
+    unreachable_pub
+)]
 #![allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 
 use std::rc::Rc;
@@ -89,10 +94,12 @@ impl Probe {
             .unwrap_or(60);
         let churn = std::env::var("MP_MODE").as_deref() == Ok("churn");
         let evict = std::env::var("MP_EVICT").is_ok();
+        // Defaults to roughly five seconds of frames. A probe should answer its question and get
+        // off the screen; a long-running window is indistinguishable from a hang.
         let max_frames: u64 = std::env::var("MP_FRAMES")
             .ok()
             .and_then(|v| v.parse().ok())
-            .unwrap_or(400);
+            .unwrap_or(300);
 
         cx.spawn(async move |this, cx| {
             loop {
@@ -189,7 +196,7 @@ impl Render for Probe {
                             };
                         }
 
-                        if probe.frames % 100 == 0 {
+                        if probe.frames.is_multiple_of(100) {
                             eprintln!(
                                 "frame {:>5}  paint_ema {:>8.3} ms  worst {:>8.3} ms  tiles {}  errors {}",
                                 probe.frames,
