@@ -459,11 +459,46 @@ fn params(url: &str, filter: Option<&str>) -> std::process::ExitCode {
             }
         },
         None => {
+            let mut undocumented = 0usize;
+            let mut out_of_range = Vec::new();
             for (name, value) in table.iter() {
+                let meta = mp_vehicle::param_meta::lookup(name);
+                let units = meta.map_or("", |m| m.units);
+                if meta.is_none() {
+                    undocumented += 1;
+                }
+                if let Some(meta) = meta
+                    && !meta.accepts(value.as_f64())
+                {
+                    out_of_range.push(name.clone());
+                }
                 println!(
-                    "{name:<17} {:>14}  {:?}",
+                    "{name:<17} {:>14}  {:<7} {units}",
                     value.as_f64(),
-                    value.param_type()
+                    format!("{:?}", value.param_type())
+                );
+            }
+
+            // Drift between the bundled metadata and the running firmware is normal and worth
+            // stating plainly: parameters get renamed between releases, and a description that
+            // no longer matches the firmware is worse than no description at all.
+            if undocumented > 0 {
+                println!(
+                    "\n{undocumented} of {} parameters have no bundled documentation (the \
+                     metadata and the firmware are different versions)",
+                    table.len()
+                );
+            }
+            if !out_of_range.is_empty() {
+                println!(
+                    "{} parameter(s) outside their documented range: {}",
+                    out_of_range.len(),
+                    out_of_range
+                        .iter()
+                        .take(6)
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 );
             }
         }

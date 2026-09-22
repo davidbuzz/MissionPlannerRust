@@ -923,6 +923,37 @@ boundary, a `--safe-mode` flag that loads nothing, per-plugin opt-in recorded on
 reports naming every loaded plugin. A GCS that dies because a third-party plugin dereferenced null
 is worse than one that never loaded it. Tiers 1 and 2 exist so that most users never need tier 3.
 
+### 10.5 Measured: the bundled parameter metadata does not match shipping firmware
+
+Recorded here because it was measured on this box, against a live vehicle, and it changes how D12
+must be built.
+
+`ParameterMetaDataBackup.xml` ships with Mission Planner and is the source of every parameter
+description, range, enumeration and bitmask — and of the flight mode tables. Against ArduPilot
+4.6.0-beta1 SITL:
+
+| Measure | Result |
+|---|---|
+| Parameters the vehicle reports | 1,408 |
+| With no bundled documentation | **581 (41%)** |
+| Outside their documented range | 9, including `FENCE_TOTAL` and `EK3_ABIAS_P_NSE` |
+| Renamed since the metadata | `ARMING_CHECK` → `ARMING_OPTIONS`, `WPNAV_SPEED` → `WP_SPD` |
+
+**Consequence.** A configuration screen driven by the bundled file alone shows nothing useful for
+two parameters in five, and shows *wrong* ranges for a handful — which is worse, because a range
+that disagrees with the firmware will reject a value the vehicle would have accepted, or accept one
+it will not.
+
+**What D12 has to do instead.** Fetch metadata matching the firmware version the vehicle reports,
+as Mission Planner itself does at runtime, and fall back to the bundled copy only when offline.
+The bundled file stays as the offline default and as the codegen input for flight modes, which are
+stable enough to compile in. Parameters are not.
+
+**Cheapest experiment to size the fetch path:** take the `AUTOPILOT_VERSION` message the vehicle
+already sends, resolve it to an ArduPilot release, and check whether that release's `apm.pdef.xml`
+covers the 581 currently missing. That is a day's work and it decides whether D12 needs a metadata
+cache with its own versioning or just a download.
+
 ## 11. Risk register
 
 | # | Risk | L | I | Early warning | Mitigation |
