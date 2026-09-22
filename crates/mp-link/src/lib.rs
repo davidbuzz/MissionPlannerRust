@@ -18,6 +18,7 @@
 #![forbid(unsafe_code)]
 
 pub mod commands;
+pub mod params;
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -28,6 +29,7 @@ use mp_mavlink::{DecodeStats, FrameDecoder, Message as _, encode_v2};
 use mp_mavlink_dialects::all::{DIALECT, Heartbeat, MavMessage, RequestDataStream};
 use mp_transport::{OpenError, Transport};
 use mp_vehicle::{StateHandle, VehicleId, VehicleRegistry};
+use params::{ParamTable, ParamType, ParamValue, decode_param_id};
 
 /// MAVLink component id for a ground control station.
 pub const MAV_COMP_ID_MISSIONPLANNER: u8 = 190;
@@ -35,6 +37,12 @@ pub const MAV_COMP_ID_MISSIONPLANNER: u8 = 190;
 const MAV_TYPE_GCS: u8 = 6;
 /// `MAV_AUTOPILOT_INVALID`, which is what a GCS reports.
 const MAV_AUTOPILOT_INVALID: u8 = 8;
+
+/// How long the parameter stream must be quiet before gaps are re-requested.
+const PARAM_GAP_TIMEOUT: Duration = Duration::from_millis(1500);
+
+/// How many missing parameters to re-request at once.
+const PARAM_RETRY_BURST: usize = 10;
 
 /// Minimum time the I/O loop spends per iteration when there is nothing to read.
 const IDLE_POLL: Duration = Duration::from_millis(1);
@@ -115,6 +123,10 @@ struct Shared {
     /// session - which is exactly wrong on the one screen a pilot looks at.
     description: Mutex<String>,
     handles: Mutex<BTreeMap<VehicleId, StateHandle>>,
+    /// Parameters received per vehicle, and whether a download is in progress.
+    params: Mutex<BTreeMap<VehicleId, ParamTable>>,
+    /// Vehicles whose parameter download the caller has asked for.
+    param_downloads: Mutex<BTreeMap<VehicleId, bool>>,
     stats: Mutex<LinkStats>,
     running: AtomicBool,
     frames_received: AtomicU64,
@@ -192,6 +204,23 @@ impl Link {
             .find(|(id, _)| id.compid == 1)
             .or_else(|| handles.iter().next())
             .map(|(id, handle)| (*id, handle.clone()))
+    }
+
+    /// Starts a parameter download and returns immediately.
+    ///
+    /// Progress is observable through [`Link::params`]; the link thread re-requests any gaps, so
+    /// the caller does not need to implement retry logic.
+    pub fn download_params(&self, target: VehicleId) -> bool {
+        if let Ok(mut downloads) = self.shared.param_downloads.lock() {
+            downloads.insert(target, true);
+        }
+        self.send(&commands::request_param_list(target))
+    }
+
+    /// A snapshot of a vehicle's parameters.
+    #[must_use]
+    pub fn params(&self, target: VehicleId) -> Option<ParamTable> {
+        self.shared.params.lock().ok()?.get(&target).cloned()
     }
 
     /// Link counters.
@@ -287,6 +316,7 @@ fn run_link(
     let mut tx_seq: u8 = 0;
 
     let mut newly_seen: Vec<VehicleId> = Vec::new();
+    let mut last_param = Instant::now();
     let mut last_publish = Instant::now();
     let mut last_heartbeat = Instant::now() - config.heartbeat_interval;
     let mut known: BTreeMap<VehicleId, ()> = BTreeMap::new();
@@ -321,6 +351,20 @@ fn run_link(
                             let id = registry.apply(frame.sysid, frame.compid, frame.seq, &msg);
                             if known.insert(id, ()).is_none() {
                                 newly_seen.push(id);
+                            }
+                            if let MavMessage::ParamValue(param) = msg {
+                                let name = decode_param_id(&param.param_id);
+                                if let (Some(kind), Ok(mut table)) =
+                                    (ParamType::from_wire(param.param_type), shared.params.lock())
+                                {
+                                    table.entry(id).or_default().insert(
+                                        name,
+                                        ParamValue::from_param_value_field(param.param_value, kind),
+                                        param.param_index,
+                                        param.param_count,
+                                    );
+                                    last_param = Instant::now();
+                                }
                             }
                         }
                     });
@@ -364,6 +408,55 @@ fn run_link(
                     }
                 }
             }
+        }
+
+        // Parameter gap recovery. PARAM_REQUEST_LIST streams once with no retransmission, so a
+        // single lost packet on a telemetry link leaves a hole that never fills by itself. When
+        // the stream goes quiet with gaps outstanding, ask for them individually.
+        if last_param.elapsed() >= PARAM_GAP_TIMEOUT {
+            let outstanding: Vec<(VehicleId, Vec<u16>)> = shared
+                .params
+                .lock()
+                .map(|tables| {
+                    tables
+                        .iter()
+                        .filter(|(_, table)| !table.is_complete() && table.expected().is_some())
+                        .map(|(id, table)| (*id, table.missing()))
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            for (id, missing) in outstanding {
+                // A burst rather than the whole list: asking for hundreds at once floods a
+                // 57,600 baud radio and the replies collide with the telemetry stream.
+                for index in missing.into_iter().take(PARAM_RETRY_BURST) {
+                    let request = commands::request_param_by_index(id, index);
+                    let mut payload = [0u8; 255];
+                    let len = request.encode(&mut payload);
+                    let mut frame = [0u8; mp_mavlink::MAX_FRAME_LEN];
+                    if let Some(body) = payload.get(..len)
+                        && let Ok(n) = encode_v2(
+                            &mut frame,
+                            tx_seq,
+                            config.sysid,
+                            config.compid,
+                            request.id(),
+                            body,
+                            request.crc_extra(),
+                            0,
+                        )
+                    {
+                        tx_seq = tx_seq.wrapping_add(1);
+                        if let Some(bytes) = frame.get(..n)
+                            && transport.write_all(bytes).is_ok()
+                        {
+                            stats.bytes_written += bytes.len() as u64;
+                            stats.frames_sent += 1;
+                        }
+                    }
+                }
+            }
+            last_param = Instant::now();
         }
 
         // Publish snapshots on a cadence rather than per packet: no display can show more than

@@ -1,0 +1,7 @@
+# Project memory index
+
+One line per memory. Files live in `.claude/memory/` in this repository so they are version
+controlled; the per-project memory directory holds symlinks to them.
+
+- [No foreground waiting](no-foreground-waiting.md) — background long operations, poll cheaply, never block the session
+- [GUI runs stay short](gui-runs-stay-short.md) — windows live ~5s and clean up; never leave MP_BENCH on

@@ -5,7 +5,8 @@
 //! magic number has exactly one definition with a comment saying what it is.
 
 use mp_mavlink_dialects::all::{
-    CommandLong, MavMessage, ParamSet, SetMode, SetPositionTargetGlobalInt,
+    CommandLong, MavMessage, ParamRequestList, ParamRequestRead, ParamSet, SetMode,
+    SetPositionTargetGlobalInt,
 };
 use mp_vehicle::VehicleId;
 
@@ -159,5 +160,45 @@ pub fn goto_position(
         target_system: target.sysid,
         target_component: target.compid,
         coordinate_frame: FRAME_GLOBAL_RELATIVE_ALT_INT,
+    })
+}
+
+/// Asks the vehicle to stream its entire parameter set.
+///
+/// The vehicle streams once and never retransmits, so a dropped packet leaves a permanent hole.
+/// Recovering it is [`request_param_by_index`]'s job.
+#[must_use]
+pub fn request_param_list(target: VehicleId) -> MavMessage {
+    MavMessage::ParamRequestList(ParamRequestList {
+        target_system: target.sysid,
+        target_component: target.compid,
+    })
+}
+
+/// Asks for one parameter by its index in the list.
+///
+/// `param_id` must be empty when requesting by index; a vehicle that sees a name will answer the
+/// name and ignore the index.
+#[must_use]
+pub fn request_param_by_index(target: VehicleId, index: u16) -> MavMessage {
+    MavMessage::ParamRequestRead(ParamRequestRead {
+        param_index: i16::try_from(index).unwrap_or(i16::MAX),
+        target_system: target.sysid,
+        target_component: target.compid,
+        param_id: [0u8; 16],
+    })
+}
+
+/// Asks for one parameter by name.
+///
+/// `param_index` must be -1 to mean "use the name", which is the opposite convention to
+/// [`request_param_by_index`] and easy to get backwards.
+#[must_use]
+pub fn request_param_by_name(target: VehicleId, name: &str) -> MavMessage {
+    MavMessage::ParamRequestRead(ParamRequestRead {
+        param_index: -1,
+        target_system: target.sysid,
+        target_component: target.compid,
+        param_id: crate::params::encode_param_id(name),
     })
 }

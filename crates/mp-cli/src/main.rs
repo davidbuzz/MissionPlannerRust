@@ -36,6 +36,13 @@ fn main() -> std::process::ExitCode {
                 std::process::ExitCode::from(2)
             }
         },
+        Some("params") => match args.get(1) {
+            Some(url) => params(url, args.get(2).map(String::as_str)),
+            None => {
+                eprintln!("usage: mpr params <url> [NAME]");
+                std::process::ExitCode::from(2)
+            }
+        },
         Some("ports") => ports(),
         Some("help" | "--help" | "-h") | None => {
             usage();
@@ -56,6 +63,7 @@ fn usage() {
          mpr watch <url> [seconds]   connect and display live telemetry\n  \
          mpr record <url> <file> [s] record telemetry to a .tlog\n  \
          mpr fly <url> [file]        fly a scripted mission (simulator only)\n  \
+         mpr params <url> [NAME]     download the parameter set, or show one parameter\n  \
          mpr ports                   list serial ports\n\n\
          url forms:\n  \
          serial:/dev/ttyACM0:115200\n  \
@@ -290,5 +298,126 @@ fn fly(url: &str, record_path: Option<&str>) -> std::process::ExitCode {
     );
 
     println!("flight complete: {} frames", link.frames_received());
+    std::process::ExitCode::SUCCESS
+}
+
+/// Downloads the vehicle's parameters and prints them.
+///
+/// Useful on its own, and the fastest way to check the download protocol against a real vehicle:
+/// a parameter set with a hole in it is a protocol bug, and the count is printed so a hole is
+/// visible rather than implied.
+fn params(url: &str, filter: Option<&str>) -> std::process::ExitCode {
+    let config = LinkConfig {
+        stream_rate_hz: 0,
+        ..LinkConfig::default()
+    };
+    let link = match Link::connect(url, config) {
+        Ok(link) => link,
+        Err(err) => {
+            eprintln!("could not open {url}: {err}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    println!("connected: {}", link.description());
+
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while link.primary_vehicle().is_none() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let Some((id, _)) = link.primary_vehicle() else {
+        eprintln!("no vehicle appeared on {url}");
+        return std::process::ExitCode::FAILURE;
+    };
+
+    println!("downloading parameters from vehicle {id}");
+    link.download_params(id);
+
+    // Progress is reported so a stalled download looks different from a slow one.
+    let deadline = Instant::now() + Duration::from_secs(120);
+    let mut last_report = Instant::now();
+    let mut last_count = 0usize;
+    loop {
+        let Some(table) = link.params(id) else {
+            std::thread::sleep(Duration::from_millis(200));
+            continue;
+        };
+        if table.is_complete() {
+            break;
+        }
+        if Instant::now() >= deadline {
+            eprintln!(
+                "timed out with {} of {:?} parameters, missing {} indices",
+                table.len(),
+                table.expected(),
+                table.missing().len()
+            );
+            break;
+        }
+        if last_report.elapsed() >= Duration::from_secs(1) {
+            let count = table.len();
+            println!(
+                "  {count} of {:?}  ({:.0}%){}",
+                table.expected(),
+                table.progress() * 100.0,
+                if count == last_count {
+                    "  - waiting on gaps"
+                } else {
+                    ""
+                }
+            );
+            last_count = count;
+            last_report = Instant::now();
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+
+    let Some(table) = link.params(id) else {
+        eprintln!("no parameters received");
+        return std::process::ExitCode::FAILURE;
+    };
+
+    match filter {
+        Some(name) => match table.get(name) {
+            Some(value) => {
+                println!("{name} = {} ({:?})", value.as_f64(), value.param_type());
+            }
+            None => {
+                eprintln!("no parameter named {name} ({} received)", table.len());
+                return std::process::ExitCode::FAILURE;
+            }
+        },
+        None => {
+            for (name, value) in table.iter() {
+                println!(
+                    "{name:<17} {:>14}  {:?}",
+                    value.as_f64(),
+                    value.param_type()
+                );
+            }
+        }
+    }
+    println!(
+        "\n{} names received, {} placed in the list, vehicle reported {:?}, complete: {}",
+        table.len(),
+        table.indexed_len(),
+        table.expected(),
+        table.is_complete()
+    );
+    let unindexed = table.unindexed();
+    if !unindexed.is_empty() {
+        // Not an error: a vehicle can answer a by-name read with index 65535, and ArduPilot's
+        // reported count does not always match the names it sends. Printed so the difference is
+        // explainable rather than mysterious.
+        println!(
+            "{} name(s) arrived without a list index: {}",
+            unindexed.len(),
+            unindexed
+                .iter()
+                .take(8)
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
     std::process::ExitCode::SUCCESS
 }
