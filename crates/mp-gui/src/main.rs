@@ -692,14 +692,47 @@ impl Render for MissionPlanner {
     }
 }
 
+/// The initial window size, from `MP_WINDOW` or the default.
+///
+/// A malformed value falls back to the default rather than failing to start: a ground station that
+/// refuses to open because an environment variable is wrong is worse than one that opens at the
+/// wrong size.
+fn window_size() -> (f32, f32) {
+    const DEFAULT: (f32, f32) = (1600.0, 1200.0);
+
+    let Ok(value) = std::env::var("MP_WINDOW") else {
+        return DEFAULT;
+    };
+    parse_window_size(&value).unwrap_or_else(|| {
+        eprintln!("MP_WINDOW should look like 1600x1200, at least 640x480; using the default");
+        DEFAULT
+    })
+}
+
+/// Parses a `WIDTHxHEIGHT` window size.
+///
+/// `None` for anything the caller should not act on, including sizes too small to lay out - the
+/// sidebar alone is 400 pixels wide, so a 320-pixel window would show nothing but a sliver of it.
+fn parse_window_size(value: &str) -> Option<(f32, f32)> {
+    let (width, height) = value.split_once(['x', 'X'])?;
+    let width: f32 = width.trim().parse().ok()?;
+    let height: f32 = height.trim().parse().ok()?;
+    (width >= 640.0 && height >= 480.0).then_some((width, height))
+}
+
 fn main() {
     let target = std::env::args().nth(1);
 
     platform::application().run(move |cx: &mut App| {
-        // 1024x768. Small enough to open sensibly on a laptop or a field tablet, which is where a
-        // ground station actually gets used. Nothing is cut off at this size: the panel columns
-        // scroll and the map takes what is left, which is what the scrolling was added for.
-        let bounds = Bounds::centered(None, size(px(1024.0), px(768.0)), cx);
+        // 1600x1200. Room for the panel columns and a map worth looking at side by side. Smaller
+        // windows work - the panel columns scroll and the map takes what is left, which is what
+        // the scrolling was added for - but this is the size the application is laid out for.
+        //
+        // MP_WINDOW overrides it, as WIDTHxHEIGHT. Trying a size should not need a rebuild, and a
+        // screenshot at a particular size should not need a code change that then has to be
+        // remembered and undone.
+        let (width, height) = window_size();
+        let bounds = Bounds::centered(None, size(px(width), px(height)), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             titlebar: Some(TitlebarOptions {
@@ -717,4 +750,48 @@ fn main() {
         }
         cx.activate(true);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_malformed_window_size_falls_back_rather_than_refusing_to_start() {
+        // A ground station that will not open because an environment variable is wrong is worse
+        // than one that opens at the wrong size. The parsing is exercised directly because the
+        // variable is process-wide and tests run in parallel.
+        assert_eq!(parse_window_size("1600x1200"), Some((1600.0, 1200.0)));
+        assert_eq!(parse_window_size("1024X768"), Some((1024.0, 768.0)));
+        assert_eq!(parse_window_size(" 1280 x 720 "), Some((1280.0, 720.0)));
+        assert_eq!(parse_window_size("wide"), None);
+        assert_eq!(parse_window_size("1600"), None);
+        assert_eq!(parse_window_size("1600x"), None);
+        // Too small to lay out: the sidebar alone is 400px wide.
+        assert_eq!(parse_window_size("320x240"), None);
+        assert_eq!(parse_window_size("-1600x1200"), None);
+    }
+
+    #[test]
+    fn the_screens_have_distinct_labels_and_ids() {
+        // The ids address controls a test script clicks; two screens sharing one would make a
+        // click silently land on the wrong tab.
+        let mut ids: Vec<&str> = Screen::ALL.iter().map(|s| s.id()).collect();
+        let count = ids.len();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), count);
+
+        let mut labels: Vec<&str> = Screen::ALL.iter().map(|s| s.label()).collect();
+        labels.sort_unstable();
+        labels.dedup();
+        assert_eq!(labels.len(), count);
+    }
+
+    #[test]
+    fn flying_is_the_screen_it_opens_on() {
+        // Not a preference: it is what the application is for, and an operator who connects to a
+        // vehicle in flight should not have to find the right tab first.
+        assert_eq!(Screen::ALL.first().copied(), Some(Screen::Fly));
+    }
 }
