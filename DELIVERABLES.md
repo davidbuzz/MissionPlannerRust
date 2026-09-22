@@ -227,13 +227,24 @@ config, joystick input, swarm control, warnings engine, web APIs, ADS-B / Altitu
 - **Tests:** `tests/dsdl_roundtrip.rs` proptest over every generated DroneCAN type; `tests/node_sim.rs` drives a simulated CAN node through enumerate/param-edit/firmware-update; `tests/joystick.rs` uses a virtual HID device fixture to assert mapping, expo/deadzone maths and <5 ms end-to-end latency; `tests/tracker.rs` and `tests/swarm.rs` against SITL; `tests/video_pipeline.rs` smoke-tests each capture/decode backend per OS; `tests/feature_ledger.rs` fails if a feature in this bucket is neither implemented nor explicitly marked dropped.
 
 ### D16. Extension and scripting system
-WASM extension host modelled on zed's `extension` / `extension_host` / `extension_api`, a stable extension
-API, and a user scripting host replacing IronPython.
+Three tiers, because Mission Planner already ships two mechanisms and users touch both:
+**(1) embedded Python** via `rustpython-vm` (pure Rust, no system Python, no compile step) as the
+direct replacement for IronPython, with `pyo3`/CPython behind an opt-in feature for users who need
+numpy or pymavlink; **(2) a sandboxed WASM extension host** modelled on zed's `extension` /
+`extension_host` / `extension_api` for distributable extensions; **(3)** full-trust native plugins,
+which are [D21](#d21-native-in-process-plugin-host) and come last.
+Python is not a preference, it is compatibility: the 19 scripts in `testdata/scripts/` ship with
+Mission Planner today and are already Python. A Rust-native scripting language would break every
+one of them.
 - **DoD:** a sample extension builds, loads, adds a panel, subscribes to telemetry and sends commands;
   extensions are sandboxed and cannot crash the app; a migration guide plus at least one real C# plugin and
   one IronPython script reimplemented as proof; API versioned and documented.
 - **Replaces:** `Plugin/`, `Plugins/`, `plugins/` (13,289 total), `Script.cs` + `Scripts/` + IronPython.
-- **Tests:** `tests/sample_extension.rs` builds the sample extension to wasm in CI, loads it, and asserts it can add a panel, subscribe to telemetry and send a command; `tests/sandbox.rs` asserts a malicious or panicking extension cannot crash, block or read outside its sandbox (infinite loop, OOM, filesystem escape, host-call abuse); `tests/api_compat.rs` loads extensions built against older API versions; `tests/scripting.rs` runs a fixture script corpus including the reimplemented IronPython examples and asserts identical effects.
+- **Tests:** `tests/stock_scripts.rs` runs every `testdata/scripts/*.py` against a simulated
+  vehicle and asserts each either completes or fails with a recorded, reviewed reason - the file
+  count is asserted too, so a script silently disappearing from the corpus fails;
+  `tests/script_kill.rs` asserts an infinite loop is terminated by the kill switch within a bounded
+  time; `tests/sample_extension.rs` builds the sample extension to wasm in CI, loads it, and asserts it can add a panel, subscribe to telemetry and send a command; `tests/sandbox.rs` asserts a malicious or panicking extension cannot crash, block or read outside its sandbox (infinite loop, OOM, filesystem escape, host-call abuse); `tests/api_compat.rs` loads extensions built against older API versions; `tests/scripting.rs` runs a fixture script corpus including the reimplemented IronPython examples and asserts identical effects.
 
 ### D17. Localization, settings and data compatibility
 All UI strings through Fluent, every existing culture migrated, Crowdin flow preserved; settings storage;

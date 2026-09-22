@@ -182,7 +182,7 @@ project, and it is why §10 front-loads UI-free work.
 | Projections | **Unresolved — see §12 D4.** Either `proj 0.31` (native libproj) or drop Shapefile + arbitrary-CRS GeoTIFF | "~200 LOC UTM kernel" — cannot serve `DotSpatial.Projections`' EPSG/proj4/ESRI-WKT reprojection used by `FlightPlanner.cs:3533` (.shp import) and `GeoTiff.cs:232` | low | Audit which CRSs real user GeoTIFFs actually use |
 | Video | `gstreamer 0.25` | `LibVLC.NET` (`vlc-rs` dead since 2018); `DirectShowLib` (37,629 LOC, Windows-only) | med | LGPL/GPL shipping obligations of the ffmpeg alternative |
 | Charting | Write `mp-chart` on gpui primitives + LOD pyramid | `ZedGraph` (52,265 LOC); `plotters` (static backend, no interaction model) | high | — |
-| Scripting | `rhai 1.26` (operation limits + per-call timeouts — these scripts fly aircraft) | IronPython compat via `rustpython-vm` (incomplete stdlib) or `pyo3` (forfeits single-static-binary) | med | Owner requires verbatim user-script compatibility (§12 D6) |
+| Scripting | **`rustpython-vm 0.5`** — the 19 shipped scripts are already Python, so a Rust-native language would break every one of them; `pyo3` behind an opt-in feature for numpy/pymavlink users | `rhai 1.26` (fast and easily sandboxed, but forces a rewrite of user scripts that work today); `pyo3` as default (forfeits the single static binary) | med | Any stock script that will not run unmodified is recorded per script, not hand-waved (§12 D6) |
 | Plugins | `wasmtime 48` component host, capability-gated per MAVLink msgid | In-process dylib | high | — |
 | i18n | `fluent 0.17` + `i18n-embed-fl 0.10` (compile-checked `fl!()`) | `.resx` (of 30,916 English entries only ~2,634 are language) | high | — |
 | Expression eval | Own compiled evaluator over column handles | `evalexpr 13.1.0` — **AGPL-3.0-only**, must never enter | high | — |
@@ -827,7 +827,7 @@ decomposition), 1–3 engineers, an agent fleet of 8–14 concurrent units. Cale
 | **7** | SEE (video, gimbal, OSD, 3D) | 7–9 | 70 | 1080p60 under HUD at full rate with **no `videoconvert`** — or, if the fork was deferred, 30 Hz with the measured CPU/PCIe cost in an ADR; 3D terrain 50 km² at 60 fps with zero per-frame CPU mesh alloc | Fork proves untenable → ship video at 30 Hz via `RenderImage`, defer 3D |
 | **8** | BUS + FLEET (DroneCAN, RTK, swarm, joystick) | 10–13 | 100 | Real CAN bus ≥3 nodes enumerates + firmware-updates over SLCAN **and** SocketCAN; SLCAN mode-switch 50× without losing telemetry; RTK FIXED on 2 vehicles; stick→syscall p99 ≤5 ms on Linux **and** Windows; 20-vehicle SITL swarm at 120 fps | gilrs cannot expose raw HID axes → hidapi fallback (+~800 LOC) |
 | **9** | SHIP (i18n, packaging, update, crash) | 6–8 | 50 | 18 locales incl. RTL + CJK on 3 OSes; `cargo dist` emits MSI/dmg/deb/rpm/AppImage from one tag; **ed25519-signed** update installs and rejects a tampered artifact; minidump on all 3 OSes | Apple/EV identity not obtained → ship unsigned with a named regression |
-| **10** | EXTEND (plugins, scripting) | 5–6 | 50 | A malicious extension (infinite `loop()`, unauthorised `mavlink:send:COMMAND_LONG`, out-of-namespace file read) is **preempted or refused with no dropped frame**; 19 stock scripts run under rhai with a working kill switch | UI-capability decision (§12 D7) forced by FaceMap/Dowding |
+| **10** | EXTEND (plugins, scripting) | 5–6 | 50 | A malicious extension (infinite `loop()`, unauthorised `mavlink:send:COMMAND_LONG`, out-of-namespace file read) is **preempted or refused with no dropped frame**; **all 19 stock `Scripts/*.py` run unmodified** under the embedded Python engine with a working kill switch | UI-capability decision (§12 D7) forced by FaceMap/Dowding |
 | **12** | NATIVE PLUGINS (`PluginLoader` parity) | 4–6 | 40 | A native plugin built out-of-tree loads, registers a panel and a menu action, reads telemetry and sends a command; an ABI-mismatched plugin is refused by version, not by crashing; a panicking plugin does not take the GCS with it; `--safe-mode` loads none; loose-source plugins compile and load when a toolchain is present | Owner may stop after the sandboxed host (Phase 10) if full-trust loading is judged not worth the failure modes |
 | **11** | CLOSE (the long tail + certification) | 8–12 | 80 | **3,678/3,678 in terminal state**, every `dropped` with an owner-ratified reason; full-corpus differential green 7 consecutive nightlies; mutants ≤10% on class-A/D; exhaustive 2^32 f32 param-rounding sweep clean; pilot flight test on 3 OSes | — |
 
@@ -873,33 +873,55 @@ gated on v1 shipping — not obligation.
 
 ---
 
-### 10.4 Phase 12 — in-process arbitrary-code plugins, and what "equivalent" can mean
+### 10.4 Extension model — three tiers, because Mission Planner already has two
 
-An earlier draft of this plan listed this as a decided non-goal. The owner overruled it: the goal
-is 100% of Mission Planner, and `PluginLoader.cs` is part of Mission Planner. It goes last, after
-everything else, because it is the one capability whose *absence* costs nothing to a pilot and
-whose *presence* can cost everything to a flight.
+An earlier draft listed in-process arbitrary-code plugins as a decided non-goal. The owner
+overruled it: the goal is 100% of Mission Planner, and `PluginLoader.cs` is part of Mission
+Planner. The owner then asked whether plugins might use a dynamic language so nothing needs
+compiling — which is not merely convenient, it is what Mission Planner already does.
 
-**What the C# does.** `PluginLoader` scans a directory, Roslyn-compiles loose `.cs` files at
-startup, `Assembly.Load`s prebuilt DLLs, instantiates anything deriving from `Plugin`, and calls
-`Init`/`Loaded`/`Loop`/`Exit` in-process with full trust and direct access to `MainV2` and
-`CurrentState`. There is no sandbox and no capability model: a plugin is the application.
+**What exists upstream.** Two separate mechanisms, not one:
 
-**What Rust can do, in descending order of fidelity.**
-
-| Mechanism | Fidelity to `PluginLoader` | Notes |
+| Upstream | Mechanism | Users write |
 |---|---|---|
-| Native `cdylib` via `libloading` | High | A versioned C ABI entry point, a host vtable for telemetry/send/UI registration. Truly in-process, truly arbitrary, exactly the same trust model |
-| Loose `.rs` compiled at load time | High | The literal analogue of Roslyn compiling loose `.cs`: invoke the toolchain, cache by content hash, `dlopen` the result. Requires a toolchain on the machine, which Roslyn did not |
-| Sandboxed WASM extension (Phase 10) | Medium | Safe and portable, but cannot do the arbitrary in-process things a `PluginLoader` plugin can, so it is a complement rather than a replacement |
-| Loading existing C# plugin assemblies | **Impossible without a CLR** | Stated plainly rather than promised. Existing plugins must be rewritten against the native or WASM API; a migration guide is part of the deliverable |
+| `Script.cs` + `Scripts/` | IronPython, interpreted in-process, no compile step | **19 shipped `.py` scripts**, API of `GetParam`, `ChangeParam`, `ChangeMode`, `WaitFor`, `SendRC`, `Sleep`, `runScript`, `mavlink_connection`, `recv_match` |
+| `PluginLoader.cs` + `Plugins/` | Roslyn-compiles loose `.cs`, `Assembly.Load`s DLLs, full trust | Compiled C# plugins |
 
-**The failure modes are the deliverable.** Full trust in-process means a plugin can corrupt vehicle
-state, block the render thread, or crash the GCS mid-flight. The phase is therefore judged on its
-guard rails as much as its loader: an ABI version check that refuses rather than crashes,
-`catch_unwind` at every boundary crossing, a `--safe-mode` flag that loads nothing, per-plugin
-opt-in recorded on disk, and crash reports that name every loaded plugin. A GCS that silently dies
-because a third-party plugin dereferenced a null pointer is worse than one that never loaded it.
+So the port needs both, and the scripting half is the one users touch.
+
+**Tier 1 — embedded Python (Phase 10, the default).** Directly replaces IronPython. No compiler,
+no toolchain, edit-and-run.
+
+| Engine | Verdict |
+|---|---|
+| `rustpython-vm` 0.5.0 (MIT) | **Default.** Pure Rust, no system Python, builds for every target we ship including wasm, and sandboxable because we own the host bindings. Slower than CPython and its stdlib has gaps |
+| `pyo3` 0.29 (MIT/Apache) | **Opt-in feature** for users who need numpy, scipy or pymavlink. Costs a CPython runtime on the machine and complicates packaging, so it is not the default |
+
+The compatibility test is concrete: the 19 stock scripts must run unmodified, and that corpus is
+checked in. IronPython is a Python 2.7/3.4-era dialect, so where a stock script does not run, the
+divergence is recorded per script rather than hand-waved.
+
+**PHP was considered and rejected.** Not from taste: the Rust ecosystem has `php` 0.1.0 bindings
+and `phprs` 0.1.x, a from-scratch VM — both far too immature to put under a ground control
+station — and no Mission Planner user has a PHP script to preserve. Python is the compatible
+choice precisely because the existing scripts are already Python.
+
+**Tier 2 — sandboxed WASM extensions (Phase 10).** For extensions that need real speed or a
+language other than Python, with a capability model. Portable, safe, and the right default for
+anything distributed to other people.
+
+**Tier 3 — native in-process plugins (Phase 12, last).** `PluginLoader` parity: native `cdylib`
+loaded through `libloading` behind a versioned C ABI with a host vtable, plus load-time
+compilation of loose Rust source — the literal analogue of Roslyn compiling loose `.cs`. Loading
+existing *C# assemblies* remains impossible without a CLR; that is stated rather than promised,
+and a migration guide ships instead.
+
+**The failure modes are the deliverable.** Tier 3 means a plugin can corrupt vehicle state, block
+the render thread, or crash the GCS mid-flight. The phase is judged on its guard rails as much as
+its loader: an ABI version check that refuses rather than crashes, `catch_unwind` at every
+boundary, a `--safe-mode` flag that loads nothing, per-plugin opt-in recorded on disk, and crash
+reports naming every loaded plugin. A GCS that dies because a third-party plugin dereferenced null
+is worse than one that never loaded it. Tiers 1 and 2 exist so that most users never need tier 3.
 
 ## 11. Risk register
 
