@@ -18,17 +18,17 @@ Reference clone: [referneces/zed](referneces/zed).
 | [D1](#d1-workspace-crate-graph-and-build-system) | 0 | Cargo workspace and crate graph | P0 | In progress | Unit |
 | [D2](#d2-mavlink-protocol-crate) | 0 | MAVLink protocol codec crate | P0 | In progress | Differential vs C# |
 | [D3](#d3-transport-layer) | 0 | Serial, TCP, UDP, BLE transports | P0 | In progress | Unit |
-| [D4](#d4-link-engine-the-mavlinkinterface-equivalent) | 0 | Link engine, protocol machines | P0 | In progress | Unit |
+| [D4](#d4-link-engine-the-mavlinkinterface-equivalent) | 0 | Link engine, protocol machines | P0 | In progress | Differential vs C# |
 | [D5](#d5-vehicle-state-model--telemetry-bus) | 0 | Vehicle state snapshot bus | P0 | In progress | Differential vs C# |
 | [D6](#d6-ui-kit-on-gpui) | 1 | gpui widget kit | P0 | In progress | Unit |
 | [D7](#d7-gpu-render-core) | 1 | Shared wgpu render core | P0 | Spiked | Unit |
 | [D8](#d8-map-engine) | 2 | GPU slippy map engine | P0 | Spiked | Unit |
-| [D9](#d9-hud--primary-flight-display) | 2 | GPU HUD with video | P0 | Not started | Not started |
+| [D9](#d9-hud--primary-flight-display) | 2 | GPU HUD with video | P0 | In progress | Unit |
 | [D10](#d10-flight-data-screen) | 2 | Flight Data operations screen | P0 | Not started | Not started |
-| [D11](#d11-flight-planner-screen) | 2 | Mission and survey planner | P0 | Not started | Not started |
-| [D12](#d12-configuration--tuning-screens) | 2 | Parameter config and tuning | P1 | Not started | Not started |
+| [D11](#d11-flight-planner-screen) | 2 | Mission and survey planner | P0 | In progress | Differential vs C# |
+| [D12](#d12-configuration--tuning-screens) | 2 | Parameter config and tuning | P1 | In progress | Unit |
 | [D13](#d13-initial-setup-calibration-and-firmware) | 2 | Setup, calibration, firmware flashing | P1 | Not started | Not started |
-| [D14](#d14-log-engine-and-analysis) | 2 | Dataflash log parsing, plots | P1 | Not started | Not started |
+| [D14](#d14-log-engine-and-analysis) | 2 | Dataflash log parsing, plots | P1 | In progress | Unit |
 | [D15](#d15-can-peripherals-and-outboard-features) | 2 | DroneCAN, peripherals, video, joystick | P2 | Not started | Not started |
 | [D16](#d16-extension-and-scripting-system) | 2 | Python scripting, WASM extensions | P2 | Not started | Not started |
 | [D17](#d17-localization-settings-and-data-compatibility) | 2 | i18n, settings, data compatibility | P1 | Not started | Not started |

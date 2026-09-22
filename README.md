@@ -20,9 +20,12 @@ beginning.
 | Transports | serial, TCP, UDP, file replay, in-memory test doubles |
 | Link engine | I/O thread, multi-vehicle routing, stream requests, commands |
 | Vehicle state | lock-free snapshot bus, packet-loss tracking |
-| Logs | `.tlog` read and write, byte-compatible with Mission Planner |
-| CLI | `mpr watch | record | fly | ports` |
-| GUI | first gpui window |
+| Parameters | full download with gap recovery, typed values, 1,408 from SITL |
+| Missions | upload and download, `.waypoints` files, 129-file corpus |
+| Logs | `.tlog` read and write; ArduPilot `.BIN` dataflash parsing |
+| Geodesy | typed units, Web Mercator, slippy-map tile arithmetic |
+| CLI | `mpr watch \| record \| fly \| params \| mission \| ports` |
+| GUI | live telemetry, flight path map, primary flight display |
 
 ## Verification
 
