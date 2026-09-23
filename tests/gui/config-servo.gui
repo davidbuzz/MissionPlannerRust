@@ -98,11 +98,11 @@ expect params.value.SERVO9_REVERSED 0
 # The function: RCPassThru, then Disabled again. The list shows thirty rows and scrolls three a
 # wheel notch, as Mission Planner's drop-down scrolls; RCPassThru is row 96 of the fetched
 # documentation's list, which orders a SERVOn_FUNCTION's 128 values alphabetically after GPIO and
-# Disabled. Forty notches down stops at the end (row 98 on top), two up puts 92 on top and row 96
+# Disabled. Sixty notches down stops at the end (row 98 on top), two up puts 92 on top and row 96
 # in view.
 click servo-SERVO9_FUNCTION
 expect config.servo.list.top 0
-scroll servo-SERVO9_FUNCTION-list down 40
+scroll servo-SERVO9_FUNCTION-list down 60
 expect config.servo.list.top 98
 scroll servo-SERVO9_FUNCTION-list up 2
 expect config.servo.list.top 92

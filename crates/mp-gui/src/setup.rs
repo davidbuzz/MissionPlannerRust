@@ -961,6 +961,9 @@ impl MissionPlanner {
                     crate::metadata::lookup,
                 );
             }
+            // Every time, as `ActivatePage` calls it.
+            // C#: GCSViews/ConfigurationView/ConfigPlanner.cs:55-256
+            Some("ConfigPlanner") => self.planner_activate(),
             _ => {}
         }
     }
@@ -1014,6 +1017,8 @@ impl MissionPlanner {
             Some("ConfigESCCalibration") => {
                 self.esc_calibration.hide(std::time::Instant::now());
             }
+            // `ConfigPlanner` is `IActivate` only: hidden, its boxes put away.
+            Some("ConfigPlanner") if self.planner.is_active() => self.planner.deactivate(),
             _ => {}
         }
     }
@@ -1169,6 +1174,8 @@ impl MissionPlanner {
                 .child(crate::joystick::panel_for(view, &self.sticks, cx))
                 .into_any_element(),
             "ConfigRawParams" => self.params_body(view, window, cx),
+            // C#: GCSViews/ConfigurationView/ConfigPlanner.Designer.cs:29-994; ConfigPlanner.resx
+            "ConfigPlanner" => self.planner_page(view, window, cx),
             _ => return None,
         })
     }

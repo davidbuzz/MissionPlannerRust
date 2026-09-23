@@ -306,6 +306,9 @@ struct MissionPlanner {
     /// Initial Setup's ESC Calibration page, and the focus of the number being typed into.
     esc_calibration: config::esc_calibration::EscCalibration,
     esc_focus: gpui::FocusHandle,
+    /// CONFIG's Planner page, and its boxes' focus.
+    planner: config::planner::Planner,
+    planner_focus: config::planner::Focus,
 }
 
 impl MissionPlanner {
@@ -382,7 +385,10 @@ impl MissionPlanner {
                 .or_else(|| settings::Settings::load().tile_source)
                 .and_then(|id| mp_tiles::source::source_by_id(&id))
                 .unwrap_or_else(mp_tiles::source::default_source);
-            let store = if std::env::var("MP_OFFLINE").is_ok() {
+            // `mapCache`, the Planner page's Map Access Mode. `// C#: Program.cs:321-325`
+            let store = if std::env::var("MP_OFFLINE").is_ok()
+                || config::planner::cache_only(&settings::Settings::load())
+            {
                 TileStore::offline(source, cache)
             } else {
                 TileStore::new(source, cache)
@@ -406,7 +412,10 @@ impl MissionPlanner {
         let mut this = Self {
             telemetry,
             map: std::rc::Rc::new(std::cell::RefCell::new(map)),
-            auto_read_mission: read_mission,
+            // `loadwpsonconnect`, the Planner page's Load Waypoints on connect.
+            // `// C#: MainV2.cs:1750-1759`
+            auto_read_mission: read_mission
+                || config::planner::load_wps_on_connect(&settings::Settings::load()),
             mission_requested: false,
             screen,
             plan,
@@ -488,6 +497,8 @@ impl MissionPlanner {
             serial_ports: config::serial_ports::SerialPorts::default(),
             esc_calibration: config::esc_calibration::EscCalibration::default(),
             esc_focus: cx.focus_handle(),
+            planner: config::planner::Planner::new(&settings::Settings::load()),
+            planner_focus: config::planner::Focus::new(cx),
         };
         // Opening on the planning screen activates it, as switching to it does.
         if this.screen == Screen::Plan {
@@ -746,11 +757,12 @@ impl MissionPlanner {
             return;
         }
         let cache = TileCache::new(TileCache::default_root());
-        let store = if std::env::var("MP_OFFLINE").is_ok() {
-            TileStore::offline(source, cache)
-        } else {
-            TileStore::new(source, cache)
-        };
+        let store =
+            if std::env::var("MP_OFFLINE").is_ok() || config::planner::cache_only(&self.settings) {
+                TileStore::offline(source, cache)
+            } else {
+                TileStore::new(source, cache)
+            };
         self.map.borrow_mut().set_tiles(std::sync::Arc::new(store));
         // `Settings.Instance["MapType"] = comboBoxMapType.Text`, saved with the rest later.
         self.persisted.map_type_changed(source);
@@ -1600,6 +1612,8 @@ impl Render for MissionPlanner {
         // and its Spin write.
         self.motor_test
             .tick(&self.telemetry, self.motor_focus.focused(window));
+        // The Planner page's number boxes validated as the focus leaves them.
+        self.planner_tick(window);
         // The Compass page's writes and commands, its calibration timer, and its boxes, which
         // take the keyboard while they show.
         self.compass.tick(
@@ -1848,6 +1862,7 @@ impl Render for MissionPlanner {
             config::servo_output::record_facts(&self.servo_output, &view);
             config::serial_ports::record_facts(&self.serial_ports, &view);
             config::esc_calibration::record_facts(&self.esc_calibration, &view);
+            config::planner::record_facts(&self.planner, &self.settings, self.auto_read_mission);
             facts::publish();
             // The harness's work, which a normal run does not do, is not the frame's.
             storm::exclude(harness.elapsed());

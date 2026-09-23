@@ -46,6 +46,16 @@ pub struct Settings {
     /// `MAV_FRAME` number so a hand-edited settings file is readable, and so a number that stops
     /// meaning what it did cannot silently change the frame a mission is planned in.
     pub altitude_frame: Option<String>,
+    // ConfigPlanner keys
+    /// `Settings.Instance[key]` for the keys the CONFIG screen's Planner page reads and writes
+    /// ([`PLANNER_KEYS`]), under the C#'s own names and as the C# stores them - `True`/`False`,
+    /// numbers as text - so each one is the same entry in Mission Planner's `config.xml`.
+    /// Written to this file.
+    pub planner: BTreeMap<String, String>,
+    /// The same keys as Mission Planner's `config.xml` holds them, which `planner` falls back to:
+    /// the C#'s `Settings.Instance` is that file. Read, never written here.
+    pub planner_mission_planner: BTreeMap<String, String>,
+    // end ConfigPlanner keys
 }
 
 impl Settings {
@@ -102,6 +112,16 @@ impl Settings {
                 .and_then(mp_tiles::source::source_by_name)
                 .map(|source| source.id.to_owned());
         }
+        // ConfigPlanner keys
+        self.planner_mission_planner = PLANNER_KEYS
+            .iter()
+            .filter_map(|key| {
+                config
+                    .get(key)
+                    .map(|value| ((*key).to_owned(), value.to_owned()))
+            })
+            .collect();
+        // end ConfigPlanner keys
         self
     }
 
@@ -129,6 +149,22 @@ impl Settings {
                 .filter(|value| !value.is_empty())
         };
 
+        // ConfigPlanner keys: the value as written, less the space `render` puts after the `=`
+        // but not the end of the line - a speech template can end in a space, as the C#'s
+        // `speechcustom` default does (`ConfigPlanner.cs:486`).
+        let mut planner = BTreeMap::new();
+        for line in text.lines() {
+            let Some((key, value)) = line.split_once('=') else {
+                continue;
+            };
+            let key = key.trim();
+            if PLANNER_KEYS.contains(&key) {
+                let value = value.trim_start();
+                planner.insert(key.to_owned(), value.to_owned());
+            }
+        }
+        // end ConfigPlanner keys
+
         Self {
             link: non_empty("link"),
             tile_source: non_empty("tile_source"),
@@ -136,6 +172,8 @@ impl Settings {
             screen: non_empty("screen"),
             plan_directory: non_empty("plan_directory"),
             altitude_frame: non_empty("altitude_frame"),
+            planner,
+            planner_mission_planner: BTreeMap::new(),
         }
     }
 
@@ -170,6 +208,11 @@ impl Settings {
         if let Some(directory) = &self.plan_directory {
             write("plan_directory", directory);
         }
+        // ConfigPlanner keys
+        for (key, value) in &self.planner {
+            write(key, value);
+        }
+        // end ConfigPlanner keys
         out
     }
 
@@ -499,6 +542,111 @@ fn read_config(path: &Path) -> Result<mp_settings::Config, String> {
     }
     mp_settings::Config::parse(&text).map_err(|err| err.to_string())
 }
+// ConfigPlanner keys
+/// Every `Settings.Instance` key `ConfigPlanner` reads or writes, by the C#'s name. The Planner
+/// page (`config/planner.rs`) reads each through [`Settings::planner_get`] and writes it through
+/// [`Settings::planner_set`]; keys the C# spells two ways (`GMapMarkerBase_Length` read,
+/// `GMapMarkerBase_length` written) are both here, as the C# has both.
+/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:47-1166`
+pub const PLANNER_KEYS: &[&str] = &[
+    // C#: ConfigPlanner.cs:95-102, 413
+    "severity",
+    // C#: ConfigPlanner.cs:148-166
+    "speechenable",
+    "speechwaypointenabled",
+    "speechmodeenabled",
+    "speechcustomenabled",
+    "speechbatteryenabled",
+    "speechaltenabled",
+    "speecharmenabled",
+    "speechlowspeedenabled",
+    "beta_updates",
+    "password_protect",
+    "showairports",
+    "enableadsb",
+    "norcreceiver",
+    "showtfr",
+    "autoParamCommit",
+    "ShowNoFly",
+    "Params_BG",
+    "SlowMachine",
+    "speech_armed_only",
+    // C#: ConfigPlanner.cs:169, 690
+    "NUM_tracklength",
+    // C#: ConfigPlanner.cs:172-176
+    "loadwpsonconnect",
+    "CHK_resetapmonconnect",
+    "CHK_rtsresetesp32",
+    // C#: ConfigPlanner.cs:573-640, by each combo's `Name`
+    "CMB_rateattitude",
+    "CMB_rateposition",
+    "CMB_ratestatus",
+    "CMB_raterc",
+    "CMB_ratesensors",
+    // C#: ConfigPlanner.cs:184-189
+    "analyticsoptout",
+    "CHK_GDIPlus",
+    "CHK_maprotation",
+    "CHK_disttohomeflightdata",
+    // C#: ConfigPlanner.cs:194
+    "hudcolor",
+    // C#: ConfigPlanner.cs:208-213
+    "distunits",
+    "speedunits",
+    "altunits",
+    // `Settings.LogDir`. C#: ConfigPlanner.cs:235, 792; ExtLibs/Utilities/Settings.cs:127-140
+    "logdirectory",
+    // C#: ConfigPlanner.cs:238-244, 1079-1159
+    "GMapMarkerBase_DisplayCOG",
+    "GMapMarkerBase_DisplayHeading",
+    "GMapMarkerBase_DisplayNavBearing",
+    "GMapMarkerBase_DisplayRadius",
+    "GMapMarkerBase_DisplayTarget",
+    "mapicondesc",
+    "mapicondesc_default",
+    "GMapMarkerBase_Length",
+    "GMapMarkerBase_length",
+    "GMapMarkerBase_InactiveDisplayStyle",
+    // C#: ConfigPlanner.cs:249, 1165
+    "mapCache",
+    // The speech templates and levels. C#: ConfigPlanner.cs:442-549, 660-686, 811-916
+    "speechwaypoint",
+    "speechmode",
+    "speechcustom",
+    "speechbattery",
+    "speechbatteryvolt",
+    "speechbatterypercent",
+    "speechalt",
+    "speechaltheight",
+    "speecharm",
+    "speechdisarm",
+    "speechlowgroundspeed",
+    "speechlowgroundspeedtrigger",
+    "speechlowairspeed",
+    "speechlowairspeedtrigger",
+    // C#: ConfigPlanner.cs:1060; MainV2.cs:683
+    "gcsid",
+    // `ThemeManager.thmColor.strThemeName`, which CMB_theme shows. C#: Utilities/ThemeManager.cs:287
+    "theme",
+];
+
+impl Settings {
+    /// `Settings.Instance[key]`: this file's value, else Mission Planner's, else `null`.
+    /// `// C#: ExtLibs/Utilities/Settings.cs:49-62`
+    #[must_use]
+    pub fn planner_get(&self, key: &str) -> Option<&str> {
+        self.planner
+            .get(key)
+            .or_else(|| self.planner_mission_planner.get(key))
+            .map(String::as_str)
+    }
+
+    /// `Settings.Instance[key] = value`.
+    pub fn planner_set(&mut self, key: &str, value: impl Into<String>) {
+        self.planner.insert(key.to_owned(), value.into());
+    }
+}
+// end ConfigPlanner keys
 
 /// Parses a `WIDTHxHEIGHT` size.
 fn parse_size(value: &str) -> Option<(u32, u32)> {
@@ -1004,9 +1152,52 @@ mod tests {
             screen: Some("plan".to_owned()),
             plan_directory: Some("/home/pilot/missions".to_owned()),
             altitude_frame: Some("terrain".to_owned()),
+            ..Settings::default()
         };
         assert_eq!(Settings::parse(&settings.render()), settings);
     }
+
+    // ConfigPlanner keys
+    #[test]
+    fn the_planner_keys_round_trip_with_a_templates_trailing_space() {
+        let mut settings = Settings::default();
+        settings.planner_set("distunits", "Feet");
+        settings.planner_set("CMB_rateattitude", "10");
+        // `speechcustom`'s default ends in a space. C#: ConfigPlanner.cs:486
+        settings.planner_set(
+            "speechcustom",
+            "Heading to Waypoint {wpn}, altitude is {alt}, Ground speed is {gsp} ",
+        );
+        let text = settings.render();
+        assert!(text.contains("distunits = Feet\n"), "{text}");
+        let back = Settings::parse(&text);
+        assert_eq!(back, settings);
+        assert_eq!(
+            back.planner_get("speechcustom"),
+            Some("Heading to Waypoint {wpn}, altitude is {alt}, Ground speed is {gsp} ")
+        );
+        // A key the page does not use is not taken as one of its keys.
+        assert!(Settings::parse("MapType = Bing\n").planner.is_empty());
+    }
+
+    #[test]
+    fn a_planner_key_falls_back_to_mission_planners_config() {
+        let mut theirs = mp_settings::Config::default();
+        theirs.set("distunits", "Feet");
+        theirs.set("severity", "3");
+        theirs.set("comport", "TCP");
+        let mut settings = Settings::default().with_mission_planner_defaults(Some(&theirs));
+        assert_eq!(settings.planner_get("distunits"), Some("Feet"));
+        assert_eq!(settings.planner_get("severity"), Some("3"));
+        assert_eq!(settings.planner_get("altunits"), None);
+        // This file's own value wins, and only its own values are written.
+        settings.planner_set("distunits", "Meters");
+        assert_eq!(settings.planner_get("distunits"), Some("Meters"));
+        let text = settings.render();
+        assert!(text.contains("distunits = Meters"), "{text}");
+        assert!(!text.contains("severity"), "{text}");
+    }
+    // end ConfigPlanner keys
 
     #[test]
     fn an_empty_file_yields_defaults() {

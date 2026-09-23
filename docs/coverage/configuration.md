@@ -4,12 +4,12 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui c
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 6 | 10 | 39 | 2 | 4 | 569 |
+| 61 | 6 | 11 | 38 | 2 | 4 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 6 | 9 | 27 | 2 | 0 | 258 | 147 |
-| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 0 | 1 | 12 | 0 | 0 | 277 | 255 |
+| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 0 | 2 | 11 | 0 | 0 | 277 | 191 |
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 | 0 |
 
 The lists also add 4 pages that are not in `ConfigurationView/` (`Sikradio`, `JoystickSetup`, `TrackerUI`, `MavFTPUI`): 0 done, 1 partial, 3 missing, 0 plumbing, 0 dropped. They are in the lists below and not in the counts above.
@@ -19,7 +19,6 @@ The largest missing panels, by wirings:
 | panel | title | wirings |
 |---|---|---:|
 | `ConfigArducopter` | Extended Tuning | 128 |
-| `ConfigPlanner` | Planner | 64 |
 | `ConfigArduplane` | Basic Tuning | 47 |
 | `ConfigSerialInjectGPS` | RTK/GPS Inject | 24 |
 | `ConfigFirmware` | Install Firmware Legacy | 20 |
@@ -30,6 +29,7 @@ The largest missing panels, by wirings:
 | `ConfigBatteryMonitoring2` | Battery Monitor 2 | 10 |
 | `ConfigAteryx` | Ateryx Pids | 8 |
 | `ConfigADSB` | ADSB | 5 |
+| `ConfigMount` | Camera Gimbal | 5 |
 
 Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConnected && gotAllParams`); **always** is connected or not; **connected** and **disconnected** are the link alone; a named vehicle, parameter or view is what the call, or the `if` around it, checks. **Advanced view** is `DisplayView.isAdvancedMode`. A page with a `DisplayView` switch also needs it on, which it is by default unless the vehicles say otherwise. The list shows a heading as `>> title` and indents what is under it (`ExtLibs/Controls/BackstageView/BackstageView.cs:227`, `:232`).
 
@@ -107,7 +107,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConne
 | 237 | `ConfigAteryx` | Ateryx Pids |  | Ateryx | 8 | **missing** |
 | 243 | `ConfigParamLoading` | Loading |  | connected, parameters still arriving | 2 | as at `GCSViews/InitialSetup.cs:162` |
 | 245 | `ConfigParamLoading` | Loading |  | connected, parameters still arriving | 2 | as at `GCSViews/InitialSetup.cs:162` |
-| 250 | `ConfigPlanner` | Planner |  | connected | 64 | **missing** |
+| 250 | `ConfigPlanner` | Planner |  | connected | 64 | partial: `crates/mp-gui/src/config/planner.rs` `fn planner_page` - every control at its place, each bound to the Settings key its handler writes; the units (ChangeUnits), the telemetry rates and their stream requests, the speech boxes and their InputBox templates, Load Waypoints on connect, the map access mode, Joystick Setup, Browse and Open Map Cache act at once; dimmed for want of what they drive: video, the HUD overlay, GDI+, language, theme, Layout, OSD colour, Vario, password, the ADSB server, analytics, beta updates, MAVLink debug and the testing screen; the flight screen does not yet read the units, the track length, the map's rotation or the icon settings, nor the link the GCS id or the rates on connecting |
 | 257 | `ConfigPlanner` | Planner |  | disconnected | 64 | as at `GCSViews/SoftwareConfig.cs:250` |
 
 ## Neither list

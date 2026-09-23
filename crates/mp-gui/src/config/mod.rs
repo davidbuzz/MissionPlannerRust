@@ -6,6 +6,7 @@ pub mod firmware;
 pub mod flight_modes;
 pub mod frame_type;
 pub mod motor_test;
+pub mod planner;
 pub mod radio;
 pub mod serial_ports;
 pub mod servo_output;

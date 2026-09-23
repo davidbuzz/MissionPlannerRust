@@ -1,0 +1,161 @@
+# CONFIG's Planner page, ported from GCSViews/ConfigurationView/ConfigPlanner.cs.
+#
+# The claim: disconnected, SoftwareConfig lists the Planner page as the one to open first
+# (SoftwareConfig.cs:257), and Activate fills every control from Settings.Instance - writing the
+# severity's default and the aircraft icon's keys as it does (ConfigPlanner.cs:95-103, 238-244).
+# Each control writes the key its handler writes, under the C#'s own name (config.planner.<key>),
+# and the ones that act at once act: the unit combos run ChangeUnits (config.planner.units.*,
+# MainV2.cs:4247-4330), a telemetry rate sets cs.rate (config.planner.rates), Enable Speech shows
+# the speech boxes and each speech box asks for its templates in the C#'s InputBoxes
+# (ConfigPlanner.cs:380-550), Map is rotated unticks No Fly (:755-765), Load Waypoints on connect
+# sets the read on connect (MainV2.cs:1750-1759), and Joystick Setup opens the joystick page
+# (:552-555). The dimmed controls - video, theme, language, GDI+ and the rest - do nothing.
+#
+# No link is needed: the rates' stream requests are proved against a scripted vehicle by the unit
+# tests in crates/mp-gui/src/config/planner.rs; here, with no vehicle, none is sent. Mission
+# Planner's own config.xml is kept out of it by pointing the user data directory at a scratch one,
+# so every key starts unset. Run as
+#
+#   tools/gui-test.sh tests/gui/config-planner.gui
+
+screen config
+window 1600x1200
+env XDG_DATA_HOME $WORK
+settle 4
+
+expect config.page ConfigPlanner
+expect config.title Planner
+expect config.planner.active true
+expect config.planner.dimmed CHK_hudshow,CHK_GDIPlus,CHK_Password,chk_ADSB,chk_analytics,CHK_beta,CHK_mavdebug,chk_temp,CMB_videosources,CMB_videoresolutions,CMB_osdcolor,CMB_language,CMB_theme,CMB_Layout,BUT_videostart,BUT_videostop,BUT_themecustom,BUT_Vario
+
+# What Activate did with nothing set: Warning chosen and written, the icon's five boxes ticked and
+# written True, the line length read as GMapMarkerBase_Length and written as GMapMarkerBase_length.
+expect config.planner.severity 4
+expect config.planner.combo.CMB_severity Warning
+expect config.planner.GMapMarkerBase_DisplayCOG True
+expect config.planner.GMapMarkerBase_DisplayTarget True
+expect config.planner.GMapMarkerBase_length 500
+expect config.planner.number.num_linelength 500
+expect config.planner.number.NUM_tracklength 200
+expect config.planner.number.num_gcsid 255
+expect config.planner.combo.CMB_Layout Advanced
+expect config.planner.combo.CMB_mapCache ServerAndCache
+expect config.planner.cacheonly false
+expect config.planner.saved ok
+
+# The units: none set, so the combos show their first items and ChangeUnits gives metres.
+expect config.planner.distunits none
+expect config.planner.combo.CMB_distunits Meters
+expect config.planner.units.dist m
+expect config.planner.units.alt m
+expect config.planner.units.speed m/s
+click planner-CMB_distunits
+expect config.planner.dropdown CMB_distunits
+click planner-CMB_distunits-Feet
+expect config.planner.dropdown none
+expect config.planner.distunits Feet
+expect config.planner.combo.CMB_distunits Feet
+expect config.planner.units.dist ft
+expect config.planner.units.alt m
+click planner-CMB_altunits
+click planner-CMB_altunits-Feet
+expect config.planner.altunits Feet
+expect config.planner.units.alt ft
+click planner-CMB_speedunits
+click planner-CMB_speedunits-knots
+expect config.planner.speedunits knots
+expect config.planner.units.speed kts
+
+# A telemetry rate: the combo's name is the key, cs.rateattitude follows, and with no vehicle
+# nothing goes on the wire.
+expect config.planner.combo.CMB_rateattitude 4
+expect config.planner.rates 4,2,2,2,2
+click planner-CMB_rateattitude
+click planner-CMB_rateattitude-10
+expect config.planner.CMB_rateattitude 10
+expect config.planner.combo.CMB_rateattitude 10
+expect config.planner.rates 10,2,2,2,2
+expect config.planner.streams none
+
+# Speech: the boxes are hidden until it is enabled.
+expect config.planner.check.CHK_speechwaypoint hidden
+click planner-CHK_enablespeech
+expect config.planner.speechenable True
+expect config.planner.check.CHK_speechwaypoint false
+# Waypoint asks for its template, starting from the C#'s; OK writes it.
+click planner-CHK_speechwaypoint
+expect config.planner.speechwaypointenabled True
+expect config.planner.prompt ~ Notification: What do you want it to say
+expect config.planner.prompt.text Heading to Waypoint {wpn}
+key Return
+expect config.planner.prompt none
+expect config.planner.speechwaypoint Heading to Waypoint {wpn}
+# Mode, typed over.
+click planner-CHK_speechmode
+expect config.planner.prompt.text Mode changed to {mode}
+key ctrl+u
+type Now in {mode}
+key Return
+expect config.planner.speechmode Now in {mode}
+# Battery Warning asks three times; a Cancel on the second ends the handler.
+click planner-CHK_speechbattery
+key Return
+expect config.planner.speechbattery WARNING, Battery at {batv} Volt, {batp} percent
+expect config.planner.prompt ~ Battery Level: What Voltage do you want to warn at
+expect config.planner.prompt.text 9.6
+click planner-prompt-cancel
+expect config.planner.prompt none
+expect config.planner.speechbatteryvolt none
+expect config.planner.check.CHK_speechbattery true
+
+# Map is rotated to follow the plane unticks No Fly, and both are written.
+expect config.planner.check.chk_shownofly true
+click planner-CHK_maprotation
+expect config.planner.CHK_maprotation True
+expect config.planner.check.chk_shownofly false
+expect config.planner.ShowNoFly False
+
+# The track length steps by its increment of 100 and is written as it changes.
+click planner-NUM_tracklength-up
+expect config.planner.number.NUM_tracklength 300
+expect config.planner.NUM_tracklength 300
+
+# Load Waypoints on connect: the key, and the read on connect it stands for.
+expect config.planner.readmissiononconnect false
+click planner-CHK_loadwponconnect
+expect config.planner.loadwpsonconnect True
+expect config.planner.readmissiononconnect true
+
+# The inactive aircraft style and the map access mode.
+click planner-cmb_secondarydisplaystyle
+click planner-cmb_secondarydisplaystyle-Transparent
+expect config.planner.GMapMarkerBase_InactiveDisplayStyle Transparent
+click planner-CMB_mapCache
+click planner-CMB_mapCache-CacheOnly
+expect config.planner.mapCache CacheOnly
+expect config.planner.cacheonly true
+
+# A dimmed box takes no click.
+click planner-CHK_GDIPlus
+expect config.planner.CHK_GDIPlus none
+expect config.planner.check.CHK_GDIPlus false
+
+# Joystick Setup opens the joystick page in a window of its own, over this one.
+click planner-BUT_Joystick
+expect config.planner.joystick true
+click planner-joystick-close
+expect config.planner.joystick false
+expect config.planner.saved ok
+
+# Leaving CONFIG and coming back opens the page again, as it was left.
+click tab-fly
+expect config.planner.active false
+click tab-config
+settle 1
+expect config.page ConfigPlanner
+expect config.planner.active true
+expect config.planner.combo.CMB_distunits Feet
+expect config.planner.combo.CMB_speedunits knots
+expect config.planner.units.alt ft
+expect config.planner.check.CHK_speechwaypoint true
+expect config.planner.check.CHK_maprotation true

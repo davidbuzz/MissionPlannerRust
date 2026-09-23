@@ -766,7 +766,19 @@ pub const PANELS: &[Panel] = &[
             config(250, "Planner", CONNECTED),
             config(257, "Planner", DISCONNECTED),
         ],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigPlanner.cs:26-1192 - every control at its .resx
+        // place, bound to the Settings key its handler writes.
+        Partial(
+            at("crates/mp-gui/src/config/planner.rs", "fn planner_page"),
+            "every control at its place, each bound to the Settings key its handler writes; the \
+             units (ChangeUnits), the telemetry rates and their stream requests, the speech boxes \
+             and their InputBox templates, Load Waypoints on connect, the map access mode, \
+             Joystick Setup, Browse and Open Map Cache act at once; dimmed for want of what they \
+             drive: video, the HUD overlay, GDI+, language, theme, Layout, OSD colour, Vario, \
+             password, the ADSB server, analytics, beta updates, MAVLink debug and the testing \
+             screen; the flight screen does not yet read the units, the track length, the map's \
+             rotation or the icon settings, nor the link the GCS id or the rates on connecting",
+        ),
     ),
     // ---- Neither list adds these ----
     panel(
@@ -1576,7 +1588,7 @@ mod tests {
             );
             checked += 1;
         }
-        assert_eq!(checked, 17);
+        assert_eq!(checked, 18);
     }
 
     /// The committed report matches the table.
@@ -1608,7 +1620,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (6, 10, 39, 2, 4)
+            (6, 11, 38, 2, 4)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()
