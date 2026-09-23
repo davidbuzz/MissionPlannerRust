@@ -13,8 +13,10 @@ pub mod cache;
 pub mod fetch;
 pub mod policy;
 pub mod source;
+pub mod store;
 
 pub use cache::{CacheError, CacheUsage, CachedTile, ImageFormat, TileCache};
 pub use fetch::{FetchError, TileFetcher};
 pub use policy::{Decision, FetchPolicy};
 pub use source::{OPENSTREETMAP, OPENTOPOMAP, SOURCES, TileSource, source_by_id};
+pub use store::{DecodedTile, StoreStats, TileAnswer, TileStore};

@@ -34,6 +34,9 @@ anyhow = "1"
 # rustls rather than the system TLS, so a Windows build needs no extra toolchain and a Linux one
 # needs no OpenSSL headers.
 ureq = { version = "3", default-features = false, features = ["rustls"] }
+# Tile decoding. Only the two formats raster providers actually serve; the rest of the crate's
+# decoders are attack surface for a ground station that will be pointed at arbitrary URLs.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 [workspace.lints.rust]
 unsafe_code = "deny"

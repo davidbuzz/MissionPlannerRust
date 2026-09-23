@@ -1,0 +1,432 @@
+//! The store the map talks to.
+//!
+//! One rule governs the design: **a render pass never waits**. It asks for a tile and gets an
+//! answer immediately - the tile, an ancestor to scale up in its place, or nothing. Everything
+//! slow happens on a thread of its own.
+//!
+//! That is why tiles are decoded here rather than by the caller. Decoding a 256x256 PNG takes
+//! around a millisecond, which is most of a frame at 120 Hz; doing it in the painter would make
+//! the map stutter every time a tile arrived, which is exactly when it must not.
+
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::{Duration, Instant};
+
+use mp_units::TileId;
+
+use crate::cache::TileCache;
+use crate::fetch::TileFetcher;
+use crate::policy::{Decision, FetchPolicy};
+use crate::source::TileSource;
+
+/// How long a fetch may be outstanding before its slot is reclaimed.
+const FETCH_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// How many decoded tiles to keep in memory.
+///
+/// A 256x256 RGBA tile is 256 KiB, so this is about 64 MiB. A 1600x1200 window shows around forty
+/// tiles, so this holds several screenfuls - enough that panning back and forth is instant, and
+/// bounded so that an hour of panning does not consume the machine.
+pub const MEMORY_TILES: usize = 256;
+
+/// How far up the pyramid to look for a stand-in while a tile loads.
+///
+/// Four levels means a sixteenth-scale ancestor at worst, which is blurry but recognisable. Going
+/// further gives a stand-in so coarse it misleads more than it helps.
+pub const MAX_ANCESTOR_DEPTH: u8 = 4;
+
+/// A decoded tile, ready to upload to the GPU.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedTile {
+    /// Width in pixels, normally 256.
+    pub width: u32,
+    /// Height in pixels, normally 256.
+    pub height: u32,
+    /// Straight RGBA, eight bits per channel, not premultiplied.
+    pub rgba: Vec<u8>,
+}
+
+impl DecodedTile {
+    /// Decodes an encoded tile.
+    ///
+    /// Only PNG and JPEG are enabled in the decoder. A ground station is pointed at whatever URL
+    /// the operator configures, and every other format is attack surface for no benefit.
+    #[must_use]
+    pub fn decode(bytes: &[u8]) -> Option<Self> {
+        let image = image::load_from_memory(bytes).ok()?;
+        let rgba = image.to_rgba8();
+        Some(Self {
+            width: rgba.width(),
+            height: rgba.height(),
+            rgba: rgba.into_raw(),
+        })
+    }
+}
+
+/// What the map got when it asked for a tile.
+#[derive(Debug, Clone)]
+pub enum TileAnswer {
+    /// The tile itself.
+    Exact(Arc<DecodedTile>),
+    /// An ancestor, to be drawn scaled up until the real one arrives.
+    ///
+    /// Carries which ancestor it is so the caller can work out which part of it to draw: the tile
+    /// asked for occupies one 2^n-th of it.
+    Ancestor {
+        /// The ancestor that was found.
+        id: TileId,
+        /// Its pixels.
+        tile: Arc<DecodedTile>,
+    },
+    /// Nothing yet.
+    Missing,
+}
+
+/// Counters, for the status line and for tests.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct StoreStats {
+    /// Answered from memory.
+    pub memory_hits: u64,
+    /// Answered from disk.
+    pub disk_hits: u64,
+    /// Answered with an ancestor.
+    pub ancestor_hits: u64,
+    /// Not answered at all.
+    pub misses: u64,
+    /// Tiles fetched over the network.
+    pub fetched: u64,
+    /// Fetches that failed.
+    pub failed: u64,
+}
+
+/// Shared between the map and the fetch thread.
+#[derive(Debug)]
+struct Shared {
+    memory: Mutex<Memory>,
+    policy: Mutex<FetchPolicy>,
+    queue: Mutex<Vec<TileId>>,
+    wake: Condvar,
+    running: AtomicBool,
+    stats: Mutex<StoreStats>,
+    /// Bumped whenever a tile arrives, so the UI knows to repaint without polling every tile.
+    generation: AtomicU64,
+}
+
+/// The in-memory tiles, with a least-recently-used order.
+#[derive(Debug, Default)]
+struct Memory {
+    tiles: HashMap<TileId, Arc<DecodedTile>>,
+    /// Least recently used first. Small enough that a Vec beats a linked structure.
+    order: Vec<TileId>,
+}
+
+impl Memory {
+    fn get(&mut self, tile: TileId) -> Option<Arc<DecodedTile>> {
+        let found = self.tiles.get(&tile).map(Arc::clone)?;
+        if let Some(position) = self.order.iter().position(|held| *held == tile) {
+            let id = self.order.remove(position);
+            self.order.push(id);
+        }
+        Some(found)
+    }
+
+    /// Looks without disturbing the order, for the ancestor search.
+    ///
+    /// An ancestor consulted as a stand-in is not the tile the operator wants; promoting it would
+    /// evict the tiles they do want.
+    fn peek(&self, tile: TileId) -> Option<Arc<DecodedTile>> {
+        self.tiles.get(&tile).map(Arc::clone)
+    }
+
+    fn insert(&mut self, tile: TileId, decoded: Arc<DecodedTile>) {
+        if self.tiles.insert(tile, decoded).is_none() {
+            self.order.push(tile);
+        }
+        while self.order.len() > MEMORY_TILES {
+            if self.order.is_empty() {
+                break;
+            }
+            let evicted = self.order.remove(0);
+            self.tiles.remove(&evicted);
+        }
+    }
+}
+
+/// Serves tiles to the map.
+#[derive(Debug)]
+pub struct TileStore {
+    shared: Arc<Shared>,
+    cache: TileCache,
+    source: &'static TileSource,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl TileStore {
+    /// Starts a store with a fetch thread.
+    #[must_use]
+    pub fn new(source: &'static TileSource, cache: TileCache) -> Self {
+        Self::start(source, cache, FetchPolicy::new(), true)
+    }
+
+    /// A store that never fetches, for offline use and for tests.
+    ///
+    /// Still serves everything already cached, which is what "full function with the network
+    /// disabled" has to mean: a survey flown from a cache filled at home works in a paddock.
+    #[must_use]
+    pub fn offline(source: &'static TileSource, cache: TileCache) -> Self {
+        Self::start(source, cache, FetchPolicy::offline(), false)
+    }
+
+    fn start(
+        source: &'static TileSource,
+        cache: TileCache,
+        policy: FetchPolicy,
+        spawn: bool,
+    ) -> Self {
+        let shared = Arc::new(Shared {
+            memory: Mutex::new(Memory::default()),
+            policy: Mutex::new(policy),
+            queue: Mutex::new(Vec::new()),
+            wake: Condvar::new(),
+            running: AtomicBool::new(true),
+            stats: Mutex::new(StoreStats::default()),
+            generation: AtomicU64::new(0),
+        });
+
+        let thread = spawn.then(|| {
+            let thread_shared = Arc::clone(&shared);
+            let thread_cache = cache.clone();
+            std::thread::Builder::new()
+                .name("mp-tiles".to_owned())
+                .spawn(move || run_fetcher(source, &thread_cache, &thread_shared))
+                .ok()
+        });
+
+        Self {
+            shared,
+            cache,
+            source,
+            thread: thread.flatten(),
+        }
+    }
+
+    /// The provider being shown.
+    #[must_use]
+    pub const fn source(&self) -> &'static TileSource {
+        self.source
+    }
+
+    /// Bumped whenever a tile arrives. A UI can repaint when it changes rather than polling.
+    #[must_use]
+    pub fn generation(&self) -> u64 {
+        self.shared.generation.load(Ordering::Acquire)
+    }
+
+    /// Counters.
+    #[must_use]
+    pub fn stats(&self) -> StoreStats {
+        self.shared.stats.lock().map(|s| *s).unwrap_or_default()
+    }
+
+    /// Whether fetching is switched off.
+    #[must_use]
+    pub fn is_offline(&self) -> bool {
+        self.shared
+            .policy
+            .lock()
+            .map(|policy| policy.is_offline())
+            .unwrap_or(true)
+    }
+
+    /// Asks for a tile. Never blocks on I/O.
+    ///
+    /// A miss queues a fetch and answers with the best ancestor already held, so the map fills in
+    /// progressively from coarse to fine rather than appearing blank and then snapping.
+    pub fn get(&self, tile: TileId) -> TileAnswer {
+        // Memory first: the common case, and the only one on the hot path of a pan.
+        if let Ok(mut memory) = self.shared.memory.lock()
+            && let Some(found) = memory.get(tile)
+        {
+            self.bump(|stats| stats.memory_hits += 1);
+            return TileAnswer::Exact(found);
+        }
+
+        // Then disk. Reading and decoding here would block the render thread, so it is queued for
+        // the fetch thread, which checks the cache before the network.
+        self.request(tile);
+
+        match self.best_ancestor(tile) {
+            Some((id, found)) => {
+                self.bump(|stats| stats.ancestor_hits += 1);
+                TileAnswer::Ancestor { id, tile: found }
+            }
+            None => {
+                self.bump(|stats| stats.misses += 1);
+                TileAnswer::Missing
+            }
+        }
+    }
+
+    /// The nearest ancestor already in memory.
+    fn best_ancestor(&self, tile: TileId) -> Option<(TileId, Arc<DecodedTile>)> {
+        let Ok(memory) = self.shared.memory.lock() else {
+            return None;
+        };
+        let mut ancestor = tile;
+        for _ in 0..MAX_ANCESTOR_DEPTH {
+            ancestor = ancestor.parent()?;
+            if let Some(found) = memory.peek(ancestor) {
+                return Some((ancestor, found));
+            }
+        }
+        None
+    }
+
+    /// Queues a tile, if the policy allows and it is not already queued.
+    fn request(&self, tile: TileId) {
+        if self.source.url_for(tile).is_none() {
+            return;
+        }
+        let Ok(mut queue) = self.shared.queue.lock() else {
+            return;
+        };
+        if queue.contains(&tile) {
+            return;
+        }
+        // Newest first: the operator has moved, and the tiles they asked for most recently are the
+        // ones under their eyes. A stale request at the back is dropped rather than served late.
+        queue.push(tile);
+        if queue.len() > MEMORY_TILES {
+            queue.remove(0);
+        }
+        drop(queue);
+        self.shared.wake.notify_one();
+    }
+
+    /// Reads a tile straight from the cache, decoding on this thread.
+    ///
+    /// For tests and for pre-loading; the map uses [`TileStore::get`], which never blocks.
+    pub fn load_from_cache(&self, tile: TileId) -> Option<Arc<DecodedTile>> {
+        let cached = self.cache.read(self.source.id, tile)?;
+        let decoded = Arc::new(DecodedTile::decode(&cached.bytes)?);
+        if let Ok(mut memory) = self.shared.memory.lock() {
+            memory.insert(tile, Arc::clone(&decoded));
+        }
+        self.bump(|stats| stats.disk_hits += 1);
+        Some(decoded)
+    }
+
+    /// How many tiles are held in memory.
+    #[must_use]
+    pub fn memory_tiles(&self) -> usize {
+        self.shared
+            .memory
+            .lock()
+            .map(|memory| memory.tiles.len())
+            .unwrap_or(0)
+    }
+
+    fn bump(&self, change: impl FnOnce(&mut StoreStats)) {
+        if let Ok(mut stats) = self.shared.stats.lock() {
+            change(&mut stats);
+        }
+    }
+}
+
+impl Drop for TileStore {
+    fn drop(&mut self) {
+        self.shared.running.store(false, Ordering::Release);
+        self.shared.wake.notify_all();
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
+/// The fetch thread: cache first, then network, then decode.
+fn run_fetcher(source: &'static TileSource, cache: &TileCache, shared: &Arc<Shared>) {
+    let fetcher = TileFetcher::new();
+
+    while shared.running.load(Ordering::Acquire) {
+        let Some(tile) = next_tile(shared) else {
+            continue;
+        };
+
+        // The cache is the primary source. Checked here rather than on the render thread because
+        // reading and decoding a tile is far too slow to do in a painter.
+        if let Some(cached) = cache.read(source.id, tile)
+            && let Some(decoded) = DecodedTile::decode(&cached.bytes)
+        {
+            publish(shared, tile, decoded, |stats| stats.disk_hits += 1);
+            continue;
+        }
+
+        let now = Instant::now();
+        {
+            let Ok(mut policy) = shared.policy.lock() else {
+                continue;
+            };
+            policy.expire(now, FETCH_TIMEOUT);
+            if policy.decide(tile, now) != Decision::Fetch {
+                continue;
+            }
+            policy.begin(tile, now);
+        }
+
+        match fetcher.fetch(source, tile) {
+            Ok(bytes) => {
+                // Written before decoding, so a tile survives even if this build cannot decode it.
+                let _ = cache.write(source.id, tile, &bytes);
+                if let Ok(mut policy) = shared.policy.lock() {
+                    policy.succeeded(tile);
+                }
+                if let Some(decoded) = DecodedTile::decode(&bytes) {
+                    publish(shared, tile, decoded, |stats| stats.fetched += 1);
+                }
+            }
+            Err(_) => {
+                if let Ok(mut policy) = shared.policy.lock() {
+                    policy.failed(tile, Instant::now());
+                }
+                if let Ok(mut stats) = shared.stats.lock() {
+                    stats.failed += 1;
+                }
+            }
+        }
+    }
+}
+
+/// Takes the next tile to work on, waiting if there is nothing to do.
+fn next_tile(shared: &Arc<Shared>) -> Option<TileId> {
+    let Ok(mut queue) = shared.queue.lock() else {
+        return None;
+    };
+    while queue.is_empty() {
+        if !shared.running.load(Ordering::Acquire) {
+            return None;
+        }
+        // A timeout rather than a bare wait, so shutdown is never missed if the notify raced.
+        let Ok((held, _)) = shared.wake.wait_timeout(queue, Duration::from_millis(200)) else {
+            return None;
+        };
+        queue = held;
+    }
+    queue.pop()
+}
+
+/// Publishes a decoded tile and tells anyone watching that something changed.
+fn publish(
+    shared: &Arc<Shared>,
+    tile: TileId,
+    decoded: DecodedTile,
+    count: impl FnOnce(&mut StoreStats),
+) {
+    if let Ok(mut memory) = shared.memory.lock() {
+        memory.insert(tile, Arc::new(decoded));
+    }
+    if let Ok(mut stats) = shared.stats.lock() {
+        count(&mut stats);
+    }
+    shared.generation.fetch_add(1, Ordering::AcqRel);
+}

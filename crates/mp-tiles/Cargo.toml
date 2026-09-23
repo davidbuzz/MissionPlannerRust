@@ -14,3 +14,9 @@ workspace = true
 mp-units.workspace = true
 thiserror.workspace = true
 ureq.workspace = true
+image.workspace = true
+
+[dev-dependencies]
+# The offline tests build real PNGs rather than using fixture bytes, so a change in what the
+# decoder accepts cannot silently diverge from what the tests feed it.
+image.workspace = true
