@@ -1,9 +1,15 @@
 //! Positions and the operations a ground control station performs on them.
+//!
+//! The arithmetic is Mission Planner's, transliterated operation for operation: distance, bearing
+//! and offset from `ExtLibs/Utilities/PointLatLngAlt.cs`, Web Mercator from GMap.NET's
+//! `MercatorProjection.cs`. `crates/mp-units/tests/projection.rs` holds every one of them to what
+//! the C# returns under mono for the coordinates in `testdata/projection`, most to the bit, so an
+//! algebraically equal rewrite - a `mul_add`, a different radius, a reassociated product - is a
+//! test failure, not a refactor.
+
+use std::f64::consts::PI;
 
 use crate::{Degrees, Metres};
-
-/// Mean Earth radius (IUGG), the sphere used for great-circle calculations.
-pub const EARTH_MEAN_RADIUS: f64 = 6_371_008.8;
 
 /// WGS84 semi-major axis.
 pub const WGS84_A: f64 = 6_378_137.0;
@@ -89,53 +95,86 @@ impl LatLon {
         )
     }
 
-    /// Great-circle distance using the haversine formula on a sphere.
+    /// Great-circle distance, `PointLatLngAlt.GetDistance` (`PointLatLngAlt.cs:382-393`).
     ///
-    /// Accurate to roughly 0.3% against the WGS84 ellipsoid, which is fine for range readouts and
-    /// map interaction. Survey grid generation (D11) needs ellipsoidal accuracy and must use a
-    /// geodesic solver instead.
+    /// The C# hand-inlines a haversine on a 6371 km sphere, not the WGS84 ellipsoid, and PLAN.md
+    /// §1.3 ports it literally: a better geodesy would move every distance the application shows
+    /// by up to 0.5% from what Mission Planner shows for the same two points. The expression is
+    /// the C#'s in its order - `(6371 * c) * 1000`, not `6371000 * c` - because the two round
+    /// differently and the test holds this to the bit.
     #[must_use]
     pub fn distance_to(self, other: Self) -> Metres {
-        let lat1 = self.latitude.to_radians().0;
-        let lat2 = other.latitude.to_radians().0;
-        let dlat = (other.latitude.0 - self.latitude.0).to_radians();
-        let dlon = (other.longitude.0 - self.longitude.0).to_radians();
-
-        let a = (dlat / 2.0).sin().powi(2) + lat1.cos() * lat2.cos() * (dlon / 2.0).sin().powi(2);
-        let c = 2.0 * a.sqrt().asin().min(std::f64::consts::FRAC_PI_2 * 2.0);
-        Metres(EARTH_MEAN_RADIUS * c)
+        // C#: ExtLibs/Utilities/PointLatLngAlt.cs:384-392, the C#'s names kept.
+        let d = self.latitude() * 0.017_453_292_519_943_295;
+        let num2 = self.longitude() * 0.017_453_292_519_943_295;
+        let num3 = other.latitude() * 0.017_453_292_519_943_295;
+        let num4 = other.longitude() * 0.017_453_292_519_943_295;
+        let num5 = num4 - num2;
+        let num6 = num3 - d;
+        // Math.Pow(x, 2.0) is libm's pow under mono and powi(2) is one multiply; they gave the
+        // same bits for every pair in testdata/projection, which tests/projection.rs holds.
+        let num7 =
+            (num6 / 2.0).sin().powi(2) + ((d.cos() * num3.cos()) * (num5 / 2.0).sin().powi(2));
+        let num8 = 2.0 * num7.sqrt().atan2((1.0 - num7).sqrt());
+        Metres((6371.0 * num8) * 1000.0)
     }
 
-    /// Initial bearing along the great circle to `other`.
+    /// Initial great-circle bearing to `other`, `PointLatLngAlt.GetBearing`
+    /// (`PointLatLngAlt.cs:350-360`), in `[0, 360)`.
+    ///
+    /// Normalised as the C# does, `(b + 360) % 360`, which rounds an eastward bearing to the
+    /// precision of a number above 360; normalising only the negative ones would keep bits the C#
+    /// throws away.
     #[must_use]
     pub fn bearing_to(self, other: Self) -> Bearing {
-        let lat1 = self.latitude.to_radians().0;
-        let lat2 = other.latitude.to_radians().0;
-        let dlon = (other.longitude.0 - self.longitude.0).to_radians();
+        // C#: ExtLibs/Utilities/PointLatLngAlt.cs:352-359. MathHelper.deg2rad is 1 / (180 / PI),
+        // which is PI / 180 to the bit, the constant to_radians multiplies by.
+        let latitude1 = self.latitude().to_radians();
+        let latitude2 = other.latitude().to_radians();
+        let longitude_difference = (other.longitude() - self.longitude()).to_radians();
 
-        let y = dlon.sin() * lat2.cos();
-        let x = lat1
-            .cos()
-            .mul_add(lat2.sin(), -(lat1.sin() * lat2.cos() * dlon.cos()));
-        Bearing(Degrees(y.atan2(x).to_degrees()).normalised())
+        let y = longitude_difference.sin() * latitude2.cos();
+        // Two products and a difference, never a mul_add: the C# rounds each product.
+        let x = latitude1.cos() * latitude2.sin()
+            - latitude1.sin() * latitude2.cos() * longitude_difference.cos();
+
+        Bearing(Degrees((y.atan2(x).to_degrees() + 360.0) % 360.0))
     }
 
-    /// The position reached by travelling `distance` along `bearing`.
+    /// The position reached by travelling `distance` along `bearing`, `PointLatLngAlt.newpos`
+    /// (`PointLatLngAlt.cs:313-335`).
+    ///
+    /// The C# travels on a 6378.1 km sphere while [`LatLon::distance_to`] measures on a 6371 km
+    /// one, so a point placed 1000 m away measures 998.89 m. That is Mission Planner's behaviour
+    /// and it is kept: every offset the planner draws is placed this way.
+    ///
+    /// The one departure: the C# returns a longitude past ±180 when the path crosses the
+    /// antimeridian, and a [`LatLon`] cannot hold one, so such a longitude is wrapped - the same
+    /// meridian, 360 degrees round. A longitude already in range is returned to the bit.
     #[must_use]
     pub fn offset(self, bearing: Bearing, distance: Metres) -> Self {
-        let angular = distance.0 / EARTH_MEAN_RADIUS;
-        let brg = bearing.0.to_radians().0;
-        let lat1 = self.latitude.to_radians().0;
-        let lon1 = self.longitude.to_radians().0;
+        // C#: ExtLibs/Utilities/PointLatLngAlt.cs:319-332.
+        let radius_of_earth = 6_378_100.0;
 
-        let lat2 = (lat1.sin() * angular.cos() + lat1.cos() * angular.sin() * brg.cos()).asin();
-        let lon2 = lon1
-            + (brg.sin() * angular.sin() * lat1.cos())
-                .atan2(angular.cos() - lat1.sin() * lat2.sin());
+        let lat1 = self.latitude().to_radians();
+        let lon1 = self.longitude().to_radians();
+        let brng = bearing.0.0.to_radians();
+        let dr = distance.0 / radius_of_earth;
+
+        let lat2 = (lat1.sin() * dr.cos() + lat1.cos() * dr.sin() * brng.cos()).asin();
+        let lon2 =
+            lon1 + (brng.sin() * dr.sin() * lat1.cos()).atan2(dr.cos() - lat1.sin() * lat2.sin());
+
+        let latout = lat2.to_degrees();
+        let lngout = lon2.to_degrees();
 
         Self {
-            latitude: Degrees(lat2.to_degrees()),
-            longitude: Degrees(lon2.to_degrees()).normalised_signed(),
+            latitude: Degrees(latout),
+            longitude: if (-180.0..=180.0).contains(&lngout) {
+                Degrees(lngout)
+            } else {
+                Degrees(lngout).normalised_signed()
+            },
         }
     }
 }
@@ -154,31 +193,50 @@ pub struct WebMercator {
     pub y: f64,
 }
 
-/// The latitude beyond which Web Mercator is not defined, because the projection sends the poles
-/// to infinity. Tile servers clip here and so do we.
-pub const WEB_MERCATOR_MAX_LATITUDE: f64 = 85.051_128_779_806_59;
+/// The latitude GMap clips to, `MercatorProjection.cs:14-15`, because the projection sends the
+/// poles to infinity.
+///
+/// It is 85.05112878, which is 1.9e-10 degrees beyond the projection's true edge
+/// (`atan(sinh(pi))`, 85.0511287798066), so a pole projects to a `y` of -6e-12 rather than 0: less
+/// than a hundredth of a pixel at zoom 20. Kept as GMap has it, since every latitude between the
+/// two projects differently otherwise.
+pub const WEB_MERCATOR_MAX_LATITUDE: f64 = 85.051_128_78;
 
 impl LatLon {
-    /// Projects to Web Mercator, clamping latitude to the projection's limit.
+    /// Projects to Web Mercator, clamping latitude to GMap's limit.
+    ///
+    /// `MercatorProjection.FromLatLngToPixel` (`MercatorProjection.cs:52-71`) up to the point
+    /// where it scales to a zoom level and rounds to a whole pixel: this is the continuous value
+    /// it rounds, so the map can pan and zoom by fractions of a pixel where GMap cannot.
     #[must_use]
     pub fn to_web_mercator(self) -> WebMercator {
+        // C#: MercatorProjection.cs:56-61. GMap's Clip is Math.Min(Math.Max(n, min), max)
+        // (PureProjection.cs:424-427), which clamp is for every number that is not NaN, and a
+        // LatLon holds no NaN.
         let lat = self
             .latitude()
             .clamp(-WEB_MERCATOR_MAX_LATITUDE, WEB_MERCATOR_MAX_LATITUDE);
-        let lat_rad = lat.to_radians();
-        let y = (1.0 - ((lat_rad.tan() + 1.0 / lat_rad.cos()).ln() / std::f64::consts::PI)) / 2.0;
-        WebMercator {
-            x: (self.longitude() + 180.0) / 360.0,
-            y,
-        }
+        let lng = self.longitude().clamp(-180.0, 180.0);
+
+        let x = (lng + 180.0) / 360.0;
+        // lat * PI / 180, not lat.to_radians(): the C# multiplies by PI first, and the two round
+        // differently.
+        let sin_latitude = (lat * PI / 180.0).sin();
+        let y = 0.5 - ((1.0 + sin_latitude) / (1.0 - sin_latitude)).ln() / (4.0 * PI);
+        WebMercator { x, y }
     }
 
-    /// Inverse of [`LatLon::to_web_mercator`].
+    /// Inverse of [`LatLon::to_web_mercator`], `MercatorProjection.FromPixelToLatLng`
+    /// (`MercatorProjection.cs:73-88`) without the pixel: given `pixel / map size`, which is exact
+    /// for GMap's power-of-two map sizes, it returns what GMap returns to the bit.
     pub fn from_web_mercator(projected: WebMercator) -> Result<Self, PositionError> {
-        let lon = projected.x.mul_add(360.0, -180.0);
-        let n = std::f64::consts::PI * 2.0f64.mul_add(-projected.y, 1.0);
-        let lat = n.sinh().atan().to_degrees();
-        Self::new(lat, lon)
+        // C#: MercatorProjection.cs:81-85.
+        let xx = projected.x - 0.5;
+        let yy = 0.5 - projected.y;
+
+        let lat = 90.0 - 360.0 * (-yy * 2.0 * PI).exp().atan() / PI;
+        let lng = 360.0 * xx;
+        Self::new(lat, lng)
     }
 }
 
@@ -257,15 +315,19 @@ mod tests {
     }
 
     #[test]
-    fn offset_then_distance_returns_the_offset() {
+    fn offset_then_distance_comes_back_short_by_the_ratio_of_the_two_radii() {
+        // Mission Planner places a point on a 6378.1 km sphere (newpos) and measures on a 6371 km
+        // one (GetDistance), so what it measures is 6371 / 6378.1 of what it placed. A port that
+        // "fixed" this would disagree with every distance the C# shows next to a planned point.
         let start = brisbane();
         for bearing in [0.0, 45.0, 90.0, 180.0, 270.0, 359.0] {
             for metres in [1.0, 100.0, 10_000.0] {
                 let moved = start.offset(Bearing(Degrees(bearing)), Metres(metres));
                 let measured = start.distance_to(moved).0;
+                let expected = metres * 6371.0 / 6378.1;
                 assert!(
-                    (measured - metres).abs() < metres * 1e-6 + 1e-6,
-                    "bearing {bearing}, expected {metres} m, measured {measured} m"
+                    (measured - expected).abs() < expected * 1e-6 + 1e-6,
+                    "bearing {bearing}, placed {metres} m, expected {expected} m, measured {measured} m"
                 );
             }
         }
@@ -335,9 +397,18 @@ mod tests {
 
     #[test]
     fn web_mercator_clamps_the_poles_rather_than_producing_infinity() {
-        let pole = LatLon::new(90.0, 0.0).expect("valid").to_web_mercator();
-        assert!(pole.y.is_finite(), "the north pole projected to {}", pole.y);
-        assert!((0.0..=1.0).contains(&pole.y));
+        // GMap's clip latitude is a hair beyond the projection's edge, so the poles land a hair
+        // outside the unit square - six trillionths of the world, not infinity.
+        for latitude in [90.0, -90.0] {
+            let pole = LatLon::new(latitude, 0.0).expect("valid").to_web_mercator();
+            assert!(pole.y.is_finite(), "{latitude} projected to {}", pole.y);
+            let edge = if latitude > 0.0 { 0.0 } else { 1.0 };
+            assert!(
+                (pole.y - edge).abs() < 1e-11,
+                "{latitude} projected to {}",
+                pole.y
+            );
+        }
     }
 
     #[test]

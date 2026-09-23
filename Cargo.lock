@@ -3450,7 +3450,11 @@ dependencies = [
 name = "mp-params"
 version = "0.1.0"
 dependencies = [
+ "flate2",
+ "mp-settings",
+ "roxmltree 0.20.0",
  "thiserror 2.0.20",
+ "ureq",
 ]
 
 [[package]]
@@ -3493,6 +3497,7 @@ dependencies = [
 name = "mp-units"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "proptest",
  "thiserror 2.0.20",
 ]

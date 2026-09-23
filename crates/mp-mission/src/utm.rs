@@ -442,6 +442,38 @@ pub(crate) fn to_utm(utmzone: i32, hemisphere_lat: f64, lat: f64, lng: f64) -> (
 mod tests {
     use super::*;
 
+    /// Every point of `testdata/projection/points.txt` through `new utmpos(point)` and
+    /// `ToLLA()` under mono, as `tools/csharp-reference/regen-projection.sh` printed them
+    /// (`testdata/projection/golden/utm.csv`, G17): the zone and both metres bit for bit, and
+    /// the way back bit for bit. The oracle is the same build of `ExtLibs/Utilities` the grid
+    /// goldens come from.
+    #[test]
+    fn every_projection_golden_point_matches_the_c_sharp_bit_for_bit() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../testdata/projection/golden/utm.csv");
+        let text = std::fs::read_to_string(&path).expect("testdata/projection/golden/utm.csv");
+        let mut compared = 0;
+        for line in text.lines().filter(|line| line.starts_with("utm,")) {
+            let fields: Vec<&str> = line.split(',').collect();
+            assert_eq!(fields.len(), 8, "{line}");
+            let parse = |i: usize| fields[i].parse::<f64>().unwrap_or_else(|_| panic!("{line}"));
+            let (lat, lng) = (parse(1), parse(2));
+            let zone: i32 = fields[3].parse().unwrap_or_else(|_| panic!("{line}"));
+            let (x, y, back_lat, back_lng) = (parse(4), parse(5), parse(6), parse(7));
+
+            let ours = UtmPos::from_lat_lng(lat, lng);
+            assert_eq!(ours.zone, zone, "zone of ({lat}, {lng})");
+            assert_eq!(ours.x.to_bits(), x.to_bits(), "x of ({lat}, {lng}): {} vs {x}", ours.x);
+            assert_eq!(ours.y.to_bits(), y.to_bits(), "y of ({lat}, {lng}): {} vs {y}", ours.y);
+
+            let (our_lat, our_lng) = ours.to_lla().unwrap_or_else(|| panic!("ToLLA of {line}"));
+            assert_eq!(our_lat.to_bits(), back_lat.to_bits(), "ToLLA lat of {line}: {our_lat}");
+            assert_eq!(our_lng.to_bits(), back_lng.to_bits(), "ToLLA lng of {line}: {our_lng}");
+            compared += 1;
+        }
+        assert!(compared >= 600, "only {compared} golden points: is the file complete?");
+    }
+
     #[test]
     fn zones_are_signed_by_hemisphere() {
         // PLAN.md §1.3: the oracle returns zone -56 for Brisbane.

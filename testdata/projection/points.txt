@@ -1,0 +1,118 @@
+# Coordinates for the projection oracle: tools/csharp-reference/MpProjection.cs, regen-projection.sh.
+# Directives are described at the top of MpProjection.cs. Every point is projected at every zoom
+# and to UTM; every two consecutive points are also a pair for GetDistance/GetBearing/newpos.
+
+# Global lattices. 15 degrees hits the poles, the equator, the prime meridian and both sides of the
+# antimeridian exactly; 17.9 degrees from 89.5 south lands on nothing round.
+lattice -90 90 -180 180 15
+lattice -89.5 89.5 -179.5 179.5 17.9
+
+# Survey scale: 0.01 degrees (about 1.1 km) around ArduPilot's SITL home at CMAC.
+lattice -35.40 -35.33 149.12 149.19 0.01
+
+# The Web Mercator clamps. GMap clips latitude to +-85.05112878 (MercatorProjection.cs:14-15); the
+# projection's true edge, atan(sinh(pi)), is 85.0511287798066. Both, and either side of them.
+point 85.05112878 0
+point -85.05112878 0
+point 85.0511287798066 10
+point -85.0511287798066 -10
+point 85.05112877 20
+point -85.05112877 -20
+point 85.05112879 30
+point -85.05112879 -30
+point 85.0511 45
+point -85.0511 -45
+point 85.1 60
+point -85.1 -60
+point 86 90
+point -86 -90
+
+# The poles' neighbourhoods, and UTM's own limits (84 north, 80 south).
+point 90 0
+point -90 0
+point 89.9999999 45
+point -89.9999999 -135
+point 89 179.9
+point -89 -179.9
+point 90 180
+point -90 -180
+point 84 3
+point -80 3
+
+# The antimeridian.
+point 0 180
+point 0 -180
+point 0 179.9999999
+point 0 -179.9999999
+point -16.5 179.99999
+point -16.5 -179.99999
+point 65.5 180
+point 65.5 -180
+point 51.5 179.999999999
+
+# Null Island, a nanodegree either side of it, and Greenwich.
+point 0 0
+point 0.000000001 0.000000001
+point -0.000000001 -0.000000001
+point 51.4779 -0.0015
+
+# SITL home (ArduPilot's CMAC, -35.363261 149.165230) and the value the Rust tests use.
+point -35.363261 149.165230
+point -35.363262 149.165237
+
+# A millimetre from SITL home: 1 mm north is 8.98e-9 degrees, 1 mm east at 35.36 S is 1.10e-8.
+point -35.363261009 149.165230
+point -35.363261 149.165230011
+point -35.36326101 149.16523001
+point -35.3632610001 149.1652300001
+
+# UTM: the probe points of crates/mp-mission/src/utm.rs, Brisbane (zone -56, PLAN.md §1.3),
+# Sydney, and zone edges either side.
+point 47.4 8.5
+point 69.6 18.9
+point -0.001 32.6
+point -27.4698 153.0251
+point -33.8688 151.2093
+point 10 -180
+point 10 -174
+point 10 -174.0000001
+point 10 -0.0000001
+point 10 6
+point -10 5.9999999
+point 0 3
+point -0 3
+
+# Pairs beyond the consecutive points.
+pair -27.4698 153.0251 -33.8688 151.2093
+pair -35.363261 149.165230 -35.363261009 149.165230
+pair -35.363261 149.165230 -35.363261 149.165230011
+pair -35.363261 149.165230 -35.36326101 149.16523001
+pair -35.363261 149.165230 -35.3632610001 149.1652300001
+pair -35.363261 149.165230 -35.363261 149.165230
+pair 0 179.9999 0 -179.9999
+pair 0 -179.9999 0 179.9999
+pair 0 0 0 180
+pair 0 0 0.000000001 0
+pair 45 0 45.000000001 0.000000001
+pair 90 0 -90 0
+pair 90 0 89.9999999 45
+pair -90 0 -89.9999999 -135
+pair 51.4779 -0.0015 -33.8688 151.2093
+
+# newpos: millimetres to half the planet, across the antimeridian and the poles, and the bearings
+# and distances nobody should pass but the C# accepts.
+newpos -35.363261 149.165230 0 0.001
+newpos -35.363261 149.165230 90 0.001
+newpos -35.363261 149.165230 45 1
+newpos -35.363261 149.165230 123.456 100
+newpos -35.363261 149.165230 270 1000
+newpos -35.363261 149.165230 359.999 50000
+newpos 0 179.9999 90 1000
+newpos 0 -179.9999 270 1000
+newpos 89.9999 0 0 1000
+newpos -89.9999 0 180 1000
+newpos 0 0 90 20037508
+newpos 51.4779 -0.0015 -45 10
+newpos 51.4779 -0.0015 725 10
+newpos 10 10 0 -100
+newpos 90 0 180 1000
