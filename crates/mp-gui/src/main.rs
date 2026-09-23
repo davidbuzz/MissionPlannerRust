@@ -67,8 +67,12 @@ enum Screen {
     Fly,
     /// Flight plan: the mission.
     Plan,
-    /// Initial setup and calibration.
+    /// Initial setup and calibration: `MainV2`'s SETUP button, `InitialSetup`.
+    /// `// C#: MainV2.cs:3179`
     Setup,
+    /// Configuration and tuning: `MainV2`'s CONFIG button, beside SETUP, `SoftwareConfig`.
+    /// `// C#: MainV2.cs:3180; MainV2.Designer.cs:150, 158`
+    Config,
     /// The vehicle's parameters.
     Params,
     /// Reviewing a dataflash log.
@@ -82,7 +86,14 @@ enum Screen {
 
 impl Screen {
     /// The tabs, in order.
-    const ALL: [Self; 5] = [Self::Fly, Self::Plan, Self::Setup, Self::Params, Self::Logs];
+    const ALL: [Self; 6] = [
+        Self::Fly,
+        Self::Plan,
+        Self::Setup,
+        Self::Config,
+        Self::Params,
+        Self::Logs,
+    ];
 
     /// The screen to open on, from `MP_SCREEN`.
     ///
@@ -99,6 +110,7 @@ impl Screen {
         match named.as_str() {
             "plan" => Self::Plan,
             "setup" => Self::Setup,
+            "config" => Self::Config,
             "params" => Self::Params,
             "logs" => Self::Logs,
             // Anything else, including nothing and a typo, opens on the flight screen. An operator
@@ -112,6 +124,7 @@ impl Screen {
             Self::Fly => "fly",
             Self::Plan => "plan",
             Self::Setup => "setup",
+            Self::Config => "config",
             Self::Params => "params",
             Self::Logs => "logs",
         }
@@ -122,6 +135,7 @@ impl Screen {
             Self::Fly => "tab-fly",
             Self::Plan => "tab-plan",
             Self::Setup => "tab-setup",
+            Self::Config => "tab-config",
             Self::Params => "tab-params",
             Self::Logs => "tab-logs",
         }
@@ -259,6 +273,10 @@ struct MissionPlanner {
     plan_scroll: gpui::ScrollHandle,
     /// Initial Setup's FailSafe page.
     failsafe: config::failsafe::FailSafe,
+    /// The SETUP screen's backstage view: `InitialSetup`'s list and the page chosen from it.
+    setup_list: setup::Backstage,
+    /// The CONFIG screen's: `SoftwareConfig`'s.
+    config_list: setup::Backstage,
 }
 
 impl MissionPlanner {
@@ -403,6 +421,8 @@ impl MissionPlanner {
             fly_focus: fly::ActionsFocus::new(cx),
             fly_pages: fly::Pages::default(),
             failsafe: config::failsafe::FailSafe::default(),
+            setup_list: setup::Backstage::new(setup::List::Setup),
+            config_list: setup::Backstage::new(setup::List::Config),
         };
         // Opening on the planning screen activates it, as switching to it does.
         if this.screen == Screen::Plan {
@@ -1110,50 +1130,51 @@ impl MissionPlanner {
             .children(ui::scroll_indicator(&self.plan_scroll))
     }
 
-    /// The setup screen, which is one column and no map.
-    fn setup_body(&self, view: &TelemetryView, cx: &mut Context<Self>) -> impl IntoElement {
-        let calibration = self.telemetry.accel_calibration();
-        let compass = self.telemetry.compass_calibration();
-        let listings = self.telemetry.log_listings();
-        let log_progress = self.telemetry.log_progress();
-        let column = div()
+    /// The parameter screen's panels: the Params tab, and CONFIG's Full Parameter List page.
+    fn params_body(
+        &self,
+        view: &TelemetryView,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> gpui::AnyElement {
+        let parameters = params::collect(view);
+        let group = self.selected_param_group.clone();
+        let selected = self.selected_param.clone();
+        div()
+            .id("params-body")
             .flex()
             .flex_col()
+            .flex_1()
+            .min_h(px(0.0))
             .gap_2()
             .p_2()
-            .w(px(760.0))
-            // Initial Setup's pages that open as pages, in the C#'s list order, first: an opened
-            // page is then on screen rather than below the fold. The strip stays while a page
-            // shows, as the backstage list does beside its page.
-            .child(setup::mandatory_hardware_panel(
+            .overflow_y_scroll()
+            .child(params::browser_panel(
                 view,
-                self.flight_modes.is_active(),
-                self.failsafe.is_open(),
-                cx,
-            ));
-        // A page chosen from that list takes the column's place, as a backstage page does.
-        if self.failsafe.is_open() {
-            return column.child(config::failsafe::page(&self.failsafe, view, cx));
-        }
-        column
-            .children(config::flight_modes::page(&self.flight_modes, view, cx))
-            .child(setup::identity_panel(view))
-            // Above the calibrations. The reason somebody opens this screen mid-session is
-            // usually that the vehicle is behaving oddly, and this is the panel that says why -
-            // putting it below six calibration wizards buries the answer under the treatments.
-            .child(fly::estimator_panel(view))
-            .child(setup::accelerometer_panel(calibration, view, cx))
-            .child(setup::compass_panel(&compass, view, cx))
-            .child(setup::radio_panel(
-                view,
-                &self.radio_range,
-                self.capturing_radio,
+                &parameters,
+                group.as_deref(),
+                &self.param_search,
+                &self.param_search_focus,
+                self.param_search_focus.is_focused(window),
                 cx,
             ))
-            .child(setup::motor_panel(view, self.motor_throttle, cx))
-            .child(joystick::panel_for(view, &self.sticks, cx))
-            .child(setup::logs_panel(&listings, log_progress, view, cx))
-            .child(setup::calibration_panel(view, cx))
+            .child(params::list_panel(
+                &parameters,
+                group.as_deref(),
+                self.param_search.value(),
+                selected.as_deref(),
+                cx,
+            ))
+            .child(params::editor_panel(&parameters, selected.as_deref(), cx))
+            .child(params::file_panel(
+                view,
+                &self.param_file_name,
+                &self.param_file_focus,
+                self.param_file_focus.is_focused(window),
+                &self.param_differences,
+                cx,
+            ))
+            .into_any_element()
     }
 
     /// The map, with the handlers that make it a map rather than a picture.
@@ -1412,6 +1433,9 @@ impl Render for MissionPlanner {
         self.hud = self.hud_inputs(&view);
         // The vehicle's banner names its firmware; its parameter documentation follows from it.
         self.telemetry.tick();
+        // SETUP's and CONFIG's lists: built when their screen shows, built again when MainV2
+        // would reload it, closed - deactivating the page showing - when it is left.
+        self.backstage_tick(&view);
         // Save Modes' writes go one at a time, each after the last is answered.
         self.flight_modes.tick(&self.telemetry);
         // The FailSafe page's timers and writes, and closing it when the screen changes.
@@ -1580,6 +1604,7 @@ impl Render for MissionPlanner {
             self.fly_pages
                 .record_facts(f32::from(self.fly_scroll.max_offset().y));
             config::failsafe::record_facts(&self.failsafe, &view);
+            setup::record_facts([&self.setup_list, &self.config_list]);
             facts::publish();
         }
 
@@ -1808,49 +1833,7 @@ impl Render for MissionPlanner {
                     cx,
                 ))
                 .into_any_element(),
-            Screen::Params => {
-                let parameters = params::collect(&view);
-                let group = self.selected_param_group.clone();
-                let selected = self.selected_param.clone();
-                div()
-                    .id("params-body")
-                    .flex()
-                    .flex_col()
-                    .flex_1()
-                    .min_h(px(0.0))
-                    .gap_2()
-                    .p_2()
-                    .overflow_y_scroll()
-                    .child(params::browser_panel(
-                        &view,
-                        &parameters,
-                        group.as_deref(),
-                        &self.param_search,
-                        &self.param_search_focus,
-                        self.param_search_focus.is_focused(window),
-                        cx,
-                    ))
-                    .child(params::list_panel(
-                        &parameters,
-                        group.as_deref(),
-                        self.param_search.value(),
-                        selected.as_deref(),
-                        cx,
-                    ))
-                    .child(params::editor_panel(&parameters, selected.as_deref(), cx))
-                    .child(params::file_panel(
-                        &view,
-                        &self.param_file_name,
-                        &self.param_file_focus,
-                        self.param_file_focus.is_focused(window),
-                        &self.param_differences,
-                        cx,
-                    ))
-                    .into_any_element()
-            }
-            // Measured so UI tests can address the body itself rather than only the controls in
-            // it. The setup screen runs to nine panels and is taller than most windows, so a test
-            // that wants the screen rather than a button needs a handle on the container.
+            Screen::Params => self.params_body(&view, window, cx),
             Screen::Logs => div()
                 .id("logs-body")
                 .flex()
@@ -1866,13 +1849,21 @@ impl Render for MissionPlanner {
                     cx,
                 ))
                 .into_any_element(),
+            // Each a backstage view: the list down the left, the chosen page beside it, each
+            // scrolling on its own as `pnlMenu` and `pnlPages` do.
+            // `// C#: ExtLibs/Controls/BackstageView/BackstageView.Designer.cs:35-52; ExtLibs/Controls/BackstageView/BackStageViewMenuPanel.cs:22`
             Screen::Setup => probe::measured("setup-body", div())
-                .id("setup-body")
                 .flex()
                 .flex_1()
-                .overflow_y_scroll()
-                .child(self.setup_body(&view, cx))
+                .min_h(px(0.0))
+                .child(self.backstage_screen(setup::List::Setup, &view, window, cx))
                 .children(config::failsafe::overlay(&self.failsafe, window, cx))
+                .into_any_element(),
+            Screen::Config => probe::measured("config-body", div())
+                .flex()
+                .flex_1()
+                .min_h(px(0.0))
+                .child(self.backstage_screen(setup::List::Config, &view, window, cx))
                 .into_any_element(),
         };
 
@@ -2063,7 +2054,7 @@ OPTIONS:
     -h, --help              print this and exit
     -V, --version           print the version and exit
         --read-mission      read the vehicle's mission once it appears
-        --screen SCREEN     open on fly, plan or setup (default: fly)
+        --screen SCREEN     open on fly, plan, setup, config, params or logs (default: fly)
         --window WIDTHxHEIGHT
                             initial window size (default: 1600x1200)
 
@@ -2304,6 +2295,7 @@ mod tests {
         assert_eq!(window_size(Some("1280x800"), None), (1280.0, 800.0));
         assert_eq!(Screen::initial(Some("plan"), None), Screen::Plan);
         assert_eq!(Screen::initial(Some("setup"), None), Screen::Setup);
+        assert_eq!(Screen::initial(Some("config"), None), Screen::Config);
         // A name that is not a screen opens on the one the application is for.
         assert_eq!(Screen::initial(Some("nonsense"), None), Screen::Fly);
 
@@ -2387,6 +2379,18 @@ mod tests {
         labels.sort_unstable();
         labels.dedup();
         assert_eq!(labels.len(), count);
+    }
+
+    #[test]
+    fn config_is_beside_setup_as_mainv2_has_them() {
+        // MainV2's menu: SETUP, then CONFIG (MainV2.Designer.cs:150, 158).
+        let setup = Screen::ALL
+            .iter()
+            .position(|screen| *screen == Screen::Setup);
+        let config = Screen::ALL
+            .iter()
+            .position(|screen| *screen == Screen::Config);
+        assert_eq!(setup.map(|at| at + 1), config);
     }
 
     #[test]

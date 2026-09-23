@@ -16,7 +16,9 @@
 //! and what stands in for it here. Panels neither list adds come last. [`OTHER_PAGES`] holds the
 //! four pages the lists add that are not in `ConfigurationView/`, so the lists are complete; they
 //! are not counted as panels. The report renders to `docs/coverage/configuration.md`, as
-//! `coverage.rs` and `planner_coverage.rs` do for the flight and planning screens.
+//! `coverage.rs` and `planner_coverage.rs` do for the flight and planning screens. The SETUP and
+//! CONFIG screens (`setup.rs`) draw their lists with this table's titles and headings, looked up
+//! by the line of each call ([`listing`]).
 //!
 //! The tests hold the table to the C#. When the tree is present, every `Config*.cs` in the
 //! directory must be a row and every row a file there, declaring the class the row names; each
@@ -27,8 +29,8 @@
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
-// The binary reads the counts; the listings, titles and vehicles are read by the report, which is
-// built by the tests.
+// The binary reads the counts, and the titles and headings the SETUP and CONFIG lists draw; the
+// vehicles and the rest are read by the report, which is built by the tests.
 #![cfg_attr(not(test), allow(dead_code))]
 
 /// The two screens that list the panels.
@@ -102,7 +104,6 @@ pub struct At {
 
 /// What stands in for a C# panel here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)] // Done has no row yet; the table says so, not the type
 pub enum Ours {
     /// Everything the panel does, here.
     Done(At),
@@ -220,14 +221,9 @@ pub const PANELS: &[Panel] = &[
             config(243, "Loading", LOADING),
             config(245, "Loading", LOADING),
         ],
-        // C#: GCSViews/ConfigurationView/ConfigParamLoading.cs:44 reloads the screen once the
-        // list is whole; :50 re-requests it.
-        Partial(
-            at(PARAMS_RS, "fn browser_panel"),
-            "the parameter screen shows the download's progress and re-requests it, as Force \
-             Refresh does; nothing stands a Loading page in for either list while parameters \
-             arrive",
-        ),
+        // C#: GCSViews/ConfigurationView/ConfigParamLoading.cs:34-53 - the label, Retry Now,
+        // and the timer that reloads the screen once the list is whole.
+        Ours::Done(at(SETUP_RS, "fn param_loading_page")),
     ),
     panel(
         "ConfigFirmwareDisabled",
@@ -298,8 +294,8 @@ pub const PANELS: &[Panel] = &[
         &[setup(196, "Accel Calibration", MANDATORY, ANY)],
         Partial(
             at(SETUP_RS, "fn accelerometer_panel"),
-            "has Calibrate Accel's six positions, and Calibrate Level as `cal-level` in the \
-             calibration panel; missing Simple Accel Cal",
+            "has Calibrate Accel's six positions, and Calibrate Level as `cal-level` on the \
+             page; missing Simple Accel Cal",
         ),
     ),
     panel(
@@ -855,6 +851,20 @@ pub fn group(panel: &Panel) -> Option<Screen> {
     panel.listed.first().map(|listed| listed.screen)
 }
 
+/// The call `screen`'s list makes at `line` of its source, with the page it adds: where the setup
+/// and configuration screens (`setup.rs`) read each entry's title and heading, so the lists they
+/// draw and this ledger cannot disagree.
+#[must_use]
+pub fn listing(screen: Screen, line: u32) -> Option<(&'static Listed, &'static Panel)> {
+    PANELS.iter().chain(OTHER_PAGES).find_map(|panel| {
+        panel
+            .listed
+            .iter()
+            .find(|listed| listed.screen == screen && listed.line == line)
+            .map(|listed| (listed, panel))
+    })
+}
+
 /// Every listing on `screen`'s list, with its page, in the list's order.
 #[cfg(test)]
 fn listings(screen: Screen) -> Vec<(&'static Listed, &'static Panel)> {
@@ -1064,56 +1074,30 @@ pub fn report() -> String {
     out
 }
 
+/// Reading the C# tree, for this ledger's tests and for the tests of the lists drawn from it
+/// (`setup.rs`).
 #[cfg(test)]
-mod tests {
+pub(crate) mod source {
     use std::collections::BTreeMap;
     use std::path::{Path, PathBuf};
 
-    use super::*;
-
-    /// Where the committed report lives, relative to this crate.
-    const REPORT: &str = "../../docs/coverage/configuration.md";
-
     /// The workspace root.
-    fn workspace() -> PathBuf {
+    pub(crate) fn workspace() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
     }
 
     /// The C# tree.
-    fn csharp_root() -> PathBuf {
+    pub(crate) fn csharp_root() -> PathBuf {
         workspace().join("referneces/missionplanner")
     }
 
     /// A C# file, relative to the tree, or `None` when the tree is not checked out.
-    fn csharp(path: &str) -> Option<String> {
+    pub(crate) fn csharp(path: &str) -> Option<String> {
         std::fs::read_to_string(csharp_root().join(path)).ok()
     }
 
-    /// The Designer beside a `.cs` file: `X.Designer.cs`, or `X.designer.cs` as `ConfigMount`'s
-    /// is spelled.
-    fn designer(file: &str) -> Option<String> {
-        let stem = file.strip_suffix(".cs")?;
-        csharp(&format!("{stem}.Designer.cs")).or_else(|| csharp(&format!("{stem}.designer.cs")))
-    }
-
-    /// The event wirings in a Designer: `this.X.Y += new Z(this.H);`, as `coverage.rs` reads them.
-    fn wirings(designer: &str) -> usize {
-        designer
-            .lines()
-            .filter(|line| {
-                let line = line.trim();
-                line.split_once(" += new ").is_some_and(|(left, right)| {
-                    left.starts_with("this.")
-                        && right
-                            .rsplit_once("(this.")
-                            .is_some_and(|(_, handler)| handler.ends_with(");"))
-                })
-            })
-            .count()
-    }
-
     /// Every `<data name="K"><value>V</value>` in a `.resx`.
-    fn resx(text: &str) -> BTreeMap<String, String> {
+    pub(crate) fn resx(text: &str) -> BTreeMap<String, String> {
         let mut values = BTreeMap::new();
         for data in text.split("<data name=\"").skip(1) {
             let Some((name, rest)) = data.split_once('"') else {
@@ -1136,19 +1120,24 @@ mod tests {
 
     /// One `AddBackstageViewPage(typeof(...), ...)` call.
     #[derive(Debug)]
-    struct Call {
+    pub(crate) struct Call {
         /// 1-based line of the call.
-        line: u32,
+        pub(crate) line: u32,
         /// The page's class, without its namespace.
-        class: String,
+        pub(crate) class: String,
         /// The arguments, whitespace collapsed; the first is the `typeof`.
-        args: Vec<String>,
+        pub(crate) args: Vec<String>,
         /// `x` in `var x = AddBackstageViewPage(...)`.
-        assigned: Option<String>,
+        pub(crate) assigned: Option<String>,
+        /// Where the call starts in the source, in bytes.
+        pub(crate) offset: usize,
+        /// What precedes the call on its line, trimmed: `start =` where `SoftwareConfig` keeps
+        /// the page to open first.
+        pub(crate) prefix: String,
     }
 
     /// The arguments of the call whose `(` opens `text`, split at its top-level commas.
-    fn arguments(text: &str) -> Vec<String> {
+    pub(crate) fn arguments(text: &str) -> Vec<String> {
         let mut args = Vec::new();
         let mut current = String::new();
         let mut depth = 0_i32;
@@ -1195,7 +1184,7 @@ mod tests {
     }
 
     /// Every call in `handler`'s body that is not commented out, in the source's order.
-    fn calls(source: &str, handler: &str) -> Vec<Call> {
+    pub(crate) fn calls(source: &str, handler: &str) -> Vec<Call> {
         const OPEN: &str = "AddBackstageViewPage(typeof(";
         let start = source
             .find(&format!("private void {handler}("))
@@ -1230,9 +1219,46 @@ mod tests {
                 class,
                 args,
                 assigned,
+                offset,
+                prefix: before.trim().to_owned(),
             });
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+    use std::path::Path;
+
+    use super::source::{calls, csharp, csharp_root, resx, workspace};
+    use super::*;
+
+    /// Where the committed report lives, relative to this crate.
+    const REPORT: &str = "../../docs/coverage/configuration.md";
+
+    /// The Designer beside a `.cs` file: `X.Designer.cs`, or `X.designer.cs` as `ConfigMount`'s
+    /// is spelled.
+    fn designer(file: &str) -> Option<String> {
+        let stem = file.strip_suffix(".cs")?;
+        csharp(&format!("{stem}.Designer.cs")).or_else(|| csharp(&format!("{stem}.designer.cs")))
+    }
+
+    /// The event wirings in a Designer: `this.X.Y += new Z(this.H);`, as `coverage.rs` reads them.
+    fn wirings(designer: &str) -> usize {
+        designer
+            .lines()
+            .filter(|line| {
+                let line = line.trim();
+                line.split_once(" += new ").is_some_and(|(left, right)| {
+                    left.starts_with("this.")
+                        && right
+                            .rsplit_once("(this.")
+                            .is_some_and(|(_, handler)| handler.ends_with(");"))
+                })
+            })
+            .count()
     }
 
     /// The text a title argument evaluates to: `rm.GetString("K")` from `InitialSetup.resx`,
@@ -1539,7 +1565,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (0, 9, 46, 2, 4)
+            (1, 8, 46, 2, 4)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

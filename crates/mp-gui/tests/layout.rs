@@ -222,6 +222,40 @@ fn the_plan_screen_keeps_its_panels_inside_the_window() {
 
 #[test]
 #[ignore = "opens a window; needs a display"]
+fn the_setup_and_config_screens_keep_their_list_and_page_inside_the_window() {
+    // Each is a backstage view: the list down the left and the page beside it, each scrolling on
+    // its own. Neither may run past the window at the size the application opens at, and no page
+    // may run off its right edge.
+    for (screen, list, page) in [
+        ("setup", "setup-list", "setup-page"),
+        ("config", "config-list", "config-page"),
+    ] {
+        let measured = measure(1600, 1200, screen);
+        let root = measured.get("root").copied().expect("the root is measured");
+        for name in [list, page] {
+            let rect = measured
+                .get(name)
+                .copied()
+                .unwrap_or_else(|| panic!("{name} is measured on the {screen} screen"));
+            assert!(
+                rect.bottom() <= root.bottom() && rect.right() <= root.right() && rect.x >= 0.0,
+                "{name} runs past the window: {rect:?}, window {root:?}"
+            );
+        }
+        for (name, rect) in panels(&measured) {
+            assert!(
+                rect.right() <= root.right(),
+                "panel '{name}' on the {screen} screen runs off the right edge: ends at {:.0}, \
+                 window is {:.0} wide",
+                rect.right(),
+                root.right()
+            );
+        }
+    }
+}
+
+#[test]
+#[ignore = "opens a window; needs a display"]
 fn a_small_window_still_lays_out_rather_than_collapsing() {
     // MP_WINDOW accepts sizes down to 640x480. Everything will not fit at that size and the
     // columns scroll, which is fine - what must not happen is a panel of zero size or one placed

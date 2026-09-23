@@ -1,0 +1,192 @@
+# The SETUP and CONFIG screens are Mission Planner's backstage views: the list its Load handler
+# builds down the left, and the page chosen from it on the right, one at a time.
+#
+# GCSViews/InitialSetup.cs:155-395 adds each page under the condition around its call - most need
+# a vehicle whose every parameter is in - under the headings Mandatory Hardware, Optional Hardware
+# and Advanced, and opens on nothing the first time. ExtLibs/Controls/BackstageView/BackstageView.cs
+# draws a heading as ">> title", its pages only while it is open (choosing it opens or closes it),
+# and on a choice deactivates the old page and activates the new. Leaving the screen remembers the
+# page showing (lastpagename) and the screen opens on it again. GCSViews/SoftwareConfig.cs:142-316
+# builds CONFIG's list, headingless, and opens on its `start` page when nothing is remembered.
+#
+# The list checked here is a copter of 3.5 or later with every parameter in; the unit tests in
+# crates/mp-gui/src/setup.rs build the same list from the same conditions and check this file's
+# `expect setup.pages` line against it.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run as
+#
+#   tools/gui-test.sh tests/gui/setup-list.gui -- tcp:127.0.0.1:5760
+
+screen setup
+window 1600x1200
+settle 6
+
+# With the parameters still to come, SETUP lists the Loading page and the pages that need none,
+# with nothing chosen.
+expect screen setup
+expect setup.page none
+expect setup.pages ~ ConfigParamLoading,ConfigFirmwareDisabled,ConfigOptional,
+# The Loading page's Retry Now asks for them (ConfigParamLoading.cs:50-53), and once every one is
+# in its timer shows the screen again (:44-48): the whole list, and nothing chosen, as the Loading
+# page it was on is no longer listed.
+click setup-page-ConfigParamLoading
+expect setup.page ConfigParamLoading
+click but_forceparams
+settle 12
+expect params.held > 1000
+expect setup.page none
+expect setup.pages ConfigFirmwareDisabled,ConfigMandatory,ConfigFrameClassType,ConfigAccelerometerCalibration,ConfigHWCompass2,ConfigRadioInput,ConfigRadioOutput,ConfigSerial,ConfigESCCalibration,ConfigFlightModes,ConfigFailSafe,ConfigInitialParams,ConfigHWIDs,ConfigADSB,ConfigOptional,ConfigSerialInjectGPS,ConfigCubeID,Sikradio,ConfigGPSOrder,ConfigBatteryMonitoring,ConfigBatteryMonitoring2,ConfigDroneCAN,JoystickSetup,ConfigCompassMot,ConfigHWRangeFinder,ConfigHWAirspeed,ConfigHWPX4Flow,ConfigHWOptFlow,ConfigHWOSD,ConfigMount,ConfigMotorTest,ConfigHWBT,ConfigHWParachute,ConfigHWESP8266,TrackerUI,ConfigFFT,ConfigAdvanced,ConfigTerminal,ConfigREPL
+expect setup.titles Install Firmware,Mandatory Hardware,Frame Type,Accel Calibration,Compass,Radio Calibration,Servo Output,Serial Ports,ESC Calibration,Flight Modes,FailSafe,Initial Tune Parameter,HW ID,ADSB,Optional Hardware,RTK/GPS Inject,CubeID Update,Sik Radio,CAN GPS Order,Battery Monitor,Battery Monitor 2,DroneCAN/UAVCAN,Joystick,Compass/Motor Calib,Range Finder,Airspeed,PX4Flow,Optical Flow,OSD,Camera Gimbal,Motor Test,Bluetooth Setup,Parachute,ESP8266 Setup,Antenna Tracker,FFT Setup,Advanced,Terminal,Script REPL
+expect setup.groups Mandatory Hardware=ConfigFrameClassType,ConfigAccelerometerCalibration,ConfigHWCompass2,ConfigRadioInput,ConfigRadioOutput,ConfigSerial,ConfigESCCalibration,ConfigFlightModes,ConfigFailSafe,ConfigInitialParams,ConfigHWIDs,ConfigADSB;Optional Hardware=ConfigSerialInjectGPS,ConfigCubeID,Sikradio,ConfigGPSOrder,ConfigBatteryMonitoring,ConfigBatteryMonitoring2,ConfigDroneCAN,JoystickSetup,ConfigCompassMot,ConfigHWRangeFinder,ConfigHWAirspeed,ConfigHWPX4Flow,ConfigHWOptFlow,ConfigHWOSD,ConfigMount,ConfigMotorTest,ConfigHWBT,ConfigHWParachute,ConfigHWESP8266,TrackerUI,ConfigFFT;Advanced=ConfigTerminal,ConfigREPL
+# Every heading closed.
+expect setup.shown ConfigFirmwareDisabled,ConfigMandatory,ConfigOptional,ConfigAdvanced
+
+click setup-page-ConfigFirmwareDisabled
+expect setup.page ConfigFirmwareDisabled
+expect setup.title Install Firmware
+
+# Mandatory Hardware: choosing the heading opens it and shows its page.
+click setup-page-ConfigMandatory
+expect setup.page ConfigMandatory
+expect setup.expanded ConfigMandatory
+expect setup.shown ConfigFirmwareDisabled,ConfigMandatory,ConfigFrameClassType,ConfigAccelerometerCalibration,ConfigHWCompass2,ConfigRadioInput,ConfigRadioOutput,ConfigSerial,ConfigESCCalibration,ConfigFlightModes,ConfigFailSafe,ConfigInitialParams,ConfigHWIDs,ConfigADSB,ConfigOptional,ConfigAdvanced
+click setup-page-ConfigFrameClassType
+expect setup.page ConfigFrameClassType
+click setup-page-ConfigAccelerometerCalibration
+expect setup.page ConfigAccelerometerCalibration
+click setup-page-ConfigHWCompass2
+expect setup.page ConfigHWCompass2
+click setup-page-ConfigRadioInput
+expect setup.page ConfigRadioInput
+click setup-page-ConfigRadioOutput
+expect setup.page ConfigRadioOutput
+click setup-page-ConfigSerial
+expect setup.page ConfigSerial
+click setup-page-ConfigESCCalibration
+expect setup.page ConfigESCCalibration
+
+# The two ported pages that keep state are activated when chosen and deactivated when left.
+click setup-page-ConfigFlightModes
+expect setup.page ConfigFlightModes
+expect config.flightmodes.active true
+expect config.flightmodes.1 7
+click setup-page-ConfigFailSafe
+expect setup.page ConfigFailSafe
+expect config.flightmodes.active false
+expect config.failsafe.open true
+expect config.failsafe.message Ensure your props are not on the Plane/Quad
+click failsafe-message-ok
+expect config.failsafe.message none
+click setup-page-ConfigInitialParams
+expect setup.page ConfigInitialParams
+expect config.failsafe.open false
+click setup-page-ConfigHWIDs
+expect setup.page ConfigHWIDs
+click setup-page-ConfigADSB
+expect setup.page ConfigADSB
+
+# Choosing the heading again closes it, and shows its page.
+click setup-page-ConfigMandatory
+expect setup.page ConfigMandatory
+expect setup.shown ConfigFirmwareDisabled,ConfigMandatory,ConfigOptional,ConfigAdvanced
+
+# Optional Hardware.
+click setup-page-ConfigOptional
+expect setup.page ConfigOptional
+expect setup.expanded ConfigOptional
+click setup-page-ConfigSerialInjectGPS
+expect setup.page ConfigSerialInjectGPS
+click setup-page-ConfigCubeID
+expect setup.page ConfigCubeID
+click setup-page-Sikradio
+expect setup.page Sikradio
+click setup-page-ConfigGPSOrder
+expect setup.page ConfigGPSOrder
+click setup-page-ConfigBatteryMonitoring
+expect setup.page ConfigBatteryMonitoring
+click setup-page-ConfigBatteryMonitoring2
+expect setup.page ConfigBatteryMonitoring2
+click setup-page-ConfigDroneCAN
+expect setup.page ConfigDroneCAN
+click setup-page-JoystickSetup
+expect setup.page JoystickSetup
+click setup-page-ConfigCompassMot
+expect setup.page ConfigCompassMot
+click setup-page-ConfigHWRangeFinder
+expect setup.page ConfigHWRangeFinder
+click setup-page-ConfigHWAirspeed
+expect setup.page ConfigHWAirspeed
+click setup-page-ConfigHWPX4Flow
+expect setup.page ConfigHWPX4Flow
+click setup-page-ConfigHWOptFlow
+expect setup.page ConfigHWOptFlow
+click setup-page-ConfigHWOSD
+expect setup.page ConfigHWOSD
+click setup-page-ConfigMount
+expect setup.page ConfigMount
+click setup-page-ConfigMotorTest
+expect setup.page ConfigMotorTest
+click setup-page-ConfigHWBT
+expect setup.page ConfigHWBT
+click setup-page-ConfigHWParachute
+expect setup.page ConfigHWParachute
+click setup-page-ConfigHWESP8266
+expect setup.page ConfigHWESP8266
+click setup-page-TrackerUI
+expect setup.page TrackerUI
+click setup-page-ConfigFFT
+expect setup.page ConfigFFT
+click setup-page-ConfigOptional
+expect setup.shown ConfigFirmwareDisabled,ConfigMandatory,ConfigOptional,ConfigAdvanced
+
+# Advanced.
+click setup-page-ConfigAdvanced
+expect setup.page ConfigAdvanced
+click setup-page-ConfigTerminal
+expect setup.page ConfigTerminal
+click setup-page-ConfigREPL
+expect setup.page ConfigREPL
+
+# Leave on Flight Modes.
+click setup-page-ConfigAdvanced
+click setup-page-ConfigMandatory
+click setup-page-ConfigFlightModes
+expect setup.page ConfigFlightModes
+expect config.flightmodes.active true
+
+# CONFIG, beside SETUP: leaving SETUP deactivates its page; CONFIG opens on Basic Tuning, its
+# `start` for a copter.
+click tab-config
+settle 1
+expect screen config
+expect config.flightmodes.active false
+expect config.page ConfigSimplePids
+expect config.title Basic Tuning
+expect config.pages ~ ConfigAC_Fence,ConfigSimplePids,ConfigArducopter,
+expect config.pages ~ ConfigUserDefined,ConfigRawParams,ConfigPlanner
+click config-page-ConfigRawParams
+expect config.page ConfigRawParams
+expect config.title Full Parameter List
+click config-page-ConfigAC_Fence
+expect config.page ConfigAC_Fence
+click config-page-ConfigArducopter
+expect config.page ConfigArducopter
+click config-page-ConfigUserDefined
+expect config.page ConfigUserDefined
+click config-page-ConfigPlanner
+expect config.page ConfigPlanner
+click config-page-ConfigRawParams
+expect config.page ConfigRawParams
+
+# Back to SETUP: it opens on the page it was left on (lastpagename), which is activated again, and
+# choosing a page under a closed heading opens the heading.
+click tab-setup
+settle 1
+expect setup.page ConfigFlightModes
+expect setup.expanded ConfigMandatory
+expect config.flightmodes.active true
+
+# And CONFIG opens on its remembered page rather than on `start`.
+click tab-config
+settle 1
+expect config.page ConfigRawParams

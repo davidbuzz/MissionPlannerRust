@@ -21,11 +21,16 @@ settle 12
 expect params.held > 1000
 expect params.value.FLTMODE2 9
 
+# SETUP opens with no page chosen and its headings closed (BackstageView.cs:261-343); the page is
+# under Mandatory Hardware, which choosing opens.
 click tab-setup
 settle 1
+expect setup.page none
 expect config.flightmodes.active false
-click setup-flightmodes
+click setup-page-ConfigMandatory
+click setup-page-ConfigFlightModes
 settle 1
+expect setup.page ConfigFlightModes
 expect config.flightmodes.active true
 expect config.flightmodes.firmware ArduCopter2
 
@@ -72,3 +77,8 @@ settle 3
 expect config.flightmodes.save complete
 expect params.value.FLTMODE2 9
 expect params.value.SIMPLE 0
+
+# Choosing another page deactivates this one (BackstageView.cs:453-464).
+click setup-page-ConfigFailSafe
+expect setup.page ConfigFailSafe
+expect config.flightmodes.active false

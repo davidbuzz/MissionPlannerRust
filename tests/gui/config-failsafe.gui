@@ -26,8 +26,11 @@ settle 15
 expect params.held > 1000
 expect config.failsafe.available true
 
+# SETUP opens with its headings closed; the page is under Mandatory Hardware.
 click tab-setup
-click setup-failsafe
+click setup-page-ConfigMandatory
+click setup-page-ConfigFailSafe
+expect setup.page ConfigFailSafe
 expect config.failsafe.open true
 # Activate ends with a modal warning (ConfigFailSafe.cs:91-92).
 expect config.failsafe.message Ensure your props are not on the Plane/Quad
@@ -82,6 +85,7 @@ expect config.failsafe.throttle 1
 expect config.failsafe.write FS_THR_ENABLE 1 accepted
 expect config.failsafe.throttle.vehicle 1
 
-# Choosing the entry again closes the page and brings the setup column back.
-click setup-failsafe
+# Choosing another page deactivates this one (BackstageView.cs:453-464), and the page is closed.
+click setup-page-ConfigFlightModes
+expect setup.page ConfigFlightModes
 expect config.failsafe.open false

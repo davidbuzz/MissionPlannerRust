@@ -295,7 +295,11 @@ The full parameter system — tree/list/advanced editors driven by parameter met
   held to `InitialSetup.cs`/`SoftwareConfig.cs` by tests and rendered to
   `docs/coverage/configuration.md` (PLAN.md §13.4 row 14); Flight Modes and FailSafe are ported
   from their `Config*.cs` (rows 15, 16), each proved by a script that changes a parameter on
-  SITL through the retrying set and reads it back (**9 partial, 46 missing**). **Still owed:** the fixture is
+  SITL through the retrying set and reads it back. The SETUP and CONFIG screens are the C#'s
+  backstage views: every `AddBackstageViewPage` call of `InitialSetup.cs` and `SoftwareConfig.cs`
+  is a list entry with its conditions, headings open and close, the last page is remembered, and
+  pages not yet ported say so under their C# title (row 17; **1 done, 8 partial, 46 missing**).
+  **Still owed:** the fixture is
   written from a reading of the C# source, not captured from a run of it; mono's float formatting
   diverges from .NET 4.7.2 (PLAN.md R5), so settling it needs the Windows runner §7.1 budgets.
 - **Tests:** `tests/metadata_codegen.rs` asserts the generated parameter metadata matches the source XML and compiles; `tests/panel_coverage.rs` fails if any C# `Config*.cs` panel is missing from the Rust implementation (ledger-driven); `tests/param_roundtrip.rs` writes and re-reads every parameter type against SITL including bitmask/enum/float edge values; per-panel UI snapshots; `tests/param_file_compat.rs` reads and writes `.param` files produced by the C# app byte-for-byte.

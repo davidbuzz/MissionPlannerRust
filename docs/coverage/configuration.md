@@ -4,11 +4,11 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui c
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 0 | 9 | 46 | 2 | 4 | 569 |
+| 61 | 1 | 8 | 46 | 2 | 4 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 0 | 8 | 34 | 2 | 0 | 258 | 198 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 1 | 7 | 34 | 2 | 0 | 258 | 198 |
 | CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 0 | 1 | 12 | 0 | 0 | 277 | 255 |
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 | 0 |
 
@@ -37,7 +37,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConne
 
 | line | page | title | under | vehicles | wirings | ours |
 |---:|---|---|---|---|---:|---|
-| 162 | `ConfigParamLoading` | Loading |  | connected, parameters still arriving | 2 | partial: `crates/mp-gui/src/params.rs` `fn browser_panel` - the parameter screen shows the download's progress and re-requests it, as Force Refresh does; nothing stands a Loading page in for either list while parameters arrive |
+| 162 | `ConfigParamLoading` | Loading |  | connected, parameters still arriving | 2 | done: `crates/mp-gui/src/setup.rs` `fn param_loading_page` |
 | 169 | `ConfigFirmwareDisabled` | Install Firmware |  | connected | 1 | **missing** |
 | 171 | `ConfigFirmwareManifest` | Install Firmware |  | disconnected | 16 | **missing** |
 | 173 | `ConfigFirmware` | Install Firmware Legacy |  | disconnected | 20 | **missing** |
@@ -46,7 +46,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConne
 | 187 | `ConfigTradHeli4` | Heli Setup | Mandatory Hardware | heli | 0 | **missing** |
 | 188 | `ConfigFrameType` | Frame Type | Mandatory Hardware | copter before 3.5 | 12 | **missing** |
 | 189 | `ConfigFrameClassType` | Frame Type | Mandatory Hardware | any with FRAME_CLASS; copter 3.5 and later | 19 | **missing** |
-| 196 | `ConfigAccelerometerCalibration` | Accel Calibration | Mandatory Hardware | any | 3 | partial: `crates/mp-gui/src/setup.rs` `fn accelerometer_panel` - has Calibrate Accel's six positions, and Calibrate Level as `cal-level` in the calibration panel; missing Simple Accel Cal |
+| 196 | `ConfigAccelerometerCalibration` | Accel Calibration | Mandatory Hardware | any | 3 | partial: `crates/mp-gui/src/setup.rs` `fn accelerometer_panel` - has Calibrate Accel's six positions, and Calibrate Level as `cal-level` on the page; missing Simple Accel Cal |
 | 203 | `ConfigHWCompass2` | Compass | Mandatory Hardware | any with COMPASS_PRIO1_ID | 11 | partial: `crates/mp-gui/src/setup.rs` `fn compass_panel` - has the onboard calibration's start and cancel with each compass's progress; missing Accept, the priority grid (order, use, external, remove missing), Large Vehicle MagCal and Reboot |
 | 206 | `ConfigHWCompass` | Compass | Mandatory Hardware | any without COMPASS_PRIO1_ID | 21 | partial: `crates/mp-gui/src/setup.rs` `fn compass_panel` - has the onboard calibration's start and cancel; missing declination, each compass's use and external boxes, the board presets, live calibration, compass learn and Large Vehicle MagCal |
 | 211 | `ConfigRadioInput` | Radio Calibration | Mandatory Hardware | any | 8 | partial: `crates/mp-gui/src/setup.rs` `fn radio_panel` - has the live channel bars and Calibrate Radio's capture of each channel's range, written as RCn_MIN and RCn_MAX; missing RCn_TRIM, the four Reverse boxes, the Spektrum bind buttons and the plane's elevon boxes |
