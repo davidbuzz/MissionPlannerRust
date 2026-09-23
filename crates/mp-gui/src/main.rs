@@ -24,6 +24,8 @@ use gpui::{
     WindowOptions, div, prelude::*, px, rgb, size,
 };
 use mapview::MapViewport;
+use mp_tiles::cache::TileCache;
+use mp_tiles::store::TileStore;
 use plan::Plan;
 use telemetry::{Telemetry, TelemetryView};
 use ui::{action, theme};
@@ -155,12 +157,26 @@ impl MissionPlanner {
             .and_then(|v| v.parse().ok())
             .unwrap_or(0);
 
+        // Map imagery. Off with MP_NO_TILES, which is how the offline behaviour gets exercised
+        // and how a screenshot avoids depending on a tile server being up.
+        let mut map = MapViewport::new(track_points, markers);
+        if std::env::var("MP_NO_TILES").is_err() {
+            let cache = TileCache::new(TileCache::default_root());
+            let source = std::env::var("MP_TILE_SOURCE")
+                .ok()
+                .and_then(|id| mp_tiles::source::source_by_id(&id))
+                .unwrap_or(&mp_tiles::source::OPENSTREETMAP);
+            let store = if std::env::var("MP_OFFLINE").is_ok() {
+                TileStore::offline(source, cache)
+            } else {
+                TileStore::new(source, cache)
+            };
+            map.set_tiles(std::sync::Arc::new(store));
+        }
+
         Self {
             telemetry,
-            map: std::rc::Rc::new(std::cell::RefCell::new(MapViewport::new(
-                track_points,
-                markers,
-            ))),
+            map: std::rc::Rc::new(std::cell::RefCell::new(map)),
             auto_read_mission: read_mission,
             mission_requested: false,
             screen,
@@ -378,6 +394,7 @@ impl MissionPlanner {
     /// The map, with the handlers that make it a map rather than a picture.
     fn map_pane(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let following = self.map.borrow().is_following();
+        let attribution = self.map.borrow().attribution();
         let planning = self.screen == Screen::Plan;
 
         div()
@@ -476,6 +493,21 @@ impl MissionPlanner {
                         }),
                     )
                     .child(mapview::map_element(self.map.clone()))
+                    // Attribution. Required by both providers' licences, so it is drawn over the
+                    // map rather than in a settings screen nobody opens - if the imagery is on
+                    // screen, so is the credit for it.
+                    .children(attribution.map(|text| {
+                        div()
+                            .absolute()
+                            .bottom_1()
+                            .right_2()
+                            .px_1()
+                            .rounded_sm()
+                            .bg(rgb(theme::PANEL))
+                            .text_xs()
+                            .text_color(rgb(theme::DIM))
+                            .child(text)
+                    }))
                     .child(
                         div()
                             .absolute()
@@ -508,9 +540,15 @@ impl MissionPlanner {
     /// The strip under the map: what it drew and how long it took.
     fn map_status(&self) -> impl IntoElement {
         let map = self.map.borrow();
+        let (drawn, approximate, missing) = map.tile_counts();
+        let tiles = if map.has_tiles() {
+            format!("tiles: {drawn} drawn, {approximate} coarse, {missing} pending  -  ")
+        } else {
+            String::new()
+        };
         let text = if map.has_fix() {
             format!(
-                "flight path: {} points recorded, {} drawn in {} path(s), {} refused  -  paint {:.2} ms avg, {:.2} ms worst over {} frames",
+                "{tiles}flight path: {} points recorded, {} drawn in {} path(s), {} refused  -  paint {:.2} ms avg, {:.2} ms worst over {} frames",
                 map.path_len(),
                 map.drawn_points(),
                 map.track_paths(),
@@ -521,7 +559,7 @@ impl MissionPlanner {
             )
         } else {
             format!(
-                "waiting for a position fix  -  paint {:.2} ms avg over {} frames",
+                "{tiles}waiting for a position fix  -  paint {:.2} ms avg over {} frames",
                 map.paint_ema().as_secs_f64() * 1000.0,
                 map.paints(),
             )

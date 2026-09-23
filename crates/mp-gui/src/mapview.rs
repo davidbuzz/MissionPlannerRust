@@ -15,13 +15,17 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use gpui::{
-    App, Bounds, Hsla, Path, PathBuilder, Pixels, Point, Window, canvas, point, px, quad, rgb, size,
+    App, Bounds, Corners, Hsla, Path, PathBuilder, Pixels, Point, RenderImage, Window, canvas,
+    point, px, quad, rgb, size,
 };
 use mp_mission::MissionItem;
-use mp_units::{Bearing, LatLon, WebMercator};
+use mp_tiles::store::{TileAnswer, TileStore};
+use mp_units::{Bearing, LatLon, TileId, WebMercator, tiles};
 
 /// A synthetic flight track and the state needed to draw it.
 pub struct MapViewport {
@@ -61,6 +65,22 @@ pub struct MapViewport {
     mission: Vec<(WebMercator, u16)>,
     /// The survey area being drawn, if any.
     polygon: Vec<WebMercator>,
+    /// Where map imagery comes from, if any has been configured.
+    tiles: Option<Arc<TileStore>>,
+    /// Tiles already uploaded to the GPU, keyed so the `ImageId` stays stable.
+    ///
+    /// Stability is the whole game: gpui keys its texture atlas on `ImageId`, so handing it a
+    /// fresh `RenderImage` with identical pixels every frame re-uploads every tile every frame.
+    /// The earlier spike measured that at 37 microseconds per tile against 0.44 when the id is
+    /// stable - a hundredfold difference, and at forty tiles a screen the difference between a
+    /// map that pans smoothly and one that does not.
+    images: HashMap<TileId, Arc<RenderImage>>,
+    /// Tiles drawn from imagery in the last paint.
+    tiles_drawn: usize,
+    /// Tiles that had to be drawn from a coarser ancestor.
+    tiles_approximate: usize,
+    /// Tiles with nothing to draw at all.
+    tiles_missing: usize,
     /// The view the user has chosen, or `None` while the map follows the vehicle.
     ///
     /// Follow-the-vehicle is right until the moment someone wants to look at something else, and
@@ -173,6 +193,11 @@ impl MapViewport {
             home: None,
             mission: Vec::new(),
             polygon: Vec::new(),
+            tiles: None,
+            images: HashMap::new(),
+            tiles_drawn: 0,
+            tiles_approximate: 0,
+            tiles_missing: 0,
             camera: None,
             drag_from: None,
             last_viewport: (1.0, 1.0),
@@ -489,7 +514,159 @@ impl MapViewport {
     }
 }
 
-/// Paints the checkerboard that stands in for raster tiles until the tile pipeline exists.
+impl MapViewport {
+    /// Gives the map somewhere to get imagery from.
+    pub fn set_tiles(&mut self, store: Arc<TileStore>) {
+        self.tiles = Some(store);
+        self.images.clear();
+    }
+
+    /// Whether imagery is configured.
+    #[must_use]
+    pub const fn has_tiles(&self) -> bool {
+        self.tiles.is_some()
+    }
+
+    /// How the last paint went: drawn, approximated from a coarser tile, and missing.
+    #[must_use]
+    pub const fn tile_counts(&self) -> (usize, usize, usize) {
+        (self.tiles_drawn, self.tiles_approximate, self.tiles_missing)
+    }
+
+    /// What must be shown on screen about where the imagery came from.
+    #[must_use]
+    pub fn attribution(&self) -> Option<&'static str> {
+        self.tiles.as_ref().map(|store| store.source().attribution)
+    }
+
+    /// The uploaded image for a tile, uploading it if this is the first sight of it.
+    ///
+    /// The cache is keyed on `TileId` so the `ImageId` inside stays the same across frames. It is
+    /// bounded, because an hour of panning would otherwise hold every tile ever seen.
+    fn image_for(&mut self, id: TileId, tile: &mp_tiles::store::DecodedTile) -> Arc<RenderImage> {
+        if let Some(existing) = self.images.get(&id) {
+            return Arc::clone(existing);
+        }
+
+        // gpui stores RenderImage frames in BGRA despite the RgbaImage container - see
+        // decode_static_image_from_decoder, which does pixel.swap(0, 2) after into_rgba8(). A tile
+        // decoded from PNG must be swizzled the same way or every tile renders colour-swapped.
+        let mut bgra = tile.rgba.clone();
+        for pixel in bgra.chunks_exact_mut(4) {
+            pixel.swap(0, 2);
+        }
+
+        let image = image::RgbaImage::from_raw(tile.width, tile.height, bgra)
+            .map(|buffer| Arc::new(RenderImage::new(vec![image::Frame::new(buffer)])));
+
+        let Some(image) = image else {
+            // A tile whose pixel count disagrees with its dimensions. Rather than panicking, treat
+            // it as missing; the next fetch replaces it.
+            return Arc::new(RenderImage::new(vec![image::Frame::new(
+                image::RgbaImage::new(1, 1),
+            )]));
+        };
+
+        if self.images.len() >= MAX_UPLOADED_TILES {
+            // Cheap eviction: the map asks for what is on screen every frame, so anything dropped
+            // that is still needed is re-uploaded on the next paint. Precision here would cost
+            // more than it saves.
+            self.images.clear();
+        }
+        self.images.insert(id, Arc::clone(&image));
+        image
+    }
+}
+
+/// How many uploaded tiles to keep. A screenful is about forty; this is several screenfuls.
+const MAX_UPLOADED_TILES: usize = 192;
+
+/// Paints map imagery for the view, falling back to the graticule where there is none.
+///
+/// Returns false if there is no imagery configured at all, so the caller can draw the placeholder.
+fn paint_tiles(
+    map: &mut MapViewport,
+    origin: Point<Pixels>,
+    w: f32,
+    h: f32,
+    view: (f64, f64, f64, f64),
+    window: &mut Window,
+) -> bool {
+    let Some(store) = map.tiles.clone() else {
+        return false;
+    };
+    let (vx, vy, vw, vh) = view;
+    if vw <= 0.0 || vh <= 0.0 || w <= 0.0 || h <= 0.0 {
+        return false;
+    }
+
+    // The zoom whose tiles are closest to one screen pixel per tile pixel. Choosing by the
+    // viewport rather than by a fixed step is what keeps imagery sharp at any window size.
+    let zoom = tiles::zoom_for_span(vw, w, tiles::TILE_SIZE_PX).min(store.source().max_zoom);
+    let north_west = WebMercator { x: vx, y: vy };
+    let south_east = WebMercator {
+        x: vx + vw,
+        y: vy + vh,
+    };
+
+    map.tiles_drawn = 0;
+    map.tiles_approximate = 0;
+    map.tiles_missing = 0;
+
+    #[allow(clippy::cast_possible_truncation)] // screen coordinates are f32 by the renderer's API
+    let screen_rect = |a: WebMercator, b: WebMercator| -> Bounds<Pixels> {
+        let left = ((a.x - vx) / vw) as f32 * w;
+        let top = ((a.y - vy) / vh) as f32 * h;
+        let right = ((b.x - vx) / vw) as f32 * w;
+        let bottom = ((b.y - vy) / vh) as f32 * h;
+        Bounds {
+            origin: point(origin.x + px(left), origin.y + px(top)),
+            size: size(px(right - left), px(bottom - top)),
+        }
+    };
+
+    for id in tiles::tiles_for_view(north_west, south_east, zoom) {
+        let (tile_nw, tile_se) = id.bounds();
+        let rect = screen_rect(tile_nw, tile_se);
+
+        match store.get(id) {
+            TileAnswer::Exact(tile) => {
+                let image = map.image_for(id, &tile);
+                // bounds clips, image_bounds says where the whole image would go. They are the
+                // same for an exact tile.
+                let _ = window.paint_image(rect, rect, Corners::default(), image, 0, false);
+                map.tiles_drawn += 1;
+            }
+            TileAnswer::Ancestor { id: ancestor, tile } => {
+                let image = map.image_for(ancestor, &tile);
+                // Draw the ancestor at its own, larger extent and clip to this tile's rectangle,
+                // which shows exactly the part of it that belongs here. This is why the map fills
+                // in blurry and then sharpens rather than appearing blank and snapping.
+                let (ancestor_nw, ancestor_se) = ancestor.bounds();
+                let ancestor_rect = screen_rect(ancestor_nw, ancestor_se);
+                let _ =
+                    window.paint_image(rect, ancestor_rect, Corners::default(), image, 0, false);
+                map.tiles_approximate += 1;
+            }
+            TileAnswer::Missing => {
+                // A flat panel colour, not the checkerboard: a chequered hole among real imagery
+                // reads as a rendering fault rather than as a tile that has not arrived.
+                window.paint_quad(quad(
+                    rect,
+                    Corners::default(),
+                    rgb(0x1c_25_2d),
+                    gpui::Edges::default(),
+                    rgb(0x00_00_00),
+                    gpui::BorderStyle::default(),
+                ));
+                map.tiles_missing += 1;
+            }
+        }
+    }
+    true
+}
+
+/// Paints the checkerboard that stands in for raster tiles when no imagery is configured.
 ///
 /// Drawn whether or not there is anything to plot on it. A map with no fix should look like a map
 /// waiting for a position, not like a panel that failed to paint.
@@ -568,9 +745,11 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
         )
     };
 
-    // Graticule, standing in for raster tiles until the tile pipeline exists.
+    // Imagery, or the graticule if none is configured.
     let phase_tiles = Instant::now();
-    paint_graticule(origin, w, h, window);
+    if !paint_tiles(map, origin, w, h, (vx, vy, vw, vh), window) {
+        paint_graticule(origin, w, h, window);
+    }
     map.phases[0] = phase_tiles.elapsed();
 
     // The flown path. Decimated to screen resolution for the reasons measured in ADR 0001, and

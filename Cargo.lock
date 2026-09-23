@@ -3322,6 +3322,7 @@ dependencies = [
  "mp-link",
  "mp-mavlink-dialects",
  "mp-mission",
+ "mp-tiles",
  "mp-units",
  "mp-vehicle",
 ]
