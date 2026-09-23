@@ -19,7 +19,9 @@
 
 #![forbid(unsafe_code)]
 
+pub mod clock;
 pub mod coverage;
+pub mod fence;
 pub mod health;
 pub mod link_quality;
 /// Flight mode names, generated from Mission Planner's parameter metadata.
@@ -31,12 +33,17 @@ pub mod registry;
 pub mod sensors;
 pub mod snapshot;
 pub mod state;
+pub mod statics;
 pub mod units;
+pub mod update;
 
+pub use clock::DateTime;
+pub use fence::FenceItem;
 pub use link_quality::{LinkQuality, Radio};
 pub use modes::{VehicleFamily, flight_mode_name};
 pub use rc::RcChannels;
 pub use registry::{VehicleId, VehicleRegistry};
 pub use sensors::Sensors;
 pub use snapshot::{StateHandle, StatePublisher};
-pub use state::{Attitude, Battery, GpsInfo, Nav, Rangefinder, Terrain, VehicleState};
+pub use state::{Attitude, Battery, GpsInfo, LatLngAlt, Nav, Rangefinder, Terrain, VehicleState};
+pub use statics::StreamRates;

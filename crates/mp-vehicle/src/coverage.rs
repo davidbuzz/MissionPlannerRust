@@ -133,7 +133,7 @@ pub const CURRENTSTATE: &[Field] = &[
         "",
         "",
         Plumbing(
-            "the saved default that `ResetInternals` copies into the matching `rate*` property",
+            "the saved default that `ResetInternals` copies into the matching `rate*` property: `StreamRates::backups`, which a newly seen vehicle starts from",
         ),
     ),
     row(
@@ -142,7 +142,7 @@ pub const CURRENTSTATE: &[Field] = &[
         "",
         "",
         Plumbing(
-            "the saved default that `ResetInternals` copies into the matching `rate*` property",
+            "the saved default that `ResetInternals` copies into the matching `rate*` property: `StreamRates::backups`, which a newly seen vehicle starts from",
         ),
     ),
     row(
@@ -151,7 +151,7 @@ pub const CURRENTSTATE: &[Field] = &[
         "",
         "",
         Plumbing(
-            "the saved default that `ResetInternals` copies into the matching `rate*` property",
+            "the saved default that `ResetInternals` copies into the matching `rate*` property: `StreamRates::backups`, which a newly seen vehicle starts from",
         ),
     ),
     row(
@@ -160,7 +160,7 @@ pub const CURRENTSTATE: &[Field] = &[
         "",
         "",
         Plumbing(
-            "the saved default that `ResetInternals` copies into the matching `rate*` property",
+            "the saved default that `ResetInternals` copies into the matching `rate*` property: `StreamRates::backups`, which a newly seen vehicle starts from",
         ),
     ),
     row(
@@ -169,10 +169,18 @@ pub const CURRENTSTATE: &[Field] = &[
         "",
         "",
         Plumbing(
-            "the saved default that `ResetInternals` copies into the matching `rate*` property",
+            "the saved default that `ResetInternals` copies into the matching `rate*` property: `StreamRates::backups`, which a newly seen vehicle starts from",
         ),
     ),
-    row("KIndexstatic", "static int", "", "", Missing),
+    row(
+        "KIndexstatic",
+        "static int",
+        "",
+        "",
+        Done(
+            "VehicleState::kindex() (process-wide, -1 until `VehicleState::set_kindex`, which start-up must call with the `kindex` setting and the K-index download, as MainV2.cs:3940-3981 does)",
+        ),
+    ),
     row(
         "firmware",
         "Firmwares",
@@ -182,14 +190,62 @@ pub const CURRENTSTATE: &[Field] = &[
             "from `autopilot` and `vehicle_type` as MAVLinkInterface.cs:6700-6815 does, `VehicleFamily::from_mav_type` for ArduPilot; the version-string lookup it tries first reads the firmware's `STATUSTEXT` banner (MAVLinkInterface.cs:1827-1830), which is not held here",
         ),
     ),
-    row("hilch1", "int", "", "", Missing),
-    row("hilch2", "int", "", "", Missing),
-    row("hilch3", "int", "", "", Missing),
-    row("hilch4", "int", "", "", Missing),
-    row("hilch5", "int", "", "", Missing),
-    row("hilch6", "int", "", "", Missing),
-    row("hilch7", "int", "", "", Missing),
-    row("hilch8", "int", "", "", Missing),
+    row(
+        "hilch1",
+        "int",
+        "",
+        "",
+        Done("hil_channels[0] (`RC_CHANNELS_SCALED`, or `HIL_CONTROLS`' roll times 10000)"),
+    ),
+    row(
+        "hilch2",
+        "int",
+        "",
+        "",
+        Done("hil_channels[1] (`RC_CHANNELS_SCALED`, or `HIL_CONTROLS`' pitch times 10000)"),
+    ),
+    row(
+        "hilch3",
+        "int",
+        "",
+        "",
+        Done("hil_channels[2] (`RC_CHANNELS_SCALED`, or `HIL_CONTROLS`' throttle times 10000)"),
+    ),
+    row(
+        "hilch4",
+        "int",
+        "",
+        "",
+        Done("hil_channels[3] (`RC_CHANNELS_SCALED`, or `HIL_CONTROLS`' yaw times 10000)"),
+    ),
+    row(
+        "hilch5",
+        "int",
+        "",
+        "",
+        Done("hil_channels[4] (`RC_CHANNELS_SCALED`)"),
+    ),
+    row(
+        "hilch6",
+        "int",
+        "",
+        "",
+        Done("hil_channels[5] (`RC_CHANNELS_SCALED`)"),
+    ),
+    row(
+        "hilch7",
+        "int",
+        "",
+        "",
+        Done("hil_channels[6] (`RC_CHANNELS_SCALED`)"),
+    ),
+    row(
+        "hilch8",
+        "int",
+        "",
+        "",
+        Done("hil_channels[7] (`RC_CHANNELS_SCALED`)"),
+    ),
     row(
         "lastautowp",
         "int",
@@ -405,26 +461,34 @@ pub const CURRENTSTATE: &[Field] = &[
         "",
         Plumbing("the static name-to-slot map behind `customfield0` to `customfield19`"),
     ),
-    row("customfield0", "float", "", "", Missing),
-    row("customfield1", "float", "", "", Missing),
-    row("customfield2", "float", "", "", Missing),
-    row("customfield3", "float", "", "", Missing),
-    row("customfield4", "float", "", "", Missing),
-    row("customfield5", "float", "", "", Missing),
-    row("customfield6", "float", "", "", Missing),
-    row("customfield7", "float", "", "", Missing),
-    row("customfield8", "float", "", "", Missing),
-    row("customfield9", "float", "", "", Missing),
-    row("customfield10", "float", "", "", Missing),
-    row("customfield11", "float", "", "", Missing),
-    row("customfield12", "float", "", "", Missing),
-    row("customfield13", "float", "", "", Missing),
-    row("customfield14", "float", "", "", Missing),
-    row("customfield15", "float", "", "", Missing),
-    row("customfield16", "float", "", "", Missing),
-    row("customfield17", "float", "", "", Missing),
-    row("customfield18", "float", "", "", Missing),
-    row("customfield19", "float", "", "", Missing),
+    row(
+        "customfield0",
+        "float",
+        "",
+        "",
+        Done(
+            "custom_fields[0] (a `NAMED_VALUE_FLOAT`, in the field its name claimed; the names, the C#'s static `custom_field_names`, are `VehicleState::custom_field_name`, and the `customfield<n>` settings start-up adds are `VehicleState::add_custom_field_name`)",
+        ),
+    ),
+    row("customfield1", "float", "", "", Done("custom_fields[1]")),
+    row("customfield2", "float", "", "", Done("custom_fields[2]")),
+    row("customfield3", "float", "", "", Done("custom_fields[3]")),
+    row("customfield4", "float", "", "", Done("custom_fields[4]")),
+    row("customfield5", "float", "", "", Done("custom_fields[5]")),
+    row("customfield6", "float", "", "", Done("custom_fields[6]")),
+    row("customfield7", "float", "", "", Done("custom_fields[7]")),
+    row("customfield8", "float", "", "", Done("custom_fields[8]")),
+    row("customfield9", "float", "", "", Done("custom_fields[9]")),
+    row("customfield10", "float", "", "", Done("custom_fields[10]")),
+    row("customfield11", "float", "", "", Done("custom_fields[11]")),
+    row("customfield12", "float", "", "", Done("custom_fields[12]")),
+    row("customfield13", "float", "", "", Done("custom_fields[13]")),
+    row("customfield14", "float", "", "", Done("custom_fields[14]")),
+    row("customfield15", "float", "", "", Done("custom_fields[15]")),
+    row("customfield16", "float", "", "", Done("custom_fields[16]")),
+    row("customfield17", "float", "", "", Done("custom_fields[17]")),
+    row("customfield18", "float", "", "", Done("custom_fields[18]")),
+    row("customfield19", "float", "", "", Done("custom_fields[19]")),
     row(
         "roll",
         "float",
@@ -474,7 +538,9 @@ pub const CURRENTSTATE: &[Field] = &[
         "float",
         "Altitude (alt)",
         "Position",
-        Done("altitude_relative (the C# subtracts the user's `altoffsethome`, 0 unless set)"),
+        Done(
+            "altitude_relative (the C# subtracts the user's `altoffsethome`, 0 unless set: `alt()` is that difference, in the C#'s single precision)",
+        ),
     ),
     row(
         "altasl",
@@ -523,7 +589,9 @@ pub const CURRENTSTATE: &[Field] = &[
         "float",
         "Alt Home Offset (dist)",
         "Position",
-        Missing,
+        Done(
+            "alt_offset_home (0 until the flight screen's Home Alt button writes it, FlightData.cs:1236-1247)",
+        ),
     ),
     row(
         "gpsstatus",
@@ -710,7 +778,15 @@ pub const CURRENTSTATE: &[Field] = &[
             "`target_airspeed()`, without the C#'s low-pass and its division of the error by 100",
         ),
     ),
-    row("lowairspeed", "bool", "", "", Missing),
+    row(
+        "lowairspeed",
+        "bool",
+        "",
+        "",
+        Done(
+            "low_airspeed (from `VFR_HUD`; the `AIRSPEED_MIN` or `ARSPD_FBW_MIN` parameter the C# reads itself comes from `set_airspeed_min_params()`, which the parameter table's owner must call)",
+        ),
+    ),
     row(
         "asratio",
         "float",
@@ -1255,7 +1331,9 @@ pub const CURRENTSTATE: &[Field] = &[
         "float",
         "Vertical Speed (speed)",
         "Position",
-        Missing,
+        Done(
+            "vertical_speed() (the `alt` setter's filtered rate from `GLOBAL_POSITION_INT` and the high-latency messages, against `datetime`)",
+        ),
     ),
     row(
         "verticalspeed_fpm",
@@ -1352,7 +1430,7 @@ pub const CURRENTSTATE: &[Field] = &[
         "ClimbRate (speed)",
         "Position",
         Done(
-            "climb_rate (from `VFR_HUD`; the C#'s fallback, differentiating `alt` when no `VFR_HUD` arrives, needs a packet clock)",
+            "climb_rate (from `VFR_HUD`; until the first, the `alt` setter's unfiltered rate against `datetime`, as the C#'s)",
         ),
     ),
     row(
@@ -1374,28 +1452,32 @@ pub const CURRENTSTATE: &[Field] = &[
         "float",
         "Dist Traveled (dist)",
         "Position",
-        Missing,
+        Done(
+            "dist_traveled (metres, where the C# adds display units; counted by `update_current_settings`, which the link must call on every vehicle after each read, as `VehicleRegistry::update_current_settings`)",
+        ),
     ),
     row(
         "timeSinceArmInAir",
         "float",
         "Time in Air (sec)",
         "Position",
-        Missing,
+        Done(
+            "time_since_arm_in_air (counted by `update_current_settings`; `HEARTBEAT` arming restarts it)",
+        ),
     ),
     row(
         "timeInAir",
         "float",
         "Time in Air (sec)",
         "Position",
-        Missing,
+        Done("time_in_air (counted by `update_current_settings`)"),
     ),
     row(
         "timeInAirMinSec",
         "float",
         "Time in Air (min.sec)",
         "Position",
-        Missing,
+        Done("time_in_air_min_sec()"),
     ),
     row(
         "turnrate",
@@ -1683,14 +1765,14 @@ pub const CURRENTSTATE: &[Field] = &[
         "double",
         "Bat efficiency (mah/km)",
         "Battery",
-        Missing,
+        Done("battery_mah_per_km() (unguarded: infinite or NaN before any distance)"),
     ),
     row(
         "battery_kmleft",
         "double",
         "Bat km left EST (km)",
         "Battery",
-        Missing,
+        Done("battery_km_left()"),
     ),
     row(
         "battery_usedmah",
@@ -1698,7 +1780,7 @@ pub const CURRENTSTATE: &[Field] = &[
         "Bat used EST (mah)",
         "Battery",
         Done(
-            "battery.consumed_mah (from `BATTERY_STATUS`; the C#'s integration of the `SYS_STATUS` current needs a packet clock)",
+            "battery_used_mah (`BATTERY_STATUS`'s `current_consumed`, which is also `battery.consumed_mah`, and between reports the `SYS_STATUS` current integrated against `datetime`)",
         ),
     ),
     row(
@@ -2001,10 +2083,28 @@ pub const CURRENTSTATE: &[Field] = &[
         "PointLatLngAlt",
         "",
         "Position",
-        Missing,
+        Done(
+            "VehicleState::planned_home() (process-wide, as the C#'s static is; `VehicleState::set_planned_home` is what start-up must call with the `TXT_homelat`, `TXT_homelng` and `TXT_homealt` settings, as MainV2.cs:1012-1025 does)",
+        ),
     ),
-    row("Base", "PointLatLngAlt", "", "Position", Missing),
-    row("TrackerLocation", "PointLatLngAlt", "", "Position", Missing),
+    row(
+        "Base",
+        "PointLatLngAlt",
+        "",
+        "Position",
+        Done(
+            "base ((0, 0, 0) until the RTK injection page or the moving-base control writes it, ConfigSerialInjectGPS.cs:910, 1077, 1098 and Controls/MovingBase.cs:227)",
+        ),
+    ),
+    row(
+        "TrackerLocation",
+        "PointLatLngAlt",
+        "",
+        "Position",
+        Done(
+            "tracker_location() (home until `VehicleState::set_tracker_location` - the planner's Set Tracker Home, FlightPlanner.cs:760, 6977 - gives it a longitude)",
+        ),
+    ),
     row(
         "Location",
         "PointLatLngAlt",
@@ -2021,14 +2121,22 @@ pub const CURRENTSTATE: &[Field] = &[
             "target_position with `target_altitude_msl` (the C#'s tag on it, the type mask, is not kept)",
         ),
     ),
-    row("GeoFenceDist", "float", "", "Other", Missing),
+    row(
+        "GeoFenceDist",
+        "float",
+        "",
+        "Other",
+        Done(
+            "geo_fence_dist() (given the fence items the C# reads from `MAVState.fencepoints`, which their owner must pass)",
+        ),
+    ),
     row(
         "DistToHome",
         "float",
         "Dist to Home (dist)",
         "Position",
         Derived(
-            "from `home` to `position` on the C#'s flat projection, 111319.5 m a degree with longitude scaled by cos(latitude)",
+            "from `tracker_location()` - home unless a tracker is set - to `position` on the C#'s flat projection, 111319.5 m a degree with longitude scaled by cos(latitude)",
         ),
     ),
     row(
@@ -2036,7 +2144,7 @@ pub const CURRENTSTATE: &[Field] = &[
         "float",
         "Dist to Moving Base (dist)",
         "Position",
-        Missing,
+        Done("dist_from_moving_base() (from 0° 0° until a base is set, as the C# is)"),
     ),
     row(
         "ELToMAV",
@@ -2275,17 +2383,41 @@ pub const CURRENTSTATE: &[Field] = &[
         "Hardware",
         Done("board.i2c_errors"),
     ),
-    row("timesincelastshot", "double", "", "Other", Missing),
+    row(
+        "timesincelastshot",
+        "double",
+        "",
+        "Other",
+        Done(
+            "time_since_last_shot (0 until the flight screen sets it from `VehicleState::shot_interval` over the camera feedback it keeps, as FlightData.cs:4021-4038 does)",
+        ),
+    ),
     row("press_abs", "float", "", "Sensor", Done("press_abs")),
     row("press_temp", "int", "", "Sensor", Done("press_temp")),
     row("press_abs2", "float", "", "Sensor", Done("press_abs2")),
     row("press_temp2", "int", "", "Sensor", Done("press_temp2")),
-    row("rateattitude", "int", "", "Telem", Missing),
-    row("rateposition", "int", "", "Telem", Missing),
-    row("ratestatus", "int", "", "Telem", Missing),
-    row("ratesensors", "int", "", "Telem", Missing),
-    row("raterc", "int", "", "Telem", Missing),
-    row("datetime", "DateTime", "", "", Missing),
+    row(
+        "rateattitude",
+        "int",
+        "",
+        "Telem",
+        Done(
+            "rates.attitude (4 Hz, or the saved default when the vehicle was first seen; the link's stream requests and Planner's rate combos read and write it)",
+        ),
+    ),
+    row("rateposition", "int", "", "Telem", Done("rates.position")),
+    row("ratestatus", "int", "", "Telem", Done("rates.status")),
+    row("ratesensors", "int", "", "Telem", Done("rates.sensors")),
+    row("raterc", "int", "", "Telem", Done("rates.rc")),
+    row(
+        "datetime",
+        "DateTime",
+        "",
+        "",
+        Done(
+            "datetime (each packet's time, stamped by `VehicleRegistry::apply_at`, which the link thread must call with `DateTime::now()`, or a replay with the log's time, in place of `apply`)",
+        ),
+    ),
     row(
         "connected",
         "bool",
@@ -2296,9 +2428,17 @@ pub const CURRENTSTATE: &[Field] = &[
     row("campointa", "float", "", "Mount", Done("mount.pointing_a")),
     row("campointb", "float", "", "Mount", Done("mount.pointing_b")),
     row("campointc", "float", "", "Mount", Done("mount.pointing_c")),
-    row("GimbalPoint", "PointLatLngAlt", "", "Mount", Missing),
-    row("gimballat", "float", "", "Mount", Missing),
-    row("gimballng", "float", "", "Mount", Missing),
+    row(
+        "GimbalPoint",
+        "PointLatLngAlt",
+        "",
+        "Mount",
+        Done(
+            "gimbal_point (`None` until the flight screen writes what `GimbalPoint.ProjectPoint` projects, FlightData.cs:3964-3995; that projection is not ported)",
+        ),
+    ),
+    row("gimballat", "float", "", "Mount", Done("gimbal_lat()")),
+    row("gimballng", "float", "", "Mount", Done("gimbal_lng()")),
     row(
         "landed",
         "bool",
@@ -2339,7 +2479,13 @@ pub const CURRENTSTATE: &[Field] = &[
     row("ter_load", "float", "", "Terrain", Done("terrain.loaded")),
     row("ter_pend", "float", "", "Terrain", Done("terrain.pending")),
     row("ter_space", "float", "", "Terrain", Done("terrain.spacing")),
-    row("KIndex", "int", "", "Enviromental", Missing),
+    row(
+        "KIndex",
+        "int",
+        "",
+        "Enviromental",
+        Done("VehicleState::kindex() (`KIndexstatic`)"),
+    ),
     row(
         "opt_m_x",
         "float",
@@ -2459,7 +2605,15 @@ pub const CURRENTSTATE: &[Field] = &[
         "Software",
         Done("autopilot_info.capabilities"),
     ),
-    row("speedup", "float", "", "Software", Missing),
+    row(
+        "speedup",
+        "float",
+        "",
+        "Software",
+        Done(
+            "speedup (`RAW_IMU`'s clock against `datetime`, where the C# uses the wall clock - the same live, the recorded time in a replay)",
+        ),
+    ),
     row("vtol_state", "byte", "", "Software", Done("vtol_state")),
     row("landed_state", "byte", "", "Software", Done("landed_state")),
     row(
@@ -2877,10 +3031,14 @@ pub fn report() -> String {
         counts.plumbing,
         counts.dropped
     );
-    out.push_str(
-        "## Missing, by group\n\n| group | missing | of | fields |\n|---|---:|---:|---|\n",
-    );
-    for (group, missing, of) in missing_by_group() {
+    let groups = missing_by_group();
+    out.push_str("## Missing, by group\n\n");
+    if groups.is_empty() {
+        out.push_str("None: every field is held, derivable, plumbing or deliberately dropped.\n");
+    } else {
+        out.push_str("| group | missing | of | fields |\n|---|---:|---:|---|\n");
+    }
+    for (group, missing, of) in groups {
         let names: Vec<String> = CURRENTSTATE
             .iter()
             .filter(|field| field.ours == Missing)
@@ -2928,6 +3086,11 @@ mod tests {
         include_str!("link_quality.rs"),
         include_str!("rc.rs"),
         include_str!("units.rs"),
+        include_str!("clock.rs"),
+        include_str!("statics.rs"),
+        include_str!("update.rs"),
+        include_str!("fence.rs"),
+        include_str!("registry.rs"),
     ];
 
     fn current_state() -> Option<String> {
@@ -3304,11 +3467,18 @@ mod tests {
             )
         );
         let groups = missing_by_group();
-        let (worst, missing, _) = groups.first().copied().expect("something is missing");
-        assert!(
-            report.contains(&format!("| {worst} | {missing} |")),
-            "the worst group is named"
-        );
+        match groups.first().copied() {
+            Some((worst, missing, _)) => assert!(
+                report.contains(&format!("| {worst} | {missing} |")),
+                "the worst group is named"
+            ),
+            // With nothing missing the section says so, and has no table to mislead.
+            None => {
+                assert_eq!(counts.missing, 0);
+                assert!(report.contains("## Missing, by group\n\nNone: every field"));
+                assert!(!report.contains("| group | missing |"));
+            }
+        }
         // And every missing field is named under its group.
         for field in CURRENTSTATE.iter().filter(|field| field.ours == Missing) {
             let group = if field.group.is_empty() {
@@ -3349,7 +3519,7 @@ mod tests {
                 counts.plumbing,
                 counts.dropped
             ),
-            (416, 48, 55, 30, 1)
+            (471, 48, 0, 30, 1)
         );
     }
 }

@@ -23,7 +23,7 @@ they need SITL, a window, or the network), **69 GUI scripts** under `tests/gui/`
 | Generated dialect | 349 messages, 206 enums, generated from the upstream XML |
 | Transports | serial, TCP, UDP, file replay, in-memory test doubles; port enumeration by `CommsSerialPort.GetPortNames`'s rules, held to per-OS fixtures; faults and a real pty unplug rehearsed in tests |
 | Link engine | I/O thread, multi-vehicle routing (50 systems in one test), stream requests; parameter sets, reads, commands, set-current and mission transfer with Mission Planner's own retry counts and waits, proved by counting sends under dropped, delayed and duplicated frames; every set and command the screens and `mpr` send goes through them |
-| Vehicle state | lock-free snapshot bus, packet-loss tracking; 416 of `CurrentState`'s 550 fields held with the C#'s rules, the rest listed in `docs/coverage/currentstate.md` by a test that reads the C# |
+| Vehicle state | lock-free snapshot bus, packet-loss tracking; all 550 of `CurrentState`'s members accounted for (471 held with the C#'s rules, 48 derived, 30 plumbing, 1 dropped), the last 55 matched per packet to the C#'s own `UpdateCurrentSettings` under mono |
 | Parameters | full download with gap recovery, typed values, 1,408 from SITL |
 | `.param` files | save, load and compare against a vehicle, honouring the C# skip-list |
 | Parameter docs | fetched for the connected firmware as Mission Planner fetches them (`apm.pdef.xml`, versioned or weekly), read before the bundled table: 1,407 of a SITL's 1,408 documented instead of 798 |

@@ -22,7 +22,9 @@ use mp_mavlink_dialects::all::{
 };
 use mp_units::{Bearing, Degrees, LatLon, Metres, MetresPerSecond, Radians};
 
+use crate::clock::DateTime;
 use crate::link_quality::{LinkQuality, Radio};
+use crate::statics::StreamRates;
 
 /// Attitude in the body frame.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -322,6 +324,28 @@ impl Default for Rangefinder {
     }
 }
 
+/// A point as the C#'s `PointLatLngAlt` carries one: latitude and longitude in degrees, altitude
+/// in metres, with no range check, and (0, 0, 0) for a point that has not been set.
+/// `// C#: ExtLibs/Utilities/PointLatLngAlt.cs:19-45`
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct LatLngAlt {
+    /// Latitude, degrees.
+    pub lat: f64,
+    /// Longitude, degrees.
+    pub lng: f64,
+    /// Altitude, metres.
+    pub alt: f64,
+}
+
+impl LatLngAlt {
+    /// (0, 0, 0): `new PointLatLngAlt()`, and `PointLatLngAlt.Zero`.
+    pub const ZERO: Self = Self {
+        lat: 0.0,
+        lng: 0.0,
+        alt: 0.0,
+    };
+}
+
 /// Everything decoded about one vehicle.
 ///
 /// `Copy` on purpose: publishing a snapshot is a memcpy into a recycled allocation, not a deep
@@ -503,6 +527,104 @@ pub struct VehicleState {
     /// The target's altitude above sea level.
     pub target_altitude_msl: Metres,
 
+    /// `datetime`: this vehicle's clock, which the rates and totals below are measured against.
+    /// [`crate::VehicleRegistry::apply_at`] sets it to each packet's time before applying it;
+    /// [`DateTime::MIN`] until then, which leaves them all still. See [`crate::clock`].
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:2009-2010`
+    pub datetime: DateTime,
+    /// `altoffsethome`, metres: what [`VehicleState::alt`] subtracts. The flight screen's "Home
+    /// Alt" button toggles it between 0 and minus the home altitude, which makes the displayed
+    /// altitude above sea level (`FlightData.cs:1236-1247`); the vertical speed is worked out
+    /// from the offset altitude, as in the C#.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:378-383`
+    pub alt_offset_home: f32,
+    /// `_alt`, the altitude above home as the `alt` setter was last given it, single precision.
+    pub(crate) alt_backing: f32,
+    /// `oldalt`: the offset altitude the vertical speed was last worked out from.
+    pub(crate) old_alt: f32,
+    /// `lastalt`: when.
+    pub(crate) last_alt: DateTime,
+    /// `gotVFR`: a `VFR_HUD` has given the climb rate, so the `alt` setter no longer does.
+    pub(crate) got_vfr: bool,
+    /// `_verticalspeed`, behind [`VehicleState::vertical_speed`].
+    pub(crate) vertical_speed_backing: f32,
+    /// `distTraveled`, metres: the distance flown while armed on a 3D fix, a straight line a
+    /// second. See [`VehicleState::update_current_settings`].
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1186-1187, 4606-4619`
+    pub dist_traveled: f32,
+    /// `timeInAir`, seconds: the seconds armed with the throttle over 12% or the ground speed
+    /// over 3 m/s.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1191-1192, 4621-4626`
+    pub time_in_air: f32,
+    /// `timeSinceArmInAir`, seconds: the same count, restarted at 0 each time the vehicle arms.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1189, 2878-2882, 4621-4626`
+    pub time_since_arm_in_air: f32,
+    /// `lastpos`: the position at the last second counted; `None` for the C#'s (0, 0).
+    pub(crate) last_pos: Option<LatLon>,
+    /// `lastsecondcounter`: the clock at the last second counted.
+    pub(crate) last_second_counter: DateTime,
+    /// `Base`: the moving base's position, which [`VehicleState::dist_from_moving_base`] measures
+    /// from; (0, 0, 0) until set. The RTK injection page sets it from the base receiver's reports
+    /// (`ConfigSerialInjectGPS.cs:910, 1077, 1098`) and the moving-base control from its own GPS
+    /// (`Controls/MovingBase.cs:227`); whoever ports those writes it here.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:79, 1591-1604`
+    pub base: LatLngAlt,
+    /// The stream rates Mission Planner asks this vehicle for, starting from
+    /// [`StreamRates::backups`] when it is first seen.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:2002-2007, 4393-4397`
+    pub rates: StreamRates,
+    /// `GimbalPoint`: where the camera is pointed, projected onto the terrain; `None` until the
+    /// flight screen has projected it. The C# projects it on each map update when the mount
+    /// parameters say it is stabilised, with `GimbalPoint.ProjectPoint` - terrain heights, the
+    /// mount's parameters and angles - and sets it when that finds a point
+    /// (`FlightData.cs:3964-3995`); that projection is the flight screen's to port, and writes
+    /// here.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:2022`
+    pub gimbal_point: Option<LatLngAlt>,
+    /// `timesincelastshot`, seconds between the last two camera shots; 0 until the flight screen
+    /// sets it from [`VehicleState::shot_interval`].
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1993-1994`
+    pub time_since_last_shot: f64,
+    /// `speedup`: how fast the vehicle's clock runs against ours - a simulator's speed-up - from
+    /// `RAW_IMU`, filtered 95% old to 5% new. Only readings that move the IMU clock forward by
+    /// less than ten seconds count, and the first is measured from an IMU clock of 0, so it
+    /// counts only if the vehicle is first heard within ten seconds of boot, and never again once
+    /// the vehicle reboots. **Divergence:** measured against [`VehicleState::datetime`] where the
+    /// C# uses `DateTime.Now` - the same on a live link, and the recorded time in a replay, where
+    /// the C#'s figure is how fast the file is being read.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:2156, 3699-3713`
+    pub speedup: f32,
+    /// `imutime`: the IMU clock at the last reading counted, seconds.
+    pub(crate) imu_time: f64,
+    /// `lastimutime`: our clock then.
+    pub(crate) last_imu_time: DateTime,
+    /// `hilch1` to `hilch8`: `RC_CHANNELS_SCALED`'s eight channels, or `HIL_CONTROLS`' first four
+    /// as ten-thousandths - what a hardware-in-the-loop simulator is being told.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:105-113, 2307-2324, 2551-2564`
+    pub hil_channels: [i32; 8],
+    /// `customfield0` to `customfield19`: `NAMED_VALUE_FLOAT` values, each in the field its name
+    /// was given; [`VehicleState::custom_field_name`] says which name that is.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:239-258, 3913-4012`
+    pub custom_fields: [f32; crate::statics::CUSTOM_FIELDS],
+    /// `lowairspeed`, as each `VFR_HUD` sets it: armed, in the air since arming, with the airspeed
+    /// sensor enabled and healthy, and below the minimum airspeed parameter, which the owner of
+    /// the parameters gives [`VehicleState::set_airspeed_min_params`].
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:505, 3858-3888`
+    pub low_airspeed: bool,
+    /// The minimum airspeed parameter as last given by [`VehicleState::set_airspeed_min_params`].
+    pub(crate) airspeed_min_param: Option<f32>,
+    /// `_cachedAirspeedMin`: the minimum the warning last took from it.
+    pub(crate) cached_airspeed_min: f32,
+    /// `_lastAirspeedMinCheck`.
+    pub(crate) last_airspeed_min_check: DateTime,
+    /// `battery_usedmah`, milliamp-hours: `BATTERY_STATUS`'s `current_consumed` for the first
+    /// battery, and between reports the `SYS_STATUS` current integrated over the clock. The
+    /// C#'s `battery_mahperkm` and `battery_kmleft` are worked out from it.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1396-1415, 1483-1485, 3120`
+    pub battery_used_mah: f64,
+    /// `_lastcurrent`: the clock at the last current reading.
+    pub(crate) last_current: DateTime,
+
     /// Number of MAVLink messages applied to this state.
     pub messages_applied: u64,
 }
@@ -528,12 +650,15 @@ fn radians(degrees: f32) -> Radians {
 }
 
 impl VehicleState {
-    /// Creates empty state for a vehicle.
+    /// Creates empty state for a vehicle, with the saved stream rates as the C#'s constructor
+    /// takes them through `ResetInternals`.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:223-227, 4393-4397`
     #[must_use]
     pub fn new(sysid: u8, compid: u8) -> Self {
         Self {
             sysid,
             compid,
+            rates: StreamRates::backups(),
             ..Self::default()
         }
     }
@@ -555,7 +680,12 @@ impl VehicleState {
                 self.base_mode = m.base_mode;
                 self.custom_mode = m.custom_mode;
                 self.system_status = m.system_status;
-                self.armed = m.base_mode & MODE_FLAG_SAFETY_ARMED != 0;
+                let armed = m.base_mode & MODE_FLAG_SAFETY_ARMED != 0;
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:2878-2882, arming restarts the count.
+                if !self.armed && armed {
+                    self.time_since_arm_in_air = 0.0;
+                }
+                self.armed = armed;
                 true
             }
             MavMessage::Attitude(m) => {
@@ -817,15 +947,10 @@ impl VehicleState {
         self.load = f32::from(m.load) / 10.0;
         // C#: CurrentState.cs:2951, through the setter at 1343-1352
         self.battery.set_remaining(m.battery_remaining);
-        // C#: CurrentState.cs:2952, through the setter at 1396-1415: the wire's -1 ("no
-        // sensor") is -0.01 A after the division, which the setter turns into 0. The setter
-        // also integrates the current into `battery_usedmah` over the packet clock; there is no
-        // clock here, and `BATTERY_STATUS` overwrites that figure with the vehicle's own.
-        self.battery.current = if m.current_battery == -1 {
-            0.0
-        } else {
-            f32::from(m.current_battery) / 100.0
-        };
+        // C#: CurrentState.cs:2952, `current_battery / 100.0f` through the setter at 1396-1415:
+        // the wire's -1 ("no sensor") is -0.01 A after the division, which the setter turns into
+        // 0; anything else is integrated into `battery_usedmah` over the clock.
+        self.set_current(f64::from(f32::from(m.current_battery) / 100.0));
         // C#: CurrentState.cs:2954
         self.packet_drop_remote = m.drop_rate_comm;
         // C#: CurrentState.cs:2957-2960
@@ -847,8 +972,10 @@ impl VehicleState {
 
     /// `GLOBAL_POSITION_INT`. `// C#: ExtLibs/ArduPilot/CurrentState.cs:3261-3288`
     fn apply_global_position_int(&mut self, m: &GlobalPositionInt) {
-        // C#: CurrentState.cs:3268, whatever the position says.
+        // C#: CurrentState.cs:3268, whatever the position says: `relative_alt / 1000.0f`, in
+        // single precision through the `alt` setter, which works out the vertical speed.
         self.altitude_relative = Metres::from_millimetres(m.relative_alt);
+        self.set_alt(i32_f32(m.relative_alt) / 1000.0);
         // C#: CurrentState.cs:3270-3274. "The new AHRS dead reckoning may send 0 alt and 0
         // long": a zero or unset coordinate leaves the last position where it was, and lets
         // GPS_RAW_INT supply one instead.
@@ -946,8 +1073,6 @@ impl VehicleState {
     }
 
     /// `VFR_HUD`. `// C#: ExtLibs/ArduPilot/CurrentState.cs:3841-3889`
-    ///
-    /// `lowairspeed` is not ported: it needs the `AIRSPEED_MIN` parameter and the time in air.
     fn apply_vfr_hud(&mut self, m: &VfrHud) {
         // C#: CurrentState.cs:3846-3848
         self.ground_speed = MetresPerSecond(f64::from(m.groundspeed));
@@ -960,8 +1085,11 @@ impl VehicleState {
         if self.sensors.reverse_motor() && self.throttle_percent > 0 {
             self.throttle_percent = -self.throttle_percent;
         }
-        // C#: CurrentState.cs:3855
+        // C#: CurrentState.cs:3855-3856, and from now on the `alt` setter leaves it alone.
         self.climb_rate = MetresPerSecond(f64::from(m.climb));
+        self.got_vfr = true;
+        // C#: CurrentState.cs:3858-3888
+        self.check_low_airspeed(m.airspeed);
     }
 
     /// `BATTERY_STATUS`. `// C#: ExtLibs/ArduPilot/CurrentState.cs:3077-3208`
@@ -1003,7 +1131,9 @@ impl VehicleState {
                     volts(&v14),
                 ];
             }
-            // C#: CurrentState.cs:3120-3126. The current is written past its setter.
+            // C#: CurrentState.cs:3120-3126. The current is written past its setter, so neither
+            // it nor its clock is touched by the used capacity, which is simply replaced.
+            self.battery_used_mah = f64::from(m.current_consumed);
             let battery = &mut self.battery;
             battery.consumed_mah = m.current_consumed;
             battery.set_remaining(m.battery_remaining);
@@ -1163,6 +1293,8 @@ impl VehicleState {
         self.altitude_msl = Metres(f64::from(amsl));
         let relative = amsl - cast_f32(self.home_altitude.0);
         self.altitude_relative = Metres(f64::from(relative));
+        // Through the `alt` setter, as `alt = altasl - (float)HomeAlt` is.
+        self.set_alt(relative);
         self.nav.alt_error = target - relative;
     }
 }

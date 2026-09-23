@@ -4,20 +4,11 @@ Generated from `crates/mp-vehicle/src/coverage.rs` by `cargo test -p mp-vehicle 
 
 | total | done | derived | missing | plumbing | dropped |
 |---:|---:|---:|---:|---:|---:|
-| 550 | 416 | 48 | 55 | 30 | 1 |
+| 550 | 471 | 48 | 0 | 30 | 1 |
 
 ## Missing, by group
 
-| group | missing | of | fields |
-|---|---:|---:|---|
-| (none) | 31 | 75 | `KIndexstatic`, `hilch1`, `hilch2`, `hilch3`, `hilch4`, `hilch5`, `hilch6`, `hilch7`, `hilch8`, `customfield0`, `customfield1`, `customfield2`, `customfield3`, `customfield4`, `customfield5`, `customfield6`, `customfield7`, `customfield8`, `customfield9`, `customfield10`, `customfield11`, `customfield12`, `customfield13`, `customfield14`, `customfield15`, `customfield16`, `customfield17`, `customfield18`, `customfield19`, `lowairspeed`, `datetime` |
-| Position | 10 | 63 | `altoffsethome`, `verticalspeed`, `distTraveled`, `timeSinceArmInAir`, `timeInAir`, `timeInAirMinSec`, `PlannedHomeLocation`, `Base`, `TrackerLocation`, `DistFromMovingBase` |
-| Telem | 5 | 18 | `rateattitude`, `rateposition`, `ratestatus`, `ratesensors`, `raterc` |
-| Mount | 3 | 6 | `GimbalPoint`, `gimballat`, `gimballng` |
-| Battery | 2 | 71 | `battery_mahperkm`, `battery_kmleft` |
-| Other | 2 | 5 | `GeoFenceDist`, `timesincelastshot` |
-| Enviromental | 1 | 1 | `KIndex` |
-| Software | 1 | 14 | `speedup` |
+None: every field is held, derivable, plumbing or deliberately dropped.
 
 ## Every field
 
@@ -30,21 +21,21 @@ Generated from `crates/mp-vehicle/src/coverage.rs` by `cargo test -p mp-vehicle 
 | `SpeedUnit` | `static string` |  |  | done: `DisplayUnits::speed_unit` |
 | `multiplieralt` | `static float` |  |  | done: `DisplayUnits::alt` |
 | `AltUnit` | `static string` |  |  | done: `DisplayUnits::alt_unit` |
-| `rateattitudebackup` | `static int` |  |  | plumbing: the saved default that `ResetInternals` copies into the matching `rate*` property |
-| `ratepositionbackup` | `static int` |  |  | plumbing: the saved default that `ResetInternals` copies into the matching `rate*` property |
-| `ratestatusbackup` | `static int` |  |  | plumbing: the saved default that `ResetInternals` copies into the matching `rate*` property |
-| `ratesensorsbackup` | `static int` |  |  | plumbing: the saved default that `ResetInternals` copies into the matching `rate*` property |
-| `ratercbackup` | `static int` |  |  | plumbing: the saved default that `ResetInternals` copies into the matching `rate*` property |
-| `KIndexstatic` | `static int` |  |  | **missing** |
+| `rateattitudebackup` | `static int` |  |  | plumbing: the saved default that `ResetInternals` copies into the matching `rate*` property: `StreamRates::backups`, which a newly seen vehicle starts from |
+| `ratepositionbackup` | `static int` |  |  | plumbing: the saved default that `ResetInternals` copies into the matching `rate*` property: `StreamRates::backups`, which a newly seen vehicle starts from |
+| `ratestatusbackup` | `static int` |  |  | plumbing: the saved default that `ResetInternals` copies into the matching `rate*` property: `StreamRates::backups`, which a newly seen vehicle starts from |
+| `ratesensorsbackup` | `static int` |  |  | plumbing: the saved default that `ResetInternals` copies into the matching `rate*` property: `StreamRates::backups`, which a newly seen vehicle starts from |
+| `ratercbackup` | `static int` |  |  | plumbing: the saved default that `ResetInternals` copies into the matching `rate*` property: `StreamRates::backups`, which a newly seen vehicle starts from |
+| `KIndexstatic` | `static int` |  |  | done: `VehicleState::kindex()` (process-wide, -1 until `VehicleState::set_kindex`, which start-up must call with the `kindex` setting and the K-index download, as MainV2.cs:3940-3981 does) |
 | `firmware` | `Firmwares` |  |  | derived: from `autopilot` and `vehicle_type` as MAVLinkInterface.cs:6700-6815 does, `VehicleFamily::from_mav_type` for ArduPilot; the version-string lookup it tries first reads the firmware's `STATUSTEXT` banner (MAVLinkInterface.cs:1827-1830), which is not held here |
-| `hilch1` | `int` |  |  | **missing** |
-| `hilch2` | `int` |  |  | **missing** |
-| `hilch3` | `int` |  |  | **missing** |
-| `hilch4` | `int` |  |  | **missing** |
-| `hilch5` | `int` |  |  | **missing** |
-| `hilch6` | `int` |  |  | **missing** |
-| `hilch7` | `int` |  |  | **missing** |
-| `hilch8` | `int` |  |  | **missing** |
+| `hilch1` | `int` |  |  | done: `hil_channels[0]` (`RC_CHANNELS_SCALED`, or `HIL_CONTROLS`' roll times 10000) |
+| `hilch2` | `int` |  |  | done: `hil_channels[1]` (`RC_CHANNELS_SCALED`, or `HIL_CONTROLS`' pitch times 10000) |
+| `hilch3` | `int` |  |  | done: `hil_channels[2]` (`RC_CHANNELS_SCALED`, or `HIL_CONTROLS`' throttle times 10000) |
+| `hilch4` | `int` |  |  | done: `hil_channels[3]` (`RC_CHANNELS_SCALED`, or `HIL_CONTROLS`' yaw times 10000) |
+| `hilch5` | `int` |  |  | done: `hil_channels[4]` (`RC_CHANNELS_SCALED`) |
+| `hilch6` | `int` |  |  | done: `hil_channels[5]` (`RC_CHANNELS_SCALED`) |
+| `hilch7` | `int` |  |  | done: `hil_channels[6]` (`RC_CHANNELS_SCALED`) |
+| `hilch8` | `int` |  |  | done: `hil_channels[7]` (`RC_CHANNELS_SCALED`) |
 | `lastautowp` | `int` |  |  | done: `last_auto_wp` (`None` is the C#'s -1) |
 | `parent` | `MAVState` |  |  | plumbing: the back-reference to the owning `MAVState`; `VehicleRegistry` holds that relationship |
 | `rcoverridech1` | `short` |  |  | plumbing: the RC override the joystick sends: the GCS's output, not vehicle state (`mp_link::commands::rc_override`) |
@@ -70,26 +61,26 @@ Generated from `crates/mp-vehicle/src/coverage.rs` by `cargo test -p mp-vehicle 
 | `sensors_present` | `Mavlink_Sensors` |  |  | done: `sensors.present` |
 | `prearmstatus` | `bool` |  |  | derived: connected and (`sensors.health` or not `sensors.enabled`) at the pre-arm bit, 0x10000000 |
 | `custom_field_names` | `static Dictionary<string, string>` |  |  | plumbing: the static name-to-slot map behind `customfield0` to `customfield19` |
-| `customfield0` | `float` |  |  | **missing** |
-| `customfield1` | `float` |  |  | **missing** |
-| `customfield2` | `float` |  |  | **missing** |
-| `customfield3` | `float` |  |  | **missing** |
-| `customfield4` | `float` |  |  | **missing** |
-| `customfield5` | `float` |  |  | **missing** |
-| `customfield6` | `float` |  |  | **missing** |
-| `customfield7` | `float` |  |  | **missing** |
-| `customfield8` | `float` |  |  | **missing** |
-| `customfield9` | `float` |  |  | **missing** |
-| `customfield10` | `float` |  |  | **missing** |
-| `customfield11` | `float` |  |  | **missing** |
-| `customfield12` | `float` |  |  | **missing** |
-| `customfield13` | `float` |  |  | **missing** |
-| `customfield14` | `float` |  |  | **missing** |
-| `customfield15` | `float` |  |  | **missing** |
-| `customfield16` | `float` |  |  | **missing** |
-| `customfield17` | `float` |  |  | **missing** |
-| `customfield18` | `float` |  |  | **missing** |
-| `customfield19` | `float` |  |  | **missing** |
+| `customfield0` | `float` |  |  | done: `custom_fields[0]` (a `NAMED_VALUE_FLOAT`, in the field its name claimed; the names, the C#'s static `custom_field_names`, are `VehicleState::custom_field_name`, and the `customfield<n>` settings start-up adds are `VehicleState::add_custom_field_name`) |
+| `customfield1` | `float` |  |  | done: `custom_fields[1]` |
+| `customfield2` | `float` |  |  | done: `custom_fields[2]` |
+| `customfield3` | `float` |  |  | done: `custom_fields[3]` |
+| `customfield4` | `float` |  |  | done: `custom_fields[4]` |
+| `customfield5` | `float` |  |  | done: `custom_fields[5]` |
+| `customfield6` | `float` |  |  | done: `custom_fields[6]` |
+| `customfield7` | `float` |  |  | done: `custom_fields[7]` |
+| `customfield8` | `float` |  |  | done: `custom_fields[8]` |
+| `customfield9` | `float` |  |  | done: `custom_fields[9]` |
+| `customfield10` | `float` |  |  | done: `custom_fields[10]` |
+| `customfield11` | `float` |  |  | done: `custom_fields[11]` |
+| `customfield12` | `float` |  |  | done: `custom_fields[12]` |
+| `customfield13` | `float` |  |  | done: `custom_fields[13]` |
+| `customfield14` | `float` |  |  | done: `custom_fields[14]` |
+| `customfield15` | `float` |  |  | done: `custom_fields[15]` |
+| `customfield16` | `float` |  |  | done: `custom_fields[16]` |
+| `customfield17` | `float` |  |  | done: `custom_fields[17]` |
+| `customfield18` | `float` |  |  | done: `custom_fields[18]` |
+| `customfield19` | `float` |  |  | done: `custom_fields[19]` |
 | `roll` | `float` | Roll (deg) | Attitude | derived: `attitude.roll`, in radians where the C# holds degrees |
 | `pitch` | `float` | Pitch (deg) | Attitude | derived: `attitude.pitch`, in radians where the C# holds degrees |
 | `yaw` | `float` | Yaw (deg) | Attitude | derived: `attitude.yaw`, in radians where the C# holds degrees from 0 to 360 |
@@ -98,14 +89,14 @@ Generated from `crates/mp-vehicle/src/coverage.rs` by `cargo test -p mp-vehicle 
 | `groundcourse` | `float` | GroundCourse (deg) | Position | done: `gps.course` |
 | `lat` | `double` | Latitude (dd) | Position | done: `position` (`None` is the C#'s 0, 0) |
 | `lng` | `double` | Longitude (dd) | Position | done: `position` (`None` is the C#'s 0, 0) |
-| `alt` | `float` | Altitude (alt) | Position | done: `altitude_relative` (the C# subtracts the user's `altoffsethome`, 0 unless set) |
+| `alt` | `float` | Altitude (alt) | Position | done: `altitude_relative` (the C# subtracts the user's `altoffsethome`, 0 unless set: `alt()` is that difference, in the C#'s single precision) |
 | `altasl` | `float` | Altitude (alt) | Position | done: `altitude_msl` |
 | `horizondist` | `float` | Horizon Dist (dist) | Position | derived: 3570 * sqrt(`altitude_relative`), metres |
 | `vx` | `double` | Velocity X (ms) | Position | done: `velocity_north` |
 | `vy` | `double` | Velocity Y (ms) | Position | done: `velocity_east` |
 | `vz` | `double` | Velocity Z (ms) | Position | done: `velocity_down` |
 | `vlen` | `double` |  | Position | derived: the length of (`velocity_north`, `velocity_east`, `velocity_down`) |
-| `altoffsethome` | `float` | Alt Home Offset (dist) | Position | **missing** |
+| `altoffsethome` | `float` | Alt Home Offset (dist) | Position | done: `alt_offset_home` (0 until the flight screen's Home Alt button writes it, FlightData.cs:1236-1247) |
 | `gpsstatus` | `float` | Gps Status | Position | done: `gps.fix_type` |
 | `gpshdop` | `float` | Gps HDOP | Position | done: `gps.hdop` |
 | `satcount` | `float` | Sat Count | Position | done: `gps.satellites_visible` |
@@ -133,7 +124,7 @@ Generated from `crates/mp-vehicle/src/coverage.rs` by `cargo test -p mp-vehicle 
 | `altd100` | `float` |  | Other | derived: `altitude_relative` / 100 % 10, the hundreds digit |
 | `airspeed` | `float` | AirSpeed (speed) | Sensor | done: `air_speed` |
 | `targetairspeed` | `float` | Airspeed Target (speed) | NAV | derived: `target_airspeed()`, without the C#'s low-pass and its division of the error by 100 |
-| `lowairspeed` | `bool` |  |  | **missing** |
+| `lowairspeed` | `bool` |  |  | done: `low_airspeed` (from `VFR_HUD`; the `AIRSPEED_MIN` or `ARSPD_FBW_MIN` parameter the C# reads itself comes from `set_airspeed_min_params()`, which the parameter table's owner must call) |
 | `asratio` | `float` | Airspeed Ratio | Calibration | done: `airspeed_ratio` |
 | `airspeed1_temp` | `float` | Airspeed1 Temperature | Sensor | done: `airspeed1_temp` |
 | `airspeed2_temp` | `float` | Airspeed2 Temperature | Sensor | done: `airspeed2_temp` |
@@ -299,7 +290,7 @@ Generated from `crates/mp-vehicle/src/coverage.rs` by `cargo test -p mp-vehicle 
 | `rxrssi` | `int` | RX Rssi | Telem | derived: `rc.rssi` * 100 / 254, 0 when 255 (`RC_CHANNELS`); the C# divides by 255 after `RC_CHANNELS_RAW` |
 | `crit_AOA` | `float` | Crit AOA (deg) | Attitude | derived: the AOA_CRIT parameter, 25 without it |
 | `lowgroundspeed` | `bool` |  |  | dropped: nothing in the C# sets it, so it is always false; the HUD's low-ground-speed warning is its own |
-| `verticalspeed` | `float` | Vertical Speed (speed) | Position | **missing** |
+| `verticalspeed` | `float` | Vertical Speed (speed) | Position | done: `vertical_speed()` (the `alt` setter's filtered rate from `GLOBAL_POSITION_INT` and the high-latency messages, against `datetime`) |
 | `verticalspeed_fpm` | `double` | Vertical Speed (fpm) | Position | derived: `velocity_down` * -3.28084 * 60 |
 | `glide_ratio` | `double` | Glide Ratio | Position | derived: the horizontal length of (`velocity_north`, `velocity_east`) over `velocity_down` |
 | `nav_roll` | `float` | Roll Target (deg) | NAV | done: `nav.roll` |
@@ -313,13 +304,13 @@ Generated from `crates/mp-vehicle/src/coverage.rs` by `cargo test -p mp-vehicle 
 | `xtrack_error` | `float` | Xtrack Error (m) | NAV | done: `nav.xtrack_error` |
 | `wpno` | `float` | WP No | NAV | done: `mission_current` |
 | `mode` | `string` | Mode | NAV | derived: `flight_mode_name(vehicle_type, custom_mode)` |
-| `climbrate` | `float` | ClimbRate (speed) | Position | done: `climb_rate` (from `VFR_HUD`; the C#'s fallback, differentiating `alt` when no `VFR_HUD` arrives, needs a packet clock) |
+| `climbrate` | `float` | ClimbRate (speed) | Position | done: `climb_rate` (from `VFR_HUD`; until the first, the `alt` setter's unfiltered rate against `datetime`, as the C#'s) |
 | `tot` | `int` | Time over Target (sec) | NAV | derived: `nav.wp_distance` / `ground_speed`, whole seconds, 0 when not moving |
 | `toh` | `int` | Time over Home (sec) | NAV | derived: `DistToHome` / `ground_speed`, whole seconds, 0 when not moving |
-| `distTraveled` | `float` | Dist Traveled (dist) | Position | **missing** |
-| `timeSinceArmInAir` | `float` | Time in Air (sec) | Position | **missing** |
-| `timeInAir` | `float` | Time in Air (sec) | Position | **missing** |
-| `timeInAirMinSec` | `float` | Time in Air (min.sec) | Position | **missing** |
+| `distTraveled` | `float` | Dist Traveled (dist) | Position | done: `dist_traveled` (metres, where the C# adds display units; counted by `update_current_settings`, which the link must call on every vehicle after each read, as `VehicleRegistry::update_current_settings`) |
+| `timeSinceArmInAir` | `float` | Time in Air (sec) | Position | done: `time_since_arm_in_air` (counted by `update_current_settings`; `HEARTBEAT` arming restarts it) |
+| `timeInAir` | `float` | Time in Air (sec) | Position | done: `time_in_air` (counted by `update_current_settings`) |
+| `timeInAirMinSec` | `float` | Time in Air (min.sec) | Position | done: `time_in_air_min_sec()` |
 | `turnrate` | `float` | Turn Rate (speed) | Position | done: `turn_rate()` |
 | `turng` | `float` | Turn Gs (load) | Position | derived: 1 / cos(`attitude.roll`) |
 | `radius` | `float` | Turn Radius (dist) | Position | derived: `ground_speed`² / (9.80665 * tan(`attitude.roll`)), 0 at 1 m/s and below |
@@ -359,9 +350,9 @@ Generated from `crates/mp-vehicle/src/coverage.rs` by `cargo test -p mp-vehicle 
 | `current8` | `double` | Bat8 Current (Amps) | Battery | done: `batteries[6].current` |
 | `current9` | `double` | Bat9 Current (Amps) | Battery | done: `batteries[7].current` |
 | `watts` | `double` | Bat Watts | Battery | derived: `battery.voltage` * `battery.current` |
-| `battery_mahperkm` | `double` | Bat efficiency (mah/km) | Battery | **missing** |
-| `battery_kmleft` | `double` | Bat km left EST (km) | Battery | **missing** |
-| `battery_usedmah` | `double` | Bat used EST (mah) | Battery | done: `battery.consumed_mah` (from `BATTERY_STATUS`; the C#'s integration of the `SYS_STATUS` current needs a packet clock) |
+| `battery_mahperkm` | `double` | Bat efficiency (mah/km) | Battery | done: `battery_mah_per_km()` (unguarded: infinite or NaN before any distance) |
+| `battery_kmleft` | `double` | Bat km left EST (km) | Battery | done: `battery_km_left()` |
+| `battery_usedmah` | `double` | Bat used EST (mah) | Battery | done: `battery_used_mah` (`BATTERY_STATUS`'s `current_consumed`, which is also `battery.consumed_mah`, and between reports the `SYS_STATUS` current integrated against `datetime`) |
 | `battery_cell1` | `double` |  | Battery | done: `battery.cells[0]` |
 | `battery_cell2` | `double` |  | Battery | done: `battery.cells[1]` |
 | `battery_cell3` | `double` |  | Battery | done: `battery.cells[2]` |
@@ -405,14 +396,14 @@ Generated from `crates/mp-vehicle/src/coverage.rs` by `cargo test -p mp-vehicle 
 | `battery_voltage2` | `double` | Bat2 Voltage (V) | Battery | done: `batteries[0].voltage` |
 | `HomeAlt` | `double` |  | Position | done: `home_altitude` |
 | `HomeLocation` | `PointLatLngAlt` |  | Position | done: `home` (with `home_altitude`) |
-| `PlannedHomeLocation` | `PointLatLngAlt` |  | Position | **missing** |
-| `Base` | `PointLatLngAlt` |  | Position | **missing** |
-| `TrackerLocation` | `PointLatLngAlt` |  | Position | **missing** |
+| `PlannedHomeLocation` | `PointLatLngAlt` |  | Position | done: `VehicleState::planned_home()` (process-wide, as the C#'s static is; `VehicleState::set_planned_home` is what start-up must call with the `TXT_homelat`, `TXT_homelng` and `TXT_homealt` settings, as MainV2.cs:1012-1025 does) |
+| `Base` | `PointLatLngAlt` |  | Position | done: `base` ((0, 0, 0) until the RTK injection page or the moving-base control writes it, ConfigSerialInjectGPS.cs:910, 1077, 1098 and Controls/MovingBase.cs:227) |
+| `TrackerLocation` | `PointLatLngAlt` |  | Position | done: `tracker_location()` (home until `VehicleState::set_tracker_location` - the planner's Set Tracker Home, FlightPlanner.cs:760, 6977 - gives it a longitude) |
 | `Location` | `PointLatLngAlt` |  | Position | derived: `position` with `altitude_msl` |
 | `TargetLocation` | `PointLatLngAlt` |  | Position | done: `target_position` with `target_altitude_msl` (the C#'s tag on it, the type mask, is not kept) |
-| `GeoFenceDist` | `float` |  | Other | **missing** |
-| `DistToHome` | `float` | Dist to Home (dist) | Position | derived: from `home` to `position` on the C#'s flat projection, 111319.5 m a degree with longitude scaled by cos(latitude) |
-| `DistFromMovingBase` | `float` | Dist to Moving Base (dist) | Position | **missing** |
+| `GeoFenceDist` | `float` |  | Other | done: `geo_fence_dist()` (given the fence items the C# reads from `MAVState.fencepoints`, which their owner must pass) |
+| `DistToHome` | `float` | Dist to Home (dist) | Position | derived: from `tracker_location()` - home unless a tracker is set - to `position` on the C#'s flat projection, 111319.5 m a degree with longitude scaled by cos(latitude) |
+| `DistFromMovingBase` | `float` | Dist to Moving Base (dist) | Position | done: `dist_from_moving_base()` (from 0° 0° until a base is set, as the C# is) |
 | `ELToMAV` | `float` | Elevation to Mav (deg) | Position | derived: atan((`altitude_msl` - `home_altitude`) / `DistToHome`), degrees, from `home` |
 | `AZToMAV` | `float` | Bearing to Mav (deg) | Position | derived: the bearing from `home` to `position` on the C#'s flat projection |
 | `sonarrange` | `float` | Sonar Range (alt) | Sensor | done: `rangefinder.range` |
@@ -452,24 +443,24 @@ Generated from `crates/mp-vehicle/src/coverage.rs` by `cargo test -p mp-vehicle 
 | `servovoltage` | `float` | Servo Rail Voltage | Hardware | done: `board.servo_voltage` (millivolts, as the C# shows them) |
 | `voltageflag` | `uint` | Voltage Flags | Hardware | done: `board.voltage_flags` |
 | `i2cerrors` | `ushort` |  | Hardware | done: `board.i2c_errors` |
-| `timesincelastshot` | `double` |  | Other | **missing** |
+| `timesincelastshot` | `double` |  | Other | done: `time_since_last_shot` (0 until the flight screen sets it from `VehicleState::shot_interval` over the camera feedback it keeps, as FlightData.cs:4021-4038 does) |
 | `press_abs` | `float` |  | Sensor | done: `press_abs` |
 | `press_temp` | `int` |  | Sensor | done: `press_temp` |
 | `press_abs2` | `float` |  | Sensor | done: `press_abs2` |
 | `press_temp2` | `int` |  | Sensor | done: `press_temp2` |
-| `rateattitude` | `int` |  | Telem | **missing** |
-| `rateposition` | `int` |  | Telem | **missing** |
-| `ratestatus` | `int` |  | Telem | **missing** |
-| `ratesensors` | `int` |  | Telem | **missing** |
-| `raterc` | `int` |  | Telem | **missing** |
-| `datetime` | `DateTime` |  |  | **missing** |
+| `rateattitude` | `int` |  | Telem | done: `rates.attitude` (4 Hz, or the saved default when the vehicle was first seen; the link's stream requests and Planner's rate combos read and write it) |
+| `rateposition` | `int` |  | Telem | done: `rates.position` |
+| `ratestatus` | `int` |  | Telem | done: `rates.status` |
+| `ratesensors` | `int` |  | Telem | done: `rates.sensors` |
+| `raterc` | `int` |  | Telem | done: `rates.rc` |
+| `datetime` | `DateTime` |  |  | done: `datetime` (each packet's time, stamped by `VehicleRegistry::apply_at`, which the link thread must call with `DateTime::now()`, or a replay with the log's time, in place of `apply`) |
 | `connected` | `bool` |  |  | plumbing: whether the link is open, which the link knows (`mp_link`), not the vehicle |
 | `campointa` | `float` |  | Mount | done: `mount.pointing_a` |
 | `campointb` | `float` |  | Mount | done: `mount.pointing_b` |
 | `campointc` | `float` |  | Mount | done: `mount.pointing_c` |
-| `GimbalPoint` | `PointLatLngAlt` |  | Mount | **missing** |
-| `gimballat` | `float` |  | Mount | **missing** |
-| `gimballng` | `float` |  | Mount | **missing** |
+| `GimbalPoint` | `PointLatLngAlt` |  | Mount | done: `gimbal_point` (`None` until the flight screen writes what `GimbalPoint.ProjectPoint` projects, FlightData.cs:3964-3995; that projection is not ported) |
+| `gimballat` | `float` |  | Mount | done: `gimbal_lat()` |
+| `gimballng` | `float` |  | Mount | done: `gimbal_lng()` |
 | `landed` | `bool` |  | Software | derived: `system_status` == MAV_STATE_STANDBY (3); `HIGH_LATENCY`'s landed state is not held |
 | `safetyactive` | `bool` |  | Software | done: `sensors.safety_active()` |
 | `terrainactive` | `bool` |  | Terrain | done: `sensors.terrain_active()` |
@@ -478,7 +469,7 @@ Generated from `crates/mp-vehicle/src/coverage.rs` by `cargo test -p mp-vehicle 
 | `ter_load` | `float` |  | Terrain | done: `terrain.loaded` |
 | `ter_pend` | `float` |  | Terrain | done: `terrain.pending` |
 | `ter_space` | `float` |  | Terrain | done: `terrain.spacing` |
-| `KIndex` | `int` |  | Enviromental | **missing** |
+| `KIndex` | `int` |  | Enviromental | done: `VehicleState::kindex()` (`KIndexstatic`) |
 | `opt_m_x` | `float` | flow_comp_m_x | Flow | done: `optical_flow.comp_m_x` |
 | `opt_m_y` | `float` | flow_comp_m_y | Flow | done: `optical_flow.comp_m_y` |
 | `opt_x` | `short` | flow_x | Flow | done: `optical_flow.x` |
@@ -518,7 +509,7 @@ Generated from `crates/mp-vehicle/src/coverage.rs` by `cargo test -p mp-vehicle 
 | `rpm1` | `float` |  | Sensor | done: `rpm[0]` |
 | `rpm2` | `float` |  | Sensor | done: `rpm[1]` |
 | `capabilities` | `uint` |  | Software | done: `autopilot_info.capabilities` |
-| `speedup` | `float` |  | Software | **missing** |
+| `speedup` | `float` |  | Software | done: `speedup` (`RAW_IMU`'s clock against `datetime`, where the C# uses the wall clock - the same live, the recorded time in a replay) |
 | `vtol_state` | `byte` |  | Software | done: `vtol_state` |
 | `landed_state` | `byte` |  | Software | done: `landed_state` |
 | `gen_status` | `float` |  | Generator | done: `generator.status` |

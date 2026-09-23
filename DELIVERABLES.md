@@ -144,10 +144,15 @@ snapshots so the renderer never blocks on the I/O thread.
   `COMMAND_ACK` allocate by design and are listed with a bound each. `Transport::description()`
   returns `&str` and the publish path allocates nothing (71,500 allocations over 35,750 publishes
   before; the tests demand zero now). The field-coverage report exists: `crates/mp-vehicle/src/coverage.rs` accounts for all
-  550 public members of `CurrentState` (416 done, 48 derived, 55 missing, 30 plumbing, 1 dropped),
+  550 public members of `CurrentState` (**471 done, 48 derived, 0 missing, 30 plumbing, 1 dropped**),
   matched to the C# file by a test, rendered to `docs/coverage/currentstate.md`; the porting that
   took it from 219 done added SYS_STATUS, GPS, battery, radio, wind, terrain, rangefinder, servo,
-  high-latency and the onboard subsystems with the C#'s rules and quirks kept.
+  high-latency and the onboard subsystems with the C#'s rules and quirks kept, and the last 55
+  (the clock, the once-a-second counts, the battery integration, HIL channels, custom fields,
+  gimbal/tracker/base, stream rates, K-index, speedup) are held per packet to the C#'s own
+  `UpdateCurrentSettings` under mono over three tlogs (`tools/csharp-reference/MpState.cs`,
+  PLAN.md §13.4 row 38) - the differential the `Tests:` line asks for, for those fields. Their
+  callers in the link and the GUI are row 39.
 - **Tests:** `tests/field_coverage.rs` reads the D18 ledger and fails if any C# `CurrentState` field lacks a Rust counterpart; `tests/decode_to_state.rs` replays golden tlogs and diffs the resulting state timeline against C# output; `tests/concurrency.rs` stress-tests the snapshot bus (writer at 1 kHz, 8 readers) asserting no torn reads and no reader stall, with a `loom` model of the publish path; `tests/no_alloc_ingest.rs` allocation counter over the ingest→state path; `benches/snapshot.rs` gates publish and read latency.
 
 ---

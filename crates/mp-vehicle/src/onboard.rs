@@ -335,15 +335,49 @@ impl VehicleState {
     pub(crate) fn apply_onboard(&mut self, message: &MavMessage) -> Option<bool> {
         match message {
             MavMessage::RawImu(m) => {
-                // C#: ExtLibs/ArduPilot/CurrentState.cs:3685-3697. `speedup`, the rest of this
-                // case, compares the IMU clock with the wall clock, which the state does not
-                // keep.
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:3685-3697
                 self.imu[0] = Imu {
                     accel: [m.xacc, m.yacc, m.zacc].map(f32::from),
                     gyro: [m.xgyro, m.ygyro, m.zgyro].map(f32::from),
                     mag: [m.xmag, m.ymag, m.zmag].map(f32::from),
                     temperature: f32::from(m.temperature) / 100.0,
                 };
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:3699-3713
+                self.update_speedup(m.time_usec);
+            }
+            MavMessage::RcChannelsScaled(m) => {
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:2307-2324, "hil mavlink 0.9": every
+                // port's, as the C# does not look at it.
+                self.hil_channels = [
+                    m.chan1_scaled,
+                    m.chan2_scaled,
+                    m.chan3_scaled,
+                    m.chan4_scaled,
+                    m.chan5_scaled,
+                    m.chan6_scaled,
+                    m.chan7_scaled,
+                    m.chan8_scaled,
+                ]
+                .map(i32::from);
+            }
+            MavMessage::HilControls(m) => {
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:2551-2564, the first four, the other four
+                // kept.
+                let [ch1, ch2, ch3, ch4, ..] = &mut self.hil_channels;
+                *ch1 = hil_control(m.roll_ailerons);
+                *ch2 = hil_control(m.pitch_elevator);
+                *ch3 = hil_control(m.throttle);
+                *ch4 = hil_control(m.yaw_rudder);
+            }
+            MavMessage::NamedValueFloat(m) => {
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:3913-4012. With every field named, the
+                // value goes nowhere.
+                let Some(field) = Self::custom_field_for(&m.name)
+                    .and_then(|index| self.custom_fields.get_mut(index))
+                else {
+                    return Some(false);
+                };
+                *field = m.value;
             }
             MavMessage::ScaledImu(m) => {
                 // C#: ExtLibs/ArduPilot/CurrentState.cs:3723-3735
@@ -728,6 +762,22 @@ const fn i32_f32(value: i32) -> f32 {
 #[allow(clippy::cast_precision_loss)]
 const fn u64_f32(value: u64) -> f32 {
     value as f32
+}
+
+/// `HIL_CONTROLS`' `(int)(control * 10000)`: the product in single precision, then toward zero.
+///
+/// NaN or out of `int`'s range gives `int.MinValue`, which is what the C#'s conversion does on
+/// the x86 and x64 processors it runs on (`cvttss2si`'s "integer indefinite"); a simulator
+/// sending a NaN control would show as -2147483648 in the C#, and does here.
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:2557-2560`
+fn hil_control(control: f32) -> i32 {
+    let scaled = control * 10000.0;
+    // 2^31 is exact in single precision; -2^31 converts, anything at or past 2^31 does not, and
+    // NaN is in no range.
+    if !(-2_147_483_648.0..2_147_483_648.0).contains(&scaled) {
+        return i32::MIN;
+    }
+    truncate_i32(scaled)
 }
 
 /// C#'s `(int)` of a `float`: toward zero. Out of range saturates here where the C# is
