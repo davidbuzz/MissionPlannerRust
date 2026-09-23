@@ -94,7 +94,7 @@ pub fn collect(view: &TelemetryView) -> Vec<Parameter> {
         .map(|(name, value)| Parameter {
             name: name.clone(),
             value: *value,
-            meta: mp_params::param_meta::lookup(name),
+            meta: crate::metadata::lookup(name),
         })
         .collect()
 }

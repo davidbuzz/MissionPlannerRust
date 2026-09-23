@@ -94,6 +94,20 @@ pub fn land(target: VehicleId) -> MavMessage {
     command(target, CMD_NAV_LAND, [0.0; 7])
 }
 
+/// `MAV_CMD_DO_SEND_BANNER`.
+pub const CMD_DO_SEND_BANNER: u16 = 42_428;
+
+/// Asks the vehicle to say what it is.
+///
+/// The answer is the `STATUSTEXT` banner - `ArduCopter V4.5.7 (1c0c8d9c)` - which is where
+/// Mission Planner reads the firmware version it fetches parameter documentation for. It sends
+/// this at connect and again whenever a new vehicle appears.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:930, 1856`
+#[must_use]
+pub fn send_banner(target: VehicleId) -> MavMessage {
+    command(target, CMD_DO_SEND_BANNER, [0.0; 7])
+}
+
 /// Sets a vehicle-specific flight mode.
 #[must_use]
 pub fn set_mode(target: VehicleId, custom_mode: u32) -> MavMessage {
@@ -542,5 +556,18 @@ mod tests {
             "channels 9-18 release with UINT16_MAX-1, not 0"
         );
         assert_eq!(message.chan18_raw, u16::MAX - 1);
+    }
+
+    #[test]
+    fn the_banner_request_is_do_send_banner_with_no_arguments() {
+        let MavMessage::CommandLong(message) = send_banner(VehicleId {
+            sysid: 1,
+            compid: 1,
+        }) else {
+            panic!("send_banner must build a COMMAND_LONG");
+        };
+        assert_eq!(message.command, CMD_DO_SEND_BANNER);
+        assert_eq!(message.target_system, 1);
+        assert_eq!(message.param1, 0.0);
     }
 }

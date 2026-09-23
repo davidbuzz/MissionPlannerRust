@@ -133,6 +133,10 @@ pub struct Telemetry {
     /// system heard from. A choice is remembered even while that vehicle is quiet, because a
     /// vehicle going briefly silent is not a reason to start showing a different one.
     selected: Option<VehicleId>,
+    /// Vehicles already asked for their banner, so each is asked once.
+    banner_requested: std::collections::BTreeSet<VehicleId>,
+    /// The firmware banner, once a vehicle has said it: `ArduCopter V4.5.7 (1c0c8d9c)`.
+    banner: Option<String>,
 }
 
 impl Telemetry {
@@ -229,6 +233,8 @@ impl Telemetry {
                 target: url.to_owned(),
                 error: None,
                 selected: None,
+                banner_requested: std::collections::BTreeSet::new(),
+                banner: None,
                 recording,
             },
             Err(err) => Self {
@@ -236,6 +242,8 @@ impl Telemetry {
                 target: url.to_owned(),
                 error: Some(err.to_string()),
                 selected: None,
+                banner_requested: std::collections::BTreeSet::new(),
+                banner: None,
                 recording: None,
             },
         }
@@ -249,6 +257,8 @@ impl Telemetry {
             target: String::new(),
             error: None,
             selected: None,
+            banner_requested: std::collections::BTreeSet::new(),
+            banner: None,
             recording: None,
         }
     }
@@ -780,6 +790,35 @@ impl Telemetry {
 }
 
 impl Telemetry {
+    /// Once a frame: asks a newly seen vehicle for its banner, and notices the banner arriving.
+    ///
+    /// Mission Planner sends `DO_SEND_BANNER` at connect and for each new vehicle, and takes the
+    /// firmware version from the `STATUSTEXT` that names the vehicle; the parameter
+    /// documentation for that release is fetched from it.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:930, 1822-1830, 1856`
+    pub fn tick(&mut self) {
+        let Some(link) = &self.link else {
+            return;
+        };
+        if let Some((id, _)) = link.primary_vehicle()
+            && !self.banner_requested.contains(&id)
+        {
+            link.send(&commands::send_banner(id));
+            self.banner_requested.insert(id);
+        }
+        if self.banner.is_none() {
+            let messages = link.recent_messages(MESSAGE_LINES);
+            self.banner = crate::metadata::banner_in(messages.iter().map(|m| m.text.as_str()))
+                .map(str::to_owned);
+        }
+    }
+
+    /// The firmware banner, if the vehicle has said it.
+    #[must_use]
+    pub fn firmware_banner(&self) -> Option<&str> {
+        self.banner.as_deref()
+    }
+
     /// Where stick frames should go right now: a handle that sends on the link, and the vehicle.
     ///
     /// For the joystick reader's send thread, which cannot borrow the link and must not wait for

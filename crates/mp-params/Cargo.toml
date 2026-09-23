@@ -12,3 +12,11 @@ workspace = true
 
 [dependencies]
 thiserror.workspace = true
+roxmltree.workspace = true
+flate2.workspace = true
+# Fetching apm.pdef.xml from autotest.ardupilot.org, as the C# does; blocking, on a thread of
+# the caller's choosing.
+ureq.workspace = true
+
+[dev-dependencies]
+mp-settings.workspace = true

@@ -20,11 +20,12 @@ Measured on this tree: **21 crates, 55,520 hand-written Rust LOC** (plus 93,834 
 |---|---|
 | MAVLink v1/v2 codec | zero-copy parse, allocation-free encode, v2 signing |
 | Generated dialect | 349 messages, 206 enums, generated from the upstream XML |
-| Transports | serial, TCP, UDP, file replay, in-memory test doubles |
+| Transports | serial, TCP, UDP, file replay, in-memory test doubles; port enumeration by `CommsSerialPort.GetPortNames`'s rules, held to per-OS fixtures; faults and a real pty unplug rehearsed in tests |
 | Link engine | I/O thread, multi-vehicle routing, stream requests, commands |
 | Vehicle state | lock-free snapshot bus, packet-loss tracking |
 | Parameters | full download with gap recovery, typed values, 1,408 from SITL |
 | `.param` files | save, load and compare against a vehicle, honouring the C# skip-list |
+| Parameter docs | fetched for the connected firmware as Mission Planner fetches them (`apm.pdef.xml`, versioned or weekly), read before the bundled table: 1,407 of a SITL's 1,408 documented instead of 827 |
 | Missions | upload and download, `.waypoints` files, 129-file corpus |
 | Survey grids | `Grid.CreateGrid` transliterated over a port of ProjNet's UTM, bit-identical to the C# on 180 golden cases the real code generated under mono |
 | Logs | `.tlog` read and write; ArduPilot `.BIN` dataflash parsing |
@@ -37,7 +38,7 @@ Measured on this tree: **21 crates, 55,520 hand-written Rust LOC** (plus 93,834 
 | Scripting | the `Script.cs` host API, and a measurement of what the 19 shipped scripts need |
 | KML export | a flown path coloured by flight mode, and a mission, for Google Earth |
 | Tuning graph | eleven telemetry fields plotted live, min/max reduced so a spike cannot hide |
-| Geodesy | typed units, Web Mercator, slippy-map tile arithmetic |
+| Geodesy | typed units, Web Mercator, slippy-map tile arithmetic; pixel, inverse, distance, bearing, `newpos` and UTM match the C# under mono bit for bit over 676 points |
 | HUD | 18 of the 24 elements `HUD.cs` paints, from a pure scene builder with a coverage table: horizon and ladder, heading tape with target and course marks, cross-track and turn rate, speed and altitude scrollers, VSI, mode and waypoint, link, battery, GPS, ARMED/DISARMED/SAFE/FAILSAFE, the message line |
 | Maps | GPU tile rendering, three providers including Esri satellite imagery, overlays; the on-disk cache is Mission Planner's own, so a cache filled by either application is read by both |
 | CLI | `mpr watch \| record \| fly \| params \| param \| mission \| survey \| log \| logs \| kml \| firmware \| ports` |

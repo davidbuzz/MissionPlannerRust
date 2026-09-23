@@ -1,0 +1,15 @@
+# The parameter screen reads the firmware's own documentation, fetched as Mission Planner fetches it.
+#
+# On connect the vehicle is asked for its banner (DO_SEND_BANNER); the STATUSTEXT that names the
+# vehicle carries the version; the documentation for that release is fetched into the data
+# directory - the versioned file if the release has one, else the vehicle's unversioned file -
+# and read before the bundled table. Needs SITL on tcp:127.0.0.1:5760 and either the network or
+# a cached ArduCopter.apm.pdef.xml under ~/.local/share/Mission Planner, which a real Mission
+# Planner installation leaves there.
+
+screen params
+window 1600x1200
+settle 10
+
+expect params.metadata.source ~ Copter
+expect params.metadata.documented > 1000

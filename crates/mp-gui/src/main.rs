@@ -14,6 +14,7 @@ mod hud;
 mod joystick;
 mod logbrowse;
 mod mapview;
+mod metadata;
 mod params;
 mod plan;
 mod platform;
@@ -195,6 +196,8 @@ struct MissionPlanner {
     /// The primary flight display's inputs for this frame, and the clocks behind its banners.
     hud: hud::HudInputs,
     hud_timing: hud::Timing,
+    /// The parameter documentation fetch for the connected firmware.
+    metadata: metadata::Fetch,
     /// The live tuning graph.
     tuning: tuning::Tuning,
     /// The log being reviewed.
@@ -346,6 +349,7 @@ impl MissionPlanner {
             sticks: joystick::Sticks::new(),
             hud: hud::HudInputs::default(),
             hud_timing: hud::Timing::default(),
+            metadata: metadata::Fetch::default(),
             tuning: tuning::Tuning::new(),
             log_browse: logbrowse::LogBrowse::new(),
             log_name: textfield::TextField::new("a .BIN or .log in the plan directory"),
@@ -688,7 +692,7 @@ impl MissionPlanner {
             return;
         };
         let mut next = current + delta;
-        if let Some(meta) = mp_params::param_meta::lookup(name)
+        if let Some(meta) = metadata::lookup(name)
             && let Some((low, high)) = meta.range
         {
             next = next.clamp(low, high);
@@ -1324,6 +1328,11 @@ impl Render for MissionPlanner {
         // flown and notices a device that has gone. Once a frame, whether or not anything shows.
         self.sticks.tick(self.telemetry.send_handle());
         self.hud = self.hud_inputs(&view);
+        // The vehicle's banner names its firmware; its parameter documentation follows from it.
+        self.telemetry.tick();
+        let banner = self.telemetry.firmware_banner().map(str::to_owned);
+        let mav_type = view.state.as_ref().map_or(0, |state| state.vehicle_type);
+        self.metadata.advance(banner.as_deref(), mav_type);
 
         // Facts a UI test can assert on. Recorded from render because that is where every one of
         // them is already in hand, and published at the end of the frame so a reader never sees
@@ -1408,6 +1417,21 @@ impl Render for MissionPlanner {
             facts::record("coverage.flightdata.missing", missing);
             facts::record("coverage.flightdata.total", coverage::FLIGHTDATA.len());
             let _ = (plumbing, dropped);
+            // Where the parameter documentation comes from and how much of this vehicle it
+            // covers: PLAN.md 10.5's measurement, live.
+            facts::record("params.metadata.source", metadata::source());
+            facts::record("params.metadata.documented", metadata::documented());
+            facts::record(
+                "params.metadata.covered",
+                view.parameters
+                    .iter()
+                    .filter(|(name, _)| metadata::lookup(name).is_some())
+                    .count(),
+            );
+            facts::record(
+                "params.metadata.status",
+                self.metadata.status.as_deref().unwrap_or("idle"),
+            );
             facts::record("sticks.enabled", self.sticks.is_enabled());
             // Frames the link accepted and the measured stick-to-link latency, so a test with a
             // device attached can prove frames go out and how fast.

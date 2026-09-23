@@ -103,6 +103,12 @@ OSes, plus bootloader/flashing transports (px4uploader, DFU, ADB).
   live caster; **≤ 1 ms** added latency over raw OS read.
 - **Replaces:** `ExtLibs/Comms` (8,249), `ExtLibs/Ntrip`, `ExtLibs/Zeroconf`, `ExtLibs/px4uploader`,
   `ExtLibs/NetDFULib`, `ExtLibs/WinUSBNet`, `ExtLibs/SharpAdbClient`, `Radio/`, `SikRadio/`.
+- **Today:** serial, TCP, UDP, file replay and the in-memory mock, behind one trait. Port
+  enumeration is `CommsSerialPort.GetPortNames` ported rule for rule (`crates/mp-transport/src/enumerate.rs`)
+  and held to Linux, macOS and Windows fixtures in `tests/enumerate.rs`; `tests/faults.rs` runs real
+  frames through every fault the DoD names and re-checks each delivered checksum; `tests/hotplug.rs`
+  unplugs a real `SerialTransport` over a pty and reopens it. **Not yet:** BLE, NTRIP, websocket,
+  the flashing transports, Windows friendly names via WMI, and the ≤ 1 ms latency bench.
 - **Tests:** `crates/transport/tests/loopback.rs` per transport (serial via a PTY pair / com0com, TCP, UDP, websocket, file-replay); `tests/faults.rs` fault-injection over a mock transport (drop, duplicate, reorder, partial write, mid-frame disconnect); `tests/enumerate.rs` parses checked-in per-OS device fixtures (Windows registry dumps, Linux udev/sysfs trees, macOS IOKit dumps) and asserts the device list; `tests/hotplug.rs` simulated surprise-unplug and reconnect; `tests/ntrip.rs` against an in-process mock caster; `benches/latency.rs` gates the ≤1 ms overhead target.
 
 ### D4. Link engine (the `MAVLinkInterface` equivalent)
@@ -178,7 +184,14 @@ markers, tracks, polygons, geofences, survey grids, and full editing interaction
   (`crates/mp-tiles/tests/tilecache.rs`); offline mode serves the cache. **Not yet:** the `redb`
   index; provider parity — two of the three providers (OpenTopoMap, Esri World Imagery) are not
   Mission Planner's, and its default satellite provider `GoogleSatelliteMap` is not ported, which
-  is the owner's call; projections; editing beyond click-to-add and drag.
+  is the owner's call; editing beyond click-to-add and drag. **Projection proved:**
+  `crates/mp-units/tests/projection.rs` holds Web Mercator, `GetDistance`, `GetBearing`, `newpos`
+  and (in `mp_mission::utm`) `utmpos` to what the C# itself returns under mono over 676 points
+  (`testdata/projection/`), bit for bit where GMap exposes the value and to the identical whole
+  pixel at zooms 1-30 where it does not; the round trip is < 1 mm (worst 5.8 nm). Four geodesy
+  divergences from the C# were found by it and fixed. `benches/pan_zoom.rs` measures the
+  following frame at p99 5.42 ms with a 1 M-point track and 10 k markers, inside the 120 fps
+  budget on the CPU side, and gates it; the GPU half is not measured.
 - **Tests:** `tests/projection.rs` round-trips a fixture grid of coordinates against ProjNet/GDAL reference values asserting <1 mm error; `tests/tilecache.rs` cache hit/miss/evict/corrupt-entry recovery and compatibility with the existing Mission Planner cache layout; `tests/overlays.rs` golden-image renders of tracks, polygons, fences and marker clusters; `tests/editing.rs` drag/snap/rubber-band interaction via the test executor; `tests/offline.rs` asserts full function with the network disabled; `benches/pan_zoom.rs` gates 120 fps with a 1 M-point track + 10 k markers.
 
 ### D9. HUD / primary flight display
@@ -242,9 +255,12 @@ The full parameter system — tree/list/advanced editors driven by parameter met
   is ported from `ExtLibs/Utilities/ParamFile.cs:50-76` (all 16 entries, on the load side as the C#
   has it), and numbers are written through a `G15` formatter matching
   `double.ToString(InvariantCulture)` — shortest representation, scientific below 1e-4, which is
-  where gyro offsets live. **Still owed:** the fixture is written from a reading of the C# source,
-  not captured from a run of it; mono's float formatting diverges from .NET 4.7.2 (PLAN.md R5), so
-  settling it needs the Windows runner §7.1 budgets.
+  where gyro offsets live. Parameter documentation is fetched for the firmware actually flying,
+  as the C# fetches it (`mp_params::pdef`: the version from the banner, the versioned or
+  unversioned `apm.pdef.xml` into the C#'s directory, read before the bundled table) - on this
+  SITL that takes documented parameters from 827 of 1,408 to 1,407. **Still owed:** the fixture is
+  written from a reading of the C# source, not captured from a run of it; mono's float formatting
+  diverges from .NET 4.7.2 (PLAN.md R5), so settling it needs the Windows runner §7.1 budgets.
 - **Tests:** `tests/metadata_codegen.rs` asserts the generated parameter metadata matches the source XML and compiles; `tests/panel_coverage.rs` fails if any C# `Config*.cs` panel is missing from the Rust implementation (ledger-driven); `tests/param_roundtrip.rs` writes and re-reads every parameter type against SITL including bitmask/enum/float edge values; per-panel UI snapshots; `tests/param_file_compat.rs` reads and writes `.param` files produced by the C# app byte-for-byte.
 
 ### D13. Initial setup, calibration and firmware
