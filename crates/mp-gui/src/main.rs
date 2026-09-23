@@ -7,6 +7,7 @@
 
 #![allow(clippy::print_stderr)]
 
+mod config;
 mod config_coverage;
 mod coverage;
 mod facts;
@@ -200,6 +201,8 @@ struct MissionPlanner {
     metadata: metadata::Fetch,
     /// The live tuning graph.
     tuning: tuning::Tuning,
+    /// Initial Setup's Flight Modes page.
+    flight_modes: config::flight_modes::FlightModes,
     /// The log being reviewed.
     log_browse: logbrowse::LogBrowse,
     /// The log file name to open.
@@ -370,6 +373,7 @@ impl MissionPlanner {
             hud_timing: hud::Timing::default(),
             metadata: metadata::Fetch::default(),
             tuning: tuning::Tuning::new(),
+            flight_modes: config::flight_modes::FlightModes::default(),
             log_browse: logbrowse::LogBrowse::new(),
             log_name: textfield::TextField::new("a .BIN or .log in the plan directory"),
             log_name_focus: cx.focus_handle(),
@@ -1112,6 +1116,14 @@ impl MissionPlanner {
             // is usually that the vehicle is behaving oddly, and this is the panel that says why -
             // putting it below six calibration wizards buries the answer under the treatments.
             .child(fly::estimator_panel(view))
+            // Initial Setup's pages that open as pages, and the one open, above the panels that
+            // are always shown so an opened page is on screen rather than below the fold.
+            .child(setup::mandatory_hardware_panel(
+                view,
+                self.flight_modes.is_active(),
+                cx,
+            ))
+            .children(config::flight_modes::page(&self.flight_modes, view, cx))
             .child(setup::accelerometer_panel(calibration, view, cx))
             .child(setup::compass_panel(&compass, view, cx))
             .child(setup::radio_panel(
@@ -1382,6 +1394,8 @@ impl Render for MissionPlanner {
         self.hud = self.hud_inputs(&view);
         // The vehicle's banner names its firmware; its parameter documentation follows from it.
         self.telemetry.tick();
+        // Save Modes' writes go one at a time, each after the last is answered.
+        self.flight_modes.tick(&self.telemetry);
         let banner = self.telemetry.firmware_banner().map(str::to_owned);
         let mav_type = view.state.as_ref().map_or(0, |state| state.vehicle_type);
         self.metadata.advance(banner.as_deref(), mav_type);
@@ -1515,6 +1529,7 @@ impl Render for MissionPlanner {
                 "sticks.p99_us",
                 self.sticks.latency().map_or(0, |(_, p99)| p99.as_micros()),
             );
+            config::flight_modes::record_facts(&self.flight_modes, &view);
             facts::record("recording", self.telemetry.recording().is_some());
             facts::record("status", self.file_status.as_deref().unwrap_or(""));
             // What the Actions tab last put on the wire and what the vehicle said back.

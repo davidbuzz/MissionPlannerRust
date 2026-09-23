@@ -642,6 +642,21 @@ impl Telemetry {
         }
     }
 
+    /// Writes one parameter and waits, on the link thread, for the vehicle to echo it: the C#'s
+    /// `setParam`, with its checks and its retries. `None` with no vehicle to write to; the
+    /// outcome is read with [`Telemetry::request`].
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1628-1766`
+    pub fn set_parameter_confirmed(&self, name: &str, value: f64) -> Option<mp_link::RequestId> {
+        let (link, id) = self.target()?;
+        Some(link.set_param(id, name, value, false))
+    }
+
+    /// Where a request made through the link is, or `None` if the link has forgotten it.
+    #[must_use]
+    pub fn request(&self, id: mp_link::RequestId) -> Option<mp_link::requests::Request> {
+        self.link.as_ref()?.request(id)
+    }
+
     /// Reboots the autopilot.
     ///
     /// The link drops when the vehicle obeys, which is what success looks like. Useful after a

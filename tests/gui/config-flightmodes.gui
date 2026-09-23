@@ -1,0 +1,74 @@
+# Initial Setup's Flight Modes page reads the vehicle's six modes and writes a change back to it.
+#
+# ConfigFlightModes.cs: Activate fills six combos from the mode list and sets them from FLTMODE1-6,
+# the Simple boxes from the SIMPLE bitmask, and a timer lights the combo the mode channel's pulse
+# selects; Save Modes writes FLTMODE1-6 and, on a copter, SIMPLE and SUPER_SIMPLE. The claim here is
+# the round trip: what the page shows is what the vehicle holds, and what Save Modes writes is what
+# the vehicle then holds - read back from the vehicle's own echo, not from the page.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm, whose
+# FLTMODE1-6 are 7 9 6 3 5 0 (Circle, Land, RTL, Auto, Loiter, Stabilize), FLTMODE_CH 5 and SIMPLE 0.
+# The test changes mode 2 to Loiter and ticks its Simple box, saves, checks the vehicle, then puts
+# both back to copter.parm's values and checks again - so it ends where it started.
+
+screen params
+window 1600x1200
+settle 6
+
+# The page is offered once every parameter has arrived, as the C# adds it only with gotAllParams.
+click param-download
+settle 12
+expect params.held > 1000
+expect params.value.FLTMODE2 9
+
+click tab-setup
+settle 1
+expect config.flightmodes.active false
+click setup-flightmodes
+settle 1
+expect config.flightmodes.active true
+expect config.flightmodes.firmware ArduCopter2
+
+# What Activate read: the six modes, the mode list, the channel and the boxes.
+expect config.flightmodes.1 7
+expect config.flightmodes.1.name Circle
+expect config.flightmodes.2 9
+expect config.flightmodes.2.name Land
+expect config.flightmodes.3 6
+expect config.flightmodes.4 3
+expect config.flightmodes.5 5
+expect config.flightmodes.6 0
+expect config.flightmodes.modes > 20
+expect config.flightmodes.channel 5
+expect config.flightmodes.pwm.label ~ 5:
+expect config.flightmodes.current >= 1
+expect config.flightmodes.simple 0
+expect config.flightmodes.save idle
+
+# Mode 2 to Loiter, Simple on for position 2, and save.
+click fm-mode2
+click fm-mode2-5
+expect config.flightmodes.2 5
+expect config.flightmodes.2.name Loiter
+click fm-simple-2
+expect config.flightmodes.simple 2
+click fm-save
+settle 3
+expect config.flightmodes.save complete
+expect params.value.FLTMODE2 5
+expect params.value.SIMPLE 2
+# The other five were written unchanged, so still hold what they held.
+expect params.value.FLTMODE1 7
+expect params.value.FLTMODE6 0
+
+# Put them back.
+click fm-mode2
+click fm-mode2-9
+expect config.flightmodes.2 9
+click fm-simple-2
+expect config.flightmodes.simple 0
+click fm-save
+settle 3
+expect config.flightmodes.save complete
+expect params.value.FLTMODE2 9
+expect params.value.SIMPLE 0
