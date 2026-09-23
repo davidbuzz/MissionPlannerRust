@@ -1,0 +1,9 @@
+# `Get-CimInstance Win32_SerialPort | Select-Object DeviceID,Name | ConvertTo-Csv -NoTypeInformation`
+# on the same machine as windows-serialcomm.txt, the query Mission Planner makes for friendly names.
+# COM3 has no row, which exercises the empty name: whether a given driver's port appears in
+# Win32_SerialPort varies.
+"DeviceID","Name"
+"COM1","Communications Port (COM1)"
+"COM4","USB Serial Port (COM4)"
+"COM10","Standard Serial over Bluetooth link (COM10)"
+"COM11","Standard Serial over Bluetooth link (COM11)"

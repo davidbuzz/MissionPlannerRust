@@ -16,6 +16,7 @@
 //! [`ReplayTransport`] makes a recorded flight a first-class input. Tests, benchmarks and the
 //! differential harness all drive the real code path with real data instead of synthetic frames.
 
+pub mod enumerate;
 pub mod replay;
 #[cfg(feature = "serial")]
 pub mod serial;
@@ -26,6 +27,7 @@ pub mod url;
 use std::io;
 use std::time::Duration;
 
+pub use enumerate::PortInfo;
 pub use replay::ReplayTransport;
 #[cfg(feature = "serial")]
 pub use serial::{SerialTransport, list_ports};

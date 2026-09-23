@@ -22,3 +22,5 @@ serialport = { version = "4.10", optional = true }
 [dev-dependencies]
 mp-mavlink.workspace = true
 mp-mavlink-dialects.workspace = true
+# For TTYPort::pair(): a pseudo-terminal is the one real serial port a test can unplug.
+serialport = { version = "4.10", default-features = false }

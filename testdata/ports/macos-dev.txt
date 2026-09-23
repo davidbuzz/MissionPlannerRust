@@ -1,0 +1,27 @@
+# /dev on a Mac, in readdir order. There is no /dev/serial/by-id on macOS, so only the top level
+# matters. Hand-made, modelled on a real machine: an ArduPilot board on USB CDC (cu./tty.usbmodem),
+# an FTDI adapter (cu./tty.usbserial), the Bluetooth and debug ports every Mac has, some terminals
+# (ttys*) and legacy BSD ptys (ttyp*), and nodes no port list should show. Serial numbers invented.
+#
+# Entry lines: an absolute path; a directory ends in "/".
+/dev/cu.usbmodem14101
+/dev/tty.usbmodem14101
+/dev/cu.usbserial-A10K3Z9B
+/dev/tty.usbserial-A10K3Z9B
+/dev/cu.Bluetooth-Incoming-Port
+/dev/tty.Bluetooth-Incoming-Port
+/dev/cu.debug-console
+/dev/tty.debug-console
+/dev/ttys001
+/dev/ttys000
+/dev/ttyp1
+/dev/ttyp0
+/dev/ptmx
+/dev/console
+/dev/tty
+/dev/fd/
+/dev/disk0
+/dev/urandom
+/dev/random
+/dev/zero
+/dev/null

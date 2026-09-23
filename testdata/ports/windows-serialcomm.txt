@@ -1,0 +1,11 @@
+# `reg query HKLM\HARDWARE\DEVICEMAP\SERIALCOMM` on a Windows ground station, in registry order.
+# Hand-made, modelled on a real machine: the motherboard UART, an ArduPilot board on usbser.sys,
+# an FTDI adapter, and the two ports Windows creates for a paired Bluetooth SPP radio.
+
+HKEY_LOCAL_MACHINE\HARDWARE\DEVICEMAP\SERIALCOMM
+    \Device\Serial0    REG_SZ    COM1
+    \Device\USBSER000    REG_SZ    COM3
+    \Device\VCP0    REG_SZ    COM4
+    \Device\BthModem0    REG_SZ    COM10
+    \Device\BthModem1    REG_SZ    COM11
+

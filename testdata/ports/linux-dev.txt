@@ -1,0 +1,43 @@
+# /dev on a Linux ground station: the top level and /dev/serial/by-id, the only two directories
+# Mission Planner globs, each in readdir order. devtmpfs lists newest first, so the devices plugged
+# in last lead and ttyACM1 precedes ttyACM0. Hand-made, modelled on a real machine: a Pixhawk 6X
+# running ArduPilot (two CDC interfaces), an FTDI FT232R adapter, a paired Bluetooth radio, and the
+# nodes every PC has. Serial numbers are invented.
+#
+# Entry lines: an absolute path; a directory ends in "/"; a symlink shows " -> target".
+# usb| lines: what the serialport crate reports for a device node - node|vid:pid|serial|manufacturer|product.
+/dev/rfcomm0
+/dev/ttyACM1
+/dev/ttyACM0
+/dev/hidraw2
+/dev/ttyUSB0
+/dev/serial/
+/dev/usbmon2
+/dev/usbmon1
+/dev/usbmon0
+/dev/vboxusb/
+/dev/usb/
+/dev/hidraw0
+/dev/pts/
+/dev/bus/
+/dev/ttyprintk
+/dev/ttyS3
+/dev/ttyS2
+/dev/ttyS1
+/dev/ttyS0
+/dev/ptmx
+/dev/tty2
+/dev/tty1
+/dev/tty0
+/dev/console
+/dev/tty
+/dev/urandom
+/dev/random
+/dev/zero
+/dev/null
+/dev/serial/by-id/usb-ArduPilot_Pixhawk6X_3A0045001351333031383238-if00 -> ../../ttyACM0
+/dev/serial/by-id/usb-ArduPilot_Pixhawk6X_3A0045001351333031383238-if02 -> ../../ttyACM1
+/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A10K3Z9B-if00-port0 -> ../../ttyUSB0
+usb|/dev/ttyACM0|1209:5741|3A0045001351333031383238|ArduPilot|Pixhawk6X
+usb|/dev/ttyACM1|1209:5741|3A0045001351333031383238|ArduPilot|Pixhawk6X
+usb|/dev/ttyUSB0|0403:6001|A10K3Z9B|FTDI|FT232R USB UART

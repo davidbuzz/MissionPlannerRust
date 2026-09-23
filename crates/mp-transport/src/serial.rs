@@ -1,79 +1,109 @@
 //! Serial port transport and enumeration.
 //!
-//! Replaces `ExtLibs/Comms/CommsSerialPort.cs`. Enumeration carries USB VID/PID because board
-//! detection (D13) identifies autopilots by them, exactly as `BoardDetect.cs` does today.
+//! Replaces `ExtLibs/Comms/CommsSerialPort.cs`. Which ports are listed, and in what order, is the
+//! C#'s rule set in [`crate::enumerate`]; this module only feeds it what the OS shows. Enumeration
+//! carries USB VID/PID because board detection (D13) identifies autopilots by them, exactly as
+//! `BoardDetect.cs` does today.
 
 use std::io::{self, Read, Write};
 use std::time::Duration;
 
+use crate::enumerate;
+pub use crate::enumerate::PortInfo;
 use crate::{DEFAULT_READ_TIMEOUT, OpenError, Transport};
 
-/// A discovered serial port.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PortInfo {
-    /// Device path (`/dev/ttyACM0`) or Windows port name (`COM3`).
-    pub name: String,
-    /// USB vendor id, when the port is a USB device.
-    pub vid: Option<u16>,
-    /// USB product id, when the port is a USB device.
-    pub pid: Option<u16>,
-    /// USB serial number, used to tell two identical boards apart.
-    pub serial_number: Option<String>,
-    /// Manufacturer string.
-    pub manufacturer: Option<String>,
-    /// Product string.
-    pub product: Option<String>,
-}
-
-impl PortInfo {
-    /// A one-line label for the connection dropdown.
-    #[must_use]
-    pub fn label(&self) -> String {
-        match (&self.product, self.vid, self.pid) {
-            (Some(product), Some(vid), Some(pid)) => {
-                format!("{} - {product} ({vid:04x}:{pid:04x})", self.name)
-            }
-            (Some(product), _, _) => format!("{} - {product}", self.name),
-            _ => self.name.clone(),
-        }
-    }
-}
-
-/// Lists serial ports currently present.
+/// Lists serial ports currently present, as Mission Planner would list them on this machine.
+///
+/// The names and their order are `SerialPort.GetPortNames()`'s: on Linux and macOS the `/dev`
+/// globs and Mono's own list, stable `/dev/serial/by-id` names first; on Windows the port names
+/// the OS reports, with the C#'s repairs applied. Each is then annotated with the USB ids the
+/// `serialport` crate finds for the device it names. Nothing is opened.
 ///
 /// Returns an empty list rather than an error when enumeration is unsupported: a headless CI box
 /// with no serial hardware is a normal environment, not a failure.
 #[must_use]
 pub fn list_ports() -> Vec<PortInfo> {
+    let known = usb_ports();
+    let names = port_names(&known);
+    enumerate::with_usb_metadata(names, device_node, &known)
+}
+
+/// What the `serialport` crate knows about each device node, for its USB ids. Its own list is not
+/// the one shown: its order is its own, and it has no by-id names.
+fn usb_ports() -> Vec<PortInfo> {
     let Ok(ports) = serialport::available_ports() else {
         return Vec::new();
     };
-    let mut out: Vec<PortInfo> = ports
+    ports
         .into_iter()
-        .map(|p| {
-            let (vid, pid, serial_number, manufacturer, product) = match p.port_type {
-                serialport::SerialPortType::UsbPort(usb) => (
-                    Some(usb.vid),
-                    Some(usb.pid),
-                    usb.serial_number,
-                    usb.manufacturer,
-                    usb.product,
-                ),
-                _ => (None, None, None, None, None),
-            };
-            PortInfo {
+        .map(|p| match p.port_type {
+            serialport::SerialPortType::UsbPort(usb) => PortInfo {
                 name: p.port_name,
-                vid,
-                pid,
-                serial_number,
-                manufacturer,
-                product,
-            }
+                vid: Some(usb.vid),
+                pid: Some(usb.pid),
+                serial_number: usb.serial_number,
+                manufacturer: usb.manufacturer,
+                product: usb.product,
+            },
+            _ => PortInfo::bare(p.port_name),
         })
-        .collect();
-    // Stable ordering so the UI list does not reshuffle between refreshes.
-    out.sort_by(|a, b| a.name.cmp(&b.name));
-    out
+        .collect()
+}
+
+#[cfg(unix)]
+fn port_names(_known: &[PortInfo]) -> Vec<String> {
+    let listing = dev_listing();
+    let entries: Vec<&str> = listing.iter().map(String::as_str).collect();
+    let runtime = enumerate::mono_port_names(&entries);
+    enumerate::get_port_names(&entries, &runtime)
+}
+
+#[cfg(not(unix))]
+fn port_names(known: &[PortInfo]) -> Vec<String> {
+    // .NET reads the SERIALCOMM registry key here; the serialport crate asks SetupAPI. The two
+    // normally name the same COM ports, and a driver that registers with only one of them would
+    // make the lists differ. The crate's list stands in, in its order, with the C#'s trimming and
+    // Bluetooth repair applied to it.
+    let runtime: Vec<&str> = known.iter().map(|port| port.name.as_str()).collect();
+    enumerate::get_port_names(&[], &runtime)
+}
+
+/// The two directories the C# globs, as the listing [`enumerate`] expects: absolute paths in
+/// directory order, directories with a trailing `/`.
+#[cfg(unix)]
+fn dev_listing() -> Vec<String> {
+    let mut listing = Vec::new();
+    for directory in ["/dev/", "/dev/serial/by-id/"] {
+        // The C# wraps each glob in its own try/catch: a directory that cannot be read lists
+        // nothing, and the others still count.
+        let Ok(read) = std::fs::read_dir(directory) else {
+            continue;
+        };
+        for entry in read.flatten() {
+            let path = format!("{directory}{}", entry.file_name().to_string_lossy());
+            // stat() rather than the entry's own type, because GetFiles decides by what a symlink
+            // points at; a dangling link fails the stat and counts as a file, as it does there.
+            let is_dir = std::fs::metadata(&path).is_ok_and(|meta| meta.is_dir());
+            listing.push(if is_dir { format!("{path}/") } else { path });
+        }
+    }
+    listing
+}
+
+/// The device node a listed name stands for: a by-id symlink resolves to its `/dev/ttyACM0`.
+/// realpath() reads links and never opens the device.
+#[cfg(unix)]
+fn device_node(name: &str) -> Option<String> {
+    std::fs::canonicalize(name)
+        .ok()
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
+/// On Windows a port name is already the device. canonicalize() would open it to find out, and
+/// opening a COM port can reset the board on the other end.
+#[cfg(not(unix))]
+fn device_node(_name: &str) -> Option<String> {
+    None
 }
 
 /// An open serial port.
@@ -97,6 +127,15 @@ impl std::fmt::Debug for SerialTransport {
 impl SerialTransport {
     /// Opens a port at the given baud rate.
     pub fn open(path: &str, baud: u32) -> Result<Self, OpenError> {
+        // C#: ExtLibs/Comms/CommsSerialPort.cs:502-504 - a device path that is not there fails
+        // before the driver is asked, with the message Mission Planner shows. An unplugged board's
+        // by-id link is gone or dangling, and both land here.
+        if path.starts_with('/') && !std::path::Path::new(path).exists() {
+            return Err(OpenError::io(
+                format!("opening {path} at {baud} baud"),
+                io::Error::new(io::ErrorKind::NotFound, "No such device"),
+            ));
+        }
         let port = serialport::new(path, baud)
             .timeout(DEFAULT_READ_TIMEOUT)
             .open()
