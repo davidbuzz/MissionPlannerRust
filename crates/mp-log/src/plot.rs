@@ -55,7 +55,7 @@ impl std::fmt::Display for PlottableField {
 /// declares it properly, in `FMTU`: a `#` in the `UnitIds` string marks the field, positionally.
 /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:230-250`
 #[must_use]
-fn instance_fields(data: &[u8]) -> std::collections::BTreeMap<String, String> {
+pub(crate) fn instance_fields(data: &[u8]) -> std::collections::BTreeMap<String, String> {
     let mut by_type: std::collections::BTreeMap<i64, usize> = std::collections::BTreeMap::new();
     let mut reader = DataflashReader::new(data);
     while let Some(message) = reader.next_message() {

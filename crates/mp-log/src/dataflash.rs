@@ -274,7 +274,43 @@ impl<'a> DataflashReader<'a> {
     }
 
     /// Reads the next decodable message, or `None` at the end of the log.
+    ///
+    /// `FMT` records are consumed into [`Self::formats`] rather than returned: every reader of
+    /// messages wants the data, not the declarations. [`Self::next_record`] is the walk that
+    /// includes them.
     pub fn next_message(&mut self) -> Option<LogMessage> {
+        loop {
+            let record = self.next_record()?;
+            if record.msg_type == FMT_TYPE {
+                continue;
+            }
+            // `next_record` only stops on a type whose format it holds and whose body is whole,
+            // so neither lookup below can miss; they are checked anyway, and a miss ends the walk
+            // rather than panicking.
+            let format = self.formats.get(&record.msg_type)?;
+            let body_start = record.offset + 3;
+            let body = self
+                .data
+                .get(body_start..body_start + format.payload_len())?;
+            let fields = decode_fields(format, body);
+            self.stats.messages += 1;
+            return Some(LogMessage {
+                name: format.name.clone(),
+                fields,
+            });
+        }
+    }
+
+    /// Steps to the next whole record, `FMT` included, and says where it starts.
+    ///
+    /// Mission Planner's log browser shows every record the log holds as a row of its grid,
+    /// format declarations among them, and reaches a row by its byte offset rather than by
+    /// holding the row: `DFLogBuffer` keeps a `linestartoffset` per record and decodes on demand.
+    /// This is the walk that finds those offsets. The rules are the ones [`Self::next_message`]
+    /// has always applied - resynchronise on garbage, skip a type with no format, skip a type
+    /// whose format contradicts itself - because both are the same walk.
+    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:98-126`
+    pub fn next_record(&mut self) -> Option<RecordAt> {
         loop {
             // Find a header. Logs from a failing SD card contain runs of garbage, so the
             // scan is bounds-checked at every step rather than trusting the length arithmetic.
@@ -289,6 +325,7 @@ impl<'a> DataflashReader<'a> {
                 }
             }
 
+            let offset = self.pos;
             let msg_type = *self.data.get(self.pos + 2)?;
             let body_start = self.pos + 3;
 
@@ -302,11 +339,12 @@ impl<'a> DataflashReader<'a> {
                         self.stats.inconsistent_formats += 1;
                     }
                     self.formats.insert(format.msg_type, format);
+                    return Some(RecordAt { offset, msg_type });
                 }
                 continue;
             }
 
-            let Some(format) = self.formats.get(&msg_type).cloned() else {
+            let Some(format) = self.formats.get(&msg_type) else {
                 // A message type with no definition cannot be skipped reliably, because its
                 // length is unknown. Resynchronise rather than guess.
                 self.stats.unknown_types += 1;
@@ -316,40 +354,91 @@ impl<'a> DataflashReader<'a> {
             };
 
             let payload_len = format.payload_len();
-            let body = self.data.get(body_start..body_start + payload_len)?;
+            let consistent = format.is_self_consistent();
+            // A body cut short by the end of the log ends the walk: there is nothing after it.
+            self.data.get(body_start..body_start + payload_len)?;
             self.pos = body_start + payload_len;
 
-            if !format.is_self_consistent() {
+            if !consistent {
                 continue;
             }
-
-            let mut fields = Vec::with_capacity(format.format.len());
-            let mut offset = 0usize;
-            for (index, code) in format.format.bytes().enumerate() {
-                let field_type = FieldType(code);
-                let Some(size) = field_type.size() else { break };
-                let Some(slice) = body.get(offset..offset + size) else {
-                    break;
-                };
-                let Some(value) = field_type.decode(slice) else {
-                    break;
-                };
-                let label = format
-                    .labels
-                    .get(index)
-                    .cloned()
-                    .unwrap_or_else(|| format!("field{index}"));
-                fields.push((label, value));
-                offset += size;
-            }
-
-            self.stats.messages += 1;
-            return Some(LogMessage {
-                name: format.name.clone(),
-                fields,
-            });
+            return Some(RecordAt { offset, msg_type });
         }
     }
+}
+
+/// Where one record sits in a log, as [`DataflashReader::next_record`] finds it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RecordAt {
+    /// Byte offset of the record's first header byte.
+    pub offset: usize,
+    /// Its message type.
+    pub msg_type: u8,
+}
+
+/// The longest record the format allows: the length byte is a `u8` and counts the header.
+pub const MAX_RECORD_LEN: usize = u8::MAX as usize;
+
+/// Decodes the one record at the start of `bytes`, with a format table already collected.
+///
+/// The random-access half of [`DataflashReader::next_record`]: a grid showing rows ten thousand
+/// records into a log decodes those rows and nothing else, against the formats the whole log
+/// declared. An `FMT` record decodes against the log's own declaration of `FMT` when it has one,
+/// as every ArduPilot log does, and otherwise by its fixed layout, so a format declaration is a
+/// row like any other.
+#[must_use]
+pub fn decode_record(formats: &BTreeMap<u8, MessageFormat>, bytes: &[u8]) -> Option<LogMessage> {
+    let Some(&[HEAD_BYTE1, HEAD_BYTE2, msg_type]) = bytes.get(..3) else {
+        return None;
+    };
+    let body = bytes.get(3..)?;
+    match formats.get(&msg_type) {
+        Some(format) if format.is_self_consistent() => {
+            let body = body.get(..format.payload_len())?;
+            Some(LogMessage {
+                name: format.name.clone(),
+                fields: decode_fields(format, body),
+            })
+        }
+        _ if msg_type == FMT_TYPE => {
+            let format = parse_fmt(body.get(..FMT_PAYLOAD_LEN)?)?;
+            Some(LogMessage {
+                name: "FMT".to_owned(),
+                fields: vec![
+                    ("Type".to_owned(), Value::Uint(u64::from(format.msg_type))),
+                    ("Length".to_owned(), Value::Uint(u64::from(format.length))),
+                    ("Name".to_owned(), Value::Text(format.name)),
+                    ("Format".to_owned(), Value::Text(format.format)),
+                    ("Columns".to_owned(), Value::Text(format.labels.join(","))),
+                ],
+            })
+        }
+        _ => None,
+    }
+}
+
+/// Decodes a record's body field by field, stopping at the first that does not fit.
+fn decode_fields(format: &MessageFormat, body: &[u8]) -> Vec<(String, Value)> {
+    let mut fields = Vec::with_capacity(format.format.len());
+    let mut offset = 0usize;
+    for (index, code) in format.format.bytes().enumerate() {
+        let field_type = FieldType(code);
+        let Some(size) = field_type.size() else { break };
+        let Some(slice) = body.get(offset..offset + size) else {
+            break;
+        };
+        let Some(value) = field_type.decode(slice) else {
+            break;
+        };
+        let label = format
+            .labels
+            .get(index)
+            .cloned()
+            .unwrap_or_else(|| format!("field{index}"));
+        fields.push((label, value));
+        offset += size;
+    }
+    fields
 }
 
 /// Parses an `FMT` payload.

@@ -1659,6 +1659,7 @@ impl Render for MissionPlanner {
                 .flex()
                 .flex_1()
                 .min_h(px(0.0))
+                .min_w(px(0.0))
                 .child(logbrowse::screen(
                     &self.log_browse,
                     &self.log_name,

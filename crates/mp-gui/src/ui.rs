@@ -62,7 +62,7 @@ pub fn field(label: &str, value: impl Into<SharedString>, colour: u32) -> impl I
 /// Measured under `MP_PROBE`, keyed on its title, so a layout test can assert that no panel ends
 /// up outside the window. Overflow is the failure this UI keeps having, and it is invisible in a
 /// screenshot of the part that did fit.
-pub fn panel(title: &str, body: impl IntoElement) -> impl IntoElement {
+pub fn panel(title: &str, body: impl IntoElement) -> gpui::Div {
     crate::probe::measured(format!("panel:{title}"), div())
         .flex()
         .flex_col()

@@ -2,23 +2,33 @@
 //!
 //! Ported from `Log/LogBrowse.cs` @ efb0801 (GPL-3.0-or-later). Mission Planner opens it as a
 //! separate window from a button on the flight screen; a single-window application makes it a tab.
-//! What it holds is the same: a list of the fields the log declares, and a chart of the chosen
-//! ones on two axes.
+//! What it holds is the same: a list of the fields the log declares, a chart of the chosen ones on
+//! two axes, the map of where the vehicle went beside the chart, and the log's records in a grid
+//! under it, whose current cell the Graph Left and Graph Right buttons put on the chart.
 //!
-//! The extraction is in `mp_log::plot` and the reduction in `mp_chart`, both of which have their
-//! own tests and no gpui in them. This is the screen.
+//! The extraction is in `mp_log::plot`, the record index in `mp_log::index`, the routes in
+//! `mp_log::track` and the reduction in `mp_chart`, all of which have their own tests and no gpui
+//! in them. The grid's model is [`grid`]. This is the screen.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
-use std::collections::BTreeMap;
+mod grid;
 
-use gpui::{AnyElement, Context, div, prelude::*, px, rgb};
+use std::cell::RefCell;
+use std::collections::BTreeMap;
+use std::rc::Rc;
+use std::sync::Arc;
+
+use gpui::{AnyElement, Context, MouseButton, SharedString, div, prelude::*, px, rgb};
 use mp_chart::Series;
 use mp_log::plot::{FieldUnit, PlottableField, UnitTable};
+use mp_tiles::store::TileStore;
 
 use crate::MissionPlanner;
+use crate::mapview::MapViewport;
 use crate::ui::{action, panel, theme};
+use grid::{Grid, ROW_HEIGHT, TYPE_COLUMN};
 
 /// How many fields the list shows before it stops.
 ///
@@ -94,8 +104,18 @@ impl Plotted {
     }
 }
 
+/// What the log's map shows, counted, for the facts and the legend.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct MapContents {
+    /// Which route is drawn as the track: `GPS`, `POS`, or nothing.
+    pub source: &'static str,
+    /// Points of that route.
+    pub points: usize,
+    /// Waypoints of the mission the vehicle logged.
+    pub waypoints: usize,
+}
+
 /// What the log screen keeps between frames.
-#[derive(Debug, Default)]
 pub struct LogBrowse {
     /// The file that was opened, if one was.
     path: Option<std::path::PathBuf>,
@@ -107,20 +127,61 @@ pub struct LogBrowse {
     plotted: Vec<Plotted>,
     /// The last thing that happened, so a refusal is never silent.
     status: Option<String>,
+    /// The last refusal, until something succeeds: the C#'s message box, kept for a test to read.
+    refused: Option<String>,
+    /// The records, a screenful at a time: `dataGridView1`.
+    grid: Option<Grid>,
+    /// The map beside the chart: `myGMAP1`. The flight screen's map widget, a second instance.
+    map: Rc<RefCell<MapViewport>>,
+    /// What is on it.
+    map_contents: MapContents,
+    /// The imagery it shows, the flight map's provider as `myGMAP1.MapProvider` is.
+    tiles: Option<Arc<TileStore>>,
+}
+
+impl std::fmt::Debug for LogBrowse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LogBrowse")
+            .field("path", &self.path)
+            .field("fields", &self.fields.len())
+            .field("plotted", &self.plotted)
+            .field("status", &self.status)
+            .field("grid", &self.grid)
+            .field("map", &self.map_contents)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Default for LogBrowse {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl LogBrowse {
     /// Nothing open.
     #[must_use]
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            path: None,
+            fields: Vec::new(),
+            units: UnitTable::default(),
+            plotted: Vec::new(),
+            status: None,
+            refused: None,
+            grid: None,
+            map: Rc::new(RefCell::new(MapViewport::new(0, 0))),
+            map_contents: MapContents::default(),
+            tiles: None,
+        }
     }
 
-    /// Opens a log and reads what it can plot.
+    /// Opens a log: what it can plot, where it went, and the index its grid reads rows through.
     ///
-    /// The whole file is read and walked once. A 1 GB log is not something to do on the render
-    /// thread, and D14 budgets two seconds for it with a memory-mapped columnar parse - this is
-    /// the straightforward version, and the place that gets replaced when that lands.
+    /// The whole file is read, and walked once for each of those. A 1 GB log is not something to
+    /// do on the render thread, and D14 budgets two seconds for it with a memory-mapped columnar
+    /// parse - this is the straightforward version, and the place that gets replaced when that
+    /// lands.
     pub fn open(&mut self, path: &std::path::Path) {
         let data = match std::fs::read(path) {
             Ok(data) => data,
@@ -133,6 +194,24 @@ impl LogBrowse {
         self.units = mp_log::plot::units(&data);
         self.plotted.clear();
         self.path = Some(path.to_path_buf());
+        self.refused = None;
+        self.show_routes(&mp_log::track::routes(&data));
+        // The grid keeps the file open and reads its rows back a screenful at a time, as
+        // `DFLogBuffer` keeps its stream; the bytes read here are dropped when this returns.
+        self.grid = None;
+        match std::fs::File::open(path) {
+            Ok(file) => {
+                self.grid = Some(Grid::new(
+                    mp_log::index::RecordIndex::build(&data),
+                    Box::new(file),
+                    leap_seconds_now(),
+                ));
+            }
+            Err(err) => {
+                self.status = Some(format!("could not reopen {}: {err}", path.display()));
+                return;
+            }
+        }
         self.status = Some(if self.fields.is_empty() {
             format!(
                 "{} has nothing plottable - is it a dataflash log?",
@@ -240,6 +319,231 @@ impl LogBrowse {
     pub fn clear(&mut self) {
         self.plotted.clear();
     }
+
+    /// The grid, once a log is open.
+    #[must_use]
+    pub const fn grid(&self) -> Option<&Grid> {
+        self.grid.as_ref()
+    }
+
+    /// Makes a grid cell current: a click on it.
+    pub fn select_cell(&mut self, row: usize, column: usize) {
+        if let Some(grid) = self.grid.as_mut() {
+            grid.select(row, column);
+        }
+    }
+
+    /// Moves the grid by a wheel's movement.
+    pub fn scroll_grid(&mut self, pixels: f32) {
+        if let Some(grid) = self.grid.as_mut() {
+            grid.scroll_pixels(pixels);
+        }
+    }
+
+    /// Shows or hides the types the grid can be filtered to: a click on a column header.
+    pub fn toggle_grid_chooser(&mut self) {
+        if let Some(grid) = self.grid.as_mut() {
+            grid.toggle_chooser();
+        }
+    }
+
+    /// Filters the grid to one type, or clears the filter.
+    pub fn filter_grid(&mut self, name: Option<&str>) {
+        if let Some(grid) = self.grid.as_mut() {
+            grid.set_filter(name);
+        }
+    }
+
+    /// Graphs the grid's current cell: Graph Left and Graph Right.
+    ///
+    /// `graphit_clickprocess` and then `GraphItem`. The refusals are the C#'s, in its words, and
+    /// go to the status line where the C# puts up a message box - one window, and a modal box in
+    /// it would stop the operator reading the grid the message is about. Two differences, both
+    /// forced by the chart this graphs onto:
+    ///
+    /// - a field the chart has no time series for - an `FMT` column, a text field, `TimeUS`
+    ///   itself - is refused, where the C# would draw something against line numbers;
+    /// - a field already on the chart stays there, as `GraphItem` aborts on it, rather than
+    ///   coming off as a second click in the field list does.
+    ///
+    /// `// C#: Log/LogBrowse.cs:1062-1146, 2898-2901`
+    pub fn graph_selected(&mut self, axis: Axis) {
+        let resolved = self
+            .grid
+            .as_ref()
+            .map_or(Err(grid::Refusal::NoLog), Grid::resolve);
+        let target = match resolved {
+            Ok(target) => target,
+            Err(refusal) => {
+                self.refuse(refusal.to_string());
+                return;
+            }
+        };
+        let Some(field) = self
+            .fields
+            .iter()
+            .find(|field| {
+                field.message == target.message
+                    && field.instance == target.instance
+                    && field.field == target.field
+            })
+            .cloned()
+        else {
+            self.refuse(format!("{target} cannot be plotted against time"));
+            return;
+        };
+        self.refused = None;
+        if self.axis_of(&field).is_some() {
+            self.status = Some(format!("{target} is already on the graph"));
+            return;
+        }
+        self.graph(&field, axis);
+    }
+
+    /// Says why something was refused, and remembers that it was.
+    fn refuse(&mut self, why: String) {
+        self.status = Some(why.clone());
+        self.refused = Some(why);
+    }
+
+    /// The last refusal, if nothing has succeeded since.
+    #[must_use]
+    pub fn refused(&self) -> Option<&str> {
+        self.refused.as_deref()
+    }
+
+    /// Rows the grid holds.
+    #[must_use]
+    pub fn grid_rows(&self) -> usize {
+        self.grid.as_ref().map_or(0, Grid::rows)
+    }
+
+    /// Records in the open log.
+    #[must_use]
+    pub fn grid_records(&self) -> usize {
+        self.grid.as_ref().map_or(0, Grid::records)
+    }
+
+    /// The field the grid's current cell holds, or `none`.
+    #[must_use]
+    pub fn selected_field(&self) -> String {
+        self.grid
+            .as_ref()
+            .and_then(|grid| grid.resolve().ok())
+            .map_or_else(|| "none".to_owned(), |field| field.to_string())
+    }
+
+    /// The map beside the chart.
+    #[must_use]
+    pub fn map(&self) -> Rc<RefCell<MapViewport>> {
+        Rc::clone(&self.map)
+    }
+
+    /// What the map shows.
+    #[must_use]
+    pub const fn map_contents(&self) -> MapContents {
+        self.map_contents
+    }
+
+    /// Shows the flight map's imagery on this map too.
+    ///
+    /// `myGMAP1.MapProvider = GCSViews.FlightData.mymap.MapProvider`, which the C# does when the
+    /// window opens and again whenever the map is shown. A store of its own rather than the flight
+    /// map's, as `myGMAP1` is a control of its own; it is only replaced when the provider changes,
+    /// so opening one log after another does not start a fetch thread each time.
+    /// `// C#: Log/LogBrowse.cs:217-218, 2990`
+    pub fn use_imagery_of(&mut self, flight: &MapViewport) {
+        let wanted = flight.source_id();
+        if wanted == self.tiles.as_ref().map(|store| store.source().id) {
+            return;
+        }
+        self.tiles = wanted
+            .and_then(mp_tiles::source::source_by_id)
+            .map(|source| {
+                let cache =
+                    mp_tiles::cache::TileCache::new(mp_tiles::cache::TileCache::default_root());
+                // The same switch the flight map is built with: offline means the cache only.
+                Arc::new(if std::env::var("MP_OFFLINE").is_ok() {
+                    TileStore::offline(source, cache)
+                } else {
+                    TileStore::new(source, cache)
+                })
+            });
+        if let Some(store) = &self.tiles {
+            self.map.borrow_mut().set_tiles(Arc::clone(store));
+        }
+    }
+
+    /// Puts a log's routes on the map, replacing whatever the last log put there.
+    ///
+    /// `DrawMap` draws every route at once, each its own colour, over the mission the vehicle
+    /// logged. The map widget here draws one track, so it draws the first GPS's route - the
+    /// C#'s blue one - and the `POS` route only for a log whose GPS never had a fix; the second
+    /// GPS and the `GPSB` blend are not drawn. The logged mission goes on as a mission, which is
+    /// what the widget draws `CMD`'s route and markers as anyway.
+    ///
+    /// The widget's track is the path a vehicle has flown, so it ends at a vehicle symbol; here
+    /// that sits on the route's last point, pointing along the last course the GPS logged.
+    /// `// C#: Log/LogBrowse.cs:2191-2540`
+    fn show_routes(&mut self, routes: &mp_log::track::Routes) {
+        let (points, source) = if routes.gps.is_empty() && !routes.pos.is_empty() {
+            (&routes.pos, "POS")
+        } else if routes.gps.is_empty() {
+            (&routes.gps, "")
+        } else {
+            (&routes.gps, "GPS")
+        };
+
+        // A fresh widget, because a track only ever grows: the last log's would otherwise run
+        // straight into this one's.
+        let mut map = MapViewport::new(0, 0);
+        if let Some(store) = &self.tiles {
+            map.set_tiles(Arc::clone(store));
+        }
+        let mut drawn = 0;
+        for point in points {
+            if let Ok(position) = mp_units::LatLon::new(point.latitude, point.longitude) {
+                let course = mp_units::Bearing(mp_units::Degrees(point.course.unwrap_or(0.0)));
+                map.observe(position, course);
+                drawn += 1;
+            }
+        }
+        let mission: Vec<mp_mission::MissionItem> = routes
+            .commands
+            .iter()
+            .map(|command| {
+                let [param1, param2, param3, param4] = command.params;
+                mp_mission::MissionItem {
+                    seq: command.seq,
+                    current: 0,
+                    frame: command.frame.unwrap_or(0),
+                    command: command.command,
+                    param1,
+                    param2,
+                    param3,
+                    param4,
+                    x: command.latitude,
+                    y: command.longitude,
+                    z: command.altitude,
+                    autocontinue: 1,
+                }
+            })
+            .collect();
+        map.set_mission(&mission);
+        *self.map.borrow_mut() = map;
+        self.map_contents = MapContents {
+            source,
+            points: drawn,
+            waypoints: routes.commands.len(),
+        };
+    }
+}
+
+/// Seconds GPS time is ahead of UTC, as `gpsTimeToTime` asks: for today, not for the log.
+fn leap_seconds_now() -> i64 {
+    use chrono::Datelike as _;
+    let today = chrono::Local::now();
+    mp_log::index::leap_seconds_gps(today.year(), today.month())
 }
 
 /// The value ranges the chart's axes take over a time window.
@@ -326,9 +630,16 @@ const TRACE_COLOURS: &[u32] = &[
 ///   └─ Panel2  treeView1 - the field tree, on the RIGHT
 /// ```
 ///
-/// So: chart on the left with its controls under it, field list down the right-hand side. The map
-/// beside the chart and the raw data grid under it are not built yet and are named here so the
-/// shape is not mistaken for finished. `// C#: Log/LogBrowse.designer.cs:136-390`
+/// So: the chart with the map beside it, taking half the width each as `CHK_map` splits them;
+/// under both, the strip of buttons and then the grid; the field list down the right-hand side.
+/// The log's name and open button sit above it all, where a single window has room for them and
+/// the C# has a Load A Log button in the strip and a file dialog.
+///
+/// Not ported from the strip: Remove Item, the preselected graphs, and the Time, Map, Data Table,
+/// Show Params, Mode, Errors, MSG and Events check boxes. The map and the grid are always shown,
+/// where the C# hides each behind its box - Map, Data Table - and remembers the boxes between
+/// sessions.
+/// `// C#: Log/LogBrowse.designer.cs:136-390; Log/LogBrowse.resx (strip at y 3, x 3 to 971)`
 pub fn screen(
     browse: &LogBrowse,
     name: &crate::textfield::TextField,
@@ -341,6 +652,10 @@ pub fn screen(
         .flex()
         .flex_1()
         .min_h(px(0.0))
+        // Never wider than the window. A flex item's automatic minimum width is its content's
+        // min-content, and the data grid's rows made that wider than 1600 px, which pushed the
+        // field list past the window's right edge where no click could reach it.
+        .min_w(px(0.0))
         .gap_2()
         .p_2()
         // Left: everything about the plot, top to bottom.
@@ -352,7 +667,9 @@ pub fn screen(
                 .min_w(px(0.0))
                 .gap_2()
                 .child(file_panel(browse, name, name_focus, focused, cx))
-                .children(browse.is_open().then(|| plot_panel(browse, cx))),
+                .children(browse.is_open().then(|| chart_row(browse)))
+                .children(browse.is_open().then(|| button_strip(browse, cx)))
+                .children(browse.grid().map(|grid| grid_panel(grid, cx))),
         )
         // Right: the field tree, which is where LogBrowse puts it.
         .children(browse.is_open().then(|| field_panel(browse, search, cx)))
@@ -386,7 +703,10 @@ fn file_panel(
                         px(320.0),
                         cx.listener(|this, event: &gpui::KeyDownEvent, _window, cx| {
                             match this.log_name.key(event) {
-                                crate::textfield::KeyOutcome::Submitted => this.open_log(),
+                                crate::textfield::KeyOutcome::Submitted => {
+                                    this.log_browse.use_imagery_of(&this.map.borrow());
+                                    this.open_log();
+                                }
                                 crate::textfield::KeyOutcome::Cancelled => this.log_name.clear(),
                                 crate::textfield::KeyOutcome::Ignored => return,
                                 crate::textfield::KeyOutcome::Changed => {}
@@ -400,6 +720,7 @@ fn file_panel(
                         theme::ACCENT,
                         true,
                         cx.listener(|this, _event: &(), _window, cx| {
+                            this.log_browse.use_imagery_of(&this.map.borrow());
                             this.open_log();
                             cx.notify();
                         }),
@@ -420,7 +741,7 @@ fn file_panel(
 /// The axes have no tick marks yet; their ranges are written out above the plot, one entry per
 /// axis, and the legend carries each series' own extent - a plot with an auto-scaled axis and no
 /// numbers on it says only "this went up and down".
-fn plot_panel(browse: &LogBrowse, cx: &mut Context<MissionPlanner>) -> AnyElement {
+fn plot_panel(browse: &LogBrowse) -> AnyElement {
     let plotted = browse.plotted();
     let from = plotted
         .iter()
@@ -551,31 +872,355 @@ fn plot_panel(browse: &LogBrowse, cx: &mut Context<MissionPlanner>) -> AnyElemen
             .child(plot)
             .child(
                 div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(rgb(theme::DIM))
-                            .child(if from.is_finite() {
-                                format!("{from:.1}s to {to:.1}s")
-                            } else {
-                                String::new()
-                            }),
-                    )
-                    .child(action(
-                        "log-clear",
-                        "clear",
-                        theme::ACCENT,
-                        !browse.plotted().is_empty(),
-                        cx.listener(|this, _event: &(), _window, cx| {
-                            this.log_browse.clear();
-                            cx.notify();
-                        }),
-                    )),
+                    .text_xs()
+                    .text_color(rgb(theme::DIM))
+                    .child(if from.is_finite() {
+                        format!("{from:.1}s to {to:.1}s")
+                    } else {
+                        String::new()
+                    }),
             )
             .child(legend),
+    )
+    .into_any_element()
+}
+
+/// `splitContainerZgMap`: the chart and the map, side by side, half the width each.
+///
+/// `CHK_map_CheckedChanged` sets the splitter to half the width when the map is shown, and the
+/// designer puts the chart on the left. `// C#: Log/LogBrowse.cs:2980-2987`
+fn chart_row(browse: &LogBrowse) -> AnyElement {
+    div()
+        .flex()
+        .gap_2()
+        .child(div().flex_1().min_w(px(0.0)).child(plot_panel(browse)))
+        .child(div().flex_1().min_w(px(0.0)).child(map_panel(browse)))
+        .into_any_element()
+}
+
+/// Height of the map, about the height of the chart panel beside it.
+const MAP_HEIGHT: f32 = 300.0;
+
+/// `myGMAP1`: where the log says the vehicle went.
+///
+/// Dragging pans and the wheel zooms about the cursor, as the designer sets `CanDragMap` and
+/// `MousePositionWithoutCenter`. The C# labels its routes in their colours in the top-left
+/// corner; the one route drawn here is labelled the same way, in the colour it is drawn.
+/// `// C#: Log/LogBrowse.designer.cs:153-232; Log/LogBrowse.cs:3735-3771`
+fn map_panel(browse: &LogBrowse) -> AnyElement {
+    let map = browse.map();
+    let contents = browse.map_contents();
+    let attribution = map.borrow().attribution();
+
+    panel(
+        "map",
+        crate::probe::measured("log-map", div())
+            .relative()
+            .h(px(MAP_HEIGHT))
+            .w_full()
+            .overflow_hidden()
+            .on_mouse_down(MouseButton::Left, {
+                let map = map.clone();
+                move |event: &gpui::MouseDownEvent, _window, _cx| {
+                    map.borrow_mut()
+                        .begin_drag(f32::from(event.position.x), f32::from(event.position.y));
+                }
+            })
+            .on_mouse_move({
+                let map = map.clone();
+                move |event: &gpui::MouseMoveEvent, window, _cx| {
+                    if event.pressed_button != Some(MouseButton::Left) {
+                        return;
+                    }
+                    map.borrow_mut()
+                        .drag_to(f32::from(event.position.x), f32::from(event.position.y));
+                    window.refresh();
+                }
+            })
+            .on_mouse_up(MouseButton::Left, {
+                let map = map.clone();
+                move |_event: &gpui::MouseUpEvent, _window, _cx| map.borrow_mut().end_drag()
+            })
+            .on_scroll_wheel({
+                let map = map.clone();
+                move |event: &gpui::ScrollWheelEvent, window, _cx| {
+                    let delta = event.delta.pixel_delta(px(20.0));
+                    map.borrow_mut().zoom(
+                        f32::from(event.position.x),
+                        f32::from(event.position.y),
+                        f32::from(delta.y) / 20.0,
+                    );
+                    window.refresh();
+                }
+            })
+            .child(crate::mapview::map_element(map))
+            // `label1`, "GPS", in the corner, in the colour of its route - which here is the
+            // colour the map widget strokes any track in.
+            .children((!contents.source.is_empty()).then(|| {
+                div()
+                    .absolute()
+                    .top_1()
+                    .left_1()
+                    .px_1()
+                    .rounded_sm()
+                    .bg(rgb(theme::PANEL))
+                    .text_xs()
+                    .text_color(rgb(theme::OK))
+                    .child(contents.source)
+            }))
+            // Required by the imagery's licence wherever the imagery is shown.
+            .children(attribution.map(|text| {
+                div()
+                    .absolute()
+                    .bottom_1()
+                    .right_1()
+                    .px_1()
+                    .rounded_sm()
+                    .bg(rgb(theme::PANEL))
+                    .text_xs()
+                    .text_color(rgb(theme::DIM))
+                    .child(text)
+            })),
+    )
+    .into_any_element()
+}
+
+/// `splitContainerButGrid.Panel1`: the strip of buttons between the chart and the grid.
+///
+/// In the C#'s order: Graph Left, Graph Right, Clear Graph. The two graph buttons act on the
+/// grid's current cell, not on the field list.
+/// `// C#: Log/LogBrowse.designer.cs:240-255; Log/LogBrowse.resx:159-160, 186-187, 675-676`
+fn button_strip(browse: &LogBrowse, cx: &mut Context<MissionPlanner>) -> AnyElement {
+    div()
+        .flex()
+        .items_center()
+        .gap_2()
+        .child(action(
+            "log-graph-left",
+            "Graph Left",
+            theme::ACCENT,
+            true,
+            cx.listener(|this, _event: &(), _window, cx| {
+                this.log_browse.graph_selected(Axis::Left);
+                cx.notify();
+            }),
+        ))
+        .child(action(
+            "log-graph-right",
+            "Graph Right",
+            theme::ACCENT,
+            true,
+            cx.listener(|this, _event: &(), _window, cx| {
+                this.log_browse.graph_selected(Axis::Right);
+                cx.notify();
+            }),
+        ))
+        .child(action(
+            "log-clear",
+            "Clear Graph",
+            theme::ACCENT,
+            !browse.plotted().is_empty(),
+            cx.listener(|this, _event: &(), _window, cx| {
+                this.log_browse.clear();
+                cx.notify();
+            }),
+        ))
+        .into_any_element()
+}
+
+/// Width of a grid column: the line number, the time, the type, and then the fields.
+///
+/// A field is ten characters or so once a float is written as the single it was logged as, so a
+/// message of a dozen fields fits beside the field list in a 1600-pixel window, and a wider one
+/// scrolls sideways.
+fn column_width(column: usize) -> f32 {
+    match column {
+        0 => 56.0,
+        1 => 160.0,
+        TYPE_COLUMN => 48.0,
+        _ => 76.0,
+    }
+}
+
+/// `dataGridView1`: the log's records, a screenful at a time.
+///
+/// A click on a cell makes it current - one cell, as `SelectionMode = CellSelect` and
+/// `MultiSelect = false` have it. The wheel moves the rows. A click on a column header offers
+/// the log's message types to filter the grid to, with Cancel to show every record again, which
+/// is `dataGridView1_ColumnHeaderMouseClick`'s dialog laid out in the panel instead.
+///
+/// Every visible cell reports its position as `loggrid-<row>-<column>`, the row counted in the
+/// grid as it is filtered, so a test can click one by name.
+/// `// C#: Log/LogBrowse.designer.cs:349-363; Log/LogBrowse.cs:2820-2896`
+fn grid_panel(grid: &Grid, cx: &mut Context<MissionPlanner>) -> AnyElement {
+    let columns = grid.columns();
+    let current = grid.current();
+    let width: f32 = (0..columns).map(column_width).sum();
+
+    // Each cell's text sits in a child the full size of the cell, because the probe measures a
+    // control's children: an empty cell would otherwise report a rectangle of no height on its
+    // top edge, and a click there lands on the row above.
+    let mut header = div().flex().h(px(ROW_HEIGHT));
+    for (column, text) in grid.headers().into_iter().enumerate() {
+        let id = format!("loggrid-head-{column}");
+        header = header.child(
+            crate::probe::measured(id.clone(), div())
+                .id(SharedString::from(id))
+                .w(px(column_width(column)))
+                .h_full()
+                .flex_shrink_0()
+                .px_1()
+                .border_r_1()
+                .border_b_1()
+                .border_color(rgb(theme::BORDER))
+                .text_xs()
+                .text_color(rgb(theme::DIM))
+                .cursor_pointer()
+                .hover(|style| style.bg(rgb(theme::BORDER)))
+                .child(div().size_full().overflow_hidden().child(text))
+                .on_click(cx.listener(|this, _event, _window, cx| {
+                    this.log_browse.toggle_grid_chooser();
+                    cx.notify();
+                })),
+        );
+    }
+
+    let mut body = div()
+        .id("loggrid")
+        .flex()
+        .flex_col()
+        .on_scroll_wheel(
+            cx.listener(|this, event: &gpui::ScrollWheelEvent, _window, cx| {
+                let delta = event.delta.pixel_delta(px(ROW_HEIGHT));
+                this.log_browse.scroll_grid(f32::from(delta.y));
+                // The panel around the grid would scroll too; the rows are what moved.
+                cx.stop_propagation();
+                cx.notify();
+            }),
+        );
+    for row in grid.window() {
+        let mut line = div().flex().h(px(ROW_HEIGHT));
+        for column in 0..columns {
+            let chosen = current == Some((row.row, column));
+            let id = format!("loggrid-{}-{column}", row.row);
+            let text = row.cells.get(column).cloned().unwrap_or_default();
+            let at = (row.row, column);
+            line = line.child(
+                crate::probe::measured(id.clone(), div())
+                    .id(SharedString::from(id))
+                    .w(px(column_width(column)))
+                    .h_full()
+                    .flex_shrink_0()
+                    .px_1()
+                    .border_r_1()
+                    .border_color(rgb(theme::BORDER))
+                    .text_xs()
+                    .bg(rgb(if chosen { theme::ACCENT } else { theme::PANEL }))
+                    .text_color(rgb(if chosen { theme::BG } else { theme::TEXT }))
+                    .cursor_pointer()
+                    .child(div().size_full().overflow_hidden().child(text))
+                    .on_click(cx.listener(move |this, _event, _window, cx| {
+                        this.log_browse.select_cell(at.0, at.1);
+                        cx.notify();
+                    })),
+            );
+        }
+        body = body.child(line);
+    }
+
+    // The types to filter by, when a header has been clicked.
+    let chooser = grid.is_choosing().then(|| {
+        let mut chips = div().flex().flex_wrap().gap_1();
+        for name in grid.types() {
+            let id = format!("loggrid-type-{name}");
+            let chosen = name.clone();
+            chips = chips.child(
+                crate::probe::measured(id.clone(), div())
+                    .id(SharedString::from(id))
+                    .px_2()
+                    .py(px(1.0))
+                    .rounded_sm()
+                    .border_1()
+                    .border_color(rgb(if grid.filter() == Some(name.as_str()) {
+                        theme::ACCENT
+                    } else {
+                        theme::BORDER
+                    }))
+                    .text_xs()
+                    .text_color(rgb(theme::TEXT))
+                    .cursor_pointer()
+                    .hover(|style| style.bg(rgb(theme::BORDER)))
+                    .child(name)
+                    .on_click(cx.listener(move |this, _event, _window, cx| {
+                        this.log_browse.filter_grid(Some(&chosen));
+                        cx.notify();
+                    })),
+            );
+        }
+        div()
+            .flex()
+            .items_start()
+            .gap_2()
+            .child(chips)
+            .child(action(
+                "loggrid-type-cancel",
+                "Cancel",
+                theme::ACCENT,
+                true,
+                cx.listener(|this, _event: &(), _window, cx| {
+                    this.log_browse.filter_grid(None);
+                    cx.notify();
+                }),
+            ))
+    });
+
+    // Where the window is in the log - what the C# grid's scroll bar shows by its thumb.
+    let position = match grid.window().last() {
+        Some(last) => format!(
+            "rows {} to {} of {}{}",
+            grid.first() + 1,
+            last.row + 1,
+            grid.rows(),
+            grid.filter()
+                .map(|name| format!(" {name}, of {} records", grid.records()))
+                .unwrap_or_default()
+        ),
+        _ => format!(
+            "no rows{}",
+            grid.filter()
+                .map(|name| format!(" of {name}"))
+                .unwrap_or_default()
+        ),
+    };
+
+    panel(
+        "data",
+        div()
+            .flex()
+            .flex_col()
+            .gap_1()
+            .children(chooser)
+            .child(
+                div()
+                    .id("loggrid-scroll")
+                    // Its own width comes from the column, never from the rows: without this
+                    // the widest message's columns pushed the whole screen wider than the
+                    // window and the field list off its right edge.
+                    .w_full()
+                    .min_w(px(0.0))
+                    .overflow_x_scroll()
+                    // The wheel moves rows; only a sideways movement scrolls the columns.
+                    .restrict_scroll_to_axis()
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .w(px(width))
+                            .child(header)
+                            .child(body),
+                    ),
+            )
+            .child(div().text_xs().text_color(rgb(theme::DIM)).child(position)),
     )
     .into_any_element()
 }
@@ -658,6 +1303,10 @@ fn field_panel(browse: &LogBrowse, search: &str, cx: &mut Context<MissionPlanner
             )
             .child(list),
     )
+    // The list scrolls inside the window rather than making the screen as tall as itself: a
+    // flex item's automatic minimum height is its content's, and two hundred chips are taller
+    // than any window, which stretched the whole row and put the scroll bar out of reach.
+    .min_h(px(0.0))
     .into_any_element()
 }
 
@@ -875,5 +1524,157 @@ mod tests {
         browse.graph(&field("ATT", "Roll"), Axis::Right);
         assert!(browse.plotted().is_empty());
         assert_eq!(browse.right_count(), 0);
+    }
+
+    fn opened() -> LogBrowse {
+        let mut browse = LogBrowse::new();
+        browse.open(&fixture());
+        browse
+    }
+
+    /// Graph Left and Graph Right put the grid's current cell on their axis.
+    #[test]
+    fn the_graph_buttons_graph_the_current_cell() {
+        let mut browse = opened();
+        browse.filter_grid(Some("ATT"));
+        browse.select_cell(0, 5);
+        assert_eq!(browse.selected_field(), "ATT.Roll");
+        browse.graph_selected(Axis::Left);
+        assert_eq!(browse.plotted().len(), 1);
+        assert_eq!(browse.plotted()[0].label, "ATT.Roll (deg)");
+        assert_eq!(browse.right_count(), 0);
+        assert_eq!(browse.refused(), None);
+
+        browse.select_cell(0, 7);
+        browse.graph_selected(Axis::Right);
+        assert_eq!(browse.plotted().len(), 2);
+        assert_eq!(browse.right_count(), 1);
+        assert_eq!(browse.plotted()[1].label, "ATT.Pitch (deg) R");
+    }
+
+    /// A cell of a type with instances graphs that instance, as the field list would.
+    #[test]
+    fn a_cell_graphs_its_rows_instance() {
+        let mut browse = opened();
+        browse.filter_grid(Some("VIBE"));
+        browse.select_cell(0, 5);
+        browse.graph_selected(Axis::Left);
+        assert_eq!(browse.plotted().len(), 1);
+        assert_eq!(browse.plotted()[0].field.to_string(), "VIBE[0].VibeX");
+    }
+
+    /// Straight after opening, the first cell is current, and graphing it is refused in words.
+    #[test]
+    fn the_line_number_column_is_refused_in_the_status_line() {
+        let mut browse = opened();
+        assert_eq!(browse.selected_field(), "none");
+        browse.graph_selected(Axis::Left);
+        let words = "Please pick another column, Highlight the cell you wish to graph";
+        assert!(browse.plotted().is_empty());
+        assert_eq!(browse.refused(), Some(words));
+        assert_eq!(browse.status(), Some(words), "the status line says it");
+    }
+
+    /// A column that is a field but not one the chart can plot is refused, and a success after a
+    /// refusal clears it.
+    #[test]
+    fn a_field_with_no_time_series_is_refused_and_a_success_clears_it() {
+        let mut browse = opened();
+        browse.select_cell(0, 3); // FMT.Type
+        browse.graph_selected(Axis::Left);
+        assert_eq!(
+            browse.refused(),
+            Some("FMT.Type cannot be plotted against time")
+        );
+        assert!(browse.plotted().is_empty());
+
+        browse.filter_grid(Some("ATT"));
+        browse.select_cell(0, 5);
+        browse.graph_selected(Axis::Left);
+        assert_eq!(browse.refused(), None);
+        assert_eq!(browse.plotted().len(), 1);
+    }
+
+    /// Graphing a plotted cell again leaves it on the chart, as `GraphItem` aborts on it.
+    #[test]
+    fn graphing_a_plotted_cell_again_leaves_it_there() {
+        let mut browse = opened();
+        browse.filter_grid(Some("ATT"));
+        browse.select_cell(0, 5);
+        browse.graph_selected(Axis::Left);
+        browse.graph_selected(Axis::Right);
+        assert_eq!(browse.plotted().len(), 1);
+        assert_eq!(
+            browse.right_count(),
+            0,
+            "not moved to the other axis either"
+        );
+        assert_eq!(browse.status(), Some("ATT.Roll is already on the graph"));
+    }
+
+    /// No log open, the buttons refuse as the C# does with an empty grid.
+    #[test]
+    fn the_graph_buttons_with_no_log_refuse() {
+        let mut browse = LogBrowse::new();
+        browse.graph_selected(Axis::Right);
+        assert_eq!(browse.refused(), Some("Please load a valid file"));
+        assert_eq!(browse.grid_rows(), 0);
+    }
+
+    /// The grid holds every record of the log, and a filter narrows it.
+    #[test]
+    fn the_grid_counts_its_rows_and_the_logs_records() {
+        let mut browse = opened();
+        assert_eq!(browse.grid_rows(), 11_439);
+        assert_eq!(browse.grid_records(), 11_439);
+        browse.filter_grid(Some("GPS"));
+        assert_eq!(browse.grid_rows(), 91);
+        assert_eq!(browse.grid_records(), 11_439);
+        browse.filter_grid(None);
+        assert_eq!(browse.grid_rows(), 11_439);
+    }
+
+    /// The fixture's GPS never had a fix: no track, and the mission it logged in its place.
+    #[test]
+    fn a_log_with_no_fix_maps_its_mission() {
+        let browse = opened();
+        let contents = browse.map_contents();
+        assert_eq!(contents.points, 0);
+        assert_eq!(contents.source, "");
+        assert_eq!(contents.waypoints, 6);
+        assert_eq!(browse.map().borrow().mission_len(), 6);
+        assert_eq!(browse.map().borrow().path_len(), 0);
+    }
+
+    /// A log with a fix maps its first GPS's route.
+    #[test]
+    fn a_log_with_a_fix_maps_its_gps_route() {
+        let mut browse = LogBrowse::new();
+        browse.open(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../testdata/dataflash_damaged.bin"),
+        );
+        let contents = browse.map_contents();
+        assert_eq!(contents.source, "GPS");
+        assert_eq!(contents.points, 63);
+        // The widget keeps a point only when the vehicle has moved; on a bench it barely does.
+        let kept = browse.map().borrow().path_len();
+        assert!((1..=63).contains(&kept), "{kept}");
+        assert!(browse.map().borrow().has_fix());
+    }
+
+    /// Opening another log replaces the map rather than adding to it.
+    #[test]
+    fn opening_another_log_replaces_its_map() {
+        let mut browse = LogBrowse::new();
+        browse.open(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../testdata/dataflash_damaged.bin"),
+        );
+        assert!(browse.map().borrow().path_len() > 0);
+        browse.open(&fixture());
+        assert_eq!(browse.map().borrow().path_len(), 0);
+        assert!(!browse.map().borrow().has_fix());
+        assert_eq!(browse.map_contents().points, 0);
     }
 }

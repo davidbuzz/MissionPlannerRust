@@ -7,3 +7,6 @@
 # Huge, third-party, and each carries its own .git - never tracked here.
 /referneces
 /references
+
+# Agent worktrees made by the coding harness; each is a checkout of this repository.
+/.claude/worktrees

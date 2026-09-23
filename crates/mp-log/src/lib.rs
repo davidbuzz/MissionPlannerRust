@@ -13,8 +13,12 @@
 #![forbid(unsafe_code)]
 
 pub mod dataflash;
+pub mod index;
 pub mod plot;
 pub mod reader;
+#[cfg(test)]
+mod testlog;
+pub mod track;
 pub mod writer;
 
 pub use dataflash::{DataflashReader, DataflashStats, LogMessage, MessageFormat, Value};
