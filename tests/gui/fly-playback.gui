@@ -1,0 +1,69 @@
+# The Telemetry Logs page: tableLayoutPaneltlogs. A tlog plays in the time it was recorded in,
+# divided by the speed a button sets (BUT_speed1_Click: 0.1, 0.25, 0.5, 1x, 2x, 5x, 10x, said on
+# lbl_playbackspeed as "x " and the speed); Play/Pause toggles it (BUT_playlog_Click, the button
+# reading "Pause" while it plays and "Play" when not); the end of the file stops it; and the track
+# bar moves the file to its percentage (tracklog_Scroll), a press beside the thumb moving it by its
+# LargeChange, 5, with lbl_logpercent saying where the file is.
+# `GCSViews/FlightData.cs:556-594, 1674-1678, 3474-3568, 5361-5378, 5543-5577, 5630-5660,
+# GCSViews/FlightData.Designer.cs:2193-2320`
+#
+# Plays the recorded copter flight - 36 seconds of it - so it needs no vehicle. Run from the
+# repository root:
+#   tools/gui-test.sh tests/gui/fly-playback.gui -- file:testdata/mavlink/autotest.tlog
+
+screen fly
+window 1600x1200
+settle 2
+
+# Telemetry Logs is the thirteenth header: bring it to the front of the row, then show its page.
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+expect fly.tabs.first 12
+click fly-tab-tlogs
+expect fly.tab tabTLogs
+expect fly.page.overflow 0
+
+# A log given as the link plays as LoadLogFile plays one: its name shown, playing, at 1x.
+expect fly.playback.file autotest.tlog
+expect fly.playback.playing true
+expect fly.playback.button Pause
+expect fly.playback.speed x 1
+
+# 10x: what is left of the recording in under four seconds.
+click fly-speed10
+expect fly.playback.speed x 10
+settle 6
+
+# The end of the file stops it, at 100%, with the button back to Play.
+expect fly.playback.playing false
+expect fly.playback.button Play
+expect fly.playback.percent 100.00%
+expect fly.playback.tracklog 100
+
+# A press left of the thumb moves it one LargeChange back, and the file with it; still stopped.
+click fly-tracklog@0.02x0.5
+expect fly.playback.tracklog 95
+expect fly.playback.percent ~ 95.
+expect fly.playback.playing false
+
+# The slowest speed, then Play: it plays from there - 1.8 recorded seconds at 0.1x is eighteen.
+click fly-speed1_10
+expect fly.playback.speed x 0.1
+click fly-playlog
+expect fly.playback.playing true
+expect fly.playback.button Pause
+
+# Pause holds it.
+click fly-playlog
+expect fly.playback.playing false
+expect fly.playback.button Play

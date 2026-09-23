@@ -1,0 +1,71 @@
+# Points of interest on the flight map: the map menu's Add Poi, Coords and Delete.
+#
+# Add Poi asks "Enter ID" and adds the point where the map was last pressed (MouseDownStart);
+# Coords asks for 'lat;long;alt' or 'lat;long', each read as a float, then for the ID; Delete
+# removes the marker under the press. Every change is saved to poi.txt in the user data
+# directory, which the flight screen reads when it starts - here a scratch one, through
+# XDG_DATA_HOME. The C#'s menu opens on the map; this application's map menu entries are the row
+# under the Actions grid, so the map is pressed first and the entry chosen after.
+# `GCSViews/FlightData.cs:1007-1010, 2632-2638, 2956-2959, 6011-6038, Utilities/POI.cs`
+#
+# Plays the recorded copter flight so the map has a view to press on, and needs no vehicle. Run
+# from the repository root:
+#   tools/gui-test.sh tests/gui/fly-poi.gui -- file:testdata/mavlink/autotest.tlog
+
+env XDG_DATA_HOME $WORK
+screen fly
+window 1600x1200
+settle 4
+
+expect fly.poi.count 0
+expect fly.poi.file ~ Mission Planner/poi.txt
+# In the scratch directory, not the user's own. (Where a ~/Mission Planner directory exists the
+# C# keeps its data there instead, XDG_DATA_HOME does not move it, and this fails.)
+expect fly.poi.file ~ mpr-work-
+
+# Press the map: that is where Add Poi adds. A press freezes the view, so the point stays put.
+click map@0.5x0.5
+expect fly.mousedown ~ ;
+click fly-tab-actions
+expect fly.tab tabActions
+click fly-poi-add
+expect fly.prompt Enter ID
+type tower
+settle 1
+expect fly.prompt.value tower
+click fly-prompt-ok
+expect fly.prompt none
+expect fly.poi.count 1
+expect fly.poi.list ~ tower -35.
+# Saved as it was added.
+expect fly.poi.error none
+
+# Coords, with no altitude: two floats, widened - so -35.36 is -35.3600006103516.
+click fly-poi-coords
+expect fly.prompt Please enter the coords 'lat;long;alt' or 'lat;long'
+key minus
+type 35.36;149.16
+settle 2
+expect fly.prompt.value -35.36;149.16
+click fly-prompt-ok
+expect fly.prompt Enter ID
+type gate
+settle 1
+click fly-prompt-ok
+expect fly.poi.count 2
+expect fly.poi.list ~ gate -35.3600006103516;149.160003662109
+
+# Delete takes the marker under the press: pressing where the tower went finds the tower.
+click map@0.5x0.5
+click fly-poi-delete
+expect fly.poi.count 1
+expect fly.poi.list ~ gate
+expect fly.poi.error none
+
+# Coords that are not two or three numbers are Invalid Field, and add nothing.
+click fly-poi-coords
+type nonsense
+settle 1
+click fly-prompt-ok
+expect status ~ Invalid Field
+expect fly.poi.count 1

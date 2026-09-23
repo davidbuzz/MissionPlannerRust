@@ -74,7 +74,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "addPoiToolStripMenuItem_Click",
         "Add Poi",
-        Missing,
+        Done("fly-poi-add"),
     ),
     row(
         "ALT_btn",
@@ -137,7 +137,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUT_DFMavlink_Click",
         "Download DataFlash Log Via Mavlink",
-        Done("logs-list"),
+        Done("fly-dfmavlink"),
     ),
     row(
         "but_disablejoystick",
@@ -186,7 +186,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUT_loadtelem_Click",
         "Load Log",
-        Elsewhere("a file: link URL replays a tlog"),
+        Done("fly-loadtelem"),
     ),
     row(
         "BUT_log2kml",
@@ -207,7 +207,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUT_logbrowse_Click",
         "Review a Log",
-        Done("log-open"),
+        Done("fly-logbrowse"),
     ),
     row(
         "BUT_matlab",
@@ -228,7 +228,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUT_playlog_Click",
         "Play/Pause",
-        Missing,
+        Done("fly-playlog"),
     ),
     row(
         "BUT_quickauto",
@@ -314,13 +314,55 @@ pub const FLIGHTDATA: &[Action] = &[
         "Set WP",
         Done("fly-setwp"),
     ),
-    row("BUT_speed10", "Click", "BUT_speed1_Click", "10x", Missing),
-    row("BUT_speed1_10", "Click", "BUT_speed1_Click", "0.1", Missing),
-    row("BUT_speed1_2", "Click", "BUT_speed1_Click", "0.5", Missing),
-    row("BUT_speed1_4", "Click", "BUT_speed1_Click", "0.25", Missing),
-    row("BUT_speed1", "Click", "BUT_speed1_Click", "1x", Missing),
-    row("BUT_speed2", "Click", "BUT_speed1_Click", "2x", Missing),
-    row("BUT_speed5", "Click", "BUT_speed1_Click", "5x", Missing),
+    row(
+        "BUT_speed10",
+        "Click",
+        "BUT_speed1_Click",
+        "10x",
+        Done("fly-speed10"),
+    ),
+    row(
+        "BUT_speed1_10",
+        "Click",
+        "BUT_speed1_Click",
+        "0.1",
+        Done("fly-speed1_10"),
+    ),
+    row(
+        "BUT_speed1_2",
+        "Click",
+        "BUT_speed1_Click",
+        "0.5",
+        Done("fly-speed1_2"),
+    ),
+    row(
+        "BUT_speed1_4",
+        "Click",
+        "BUT_speed1_Click",
+        "0.25",
+        Done("fly-speed1_4"),
+    ),
+    row(
+        "BUT_speed1",
+        "Click",
+        "BUT_speed1_Click",
+        "1x",
+        Done("fly-speed1"),
+    ),
+    row(
+        "BUT_speed2",
+        "Click",
+        "BUT_speed1_Click",
+        "2x",
+        Done("fly-speed2"),
+    ),
+    row(
+        "BUT_speed5",
+        "Click",
+        "BUT_speed1_Click",
+        "5x",
+        Done("fly-speed5"),
+    ),
     row(
         "CB_tuning",
         "CheckedChanged",
@@ -361,7 +403,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "deleteToolStripMenuItem_Click",
         "Delete (POI)",
-        Missing,
+        Done("fly-poi-delete"),
     ),
     row(
         "FlightID_tb",
@@ -501,7 +543,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "ekfclick",
         "hud1_ekfclick",
         "the HUD's EKF indicator",
-        Done("ekf"),
+        Done("hud-ekf"),
     ),
     row("hud1", "Load", "hud1_Load", "the HUD", Plumbing),
     row(
@@ -517,7 +559,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "vibeclick",
         "hud1_vibeclick",
         "the HUD's vibration indicator",
-        Done("vibration"),
+        Done("hud-vibe"),
     ),
     row(
         "IDENT_btn",
@@ -622,7 +664,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "poiatcoordsToolStripMenuItem_Click",
         "Coords (POI)",
-        Missing,
+        Done("fly-poi-coords"),
     ),
     row(
         "PointCameraCoordsToolStripMenuItem1",
@@ -643,42 +685,42 @@ pub const FLIGHTDATA: &[Action] = &[
         "DoubleClick",
         "quickView_DoubleClick",
         "quick view 1: choose its field",
-        Missing,
+        Done("fly-quick-1"),
     ),
     row(
         "quickView2",
         "DoubleClick",
         "quickView_DoubleClick",
         "quick view 2: choose its field",
-        Missing,
+        Done("fly-quick-2"),
     ),
     row(
         "quickView3",
         "DoubleClick",
         "quickView_DoubleClick",
         "quick view 3: choose its field",
-        Missing,
+        Done("fly-quick-3"),
     ),
     row(
         "quickView4",
         "DoubleClick",
         "quickView_DoubleClick",
         "quick view 4: choose its field",
-        Missing,
+        Done("fly-quick-4"),
     ),
     row(
         "quickView5",
         "DoubleClick",
         "quickView_DoubleClick",
         "quick view 5: choose its field",
-        Missing,
+        Done("fly-quick-5"),
     ),
     row(
         "quickView6",
         "DoubleClick",
         "quickView_DoubleClick",
         "quick view 6: choose its field",
-        Missing,
+        Done("fly-quick-6"),
     ),
     row(
         "recordHudToAVIToolStripMenuItem",
@@ -858,7 +900,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Scroll",
         "tracklog_Scroll",
         "the playback position",
-        Missing,
+        Done("fly-tracklog"),
     ),
     row(
         "triggerCameraToolStripMenuItem",
@@ -1016,6 +1058,9 @@ mod tests {
         include_str!("mapview.rs"),
         include_str!("setup.rs"),
         include_str!("params.rs"),
+        include_str!("quick.rs"),
+        include_str!("poi.rs"),
+        include_str!("logdownload.rs"),
     ];
 
     fn designer() -> Option<String> {
@@ -1131,7 +1176,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (40, 2, 75, 18, 1)
+            (59, 1, 57, 18, 1)
         );
     }
 }

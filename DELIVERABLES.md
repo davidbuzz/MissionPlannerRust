@@ -245,7 +245,7 @@ servo/RC, and the vehicle action buttons.
   Since then the Actions tab is ported in its own 5×5 arrangement - Set WP, Restart and Resume
   Mission, Change Alt/Speed/Loiter Radius, Fly To Coords, Fly To Here Alt, Abort Landing, Set
   Home Alt, Do Action with the C#'s 19 entries - each sending what `FlightData.cs` sends and proved
-  by a `tests/gui/fly-*.gui` script, inside the C#'s fourteen-page tab control under the HUD: **40 done, 75 missing**. The storm number is measured on the frame: at 200 Hz through the real link, the release build's p99 is 4.9 ms with no frame over 8 ms in 590 (`tests/gui/storm.gui`; the debug build does not meet it).
+  by a `tests/gui/fly-*.gui` script, inside the C#'s fourteen-page tab control under the HUD; the Quick view with its field chooser, the Telemetry Logs page's paced playback, POIs, the DataFlash Logs page with the log downloader, and the EKF and Vibration windows behind the HUD's texts (rows 18, 22): **59 done, 57 missing**. The storm number is measured on the frame: at 200 Hz through the real link, the release build's p99 is 4.9 ms with no frame over 8 ms in 590 (`tests/gui/storm.gui`; the debug build does not meet it).
 - **Tests:** `crates/mp-gui/src/coverage.rs` (in place of `tests/action_coverage.rs`: the crate is a
   binary, so its tests are inline) enumerates every C# `FlightData` control and action from the D18 ledger and fails on anything unimplemented; `tests/sitl_ops.rs` drives arm/disarm/mode-change/RTL/guided-goto against SITL and asserts resulting vehicle state; per-tab UI snapshots; `tests/layout_persist.rs` save/restore of the screen layout; `benches/telemetry_storm.rs` pumps 200 Hz telemetry and asserts no frame exceeds 8 ms.
 

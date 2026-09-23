@@ -23,6 +23,8 @@ workspace = true
 # gpui_platform cfg-selects the backend per target, so Windows and wasm need no changes here.
 gpui = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f0c8a3af8d5e7e9c4652490d468db8" }
 mp-link.workspace = true
+# A tlog played at its own pace, under the Telemetry Logs page's controls: the replay transport.
+mp-transport.workspace = true
 mp-params.workspace = true
 mp-calibration.workspace = true
 mp-ftp.workspace = true
@@ -37,7 +39,6 @@ mp-chart.workspace = true
 mp-log.workspace = true
 # Install Firmware: the firmware catalogue and the board a USB device names, from the port list.
 mp-firmware.workspace = true
-mp-transport.workspace = true
 
 # Local time, for naming a flight recording the way the pilot's own clock reads. std has no
 # timezone support at all, and the alternatives are worse: libc's localtime_r needs unsafe, which
@@ -64,8 +65,7 @@ gpui_windows = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd
 gpui_macos = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f0c8a3af8d5e7e9c4652490d468db8" }
 
 # A scripted vehicle on the far end of an in-memory link, so a screen's sets and commands can be
-# driven through the real link and its retries in a unit test: the transport double and the frame
-# codec that vehicle speaks with.
+# driven through the real link and its retries in a unit test: the frame codec that vehicle speaks
+# with. (Its transport double, mp-transport, is a dependency above.)
 [dev-dependencies]
-mp-transport.workspace = true
 mp-mavlink.workspace = true

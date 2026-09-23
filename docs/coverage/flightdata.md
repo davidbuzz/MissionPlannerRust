@@ -4,11 +4,11 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 
 | total | done | elsewhere | missing | plumbing | dropped |
 |---:|---:|---:|---:|---:|---:|
-| 136 | 40 | 2 | 75 | 18 | 1 |
+| 136 | 59 | 1 | 57 | 18 | 1 |
 
 | control | event | handler | text | ours |
 |---|---|---|---|---|
-| `addPoiToolStripMenuItem` | Click | `addPoiToolStripMenuItem_Click` | Add Poi | **missing** |
+| `addPoiToolStripMenuItem` | Click | `addPoiToolStripMenuItem_Click` | Add Poi | done: `fly-poi-add` |
 | `ALT_btn` | Click | `ALT_btn_Click` | ALT (transponder) | **missing** |
 | `BUT_abortland` | Click | `BUT_abortland_Click` | Abort Landing | done: `fly-abortland` |
 | `BUT_abort_script` | Click | `BUT_abort_script_Click` | Abort Running Script | **missing** |
@@ -17,20 +17,20 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `but_bintolog` | Click | `but_bintolog_Click` | Convert .Bin to .Log | **missing** |
 | `BUT_clear_track` | Click | `BUT_clear_track_Click` | Clear Track | **missing** |
 | `but_dflogtokml` | Click | `but_dflogtokml_Click` | Create KML + gpx | **missing** |
-| `BUT_DFMavlink` | Click | `BUT_DFMavlink_Click` | Download DataFlash Log Via Mavlink | done: `logs-list` |
+| `BUT_DFMavlink` | Click | `BUT_DFMavlink_Click` | Download DataFlash Log Via Mavlink | done: `fly-dfmavlink` |
 | `but_disablejoystick` | Click | `but_disablejoystick_Click` | Disable Joystick | done: `joystick-enable` |
 | `BUT_edit_selected` | Click | `BUT_edit_selected_Click` | Edit Selected Script | **missing** |
 | `BUT_georefimage` | Click | `BUT_georefimage_Click` | Geo Reference Images | **missing** |
 | `BUT_GimbalVideo` | Click | `gimbalVideoPopOutToolStripMenuItem_Click` | Video Control | **missing** |
 | `BUT_Homealt` | Click | `BUT_Homealt_Click` | Set Home Alt | done: `fly-homealt` |
 | `BUT_joystick` | Click | `BUT_joystick_Click` | Joystick | done: `joystick-refresh` |
-| `BUT_loadtelem` | Click | `BUT_loadtelem_Click` | Load Log | elsewhere: a file: link URL replays a tlog |
+| `BUT_loadtelem` | Click | `BUT_loadtelem_Click` | Load Log | done: `fly-loadtelem` |
 | `BUT_log2kml` | Click | `BUT_log2kml_Click` | Tlog > Kml or Graph | elsewhere: mpr kml |
 | `BUT_loganalysis` | Click | `BUT_loganalysis_Click` | Auto Analysis | **missing** |
-| `BUT_logbrowse` | Click | `BUT_logbrowse_Click` | Review a Log | done: `log-open` |
+| `BUT_logbrowse` | Click | `BUT_logbrowse_Click` | Review a Log | done: `fly-logbrowse` |
 | `BUT_matlab` | Click | `BUT_matlab_Click` | Create Matlab File | **missing** |
 | `BUT_mountmode` | Click | `BUT_mountmode_Click` | Set Mount | **missing** |
-| `BUT_playlog` | Click | `BUT_playlog_Click` | Play/Pause | **missing** |
+| `BUT_playlog` | Click | `BUT_playlog_Click` | Play/Pause | done: `fly-playlog` |
 | `BUT_quickauto` | Click | `BUT_quickauto_Click` | Auto | done: `mode` |
 | `BUT_quickmanual` | Click | `BUT_quickmanual_Click` | Loiter | done: `mode` |
 | `BUT_quickrtl` | Click | `BUT_quickrtl_Click` | RTL | done: `mode` |
@@ -43,19 +43,19 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `BUT_SendMSG` | Click | `BUT_SendMSG_Click` | Message | **missing** |
 | `BUT_setmode` | Click | `BUT_setmode_Click` | Set Mode | done: `mode` |
 | `BUT_setwp` | Click | `BUT_setwp_Click` | Set WP | done: `fly-setwp` |
-| `BUT_speed10` | Click | `BUT_speed1_Click` | 10x | **missing** |
-| `BUT_speed1_10` | Click | `BUT_speed1_Click` | 0.1 | **missing** |
-| `BUT_speed1_2` | Click | `BUT_speed1_Click` | 0.5 | **missing** |
-| `BUT_speed1_4` | Click | `BUT_speed1_Click` | 0.25 | **missing** |
-| `BUT_speed1` | Click | `BUT_speed1_Click` | 1x | **missing** |
-| `BUT_speed2` | Click | `BUT_speed1_Click` | 2x | **missing** |
-| `BUT_speed5` | Click | `BUT_speed1_Click` | 5x | **missing** |
+| `BUT_speed10` | Click | `BUT_speed1_Click` | 10x | done: `fly-speed10` |
+| `BUT_speed1_10` | Click | `BUT_speed1_Click` | 0.1 | done: `fly-speed1_10` |
+| `BUT_speed1_2` | Click | `BUT_speed1_Click` | 0.5 | done: `fly-speed1_2` |
+| `BUT_speed1_4` | Click | `BUT_speed1_Click` | 0.25 | done: `fly-speed1_4` |
+| `BUT_speed1` | Click | `BUT_speed1_Click` | 1x | done: `fly-speed1` |
+| `BUT_speed2` | Click | `BUT_speed1_Click` | 2x | done: `fly-speed2` |
+| `BUT_speed5` | Click | `BUT_speed1_Click` | 5x | done: `fly-speed5` |
 | `CB_tuning` | CheckedChanged | `CB_tuning_CheckedChanged` | Tuning | done: `tuning-show` |
 | `CHK_autopan` | CheckedChanged | `CHK_autopan_CheckedChanged` | Auto Pan | done: `map-follow` |
 | `CMB_modes` | Click | `CMB_modes_Click` | the mode list | done: `mode` |
 | `CMB_setwp` | Click | `CMB_setwp_Click` | the waypoint list | done: `fly-setwp-list` |
 | `customizeToolStripMenuItem` | Click | `customizeToolStripMenuItem_Click` | Customize | **missing** |
-| `deleteToolStripMenuItem` | Click | `deleteToolStripMenuItem_Click` | Delete (POI) | **missing** |
+| `deleteToolStripMenuItem` | Click | `deleteToolStripMenuItem_Click` | Delete (POI) | done: `fly-poi-delete` |
 | `FlightID_tb` | TextChanged | `FlightID_tb_TextChanged` | FlightID | **missing** |
 | `flightPlannerToolStripMenuItem` | Click | `flightPlannerToolStripMenuItem_Click` | Flight Planner | done: `tab-plan` |
 | `flyToCoordsToolStripMenuItem` | Click | `flyToCoordsToolStripMenuItem_Click` | Fly To Coords | done: `fly-flytocoords` |
@@ -75,11 +75,11 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `gStreamerStopToolStripMenuItem` | Click | `GStreamerStopToolStripMenuItem_Click` | GStreamer Stop | **missing** |
 | `hereLinkVideoToolStripMenuItem` | Click | `HereLinkVideoToolStripMenuItem_Click` | HereLink Video | **missing** |
 | `hud1` | DoubleClick | `hud1_DoubleClick` | the HUD: swap with the map | **missing** |
-| `hud1` | ekfclick | `hud1_ekfclick` | the HUD's EKF indicator | done: `ekf` |
+| `hud1` | ekfclick | `hud1_ekfclick` | the HUD's EKF indicator | done: `hud-ekf` |
 | `hud1` | Load | `hud1_Load` | the HUD | plumbing |
 | `hud1` | prearmclick | `hud1_prearmclick` | the HUD's pre-arm indicator | done: `pre-arm` |
 | `hud1` | Resize | `hud1_Resize` | the HUD | plumbing |
-| `hud1` | vibeclick | `hud1_vibeclick` | the HUD's vibration indicator | done: `vibration` |
+| `hud1` | vibeclick | `hud1_vibeclick` | the HUD's vibration indicator | done: `hud-vibe` |
 | `IDENT_btn` | Click | `IDENT_btn_Click` | IDENT (transponder) | **missing** |
 | `jumpToTagToolStripMenuItem` | Click | `jumpToTagToolStripMenuItem_Click` | Jump To Tag | **missing** |
 | `loadFileToolStripMenuItem` | Click | `loadFileToolStripMenuItem_Click` | Load File | **missing** |
@@ -94,15 +94,15 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `myButton3` | Click | `BUT_quickauto_Click` | Auto | done: `mode` |
 | `ON_btn` | Click | `ON_btn_Click` | ON (transponder) | **missing** |
 | `onOffCameraOverlapToolStripMenuItem` | Click | `onOffCameraOverlapToolStripMenuItem_Click` | Camera Overlap | **missing** |
-| `poiatcoordsToolStripMenuItem` | Click | `poiatcoordsToolStripMenuItem_Click` | Coords (POI) | **missing** |
+| `poiatcoordsToolStripMenuItem` | Click | `poiatcoordsToolStripMenuItem_Click` | Coords (POI) | done: `fly-poi-coords` |
 | `PointCameraCoordsToolStripMenuItem1` | Click | `PointCameraCoordsToolStripMenuItem1_Click` | Point Camera Coords | **missing** |
 | `pointCameraHereToolStripMenuItem` | Click | `pointCameraHereToolStripMenuItem_Click` | Point Camera Here | **missing** |
-| `quickView1` | DoubleClick | `quickView_DoubleClick` | quick view 1: choose its field | **missing** |
-| `quickView2` | DoubleClick | `quickView_DoubleClick` | quick view 2: choose its field | **missing** |
-| `quickView3` | DoubleClick | `quickView_DoubleClick` | quick view 3: choose its field | **missing** |
-| `quickView4` | DoubleClick | `quickView_DoubleClick` | quick view 4: choose its field | **missing** |
-| `quickView5` | DoubleClick | `quickView_DoubleClick` | quick view 5: choose its field | **missing** |
-| `quickView6` | DoubleClick | `quickView_DoubleClick` | quick view 6: choose its field | **missing** |
+| `quickView1` | DoubleClick | `quickView_DoubleClick` | quick view 1: choose its field | done: `fly-quick-1` |
+| `quickView2` | DoubleClick | `quickView_DoubleClick` | quick view 2: choose its field | done: `fly-quick-2` |
+| `quickView3` | DoubleClick | `quickView_DoubleClick` | quick view 3: choose its field | done: `fly-quick-3` |
+| `quickView4` | DoubleClick | `quickView_DoubleClick` | quick view 4: choose its field | done: `fly-quick-4` |
+| `quickView5` | DoubleClick | `quickView_DoubleClick` | quick view 5: choose its field | done: `fly-quick-5` |
+| `quickView6` | DoubleClick | `quickView_DoubleClick` | quick view 6: choose its field | done: `fly-quick-6` |
 | `recordHudToAVIToolStripMenuItem` | Click | `recordHudToAVIToolStripMenuItem_Click` | Record Hud to AVI | **missing** |
 | `russianHudToolStripMenuItem` | Click | `russianHudToolStripMenuItem_Click` | Russian Hud | **missing** |
 | `saveFileToolStripMenuItem` | Click | `saveFileToolStripMenuItem_Click` | Save File | **missing** |
@@ -130,7 +130,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `trackBarPitch` | Scroll | `gimbalTrackbar_Scroll` | Tilt (gimbal) | **missing** |
 | `trackBarRoll` | Scroll | `gimbalTrackbar_Scroll` | Roll (gimbal) | **missing** |
 | `trackBarYaw` | Scroll | `gimbalTrackbar_Scroll` | Pan (gimbal) | **missing** |
-| `tracklog` | Scroll | `tracklog_Scroll` | the playback position | **missing** |
+| `tracklog` | Scroll | `tracklog_Scroll` | the playback position | done: `fly-tracklog` |
 | `triggerCameraToolStripMenuItem` | Click | `triggerCameraToolStripMenuItem_Click` | Trigger Camera NOW | **missing** |
 | `TRK_zoom` | Scroll | `TRK_zoom_Scroll` | Zoom | done: `map` |
 | `undockToolStripMenuItem` | Click | `undockDockToolStripMenuItem_Click` | Undock | dropped: one window: nothing to undock from |

@@ -1,0 +1,51 @@
+# The DataFlash Logs page: tableLayoutPanel2, whose Download DataFlash Log Via Mavlink opens the
+# Log Downloader and whose Review a Log opens the log browser.
+#
+# The Log Downloader's Log_Load asks the vehicle for its list - or, with no vehicle, says "Please
+# connect your drone" in its output. Download Selected Logs with nothing checked says to check
+# some; Download All Logs with nothing listed asks for the list again. The form's close box
+# closes it. `GCSViews/FlightData.cs:1204-1209, 1380-1385, Log/LogDownloadMavLink.cs:51-89,
+# 158-197, 428-448, Log/LogStrings.resx`
+#
+# Needs no link: tools/gui-test.sh tests/gui/fly-dataflash.gui
+
+screen fly
+window 1600x1200
+settle 2
+
+# DataFlash Logs is the last header: bring it to the front of the row, then show its page.
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+expect fly.tabs.first 13
+click fly-tab-logbrowse
+expect fly.tab tablogbrowse
+expect fly.page.overflow 0
+
+click fly-dfmavlink
+expect fly.logs.open true
+expect fly.logs.output Please connect your drone
+expect fly.logs.items 0
+
+click fly-logs-dlthese
+expect fly.logs.output Please select some logs by checking the check boxes in the list
+click fly-logs-dlall
+expect fly.logs.output Please connect your drone
+expect fly.logs.fetching none
+
+click fly-logs-close
+expect fly.logs.open false
+
+# Review a Log: the log browser, which is a screen of its own here.
+click fly-logbrowse
+expect screen logs

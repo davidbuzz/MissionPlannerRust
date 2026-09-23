@@ -1,0 +1,39 @@
+# The windows a click on the HUD opens: "EKF" opens EKF Status and "Vibe" opens Vibration.
+#
+# HUD.cs keeps a rectangle where it draws each - at the text, 40 wide, twice the font high - and a
+# click whose 5x5 box meets one raises ekfclick or vibeclick; FlightData shows the form. EKF
+# Status has five bars (each variance times 100) and the flags, every EKF_STATUS_FLAGS bit up to
+# EKF_UNINITIALIZED as "name On" or "name Off"; Vibration has the X, Y and Z bars and the three
+# clipping counts. Each is a form shown with Show(), so both can be open at once.
+# `ExtLibs/Controls/HUD.cs:1199-1231, 3148-3215, GCSViews/FlightData.cs:3293-3323,
+# Controls/EKFStatus.cs, Controls/Vibration.cs`
+#
+# Plays the recorded copter flight, which sends EKF_STATUS_REPORT and VIBRATION, and needs no
+# vehicle. Run from the repository root:
+#   tools/gui-test.sh tests/gui/fly-hudwindows.gui -- file:testdata/mavlink/autotest.tlog
+
+screen fly
+window 1600x1200
+settle 4
+
+expect fly.ekf.open false
+expect fly.vibration.open false
+
+click hud-ekf
+expect fly.ekf.open true
+expect fly.ekf.flags ~ attitude O
+expect fly.ekf.flags ~ uninitialized O
+click fly-ekf-close
+expect fly.ekf.open false
+
+click hud-vibe
+expect fly.vibration.open true
+expect fly.vibration.values ~ ;
+click fly-vibration-close
+expect fly.vibration.open false
+
+# Both at once, as two forms can be.
+click hud-ekf
+click hud-vibe
+expect fly.ekf.open true
+expect fly.vibration.open true

@@ -7,10 +7,14 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use std::cell::Cell;
+use std::rc::Rc;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use gpui::{
-    AnyElement, Context, FocusHandle, KeyDownEvent, SharedString, Window, div, prelude::*, px, rgb,
+    AnyElement, Bounds, Context, FocusHandle, KeyDownEvent, Pixels, SharedString, Window, div,
+    prelude::*, px, rgb,
 };
 use mp_link::messages::{LogMessage, Severity, time_of_day};
 use mp_link::requests::{self, RequestOutcome, RequestState};
@@ -22,7 +26,7 @@ use mp_vehicle::{VehicleFamily, VehicleId};
 use crate::MissionPlanner;
 use crate::telemetry::{Lookup, Report, TelemetryView};
 use crate::textfield::{KeyOutcome, TextField};
-use crate::ui::{action, action_sized, field, panel, progress, theme};
+use crate::ui::{action, action_sized, field, panel, theme};
 // Aliased because `mp_link::messages::Severity` is already `Severity` here and means something
 // else entirely: that one is how loud a STATUSTEXT was, this one is how bad a reading is.
 use mp_vehicle::health::Severity as Health;
@@ -40,56 +44,6 @@ pub const TAKEOFF_ALTITUDE: f32 = 10.0;
 /// different force, and two controls that do nearly the same thing should not look like different
 /// kinds of control.
 const ARM_BUTTON_WIDTH: gpui::Pixels = px(104.0);
-
-/// What the aircraft is and whether it is armed.
-///
-/// The altitude is `cs.alt`: above home, or above sea level while Set Home Alt is on.
-pub fn vehicle_panel(view: &TelemetryView, alt_offset_home: f32) -> impl IntoElement {
-    let (armed, armed_colour) = match view.state.as_ref() {
-        Some(s) if s.armed => ("ARMED".to_owned(), theme::ALERT),
-        Some(_) => ("disarmed".to_owned(), theme::TEXT),
-        None => ("no vehicle".to_owned(), theme::DIM),
-    };
-    let position = view.state.as_ref().and_then(|s| s.position).map_or_else(
-        || "no position".to_owned(),
-        |p| format!("{:.6}, {:.6}", p.latitude(), p.longitude()),
-    );
-    let altitude = view.state.as_ref().map_or_else(
-        || "--".to_owned(),
-        |s| {
-            format!(
-                "{:.1} m",
-                displayed_altitude(s.altitude_relative.0, alt_offset_home)
-            )
-        },
-    );
-    let speed = view.state.as_ref().map_or_else(
-        || "--".to_owned(),
-        |s| format!("{:.1} m/s", s.ground_speed.0),
-    );
-    let heading = view.state.as_ref().map_or_else(
-        || "--".to_owned(),
-        |s| format!("{:.0}°", s.heading.degrees()),
-    );
-
-    panel(
-        "vehicle",
-        div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(field("state", armed, armed_colour))
-            .child(field("position", position, theme::TEXT))
-            .child(
-                div()
-                    .flex()
-                    .gap_3()
-                    .child(field("altitude", altitude, theme::TEXT))
-                    .child(field("ground speed", speed, theme::TEXT))
-                    .child(field("heading", heading, theme::TEXT)),
-            ),
-    )
-}
 
 /// The controls that command the aircraft.
 ///
@@ -382,36 +336,6 @@ fn message_footer(view: &TelemetryView) -> String {
     }
 }
 
-pub fn hud_panel(inputs: &crate::hud::HudInputs) -> impl IntoElement {
-    // Everything on the display is in the scene now - the tapes carry their own numbers, the
-    // mode and waypoint sit under the altitude scroller, battery and GPS along the bottom - as
-    // `HUD.cs` paints them, so nothing is overlaid as widgets any more. The box is 16:9-ish and
-    // tall enough that the C#'s `Height / 30` font is legible.
-    let inputs = inputs.clone();
-    div()
-        .relative()
-        .h(px(260.0))
-        .w_full()
-        .overflow_hidden()
-        .rounded_md()
-        .border_1()
-        .border_color(rgb(theme::BORDER))
-        .child(
-            gpui::canvas(
-                |_bounds, _window, _cx| (),
-                move |bounds, (), window, cx| {
-                    let scene = crate::hud::scene(
-                        &inputs,
-                        f32::from(bounds.size.width),
-                        f32::from(bounds.size.height),
-                    );
-                    crate::hud::paint(&scene, bounds, window, cx);
-                },
-            )
-            .size_full(),
-        )
-}
-
 /// Why the aircraft will not arm.
 ///
 /// Two sources, because neither alone is enough. `SYS_STATUS` names which sensors are switched on
@@ -677,170 +601,6 @@ const fn health_colour(health: Health) -> u32 {
         Health::Warning => theme::WARN,
         Health::Bad => theme::ALERT,
     }
-}
-
-/// The estimator and the frame, in detail.
-///
-/// A vehicle that will not arm, drifts in a hover or climbs when told to hold is almost always one
-/// of these two, and neither is visible anywhere else. The bars are the point: a variance is a
-/// number nobody can read at a glance, and a bar against a threshold is a picture anybody can.
-pub fn estimator_panel(view: &TelemetryView) -> AnyElement {
-    let Some(state) = view.state.as_ref() else {
-        return div().into_any_element();
-    };
-    // Nothing shown until something has been heard. An estimator panel full of zeroes on a vehicle
-    // that has never sent one reads as a perfectly healthy vehicle, which is the opposite of the
-    // truth.
-    if !state.ekf.seen && !state.vibration.seen {
-        return panel(
-            "estimator",
-            div()
-                .text_xs()
-                .text_color(rgb(theme::DIM))
-                .child("no EKF or vibration reports yet"),
-        )
-        .into_any_element();
-    }
-
-    let mut rows = div().flex().flex_col().gap_1();
-    if state.ekf.seen {
-        for (name, variance) in state.ekf.variances() {
-            let severity = if variance >= mp_vehicle::health::VARIANCE_BAD {
-                Health::Bad
-            } else if variance >= mp_vehicle::health::VARIANCE_WARNING {
-                Health::Warning
-            } else {
-                Health::Good
-            };
-            rows = rows.child(bar_row(
-                name,
-                variance,
-                1.0,
-                severity,
-                format!("{variance:.2}"),
-            ));
-        }
-        // The flags say *why* a mode change was refused, which the variances never do.
-        //
-        // Two lines, because two different things are being said. Amber is what a pilot should do
-        // something about; grey is the rest, shown because this is the detail view and somebody
-        // reading it wants the lot - a vehicle with no rangefinder never gets a height-above-
-        // ground estimate and that is not a fault.
-        let missing = state.ekf.unhealthy_estimates();
-        if !missing.is_empty() {
-            rows = rows.child(
-                div()
-                    .pt_1()
-                    .text_xs()
-                    .text_color(rgb(theme::WARN))
-                    .child(format!("not yet good: {}", missing.join(", "))),
-            );
-        }
-        let unavailable: Vec<_> = state
-            .ekf
-            .all_unhealthy_estimates()
-            .into_iter()
-            .filter(|name| !missing.contains(name))
-            .collect();
-        if !unavailable.is_empty() {
-            rows = rows.child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(theme::DIM))
-                    .child(format!("not estimated: {}", unavailable.join(", "))),
-            );
-        }
-        for (set, text) in [
-            (
-                state.ekf.uninitialised(),
-                "the estimator has never been healthy",
-            ),
-            (
-                state.ekf.constant_position_mode(),
-                "holding attitude only - no position source",
-            ),
-            (
-                state.ekf.gps_glitching(),
-                "the estimator is rejecting the GPS",
-            ),
-        ] {
-            if set {
-                rows = rows.child(div().text_xs().text_color(rgb(theme::ALERT)).child(text));
-            }
-        }
-    }
-
-    if state.vibration.seen {
-        for (axis, level) in state.vibration.axes() {
-            let severity = if level >= mp_vehicle::health::VIBRATION_BAD {
-                Health::Bad
-            } else if level >= mp_vehicle::health::VIBRATION_WARNING {
-                Health::Warning
-            } else {
-                Health::Good
-            };
-            rows = rows.child(bar_row(
-                &format!("vibration {axis}"),
-                level,
-                mp_vehicle::health::VIBRATION_BAD,
-                severity,
-                format!("{level:.1}"),
-            ));
-        }
-        let clipping = state.vibration.total_clipping();
-        if clipping > 0 {
-            rows = rows.child(
-                div()
-                    .pt_1()
-                    .text_xs()
-                    .text_color(rgb(theme::ALERT))
-                    .child(format!(
-                        "{clipping} clipping events - an accelerometer has been driven past its range"
-                    )),
-            );
-        }
-    }
-
-    panel("estimator", rows).into_any_element()
-}
-
-/// A labelled bar against a full-scale value.
-fn bar_row(
-    label: &str,
-    value: f32,
-    full_scale: f32,
-    severity: Health,
-    shown: String,
-) -> impl IntoElement {
-    let fraction = if full_scale > 0.0 {
-        (value / full_scale).clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
-    div()
-        .flex()
-        .items_center()
-        .gap_2()
-        .child(
-            div()
-                .w(px(120.0))
-                .text_xs()
-                .text_color(rgb(theme::DIM))
-                .child(label.to_owned()),
-        )
-        .child(
-            div()
-                .flex_1()
-                .min_w(px(0.0))
-                .child(progress(fraction, health_colour(severity))),
-        )
-        .child(
-            div()
-                .w(px(40.0))
-                .text_xs()
-                .text_color(rgb(health_colour(severity)))
-                .child(shown),
-        )
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -1115,6 +875,14 @@ pub enum Prompt {
         /// The `MAV_FRAME` selected in the box.
         frame: u8,
     },
+    /// `InputBox.Show("POI", "Enter ID", ref output)`. `// C#: Utilities/POI.cs:73`
+    PoiId,
+    /// `InputBox.Show("Enter POI Coords", ...)`. `// C#: GCSViews/FlightData.cs:6014`
+    PoiCoords,
+    /// Load Log's `OpenFileDialog`, which this application has no platform dialog for: the path
+    /// is typed, into a box that starts in the dialog's `InitialDirectory`, `tlogdir`, and the
+    /// words are the dialog's first filter. `// C#: GCSViews/FlightData.cs:1276-1302`
+    LoadLog,
 }
 
 impl Prompt {
@@ -1127,6 +895,9 @@ impl Prompt {
             Self::ResumeAt => "Resume at",
             Self::FlyToCoords => "Enter Fly To Coords",
             Self::FlyToHereAlt { .. } => "Enter Alt",
+            Self::PoiId => crate::poi::ID_TITLE,
+            Self::PoiCoords => crate::poi::COORDS_TITLE,
+            Self::LoadLog => "Load Log",
         }
     }
 
@@ -1145,6 +916,9 @@ impl Prompt {
             Self::ResumeAt => "Resume mission at waypoint#".to_owned(),
             Self::FlyToCoords => "Please enter the coords 'lat;long;alt' or 'lat;long'".to_owned(),
             Self::FlyToHereAlt { .. } => "Enter Guided Mode Alt".to_owned(),
+            Self::PoiId => crate::poi::ID_TEXT.to_owned(),
+            Self::PoiCoords => crate::poi::COORDS_TEXT.to_owned(),
+            Self::LoadLog => "Telemetry log (*.tlog)".to_owned(),
         }
     }
 
@@ -1153,7 +927,12 @@ impl Prompt {
     pub const fn takes_text(self) -> bool {
         matches!(
             self,
-            Self::ResumeAt | Self::FlyToCoords | Self::FlyToHereAlt { .. }
+            Self::ResumeAt
+                | Self::FlyToCoords
+                | Self::FlyToHereAlt { .. }
+                | Self::PoiId
+                | Self::PoiCoords
+                | Self::LoadLog
         )
     }
 
@@ -2801,6 +2580,46 @@ fn actions_tab(
                 }),
             )),
     );
+    // The menu's POI entry and three of its four: Add Poi at the point the map was last
+    // pressed, Delete the one under it, and Coords. `// C#: GCSViews/FlightData.Designer.cs:2553-2586`
+    body = body.child(
+        div()
+            .flex()
+            .items_center()
+            .gap_1()
+            .child(div().text_xs().text_color(rgb(theme::DIM)).child("POI"))
+            .child(action(
+                "fly-poi-add",
+                "Add Poi",
+                theme::ACCENT,
+                true,
+                cx.listener(|this, _event: &(), window, cx| {
+                    this.poi_add(window, cx);
+                    cx.notify();
+                }),
+            ))
+            .child(action(
+                "fly-poi-delete",
+                "Delete",
+                theme::ACCENT,
+                true,
+                cx.listener(|this, _event: &(), _window, cx| {
+                    this.poi_delete();
+                    cx.notify();
+                }),
+            ))
+            .child(action(
+                "fly-poi-coords",
+                "Coords",
+                theme::ACCENT,
+                true,
+                cx.listener(|this, _event: &(), window, cx| {
+                    this.fly_actions.ask(Prompt::PoiCoords, "");
+                    this.fly_focus.prompt.focus(window, cx);
+                    cx.notify();
+                }),
+            )),
+    );
 
     if let Some(resume) = &tab.resume {
         let colour = match resume.phase() {
@@ -3110,13 +2929,7 @@ impl Page {
     #[must_use]
     pub const fn note(self) -> Option<&'static str> {
         Some(match self {
-            // `// C#: GCSViews/FlightData.Designer.cs:626-631, 713, 726` - quickView1 to 6, bound to alt,
-            // groundspeed, wp_dist, yaw, verticalspeed and DistToHome.
-            Self::Quick => {
-                "quickView1-6 are not ported; the vehicle panel shows three of their six numbers: \
-                 altitude, ground speed and heading."
-            }
-            Self::Actions => return None,
+            Self::Quick | Self::Actions => return None,
             // `// C#: GCSViews/FlightData.Designer.cs:1086`
             Self::Messages => "txt_messagebox: the messages are under the map on this screen.",
             // `// C#: GCSViews/FlightData.Designer.cs:1098-1140`, each wired to a quick-mode
@@ -3150,15 +2963,12 @@ impl Page {
                 "The gimbal controls (pitch, roll and yaw, Reset Position, Video Control) are \
                  not ported."
             }
-            // `// C#: GCSViews/FlightData.Designer.cs:2195, 2203-2207`
-            Self::TLogs => {
-                "Load Log is a file: link here; Play/Pause and the rest of \
-                 tableLayoutPaneltlogs are not ported."
-            }
-            // `// C#: GCSViews/FlightData.Designer.cs:2374`
+            // `// C#: GCSViews/FlightData.Designer.cs:2208`
+            Self::TLogs => "Tlog > Kml or Graph is mpr kml, on the command line.",
+            // `// C#: GCSViews/FlightData.Designer.cs:2383-2388`
             Self::LogBrowse => {
-                "Review a Log is the Logs screen and Download DataFlash Log Via Mavlink is on the \
-                 Setup screen; the rest of tableLayoutPanel2 is not ported."
+                "Auto Analysis, Create KML + gpx, Convert .Bin to .Log, Create Matlab File and \
+                 Geo Reference Images are not ported."
             }
         })
     }
@@ -3167,21 +2977,24 @@ impl Page {
 /// A panel this screen draws on a page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Panel {
-    /// [`vehicle_panel`].
-    Vehicle,
+    /// `quickView1-6`: [`crate::quick::page`].
+    Quick,
     /// [`actions_panel`]: the arm and command buttons, the Actions grid and the mode list.
     Actions,
     /// [`prearm_panel`].
     PreArm,
     /// [`health_panel`].
     Health,
+    /// `tableLayoutPaneltlogs`: [`playback_page`].
+    Playback,
+    /// `tableLayoutPanel2`: [`dataflash_page`].
+    DataFlash,
 }
 
 impl Page {
     /// The panels the page shows, top to bottom.
     ///
-    /// - Quick: the vehicle panel, whose altitude, ground speed and heading are three of the six
-    ///   numbers `quickView1-6` show by default.
+    /// - Quick: `quickView1-6`, the page's only control (`// C#: GCSViews/FlightData.Designer.cs:618`).
     /// - Actions: the arm, mode and command controls with the 5x5 grid - `BUT_ARM` and
     ///   `CMB_modes` are cells of `tableLayoutPanel1` on `tabActions`
     ///   (`// C#: GCSViews/FlightData.Designer.cs:739, 757, 767`).
@@ -3191,14 +3004,21 @@ impl Page {
     ///   and the fix, satellites, link and battery the health panel shows are what
     ///   `checkListControl1` checks by default (`// C#: checklistDefault.xml`).
     ///
+    /// - Telemetry Logs: `tableLayoutPaneltlogs`, the playback controls
+    ///   (`// C#: GCSViews/FlightData.Designer.cs:2195-2211`).
+    /// - DataFlash Logs: `tableLayoutPanel2`, the log tools, whose first opens the Log Downloader
+    ///   (`// C#: GCSViews/FlightData.Designer.cs:2374-2389`).
+    ///
     /// The messages stay under the map, where this screen has always had them, and the tuning
     /// graph is above the map, where the C# has it.
     #[must_use]
     pub const fn panels(self) -> &'static [Panel] {
         match self {
-            Self::Quick => &[Panel::Vehicle],
+            Self::Quick => &[Panel::Quick],
             Self::Actions => &[Panel::Actions],
             Self::PreFlight => &[Panel::PreArm, Panel::Health],
+            Self::TLogs => &[Panel::Playback],
+            Self::LogBrowse => &[Panel::DataFlash],
             _ => &[],
         }
     }
@@ -3390,6 +3210,8 @@ fn strip_arrow(
 pub struct PageInputs<'a> {
     /// The vehicle, as the panels read it.
     pub view: &'a TelemetryView,
+    /// The Quick, Telemetry Logs and DataFlash Logs pages' state.
+    pub data: &'a FlightData,
     /// The Actions page's state.
     pub actions: &'a Actions,
     /// Its text boxes' focus.
@@ -3411,9 +3233,21 @@ pub fn page_content(
         .panels()
         .iter()
         .map(|panel| match panel {
-            Panel::Vehicle => {
-                vehicle_panel(view, inputs.actions.alt_offset_home).into_any_element()
+            Panel::Quick => {
+                // `cs.alt` is above home, or above sea level while Set Home Alt is on.
+                // `// C#: ExtLibs/ArduPilot/CurrentState.cs:325-328`
+                let shown = view.state.as_deref().map(|state| {
+                    let mut shown = *state;
+                    shown.altitude_relative = mp_units::Metres(displayed_altitude(
+                        state.altitude_relative.0,
+                        inputs.actions.alt_offset_home,
+                    ));
+                    shown
+                });
+                crate::quick::page(&inputs.data.quick, shown.as_ref(), cx)
             }
+            Panel::Playback => playback_page(&inputs.data.playback, cx),
+            Panel::DataFlash => dataflash_page(cx),
             Panel::Actions => actions_panel(
                 view,
                 inputs.checks_disabled,
@@ -3689,6 +3523,19 @@ impl MissionPlanner {
                     self.fly_to_here_alt(&text, frame);
                 }
             }
+            Prompt::PoiId => {
+                let pending = self.fly_data.pois.pending.take();
+                if accepted && let Some((lat, lng, alt)) = pending {
+                    self.fly_data.pois.add(lat, lng, alt, &text);
+                }
+            }
+            // Like Fly To Coords, the answer is read whether or not the box was cancelled.
+            Prompt::PoiCoords => self.poi_at_coords(if accepted { &text } else { "" }, window, cx),
+            Prompt::LoadLog => {
+                if accepted {
+                    self.fly_load_log(&text);
+                }
+            }
         }
     }
 
@@ -3834,8 +3681,10 @@ impl MissionPlanner {
         });
     }
 
-    /// Once a frame: `cs.lastautowp`, and a Resume Mission moved on.
+    /// Once a frame: `cs.lastautowp`, a Resume Mission moved on, and the Telemetry Logs page
+    /// following the log it plays.
     pub(crate) fn fly_tick(&mut self, view: &TelemetryView) {
+        self.fly_data.playback.tick();
         if let Some(state) = view.state.as_deref()
             && mode_name(state).is_some_and(|mode| mode.eq_ignore_ascii_case("auto"))
             && state.mission_current != 0
@@ -3948,6 +3797,1155 @@ fn guided_sends(
         ))
     } else {
         Ok(messages)
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// The rest of the screen: the Quick page's views, the Telemetry Logs page's playback, the points
+// of interest, the Log Downloader the DataFlash Logs page opens, and the windows a click on the
+// HUD opens.
+// -------------------------------------------------------------------------------------------------
+
+/// What the flight screen keeps besides the Actions tab and the page strip.
+#[derive(Debug)]
+pub struct FlightData {
+    /// `quickView1-6`.
+    pub quick: crate::quick::QuickViews,
+    /// The Telemetry Logs page.
+    pub playback: Playback,
+    /// The points of interest.
+    pub pois: crate::poi::Pois,
+    /// The Log Downloader.
+    pub logs: crate::logdownload::LogDownloader,
+    /// Whether the `EKFStatus` window is showing.
+    pub ekf_open: bool,
+    /// Whether the `Vibration` window is showing.
+    pub vibration_open: bool,
+    /// `MouseDownStart`: where the flight map was last pressed, and where that was in the window.
+    /// `// C#: GCSViews/FlightData.cs:2956-2959`
+    pub mouse_down_start: Option<(mp_units::LatLon, (f32, f32))>,
+    /// Where the HUD was laid out, for its click zones.
+    pub hud_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
+}
+
+impl FlightData {
+    /// The screen at start, with the points of interest the C# keeps read from its file.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::with_pois(crate::poi::Pois::load_default())
+    }
+
+    /// The same, with the points of interest given.
+    #[must_use]
+    pub fn with_pois(pois: crate::poi::Pois) -> Self {
+        Self {
+            quick: crate::quick::QuickViews::default(),
+            playback: Playback::default(),
+            pois,
+            logs: crate::logdownload::LogDownloader::default(),
+            ekf_open: false,
+            vibration_open: false,
+            mouse_down_start: None,
+            hud_bounds: Rc::new(Cell::new(None)),
+        }
+    }
+
+    /// Publishes what a UI test asserts on. `alt_offset_home` is Set Home Alt's, which the
+    /// Quick page's altitude includes.
+    pub fn record_facts(&self, view: &TelemetryView, listed: usize, alt_offset_home: f32) {
+        let shown = view.state.as_deref().map(|state| {
+            let mut shown = *state;
+            shown.altitude_relative = mp_units::Metres(displayed_altitude(
+                state.altitude_relative.0,
+                alt_offset_home,
+            ));
+            shown
+        });
+        self.quick.record_facts(shown.as_ref());
+        self.playback.record_facts();
+        self.pois.record_facts();
+        self.logs.record_facts(listed);
+        crate::facts::record("fly.ekf.open", self.ekf_open);
+        crate::facts::record("fly.vibration.open", self.vibration_open);
+        let state = view.state.as_deref();
+        crate::facts::record(
+            "fly.ekf.values",
+            state.map_or_else(
+                || "none".to_owned(),
+                |state| {
+                    ekf_values(state)
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(",")
+                },
+            ),
+        );
+        crate::facts::record(
+            "fly.ekf.flags",
+            state.map_or_else(
+                || "none".to_owned(),
+                |state| {
+                    ekf_flags(state.ekf.flags)
+                        .iter()
+                        .map(|(text, _)| text.trim_end().to_owned())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                },
+            ),
+        );
+        crate::facts::record(
+            "fly.vibration.values",
+            state.map_or_else(
+                || "none".to_owned(),
+                |state| {
+                    let (bars, clips) = vibration_values(state);
+                    format!(
+                        "{};{}",
+                        bars.map(|value| value.to_string()).join(","),
+                        clips.map(|value| value.to_string()).join(",")
+                    )
+                },
+            ),
+        );
+        crate::facts::record(
+            "fly.mousedown",
+            self.mouse_down_start.map_or_else(
+                || "none".to_owned(),
+                |(at, _)| format!("{:.6};{:.6}", at.latitude(), at.longitude()),
+            ),
+        );
+    }
+}
+
+/// Opens a `.tlog` to play: `LoadLogFile`'s `logplaybackfile`, here a replay link paced by the
+/// file's own timestamps, with the controls the Telemetry Logs page drives. Nothing is recorded
+/// and no heartbeat is sent: the C# plays a log with its port closed.
+/// `// C#: GCSViews/FlightData.cs:669-701`
+pub fn replay(
+    path: &str,
+) -> Result<
+    (
+        crate::telemetry::Telemetry,
+        Arc<mp_transport::replay::Playback>,
+    ),
+    String,
+> {
+    let transport = mp_transport::ReplayTransport::open(path).map_err(|err| err.to_string())?;
+    let (transport, control) = transport.paced();
+    let config = mp_link::LinkConfig {
+        record_path: None,
+        send_heartbeat: false,
+        ..mp_link::LinkConfig::default()
+    };
+    let link = mp_link::Link::from_transport(Box::new(transport), config);
+    Ok((
+        crate::telemetry::Telemetry::over(link, &format!("file:{path}")),
+        control,
+    ))
+}
+
+/// `MainV2.comPort.BaseStream.IsOpen`: a link to a vehicle is up. A log being played is not a
+/// port: the C# plays one with its port closed.
+#[must_use]
+pub fn port_open(view: &TelemetryView) -> bool {
+    view.connected && !view.target.starts_with("file:")
+}
+
+/// `Settings.Instance.LogDir`, where Load Log's dialog opens: the directory flights are recorded
+/// into, as the recorder finds it. `// C#: GCSViews/FlightData.cs:1274, ExtLibs/Utilities/Settings.cs:127-140`
+fn log_directory() -> Option<std::path::PathBuf> {
+    std::env::var_os("MP_LOG_DIR")
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            mp_settings::Config::default_path()
+                .and_then(|path| mp_settings::Config::load(&path).ok())
+                .and_then(|config| config.log_directory())
+        })
+        .or_else(mp_settings::default_log_directory)
+}
+
+/// The speed buttons of `panel2`: each one's text, the `Tag` `BUT_speed1_Click` parses, its id,
+/// and where the Designer puts it - the first four on one row, the other three under them.
+/// `// C#: GCSViews/FlightData.Designer.cs:2231-2317, GCSViews/FlightData.resx (BUT_speed*.Text)`
+pub const SPEEDS: [(&str, f64, &str); 7] = [
+    ("0.1", 0.1, "fly-speed1_10"),
+    ("0.25", 0.25, "fly-speed1_4"),
+    ("0.5", 0.5, "fly-speed1_2"),
+    ("1x", 1.0, "fly-speed1"),
+    ("2x", 2.0, "fly-speed2"),
+    ("5x", 5.0, "fly-speed5"),
+    ("10x", 10.0, "fly-speed10"),
+];
+
+/// `TrackBar.LargeChange`, which the Designer leaves at its default: how far a press on the
+/// channel beside the thumb moves it.
+pub const TRACK_STEP: u8 = 5;
+
+/// The Telemetry Logs page: the log playing, and the page's labels as the C# last set them.
+#[derive(Debug)]
+pub struct Playback {
+    /// `MainV2.comPort.logplaybackfile`, as the replay's controls.
+    control: Option<Arc<mp_transport::replay::Playback>>,
+    /// `LBL_logfn.Text`.
+    file_name: String,
+    /// `tlogdir`: where Load Log's dialog opens. `// C#: GCSViews/FlightData.cs:1274`
+    directory: Option<std::path::PathBuf>,
+    /// `LogPlayBackSpeed`.
+    speed: f64,
+    /// `lbl_playbackspeed.Text`: "x 1.0" in the `.resx` until something sets it.
+    speed_label: String,
+    /// `lbl_logpercent.Text`: "0.00 %" in the `.resx` until something sets it.
+    percent_label: String,
+    /// `tracklog.Value`, 0 to 100.
+    tracklog: u8,
+    /// Whether the thumb is held.
+    dragging: bool,
+    /// Where the track bar was laid out.
+    bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
+}
+
+impl Default for Playback {
+    fn default() -> Self {
+        Self {
+            control: None,
+            file_name: String::new(),
+            directory: log_directory(),
+            speed: 1.0,
+            speed_label: "x 1.0".to_owned(),
+            percent_label: "0.00 %".to_owned(),
+            tracklog: 0,
+            dragging: false,
+            bounds: Rc::new(Cell::new(None)),
+        }
+    }
+}
+
+impl Playback {
+    /// `LoadLogFile`: the log's name on the page, the track bar back to 0, playing.
+    /// `// C#: GCSViews/FlightData.cs:669-701`
+    pub fn load(&mut self, path: &str, control: Arc<mp_transport::replay::Playback>) {
+        let path = std::path::Path::new(path);
+        self.directory = path.parent().map(std::path::Path::to_path_buf);
+        self.file_name = path
+            .file_name()
+            .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+        control.set_speed(self.speed);
+        control.set_paused(false);
+        self.control = Some(control);
+        self.tracklog = 0;
+    }
+
+    /// `logplaybackfile.Close()`: nothing plays until another log is loaded.
+    pub fn close(&mut self) {
+        if let Some(control) = self.control.take() {
+            control.set_paused(true);
+        }
+    }
+
+    /// Load Log with a port open: the name is shown, and the C#'s main loop closes the file at
+    /// once, so nothing plays. `// C#: GCSViews/FlightData.cs:3439-3453`
+    pub fn load_name_only(&mut self, path: &str) {
+        self.file_name = std::path::Path::new(path)
+            .file_name()
+            .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+        self.control = None;
+    }
+
+    /// `logreadmode`: a log is playing.
+    #[must_use]
+    pub fn playing(&self) -> bool {
+        self.control
+            .as_ref()
+            .is_some_and(|control| control.is_playing())
+    }
+
+    /// `BUT_playlog.Text`, as `updatePlayPauseButton` sets it: "Pause" while playing, "Play"
+    /// otherwise. `// C#: GCSViews/FlightData.cs:5630-5660`
+    #[must_use]
+    pub fn button(&self) -> &'static str {
+        if self.playing() { "Pause" } else { "Play" }
+    }
+
+    /// `BUT_playlog_Click`: `logreadmode` toggled. With no log loaded the main loop turns it
+    /// straight back off, so nothing happens. `// C#: GCSViews/FlightData.cs:556-594`
+    pub fn toggle(&self) {
+        if let Some(control) = &self.control {
+            control.set_paused(!control.is_paused());
+        }
+    }
+
+    /// `BUT_speed1_Click`: the button's tag as the speed, said on the label.
+    /// `// C#: GCSViews/FlightData.cs:1674-1678`
+    pub fn set_speed(&mut self, speed: f64) {
+        self.speed = speed;
+        if let Some(control) = &self.control {
+            control.set_speed(speed);
+        }
+        self.speed_label = format!("x {}", mp_params::param_file::invariant_double(speed));
+    }
+
+    /// `tracklog_Scroll`: the file moved to the value's percentage of its length, and the percent
+    /// label said again. `// C#: GCSViews/FlightData.cs:5361-5378`
+    pub fn scroll(&mut self, value: u8) {
+        self.tracklog = value.min(100);
+        if let Some(control) = &self.control {
+            control.seek_fraction(f64::from(self.tracklog) / 100.0);
+            self.percent_label = percent(control);
+        }
+    }
+
+    /// A press on the track bar, `fraction` of the way along it, `thumb` wide in fractions: on
+    /// the thumb it takes hold of it; beside it, the thumb moves one `LargeChange` towards the
+    /// press, which is a scroll.
+    pub fn press(&mut self, fraction: f32, thumb: f32) {
+        let at = f32::from(self.tracklog) / 100.0;
+        if (fraction - at).abs() <= thumb / 2.0 {
+            self.dragging = true;
+            return;
+        }
+        let value = if fraction > at {
+            self.tracklog.saturating_add(TRACK_STEP).min(100)
+        } else {
+            self.tracklog.saturating_sub(TRACK_STEP)
+        };
+        self.scroll(value);
+    }
+
+    /// The thumb dragged to `fraction` of the way along.
+    pub fn drag(&mut self, fraction: f32) {
+        if !self.dragging {
+            return;
+        }
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let value = (fraction.clamp(0.0, 1.0) * 100.0).round() as u8;
+        if value != self.tracklog {
+            self.scroll(value);
+        }
+    }
+
+    /// The thumb let go.
+    pub fn release(&mut self) {
+        self.dragging = false;
+    }
+
+    /// Once a frame while a log plays: `updateLogPlayPosition`, which the main loop runs every
+    /// 300 ms - the track bar at the file's position, the percentage, the speed.
+    /// `// C#: GCSViews/FlightData.cs:3462-3470, 5543-5577`
+    pub fn tick(&mut self) {
+        let Some(control) = self.control.clone() else {
+            return;
+        };
+        let at_end = !control.is_paused() && control.position() >= control.len();
+        if !self.playing() && !at_end {
+            return;
+        }
+        if !self.dragging && !control.is_empty() {
+            #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+            #[allow(clippy::cast_sign_loss)]
+            let value = (control.position() as f64 / control.len() as f64 * 100.0) as u8;
+            self.tracklog = value.min(100);
+        }
+        self.percent_label = percent(&control);
+        self.speed_label = format!("x {}", mp_params::param_file::invariant_double(self.speed));
+        // The end of the file: the main loop sets `logreadmode` false, so a scroll back finds it
+        // stopped and Play starts it again. `// C#: GCSViews/FlightData.cs:3556-3563`
+        if at_end {
+            control.set_paused(true);
+        }
+    }
+
+    /// Publishes what a UI test asserts on.
+    pub fn record_facts(&self) {
+        crate::facts::record("fly.playback.file", &self.file_name);
+        crate::facts::record("fly.playback.button", self.button());
+        crate::facts::record("fly.playback.playing", self.playing());
+        crate::facts::record("fly.playback.speed", &self.speed_label);
+        crate::facts::record("fly.playback.percent", &self.percent_label);
+        crate::facts::record("fly.playback.tracklog", self.tracklog);
+        crate::facts::record(
+            "fly.playback.position",
+            self.control
+                .as_ref()
+                .map_or(0, |control| control.position()),
+        );
+    }
+}
+
+/// `(Position / (double)Length).ToString("0.00%")`: a hundred times the fraction, to two places,
+/// and a percent sign.
+fn percent(control: &mp_transport::replay::Playback) -> String {
+    if control.is_empty() {
+        return "0.00%".to_owned();
+    }
+    #[allow(clippy::cast_precision_loss)] // a file's length
+    let fraction = control.position() as f64 / control.len() as f64;
+    format!("{:.2}%", fraction * 100.0)
+}
+
+/// The Telemetry Logs page: `tableLayoutPaneltlogs`, three columns - 91 pixels, what is left, 36
+/// pixels - of three rows. Load Log beside the log's name; Play/Pause beside the track bar and the
+/// percentage; under them the speed buttons and the speed. Tlog > Kml or Graph's cell is empty:
+/// that tool is `mpr kml` here.
+/// `// C#: GCSViews/FlightData.Designer.cs:2193-2320, GCSViews/FlightData.resx (tableLayoutPaneltlogs.LayoutSettings)`
+pub fn playback_page(playback: &Playback, cx: &mut Context<MissionPlanner>) -> AnyElement {
+    let left = |content: AnyElement| div().w(px(91.0)).flex_shrink_0().child(content);
+    let right = |text: String| {
+        div()
+            .w(px(60.0))
+            .flex_shrink_0()
+            .text_xs()
+            .text_color(rgb(theme::TEXT))
+            .child(text)
+    };
+
+    let row0 = div()
+        .flex()
+        .items_center()
+        .gap_1()
+        .h(px(33.0))
+        .child(left(action(
+            "fly-loadtelem",
+            "Load Log",
+            theme::ACCENT,
+            true,
+            cx.listener(|this, _event: &(), window, cx| {
+                // `LBL_logfn.Text = ""` and the log playing closed, then the dialog.
+                // `// C#: GCSViews/FlightData.cs:1276-1291`
+                this.fly_data.playback.file_name.clear();
+                this.fly_data.playback.close();
+                let start = this
+                    .fly_data
+                    .playback
+                    .directory
+                    .as_ref()
+                    .map_or_else(String::new, |dir| {
+                        format!("{}{}", dir.display(), std::path::MAIN_SEPARATOR)
+                    });
+                this.fly_actions.ask(Prompt::LoadLog, &start);
+                this.fly_focus.prompt.focus(window, cx);
+                cx.notify();
+            }),
+        )))
+        .child(
+            crate::probe::measured("fly-logfn", div())
+                .flex_1()
+                .min_w(px(0.0))
+                .truncate()
+                .text_xs()
+                .text_color(rgb(theme::TEXT))
+                .child(playback.file_name.clone()),
+        );
+
+    let row1 = div()
+        .flex()
+        .items_center()
+        .gap_1()
+        .h(px(33.0))
+        .child(left(action(
+            "fly-playlog",
+            playback.button(),
+            theme::ACCENT,
+            true,
+            cx.listener(|this, _event: &(), _window, cx| {
+                this.fly_data.playback.toggle();
+                cx.notify();
+            }),
+        )))
+        .child(track_bar(playback, cx))
+        .child(right(playback.percent_label.clone()));
+
+    // `panel2`: "Speed" over two rows of buttons.
+    let mut first = div().flex().gap_1();
+    let mut second = div().flex().gap_1();
+    for (index, (label, speed, id)) in SPEEDS.iter().enumerate() {
+        let button = action(
+            id,
+            *label,
+            theme::TEXT,
+            true,
+            cx.listener(move |this, _event: &(), _window, cx| {
+                this.fly_data.playback.set_speed(*speed);
+                cx.notify();
+            }),
+        );
+        if index < 4 {
+            first = first.child(button);
+        } else {
+            second = second.child(button);
+        }
+    }
+    let row2 = div()
+        .flex()
+        .gap_1()
+        .child(div().w(px(91.0)).flex_shrink_0())
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap_1()
+                .flex_1()
+                .min_w(px(0.0))
+                .child(div().text_xs().text_color(rgb(theme::DIM)).child("Speed"))
+                .child(first)
+                .child(second),
+        )
+        .child(right(playback.speed_label.clone()));
+
+    div()
+        .flex()
+        .flex_col()
+        .gap_1()
+        .child(row0)
+        .child(row1)
+        .child(row2)
+        .into_any_element()
+}
+
+/// `tracklog`: a channel with a tick every five, and the thumb at the value.
+fn track_bar(playback: &Playback, cx: &mut Context<MissionPlanner>) -> AnyElement {
+    /// The thumb's width, in pixels.
+    const THUMB: f32 = 10.0;
+    let bounds = Rc::clone(&playback.bounds);
+    let pressed = Rc::clone(&playback.bounds);
+    let moved = Rc::clone(&playback.bounds);
+    let value = f32::from(playback.tracklog) / 100.0;
+    let fraction_at = |bounds: &Rc<Cell<Option<Bounds<Pixels>>>>, x: Pixels| {
+        bounds.get().map(|laid_out| {
+            let width = f32::from(laid_out.size.width).max(1.0);
+            (
+                (f32::from(x - laid_out.origin.x) / width).clamp(0.0, 1.0),
+                THUMB / width,
+            )
+        })
+    };
+    let mut channel = div()
+        .relative()
+        .h(px(20.0))
+        .child(
+            gpui::canvas(
+                move |laid_out, _window, _cx| bounds.set(Some(laid_out)),
+                |_bounds, (), _window, _cx| {},
+            )
+            .absolute()
+            .inset_0(),
+        )
+        .child(
+            div()
+                .absolute()
+                .left_0()
+                .right_0()
+                .top(px(8.0))
+                .h(px(4.0))
+                .rounded_sm()
+                .bg(rgb(theme::BORDER)),
+        );
+    for tick in (0..=100u8).step_by(5) {
+        channel = channel.child(
+            div()
+                .absolute()
+                .left(gpui::relative(f32::from(tick) / 100.0))
+                .bottom_0()
+                .w(px(1.0))
+                .h(px(3.0))
+                .bg(rgb(theme::DIM)),
+        );
+    }
+    channel = channel.child(
+        div()
+            .absolute()
+            .left(gpui::relative(value))
+            .ml(px(-THUMB / 2.0))
+            .top(px(2.0))
+            .w(px(THUMB))
+            .h(px(16.0))
+            .rounded_sm()
+            .bg(rgb(theme::ACCENT)),
+    );
+    crate::probe::measured("fly-tracklog", div())
+        .id("fly-tracklog")
+        .flex_1()
+        .min_w(px(0.0))
+        .cursor_pointer()
+        .child(channel)
+        .on_mouse_down(
+            gpui::MouseButton::Left,
+            cx.listener(move |this, event: &gpui::MouseDownEvent, _window, cx| {
+                if let Some((fraction, thumb)) = fraction_at(&pressed, event.position.x) {
+                    this.fly_data.playback.press(fraction, thumb);
+                    cx.notify();
+                }
+            }),
+        )
+        .on_mouse_move(
+            cx.listener(move |this, event: &gpui::MouseMoveEvent, _window, cx| {
+                if event.pressed_button != Some(gpui::MouseButton::Left) {
+                    return;
+                }
+                if let Some((fraction, _)) = fraction_at(&moved, event.position.x) {
+                    this.fly_data.playback.drag(fraction);
+                    cx.notify();
+                }
+            }),
+        )
+        .on_mouse_up(
+            gpui::MouseButton::Left,
+            cx.listener(|this, _event: &gpui::MouseUpEvent, _window, _cx| {
+                this.fly_data.playback.release();
+            }),
+        )
+        .into_any_element()
+}
+
+/// The DataFlash Logs page: `tableLayoutPanel2`, three columns of three rows, as its
+/// `LayoutSettings` place each button. Download DataFlash Log Via Mavlink opens the Log
+/// Downloader and Review a Log the log browser; the other five tools are not ported, and their
+/// cells are empty, as the Actions grid leaves the cells of what it lacks.
+/// `// C#: GCSViews/FlightData.Designer.cs:2379-2389, GCSViews/FlightData.resx (tableLayoutPanel2.LayoutSettings)`
+pub fn dataflash_page(cx: &mut Context<MissionPlanner>) -> AnyElement {
+    div()
+        .grid()
+        .grid_cols(3)
+        .gap_1()
+        .child(cell(
+            0,
+            0,
+            grid_button(
+                "fly-dfmavlink",
+                "Download DataFlash Log Via Mavlink",
+                theme::ACCENT,
+                true,
+                cx.listener(|this, _event: &(), _window, cx| {
+                    this.logs_open();
+                    cx.notify();
+                }),
+            ),
+        ))
+        .child(cell(
+            1,
+            0,
+            grid_button(
+                "fly-logbrowse",
+                "Review a Log",
+                theme::ACCENT,
+                true,
+                // `new LogBrowse().Show()`: the log browser, which is a screen of its own here.
+                // `// C#: GCSViews/FlightData.cs:1380-1385`
+                cx.listener(|this, _event: &(), _window, cx| {
+                    this.screen = crate::Screen::Logs;
+                    this.remember();
+                    cx.notify();
+                }),
+            ),
+        ))
+        .into_any_element()
+}
+
+// --- The windows the HUD opens --------------------------------------------------------------------
+
+/// Which window a click on the HUD opens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HudWindow {
+    /// `EKFStatus`, from `ekfhitzone`.
+    Ekf,
+    /// `Vibration`, from `vibehitzone`.
+    Vibration,
+}
+
+impl HudWindow {
+    /// The click target's id.
+    #[must_use]
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Ekf => "hud-ekf",
+            Self::Vibration => "hud-vibe",
+        }
+    }
+}
+
+/// Where a click on the HUD opens a window: the rectangle `doPaint` sets where it draws "EKF"
+/// or "Vibe" - at the text, 40 wide and twice the font high - grown up and left by the five
+/// pixels of the box `OnMouseClick` tests against it. `(left, top, width, height)` in the HUD.
+/// `// C#: ExtLibs/Controls/HUD.cs:1203-1231, 3156-3158, 3212-3215`
+#[must_use]
+pub fn hud_zone(scene: &crate::hud::Scene, window: HudWindow) -> Option<(f32, f32, f32, f32)> {
+    let (element, text) = match window {
+        HudWindow::Ekf => (crate::hud::Element::Ekf, "EKF"),
+        HudWindow::Vibration => (crate::hud::Element::Vibe, "Vibe"),
+    };
+    scene
+        .owners
+        .iter()
+        .filter(|(owner, _)| *owner == element)
+        .find_map(|(_, index)| match scene.items.get(*index) {
+            Some(crate::hud::Item::Label {
+                text: drawn,
+                at,
+                size,
+                ..
+            }) if drawn == text => {
+                // The text is drawn at `fontsize + 2`.
+                let fontsize = size - 2.0;
+                Some((at.0 - 5.0, at.1 - 5.0, 45.0, fontsize * 2.0 + 5.0))
+            }
+            _ => None,
+        })
+}
+
+/// The primary flight display, with the two places a click opens a window.
+pub fn hud_panel(
+    inputs: &crate::hud::HudInputs,
+    data: &FlightData,
+    cx: &mut Context<MissionPlanner>,
+) -> impl IntoElement {
+    // Everything on the display is in the scene now - the tapes carry their own numbers, the
+    // mode and waypoint sit under the altitude scroller, battery and GPS along the bottom - as
+    // `HUD.cs` paints them, so nothing is overlaid as widgets any more. The box is 16:9-ish and
+    // tall enough that the C#'s `Height / 30` font is legible.
+    let painted = inputs.clone();
+    let bounds = Rc::clone(&data.hud_bounds);
+    // The zones are where the last frame drew the text; before the first, the column's size.
+    let (width, height) = data.hud_bounds.get().map_or((398.0, 258.0), |laid_out| {
+        (
+            f32::from(laid_out.size.width),
+            f32::from(laid_out.size.height),
+        )
+    });
+    let scene = crate::hud::scene(inputs, width, height);
+    let mut hud = div()
+        .relative()
+        .h(px(260.0))
+        .w_full()
+        .overflow_hidden()
+        .rounded_md()
+        .border_1()
+        .border_color(rgb(theme::BORDER))
+        .child(
+            gpui::canvas(
+                move |laid_out, _window, _cx| bounds.set(Some(laid_out)),
+                move |bounds, (), window, cx| {
+                    let scene = crate::hud::scene(
+                        &painted,
+                        f32::from(bounds.size.width),
+                        f32::from(bounds.size.height),
+                    );
+                    crate::hud::paint(&scene, bounds, window, cx);
+                },
+            )
+            .size_full(),
+        );
+    for which in [HudWindow::Ekf, HudWindow::Vibration] {
+        let Some((left, top, width, height)) = hud_zone(&scene, which) else {
+            continue;
+        };
+        hud = hud.child(
+            crate::probe::measured(which.id(), div())
+                .id(which.id())
+                .absolute()
+                .left(px(left))
+                .top(px(top))
+                .w(px(width))
+                .h(px(height))
+                .cursor_pointer()
+                // Measured through a child, as the probe measures: an empty box has none.
+                .child(div().size_full())
+                .on_click(cx.listener(move |this, _event, _window, cx| {
+                    // `hud1_ekfclick` and `hud1_vibeclick`: the form shown.
+                    // `// C#: GCSViews/FlightData.cs:3293-3323`
+                    match which {
+                        HudWindow::Ekf => this.fly_data.ekf_open = true,
+                        HudWindow::Vibration => this.fly_data.vibration_open = true,
+                    }
+                    cx.notify();
+                })),
+        );
+    }
+    hud
+}
+
+/// `EKFStatus.timer1_Tick`'s five bars: each variance times a hundred, as an `int`.
+/// `// C#: Controls/EKFStatus.cs:22-27`
+#[must_use]
+pub fn ekf_values(state: &mp_vehicle::VehicleState) -> [i32; 5] {
+    let ekf = &state.ekf;
+    #[allow(clippy::cast_possible_truncation)]
+    [
+        ekf.velocity_variance,
+        ekf.position_horizontal_variance,
+        ekf.position_vertical_variance,
+        ekf.compass_variance,
+        ekf.terrain_altitude_variance,
+    ]
+    .map(|variance| (variance * 100.0) as i32)
+}
+
+/// The bars' labels, under them. `// C#: Controls/EKFStatus.resx (label2-label6)`
+pub const EKF_LABELS: [&str; 5] = [
+    "Velocity",
+    "Position (Horiz)",
+    "Position (Vert)",
+    "Compass",
+    "Terrain",
+];
+
+/// A bar's colour: `ValueColor` from the Designer, orange past 50 and red past 80.
+/// `// C#: Controls/EKFStatus.cs:32-39, Controls/EKFStatus.Designer.cs:57`
+#[must_use]
+pub const fn ekf_colour(value: i32) -> u32 {
+    if value > 80 {
+        0xff_00_00
+    } else if value > 50 {
+        0xff_a5_00
+    } else {
+        0xff_00_ff
+    }
+}
+
+/// The flags list: every `EKF_STATUS_FLAGS` bit up to `EKF_UNINITIALIZED`, named without its
+/// `EKF_` in lower case, then "On " or "Off"; red when horizontal velocity or either absolute
+/// position is off. `// C#: Controls/EKFStatus.cs:41-67`
+#[must_use]
+pub fn ekf_flags(flags: u16) -> Vec<(String, bool)> {
+    use mp_mavlink_dialects::all::EkfStatusFlags;
+    let mut lines = Vec::new();
+    let mut bit: u32 = 1;
+    while bit <= EkfStatusFlags::EKF_UNINITIALIZED.0 {
+        let on = u32::from(flags) & bit != 0;
+        let name = EkfStatusFlags(bit)
+            .name()
+            .unwrap_or_default()
+            .replace("EKF_", "")
+            .to_lowercase();
+        let red = !on
+            && [
+                EkfStatusFlags::EKF_VELOCITY_HORIZ.0,
+                EkfStatusFlags::EKF_POS_HORIZ_ABS.0,
+                EkfStatusFlags::EKF_POS_VERT_ABS.0,
+            ]
+            .contains(&bit);
+        lines.push((format!("{name} {}", if on { "On " } else { "Off" }), red));
+        bit <<= 1;
+    }
+    lines
+}
+
+/// `Vibration.timer1_Tick`: the three axes as `int`s, and the three clipping counts.
+/// `// C#: Controls/Vibration.cs:21-29`
+#[must_use]
+pub fn vibration_values(state: &mp_vehicle::VehicleState) -> ([i32; 3], [u32; 3]) {
+    let vibration = &state.vibration;
+    #[allow(clippy::cast_possible_truncation)]
+    let bars = [vibration.x, vibration.y, vibration.z].map(|level| level as i32);
+    (bars, vibration.clipping)
+}
+
+/// A `VerticalProgressBar2`: the value from the bottom, and the red lines at `minline` and
+/// `maxline` with their values, scaled for display, beside them.
+/// `// C#: ExtLibs/Controls/HorizontalProgressBar2.cs:185-230`
+fn vertical_bar(value: i32, maximum: i32, lines: (i32, i32), scale: f32, colour: u32) -> gpui::Div {
+    #[allow(clippy::cast_precision_loss)]
+    let fraction = |at: i32| at.clamp(0, maximum) as f32 / maximum.max(1) as f32;
+    let mut bar = div()
+        .relative()
+        .w(px(58.0))
+        .h(px(174.0))
+        .bg(rgb(theme::BORDER))
+        .border_1()
+        .border_color(rgb(theme::DIM))
+        .child(
+            div()
+                .absolute()
+                .left_0()
+                .right_0()
+                .bottom_0()
+                .h(gpui::relative(fraction(value)))
+                .bg(rgb(colour)),
+        );
+    for line in [lines.0, lines.1] {
+        // `(minline * _displayscale).ToString()`: a float, written as its shortest form.
+        #[allow(clippy::cast_precision_loss)]
+        let label = format!("{}", line as f32 * scale);
+        bar = bar.child(
+            div()
+                .absolute()
+                .left_0()
+                .right_0()
+                .top(gpui::relative(1.0 - fraction(line)))
+                .h(px(2.0))
+                .bg(rgb(0xff_00_00))
+                .child(
+                    div()
+                        .absolute()
+                        .left(px(5.0))
+                        .top(px(-14.0))
+                        .text_xs()
+                        .text_color(rgb(theme::TEXT))
+                        .child(label),
+                ),
+        );
+    }
+    bar
+}
+
+/// A form as `Show()` shows it: a titled box over the screen that leaves the rest usable, with
+/// its close box.
+fn floating_window(
+    id: &'static str,
+    title: &'static str,
+    close: &'static str,
+    at: (f32, f32),
+    body: gpui::Div,
+    on_close: impl Fn(&(), &mut Window, &mut gpui::App) + 'static,
+) -> AnyElement {
+    gpui::deferred(
+        gpui::anchored()
+            .position(gpui::point(px(at.0), px(at.1)))
+            .child(
+                crate::probe::measured(id, div())
+                    .id(id)
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .p_3()
+                    .bg(rgb(theme::PANEL))
+                    .border_1()
+                    .border_color(rgb(theme::BORDER))
+                    .rounded_md()
+                    .occlude()
+                    .child(
+                        div()
+                            .flex()
+                            .justify_between()
+                            .gap_3()
+                            .child(div().text_xs().text_color(rgb(theme::DIM)).child(title))
+                            .child(action(close, "\u{2715}", theme::TEXT, true, on_close)),
+                    )
+                    .child(body),
+            ),
+    )
+    .with_priority(1)
+    .into_any_element()
+}
+
+/// The windows the HUD has open: `EKFStatus` and `Vibration`, each `TopMost` and each updated
+/// by its own timer - here, every frame.
+pub fn hud_windows(
+    data: &FlightData,
+    view: &TelemetryView,
+    cx: &mut Context<MissionPlanner>,
+) -> Vec<AnyElement> {
+    let mut windows = Vec::new();
+    let state = view.state.as_deref().copied().unwrap_or_default();
+    if data.ekf_open {
+        // `tableLayoutPanel1`: "EKF Status" over five bars with their names under them, and
+        // "Flags" beside them over the list. `// C#: Controls/EKFStatus.Designer.cs:81-96`
+        let mut bars = div().flex().gap_1();
+        for (value, label) in ekf_values(&state).into_iter().zip(EKF_LABELS) {
+            bars = bars.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .gap_1()
+                    .w(px(58.0))
+                    .child(vertical_bar(value, 100, (50, 80), 0.01, ekf_colour(value)))
+                    .child(div().text_xs().text_color(rgb(theme::TEXT)).child(label)),
+            );
+        }
+        let mut flags = div()
+            .flex()
+            .flex_col()
+            .w(px(142.0))
+            .child(div().text_sm().text_color(rgb(theme::TEXT)).child("Flags"));
+        for (text, red) in ekf_flags(state.ekf.flags) {
+            flags = flags.child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(if red { 0xff_00_00 } else { theme::TEXT }))
+                    .child(text),
+            );
+        }
+        let body = div()
+            .flex()
+            .gap_3()
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(rgb(theme::TEXT))
+                            .child("EKF Status"),
+                    )
+                    .child(bars),
+            )
+            .child(flags);
+        windows.push(floating_window(
+            "fly-ekf-status",
+            "EKF Status",
+            "fly-ekf-close",
+            (420.0, 80.0),
+            body,
+            cx.listener(|this, _event: &(), _window, cx| {
+                this.fly_data.ekf_open = false;
+                cx.notify();
+            }),
+        ));
+    }
+    if data.vibration_open {
+        // "Vibration" over the X, Y and Z bars, and "Clipping" beside them over the three
+        // counts. `// C#: Controls/Vibration.Designer.cs:104-120`
+        let (values, clips) = vibration_values(&state);
+        let mut bars = div().flex().gap_1();
+        for (value, label) in values.into_iter().zip(["X", "Y", "Z"]) {
+            bars = bars.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .gap_1()
+                    .w(px(62.0))
+                    .child(vertical_bar(value, 90, (30, 60), 1.0, 0xff_00_ff))
+                    .child(div().text_xs().text_color(rgb(theme::TEXT)).child(label)),
+            );
+        }
+        let mut clipping = div().flex().flex_col().gap_1().child(
+            div()
+                .text_sm()
+                .text_color(rgb(theme::TEXT))
+                .child("Clipping"),
+        );
+        for (label, count) in ["Primary", "Secondary", "Tertiary"].into_iter().zip(clips) {
+            clipping = clipping.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .child(
+                        div()
+                            .w(px(62.0))
+                            .text_xs()
+                            .text_color(rgb(theme::TEXT))
+                            .child(label),
+                    )
+                    .child(
+                        div()
+                            .w(px(47.0))
+                            .px_1()
+                            .border_1()
+                            .border_color(rgb(theme::BORDER))
+                            .bg(rgb(theme::BG))
+                            .text_xs()
+                            .text_color(rgb(theme::TEXT))
+                            .child(count.to_string()),
+                    ),
+            );
+        }
+        let body = div()
+            .flex()
+            .gap_3()
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(rgb(theme::TEXT))
+                            .child("Vibration"),
+                    )
+                    .child(bars),
+            )
+            .child(clipping);
+        windows.push(floating_window(
+            "fly-vibration",
+            "Vibration",
+            "fly-vibration-close",
+            (420.0, 420.0),
+            body,
+            cx.listener(|this, _event: &(), _window, cx| {
+                this.fly_data.vibration_open = false;
+                cx.notify();
+            }),
+        ));
+    }
+    windows
+}
+
+// --- The handlers for the pages and the map's POI entries -----------------------------------------
+
+impl MissionPlanner {
+    /// Load Log, once a path is given: the link given over to playing it - or, with a port
+    /// open, only its name shown, as the C#'s main loop closes the file straight away.
+    /// `// C#: GCSViews/FlightData.cs:669-701, 1276-1302, 3439-3453`
+    fn fly_load_log(&mut self, path: &str) {
+        let path = path.trim();
+        if path.is_empty() {
+            return;
+        }
+        if port_open(&self.telemetry.view()) {
+            self.fly_data.playback.load_name_only(path);
+            return;
+        }
+        match replay(path) {
+            Ok((telemetry, control)) => {
+                self.telemetry = telemetry;
+                self.fly_data.playback.load(path, control);
+            }
+            Err(_) => {
+                self.file_status = Some(error_box("Please load a valid file"));
+            }
+        }
+    }
+
+    /// Add Poi: `POI.POIAdd(MouseDownStart)` - the ID asked for, then the point added where the
+    /// map was last pressed. Before any press the C#'s `MouseDownStart` is null and `POIAdd`
+    /// returns at once. `// C#: GCSViews/FlightData.cs:1007-1010, Utilities/POI.cs:70-82`
+    fn poi_add(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((at, _)) = self.fly_data.mouse_down_start else {
+            return;
+        };
+        self.fly_data.pois.pending = Some((at.latitude(), at.longitude(), 0.0));
+        self.fly_actions.ask(Prompt::PoiId, "");
+        self.fly_focus.prompt.focus(window, cx);
+    }
+
+    /// Delete: `POI.POIDelete` on the marker the map was pressed on, if it was pressed on one.
+    /// The C# deletes the marker under the pointer when its menu opens; the menu here is under
+    /// the grid, so it is the marker under the last press.
+    /// `// C#: GCSViews/FlightData.cs:2632-2638, Utilities/POI.cs:84-100`
+    fn poi_delete(&mut self) {
+        let Some((_, press)) = self.fly_data.mouse_down_start else {
+            return;
+        };
+        let drawn: Vec<Option<(f32, f32)>> = {
+            let map = self.map.borrow();
+            self.fly_data
+                .pois
+                .points()
+                .iter()
+                .map(|poi| poi.position().and_then(|at| map.screen_of(at)))
+                .collect()
+        };
+        if let Some(index) = crate::poi::under(&drawn, press) {
+            self.fly_data.pois.delete(index);
+        }
+    }
+
+    /// Coords, once answered: the typed point, then its ID asked for as Add Poi asks.
+    /// `// C#: GCSViews/FlightData.cs:6011-6038`
+    fn poi_at_coords(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
+        match crate::poi::parse_coords(text) {
+            Ok(point) => {
+                self.fly_data.pois.pending = Some(point);
+                self.fly_actions.ask(Prompt::PoiId, "");
+                self.fly_focus.prompt.focus(window, cx);
+            }
+            Err(why) => self.file_status = Some(error_box(why)),
+        }
     }
 }
 
@@ -5069,7 +6067,14 @@ mod tests {
     /// missing from them.
     #[test]
     fn each_panel_is_on_one_page_and_every_other_page_says_what_it_lacks() {
-        for panel in [Panel::Vehicle, Panel::Actions, Panel::PreArm, Panel::Health] {
+        for panel in [
+            Panel::Quick,
+            Panel::Actions,
+            Panel::PreArm,
+            Panel::Health,
+            Panel::Playback,
+            Panel::DataFlash,
+        ] {
             let pages: Vec<Page> = Page::ALL
                 .into_iter()
                 .filter(|page| page.panels().contains(&panel))
@@ -5077,12 +6082,14 @@ mod tests {
             assert_eq!(pages.len(), 1, "{panel:?} is on {pages:?}");
         }
         assert_eq!(Page::Actions.panels(), &[Panel::Actions]);
-        assert_eq!(Page::Quick.panels(), &[Panel::Vehicle]);
+        assert_eq!(Page::Quick.panels(), &[Panel::Quick]);
+        assert_eq!(Page::TLogs.panels(), &[Panel::Playback]);
+        assert_eq!(Page::LogBrowse.panels(), &[Panel::DataFlash]);
         assert_eq!(Page::PreFlight.panels(), &[Panel::PreArm, Panel::Health]);
         for page in Page::ALL {
             assert_eq!(
                 page.note().is_none(),
-                page == Page::Actions,
+                matches!(page, Page::Actions | Page::Quick),
                 "{} should say what the C# has on it that this does not",
                 page.name()
             );
@@ -5224,5 +6231,280 @@ mod tests {
         assert_eq!(actions.prompt_value(), "1;2");
         actions.ask(Prompt::ResumeWarning, "");
         assert_eq!(actions.prompt_value(), "none");
+    }
+
+    // --- The HUD's windows, the Telemetry Logs page and the POI questions ------------------------
+
+    /// `IntersectsWith(new Rectangle(x, y, 5, 5))` against the C#'s own rectangle, for holding
+    /// the zones to it.
+    fn csharp_hit(zone: (f32, f32, f32, f32), (x, y): (f32, f32)) -> bool {
+        let (left, top, width, height) = zone;
+        x < left + width && left < x + 5.0 && y < top + height && top < y + 5.0
+    }
+
+    /// The zones are where "EKF" and "Vibe" are drawn, 40 wide and twice the font high, grown
+    /// by the C#'s five-pixel box: every point the C# counts as a hit is inside one, and none
+    /// outside it.
+    #[test]
+    fn a_click_on_ekf_or_vibe_is_a_click_in_the_csharps_rectangle() {
+        // Without a vehicle the HUD draws neither, and there is nothing to click.
+        let idle = crate::hud::scene(&crate::hud::HudInputs::default(), 398.0, 258.0);
+        assert_eq!(hud_zone(&idle, HudWindow::Ekf), None);
+        let inputs = crate::hud::HudInputs {
+            has_vehicle: true,
+            ..crate::hud::HudInputs::default()
+        };
+        let (w, h) = (398.0, 258.0);
+        let scene = crate::hud::scene(&inputs, w, h);
+        // `fontsize` as `doPaint` sets it for this height. `// C#: ExtLibs/Controls/HUD.cs:2040-2048`
+        let fontsize = (h / 30.0f32).max(9.0);
+        for (which, text, x) in [
+            (HudWindow::Ekf, "EKF", w - 23.0 * fontsize),
+            (HudWindow::Vibration, "Vibe", w - 18.0 * fontsize),
+        ] {
+            let zone = hud_zone(&scene, which).expect("the text is drawn");
+            let label_y = scene
+                .owners
+                .iter()
+                .find_map(|(_, index)| match scene.items.get(*index) {
+                    Some(crate::hud::Item::Label {
+                        text: drawn, at, ..
+                    }) if drawn == text => Some(at.1),
+                    _ => None,
+                })
+                .expect("the label");
+            let csharp = (x, label_y, 40.0, fontsize * 2.0);
+            for dx in -8..50 {
+                for dy in -8..30 {
+                    #[allow(clippy::cast_precision_loss)]
+                    let point = (x + dx as f32, label_y + dy as f32);
+                    let (left, top, width, height) = zone;
+                    let ours = point.0 > left
+                        && point.0 < left + width
+                        && point.1 > top
+                        && point.1 < top + height;
+                    assert_eq!(ours, csharp_hit(csharp, point), "{which:?} at {point:?}");
+                }
+            }
+        }
+        assert_eq!(HudWindow::Ekf.id(), "hud-ekf");
+        assert_eq!(HudWindow::Vibration.id(), "hud-vibe");
+    }
+
+    #[test]
+    fn the_ekf_window_lists_every_flag_to_uninitialized() {
+        let lines = ekf_flags(0x0001 | 0x0004);
+        let texts: Vec<&str> = lines.iter().map(|(text, _)| text.as_str()).collect();
+        assert_eq!(
+            texts,
+            [
+                "attitude On ",
+                "velocity_horiz Off",
+                "velocity_vert On ",
+                "pos_horiz_rel Off",
+                "pos_horiz_abs Off",
+                "pos_vert_abs Off",
+                "pos_vert_agl Off",
+                "const_pos_mode Off",
+                "pred_pos_horiz_rel Off",
+                "pred_pos_horiz_abs Off",
+                "uninitialized Off",
+            ]
+        );
+        // Red: horizontal velocity and the two absolute positions, when off.
+        let red: Vec<&str> = lines
+            .iter()
+            .filter(|(_, red)| *red)
+            .map(|(text, _)| text.as_str())
+            .collect();
+        assert_eq!(
+            red,
+            [
+                "velocity_horiz Off",
+                "pos_horiz_abs Off",
+                "pos_vert_abs Off"
+            ]
+        );
+        assert!(ekf_flags(0xffff).iter().all(|(_, red)| !red));
+    }
+
+    #[test]
+    fn the_windows_bars_are_the_csharps_numbers() {
+        let mut state = mp_vehicle::VehicleState::default();
+        state.ekf.velocity_variance = 0.567;
+        state.ekf.compass_variance = 0.9;
+        state.vibration.x = 31.9;
+        state.vibration.clipping = [1, 2, 3];
+        assert_eq!(ekf_values(&state), [56, 0, 0, 90, 0]);
+        assert_eq!(ekf_colour(50), 0xff_00_ff);
+        assert_eq!(ekf_colour(56), 0xff_a5_00);
+        assert_eq!(ekf_colour(81), 0xff_00_00);
+        assert_eq!(vibration_values(&state), ([31, 0, 0], [1, 2, 3]));
+    }
+
+    /// A replay's controls, over a log of `records` frames 10 ms apart.
+    fn control(records: u64) -> Arc<mp_transport::replay::Playback> {
+        let mut data = Vec::new();
+        for i in 0..records {
+            data.extend_from_slice(&(i * 10_000).to_be_bytes());
+            data.extend_from_slice(&[0xFE, 1, 0, 1, 1, 0, 0, 0, 0]);
+        }
+        mp_transport::ReplayTransport::from_bytes("test.tlog", data)
+            .paced()
+            .1
+    }
+
+    #[test]
+    fn the_speed_buttons_set_the_speed_and_say_it() {
+        let mut playback = Playback::default();
+        // The `.resx`'s text until something sets it.
+        assert_eq!(playback.speed_label, "x 1.0");
+        for (label, speed, _) in SPEEDS {
+            playback.set_speed(speed);
+            let said = label.trim_end_matches('x');
+            assert_eq!(playback.speed_label, format!("x {said}"));
+        }
+        // A log loaded afterwards plays at the speed chosen.
+        let control = control(4);
+        playback.load("/somewhere/flight.tlog", Arc::clone(&control));
+        assert_eq!(control.speed(), 10.0);
+        assert_eq!(playback.file_name, "flight.tlog");
+    }
+
+    #[test]
+    fn play_pause_toggles_a_loaded_log_and_nothing_else() {
+        let mut playback = Playback::default();
+        playback.toggle();
+        assert_eq!(playback.button(), "Play");
+        let control = control(10);
+        playback.load("flight.tlog", Arc::clone(&control));
+        assert!(playback.playing());
+        assert_eq!(playback.button(), "Pause");
+        playback.toggle();
+        assert!(!playback.playing());
+        assert_eq!(playback.button(), "Play");
+        playback.toggle();
+        assert!(playback.playing());
+    }
+
+    #[test]
+    fn the_track_bar_moves_by_its_large_change_and_seeks() {
+        let mut playback = Playback::default();
+        let control = control(100);
+        playback.load("flight.tlog", Arc::clone(&control));
+        playback.toggle();
+        // Beside the thumb, at 0: five on, and the file moved to 5%.
+        playback.press(0.9, 0.05);
+        assert_eq!(playback.tracklog, 5);
+        assert_eq!(control.position(), control.len() / 20);
+        assert_eq!(playback.percent_label, "5.00%");
+        playback.press(0.9, 0.05);
+        assert_eq!(playback.tracklog, 10);
+        playback.press(0.0, 0.05);
+        assert_eq!(playback.tracklog, 5);
+        // On the thumb: held, and dragged.
+        playback.press(0.05, 0.05);
+        assert_eq!(playback.tracklog, 5);
+        playback.drag(0.5);
+        assert_eq!(playback.tracklog, 50);
+        playback.release();
+        playback.drag(0.7);
+        assert_eq!(playback.tracklog, 50);
+        // Never past either end.
+        playback.scroll(100);
+        playback.press(1.0, 0.0);
+        assert_eq!(playback.tracklog, 100);
+    }
+
+    #[test]
+    fn the_end_of_the_log_stops_it_as_the_main_loop_does() {
+        let mut playback = Playback::default();
+        let control = control(3);
+        playback.load("flight.tlog", Arc::clone(&control));
+        control.seek_fraction(1.0);
+        playback.tick();
+        assert_eq!(playback.tracklog, 100);
+        assert_eq!(playback.percent_label, "100.00%");
+        assert!(control.is_paused());
+        assert_eq!(playback.button(), "Play");
+        // Back along the bar, it is still stopped until Play.
+        playback.scroll(50);
+        assert!(!playback.playing());
+        playback.toggle();
+        assert!(playback.playing());
+    }
+
+    /// The product's path: a recorded flight opened as Load Log opens it, played through the
+    /// real link, reaches the screen - and stops reaching it when paused.
+    #[test]
+    fn a_loaded_log_plays_through_the_link_and_pauses() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../testdata/mavlink/autotest.tlog");
+        if !path.exists() {
+            eprintln!("skipped: {} is not here", path.display());
+            return;
+        }
+        assert!(replay("/no/such/flight.tlog").is_err());
+        let (telemetry, control) = replay(&path.display().to_string()).expect("opens");
+        assert_eq!(
+            u64::try_from(control.len()).unwrap(),
+            std::fs::metadata(&path).unwrap().len()
+        );
+        control.set_speed(1000.0);
+        let started = Instant::now();
+        while telemetry.view().state.is_none() && started.elapsed() < Duration::from_secs(10) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(telemetry.view().state.is_some(), "no vehicle after 10 s");
+        assert!(telemetry.recording().is_none(), "a replay is not recorded");
+        control.set_paused(true);
+        std::thread::sleep(Duration::from_millis(300));
+        let held = control.position();
+        std::thread::sleep(Duration::from_millis(300));
+        assert_eq!(control.position(), held);
+        assert!(held < control.len());
+    }
+
+    /// A log being played is not a port: Load Log replaces it, and the Log Downloader asks
+    /// for a drone. A link to a vehicle is.
+    #[test]
+    fn a_played_log_is_not_an_open_port() {
+        let mut view = TelemetryView::disconnected("tcp:127.0.0.1:5760");
+        assert!(!port_open(&view));
+        view.connected = true;
+        assert!(port_open(&view));
+        let mut played = TelemetryView::disconnected("file:flight.tlog");
+        played.connected = true;
+        assert!(!port_open(&played));
+    }
+
+    #[test]
+    fn load_log_closes_the_log_playing() {
+        let mut playback = Playback::default();
+        let control = control(10);
+        playback.load("flight.tlog", Arc::clone(&control));
+        playback.close();
+        assert!(control.is_paused());
+        assert!(!playback.playing());
+        playback.toggle();
+        assert!(
+            control.is_paused(),
+            "Play has nothing to play once it is closed"
+        );
+    }
+
+    #[test]
+    fn the_poi_questions_are_the_csharps() {
+        assert_eq!(Prompt::PoiId.title(), "POI");
+        assert_eq!(Prompt::PoiId.text(), "Enter ID");
+        assert_eq!(Prompt::PoiCoords.title(), "Enter POI Coords");
+        assert_eq!(
+            Prompt::PoiCoords.text(),
+            "Please enter the coords 'lat;long;alt' or 'lat;long'"
+        );
+        assert!(Prompt::PoiId.takes_text());
+        assert!(Prompt::PoiCoords.takes_text());
+        assert!(Prompt::LoadLog.takes_text());
+        assert_eq!(Prompt::LoadLog.title(), "Load Log");
     }
 }

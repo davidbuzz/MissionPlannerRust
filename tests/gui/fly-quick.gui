@@ -1,0 +1,57 @@
+# The Quick page: quickView1-6 in tableLayoutPanelQuick, two columns of three, each a
+# description over a number. Bound as the Designer binds them - alt, groundspeed, wp_dist, yaw,
+# verticalspeed, DistToHome - and described by GetNameandUnit: the property's [DisplayText] with
+# its unit. A double click on one opens "Display This", the properties to choose from, and
+# checking one binds the view to it and closes the chooser.
+# `GCSViews/FlightData.Designer.cs:615-735, GCSViews/FlightData.cs:2474-2506, 4549-4650,
+# ExtLibs/Controls/QuickView.cs, ExtLibs/ArduPilot/CurrentState.cs:4526-4552`
+#
+# Plays the recorded copter flight, so it needs no vehicle. Run from the repository root:
+#   tools/gui-test.sh tests/gui/fly-quick.gui -- file:testdata/mavlink/autotest.tlog
+
+screen fly
+window 1600x1200
+settle 5
+
+expect fly.tab tabQuick
+expect fly.page.overflow 0
+expect fly.quick.1 alt
+expect fly.quick.1.label Altitude (m)
+expect fly.quick.2 groundspeed
+expect fly.quick.2.label GroundSpeed (m/s)
+expect fly.quick.3 wp_dist
+expect fly.quick.3.label Dist to WP (m)
+expect fly.quick.4 yaw
+expect fly.quick.4.label Yaw (deg)
+expect fly.quick.5 verticalspeed
+expect fly.quick.5.label Vertical Speed (m/s)
+expect fly.quick.6 DistToHome
+expect fly.quick.6.label Dist to Home (m)
+# A number from the recording, written to two places.
+expect fly.quick.1.value ~ .
+expect fly.quick.4.value ~ .
+# verticalspeed is CurrentState's own smoothed derivative of the altitude, which this application
+# does not hold (docs/coverage/currentstate.md): its view shows no number rather than a made-up one.
+expect fly.quick.5.value none
+expect fly.quick.chooser none
+
+# A double click opens the chooser for that view; every numeric property held is offered.
+doubleclick fly-quick-3
+expect fly.quick.chooser 3
+expect fly.quick.choices 401
+# Checking another binds the view to it and closes the chooser.
+click fly-quick-choice-satcount
+expect fly.quick.chooser none
+expect fly.quick.3 satcount
+expect fly.quick.3.label Sat Count
+expect fly.quick.3.value ~ .00
+# The others are untouched.
+expect fly.quick.1 alt
+expect fly.quick.6 DistToHome
+
+# The form's close box closes it without choosing.
+doubleclick fly-quick-6
+expect fly.quick.chooser 6
+click fly-quick-close
+expect fly.quick.chooser none
+expect fly.quick.6 DistToHome

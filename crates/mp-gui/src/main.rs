@@ -15,13 +15,16 @@ mod fly;
 mod hud;
 mod joystick;
 mod logbrowse;
+mod logdownload;
 mod mapview;
 mod metadata;
 mod params;
 mod plan;
 mod planner_coverage;
 mod platform;
+mod poi;
 mod probe;
+mod quick;
 mod settings;
 mod setup;
 mod smoke;
@@ -271,6 +274,9 @@ struct MissionPlanner {
     fly_focus: fly::ActionsFocus,
     /// Which page of the flight screen's `tabControlactions` is showing.
     fly_pages: fly::Pages,
+    /// The flight screen's other state: the Quick and Telemetry Logs pages, the points of
+    /// interest, the Log Downloader and the windows the HUD opens.
+    fly_data: fly::FlightData,
     /// Scroll position of the plan screen's panel column.
     plan_scroll: gpui::ScrollHandle,
     /// Initial Setup's FailSafe page.
@@ -295,10 +301,22 @@ impl MissionPlanner {
         screen: Screen,
         cx: &mut Context<Self>,
     ) -> Self {
+        // A log to replay plays as the Telemetry Logs page plays one: at its own pace, under the
+        // page's controls. `// C#: GCSViews/FlightData.cs:669-701`
         // MP_STORM puts a synthetic vehicle behind the screens in place of any link: storm.rs.
+        let mut fly_data = fly::FlightData::new();
         let telemetry = match (storm::telemetry(), target) {
             (Some(storm), _) => storm,
-            (None, Some(url)) => Telemetry::connect(&url),
+            (None, Some(url)) => match url.parse::<mp_transport::LinkUrl>() {
+                Ok(mp_transport::LinkUrl::File { path }) => match fly::replay(&path) {
+                    Ok((telemetry, control)) => {
+                        fly_data.playback.load(&path, control);
+                        telemetry
+                    }
+                    Err(_) => Telemetry::connect(&url),
+                },
+                _ => Telemetry::connect(&url),
+            },
             (None, None) => Telemetry::idle(),
         };
 
@@ -429,6 +447,7 @@ impl MissionPlanner {
             fly_actions: fly::Actions::default(),
             fly_focus: fly::ActionsFocus::new(cx),
             fly_pages: fly::Pages::default(),
+            fly_data,
             failsafe: config::failsafe::FailSafe::default(),
             setup_list: setup::Backstage::new(setup::List::Setup),
             config_list: setup::Backstage::new(setup::List::Config),
@@ -997,6 +1016,7 @@ impl MissionPlanner {
             self.fly_pages.selected(),
             &fly::PageInputs {
                 view,
+                data: &self.fly_data,
                 actions: &self.fly_actions,
                 focus: &self.fly_focus,
                 checks_disabled: self.disabled_arming_checks,
@@ -1011,7 +1031,7 @@ impl MissionPlanner {
             .min_h(px(0.0))
             .gap_2()
             .w(px(400.0))
-            .child(fly::hud_panel(&self.hud))
+            .child(fly::hud_panel(&self.hud, &self.fly_data, cx))
             .child(fly::page_strip(&self.fly_pages, cx))
             .child(
                 // The scrolling page and its indicator share a positioned parent, so the
@@ -1218,6 +1238,12 @@ impl MissionPlanner {
                             if this.plan_menus.swallows_press((x, y)) {
                                 return;
                             }
+                            // `MouseDownStart`, which the flight map's menu entries act at.
+                            // `// C#: GCSViews/FlightData.cs:2956-2959`
+                            if !planning {
+                                let at = this.map.borrow().position_at(x, y);
+                                this.fly_data.mouse_down_start = at.map(|at| (at, (x, y)));
+                            }
                             let grabbed = planning
                                 .then(|| this.map.borrow().waypoint_at(x, y))
                                 .flatten();
@@ -1320,6 +1346,7 @@ impl MissionPlanner {
                                 plan::open_map_menu(this, x, y);
                             } else {
                                 let position = this.map.borrow().position_at(x, y);
+                                this.fly_data.mouse_down_start = position.map(|at| (at, (x, y)));
                                 if let Some(position) = position {
                                     this.fly_here(position);
                                 }
@@ -1328,6 +1355,11 @@ impl MissionPlanner {
                         }),
                     )
                     .child(mapview::map_element(self.map.clone()))
+                    // The points of interest, over the flight map: `poioverlay`.
+                    // `// C#: GCSViews/FlightData.cs:52, 410, 4473-4476`
+                    .children(
+                        (!planning).then(|| poi::layer(&self.fly_data.pois, self.map.clone())),
+                    )
                     // Attribution. Required by both providers' licences, so it is drawn over the
                     // map rather than in a settings screen nobody opens - if the imagery is on
                     // screen, so is the credit for it.
@@ -1658,6 +1690,11 @@ impl Render for MissionPlanner {
             facts::record("status", self.file_status.as_deref().unwrap_or(""));
             // What the Actions tab last put on the wire and what the vehicle said back.
             self.fly_actions.record_facts(&view);
+            self.fly_data.record_facts(
+                &view,
+                self.telemetry.log_listings().len(),
+                self.fly_actions.alt_offset_home,
+            );
             self.fly_pages
                 .record_facts(f32::from(self.fly_scroll.max_offset().y));
             config::failsafe::record_facts(&self.failsafe, &view);
@@ -1728,21 +1765,10 @@ impl Render for MissionPlanner {
             self.map.borrow_mut().set_traffic(&traffic);
         }
 
-        // Keep a log download moving, and write it out when it finishes. Driven from the render
-        // pass because that is the only thing ticking; the link cannot write files and should not
-        // decide where they go.
-        if self.telemetry.log_progress().is_some() {
-            if let Some((id, bytes)) = self.telemetry.finished_log() {
-                self.telemetry.clear_log_download();
-                let path = Self::plan_directory().join(format!("log_{id}.bin"));
-                self.file_status = Some(match std::fs::write(&path, &bytes) {
-                    Ok(()) => format!("wrote {} ({} bytes)", path.display(), bytes.len()),
-                    Err(err) => format!("could not write {}: {err}", path.display()),
-                });
-            } else {
-                self.telemetry.nudge_log_download();
-            }
-        }
+        // Keep a log download moving, write it out when it finishes and start the next of the
+        // Log Downloader's batch. Driven from the render pass because that is the only thing
+        // ticking; the link cannot write files and should not decide where they go.
+        self.logs_tick();
 
         // Keep re-sending a forced arm until it takes, or until we give up. The parameter write
         // that disabled the checks may not have been applied when the first command arrived.
@@ -1872,6 +1898,16 @@ impl Render for MissionPlanner {
                     window,
                     cx,
                 ))
+                // The forms the flight screen shows with `Show()`: over it, and it stays usable.
+                .children(fly::hud_windows(&self.fly_data, &view, cx))
+                .children(logdownload::window(
+                    &self.fly_data.logs,
+                    &self.telemetry.log_listings(),
+                    window,
+                    cx,
+                ))
+                // `ShowDialog()`: the quick view's chooser, over everything.
+                .children(quick::chooser(&self.fly_data.quick, window, cx))
                 .into_any_element(),
             Screen::Plan => div()
                 .flex()
