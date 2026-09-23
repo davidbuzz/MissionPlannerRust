@@ -18,3 +18,7 @@ mp-vehicle.workspace = true
 mp-mission.workspace = true
 mp-log.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+# The fence tests build positions to send and compare what comes back.
+mp-units.workspace = true

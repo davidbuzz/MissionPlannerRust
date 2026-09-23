@@ -71,6 +71,12 @@ pub enum TransferFailure {
 pub struct MissionTransfer {
     /// Which vehicle.
     pub target: VehicleId,
+    /// Which list: the mission, the geofence or the rally points.
+    ///
+    /// The three share one protocol and one set of messages, distinguished only by this field. A
+    /// transfer that ignored it would answer a fence's MISSION_COUNT as if it were the mission's
+    /// and write a geofence into the flight plan.
+    pub mission_type: u8,
     state: TransferState,
     items: Vec<MissionItem>,
     last_activity: Instant,
@@ -97,9 +103,10 @@ pub enum Action {
 impl MissionTransfer {
     /// Starts a download.
     #[must_use]
-    pub fn download(target: VehicleId) -> Self {
+    pub fn download(target: VehicleId, mission_type: u8) -> Self {
         Self {
             target,
+            mission_type,
             state: TransferState::AwaitingCount,
             items: Vec::new(),
             last_activity: Instant::now(),
@@ -109,9 +116,10 @@ impl MissionTransfer {
 
     /// Starts an upload.
     #[must_use]
-    pub fn upload(target: VehicleId, items: Vec<MissionItem>) -> Self {
+    pub fn upload(target: VehicleId, items: Vec<MissionItem>, mission_type: u8) -> Self {
         Self {
             target,
+            mission_type,
             state: TransferState::Uploading {
                 last_requested: None,
             },
@@ -131,6 +139,16 @@ impl MissionTransfer {
     #[must_use]
     pub fn items(&self) -> &[MissionItem] {
         &self.items
+    }
+
+    /// Whether this transfer is waiting for an item to arrive.
+    ///
+    /// Used to route `MISSION_ITEM_INT`, which carries no list type of its own. Only one of a
+    /// vehicle's transfers can be in this state at a time, because each is lock-step and asks for
+    /// the next item only once the last has arrived.
+    #[must_use]
+    pub const fn expects_item(&self) -> bool {
+        matches!(self.state, TransferState::Downloading { .. })
     }
 
     /// Whether the transfer has finished, either way.
@@ -277,6 +295,7 @@ impl MissionTransfer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mp_mission::MISSION_TYPE_MISSION;
 
     fn target() -> VehicleId {
         VehicleId::new(1, 1)
@@ -295,7 +314,7 @@ mod tests {
 
     #[test]
     fn a_download_walks_the_whole_mission() {
-        let mut transfer = MissionTransfer::download(target());
+        let mut transfer = MissionTransfer::download(target(), MISSION_TYPE_MISSION);
         assert_eq!(transfer.begin(), Action::RequestList);
 
         assert_eq!(transfer.on_count(3), Action::RequestItem(0));
@@ -313,7 +332,7 @@ mod tests {
         // A request and its reply crossing is normal on a lossy link. Counting the duplicate as
         // the next item shifts every subsequent waypoint by one - a mission that flies a
         // different shape than the one on screen.
-        let mut transfer = MissionTransfer::download(target());
+        let mut transfer = MissionTransfer::download(target(), MISSION_TYPE_MISSION);
         transfer.on_count(3);
         transfer.on_item(&item(0).to_wire());
         assert_eq!(
@@ -327,7 +346,7 @@ mod tests {
 
     #[test]
     fn an_out_of_order_item_is_ignored() {
-        let mut transfer = MissionTransfer::download(target());
+        let mut transfer = MissionTransfer::download(target(), MISSION_TYPE_MISSION);
         transfer.on_count(3);
         assert_eq!(
             transfer.on_item(&item(2).to_wire()),
@@ -339,7 +358,7 @@ mod tests {
 
     #[test]
     fn an_empty_mission_is_a_valid_answer() {
-        let mut transfer = MissionTransfer::download(target());
+        let mut transfer = MissionTransfer::download(target(), MISSION_TYPE_MISSION);
         assert_eq!(transfer.on_count(0), Action::SendAck);
         assert_eq!(transfer.state(), &TransferState::Complete);
         assert!(transfer.items().is_empty());
@@ -348,7 +367,7 @@ mod tests {
     #[test]
     fn an_upload_answers_whatever_the_vehicle_asks_for() {
         let items = vec![item(0), item(1), item(2)];
-        let mut transfer = MissionTransfer::upload(target(), items);
+        let mut transfer = MissionTransfer::upload(target(), items, MISSION_TYPE_MISSION);
         assert_eq!(transfer.begin(), Action::SendCount(3));
 
         assert_eq!(transfer.on_request(0), Action::SendItem(item(0)));
@@ -363,7 +382,7 @@ mod tests {
 
     #[test]
     fn a_request_beyond_the_mission_fails_the_transfer() {
-        let mut transfer = MissionTransfer::upload(target(), vec![item(0)]);
+        let mut transfer = MissionTransfer::upload(target(), vec![item(0)], MISSION_TYPE_MISSION);
         transfer.on_request(7);
         assert_eq!(
             transfer.state(),
@@ -374,7 +393,7 @@ mod tests {
 
     #[test]
     fn a_rejected_upload_reports_the_reason() {
-        let mut transfer = MissionTransfer::upload(target(), vec![item(0)]);
+        let mut transfer = MissionTransfer::upload(target(), vec![item(0)], MISSION_TYPE_MISSION);
         transfer.on_request(0);
         transfer.on_ack(13);
         assert_eq!(
@@ -385,7 +404,7 @@ mod tests {
 
     #[test]
     fn a_silent_vehicle_eventually_gives_up_rather_than_hanging() {
-        let mut transfer = MissionTransfer::download(target());
+        let mut transfer = MissionTransfer::download(target(), MISSION_TYPE_MISSION);
         transfer.on_count(2);
 
         // Force the clock past the step timeout repeatedly.
@@ -401,7 +420,7 @@ mod tests {
 
     #[test]
     fn a_retry_repeats_the_outstanding_request_only() {
-        let mut transfer = MissionTransfer::download(target());
+        let mut transfer = MissionTransfer::download(target(), MISSION_TYPE_MISSION);
         transfer.on_count(3);
         transfer.on_item(&item(0).to_wire());
 

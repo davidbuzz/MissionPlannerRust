@@ -3336,6 +3336,7 @@ dependencies = [
  "mp-mavlink-dialects",
  "mp-mission",
  "mp-transport",
+ "mp-units",
  "mp-vehicle",
  "thiserror 2.0.20",
 ]

@@ -30,7 +30,7 @@ use std::time::{Duration, Instant};
 use mission_transfer::{Action, MissionTransfer};
 use mp_mavlink::{DecodeStats, FrameDecoder, Message as _, encode_v2};
 use mp_mavlink_dialects::all::{DIALECT, Heartbeat, MavCmd, MavMessage, RequestDataStream};
-use mp_mission::{MissionItem, WireItem};
+use mp_mission::{MISSION_TYPE_MISSION, MissionItem, WireItem};
 use mp_transport::{OpenError, Transport};
 use mp_vehicle::{StateHandle, VehicleId, VehicleRegistry};
 use params::{ParamTable, ParamType, ParamValue, decode_param_id};
@@ -135,8 +135,12 @@ struct Shared {
     params: Mutex<BTreeMap<VehicleId, ParamTable>>,
     /// Vehicles whose parameter download the caller has asked for.
     param_downloads: Mutex<BTreeMap<VehicleId, bool>>,
-    /// Mission transfers the caller has started, and their current state.
-    missions: Mutex<BTreeMap<VehicleId, MissionTransfer>>,
+    /// Transfers the caller has started, and their current state.
+    ///
+    /// Keyed by vehicle *and* list type: a mission download and a fence download are separate
+    /// conversations that use the same messages, and a single key per vehicle would let one
+    /// answer the other's questions.
+    missions: Mutex<BTreeMap<(VehicleId, u8), MissionTransfer>>,
     /// Transfers the link thread has yet to pick up.
     mission_requests: Mutex<Vec<MissionTransfer>>,
     /// What the vehicle has said, and how it answered our commands.
@@ -234,12 +238,29 @@ impl Link {
     /// Starts downloading the vehicle's mission. Progress is observable through
     /// [`Link::mission_transfer`].
     pub fn download_mission(&self, target: VehicleId) -> bool {
-        self.queue_transfer(MissionTransfer::download(target))
+        self.download_list(target, MISSION_TYPE_MISSION)
     }
 
     /// Starts uploading a mission to the vehicle.
     pub fn upload_mission(&self, target: VehicleId, items: Vec<MissionItem>) -> bool {
-        self.queue_transfer(MissionTransfer::upload(target, items))
+        self.upload_list(target, items, MISSION_TYPE_MISSION)
+    }
+
+    /// Starts downloading one of the vehicle's lists: mission, geofence or rally points.
+    ///
+    /// They share one protocol, so this is the same transfer with a different `mission_type`.
+    pub fn download_list(&self, target: VehicleId, mission_type: u8) -> bool {
+        self.queue_transfer(MissionTransfer::download(target, mission_type))
+    }
+
+    /// Starts uploading one of the vehicle's lists.
+    pub fn upload_list(
+        &self,
+        target: VehicleId,
+        items: Vec<MissionItem>,
+        mission_type: u8,
+    ) -> bool {
+        self.queue_transfer(MissionTransfer::upload(target, items, mission_type))
     }
 
     fn queue_transfer(&self, transfer: MissionTransfer) -> bool {
@@ -253,7 +274,18 @@ impl Link {
     /// The state of a vehicle's mission transfer, if one has been started.
     #[must_use]
     pub fn mission_transfer(&self, target: VehicleId) -> Option<MissionTransfer> {
-        self.shared.missions.lock().ok()?.get(&target).cloned()
+        self.list_transfer(target, MISSION_TYPE_MISSION)
+    }
+
+    /// The state of a transfer of one particular list.
+    #[must_use]
+    pub fn list_transfer(&self, target: VehicleId, mission_type: u8) -> Option<MissionTransfer> {
+        self.shared
+            .missions
+            .lock()
+            .ok()?
+            .get(&(target, mission_type))
+            .cloned()
     }
 
     /// A snapshot of a vehicle's parameters.
@@ -379,7 +411,7 @@ fn run_link(
 
     let mut newly_seen: Vec<VehicleId> = Vec::new();
     let mut last_param = Instant::now();
-    let mut pending_actions: Vec<(VehicleId, Action)> = Vec::new();
+    let mut pending_actions: Vec<(VehicleId, u8, Action)> = Vec::new();
     let mut last_publish = Instant::now();
     let mut last_heartbeat = Instant::now() - config.heartbeat_interval;
     let mut known: BTreeMap<VehicleId, ()> = BTreeMap::new();
@@ -417,40 +449,16 @@ fn run_link(
                             }
                             // Mission transfer is lock-step, so every relevant message may
                             // produce exactly one reply. The state machine decides which.
-                            if let Ok(mut transfers) = shared.missions.lock()
-                                && let Some(transfer) = transfers.get_mut(&id)
+                            //
+                            // Which state machine is decided by the list type on the message: the
+                            // mission, the geofence and the rally points use the same messages,
+                            // so routing by vehicle alone would let a fence's MISSION_COUNT be
+                            // answered as if it were the mission's - and write a geofence into
+                            // the flight plan.
+                            if let Some((kind, action)) = route_transfer(shared, id, &msg)
+                                && action != Action::Nothing
                             {
-                                let action = match msg {
-                                    MavMessage::MissionCount(m) => transfer.on_count(m.count),
-                                    MavMessage::MissionItemInt(m) => transfer.on_item(&WireItem {
-                                        seq: m.seq,
-                                        frame: m.frame,
-                                        command: m.command,
-                                        current: m.current,
-                                        autocontinue: m.autocontinue,
-                                        param1: m.param1,
-                                        param2: m.param2,
-                                        param3: m.param3,
-                                        param4: m.param4,
-                                        x: m.x,
-                                        y: m.y,
-                                        z: m.z,
-                                    }),
-                                    // ArduPilot answers a MISSION_COUNT with the request
-                                    // variant matching the protocol the GCS appears to be
-                                    // speaking, and it defaults to the older MISSION_REQUEST
-                                    // (id 40) rather than MISSION_REQUEST_INT (id 51).
-                                    // Handling only the _INT form makes an upload stall at
-                                    // zero percent with no error - the vehicle is waiting for
-                                    // us and we are waiting for it.
-                                    MavMessage::MissionRequestInt(m) => transfer.on_request(m.seq),
-                                    MavMessage::MissionRequest(m) => transfer.on_request(m.seq),
-                                    MavMessage::MissionAck(m) => transfer.on_ack(m.r#type),
-                                    _ => Action::Nothing,
-                                };
-                                if action != Action::Nothing {
-                                    pending_actions.push((id, action));
-                                }
+                                pending_actions.push((id, kind, action));
                             }
 
                             // What the vehicle says about itself, and about our commands. Both
@@ -567,34 +575,36 @@ fn run_link(
         if let Ok(mut queued) = shared.mission_requests.lock() {
             for transfer in queued.drain(..) {
                 let id = transfer.target;
+                let kind = transfer.mission_type;
                 let first = transfer.begin();
                 if let Ok(mut transfers) = shared.missions.lock() {
-                    transfers.insert(id, transfer);
+                    transfers.insert((id, kind), transfer);
                 }
-                pending_actions.push((id, first));
+                pending_actions.push((id, kind, first));
             }
         }
 
         // Retry whatever step is outstanding.
         if let Ok(mut transfers) = shared.missions.lock() {
-            for (id, transfer) in transfers.iter_mut() {
+            for ((id, kind), transfer) in transfers.iter_mut() {
                 let action = transfer.on_tick();
                 if action != Action::Nothing {
-                    pending_actions.push((*id, action));
+                    pending_actions.push((*id, *kind, action));
                 }
             }
         }
 
         // Send whatever the state machines decided, outside their lock.
-        for (id, action) in pending_actions.drain(..) {
+        for (id, kind, action) in pending_actions.drain(..) {
             let message = match action {
-                Action::RequestList => Some(commands::request_mission_list(id)),
-                Action::RequestItem(seq) => Some(commands::request_mission_item(id, seq)),
-                Action::SendCount(count) => Some(commands::send_mission_count(id, count)),
-                Action::SendItem(item) => Some(commands::send_mission_item(id, &item)),
+                Action::RequestList => Some(commands::request_mission_list(id, kind)),
+                Action::RequestItem(seq) => Some(commands::request_mission_item(id, seq, kind)),
+                Action::SendCount(count) => Some(commands::send_mission_count(id, count, kind)),
+                Action::SendItem(item) => Some(commands::send_mission_item(id, &item, kind)),
                 Action::SendAck => Some(commands::send_mission_ack(
                     id,
                     mission_transfer::MISSION_ACCEPTED,
+                    kind,
                 )),
                 Action::Nothing => None,
             };
@@ -776,6 +786,61 @@ fn run_link(
 }
 
 /// Recomputes a v2 frame's checksum after its sequence byte was re-stamped.
+/// Hands a message to the transfer it belongs to, and returns what that transfer wants to send.
+///
+/// `MISSION_ITEM_INT` is the awkward one: it carries no `mission_type` of its own, so it belongs
+/// to whichever of this vehicle's transfers is currently waiting for an item. There is only ever
+/// one, because each transfer is lock-step and asks for the next item only after the last arrived.
+fn route_transfer(shared: &Arc<Shared>, id: VehicleId, msg: &MavMessage) -> Option<(u8, Action)> {
+    let declared = match msg {
+        MavMessage::MissionCount(m) => Some(m.mission_type),
+        MavMessage::MissionRequestInt(m) => Some(m.mission_type),
+        MavMessage::MissionRequest(m) => Some(m.mission_type),
+        MavMessage::MissionAck(m) => Some(m.mission_type),
+        MavMessage::MissionItemInt(_) => None,
+        // Not part of a transfer at all.
+        _ => return None,
+    };
+
+    let mut transfers = shared.missions.lock().ok()?;
+
+    let kind = match declared {
+        Some(kind) => kind,
+        None => *transfers
+            .iter()
+            .find(|((target, _), transfer)| *target == id && transfer.expects_item())
+            .map(|((_, kind), _)| kind)?,
+    };
+
+    let transfer = transfers.get_mut(&(id, kind))?;
+    let action = match msg {
+        MavMessage::MissionCount(m) => transfer.on_count(m.count),
+        MavMessage::MissionItemInt(m) => transfer.on_item(&WireItem {
+            seq: m.seq,
+            frame: m.frame,
+            command: m.command,
+            current: m.current,
+            autocontinue: m.autocontinue,
+            param1: m.param1,
+            param2: m.param2,
+            param3: m.param3,
+            param4: m.param4,
+            x: m.x,
+            y: m.y,
+            z: m.z,
+        }),
+        // ArduPilot answers a MISSION_COUNT with the request variant matching the protocol the
+        // GCS appears to be speaking, and it defaults to the older MISSION_REQUEST (id 40) rather
+        // than MISSION_REQUEST_INT (id 51). Handling only the _INT form makes an upload stall at
+        // zero percent with no error - the vehicle is waiting for us and we are waiting for it.
+        MavMessage::MissionRequestInt(m) => transfer.on_request(m.seq),
+        MavMessage::MissionRequest(m) => transfer.on_request(m.seq),
+        MavMessage::MissionAck(m) => transfer.on_ack(m.r#type),
+        _ => Action::Nothing,
+    };
+    Some((kind, action))
+}
+
 fn restamp_checksum(frame: &[u8]) -> Option<Vec<u8>> {
     let payload_len = usize::from(*frame.get(1)?);
     let msgid = u32::from_le_bytes([*frame.get(7)?, *frame.get(8)?, *frame.get(9)?, 0]);
