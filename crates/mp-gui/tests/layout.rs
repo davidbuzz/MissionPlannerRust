@@ -62,6 +62,12 @@ fn measure(width: u32, height: u32, screen: &str) -> BTreeMap<String, Rect> {
         .env("MP_PROBE", &probe)
         .env("MP_WINDOW", format!("{width}x{height}"))
         .env("MP_SCREEN", screen)
+        // The application writes Mission Planner's config.xml on starting; a measurement must not
+        // rewrite the settings of the Mission Planner installed on this machine.
+        .env(
+            "MP_CONFIG_XML",
+            std::env::temp_dir().join("mpr-layout-config.xml"),
+        )
         .env(
             "DISPLAY",
             std::env::var("DISPLAY").unwrap_or_else(|_| ":0".to_owned()),

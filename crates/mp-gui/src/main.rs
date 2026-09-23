@@ -188,6 +188,9 @@ struct MissionPlanner {
     map_press: Option<(f32, f32)>,
     /// What was loaded from the settings file, and what will be written back to it.
     settings: settings::Settings,
+    /// Mission Planner's `config.xml`, as `Settings.Instance` holds it: what the screens keep
+    /// there, written whole on the C#'s events.
+    persisted: settings::Persisted,
     /// The planning map's right-click menu and the dialogs it opens.
     plan_menus: plan::PlanMenus,
     /// Focus for those dialogs, which take the keyboard while they show.
@@ -308,6 +311,8 @@ impl MissionPlanner {
         // page's controls. `// C#: GCSViews/FlightData.cs:669-701`
         // MP_STORM puts a synthetic vehicle behind the screens in place of any link: storm.rs.
         let mut fly_data = fly::FlightData::new();
+        // The link this start opens, which Mission Planner's Connect would save.
+        let opened = target.clone().filter(|_| !storm::enabled());
         let telemetry = match (storm::telemetry(), target) {
             (Some(storm), _) => storm,
             (None, Some(url)) => match url.parse::<mp_transport::LinkUrl>() {
@@ -377,13 +382,18 @@ impl MissionPlanner {
             map.set_tiles(std::sync::Arc::new(store));
         }
 
-        // The home the planning screen remembers, which `MainV2` reads at start-up, and the
-        // panel boxes it saved, which `FlightPlanner_Load` reads.
+        // Mission Planner's config.xml, read once as `Settings.Instance` is: the home the planning
+        // screen remembers, which `MainV2` reads at start-up, the panel boxes it saved, which
+        // `FlightPlanner_Load` reads, and the quick views `FlightData.Activate` binds. Then the
+        // link opened above, as Connect's `Open` puts its port and host in the dictionary.
+        let mut persisted = settings::Persisted::load();
         let mut plan = Plan::default();
-        let config = mp_settings::Config::default_path()
-            .and_then(|path| mp_settings::Config::load(&path).ok());
-        plan.set_planned_home(plan::planned_home_from_config(config.as_ref()));
-        plan.apply_panel_config(config.as_ref());
+        plan.set_planned_home(plan::planned_home_from_config(Some(persisted.config())));
+        plan.apply_panel_config(Some(persisted.config()));
+        persisted.restore_quick_views(&mut fly_data.quick);
+        if let Some(url) = &opened {
+            persisted.link_opened(url);
+        }
 
         let mut this = Self {
             telemetry,
@@ -397,14 +407,19 @@ impl MissionPlanner {
             adopt_vehicle_rally: false,
             file_status: None,
             dragging_waypoint: None,
-            altitude_frame: plan::AltitudeFrame::from_key(
-                settings::Settings::load()
-                    .altitude_frame
-                    .as_deref()
-                    .unwrap_or_default(),
-            ),
+            // `CMB_altmode` as `config(false)` restores it, else this application's own choice.
+            // `// C#: GCSViews/FlightPlanner.cs:2609-2610`
+            altitude_frame: persisted.altitude_frame().unwrap_or_else(|| {
+                plan::AltitudeFrame::from_key(
+                    settings::Settings::load()
+                        .altitude_frame
+                        .as_deref()
+                        .unwrap_or_default(),
+                )
+            }),
             map_press: None,
             settings: settings::Settings::load(),
+            persisted,
             plan_name: {
                 let mut field = textfield::TextField::new("mission.waypoints");
                 field.set(DEFAULT_PLAN_FILE);
@@ -465,7 +480,35 @@ impl MissionPlanner {
         if this.screen == Screen::Plan {
             plan::activate(&mut this);
         }
+        // `SaveConfig` at the end of `MainV2`'s constructor, "to test we have write access" - and
+        // Connect's, for the link opened above.
+        // `// C#: MainV2.cs:1106-1107, 1841-1847`
+        this.save_config(settings::SaveEvent::Startup);
         this
+    }
+
+    /// `MainV2.SaveConfig`. Its failure the C# shows in a message box; here, the status line.
+    /// `// C#: MainV2.cs:2219-2237`
+    fn save_config(&mut self, event: settings::SaveEvent) {
+        if let Err(err) = self.persisted.save_config(event) {
+            self.file_status = Some(format!(
+                "could not save Mission Planner's config.xml: {err}"
+            ));
+        }
+    }
+
+    /// `MainV2_FormClosing`, on the window's close box: `MyView.Dispose` deactivates the screen
+    /// showing - the planning screen's is `config(true)` - and `SaveConfig` writes the file.
+    /// (It also saves the window's size and place, which this application keeps in its own
+    /// settings, and not on closing.)
+    /// `// C#: MainV2.cs:2010-2015, 2129-2132, 2170-2171; ExtLibs/Controls/MainSwitcher.cs:249-254`
+    fn form_closing(&mut self) {
+        if self.screen == Screen::Plan {
+            self.persisted
+                .planner_deactivated(&self.plan, self.altitude_frame);
+        }
+        self.persisted.observe_quick_views(&self.fly_data.quick);
+        self.save_config(settings::SaveEvent::Close);
     }
 
     /// The directory missions are read from and written to.
@@ -696,6 +739,8 @@ impl MissionPlanner {
             TileStore::new(source, cache)
         };
         self.map.borrow_mut().set_tiles(std::sync::Arc::new(store));
+        // `Settings.Instance["MapType"] = comboBoxMapType.Text`, saved with the rest later.
+        self.persisted.map_type_changed(source);
         self.settings.tile_source = Some(source.id.to_owned());
         if let Err(err) = self.settings.save() {
             self.file_status = Some(format!("could not remember the map provider: {err}"));
@@ -714,6 +759,8 @@ impl MissionPlanner {
     /// one for somebody who plans over terrain every time.
     fn set_altitude_frame(&mut self, frame: plan::AltitudeFrame) {
         self.altitude_frame = frame;
+        // `CMB_altmode_SelectedIndexChanged`'s `FPaltmode`, saved with the rest later.
+        self.persisted.altitude_frame_changed(frame);
         self.settings.altitude_frame = Some(frame.key().to_owned());
         // A settings file that cannot be written is not a reason to refuse the change: the choice
         // applies to this session either way, and the worst case is that it is not remembered.
@@ -945,6 +992,14 @@ impl MissionPlanner {
                     .hover(|style| style.text_color(rgb(theme::TEXT)))
                     .child(screen.label())
                     .on_click(cx.listener(move |this, _event, _window, cx| {
+                        // `MainSwitcher.ShowScreen` deactivates the screen showing first, the
+                        // same one again included: the planning screen's `Deactivate` is its
+                        // `config(true)`.
+                        // `// C#: ExtLibs/Controls/MainSwitcher.cs:112-125; GCSViews/FlightPlanner.cs:340-344`
+                        if this.screen == Screen::Plan {
+                            this.persisted
+                                .planner_deactivated(&this.plan, this.altitude_frame);
+                        }
                         this.screen = screen;
                         if screen == Screen::Plan {
                             plan::activate(this);
@@ -953,6 +1008,14 @@ impl MissionPlanner {
                         // window closing, and a ground station is as likely to be killed as
                         // closed.
                         this.remember();
+                        // FLIGHT DATA and FLIGHT PLAN save Mission Planner's config.xml once the
+                        // screen is shown; SETUP and CONFIG do not.
+                        // `// C#: MainV2.cs:1309-1323`
+                        match screen {
+                            Screen::Fly => this.save_config(settings::SaveEvent::FlightData),
+                            Screen::Plan => this.save_config(settings::SaveEvent::FlightPlanner),
+                            Screen::Setup | Screen::Config | Screen::Params | Screen::Logs => {}
+                        }
                         cx.notify();
                     })),
             );
@@ -1545,6 +1608,9 @@ impl Render for MissionPlanner {
             plan::track_panel_focus(self, window);
         }
         plan::drive_writes(self, &view, window, cx);
+        // A quick view chosen since the last frame goes into Mission Planner's config.xml, as the
+        // chooser's check box puts it there.
+        self.persisted.observe_quick_views(&self.fly_data.quick);
 
         // Facts a UI test can assert on. Recorded from render because that is where every one of
         // them is already in hand, and published at the end of the frame so a reader never sees
@@ -1552,6 +1618,7 @@ impl Render for MissionPlanner {
         if facts::enabled() {
             let harness = std::time::Instant::now();
             facts::record("screen", self.screen.label());
+            self.persisted.record_facts();
             // Where the map draws home, as `latitude,longitude`, read back from the map, and
             // whether the last paint wrote its "H".
             {
@@ -2210,6 +2277,8 @@ ENVIRONMENT:
     MP_LOG_DIR   where flights are recorded (default: Mission Planner's own logs directory)
     MP_NO_RECORD do not record this flight
     MP_NO_TILES  do not fetch map imagery
+    MP_CONFIG_XML  read and write Mission Planner's config.xml here rather than in its data
+                 directory (tests: the application saves it as Mission Planner does)
     MP_STORM     development only: replace the link with a synthetic vehicle sending this many
                  Hz of telemetry, and measure each frame (see crates/mp-gui/src/storm.rs)
 ";
@@ -2301,13 +2370,35 @@ fn main() {
             ..Default::default()
         };
 
-        if let Err(err) = cx.open_window(options, |_, cx| {
-            cx.new(|cx| MissionPlanner::new(target, read_mission, screen, cx))
-        }) {
-            eprintln!("could not open a window: {err}");
-            // A non-zero exit, because this is the failure a smoke test exists to catch and a
-            // process that prints an error and exits 0 is a process CI calls a success.
-            std::process::exit(1);
+        let opened = cx.open_window(options, |window, cx| {
+            let app = cx.new(|cx| MissionPlanner::new(target, read_mission, screen, cx));
+            // The close box is `MainV2_FormClosing`, which saves Mission Planner's config.xml.
+            // A kill is not, and saves nothing, in either application.
+            let closing = app.downgrade();
+            window.on_window_should_close(cx, move |_window, cx| {
+                closing.update(cx, |this, _cx| this.form_closing()).ok();
+                true
+            });
+            app
+        });
+        match opened {
+            // `Application.Run(new MainV2())`: the application ends when its main window does,
+            // whatever else it has open. `// C#: Program.cs:478`
+            Ok(main_window) => {
+                let main_window = main_window.window_id();
+                cx.on_window_closed(move |cx, closed| {
+                    if closed == main_window {
+                        cx.quit();
+                    }
+                })
+                .detach();
+            }
+            Err(err) => {
+                eprintln!("could not open a window: {err}");
+                // A non-zero exit, because this is the failure a smoke test exists to catch and a
+                // process that prints an error and exits 0 is a process CI calls a success.
+                std::process::exit(1);
+            }
         }
         cx.activate(true);
         if smoke::enabled() {
@@ -2426,6 +2517,7 @@ mod tests {
             "MP_LOG_DIR",
             "MP_NO_RECORD",
             "MP_NO_TILES",
+            "MP_CONFIG_XML",
             "MP_STORM",
         ] {
             assert!(

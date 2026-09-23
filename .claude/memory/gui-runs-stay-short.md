@@ -82,3 +82,11 @@ wait (`until [ "$(cut -d. -f1 /proc/loadavg)" -lt 25 ]; do sleep 30; done`), or 
 an hour of diagnosis each. A script that fails only under load is not a defect to fix in the
 script with longer settles; it is a run to repeat when the machine is quiet. See
 [[worktree-agents-share-the-target-dir]].
+
+**The link goes after `--`.** A script that needs SITL says so in its header
+(`tools/gui-test.sh tests/gui/x.gui -- tcp:127.0.0.1:5760`); the runner passes nothing by default
+and the application then starts idle. Run without it, `params.metadata.documented` reads 0,
+`mission.items` reads 0 and `setup.pages` is the disconnected list - which looks like a broken
+link and cost an hour of stash-and-rebuild on 2026-09-24 before the header was read. Always run
+SITL scripts with the argument; self-contained ones (`tiles offline`, no SITL in the header)
+without.

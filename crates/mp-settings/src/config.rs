@@ -1,27 +1,47 @@
 //! Mission Planner's `config.xml`: the settings file both applications can share.
 //!
-//! Ported from `ExtLibs/Utilities/Settings.cs` `Load()` (427-505) and `Save()` (507-540). The
+//! Ported from `ExtLibs/Utilities/Settings.cs` `Load()` (427-505) and `Save()` (507-550). The
 //! format is as plain as a settings file gets - a `Config` root and one element per key, the
-//! element's text being the value - with two rules that are easy to get wrong. A key with a `/`
-//! in it is written as `____`, because `/` is not a legal element name. And the file is written
-//! with the keys sorted, case-insensitively, with a UTF-8 byte-order mark and no newline after
-//! the root's closing tag, which is what `XmlTextWriter` produces; [`Config::render`] matches
-//! that byte for byte, so a file this crate writes is one the C# reads back unchanged and vice
-//! versa - the promise DELIVERABLES.md D17 makes about running both applications on one data
-//! directory.
+//! element's text being the value - and [`Config::render`] writes it byte for byte as
+//! `XmlTextWriter` does under mono, so a file this crate writes is one the C# reads back unchanged
+//! and vice versa: the promise DELIVERABLES.md D17 makes about running both applications on one
+//! data directory. Measured, not guessed: `tests/fixtures/config-saved.xml` is what Mission
+//! Planner's own `Settings.Save` wrote, under mono, for the keys in `config-saved.txt`
+//! (`tests/fixtures/SettingsOracle.cs` drives it), and the tests render the same keys and compare.
 //!
-//! Values are kept exactly as stored: the C# reads them with `ReadString`, which does not trim,
-//! and some are multi-line JSON.
+//! What the writer does that is easy to get wrong:
+//!
+//! - The keys are sorted by `OrderBy(a => a)`, the culture comparer: `.` `/` `_` before digits
+//!   before letters, letters without regard to case, and only then lower case before upper.
+//! - A value that is empty is an empty element, `<key />`.
+//! - A key with `/` in it is renamed `____` - and then looked up under the new name, which is not
+//!   the name it is held under, so the lookup throws, the `catch` swallows it and the key is not
+//!   written at all. Settings set in memory with a slash in their name never reach the file; a
+//!   serial port's `/dev/ttyACM0_BAUD` is one. `Load` does not undo the renaming either, so a
+//!   `____` element read from the file stays `____` in memory and is written back as it came.
+//! - A UTF-8 byte-order mark, two-space indentation, `&`, `<` and `>` escaped and nothing else but
+//!   control characters, and no newline after `</Config>`.
+//!
+//! When the C# saves - its `SaveConfig`, on start-up, on the FLIGHT DATA and FLIGHT PLAN buttons,
+//! after Connect and on closing - is the caller's; this is the file.
 
 use std::collections::BTreeMap;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 /// The file's name, `Settings.FileName`.
 /// `// C#: ExtLibs/Utilities/Settings.cs:47`
 pub const FILE_NAME: &str = "config.xml";
 
+/// The environment variable that puts `config.xml` somewhere else.
+///
+/// Not the C#'s. The C# writes this file on start-up and on every screen change, and so does
+/// this application; a test that did not name a file of its own would rewrite the settings of the
+/// Mission Planner installed on the machine running it. `tools/gui-test.sh` points it at a copy.
+pub const PATH_VARIABLE: &str = "MP_CONFIG_XML";
+
 /// What `/` becomes in an element name.
-/// `// C#: ExtLibs/Utilities/Settings.cs:484, 520`
+/// `// C#: ExtLibs/Utilities/Settings.cs:524-525`
 const SLASH: &str = "____";
 
 /// Why a config file could not be read.
@@ -43,21 +63,26 @@ pub enum ConfigError {
     NotAConfig(String),
 }
 
-/// A loaded `config.xml`.
+/// A loaded `config.xml`: `Settings.config`, the dictionary every `Settings.Instance[key]` reads
+/// and writes.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Config {
     entries: BTreeMap<String, String>,
 }
 
 impl Config {
-    /// Where the C# keeps it: the user data directory plus `config.xml`.
+    /// Where the C# keeps it: the user data directory plus `config.xml` - or wherever
+    /// [`PATH_VARIABLE`] says.
     ///
     /// The C# also migrates a `config.xml` found beside the executable into that directory on
     /// first run (`GetConfigFullPath`); there is no executable-side file here to migrate.
-    /// `// C#: ExtLibs/Utilities/Settings.cs:370-403`
+    /// `// C#: ExtLibs/Utilities/Settings.cs:370-411`
     #[must_use]
     pub fn default_path() -> Option<PathBuf> {
-        crate::user_data_directory().map(|directory| directory.join(FILE_NAME))
+        path_from(
+            std::env::var_os(PATH_VARIABLE),
+            crate::user_data_directory(),
+        )
     }
 
     /// Reads a file.
@@ -71,11 +96,12 @@ impl Config {
 
     /// Parses the file's text.
     ///
-    /// Every element under the root is a key; the root and the XML declaration are skipped, as
-    /// the C#'s `switch (xmlreader.Name)` skips them. A malformed entry does not fail the file
-    /// in the C# - it is caught and ignored - but there is no such thing as a malformed element
-    /// once the document parses, so the only failures here are a document that does not parse
-    /// and a root that is not `Config`.
+    /// Every element under the root is a key, named as the element is: the main file's `Load`
+    /// keeps `____` as it is (only the `custom.config.xml` defaults are renamed back to `/`). The
+    /// root and the XML declaration are skipped, as the C#'s `switch (xmlreader.Name)` skips them.
+    /// A malformed entry does not fail the file in the C# - it is caught and ignored - but there is
+    /// no such thing as a malformed element once the document parses, so the only failures here
+    /// are a document that does not parse and a root that is not `Config`.
     /// `// C#: ExtLibs/Utilities/Settings.cs:468-500`
     pub fn parse(text: &str) -> Result<Self, ConfigError> {
         let text = text.strip_prefix('\u{feff}').unwrap_or(text);
@@ -87,20 +113,22 @@ impl Config {
         }
         let mut entries = BTreeMap::new();
         for element in root.children().filter(roxmltree::Node::is_element) {
-            let key = element.tag_name().name().replace(SLASH, "/");
+            let key = element.tag_name().name().to_owned();
             let value: String = element.children().filter_map(|node| node.text()).collect();
             entries.insert(key, value);
         }
         Ok(Self { entries })
     }
 
-    /// One setting.
+    /// One setting: `Settings.Instance[key]`.
+    /// `// C#: ExtLibs/Utilities/Settings.cs:49-56`
     #[must_use]
     pub fn get(&self, key: &str) -> Option<&str> {
         self.entries.get(key).map(String::as_str)
     }
 
-    /// Sets one setting.
+    /// Sets one setting: `Settings.Instance[key] = value`, in memory until the file is saved.
+    /// `// C#: ExtLibs/Utilities/Settings.cs:58-61`
     pub fn set(&mut self, key: impl Into<String>, value: impl Into<String>) {
         self.entries.insert(key.into(), value.into());
     }
@@ -117,29 +145,25 @@ impl Config {
         self.entries.is_empty()
     }
 
-    /// Every key, sorted as the file is.
+    /// Every key, in the order `Save` writes them: `config.Keys.OrderBy(a => a)`.
+    /// `// C#: ExtLibs/Utilities/Settings.cs:519`
     #[must_use]
     pub fn keys(&self) -> Vec<&str> {
         let mut keys: Vec<&str> = self.entries.keys().map(String::as_str).collect();
-        keys.sort_by_cached_key(|key| (key.to_lowercase(), (*key).to_owned()));
+        keys.sort_by_cached_key(|key| culture_key(key));
         keys
     }
 
     /// The file's text, as `Settings.Save` writes it.
     ///
-    /// A UTF-8 byte-order mark, the declaration, `Config`, one indented element per key with the
-    /// keys sorted case-insensitively - `OrderBy(a => a)` uses the culture comparer, which is
-    /// what puts `kindex` before `MainHeight` in a real file - and no newline after the closing
-    /// tag. A key the C# would refuse to write (empty, or containing a space, `-`, `:`, `;`,
-    /// `@`, `!`, `#`, `$` or `%`) is left out here too.
-    /// `// C#: ExtLibs/Utilities/Settings.cs:507-540`
+    /// Each key in [`Config::keys`]'s order, `/` spelled `____`; a key the C# refuses (empty, or
+    /// holding a space, `-`, `:`, `;`, `@`, `!`, `#`, `$` or `%`) left out, and so is one whose
+    /// `____` spelling is not itself a key, because `config[key]` is read with the renamed key.
+    /// `// C#: ExtLibs/Utilities/Settings.cs:507-550`
     #[must_use]
     pub fn render(&self) -> String {
         let mut out = String::from("\u{feff}<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<Config>");
         for key in self.keys() {
-            let Some(value) = self.entries.get(key) else {
-                continue;
-            };
             let element = key.replace('/', SLASH);
             if element.is_empty()
                 || element
@@ -148,8 +172,18 @@ impl Config {
             {
                 continue;
             }
+            // `xmlwriter.WriteElementString(key, "" + config[key])`, `key` being the renamed one.
+            let Some(value) = self.entries.get(&element) else {
+                continue;
+            };
             out.push_str("\n  <");
             out.push_str(&element);
+            // `WriteElementString` writes no text for "", and `WriteEndElement` then closes the
+            // element as an empty one.
+            if value.is_empty() {
+                out.push_str(" />");
+                continue;
+            }
             out.push('>');
             push_escaped(&mut out, value);
             out.push_str("</");
@@ -160,43 +194,53 @@ impl Config {
         out
     }
 
-    /// Writes the file, through a temporary file and a rename so a crash mid-write leaves the
-    /// old settings rather than half a file.
+    /// Writes the file: `Settings.Save`, the whole dictionary every time.
+    ///
+    /// The directory is made if it is missing, as `GetConfigFullPath` makes it. Written through a
+    /// temporary file and a rename, so a crash mid-write leaves the old settings rather than half
+    /// a file; the bytes that land are [`Config::render`]'s either way.
+    /// `// C#: ExtLibs/Utilities/Settings.cs:382-387, 507-550`
     pub fn save(&self, path: &Path) -> Result<(), ConfigError> {
-        let temporary = path.with_extension("xml.tmp");
         let io = |source| ConfigError::Io {
             path: path.to_path_buf(),
             source,
         };
+        if let Some(directory) = path.parent().filter(|dir| !dir.as_os_str().is_empty()) {
+            std::fs::create_dir_all(directory).map_err(io)?;
+        }
+        let temporary = path.with_extension("xml.tmp");
         std::fs::write(&temporary, self.render()).map_err(io)?;
         std::fs::rename(&temporary, path).map_err(io)
     }
 
     /// The link the C# would open, as this application's URL, if the file names one.
     ///
-    /// `comport` is a device path or one of the words `TCP`, `UDP` and `UDPCl`; the baud rate is
-    /// under `<comport>_BAUD`; TCP and UDP hosts and ports are under their own keys.
-    /// `// C#: ExtLibs/Utilities/Settings.cs:88-125; MainV2.cs:2211-2227`
+    /// `comport` is a device path or one of the words the connection box lists; an empty one is
+    /// no link, as `MainV2` leaves the box alone for it. The baud rate is under `<comport>_BAUD`
+    /// (which `Save` never writes for a device path with a `/` in it); TCP's host and port are
+    /// under `TCP_host` and `TCP_port`, UDP's port under `UDP_port`, with the C#'s defaults. The
+    /// words this application has no link for are not a link: `AUTO` scans the serial ports,
+    /// `UDPCl` sends to a host (under `UDP_host` and `UDP_port`, where this application's `udp:`
+    /// listens), and `WS` is a websocket.
+    /// `// C#: ExtLibs/Utilities/Settings.cs:88-125; MainV2.cs:782-808, 1295-1301;
+    /// ExtLibs/Comms/CommsTCPSerial.cs:35, 114-121; ExtLibs/Comms/CommsUdpSerial.cs:44, 110-112;
+    /// ExtLibs/Comms/CommsUDPSerialConnect.cs:133-138`
     #[must_use]
     pub fn last_link(&self) -> Option<String> {
-        let port = self.get("comport")?;
-        Some(match port {
-            "TCP" => format!(
+        let port = self.get("comport").filter(|port| !port.is_empty())?;
+        match port {
+            "TCP" => Some(format!(
                 "tcp:{}:{}",
                 self.get("TCP_host").unwrap_or("127.0.0.1"),
                 self.get("TCP_port").unwrap_or("5760")
-            ),
-            "UDP" => format!("udp:{}", self.get("UDP_port").unwrap_or("14550")),
-            "UDPCl" => format!(
-                "udp:{}:{}",
-                self.get("UDPCl_host").unwrap_or("127.0.0.1"),
-                self.get("UDPCl_port").unwrap_or("14550")
-            ),
-            device => match self.get(&format!("{device}_BAUD")) {
-                Some(baud) => format!("serial:{device}:{baud}"),
-                None => format!("serial:{device}"),
-            },
-        })
+            )),
+            "UDP" => Some(format!("udp:{}", self.get("UDP_port").unwrap_or("14550"))),
+            "AUTO" | "UDPCl" | "WS" => None,
+            device => Some(match self.get(&format!("{device}_BAUD")) {
+                Some(baud) if !baud.is_empty() => format!("serial:{device}:{baud}"),
+                _ => format!("serial:{device}"),
+            }),
+        }
     }
 
     /// The map provider the C# last showed, by its provider `Name`.
@@ -219,13 +263,60 @@ impl Config {
     }
 }
 
-/// XML text escaping as `XmlTextWriter.WriteElementString` does it.
+/// [`Config::default_path`] with its inputs passed in: the variable's value if it names anything,
+/// else `config.xml` in the user data directory.
+fn path_from(explicit: Option<OsString>, user_data: Option<PathBuf>) -> Option<PathBuf> {
+    match explicit {
+        Some(path) if !path.is_empty() => Some(PathBuf::from(path)),
+        _ => user_data.map(|directory| directory.join(FILE_NAME)),
+    }
+}
+
+/// The punctuation a key can hold, in the order mono's `en-US` comparer puts it - measured with
+/// `OrderBy` over one key per character. All of it sorts before the digits, and the digits before
+/// the letters.
+const PUNCTUATION: &str = "'- !\"#$%&()*,./:;?@[\\]^_`{|}~+<=>";
+
+/// A key's place in `OrderBy(a => a)` under mono's `en-US` culture, as a value Rust can sort by.
+///
+/// The comparison has levels. First every character's primary weight, left to right - punctuation
+/// in [`PUNCTUATION`]'s order, then digits, then letters with case ignored - with a key that runs
+/// out first coming first. Only when those are equal throughout does case count, lower before
+/// upper at the first difference: `kindex` before `Kindex`, but `ka1` before `kA2` before `Ka3`.
+/// Letters outside ASCII are placed by their code point, which is not the culture's order and is
+/// not needed: no key the C# writes has one.
+fn culture_key(key: &str) -> (Vec<(u8, u32)>, Vec<bool>, String) {
+    let primary = key
+        .chars()
+        .map(|c| {
+            if let Some(at) = PUNCTUATION.find(c) {
+                (0, u32::try_from(at).unwrap_or(u32::MAX))
+            } else if c.is_ascii_digit() {
+                (1, u32::from(c))
+            } else if c.is_alphabetic() {
+                (2, u32::from(c.to_lowercase().next().unwrap_or(c)))
+            } else {
+                (3, u32::from(c))
+            }
+        })
+        .collect();
+    let case = key.chars().map(char::is_uppercase).collect();
+    (primary, case, key.to_owned())
+}
+
+/// Text escaping as mono's `XmlTextWriter.WriteString` does it, measured: `&`, `<` and `>` as
+/// entities, a control character other than tab, line feed and carriage return as a character
+/// reference, and everything else - quotes, `\r\n`, non-ASCII - as it is.
 fn push_escaped(out: &mut String, value: &str) {
     for c in value.chars() {
         match c {
             '&' => out.push_str("&amp;"),
             '<' => out.push_str("&lt;"),
             '>' => out.push_str("&gt;"),
+            '\t' | '\n' | '\r' => out.push(c),
+            control if control.is_control() && u32::from(control) < 0x20 => {
+                out.push_str(&format!("&#x{:X};", u32::from(control)));
+            }
             other => out.push(other),
         }
     }
@@ -236,6 +327,92 @@ mod tests {
     use super::*;
 
     const FIXTURE: &str = include_str!("../tests/fixtures/config.xml");
+
+    /// What Mission Planner's own `Settings.Save` wrote, under mono, for [`SAVED_INPUT`].
+    const SAVED: &str = include_str!("../tests/fixtures/config-saved.xml");
+
+    /// The `key=value` lines `SettingsOracle.cs` set before saving, values in C# escapes.
+    const SAVED_INPUT: &str = include_str!("../tests/fixtures/config-saved.txt");
+
+    /// `Regex.Unescape` for the escapes the input uses: `\n`, `\r`, `\t` and `\xHH`.
+    fn unescape(value: &str) -> String {
+        let mut out = String::new();
+        let mut chars = value.chars();
+        while let Some(c) = chars.next() {
+            if c != '\\' {
+                out.push(c);
+                continue;
+            }
+            match chars.next() {
+                Some('n') => out.push('\n'),
+                Some('r') => out.push('\r'),
+                Some('t') => out.push('\t'),
+                Some('x') => {
+                    let hex: String = chars.by_ref().take(2).collect();
+                    let code = u32::from_str_radix(&hex, 16).expect("two hex digits");
+                    out.push(char::from_u32(code).expect("a character"));
+                }
+                Some(other) => out.push(other),
+                None => out.push('\\'),
+            }
+        }
+        out
+    }
+
+    /// The dictionary `SettingsOracle.cs` built, built here the same way.
+    fn saved_input() -> Config {
+        let mut config = Config::default();
+        for line in SAVED_INPUT.lines() {
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            let (key, value) = line.split_once('=').expect("key=value");
+            config.set(key, unescape(value));
+        }
+        config
+    }
+
+    #[test]
+    fn rendering_is_what_mission_planners_own_save_wrote() {
+        // The oracle: MissionPlanner.Utilities.dll's Settings class, given these keys under mono,
+        // wrote SAVED. Every rule in the module comment is in it - the sort, `<fpminaltwarning />`,
+        // `/dev/ttyACM0_BAUD` left out, the slashed twin of a `____` key writing that key's value
+        // a second time, quotes unescaped, a newline and a trailing space kept.
+        let config = saved_input();
+        assert_eq!(config.render(), SAVED);
+    }
+
+    #[test]
+    fn what_mission_planner_saved_reads_back_and_saves_again_unchanged() {
+        let config = Config::parse(SAVED).expect("the oracle's file parses");
+        assert_eq!(config.get("fpminaltwarning"), Some(""));
+        assert_eq!(config.get("multi"), Some("line one\nline two"));
+        assert_eq!(config.get("sp"), Some(" x "));
+        assert_eq!(config.get("uni"), Some("é谷"));
+        assert_eq!(
+            config.get("update_check"),
+            Some("9/20/2026 <beta> & \"more\" 'quoted'")
+        );
+        assert_eq!(config.get("rawparam____panel1collapsed"), Some("True"));
+        assert_eq!(config.get("rawparam/panel1collapsed"), None);
+        assert_eq!(config.get("/dev/ttyACM0_BAUD"), None);
+        // The twin was written twice with one value, and reads back as one key: the next save
+        // writes it once.
+        let again = config.render();
+        assert_eq!(again.matches("<rawparam____panel1collapsed>").count(), 1);
+        assert_eq!(
+            again.replacen(
+                "\n  <rawparam____panel1collapsed>True</rawparam____panel1collapsed>",
+                "",
+                1
+            ),
+            SAVED.replacen(
+                "\n  <rawparam____panel1collapsed>True</rawparam____panel1collapsed>",
+                "",
+                2
+            ),
+        );
+    }
 
     #[test]
     fn a_file_the_csharp_wrote_reads_back_key_by_key() {
@@ -253,8 +430,9 @@ mod tests {
         assert!(auto.contains("\"Port\": 14550"));
         // Escaped text is unescaped.
         assert_eq!(config.get("update_check"), Some("9/20/2026 <beta> & more"));
-        // A slash in a key survives the ____ spelling.
-        assert_eq!(config.get("rawparam/panel1collapsed"), Some("True"));
+        // `Load` keeps the element's name: `____` stays `____`.
+        assert_eq!(config.get("rawparam____panel1collapsed"), Some("True"));
+        assert_eq!(config.get("rawparam/panel1collapsed"), None);
     }
 
     #[test]
@@ -266,27 +444,47 @@ mod tests {
     }
 
     #[test]
-    fn keys_sort_case_insensitively_as_the_culture_comparer_does() {
+    fn keys_sort_as_monos_culture_comparer_does() {
+        // Measured: `OrderBy(a => a)` under mono's en-US culture over these keys.
+        let measured = [
+            "FP_docking",
+            "FPaltmode",
+            "fpcoordmouse",
+            "k",
+            "K",
+            "k.",
+            "k.1",
+            "k.a",
+            "k/",
+            "k/a",
+            "k_",
+            "k____a",
+            "k__a",
+            "k_1",
+            "k_a",
+            "k_a_b",
+            "k_b",
+            "k0",
+            "k1",
+            "k1a",
+            "k9",
+            "ka",
+            "kA",
+            "ka1",
+            "kA2",
+            "Ka3",
+            "kab",
+            "kb",
+            "kB",
+            "UDP_BAUD",
+            "UDP_host",
+            "UDPCl_BAUD",
+        ];
         let mut config = Config::default();
-        for key in [
-            "MainHeight",
-            "kindex",
-            "AUTO_BAUD",
-            "AutoConnect",
-            "APMFirmware",
-        ] {
-            config.set(key, "1");
+        for key in measured.iter().rev() {
+            config.set(*key, "1");
         }
-        assert_eq!(
-            config.keys(),
-            vec![
-                "APMFirmware",
-                "AUTO_BAUD",
-                "AutoConnect",
-                "kindex",
-                "MainHeight"
-            ]
-        );
+        assert_eq!(config.keys(), measured);
     }
 
     #[test]
@@ -300,6 +498,43 @@ mod tests {
         assert!(rendered.contains("<good>1</good>"));
         assert!(!rendered.contains("bad"));
         assert!(!rendered.contains("<>4"));
+    }
+
+    #[test]
+    fn a_key_with_a_slash_is_lost_unless_its_twin_is_held() {
+        // A serial port's baud rate is `<comport>_BAUD`, and a Linux device path has slashes: the
+        // C# looks the value up under the renamed key, finds nothing, and writes nothing.
+        let mut config = Config::default();
+        config.set("comport", "/dev/ttyACM0");
+        config.set("/dev/ttyACM0_BAUD", "57600");
+        let rendered = config.render();
+        assert!(!rendered.contains("57600"), "{rendered}");
+        assert!(!rendered.contains("____dev"), "{rendered}");
+        // A Windows port name has none, and is written.
+        config.set("COM3_BAUD", "57600");
+        assert!(config.render().contains("<COM3_BAUD>57600</COM3_BAUD>"));
+    }
+
+    #[test]
+    fn an_empty_value_is_an_empty_element() {
+        let mut config = Config::default();
+        config.set("TXT_homelat", "");
+        assert!(config.render().ends_with("\n  <TXT_homelat />\n</Config>"));
+        let back = Config::parse(&config.render()).expect("parses");
+        assert_eq!(back.get("TXT_homelat"), Some(""));
+    }
+
+    #[test]
+    fn a_control_character_is_a_character_reference() {
+        // Measured: "a\x01b" is written `a&#x1;b`, and "a\r\nb" and "a\tb" as they are.
+        let mut config = Config::default();
+        config.set("ctl", "a\u{1}b");
+        config.set("crlf", "a\r\nb");
+        config.set("tab", "a\tb");
+        let rendered = config.render();
+        assert!(rendered.contains("<ctl>a&#x1;b</ctl>"), "{rendered}");
+        assert!(rendered.contains("<crlf>a\r\nb</crlf>"), "{rendered}");
+        assert!(rendered.contains("<tab>a\tb</tab>"), "{rendered}");
     }
 
     #[test]
@@ -321,20 +556,53 @@ mod tests {
         config.set("comport", "UDP");
         config.set("UDP_port", "14551");
         assert_eq!(config.last_link().as_deref(), Some("udp:14551"));
+        config.set("comport", "COM3");
+        config.set("COM3_BAUD", "57600");
+        assert_eq!(config.last_link().as_deref(), Some("serial:COM3:57600"));
+        // A device path's baud rate is never saved, so what comes back from the file is the port.
         config.set("comport", "/dev/ttyUSB0");
         config.set("/dev/ttyUSB0_BAUD", "57600");
-        assert_eq!(
-            config.last_link().as_deref(),
-            Some("serial:/dev/ttyUSB0:57600")
-        );
+        let back = Config::parse(&config.render()).expect("parses");
+        assert_eq!(back.last_link().as_deref(), Some("serial:/dev/ttyUSB0"));
         assert_eq!(Config::default().last_link(), None);
     }
 
     #[test]
-    fn saving_and_loading_round_trips() {
+    fn a_comport_this_application_cannot_open_is_no_link() {
+        // "" is what SaveConfig writes before anything was chosen, and MainV2 skips it; AUTO,
+        // UDPCl and WS are links this application does not have.
+        let mut config = Config::default();
+        for port in ["", "AUTO", "UDPCl", "WS"] {
+            config.set("comport", port);
+            config.set("UDP_host", "192.168.2.1");
+            assert_eq!(config.last_link(), None, "{port:?}");
+        }
+    }
+
+    #[test]
+    fn the_variable_names_the_file_when_it_names_anything() {
+        let data = PathBuf::from("/home/pilot/.local/share/Mission Planner");
+        assert_eq!(
+            path_from(None, Some(data.clone())),
+            Some(data.join("config.xml"))
+        );
+        assert_eq!(
+            path_from(Some(OsString::new()), Some(data.clone())),
+            Some(data.join("config.xml"))
+        );
+        assert_eq!(
+            path_from(Some(OsString::from("/tmp/run/config.xml")), Some(data)),
+            Some(PathBuf::from("/tmp/run/config.xml"))
+        );
+        assert_eq!(path_from(None, None), None);
+    }
+
+    #[test]
+    fn saving_makes_the_directory_and_round_trips() {
         let dir = std::env::temp_dir().join(format!("mp-settings-config-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
-        let path = dir.join("config.xml");
+        let _ = std::fs::remove_dir_all(&dir);
+        // GetConfigFullPath creates the user data directory; so does this.
+        let path = dir.join("Mission Planner").join("config.xml");
         let config = Config::parse(FIXTURE).expect("parses");
         config.save(&path).expect("save");
         let back = Config::load(&path).expect("load");
@@ -368,6 +636,82 @@ mod tests {
             config.render(),
             text,
             "render must give back the C#'s bytes"
+        );
+    }
+
+    /// The keys the ported screens write, each set in the real file and rendered: the element
+    /// Mission Planner wrote for it is the one written here, a value set to what it already was
+    /// changes no byte, and a new value changes that element and nothing else.
+    #[test]
+    fn each_persisted_key_round_trips_through_the_real_config() {
+        let Some(path) = Config::default_path() else {
+            eprintln!("skipped: no home directory");
+            return;
+        };
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            eprintln!("skipped: no Mission Planner config at {}", path.display());
+            return;
+        };
+        let real = Config::parse(&text).expect("the real config.xml parses");
+        let keys = [
+            "TXT_homelat",
+            "TXT_homelng",
+            "TXT_homealt",
+            "TXT_WPRad",
+            "TXT_loiterrad",
+            "TXT_DefaultAlt",
+            "CMB_altmode",
+            "FPaltmode",
+            "quickView1",
+            "quickView2",
+            "quickView3",
+            "quickView4",
+            "quickView5",
+            "quickView6",
+            "MapType",
+            "comport",
+            "TCP_host",
+            "TCP_port",
+            "UDP_port",
+            "distunits",
+            "altunits",
+            "speedunits",
+        ];
+        let mut seen = 0;
+        for key in keys {
+            let mut config = real.clone();
+            if let Some(value) = real.get(key) {
+                seen += 1;
+                // The C#'s own line for it is in the file, and is the line rendered for it.
+                let line = if value.is_empty() {
+                    format!("\n  <{key} />")
+                } else {
+                    let mut escaped = String::new();
+                    push_escaped(&mut escaped, value);
+                    format!("\n  <{key}>{escaped}</{key}>")
+                };
+                assert!(text.contains(&line), "{key}: {line:?} not in the real file");
+                config.set(key, value);
+                assert_eq!(config.render(), text, "{key} set to itself");
+            }
+            config.set(key, "changed & <new>");
+            let rendered = config.render();
+            let back = Config::parse(&rendered).expect("parses");
+            assert_eq!(back.get(key), Some("changed & <new>"), "{key}");
+            for other in real.keys() {
+                if other != key {
+                    assert_eq!(back.get(other), real.get(other), "{other} after {key}");
+                }
+            }
+            assert_eq!(
+                back.len(),
+                real.len() + usize::from(real.get(key).is_none())
+            );
+        }
+        eprintln!(
+            "{}: {seen} of {} persisted keys present",
+            path.display(),
+            keys.len()
         );
     }
 }

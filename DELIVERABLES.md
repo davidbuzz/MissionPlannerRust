@@ -427,8 +427,17 @@ and strict backward compatibility with the C# app's user data.
   find each other's files. `mp_settings::Config` reads and writes `config.xml` exactly as
   `Settings.Load`/`Save` do - keys sorted case-insensitively, `/` spelled `____`, a UTF-8 BOM,
   no final newline - and a test renders this machine's real file back byte for byte. The GUI
-  reads the recording directory, the last link and the map type from it; its own choices still
-  live in its own file, and nothing writes `config.xml` yet.
+  reads the recording directory, the last link and the map type from it. The GUI holds the
+  whole file as `Settings.Instance` and writes it whole on the C#'s events - start-up, the
+  FLIGHT DATA and FLIGHT PLAN buttons, Connect, the close box (`MainV2.cs:1107, 1309-1323,
+  1846, 2171`) - with the planner's home and panel boxes put in when the screen is deactivated
+  (`FlightPlanner.cs:340-344, 2572-2612`), the quick views when chosen (`FlightData.cs:2482`),
+  the map type and altitude frame when changed, the link when opened; keys sort as mono's
+  en-US sort does and a key holding `/` is dropped as `Settings.Save` drops it. What the C#'s
+  own `MissionPlanner.Utilities.dll` wrote under mono for the same keys
+  (`tests/fixtures/config-saved.xml`, harness `SettingsOracle.cs`) is matched byte for byte,
+  and `tests/gui/settings-persist.gui` restarts the application through the close box and
+  finds every value back. Its own choices (window, recording, map) still live in its own file.
 - **Tests:** `tests/resx_conversion.rs` asserts zero string loss for every culture present in the C# repo and fails on any English key without a Rust counterpart; `tests/placeholders.rs` asserts argument arity and type agreement between every translation and its English source; `tests/pseudolocale.rs` renders screens in a pseudo-locale to catch truncation and hard-coded strings; `tests/data_compat.rs` reads real `config.xml`, `.waypoints`, `.param`, `.tlog` and map-cache fixtures produced by the C# app, writes them back, and asserts byte equality — the both-apps-same-data-directory guarantee.
 
 ---

@@ -29,6 +29,16 @@
 #   expect map.tiles.drawn >= 4 ... or at least a value
 #   expect frame.p99 < 8        ... or less than a value
 #   expect log.open true
+#   restart                     close the window by its close box and start the application again
+#
+# `restart` is for a test of what survives a restart. It sends the window WM_DELETE_WINDOW, as a
+# window manager's close box does - so the application does what it does on closing, which is to
+# save Mission Planner's config.xml - waits for the process to end (a failure if it has not within
+# ten seconds), and starts it again with the same environment, arguments and scratch directory.
+# The facts and control positions the old process published are cleared first, so nothing is read
+# from it; `settle` after a `restart` as after the first start. Closing takes python3 with the Xlib
+# module (python3-xlib); without it `restart` fails rather than killing, since a kill is not a
+# close and saves nothing.
 #
 # `env` and `setup` are for a test that needs the world arranged before the application starts -
 # a tile cache laid out the way another program writes it, say. Every `env` is exported first
@@ -182,31 +192,78 @@ for I in "${!SETUP_COMMANDS[@]}"; do
     fi
 done
 
+# Mission Planner's config.xml, which the application writes as Mission Planner does: on starting,
+# on the FLIGHT DATA and FLIGHT PLAN buttons, and on closing. A test that gave it neither a data
+# directory of its own (`env XDG_DATA_HOME $WORK`) nor a file (`env MP_CONFIG_XML ...`) gets a copy
+# of the file it would have read, in $WORK: it reads what it always read, and the settings of the
+# Mission Planner installed on the machine running it are never rewritten by a test. The directory
+# is found as the application finds it - ~/Mission Planner if that exists, else the XDG data one.
+if [ -z "${MP_CONFIG_XML:-}" ]; then
+    if [ -d "$HOME/Mission Planner" ]; then
+        DATA_DIR="$HOME/Mission Planner"
+    else
+        DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/Mission Planner"
+    fi
+    case "$DATA_DIR" in
+        "$WORK"/*) ;;
+        *)
+            export MP_CONFIG_XML="$WORK/config.xml"
+            if [ -f "$DATA_DIR/config.xml" ]; then
+                cp "$DATA_DIR/config.xml" "$MP_CONFIG_XML"
+            fi
+            ;;
+    esac
+fi
+
 POINTER_HOME=$(xdotool getmouselocation --shell 2>/dev/null | awk -F= '/^X=/{x=$2} /^Y=/{y=$2} END{print x" "y}')
 SHOT_AT="${SHOT_AT:-2560,0}"
 xdotool mousemove "${SHOT_AT%%,*}" "${SHOT_AT##*,}" 2>/dev/null
 
-"$BIN" "${APP_ARGS[@]}" &
-APP_PID=$!
+# Starts the application and waits for its window, then activates it and moves it where the
+# pointer waits. Once before the steps, and again for each `restart`.
+start_app() {
+    "$BIN" "${APP_ARGS[@]}" </dev/null &
+    APP_PID=$!
 
-# The window must belong to the process this script started. The real Mission Planner shares our
-# title, and a test that drives it instead of us is worse than a test that does not run.
-WIN_ID=""
-for _ in $(seq 1 60); do
-    for CANDIDATE in $(xdotool search --pid "$APP_PID" --onlyvisible --name "$WINDOW_TITLE" 2>/dev/null); do
-        OWNER=$(xdotool getwindowpid "$CANDIDATE" 2>/dev/null)
-        [ "$OWNER" = "$APP_PID" ] && xwininfo -id "$CANDIDATE" >/dev/null 2>&1 && WIN_ID="$CANDIDATE"
+    # The window must belong to the process this script started. The real Mission Planner shares
+    # our title, and a test that drives it instead of us is worse than a test that does not run.
+    WIN_ID=""
+    for _ in $(seq 1 60); do
+        for CANDIDATE in $(xdotool search --pid "$APP_PID" --onlyvisible --name "$WINDOW_TITLE" 2>/dev/null); do
+            OWNER=$(xdotool getwindowpid "$CANDIDATE" 2>/dev/null)
+            [ "$OWNER" = "$APP_PID" ] && xwininfo -id "$CANDIDATE" >/dev/null 2>&1 && WIN_ID="$CANDIDATE"
+        done
+        [ -n "$WIN_ID" ] && break
+        kill -0 $APP_PID 2>/dev/null || { echo "app exited before showing a window" >&2; exit 1; }
+        sleep 0.5
     done
-    [ -n "$WIN_ID" ] && break
-    kill -0 $APP_PID 2>/dev/null || { echo "app exited before showing a window" >&2; exit 1; }
-    sleep 0.5
-done
-[ -n "$WIN_ID" ] || { echo "no window owned by pid $APP_PID appeared" >&2; exit 1; }
+    [ -n "$WIN_ID" ] || { echo "no window owned by pid $APP_PID appeared" >&2; exit 1; }
 
-sleep 1
-xdotool windowactivate --sync "$WIN_ID" 2>/dev/null
-xdotool windowmove "$WIN_ID" "${SHOT_AT%%,*}" "${SHOT_AT##*,}" 2>/dev/null
-sleep 0.5
+    sleep 1
+    xdotool windowactivate --sync "$WIN_ID" 2>/dev/null
+    xdotool windowmove "$WIN_ID" "${SHOT_AT%%,*}" "${SHOT_AT##*,}" 2>/dev/null
+    sleep 0.5
+}
+
+# Sends a window WM_DELETE_WINDOW, as a window manager's close box does. xdotool's windowclose
+# destroys the window instead, which the application never hears about.
+close_window() {
+    python3 - "$1" <<'PY'
+import sys
+from Xlib import X, display, protocol
+d = display.Display()
+window = d.create_resource_object("window", int(sys.argv[1]))
+event = protocol.event.ClientMessage(
+    window=window,
+    client_type=d.intern_atom("WM_PROTOCOLS"),
+    data=(32, [d.intern_atom("WM_DELETE_WINDOW"), X.CurrentTime, 0, 0, 0]),
+)
+window.send_event(event, event_mask=X.NoEventMask)
+d.flush()
+PY
+}
+
+start_app
 
 # Reads one fact. Empty if the key is absent, which `expect` reports as a failure rather than
 # comparing against nothing.
@@ -299,6 +356,28 @@ while IFS= read -r RAW; do
         key)
             xdotool key --window "$WIN_ID" --clearmodifiers "${2:?key needs a name}"
             sleep 0.6
+            ;;
+        restart)
+            if ! close_window "$WIN_ID"; then
+                echo "FAIL line $LINE_NO: restart could not close the window (it needs python3 with Xlib)" >&2
+                FAILURES=$((FAILURES + 1))
+            fi
+            for _ in $(seq 1 40); do
+                kill -0 "$APP_PID" 2>/dev/null || break
+                sleep 0.25
+            done
+            if kill -0 "$APP_PID" 2>/dev/null; then
+                echo "FAIL line $LINE_NO: the application did not exit when its window was closed" >&2
+                FAILURES=$((FAILURES + 1))
+                kill "$APP_PID" 2>/dev/null
+            fi
+            wait "$APP_PID" 2>/dev/null
+            APP_PID=""
+            # What the old process published is not what the new one believes.
+            : > "$FACTS_FILE"
+            : > "$PROBE_FILE"
+            echo "restarted after line $((LINE_NO - 1))"
+            start_app
             ;;
         expect)
             KEY="${2:?expect needs a key}"

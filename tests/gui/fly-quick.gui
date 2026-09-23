@@ -9,6 +9,10 @@
 # Plays the recorded copter flight, so it needs no vehicle. Run from the repository root:
 #   tools/gui-test.sh tests/gui/fly-quick.gui -- file:testdata/mavlink/autotest.tlog
 
+# Its own Mission Planner config.xml, empty: FlightData.Activate binds the quick views saved there
+# (quickView1-6), and this script counts on the defaults.
+env MP_CONFIG_XML $WORK/config.xml
+
 screen fly
 window 1600x1200
 settle 5

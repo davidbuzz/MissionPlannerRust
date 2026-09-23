@@ -62,6 +62,19 @@ if [ -n "${CLICK:-}" ] || [ -n "${CLICK_AFTER:-}" ] || [ -n "${DRAG:-}" ]; then
     export MP_PROBE="$PROBE_FILE"
 fi
 
+# The application writes Mission Planner's config.xml on starting and on the screen buttons; a
+# screenshot must not rewrite the settings of the Mission Planner installed on this machine, so it
+# gets a copy of the file it would have read, as tools/gui-test.sh gives its tests.
+if [ -z "${MP_CONFIG_XML:-}" ]; then
+    if [ -d "$HOME/Mission Planner" ]; then
+        DATA_DIR="$HOME/Mission Planner"
+    else
+        DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/Mission Planner"
+    fi
+    export MP_CONFIG_XML="$(mktemp -t mpr-config-XXXXXX.xml)"
+    [ -f "$DATA_DIR/config.xml" ] && cp "$DATA_DIR/config.xml" "$MP_CONFIG_XML"
+fi
+
 echo "launching $BIN $*"
 # Where the pointer was before any of this started.
 #

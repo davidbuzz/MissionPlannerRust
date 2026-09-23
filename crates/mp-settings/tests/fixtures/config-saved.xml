@@ -1,0 +1,38 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Config>
+  <a.b>1</a.b>
+  <a_b>1</a_b>
+  <a1>1</a1>
+  <ab>1</ab>
+  <aB>1</aB>
+  <altunits>Feet</altunits>
+  <CMB_altmode>Terrain</CMB_altmode>
+  <comport>TCP</comport>
+  <distunits>Feet</distunits>
+  <FPaltmode>10</FPaltmode>
+  <fpminaltwarning />
+  <kindex>1</kindex>
+  <Kindex>2</Kindex>
+  <MapType>BingSatelliteMap</MapType>
+  <multi>line one
+line two</multi>
+  <quickView1>battery_voltage</quickView1>
+  <quickView3>satcount</quickView3>
+  <quickView6>DistToHome</quickView6>
+  <rawparam____panel1collapsed>True</rawparam____panel1collapsed>
+  <rawparam____panel1collapsed>True</rawparam____panel1collapsed>
+  <sp> x </sp>
+  <speedunits>knots</speedunits>
+  <TCP_BAUD>115200</TCP_BAUD>
+  <TCP_host>127.0.0.1</TCP_host>
+  <TCP_port>5760</TCP_port>
+  <TXT_DefaultAlt>100</TXT_DefaultAlt>
+  <TXT_homealt>584.10</TXT_homealt>
+  <TXT_homelat>-35.3632621</TXT_homelat>
+  <TXT_homelng>149.1652374</TXT_homelng>
+  <TXT_loiterrad>45</TXT_loiterrad>
+  <TXT_WPRad>30</TXT_WPRad>
+  <UDP_port>14550</UDP_port>
+  <uni>é谷</uni>
+  <update_check>9/20/2026 &lt;beta&gt; &amp; "more" 'quoted'</update_check>
+</Config>

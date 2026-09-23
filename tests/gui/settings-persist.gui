@@ -1,0 +1,109 @@
+# What the screens keep in Mission Planner's config.xml comes back after a restart (D17).
+#
+# Settings.Instance is the whole file, read once; a screen changes it in memory and SaveConfig
+# writes all of it on start-up, on the FLIGHT DATA and FLIGHT PLAN buttons, after Connect and on
+# closing (MainV2.cs:1107, 1309-1323, 1846, 2171; ExtLibs/Utilities/Settings.cs:507-550). A quick
+# view's choice goes in when it is made (FlightData.cs:2475-2482) and FlightData.Activate binds it
+# again (:462-494). The planning screen's boxes go in when the screen is deactivated, config(true)
+# (FlightPlanner.cs:340-344, 2572-2592): MainV2 reads the home back at start-up (MainV2.cs:1012-
+# 1025) and config(false) the panel boxes (FlightPlanner.cs:2592-2612). The map type goes in when
+# it is changed (:2237), the altitude frame's number too (:2166).
+#
+# So the test makes each change at a different point and restarts through the close box: the quick
+# view is on disk from the FLIGHT PLAN button's save, and the home, WP Radius, frame and map only
+# from closing - `restart` closes as a window manager does, and a kill would have saved none of
+# them. The facts config.<key> are the dictionary as the application holds it; after the restart
+# that is what it read back from the file.
+#
+# Self-contained: its own config.xml, which holds display units no ported screen changes - still
+# there after two saves, because the file is written whole - and a map type.
+
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '\357\273\277<?xml version="1.0" encoding="utf-8"?>\n<Config>\n  <altunits>Feet</altunits>\n  <distunits>Feet</distunits>\n  <MapType>OpenStreetMap</MapType>\n  <speedunits>knots</speedunits>\n</Config>' > "$WORK/config.xml"
+
+tiles offline
+screen fly
+window 1600x1200
+settle 5
+
+# SaveConfig ran at start-up; the map is the one config.xml names.
+expect config.saved startup
+expect config.saves 1
+expect config.MapType OpenStreetMap
+expect map.source osm
+expect config.distunits Feet
+expect config.quickView3 none
+expect fly.quick.3 wp_dist
+
+# A quick view chosen is in the dictionary at once, and not yet on disk.
+doubleclick fly-quick-3
+expect fly.quick.chooser 3
+click fly-quick-choice-satcount
+expect fly.quick.3 satcount
+expect config.quickView3 satcount
+expect config.saves 1
+
+# FLIGHT PLAN saves, after the planning screen is shown.
+click tab-plan
+expect config.saved plan
+expect config.saves 2
+
+# The planning screen's boxes, the frame and the map, changed and not saved: the screen is still
+# showing, so config(true) has not run.
+click plan-home-lat
+key ctrl+u
+type 51.25
+click plan-home-lng
+key ctrl+u
+type 7.5
+click plan-home-alt
+key ctrl+u
+type 600
+expect plan.home 51.25,7.5,600
+click plan-wprad
+key ctrl+u
+type 12
+expect plan.wprad 12
+click plan-frame-terrain
+expect plan.frame terrain
+expect config.FPaltmode 10
+click plan-map-bing-satellite
+settle 2
+expect map.source bing-satellite
+expect config.MapType BingSatelliteMap
+expect config.TXT_homelat none
+expect config.saves 2
+
+# The close box: MyView.Dispose deactivates the planning screen, then SaveConfig.
+restart
+settle 5
+
+# What was read back: the start-up save of what was loaded.
+expect config.saved startup
+expect config.saves 1
+expect config.TXT_homelat 51.25
+expect config.TXT_homelng 7.5
+expect config.TXT_homealt 600
+expect config.TXT_WPRad 12
+expect config.TXT_loiterrad 45
+expect config.TXT_DefaultAlt 100
+expect config.CMB_altmode Terrain
+expect config.FPaltmode 10
+expect config.quickView3 satcount
+expect config.MapType BingSatelliteMap
+expect config.distunits Feet
+expect config.altunits Feet
+expect config.speedunits knots
+
+# And the screens show it: the flight screen first, as MP_SCREEN says.
+expect fly.quick.3 satcount
+expect fly.quick.3.label Sat Count
+expect fly.quick.1 alt
+expect map.source bing-satellite
+
+# The planning screen: the home MainV2 read, in its boxes as Activate writes them, the panel box
+# config(false) filled, the frame CMB_altmode names.
+click tab-plan
+expect plan.home 51.25,7.5,600.00
+expect plan.wprad 12
+expect plan.frame terrain
