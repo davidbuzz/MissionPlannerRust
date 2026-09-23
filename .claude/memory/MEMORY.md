@@ -14,4 +14,4 @@ controlled; the per-project memory directory holds symlinks to them.
 - [Never stop after a commit](never-stop-after-a-commit.md) — chain to the next task; a commit is not an exit condition
 - [Verify before committing](verify-before-committing.md) — clippy is its own command, read it, then commit
 - [Autotests mandatory](autotests-mandatory.md) — every change ships with a test that fails if it stops working; test the path the product takes
-- [Delegate to Opus subagents](delegate-to-opus-subagents.md) — up to three at once, disjoint files, never a window, never a commit
+- [Delegate to Opus subagents](delegate-to-opus-subagents.md) — up to six at once, disjoint files, never a window, never a commit

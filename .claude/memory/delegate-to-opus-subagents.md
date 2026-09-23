@@ -1,19 +1,19 @@
 ---
 name: delegate-to-opus-subagents
-description: Buzz authorised delegating coding tasks to at most three Opus subagents at a time; they never open windows, never commit, and get disjoint files
+description: Buzz authorised delegating coding tasks to at most six Opus subagents at a time (three until 2026-09-24); they never open windows, never commit, and get disjoint files
 metadata:
   type: feedback
 ---
 
 **"pls delegate coding tasks to at most 3 Opus 5 subagents"** — Buzz, 2026-09-23 14:08 UTC (the transcript's time; the question "are you capable of delegating coding tasks to Opus 5.1 as a sub agent?" came a minute before). Standing
-authorisation, with a cap of three concurrent.
+authorisation, with a cap of three concurrent - **raised to six** on 2026-09-24 16:05 UTC: "pls delegate coding tasks to at most 6 Opus 5 subagents".
 
 **Why:** the queue in PLAN.md §13.2 has independent items, and one context working them in series
-is the bottleneck; three agents with disjoint files finish three items in the time of one.
+is the bottleneck; agents with disjoint files finish that many items in the time of one.
 
 **How to apply:**
 
-- `Agent` tool, `model: "opus"`, `subagent_type: general-purpose`, background; at most three at
+- `Agent` tool, `model: "opus"`, `subagent_type: general-purpose`, background; at most six at
   once. Each prompt carries the rules the agents do not otherwise see: not-in-the-C# is not in
   scope, read the `.cs` first, autotests mandatory, workspace lints, comment style.
 - **Disjoint file sets, stated explicitly in each prompt.** Concurrent agents on one file is a
