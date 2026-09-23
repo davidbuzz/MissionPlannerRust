@@ -119,6 +119,8 @@ struct MissionPlanner {
     file_status: Option<String>,
     /// The waypoint being dragged on the map, if one is.
     dragging_waypoint: Option<u16>,
+    /// Throttle a motor test uses, as a percentage.
+    motor_throttle: f32,
     /// Whether a radio calibration is recording stick limits.
     capturing_radio: bool,
     /// The limits recorded so far.
@@ -217,6 +219,7 @@ impl MissionPlanner {
             adopt_vehicle_rally: false,
             file_status: None,
             dragging_waypoint: None,
+            motor_throttle: 5.0,
             capturing_radio: false,
             radio_range: mp_vehicle::RcRange::new(),
             disabled_arming_checks: false,
@@ -534,6 +537,7 @@ impl MissionPlanner {
                 self.capturing_radio,
                 cx,
             ))
+            .child(setup::motor_panel(view, self.motor_throttle, cx))
             .child(setup::calibration_panel(view, cx))
     }
 

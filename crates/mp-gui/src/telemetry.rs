@@ -377,6 +377,24 @@ impl Telemetry {
         }
     }
 
+    /// Spins one motor briefly, at a bounded throttle and with a timeout.
+    pub fn test_motor(&self, motor: u8, throttle_percent: f32) {
+        if let Some((link, id)) = self.target() {
+            link.send(&mp_link::calibration::test_motor(
+                id,
+                motor,
+                throttle_percent,
+            ));
+        }
+    }
+
+    /// Stops a running motor test.
+    pub fn stop_motor(&self, motor: u8) {
+        if let Some((link, id)) = self.target() {
+            link.send(&mp_link::calibration::stop_motor(id, motor));
+        }
+    }
+
     /// Writes one parameter.
     pub fn set_parameter(&self, name: &str, value: f32) {
         if let Some((link, id)) = self.target() {

@@ -507,6 +507,138 @@ pub fn radio_panel(
     )
 }
 
+/// How many motors to offer.
+///
+/// Eight covers every common multirotor up to an octocopter. A frame with more is a frame whose
+/// operator is not learning their motor order from a ground station for the first time.
+const MOTORS: u8 = 8;
+
+/// Motor test: spins one motor at a time, briefly.
+///
+/// Disabled while armed, and deliberately not offered as a sequence. Testing motors in order is
+/// how an operator loses track of which one is about to move, and this is the only control in the
+/// application that turns something sharp.
+pub fn motor_panel(
+    view: &TelemetryView,
+    throttle: f32,
+    cx: &mut Context<MissionPlanner>,
+) -> impl IntoElement {
+    let has_vehicle = view.vehicle.is_some();
+    let armed = view.state.as_ref().is_some_and(|state| state.armed);
+    let enabled = has_vehicle && !armed;
+
+    let mut buttons = div().flex().flex_wrap().gap_2();
+    for motor in 1..=MOTORS {
+        buttons = buttons.child(
+            crate::probe::measured(format!("motor-{motor}"), div())
+                .id(("motor", usize::from(motor)))
+                .px_3()
+                .py_1()
+                .rounded_md()
+                .border_1()
+                .border_color(rgb(if enabled { theme::ALERT } else { theme::BORDER }))
+                .bg(rgb(theme::ACTION))
+                .text_sm()
+                .text_color(rgb(if enabled { theme::ALERT } else { theme::DIM }))
+                .cursor_pointer()
+                .child(format!("{motor}"))
+                .on_click(cx.listener(move |this, _event, _window, cx| {
+                    if this.telemetry.view().state.is_some_and(|state| state.armed) {
+                        return;
+                    }
+                    this.telemetry.test_motor(motor, this.motor_throttle);
+                    this.file_status = Some(format!(
+                        "motor {motor} at {:.0}% for {:.0}s",
+                        this.motor_throttle,
+                        mp_link::calibration::MOTOR_TEST_SECONDS
+                    ));
+                    cx.notify();
+                })),
+        );
+    }
+
+    panel(
+        "motors",
+        div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(theme::ALERT))
+                    .child("REMOVE THE PROPELLERS BEFORE USING THIS"),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .w(px(64.0))
+                            .text_xs()
+                            .text_color(rgb(theme::DIM))
+                            .child("throttle"),
+                    )
+                    .child(
+                        div()
+                            .w(px(52.0))
+                            .text_sm()
+                            .text_color(rgb(theme::TEXT))
+                            .child(format!("{throttle:.0}%")),
+                    )
+                    .child(throttle_step("motor-throttle-down", -1.0, "-1", cx))
+                    .child(throttle_step("motor-throttle-up", 1.0, "+1", cx)),
+            )
+            .child(buttons)
+            .child(action(
+                "motor-stop",
+                "stop all",
+                theme::OK,
+                enabled,
+                cx.listener(|this, _event: &(), _window, cx| {
+                    for motor in 1..=MOTORS {
+                        this.telemetry.stop_motor(motor);
+                    }
+                    this.file_status = Some("motor test stopped".to_owned());
+                    cx.notify();
+                }),
+            ))
+            .child(div().text_xs().text_color(rgb(theme::DIM)).child(format!(
+                "each press spins one motor for {:.0} seconds, then the vehicle stops it \
+                         on its own",
+                mp_link::calibration::MOTOR_TEST_SECONDS
+            ))),
+    )
+}
+
+/// One step of the motor test throttle.
+fn throttle_step(
+    id: &'static str,
+    delta: f32,
+    label: &'static str,
+    cx: &mut Context<MissionPlanner>,
+) -> impl IntoElement {
+    crate::probe::measured(id, div())
+        .id(id)
+        .px_2()
+        .py_1()
+        .rounded_md()
+        .border_1()
+        .border_color(rgb(theme::BORDER))
+        .text_xs()
+        .text_color(rgb(theme::TEXT))
+        .cursor_pointer()
+        .hover(|style| style.bg(rgb(theme::BORDER)))
+        .child(label)
+        .on_click(cx.listener(move |this, _event, _window, cx| {
+            this.motor_throttle = (this.motor_throttle + delta)
+                .clamp(1.0, mp_link::calibration::MAX_MOTOR_TEST_THROTTLE);
+            cx.notify();
+        }))
+}
+
 /// The calibrations that are a single command.
 pub fn calibration_panel(
     view: &TelemetryView,
