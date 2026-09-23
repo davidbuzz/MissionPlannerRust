@@ -356,8 +356,11 @@ Dataflash (`.bin`/`.log`) and tlog parsing, log download, graphing, LogAnalyzer 
   `graphit_clickprocess` refuses; `mp_log::track` draws the log's first GPS route and its logged
   mission on a map beside the chart; the double-click cursor with its map pin and grid row, and
   the strip's Map/Time/Data Table/Mode/Errors/MSG/Events boxes drawing what the C# draws
-  (PLAN.md §13.4 row 7). Not yet: the point-value tooltip (off by default in the C#), the strip's
-  Show Params and preselect, GPS2/POS routes, the memory-mapped parse.
+  (PLAN.md §13.4 row 7). The DataFlash Logs page's four conversions are ported and held to
+  Mission Planner's own code under mono: `.BIN → .log` byte-identical, KML+GPX and `.mat`
+  identical but for a namespace order and a hash-table order, Auto Analysis as the C# runs it
+  (row 23). Not yet: the page's buttons calling them, the point-value tooltip (off by default in
+  the C#), the strip's Show Params and preselect, GPS2/POS routes, the memory-mapped parse.
 - **Tests:** `tests/parser_diff.rs` parses a corpus of real dataflash and tlog files and diffs every decoded field against the C# parser's output; `fuzz/fuzz_targets/dataflash.rs` and `tlog.rs` asserting no panic and no unbounded allocation on corrupt logs (truncated, bit-flipped, wrong-endian, fabricated FMT messages); `tests/fft.rs` compares against `Exocortex.DSP` golden spectra; `tests/exports.rs` `.mat`/CSV/KML round-trips; `benches/parse_1gb.rs` gates <2 s to first plot and `benches/scrub_10m.rs` gates 120 fps scrubbing.
 
 ### D15. CAN, peripherals and outboard features

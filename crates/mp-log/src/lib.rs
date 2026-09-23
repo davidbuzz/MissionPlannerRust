@@ -12,17 +12,32 @@
 //! Byte compatibility with Mission Planner is a requirement, not a nicety: users have years of
 //! recordings, and the two applications must be able to read each other's logs
 //! (`DELIVERABLES.md` D17).
+//!
+//! # The DataFlash Logs page's conversions
+//!
+//! Three of the flight screen's dataflash buttons live here, each a function the page calls with
+//! [`convert::flight_mode_name`] for its flight modes: "Convert .Bin to .Log"
+//! ([`convert::convert_bin_file`]), "Create Matlab file" ([`matlab::process_log_file`]) and
+//! "Auto Analysis" ([`analysis::analyse`], which runs ArduPilot's own analyzer). The fourth,
+//! "Create KML + gpx", is `mp_kml::dflog::dflog_to_kml`, reading through [`dflogbuffer`]. All of
+//! them are held to Mission Planner's own output under `testdata/dataflash/golden`.
 
 #![forbid(unsafe_code)]
 
+pub mod analysis;
+pub mod convert;
 pub mod dataflash;
+pub mod dflogbuffer;
 pub mod index;
+pub mod matlab;
+pub mod netfmt;
 pub mod overlay;
 pub mod plot;
 pub mod reader;
 #[cfg(test)]
 mod testlog;
 pub mod track;
+pub mod zip;
 
 pub use dataflash::{DataflashReader, DataflashStats, LogMessage, MessageFormat, Value};
 pub use reader::{TlogReader, TlogRecord};

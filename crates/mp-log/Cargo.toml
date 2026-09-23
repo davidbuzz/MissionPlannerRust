@@ -13,6 +13,12 @@ workspace = true
 [dependencies]
 mp-mavlink.workspace = true
 thiserror.workspace = true
+# The .kmz "Create KML + gpx" writes and the analyzer zip "Auto Analysis" unpacks.
+flate2.workspace = true
+# The analyzer's XML report.
+roxmltree.workspace = true
+# The flight mode tables `BinaryLog.onFlightMode` names modes from (L3, below this crate's L4).
+mp-vehicle.workspace = true
 
 [dev-dependencies]
 mp-mavlink-dialects.workspace = true

@@ -11,10 +11,14 @@ publish = false
 workspace = true
 
 [dev-dependencies]
-mp-log.workspace = true
 mp-mavlink.workspace = true
 mp-mavlink-dialects.workspace = true
 
 [dependencies]
 mp-units.workspace = true
 mp-mission.workspace = true
+# "Create KML + gpx" reads a dataflash log through mp-log's DFLogBuffer (L4, below this crate's L5).
+mp-log.workspace = true
+thiserror.workspace = true
+# The local time zone the .gpx times are written in.
+chrono.workspace = true

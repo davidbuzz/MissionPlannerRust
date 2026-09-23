@@ -29,7 +29,7 @@ they need SITL, a window, or the network), **31 GUI scripts** under `tests/gui/`
 | Parameter docs | fetched for the connected firmware as Mission Planner fetches them (`apm.pdef.xml`, versioned or weekly), read before the bundled table: 1,407 of a SITL's 1,408 documented instead of 827 |
 | Missions | upload and download, `.waypoints` files, 129-file corpus |
 | Survey grids | `Grid.CreateGrid`, `CreateCorridor` and `CreateRotary` transliterated over a port of ProjNet's UTM and the C#'s Clipper, bit-identical to the C# on 284 golden cases the real code generated under mono |
-| Logs | `.tlog` read and write; ArduPilot `.BIN` dataflash parsing; the log browser with `LogBrowse.cs`'s two axes, data grid, map, double-click cursor and mode/error/message overlays |
+| Logs | `.tlog` read and write; ArduPilot `.BIN` dataflash parsing; the log browser with `LogBrowse.cs`'s two axes, data grid, map, double-click cursor and mode/error/message overlays; `.BIN → .log`, KML+GPX and `.mat` conversions byte-identical to `BinaryLog`, `LogOutput` and `MatLab` run under mono |
 | Flight recording | every connection recorded to a `.tlog`, both directions, into Mission Planner's own logs directory |
 | Data directory | `Settings.cs`'s rules ported, mono quirks included, so files land where the C# application looks; its `config.xml` is read for the last link, map type and log directory, and rendered back byte for byte |
 | Health | EKF variances and vibration with ArduPilot's own thresholds, clipping counts |

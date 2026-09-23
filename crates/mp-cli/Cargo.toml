@@ -26,3 +26,6 @@ mp-kml.workspace = true
 mp-log.workspace = true
 mp-mission.workspace = true
 mp-units.workspace = true
+# `mpr log loganalysis`: where the analyzer lives, and the download of it.
+mp-settings.workspace = true
+ureq.workspace = true

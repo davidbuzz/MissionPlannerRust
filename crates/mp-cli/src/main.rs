@@ -9,6 +9,7 @@
 
 use std::time::{Duration, Instant};
 
+mod dflog;
 mod logs;
 
 use mp_link::requests::RequestOutcome;
@@ -95,10 +96,24 @@ fn main() -> std::process::ExitCode {
                 std::process::ExitCode::from(2)
             }
         },
-        Some("log") => match args.get(1) {
-            Some(path) => logs::summarise(path),
-            None => {
-                eprintln!("usage: mpr log <file.tlog|file.bin>");
+        Some("log") => match (args.get(1).map(String::as_str), args.get(2)) {
+            (Some(verb), Some(file)) if dflog::VERBS.contains(&verb) => {
+                dflog::run(verb, file, args.get(3).map(String::as_str))
+            }
+            (Some(verb), None) if dflog::VERBS.contains(&verb) => {
+                eprintln!("usage: mpr log {verb} <file> [out]");
+                std::process::ExitCode::from(2)
+            }
+            (Some(path), _) => logs::summarise(path),
+            (None, _) => {
+                eprintln!(
+                    "usage:\n  \
+                     mpr log <file.tlog|file.bin>              summarise a log\n  \
+                     mpr log bintolog <file.bin> [out.log]     Convert .Bin to .Log\n  \
+                     mpr log dflogtokml <file> [dir]           Create KML + gpx\n  \
+                     mpr log matlab <file> [out.mat]           Create Matlab file\n  \
+                     mpr log loganalysis <file> [dir]          Auto Analysis"
+                );
                 std::process::ExitCode::from(2)
             }
         },
@@ -161,6 +176,10 @@ fn usage() {
          mpr mission <url> [file]    download the mission, or upload one from a file\n  \
          mpr survey <url> <file>     generate a survey grid around the vehicle\n  \
          mpr log <file>              summarise a telemetry or dataflash log
+  mpr log bintolog <bin> [out]   Convert .Bin to .Log, as the DataFlash Logs page does
+  mpr log dflogtokml <log> [dir] Create KML + gpx (.kmz, .gpx, waypoints, .param, RINEX)
+  mpr log matlab <log> [out]     Create Matlab file (.mat)
+  mpr log loganalysis <log> [dir] Auto Analysis: run ArduPilot's LogAnalyzer, print its report
   mpr logs <url> [ID] [DIR]   list the vehicle's logs, or download one\n  \
          mpr fields <log.bin>        list what a dataflash log can plot
   mpr kml <log> <out.kml>     export a flown path for Google Earth

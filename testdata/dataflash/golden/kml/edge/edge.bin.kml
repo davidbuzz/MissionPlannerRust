@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<kml xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Document>
+    <Style id="yellowLineGreenPoly">
+      <LineStyle>
+        <color>7F00FFFF</color>
+        <colorMode>normal</colorMode>
+        <width>4</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>7F00FF00</color>
+        <colorMode>normal</colorMode>
+      </PolyStyle>
+    </Style>
+    <Style id="spray">
+      <LineStyle>
+        <color>4C0000FF</color>
+        <colorMode>normal</colorMode>
+        <width>0</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>4C0000FF</color>
+        <colorMode>normal</colorMode>
+      </PolyStyle>
+    </Style>
+    <Folder>
+      <name>Log</name>
+      <Placemark>
+        <name>POS Message</name>
+        <Style id="yellowLineGreenPoly">
+          <LineStyle>
+            <color>7F00FFFF</color>
+            <colorMode>normal</colorMode>
+            <width>4</width>
+          </LineStyle>
+          <PolyStyle>
+            <color>7F00FF00</color>
+            <colorMode>normal</colorMode>
+          </PolyStyle>
+        </Style>
+        <LineString>
+          <coordinates />
+        </LineString>
+      </Placemark>
+      <Folder>
+        <name>Planes</name>
+      </Folder>
+      <Folder>
+        <name>Waypoints</name>
+      </Folder>
+    </Folder>
+  </Document>
+</kml>

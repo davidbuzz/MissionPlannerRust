@@ -1,0 +1,25 @@
+     3.02           OBSERVATION DATA    M: Mixed            RINEX VERSION / TYPE
+                                                            MARKER NAME         
+                                                            MARKER NUMBER       
+                                                            MARKER TYPE         
+                                                            OBSERVER / AGENCY   
+                                                            REC # / TYPE / VERS 
+                                                            ANT # / TYPE        
+        0.0000        0.0000        0.0000                  APPROX POSITION XYZ 
+        0.0000        0.0000        0.0000                  ANTENNA: DELTA H/E/N
+G    4 C1C L1C D1C S1C                                      SYS / # / OBS TYPES 
+S    4 C1C L1C D1C S1C                                      SYS / # / OBS TYPES 
+R    4 C1C L1C D1C S1C                                      SYS / # / OBS TYPES 
+E    4 C1C L1C D1C S1C                                      SYS / # / OBS TYPES 
+G                                                           SYS / PHASE SHIFT   
+                                                            END OF HEADER       
+> 2024  2  9  7 46 41.2000000  0  3
+G12  22000000.12307 115600000.568         -1234.5          42.000  
+S31  23000000.98806 120000000.432          567.25          36.000  
+R05  21000000.00008 110000000.000               0          48.000  
+J01  21000000.00105 110000000.001             0.5          30.000  
+C07  21000000.00009 110000000.000               0          70.000  
+> 2024  2  9  7 46 42.0000000  0  9
+G05  21900000.75007 115000000.250           100.5          45.000  
+> 2024  2  9  7 46 42.5000000  0  9
+G07  21900002.50011 115000002.125           -1.25           3.000  

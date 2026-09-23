@@ -19,6 +19,8 @@
 use mp_mission::MissionItem;
 use mp_units::LatLon;
 
+pub mod dflog;
+
 /// The colours Mission Planner cycles flight-path segments through.
 ///
 /// `// C#: Log/MavlinkLogBase.cs:136-140` - red, orange, yellow, green, blue, indigo, violet, pink.

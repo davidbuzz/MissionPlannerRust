@@ -3321,9 +3321,11 @@ dependencies = [
  "mp-mavlink-dialects",
  "mp-mission",
  "mp-params",
+ "mp-settings",
  "mp-transport",
  "mp-units",
  "mp-vehicle",
+ "ureq",
 ]
 
 [[package]]
@@ -3395,11 +3397,13 @@ version = "0.1.0"
 name = "mp-kml"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "mp-log",
  "mp-mavlink",
  "mp-mavlink-dialects",
  "mp-mission",
  "mp-units",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -3422,9 +3426,12 @@ dependencies = [
 name = "mp-log"
 version = "0.1.0"
 dependencies = [
+ "flate2",
  "mp-link",
  "mp-mavlink",
  "mp-mavlink-dialects",
+ "mp-vehicle",
+ "roxmltree 0.20.0",
  "thiserror 2.0.20",
 ]
 

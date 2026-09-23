@@ -1,0 +1,22 @@
+Log File examples/robert_lefebvre_octo_PM.log
+Size (kb) 302.7548828125
+No of lines 4750
+Duration 0:02:35
+Vehicletype ArduCopter
+Firmware Version V3.0.1
+Firmware Hash 5c6503e2
+Hardware Type APM 2
+Free Mem 1331
+Skipped Lines 0
+Test: Brownout = GOOD - 
+Test: Compass = GOOD - No MAG data, unable to test mag_field interference
+
+Test: Dupe Log Data = GOOD - 
+Test: Empty = GOOD - 
+Test: Event/Failsafe = FAIL - ERR found: GPS 
+Test: GPS = WARN - Min satellites: 6, Max HDop: 4.68
+Test: Parameters = GOOD - 
+Test: PM = FAIL - 14 slow loop lines found, max 18.56% on line 2983
+Test: Pitch/Roll = GOOD - 
+Test: Thrust = GOOD - 
+Test: VCC = GOOD - 
