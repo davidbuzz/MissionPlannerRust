@@ -1,0 +1,25 @@
+# Jump > Start: jumpstartToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:4094). Asks "Number of
+# times to Repeat", offering 5, and appends a DO_JUMP (177) to item 1 with that many repeats and
+# no position.
+
+screen plan
+window 1600x1200
+settle 4
+
+click map@0.45x0.40
+click map@0.60x0.55
+expect mission.items 2
+
+click map@0.30x0.70:right
+click menu-jump
+expect plan.menu.submenu menu-jump
+click menu-jumpstart
+expect plan.prompt Jump repeat
+expect plan.prompt.text Number of times to Repeat
+expect plan.prompt.value 5
+key Return
+expect mission.items 3
+expect mission.last.command 177
+expect mission.last.p1 1
+expect mission.last.p2 5
+expect mission.last.position false

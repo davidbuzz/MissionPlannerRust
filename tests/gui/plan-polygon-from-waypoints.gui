@@ -1,0 +1,31 @@
+# Polygon > From Current Waypoints: fromCurrentWaypointsMenuItem_Click
+# (GCSViews/FlightPlanner.cs:3619). The survey polygon becomes the WAYPOINT rows, then "Clear
+# current waypoints?" - No keeps the mission, Yes clears it.
+
+screen plan
+window 1600x1200
+settle 4
+
+click map@0.45x0.40
+click map@0.55x0.45
+click map@0.60x0.55
+expect mission.items 3
+expect survey.points 0
+
+click map@0.30x0.70:right
+click menu-polygon
+click menu-fromCurrentWaypoints
+expect survey.points 3
+expect plan.prompt Confirm
+expect plan.prompt.text Clear current waypoints?
+click plan-prompt-cancel
+expect plan.prompt none
+expect mission.items 3
+
+click map@0.30x0.70:right
+click menu-polygon
+click menu-fromCurrentWaypoints
+click plan-prompt-ok
+expect plan.prompt none
+expect mission.items 0
+expect survey.points 3

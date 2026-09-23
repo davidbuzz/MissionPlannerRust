@@ -1,0 +1,17 @@
+# Loiter > Circles: loitercirclesToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:4743). Asks
+# "Loiter Turns", offering 3, and appends a LOITER_TURNS (18) at the click with the turns in Param1.
+
+screen plan
+window 1600x1200
+settle 4
+
+click map@0.45x0.40:right
+click menu-loiter
+click menu-loitercircles
+expect plan.prompt Loiter Turns
+expect plan.prompt.value 3
+key Return
+expect mission.items 1
+expect mission.last.command 18
+expect mission.last.p1 3
+expect mission.last.position true

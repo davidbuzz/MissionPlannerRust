@@ -456,22 +456,47 @@ mod tests {
         for line in text.lines().filter(|line| line.starts_with("utm,")) {
             let fields: Vec<&str> = line.split(',').collect();
             assert_eq!(fields.len(), 8, "{line}");
-            let parse = |i: usize| fields[i].parse::<f64>().unwrap_or_else(|_| panic!("{line}"));
+            let parse = |i: usize| {
+                fields[i]
+                    .parse::<f64>()
+                    .unwrap_or_else(|_| panic!("{line}"))
+            };
             let (lat, lng) = (parse(1), parse(2));
             let zone: i32 = fields[3].parse().unwrap_or_else(|_| panic!("{line}"));
             let (x, y, back_lat, back_lng) = (parse(4), parse(5), parse(6), parse(7));
 
             let ours = UtmPos::from_lat_lng(lat, lng);
             assert_eq!(ours.zone, zone, "zone of ({lat}, {lng})");
-            assert_eq!(ours.x.to_bits(), x.to_bits(), "x of ({lat}, {lng}): {} vs {x}", ours.x);
-            assert_eq!(ours.y.to_bits(), y.to_bits(), "y of ({lat}, {lng}): {} vs {y}", ours.y);
+            assert_eq!(
+                ours.x.to_bits(),
+                x.to_bits(),
+                "x of ({lat}, {lng}): {} vs {x}",
+                ours.x
+            );
+            assert_eq!(
+                ours.y.to_bits(),
+                y.to_bits(),
+                "y of ({lat}, {lng}): {} vs {y}",
+                ours.y
+            );
 
             let (our_lat, our_lng) = ours.to_lla().unwrap_or_else(|| panic!("ToLLA of {line}"));
-            assert_eq!(our_lat.to_bits(), back_lat.to_bits(), "ToLLA lat of {line}: {our_lat}");
-            assert_eq!(our_lng.to_bits(), back_lng.to_bits(), "ToLLA lng of {line}: {our_lng}");
+            assert_eq!(
+                our_lat.to_bits(),
+                back_lat.to_bits(),
+                "ToLLA lat of {line}: {our_lat}"
+            );
+            assert_eq!(
+                our_lng.to_bits(),
+                back_lng.to_bits(),
+                "ToLLA lng of {line}: {our_lng}"
+            );
             compared += 1;
         }
-        assert!(compared >= 600, "only {compared} golden points: is the file complete?");
+        assert!(
+            compared >= 600,
+            "only {compared} golden points: is the file complete?"
+        );
     }
 
     #[test]

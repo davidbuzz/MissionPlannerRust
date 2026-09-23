@@ -17,6 +17,7 @@ mod mapview;
 mod metadata;
 mod params;
 mod plan;
+mod planner_coverage;
 mod platform;
 mod probe;
 mod settings;
@@ -49,14 +50,6 @@ const DEFAULT_PLAN_FILE: &str = "mission.waypoints";
 
 /// The name a parameter backup gets if the operator does not choose one.
 const DEFAULT_PARAM_FILE: &str = "vehicle.param";
-
-/// The altitude a waypoint gets when there is no previous one to copy.
-///
-/// Mission Planner takes it from `TXT_DefaultAlt`, a box on the planning screen
-/// (`FlightPlanner.cs:6873`). There is no such box here yet, so a new waypoint copies the one
-/// before it and falls back to this - which is the behaviour an operator gets from that box
-/// anyway, since they set it once and every waypoint after inherits it.
-const DEFAULT_WAYPOINT_ALTITUDE: f64 = 50.0;
 
 /// Repaint interval when measuring the renderer: as fast as the executor will schedule, so paint
 /// cost is measured rather than the timer.
@@ -175,6 +168,10 @@ struct MissionPlanner {
     map_press: Option<(f32, f32)>,
     /// What was loaded from the settings file, and what will be written back to it.
     settings: settings::Settings,
+    /// The planning map's right-click menu and the dialogs it opens.
+    plan_menus: plan::PlanMenus,
+    /// Focus for those dialogs, which take the keyboard while they show.
+    plan_prompt_focus: gpui::FocusHandle,
     /// The mission file name to save to or load from.
     plan_name: textfield::TextField,
     /// Focus for that field.
@@ -336,6 +333,8 @@ impl MissionPlanner {
                 field
             },
             plan_name_focus: cx.focus_handle(),
+            plan_menus: plan::PlanMenus::default(),
+            plan_prompt_focus: cx.focus_handle(),
             param_search: textfield::TextField::new("search parameters"),
             param_search_focus: cx.focus_handle(),
             selected_param_group: None,
@@ -1086,6 +1085,9 @@ impl MissionPlanner {
                         MouseButton::Left,
                         cx.listener(move |this, event: &gpui::MouseDownEvent, _window, cx| {
                             let (x, y) = (f32::from(event.position.x), f32::from(event.position.y));
+                            if this.plan_menus.swallows_press((x, y)) {
+                                return;
+                            }
                             let grabbed = planning
                                 .then(|| this.map.borrow().waypoint_at(x, y))
                                 .flatten();
@@ -1151,14 +1153,15 @@ impl MissionPlanner {
                             let Some(position) = this.map.borrow().position_at(x, y) else {
                                 return;
                             };
-                            let altitude = this
-                                .plan
-                                .items()
-                                .last()
-                                .map_or(DEFAULT_WAYPOINT_ALTITUDE, |last| last.z);
+                            // What the click adds follows what is being drawn: AddWPToMap.
+                            // `// C#: GCSViews/FlightPlanner.cs:558-600`
+                            let altitude = this.plan.default_altitude();
                             this.plan
-                                .add_waypoint_in(position, altitude, this.altitude_frame);
+                                .add_wp_to_map(position, altitude, this.altitude_frame);
                             this.sync_map_mission();
+                            this.sync_map_polygon();
+                            this.sync_map_fence();
+                            this.sync_map_rally();
                             cx.notify();
                         }),
                     )
@@ -1175,48 +1178,22 @@ impl MissionPlanner {
                             window.refresh();
                         }
                     })
-                    // Right-click adds a waypoint while planning. Not left-click: left is pan,
-                    // and a gesture that both moves the map and drops a waypoint would put one
-                    // down on every failed drag.
-                    // Right-click adds a waypoint while planning, and commands a guided move
-                    // while flying. Not left-click in either case: left is pan, and a gesture
-                    // that both moves the map and commits something would fire on every failed
-                    // drag - which while flying means the aircraft moves.
+                    // Right-click opens the planning map's menu, `MainMap.ContextMenuStrip`, and
+                    // commands a guided move while flying. Not left-click in either case: left is
+                    // pan, and a gesture that both moves the map and commits something would fire
+                    // on every failed drag - which while flying means the aircraft moves.
+                    // `// C#: GCSViews/FlightPlanner.Designer.cs:875`
                     .on_mouse_up(
                         MouseButton::Right,
                         cx.listener(move |this, event: &gpui::MouseUpEvent, _window, cx| {
-                            let Some(position) = this.map.borrow().position_at(
-                                f32::from(event.position.x),
-                                f32::from(event.position.y),
-                            ) else {
-                                return;
-                            };
+                            let (x, y) = (f32::from(event.position.x), f32::from(event.position.y));
                             if planning {
-                                // Freeze the view before the edit, not after: the automatic fit
-                                // frames everything it knows about, so adding a waypoint changes
-                                // what it has to frame and the map jumps - putting the next click
-                                // somewhere the operator did not aim at.
-                                this.map.borrow_mut().freeze_view();
-                                match this.plan.draw_mode() {
-                                    plan::DrawMode::Waypoints => {
-                                        this.plan.add_waypoint(position, plan::DEFAULT_ALTITUDE);
-                                        this.sync_map_mission();
-                                    }
-                                    plan::DrawMode::Area => {
-                                        this.plan.add_area_vertex(position);
-                                        this.sync_map_polygon();
-                                    }
-                                    plan::DrawMode::Fence => {
-                                        this.plan.add_fence_vertex(position);
-                                        this.sync_map_fence();
-                                    }
-                                    plan::DrawMode::Rally => {
-                                        this.plan.add_rally_point(position);
-                                        this.sync_map_rally();
-                                    }
-                                }
+                                plan::open_map_menu(this, x, y);
                             } else {
-                                this.fly_here(position);
+                                let position = this.map.borrow().position_at(x, y);
+                                if let Some(position) = position {
+                                    this.fly_here(position);
+                                }
                             }
                             cx.notify();
                         }),
@@ -1417,6 +1394,15 @@ impl Render for MissionPlanner {
             facts::record("coverage.flightdata.missing", missing);
             facts::record("coverage.flightdata.total", coverage::FLIGHTDATA.len());
             let _ = (plumbing, dropped);
+            // The same for the planning screen, and what its map menu has done to the mission.
+            let (done, elsewhere, missing, _, _) = planner_coverage::counts();
+            facts::record("coverage.flightplanner.done", done + elsewhere);
+            facts::record("coverage.flightplanner.missing", missing);
+            facts::record(
+                "coverage.flightplanner.total",
+                planner_coverage::FLIGHTPLANNER.len(),
+            );
+            plan::record_facts(&self.plan, &self.plan_menus);
             // Where the parameter documentation comes from and how much of this vehicle it
             // covers: PLAN.md 10.5's measurement, live.
             facts::record("params.metadata.source", metadata::source());
@@ -1634,6 +1620,12 @@ impl Render for MissionPlanner {
                 .p_2()
                 .child(self.plan_sidebar(&view, window, cx))
                 .child(self.map_pane(cx))
+                .children(plan::overlays(
+                    &self.plan_menus,
+                    &self.plan_prompt_focus,
+                    window,
+                    cx,
+                ))
                 .into_any_element(),
             Screen::Params => {
                 let parameters = params::collect(&view);

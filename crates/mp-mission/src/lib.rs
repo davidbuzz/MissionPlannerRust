@@ -5,10 +5,12 @@
 
 #![forbid(unsafe_code)]
 
+pub mod commands;
 pub mod fence;
 pub mod fence_file;
 pub mod grid;
 pub mod item;
+pub mod rows;
 pub mod survey;
 mod utm;
 pub mod validate;

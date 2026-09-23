@@ -1,0 +1,37 @@
+# Modify Alt: modifyAltToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:4921). Every row's
+# altitude changes by what is typed: "20" adds twenty, "5.5" five and a half. (The "*2"
+# form is unit-tested: this harness word-splits its lines unquoted, so a star would be globbed.)
+
+screen plan
+window 1600x1200
+settle 4
+
+click map@0.45x0.40
+click map@0.60x0.55
+expect mission.last.alt 50
+
+click map@0.30x0.70:right
+click menu-modifyAlt
+expect plan.prompt Alt Change
+expect plan.prompt.value 0
+key ctrl+u
+type 20
+key Return
+expect mission.last.alt 70
+
+click map@0.30x0.70:right
+click menu-modifyAlt
+key ctrl+u
+type 5.5
+key Return
+expect mission.last.alt 75.5
+
+# Text float.Parse refuses changes nothing.
+click map@0.30x0.70:right
+click menu-modifyAlt
+key ctrl+u
+type up
+key Return
+expect plan.prompt Error
+expect plan.prompt.text Invalid number entered
+expect mission.last.alt 75.5

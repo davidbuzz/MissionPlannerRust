@@ -1,0 +1,29 @@
+# Jump > WP #: jumpwPToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:4111). Asks "Jump to WP
+# no?", offering 1, then the repeat count, and appends a DO_JUMP (177) with both.
+
+screen plan
+window 1600x1200
+settle 4
+
+click map@0.45x0.40
+click map@0.60x0.55
+
+click map@0.30x0.70:right
+click menu-jump
+click menu-jumpwP
+expect plan.prompt WP No
+expect plan.prompt.text Jump to WP no?
+expect plan.prompt.value 1
+key ctrl+u
+type 2
+key Return
+expect plan.prompt Jump repeat
+expect plan.prompt.value 5
+key ctrl+u
+type 3
+key Return
+expect plan.prompt none
+expect mission.items 3
+expect mission.last.command 177
+expect mission.last.p1 2
+expect mission.last.p2 3

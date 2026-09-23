@@ -1,0 +1,29 @@
+# Loiter > Time: loitertimeToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:4776). Asks "Loiter
+# Time", offering 5, and appends a LOITER_TIME (19) at the click with the answer in Param1.
+
+screen plan
+window 1600x1200
+settle 4
+
+click map@0.45x0.40:right
+click menu-loiter
+click menu-loitertime
+expect plan.prompt Loiter Time
+expect plan.prompt.text Loiter Time
+expect plan.prompt.value 5
+key ctrl+u
+type 12
+key Return
+expect plan.prompt none
+expect mission.items 1
+expect mission.last.command 19
+expect mission.last.p1 12
+expect mission.last.position true
+
+# Cancel is the handler's return: nothing more is added.
+click map@0.55x0.45:right
+click menu-loiter
+click menu-loitertime
+key Escape
+expect plan.prompt none
+expect mission.items 1

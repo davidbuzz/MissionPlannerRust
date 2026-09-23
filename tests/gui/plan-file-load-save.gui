@@ -1,0 +1,31 @@
+# File Load/Save > Save WP File and Load WP File: saveWPFileToolStripMenuItem_Click and
+# loadWPFileToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:6181, 4738), which are the
+# planning screen's own Save File and Load File. The file read back starts with a home record,
+# so the mission it loads says so.
+
+env MP_PLAN_DIR $WORK
+
+screen plan
+window 1600x1200
+settle 4
+
+click map@0.45x0.40
+click map@0.60x0.55
+expect mission.items 2
+
+click map@0.30x0.70:right
+click menu-fileLoadSave
+expect plan.menu.submenu menu-fileLoadSave
+click menu-saveWPFile
+expect status ~ saved 2 items
+
+click map@0.30x0.70:right
+click menu-clearMission
+expect mission.items 0
+
+click map@0.30x0.70:right
+click menu-fileLoadSave
+click menu-loadWPFile
+expect status ~ loaded 2 items
+expect mission.items 2
+expect mission.home true

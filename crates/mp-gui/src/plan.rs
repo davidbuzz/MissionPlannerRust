@@ -17,6 +17,7 @@ use mp_units::LatLon;
 
 use crate::MissionPlanner;
 use crate::telemetry::TelemetryView;
+use crate::textfield::TextField;
 use crate::ui::{action, panel, progress, theme};
 
 /// `MAV_CMD_NAV_WAYPOINT`, the command a click on the map creates.
@@ -237,13 +238,13 @@ impl DrawMode {
         }
     }
 
-    /// What a right-click does in this mode, said plainly.
+    /// What a click does in this mode, said plainly.
     pub const fn hint(self) -> &'static str {
         match self {
-            Self::Waypoints => "right-click the map to add a waypoint",
-            Self::Area => "right-click the map to place the survey area's corners",
-            Self::Fence => "right-click the map to place the fence's corners",
-            Self::Rally => "right-click the map to place a rally point",
+            Self::Waypoints => "click the map to add a waypoint; right-click for the menu",
+            Self::Area => "click the map to place the survey area's corners",
+            Self::Fence => "click the map to place the fence's corners",
+            Self::Rally => "click the map to place a rally point",
         }
     }
 }
@@ -272,6 +273,13 @@ pub struct Plan {
     fence_error: Option<String>,
     /// Why the last survey could not be generated, if it could not.
     survey_error: Option<String>,
+    /// Whether item 0 is the home record, as it is in a mission read from a vehicle or a file.
+    ///
+    /// Mission Planner keeps home out of its `Commands` grid, so every map-menu edit that counts
+    /// rows - insert after waypoint n, reverse, clear - counts from the item after it. A plan
+    /// drawn here from nothing has no home record: its first item is the first click, and so the
+    /// first row. See `mp_mission::rows`.
+    home_first: bool,
 }
 
 /// Where the plan on screen came from.
@@ -331,6 +339,8 @@ impl Plan {
 
     /// Replaces the plan with what the vehicle reported.
     pub fn adopt_from_vehicle(&mut self, items: Vec<MissionItem>) {
+        // A vehicle's list starts with home: `getHomePosition` is item 0 in every download.
+        self.home_first = !items.is_empty();
         self.items = items;
         self.origin = Origin::Vehicle;
         self.selected = None;
@@ -338,6 +348,8 @@ impl Plan {
 
     /// Replaces the plan with the contents of a file.
     pub fn adopt_from_file(&mut self, name: impl Into<String>, items: Vec<MissionItem>) {
+        // `read_waypoints` inserts a blank home when a file lacks one, so a file always has it.
+        self.home_first = !items.is_empty();
         self.items = items;
         self.origin = Origin::File(name.into());
         self.selected = None;
@@ -348,6 +360,7 @@ impl Plan {
     /// Sequence numbers are reassigned from scratch rather than incremented, because a mission
     /// with a gap in its sequence is rejected by the vehicle at upload time - a failure that
     /// happens minutes after the mistake, with no indication of which edit caused it.
+    #[cfg(test)]
     pub fn add_waypoint(&mut self, position: LatLon, altitude: f64) {
         self.add_waypoint_in(position, altitude, AltitudeFrame::Relative);
     }
@@ -395,6 +408,9 @@ impl Plan {
 
     /// Removes an item.
     pub fn remove(&mut self, seq: u16) {
+        if seq == 0 {
+            self.home_first = false;
+        }
         self.items.retain(|item| item.seq != seq);
         self.renumber();
         self.origin = Origin::Edited;
@@ -420,6 +436,9 @@ impl Plan {
         };
         if target >= self.items.len() {
             return;
+        }
+        if index == 0 || target == 0 {
+            self.home_first = false;
         }
         self.items.swap(index, target);
         self.renumber();
@@ -492,6 +511,7 @@ impl Plan {
     /// Discards everything, including the survey area and the fence.
     pub fn clear(&mut self) {
         self.items.clear();
+        self.home_first = false;
         self.origin = Origin::Empty;
         self.selected = None;
         self.polygon.clear();
@@ -745,6 +765,7 @@ impl Plan {
                     })
                     .collect();
                 self.renumber();
+                self.home_first = false;
                 self.origin = Origin::Edited;
                 self.selected = None;
                 self.survey_error = None;
@@ -755,8 +776,175 @@ impl Plan {
 
     /// Renumbers items 0..n so the sequence has no gaps.
     fn renumber(&mut self) {
-        for (index, item) in self.items.iter_mut().enumerate() {
-            item.seq = u16::try_from(index).unwrap_or(u16::MAX);
+        mp_mission::rows::renumber(&mut self.items);
+    }
+
+    /// Whether item 0 is the home record rather than the first row.
+    #[must_use]
+    pub const fn home_first(&self) -> bool {
+        self.home_first
+    }
+
+    /// Where the C#'s `Commands` rows start in the list: after home, when there is one.
+    #[must_use]
+    pub fn first_row(&self) -> usize {
+        usize::from(self.home_first && !self.items.is_empty())
+    }
+
+    /// The altitude a new item gets: the stand-in for `TXT_DefaultAlt`.
+    ///
+    /// Mission Planner takes it from a box on the planning screen (`FlightPlanner.cs:6873`), which
+    /// this screen does not have. A new item copies the last item that has a position, which is
+    /// what an operator gets from that box anyway - set once, inherited by everything after - and
+    /// falls back to [`DEFAULT_ALTITUDE`]. Items without a position are skipped because their
+    /// altitude field is zero or means something else, and the C# never hands out zero:
+    /// `if (ans == 0) cell.Value = 50;` (`FlightPlanner.cs:1197`).
+    #[must_use]
+    pub fn default_altitude(&self) -> f64 {
+        self.items
+            .iter()
+            .rev()
+            .find(|item| matches!(item.position(), Ok(Some(_))))
+            .map_or(DEFAULT_ALTITUDE, |item| item.z)
+    }
+
+    /// `Commands.Rows.Add()` and the handler filling the new row: an item at the end.
+    pub fn append(&mut self, item: MissionItem) {
+        self.items.push(item);
+        self.renumber();
+        self.origin = Origin::Edited;
+    }
+
+    /// Insert Wp and Insert Spline WP: an item after the waypoint numbered `wpno`, or the C#'s
+    /// refusal if it would throw on the number. The new row becomes the selected one, as
+    /// `selectedrow = int.Parse(wpno)` makes it.
+    /// `// C#: GCSViews/FlightPlanner.cs:4070-4091`
+    pub fn insert_after(&mut self, wpno: &str, item: MissionItem) -> Result<u16, ()> {
+        let index =
+            mp_mission::rows::insert_index(self.items.len(), self.first_row(), wpno).ok_or(())?;
+        self.items.insert(index, item);
+        self.renumber();
+        self.origin = Origin::Edited;
+        let seq = u16::try_from(index).unwrap_or(u16::MAX);
+        self.selected = Some(seq);
+        Ok(seq)
+    }
+
+    /// The number Insert Wp offers, `(selectedrow + 1)`: straight after the selected item.
+    #[must_use]
+    pub fn insert_offer(&self) -> usize {
+        mp_mission::rows::insert_offer(
+            self.items.len(),
+            self.first_row(),
+            self.selected.map(usize::from),
+        )
+    }
+
+    /// Delete WP on the marker under the cursor. Home is not a row, so `Commands.Rows.RemoveAt`
+    /// is never reached for it, and it stays.
+    /// `// C#: GCSViews/FlightPlanner.cs:3118-3135`
+    pub fn delete_marker(&mut self, seq: u16) -> bool {
+        if self.home_first && seq == 0 {
+            return false;
+        }
+        if !self.items.iter().any(|item| item.seq == seq) {
+            return false;
+        }
+        self.remove(seq);
+        true
+    }
+
+    /// Clear Mission: every row, and home stays.
+    /// `// C#: GCSViews/FlightPlanner.cs:2064-2082`
+    pub fn clear_mission(&mut self) {
+        let first_row = self.first_row();
+        mp_mission::rows::clear(&mut self.items, first_row);
+        self.selected = None;
+        self.origin = Origin::Edited;
+    }
+
+    /// Reverse WPs: the rows turned round, home first still.
+    /// `// C#: GCSViews/FlightPlanner.cs:5840-5858`
+    pub fn reverse_waypoints(&mut self) {
+        let first_row = self.first_row();
+        mp_mission::rows::reverse(&mut self.items, first_row);
+        self.renumber();
+        self.selected = None;
+        self.origin = Origin::Edited;
+    }
+
+    /// Modify Alt: every row's altitude times a factor plus a change. `"*2"` doubles, `"20"`
+    /// adds twenty; anything `float.Parse` refuses is refused.
+    /// `// C#: GCSViews/FlightPlanner.cs:4921-4952`
+    pub fn modify_altitudes(&mut self, altdif: &str) -> Result<(), ()> {
+        let (multiplier, change) = if altdif.contains('*') {
+            (
+                altdif
+                    .replace('*', " ")
+                    .trim()
+                    .parse::<f32>()
+                    .map_err(|_| ())?,
+                0.0,
+            )
+        } else {
+            (1.0, altdif.trim().parse::<f32>().map_err(|_| ())?)
+        };
+        let first_row = self.first_row();
+        for item in self.items.iter_mut().skip(first_row) {
+            // The C# does this in float: `float.Parse(cell) * multiplyer + altchange`.
+            #[allow(clippy::cast_possible_truncation)] // the C#'s float arithmetic, on purpose
+            let altitude = item.z as f32;
+            item.z = f64::from(altitude * multiplier + change);
+        }
+        self.origin = Origin::Edited;
+        Ok(())
+    }
+
+    /// Polygon > Draw a Polygon: the first choice starts drawing (`polygongridmode = true`), and
+    /// each one after adds the corner under the menu.
+    /// `// C#: GCSViews/FlightPlanner.cs:1731-1756`
+    pub fn draw_polygon(&mut self, position: LatLon) {
+        if self.draw_mode != DrawMode::Area {
+            self.draw_mode = DrawMode::Area;
+            return;
+        }
+        self.add_area_vertex(position);
+    }
+
+    /// Polygon > Clear Polygon: the corners go, and drawing stops.
+    /// `// C#: GCSViews/FlightPlanner.cs:2084-2094`
+    pub fn clear_polygon(&mut self) {
+        if self.draw_mode == DrawMode::Area {
+            self.draw_mode = DrawMode::Waypoints;
+        }
+        self.clear_area();
+    }
+
+    /// Polygon > From Current Waypoints: the survey polygon becomes the `WAYPOINT` rows. Nothing
+    /// happens without rows, and whether to clear the mission afterwards is the operator's
+    /// question to answer - the caller asks it.
+    /// `// C#: GCSViews/FlightPlanner.cs:3619-3637`
+    pub fn polygon_from_waypoints(&mut self) -> bool {
+        let first_row = self.first_row();
+        if self.items.len() <= first_row {
+            return false;
+        }
+        self.polygon = mp_mission::rows::waypoint_positions(&self.items, first_row);
+        self.survey_error = None;
+        true
+    }
+
+    /// `AddWPToMap`: what a click on the map adds, by what is being drawn.
+    ///
+    /// Drawing a polygon adds a corner; the geofence and rally modes are `cmb_missiontype` set to
+    /// FENCE and RALLY; otherwise a waypoint, in the screen's altitude frame.
+    /// `// C#: GCSViews/FlightPlanner.cs:558-600`
+    pub fn add_wp_to_map(&mut self, position: LatLon, altitude: f64, frame: AltitudeFrame) {
+        match self.draw_mode {
+            DrawMode::Waypoints => self.add_waypoint_in(position, altitude, frame),
+            DrawMode::Area => self.add_area_vertex(position),
+            DrawMode::Fence => self.add_fence_vertex(position),
+            DrawMode::Rally => self.add_rally_point(position),
         }
     }
 }
@@ -1182,13 +1370,13 @@ fn param_stepper(
         }))
 }
 
-/// Everything drawn on the map: which mode a right-click is in, and the controls for that mode.
+/// Everything drawn on the map: which mode a click is in, and the controls for that mode.
 ///
 /// One panel rather than four. The survey area, the geofence and the rally points are all placed
-/// by right-clicking, so the question is always "what does a click do now" - and four panels each
+/// by clicking, so the question is always "what does a click do now" - and four panels each
 /// answering it separately made a sidebar that had to be scrolled to find out.
 pub struct DrawState<'a> {
-    /// What a right-click does.
+    /// What a click does.
     pub mode: DrawMode,
     /// Survey area corners placed.
     pub area_vertices: usize,
@@ -1885,6 +2073,1563 @@ pub fn actions_panel(
                 progress(status.fraction, colour)
             })),
     )
+}
+
+// ---------------------------------------------------------------------------------------------
+// The map's right-click menu: `contextMenuStrip1`, and the `InputBox` prompts its items open.
+// ---------------------------------------------------------------------------------------------
+
+/// What choosing a menu entry does here.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MenuAction {
+    /// `deleteWPToolStripMenuItem_Click`.
+    DeleteWp,
+    /// `insertWpToolStripMenuItem_Click`.
+    InsertWp,
+    /// `currentPositionToolStripMenuItem_Click`.
+    InsertAtCurrentPosition,
+    /// `insertSplineWPToolStripMenuItem_Click`.
+    InsertSplineWp,
+    /// `loiterForeverToolStripMenuItem_Click`.
+    LoiterForever,
+    /// `loitertimeToolStripMenuItem_Click`.
+    LoiterTime,
+    /// `loitercirclesToolStripMenuItem_Click`.
+    LoiterCircles,
+    /// `jumpstartToolStripMenuItem_Click`.
+    JumpStart,
+    /// `jumpwPToolStripMenuItem_Click`.
+    JumpWp,
+    /// `rTLToolStripMenuItem_Click`.
+    Rtl,
+    /// `landToolStripMenuItem_Click`.
+    Land,
+    /// `takeoffToolStripMenuItem_Click`.
+    Takeoff,
+    /// `setROIToolStripMenuItem_Click`.
+    SetRoi,
+    /// `clearMissionToolStripMenuItem_Click`.
+    ClearMission,
+    /// `addPolygonPointToolStripMenuItem_Click`.
+    DrawPolygon,
+    /// `clearPolygonToolStripMenuItem_Click`.
+    ClearPolygon,
+    /// `fromCurrentWaypointsMenuItem_Click`.
+    PolygonFromWaypoints,
+    /// `ContextMeasure_Click`.
+    MeasureDistance,
+    /// `reverseWPsToolStripMenuItem_Click`.
+    ReverseWps,
+    /// `loadWPFileToolStripMenuItem_Click`, which is `BUT_loadwpfile_Click`.
+    LoadWpFile,
+    /// `saveWPFileToolStripMenuItem_Click`, which is `SaveFile_Click`.
+    SaveWpFile,
+    /// `modifyAltToolStripMenuItem_Click`.
+    ModifyAlt,
+}
+
+/// One entry of `contextMenuStrip1` or of one of its drop-downs.
+#[derive(Debug, Clone, Copy)]
+pub struct MenuEntry {
+    /// The id a test script clicks it by: `menu-` and the Designer's name without
+    /// `ToolStripMenuItem`. Empty for the separator.
+    pub id: &'static str,
+    /// The control's name in `FlightPlanner.Designer.cs`. Read by the coverage tests, which hold
+    /// the menu to the Designer by it.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub control: &'static str,
+    /// Its `Text` in `FlightPlanner.resx`. Empty for the separator.
+    pub text: &'static str,
+    /// What choosing it does. `None` on an entry not ported here, which is drawn dimmed and
+    /// inert so the menu keeps the C#'s shape, and on an entry that only opens a drop-down.
+    pub action: Option<MenuAction>,
+    /// Its drop-down, in the order the Designer adds them.
+    pub children: &'static [MenuEntry],
+}
+
+impl MenuEntry {
+    /// Whether this is `toolStripSeparator1`.
+    #[must_use]
+    pub const fn is_separator(&self) -> bool {
+        self.text.is_empty()
+    }
+
+    /// Whether choosing it does anything here.
+    #[must_use]
+    pub const fn is_live(&self) -> bool {
+        self.action.is_some() || !self.children.is_empty()
+    }
+}
+
+const fn item(
+    id: &'static str,
+    control: &'static str,
+    text: &'static str,
+    action: Option<MenuAction>,
+) -> MenuEntry {
+    MenuEntry {
+        id,
+        control,
+        text,
+        action,
+        children: &[],
+    }
+}
+
+const fn drop_down(
+    id: &'static str,
+    control: &'static str,
+    text: &'static str,
+    action: Option<MenuAction>,
+    children: &'static [MenuEntry],
+) -> MenuEntry {
+    MenuEntry {
+        id,
+        control,
+        text,
+        action,
+        children,
+    }
+}
+
+/// `contextMenuStrip1`, in the order `contextMenuStrip1.Items.AddRange` adds it, each drop-down in
+/// its own `DropDownItems.AddRange` order, with the `.resx` text. A test holds all three to the C#
+/// tree when it is present.
+/// `// C#: GCSViews/FlightPlanner.Designer.cs:899-922`
+pub const MAP_MENU: &[MenuEntry] = {
+    use MenuAction::{
+        ClearMission, ClearPolygon, DeleteWp, DrawPolygon, InsertAtCurrentPosition, InsertSplineWp,
+        InsertWp, JumpStart, JumpWp, Land, LoadWpFile, LoiterCircles, LoiterForever, LoiterTime,
+        MeasureDistance, ModifyAlt, PolygonFromWaypoints, ReverseWps, Rtl, SaveWpFile, SetRoi,
+        Takeoff,
+    };
+    &[
+        item(
+            "menu-deleteWP",
+            "deleteWPToolStripMenuItem",
+            "Delete WP",
+            Some(DeleteWp),
+        ),
+        // `// C#: GCSViews/FlightPlanner.Designer.cs:937-938`
+        drop_down(
+            "menu-insertWp",
+            "insertWpToolStripMenuItem",
+            "Insert Wp",
+            Some(InsertWp),
+            &[item(
+                "menu-currentPosition",
+                "currentPositionToolStripMenuItem",
+                "At Current Position",
+                Some(InsertAtCurrentPosition),
+            )],
+        ),
+        item(
+            "menu-insertSplineWP",
+            "insertSplineWPToolStripMenuItem",
+            "Insert Spline WP",
+            Some(InsertSplineWp),
+        ),
+        // `// C#: GCSViews/FlightPlanner.Designer.cs:957-960`
+        drop_down(
+            "menu-loiter",
+            "loiterToolStripMenuItem",
+            "Loiter",
+            None,
+            &[
+                item(
+                    "menu-loiterForever",
+                    "loiterForeverToolStripMenuItem",
+                    "Forever",
+                    Some(LoiterForever),
+                ),
+                item(
+                    "menu-loitertime",
+                    "loitertimeToolStripMenuItem",
+                    "Time",
+                    Some(LoiterTime),
+                ),
+                item(
+                    "menu-loitercircles",
+                    "loitercirclesToolStripMenuItem",
+                    "Circles",
+                    Some(LoiterCircles),
+                ),
+            ],
+        ),
+        // `// C#: GCSViews/FlightPlanner.Designer.cs:984-986`
+        drop_down(
+            "menu-jump",
+            "jumpToolStripMenuItem",
+            "Jump",
+            None,
+            &[
+                item(
+                    "menu-jumpstart",
+                    "jumpstartToolStripMenuItem",
+                    "Start",
+                    Some(JumpStart),
+                ),
+                item(
+                    "menu-jumpwP",
+                    "jumpwPToolStripMenuItem",
+                    "WP #",
+                    Some(JumpWp),
+                ),
+            ],
+        ),
+        item("menu-rTL", "rTLToolStripMenuItem", "RTL", Some(Rtl)),
+        item("menu-land", "landToolStripMenuItem", "Land", Some(Land)),
+        item(
+            "menu-takeoff",
+            "takeoffToolStripMenuItem",
+            "Takeoff",
+            Some(Takeoff),
+        ),
+        item(
+            "menu-setROI",
+            "setROIToolStripMenuItem",
+            "DO_SET_ROI",
+            Some(SetRoi),
+        ),
+        item(
+            "menu-clearMission",
+            "clearMissionToolStripMenuItem",
+            "Clear Mission",
+            Some(ClearMission),
+        ),
+        item("", "toolStripSeparator1", "", None),
+        // `// C#: GCSViews/FlightPlanner.Designer.cs:1039-1047`
+        drop_down(
+            "menu-polygon",
+            "polygonToolStripMenuItem",
+            "Polygon",
+            None,
+            &[
+                item(
+                    "menu-addPolygonPoint2",
+                    "addPolygonPointToolStripMenuItem2",
+                    "Draw a Polygon",
+                    Some(DrawPolygon),
+                ),
+                item(
+                    "menu-clearPolygon2",
+                    "clearPolygonToolStripMenuItem2",
+                    "Clear Polygon",
+                    Some(ClearPolygon),
+                ),
+                item(
+                    "menu-savePolygon2",
+                    "savePolygonToolStripMenuItem2",
+                    "Save Polygon",
+                    None,
+                ),
+                item(
+                    "menu-loadPolygon2",
+                    "loadPolygonToolStripMenuItem2",
+                    "Load Polygon",
+                    None,
+                ),
+                item(
+                    "menu-fromSHP2",
+                    "fromSHPToolStripMenuItem2",
+                    "From SHP",
+                    None,
+                ),
+                item(
+                    "menu-fromCurrentWaypoints",
+                    "fromCurrentWaypointsToolStripMenuItem",
+                    "From Current Waypoints",
+                    Some(PolygonFromWaypoints),
+                ),
+                item(
+                    "menu-offsetPolygon2",
+                    "offsetPolygonToolStripMenuItem2",
+                    "Offset Polygon",
+                    None,
+                ),
+                item("menu-area2", "areaToolStripMenuItem2", "Area", None),
+            ],
+        ),
+        // `// C#: GCSViews/FlightPlanner.Designer.cs:1101-1107`
+        drop_down(
+            "menu-geoFence",
+            "geoFenceToolStripMenuItem",
+            "Geo-Fence",
+            None,
+            &[
+                item(
+                    "menu-GeoFenceupload",
+                    "GeoFenceuploadToolStripMenuItem",
+                    "Upload",
+                    None,
+                ),
+                item(
+                    "menu-GeoFencedownload",
+                    "GeoFencedownloadToolStripMenuItem",
+                    "Download",
+                    None,
+                ),
+                item(
+                    "menu-setReturnLocation",
+                    "setReturnLocationToolStripMenuItem",
+                    "Set Return Location",
+                    None,
+                ),
+                item(
+                    "menu-loadFromFile",
+                    "loadFromFileToolStripMenuItem",
+                    "Load from File",
+                    None,
+                ),
+                item(
+                    "menu-saveToFile",
+                    "saveToFileToolStripMenuItem",
+                    "Save to File",
+                    None,
+                ),
+                item("menu-clear", "clearToolStripMenuItem", "Clear", None),
+            ],
+        ),
+        // `// C#: GCSViews/FlightPlanner.Designer.cs:1149-1155`
+        drop_down(
+            "menu-rallyPoints",
+            "rallyPointsToolStripMenuItem",
+            "Rally Points",
+            None,
+            &[
+                item(
+                    "menu-setRallyPoint",
+                    "setRallyPointToolStripMenuItem",
+                    "Set Rally Point",
+                    None,
+                ),
+                item(
+                    "menu-getRallyPoints",
+                    "getRallyPointsToolStripMenuItem",
+                    "Download",
+                    None,
+                ),
+                item(
+                    "menu-saveRallyPoints",
+                    "saveRallyPointsToolStripMenuItem",
+                    "Upload",
+                    None,
+                ),
+                item(
+                    "menu-clearRallyPoints",
+                    "clearRallyPointsToolStripMenuItem",
+                    "Clear Rally Points",
+                    None,
+                ),
+                item(
+                    "menu-saveToFile1",
+                    "saveToFileToolStripMenuItem1",
+                    "Save Rally to File",
+                    None,
+                ),
+                item(
+                    "menu-loadFromFile1",
+                    "loadFromFileToolStripMenuItem1",
+                    "Load Rally from File",
+                    None,
+                ),
+            ],
+        ),
+        // `// C#: GCSViews/FlightPlanner.Designer.cs:1197-1203`
+        drop_down(
+            "menu-autoWP",
+            "autoWPToolStripMenuItem",
+            "Auto WP",
+            None,
+            &[
+                item(
+                    "menu-createWpCircle",
+                    "createWpCircleToolStripMenuItem",
+                    "Create Wp Circle",
+                    None,
+                ),
+                item(
+                    "menu-createSplineCircle",
+                    "createSplineCircleToolStripMenuItem",
+                    "Create Spline Circle",
+                    None,
+                ),
+                item("menu-area1", "areaToolStripMenuItem1", "Area", None),
+                item("menu-text", "textToolStripMenuItem", "Text", None),
+                item(
+                    "menu-createCircleSurvey",
+                    "createCircleSurveyToolStripMenuItem",
+                    "Create Circle Survey",
+                    None,
+                ),
+                item(
+                    "menu-surveyGrid",
+                    "surveyGridToolStripMenuItem",
+                    "Survey (Grid)",
+                    None,
+                ),
+            ],
+        ),
+        // `// C#: GCSViews/FlightPlanner.Designer.cs:1245-1254`
+        drop_down(
+            "menu-mapTool",
+            "mapToolToolStripMenuItem",
+            "Map Tool",
+            None,
+            &[
+                item(
+                    "menu-ContextMeasure",
+                    "ContextMeasure",
+                    "Measure Distance",
+                    Some(MeasureDistance),
+                ),
+                item(
+                    "menu-rotateMap",
+                    "rotateMapToolStripMenuItem",
+                    "Rotate Map",
+                    None,
+                ),
+                item("menu-zoomTo", "zoomToToolStripMenuItem", "Zoom To", None),
+                item(
+                    "menu-prefetch",
+                    "prefetchToolStripMenuItem",
+                    "Prefetch",
+                    None,
+                ),
+                item(
+                    "menu-prefetchWPPath",
+                    "prefetchWPPathToolStripMenuItem",
+                    "Prefetch WP Path",
+                    None,
+                ),
+                item(
+                    "menu-kMLOverlay",
+                    "kMLOverlayToolStripMenuItem",
+                    "KML Overlay",
+                    None,
+                ),
+                item(
+                    "menu-elevationGraph",
+                    "elevationGraphToolStripMenuItem",
+                    "Elevation Graph",
+                    None,
+                ),
+                item(
+                    "menu-reverseWPs",
+                    "reverseWPsToolStripMenuItem",
+                    "Reverse WPs",
+                    Some(ReverseWps),
+                ),
+                item(
+                    "menu-gDALOpacity",
+                    "gDALOpacityToolStripMenuItem",
+                    "GDAL Opacity",
+                    None,
+                ),
+            ],
+        ),
+        // `// C#: GCSViews/FlightPlanner.Designer.cs:1308-1313`
+        drop_down(
+            "menu-fileLoadSave",
+            "fileLoadSaveToolStripMenuItem",
+            "File Load/Save",
+            None,
+            &[
+                item(
+                    "menu-loadWPFile",
+                    "loadWPFileToolStripMenuItem",
+                    "Load WP File",
+                    Some(LoadWpFile),
+                ),
+                item(
+                    "menu-loadAndAppend",
+                    "loadAndAppendToolStripMenuItem",
+                    "Load and Append",
+                    None,
+                ),
+                item(
+                    "menu-saveWPFile",
+                    "saveWPFileToolStripMenuItem",
+                    "Save WP File",
+                    Some(SaveWpFile),
+                ),
+                item(
+                    "menu-loadKMLFile",
+                    "loadKMLFileToolStripMenuItem",
+                    "Load KML File",
+                    None,
+                ),
+                item(
+                    "menu-loadSHPFile",
+                    "loadSHPFileToolStripMenuItem",
+                    "Load SHP File",
+                    None,
+                ),
+            ],
+        ),
+        // `// C#: GCSViews/FlightPlanner.Designer.cs:1349-1352`
+        drop_down(
+            "menu-pOI",
+            "pOIToolStripMenuItem",
+            "POI",
+            None,
+            &[
+                item("menu-poiadd", "poiaddToolStripMenuItem", "Add", None),
+                item(
+                    "menu-poidelete",
+                    "poideleteToolStripMenuItem",
+                    "Delete",
+                    None,
+                ),
+                item("menu-poiedit", "poieditToolStripMenuItem", "Edit", None),
+            ],
+        ),
+        item(
+            "menu-trackerHome",
+            "trackerHomeToolStripMenuItem",
+            "Tracker Home",
+            None,
+        ),
+        item(
+            "menu-modifyAlt",
+            "modifyAltToolStripMenuItem",
+            "Modify Alt",
+            Some(ModifyAlt),
+        ),
+        item(
+            "menu-enterUTMCoord",
+            "enterUTMCoordToolStripMenuItem",
+            "Enter UTM Coord",
+            None,
+        ),
+        item(
+            "menu-switchDocking",
+            "switchDockingToolStripMenuItem",
+            "Switch Docking",
+            None,
+        ),
+        item(
+            "menu-setHomeHere",
+            "setHomeHereToolStripMenuItem",
+            "Set Home Here",
+            None,
+        ),
+    ]
+};
+
+/// Every entry, drop-downs included, in menu order.
+#[cfg(test)]
+pub fn menu_entries() -> impl Iterator<Item = &'static MenuEntry> {
+    MAP_MENU
+        .iter()
+        .flat_map(|entry| std::iter::once(entry).chain(entry.children.iter()))
+}
+
+/// The menu while it is open.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OpenMenu {
+    /// Where the right button came up, in window coordinates: where the menu is drawn.
+    pub at: (f32, f32),
+    /// The map position there. The C# reads `MouseDownStart` in some handlers and `MouseDownEnd`
+    /// in others - where the right button went down and where it came up - and a right click
+    /// that did not drag makes them the same point, so one position stands for both.
+    pub position: LatLon,
+    /// The waypoint under the cursor when the menu opened: `CurentRectMarker`, which is what
+    /// decides whether Delete WP is enabled (`FlightPlanner.cs:2669-2677`).
+    pub marker: Option<u16>,
+    /// Which top-level entry's drop-down is showing, by its index in [`MAP_MENU`].
+    pub submenu: Option<usize>,
+}
+
+/// What an `InputBox` or `CustomMessageBox` the menu opened is for.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PromptKind {
+    /// "Insert WP after wp#", for a waypoint or a spline waypoint at the menu's position.
+    InsertWp {
+        /// Insert Spline WP rather than Insert Wp.
+        spline: bool,
+        /// Where the menu was opened.
+        position: LatLon,
+    },
+    /// "Loiter Time".
+    LoiterTime {
+        /// Where the menu was opened.
+        position: LatLon,
+    },
+    /// "Loiter Turns".
+    LoiterTurns {
+        /// Where the menu was opened.
+        position: LatLon,
+    },
+    /// Jump > Start's "Number of times to Repeat".
+    JumpStartRepeat,
+    /// Jump > WP #'s "Jump to WP no?".
+    JumpWpNumber,
+    /// Jump > WP #'s "Number of times to Repeat", once the target is known.
+    JumpWpRepeat {
+        /// The item to jump to.
+        target: f64,
+    },
+    /// Takeoff's "Please enter your takeoff altitude in m".
+    TakeoffAltitude {
+        /// Whether a pitch is asked for next.
+        ask_pitch: bool,
+    },
+    /// Takeoff's "Please enter your takeoff pitch", on ArduPlane.
+    TakeoffPitch {
+        /// The altitude already given.
+        altitude: f64,
+    },
+    /// Modify Alt's change.
+    ModifyAlt,
+    /// From Current Waypoints' "Clear current waypoints?", Yes or No.
+    ClearWaypoints,
+    /// A message with an OK.
+    Message,
+}
+
+/// A dialog: an `InputBox` with its field, a Yes/No question, or a message.
+///
+/// Drawn over the screen and taking the keyboard, as the C#'s modal forms do. Enter is OK and
+/// Escape is Cancel, as `InputBox`'s accept and cancel buttons are.
+#[derive(Debug)]
+pub struct Prompt {
+    /// The window caption.
+    pub title: &'static str,
+    /// The prompt text.
+    pub text: String,
+    /// The value being typed, for an `InputBox`; `None` for a question or a message.
+    pub field: Option<TextField>,
+    /// What OK does.
+    pub kind: PromptKind,
+}
+
+impl Prompt {
+    /// An `InputBox.Show(title, text, ref value)`.
+    fn input(title: &'static str, text: &str, value: impl Into<String>, kind: PromptKind) -> Self {
+        let mut field = TextField::new("");
+        field.set(value);
+        Self {
+            title,
+            text: text.to_owned(),
+            field: Some(field),
+            kind,
+        }
+    }
+
+    /// A `CustomMessageBox.Show(text, title)`.
+    fn message(title: &'static str, text: impl Into<String>) -> Self {
+        Self {
+            title,
+            text: text.into(),
+            field: None,
+            kind: PromptKind::Message,
+        }
+    }
+
+    /// What has been typed, or nothing.
+    #[must_use]
+    pub fn value(&self) -> &str {
+        self.field.as_ref().map_or("", TextField::value)
+    }
+
+    /// Whether this asks Yes or No.
+    #[must_use]
+    pub const fn is_question(&self) -> bool {
+        matches!(self.kind, PromptKind::ClearWaypoints)
+    }
+}
+
+/// `Strings.ERROR`.
+const ERROR: &str = "Error";
+/// `Strings.InvalidNumberEntered`, without the resource's trailing newline.
+const INVALID_NUMBER: &str = "Invalid number entered";
+
+/// What the menu needs to know that the plan does not.
+#[derive(Debug, Clone, Copy)]
+pub struct MenuContext {
+    /// `CMB_altmode`: the frame a new row gets.
+    pub frame: AltitudeFrame,
+    /// The vehicle's position and altitude above home, for Insert Wp > At Current Position.
+    pub vehicle: Option<(LatLon, f64)>,
+    /// Whether Takeoff asks for a pitch: on ArduPlane, unless `Q_OPTIONS` lacks bit 1.
+    pub takeoff_pitch: bool,
+}
+
+impl MenuContext {
+    /// Whether Takeoff asks for a pitch, from the vehicle's `MAV_TYPE` and parameters.
+    ///
+    /// `cs.firmware == Firmwares.ArduPlane` is the C#'s test, and `ArduPlane` is what it sets for
+    /// a fixed wing, a flapping wing and every VTOL type (`MAVLinkInterface.cs:6724-6735`). A
+    /// quadplane whose `Q_OPTIONS` lacks bit 1 skips the question.
+    /// `// C#: GCSViews/FlightPlanner.cs:6797-6813`
+    #[must_use]
+    pub fn asks_takeoff_pitch(mav_type: Option<u8>, parameters: &[(String, f64)]) -> bool {
+        let plane = matches!(mav_type, Some(1 | 16 | 19..=25));
+        if !plane {
+            return false;
+        }
+        match parameters.iter().find(|(name, _)| name == "Q_OPTIONS") {
+            #[allow(clippy::cast_possible_truncation)] // `(int)MAV.param["Q_OPTIONS"]`
+            Some((_, value)) => (*value as i64) & (1 << 1) != 0,
+            None => true,
+        }
+    }
+}
+
+/// The distance and bearing Measure Distance reports, in the C#'s words:
+/// `"Distance: " + FormatDistance(GetDistance(a, b), true) + " AZ: " + GetBearing(a, b)`.
+///
+/// `GetDistance` is GMap's `PureProjection.GetDistance`: a haversine on the projection's `Axis`,
+/// 6378137 m for Mercator, in kilometres; `FormatDistance(km, true)` in the default metres writes
+/// `(km * 1000).ToString("0.00 m")`. The bearing is `PureProjection.GetBearing` as `"0"`.
+/// `// C#: GCSViews/FlightPlanner.cs:2649-2655, 3505-3531; ExtLibs/GMap.NET.Core/GMap.NET/PureProjection.cs:436-472`
+#[must_use]
+pub fn measure_text(from: LatLon, to: LatLon) -> String {
+    let (lat1, lng1) = (from.latitude().to_radians(), from.longitude().to_radians());
+    let (lat2, lng2) = (to.latitude().to_radians(), to.longitude().to_radians());
+    let a = ((lat2 - lat1) / 2.0).sin().powi(2)
+        + lat1.cos() * lat2.cos() * ((lng2 - lng1) / 2.0).sin().powi(2);
+    let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
+    let kilometres = (6_378_137.0 / 1000.0) * c;
+    let bearing = from.bearing_to(to).0.0;
+    // .NET's custom numeric formats round half away from zero; `{:.2}` rounds half to even.
+    let metres = (kilometres * 1000.0 * 100.0).round() / 100.0;
+    format!("Distance: {metres:.2} m AZ: {:.0}", bearing.round())
+}
+
+/// The planning screen's menu and the dialogs it opens.
+#[derive(Debug, Default)]
+pub struct PlanMenus {
+    /// The menu, while it is open.
+    pub open: Option<OpenMenu>,
+    /// The dialog, while one is showing.
+    pub prompt: Option<Prompt>,
+    /// Measure Distance's first point, `startmeasure`, once chosen.
+    pub measure_from: Option<LatLon>,
+    /// Where the press that closed the menu went down. A click off an open menu closes it and
+    /// does nothing else, so the map must not take the same press as a click that adds a
+    /// waypoint.
+    dismissed_at: Option<(f32, f32)>,
+}
+
+impl PlanMenus {
+    /// Opens the menu where the right button came up. `contextMenuStrip1_Opening` runs here: the
+    /// marker under the cursor decides Delete WP.
+    pub fn open_at(&mut self, at: (f32, f32), position: LatLon, marker: Option<u16>) {
+        self.open = Some(OpenMenu {
+            at,
+            position,
+            marker,
+            submenu: None,
+        });
+        self.dismissed_at = None;
+    }
+
+    /// Closes the menu because a press landed somewhere else.
+    pub fn dismiss(&mut self, at: (f32, f32)) {
+        if self.open.take().is_some() {
+            self.dismissed_at = Some(at);
+        }
+    }
+
+    /// Whether a press on the map is the one that just closed the menu, which it then consumes.
+    pub fn swallows_press(&mut self, at: (f32, f32)) -> bool {
+        self.dismissed_at.take() == Some(at)
+    }
+
+    /// Whether Delete WP is enabled: only over a marker.
+    #[must_use]
+    pub fn delete_enabled(&self) -> bool {
+        self.open.is_some_and(|menu| menu.marker.is_some())
+    }
+
+    /// Shows a top-level entry's drop-down, or none.
+    pub fn show_submenu(&mut self, index: Option<usize>) {
+        if let Some(menu) = self.open.as_mut() {
+            menu.submenu = index;
+        }
+    }
+
+    fn ask(&mut self, prompt: Prompt) {
+        self.prompt = Some(prompt);
+    }
+
+    fn tell(&mut self, title: &'static str, text: impl Into<String>) {
+        self.prompt = Some(Prompt::message(title, text));
+    }
+
+    /// Chooses an entry: what its handler does, up to the first `InputBox` it shows.
+    ///
+    /// Choosing closes the menu, as clicking a `ToolStripMenuItem` does. Load and Save are the
+    /// caller's, because they are the screen's file handling rather than an edit.
+    pub fn choose(&mut self, plan: &mut Plan, action: MenuAction, context: &MenuContext) {
+        let Some(menu) = self.open.take() else {
+            return;
+        };
+        let position = menu.position;
+        let frame = context.frame.mav_frame();
+        let altitude = plan.default_altitude();
+        match action {
+            MenuAction::DeleteWp => {
+                if let Some(seq) = menu.marker {
+                    plan.delete_marker(seq);
+                }
+            }
+            MenuAction::InsertWp | MenuAction::InsertSplineWp => self.ask(Prompt::input(
+                "Insert WP",
+                "Insert WP after wp#",
+                plan.insert_offer().to_string(),
+                PromptKind::InsertWp {
+                    spline: action == MenuAction::InsertSplineWp,
+                    position,
+                },
+            )),
+            MenuAction::InsertAtCurrentPosition => {
+                // AddWPToMap(cs.lat, cs.lng, (int) cs.alt): an altitude of 0 takes the default.
+                // With no position the C# would place it at 0,0; that is refused here in the
+                // words zoomToVehicle uses for the same condition.
+                // `// C#: GCSViews/FlightPlanner.cs:3051-3054, 1195-1197`
+                let Some((at, vehicle_altitude)) = context.vehicle else {
+                    self.tell(ERROR, "Invalid Location");
+                    return;
+                };
+                let vehicle_altitude = vehicle_altitude.trunc();
+                let altitude = if vehicle_altitude == 0.0 {
+                    altitude
+                } else {
+                    vehicle_altitude
+                };
+                // Drawing a polygon, AddWPToMap adds a corner at MouseDownStart, the menu's
+                // position, not the vehicle's.
+                if plan.draw_mode() == DrawMode::Area {
+                    plan.add_area_vertex(position);
+                } else {
+                    plan.add_wp_to_map(at, altitude, context.frame);
+                }
+            }
+            MenuAction::LoiterForever => {
+                plan.append(mp_mission::commands::loiter_unlimited(
+                    position, altitude, frame,
+                ));
+            }
+            MenuAction::LoiterTime => self.ask(Prompt::input(
+                "Loiter Time",
+                "Loiter Time",
+                "5",
+                PromptKind::LoiterTime { position },
+            )),
+            MenuAction::LoiterCircles => self.ask(Prompt::input(
+                "Loiter Turns",
+                "Loiter Turns",
+                "3",
+                PromptKind::LoiterTurns { position },
+            )),
+            MenuAction::JumpStart => self.ask(Prompt::input(
+                "Jump repeat",
+                "Number of times to Repeat",
+                "5",
+                PromptKind::JumpStartRepeat,
+            )),
+            MenuAction::JumpWp => self.ask(Prompt::input(
+                "WP No",
+                "Jump to WP no?",
+                "1",
+                PromptKind::JumpWpNumber,
+            )),
+            MenuAction::Rtl => plan.append(mp_mission::commands::return_to_launch(frame)),
+            MenuAction::Land => plan.append(mp_mission::commands::land(position, frame)),
+            // `CurrentState.AltUnit == "m" ? "10" : "30"`; this application is metric.
+            MenuAction::Takeoff => self.ask(Prompt::input(
+                "Altitude",
+                "Please enter your takeoff altitude in m",
+                "10",
+                PromptKind::TakeoffAltitude {
+                    ask_pitch: context.takeoff_pitch,
+                },
+            )),
+            // `cmdParamNames.ContainsKey("DO_SET_ROI")` is true in all three of mavcmd.xml's
+            // vehicle sections, so the C#'s "not enabled in your firmware" never shows.
+            MenuAction::SetRoi => {
+                plan.append(mp_mission::commands::set_roi(position, altitude, frame));
+            }
+            MenuAction::ClearMission => plan.clear_mission(),
+            MenuAction::DrawPolygon => plan.draw_polygon(position),
+            MenuAction::ClearPolygon => plan.clear_polygon(),
+            MenuAction::PolygonFromWaypoints => {
+                if plan.polygon_from_waypoints() {
+                    self.ask(Prompt {
+                        title: "Confirm",
+                        text: "Clear current waypoints?".to_owned(),
+                        field: None,
+                        kind: PromptKind::ClearWaypoints,
+                    });
+                }
+            }
+            // The C# also drops a red marker at each end; the map here has no overlay for them.
+            MenuAction::MeasureDistance => match self.measure_from.take() {
+                None => {
+                    self.measure_from = Some(position);
+                    self.tell(
+                        "Measure Dist",
+                        "You can now pan/zoom around.\nClick this option again to get the distance.",
+                    );
+                }
+                Some(from) => self.tell("", measure_text(from, position)),
+            },
+            MenuAction::ReverseWps => plan.reverse_waypoints(),
+            MenuAction::ModifyAlt => self.ask(Prompt::input(
+                "Alt Change",
+                "Please enter the alitude change you require.\n(20 = up 20, *2 = up by alt * 2)",
+                "0",
+                PromptKind::ModifyAlt,
+            )),
+            MenuAction::LoadWpFile | MenuAction::SaveWpFile => {}
+        }
+    }
+
+    /// OK, or Yes: the rest of the handler, with what was typed.
+    ///
+    /// A value the C# would refuse is refused with its message. The loiter and jump handlers put
+    /// the typed text in the grid unchecked and fail later, at "Invalid number on row" when the
+    /// mission is written; an item here holds a number, so that text is refused as it is typed,
+    /// with `Strings.InvalidNumberEntered`.
+    pub fn submit(&mut self, plan: &mut Plan, context: &MenuContext) {
+        let Some(prompt) = self.prompt.take() else {
+            return;
+        };
+        let value = prompt.value().to_owned();
+        let frame = context.frame.mav_frame();
+        let altitude = plan.default_altitude();
+        let number = || {
+            value
+                .trim()
+                .parse::<f64>()
+                .ok()
+                .filter(|number| number.is_finite())
+        };
+        // `int.TryParse`, for the takeoff's two numbers.
+        let integer = || value.trim().parse::<i32>().ok().map(f64::from);
+        match prompt.kind {
+            PromptKind::InsertWp { spline, position } => {
+                let item = if spline {
+                    mp_mission::commands::spline_waypoint(position, altitude, frame)
+                } else {
+                    mp_mission::commands::waypoint(position, altitude, frame)
+                };
+                if plan.insert_after(&value, item).is_err() {
+                    // `// C#: GCSViews/FlightPlanner.cs:4046, 4081`
+                    self.tell(
+                        ERROR,
+                        if spline {
+                            INVALID_NUMBER
+                        } else {
+                            "Invalid insert position"
+                        },
+                    );
+                }
+            }
+            PromptKind::LoiterTime { position } => match number() {
+                Some(seconds) => plan.append(mp_mission::commands::loiter_time(
+                    position, altitude, frame, seconds,
+                )),
+                None => self.tell(ERROR, INVALID_NUMBER),
+            },
+            PromptKind::LoiterTurns { position } => match number() {
+                Some(turns) => plan.append(mp_mission::commands::loiter_turns(
+                    position, altitude, frame, turns,
+                )),
+                None => self.tell(ERROR, INVALID_NUMBER),
+            },
+            // Jump > Start jumps to item 1: `Param1.Value = 1`.
+            PromptKind::JumpStartRepeat => match number() {
+                Some(repeat) => plan.append(mp_mission::commands::do_jump(1.0, repeat, frame)),
+                None => self.tell(ERROR, INVALID_NUMBER),
+            },
+            PromptKind::JumpWpNumber => match number() {
+                Some(target) => self.ask(Prompt::input(
+                    "Jump repeat",
+                    "Number of times to Repeat",
+                    "5",
+                    PromptKind::JumpWpRepeat { target },
+                )),
+                None => self.tell(ERROR, INVALID_NUMBER),
+            },
+            PromptKind::JumpWpRepeat { target } => match number() {
+                Some(repeat) => plan.append(mp_mission::commands::do_jump(target, repeat, frame)),
+                None => self.tell(ERROR, INVALID_NUMBER),
+            },
+            PromptKind::TakeoffAltitude { ask_pitch } => match integer() {
+                Some(altitude) if ask_pitch => self.ask(Prompt::input(
+                    "Takeoff Pitch",
+                    "Please enter your takeoff pitch",
+                    "15",
+                    PromptKind::TakeoffPitch { altitude },
+                )),
+                Some(altitude) => {
+                    plan.append(mp_mission::commands::takeoff(altitude, 0.0, frame));
+                }
+                // `MessageBox.Show("Bad Alt")`. `// C#: GCSViews/FlightPlanner.cs:6792`
+                None => self.tell("", "Bad Alt"),
+            },
+            PromptKind::TakeoffPitch { altitude } => match integer() {
+                Some(pitch) => plan.append(mp_mission::commands::takeoff(altitude, pitch, frame)),
+                // `// C#: GCSViews/FlightPlanner.cs:6818`
+                None => self.tell("", "Bad Takeoff pitch"),
+            },
+            PromptKind::ModifyAlt => {
+                if plan.modify_altitudes(&value).is_err() {
+                    self.tell(ERROR, INVALID_NUMBER);
+                }
+            }
+            PromptKind::ClearWaypoints => plan.clear_mission(),
+            PromptKind::Message => {}
+        }
+    }
+
+    /// Cancel, or No: the handler returns.
+    pub fn cancel(&mut self) {
+        self.prompt = None;
+    }
+}
+
+/// The context the menu needs, from what the application knows right now.
+fn menu_context(this: &MissionPlanner) -> MenuContext {
+    let view = this.telemetry.view();
+    let state = view.state.as_ref();
+    MenuContext {
+        frame: this.altitude_frame,
+        vehicle: state.and_then(|state| {
+            state
+                .position
+                .map(|position| (position, state.altitude_relative.0))
+        }),
+        takeoff_pitch: MenuContext::asks_takeoff_pitch(
+            state.map(|state| state.vehicle_type),
+            &view.parameters,
+        ),
+    }
+}
+
+/// Pushes everything the menu can change to the map.
+fn sync_everything(this: &MissionPlanner) {
+    this.sync_map_mission();
+    this.sync_map_polygon();
+    this.sync_map_fence();
+    this.sync_map_rally();
+}
+
+/// Opens the menu for a right click on the map, as `MainMap.ContextMenuStrip = contextMenuStrip1`
+/// does, with the waypoint under the cursor for Delete WP.
+/// `// C#: GCSViews/FlightPlanner.Designer.cs:875; GCSViews/FlightPlanner.cs:2667-2695`
+pub fn open_map_menu(this: &mut MissionPlanner, x: f32, y: f32) {
+    let (position, marker) = {
+        let map = this.map.borrow();
+        (map.position_at(x, y), map.waypoint_at(x, y))
+    };
+    let Some(position) = position else {
+        return;
+    };
+    // The same reason as placing a waypoint: an edit made from the menu must not refit the view
+    // and move the ground under the cursor.
+    this.map.borrow_mut().freeze_view();
+    this.plan_menus.open_at((x, y), position, marker);
+}
+
+/// Chooses an entry from the open menu, and focuses the dialog if it opened one.
+fn choose_entry(
+    this: &mut MissionPlanner,
+    action: MenuAction,
+    window: &mut gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) {
+    match action {
+        MenuAction::LoadWpFile => {
+            this.plan_menus.open = None;
+            this.load_plan();
+        }
+        MenuAction::SaveWpFile => {
+            this.plan_menus.open = None;
+            this.save_plan();
+        }
+        _ => {
+            let context = menu_context(this);
+            this.plan_menus.choose(&mut this.plan, action, &context);
+        }
+    }
+    sync_everything(this);
+    if this.plan_menus.prompt.is_some() {
+        this.plan_prompt_focus.focus(window, cx);
+    }
+    cx.notify();
+}
+
+/// OK, Yes, or Enter in a dialog.
+fn submit_prompt(
+    this: &mut MissionPlanner,
+    window: &mut gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) {
+    let context = menu_context(this);
+    this.plan_menus.submit(&mut this.plan, &context);
+    sync_everything(this);
+    if this.plan_menus.prompt.is_some() {
+        this.plan_prompt_focus.focus(window, cx);
+    }
+    cx.notify();
+}
+
+/// Height of one menu entry, fixed so a drop-down can line up with the entry that opened it.
+const MENU_ROW: f32 = 22.0;
+/// Height of the separator.
+const MENU_SEPARATOR: f32 = 9.0;
+/// The menu's padding above its first entry.
+const MENU_PADDING: f32 = 4.0;
+/// The width of the menu and of each drop-down. Fixed, where a `ToolStripDropDown` sizes itself
+/// to its widest item, because the drop-down is placed beside the menu by arithmetic rather than
+/// by layout (see `map_menu`), and that arithmetic needs the width before the text is measured.
+/// 190 px holds the widest entry, "From Current Waypoints", at this font with room to spare.
+const MENU_WIDTH: f32 = 190.0;
+
+/// The height of a column of entries: its padding, its border, and each row or separator.
+fn column_height(entries: &[MenuEntry]) -> f32 {
+    2.0 * MENU_PADDING
+        + 2.0
+        + entries
+            .iter()
+            .map(|entry| {
+                if entry.is_separator() {
+                    MENU_SEPARATOR
+                } else {
+                    MENU_ROW
+                }
+            })
+            .sum::<f32>()
+}
+
+/// Where a drop-down of `height` starts, relative to the menu's top, when the menu's top is at
+/// `menu_top` in a window `viewport_height` tall and the entry that opens it starts `offset`
+/// down the menu.
+///
+/// It lines up with its entry when there is room below, and otherwise moves up just enough to
+/// fit, as a `ToolStripDropDown` does. What it never does is move the menu: the menu and the
+/// drop-down used to be one snapped body, so a long drop-down opening near the bottom of the
+/// window pushed the whole menu up, the pointer that had just clicked "Map Tool" found itself on
+/// "File Load/Save", and that entry's drop-down replaced the one the click had opened.
+/// `tests/gui/plan-reverse-wps.gui` found it.
+fn dropdown_top(menu_top: f32, offset: f32, height: f32, viewport_height: f32) -> f32 {
+    let aligned = offset - MENU_PADDING;
+    let lowest = viewport_height - height - menu_top;
+    aligned.min(lowest).max(-menu_top)
+}
+
+/// How far down the menu a top-level entry starts.
+fn menu_offset(index: usize) -> f32 {
+    MENU_PADDING
+        + MAP_MENU
+            .iter()
+            .take(index)
+            .map(|entry| {
+                if entry.is_separator() {
+                    MENU_SEPARATOR
+                } else {
+                    MENU_ROW
+                }
+            })
+            .sum::<f32>()
+}
+
+/// One entry, as a `ToolStripMenuItem` draws: its text, an arrow if it has a drop-down, dimmed if
+/// it does nothing here.
+fn menu_row(
+    entry: &'static MenuEntry,
+    top_level: Option<usize>,
+    enabled: bool,
+    highlighted: bool,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    if entry.is_separator() {
+        return div()
+            .h(px(MENU_SEPARATOR))
+            .flex()
+            .items_center()
+            .px_2()
+            .child(div().h(px(1.0)).w_full().bg(rgb(theme::BORDER)))
+            .into_any_element();
+    }
+    let row = crate::probe::measured(entry.id, div())
+        .id(entry.id)
+        .h(px(MENU_ROW))
+        .px_3()
+        .flex()
+        .items_center()
+        .justify_between()
+        .gap_4()
+        .text_xs()
+        .child(entry.text)
+        .children((!entry.children.is_empty()).then_some("›"));
+    if !enabled {
+        return row.text_color(rgb(theme::DIM)).into_any_element();
+    }
+    let row = row
+        .text_color(rgb(theme::TEXT))
+        .bg(rgb(if highlighted {
+            theme::ACTION
+        } else {
+            theme::PANEL
+        }))
+        .cursor_pointer()
+        .hover(|style| style.bg(rgb(theme::BORDER)));
+    // A top-level entry shows its drop-down while the pointer is on it, and hides any other, as
+    // a ToolStrip does; an entry inside a drop-down leaves it be.
+    let row = match top_level {
+        Some(index) => {
+            let opens = (!entry.children.is_empty()).then_some(index);
+            row.on_hover(cx.listener(move |this, hovered: &bool, _window, cx| {
+                if *hovered {
+                    this.plan_menus.show_submenu(opens);
+                    cx.notify();
+                }
+            }))
+        }
+        None => row,
+    };
+    let action = entry.action;
+    let opens = top_level.filter(|_| !entry.children.is_empty());
+    row.on_click(cx.listener(move |this, _event, window, cx| {
+        match action {
+            Some(action) => choose_entry(this, action, window, cx),
+            None => {
+                // An entry that only opens a drop-down opens it on a click too.
+                this.plan_menus.show_submenu(opens);
+                cx.notify();
+            }
+        }
+    }))
+    .into_any_element()
+}
+
+/// A column of entries: the menu, or a drop-down.
+fn menu_column(children: Vec<AnyElement>) -> gpui::Div {
+    div()
+        .flex()
+        .flex_col()
+        .w(px(MENU_WIDTH))
+        .py(px(MENU_PADDING))
+        .bg(rgb(theme::PANEL))
+        .border_1()
+        .border_color(rgb(theme::BORDER))
+        .rounded_sm()
+        .children(children)
+}
+
+/// `contextMenuStrip1`, drawn where the right button came up, above everything else.
+fn map_menu(
+    menus: &PlanMenus,
+    window: &gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) -> Option<AnyElement> {
+    let menu = menus.open?;
+    let delete_enabled = menus.delete_enabled();
+    // Where the snapped menu ends up: `snap_to_window` moves a top-left anchored element up and
+    // left just enough to fit, which with fixed sizes is this arithmetic.
+    let viewport = window.viewport_size();
+    let (viewport_width, viewport_height) = (f32::from(viewport.width), f32::from(viewport.height));
+    let menu_height = column_height(MAP_MENU);
+    let menu_left = menu.at.0.min(viewport_width - MENU_WIDTH).max(0.0);
+    let menu_top = menu.at.1.min(viewport_height - menu_height).max(0.0);
+    // The drop-down's rectangle in window coordinates, so a press on it is not a press outside
+    // the menu. `None` while no drop-down shows.
+    let dropdown = menu
+        .submenu
+        .and_then(|index| Some((index, MAP_MENU.get(index)?)))
+        .map(|(index, entry)| {
+            let height = column_height(entry.children);
+            let top = dropdown_top(menu_top, menu_offset(index), height, viewport_height);
+            (top, height)
+        });
+    let dropdown_contains = move |(x, y): (f32, f32)| {
+        dropdown.is_some_and(|(top, height)| {
+            let left = menu_left + MENU_WIDTH;
+            let above = menu_top + top;
+            (left..=left + MENU_WIDTH).contains(&x) && (above..=above + height).contains(&y)
+        })
+    };
+    let rows = MAP_MENU
+        .iter()
+        .enumerate()
+        .map(|(index, entry)| {
+            let enabled =
+                entry.is_live() && (entry.action != Some(MenuAction::DeleteWp) || delete_enabled);
+            menu_row(entry, Some(index), enabled, menu.submenu == Some(index), cx)
+        })
+        .collect();
+    let mut body = div()
+        .id("plan-menu")
+        .flex()
+        .items_start()
+        .occlude()
+        .on_mouse_down_out(
+            cx.listener(move |this, event: &gpui::MouseDownEvent, _window, cx| {
+                let at = (f32::from(event.position.x), f32::from(event.position.y));
+                // The drop-down sits outside the body's own bounds, so a press on it arrives
+                // here as "outside"; it is not.
+                if dropdown_contains(at) {
+                    return;
+                }
+                this.plan_menus.dismiss(at);
+                cx.notify();
+            }),
+        )
+        .child(menu_column(rows));
+    if let Some(((top, _), entry)) =
+        dropdown.zip(menu.submenu.and_then(|index| MAP_MENU.get(index)))
+    {
+        let rows = entry
+            .children
+            .iter()
+            .map(|child| menu_row(child, None, child.is_live(), false, cx))
+            .collect();
+        // Absolutely positioned, so opening it changes nothing about the body the window snaps,
+        // and the menu stays where the pointer is.
+        body = body.child(
+            div()
+                .absolute()
+                .left(px(MENU_WIDTH))
+                .top(px(top))
+                .occlude()
+                .child(menu_column(rows)),
+        );
+    }
+    Some(
+        gpui::deferred(
+            gpui::anchored()
+                .position(gpui::point(px(menu.at.0), px(menu.at.1)))
+                .snap_to_window()
+                .child(body),
+        )
+        .with_priority(1)
+        .into_any_element(),
+    )
+}
+
+/// The dialog, centred over the window with everything behind it inert, as `ShowDialog` makes it.
+fn prompt_dialog(
+    menus: &PlanMenus,
+    focus: &gpui::FocusHandle,
+    window: &gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) -> Option<AnyElement> {
+    let prompt = menus.prompt.as_ref()?;
+    let focused = focus.is_focused(window);
+    let size = window.viewport_size();
+
+    let (accept, refuse) = if prompt.is_question() {
+        ("Yes", Some("No"))
+    } else if prompt.field.is_some() {
+        ("OK", Some("Cancel"))
+    } else {
+        ("OK", None)
+    };
+    let buttons = div()
+        .flex()
+        .justify_end()
+        .gap_2()
+        .child(action(
+            "plan-prompt-ok",
+            accept,
+            theme::ACCENT,
+            true,
+            cx.listener(|this, _event: &(), window, cx| submit_prompt(this, window, cx)),
+        ))
+        .children(refuse.map(|label| {
+            action(
+                "plan-prompt-cancel",
+                label,
+                theme::TEXT,
+                true,
+                cx.listener(|this, _event: &(), _window, cx| {
+                    this.plan_menus.cancel();
+                    cx.notify();
+                }),
+            )
+        }));
+
+    let on_key = cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
+        let outcome = match this.plan_menus.prompt.as_mut() {
+            Some(Prompt {
+                field: Some(field), ..
+            }) => field.key(event),
+            // A question or a message has no field; Enter and Escape still answer it.
+            Some(_) => match event.keystroke.key.as_str() {
+                "enter" => crate::textfield::KeyOutcome::Submitted,
+                "escape" => crate::textfield::KeyOutcome::Cancelled,
+                _ => crate::textfield::KeyOutcome::Ignored,
+            },
+            None => return,
+        };
+        match outcome {
+            crate::textfield::KeyOutcome::Submitted => submit_prompt(this, window, cx),
+            crate::textfield::KeyOutcome::Cancelled => {
+                this.plan_menus.cancel();
+                cx.notify();
+            }
+            crate::textfield::KeyOutcome::Changed => cx.notify(),
+            crate::textfield::KeyOutcome::Ignored => {}
+        }
+    });
+
+    let mut dialog = crate::probe::measured("plan-prompt", div())
+        .flex()
+        .flex_col()
+        .gap_2()
+        .w(px(340.0))
+        .p_3()
+        .bg(rgb(theme::PANEL))
+        .border_1()
+        .border_color(rgb(theme::ACCENT))
+        .rounded_md()
+        .child(
+            div()
+                .text_xs()
+                .text_color(rgb(theme::DIM))
+                .child(prompt.title.to_owned()),
+        )
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .text_sm()
+                .text_color(rgb(theme::TEXT))
+                .children(prompt.text.lines().map(ToOwned::to_owned)),
+        );
+    let body = match &prompt.field {
+        Some(field) => {
+            dialog = dialog.child(crate::textfield::text_field(
+                "plan-prompt-field",
+                field,
+                focus,
+                focused,
+                px(310.0),
+                on_key,
+            ));
+            dialog.child(buttons).into_any_element()
+        }
+        None => dialog
+            .child(buttons)
+            .id("plan-prompt-keys")
+            .track_focus(focus)
+            .on_key_down(on_key)
+            .into_any_element(),
+    };
+
+    Some(
+        gpui::deferred(
+            gpui::anchored()
+                .position(gpui::point(px(0.0), px(0.0)))
+                .child(
+                    div()
+                        .id("plan-prompt-backdrop")
+                        .w(size.width)
+                        .h(size.height)
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .occlude()
+                        .child(body),
+                ),
+        )
+        .with_priority(2)
+        .into_any_element(),
+    )
+}
+
+/// The menu and the dialog, for the planning screen to draw over itself.
+pub fn overlays(
+    menus: &PlanMenus,
+    focus: &gpui::FocusHandle,
+    window: &gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) -> Vec<AnyElement> {
+    map_menu(menus, window, cx)
+        .into_iter()
+        .chain(prompt_dialog(menus, focus, window, cx))
+        .collect()
+}
+
+/// Facts a UI test asserts on for this screen: what the mission holds, item by item, and what the
+/// menu and its dialogs are doing.
+pub fn record_facts(plan: &Plan, menus: &PlanMenus) {
+    use crate::facts::record;
+    let items = plan.items();
+    record(
+        "mission.commands",
+        items
+            .iter()
+            .map(|item| item.command.to_string())
+            .collect::<Vec<_>>()
+            .join(","),
+    );
+    record("mission.home", plan.home_first());
+    record(
+        "mission.selected",
+        plan.selected()
+            .map_or_else(|| "none".to_owned(), |seq| seq.to_string()),
+    );
+    let last = items.last();
+    record(
+        "mission.last.command",
+        last.map_or_else(|| "none".to_owned(), |item| item.command.to_string()),
+    );
+    record("mission.last.p1", last.map_or(0.0, |item| item.param1));
+    record("mission.last.p2", last.map_or(0.0, |item| item.param2));
+    record("mission.last.alt", last.map_or(0.0, |item| item.z));
+    record(
+        "mission.last.position",
+        last.and_then(|item| item.position().ok().flatten())
+            .is_some(),
+    );
+    record("survey.points", plan.polygon().len());
+    record("plan.draw", plan.draw_mode().id());
+    record(
+        "plan.menu",
+        if menus.open.is_some() {
+            "open"
+        } else {
+            "closed"
+        },
+    );
+    record(
+        "plan.menu.submenu",
+        menus
+            .open
+            .and_then(|menu| menu.submenu)
+            .and_then(|index| MAP_MENU.get(index))
+            .map_or("none", |entry| entry.id),
+    );
+    record("plan.menu.delete", menus.delete_enabled());
+    record(
+        "plan.prompt",
+        menus.prompt.as_ref().map_or("none", |prompt| {
+            if prompt.title.is_empty() {
+                "message"
+            } else {
+                prompt.title
+            }
+        }),
+    );
+    record(
+        "plan.prompt.text",
+        menus
+            .prompt
+            .as_ref()
+            .map_or("", |prompt| prompt.text.as_str()),
+    );
+    record(
+        "plan.prompt.value",
+        menus.prompt.as_ref().map_or("", Prompt::value),
+    );
+    record("plan.measure", menus.measure_from.is_some());
 }
 
 #[cfg(test)]
@@ -2652,7 +4397,7 @@ mod tests {
 
     #[test]
     fn the_fence_and_the_survey_area_are_separate_shapes() {
-        // They are both polygons drawn by right-clicking, and confusing them would send a survey
+        // They are both polygons drawn by clicking, and confusing them would send a survey
         // boundary to the vehicle as a fence.
         let mut plan = Plan::default();
         plan.set_draw_mode(DrawMode::Area);
@@ -2735,13 +4480,14 @@ mod tests {
 
         for mode in DrawMode::ALL {
             assert!(!mode.label().is_empty());
-            assert!(mode.hint().contains("right-click"), "{}", mode.hint());
+            // A click places things, as AddWPToMap does; the right button is the menu's.
+            assert!(mode.hint().starts_with("click the map"), "{}", mode.hint());
         }
     }
 
     #[test]
     fn the_shapes_do_not_share_storage() {
-        // Four things are placed by right-clicking on the same map. Mixing any two would send one
+        // Four things are placed by clicking on the same map. Mixing any two would send one
         // to the vehicle as another.
         let mut plan = Plan::default();
         plan.add_waypoint(at(-35.300, 149.100), 50.0);
@@ -2827,5 +4573,762 @@ mod tests {
         assert!(plan.is_empty());
         assert_eq!(plan.selected(), None);
         assert_eq!(*plan.origin(), Origin::Empty);
+    }
+
+    // ---- The map menu: each entry against its C# handler ----
+
+    use mp_mission::commands as cmd;
+
+    const CLICK: (f32, f32) = (400.0, 300.0);
+
+    fn canberra() -> LatLon {
+        at(-35.363_262, 149.165_237)
+    }
+
+    fn context() -> MenuContext {
+        MenuContext {
+            frame: AltitudeFrame::Relative,
+            vehicle: None,
+            takeoff_pitch: false,
+        }
+    }
+
+    /// A plan as it arrives from a vehicle: home at 580 m absolute, then two waypoints at 100.
+    fn from_vehicle() -> Plan {
+        let mut items = vec![
+            MissionItem {
+                frame: FRAME_ABSOLUTE,
+                ..cmd::waypoint(at(-35.36, 149.16), 580.0, FRAME_ABSOLUTE)
+            },
+            cmd::waypoint(at(-35.361, 149.161), 100.0, FRAME_RELATIVE),
+            cmd::waypoint(at(-35.362, 149.162), 100.0, FRAME_RELATIVE),
+        ];
+        mp_mission::rows::renumber(&mut items);
+        let mut plan = Plan::default();
+        plan.adopt_from_vehicle(items);
+        plan
+    }
+
+    /// Opens the menu over `marker` at Canberra and chooses `action`.
+    fn choose(plan: &mut Plan, menus: &mut PlanMenus, action: MenuAction, marker: Option<u16>) {
+        menus.open_at(CLICK, canberra(), marker);
+        menus.choose(plan, action, &context());
+    }
+
+    /// Types `value` into the open prompt, replacing what it offered, and presses OK.
+    fn answer(plan: &mut Plan, menus: &mut PlanMenus, value: &str) {
+        menus
+            .prompt
+            .as_mut()
+            .and_then(|prompt| prompt.field.as_mut())
+            .expect("a prompt with a field")
+            .set(value);
+        menus.submit(plan, &context());
+    }
+
+    fn commands(plan: &Plan) -> Vec<u16> {
+        plan.items().iter().map(|item| item.command).collect()
+    }
+
+    fn last(plan: &Plan) -> MissionItem {
+        *plan.items().last().expect("an item")
+    }
+
+    /// The constructors' command ids are the MAVLink ones the C#'s `MAV_CMD` names resolve to.
+    #[test]
+    fn the_menu_commands_are_the_mavlink_commands_the_c_sharp_names() {
+        for (id, name) in [
+            (cmd::WAYPOINT, "MAV_CMD_NAV_WAYPOINT"),
+            (cmd::LOITER_UNLIM, "MAV_CMD_NAV_LOITER_UNLIM"),
+            (cmd::LOITER_TURNS, "MAV_CMD_NAV_LOITER_TURNS"),
+            (cmd::LOITER_TIME, "MAV_CMD_NAV_LOITER_TIME"),
+            (cmd::RETURN_TO_LAUNCH, "MAV_CMD_NAV_RETURN_TO_LAUNCH"),
+            (cmd::LAND, "MAV_CMD_NAV_LAND"),
+            (cmd::TAKEOFF, "MAV_CMD_NAV_TAKEOFF"),
+            (cmd::SPLINE_WAYPOINT, "MAV_CMD_NAV_SPLINE_WAYPOINT"),
+            (cmd::DO_JUMP, "MAV_CMD_DO_JUMP"),
+            (cmd::DO_SET_ROI, "MAV_CMD_DO_SET_ROI"),
+        ] {
+            assert_eq!(MavCmd(u32::from(id)).name(), Some(name), "command {id}");
+        }
+    }
+
+    /// Delete WP is enabled over a marker and nowhere else, as `contextMenuStrip1_Opening` has it.
+    #[test]
+    fn delete_wp_is_enabled_only_over_a_marker() {
+        let mut menus = PlanMenus::default();
+        assert!(!menus.delete_enabled(), "nothing is open");
+        menus.open_at(CLICK, canberra(), None);
+        assert!(!menus.delete_enabled());
+        menus.open_at(CLICK, canberra(), Some(2));
+        assert!(menus.delete_enabled());
+    }
+
+    /// Delete WP removes the waypoint under the cursor and renumbers the rest.
+    #[test]
+    fn delete_wp_removes_the_waypoint_under_the_cursor() {
+        let mut plan = from_vehicle();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::DeleteWp, Some(1));
+        assert_eq!(plan.items().len(), 2);
+        assert!(
+            (plan.items()[1].x - -35.362).abs() < 1e-9,
+            "the second waypoint moved up"
+        );
+        assert_eq!(plan.items()[1].seq, 1);
+        assert!(menus.open.is_none(), "choosing closes the menu");
+    }
+
+    /// Home is not a row, so Delete WP over it does nothing.
+    #[test]
+    fn delete_wp_over_home_leaves_it() {
+        let mut plan = from_vehicle();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::DeleteWp, Some(0));
+        assert_eq!(plan.items().len(), 3);
+        assert!(plan.home_first());
+    }
+
+    /// Insert Wp offers the number after the selected waypoint, and accepting it puts a WAYPOINT
+    /// there at the menu's position, in the screen's frame, at the default altitude.
+    #[test]
+    fn insert_wp_puts_a_waypoint_after_the_number_given() {
+        let mut plan = from_vehicle();
+        plan.select(Some(1));
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::InsertWp, None);
+        let prompt = menus.prompt.as_ref().expect("an InputBox");
+        assert_eq!(prompt.title, "Insert WP");
+        assert_eq!(prompt.text, "Insert WP after wp#");
+        assert_eq!(prompt.value(), "1", "(selectedrow + 1): after waypoint 1");
+        menus.submit(&mut plan, &context());
+        assert_eq!(commands(&plan), vec![16, 16, 16, 16]);
+        let inserted = plan.items()[2];
+        assert_eq!(inserted.position(), Ok(Some(canberra())));
+        assert!((inserted.z - 100.0).abs() < 1e-9, "the default altitude");
+        assert_eq!(inserted.frame, FRAME_RELATIVE);
+        assert_eq!(plan.selected(), Some(2), "the new row is selected");
+    }
+
+    /// With nothing selected the offer is after the last waypoint.
+    #[test]
+    fn insert_wp_offers_the_end_with_nothing_selected() {
+        let mut plan = from_vehicle();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::InsertWp, None);
+        assert_eq!(menus.prompt.as_ref().map(Prompt::value), Some("2"));
+        answer(&mut plan, &mut menus, "0");
+        assert_eq!(plan.items().len(), 4);
+        assert_eq!(
+            plan.items()[1].position(),
+            Ok(Some(canberra())),
+            "0 is after home"
+        );
+    }
+
+    /// A number `Rows.Insert` would throw on is refused in the C#'s words, and nothing changes.
+    #[test]
+    fn insert_wp_refuses_a_position_that_is_not_there() {
+        let mut plan = from_vehicle();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::InsertWp, None);
+        answer(&mut plan, &mut menus, "9");
+        assert_eq!(plan.items().len(), 3);
+        let message = menus.prompt.as_ref().expect("a message");
+        assert_eq!(message.title, "Error");
+        assert_eq!(message.text, "Invalid insert position");
+        assert_eq!(message.kind, PromptKind::Message);
+    }
+
+    /// Insert Spline WP puts a SPLINE_WAYPOINT, and refuses with Strings.InvalidNumberEntered.
+    #[test]
+    fn insert_spline_wp_puts_a_spline_waypoint() {
+        let mut plan = from_vehicle();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::InsertSplineWp, None);
+        answer(&mut plan, &mut menus, "1");
+        assert_eq!(commands(&plan), vec![16, 16, 82, 16]);
+
+        choose(&mut plan, &mut menus, MenuAction::InsertSplineWp, None);
+        answer(&mut plan, &mut menus, "x");
+        assert_eq!(plan.items().len(), 4);
+        assert_eq!(
+            menus.prompt.as_ref().map(|prompt| prompt.text.as_str()),
+            Some("Invalid number entered")
+        );
+    }
+
+    /// Loiter > Forever appends LOITER_UNLIM at the click, no prompt.
+    #[test]
+    fn loiter_forever_appends_an_unlimited_loiter() {
+        let mut plan = from_vehicle();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::LoiterForever, None);
+        assert!(menus.prompt.is_none());
+        let item = last(&plan);
+        assert_eq!(item.command, 17);
+        assert_eq!(item.position(), Ok(Some(canberra())));
+        assert!((item.z - 100.0).abs() < 1e-9);
+    }
+
+    /// Loiter > Time asks "Loiter Time", offering 5, and puts the answer in Param1.
+    #[test]
+    fn loiter_time_asks_for_a_time_and_puts_it_in_param1() {
+        let mut plan = from_vehicle();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::LoiterTime, None);
+        let prompt = menus.prompt.as_ref().expect("an InputBox");
+        assert_eq!(
+            (prompt.title, prompt.text.as_str()),
+            ("Loiter Time", "Loiter Time")
+        );
+        assert_eq!(prompt.value(), "5");
+        answer(&mut plan, &mut menus, "12");
+        let item = last(&plan);
+        assert_eq!(item.command, 19);
+        assert!((item.param1 - 12.0).abs() < 1e-9);
+        assert_eq!(item.position(), Ok(Some(canberra())));
+    }
+
+    /// Loiter > Circles asks "Loiter Turns", offering 3.
+    #[test]
+    fn loiter_circles_asks_for_turns_and_puts_them_in_param1() {
+        let mut plan = from_vehicle();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::LoiterCircles, None);
+        assert_eq!(menus.prompt.as_ref().map(|p| p.title), Some("Loiter Turns"));
+        assert_eq!(menus.prompt.as_ref().map(Prompt::value), Some("3"));
+        menus.submit(&mut plan, &context());
+        let item = last(&plan);
+        assert_eq!(item.command, 18);
+        assert!((item.param1 - 3.0).abs() < 1e-9);
+    }
+
+    /// Cancel is the handler's `return`: nothing is added.
+    #[test]
+    fn cancelling_a_prompt_adds_nothing() {
+        let mut plan = from_vehicle();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::LoiterTime, None);
+        menus.cancel();
+        assert!(menus.prompt.is_none());
+        assert_eq!(plan.items().len(), 3);
+    }
+
+    /// Jump > Start jumps to item 1 the number of times asked, offering 5.
+    #[test]
+    fn jump_start_jumps_to_item_one() {
+        let mut plan = from_vehicle();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::JumpStart, None);
+        let prompt = menus.prompt.as_ref().expect("an InputBox");
+        assert_eq!(
+            (prompt.title, prompt.text.as_str(), prompt.value()),
+            ("Jump repeat", "Number of times to Repeat", "5")
+        );
+        menus.submit(&mut plan, &context());
+        let item = last(&plan);
+        assert_eq!(item.command, 177);
+        assert!((item.param1 - 1.0).abs() < 1e-9);
+        assert!((item.param2 - 5.0).abs() < 1e-9);
+        assert_eq!(item.position(), Ok(None));
+    }
+
+    /// Jump > WP # asks for the target, offering 1, then the repeat count.
+    #[test]
+    fn jump_wp_asks_for_the_target_then_the_repeat() {
+        let mut plan = from_vehicle();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::JumpWp, None);
+        let prompt = menus.prompt.as_ref().expect("an InputBox");
+        assert_eq!(
+            (prompt.title, prompt.text.as_str(), prompt.value()),
+            ("WP No", "Jump to WP no?", "1")
+        );
+        answer(&mut plan, &mut menus, "2");
+        assert_eq!(menus.prompt.as_ref().map(|p| p.title), Some("Jump repeat"));
+        answer(&mut plan, &mut menus, "3");
+        let item = last(&plan);
+        assert_eq!(item.command, 177);
+        assert!((item.param1 - 2.0).abs() < 1e-9);
+        assert!((item.param2 - 3.0).abs() < 1e-9);
+    }
+
+    /// Text that is not a number is refused with Strings.InvalidNumberEntered.
+    #[test]
+    fn a_jump_that_is_not_a_number_is_refused() {
+        let mut plan = from_vehicle();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::JumpStart, None);
+        answer(&mut plan, &mut menus, "lots");
+        assert_eq!(plan.items().len(), 3);
+        assert_eq!(
+            menus.prompt.as_ref().map(|prompt| prompt.text.as_str()),
+            Some("Invalid number entered")
+        );
+    }
+
+    /// RTL appends RETURN_TO_LAUNCH and nothing else.
+    #[test]
+    fn rtl_appends_a_return_to_launch() {
+        let mut plan = from_vehicle();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::Rtl, None);
+        let item = last(&plan);
+        assert_eq!(item.command, 20);
+        assert_eq!((item.x, item.y, item.z), (0.0, 0.0, 0.0));
+        assert_eq!(item.frame, FRAME_RELATIVE);
+    }
+
+    /// Land appends LAND at the click, one metre up.
+    #[test]
+    fn land_appends_a_land_at_the_click() {
+        let mut plan = from_vehicle();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::Land, None);
+        let item = last(&plan);
+        assert_eq!(item.command, 21);
+        assert_eq!(item.position(), Ok(Some(canberra())));
+        assert!((item.z - 1.0).abs() < 1e-9);
+    }
+
+    /// Takeoff asks for the altitude, offering 10 in metres, and writes it with no position.
+    #[test]
+    fn takeoff_asks_for_an_altitude() {
+        let mut plan = from_vehicle();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::Takeoff, None);
+        let prompt = menus.prompt.as_ref().expect("an InputBox");
+        assert_eq!(
+            (prompt.title, prompt.text.as_str(), prompt.value()),
+            ("Altitude", "Please enter your takeoff altitude in m", "10")
+        );
+        answer(&mut plan, &mut menus, "25");
+        assert!(menus.prompt.is_none(), "not a plane: no pitch");
+        let item = last(&plan);
+        assert_eq!(item.command, 22);
+        assert!((item.z - 25.0).abs() < 1e-9);
+        assert!((item.param1 - 0.0).abs() < 1e-9);
+        assert_eq!(item.position(), Ok(None));
+    }
+
+    /// On a plane it asks for the pitch too, offering 15, and puts it in Param1.
+    #[test]
+    fn takeoff_on_a_plane_asks_for_the_pitch() {
+        let mut plan = from_vehicle();
+        let mut menus = PlanMenus::default();
+        let plane = MenuContext {
+            takeoff_pitch: true,
+            ..context()
+        };
+        menus.open_at(CLICK, canberra(), None);
+        menus.choose(&mut plan, MenuAction::Takeoff, &plane);
+        menus.submit(&mut plan, &plane);
+        let prompt = menus.prompt.as_ref().expect("the pitch");
+        assert_eq!(
+            (prompt.title, prompt.text.as_str(), prompt.value()),
+            ("Takeoff Pitch", "Please enter your takeoff pitch", "15")
+        );
+        menus.submit(&mut plan, &plane);
+        let item = last(&plan);
+        assert_eq!(item.command, 22);
+        assert!((item.z - 10.0).abs() < 1e-9);
+        assert!((item.param1 - 15.0).abs() < 1e-9);
+    }
+
+    /// `int.TryParse` refuses a fractional altitude: "Bad Alt".
+    #[test]
+    fn a_takeoff_altitude_int_parse_refuses_is_a_bad_alt() {
+        let mut plan = from_vehicle();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::Takeoff, None);
+        answer(&mut plan, &mut menus, "10.5");
+        assert_eq!(plan.items().len(), 3);
+        assert_eq!(
+            menus.prompt.as_ref().map(|prompt| prompt.text.as_str()),
+            Some("Bad Alt")
+        );
+    }
+
+    /// Which vehicles are asked for a pitch: ArduPlane's types, and a quadplane only with bit 1.
+    #[test]
+    fn only_a_plane_is_asked_for_a_takeoff_pitch() {
+        let none: Vec<(String, f64)> = Vec::new();
+        assert!(
+            MenuContext::asks_takeoff_pitch(Some(1), &none),
+            "fixed wing"
+        );
+        assert!(
+            MenuContext::asks_takeoff_pitch(Some(16), &none),
+            "flapping wing"
+        );
+        assert!(
+            MenuContext::asks_takeoff_pitch(Some(20), &none),
+            "VTOL quad"
+        );
+        assert!(
+            !MenuContext::asks_takeoff_pitch(Some(2), &none),
+            "quadrotor"
+        );
+        assert!(!MenuContext::asks_takeoff_pitch(Some(10), &none), "rover");
+        assert!(!MenuContext::asks_takeoff_pitch(None, &none), "no vehicle");
+        let without = vec![("Q_OPTIONS".to_owned(), 1.0)];
+        let with = vec![("Q_OPTIONS".to_owned(), 2.0)];
+        assert!(!MenuContext::asks_takeoff_pitch(Some(1), &without));
+        assert!(MenuContext::asks_takeoff_pitch(Some(1), &with));
+    }
+
+    /// DO_SET_ROI appends a region of interest at the click, which is a position.
+    #[test]
+    fn set_roi_appends_a_region_of_interest() {
+        let mut plan = from_vehicle();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::SetRoi, None);
+        let item = last(&plan);
+        assert_eq!(item.command, 201);
+        assert_eq!(item.position(), Ok(Some(canberra())));
+        assert!((item.z - 100.0).abs() < 1e-9);
+    }
+
+    /// Clear Mission empties the rows and keeps home.
+    #[test]
+    fn clear_mission_keeps_home() {
+        let mut plan = from_vehicle();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::ClearMission, None);
+        assert_eq!(plan.items().len(), 1);
+        assert!((plan.items()[0].z - 580.0).abs() < 1e-9);
+        // A plan drawn here has no home record, so everything goes.
+        let mut drawn = Plan::default();
+        drawn.add_waypoint(canberra(), 50.0);
+        drawn.add_waypoint(canberra(), 50.0);
+        choose(&mut drawn, &mut menus, MenuAction::ClearMission, None);
+        assert!(drawn.is_empty());
+    }
+
+    /// Reverse WPs turns the rows round and keeps home first.
+    #[test]
+    fn reverse_wps_keeps_home_first() {
+        let mut plan = from_vehicle();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::ReverseWps, None);
+        let latitudes: Vec<f64> = plan.items().iter().map(|item| item.x).collect();
+        assert_eq!(latitudes, vec![-35.36, -35.362, -35.361]);
+        let seqs: Vec<u16> = plan.items().iter().map(|item| item.seq).collect();
+        assert_eq!(seqs, vec![0, 1, 2]);
+    }
+
+    /// Draw a Polygon starts drawing the first time and adds the corner under the menu after.
+    #[test]
+    fn draw_a_polygon_starts_drawing_then_adds_corners() {
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::DrawPolygon, None);
+        assert_eq!(plan.draw_mode(), DrawMode::Area);
+        assert!(
+            plan.polygon().is_empty(),
+            "the first choice only starts drawing"
+        );
+        choose(&mut plan, &mut menus, MenuAction::DrawPolygon, None);
+        assert_eq!(plan.polygon(), &[canberra()]);
+        // And a click on the map adds a corner while drawing: AddWPToMap's polygongridmode.
+        plan.add_wp_to_map(at(-35.37, 149.17), 50.0, AltitudeFrame::Relative);
+        assert_eq!(plan.polygon().len(), 2);
+        assert!(plan.is_empty(), "no waypoint was added");
+    }
+
+    /// Clear Polygon removes the corners and stops drawing.
+    #[test]
+    fn clear_polygon_removes_the_corners_and_stops_drawing() {
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        plan.set_draw_mode(DrawMode::Area);
+        plan.add_area_vertex(canberra());
+        choose(&mut plan, &mut menus, MenuAction::ClearPolygon, None);
+        assert!(plan.polygon().is_empty());
+        assert_eq!(plan.draw_mode(), DrawMode::Waypoints);
+    }
+
+    /// From Current Waypoints makes the polygon from the WAYPOINT rows and asks about clearing.
+    #[test]
+    fn from_current_waypoints_makes_the_polygon_and_asks() {
+        let mut plan = from_vehicle();
+        plan.append(cmd::loiter_time(
+            at(-35.9, 149.9),
+            50.0,
+            FRAME_RELATIVE,
+            5.0,
+        ));
+        let mut menus = PlanMenus::default();
+        choose(
+            &mut plan,
+            &mut menus,
+            MenuAction::PolygonFromWaypoints,
+            None,
+        );
+        assert_eq!(
+            plan.polygon(),
+            &[at(-35.361, 149.161), at(-35.362, 149.162)],
+            "the two waypoints, not home and not the loiter"
+        );
+        let question = menus.prompt.as_ref().expect("the question");
+        assert_eq!(
+            (question.title, question.text.as_str()),
+            ("Confirm", "Clear current waypoints?")
+        );
+        assert!(question.is_question());
+        // No keeps the mission.
+        menus.cancel();
+        assert_eq!(plan.items().len(), 4);
+        // Yes clears it, home aside.
+        choose(
+            &mut plan,
+            &mut menus,
+            MenuAction::PolygonFromWaypoints,
+            None,
+        );
+        menus.submit(&mut plan, &context());
+        assert_eq!(plan.items().len(), 1);
+    }
+
+    /// With no rows it does nothing and asks nothing.
+    #[test]
+    fn from_current_waypoints_with_no_rows_does_nothing() {
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        choose(
+            &mut plan,
+            &mut menus,
+            MenuAction::PolygonFromWaypoints,
+            None,
+        );
+        assert!(menus.prompt.is_none());
+        assert!(plan.polygon().is_empty());
+    }
+
+    /// Measure Distance: the first choice remembers the point, the second reports distance and
+    /// bearing on GMap's 6378137 m sphere, in the C#'s words and formats.
+    #[test]
+    fn measure_distance_takes_two_choices() {
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        menus.open_at(CLICK, at(0.0, 0.0), None);
+        menus.choose(&mut plan, MenuAction::MeasureDistance, &context());
+        assert!(menus.measure_from.is_some());
+        assert_eq!(menus.prompt.as_ref().map(|p| p.title), Some("Measure Dist"));
+        menus.cancel();
+        menus.open_at(CLICK, at(0.0, 1.0), None);
+        menus.choose(&mut plan, MenuAction::MeasureDistance, &context());
+        assert!(menus.measure_from.is_none(), "startmeasure is reset");
+        // One degree of the equator on a 6378137 m sphere is 111319.490793 m.
+        assert_eq!(
+            menus.prompt.as_ref().map(|p| p.text.as_str()),
+            Some("Distance: 111319.49 m AZ: 90")
+        );
+    }
+
+    /// Modify Alt adds, or multiplies with a star, every row's altitude and leaves home alone.
+    #[test]
+    fn modify_alt_changes_every_row_and_not_home() {
+        let mut plan = from_vehicle();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::ModifyAlt, None);
+        assert_eq!(menus.prompt.as_ref().map(Prompt::value), Some("0"));
+        answer(&mut plan, &mut menus, "20");
+        let altitudes: Vec<f64> = plan.items().iter().map(|item| item.z).collect();
+        assert_eq!(altitudes, vec![580.0, 120.0, 120.0]);
+        choose(&mut plan, &mut menus, MenuAction::ModifyAlt, None);
+        answer(&mut plan, &mut menus, "*2");
+        let altitudes: Vec<f64> = plan.items().iter().map(|item| item.z).collect();
+        assert_eq!(altitudes, vec![580.0, 240.0, 240.0]);
+    }
+
+    /// Insert Wp > At Current Position adds a waypoint where the vehicle is, at its altitude.
+    #[test]
+    fn at_current_position_adds_a_waypoint_at_the_vehicle() {
+        let mut plan = from_vehicle();
+        let mut menus = PlanMenus::default();
+        let flying = MenuContext {
+            vehicle: Some((at(-35.4, 149.2), 42.7)),
+            ..context()
+        };
+        menus.open_at(CLICK, canberra(), None);
+        menus.choose(&mut plan, MenuAction::InsertAtCurrentPosition, &flying);
+        let item = last(&plan);
+        assert_eq!(item.command, 16);
+        assert_eq!(item.position(), Ok(Some(at(-35.4, 149.2))));
+        assert!((item.z - 42.0).abs() < 1e-9, "(int) cs.alt");
+        // Without a vehicle it says so and adds nothing.
+        choose(
+            &mut plan,
+            &mut menus,
+            MenuAction::InsertAtCurrentPosition,
+            None,
+        );
+        assert_eq!(plan.items().len(), 4);
+        assert_eq!(
+            menus.prompt.as_ref().map(|p| p.text.as_str()),
+            Some("Invalid Location")
+        );
+    }
+
+    /// A click adds what is being drawn: waypoint, fence corner or rally point.
+    #[test]
+    fn a_click_adds_what_the_draw_mode_says() {
+        let mut plan = Plan::default();
+        plan.add_wp_to_map(canberra(), 60.0, AltitudeFrame::Terrain);
+        assert_eq!(plan.items().len(), 1);
+        assert_eq!(plan.items()[0].frame, FRAME_TERRAIN);
+        plan.set_draw_mode(DrawMode::Fence);
+        plan.add_wp_to_map(canberra(), 60.0, AltitudeFrame::Relative);
+        assert_eq!(plan.fence().len(), 1);
+        plan.set_draw_mode(DrawMode::Rally);
+        plan.add_wp_to_map(canberra(), 60.0, AltitudeFrame::Relative);
+        assert_eq!(plan.rally().len(), 1);
+        assert_eq!(plan.items().len(), 1, "only the first click was a waypoint");
+    }
+
+    /// The default altitude copies the last item with a position, and never a zero from an RTL.
+    #[test]
+    fn the_default_altitude_skips_items_without_a_position() {
+        let mut plan = Plan::default();
+        assert!((plan.default_altitude() - DEFAULT_ALTITUDE).abs() < 1e-9);
+        plan.append(cmd::waypoint(canberra(), 75.0, FRAME_RELATIVE));
+        plan.append(cmd::return_to_launch(FRAME_RELATIVE));
+        assert!((plan.default_altitude() - 75.0).abs() < 1e-9);
+    }
+
+    /// A vehicle's or a file's list starts with home; clearing, surveying or deleting it ends that.
+    #[test]
+    fn home_is_first_only_while_item_zero_is_the_home_record() {
+        let mut plan = from_vehicle();
+        assert!(plan.home_first());
+        plan.remove(0);
+        assert!(!plan.home_first());
+
+        let mut plan = Plan::default();
+        plan.adopt_from_file("x.waypoints", from_vehicle().items().to_vec());
+        assert!(plan.home_first());
+        plan.clear();
+        assert!(!plan.home_first());
+
+        let mut plan = from_vehicle();
+        plan.move_item(1, -1);
+        assert!(!plan.home_first(), "home moved off item 0");
+
+        let mut plan = Plan::default();
+        plan.adopt_from_vehicle(Vec::new());
+        assert!(!plan.home_first(), "an empty download has no home");
+    }
+
+    /// A press that closed the menu is swallowed once, at that point only.
+    #[test]
+    fn the_press_that_closes_the_menu_adds_nothing() {
+        let mut menus = PlanMenus::default();
+        menus.open_at(CLICK, canberra(), None);
+        menus.dismiss((10.0, 20.0));
+        assert!(menus.open.is_none());
+        assert!(!menus.swallows_press((11.0, 20.0)), "another press");
+        menus.open_at(CLICK, canberra(), None);
+        menus.dismiss((10.0, 20.0));
+        assert!(menus.swallows_press((10.0, 20.0)));
+        assert!(!menus.swallows_press((10.0, 20.0)), "only once");
+        // A dismissal with no menu open records nothing.
+        menus.dismiss((5.0, 5.0));
+        assert!(!menus.swallows_press((5.0, 5.0)));
+    }
+
+    /// Choosing with no menu open does nothing: a stale click after the menu went away.
+    #[test]
+    fn choosing_with_no_menu_open_does_nothing() {
+        let mut plan = from_vehicle();
+        let mut menus = PlanMenus::default();
+        menus.choose(&mut plan, MenuAction::Rtl, &context());
+        assert_eq!(plan.items().len(), 3);
+    }
+
+    /// Every id is distinct, so a script never clicks the wrong entry, and every drop-down lines
+    /// up with its entry.
+    #[test]
+    fn the_menu_ids_are_distinct_and_drop_downs_line_up() {
+        let mut ids: Vec<&str> = menu_entries()
+            .filter(|entry| !entry.is_separator())
+            .map(|entry| entry.id)
+            .collect();
+        let count = ids.len();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), count);
+        assert!((menu_offset(0) - MENU_PADDING).abs() < f32::EPSILON);
+        // After ten entries and the separator.
+        let polygon = MAP_MENU
+            .iter()
+            .position(|entry| entry.control == "polygonToolStripMenuItem")
+            .expect("Polygon");
+        assert!(
+            (menu_offset(polygon) - (MENU_PADDING + 10.0 * MENU_ROW + MENU_SEPARATOR)).abs()
+                < f32::EPSILON
+        );
+    }
+
+    /// A drop-down lines up with its entry when it fits, moves up just enough when it would run
+    /// off the bottom, and never above the window; and none of that moves the menu, whose top is
+    /// an input here rather than an output.
+    #[test]
+    fn a_drop_down_moves_up_to_fit_and_the_menu_does_not_move() {
+        // Room below: aligned with the entry (its padding removed so the rows line up).
+        assert!((dropdown_top(100.0, 50.0, 200.0, 1200.0) - 46.0).abs() < f32::EPSILON);
+        // The menu opened at 837 in a 1200-tall window and Map Tool is 12 rows down: a drop-down
+        // of 7 rows would end below the window, so it starts higher, ending exactly at the bottom.
+        let map_tool = MENU_PADDING + 12.0 * MENU_ROW;
+        let height = column_height(&[]) + 7.0 * MENU_ROW;
+        let top = dropdown_top(837.0, map_tool, height, 1200.0);
+        assert!(top < map_tool - MENU_PADDING);
+        assert!((837.0 + top + height - 1200.0).abs() < f32::EPSILON);
+        // Taller than the window: pinned to the window's top, not above it.
+        assert!((dropdown_top(500.0, 50.0, 5000.0, 1200.0) + 500.0).abs() < f32::EPSILON);
+        // The menu's own height is what the window snaps, and a drop-down is not part of it.
+        let menu = column_height(MAP_MENU);
+        assert!(menu > 10.0 * MENU_ROW);
+        assert!(
+            menu < 1200.0,
+            "the menu itself fits a 1200-tall window: {menu}"
+        );
+    }
+
+    /// Every entry the plan's list says the tests prove is live, and the rest are dimmed.
+    #[test]
+    fn the_ported_entries_are_live() {
+        let live: Vec<&str> = menu_entries()
+            .filter(|entry| entry.action.is_some())
+            .map(|entry| entry.id)
+            .collect();
+        assert_eq!(
+            live,
+            vec![
+                "menu-deleteWP",
+                "menu-insertWp",
+                "menu-currentPosition",
+                "menu-insertSplineWP",
+                "menu-loiterForever",
+                "menu-loitertime",
+                "menu-loitercircles",
+                "menu-jumpstart",
+                "menu-jumpwP",
+                "menu-rTL",
+                "menu-land",
+                "menu-takeoff",
+                "menu-setROI",
+                "menu-clearMission",
+                "menu-addPolygonPoint2",
+                "menu-clearPolygon2",
+                "menu-fromCurrentWaypoints",
+                "menu-ContextMeasure",
+                "menu-reverseWPs",
+                "menu-loadWPFile",
+                "menu-saveWPFile",
+                "menu-modifyAlt",
+            ]
+        );
     }
 }

@@ -1,0 +1,39 @@
+# Insert Wp: insertWpToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:4070). Asks "Insert WP
+# after wp#", offering the row after the selected one, and puts a WAYPOINT there at the click.
+# A number Rows.Insert would throw on is refused with "Invalid insert position".
+
+screen plan
+window 1600x1200
+settle 4
+
+click map@0.45x0.40
+click map@0.60x0.55
+expect mission.items 2
+
+# Nothing selected: the offer is after the last row.
+click map@0.30x0.70:right
+click menu-insertWp
+expect plan.prompt Insert WP
+expect plan.prompt.text ~ Insert WP after wp
+expect plan.prompt.value 2
+
+# After row 1 instead: the new waypoint is the second item, and selected.
+key ctrl+u
+type 1
+key Return
+expect plan.prompt none
+expect mission.items 3
+expect mission.commands 16,16,16
+expect mission.selected 1
+
+# A row that is not there.
+click map@0.30x0.70:right
+click menu-insertWp
+key ctrl+u
+type 9
+key Return
+expect plan.prompt Error
+expect plan.prompt.text Invalid insert position
+expect mission.items 3
+key Return
+expect plan.prompt none

@@ -1,0 +1,21 @@
+# Insert Spline WP: insertSplineWPToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:4035). The
+# same question as Insert Wp, and a SPLINE_WAYPOINT (82) where the answer says.
+
+screen plan
+window 1600x1200
+settle 4
+
+click map@0.45x0.40
+click map@0.60x0.55
+expect mission.commands 16,16
+
+click map@0.30x0.70:right
+click menu-insertSplineWP
+expect plan.prompt Insert WP
+expect plan.prompt.value 2
+key ctrl+u
+type 1
+key Return
+expect mission.items 3
+expect mission.commands 16,82,16
+expect mission.selected 1

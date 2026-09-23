@@ -56,13 +56,26 @@ pub(crate) fn command(target: VehicleId, command: u16, params: [f32; 7]) -> MavM
     })
 }
 
+/// `magic_force_arm_value`, `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2634`.
+pub const MAGIC_FORCE_ARM: f32 = 2989.0;
+/// `magic_force_disarm_value`, `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2635`.
+pub const MAGIC_FORCE_DISARM: f32 = 21196.0;
+
 /// Arms or disarms the vehicle.
 ///
-/// `force` sends the magic 21196 that bypasses the autopilot's safety checks. It exists because
-/// the protocol has it and ground crews occasionally need it; it is never the default.
+/// `force` sends the magic value that bypasses the autopilot's checks - and it is a different
+/// value each way: 2989 to force an arm, 21196 to force a disarm. Mission Planner's `doARMAsync`
+/// has both as named constants, and ArduPilot looks for each one only on its own side; the
+/// wrong one is an ordinary command the vehicle checks and refuses. It exists because the
+/// protocol has it and ground crews occasionally need it; it is never the default.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2634-2635, 2640-2644`
 #[must_use]
 pub fn arm(target: VehicleId, arm: bool, force: bool) -> MavMessage {
-    let force_magic = if force { 21196.0 } else { 0.0 };
+    let force_magic = match (force, arm) {
+        (false, _) => 0.0,
+        (true, true) => MAGIC_FORCE_ARM,
+        (true, false) => MAGIC_FORCE_DISARM,
+    };
     command(
         target,
         CMD_COMPONENT_ARM_DISARM,
@@ -394,13 +407,15 @@ mod tests {
         VehicleId::new(1, 1)
     }
 
-    /// The value ArduPilot and the MAVLink definitions both use to mean "ignore your own checks".
+    /// The values ArduPilot looks for to mean "ignore your own checks", one each way.
     ///
-    /// Pinned here against Mission Planner's own constant - `magic_force_disarm_value = 21196.0f`
-    /// in `ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs` - because a wrong number here would not
-    /// fail loudly. The vehicle would simply refuse to arm and the operator would be left pressing
-    /// a button that does nothing at the moment they most need it.
-    const FORCE_MAGIC: f32 = 21196.0;
+    /// Pinned here against Mission Planner's own constants - `magic_force_arm_value = 2989.0f`
+    /// and `magic_force_disarm_value = 21196.0f` in `MAVLinkInterface.cs:2634-2635` - because a
+    /// wrong number here does not fail loudly. Until 2026-09-24 the arm side sent the disarm
+    /// value, so the Force Arm button was an ordinary arm the vehicle checked and refused: the
+    /// operator was left pressing a button that did nothing at the moment they most needed it.
+    const FORCE_ARM: f32 = 2989.0;
+    const FORCE_DISARM: f32 = 21196.0;
 
     fn params(message: &MavMessage) -> [f32; 7] {
         match message {
@@ -435,15 +450,45 @@ mod tests {
     }
 
     #[test]
-    fn forcing_sends_the_magic_the_firmware_looks_for() {
+    fn forcing_an_arm_sends_the_arm_magic_the_firmware_looks_for() {
         let message = arm(target(), true, true);
         let p = params(&message);
         assert!((p[0] - 1.0).abs() < f32::EPSILON);
         assert!(
-            (p[1] - FORCE_MAGIC).abs() < f32::EPSILON,
-            "param2 should be {FORCE_MAGIC}, got {}",
+            (p[1] - FORCE_ARM).abs() < f32::EPSILON,
+            "param2 should be {FORCE_ARM}, got {}",
             p[1]
         );
+    }
+
+    #[test]
+    fn forcing_a_disarm_sends_the_disarm_magic_which_is_a_different_number() {
+        let message = arm(target(), false, true);
+        let p = params(&message);
+        assert!(p[0].abs() < f32::EPSILON, "param1 should ask to disarm");
+        assert!(
+            (p[1] - FORCE_DISARM).abs() < f32::EPSILON,
+            "param2 should be {FORCE_DISARM}, got {}",
+            p[1]
+        );
+        assert_ne!(FORCE_ARM, FORCE_DISARM);
+    }
+
+    /// The two constants, read out of the C# file itself when the tree is present.
+    #[test]
+    fn the_magic_values_are_mission_planners_own() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../referneces/missionplanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs"
+        );
+        let Ok(source) = std::fs::read_to_string(path) else {
+            eprintln!("skipped: no C# tree at {path}");
+            return;
+        };
+        assert!(source.contains("const float magic_force_arm_value = 2989.0f;"));
+        assert!(source.contains("const float magic_force_disarm_value = 21196.0f;"));
+        assert!((MAGIC_FORCE_ARM - 2989.0).abs() < f32::EPSILON);
+        assert!((MAGIC_FORCE_DISARM - 21196.0).abs() < f32::EPSILON);
     }
 
     #[test]

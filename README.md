@@ -45,6 +45,7 @@ Measured on this tree: **21 crates, 55,520 hand-written Rust LOC** (plus 93,834 
 | GUI | fly, plan, setup, params and log screens on gpui |
 | Porting ledger | `ledger/ledger.csv`, one row per C# file with its tier and state; `cargo xtask ledger check` fails on anything unaccounted for |
 | Flight screen coverage | every one of `FlightData`'s 136 wired actions listed with what stands in for it here — 27 done, 87 missing — in `docs/coverage/flightdata.md`, kept current by a test |
+| Planner coverage and menu | every one of `FlightPlanner`'s 121 wired actions listed the same way — 40 done, 69 missing — in `docs/coverage/flightplanner.md`; the map's right-click menu is Mission Planner's, in its order, with 22 entries working and proved by a GUI script each |
 
 **Not yet**: the log browser's chart cursor, a joystick latency histogram from a real device
 (none is attached to this machine), i18n, packaging. `PLAN.md` §13.2 is the queue, and says what *done* means for

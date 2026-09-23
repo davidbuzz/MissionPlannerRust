@@ -1,0 +1,34 @@
+# Takeoff: takeoffToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:6780). Asks "Please enter
+# your takeoff altitude in m", offering 10, and appends a TAKEOFF (22) at that altitude with no
+# position. No vehicle is connected, so it is not ArduPlane and no pitch is asked. An altitude
+# int.TryParse refuses is "Bad Alt".
+
+screen plan
+window 1600x1200
+settle 4
+
+click map@0.45x0.40:right
+click menu-takeoff
+expect plan.prompt Altitude
+expect plan.prompt.text Please enter your takeoff altitude in m
+expect plan.prompt.value 10
+key ctrl+u
+type 25
+key Return
+expect plan.prompt none
+expect mission.items 1
+expect mission.last.command 22
+expect mission.last.alt 25
+expect mission.last.p1 0
+expect mission.last.position false
+
+click map@0.45x0.40:right
+click menu-takeoff
+key ctrl+u
+type 10.5
+key Return
+expect plan.prompt message
+expect plan.prompt.text Bad Alt
+expect mission.items 1
+click plan-prompt-ok
+expect plan.prompt none

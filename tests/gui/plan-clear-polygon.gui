@@ -1,0 +1,23 @@
+# Polygon > Clear Polygon: clearPolygonToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:2084).
+# The corners go and drawing stops (polygongridmode = false), so the next click is a waypoint.
+
+screen plan
+window 1600x1200
+settle 4
+
+click draw-area
+expect plan.draw draw-area
+click map@0.40x0.40
+click map@0.60x0.40
+click map@0.60x0.60
+expect survey.points 3
+
+click map@0.30x0.70:right
+click menu-polygon
+click menu-clearPolygon2
+expect survey.points 0
+expect plan.draw draw-waypoints
+
+click map@0.50x0.50
+expect mission.items 1
+expect survey.points 0

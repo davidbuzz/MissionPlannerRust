@@ -1,0 +1,32 @@
+# Delete WP, from the map's right-click menu: deleteWPToolStripMenuItem_Click
+# (GCSViews/FlightPlanner.cs:3118). Enabled only over a waypoint, as contextMenuStrip1_Opening has
+# it (FlightPlanner.cs:2669), and it removes the waypoint under the cursor.
+#
+# The first click's waypoint moves when the map frames it; the second one's does not, because the
+# second press freezes the view. So the right-click aims at the second.
+
+screen plan
+window 1600x1200
+settle 4
+
+click map@0.45x0.40
+click map@0.60x0.55
+expect mission.items 2
+
+# Off the waypoints Delete WP is disabled, and clicking it does nothing.
+click map@0.30x0.70:right
+expect plan.menu open
+expect plan.menu.delete false
+click menu-deleteWP
+expect mission.items 2
+click map@0.20x0.20
+expect plan.menu closed
+expect mission.items 2
+
+# On the second waypoint it is enabled, and removes it.
+click map@0.60x0.55:right
+expect plan.menu.delete true
+click menu-deleteWP
+expect plan.menu closed
+expect mission.items 1
+expect mission.commands 16

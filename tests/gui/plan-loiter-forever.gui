@@ -1,0 +1,18 @@
+# Loiter > Forever: loiterForeverToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:4763). A
+# LOITER_UNLIM (17) at the click, at the default altitude, with no question asked.
+
+screen plan
+window 1600x1200
+settle 4
+
+click map@0.45x0.40:right
+click menu-loiter
+expect plan.menu.submenu menu-loiter
+click menu-loiterForever
+expect plan.menu closed
+expect plan.prompt none
+expect mission.items 1
+expect mission.last.command 17
+expect mission.last.position true
+expect mission.last.alt 50
+expect mission.last.p1 0

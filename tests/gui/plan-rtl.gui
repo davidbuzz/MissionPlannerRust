@@ -1,0 +1,15 @@
+# RTL: rTLToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:5873). Appends a RETURN_TO_LAUNCH (20)
+# and nothing else - no position, no altitude.
+
+screen plan
+window 1600x1200
+settle 4
+
+click map@0.45x0.40
+click map@0.30x0.70:right
+click menu-rTL
+expect plan.menu closed
+expect mission.items 2
+expect mission.commands 16,20
+expect mission.last.position false
+expect mission.last.alt 0

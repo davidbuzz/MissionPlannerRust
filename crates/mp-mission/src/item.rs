@@ -82,13 +82,47 @@ impl MissionItem {
     ///
     /// * `MAV_CMD_DO_SET_SERVO` puts a servo number in `param1` and leaves x and y at zero.
     ///   Treating that as a position puts a phantom waypoint in the Gulf of Guinea.
-    /// * Fence vertices and rally points sit at 5000-5006 and 5100, well outside the classic
+    /// * Fence vertices and rally points sit at 5000-5004 and 5100, well outside the classic
     ///   16-95 navigation block, but they carry real latitude and longitude. Excluding them sends
     ///   a fence at latitude 0.0000035 instead of 35 - a fence the vehicle cannot breach because
     ///   it is off the coast of Africa.
+    /// * `DO_SET_ROI` (201) is outside that block too and carries a position; `NAV_DELAY` (93) is
+    ///   inside it and carries none.
+    ///
+    /// So the set is not a range. It is Mission Planner's: `Locationwp.isLocationCommand` asks
+    /// whether the `MAV_CMD` member carries `[hasLocation()]` in the generated `Mavlink.cs`, and
+    /// the link scales by 1e7 exactly when it does (`MAVLinkInterface.cs:4014-4023, 3545-3552`).
+    /// These are those 45 members; a test holds the list to `Mavlink.cs` when the C# tree is
+    /// present.
+    /// `// C#: ExtLibs/Utilities/locationwp.cs:39-56`
     #[must_use]
     pub const fn is_navigation(&self) -> bool {
-        matches!(self.command, 16..=95 | 5000..=5006 | 5100)
+        matches!(
+            self.command,
+            16..=19
+                | 21..=25
+                | 31
+                | 36
+                | 80..=82
+                | 84
+                | 85
+                | 94
+                | 179
+                | 188
+                | 189
+                | 192
+                | 195
+                | 201
+                | 252
+                | 611
+                | 4001
+                | 5000..=5004
+                | 5100
+                | 30001
+                | 31000..=31009
+                | 42006
+                | 43003
+        )
     }
 
     /// The position, if this item has one.
@@ -103,5 +137,86 @@ impl MissionItem {
     #[must_use]
     pub const fn is_home(&self) -> bool {
         self.seq == 0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The `MAV_CMD` members `Mavlink.cs` marks `[hasLocation()]`, read from the C# tree.
+    fn has_location_in_the_c_sharp() -> Option<Vec<u16>> {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../referneces/missionplanner/ExtLibs/Mavlink/Mavlink.cs");
+        let source = std::fs::read_to_string(path).ok()?;
+        let start = source.find("public enum MAV_CMD: ushort")?;
+        let body = &source[start..];
+        let end = body.find("\n    }")?;
+        let mut marked = false;
+        let mut commands = Vec::new();
+        for line in body[..end].lines() {
+            let line = line.trim();
+            if line.starts_with("[hasLocation") {
+                marked = true;
+                continue;
+            }
+            if line.starts_with('[') || line.starts_with("///") || line.is_empty() {
+                continue;
+            }
+            if let Some((_, value)) = line.split_once('=')
+                && let Ok(value) = value.trim().trim_end_matches(',').parse::<u16>()
+            {
+                if marked {
+                    commands.push(value);
+                }
+                marked = false;
+            }
+        }
+        Some(commands)
+    }
+
+    /// Every command the C# scales by 1e7 is navigation here, and no other `u16` is.
+    #[test]
+    fn the_location_commands_are_the_ones_mavlink_cs_marks() {
+        let Some(marked) = has_location_in_the_c_sharp() else {
+            eprintln!("skipped: the C# tree is not checked out here");
+            return;
+        };
+        assert_eq!(
+            marked.len(),
+            45,
+            "Mavlink.cs marks 45 MAV_CMD members hasLocation"
+        );
+        for command in 0..=u16::MAX {
+            let item = MissionItem {
+                command,
+                ..MissionItem::default()
+            };
+            assert_eq!(
+                item.is_navigation(),
+                marked.contains(&command),
+                "command {command}"
+            );
+        }
+    }
+
+    /// The ones that decided it: an ROI carries a position, RTL and a delay do not.
+    #[test]
+    fn a_region_of_interest_has_a_position_and_a_return_to_launch_does_not() {
+        let roi = MissionItem {
+            command: 201,
+            x: -35.36,
+            y: 149.16,
+            ..MissionItem::default()
+        };
+        assert!(roi.is_navigation());
+        assert!(roi.position().expect("valid").is_some());
+        for command in [20, 93, 177, 183] {
+            let item = MissionItem {
+                command,
+                ..MissionItem::default()
+            };
+            assert!(!item.is_navigation(), "command {command}");
+        }
     }
 }

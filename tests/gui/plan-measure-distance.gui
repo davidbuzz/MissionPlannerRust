@@ -1,0 +1,29 @@
+# Map Tool > Measure Distance: ContextMeasure_Click (GCSViews/FlightPlanner.cs:2625). The first
+# choice remembers the point and says to choose again; the second reports "Distance: ... m AZ: ..."
+# and forgets the first point.
+
+screen plan
+window 1600x1200
+settle 4
+
+# A waypoint first, so the map has a scale that is not the empty graticule's.
+click map@0.50x0.50
+click map@0.30x0.30:right
+click menu-mapTool
+click menu-ContextMeasure
+expect plan.measure true
+expect plan.prompt Measure Dist
+expect plan.prompt.text ~ Click this option again to get the distance.
+key Return
+expect plan.prompt none
+
+click map@0.70x0.30:right
+click menu-mapTool
+click menu-ContextMeasure
+expect plan.measure false
+expect plan.prompt message
+expect plan.prompt.text ~ Distance:
+expect plan.prompt.text ~ m AZ: 90
+key Return
+expect plan.prompt none
+expect mission.items 1

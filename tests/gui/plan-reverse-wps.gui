@@ -1,0 +1,21 @@
+# Map Tool > Reverse WPs: reverseWPsToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:5840). The
+# rows turned round. Built from three different commands so the order is visible in the facts.
+
+screen plan
+window 1600x1200
+settle 4
+
+click map@0.45x0.40
+click map@0.55x0.45:right
+click menu-loiter
+click menu-loiterForever
+click map@0.30x0.70:right
+click menu-rTL
+expect mission.commands 16,17,20
+
+click map@0.30x0.70:right
+click menu-mapTool
+expect plan.menu.submenu menu-mapTool
+click menu-reverseWPs
+expect mission.items 3
+expect mission.commands 20,17,16

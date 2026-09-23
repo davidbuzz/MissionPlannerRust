@@ -249,7 +249,12 @@ KML/DXF/shapefile import-export, geotagging hand-off.
   (rectangles, L/T/U/comb, concave fields, slivers, zone and equator crossings, the antimeridian,
   every start position, lead-in, overshoot, trigger spacing), and `tests/grid_vectors.rs` matches
   every case **bit for bit**. Corridor, rotary and Gridv2 are not ported; a Windows .NET 4.7.2
-  oracle run (PLAN.md R5) is still owed.
+  oracle run (PLAN.md R5) is still owed. The screen's actions are counted:
+  `crates/mp-gui/src/planner_coverage.rs` lists all 121 event wirings of `FlightPlanner.Designer.cs`
+  (40 done, 69 missing, 12 plumbing; `docs/coverage/flightplanner.md`), and the map's right-click
+  menu is the C#'s in its order, with 22 entries ported from their handlers and proved by one
+  `tests/gui/plan-*.gui` script each. **Defect found:** a mission drawn from an empty map has no
+  home record at item 0 (PLAN.md §13.4 row 12).
 - **Tests:** `tests/mission_bytes.rs` loads a corpus of real `.waypoints`/`.mission` files, round-trips them and asserts **byte identity**; `tests/grid_vectors.rs` survey-grid generation against golden outputs from the C# `Grid`/`Gridv2` for a matrix of polygon/angle/overlap/terrain inputs; `tests/kml_dxf.rs` import→export round-trip against fixture files; `tests/terrain.rs` altitude-following maths against golden vectors; `tests/sitl_upload.rs` uploads missions, fences and rally points to SITL and reads them back.
 
 ### D12. Configuration & tuning screens

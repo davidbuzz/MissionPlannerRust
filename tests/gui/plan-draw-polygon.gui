@@ -1,0 +1,25 @@
+# Polygon > Draw a Polygon: addPolygonPointToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:1731).
+# The first choice starts drawing (polygongridmode); after that each choice adds the corner under
+# the menu, and so does a click on the map (AddWPToMap, FlightPlanner.cs:560) - not a waypoint.
+
+screen plan
+window 1600x1200
+settle 4
+
+expect plan.draw draw-waypoints
+click map@0.40x0.40:right
+click menu-polygon
+expect plan.menu.submenu menu-polygon
+click menu-addPolygonPoint2
+expect plan.draw draw-area
+expect survey.points 0
+
+click map@0.40x0.40:right
+click menu-polygon
+click menu-addPolygonPoint2
+expect survey.points 1
+
+click map@0.60x0.40
+click map@0.60x0.60
+expect survey.points 3
+expect mission.items 0
