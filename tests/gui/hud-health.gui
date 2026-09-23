@@ -1,0 +1,29 @@
+# The HUD's health readouts - Vibe, EKF, the pre-arm line - drawn as HUD.cs draws them.
+#
+# The facts are read from the scene the display paints: each readout's colour by the C#'s brush
+# name (white, orange, red), the pre-arm text, and whether the elements that wait on values
+# mp_vehicle does not carry showed. Needs SITL copter on tcp:127.0.0.1:5760, disarmed, sitting on
+# the ground and past its start-up: GPS locked and the EKF settled, which takes SITL about half a
+# minute from launch. The thresholds and every colour are in hud.rs's unit tests; this proves the
+# live values reach them.
+
+screen fly
+window 1600x1200
+settle 6
+
+# A copter at rest in SITL shakes far below the C#'s 30 m/s² line (HUD.cs:3166).
+expect hud.vibe.colour white
+# No SYS_STATUS.load in mp_vehicle, so the red CPU is never up (HUD.cs:3206).
+expect hud.cpu false
+# A settled SITL EKF has attitude and horizontal velocity and variances near zero, so ekfstatus
+# is under the C#'s 0.5 (HUD.cs:3226).
+expect hud.ekf.colour white
+# Disarmed, so the pre-arm line is up (HUD.cs:3264). SITL passes its pre-arm checks once the
+# EKF and GPS are ready, which is white "Ready to Arm".
+expect hud.prearm Ready to Arm
+expect hud.prearm.colour white
+# No editor for the user's extra fields and no stored list, so none are drawn.
+expect hud.custom.count 0
+# SITL copter does not send AOA_SSA and mp_vehicle does not ingest it: neither shows.
+expect hud.fpv.shown false
+expect hud.aoa.shown false

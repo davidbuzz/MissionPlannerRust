@@ -361,7 +361,7 @@ fn replaying_every_fixture_tlog_into_vehicle_state_allocates_nothing_per_packet(
 
         // What a reader sees at the end is what the link thread built. Compared on the message
         // counter rather than the whole state, because the state legitimately holds NaN (an
-        // unreported HDOP) and NaN is unequal to itself.
+        // unreported VDOP) and NaN is unequal to itself.
         for (id, reader) in ids.iter().zip(&readers) {
             let seen = reader.load();
             let working = registry.working(*id).expect("working state");

@@ -2,8 +2,10 @@
 #
 # The facts name the elements the scene drew this frame; a vehicle on the link (SITL at
 # tcp:127.0.0.1:5760) is what makes the readouts appear, since without one the display is a
-# horizon at rest. `hud.missing` counts the doPaint() elements not yet ported, so a port that
-# regresses one fails here and a port that adds one has to update the count.
+# horizon at rest. `hud.missing` counts the doPaint() elements a live vehicle cannot show because
+# mp_vehicle does not carry their value - the flight path vector and the AOA scale, both waiting
+# on AOA_SSA - so a port that regresses one fails here and one that unblocks one has to update
+# the count. The health readouts along the bottom have their own script, hud-health.gui.
 
 screen fly
 window 1600x1200
@@ -21,4 +23,10 @@ expect hud.drawn ~ mode-and-waypoint
 expect hud.drawn ~ battery
 expect hud.drawn ~ gps
 expect hud.drawn ~ armed-banner
-expect hud.missing 6
+expect hud.drawn ~ custom-items
+expect hud.drawn ~ vibe
+expect hud.drawn ~ ekf
+expect hud.drawn ~ prearm
+expect hud.missing 2
+expect hud.missing.list ~ flight-path-vector
+expect hud.missing.list ~ CurrentState.AOA

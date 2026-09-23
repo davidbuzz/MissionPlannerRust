@@ -60,6 +60,18 @@ impl VehicleRegistry {
 
         publisher.working.link.record(seq);
         publisher.working.apply(message);
+
+        // A SiK radio reports as its own system, and what it says is about the link every
+        // vehicle on it shares, so the C# lets every vehicle's state take it. Sequence numbers
+        // stay with the sender: they measure its stream, not anyone else's.
+        // C#: ExtLibs/ArduPilot/CurrentState.cs:2280-2282
+        if matches!(message, MavMessage::Radio(_) | MavMessage::RadioStatus(_)) {
+            for (other, publisher) in &mut self.vehicles {
+                if *other != id {
+                    publisher.working.apply(message);
+                }
+            }
+        }
         id
     }
 

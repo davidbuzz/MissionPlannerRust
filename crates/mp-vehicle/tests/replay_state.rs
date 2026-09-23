@@ -159,8 +159,10 @@ fn a_real_flight_produces_a_plausible_vehicle_state() {
     );
 
     // This autotest flies at ArduPilot's default SITL location (CMAC, Canberra). The log both
-    // begins and ends with the simulator reset, so 0/0 positions are expected - they are
-    // correctly modelled as "no position", not as a spot in the Gulf of Guinea.
+    // begins and ends with the simulator reset, so 0/0 positions are expected. As in the C#
+    // (`CurrentState.cs:3270-3301`), a 0/0 GLOBAL_POSITION_INT leaves the last position and lets
+    // GPS_RAW_INT supply one; before any fix, and when GPS_RAW_INT says 0/0 too, that is "no
+    // position" rather than a spot in the Gulf of Guinea.
     assert!(
         obs.positions > 1_000,
         "position messages: {}",

@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use mp_tiles::cache::{ImageFormat, TileCache};
-use mp_tiles::source::OPENSTREETMAP;
+use mp_tiles::source::{GOOGLE_SATELLITE_MAP, OPENSTREETMAP};
 use mp_tiles::store::{DecodedTile, TileAnswer, TileStore};
 use mp_units::TileId;
 
@@ -189,10 +189,62 @@ fn the_real_mission_planner_cache_on_this_machine_reads_back() {
     assert_eq!((decoded.width, decoded.height), (256, 256), "a map tile");
 }
 
+#[test]
+fn google_imagery_the_csharp_cached_on_this_machine_is_shown_with_the_network_off() {
+    // Mission Planner's default map, from its own cache, through the store the map draws from.
+    // As above, the tile is copied out first: the store deletes what it cannot decode.
+    let Some(real) = mp_settings::map_cache_directory() else {
+        eprintln!("skipped: no home directory");
+        return;
+    };
+    let tile_root = real.join("TileDBv3").join("en");
+    let provider = GOOGLE_SATELLITE_MAP.cache_name;
+    let Some((_, id, source_path)) = first_tile_of(&tile_root, provider) else {
+        eprintln!("skipped: no {provider} tiles under {}", tile_root.display());
+        return;
+    };
+    eprintln!("showing {} from the real cache", source_path.display());
+
+    let scratch = Scratch::new("real-google");
+    let copy = csharp_path(&scratch.0, provider, id.z, id.x, id.y);
+    std::fs::create_dir_all(copy.parent().unwrap()).unwrap();
+    std::fs::copy(&source_path, &copy).unwrap();
+
+    let store = TileStore::offline(&GOOGLE_SATELLITE_MAP, TileCache::new(&scratch.0));
+    assert!(
+        matches!(store.get(id), TileAnswer::Missing),
+        "first ask queues it"
+    );
+    wait_for_a_tile(&store);
+    match store.get(id) {
+        TileAnswer::Exact(tile) => assert_eq!((tile.width, tile.height), (256, 256)),
+        other => panic!(
+            "expected the cached tile, got {other:?} with {:?}",
+            store.stats()
+        ),
+    }
+    assert_eq!(store.stats().fetched, 0, "the network was never consulted");
+    assert_eq!(
+        ImageFormat::sniff(&std::fs::read(&copy).unwrap()),
+        Some(ImageFormat::Jpeg),
+        "Google's imagery is JPEG, filed under .jpg like everything else"
+    );
+}
+
 /// The first `<provider>/<z>/<y>/<x>.jpg` under a tile root, parsed back into its parts.
 fn first_tile(tile_root: &Path) -> Option<(String, TileId, PathBuf)> {
+    first_tile_under(tile_root, tile_root)
+}
+
+/// The same, for one provider's directory only.
+fn first_tile_of(tile_root: &Path, provider: &str) -> Option<(String, TileId, PathBuf)> {
+    first_tile_under(tile_root, &tile_root.join(provider))
+}
+
+/// The first tile file under `directory`, parsed relative to `tile_root`.
+fn first_tile_under(tile_root: &Path, directory: &Path) -> Option<(String, TileId, PathBuf)> {
     let mut files = Vec::new();
-    collect_files(tile_root, &mut files);
+    collect_files(directory, &mut files);
     files.sort();
     files.into_iter().find_map(|path| {
         let relative = path.strip_prefix(tile_root).ok()?;

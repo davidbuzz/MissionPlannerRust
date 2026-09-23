@@ -630,7 +630,9 @@ impl MapViewport {
     /// What must be shown on screen about where the imagery came from.
     #[must_use]
     pub fn attribution(&self) -> Option<&'static str> {
-        self.tiles.as_ref().map(|store| store.source().attribution)
+        self.tiles
+            .as_ref()
+            .map(|store| store.source().attribution_text())
     }
 
     /// Which provider is being shown, if any.

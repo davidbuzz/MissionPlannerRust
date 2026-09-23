@@ -22,8 +22,18 @@ pub struct Sensors {
     pub reported: bool,
 }
 
-/// `MAV_SYS_STATUS_SENSOR_MOTOR_OUTPUTS`: the bit the safety switch clears.
-const MOTOR_OUTPUTS: u32 = 0x4000;
+/// `MAV_SYS_STATUS_SENSOR_MOTOR_OUTPUTS`: the bit the safety switch clears, which the C# reads as
+/// `sensors_enabled.motor_control`.
+///
+/// Taken from the dialect rather than written out. It was the literal `0x4000` until the
+/// `CurrentState` coverage work - `XY_POSITION_CONTROL`, the neighbouring bit - so the HUD's
+/// safety state followed the position controller rather than the switch.
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4845-4847; ExtLibs/Mavlink/Mavlink.cs:2900`
+const MOTOR_OUTPUTS: u32 = MavSysStatusSensor::MAV_SYS_STATUS_SENSOR_MOTOR_OUTPUTS.0;
+/// `MAV_SYS_STATUS_TERRAIN`. `// C#: ExtLibs/Mavlink/Mavlink.cs:2921`
+const TERRAIN: u32 = MavSysStatusSensor::MAV_SYS_STATUS_TERRAIN.0;
+/// `MAV_SYS_STATUS_REVERSE_MOTOR`. `// C#: ExtLibs/Mavlink/Mavlink.cs:2924`
+const REVERSE_MOTOR: u32 = MavSysStatusSensor::MAV_SYS_STATUS_REVERSE_MOTOR.0;
 
 impl Sensors {
     /// Whether the motor outputs are enabled - false while the safety switch is engaged.
@@ -34,6 +44,29 @@ impl Sensors {
     #[must_use]
     pub const fn motor_outputs_enabled(&self) -> bool {
         self.enabled & MOTOR_OUTPUTS != 0
+    }
+
+    /// `safetyactive`: the safety switch is holding the motors - motor outputs switched off.
+    /// False until the vehicle has said anything, as the C#'s unset property is.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:2968`
+    #[must_use]
+    pub const fn safety_active(&self) -> bool {
+        self.reported && !self.motor_outputs_enabled()
+    }
+
+    /// `terrainactive`: the terrain subsystem is present, enabled and healthy.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:2966`
+    #[must_use]
+    pub const fn terrain_active(&self) -> bool {
+        self.present & self.enabled & self.health & TERRAIN != 0
+    }
+
+    /// Whether the vehicle says its motors are reversed - present, enabled and healthy - which
+    /// makes the C# show a positive throttle as negative.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3850`
+    #[must_use]
+    pub const fn reverse_motor(&self) -> bool {
+        self.present & self.enabled & self.health & REVERSE_MOTOR != 0
     }
 
     /// The sensors that are switched on but not working, by name.
@@ -101,17 +134,90 @@ mod tests {
     const MAG: u32 = 4;
     const GPS: u32 = 32;
 
+    /// The motor-outputs bit as the dialect defines it, read independently of the constant the
+    /// code uses.
+    const DIALECT_MOTOR_OUTPUTS: u32 = MavSysStatusSensor::MAV_SYS_STATUS_SENSOR_MOTOR_OUTPUTS.0;
+    /// Its neighbour, which the constant used to be.
+    const DIALECT_XY_POSITION_CONTROL: u32 =
+        MavSysStatusSensor::MAV_SYS_STATUS_SENSOR_XY_POSITION_CONTROL.0;
+
     #[test]
     fn the_safety_switch_is_the_motor_outputs_bit() {
         let mut sensors = Sensors {
-            present: 0x4000 | GYRO,
+            present: DIALECT_MOTOR_OUTPUTS | GYRO,
             enabled: GYRO,
             health: GYRO,
             reported: true,
         };
         assert!(!sensors.motor_outputs_enabled(), "safety engaged");
-        sensors.enabled |= 0x4000;
+        assert!(sensors.safety_active());
+        sensors.enabled |= DIALECT_MOTOR_OUTPUTS;
         assert!(sensors.motor_outputs_enabled());
+        assert!(!sensors.safety_active());
+    }
+
+    /// The bit is the one the definitions call MOTOR_OUTPUTS, not its neighbour. It was 0x4000,
+    /// XY_POSITION_CONTROL, which made the HUD's "(SAFETY)" follow the position controller.
+    /// Pinned three ways - to the dialect's constant, to its name, and to the C#'s value - so the
+    /// code, a regenerated dialect and the C# cannot drift apart unnoticed.
+    #[test]
+    fn the_motor_outputs_bit_is_the_one_the_definitions_name() {
+        // C#: ExtLibs/Mavlink/Mavlink.cs:2900, MOTOR_OUTPUTS=32768
+        assert_eq!(DIALECT_MOTOR_OUTPUTS, 32_768);
+        assert_eq!(sensor_name(DIALECT_MOTOR_OUTPUTS), Some("MOTOR_OUTPUTS"));
+        let only = |bit| Sensors {
+            present: bit,
+            enabled: bit,
+            health: bit,
+            reported: true,
+        };
+        assert!(only(DIALECT_MOTOR_OUTPUTS).motor_outputs_enabled());
+        assert!(!only(DIALECT_XY_POSITION_CONTROL).motor_outputs_enabled());
+        assert!(only(DIALECT_XY_POSITION_CONTROL).safety_active());
+        // Every other bit leaves the outputs off.
+        for bit in (0..32).map(|shift| 1_u32 << shift) {
+            assert_eq!(
+                only(bit).motor_outputs_enabled(),
+                bit == DIALECT_MOTOR_OUTPUTS,
+                "bit {bit:#x}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_silent_vehicle_has_no_safety_engaged() {
+        // C#: safetyactive is unset (false) until the first SYS_STATUS.
+        assert!(!Sensors::default().safety_active());
+    }
+
+    #[test]
+    fn terrain_and_reversed_motors_need_all_three_masks() {
+        // C#: ExtLibs/Mavlink/Mavlink.cs:2921, 2924
+        assert_eq!(TERRAIN, 4_194_304);
+        assert_eq!(REVERSE_MOTOR, 8_388_608);
+        for (bit, name) in [(TERRAIN, "TERRAIN"), (REVERSE_MOTOR, "REVERSE_MOTOR")] {
+            assert_eq!(sensor_name(bit), Some(name));
+            let all = Sensors {
+                present: bit,
+                enabled: bit,
+                health: bit,
+                reported: true,
+            };
+            let unhealthy = Sensors { health: 0, ..all };
+            let disabled = Sensors { enabled: 0, ..all };
+            let absent = Sensors { present: 0, ..all };
+            let check = |s: &Sensors| {
+                if bit == TERRAIN {
+                    s.terrain_active()
+                } else {
+                    s.reverse_motor()
+                }
+            };
+            assert!(check(&all), "{name}");
+            assert!(!check(&unhealthy), "{name}");
+            assert!(!check(&disabled), "{name}");
+            assert!(!check(&absent), "{name}");
+        }
     }
 
     #[test]

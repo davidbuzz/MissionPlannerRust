@@ -16,6 +16,11 @@ use crate::source::TileSource;
 /// identifies the application, and servers block clients that send a generic one or none. A
 /// ground station pretending to be a browser is both rude and, when it gets the address blocked,
 /// self-defeating.
+///
+/// The C# is the same shape. GMap.NET's default is a browser string (`GMapProvider.cs:326-328`),
+/// but Mission Planner replaces it at startup with its product name, version and operating system,
+/// and that is what every provider, Google's and Bing's included, receives from it.
+/// `// C#: Program.cs:373-375`
 pub const USER_AGENT: &str = concat!(
     "MissionPlannerRust/",
     env!("CARGO_PKG_VERSION"),
@@ -27,6 +32,10 @@ pub const USER_AGENT: &str = concat!(
 /// Short on purpose. A tile that has not arrived in ten seconds is not going to be useful for the
 /// view the operator is looking at now, and the slot it holds is better spent on a tile that is.
 pub const TIMEOUT: Duration = Duration::from_secs(10);
+
+/// What every request accepts, `GMapProvider.requestAccept`.
+/// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/GMapProvider.cs:386, 404, 450-451`
+pub const ACCEPT: &str = "*/*";
 
 /// The largest tile we will accept.
 ///
@@ -72,7 +81,9 @@ pub enum FetchError {
 }
 
 /// Fetches tiles over HTTP.
-#[derive(Debug)]
+///
+/// Cheap to clone: the agent inside is shared, connection pool and all.
+#[derive(Debug, Clone)]
 pub struct TileFetcher {
     agent: ureq::Agent,
 }
@@ -85,6 +96,8 @@ impl Default for TileFetcher {
 
 impl TileFetcher {
     /// A fetcher with the timeouts and identity the providers expect.
+    ///
+    /// It goes through the proxy the environment names (`HTTP_PROXY` and its relatives), if any.
     #[must_use]
     pub fn new() -> Self {
         let config = ureq::Agent::config_builder()
@@ -94,6 +107,43 @@ impl TileFetcher {
         Self {
             agent: config.into(),
         }
+    }
+
+    /// The same fetcher, sending every request through the given proxy, e.g.
+    /// `http://127.0.0.1:3128` - what [`TileFetcher::new`] does when the environment names one,
+    /// without needing the environment to. How a test watches what goes over the wire without
+    /// anything leaving the machine.
+    pub fn through_proxy(proxy: &str) -> Result<Self, FetchError> {
+        let proxy = ureq::Proxy::new(proxy).map_err(|error| FetchError::Request {
+            url: proxy.to_owned(),
+            message: error.to_string(),
+        })?;
+        let config = ureq::Agent::config_builder()
+            .timeout_global(Some(TIMEOUT))
+            .user_agent(USER_AGENT)
+            .proxy(Some(proxy))
+            .build();
+        Ok(Self {
+            agent: config.into(),
+        })
+    }
+
+    /// A GET carrying the headers `GetTileImageUsingHttp` and `GetContentUsingHttp` send: the
+    /// User-Agent, `Accept: */*`, and the provider's `Referer` when it has one.
+    /// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/GMapProvider.cs:401-406, 447-453`
+    fn get(
+        &self,
+        url: &str,
+        referer: &str,
+    ) -> Result<ureq::http::Response<ureq::Body>, FetchError> {
+        let mut request = self.agent.get(url).header("Accept", ACCEPT);
+        if !referer.is_empty() {
+            request = request.header("Referer", referer);
+        }
+        request.call().map_err(|error| FetchError::Request {
+            url: url.to_owned(),
+            message: error.to_string(),
+        })
     }
 
     /// Fetches one tile, blocking until it arrives or fails.
@@ -106,14 +156,7 @@ impl TileFetcher {
             zoom: tile.z,
         })?;
 
-        let mut response = self
-            .agent
-            .get(&url)
-            .call()
-            .map_err(|error| FetchError::Request {
-                url: url.clone(),
-                message: error.to_string(),
-            })?;
+        let mut response = self.get(&url, source.referer)?;
 
         // Bounded read. A server that streams forever, or lies about its content length, must not
         // be able to exhaust memory.
@@ -143,6 +186,24 @@ impl TileFetcher {
             });
         }
         Ok(bytes)
+    }
+
+    /// Fetches a page as text: `GetContentUsingHttp`, which the version checks use.
+    ///
+    /// Bounded like a tile, because the pages are a few hundred kilobytes and a server that sends
+    /// more is not sending the page.
+    /// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/GMapProvider.cs:443-461`
+    pub fn fetch_text(&self, url: &str, referer: &str) -> Result<String, FetchError> {
+        let mut response = self.get(url, referer)?;
+        response
+            .body_mut()
+            .with_config()
+            .limit(MAX_TILE_BYTES as u64)
+            .read_to_string()
+            .map_err(|error| FetchError::Request {
+                url: url.to_owned(),
+                message: error.to_string(),
+            })
     }
 }
 
@@ -189,12 +250,33 @@ mod tests {
     fn every_provider_has_a_zoom_it_will_refuse() {
         // A provider claiming the maximum the tile grid allows would never refuse anything, and
         // the refusal is what stops us caching error pages as tiles.
+        //
+        // Except where the C# refuses nothing either. Google's and Bing's providers set
+        // `MaxZoom = null` (GoogleMapProvider.cs:24, BingMapProvider.cs:21), leaving the limit to
+        // the map control's 24 (FlightPlanner.cs:188); the grid here stops at 22, so they get all
+        // of it. A missing tile from them is a 404, which the policy backs off like any failure.
+        use crate::source::{
+            BING_HYBRID_MAP, BING_MAP, BING_SATELLITE_MAP, GOOGLE_MAP, GOOGLE_SATELLITE_MAP,
+            GOOGLE_TERRAIN_MAP,
+        };
+        let unlimited_in_the_csharp = [
+            &BING_MAP,
+            &BING_SATELLITE_MAP,
+            &BING_HYBRID_MAP,
+            &GOOGLE_MAP,
+            &GOOGLE_SATELLITE_MAP,
+            &GOOGLE_TERRAIN_MAP,
+        ];
         for source in crate::source::SOURCES {
-            assert!(
-                source.max_zoom < mp_units::tiles::MAX_ZOOM,
-                "{} claims every zoom the grid allows",
-                source.id
-            );
+            if unlimited_in_the_csharp.contains(&source) {
+                assert_eq!(source.max_zoom, mp_units::tiles::MAX_ZOOM, "{}", source.id);
+            } else {
+                assert!(
+                    source.max_zoom < mp_units::tiles::MAX_ZOOM,
+                    "{} claims every zoom the grid allows",
+                    source.id
+                );
+            }
         }
     }
 
@@ -233,9 +315,7 @@ mod tests {
             cache_name: "Test",
             label: "Broken",
             url: "https://tiles.invalid.example/{z}/{x}/{y}.png",
-            subdomains: &[],
-            max_zoom: 19,
-            attribution: "none",
+            ..crate::source::OPENSTREETMAP
         };
         let error = fetcher.fetch(&source, tile(0)).expect_err("should fail");
         assert!(matches!(error, FetchError::Request { .. }), "{error}");

@@ -16,6 +16,13 @@ mp-settings.workspace = true
 thiserror.workspace = true
 ureq.workspace = true
 image.workspace = true
+# GMap.NET's provider version checks are .NET regular expressions over a downloaded page, and the
+# URL cache names each file by a SHA-1. Both pinned to what the tree already resolves - gpui pulls
+# in regex and uuid pulls in sha1_smol - so they cost no extra compilation in the application.
+regex = "1.13"
+sha1_smol = "1.0"
+# The year in Google's and Bing's copyright lines, which the C# takes from DateTime.Today.
+chrono.workspace = true
 
 [dev-dependencies]
 # The offline tests build real PNGs rather than using fixture bytes, so a change in what the

@@ -166,7 +166,18 @@ impl TileStore {
     /// Starts a store with a fetch thread.
     #[must_use]
     pub fn new(source: &'static TileSource, cache: TileCache) -> Self {
-        Self::start(source, cache, FetchPolicy::new(), true)
+        Self::with_fetcher(source, cache, TileFetcher::new())
+    }
+
+    /// Starts a store with a fetch thread that fetches with the fetcher given - one that goes
+    /// through a particular proxy, say.
+    #[must_use]
+    pub fn with_fetcher(
+        source: &'static TileSource,
+        cache: TileCache,
+        fetcher: TileFetcher,
+    ) -> Self {
+        Self::start(source, cache, FetchPolicy::new(), fetcher, true)
     }
 
     /// A store that never fetches, for offline use and for tests.
@@ -180,13 +191,20 @@ impl TileStore {
     /// because every test pre-loaded by hand, and the map showed a graticule over a full cache.
     #[must_use]
     pub fn offline(source: &'static TileSource, cache: TileCache) -> Self {
-        Self::start(source, cache, FetchPolicy::offline(), true)
+        Self::start(
+            source,
+            cache,
+            FetchPolicy::offline(),
+            TileFetcher::new(),
+            true,
+        )
     }
 
     fn start(
         source: &'static TileSource,
         cache: TileCache,
         policy: FetchPolicy,
+        fetcher: TileFetcher,
         spawn: bool,
     ) -> Self {
         let shared = Arc::new(Shared {
@@ -204,7 +222,7 @@ impl TileStore {
             let thread_cache = cache.clone();
             std::thread::Builder::new()
                 .name("mp-tiles".to_owned())
-                .spawn(move || run_fetcher(source, &thread_cache, &thread_shared))
+                .spawn(move || run_fetcher(source, &thread_cache, &thread_shared, &fetcher))
                 .ok()
         });
 
@@ -350,8 +368,18 @@ impl Drop for TileStore {
 }
 
 /// The fetch thread: cache first, then network, then decode.
-fn run_fetcher(source: &'static TileSource, cache: &TileCache, shared: &Arc<Shared>) {
-    let fetcher = TileFetcher::new();
+fn run_fetcher(
+    source: &'static TileSource,
+    cache: &TileCache,
+    shared: &Arc<Shared>,
+    fetcher: &TileFetcher,
+) {
+    // Whether this store has run the provider's `OnInitialized` - the version check Google's and
+    // Bing's providers make the first time they are shown. Here, the first time one is about to
+    // fetch: a store that only ever reads the disk never goes to the network for a version it has
+    // no use for, which is what "offline" has to mean.
+    // `// C#: ExtLibs/GMap.NET.Core/GMap.NET.Internals/Core.cs:204-208`
+    let mut initialized = false;
 
     while shared.running.load(Ordering::Acquire) {
         let Some(tile) = next_tile(shared) else {
@@ -377,6 +405,11 @@ fn run_fetcher(source: &'static TileSource, cache: &TileCache, shared: &Arc<Shar
                 continue;
             }
             policy.begin(tile, now);
+        }
+
+        if !initialized {
+            initialized = true;
+            crate::versions::initialize(source, cache.root(), fetcher);
         }
 
         match fetcher.fetch(source, tile) {

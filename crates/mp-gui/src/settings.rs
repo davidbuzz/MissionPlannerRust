@@ -71,10 +71,11 @@ impl Settings {
     /// A pilot who has used Mission Planner on this machine has already chosen a link and a map;
     /// the first run here should open the same link on the same map rather than ask again. Only
     /// the keys both applications mean the same thing by: the link (`comport` and its
-    /// companions) and the map provider (`MapType`, matched by the C# provider's name, so a
-    /// provider this application does not have is simply not taken). This file's own choices
-    /// win once made.
-    /// `// C#: ExtLibs/Utilities/Settings.cs:88-125; GCSViews/FlightPlanner.cs:7247`
+    /// companions) and the map provider (`MapType`, matched by the C# provider's name as the C#
+    /// matches it, so a provider this application does not have is simply not taken). This
+    /// file's own choices win once made, and with neither the map is Mission Planner's default,
+    /// which `main.rs` applies where the provider is chosen.
+    /// `// C#: ExtLibs/Utilities/Settings.cs:88-125; GCSViews/FlightPlanner.cs:7247-7254`
     #[must_use]
     pub fn with_mission_planner_defaults(mut self, config: Option<&mp_settings::Config>) -> Self {
         let Some(config) = config else {
@@ -84,12 +85,10 @@ impl Settings {
             self.link = config.last_link();
         }
         if self.tile_source.is_none() {
-            self.tile_source = config.map_type().and_then(|name| {
-                mp_tiles::source::SOURCES
-                    .iter()
-                    .find(|source| source.cache_name == name)
-                    .map(|source| source.id.to_owned())
-            });
+            self.tile_source = config
+                .map_type()
+                .and_then(mp_tiles::source::source_by_name)
+                .map(|source| source.id.to_owned());
         }
         self
     }
@@ -214,14 +213,45 @@ mod tests {
         assert_eq!(chosen.link.as_deref(), Some("udp:14550"));
         assert_eq!(chosen.tile_source.as_deref(), Some("esri-imagery"));
 
-        // A provider this application does not have is not taken.
+        // Mission Planner's own default, which is what a real config.xml usually holds.
         theirs.set("MapType", "GoogleSatelliteMap");
+        let fresh = Settings::default().with_mission_planner_defaults(Some(&theirs));
+        assert_eq!(fresh.tile_source.as_deref(), Some("google-satellite"));
+        theirs.set("MapType", "BingHybridMap");
+        let fresh = Settings::default().with_mission_planner_defaults(Some(&theirs));
+        assert_eq!(fresh.tile_source.as_deref(), Some("bing-hybrid"));
+
+        // A provider this application does not have is not taken. GoogleHybridMap is the C#'s,
+        // and not ported: it is two layers.
+        theirs.set("MapType", "GoogleHybridMap");
         let fresh = Settings::default().with_mission_planner_defaults(Some(&theirs));
         assert_eq!(fresh.tile_source, None);
         assert_eq!(
             Settings::default().with_mission_planner_defaults(None),
             Settings::default()
         );
+    }
+
+    /// The real `config.xml` on this machine, when there is one: the map it names is the map
+    /// shown, if that provider is ported.
+    #[test]
+    fn the_map_the_real_mission_planner_last_showed_is_taken() {
+        let Some(path) = mp_settings::Config::default_path() else {
+            eprintln!("skipped: no home directory");
+            return;
+        };
+        let Ok(config) = mp_settings::Config::load(&path) else {
+            eprintln!("skipped: no Mission Planner config at {}", path.display());
+            return;
+        };
+        let Some(map_type) = config.map_type() else {
+            eprintln!("skipped: {} names no MapType", path.display());
+            return;
+        };
+        let taken = Settings::default().with_mission_planner_defaults(Some(&config));
+        let expected = mp_tiles::source::source_by_name(map_type).map(|source| source.id);
+        eprintln!("MapType {map_type} -> {:?}", taken.tile_source);
+        assert_eq!(taken.tile_source.as_deref(), expected);
     }
 
     #[test]

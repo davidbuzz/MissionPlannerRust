@@ -293,12 +293,14 @@ impl MissionPlanner {
         if std::env::var("MP_NO_TILES").is_err() {
             let cache = TileCache::new(TileCache::default_root());
             // The environment wins over the remembered choice, so a screenshot or a test can
-            // pin a provider without disturbing what the operator picked.
+            // pin a provider without disturbing what the operator picked. With neither, Mission
+            // Planner's default, GoogleSatelliteMap.
+            // `// C#: GCSViews/FlightPlanner.cs:7282`
             let source = std::env::var("MP_TILE_SOURCE")
                 .ok()
                 .or_else(|| settings::Settings::load().tile_source)
                 .and_then(|id| mp_tiles::source::source_by_id(&id))
-                .unwrap_or(&mp_tiles::source::OPENSTREETMAP);
+                .unwrap_or_else(mp_tiles::source::default_source);
             let store = if std::env::var("MP_OFFLINE").is_ok() {
                 TileStore::offline(source, cache)
             } else {
@@ -1380,13 +1382,16 @@ impl Render for MissionPlanner {
                 self.log_browse.map_contents().waypoints,
             );
             // What the primary flight display drew, by name, and how many of HUD.cs's elements
-            // it still does not - so a port that regresses an element fails a test.
-            facts::record(
-                "hud.drawn",
-                hud::scene(&self.hud, 800.0, 260.0).drawn_names(),
-            );
+            // it cannot show for want of a value - so a port that regresses an element fails a
+            // test. Then the health readouts as painted: Vibe's and EKF's colours, the pre-arm
+            // line, and whether the angle-of-attack elements showed.
+            let hud_scene = hud::scene(&self.hud, 800.0, 260.0);
+            facts::record("hud.drawn", hud_scene.drawn_names());
             facts::record("hud.missing", hud::missing().len());
             facts::record("hud.missing.list", hud::missing_report());
+            for (key, value) in hud::health_facts(&hud_scene) {
+                facts::record(key, value);
+            }
             // How much of FlightData this screen has, from the coverage table, so the number in
             // the plan is the number the application reports.
             let (done, elsewhere, missing, plumbing, dropped) = coverage::counts();

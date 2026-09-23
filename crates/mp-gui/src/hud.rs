@@ -17,6 +17,8 @@
 //! [`ELEMENTS`] is the coverage table: every element `doPaint()` draws, with its C# lines and
 //! whether this file draws it. A test holds the table to what [`scene`] produces, so the table
 //! cannot claim more than the code does, and what is missing is listed rather than forgotten.
+//! An element whose drawing is ported but whose value `mp_vehicle` does not carry is
+//! [`Status::Blocked`], with the `CurrentState` property it waits on named in the table.
 //!
 //! # Conventions, stated because getting them wrong is invisible in code review
 //!
@@ -52,10 +54,12 @@ mod colour {
     pub const ALERT: u32 = 0xf8_51_49;
     /// Target bugs and the 0° rung: the C#'s green pen.
     pub const TARGET: u32 = 0x3c_c8_5a;
-    /// A low battery: the C#'s orange brush.
+    /// A low battery, and Vibe or EKF past its first threshold: the C#'s orange brush.
     pub const WARN: u32 = 0xff_a5_00;
-    /// The VSI's climb polygon: `Brushes.Blue`.
+    /// The VSI's climb polygon and the AOA scale's lowest band: `Brushes.Blue`.
     pub const VSI: u32 = 0x3b_7d_ff;
+    /// The AOA scale's caution band: `Brushes.Yellow`.
+    pub const CAUTION: u32 = 0xff_ff_00;
     /// Ground under the altitude tape: `AltGroundBrush`, burlywood at alpha 100.
     pub const GROUND_TAPE: u32 = 0xde_b8_87;
     /// The ground-course mark and the scroller arrows: black.
@@ -111,7 +115,7 @@ pub enum Element {
     Failsafe,
     /// The high-priority message line.
     Message,
-    /// The vibration indicator.
+    /// The vibration indicator, and the CPU warning drawn beside it.
     Vibe,
     /// The EKF indicator.
     Ekf,
@@ -186,11 +190,24 @@ impl Element {
 /// Whether this file draws an element.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
-    /// Drawn by [`scene`].
+    /// Drawn by [`scene`] from what the vehicle reports.
     Drawn,
-    /// Not yet. The coverage test lists these; PLAN.md §13.3 item 4 tracks them.
-    Missing,
+    /// Drawn by [`scene`] when [`HudInputs`] carries its value, but `mp_vehicle` does not keep
+    /// that value, so [`HudInputs::from_vehicle`] cannot supply it and a live display never
+    /// shows the element. The text names the `CurrentState` property and why it is absent.
+    Blocked(&'static str),
 }
+
+/// Why the flight path vector never shows on a live vehicle.
+const FPV_BLOCKED: &str = "needs CurrentState.AOA and CurrentState.SSA, which come from the \
+                           AOA_SSA message (CurrentState.cs:3903-3911); mp_vehicle does not \
+                           ingest it";
+
+/// Why the AOA scale never shows on a live vehicle.
+const AOA_BLOCKED: &str = "needs CurrentState.AOA and CurrentState.SSA from the AOA_SSA message \
+                           (CurrentState.cs:3903-3911), and CurrentState.crit_AOA from the \
+                           AOA_CRIT parameter (CurrentState.cs:1017-1036); mp_vehicle does not \
+                           ingest AOA_SSA";
 
 /// The coverage table: every element `doPaint()` draws.
 pub const ELEMENTS: &[(Element, Status)] = &[
@@ -198,7 +215,7 @@ pub const ELEMENTS: &[(Element, Status)] = &[
     (Element::PitchLadder, Status::Drawn),
     (Element::RollIndicator, Status::Drawn),
     (Element::Reticle, Status::Drawn),
-    (Element::FlightPathVector, Status::Missing),
+    (Element::FlightPathVector, Status::Blocked(FPV_BLOCKED)),
     (Element::HeadingTape, Status::Drawn),
     (Element::HeadingBugs, Status::Drawn),
     (Element::XtrackBar, Status::Drawn),
@@ -208,37 +225,46 @@ pub const ELEMENTS: &[(Element, Status)] = &[
     (Element::Vsi, Status::Drawn),
     (Element::ModeAndWaypoint, Status::Drawn),
     (Element::LinkInfo, Status::Drawn),
-    (Element::Aoa, Status::Missing),
+    (Element::Aoa, Status::Blocked(AOA_BLOCKED)),
     (Element::Battery, Status::Drawn),
     (Element::Gps, Status::Drawn),
-    (Element::CustomItems, Status::Missing),
+    // Drawn from a given list. There is no editor for the list and no stored one yet: the C#'s
+    // checkboxes and `hud1_useritem_` settings are not ported (GCSViews/FlightData.cs:336-348,
+    // 2436-2472), so on a live vehicle the list is empty.
+    (Element::CustomItems, Status::Drawn),
     (Element::ArmedBanner, Status::Drawn),
     (Element::Failsafe, Status::Drawn),
     (Element::Message, Status::Drawn),
-    (Element::Vibe, Status::Missing),
-    (Element::Ekf, Status::Missing),
-    (Element::Prearm, Status::Missing),
+    // Vibe's own text is live; the "CPU" beside it (HUD.cs:3206-3207) needs CurrentState.load,
+    // SYS_STATUS.load (CurrentState.cs:2949), which mp_vehicle does not keep.
+    (Element::Vibe, Status::Drawn),
+    (Element::Ekf, Status::Drawn),
+    (Element::Prearm, Status::Drawn),
 ];
 
-/// The missing elements with their C# lines, one string, for the facts and the plan.
+/// The elements a live display cannot show, with their C# lines and what each waits on, one
+/// string, for the facts and the plan.
 #[must_use]
 pub fn missing_report() -> String {
-    missing()
+    ELEMENTS
         .iter()
-        .map(|element| {
-            let (from, to) = element.csharp_lines();
-            format!("{} (HUD.cs:{from}-{to})", element.name())
+        .filter_map(|(element, status)| match status {
+            Status::Blocked(why) => {
+                let (from, to) = element.csharp_lines();
+                Some(format!("{} (HUD.cs:{from}-{to}) {why}", element.name()))
+            }
+            Status::Drawn => None,
         })
         .collect::<Vec<_>>()
-        .join(", ")
+        .join("; ")
 }
 
-/// The elements the table says are not drawn.
+/// The elements a live display cannot show: those the table marks [`Status::Blocked`].
 #[must_use]
 pub fn missing() -> Vec<Element> {
     ELEMENTS
         .iter()
-        .filter(|(_, status)| *status == Status::Missing)
+        .filter(|(_, status)| matches!(status, Status::Blocked(_)))
         .map(|(element, _)| *element)
         .collect()
 }
@@ -313,6 +339,37 @@ pub fn gps_fix_text(fix_type: u8) -> String {
     }
 }
 
+/// The angles the flight path vector and the AOA scale are drawn from.
+/// `// C#: ExtLibs/Controls/HUD.cs:352-358, 889-945`
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AoaSsa {
+    /// Angle of attack, degrees: `AOA`.
+    pub aoa: f32,
+    /// Sideslip angle, degrees: `SSA`.
+    pub ssa: f32,
+    /// The critical angle of attack, degrees: `critAOA`, bound to `CurrentState.crit_AOA` - the
+    /// `AOA_CRIT` parameter, or 25 without one.
+    pub crit_aoa: f32,
+}
+
+/// One of the user's extra fields: `HUD.Custom`.
+///
+/// Mission Planner keeps them in a `Hashtable` keyed by the name of the `CurrentState` property
+/// shown, and reads each value by reflection as it paints. There is no reflection here, so the
+/// caller reads the value and hands it over. The C# draws them in the `Hashtable`'s enumeration
+/// order, which nothing defines; these are drawn in the list's order.
+/// `// C#: ExtLibs/Controls/HUD.cs:949-968, GCSViews/FlightData.cs:948-955`
+#[derive(Debug, Clone, PartialEq)]
+pub struct CustomItem {
+    /// The prefix the user typed: `Header`.
+    pub header: String,
+    /// The `CurrentState` property shown: `Item.Name`. It also picks the number format.
+    pub name: String,
+    /// The property's value: `GetValue`. `None` when it cannot be read - no such property, or
+    /// one that is not a number - which the C# skips without leaving a gap.
+    pub value: Option<f64>,
+}
+
 /// Everything the display draws from, in the units the C# draws in.
 #[derive(Debug, Clone, PartialEq)]
 pub struct HudInputs {
@@ -381,6 +438,20 @@ pub struct HudInputs {
     pub safety: bool,
     /// The high-priority message, with its colour.
     pub message: Option<(String, u32)>,
+    /// The angle of attack and sideslip. `None` is the C#'s `displayAOASSA == false`, which
+    /// hides the flight path vector and the AOA scale; the C# turns it on the first time either
+    /// angle changes from zero and never turns it off (HUD.cs:889-930).
+    pub aoa_ssa: Option<AoaSsa>,
+    /// The user's extra fields, drawn bottom up.
+    pub custom_items: Vec<CustomItem>,
+    /// Vibration on x, y and z, m/s²: `vibex`, `vibey`, `vibez`.
+    pub vibe: [f32; 3],
+    /// The autopilot's CPU load, percent: `load`. `None` when unknown, which shows no warning.
+    pub cpu_load: Option<f32>,
+    /// The worst EKF variance, or 1 when the flags say the filter has no answer: `ekfstatus`.
+    pub ekf_status: f32,
+    /// Whether the vehicle reports its pre-arm checks passing: `prearmstatus`.
+    pub prearm_ready: bool,
 }
 
 impl Default for HudInputs {
@@ -418,6 +489,12 @@ impl Default for HudInputs {
             failsafe: false,
             safety: false,
             message: None,
+            aoa_ssa: None,
+            custom_items: Vec::new(),
+            vibe: [0.0; 3],
+            cpu_load: None,
+            ekf_status: 0.0,
+            prearm_ready: false,
         }
     }
 }
@@ -425,10 +502,11 @@ impl Default for HudInputs {
 impl HudInputs {
     /// The display's inputs from a vehicle's state, as `FlightData` binds them to `hud1`.
     ///
-    /// `// C#: GCSViews/FlightData.Designer.cs:352-391` for the bindings, and
+    /// `// C#: GCSViews/FlightData.Designer.cs:352-397` for the bindings, and
     /// `ExtLibs/ArduPilot/CurrentState.cs` for the derived ones: `turnrate` (1203), `targetalt`
     /// (1107), `targetairspeed` (1130), `failsafe` from `MAV_STATE_CRITICAL` (2895), the safety
-    /// message when armed with motor control disabled (2887), `linkqualitygcs` (4595).
+    /// message when armed with motor control disabled (2887), `linkqualitygcs` (4595),
+    /// `ekfstatus` (2649-2741), `prearmstatus` (179-182), `vibex`..`vibez` (2592-2606).
     #[must_use]
     #[allow(clippy::cast_possible_truncation)] // display precision
     pub fn from_vehicle(
@@ -473,8 +551,269 @@ impl HudInputs {
             failsafe: state.system_status == MAV_STATE_CRITICAL,
             safety: state.armed && state.sensors.reported && !state.sensors.motor_outputs_enabled(),
             message,
+            // mp_vehicle does not ingest AOA_SSA, so the C#'s `displayAOASSA` never turns on.
+            // C#: ExtLibs/ArduPilot/CurrentState.cs:3903-3911
+            aoa_ssa: None,
+            // No editor and no stored list yet. C#: GCSViews/FlightData.cs:336-348, 2436-2472
+            custom_items: Vec::new(),
+            vibe: [state.vibration.x, state.vibration.y, state.vibration.z],
+            // mp_vehicle does not keep SYS_STATUS.load. C#: ExtLibs/ArduPilot/CurrentState.cs:2949
+            cpu_load: None,
+            ekf_status: ekf_status(state),
+            prearm_ready: prearm_ready(state),
         }
     }
+}
+
+/// `EKF_STATUS_FLAGS`: the three bits `ekfstatus` looks at.
+const EKF_ATTITUDE: u16 = 1;
+const EKF_VELOCITY_HORIZ: u16 = 2;
+const EKF_UNINITIALIZED: u16 = 1024;
+
+/// The number the HUD colours "EKF" by: `CurrentState.ekfstatus`.
+///
+/// The largest of the five variances - terrain included, which the vehicle crate's own verdict
+/// leaves out - and 1 whatever they say when the filter has no attitude, has no horizontal
+/// velocity while there is a GPS fix, or says it is uninitialised. Zero until the first
+/// `EKF_STATUS_REPORT`, as the C#'s property starts. `Math.Max` is NaN if either side is, so a
+/// NaN variance is carried through, and a NaN draws white as it does in the C#.
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:2649-2741`
+#[must_use]
+pub fn ekf_status(state: &VehicleState) -> f32 {
+    let ekf = &state.ekf;
+    if !ekf.seen {
+        return 0.0;
+    }
+    let max = |a: f32, b: f32| {
+        if a.is_nan() || b.is_nan() {
+            f32::NAN
+        } else {
+            a.max(b)
+        }
+    };
+    // C#: CurrentState.cs:2665-2667
+    let worst = max(
+        ekf.velocity_variance,
+        max(
+            ekf.compass_variance,
+            max(
+                ekf.position_horizontal_variance,
+                max(
+                    ekf.position_vertical_variance,
+                    ekf.terrain_altitude_variance,
+                ),
+            ),
+        ),
+    );
+    // The flag loop, reduced to the three cases in it that set anything. C#: :2694-2740
+    let no_attitude = ekf.flags & EKF_ATTITUDE == 0;
+    let no_velocity_with_gps = ekf.flags & EKF_VELOCITY_HORIZ == 0 && state.gps.fix_type > 0;
+    let uninitialised = ekf.flags & EKF_UNINITIALIZED != 0;
+    if no_attitude || no_velocity_with_gps || uninitialised {
+        1.0
+    } else {
+        worst
+    }
+}
+
+/// `MAV_SYS_STATUS_PREARM_CHECK`.
+const PREARM_CHECK: u32 = 0x1000_0000;
+
+/// Whether the pre-arm checks pass, as `CurrentState.prearmstatus` decides: the pre-arm bit
+/// healthy, or not enabled at all - so a vehicle that has not yet sent `SYS_STATUS` reads as
+/// ready, as it does in the C#. The C#'s `connected &&` is the caller's: this is asked only of
+/// a vehicle on the link.
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:179-182, 4935-4942`
+#[must_use]
+pub const fn prearm_ready(state: &VehicleState) -> bool {
+    state.sensors.health & PREARM_CHECK != 0 || state.sensors.enabled & PREARM_CHECK == 0
+}
+
+/// What the C# writes for one extra field, or `None` for one it skips.
+///
+/// The property's name picks the format: seven optional decimals for a latitude or longitude,
+/// none for the mAh used, `hh:mm:ss` for the time in the air, the header alone for `string`,
+/// and two optional decimals for everything else.
+/// `// C#: ExtLibs/Controls/HUD.cs:3036-3068`
+#[must_use]
+pub fn custom_item_text(item: &CustomItem) -> Option<String> {
+    let value = item.value?;
+    let header = &item.header;
+    let name = item.name.as_str();
+    Some(if name.contains("lat") || name.contains("lng") {
+        format!("{header}{}", format_hash(value, 7))
+    } else if name == "battery_usedmah" {
+        format!("{header}{}", format_hash(value, 0))
+    } else if name == "timeInAir" {
+        // `(int)` truncates toward zero, as `as` does; `%` on a double keeps the dividend's sign
+        // in both languages.
+        #[allow(clippy::cast_possible_truncation)] // the C#'s own (int) casts
+        let (hrs, mins, secs) = (
+            (value / 3600.0) as i64,
+            (value / 60.0) as i64 % 60,
+            (value % 60.0) as i64,
+        );
+        format!(
+            "{header}{}:{}:{}",
+            two_digits(hrs),
+            two_digits(mins),
+            two_digits(secs)
+        )
+    } else if name == "string" {
+        header.clone()
+    } else {
+        format!("{header}{}", format_hash(value, 2))
+    })
+}
+
+/// An integer as .NET's `"00"` writes it: at least two digits, the sign outside them.
+fn two_digits(value: i64) -> String {
+    if value < 0 {
+        format!("-{:02}", value.unsigned_abs())
+    } else {
+        format!("{value:02}")
+    }
+}
+
+/// `value.ToString("0.##…")` with `decimals` optional places, as .NET Framework writes it.
+///
+/// The number is first taken to fifteen significant digits and then rounded half away from
+/// zero, which is not what `format!("{:.2}")` does: .NET writes 0.125 as "0.13" and 1.005 as
+/// "1.01" where Rust writes "0.12" and "1.00". Trailing zeros and a bare point are dropped, and
+/// a value that rounds to zero loses its sign.
+#[must_use]
+pub fn format_hash(value: f64, decimals: u8) -> String {
+    if value.is_nan() {
+        return "NaN".to_owned();
+    }
+    if value.is_infinite() {
+        return if value > 0.0 { "Infinity" } else { "-Infinity" }.to_owned();
+    }
+    // d.dddddddddddddde<x>: fifteen significant digits.
+    let scientific = format!("{:.14e}", value.abs());
+    let Some((mantissa, exponent)) = scientific.split_once('e') else {
+        return "0".to_owned();
+    };
+    let Ok(exponent) = exponent.parse::<i64>() else {
+        return "0".to_owned();
+    };
+    let mut digits: Vec<u8> = mantissa
+        .bytes()
+        .filter(u8::is_ascii_digit)
+        .map(|b| b - b'0')
+        .collect();
+    // The value is 0.d1d2d3... times ten to the `point`.
+    let mut point = exponent + 1;
+    let Ok(kept) = usize::try_from(point + i64::from(decimals)) else {
+        return "0".to_owned();
+    };
+    if kept < digits.len() {
+        let round_up = digits.get(kept).is_some_and(|digit| *digit >= 5);
+        digits.truncate(kept);
+        if round_up {
+            let mut carry = true;
+            for digit in digits.iter_mut().rev() {
+                if *digit == 9 {
+                    *digit = 0;
+                } else {
+                    *digit += 1;
+                    carry = false;
+                    break;
+                }
+            }
+            if carry {
+                digits.insert(0, 1);
+                point += 1;
+            }
+        }
+    }
+    if digits.iter().all(|digit| *digit == 0) {
+        return "0".to_owned();
+    }
+    let text: String = digits
+        .iter()
+        .map(|digit| char::from(b'0' + digit))
+        .collect();
+    let (whole, fraction) = match usize::try_from(point) {
+        Ok(0) | Err(_) => {
+            let zeros = usize::try_from(-point).unwrap_or(0);
+            ("0".to_owned(), format!("{}{text}", "0".repeat(zeros)))
+        }
+        Ok(width) if width >= text.len() => (
+            format!("{text}{}", "0".repeat(width - text.len())),
+            String::new(),
+        ),
+        Ok(width) => {
+            let (whole, fraction) = text.split_at(width);
+            (whole.to_owned(), fraction.to_owned())
+        }
+    };
+    let fraction = fraction.trim_end_matches('0');
+    let sign = if value < 0.0 { "-" } else { "" };
+    if fraction.is_empty() {
+        format!("{sign}{whole}")
+    } else {
+        format!("{sign}{whole}.{fraction}")
+    }
+}
+
+/// A colour by the name of the C#'s brush, for the facts.
+#[must_use]
+pub fn colour_name(colour: u32) -> String {
+    match colour {
+        colour::INK => "white".to_owned(),
+        colour::WARN => "orange".to_owned(),
+        colour::ALERT => "red".to_owned(),
+        other => format!("#{other:06x}"),
+    }
+}
+
+/// What the health readouts and the angle-of-attack elements drew, as facts a `.gui` test
+/// asserts on: the colours of "Vibe" and "EKF" by name, whether "CPU" is up, the pre-arm line
+/// and its colour, how many extra fields were drawn, and whether the flight path vector and the
+/// AOA scale showed. Read from the scene, so what is asserted is what was painted.
+#[must_use]
+pub fn health_facts(scene: &Scene) -> Vec<(&'static str, String)> {
+    let colour_of = |element: Element, text: &str| {
+        scene
+            .labels_of(element)
+            .into_iter()
+            .find(|(drawn, _)| *drawn == text)
+            .map_or_else(|| "none".to_owned(), |(_, colour)| colour_name(colour))
+    };
+    let prearm = scene.labels_of(Element::Prearm).into_iter().next();
+    vec![
+        ("hud.vibe.colour", colour_of(Element::Vibe, "Vibe")),
+        (
+            "hud.cpu",
+            scene
+                .labels_of(Element::Vibe)
+                .iter()
+                .any(|(drawn, _)| *drawn == "CPU")
+                .to_string(),
+        ),
+        ("hud.ekf.colour", colour_of(Element::Ekf, "EKF")),
+        (
+            "hud.prearm",
+            prearm.map_or_else(|| "none".to_owned(), |(drawn, _)| drawn.to_owned()),
+        ),
+        (
+            "hud.prearm.colour",
+            prearm.map_or_else(|| "none".to_owned(), |(_, colour)| colour_name(colour)),
+        ),
+        (
+            "hud.custom.count",
+            scene.labels_of(Element::CustomItems).len().to_string(),
+        ),
+        (
+            "hud.fpv.shown",
+            scene.drawn.contains(&Element::FlightPathVector).to_string(),
+        ),
+        (
+            "hud.aoa.shown",
+            scene.drawn.contains(&Element::Aoa).to_string(),
+        ),
+    ]
 }
 
 /// The message the C# raises to the HUD from the vehicle's state, if any.
@@ -633,6 +972,8 @@ pub struct Scene {
     pub items: Vec<Item>,
     /// Which elements were drawn.
     pub drawn: Vec<Element>,
+    /// Which element drew which label, as an index into `items`, for the labels a fact reports.
+    pub owners: Vec<(Element, usize)>,
 }
 
 impl Scene {
@@ -674,10 +1015,37 @@ impl Scene {
         });
     }
 
+    /// A label remembered as its element's, so [`Scene::labels_of`] can find it.
+    fn owned_label(
+        &mut self,
+        element: Element,
+        text: impl Into<String>,
+        at: (f32, f32),
+        size: f32,
+        colour: u32,
+        align: Align,
+    ) {
+        self.owners.push((element, self.items.len()));
+        self.label(text, at, size, colour, align);
+    }
+
     fn drew(&mut self, element: Element) {
         if !self.drawn.contains(&element) {
             self.drawn.push(element);
         }
+    }
+
+    /// The labels an element drew through [`Scene::owned_label`], with their colours.
+    #[must_use]
+    pub fn labels_of(&self, element: Element) -> Vec<(&str, u32)> {
+        self.owners
+            .iter()
+            .filter(|(owner, _)| *owner == element)
+            .filter_map(|(_, index)| match self.items.get(*index) {
+                Some(Item::Label { text, colour, .. }) => Some((text.as_str(), *colour)),
+                _ => None,
+            })
+            .collect()
     }
 
     /// The labels, for tests.
@@ -819,6 +1187,37 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
 
     if !inputs.has_vehicle {
         return scene;
+    }
+
+    // The flight path vector: a red circle with two wings and a fin, moved from the centre by
+    // the sideslip to the right and the angle of attack down, at the ladder's scale. Shown once
+    // the vehicle has sent an angle (`displayAOASSA`). The C# draws it inside the clip that
+    // keeps the ladder off the heading tape (HUD.cs:2104-2105); the scene has no clip, so a
+    // vector pushed up into the tape - an angle of attack near -28° - is drawn over the tape's
+    // translucent fill rather than cut off. C#: HUD.cs:2232-2245
+    if let Some(angles) = inputs.aoa_ssa {
+        let fpv = (angles.ssa.mul_add(ppd, cx), angles.aoa.mul_add(ppd, cy));
+        let (outer, inner) = (halfwidth / 20.0, halfwidth / 40.0);
+        scene.stroke(circle(fpv, inner), 2.0, colour::ALERT, 1.0);
+        scene.line(
+            (fpv.0 - outer, fpv.1),
+            (fpv.0 - inner, fpv.1),
+            2.0,
+            colour::ALERT,
+        );
+        scene.line(
+            (fpv.0 + outer, fpv.1),
+            (fpv.0 + inner, fpv.1),
+            2.0,
+            colour::ALERT,
+        );
+        scene.line(
+            (fpv.0, fpv.1 - outer),
+            (fpv.0, fpv.1 - inner),
+            2.0,
+            colour::ALERT,
+        );
+        scene.drew(Element::FlightPathVector);
     }
 
     // Heading tape across the top: ±60° around the heading, a tick every 5°, a label every 15°,
@@ -1206,6 +1605,58 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     );
     scene.drew(Element::LinkInfo);
 
+    // The AOA scale, right of centre and below it: bands of red, yellow, green and blue from
+    // the top, split at the C#'s 90, 60 and 10 percent, and a black arrow at the angle of attack
+    // as a fraction of the critical one - on the green band's bottom edge at zero, on the red
+    // band's bottom edge at the critical angle, held to the bar's ends beyond them. Shown with
+    // the flight path vector. C#: HUD.cs:2804-2843, the percentages at 356-358
+    if let Some(angles) = inputs.aoa_ssa {
+        const RED: f32 = 90.0;
+        const YELLOW: f32 = 60.0;
+        const GREEN: f32 = 10.0;
+        let bar = Rect {
+            left: w - w / 6.0,
+            top: halfheight + halfheight / 10.0,
+            width: w / 25.0,
+            height: h / 5.0,
+        };
+        let band = |from: f32, height: f32| {
+            Rect {
+                top: bar.top + bar.height * from / 100.0,
+                height: bar.height * height / 100.0,
+                ..bar
+            }
+            .corners()
+        };
+        scene.fill(band(0.0, 100.0 - RED), colour::ALERT, 1.0);
+        scene.fill(band(100.0 - RED, RED - YELLOW), colour::CAUTION, 1.0);
+        scene.fill(band(100.0 - YELLOW, YELLOW - GREEN), colour::TARGET, 1.0);
+        scene.fill(band(100.0 - GREEN, GREEN), colour::VSI, 1.0);
+        scene.stroke(bar.outline(), 2.0, colour::INK, 1.0);
+        // Two `if`s, as the C# has, rather than `clamp`: a NaN - an angle of zero over a
+        // critical angle of zero - passes through both unchanged here as it does there.
+        let mut indicator = bar.height * (100.0 - GREEN) / 100.0
+            - (angles.aoa / angles.crit_aoa) * (bar.height * (RED - GREEN) / 100.0);
+        if indicator < 0.0 {
+            indicator = 0.0;
+        }
+        if indicator > bar.height {
+            indicator = bar.height;
+        }
+        let tip = (bar.left + bar.width / 5.0, bar.top + indicator);
+        let back = bar.left - bar.width / 2.0 + bar.width / 5.0;
+        let arrow = vec![
+            tip,
+            (back, tip.1 + bar.width / 2.0),
+            (back, tip.1 - bar.width / 2.0),
+        ];
+        scene.fill(arrow.clone(), colour::BLACK, 1.0);
+        let mut outline = arrow;
+        outline.push(tip);
+        scene.stroke(outline, 2.0, colour::INK, 1.0);
+        scene.drew(Element::Aoa);
+    }
+
     // The text lines along the bottom. C#: HUD.cs:2846-2854
     let y_bot_offset = if fontsize >= 8.0 { fontsize / 3.0 } else { 2.0 };
     let y_text_offset = fontsize + y_bot_offset + 2.0;
@@ -1246,6 +1697,26 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
         Align::Left,
     );
     scene.drew(Element::Gps);
+
+    // The user's extra fields, header then value, from above the battery line upward, an
+    // eighth of the way across; a field whose value cannot be read leaves no gap.
+    // C#: HUD.cs:3029-3077
+    let mut custom_y = h - (fontsize + 2.0) * 3.0 - fontoffset - fontsize - 8.0;
+    for item in &inputs.custom_items {
+        let Some(text) = custom_item_text(item) else {
+            continue;
+        };
+        scene.owned_label(
+            Element::CustomItems,
+            text,
+            (w / 8.0, custom_y),
+            fontsize + 2.0,
+            colour::INK,
+            Align::Left,
+        );
+        custom_y -= fontsize + 5.0;
+    }
+    scene.drew(Element::CustomItems);
 
     // ARMED for eight seconds after arming, DISARMED whenever disarmed, SAFE while the safety
     // switch holds the motors: red, above the centre. C#: HUD.cs:3084-3119
@@ -1304,6 +1775,80 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
         );
     }
     scene.drew(Element::Message);
+
+    // "Vibe" on the lower text line: white, orange once any axis is past 30 m/s², red past 60.
+    // The text layout, because the icon one is off unless `HUD_showicons` is set
+    // (GCSViews/FlightData.cs:427). Clipping does not enter into it. C#: HUD.cs:3148-3204
+    let vibe_x = w - 18.0 * fontsize;
+    let [vibe_x_axis, vibe_y_axis, vibe_z_axis] = inputs.vibe;
+    let over = |limit: f32| vibe_x_axis > limit || vibe_y_axis > limit || vibe_z_axis > limit;
+    let vibe_colour = if over(60.0) {
+        colour::ALERT
+    } else if over(30.0) {
+        colour::WARN
+    } else {
+        colour::INK
+    };
+    scene.owned_label(
+        Element::Vibe,
+        "Vibe",
+        (vibe_x, y_lower),
+        fontsize + 2.0,
+        vibe_colour,
+        Align::Left,
+    );
+    // "CPU" in red at the right edge of Vibe's 40-pixel box when the autopilot reports a full
+    // load. C#: HUD.cs:3206-3207
+    if inputs.cpu_load.is_some_and(|load| load == 100.0) {
+        scene.owned_label(
+            Element::Vibe,
+            "CPU",
+            (vibe_x + 40.0, y_lower),
+            fontsize + 2.0,
+            colour::ALERT,
+            Align::Left,
+        );
+    }
+    scene.drew(Element::Vibe);
+
+    // "EKF" left of it: white, orange past 0.5, red past 0.8. C#: HUD.cs:3209-3262
+    let ekf_colour = if inputs.ekf_status > 0.8 {
+        colour::ALERT
+    } else if inputs.ekf_status > 0.5 {
+        colour::WARN
+    } else {
+        colour::INK
+    };
+    scene.owned_label(
+        Element::Ekf,
+        "EKF",
+        (w - 23.0 * fontsize, y_lower),
+        fontsize + 2.0,
+        ekf_colour,
+        Align::Left,
+    );
+    scene.drew(Element::Ekf);
+
+    // While disarmed, the pre-arm state on the upper text line: "Ready to Arm" in white, or
+    // "Not Ready to Arm" in red starting two characters further left.
+    // C#: HUD.cs:3264-3301, HUDT.resx NotReadyToArm and ReadyToArm
+    if !inputs.armed {
+        let y_upper = h - 2.0 * y_text_offset - y_bot_offset - 4.0;
+        let (text, x, prearm_colour) = if inputs.prearm_ready {
+            ("Ready to Arm", w - 24.0 * fontsize, colour::INK)
+        } else {
+            ("Not Ready to Arm", w - 26.0 * fontsize, colour::ALERT)
+        };
+        scene.owned_label(
+            Element::Prearm,
+            text,
+            (x, y_upper - 4.0),
+            fontsize + 2.0,
+            prearm_colour,
+            Align::Left,
+        );
+    }
+    scene.drew(Element::Prearm);
 
     scene
 }
@@ -1479,6 +2024,17 @@ fn offset(from: (f32, f32), direction: (f32, f32), distance: f32) -> (f32, f32) 
         direction.0.mul_add(distance, from.0),
         direction.1.mul_add(distance, from.1),
     )
+}
+
+/// A closed polyline round `centre`, standing in for GDI+'s `DrawEllipse` of a circle.
+fn circle(centre: (f32, f32), radius: f32) -> Vec<(f32, f32)> {
+    const SEGMENTS: u16 = 32;
+    (0..=SEGMENTS)
+        .map(|step| {
+            let angle = f32::from(step) / f32::from(SEGMENTS) * std::f32::consts::TAU;
+            polar(centre, angle, radius)
+        })
+        .collect()
 }
 
 /// A point at `angle` radians clockwise from straight up, `radius` from `centre`.
@@ -1754,22 +2310,101 @@ mod tests {
             failsafe: false,
             safety: false,
             message: None,
+            aoa_ssa: None,
+            custom_items: Vec::new(),
+            vibe: [3.0, 4.0, 5.0],
+            cpu_load: Some(12.0),
+            ekf_status: 0.1,
+            prearm_ready: true,
         }
     }
 
+    /// `flying()` with an angle of attack and sideslip, as a vehicle sending AOA_SSA would give.
+    fn with_angles(aoa: f32, ssa: f32) -> HudInputs {
+        HudInputs {
+            aoa_ssa: Some(AoaSsa {
+                aoa,
+                ssa,
+                crit_aoa: 25.0,
+            }),
+            ..flying()
+        }
+    }
+
+    /// The fontsize and bottom text lines `scene` uses, for asserting positions.
+    fn text_lines(h: f32) -> (f32, f32, f32) {
+        let fontsize = (h / 30.0).max(9.0);
+        let bot = fontsize / 3.0;
+        let text_offset = fontsize + bot + 2.0;
+        (
+            fontsize,
+            h - 2.0 * text_offset - bot - 4.0,
+            h - text_offset - bot - 4.0,
+        )
+    }
+
+    /// The one label with this text: where it is, its size and its colour.
+    fn label_at(scene: &Scene, wanted: &str) -> Option<((f32, f32), f32, u32)> {
+        let mut found = scene.items.iter().filter_map(|item| match item {
+            Item::Label {
+                text,
+                at,
+                size,
+                colour,
+                ..
+            } if text == wanted => Some((*at, *size, *colour)),
+            _ => None,
+        });
+        let first = found.next();
+        assert!(found.next().is_none(), "more than one {wanted:?}");
+        first
+    }
+
+    fn close(a: (f32, f32), b: (f32, f32)) -> bool {
+        (a.0 - b.0).abs() < 0.01 && (a.1 - b.1).abs() < 0.01
+    }
+
     /// The coverage table is held to the code: every element it calls drawn is in the scene,
-    /// and nothing the scene draws is listed as missing.
+    /// and every element it calls blocked is drawn when given its value and never from what
+    /// `from_vehicle` makes of a vehicle.
     #[test]
     fn the_coverage_table_matches_what_the_scene_draws() {
         let scene = scene(&flying(), W, H);
+        let given = super::scene(&with_angles(4.0, -2.0), W, H);
+        let mut state = VehicleState::default();
+        state.ekf.seen = true;
+        state.vibration.seen = true;
+        let live = super::scene(
+            &HudInputs::from_vehicle(
+                &state,
+                "Stabilize".to_owned(),
+                None,
+                None,
+                String::new(),
+                None,
+            ),
+            W,
+            H,
+        );
         for (element, status) in ELEMENTS {
-            let drawn = scene.drawn.contains(element);
             match status {
-                Status::Drawn => {
-                    assert!(drawn, "{} is listed as drawn and was not", element.name())
-                }
-                Status::Missing => {
-                    assert!(!drawn, "{} is drawn; update ELEMENTS", element.name());
+                Status::Drawn => assert!(
+                    scene.drawn.contains(element),
+                    "{} is listed as drawn and was not",
+                    element.name()
+                ),
+                Status::Blocked(why) => {
+                    assert!(
+                        given.drawn.contains(element),
+                        "{} is blocked, not unported: given its value it must draw",
+                        element.name()
+                    );
+                    assert!(
+                        !live.drawn.contains(element),
+                        "{} is drawn from a live vehicle; update ELEMENTS",
+                        element.name()
+                    );
+                    assert!(why.contains("CurrentState."), "{why}");
                 }
             }
         }
@@ -1783,7 +2418,7 @@ mod tests {
         // The list of what is missing, printed so it is read.
         let missing = missing();
         eprintln!(
-            "HUD elements not yet drawn ({}): {}",
+            "HUD elements a live vehicle cannot show ({}): {}",
             missing.len(),
             missing
                 .iter()
@@ -1796,7 +2431,386 @@ mod tests {
                 .collect::<Vec<_>>()
                 .join(", ")
         );
-        assert_eq!(missing.len(), 6);
+        assert_eq!(missing, [Element::FlightPathVector, Element::Aoa]);
+        let report = missing_report();
+        assert!(
+            report.starts_with("flight-path-vector (HUD.cs:2232-2252) needs CurrentState.AOA"),
+            "{report}"
+        );
+        assert!(report.contains("aoa (HUD.cs:2804-2845)"), "{report}");
+        assert!(report.contains("CurrentState.crit_AOA"), "{report}");
+    }
+
+    /// The flight path vector sits at the sideslip across and the angle of attack down from the
+    /// centre, a red circle of half-width/40 with wings and a fin, and is absent until the
+    /// vehicle has sent an angle. C#: HUD.cs:2232-2245
+    #[test]
+    fn the_flight_path_vector_follows_the_angles_and_hides_without_them() {
+        assert!(
+            !scene(&flying(), W, H)
+                .drawn
+                .contains(&Element::FlightPathVector)
+        );
+        let scene = scene(&with_angles(4.0, -2.0), W, H);
+        assert!(scene.drawn.contains(&Element::FlightPathVector));
+        let ppd = H / 65.0;
+        let centre = (W / 2.0 - 2.0 * ppd, H / 2.0 + 4.0 * ppd);
+        let radius = W / 2.0 / 40.0;
+        let ring = scene
+            .items
+            .iter()
+            .find_map(|item| match item {
+                Item::Stroke {
+                    points,
+                    colour,
+                    width,
+                    ..
+                } if points.len() > 8 && *colour == colour::ALERT => Some((points.clone(), *width)),
+                _ => None,
+            })
+            .expect("a red ring");
+        assert_eq!(ring.1, 2.0, "the C#'s red pen is 2 wide");
+        for p in &ring.0 {
+            let r = (p.0 - centre.0).hypot(p.1 - centre.1);
+            assert!(
+                (r - radius).abs() < 0.01,
+                "ring point {p:?} is {r} from {centre:?}"
+            );
+        }
+        let (outer, inner) = (W / 2.0 / 20.0, W / 2.0 / 40.0);
+        for (from, to) in [
+            ((centre.0 - outer, centre.1), (centre.0 - inner, centre.1)),
+            ((centre.0 + outer, centre.1), (centre.0 + inner, centre.1)),
+            ((centre.0, centre.1 - outer), (centre.0, centre.1 - inner)),
+        ] {
+            let found = scene.items.iter().any(|item| {
+                matches!(item, Item::Stroke { points, colour, .. }
+                    if *colour == colour::ALERT && points.len() == 2
+                        && close(points[0], from) && close(points[1], to))
+            });
+            assert!(found, "no red stroke from {from:?} to {to:?}");
+        }
+    }
+
+    /// The AOA scale's bands and arrow: 10/30/50/10 percent of the bar in red, yellow, green
+    /// and blue from the top; the arrow's tip at the green band's bottom at zero, at the red
+    /// band's bottom at the critical angle, and held to the bar beyond. C#: HUD.cs:2804-2843
+    #[test]
+    fn the_aoa_scale_puts_the_arrow_by_the_critical_angle() {
+        assert!(!scene(&flying(), W, H).drawn.contains(&Element::Aoa));
+        let (left, top, width, height) = (W - W / 6.0, H / 2.0 + H / 20.0, W / 25.0, H / 5.0);
+        let scene_at = |aoa: f32| scene(&with_angles(aoa, 0.0), W, H);
+        let level = scene_at(0.0);
+        assert!(level.drawn.contains(&Element::Aoa));
+        let bands: Vec<(u32, f32, f32)> = level
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                Item::Fill { points, colour, .. }
+                    if points.len() == 4 && (points[0].0 - left).abs() < 0.01 =>
+                {
+                    Some((*colour, points[0].1, points[2].1))
+                }
+                _ => None,
+            })
+            .collect();
+        let expected = [
+            (colour::ALERT, top, top + 0.1 * height),
+            (colour::CAUTION, top + 0.1 * height, top + 0.4 * height),
+            (colour::TARGET, top + 0.4 * height, top + 0.9 * height),
+            (colour::VSI, top + 0.9 * height, top + height),
+        ];
+        assert_eq!(bands.len(), 4, "{bands:?}");
+        for ((colour, from, to), (want_colour, want_from, want_to)) in bands.iter().zip(expected) {
+            assert_eq!(*colour, want_colour);
+            assert!(
+                (from - want_from).abs() < 0.01 && (to - want_to).abs() < 0.01,
+                "{bands:?}"
+            );
+        }
+        let tip = |scene: &Scene| {
+            scene
+                .items
+                .iter()
+                .find_map(|item| match item {
+                    Item::Fill { points, colour, .. }
+                        if *colour == colour::BLACK && points.len() == 3 =>
+                    {
+                        Some(points[0])
+                    }
+                    _ => None,
+                })
+                .expect("an arrow")
+        };
+        let x = left + width / 5.0;
+        assert!(
+            close(tip(&level), (x, top + 0.9 * height)),
+            "{:?}",
+            tip(&level)
+        );
+        assert!(close(tip(&scene_at(25.0)), (x, top + 0.1 * height)));
+        assert!(close(tip(&scene_at(60.0)), (x, top)), "held at the top");
+        assert!(
+            close(tip(&scene_at(-60.0)), (x, top + height)),
+            "held at the bottom"
+        );
+    }
+
+    /// Extra fields go up from above the battery line at an eighth of the width, each in the
+    /// format its property's name picks, and one that cannot be read leaves no gap.
+    /// C#: HUD.cs:3029-3077
+    #[test]
+    fn custom_items_stack_upward_in_the_csharps_formats() {
+        let item = |header: &str, name: &str, value: Option<f64>| CustomItem {
+            header: header.to_owned(),
+            name: name.to_owned(),
+            value,
+        };
+        let mut inputs = flying();
+        inputs.custom_items = vec![
+            item("Lat: ", "lat", Some(-35.363_262_18)),
+            item("Gone: ", "nothing", None),
+            item("mAh: ", "battery_usedmah", Some(1234.5)),
+            item("Air: ", "timeInAir", Some(3725.9)),
+            item("Hello", "string", Some(0.0)),
+            item("Dist: ", "wp_dist", Some(12.345)),
+        ];
+        let scene = scene(&inputs, W, H);
+        let texts: Vec<&str> = scene
+            .labels_of(Element::CustomItems)
+            .into_iter()
+            .map(|(text, _)| text)
+            .collect();
+        assert_eq!(
+            texts,
+            [
+                "Lat: -35.3632622",
+                "mAh: 1235",
+                "Air: 01:02:05",
+                "Hello",
+                "Dist: 12.35"
+            ]
+        );
+        let fontsize = (H / 30.0).max(9.0);
+        let fontoffset = (fontsize - 10.0).max(0.0);
+        let first = H - (fontsize + 2.0) * 3.0 - fontoffset - fontsize - 8.0;
+        for (row, text) in texts.iter().enumerate() {
+            let (at, size, colour) = label_at(&scene, text).expect("drawn");
+            let y = first - (fontsize + 5.0) * row as f32;
+            assert!(close(at, (W / 8.0, y)), "{text} at {at:?}, wanted y {y}");
+            assert_eq!(size, fontsize + 2.0);
+            assert_eq!(colour, colour::INK);
+        }
+        assert!(!scene.labels().iter().any(|l| l.starts_with("Gone")));
+        let facts = health_facts(&scene);
+        assert!(
+            facts.contains(&("hud.custom.count", "5".to_owned())),
+            "{facts:?}"
+        );
+    }
+
+    /// .NET's "0.##" rounds half away from zero on fifteen significant digits and drops
+    /// trailing zeros; Rust's `{:.2}` does neither.
+    #[test]
+    fn format_hash_writes_numbers_as_dotnet_does() {
+        assert_eq!(format_hash(7.4321, 2), "7.43");
+        assert_eq!(format_hash(2.0, 2), "2");
+        assert_eq!(format_hash(0.125, 2), "0.13");
+        assert_eq!(format_hash(1.005, 2), "1.01");
+        assert_eq!(format_hash(99.995, 2), "100");
+        assert_eq!(format_hash(0.006, 2), "0.01");
+        assert_eq!(format_hash(-0.001, 2), "0");
+        assert_eq!(format_hash(1e-10, 2), "0");
+        assert_eq!(format_hash(2.5, 0), "3");
+        assert_eq!(format_hash(-2.5, 0), "-3");
+        assert_eq!(format_hash(1.5e20, 2), "150000000000000000000");
+        assert_eq!(format_hash(-35.363_262_18, 7), "-35.3632622");
+        assert_eq!(format_hash(f64::NAN, 2), "NaN");
+        assert_eq!(format_hash(f64::NEG_INFINITY, 2), "-Infinity");
+        assert_eq!(two_digits(-5), "-05");
+    }
+
+    /// "Vibe": white up to 30 on every axis, orange past 30 on any, red past 60, at
+    /// width - 18 characters on the lower text line. C#: HUD.cs:3148-3204
+    #[test]
+    fn vibe_is_coloured_by_the_worst_axis() {
+        let (fontsize, _, lower) = text_lines(H);
+        let colour_at = |vibe: [f32; 3]| {
+            let inputs = HudInputs { vibe, ..flying() };
+            let scene = scene(&inputs, W, H);
+            let (at, size, colour) = label_at(&scene, "Vibe").expect("Vibe is always drawn");
+            assert!(close(at, (W - 18.0 * fontsize, lower)), "{at:?}");
+            assert_eq!(size, fontsize + 2.0);
+            colour
+        };
+        assert_eq!(colour_at([0.0, 0.0, 0.0]), colour::INK);
+        assert_eq!(
+            colour_at([30.0, 30.0, 30.0]),
+            colour::INK,
+            "30 is not past 30"
+        );
+        assert_eq!(colour_at([0.0, 30.5, 0.0]), colour::WARN);
+        assert_eq!(
+            colour_at([60.0, 0.0, 0.0]),
+            colour::WARN,
+            "60 is not past 60"
+        );
+        assert_eq!(colour_at([0.0, 0.0, 61.0]), colour::ALERT);
+    }
+
+    /// "CPU" appears in red at the right of Vibe's box only at a load of exactly 100.
+    /// C#: HUD.cs:3206-3207
+    #[test]
+    fn cpu_shows_only_at_full_load() {
+        let (fontsize, _, lower) = text_lines(H);
+        for (load, shown) in [(None, false), (Some(99.9), false), (Some(100.0), true)] {
+            let inputs = HudInputs {
+                cpu_load: load,
+                ..flying()
+            };
+            let scene = scene(&inputs, W, H);
+            let cpu = label_at(&scene, "CPU");
+            assert_eq!(cpu.is_some(), shown, "{load:?}");
+            if let Some((at, _, colour)) = cpu {
+                assert!(close(at, (W - 18.0 * fontsize + 40.0, lower)), "{at:?}");
+                assert_eq!(colour, colour::ALERT);
+            }
+            let facts = health_facts(&scene);
+            assert!(facts.contains(&("hud.cpu", shown.to_string())), "{facts:?}");
+        }
+    }
+
+    /// "EKF": white up to 0.5, orange past it, red past 0.8, at width - 23 characters on the
+    /// lower text line. C#: HUD.cs:3209-3262
+    #[test]
+    fn ekf_is_coloured_by_the_status() {
+        let (fontsize, _, lower) = text_lines(H);
+        let colour_at = |ekf_status: f32| {
+            let inputs = HudInputs {
+                ekf_status,
+                ..flying()
+            };
+            let scene = scene(&inputs, W, H);
+            let (at, size, colour) = label_at(&scene, "EKF").expect("EKF is always drawn");
+            assert!(close(at, (W - 23.0 * fontsize, lower)), "{at:?}");
+            assert_eq!(size, fontsize + 2.0);
+            colour
+        };
+        assert_eq!(colour_at(0.0), colour::INK);
+        assert_eq!(colour_at(0.5), colour::INK, "0.5 is not past 0.5");
+        assert_eq!(colour_at(0.51), colour::WARN);
+        assert_eq!(colour_at(0.8), colour::WARN, "0.8 is not past 0.8");
+        assert_eq!(colour_at(0.81), colour::ALERT);
+        assert_eq!(colour_at(f32::NAN), colour::INK);
+    }
+
+    /// `ekfstatus` is the worst of the five variances, terrain included, and 1 when the flags
+    /// say there is no attitude, no horizontal velocity with a GPS fix, or no initialisation.
+    /// C#: ExtLibs/ArduPilot/CurrentState.cs:2649-2741
+    #[test]
+    fn ekf_status_follows_current_state() {
+        let mut state = VehicleState::default();
+        state.ekf.terrain_altitude_variance = 0.9;
+        assert_eq!(ekf_status(&state), 0.0, "nothing heard yet");
+        state.ekf.seen = true;
+        state.ekf.flags = EKF_ATTITUDE | EKF_VELOCITY_HORIZ;
+        state.ekf.velocity_variance = 0.2;
+        assert_eq!(ekf_status(&state), 0.9, "terrain counts here");
+        state.ekf.terrain_altitude_variance = 0.0;
+        state.ekf.compass_variance = 0.6;
+        assert_eq!(ekf_status(&state), 0.6);
+        state.ekf.flags = EKF_VELOCITY_HORIZ;
+        assert_eq!(ekf_status(&state), 1.0, "no attitude");
+        state.ekf.flags = EKF_ATTITUDE;
+        assert_eq!(ekf_status(&state), 0.6, "no velocity but no GPS either");
+        state.gps.fix_type = 3;
+        assert_eq!(ekf_status(&state), 1.0, "no velocity with a fix");
+        state.ekf.flags = EKF_ATTITUDE | EKF_VELOCITY_HORIZ | EKF_UNINITIALIZED;
+        assert_eq!(ekf_status(&state), 1.0, "uninitialised");
+        state.ekf.flags = EKF_ATTITUDE | EKF_VELOCITY_HORIZ;
+        state.ekf.position_vertical_variance = f32::NAN;
+        assert!(ekf_status(&state).is_nan(), "Math.Max carries a NaN");
+    }
+
+    /// While disarmed, "Ready to Arm" in white at width - 24 characters or "Not Ready to Arm"
+    /// in red at width - 26, on the upper text line less four; armed, neither.
+    /// C#: HUD.cs:3264-3301
+    #[test]
+    fn prearm_shows_only_while_disarmed() {
+        let (fontsize, upper, _) = text_lines(H);
+        let armed = scene(&flying(), W, H);
+        assert!(armed.labels_of(Element::Prearm).is_empty());
+        assert!(health_facts(&armed).contains(&("hud.prearm", "none".to_owned())));
+        let mut inputs = flying();
+        inputs.armed = false;
+        let ready = scene(&inputs, W, H);
+        let (at, size, colour) = label_at(&ready, "Ready to Arm").expect("shown");
+        assert!(close(at, (W - 24.0 * fontsize, upper - 4.0)), "{at:?}");
+        assert_eq!((size, colour), (fontsize + 2.0, colour::INK));
+        inputs.prearm_ready = false;
+        let not_ready = scene(&inputs, W, H);
+        let (at, _, colour) = label_at(&not_ready, "Not Ready to Arm").expect("shown");
+        assert!(close(at, (W - 26.0 * fontsize, upper - 4.0)), "{at:?}");
+        assert_eq!(colour, colour::ALERT);
+        let facts = health_facts(&not_ready);
+        assert!(facts.contains(&("hud.prearm", "Not Ready to Arm".to_owned())));
+        assert!(facts.contains(&("hud.prearm.colour", "red".to_owned())));
+    }
+
+    /// `prearmstatus`: the pre-arm bit healthy, or not enabled - so a vehicle that has sent no
+    /// SYS_STATUS reads as ready. C#: ExtLibs/ArduPilot/CurrentState.cs:179-182
+    #[test]
+    fn prearm_ready_follows_the_prearm_sensor_bit() {
+        let mut state = VehicleState::default();
+        assert!(prearm_ready(&state), "not enabled");
+        state.sensors.enabled = PREARM_CHECK;
+        assert!(!prearm_ready(&state), "enabled and failing");
+        state.sensors.health = PREARM_CHECK;
+        assert!(prearm_ready(&state), "enabled and passing");
+    }
+
+    /// `from_vehicle` feeds the health readouts from the vehicle and leaves what it cannot know
+    /// unset, and the facts read the scene it makes.
+    #[test]
+    fn from_vehicle_feeds_the_health_readouts() {
+        let mut state = VehicleState::default();
+        state.vibration.x = 45.0;
+        state.vibration.seen = true;
+        state.ekf.seen = true;
+        state.ekf.flags = EKF_ATTITUDE | EKF_VELOCITY_HORIZ;
+        state.ekf.compass_variance = 0.9;
+        state.sensors.enabled = PREARM_CHECK;
+        state.sensors.reported = true;
+        let inputs = HudInputs::from_vehicle(
+            &state,
+            "Stabilize".to_owned(),
+            None,
+            None,
+            String::new(),
+            None,
+        );
+        assert_eq!(inputs.vibe, [45.0, 0.0, 0.0]);
+        assert_eq!(inputs.ekf_status, 0.9);
+        assert!(!inputs.prearm_ready);
+        assert_eq!(inputs.aoa_ssa, None);
+        assert_eq!(inputs.cpu_load, None);
+        assert!(inputs.custom_items.is_empty());
+        let facts = health_facts(&scene(&inputs, 800.0, 260.0));
+        for expected in [
+            ("hud.vibe.colour", "orange"),
+            ("hud.ekf.colour", "red"),
+            ("hud.prearm", "Not Ready to Arm"),
+            ("hud.prearm.colour", "red"),
+            ("hud.cpu", "false"),
+            ("hud.custom.count", "0"),
+            ("hud.fpv.shown", "false"),
+            ("hud.aoa.shown", "false"),
+        ] {
+            assert!(
+                facts.contains(&(expected.0, expected.1.to_owned())),
+                "{expected:?} not in {facts:?}"
+            );
+        }
     }
 
     /// Without a vehicle the display is the horizon at rest and nothing else.

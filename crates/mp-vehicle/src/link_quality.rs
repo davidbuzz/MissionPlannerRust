@@ -1,5 +1,30 @@
 //! Packet loss and link health.
 
+/// What a SiK telemetry radio says about the link, from `RADIO` or `RADIO_STATUS`.
+///
+/// The radio is its own MAVLink system, so its report would land on a vehicle nobody is looking
+/// at; the C# hands it to every vehicle on the link instead, and so does
+/// [`crate::VehicleRegistry::apply`]. Signal and noise are the radio's own 0 to 255 scale, as
+/// sent - the C# keeps them unconverted too.
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:2280-2282, 3389-3395`
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Radio {
+    /// Local signal strength (`rssi`).
+    pub rssi: u8,
+    /// Remote signal strength (`remrssi`).
+    pub remrssi: u8,
+    /// How full the radio's transmit buffer is, percent (`txbuffer`).
+    pub txbuf: u8,
+    /// Receive errors (`rxerrors`).
+    pub rxerrors: u16,
+    /// Local background noise (`noise`).
+    pub noise: u8,
+    /// Remote background noise (`remnoise`).
+    pub remnoise: u8,
+    /// Packets corrected by error correction (`fixedp`).
+    pub fixed: u16,
+}
+
 /// Link health derived from MAVLink sequence numbers.
 ///
 /// MAVLink stamps every frame with an 8-bit per-sender sequence number, so gaps reveal loss

@@ -200,6 +200,11 @@ impl Config {
     }
 
     /// The map provider the C# last showed, by its provider `Name`.
+    ///
+    /// Written whenever the map type is changed, as the box's text - which is the `Name`. Absent
+    /// until the operator first changes it; the C# then shows `GoogleSatelliteMap`, which is
+    /// `mp_tiles::source::DEFAULT_PROVIDER` on this side.
+    /// `// C#: GCSViews/FlightPlanner.cs:2237, 7247-7295`
     #[must_use]
     pub fn map_type(&self) -> Option<&str> {
         self.get("MapType")

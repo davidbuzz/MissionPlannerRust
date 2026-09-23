@@ -3476,9 +3476,12 @@ dependencies = [
 name = "mp-tiles"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "image",
  "mp-settings",
  "mp-units",
+ "regex",
+ "sha1_smol",
  "thiserror 2.0.20",
  "ureq",
 ]

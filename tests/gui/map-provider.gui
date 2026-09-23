@@ -1,22 +1,40 @@
-# The map provider is selectable and its attribution follows it.
+# The map provider list is Mission Planner's, its default is Mission Planner's, and the choice is
+# the operator's; the attribution follows the provider.
 tiles offline
 #
-# Satellite imagery is the point of the item: planning over a paddock needs imagery, not a street
-# map. The attribution is not decoration - Esri's terms require it by name.
+# Mission Planner shows GoogleSatelliteMap when its config.xml names no map
+# (GCSViews/FlightPlanner.cs:7282). A real config.xml on the machine running this would otherwise
+# decide - it names the map the C# last showed, and this application takes it - so the data
+# directory is pointed somewhere empty: no config.xml, no tile cache, and so no link either.
+env XDG_DATA_HOME $WORK/data
 
 screen plan
 window 1600x1200
 settle 5
 
+expect map.source google-satellite
+expect map.attribution ~ Google
+
+# Another of the C#'s providers: Bing's imagery, and Microsoft's copyright line with it.
+click plan-map-bing-satellite
+settle 2
+expect map.source bing-satellite
+expect map.attribution ~ Microsoft
+
+click plan-map-osm
+settle 2
 expect map.source osm
 expect map.attribution ~ OpenStreetMap
 
+# Esri is this application's own rather than the C#'s, and is still offered after them.
 click plan-map-esri-imagery
 settle 3
 expect map.source esri-imagery
 expect map.attribution ~ Esri
 
-# And back, so the choice is a choice rather than a one-way door.
-click plan-map-osm
+# And GoogleSatelliteMap can be chosen, not only defaulted to - so the choice is a choice rather
+# than a one-way door.
+click plan-map-google-satellite
 settle 2
-expect map.source osm
+expect map.source google-satellite
+expect map.attribution ~ Google

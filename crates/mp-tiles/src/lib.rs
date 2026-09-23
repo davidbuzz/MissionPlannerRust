@@ -11,12 +11,19 @@
 
 pub mod cache;
 pub mod fetch;
+pub mod gmap;
 pub mod policy;
 pub mod source;
 pub mod store;
+pub mod urlcache;
+pub mod versions;
 
 pub use cache::{CacheError, CacheUsage, CachedTile, ImageFormat, TileCache};
 pub use fetch::{FetchError, TileFetcher};
 pub use policy::{Decision, FetchPolicy};
-pub use source::{OPENSTREETMAP, OPENTOPOMAP, SOURCES, TileSource, source_by_id};
+pub use source::{
+    CSHARP_LIST, DEFAULT_PROVIDER, GOOGLE_SATELLITE_MAP, OPENSTREETMAP, OPENTOPOMAP, SOURCES,
+    TileSource, default_source, source_by_id, source_by_name,
+};
 pub use store::{DecodedTile, StoreStats, TileAnswer, TileStore};
+pub use versions::Correction;
