@@ -10,6 +10,7 @@
 mod fly;
 mod hud;
 mod mapview;
+mod params;
 mod plan;
 mod platform;
 mod probe;
@@ -50,11 +51,13 @@ enum Screen {
     Plan,
     /// Initial setup and calibration.
     Setup,
+    /// The vehicle's parameters.
+    Params,
 }
 
 impl Screen {
     /// The tabs, in order.
-    const ALL: [Self; 3] = [Self::Fly, Self::Plan, Self::Setup];
+    const ALL: [Self; 4] = [Self::Fly, Self::Plan, Self::Setup, Self::Params];
 
     /// The screen to open on, from `MP_SCREEN`.
     ///
@@ -68,6 +71,7 @@ impl Screen {
         match named.as_str() {
             "plan" => Self::Plan,
             "setup" => Self::Setup,
+            "params" => Self::Params,
             // Anything else, including nothing and a typo, opens on the flight screen. An operator
             // who mistypes a screen name should still get the one the application is for.
             _ => Self::Fly,
@@ -79,6 +83,7 @@ impl Screen {
             Self::Fly => "fly",
             Self::Plan => "plan",
             Self::Setup => "setup",
+            Self::Params => "params",
         }
     }
 
@@ -87,6 +92,7 @@ impl Screen {
             Self::Fly => "tab-fly",
             Self::Plan => "tab-plan",
             Self::Setup => "tab-setup",
+            Self::Params => "tab-params",
         }
     }
 }
@@ -119,6 +125,10 @@ struct MissionPlanner {
     file_status: Option<String>,
     /// The waypoint being dragged on the map, if one is.
     dragging_waypoint: Option<u16>,
+    /// The parameter group being browsed.
+    selected_param_group: Option<String>,
+    /// The parameter being looked at.
+    selected_param: Option<String>,
     /// Throttle a motor test uses, as a percentage.
     motor_throttle: f32,
     /// Whether a radio calibration is recording stick limits.
@@ -219,6 +229,8 @@ impl MissionPlanner {
             adopt_vehicle_rally: false,
             file_status: None,
             dragging_waypoint: None,
+            selected_param_group: None,
+            selected_param: None,
             motor_throttle: 5.0,
             capturing_radio: false,
             radio_range: mp_vehicle::RcRange::new(),
@@ -330,6 +342,27 @@ impl MissionPlanner {
         self.forcing_arm_until = Some(std::time::Instant::now() + GIVE_UP_AFTER);
         self.file_status =
             Some("arming checks disabled (ARMING_SKIPCHK=-1); forcing arm".to_owned());
+    }
+
+    /// Changes one parameter by a step, clamped to its documented range.
+    ///
+    /// Clamped rather than refused: the operator asked to move it, and stopping at the limit is
+    /// what they meant. ArduPilot accepts an out-of-range write and then behaves oddly, so the
+    /// editor is the last place to catch it.
+    fn nudge_parameter(&mut self, name: &str, delta: f64) {
+        let view = self.telemetry.view();
+        let Some((_, current)) = view.parameters.iter().find(|(held, _)| held == name) else {
+            return;
+        };
+        let mut next = current + delta;
+        if let Some(meta) = mp_vehicle::param_meta::lookup(name)
+            && let Some((low, high)) = meta.range
+        {
+            next = next.clamp(low, high);
+        }
+        #[allow(clippy::cast_possible_truncation)] // parameters are f32 on the wire
+        self.telemetry.set_parameter(name, next as f32);
+        self.file_status = Some(format!("{name} = {next}"));
     }
 
     /// Starts recording the radio's stick limits from scratch.
@@ -931,6 +964,34 @@ impl Render for MissionPlanner {
                 .child(self.plan_sidebar(&view, cx))
                 .child(self.map_pane(cx))
                 .into_any_element(),
+            Screen::Params => {
+                let parameters = params::collect(&view);
+                let group = self.selected_param_group.clone();
+                let selected = self.selected_param.clone();
+                div()
+                    .id("params-body")
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .min_h(px(0.0))
+                    .gap_2()
+                    .p_2()
+                    .overflow_y_scroll()
+                    .child(params::browser_panel(
+                        &view,
+                        &parameters,
+                        group.as_deref(),
+                        cx,
+                    ))
+                    .child(params::list_panel(
+                        &parameters,
+                        group.as_deref(),
+                        selected.as_deref(),
+                        cx,
+                    ))
+                    .child(params::editor_panel(&parameters, selected.as_deref(), cx))
+                    .into_any_element()
+            }
             Screen::Setup => div()
                 .id("setup-body")
                 .flex()

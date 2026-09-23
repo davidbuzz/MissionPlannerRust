@@ -6,6 +6,9 @@
 #
 # usage: tools/screenshot.sh <output-name> [seconds-visible] [-- <binary args>]
 #
+# A target may carry a ~N suffix to wait N seconds after clicking it, for when a click starts
+# something slow and the next control does not exist until it finishes.
+#
 # SHOT_DELAY waits that many seconds after the last interaction before capturing, for state that
 # arrives on the next telemetry message rather than immediately.
 #
@@ -91,6 +94,13 @@ if [ -n "${CLICK:-}" ]; then
     IFS=',' read -ra TARGETS <<< "$CLICK"
     for TARGET in "${TARGETS[@]}"; do
         BUTTON=1
+        # A ~N suffix waits N seconds after this click before the next. Needed when a click starts
+        # something slow - a parameter download takes twenty seconds - and the control the next
+        # click wants does not exist until it finishes.
+        WAIT=0.6
+        case "$TARGET" in
+            *~*) WAIT="${TARGET##*~}"; TARGET="${TARGET%~*}" ;;
+        esac
         case "$TARGET" in
             *:right) BUTTON=3; TARGET="${TARGET%:right}" ;;
             *:middle) BUTTON=2; TARGET="${TARGET%:middle}" ;;
@@ -98,7 +108,7 @@ if [ -n "${CLICK:-}" ]; then
         "$ROOT/tools/gui-click.sh" "$PROBE_FILE" "$WIN_ID" "$TARGET" "$BUTTON" || exit 1
         # Let the click take effect and the next frame paint before the following one: a second
         # click sent into the old layout lands on whatever used to be there.
-        sleep 0.6
+        sleep "$WAIT"
     done
 fi
 

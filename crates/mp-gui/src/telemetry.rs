@@ -63,6 +63,10 @@ pub struct TelemetryView {
     pub messages_dropped: u64,
     /// What the mission transfer is doing, if one has been started.
     pub transfer: Option<TransferStatus>,
+    /// The vehicle's parameters, by name.
+    pub parameters: Vec<(String, f64)>,
+    /// How many the vehicle says it has, once it has said.
+    pub parameters_expected: u16,
 }
 
 /// A mission transfer, as the UI needs to describe it.
@@ -97,6 +101,8 @@ impl TelemetryView {
             messages: Vec::new(),
             messages_dropped: 0,
             transfer: None,
+            parameters: Vec::new(),
+            parameters_expected: 0,
         }
     }
 }
@@ -158,6 +164,7 @@ impl Telemetry {
         // Fetch the mission the link holds, if a download has finished. The UI never triggers
         // one itself: a ground station that silently pulls a mission whenever it connects makes
         // it impossible to tell whether what is on screen came from the vehicle or the operator.
+        let parameters = primary.as_ref().and_then(|(id, _)| link.params(*id));
         let transfer = primary
             .as_ref()
             .and_then(|(id, _)| link.mission_transfer(*id));
@@ -199,6 +206,19 @@ impl Telemetry {
             messages: link.recent_messages(MESSAGE_LINES),
             messages_dropped: link.messages_dropped(),
             transfer,
+            parameters: parameters
+                .as_ref()
+                .map(|table| {
+                    table
+                        .iter()
+                        .map(|(name, value)| (name.clone(), value.as_f64()))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            parameters_expected: parameters
+                .as_ref()
+                .and_then(mp_link::params::ParamTable::expected)
+                .unwrap_or(0),
         }
     }
 
@@ -392,6 +412,13 @@ impl Telemetry {
     pub fn stop_motor(&self, motor: u8) {
         if let Some((link, id)) = self.target() {
             link.send(&mp_link::calibration::stop_motor(id, motor));
+        }
+    }
+
+    /// Starts a parameter download.
+    pub fn download_parameters(&self) {
+        if let Some((link, id)) = self.target() {
+            link.download_params(id);
         }
     }
 
