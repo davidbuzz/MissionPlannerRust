@@ -201,7 +201,7 @@ pub fn request_param_by_name(target: VehicleId, name: &str) -> MavMessage {
         param_index: -1,
         target_system: target.sysid,
         target_component: target.compid,
-        param_id: crate::params::encode_param_id(name),
+        param_id: mp_params::encode_param_id(name),
     })
 }
 

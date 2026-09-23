@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use mp_link::{Link, LinkConfig};
 
-fn download_params() -> mp_link::params::ParamTable {
+fn download_params() -> mp_params::ParamTable {
     let config = LinkConfig {
         stream_rate_hz: 0,
         ..LinkConfig::default()

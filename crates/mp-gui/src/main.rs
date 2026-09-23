@@ -206,7 +206,7 @@ struct MissionPlanner {
     /// Held rather than applied. A comparison is something an operator reads before deciding, and
     /// the decision is a second, deliberate press - loading a tune because it was compared would
     /// be the worst possible reading of "show me what this would change".
-    param_differences: Vec<mp_link::param_file::Difference>,
+    param_differences: Vec<mp_params::param_file::Difference>,
     /// Throttle a motor test uses, as a percentage.
     motor_throttle: f32,
     /// Whether a radio calibration is recording stick limits.
@@ -456,9 +456,9 @@ impl MissionPlanner {
     }
 
     /// The parameters currently held for the vehicle, as a file would hold them.
-    fn params_as_file(&self) -> mp_link::param_file::ParamFile {
+    fn params_as_file(&self) -> mp_params::param_file::ParamFile {
         let view = self.telemetry.view();
-        mp_link::param_file::ParamFile::from_values(
+        mp_params::param_file::ParamFile::from_values(
             view.parameters
                 .iter()
                 .map(|(name, value)| (name.clone(), *value)),
@@ -499,7 +499,7 @@ impl MissionPlanner {
     /// Compares a file against the vehicle, without changing anything.
     fn compare_params(&mut self) {
         let path = self.param_path();
-        let proposed = match mp_link::param_file::ParamFile::load(&path) {
+        let proposed = match mp_params::param_file::ParamFile::load(&path) {
             Ok(file) => file,
             Err(err) => {
                 self.param_differences.clear();
@@ -542,13 +542,13 @@ impl MissionPlanner {
         let mut skipped = 0usize;
         for difference in &self.param_differences {
             match difference.kind {
-                mp_link::param_file::Change::Changed { to, .. } => {
+                mp_params::param_file::Change::Changed { to, .. } => {
                     #[allow(clippy::cast_possible_truncation)] // parameters are f32 on the wire
                     self.telemetry.set_parameter(&difference.name, to as f32);
                     written += 1;
                 }
-                mp_link::param_file::Change::Added { .. }
-                | mp_link::param_file::Change::Missing { .. } => skipped += 1,
+                mp_params::param_file::Change::Added { .. }
+                | mp_params::param_file::Change::Missing { .. } => skipped += 1,
             }
         }
         // The comparison is now stale - it describes a vehicle that no longer exists. Cleared

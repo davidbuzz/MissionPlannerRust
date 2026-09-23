@@ -326,7 +326,7 @@ impl Telemetry {
                 .unwrap_or_default(),
             parameters_expected: parameters
                 .as_ref()
-                .and_then(mp_link::params::ParamTable::expected)
+                .and_then(mp_params::ParamTable::expected)
                 .unwrap_or(0),
         }
     }

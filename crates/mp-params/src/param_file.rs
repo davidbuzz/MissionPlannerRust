@@ -11,7 +11,7 @@
 //! because the operator believes the airframe matches the file. So nothing is rejected outright
 //! and nothing is discarded quietly: every line that did not become a parameter is reported.
 
-use crate::params::round_to_significant_digits;
+use crate::round_to_significant_digits;
 use std::collections::BTreeMap;
 
 /// Significant digits used when comparing, matching Mission Planner's comparison behaviour.

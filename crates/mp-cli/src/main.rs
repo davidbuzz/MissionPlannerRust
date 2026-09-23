@@ -11,9 +11,9 @@ use std::time::{Duration, Instant};
 
 mod logs;
 
-use mp_link::param_file::{Change, ParamFile};
-use mp_link::params::ParamTable;
 use mp_link::{Link, LinkConfig, commands};
+use mp_params::ParamTable;
+use mp_params::param_file::{Change, ParamFile};
 use mp_vehicle::{StateHandle, VehicleId};
 
 fn main() -> std::process::ExitCode {
@@ -1069,7 +1069,7 @@ fn param_save(url: &str, path: &str) -> std::process::ExitCode {
     let skipped_on_load: Vec<_> = table
         .iter()
         .map(|(name, _)| name.as_str())
-        .filter(|name| !mp_link::param_file::is_loaded(name))
+        .filter(|name| !mp_params::param_file::is_loaded(name))
         .collect();
     if !skipped_on_load.is_empty() {
         println!(

@@ -3311,6 +3311,7 @@ dependencies = [
  "mp-mavlink",
  "mp-mavlink-dialects",
  "mp-mission",
+ "mp-params",
  "mp-transport",
  "mp-units",
  "mp-vehicle",
@@ -3352,6 +3353,7 @@ dependencies = [
  "mp-log",
  "mp-mavlink-dialects",
  "mp-mission",
+ "mp-params",
  "mp-settings",
  "mp-tiles",
  "mp-units",
@@ -3381,6 +3383,7 @@ dependencies = [
  "mp-mavlink",
  "mp-mavlink-dialects",
  "mp-mission",
+ "mp-params",
  "mp-transport",
  "mp-units",
  "mp-vehicle",
@@ -3419,6 +3422,13 @@ name = "mp-mission"
 version = "0.1.0"
 dependencies = [
  "mp-units",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "mp-params"
+version = "0.1.0"
+dependencies = [
  "thiserror 2.0.20",
 ]
 

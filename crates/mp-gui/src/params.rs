@@ -476,7 +476,7 @@ pub fn file_panel(
     name: &crate::textfield::TextField,
     name_focus: &gpui::FocusHandle,
     focused: bool,
-    differences: &[mp_link::param_file::Difference],
+    differences: &[mp_params::param_file::Difference],
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
     let held = view.parameters.len();
@@ -489,13 +489,13 @@ pub fn file_panel(
     const SHOWN: usize = 40;
     for difference in differences.iter().take(SHOWN) {
         let (value, colour) = match difference.kind {
-            mp_link::param_file::Change::Changed { from, to } => {
+            mp_params::param_file::Change::Changed { from, to } => {
                 (format!("{from} -> {to}"), theme::WARN)
             }
-            mp_link::param_file::Change::Added { to } => {
+            mp_params::param_file::Change::Added { to } => {
                 (format!("not on the vehicle -> {to}"), theme::DIM)
             }
-            mp_link::param_file::Change::Missing { from } => {
+            mp_params::param_file::Change::Missing { from } => {
                 (format!("{from} -> not in the file"), theme::DIM)
             }
         };
@@ -533,7 +533,12 @@ pub fn file_panel(
 
     let changed = differences
         .iter()
-        .filter(|difference| matches!(difference.kind, mp_link::param_file::Change::Changed { .. }))
+        .filter(|difference| {
+            matches!(
+                difference.kind,
+                mp_params::param_file::Change::Changed { .. }
+            )
+        })
         .count();
 
     panel(

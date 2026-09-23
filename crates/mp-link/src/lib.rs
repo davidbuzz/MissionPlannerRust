@@ -22,8 +22,6 @@ pub mod commands;
 pub mod logs;
 pub mod messages;
 pub mod mission_transfer;
-pub mod param_file;
-pub mod params;
 pub mod traffic;
 
 use std::collections::BTreeMap;
@@ -35,9 +33,9 @@ use mission_transfer::{Action, MissionTransfer};
 use mp_mavlink::{DecodeStats, FrameDecoder, Message as _, encode_v2};
 use mp_mavlink_dialects::all::{DIALECT, Heartbeat, MavCmd, MavMessage, RequestDataStream};
 use mp_mission::{MISSION_TYPE_MISSION, MissionItem, WireItem};
+use mp_params::{ParamTable, ParamType, ParamValue, decode_param_id};
 use mp_transport::{OpenError, Transport};
 use mp_vehicle::{StateHandle, VehicleId, VehicleRegistry};
-use params::{ParamTable, ParamType, ParamValue, decode_param_id};
 
 /// MAVLink component id for a ground control station.
 pub const MAV_COMP_ID_MISSIONPLANNER: u8 = 190;
