@@ -7,6 +7,7 @@
 
 #![allow(clippy::print_stderr)]
 
+mod coverage;
 mod facts;
 mod fly;
 mod hud;
@@ -1379,6 +1380,19 @@ impl Render for MissionPlanner {
             // rather than merely on the plot, and that the left side split by unit.
             facts::record("log.plotted.right", self.log_browse.right_count());
             facts::record("log.axes.left", self.log_browse.left_units().len());
+            // The data grid: rows it holds (all records, or one type's when filtered), records in
+            // the log, the field its current cell resolves to, and the last refusal of Graph
+            // Left or Graph Right in the C#'s words.
+            facts::record("log.grid.rows", self.log_browse.grid_rows());
+            facts::record("log.grid.records", self.log_browse.grid_records());
+            facts::record("log.grid.selected", self.log_browse.selected_field());
+            facts::record("log.refused", self.log_browse.refused().unwrap_or("none"));
+            // The map beside the chart: points of the route drawn, and the logged mission.
+            facts::record("log.map.points", self.log_browse.map_contents().points);
+            facts::record(
+                "log.map.waypoints",
+                self.log_browse.map_contents().waypoints,
+            );
             // What the primary flight display drew, by name, and how many of HUD.cs's elements
             // it still does not - so a port that regresses an element fails a test.
             facts::record(
@@ -1387,6 +1401,13 @@ impl Render for MissionPlanner {
             );
             facts::record("hud.missing", hud::missing().len());
             facts::record("hud.missing.list", hud::missing_report());
+            // How much of FlightData this screen has, from the coverage table, so the number in
+            // the plan is the number the application reports.
+            let (done, elsewhere, missing, plumbing, dropped) = coverage::counts();
+            facts::record("coverage.flightdata.done", done + elsewhere);
+            facts::record("coverage.flightdata.missing", missing);
+            facts::record("coverage.flightdata.total", coverage::FLIGHTDATA.len());
+            let _ = (plumbing, dropped);
             facts::record("sticks.enabled", self.sticks.is_enabled());
             // Frames the link accepted and the measured stick-to-link latency, so a test with a
             // device attached can prove frames go out and how fast.

@@ -42,6 +42,7 @@ Measured on this tree: **18 crates, 46,293 hand-written Rust LOC** (plus 93,771 
 | CLI | `mpr watch \| record \| fly \| params \| param \| mission \| survey \| log \| logs \| kml \| firmware \| ports` |
 | GUI | fly, plan, setup, params and log screens on gpui |
 | Porting ledger | `ledger/ledger.csv`, one row per C# file with its tier and state; `cargo xtask ledger check` fails on anything unaccounted for |
+| Flight screen coverage | every one of `FlightData`'s 136 wired actions listed with what stands in for it here — 27 done, 87 missing — in `docs/coverage/flightdata.md`, kept current by a test |
 
 **Not yet**: the log browser's data grid and the map beside its chart, a joystick latency
 histogram from a real device (none is attached to this machine), the `mp-link` split, i18n,

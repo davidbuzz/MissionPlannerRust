@@ -200,7 +200,17 @@ servo/RC, and the vehicle action buttons.
 - **DoD:** every tab, button and action of the C# `GCSViews/FlightData` present and behaviourally verified
   against SITL; layout persists; no UI stall > 8 ms during a 200 Hz telemetry storm.
 - **Replaces:** `GCSViews/FlightData*` and its dependents.
-- **Tests:** `tests/action_coverage.rs` enumerates every C# `FlightData` control and action from the D18 ledger and fails on anything unimplemented; `tests/sitl_ops.rs` drives arm/disarm/mode-change/RTL/guided-goto against SITL and asserts resulting vehicle state; per-tab UI snapshots; `tests/layout_persist.rs` save/restore of the screen layout; `benches/telemetry_storm.rs` pumps 200 Hz telemetry and asserts no frame exceeds 8 ms.
+- **Today:** the coverage list exists and is honest: `crates/mp-gui/src/coverage.rs` has one row
+  per event wiring in `FlightData.Designer.cs` (136), naming the control, its text, its handler
+  and what this application has for it. 27 are on the flight screen (arm/disarm, modes, take-off,
+  fly-to-here, auto-pan, the map, the tuning graph, the joystick, the HUD's health indicators),
+  2 are elsewhere (tlog replay as a link URL, `mpr kml`), 19 are WinForms plumbing, 1 is dropped
+  (undock, in a single window), and 87 are missing - the transponder, gimbal and camera, video,
+  scripts, tlog playback controls, POIs, set-home/EKF-origin, change alt/speed/loiter, set WP,
+  quick-view field choice, HUD menu items, log conversions. `docs/coverage/flightdata.md` is the
+  rendered list, and a test fails when it is stale or when a claimed id leaves the source.
+- **Tests:** `crates/mp-gui/src/coverage.rs` (in place of `tests/action_coverage.rs`: the crate is a
+  binary, so its tests are inline) enumerates every C# `FlightData` control and action from the D18 ledger and fails on anything unimplemented; `tests/sitl_ops.rs` drives arm/disarm/mode-change/RTL/guided-goto against SITL and asserts resulting vehicle state; per-tab UI snapshots; `tests/layout_persist.rs` save/restore of the screen layout; `benches/telemetry_storm.rs` pumps 200 Hz telemetry and asserts no frame exceeds 8 ms.
 
 ### D11. Flight Planner screen
 Waypoint/mission editing, survey grid generation, fences and rally points, terrain and altitude handling,
