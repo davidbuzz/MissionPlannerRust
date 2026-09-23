@@ -317,9 +317,15 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "ValueChanged",
         "Zoomlevel_ValueChanged",
         "Zoom",
-        Done("map"),
+        Done("plan-zoomlevel"),
     ),
-    row("TRK_zoom", "Scroll", "TRK_zoom_Scroll", "Zoom", Done("map")),
+    row(
+        "TRK_zoom",
+        "Scroll",
+        "TRK_zoom_Scroll",
+        "Zoom",
+        Done("plan-trk-zoom"),
+    ),
     row(
         "cmb_missiontype",
         "SelectedIndexChanged",
@@ -641,7 +647,7 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "Click",
         "zoomToToolStripMenuItem_Click",
         "Zoom To",
-        Missing,
+        Done("menu-zoomTo"),
     ),
     row(
         "prefetchToolStripMenuItem",
@@ -858,21 +864,21 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "Click",
         "zoomToVehicleToolStripMenuItem_Click",
         "Zoom to Vehicle",
-        Missing,
+        Done("menu-zoomToVehicle"),
     ),
     row(
         "zoomToMissionToolStripMenuItem",
         "Click",
         "zoomToMissionToolStripMenuItem_Click",
         "Zoom to Mission",
-        Missing,
+        Done("menu-zoomToMission"),
     ),
     row(
         "zoomToHomeToolStripMenuItem",
         "Click",
         "zoomToHomeToolStripMenuItem_Click",
         "Zoom to Home",
-        Missing,
+        Done("menu-zoomToHome"),
     ),
     row(
         "gDALOpacityToolStripMenuItem",
@@ -1272,6 +1278,37 @@ mod tests {
         }
     }
 
+    /// The zoom icon's menu is the Designer's `contextMenuStripZoom`: its entries in
+    /// `Items.AddRange` order with the `.resx` text, each live.
+    #[test]
+    fn the_zoom_menu_is_the_designers_with_its_resx_text() {
+        let (Some(designer), Some(resx)) = (
+            reference("FlightPlanner.Designer.cs"),
+            reference("FlightPlanner.resx"),
+        ) else {
+            eprintln!("skipped: the C# tree is not checked out here");
+            return;
+        };
+        let texts = resx_texts(&resx);
+        let added = added_to(&designer, "contextMenuStripZoom").expect("contextMenuStripZoom");
+        let ours: Vec<&str> = crate::plan::ZOOM_MENU
+            .iter()
+            .map(|entry| entry.control)
+            .collect();
+        assert_eq!(ours, added);
+        for entry in crate::plan::ZOOM_MENU {
+            assert_eq!(
+                Some(entry.text),
+                texts.get(entry.control).map(String::as_str),
+                "{}",
+                entry.control
+            );
+            let id = entry.control.replace("ToolStripMenuItem", "");
+            assert_eq!(entry.id, format!("menu-{id}"));
+            assert!(entry.is_live(), "{}", entry.control);
+        }
+    }
+
     /// The committed report matches the table.
     #[test]
     fn the_committed_report_is_current() {
@@ -1304,7 +1341,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (55, 0, 54, 12, 0)
+            (59, 0, 50, 12, 0)
         );
     }
 }

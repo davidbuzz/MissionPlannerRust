@@ -1,0 +1,81 @@
+# The WP radius and loiter radius circles on the planning map (DELIVERABLES.md D8, D11).
+#
+# writeKML hands WPOverlay.CreateOverlay the WP Radius and Loiter Radius boxes
+# (GCSViews/FlightPlanner.cs:1423-1434). Each waypoint's GMapMarkerRect is given the WP radius, a
+# loiter the loiter radius unless its command carries its own (ExtLibs/Maps/WPOverlay.cs:141-238),
+# and GMapMarkerRect.OnRender draws it at the map's scale (ExtLibs/Maps/GMapMarkerRect.cs:54-98).
+# The pointer on a waypoint turns its circle red and puts the grid on its row
+# (MainMap_OnMarkerEnter, FlightPlanner.cs:8068-8098), and its marker shows "Alt:" on hover
+# (WPOverlay.cs:393-398). The flight screen builds its overlay with no radii
+# (FlightData.cs:3830-3843).
+#
+# Self-contained: its own data directory, holding a home, so the map has somewhere to be.
+
+env XDG_DATA_HOME $WORK
+env MP_PLAN_DIR $WORK
+setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
+
+screen plan
+window 1600x1200
+settle 4
+
+# Nothing planned: home's rect has no radius, so there is no circle.
+expect map.circles 0
+
+# Two waypoints: two circles of the WP Radius the .resx gives, 30 m.
+click map@0.40x0.40
+click map@0.60x0.60
+expect mission.items 2
+expect plan.wprad 30
+expect map.circles 2
+expect map.circles.radii 30,30
+
+# A new WP Radius, and the box left: the circles take it.
+click plan-wprad
+key ctrl+u
+type 12
+click plan-defaultalt
+settle 1
+expect plan.wprad 12
+expect map.circles.radii 12,12
+
+# Loiter > Forever: a loiter, circled at the Loiter Radius box's 45.
+click map@0.50x0.25:right
+click menu-loiter
+click menu-loiterForever
+expect mission.items 3
+expect map.circles.radii 12,12,45
+
+# The pointer on waypoint 1: its circle red, its row selected, its altitude shown.
+click map@0.40x0.40:right
+expect plan.menu open
+expect map.hover 1
+expect map.circles.red 1
+expect mission.selected 1
+expect map.tooltip Alt: 100
+
+# Off it again: nothing under the pointer, the circle white, the row still selected.
+click map@0.90x0.90
+expect plan.menu closed
+expect map.hover none
+expect map.circles.red 0
+expect map.tooltip none
+expect mission.selected 1
+expect mission.items 3
+
+# WP Radius 0: the waypoints lose their circles and the loiter keeps its.
+click plan-wprad
+key ctrl+u
+type 0
+click plan-defaultalt
+settle 1
+expect map.circles 1
+expect map.circles.radii 45
+
+# The flight screen's overlay has no radii, and the loiter carries none of its own.
+click tab-fly
+settle 1
+expect map.circles 0
+click tab-plan
+settle 1
+expect map.circles 1

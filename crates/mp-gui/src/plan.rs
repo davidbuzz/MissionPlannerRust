@@ -17,6 +17,7 @@ use mp_mission::{GridOptions, MissionItem, Severity, grid};
 use mp_units::LatLon;
 
 use crate::MissionPlanner;
+use crate::mapview::{self, MapViewport};
 use crate::telemetry::TelemetryView;
 use crate::textfield::TextField;
 use crate::ui::{action, panel, progress, theme};
@@ -1171,8 +1172,8 @@ impl Plan {
 
     /// `TXT_*_Leave`: a box left holding what `float.TryParse` refuses goes back to a number -
     /// Default Alt to "100", Loiter Radius to "45", and WP Radius, only when it is empty, to
-    /// `startupWPradius`. (WP Radius's also redraws the waypoints' radius circles, which this
-    /// map does not draw.)
+    /// `startupWPradius`. (WP Radius's also redraws the waypoints' radius circles, which the
+    /// map here reads from the box every frame - see [`map_overlay`].)
     /// `// C#: GCSViews/FlightPlanner.cs:6992-6999, 7066-7073, 7087-7106`
     pub fn panel_leave(&mut self, which: PanelBox) {
         if float_parses(self.panel_text(which)) {
@@ -3788,6 +3789,14 @@ pub enum MenuAction {
     PolygonFromWaypoints,
     /// `ContextMeasure_Click`.
     MeasureDistance,
+    /// `zoomToToolStripMenuItem_Click`: Map Tool > Zoom To, which asks for a place.
+    ZoomTo,
+    /// `zoomToVehicleToolStripMenuItem_Click`, on the zoom icon's menu.
+    ZoomToVehicle,
+    /// `zoomToMissionToolStripMenuItem_Click`, on the zoom icon's menu.
+    ZoomToMission,
+    /// `zoomToHomeToolStripMenuItem_Click`, on the zoom icon's menu.
+    ZoomToHome,
     /// `reverseWPsToolStripMenuItem_Click`.
     ReverseWps,
     /// `loadWPFileToolStripMenuItem_Click`, which is `BUT_loadwpfile_Click`.
@@ -3880,6 +3889,7 @@ pub const MAP_MENU: &[MenuEntry] = {
         FenceSaveToFile, InsertAtCurrentPosition, InsertSplineWp, InsertWp, JumpStart, JumpWp,
         Land, LoadWpFile, LoiterCircles, LoiterForever, LoiterTime, MeasureDistance, ModifyAlt,
         PolygonFromWaypoints, ReverseWps, Rtl, SaveWpFile, SetReturnLocation, SetRoi, Takeoff,
+        ZoomTo,
     };
     &[
         item(
@@ -4166,13 +4176,23 @@ pub const MAP_MENU: &[MenuEntry] = {
                     "Measure Distance",
                     Some(MeasureDistance),
                 ),
+                // Dimmed: `rotateMapToolStripMenuItem_Click` sets `MainMap.Bearing`, and this map
+                // cannot turn - gpui draws a tile as an axis-aligned image (`PolychromeSprite`
+                // carries bounds and no transformation), so there is no bearing to set.
+                // `// C#: GCSViews/FlightPlanner.cs:5861-5871`
                 item(
                     "menu-rotateMap",
                     "rotateMapToolStripMenuItem",
                     "Rotate Map",
                     None,
                 ),
-                item("menu-zoomTo", "zoomToToolStripMenuItem", "Zoom To", None),
+                // `// C#: GCSViews/FlightPlanner.cs:8345-8368`
+                item(
+                    "menu-zoomTo",
+                    "zoomToToolStripMenuItem",
+                    "Zoom To",
+                    Some(ZoomTo),
+                ),
                 item(
                     "menu-prefetch",
                     "prefetchToolStripMenuItem",
@@ -4300,12 +4320,38 @@ pub const MAP_MENU: &[MenuEntry] = {
     ]
 };
 
-/// Every entry, drop-downs included, in menu order.
+/// `contextMenuStripZoom`, the menu the zoom icon on the map opens, in its `Items.AddRange` order
+/// with the `.resx` text.
+/// `// C#: GCSViews/FlightPlanner.Designer.cs:1512-1537; GCSViews/FlightPlanner.resx
+/// (zoomToVehicleToolStripMenuItem.Text, ...)`
+pub const ZOOM_MENU: &[MenuEntry] = &[
+    item(
+        "menu-zoomToVehicle",
+        "zoomToVehicleToolStripMenuItem",
+        "Zoom to Vehicle",
+        Some(MenuAction::ZoomToVehicle),
+    ),
+    item(
+        "menu-zoomToMission",
+        "zoomToMissionToolStripMenuItem",
+        "Zoom to Mission",
+        Some(MenuAction::ZoomToMission),
+    ),
+    item(
+        "menu-zoomToHome",
+        "zoomToHomeToolStripMenuItem",
+        "Zoom to Home",
+        Some(MenuAction::ZoomToHome),
+    ),
+];
+
+/// Every entry, drop-downs included, in menu order, then the zoom icon's.
 #[cfg(test)]
 pub fn menu_entries() -> impl Iterator<Item = &'static MenuEntry> {
     MAP_MENU
         .iter()
         .flat_map(|entry| std::iter::once(entry).chain(entry.children.iter()))
+        .chain(ZOOM_MENU.iter())
 }
 
 /// The menu while it is open.
@@ -4375,6 +4421,8 @@ pub enum PromptKind {
     FenceLoadFile,
     /// Geo-Fence > Save to File's `SaveFileDialog`, likewise.
     FenceSaveFile,
+    /// Map Tool > Zoom To's "Enter your location".
+    ZoomTo,
     /// A message with an OK.
     Message,
 }
@@ -4522,12 +4570,46 @@ pub struct PlanMenus {
     /// does nothing else, so the map must not take the same press as a click that adds a
     /// waypoint.
     dismissed_at: Option<(f32, f32)>,
+    /// The zoom icon's menu, `contextMenuStripZoom`, while it is open: where it was opened.
+    pub zoom_menu: Option<(f32, f32)>,
+    /// Where the zoom bar, `TRK_zoom`, was laid out at the last frame: its top and height in
+    /// window coordinates, which turn a press on it into a zoom.
+    zoom_track: std::rc::Rc<std::cell::Cell<Option<(f32, f32)>>>,
+    /// A Zoom To search on its way to the geocoder.
+    geocoding: Option<Geocoding>,
+    /// What a test puts in the geocoder's place, so Zoom To runs its whole course offline.
+    #[cfg(test)]
+    fake_geocoder: Option<GeocoderFetch>,
+}
+
+/// How a page is fetched from the geocoder: its URL in, its text or why not out.
+type GeocoderFetch = fn(&str) -> Result<String, String>;
+
+/// `GetContentUsingHttp` for the geocoder: a GET with the application's User-Agent, `Accept: */*`
+/// and OpenStreetMap's `Referer`.
+/// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/GMapProvider.cs:443-461`
+fn geocoder_fetch(url: &str) -> Result<String, String> {
+    mp_tiles::TileFetcher::new()
+        .fetch_text(url, mapview::GEOCODER_REFERER)
+        .map_err(|error| error.to_string())
+}
+
+/// A Map Tool > Zoom To search: the place asked for, and where the geocoder's answer arrives.
+///
+/// The C# asks on the interface thread and waits for the answer; here the request goes on a
+/// thread of its own and the answer is taken up by the frame that finds it, so the screen does
+/// not stop while a server is slow.
+#[derive(Debug)]
+struct Geocoding {
+    place: String,
+    answer: std::sync::mpsc::Receiver<(mapview::GeocoderStatus, Option<LatLon>)>,
 }
 
 impl PlanMenus {
     /// Opens the menu where the right button came up. `contextMenuStrip1_Opening` runs here: the
     /// marker under the cursor decides Delete WP.
     pub fn open_at(&mut self, at: (f32, f32), position: LatLon, marker: Option<u16>) {
+        self.zoom_menu = None;
         self.open = Some(OpenMenu {
             at,
             position,
@@ -4587,6 +4669,65 @@ impl PlanMenus {
             field: None,
             kind: PromptKind::ResetHome(loaded),
         });
+    }
+
+    /// Opens the zoom icon's menu where the button came up over the icon.
+    /// `// C#: GCSViews/FlightPlanner.cs:7624-7628`
+    pub fn open_zoom_menu(&mut self, at: (f32, f32)) {
+        self.open = None;
+        self.zoom_menu = Some(at);
+        self.dismissed_at = None;
+    }
+
+    /// Closes the zoom icon's menu because a press landed somewhere else.
+    pub fn dismiss_zoom_menu(&mut self, at: (f32, f32)) {
+        if self.zoom_menu.take().is_some() {
+            self.dismissed_at = Some(at);
+        }
+    }
+
+    /// Sends Zoom To's place to the geocoder, on a thread of its own.
+    fn start_geocode(&mut self, place: String) {
+        #[cfg(test)]
+        let fetch: GeocoderFetch = self.fake_geocoder.unwrap_or(geocoder_fetch);
+        #[cfg(not(test))]
+        let fetch: GeocoderFetch = geocoder_fetch;
+        let (send, answer) = std::sync::mpsc::channel();
+        let keywords = place.clone();
+        let spawned = std::thread::Builder::new()
+            .name("geocoder".to_owned())
+            .spawn(move || {
+                let outcome = mapview::geocode(&keywords, fetch);
+                // The screen may have gone; nobody is waiting then.
+                let _ = send.send(outcome);
+            });
+        match spawned {
+            Ok(_) => self.geocoding = Some(Geocoding { place, answer }),
+            Err(_) => self.tell(
+                "GMap.NET",
+                zoom_to_message(&place, mapview::GeocoderStatus::ExceptionInCode),
+            ),
+        }
+    }
+
+    /// Whether a Zoom To search is waiting on the geocoder.
+    #[must_use]
+    pub const fn geocoding(&self) -> bool {
+        self.geocoding.is_some()
+    }
+
+    /// The geocoder's answer, once it has come: the place asked for and what was found.
+    fn take_geocode(&mut self) -> Option<(String, (mapview::GeocoderStatus, Option<LatLon>))> {
+        let pending = self.geocoding.as_ref()?;
+        let outcome = match pending.answer.try_recv() {
+            Ok(outcome) => outcome,
+            Err(std::sync::mpsc::TryRecvError::Empty) => return None,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                (mapview::GeocoderStatus::ExceptionInCode, None)
+            }
+        };
+        let place = self.geocoding.take()?.place;
+        Some((place, outcome))
     }
 
     /// Chooses an entry: what its handler does, up to the first `InputBox` it shows.
@@ -4710,6 +4851,17 @@ impl PlanMenus {
                 }
                 Some(from) => self.tell("", measure_text(from, position)),
             },
+            // `InputBox.Show("Location", "Enter your location", ref place)`, the place given as
+            // Perth Airport.
+            // `// C#: GCSViews/FlightPlanner.cs:8345-8348`
+            MenuAction::ZoomTo => self.ask(Prompt::input(
+                "Location",
+                "Enter your location",
+                "Perth Airport, Australia",
+                PromptKind::ZoomTo,
+            )),
+            // The zoom icon's menu is the screen's: it moves the map.
+            MenuAction::ZoomToVehicle | MenuAction::ZoomToMission | MenuAction::ZoomToHome => {}
             MenuAction::ReverseWps => plan.reverse_waypoints(),
             MenuAction::ModifyAlt => self.ask(Prompt::input(
                 "Alt Change",
@@ -4852,6 +5004,7 @@ impl PlanMenus {
             PromptKind::ResetHome(loaded) => plan.reset_home_to(loaded),
             PromptKind::FenceLoadFile => return Some(FileRequest::LoadFence(value)),
             PromptKind::FenceSaveFile => return Some(FileRequest::SaveFence(value)),
+            PromptKind::ZoomTo => self.start_geocode(value),
             PromptKind::Message => {}
         }
         None
@@ -4893,6 +5046,593 @@ fn sync_everything(this: &MissionPlanner) {
         .set_fence_return(this.plan.fence_return());
 }
 
+// ---------------------------------------------------------------------------------------------
+// The map's zoom: the zoom icon and its menu, Map Tool > Zoom To, and the Zoom box and bar at the
+// map's right (`Zoomlevel`, `TRK_zoom`). Then what the map is handed of the panel's radii, and the
+// pointer over its markers.
+// ---------------------------------------------------------------------------------------------
+
+/// The zoom Zoom to Vehicle and Zoom to Home bring a wider view in to: `if (MainMap.Zoom < 17)
+/// MainMap.Zoom = 17`.
+/// `// C#: GCSViews/FlightPlanner.cs:8379-8380, 8398-8399`
+pub const ZOOM_IN_TO: f64 = 17.0;
+/// The zoom Zoom To leaves a place it found at.
+/// `// C#: GCSViews/FlightPlanner.cs:8365`
+pub const ZOOM_TO_PLACE: f64 = 15.0;
+/// `Zoomlevel.Increment`.
+/// `// C#: GCSViews/FlightPlanner.Designer.cs:811-815`
+pub const ZOOMLEVEL_INCREMENT: f64 = 0.5;
+/// Where the zoom bar's thumb stops short of each end, pixels.
+const TRACK_INSET: f32 = 8.0;
+/// Where `zoomicon` sits on the map, and its size: ten in from the left and five below
+/// `polyicon` at (10, 100), thirty across.
+/// `// C#: GCSViews/FlightPlanner.cs:4905-4911; Controls/Icon/Icon.cs:12-13`
+pub const ZOOM_ICON: (f32, f32, f32) = (10.0, 135.0, 30.0);
+
+/// The view brought in to [`ZOOM_IN_TO`] if it is wider than that.
+fn zoom_in_to_17(map: &mut MapViewport) {
+    if map.zoom_level().is_some_and(|zoom| zoom < ZOOM_IN_TO) {
+        map.set_zoom(ZOOM_IN_TO);
+    }
+}
+
+/// `zoomToVehicleToolStripMenuItem_Click`: the view centred on the vehicle and brought in to 17,
+/// or "Invalid Location" while its position is 0,0 - as it is before one has been heard.
+/// `// C#: GCSViews/FlightPlanner.cs:8370-8381`
+pub fn zoom_to_vehicle(map: &mut MapViewport, vehicle: Option<LatLon>) -> Result<(), &'static str> {
+    let Some(at) = vehicle.filter(|at| at.latitude() != 0.0 || at.longitude() != 0.0) else {
+        return Err("Invalid Location");
+    };
+    map.centre_on(at);
+    zoom_in_to_17(map);
+    Ok(())
+}
+
+/// `zoomToHomeToolStripMenuItem_Click`: the view centred on the vehicle's home, or failing that
+/// the planned home, and brought in to 17 whether either was there or not. The planned home is
+/// taken when its latitude is not zero: the C# tests `PlannedHomeLocation.Lat != 0` twice, and
+/// never the longitude.
+/// `// C#: GCSViews/FlightPlanner.cs:8388-8401`
+pub fn zoom_to_home(map: &mut MapViewport, vehicle_home: Option<LatLon>, planned: Home) {
+    if let Some(home) =
+        vehicle_home.filter(|home| home.latitude() != 0.0 && home.longitude() != 0.0)
+    {
+        map.centre_on(home);
+    } else if planned.lat != 0.0
+        && let Ok(home) = LatLon::new(planned.lat, planned.lng)
+    {
+        map.centre_on(home);
+    }
+    zoom_in_to_17(map);
+}
+
+/// What `zoomToToolStripMenuItem_Click` says, captioned "GMap.NET", when the geocoder does not
+/// answer `G_GEO_SUCCESS`.
+/// `// C#: GCSViews/FlightPlanner.cs:8358-8362`
+#[must_use]
+pub fn zoom_to_message(place: &str, status: mapview::GeocoderStatus) -> String {
+    format!("Google Maps Geocoder can't find: '{place}', reason: {status}")
+}
+
+/// The rest of `zoomToToolStripMenuItem_Click` once the geocoder has answered: the view centred
+/// on the first place found (`SetPositionByKeywords` moves it only when there is one) and zoomed
+/// to 15, or the message to show.
+/// `// C#: GCSViews/FlightPlanner.cs:8349-8367; ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/GMapControl.cs:2457-2477`
+pub fn zoom_to_answer(
+    map: &mut MapViewport,
+    place: &str,
+    (status, found): (mapview::GeocoderStatus, Option<LatLon>),
+) -> Option<String> {
+    if status != mapview::GeocoderStatus::Success {
+        return Some(zoom_to_message(place, status));
+    }
+    if let Some(at) = found {
+        map.centre_on(at);
+    }
+    map.set_zoom(ZOOM_TO_PLACE);
+    None
+}
+
+/// One of the zoom icon's entries.
+fn zoom_menu_entry(this: &mut MissionPlanner, action: MenuAction) {
+    let view = this.telemetry.view();
+    let state = view.state.as_ref();
+    let refused = {
+        let mut map = this.map.borrow_mut();
+        match action {
+            MenuAction::ZoomToVehicle => {
+                zoom_to_vehicle(&mut map, state.and_then(|state| state.position)).err()
+            }
+            MenuAction::ZoomToMission => {
+                map.zoom_and_centre_markers();
+                None
+            }
+            MenuAction::ZoomToHome => {
+                zoom_to_home(
+                    &mut map,
+                    state.and_then(|state| state.home),
+                    this.plan.planned_home_location(),
+                );
+                None
+            }
+            _ => None,
+        }
+    };
+    // `CustomMessageBox.Show(Strings.Invalid_Location, Strings.ERROR)`.
+    if let Some(why) = refused {
+        this.plan_menus.tell(ERROR, why);
+    }
+}
+
+/// Takes up Zoom To's answer when the geocoder has sent it.
+pub fn drive_geocode(
+    this: &mut MissionPlanner,
+    window: &mut gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) {
+    let Some((place, outcome)) = this.plan_menus.take_geocode() else {
+        return;
+    };
+    let said = zoom_to_answer(&mut this.map.borrow_mut(), &place, outcome);
+    if let Some(text) = said {
+        this.plan_menus.tell("GMap.NET", text);
+        this.plan_prompt_focus.focus(window, cx);
+    }
+    cx.notify();
+}
+
+/// `Zoomlevel`'s text: its value with `DecimalPlaces = 1`, rounded half away from zero as a
+/// `decimal` formats.
+#[must_use]
+pub fn zoomlevel_text(value: f64) -> String {
+    format!("{:.1}", (value * 10.0).round() / 10.0)
+}
+
+/// `Zoomlevel`'s up or down arrow: its value moved by `Increment` and held to its 0 to 24.
+/// `// C#: GCSViews/FlightPlanner.cs:3455-3457; GCSViews/FlightPlanner.Designer.cs:809-833`
+#[must_use]
+pub fn zoomlevel_step(value: f64, up: bool) -> f64 {
+    let step = if up {
+        ZOOMLEVEL_INCREMENT
+    } else {
+        -ZOOMLEVEL_INCREMENT
+    };
+    (value + step).clamp(mapview::GMAP_MIN_ZOOM, mapview::GMAP_MAX_ZOOM)
+}
+
+/// `TRK_zoom`'s value for a press at `y` on a bar laid out from `top`, `height` tall: its maximum
+/// at the top and its minimum at the bottom as a vertical `TrackBar` runs, the thumb stopping
+/// [`TRACK_INSET`] short of each end, in whole thousandths - `MyTrackBar` keeps its value as an
+/// integer, `(int)(value * 1000)`.
+///
+/// A press away from the thumb puts the thumb there. A WinForms `TrackBar` instead moves it by
+/// `LargeChange`, 0.005 here, toward the press, again and again while the button is held; a drag
+/// is the same either way.
+/// `// C#: ExtLibs/Controls/MyTrackBar.cs:11-22; GCSViews/FlightPlanner.Designer.cs:837-846;
+/// GCSViews/FlightPlanner.cs:3451-3453`
+#[must_use]
+pub fn track_value(y: f32, top: f32, height: f32) -> f32 {
+    #[allow(clippy::cast_possible_truncation)] // 0 and 24
+    let (min, max) = (mapview::GMAP_MIN_ZOOM as f32, mapview::GMAP_MAX_ZOOM as f32);
+    let travel = (height - 2.0 * TRACK_INSET).max(1.0);
+    let fraction = ((y - top - TRACK_INSET) / travel).clamp(0.0, 1.0);
+    let value = fraction.mul_add(-(max - min), max);
+    (value * 1000.0).trunc() / 1000.0
+}
+
+/// A press or a drag on the zoom bar: `TRK_zoom_Scroll`, `MainMap.Zoom = TRK_zoom.Value` - and
+/// the Zoom box, which shows the map's zoom, with it.
+/// `// C#: GCSViews/FlightPlanner.cs:6938-6952`
+fn zoom_track_press(this: &mut MissionPlanner, y: f32) {
+    let Some((top, height)) = this.plan_menus.zoom_track.get() else {
+        return;
+    };
+    let value = track_value(y, top, height);
+    this.map.borrow_mut().set_zoom(f64::from(value));
+}
+
+/// The zoom icon, `zoomicon`, on the planning map; a click opens `contextMenuStripZoom` where it
+/// was made. Its press is the icon's, not the map's, as `MainMap_MouseUp` returns once it has
+/// shown the menu.
+/// `// C#: GCSViews/FlightPlanner.cs:133, 4905-4911, 7624-7628`
+pub fn zoom_icon(cx: &mut Context<MissionPlanner>) -> AnyElement {
+    crate::probe::measured("plan-zoomicon", div())
+        .absolute()
+        .left(px(ZOOM_ICON.0))
+        .top(px(ZOOM_ICON.1))
+        .child(
+            div()
+                .id("plan-zoomicon")
+                .size(px(ZOOM_ICON.2))
+                .rounded_full()
+                .bg(rgb(0x00_00_00))
+                .border_1()
+                .border_color(rgb(ZOOM_ICON_LINE))
+                .occlude()
+                .cursor_pointer()
+                .child(
+                    gpui::canvas(
+                        |_bounds, _window, _cx| (),
+                        |bounds, (), window, _cx| paint_zoom_glyph(bounds, window),
+                    )
+                    .size_full(),
+                )
+                .on_mouse_down(gpui::MouseButton::Left, |_event, _window, cx| {
+                    cx.stop_propagation();
+                })
+                .on_mouse_up(
+                    gpui::MouseButton::Left,
+                    cx.listener(|this, event: &gpui::MouseUpEvent, _window, cx| {
+                        let at = (f32::from(event.position.x), f32::from(event.position.y));
+                        this.plan_menus.open_zoom_menu(at);
+                        cx.stop_propagation();
+                        cx.notify();
+                    }),
+                ),
+        )
+        .into_any_element()
+}
+
+/// `Icon.ForeColor`, `Color.WhiteSmoke`: the rim and the glass.
+/// `// C#: Controls/Icon/Icon.cs:10`
+const ZOOM_ICON_LINE: u32 = 0xf5_f5_f5;
+
+/// `Zoom.doPaint`'s magnifying glass, in one-pixel white smoke over the icon's black disc: with
+/// `mid` half the icon's 30 and `quartmid` a quarter of that (15 and 3, in whole numbers), a lens
+/// `mid` across at (`mid - quartmid`, `quartmid`), a handle from (`mid / 2`, `30 - mid / 2`) to
+/// (`mid`, `mid`), and a cross inside the lens four in from its edge.
+/// `// C#: Controls/Icon/Zoom.cs:7-26; Controls/Icon/Icon.cs:86-102`
+fn paint_zoom_glyph(bounds: gpui::Bounds<gpui::Pixels>, window: &mut gpui::Window) {
+    let at = |x: f32, y: f32| gpui::point(bounds.origin.x + px(x), bounds.origin.y + px(y));
+    let stroke = |window: &mut gpui::Window, points: &[(f32, f32)]| {
+        let mut builder = gpui::PathBuilder::stroke(px(1.0));
+        let mut points = points.iter();
+        let Some((x, y)) = points.next() else {
+            return;
+        };
+        builder.move_to(at(*x, *y));
+        for (x, y) in points {
+            builder.line_to(at(*x, *y));
+        }
+        if let Ok(path) = builder.build() {
+            window.paint_path(path, gpui::Hsla::from(rgb(ZOOM_ICON_LINE)));
+        }
+    };
+    let (mid, quartmid) = (15.0_f32, 3.0_f32);
+    let lens: Vec<(f32, f32)> = (0..=32_u8)
+        .map(|step| {
+            let angle = f32::from(step) / 32.0 * std::f32::consts::TAU;
+            (
+                (mid / 2.0).mul_add(angle.cos(), mid - quartmid + mid / 2.0),
+                (mid / 2.0).mul_add(angle.sin(), quartmid + mid / 2.0),
+            )
+        })
+        .collect();
+    stroke(window, &lens);
+    stroke(window, &[(7.0, 23.0), (mid, mid)]);
+    // `arcrect.Inflate(-4, -4)`: (16, 7), seven across.
+    let (left, top, side) = (mid - quartmid + 4.0, quartmid + 4.0, mid - 8.0);
+    stroke(
+        window,
+        &[(left, top + side / 2.0), (left + side, top + side / 2.0)],
+    );
+    stroke(
+        window,
+        &[(left + side / 2.0, top), (left + side / 2.0, top + side)],
+    );
+}
+
+/// `contextMenuStripZoom`, where the button came up over the zoom icon.
+fn zoom_menu(menus: &PlanMenus, cx: &mut Context<MissionPlanner>) -> Option<AnyElement> {
+    let at = menus.zoom_menu?;
+    let rows = ZOOM_MENU
+        .iter()
+        .map(|entry| menu_row(entry, None, true, false, cx))
+        .collect();
+    Some(
+        gpui::deferred(
+            gpui::anchored()
+                .position(gpui::point(px(at.0), px(at.1)))
+                .snap_to_window()
+                .child(
+                    div()
+                        .id("plan-zoom-menu")
+                        .occlude()
+                        .on_mouse_down_out(cx.listener(
+                            |this, event: &gpui::MouseDownEvent, _window, cx| {
+                                let at = (f32::from(event.position.x), f32::from(event.position.y));
+                                this.plan_menus.dismiss_zoom_menu(at);
+                                cx.notify();
+                            },
+                        ))
+                        .child(menu_column(rows)),
+                ),
+        )
+        .with_priority(1)
+        .into_any_element(),
+    )
+}
+
+/// `label11` "Zoom", `Zoomlevel` and `TRK_zoom`: the strip fifty pixels wide at the planning
+/// map's right. `panelMap_Resize` gives the map the panel's width less 50 and puts the bar in the
+/// rest, from 42 down to the bottom; the label is at 5 and the box at 25. Both show the map's
+/// zoom whenever it changes (`MainMap_OnMapZoomChanged`) - held here to their 0 to 24, where the
+/// C#'s refuse a zoom outside it and keep the last.
+/// `// C#: GCSViews/FlightPlanner.resx (label11, Zoomlevel, TRK_zoom); GCSViews/FlightPlanner.cs:4960-4968, 8012-8029`
+pub fn zoom_column(
+    zoom: Option<f64>,
+    menus: &PlanMenus,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    let value = zoom.map(|zoom| zoom.clamp(mapview::GMAP_MIN_ZOOM, mapview::GMAP_MAX_ZOOM));
+    // `Zoomlevel_ValueChanged`: `MainMap.Zoom = Zoomlevel.Value`, the bar following.
+    // `// C#: GCSViews/FlightPlanner.cs:6954-6969`
+    let arrow =
+        |id: &'static str, label: &'static str, up: bool, cx: &mut Context<MissionPlanner>| {
+            crate::probe::measured(id, div())
+                .child(
+                    div()
+                        .id(id)
+                        .px_1()
+                        .text_xs()
+                        .text_color(rgb(theme::TEXT))
+                        .cursor_pointer()
+                        .hover(|style| style.bg(rgb(theme::BORDER)))
+                        .child(label)
+                        .on_click(cx.listener(move |this, _event, window, cx| {
+                            let now = this.map.borrow().zoom_level();
+                            if let Some(now) = now {
+                                this.map.borrow_mut().set_zoom(zoomlevel_step(
+                                    now.clamp(mapview::GMAP_MIN_ZOOM, mapview::GMAP_MAX_ZOOM),
+                                    up,
+                                ));
+                            }
+                            window.refresh();
+                            cx.notify();
+                        })),
+                )
+                .into_any_element()
+        };
+    let track = std::rc::Rc::clone(&menus.zoom_track);
+    let bar = div()
+        .id("plan-trk-zoom")
+        .size_full()
+        .cursor_pointer()
+        .child(
+            gpui::canvas(
+                move |bounds, _window, _cx| {
+                    track.set(Some((
+                        f32::from(bounds.origin.y),
+                        f32::from(bounds.size.height),
+                    )));
+                },
+                move |bounds, (), window, _cx| paint_zoom_track(bounds, value, window),
+            )
+            .size_full(),
+        )
+        .on_mouse_down(
+            gpui::MouseButton::Left,
+            cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {
+                zoom_track_press(this, f32::from(event.position.y));
+                window.refresh();
+                cx.notify();
+            }),
+        )
+        .on_mouse_move(
+            cx.listener(|this, event: &gpui::MouseMoveEvent, window, cx| {
+                if event.pressed_button == Some(gpui::MouseButton::Left) {
+                    zoom_track_press(this, f32::from(event.position.y));
+                    window.refresh();
+                    cx.notify();
+                }
+            }),
+        );
+    div()
+        .flex()
+        .flex_col()
+        .items_center()
+        .w(px(50.0))
+        .flex_none()
+        .pt(px(5.0))
+        .gap_1()
+        .child(div().text_xs().text_color(rgb(theme::DIM)).child("Zoom"))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .border_1()
+                .border_color(rgb(theme::BORDER))
+                .rounded_sm()
+                .child(
+                    crate::probe::measured("plan-zoomlevel", div()).child(
+                        div()
+                            .id("plan-zoomlevel")
+                            .px_1()
+                            .text_xs()
+                            .text_color(rgb(theme::TEXT))
+                            .child(value.map_or_else(String::new, zoomlevel_text)),
+                    ),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .child(arrow("plan-zoomlevel-up", "▴", true, cx))
+                        .child(arrow("plan-zoomlevel-down", "▾", false, cx)),
+                ),
+        )
+        .child(
+            crate::probe::measured("plan-trk-zoom", div())
+                .flex_1()
+                .w_full()
+                .min_h(px(0.0))
+                .child(bar),
+        )
+        .into_any_element()
+}
+
+/// `TRK_zoom` as a vertical `TrackBar` with `TickStyle.TopLeft` draws it: a channel down the
+/// middle, a tick at each whole zoom on the left, and the thumb at the value.
+fn paint_zoom_track(
+    bounds: gpui::Bounds<gpui::Pixels>,
+    value: Option<f64>,
+    window: &mut gpui::Window,
+) {
+    let (x, y) = (f32::from(bounds.origin.x), f32::from(bounds.origin.y));
+    let (width, height) = (f32::from(bounds.size.width), f32::from(bounds.size.height));
+    let travel = (height - 2.0 * TRACK_INSET).max(1.0);
+    #[allow(clippy::cast_possible_truncation)] // 0 and 24
+    let (min, max) = (mapview::GMAP_MIN_ZOOM as f32, mapview::GMAP_MAX_ZOOM as f32);
+    let at_value = |value: f32| y + TRACK_INSET + (max - value) / (max - min) * travel;
+    let fill = |window: &mut gpui::Window, left: f32, top: f32, w: f32, h: f32, colour: u32| {
+        window.paint_quad(gpui::quad(
+            gpui::Bounds {
+                origin: gpui::point(px(left), px(top)),
+                size: gpui::size(px(w), px(h)),
+            },
+            gpui::Corners::all(px(1.0)),
+            rgb(colour),
+            gpui::Edges::default(),
+            rgb(colour),
+            gpui::BorderStyle::default(),
+        ));
+    };
+    let middle = x + width / 2.0;
+    fill(
+        window,
+        middle - 2.0,
+        y + TRACK_INSET,
+        4.0,
+        travel,
+        theme::BORDER,
+    );
+    for tick in 0..=24_u8 {
+        fill(
+            window,
+            middle - 14.0,
+            at_value(f32::from(tick)),
+            5.0,
+            1.0,
+            theme::DIM,
+        );
+    }
+    if let Some(value) = value {
+        #[allow(clippy::cast_possible_truncation)] // a zoom, 0 to 24
+        let top = at_value(value as f32) - 4.0;
+        fill(window, middle - 8.0, top, 16.0, 8.0, theme::ACCENT);
+    }
+}
+
+/// The WP Radius and Loiter Radius boxes as `writeKML` hands them to `CreateOverlay` for the
+/// planning map: an empty WP Radius read as `startupWPradius` and an empty Loiter Radius as 30,
+/// each over `multiplierdist`, which is 1 in metres.
+///
+/// `None` when either does not parse. There `double.Parse` throws, and the C# says "Invalid
+/// number entered" and draws an empty overlay; here the circles go and the markers stay, and the
+/// message is not ported. `writeKML` also writes those two defaults back into an empty box; the
+/// boxes' own Leave puts WP Radius's back before any edit could reach `writeKML`, and this
+/// leaves the text alone.
+///
+/// Read every frame, as home is. The C# reads the boxes at each `writeKML` - every edit, and WP
+/// Radius's Leave - so its circles wait for the edit or the Leave where these follow the box as it
+/// is typed.
+/// `// C#: GCSViews/FlightPlanner.cs:1423-1440, 7087-7106`
+#[must_use]
+pub fn map_overlay(plan: &Plan) -> Option<mapview::Overlay> {
+    let read = |which: PanelBox, empty: &str| {
+        let text = plan.panel_text(which);
+        let text = if text.is_empty() { empty } else { text };
+        text.trim().parse::<f64>().ok()
+    };
+    Some(mapview::Overlay {
+        wp_radius: read(PanelBox::WpRadius, &plan.panel.startup_wp_radius)?,
+        loiter_radius: read(PanelBox::LoiterRadius, "30")?,
+        planner: true,
+    })
+}
+
+/// The pointer over the map with no button down, or off it (`None`): GMap's hover, and on the
+/// planning screen `MainMap_OnMarkerEnter`, which puts the grid on the row of a rect the pointer
+/// has entered - the last, where it entered several; home's "H" is not a row. Returns whether the
+/// screen must be drawn again.
+/// `// C#: GCSViews/FlightPlanner.cs:8068-8098`
+pub fn map_hover(this: &mut MissionPlanner, planning: bool, pointer: Option<(f32, f32)>) -> bool {
+    let change = this.map.borrow_mut().hover(pointer);
+    if planning && let Some(seq) = entered_row(&change.entered) {
+        this.plan.select(Some(seq));
+    }
+    change.changed
+}
+
+/// The row `MainMap_OnMarkerEnter` leaves the grid on after the rects just entered: each one
+/// whose inner marker's tag is a number moves it there, in turn, so the last such wins.
+/// `// C#: GCSViews/FlightPlanner.cs:8077-8083`
+#[must_use]
+pub fn entered_row(entered: &[mapview::MarkerTag]) -> Option<u16> {
+    entered.iter().rev().find_map(|tag| match tag {
+        mapview::MarkerTag::Item(seq) => Some(*seq),
+        mapview::MarkerTag::Home | mapview::MarkerTag::Guided => None,
+    })
+}
+
+/// The flight screen's Guided Mode marker: there while the vehicle's mode is Guided and
+/// `GuidedMode.x` is not zero, at `GuidedMode`'s position and whole height, its rect the saved WP
+/// Radius - `Settings.GetFloat("TXT_WPRad")`, 0 where that is not a number. What the planning
+/// screen saves under that key is its WP Radius box as it is left, so the box is what is read.
+///
+/// The C# clears `routes` every five seconds and adds the marker back on each pass while in
+/// Guided, so out of Guided it can linger up to five seconds; here it goes with the mode.
+/// `// C#: GCSViews/FlightData.cs:3807, 4214-4221, 5518-5526; GCSViews/FlightPlanner.cs:1652-1690,
+/// 2581; ExtLibs/Utilities/Settings.cs:234-243`
+#[must_use]
+pub fn guided_marker(
+    mode: Option<&str>,
+    guided: crate::fly::GuidedMode,
+    plan: &Plan,
+) -> Option<mapview::GuidedMarker> {
+    if !mode.is_some_and(|mode| mode.eq_ignore_ascii_case("guided")) || guided.x == 0 {
+        return None;
+    }
+    let position = LatLon::new(f64::from(guided.x) / 1e7, f64::from(guided.y) / 1e7).ok()?;
+    let wp_radius = plan
+        .panel_text(PanelBox::WpRadius)
+        .trim()
+        .parse::<f32>()
+        .map_or(0.0, f64::from);
+    #[allow(clippy::cast_possible_truncation)] // `(int) GuidedMode.z`
+    let alt = guided.z as i32;
+    Some(mapview::GuidedMarker {
+        position,
+        alt,
+        wp_radius,
+    })
+}
+
+/// Facts for the zoom: the zoom icon's menu, a Zoom To waiting on the geocoder, and the Zoom
+/// box's text.
+#[must_use]
+pub fn zoom_facts(menus: &PlanMenus, zoom: Option<f64>) -> Vec<(&'static str, String)> {
+    vec![
+        (
+            "plan.zoommenu",
+            if menus.zoom_menu.is_some() {
+                "open"
+            } else {
+                "closed"
+            }
+            .to_owned(),
+        ),
+        ("plan.geocoding", menus.geocoding().to_string()),
+        (
+            "plan.zoomlevel",
+            zoom.map_or_else(
+                || "none".to_owned(),
+                |zoom| zoomlevel_text(zoom.clamp(mapview::GMAP_MIN_ZOOM, mapview::GMAP_MAX_ZOOM)),
+            ),
+        ),
+    ]
+}
+
 /// Opens the menu for a right click on the map, as `MainMap.ContextMenuStrip = contextMenuStrip1`
 /// does, with the waypoint under the cursor for Delete WP.
 /// `// C#: GCSViews/FlightPlanner.Designer.cs:875; GCSViews/FlightPlanner.cs:2667-2695`
@@ -4929,6 +5669,10 @@ fn choose_entry(
         MenuAction::FenceClear => {
             this.plan_menus.open = None;
             start_fence_clear(this);
+        }
+        MenuAction::ZoomToVehicle | MenuAction::ZoomToMission | MenuAction::ZoomToHome => {
+            this.plan_menus.zoom_menu = None;
+            zoom_menu_entry(this, action);
         }
         _ => {
             let context = menu_context(this);
@@ -5333,6 +6077,7 @@ pub fn overlays(
 ) -> Vec<AnyElement> {
     map_menu(menus, window, cx)
         .into_iter()
+        .chain(zoom_menu(menus, cx))
         .chain(prompt_dialog(menus, focus, window, cx))
         .collect()
 }
@@ -8147,11 +8892,279 @@ mod tests {
                 "menu-saveToFile",
                 "menu-clear",
                 "menu-ContextMeasure",
+                "menu-zoomTo",
                 "menu-reverseWPs",
                 "menu-loadWPFile",
                 "menu-saveWPFile",
                 "menu-modifyAlt",
+                "menu-zoomToVehicle",
+                "menu-zoomToMission",
+                "menu-zoomToHome",
             ]
         );
+    }
+
+    // ---- The map's zoom: the zoom icon's menu, Zoom To, the Zoom box and bar ----
+
+    fn close(a: LatLon, b: LatLon) -> bool {
+        (a.latitude() - b.latitude()).abs() < 1e-9 && (a.longitude() - b.longitude()).abs() < 1e-9
+    }
+
+    fn zoom_of(map: &MapViewport) -> f64 {
+        map.zoom_level().expect("a view")
+    }
+
+    /// `zoomToVehicleToolStripMenuItem_Click`: no position is "Invalid Location" and moves
+    /// nothing; a position is centred, and a view wider than 17 brought in to it, a closer one
+    /// left.
+    #[test]
+    fn zoom_to_vehicle_centres_on_it_at_17_or_closer() {
+        let mut map = MapViewport::new(0, 0);
+        assert_eq!(zoom_to_vehicle(&mut map, None), Err("Invalid Location"));
+        assert_eq!(
+            zoom_to_vehicle(&mut map, Some(at(0.0, 0.0))),
+            Err("Invalid Location")
+        );
+        assert_eq!(map.centre(), None, "refused: nothing moved");
+        assert_eq!(zoom_to_vehicle(&mut map, Some(canberra())), Ok(()));
+        assert!(close(map.centre().expect("centre"), canberra()));
+        assert!((zoom_of(&map) - 17.0).abs() < 1e-9);
+        map.set_zoom(19.5);
+        let elsewhere = at(-35.0, 149.0);
+        assert_eq!(zoom_to_vehicle(&mut map, Some(elsewhere)), Ok(()));
+        assert!(close(map.centre().expect("centre"), elsewhere));
+        assert!((zoom_of(&map) - 19.5).abs() < 1e-9);
+    }
+
+    /// `zoomToHomeToolStripMenuItem_Click`: the vehicle's home, else the planned home when its
+    /// latitude is not zero, and 17 either way.
+    #[test]
+    fn zoom_to_home_prefers_the_vehicles_home_then_the_planned_one() {
+        let planned = Home {
+            lat: -27.5,
+            lng: 153.0,
+            alt: 8.0,
+        };
+        let mut map = MapViewport::new(0, 0);
+        zoom_to_home(&mut map, Some(canberra()), planned);
+        assert!(close(map.centre().expect("centre"), canberra()));
+        assert!((zoom_of(&map) - 17.0).abs() < 1e-9);
+        zoom_to_home(&mut map, Some(at(0.0, 0.0)), planned);
+        assert!(close(map.centre().expect("centre"), at(-27.5, 153.0)));
+        // The C# tests the planned latitude twice and never the longitude.
+        let on_the_meridian = Home {
+            lat: 51.5,
+            lng: 0.0,
+            alt: 0.0,
+        };
+        zoom_to_home(&mut map, None, on_the_meridian);
+        assert!(close(map.centre().expect("centre"), at(51.5, 0.0)));
+        // Neither: the view stays, and is still brought in to 17.
+        map.set_zoom(10.0);
+        zoom_to_home(&mut map, None, Home::default());
+        assert!(close(map.centre().expect("centre"), at(51.5, 0.0)));
+        assert!((zoom_of(&map) - 17.0).abs() < 1e-9);
+    }
+
+    /// Map Tool > Zoom To asks for a place, Perth Airport offered.
+    #[test]
+    fn zoom_to_asks_where() {
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::ZoomTo, None);
+        let prompt = menus.prompt.as_ref().expect("the InputBox");
+        assert_eq!(
+            (prompt.title, prompt.text.as_str(), prompt.value()),
+            (
+                "Location",
+                "Enter your location",
+                "Perth Airport, Australia"
+            )
+        );
+        menus.cancel();
+        assert!(!menus.geocoding(), "Cancel asks the geocoder nothing");
+        assert!(plan.items().is_empty());
+    }
+
+    /// Waits for the geocoder thread's answer.
+    fn geocoded(menus: &mut PlanMenus) -> (String, (mapview::GeocoderStatus, Option<LatLon>)) {
+        for _ in 0..500 {
+            if let Some(answer) = menus.take_geocode() {
+                return answer;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        panic!("the geocoder never answered");
+    }
+
+    const CANBERRA_PAGE: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n<searchresults><place place_rank=\"16\" lat=\"-35.2975906\" lon=\"149.1012676\" display_name=\"Canberra\"/></searchresults>";
+
+    /// The whole of Zoom To, the geocoder faked: OK sends the place, and the answer centres the
+    /// view on the first place found at zoom 15.
+    #[test]
+    fn zoom_to_goes_to_the_place_the_geocoder_finds() {
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus {
+            fake_geocoder: Some(|url| {
+                if url == "https://nominatim.openstreetmap.org/search?q=Canberra+ACT&format=xml" {
+                    Ok(CANBERRA_PAGE.to_owned())
+                } else {
+                    Err(format!("asked for {url}"))
+                }
+            }),
+            ..PlanMenus::default()
+        };
+        choose(&mut plan, &mut menus, MenuAction::ZoomTo, None);
+        answer(&mut plan, &mut menus, "Canberra ACT");
+        assert!(menus.geocoding());
+        let (place, outcome) = geocoded(&mut menus);
+        assert_eq!(place, "Canberra ACT");
+        assert!(!menus.geocoding());
+        let mut map = MapViewport::new(0, 0);
+        assert_eq!(zoom_to_answer(&mut map, &place, outcome), None);
+        assert!(close(
+            map.centre().expect("centre"),
+            at(-35.297_590_6, 149.101_267_6)
+        ));
+        assert!((zoom_of(&map) - ZOOM_TO_PLACE).abs() < 1e-9);
+    }
+
+    /// A geocoder that cannot be reached is `ExceptionInCode`, said in the C#'s words; a page of
+    /// no places is a success that leaves the view where it was, at 15.
+    #[test]
+    fn zoom_to_says_what_the_geocoder_could_not_find() {
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus {
+            fake_geocoder: Some(|_| Err("offline".to_owned())),
+            ..PlanMenus::default()
+        };
+        choose(&mut plan, &mut menus, MenuAction::ZoomTo, None);
+        answer(&mut plan, &mut menus, "Atlantis");
+        let (place, outcome) = geocoded(&mut menus);
+        let mut map = MapViewport::new(0, 0);
+        map.centre_on(canberra());
+        let before = zoom_of(&map);
+        assert_eq!(
+            zoom_to_answer(&mut map, &place, outcome),
+            Some("Google Maps Geocoder can't find: 'Atlantis', reason: ExceptionInCode".to_owned())
+        );
+        assert!(
+            (zoom_of(&map) - before).abs() < 1e-9,
+            "a failure moves nothing"
+        );
+        let none = (mapview::GeocoderStatus::Success, None);
+        assert_eq!(zoom_to_answer(&mut map, "Nowhere", none), None);
+        assert!(close(map.centre().expect("centre"), canberra()));
+        assert!((zoom_of(&map) - 15.0).abs() < 1e-9);
+    }
+
+    /// `Zoomlevel`: one decimal place, half a zoom an arrow, 0 to 24.
+    #[test]
+    fn the_zoom_box_steps_by_a_half_within_0_to_24() {
+        assert_eq!(zoomlevel_text(16.0), "16.0");
+        assert_eq!(zoomlevel_text(16.25), "16.3");
+        assert!((zoomlevel_step(16.0, true) - 16.5).abs() < f64::EPSILON);
+        assert!((zoomlevel_step(16.0, false) - 15.5).abs() < f64::EPSILON);
+        assert!((zoomlevel_step(23.8, true) - 24.0).abs() < f64::EPSILON);
+        assert!((zoomlevel_step(0.2, false) - 0.0).abs() < f64::EPSILON);
+    }
+
+    /// `TRK_zoom`: 24 at the top of its travel, 0 at the bottom, whole thousandths between.
+    #[test]
+    fn the_zoom_bar_runs_from_24_at_the_top_to_0_at_the_bottom() {
+        let (top, height) = (100.0, 416.0);
+        assert!((track_value(top, top, height) - 24.0).abs() < f32::EPSILON);
+        assert!((track_value(top + height, top, height) - 0.0).abs() < f32::EPSILON);
+        assert!((track_value(top + height / 2.0, top, height) - 12.0).abs() < f32::EPSILON);
+        let value = track_value(top + 101.0, top, height);
+        assert!(
+            ((value * 1000.0).round() - value * 1000.0).abs() < 1e-3,
+            "{value}"
+        );
+        assert!(value < 24.0 && value > 12.0);
+    }
+
+    /// The radii the planning map is handed are the boxes', with `writeKML`'s defaults for an
+    /// empty box, and none when a box does not parse.
+    #[test]
+    fn the_planning_map_takes_its_radii_from_the_boxes() {
+        let mut plan = Plan::default();
+        let overlay = |wp: f64, loiter: f64| mapview::Overlay {
+            wp_radius: wp,
+            loiter_radius: loiter,
+            planner: true,
+        };
+        assert_eq!(map_overlay(&plan), Some(overlay(30.0, 45.0)));
+        plan.set_panel_text(PanelBox::WpRadius, "12.5");
+        plan.set_panel_text(PanelBox::LoiterRadius, "-80");
+        assert_eq!(map_overlay(&plan), Some(overlay(12.5, -80.0)));
+        plan.set_panel_text(PanelBox::WpRadius, "");
+        plan.set_panel_text(PanelBox::LoiterRadius, "");
+        assert_eq!(map_overlay(&plan), Some(overlay(5.0, 30.0)));
+        plan.set_panel_text(PanelBox::WpRadius, "1.2.3");
+        assert_eq!(map_overlay(&plan), None);
+    }
+
+    /// The flight screen's Guided Mode marker: in Guided, once somewhere has been sent, at
+    /// `GuidedMode`'s position and whole height, circled at the WP Radius box.
+    #[test]
+    fn the_guided_mode_marker_is_where_guided_mode_went() {
+        let mut plan = Plan::default();
+        let sent = crate::fly::GuidedMode {
+            x: -353_625_000,
+            y: 1_491_657_000,
+            z: 20.7,
+            frame: 3,
+        };
+        assert_eq!(guided_marker(None, sent, &plan), None);
+        assert_eq!(guided_marker(Some("Loiter"), sent, &plan), None);
+        let nowhere = crate::fly::GuidedMode { x: 0, ..sent };
+        assert_eq!(guided_marker(Some("Guided"), nowhere, &plan), None);
+        let marker = guided_marker(Some("GUIDED"), sent, &plan).expect("a marker");
+        assert!(close(marker.position, at(-35.3625, 149.1657)));
+        assert_eq!(marker.alt, 20);
+        assert!((marker.wp_radius - 30.0).abs() < f64::EPSILON);
+        plan.set_panel_text(PanelBox::WpRadius, "12.5");
+        let marker = guided_marker(Some("Guided"), sent, &plan).expect("a marker");
+        assert!((marker.wp_radius - 12.5).abs() < f64::EPSILON);
+        // `GetFloat` of what is not a number is 0: no circle.
+        plan.set_panel_text(PanelBox::WpRadius, "");
+        let marker = guided_marker(Some("Guided"), sent, &plan).expect("a marker");
+        assert!(marker.wp_radius.abs() < f64::EPSILON);
+    }
+
+    /// `MainMap_OnMarkerEnter` leaves the grid on the last rect entered that is a row.
+    #[test]
+    fn the_row_entered_last_is_selected() {
+        use mapview::MarkerTag::{Guided, Home as H, Item};
+        assert_eq!(entered_row(&[]), None);
+        assert_eq!(entered_row(&[H]), None);
+        assert_eq!(entered_row(&[Item(4), Guided]), Some(4));
+        assert_eq!(entered_row(&[Item(2), Item(3)]), Some(3));
+        assert_eq!(entered_row(&[Item(2), H]), Some(2));
+    }
+
+    /// The zoom icon's menu opens where it was clicked, closes the map's, and a press elsewhere
+    /// closes it without the map taking the press.
+    #[test]
+    fn the_zoom_menu_opens_and_closes() {
+        let mut menus = PlanMenus::default();
+        menus.open_at(CLICK, canberra(), None);
+        menus.open_zoom_menu((20.0, 150.0));
+        assert_eq!(menus.zoom_menu, Some((20.0, 150.0)));
+        assert!(menus.open.is_none());
+        menus.dismiss_zoom_menu((500.0, 500.0));
+        assert_eq!(menus.zoom_menu, None);
+        assert!(menus.swallows_press((500.0, 500.0)));
+        menus.open_zoom_menu((20.0, 150.0));
+        menus.open_at(CLICK, canberra(), None);
+        assert_eq!(
+            menus.zoom_menu, None,
+            "the map's menu closes the zoom icon's"
+        );
+        let facts = zoom_facts(&menus, Some(16.04));
+        assert!(facts.contains(&("plan.zoommenu", "closed".to_owned())));
+        assert!(facts.contains(&("plan.zoomlevel", "16.0".to_owned())));
+        assert!(facts.contains(&("plan.geocoding", "false".to_owned())));
     }
 }

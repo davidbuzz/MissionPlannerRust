@@ -24,3 +24,8 @@ than reading the output would have been, and an amend after a push is worse.
 The same applies to `cargo test`: run it, read it, then commit. A test count in a commit message
 that nobody checked is a claim, not a verification. See [[never-stop-after-a-commit]] - continuing
 straight to the next task does not mean skipping the check before the commit.
+
+**A ledger's readers live in other crates.** `mp-vehicle`'s CurrentState ledger feeds
+`mp-gui`'s quick view test (every done numeric property needs a reader): committing mp-vehicle
+after `cargo test -p mp-vehicle -p mp-link` alone left mp-gui red (2026-09-24). Before a commit,
+`cargo test --workspace`, not the changed crates' tests.

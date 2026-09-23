@@ -4,22 +4,21 @@ Generated from `crates/mp-gui/src/planner_coverage.rs` by `cargo test -p mp-gui 
 
 | total | done | elsewhere | missing | plumbing | dropped |
 |---:|---:|---:|---:|---:|---:|
-| 121 | 55 | 0 | 54 | 12 | 0 |
+| 121 | 59 | 0 | 50 | 12 | 0 |
 
 Missing, by where the control sits:
 
 | group | missing |
 |---|---:|
 | planning panel | 9 |
-| Map Tool | 7 |
 | polygon icon menu | 7 |
+| Map Tool | 6 |
 | Rally Points | 6 |
 | Auto WP | 5 |
 | Polygon | 5 |
 | map menu | 4 |
 | File Load/Save | 3 |
 | POI | 3 |
-| zoom icon menu | 3 |
 | Geo-Fence | 2 |
 
 | control | event | handler | text | ours |
@@ -59,8 +58,8 @@ Missing, by where the control sits:
 | `BUT_loadwpfile` | Click | `BUT_loadwpfile_Click` | Load File | done: `plan-load` |
 | `BUT_saveWPFile` | Click | `BUT_saveWPFile_Click` | Save File | done: `plan-save` |
 | `panelMap` | Resize | `panelMap_Resize` | the map panel | plumbing |
-| `Zoomlevel` | ValueChanged | `Zoomlevel_ValueChanged` | Zoom | done: `map` |
-| `TRK_zoom` | Scroll | `TRK_zoom_Scroll` | Zoom | done: `map` |
+| `Zoomlevel` | ValueChanged | `Zoomlevel_ValueChanged` | Zoom | done: `plan-zoomlevel` |
+| `TRK_zoom` | Scroll | `TRK_zoom_Scroll` | Zoom | done: `plan-trk-zoom` |
 | `cmb_missiontype` | SelectedIndexChanged | `Cmb_missiontype_SelectedIndexChanged` | Mission / Fence / Rally | done: `draw-fence` |
 | `MainMap` | Paint | `MainMap_Paint` | the map | plumbing |
 | `contextMenuStrip1` | Closed | `contextMenuStrip1_Closed` | the map's right-click menu | plumbing |
@@ -107,7 +106,7 @@ Missing, by where the control sits:
 | `surveyGridToolStripMenuItem` | Click | `surveyGridToolStripMenuItem_Click` | Survey (Grid) | done: `survey-generate` |
 | `ContextMeasure` | Click | `ContextMeasure_Click` | Measure Distance | done: `menu-ContextMeasure` |
 | `rotateMapToolStripMenuItem` | Click | `rotateMapToolStripMenuItem_Click` | Rotate Map | **missing** |
-| `zoomToToolStripMenuItem` | Click | `zoomToToolStripMenuItem_Click` | Zoom To | **missing** |
+| `zoomToToolStripMenuItem` | Click | `zoomToToolStripMenuItem_Click` | Zoom To | done: `menu-zoomTo` |
 | `prefetchToolStripMenuItem` | Click | `prefetchToolStripMenuItem_Click` | Prefetch | **missing** |
 | `prefetchWPPathToolStripMenuItem` | Click | `prefetchWPPathToolStripMenuItem_Click` | Prefetch WP Path | **missing** |
 | `kMLOverlayToolStripMenuItem` | Click | `kMLOverlayToolStripMenuItem_Click` | KML Overlay | **missing** |
@@ -138,9 +137,9 @@ Missing, by where the control sits:
 | `contextMenuStripPoly` | Opening | `ContextMenuStripPoly_Opening` | the polygon icon's menu | **missing** |
 | `convertWPToPolygonToolStripMenuItem` | Click | `fromCurrentWaypointsMenuItem_Click` | From Current Waypoints | done: `menu-fromCurrentWaypoints` |
 | `offsetPolygonToolStripMenuItem` | Click | `offsetPolygonToolStripMenuItem_Click` | Offset Polygon | **missing** |
-| `zoomToVehicleToolStripMenuItem` | Click | `zoomToVehicleToolStripMenuItem_Click` | Zoom to Vehicle | **missing** |
-| `zoomToMissionToolStripMenuItem` | Click | `zoomToMissionToolStripMenuItem_Click` | Zoom to Mission | **missing** |
-| `zoomToHomeToolStripMenuItem` | Click | `zoomToHomeToolStripMenuItem_Click` | Zoom to Home | **missing** |
+| `zoomToVehicleToolStripMenuItem` | Click | `zoomToVehicleToolStripMenuItem_Click` | Zoom to Vehicle | done: `menu-zoomToVehicle` |
+| `zoomToMissionToolStripMenuItem` | Click | `zoomToMissionToolStripMenuItem_Click` | Zoom to Mission | done: `menu-zoomToMission` |
+| `zoomToHomeToolStripMenuItem` | Click | `zoomToHomeToolStripMenuItem_Click` | Zoom to Home | done: `menu-zoomToHome` |
 | `gDALOpacityToolStripMenuItem` | Click | `gDALOpacityToolStripMenuItem_Click` | GDAL Opacity | **missing** |
 | `FlightPlanner` | FormClosing | `FlightPlanner_FormClosing` | the screen | plumbing |
 | `FlightPlanner` | Load | `FlightPlanner_Load` | the screen | plumbing |

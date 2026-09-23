@@ -1313,8 +1313,11 @@ impl MissionPlanner {
         let following = self.map.borrow().is_following();
         let attribution = self.map.borrow().attribution();
         let planning = self.screen == Screen::Plan;
+        // The Zoom box and bar in their strip at the planning map's right.
+        let zoom_column = planning
+            .then(|| plan::zoom_column(self.map.borrow().zoom_level(), &self.plan_menus, cx));
 
-        div()
+        let column = div()
             .flex()
             .flex_col()
             .flex_1()
@@ -1374,10 +1377,22 @@ impl MissionPlanner {
                     )
                     .on_mouse_move(cx.listener(
                         move |this, event: &gpui::MouseMoveEvent, window, cx| {
+                            let (x, y) = (f32::from(event.position.x), f32::from(event.position.y));
+                            // With no button down the pointer is only passing over the markers:
+                            // GMap's hover, which leaves them be while a button is held
+                            // (`GMapControl.OnMouseMove`, `if (Core.mouseDown.IsEmpty)`).
+                            // `// C#: ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/
+                            // GMapControl.cs:2134`
+                            if event.pressed_button.is_none() {
+                                if plan::map_hover(this, planning, Some((x, y))) {
+                                    window.refresh();
+                                    cx.notify();
+                                }
+                                return;
+                            }
                             if event.pressed_button != Some(MouseButton::Left) {
                                 return;
                             }
-                            let (x, y) = (f32::from(event.position.x), f32::from(event.position.y));
                             if let Some(seq) = this.dragging_waypoint {
                                 let position = this.map.borrow().position_at(x, y);
                                 if let Some(position) = position {
@@ -1465,7 +1480,16 @@ impl MissionPlanner {
                             cx.notify();
                         }),
                     )
+                    // The pointer leaving the map leaves every marker.
+                    .on_hover(cx.listener(move |this, hovered: &bool, window, cx| {
+                        if !*hovered && plan::map_hover(this, planning, None) {
+                            window.refresh();
+                            cx.notify();
+                        }
+                    }))
                     .child(mapview::map_element(self.map.clone()))
+                    // The planning map's zoom icon, `zoomicon`, and its menu.
+                    .children(planning.then(|| plan::zoom_icon(cx)))
                     // The points of interest, over the flight map: `poioverlay`.
                     // `// C#: GCSViews/FlightData.cs:52, 410, 4473-4476`
                     .children(
@@ -1512,7 +1536,13 @@ impl MissionPlanner {
                             )),
                     ),
             )
-            .child(self.map_status())
+            .child(self.map_status());
+        div()
+            .flex()
+            .flex_1()
+            .min_w(px(0.0))
+            .child(column)
+            .children(zoom_column)
     }
 
     /// The strip under the map: what it drew and how long it took.
@@ -1672,6 +1702,41 @@ impl Render for MissionPlanner {
             )
         };
         self.map.borrow_mut().set_home(map_home);
+        // The mission overlay each screen builds: the planner's with its WP Radius and Loiter
+        // Radius boxes, the flight screen's with none; and home's altitude, for its tooltip -
+        // `homeplla`'s on the flight screen, the vehicle's home or else the planned one.
+        // `// C#: GCSViews/FlightPlanner.cs:1423-1434; GCSViews/FlightData.cs:3812-3843`
+        let (overlay, home_altitude) = if self.screen == Screen::Plan {
+            (
+                plan::map_overlay(&self.plan),
+                self.plan.home().map(|home| home.alt),
+            )
+        } else {
+            let vehicle = view.state.as_ref().and_then(|state| {
+                state
+                    .home
+                    .filter(|home| home.latitude() != 0.0 || home.longitude() != 0.0)
+                    .map(|_| state.home_altitude.0)
+            });
+            let planned = self.plan.planned_home_location().alt;
+            (
+                Some(mapview::Overlay::FLIGHT),
+                map_home.map(|_| vehicle.unwrap_or(planned)),
+            )
+        };
+        self.map.borrow_mut().set_overlay(overlay);
+        self.map.borrow_mut().set_home_altitude(home_altitude);
+        // And the flight screen's Guided Mode marker, with its WP radius circle.
+        let guided = if self.screen == Screen::Plan {
+            None
+        } else {
+            plan::guided_marker(
+                view.state.as_deref().and_then(fly::mode_name),
+                self.fly_actions.guided,
+                &self.plan,
+            )
+        };
+        self.map.borrow_mut().set_guided(guided);
         // A panel box that lost the keyboard since the last frame has its Leave, and a row of
         // parameter sets moves on.
         if self.screen == Screen::Plan {
@@ -1681,6 +1746,8 @@ impl Render for MissionPlanner {
         // A quick view chosen since the last frame goes into Mission Planner's config.xml, as the
         // chooser's check box puts it there.
         self.persisted.observe_quick_views(&self.fly_data.quick);
+        // Map Tool > Zoom To's answer, once the geocoder has sent it.
+        plan::drive_geocode(self, window, cx);
 
         // Facts a UI test can assert on. Recorded from render because that is where every one of
         // them is already in hand, and published at the end of the frame so a reader never sees
@@ -1816,6 +1883,17 @@ impl Render for MissionPlanner {
                 facts::record(key, value);
             }
             plan::record_facts(&self.plan, &self.plan_menus);
+            // The map's zoom and centre, its radius circles and what the pointer is over, and the
+            // zoom controls beside it.
+            {
+                let map = self.map.borrow();
+                for (key, value) in map.facts() {
+                    facts::record(key, value);
+                }
+                for (key, value) in plan::zoom_facts(&self.plan_menus, map.zoom_level()) {
+                    facts::record(key, value);
+                }
+            }
             // Where the parameter documentation comes from and how much of this vehicle it
             // covers: PLAN.md 10.5's measurement, live.
             facts::record("params.metadata.source", metadata::source());

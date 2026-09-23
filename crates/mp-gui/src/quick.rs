@@ -113,6 +113,30 @@ type Reader = fn(&VehicleState) -> f64;
 /// the table and held to it by a test, so a row that becomes done without a reader here fails.
 #[rustfmt::skip]
 const READERS: &[(&str, Reader)] = &[
+    ("hilch1", |s| f64::from(s.hil_channels[0])),
+    ("hilch2", |s| f64::from(s.hil_channels[1])),
+    ("hilch3", |s| f64::from(s.hil_channels[2])),
+    ("hilch4", |s| f64::from(s.hil_channels[3])),
+    ("customfield0", |s| f64::from(s.custom_fields[0])),
+    ("customfield1", |s| f64::from(s.custom_fields[1])),
+    ("customfield2", |s| f64::from(s.custom_fields[2])),
+    ("customfield3", |s| f64::from(s.custom_fields[3])),
+    ("customfield4", |s| f64::from(s.custom_fields[4])),
+    ("customfield5", |s| f64::from(s.custom_fields[5])),
+    ("customfield6", |s| f64::from(s.custom_fields[6])),
+    ("customfield7", |s| f64::from(s.custom_fields[7])),
+    ("customfield8", |s| f64::from(s.custom_fields[8])),
+    ("customfield9", |s| f64::from(s.custom_fields[9])),
+    ("customfield10", |s| f64::from(s.custom_fields[10])),
+    ("customfield11", |s| f64::from(s.custom_fields[11])),
+    ("customfield12", |s| f64::from(s.custom_fields[12])),
+    ("customfield13", |s| f64::from(s.custom_fields[13])),
+    ("customfield14", |s| f64::from(s.custom_fields[14])),
+    ("customfield15", |s| f64::from(s.custom_fields[15])),
+    ("customfield16", |s| f64::from(s.custom_fields[16])),
+    ("customfield17", |s| f64::from(s.custom_fields[17])),
+    ("customfield18", |s| f64::from(s.custom_fields[18])),
+    ("customfield19", |s| f64::from(s.custom_fields[19])),
     ("SSA", |s| s.ssa.number()),
     ("AOA", |s| s.aoa.number()),
     ("groundcourse", |s| s.gps.course.number()),
@@ -123,6 +147,7 @@ const READERS: &[(&str, Reader)] = &[
     ("vx", |s| s.velocity_north.number()),
     ("vy", |s| s.velocity_east.number()),
     ("vz", |s| s.velocity_down.number()),
+    ("altoffsethome", |s| f64::from(s.alt_offset_home)),
     ("gpsstatus", |s| s.gps.fix_type.number()),
     ("gpshdop", |s| s.gps.hdop.number()),
     ("satcount", |s| s.gps.satellites_visible.number()),
@@ -145,6 +170,7 @@ const READERS: &[(&str, Reader)] = &[
     ("gpshdg_acc2", |s| s.gps2.hdg_acc.number()),
     ("gpsyaw2", |s| s.gps2.yaw.number()),
     ("airspeed", |s| s.air_speed.number()),
+    ("lowairspeed", |s| s.low_airspeed.number()),
     ("asratio", |s| s.airspeed_ratio.number()),
     ("airspeed1_temp", |s| s.airspeed1_temp.number()),
     ("airspeed2_temp", |s| s.airspeed2_temp.number()),
@@ -296,6 +322,7 @@ const READERS: &[(&str, Reader)] = &[
     ("esc16_rpm", |s| s.escs[15].rpm.number()),
     ("esc16_temp", |s| s.escs[15].temperature.number()),
     ("ch3percent", |s| s.throttle_percent.number()),
+    ("verticalspeed", |s| f64::from(s.vertical_speed())),
     ("nav_roll", |s| s.nav.roll.number()),
     ("nav_pitch", |s| s.nav.pitch.number()),
     ("nav_bearing", |s| s.nav.bearing.number()),
@@ -305,6 +332,10 @@ const READERS: &[(&str, Reader)] = &[
     ("xtrack_error", |s| s.nav.xtrack_error.number()),
     ("wpno", |s| s.mission_current.number()),
     ("climbrate", |s| s.climb_rate.number()),
+    ("distTraveled", |s| f64::from(s.dist_traveled)),
+    ("timeSinceArmInAir", |s| f64::from(s.time_since_arm_in_air)),
+    ("timeInAir", |s| f64::from(s.time_in_air)),
+    ("timeInAirMinSec", |s| f64::from(s.time_in_air_min_sec())),
     ("turnrate", |s| s.turn_rate().number()),
     ("wind_dir", |s| s.wind_direction.number()),
     ("wind_vel", |s| s.wind_speed.number()),
@@ -334,6 +365,8 @@ const READERS: &[(&str, Reader)] = &[
     ("current7", |s| s.batteries[5].current.number()),
     ("current8", |s| s.batteries[6].current.number()),
     ("current9", |s| s.batteries[7].current.number()),
+    ("battery_mahperkm", VehicleState::battery_mah_per_km),
+    ("battery_kmleft", VehicleState::battery_km_left),
     ("battery_usedmah", |s| s.battery.consumed_mah.number()),
     ("battery_cell1", |s| s.battery.cells[0].number()),
     ("battery_cell2", |s| s.battery.cells[1].number()),
@@ -377,6 +410,9 @@ const READERS: &[(&str, Reader)] = &[
     ("battery_usedmah9", |s| s.batteries[7].consumed_mah.number()),
     ("battery_voltage2", |s| s.batteries[0].voltage.number()),
     ("HomeAlt", |s| s.home_altitude.number()),
+    // The fence is the planning screen's, not the state's: 99999 until row 39 hands it over.
+    ("GeoFenceDist", |s| f64::from(s.geo_fence_dist(&[]))),
+    ("DistFromMovingBase", |s| f64::from(s.dist_from_moving_base())),
     ("sonarrange", |s| s.rangefinder.range.number()),
     ("sonarvoltage", |s| s.rangefinder.voltage.number()),
     ("rangefinder1", |s| s.rangefinder.distances[0].number()),
@@ -411,13 +447,21 @@ const READERS: &[(&str, Reader)] = &[
     ("servovoltage", |s| s.board.servo_voltage.number()),
     ("voltageflag", |s| s.board.voltage_flags.number()),
     ("i2cerrors", |s| s.board.i2c_errors.number()),
+    ("timesincelastshot", |s| s.time_since_last_shot),
     ("press_abs", |s| s.press_abs.number()),
     ("press_temp", |s| s.press_temp.number()),
     ("press_abs2", |s| s.press_abs2.number()),
     ("press_temp2", |s| s.press_temp2.number()),
+    ("rateattitude", |s| f64::from(s.rates.attitude)),
+    ("rateposition", |s| f64::from(s.rates.position)),
+    ("ratestatus", |s| f64::from(s.rates.status)),
+    ("ratesensors", |s| f64::from(s.rates.sensors)),
+    ("raterc", |s| f64::from(s.rates.rc)),
     ("campointa", |s| s.mount.pointing_a.number()),
     ("campointb", |s| s.mount.pointing_b.number()),
     ("campointc", |s| s.mount.pointing_c.number()),
+    ("gimballat", |s| f64::from(s.gimbal_lat())),
+    ("gimballng", |s| f64::from(s.gimbal_lng())),
     ("safetyactive", |s| s.sensors.safety_active().number()),
     ("terrainactive", |s| s.sensors.terrain_active().number()),
     ("ter_curalt", |s| s.terrain.current_height.number()),
@@ -425,6 +469,7 @@ const READERS: &[(&str, Reader)] = &[
     ("ter_load", |s| s.terrain.loaded.number()),
     ("ter_pend", |s| s.terrain.pending.number()),
     ("ter_space", |s| s.terrain.spacing.number()),
+    ("KIndex", |_| f64::from(VehicleState::kindex())),
     ("opt_m_x", |s| s.optical_flow.comp_m_x.number()),
     ("opt_m_y", |s| s.optical_flow.comp_m_y.number()),
     ("opt_x", |s| s.optical_flow.x.number()),
@@ -462,6 +507,7 @@ const READERS: &[(&str, Reader)] = &[
     ("rpm1", |s| s.rpm[0].number()),
     ("rpm2", |s| s.rpm[1].number()),
     ("capabilities", |s| s.autopilot_info.capabilities.number()),
+    ("speedup", |s| f64::from(s.speedup)),
     ("vtol_state", |s| s.vtol_state.number()),
     ("landed_state", |s| s.landed_state.number()),
     ("gen_status", |s| s.generator.status.number()),
@@ -552,7 +598,7 @@ fn dist_to_home(s: &VehicleState) -> f64 {
 
 /// The C# members the chooser leaves out although they are held: public fields, which
 /// `Type.GetProperties` does not return. `// C#: ExtLibs/ArduPilot/CurrentState.cs:119`
-const FIELDS_NOT_PROPERTIES: &[&str] = &["lastautowp"];
+const FIELDS_NOT_PROPERTIES: &[&str] = &["hilch5", "hilch6", "hilch7", "hilch8", "lastautowp"];
 
 /// What a view bound to `name` shows now, or `None` for a property this application does not
 /// hold.
@@ -1083,8 +1129,10 @@ mod tests {
         assert!((value("yaw", &state).unwrap() - 270.0).abs() < 1e-9);
         // A bool binds as 1.
         assert_eq!(value("armed", &state), Some(1.0));
+        // Held now: the C#'s vertical speed, 0 before the alt setter has run twice.
+        assert_eq!(value("verticalspeed", &state), Some(0.0));
         // Not held: no value, rather than a made-up one.
-        assert_eq!(value("verticalspeed", &state), None);
+        assert_eq!(value("lastautowp", &state), None);
         // No home: 0, as the C# returns.
         assert_eq!(value("DistToHome", &state), Some(0.0));
         state.home = Some(mp_units::LatLon::new(-35.0, 149.0).unwrap());

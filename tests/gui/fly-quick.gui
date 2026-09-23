@@ -42,7 +42,7 @@ expect fly.quick.chooser none
 # A double click opens the chooser for that view; every numeric property held is offered.
 doubleclick fly-quick-3
 expect fly.quick.chooser 3
-expect fly.quick.choices 401
+expect fly.quick.choices 445
 # Checking another binds the view to it and closes the chooser.
 click fly-quick-choice-satcount
 expect fly.quick.chooser none

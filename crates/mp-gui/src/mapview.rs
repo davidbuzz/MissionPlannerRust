@@ -77,6 +77,21 @@ pub struct MapViewport {
     fence_return: Option<WebMercator>,
     /// The planned mission, projected once when it is set rather than every frame.
     mission: Vec<(WebMercator, u16)>,
+    /// The mission's marker pairs as `WPOverlay.CreateOverlay` makes them: what the radius
+    /// circles, the hover tooltips and Zoom to Mission are drawn from. See [`overlay_markers`].
+    overlay: Vec<OverlayMarker>,
+    /// What the screen showing the map hands `CreateOverlay`, or `None` on a map that draws no
+    /// `WPOverlay` (the log browser's).
+    overlay_mode: Option<Overlay>,
+    /// Home's altitude, which the "H" marker's "Alt:" tooltip shows.
+    home_altitude: Option<f64>,
+    /// The markers whose area held the pointer at its last move with no button down: GMap's
+    /// `IsMouseOver`, kept until the pointer moves again, as GMap keeps it.
+    hovered: Hovered,
+    /// The tooltips the last paint drew, for the facts.
+    tooltips_drawn: Vec<String>,
+    /// The flight screen's Guided Mode marker, while it has one.
+    guided: Option<GuidedMarker>,
     /// The survey area being drawn, if any.
     polygon: Vec<WebMercator>,
     /// The geofence, if one is being drawn or has been read back.
@@ -246,6 +261,12 @@ impl MapViewport {
             home_label_drawn: false,
             fence_return: None,
             mission: Vec::new(),
+            overlay: Vec::new(),
+            overlay_mode: None,
+            home_altitude: None,
+            hovered: Hovered::default(),
+            tooltips_drawn: Vec::new(),
+            guided: None,
             polygon: Vec::new(),
             fence: Vec::new(),
             rally: Vec::new(),
@@ -360,8 +381,29 @@ impl MapViewport {
     /// vehicle's `cs.HomeLocation` - see `plan::planner_map_home` and `plan::flight_map_home`.
     /// `// C#: GCSViews/FlightPlanner.cs:1400-1415; GCSViews/FlightData.cs:3808-3845`
     pub fn set_home(&mut self, home: Option<LatLon>) {
+        // `writeKML` rebuilds every marker, and a new marker is not under the pointer until the
+        // pointer moves: a home that moved is no longer the one hovered.
+        if home != self.home_position {
+            self.hovered.forget(MarkerTag::Home);
+        }
         self.home = home.map(LatLon::to_web_mercator);
         self.home_position = home;
+    }
+
+    /// Home's altitude, for the "H" marker's tooltip: `addpolygonmarker("H", ..., home.Alt *
+    /// altunitmultiplier, ...)`. Metres here, so the multiplier is 1.
+    /// `// C#: ExtLibs/Maps/WPOverlay.cs:44-50, 394-398`
+    pub fn set_home_altitude(&mut self, altitude: Option<f64>) {
+        self.home_altitude = altitude;
+    }
+
+    /// Which `WPOverlay` the screen showing the map builds, or none.
+    ///
+    /// Set every frame, as home is, because the two screens that share this map build it with
+    /// different radii: the planner's are its WP Radius and Loiter Radius boxes, the flight
+    /// screen's are zero (`FlightData.cs:3830-3843`).
+    pub fn set_overlay(&mut self, overlay: Option<Overlay>) {
+        self.overlay_mode = overlay;
     }
 
     /// Where home is drawn, as it was given.
@@ -407,6 +449,13 @@ impl MapViewport {
                 Some((position.to_web_mercator(), item.seq))
             })
             .collect();
+        let overlay = overlay_markers(items);
+        if overlay != self.overlay {
+            // `writeKML` makes new markers, home's included, and none of them is under the
+            // pointer until it moves.
+            self.hovered = Hovered::default();
+            self.overlay = overlay;
+        }
     }
 
     /// Replaces the survey area shown on the map.
@@ -468,6 +517,97 @@ impl MapViewport {
     #[must_use]
     pub const fn camera(&self) -> Option<Camera> {
         self.camera
+    }
+
+    /// `GMapControl.Zoom`: GMap's zoom level of the view on screen, fractional, from its span and
+    /// the width it was last painted at. `None` before anything has framed a view.
+    #[must_use]
+    pub fn zoom_level(&self) -> Option<f64> {
+        let view = self.current_view()?;
+        // GMap keeps the zoom it was given; this works it back from a span, and a zoom of 17 set
+        // must not read back as 16.999999999999996 - whose whole part, which `SetZoomToFitRect`
+        // compares, is 16.
+        Some((gmap_zoom(view.span, self.last_viewport.0) * 1e9).round() / 1e9)
+    }
+
+    /// `GMapControl.Position`: the position at the centre of the view.
+    #[must_use]
+    pub fn centre(&self) -> Option<LatLon> {
+        LatLon::from_web_mercator(self.current_view()?.centre).ok()
+    }
+
+    /// `GMapControl.Zoom = zoom`: the view zoomed about its centre, clamped to the planning map's
+    /// `MinZoom` and `MaxZoom`. `ScaleMode` is `Fractional`, so a fractional zoom scales the view
+    /// by `2^remainder` - exactly `256 * 2^zoom` pixels round the world, as [`gmap_zoom`] reads
+    /// it back. Taking a zoom stops the view fitting itself, as panning does.
+    ///
+    /// Before anything has framed a view there is no centre to zoom about, and nothing happens.
+    /// `// C#: ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/GMapControl.cs:2666-2715;
+    /// GCSViews/FlightPlanner.Designer.cs:883-891`
+    pub fn set_zoom(&mut self, zoom: f64) {
+        let Some(view) = self.current_view() else {
+            return;
+        };
+        let zoom = zoom.clamp(GMAP_MIN_ZOOM, GMAP_MAX_ZOOM);
+        let width = f64::from(self.last_viewport.0.max(1.0));
+        self.camera = Some(Camera {
+            centre: view.centre,
+            span: width / (256.0 * zoom.exp2()),
+        });
+    }
+
+    /// `GMapControl.ZoomAndCenterMarkers`, for a set of marker positions: the largest whole zoom
+    /// at which the rectangle round them fits the map with ten pixels to spare, and the centre of
+    /// that rectangle in latitude and longitude. False, and nothing moved, with nothing to fit or
+    /// when not even zoom 0 fits.
+    ///
+    /// `SetZoomToFitRect` leaves the zoom alone when its whole part is already the one that fits
+    /// (`(int) Zoom != maxZoom`), so a view at 16.7 asked to fit 16 stays at 16.7.
+    /// `// C#: ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/GMapControl.cs:919-1053;
+    /// ExtLibs/GMap.NET.Core/GMap.NET.Internals/Core.cs:549-575`
+    pub fn zoom_to_fit(&mut self, points: &[LatLon]) -> bool {
+        let Some(rect) = LatLngRect::around(points) else {
+            return false;
+        };
+        let (width, height) = self.last_viewport;
+        let fit = max_zoom_to_fit(&rect, f64::from(width).floor(), f64::from(height).floor());
+        if fit <= 0 {
+            return false;
+        }
+        let Ok(centre) = LatLon::new(
+            rect.top - (rect.top - rect.bottom) / 2.0,
+            rect.left + (rect.right - rect.left) / 2.0,
+        ) else {
+            return false;
+        };
+        self.centre_on(centre);
+        #[allow(clippy::cast_possible_truncation)] // `(int) Zoom`, and a zoom is 0 to 24
+        let whole = self.zoom_level().map(|zoom| zoom.trunc() as i32);
+        if whole != Some(fit) {
+            self.set_zoom(f64::from(fit));
+        }
+        true
+    }
+
+    /// Where the markers of `WPOverlay` are: home's, then each item's, as
+    /// `GetRectOfAllMarkers("WPOverlay")` visits them. Empty on a map drawing no `WPOverlay`.
+    /// `// C#: ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/GMapControl.cs:1007-1053`
+    #[must_use]
+    pub fn overlay_positions(&self) -> Vec<LatLon> {
+        if self.overlay_mode.is_none() {
+            return Vec::new();
+        }
+        self.home_position
+            .into_iter()
+            .chain(self.overlay.iter().map(|marker| marker.position))
+            .collect()
+    }
+
+    /// `MainMap.ZoomAndCenterMarkers("WPOverlay")`: Zoom to Mission.
+    /// `// C#: GCSViews/FlightPlanner.cs:8383-8386`
+    pub fn zoom_and_centre_markers(&mut self) -> bool {
+        let points = self.overlay_positions();
+        self.zoom_to_fit(&points)
     }
 
     /// Where a position was drawn at the last paint, in window coordinates.
@@ -918,6 +1058,1009 @@ fn paint_graticule(origin: Point<Pixels>, w: f32, h: f32, window: &mut Window) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// The mission overlay as `WPOverlay.CreateOverlay` builds it: a `GMapMarkerWP` and the
+// `GMapMarkerRect` round it for each item, the rect's radius circle, and the pointer over them.
+// ---------------------------------------------------------------------------------------------
+
+/// The planning map's `MinZoom`: `GMapControl.Zoom` goes no lower.
+/// `// C#: GCSViews/FlightPlanner.cs:187`
+pub const GMAP_MIN_ZOOM: f64 = 0.0;
+/// The planning map's `MaxZoom`, which the Zoom box and the zoom bar also stop at.
+/// `// C#: GCSViews/FlightPlanner.cs:188, 3451-3456`
+pub const GMAP_MAX_ZOOM: f64 = 24.0;
+
+/// `MAV_CMD` values `CreateOverlay` tests for.
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs (MAV_CMD)`
+mod cmd {
+    pub const WAYPOINT: u16 = 16;
+    pub const LOITER_UNLIM: u16 = 17;
+    pub const LOITER_TURNS: u16 = 18;
+    pub const LOITER_TIME: u16 = 19;
+    pub const RETURN_TO_LAUNCH: u16 = 20;
+    pub const LAND: u16 = 21;
+    pub const CONTINUE_AND_CHANGE_ALT: u16 = 30;
+    pub const LOITER_TO_ALT: u16 = 31;
+    pub const SPLINE_WAYPOINT: u16 = 82;
+    pub const VTOL_LAND: u16 = 85;
+    pub const GUIDED_ENABLE: u16 = 92;
+    pub const DELAY: u16 = 93;
+    pub const LAST: u16 = 95;
+    pub const DO_RETURN_PATH_START: u16 = 188;
+    pub const DO_LAND_START: u16 = 189;
+    pub const DO_SET_ROI: u16 = 201;
+}
+
+/// `Color.White`: a `GMapMarkerRect`'s pen until it is given another.
+/// `// C#: ExtLibs/Maps/GMapMarkerRect.cs:15, 58-63`
+pub const RECT_WHITE: u32 = 0xff_ff_ff;
+/// `Color.LightBlue`, a loiter's rect.
+pub const RECT_LIGHT_BLUE: u32 = 0xad_d8_e6;
+/// `Color.Green`, a spline waypoint's rect.
+pub const RECT_GREEN: u32 = 0x00_80_00;
+/// `Color.Red`, the pen `MainMap_OnMarkerEnter` gives the rect under the pointer.
+/// `// C#: GCSViews/FlightPlanner.cs:8072-8074`
+pub const RECT_RED: u32 = 0xff_00_00;
+/// `Color.Blue`, the Guided Mode marker's rect.
+/// `// C#: GCSViews/FlightData.cs:4218-4220`
+pub const RECT_BLUE: u32 = 0x00_00_ff;
+
+/// The flight screen's Guided Mode marker: `FlightPlanner.addpolygonmarker(this, "Guided Mode",
+/// ...)` onto `routes` while the vehicle is in Guided and has been sent somewhere - a green
+/// `GMarkerGoogle` whose tooltip always shows, and a `GMapMarkerRect` of the saved WP radius in
+/// blue.
+/// `// C#: GCSViews/FlightData.cs:4214-4221; GCSViews/FlightPlanner.cs:1635-1700`
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GuidedMarker {
+    /// `GuidedMode.x / 1e7`, `GuidedMode.y / 1e7`.
+    pub position: LatLon,
+    /// `(int) GuidedMode.z`.
+    pub alt: i32,
+    /// `Settings.Instance.GetFloat("TXT_WPRad") / CurrentState.multiplierdist`.
+    pub wp_radius: f64,
+}
+
+impl GuidedMarker {
+    /// Its tooltip, `tag + " : " + alt` - what `addpolygonmarker` writes on every pass after the
+    /// one that makes the marker, which writes `tag + " - " + alt` until the next.
+    /// `// C#: GCSViews/FlightPlanner.cs:1648, 1672`
+    #[must_use]
+    pub fn tooltip(&self) -> String {
+        format!("Guided Mode : {}", self.alt)
+    }
+}
+
+/// `GMapMarkerRect`'s area from its point: `Size = (50, 50)`, `Offset = (-25, -45)`.
+/// `// C#: ExtLibs/Maps/GMapMarkerRect.cs:43-52`
+const RECT_AREA: (f32, f32, f32, f32) = (-25.0, -45.0, 50.0, 50.0);
+/// A `GMarkerGoogle` pin's area from its point: the 32 x 32 bitmap at `Offset = (-15, -31)` (see
+/// [`PIN_HEAD`]). `GMapMarkerWP` is one.
+const PIN_AREA: (f32, f32, f32, f32) = (-15.0, -31.0, 32.0, 32.0);
+
+/// Which marker: home's "H" or an item's number, as the marker's `Tag` reads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarkerTag {
+    /// `addpolygonmarker("H", ...)`.
+    Home,
+    /// `addpolygonmarker((a + 1).ToString(), ...)`: the item's row, which is its `seq`.
+    Item(u16),
+    /// The flight screen's "Guided Mode" marker.
+    Guided,
+}
+
+impl MarkerTag {
+    /// The tag as text.
+    #[must_use]
+    pub fn text(self) -> String {
+        match self {
+            Self::Home => "H".to_owned(),
+            Self::Item(seq) => seq.to_string(),
+            Self::Guided => "Guided Mode".to_owned(),
+        }
+    }
+}
+
+/// The radius `addpolygonmarker` gives a marker's `GMapMarkerRect`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum RectRadius {
+    /// `wprad = 0`: the rect draws no circle - home's, and DO_SET_ROI's.
+    None,
+    /// `CreateOverlay`'s `wpradius`.
+    Wp,
+    /// A loiter's: its own radius where the command carries one that is not zero, otherwise
+    /// `CreateOverlay`'s `loiterradius`, drawn at its absolute value - the sign is the direction.
+    Loiter(Option<f64>),
+}
+
+/// One item's marker and the `GMapMarkerRect` round it, as `addpolygonmarker` makes them.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OverlayMarker {
+    /// The marker's tag.
+    pub tag: MarkerTag,
+    /// Where it is.
+    pub position: LatLon,
+    /// The same, projected.
+    at: WebMercator,
+    /// The "Alt: " tooltip's altitude, `item.alt * altunitmultiplier`. `None` on DO_SET_ROI's red
+    /// `GMarkerGoogle`, whose tooltip is its number instead.
+    pub alt: Option<f64>,
+    /// The rect's radius.
+    pub radius: RectRadius,
+    /// The rect's pen.
+    pub colour: u32,
+}
+
+/// `WPOverlay.CreateOverlay`'s markers for a mission, item by item: which items get a marker, and
+/// what radius and colour its `GMapMarkerRect` has.
+///
+/// Navigable commands (below `MAV_CMD.LAST` except RTL, CONTINUE_AND_CHANGE_ALT, DELAY and
+/// GUIDED_ENABLE, plus DO_SET_ROI, DO_LAND_START and DO_RETURN_PATH_START) are drawn where they
+/// have a position; LAND at 0,0 is not, a loiter only needs one coordinate, and a spline waypoint
+/// is drawn wherever it is, 0,0 included. A waypoint, a land or a spline has the WP radius; a
+/// loiter has its own or the loiter radius, in light blue; a spline's rect is green; DO_SET_ROI is
+/// a red marker with a rect of no radius. Item 0, which the flight screen's list starts with, is
+/// home, and home has its own marker (`mission_items.RemoveAt(0)`). The fence and rally commands
+/// `CreateOverlay` also knows are drawn by their own overlays here.
+/// `// C#: ExtLibs/Maps/WPOverlay.cs:52-250, 385-439; GCSViews/FlightData.cs:3826-3829`
+#[must_use]
+pub fn overlay_markers(items: &[MissionItem]) -> Vec<OverlayMarker> {
+    use cmd::{
+        CONTINUE_AND_CHANGE_ALT, DELAY, DO_LAND_START, DO_RETURN_PATH_START, DO_SET_ROI,
+        GUIDED_ENABLE, LAND, LAST, LOITER_TIME, LOITER_TO_ALT, LOITER_TURNS, LOITER_UNLIM,
+        RETURN_TO_LAUNCH, SPLINE_WAYPOINT, VTOL_LAND, WAYPOINT,
+    };
+    let mut markers = Vec::new();
+    for item in items.iter().filter(|item| item.seq != 0) {
+        let command = item.command;
+        let navigable = (command < LAST
+            && !matches!(
+                command,
+                RETURN_TO_LAUNCH | CONTINUE_AND_CHANGE_ALT | DELAY | GUIDED_ENABLE
+            ))
+            || matches!(command, DO_SET_ROI | DO_LAND_START | DO_RETURN_PATH_START);
+        if command == 0 || !navigable {
+            continue;
+        }
+        let zero = item.x == 0.0 && item.y == 0.0;
+        let located = item.x != 0.0 && item.y != 0.0;
+        let (radius, colour, roi) = match command {
+            LAND | VTOL_LAND if zero => continue,
+            DO_LAND_START | LAND | VTOL_LAND if located => (RectRadius::Wp, RECT_WHITE, false),
+            DO_SET_ROI if located => (RectRadius::None, RECT_WHITE, true),
+            DO_SET_ROI => continue,
+            LOITER_TIME | LOITER_TURNS | LOITER_TO_ALT | LOITER_UNLIM => {
+                if zero {
+                    continue;
+                }
+                let own = match command {
+                    LOITER_TURNS | LOITER_UNLIM => item.param3,
+                    LOITER_TO_ALT => item.param2,
+                    _ => 0.0,
+                };
+                (
+                    RectRadius::Loiter((own != 0.0).then_some(own)),
+                    RECT_LIGHT_BLUE,
+                    false,
+                )
+            }
+            SPLINE_WAYPOINT => (RectRadius::Wp, RECT_GREEN, false),
+            WAYPOINT if zero => continue,
+            _ if located => (RectRadius::Wp, RECT_WHITE, false),
+            _ => continue,
+        };
+        let Ok(position) = LatLon::new(item.x, item.y) else {
+            continue;
+        };
+        markers.push(OverlayMarker {
+            tag: MarkerTag::Item(item.seq),
+            position,
+            at: position.to_web_mercator(),
+            alt: (!roi).then_some(item.z),
+            radius,
+            colour,
+        });
+    }
+    markers
+}
+
+/// What the screen showing the map hands `WPOverlay.CreateOverlay`, and whether its
+/// `OnMarkerEnter` turns a hovered rect red and selects its row - the planning screen's does; the
+/// flight screen's only notes the marker.
+/// `// C#: GCSViews/FlightPlanner.cs:1431-1434, 8068-8129; GCSViews/FlightData.cs:3060-3063`
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Overlay {
+    /// `wpradius`, metres.
+    pub wp_radius: f64,
+    /// `loiterradius`, metres.
+    pub loiter_radius: f64,
+    /// Whether this is the planning screen's map.
+    pub planner: bool,
+}
+
+impl Overlay {
+    /// The flight screen's: `CreateOverlay(homeplla, mission_items, 0, 0, ...)`, so no waypoint
+    /// has a circle and a loiter has one only where its command carries its own radius.
+    /// `// C#: GCSViews/FlightData.cs:3830-3843`
+    pub const FLIGHT: Self = Self {
+        wp_radius: 0.0,
+        loiter_radius: 0.0,
+        planner: false,
+    };
+}
+
+/// Which markers hold the pointer: GMap's `IsMouseOver`, marker by marker.
+#[derive(Debug, Clone, Default, PartialEq)]
+struct Hovered {
+    /// `GMapMarkerRect`s, which the planning screen turns red.
+    rects: Vec<MarkerTag>,
+    /// `GMapMarkerWP`s, which write their label and show their tooltip.
+    pins: Vec<MarkerTag>,
+}
+
+impl Hovered {
+    /// A marker that is no longer the one it was.
+    fn forget(&mut self, tag: MarkerTag) {
+        self.rects.retain(|hovered| *hovered != tag);
+        self.pins.retain(|hovered| *hovered != tag);
+    }
+}
+
+/// What a move of the pointer did to the markers under it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct HoverChange {
+    /// The rects the pointer has just entered, in the order GMap raises `OnMarkerEnter` for them.
+    pub entered: Vec<MarkerTag>,
+    /// Whether anything is drawn differently now.
+    pub changed: bool,
+}
+
+/// One radius circle, as `GMapMarkerRect.OnRender` draws it at the view last painted.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RadiusCircle {
+    /// The marker it is round.
+    pub tag: MarkerTag,
+    /// The marker's point, in window coordinates.
+    pub centre: (f32, f32),
+    /// The side of the square `DrawArc` is given, in whole pixels.
+    pub diameter: i64,
+    /// The radius, metres.
+    pub radius: f64,
+    /// The pen.
+    pub colour: u32,
+}
+
+/// `PureProjection.GetDistance`: the haversine distance in kilometres on the projection's
+/// `Axis`, 6378137 m for Mercator.
+/// `// C#: ExtLibs/GMap.NET.Core/GMap.NET/PureProjection.cs:436-448`
+#[must_use]
+pub fn gmap_distance_km(from: LatLon, to: LatLon) -> f64 {
+    let (lat1, lng1) = (from.latitude().to_radians(), from.longitude().to_radians());
+    let (lat2, lng2) = (to.latitude().to_radians(), to.longitude().to_radians());
+    let a = ((lat2 - lat1) / 2.0).sin().powi(2)
+        + lat1.cos() * lat2.cos() * ((lng2 - lng1) / 2.0).sin().powi(2);
+    let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
+    (6_378_137.0 / 1000.0) * c
+}
+
+/// The side of `GMapMarkerRect`'s circle: `loc.X = (int)(LocalPosition.X - m2pixelwidth * wprad *
+/// 2)` and the square is `|loc.X - LocalPosition.X|` - twice the radius in pixels, whole, the
+/// truncation toward zero taken from where the marker sits.
+/// `// C#: ExtLibs/Maps/GMapMarkerRect.cs:78-86`
+#[must_use]
+pub fn rect_diameter(local_x: i64, m2pixelwidth: f64, radius: f64) -> i64 {
+    #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)] // the C#'s `(int)`
+    let loc = (local_x as f64 - m2pixelwidth * radius * 2.0) as i32;
+    (i64::from(loc) - local_x).abs()
+}
+
+impl MapViewport {
+    /// GMap's `OnMouseMove` over the markers, the pointer at `pointer` with no button down, or
+    /// gone from the map (`None`): every marker whose area holds it is under it. Returns the
+    /// rects it has newly entered, which is what the planning screen's `OnMarkerEnter` acts on.
+    ///
+    /// Home's pair first, then each item's, as `CreateOverlay` adds them.
+    /// `// C#: ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/GMapControl.cs:2134-2185`
+    pub fn hover(&mut self, pointer: Option<(f32, f32)>) -> HoverChange {
+        let mut now = Hovered::default();
+        if let Some((x, y)) = pointer
+            && self.overlay_mode.is_some()
+        {
+            let within =
+                |(sx, sy): (f32, f32), (left, top, width, height): (f32, f32, f32, f32)| {
+                    let (dx, dy) = (x - sx, y - sy);
+                    dx >= left && dx < left + width && dy >= top && dy < top + height
+                };
+            let home = self.home.map(|at| (MarkerTag::Home, at));
+            let items = self.overlay.iter().map(|marker| (marker.tag, marker.at));
+            for (tag, at) in home.into_iter().chain(items) {
+                let Some(screen) = self.screen_position(at) else {
+                    continue;
+                };
+                if within(screen, RECT_AREA) {
+                    now.rects.push(tag);
+                }
+                if within(screen, PIN_AREA) {
+                    now.pins.push(tag);
+                }
+            }
+        }
+        let entered = now
+            .rects
+            .iter()
+            .filter(|tag| !self.hovered.rects.contains(tag))
+            .copied()
+            .collect();
+        let changed = now != self.hovered;
+        self.hovered = now;
+        HoverChange { entered, changed }
+    }
+
+    /// Pixels per metre across the map and down it, as `GMapMarkerRect.OnRender` measures them:
+    /// the distance along the top edge from the left to `Width`, and - as the C# has it - from the
+    /// left to `Height`, also along the top edge.
+    /// `// C#: ExtLibs/Maps/GMapMarkerRect.cs:69-76`
+    fn metres_to_pixels(&self) -> Option<(f64, f64)> {
+        let (x, y, width, _) = self.last_view?;
+        let (view_width, view_height) = self.last_viewport;
+        if view_width <= 0.0 || view_height <= 0.0 {
+            return None;
+        }
+        let local = |pixels: f32| {
+            LatLon::from_web_mercator(WebMercator {
+                x: f64::from(pixels / view_width).mul_add(width, x),
+                y,
+            })
+            .ok()
+        };
+        let origin = local(0.0)?;
+        let across = gmap_distance_km(origin, local(view_width)?) * 1000.0;
+        let down = gmap_distance_km(origin, local(view_height)?) * 1000.0;
+        Some((
+            f64::from(view_width) / across,
+            f64::from(view_height) / down,
+        ))
+    }
+
+    /// The radius circles at the view last painted: each `GMapMarkerRect` whose radius is not
+    /// zero, scaled from metres to pixels at the top edge of the map, red where the planning
+    /// screen has the pointer over it. None on a map drawing no `WPOverlay`.
+    /// `// C#: ExtLibs/Maps/GMapMarkerRect.cs:54-98`
+    #[must_use]
+    pub fn radius_circles(&self) -> Vec<RadiusCircle> {
+        let Some((m2pixelwidth, m2pixelheight)) = self.metres_to_pixels() else {
+            return Vec::new();
+        };
+        if !(m2pixelheight > 0.001
+            && m2pixelheight.is_finite()
+            && m2pixelheight < f64::from(i32::MAX))
+        {
+            return Vec::new();
+        }
+        let circle = |tag: MarkerTag, at: WebMercator, radius: f64, colour: u32| {
+            if radius == 0.0 {
+                return None;
+            }
+            let centre = self.screen_position(at)?;
+            // `LocalPosition` is the point, in whole pixels, plus the rect's offset.
+            #[allow(clippy::cast_possible_truncation)] // a screen coordinate, well within range
+            let local_x = (centre.0 - self.last_origin.0).floor() as i64 + (RECT_AREA.0 as i64);
+            let diameter = rect_diameter(local_x, m2pixelwidth, radius);
+            (diameter != 0).then_some(RadiusCircle {
+                tag,
+                centre,
+                diameter,
+                radius,
+                colour,
+            })
+        };
+        let mut circles = Vec::new();
+        if let Some(overlay) = self.overlay_mode {
+            for marker in &self.overlay {
+                let radius = match marker.radius {
+                    RectRadius::None => 0.0,
+                    RectRadius::Wp => overlay.wp_radius,
+                    RectRadius::Loiter(own) => own.unwrap_or(overlay.loiter_radius).abs(),
+                };
+                let colour = if overlay.planner && self.hovered.rects.contains(&marker.tag) {
+                    RECT_RED
+                } else {
+                    marker.colour
+                };
+                circles.extend(circle(marker.tag, marker.at, radius, colour));
+            }
+        }
+        // The flight screen's Guided Mode marker, on `routes` over the mission.
+        if let Some(guided) = self.guided {
+            circles.extend(circle(
+                MarkerTag::Guided,
+                guided.position.to_web_mercator(),
+                guided.wp_radius,
+                RECT_BLUE,
+            ));
+        }
+        circles
+    }
+
+    /// Puts the flight screen's Guided Mode marker on the map, or takes it away.
+    pub fn set_guided(&mut self, guided: Option<GuidedMarker>) {
+        self.guided = guided;
+    }
+
+    /// The "Alt: " tooltips to draw: each `GMapMarkerWP` under the pointer, which
+    /// `addpolygonmarker` gave `ToolTipMode.OnMouseOver` and its altitude written `"0"`.
+    /// `// C#: ExtLibs/Maps/WPOverlay.cs:393-398; ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapOverlay.cs:348-358`
+    fn hover_tooltips(&self) -> Vec<(WebMercator, String)> {
+        if self.overlay_mode.is_none() {
+            return Vec::new();
+        }
+        let home = self
+            .home
+            .zip(self.home_altitude)
+            .map(|(at, alt)| (MarkerTag::Home, at, Some(alt)));
+        let items = self
+            .overlay
+            .iter()
+            .map(|marker| (marker.tag, marker.at, marker.alt));
+        home.into_iter()
+            .chain(items)
+            .filter(|(tag, _, _)| self.hovered.pins.contains(tag))
+            .filter_map(|(_, at, alt)| Some((at, format!("Alt: {}", format_zero(alt?)))))
+            .collect()
+    }
+
+    /// Facts a test asserts on: the zoom and centre the zoom controls and the Zoom menu set, the
+    /// radius circles, and what the pointer is over.
+    #[must_use]
+    pub fn facts(&self) -> Vec<(&'static str, String)> {
+        let zoom = self.zoom_level();
+        let circles = self.radius_circles();
+        let none = || "none".to_owned();
+        let join = |parts: Vec<String>, by: &str| {
+            if parts.is_empty() {
+                none()
+            } else {
+                parts.join(by)
+            }
+        };
+        let mut hovered: Vec<MarkerTag> = Vec::new();
+        for tag in self.hovered.rects.iter().chain(&self.hovered.pins) {
+            if !hovered.contains(tag) {
+                hovered.push(*tag);
+            }
+        }
+        #[allow(clippy::cast_possible_truncation)] // `(int) Zoom`, 0 to 24 or so
+        let step = zoom.map_or_else(none, |zoom| (zoom.trunc() as i64).to_string());
+        vec![
+            (
+                "map.zoom",
+                zoom.map_or_else(none, |zoom| format!("{zoom:.2}")),
+            ),
+            ("map.zoom.step", step),
+            (
+                "map.centre",
+                self.centre().map_or_else(none, |centre| {
+                    format!("{:.7},{:.7}", centre.latitude(), centre.longitude())
+                }),
+            ),
+            ("map.circles", circles.len().to_string()),
+            (
+                "map.circles.radii",
+                join(
+                    circles
+                        .iter()
+                        .map(|circle| circle.radius.to_string())
+                        .collect(),
+                    ",",
+                ),
+            ),
+            (
+                "map.circles.red",
+                circles
+                    .iter()
+                    .filter(|circle| circle.colour == RECT_RED)
+                    .count()
+                    .to_string(),
+            ),
+            (
+                "map.hover",
+                join(hovered.into_iter().map(MarkerTag::text).collect(), ","),
+            ),
+            ("map.tooltip", join(self.tooltips_drawn.clone(), "|")),
+        ]
+    }
+}
+
+/// `double.ToString("0")`: rounded half away from zero, and never "-0".
+fn format_zero(value: f64) -> String {
+    let rounded = value.round();
+    if rounded == 0.0 {
+        "0".to_owned()
+    } else {
+        format!("{rounded:.0}")
+    }
+}
+
+/// The smallest `RectLatLng` holding a set of positions, as `GetRectOfAllMarkers` builds it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct LatLngRect {
+    left: f64,
+    top: f64,
+    right: f64,
+    bottom: f64,
+}
+
+impl LatLngRect {
+    fn around(points: &[LatLon]) -> Option<Self> {
+        let mut points = points.iter();
+        let first = points.next()?;
+        let start = Self {
+            left: first.longitude(),
+            top: first.latitude(),
+            right: first.longitude(),
+            bottom: first.latitude(),
+        };
+        Some(points.fold(start, |rect, point| Self {
+            left: rect.left.min(point.longitude()),
+            top: rect.top.max(point.latitude()),
+            right: rect.right.max(point.longitude()),
+            bottom: rect.bottom.min(point.latitude()),
+        }))
+    }
+}
+
+/// `MercatorProjection.FromLatLngToPixel`: a position's pixel at a whole zoom.
+/// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.Projections/MercatorProjection.cs:52-71`
+fn mercator_pixel(lat: f64, lng: f64, zoom: i32) -> (i64, i64) {
+    let lat = lat.clamp(-85.051_128_78, 85.051_128_78);
+    let lng = lng.clamp(-180.0, 180.0);
+    let x = (lng + 180.0) / 360.0;
+    let sin = (lat * std::f64::consts::PI / 180.0).sin();
+    let y = 0.5 - ((1.0 + sin) / (1.0 - sin)).ln() / (4.0 * std::f64::consts::PI);
+    let size = 256.0 * f64::from(zoom).exp2();
+    #[allow(clippy::cast_possible_truncation)] // `(long)`, of a pixel inside the map
+    let pixel = |fraction: f64| (fraction * size + 0.5).clamp(0.0, size - 1.0) as i64;
+    (pixel(x), pixel(y))
+}
+
+/// `Core.GetMaxZoomToFitRect`: the largest whole zoom from `MinZoom` up at which the rectangle is
+/// no more than ten pixels wider or taller than the map, and half of `MaxZoom` for a rectangle of
+/// no width or no height.
+/// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.Internals/Core.cs:549-575`
+fn max_zoom_to_fit(rect: &LatLngRect, width: f64, height: f64) -> i32 {
+    #[allow(clippy::cast_possible_truncation)] // 0 and 24
+    let (min_zoom, max_zoom) = (GMAP_MIN_ZOOM as i32, GMAP_MAX_ZOOM as i32);
+    if rect.top - rect.bottom == 0.0 || rect.right - rect.left == 0.0 {
+        return max_zoom / 2;
+    }
+    let mut zoom = min_zoom;
+    for i in min_zoom..=max_zoom {
+        let (x1, y1) = mercator_pixel(rect.top, rect.left, i);
+        let (x2, y2) = mercator_pixel(rect.bottom, rect.right, i);
+        #[allow(clippy::cast_precision_loss)] // pixel counts, far inside f64's integers
+        let fits = ((x2 - x1) as f64) <= width + 10.0 && ((y2 - y1) as f64) <= height + 10.0;
+        if !fits {
+            break;
+        }
+        zoom = i;
+    }
+    zoom
+}
+
+/// The runs of a circle's outline that can be seen in `clip` (left, top, right, bottom), as
+/// polylines. A circle is drawn as short chords; a chord is kept when its box meets the clip, so
+/// a circle hundreds of thousands of pixels round - a loiter radius at zoom 22 - costs what its
+/// visible arc costs rather than what its whole outline would.
+#[must_use]
+pub fn circle_runs(
+    centre: (f32, f32),
+    radius: f32,
+    clip: (f32, f32, f32, f32),
+) -> Vec<Vec<(f32, f32)>> {
+    let (left, top, right, bottom) = clip;
+    if radius.is_nan()
+        || radius <= 0.0
+        || centre.0 + radius < left
+        || centre.0 - radius > right
+        || centre.1 + radius < top
+        || centre.1 - radius > bottom
+    {
+        return Vec::new();
+    }
+    // About three pixels a chord, within bounds.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let segments = (radius * std::f32::consts::TAU / 3.0)
+        .ceil()
+        .clamp(16.0, 16_384.0) as u16;
+    let point = |step: u16| {
+        let angle = f64::from(step) / f64::from(segments) * std::f64::consts::TAU;
+        #[allow(clippy::cast_possible_truncation)] // screen coordinates are f32
+        (
+            f64::from(radius).mul_add(angle.cos(), f64::from(centre.0)) as f32,
+            f64::from(radius).mul_add(angle.sin(), f64::from(centre.1)) as f32,
+        )
+    };
+    let seen = |a: (f32, f32), b: (f32, f32)| {
+        a.0.max(b.0) >= left
+            && a.0.min(b.0) <= right
+            && a.1.max(b.1) >= top
+            && a.1.min(b.1) <= bottom
+    };
+    let kept: Vec<bool> = (0..segments)
+        .map(|step| seen(point(step), point(step + 1)))
+        .collect();
+    let Some(start) = kept.iter().position(|kept| !kept) else {
+        return vec![(0..=segments).map(point).collect()];
+    };
+    let mut runs = Vec::new();
+    let mut run: Vec<(f32, f32)> = Vec::new();
+    for offset in 1..=kept.len() {
+        let index = (start + offset) % kept.len();
+        let Ok(step) = u16::try_from(index) else {
+            continue;
+        };
+        if kept.get(index).copied().unwrap_or(false) {
+            if run.is_empty() {
+                run.push(point(step));
+            }
+            run.push(point(step + 1));
+        } else if !run.is_empty() {
+            runs.push(std::mem::take(&mut run));
+        }
+    }
+    if !run.is_empty() {
+        runs.push(run);
+    }
+    runs
+}
+
+/// Paints a radius circle: `DrawArc` with the rect's pen, two pixels wide and dashed
+/// (`DashStyle.Dash`, three widths on and one off).
+/// `// C#: ExtLibs/Maps/GMapMarkerRect.cs:15, 46, 91`
+fn paint_radius_circle(window: &mut Window, circle: &RadiusCircle, bounds: Bounds<Pixels>) -> bool {
+    let clip = (
+        f32::from(bounds.origin.x) - 2.0,
+        f32::from(bounds.origin.y) - 2.0,
+        f32::from(bounds.origin.x + bounds.size.width) + 2.0,
+        f32::from(bounds.origin.y + bounds.size.height) + 2.0,
+    );
+    #[allow(clippy::cast_precision_loss)] // a pixel count
+    let radius = circle.diameter as f32 / 2.0;
+    let mut drawn = true;
+    for run in circle_runs(circle.centre, radius, clip) {
+        let mut builder = PathBuilder::stroke(px(2.0)).dash_array(&[px(6.0), px(2.0)]);
+        let mut points = run.iter();
+        let Some((x, y)) = points.next() else {
+            continue;
+        };
+        builder.move_to(point(px(*x), px(*y)));
+        for (x, y) in points {
+            builder.line_to(point(px(*x), px(*y)));
+        }
+        match builder.build() {
+            Ok(path) => window.paint_path(path, Hsla::from(rgb(circle.colour))),
+            Err(_) => drawn = false,
+        }
+    }
+    drawn
+}
+
+/// `GMapToolTip.DefaultFont`: sans-serif, 14 pixels, bold.
+const TOOLTIP_FONT_SIZE: f32 = 14.0;
+/// `GMapToolTip.DefaultStroke`: `Color.FromArgb(140, Color.MidnightBlue)`, two pixels.
+const TOOLTIP_STROKE: u32 = 0x19_19_70_8c;
+/// `GMapToolTip.DefaultFill`: `Color.FromArgb(222, Color.AliceBlue)`.
+const TOOLTIP_FILL: u32 = 0xf0_f8_ff_de;
+/// `GMapToolTip.DefaultForeground`: `Color.Navy`.
+const TOOLTIP_TEXT: u32 = 0x00_00_80;
+
+/// Paints a marker's tooltip as `GMapRoundedToolTip` does: a rounded box of radius 10 whose text
+/// is padded 10 each side and 10 in all, placed 14 right of and 44 above the marker's point with
+/// its bottom edge there, and a line from the point to the box's lower left. (The line's
+/// `RoundAnchor` start cap is not drawn.)
+/// `// C#: ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/ToolTips/GMapRoundedToolTip.cs:16-64;
+/// ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapToolTip.cs:44-111`
+fn paint_tooltip(window: &mut Window, cx: &mut App, at: Point<Pixels>, text: &str) {
+    const RADIUS: f32 = 10.0;
+    const OFFSET: (f32, f32) = (14.0, -44.0);
+    let mut font = window.text_style().font();
+    font.weight = gpui::FontWeight::BOLD;
+    let run = TextRun {
+        len: text.len(),
+        font,
+        color: Hsla::from(rgb(TOOLTIP_TEXT)),
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+    };
+    let line = window.text_system().shape_line(
+        SharedString::from(text.to_owned()),
+        px(TOOLTIP_FONT_SIZE),
+        &[run],
+        None,
+    );
+    // `MeasureString(...).ToSize()`: whole pixels.
+    let text_width = f32::from(line.width).ceil();
+    let text_height = (TOOLTIP_FONT_SIZE * 1.2).floor();
+    let width = text_width + RADIUS * 2.0;
+    let height = text_height + RADIUS;
+    let left = at.x + px(OFFSET.0);
+    let top = at.y - px(text_height) + px(OFFSET.1);
+
+    let mut leader = PathBuilder::stroke(px(2.0));
+    leader.move_to(at);
+    leader.line_to(point(
+        left + px(RADIUS / 2.0),
+        top + px(height - RADIUS / 2.0),
+    ));
+    if let Ok(path) = leader.build() {
+        window.paint_path(path, Hsla::from(gpui::rgba(TOOLTIP_STROKE)));
+    }
+    window.paint_quad(quad(
+        Bounds {
+            origin: point(left, top),
+            size: size(px(width), px(height)),
+        },
+        Corners::all(px(RADIUS)),
+        gpui::rgba(TOOLTIP_FILL),
+        gpui::Edges::all(px(2.0)),
+        gpui::rgba(TOOLTIP_STROKE),
+        gpui::BorderStyle::default(),
+    ));
+    // `StringAlignment.Center` both ways.
+    let origin = point(
+        left + px((width - text_width) / 2.0),
+        top + px((height - text_height) / 2.0),
+    );
+    let _ = line.paint(origin, px(text_height), TextAlign::Left, None, window, cx);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Map Tool > Zoom To: `GMapControl.SetPositionByKeywords` through OpenStreetMap's geocoder.
+// ---------------------------------------------------------------------------------------------
+
+/// `OpenStreetMapProviderBase.GeocoderUrlFormat`, `{0}` the keywords.
+/// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/OpenStreetMap/OpenStreetMapProvider.cs:473`
+pub const GEOCODER_URL: &str = "https://nominatim.openstreetmap.org/search?q={0}&format=xml";
+/// OpenStreetMap's `RefererUrl`, which `GetContentUsingHttp` sends.
+/// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/OpenStreetMap/OpenStreetMapProvider.cs:17;
+/// GMap.NET.MapProviders/GMapProvider.cs:443-461`
+pub const GEOCODER_REFERER: &str = "https://www.openstreetmap.org/";
+
+/// `GeoCoderStatusCode`, as far as a keyword search can end.
+/// `// C#: ExtLibs/GMap.NET.Core/GMap.NET/StatusCodes.cs:7-72`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GeocoderStatus {
+    /// `Unknow`: nothing came back, or not a page of places.
+    Unknow,
+    /// `G_GEO_SUCCESS`: a page of places, possibly none.
+    Success,
+    /// `ExceptionInCode`: the request failed, or the page could not be read.
+    ExceptionInCode,
+}
+
+impl std::fmt::Display for GeocoderStatus {
+    /// The member's name, as the C# message writes the enum.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Unknow => "Unknow",
+            Self::Success => "G_GEO_SUCCESS",
+            Self::ExceptionInCode => "ExceptionInCode",
+        })
+    }
+}
+
+/// `MakeGeocoderUrl`: the keywords with each space made `+`, in the format, and the characters
+/// `System.Uri` escapes - anything not ASCII, controls, and `"<>\^`{|}` - percent-encoded as it
+/// escapes them, UTF-8 byte by byte.
+/// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/OpenStreetMap/OpenStreetMapProvider.cs:264-267`
+#[must_use]
+pub fn geocoder_url(keywords: &str) -> String {
+    let mut escaped = String::new();
+    for byte in keywords.replace(' ', "+").bytes() {
+        if byte.is_ascii_graphic() && !b"\"<>\\^`{|}".contains(&byte) {
+            escaped.push(char::from(byte));
+        } else {
+            escaped.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    GEOCODER_URL.replace("{0}", &escaped)
+}
+
+/// `GetLatLngFromGeocoderUrl` on the page that came back: a page that starts `<?xml` and has a
+/// `<place` in it is read, and every `/searchresults/place` whose `place_rank` is not below
+/// `MinExpectedRank` (0) gives its `lat` and `lon`; anything else is `Unknow`, and a page that does
+/// not read is `ExceptionInCode`.
+/// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/OpenStreetMap/OpenStreetMapProvider.cs:22, 286-367`
+#[must_use]
+pub fn parse_geocoder(page: &str) -> (GeocoderStatus, Vec<LatLon>) {
+    if !(page.starts_with("<?xml") && page.contains("<place")) {
+        return (GeocoderStatus::Unknow, Vec::new());
+    }
+    let Some(places) = xml_places(page) else {
+        return (GeocoderStatus::ExceptionInCode, Vec::new());
+    };
+    let mut points = Vec::new();
+    for attributes in places {
+        let attribute = |name: &str| {
+            attributes
+                .iter()
+                .find(|(key, _)| key == name)
+                .map(|(_, value)| value.as_str())
+        };
+        if let Some(rank) = attribute("place_rank").and_then(|rank| rank.trim().parse::<i32>().ok())
+            && rank < 0
+        {
+            continue;
+        }
+        // `double.Parse`, which throws on what is not a number: the latitude is read before the
+        // longitude is looked for.
+        let Some(lat) = attribute("lat") else {
+            continue;
+        };
+        let Ok(lat) = lat.trim().parse::<f64>() else {
+            return (GeocoderStatus::ExceptionInCode, Vec::new());
+        };
+        let Some(lon) = attribute("lon") else {
+            continue;
+        };
+        let Ok(lon) = lon.trim().parse::<f64>() else {
+            return (GeocoderStatus::ExceptionInCode, Vec::new());
+        };
+        // A position that is not one is left out rather than put on the map.
+        if let Ok(point) = LatLon::new(lat, lon) {
+            points.push(point);
+        }
+    }
+    (GeocoderStatus::Success, points)
+}
+
+/// An element's attributes, name and value, in order.
+type Attributes = Vec<(String, String)>;
+
+/// A start tag, read.
+struct StartTag<'a> {
+    /// Its name.
+    name: String,
+    /// Its attributes, entities decoded.
+    attributes: Attributes,
+    /// Whether it closes itself, `/>`.
+    closed: bool,
+    /// What follows it.
+    rest: &'a str,
+}
+
+/// The attributes of every `place` element directly under a `searchresults` root, or `None` for
+/// a page that is not well-formed enough to read.
+fn xml_places(page: &str) -> Option<Vec<Attributes>> {
+    let mut places = Vec::new();
+    let mut depth = 0_usize;
+    let mut root: Option<String> = None;
+    let mut rest = page;
+    while let Some(open) = rest.find('<') {
+        rest = rest.get(open..)?;
+        if let Some(after) = rest.strip_prefix("<?") {
+            rest = after.get(after.find("?>")? + 2..)?;
+        } else if let Some(after) = rest.strip_prefix("<!--") {
+            rest = after.get(after.find("-->")? + 3..)?;
+        } else if let Some(after) = rest.strip_prefix("<!") {
+            rest = after.get(after.find('>')? + 1..)?;
+        } else if let Some(after) = rest.strip_prefix("</") {
+            depth = depth.checked_sub(1)?;
+            rest = after.get(after.find('>')? + 1..)?;
+        } else {
+            let tag = start_tag(rest.get(1..)?)?;
+            if depth == 0 {
+                if root.is_some() {
+                    return None;
+                }
+                root = Some(tag.name.clone());
+            }
+            if depth == 1 && root.as_deref() == Some("searchresults") && tag.name == "place" {
+                places.push(tag.attributes);
+            }
+            if !tag.closed {
+                depth += 1;
+            }
+            rest = tag.rest;
+        }
+    }
+    (depth == 0 && root.is_some()).then_some(places)
+}
+
+/// A start tag after its `<`.
+fn start_tag(text: &str) -> Option<StartTag<'_>> {
+    let end_of_name = text.find(|c: char| c.is_whitespace() || c == '/' || c == '>')?;
+    let name = text.get(..end_of_name)?.to_owned();
+    if name.is_empty() {
+        return None;
+    }
+    let mut rest = text.get(end_of_name..)?;
+    let mut attributes = Vec::new();
+    loop {
+        rest = rest.trim_start();
+        if let Some(after) = rest.strip_prefix("/>") {
+            return Some(StartTag {
+                name,
+                attributes,
+                closed: true,
+                rest: after,
+            });
+        }
+        if let Some(after) = rest.strip_prefix('>') {
+            return Some(StartTag {
+                name,
+                attributes,
+                closed: false,
+                rest: after,
+            });
+        }
+        let equals = rest.find('=')?;
+        let key = rest.get(..equals)?.trim().to_owned();
+        let value_text = rest.get(equals + 1..)?.trim_start();
+        let quote = value_text
+            .chars()
+            .next()
+            .filter(|c| *c == '"' || *c == '\'')?;
+        let value_text = value_text.get(1..)?;
+        let close = value_text.find(quote)?;
+        attributes.push((key, xml_unescape(value_text.get(..close)?)));
+        rest = value_text.get(close + 1..)?;
+    }
+}
+
+/// The five predefined entities and numeric references.
+fn xml_unescape(value: &str) -> String {
+    let mut out = String::new();
+    let mut rest = value;
+    while let Some(amp) = rest.find('&') {
+        out.push_str(rest.get(..amp).unwrap_or(""));
+        let after = rest.get(amp..).unwrap_or("");
+        let Some(semi) = after.find(';') else {
+            out.push_str(after);
+            return out;
+        };
+        let entity = after.get(1..semi).unwrap_or("");
+        let decoded = match entity {
+            "amp" => Some('&'),
+            "lt" => Some('<'),
+            "gt" => Some('>'),
+            "quot" => Some('"'),
+            "apos" => Some('\''),
+            _ => entity
+                .strip_prefix("#x")
+                .and_then(|hex| u32::from_str_radix(hex, 16).ok())
+                .or_else(|| entity.strip_prefix('#').and_then(|dec| dec.parse().ok()))
+                .and_then(char::from_u32),
+        };
+        match decoded {
+            Some(character) => out.push(character),
+            None => out.push_str(after.get(..=semi).unwrap_or("")),
+        }
+        rest = after.get(semi + 1..).unwrap_or("");
+    }
+    out.push_str(rest);
+    out
+}
+
+/// `OpenStreetMapProvider.GetPoint(keywords, out status)`: the first place the geocoder finds,
+/// fetched through `fetch` - which is `GetContentUsingHttp`, and whose failure is the exception
+/// `GetLatLngFromGeocoderUrl` turns into `ExceptionInCode`. (GMap's geocoder cache is not kept:
+/// every search goes to the geocoder.)
+/// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/OpenStreetMap/OpenStreetMapProvider.cs:164-185, 286-367`
+pub fn geocode<E>(
+    keywords: &str,
+    fetch: impl FnOnce(&str) -> Result<String, E>,
+) -> (GeocoderStatus, Option<LatLon>) {
+    let Ok(page) = fetch(&geocoder_url(keywords)) else {
+        return (GeocoderStatus::ExceptionInCode, None);
+    };
+    if page.is_empty() {
+        return (GeocoderStatus::Unknow, None);
+    }
+    let (status, points) = parse_geocoder(&page);
+    (status, points.first().copied())
+}
+
+// ---------------------------------------------------------------------------------------------
 // Markers drawn as the C# draws them: GMap's Google-style pins.
 // ---------------------------------------------------------------------------------------------
 
@@ -977,8 +2120,8 @@ pub fn gmap_zoom(span: f64, width: f32) -> f64 {
     (f64::from(width) / (256.0 * span)).log2()
 }
 
-/// Whether `GMapMarkerWP` writes its label at this zoom: `Overlay.Control.Zoom > 16 ||
-/// IsMouseOver`. (The map here does not track the pointer over a marker, so it is the zoom.)
+/// Whether `GMapMarkerWP` writes its label at this zoom: the `Overlay.Control.Zoom > 16` half of
+/// `Overlay.Control.Zoom > 16 || IsMouseOver`; the painter adds the pointer's half.
 /// `// C#: ExtLibs/Maps/GMapMarkerWP.cs:58-59`
 #[must_use]
 pub fn pin_label_shown(zoom: f64) -> bool {
@@ -1065,6 +2208,7 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
     map.last_origin = (f32::from(origin.x), f32::from(origin.y));
     // Until the home marker is drawn below, it is not - including by a paint with nothing to frame.
     map.home_label_drawn = false;
+    map.tooltips_drawn.clear();
     // A view the user chose wins over the automatic fit; that is what makes panning stick.
     let fitted = map.camera.map_or_else(
         || map.view_box(),
@@ -1236,6 +2380,15 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
         ));
     }
 
+    // The radius circles: each marker's `GMapMarkerRect`, which `addpolygonmarker` adds after the
+    // marker, so it is drawn over it.
+    // `// C#: ExtLibs/Maps/WPOverlay.cs:418-434; ExtLibs/Maps/GMapMarkerRect.cs:54-98`
+    for circle in map.radius_circles() {
+        if !paint_radius_circle(window, &circle, bounds) {
+            map.track_path_failures += 1;
+        }
+    }
+
     // Rally points: diamonds, so they read as somewhere to go rather than as a waypoint on the
     // route. Drawn over the mission, because a failsafe overrides it.
     for rally in &map.rally {
@@ -1284,12 +2437,32 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
     }
 
     // Home: `WPOverlay.CreateOverlay` adds it as `GMapMarkerWP(point, "H")`, a green pin with an
-    // "H" written on its head once the map is zoomed in past 16.
+    // "H" written on its head once the map is zoomed in past 16, or while the pointer is on it.
     // `// C#: ExtLibs/Maps/WPOverlay.cs:44-50, 385-398; ExtLibs/Maps/GMapMarkerWP.cs:20-59`
     if let Some(home) = map.home {
-        let shown = pin_label_shown(gmap_zoom(vw, w));
+        let shown =
+            pin_label_shown(gmap_zoom(vw, w)) || map.hovered.pins.contains(&MarkerTag::Home);
         paint_pin(window, cx, to_screen(home), PIN_GREEN, shown.then_some("H"));
         map.home_label_drawn = shown;
+    }
+
+    // The tooltips, over the overlay's markers: "Alt: " on each marker under the pointer.
+    // `// C#: ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapOverlay.cs:348-358`
+    map.tooltips_drawn.clear();
+    for (at, text) in map.hover_tooltips() {
+        paint_tooltip(window, cx, to_screen(at), &text);
+        map.tooltips_drawn.push(text);
+    }
+
+    // The flight screen's Guided Mode marker on `routes`, above the mission: a green
+    // `GMarkerGoogle` with `ToolTipMode.Always`. Its rect is among the circles above.
+    // `// C#: GCSViews/FlightData.cs:4214-4221; GCSViews/FlightPlanner.cs:1664-1690`
+    if let Some(guided) = map.guided {
+        let at = to_screen(guided.position.to_web_mercator());
+        paint_pin(window, cx, at, PIN_GREEN, None);
+        let text = guided.tooltip();
+        paint_tooltip(window, cx, at, &text);
+        map.tooltips_drawn.push(text);
     }
 
     // The vehicle, as an arrow pointing where it is heading. Bearing is clockwise from north and
@@ -2097,5 +3270,609 @@ mod tests {
             kept * 100 < scanned,
             "the fit took {kept:?} against the scan's {scanned:?}: it is scanning the track"
         );
+    }
+
+    // ---- The zoom: `GMapControl.Zoom`, `Position`, `ZoomAndCenterMarkers` ----
+
+    /// What the painter records for the camera it was given, as `paint_live` does.
+    fn repaint(map: &mut MapViewport) {
+        let camera = map.camera.expect("camera");
+        let (width, height) = map.last_viewport;
+        let span_down = camera.span * f64::from(height) / f64::from(width);
+        map.last_view = Some((
+            camera.centre.x - camera.span / 2.0,
+            camera.centre.y - span_down / 2.0,
+            camera.span,
+            span_down,
+        ));
+    }
+
+    fn at(lat: f64, lng: f64) -> LatLon {
+        LatLon::new(lat, lng).expect("valid position")
+    }
+
+    /// An item of any command at a position, with its second and third parameters.
+    fn item(seq: u16, command: u16, lat: f64, lng: f64, p2: f64, p3: f64) -> MissionItem {
+        MissionItem {
+            seq,
+            command,
+            param2: p2,
+            param3: p3,
+            x: lat,
+            y: lng,
+            z: 50.0,
+            ..MissionItem::default()
+        }
+    }
+
+    /// `Zoom` reads back what it was set to, about the same centre, held to 0 to 24.
+    #[test]
+    fn setting_the_zoom_keeps_the_centre_and_reads_back() {
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        let centre = map.centre().expect("centre");
+        map.set_zoom(17.0);
+        assert!((map.zoom_level().expect("zoom") - 17.0).abs() < 1e-9);
+        let after = map.centre().expect("centre");
+        assert!((after.latitude() - centre.latitude()).abs() < 1e-9);
+        assert!((after.longitude() - centre.longitude()).abs() < 1e-9);
+        // A 256-pixel world at zoom 0: 800 pixels wide is 800 / (256 * 2^17) of the world.
+        let span = map.camera.expect("camera").span;
+        assert!((span - 800.0 / (256.0 * 131_072.0)).abs() < 1e-15);
+        map.set_zoom(30.0);
+        assert!((map.zoom_level().expect("zoom") - GMAP_MAX_ZOOM).abs() < 1e-9);
+        map.set_zoom(-3.0);
+        assert!((map.zoom_level().expect("zoom") - GMAP_MIN_ZOOM).abs() < 1e-9);
+    }
+
+    /// A whole zoom reads back whole, whatever the map's width: `(int) Zoom` of a zoom set to 17
+    /// is 17, which Zoom to Mission's `(int) Zoom != maxZoom` relies on.
+    #[test]
+    fn a_whole_zoom_reads_back_whole() {
+        for width in [800.0_f32, 1003.0, 1377.0, 1541.0] {
+            let mut map = viewport();
+            painted(&mut map, 0.001);
+            map.last_viewport = (width, 600.0);
+            for zoom in 0..=24 {
+                map.set_zoom(f64::from(zoom));
+                let read = map.zoom_level().expect("zoom");
+                assert!(
+                    (read.trunc() - f64::from(zoom)).abs() < f64::EPSILON,
+                    "{zoom} read back as {read} at width {width}"
+                );
+            }
+        }
+    }
+
+    /// With nothing framed there is no view to zoom.
+    #[test]
+    fn no_view_no_zoom() {
+        let mut map = viewport();
+        map.set_zoom(12.0);
+        assert_eq!(map.zoom_level(), None);
+        assert_eq!(map.centre(), None);
+    }
+
+    /// `GetMaxZoomToFitRect` for a square a hundredth of a degree across on the equator, in an
+    /// 800 x 600 map: 466 pixels at zoom 16, 932 at 17, and 810 is the most that fits.
+    #[test]
+    fn the_largest_whole_zoom_that_fits_is_chosen() {
+        let rect = LatLngRect::around(&[at(0.005, 0.0), at(-0.005, 0.01)]).expect("rect");
+        assert_eq!(max_zoom_to_fit(&rect, 800.0, 600.0), 16);
+        // Twice as wide a map takes one more.
+        assert_eq!(max_zoom_to_fit(&rect, 1600.0, 1200.0), 17);
+        // No height, or no width: half of MaxZoom.
+        let flat = LatLngRect::around(&[at(0.0, 0.0), at(0.0, 0.01)]).expect("rect");
+        assert_eq!(max_zoom_to_fit(&flat, 800.0, 600.0), 12);
+    }
+
+    /// `ZoomAndCenterMarkers`: centred on the middle of the rectangle in degrees, at the zoom
+    /// that fits it - which does fit, where the next does not.
+    #[test]
+    fn zoom_to_fit_frames_the_rectangle_of_the_markers() {
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        let points = [at(-35.36, 149.16), at(-35.37, 149.18), at(-35.35, 149.17)];
+        assert!(map.zoom_to_fit(&points));
+        let zoom = map.zoom_level().expect("zoom");
+        assert!((zoom - zoom.round()).abs() < 1e-9, "a whole zoom: {zoom}");
+        let centre = map.centre().expect("centre");
+        assert!((centre.latitude() - -35.36).abs() < 1e-9, "{centre:?}");
+        assert!((centre.longitude() - 149.17).abs() < 1e-9, "{centre:?}");
+        #[allow(clippy::cast_possible_truncation)]
+        let zoom = zoom.round() as i32;
+        let fits = |zoom: i32| {
+            let (x1, y1) = mercator_pixel(-35.35, 149.16, zoom);
+            let (x2, y2) = mercator_pixel(-35.37, 149.18, zoom);
+            x2 - x1 <= 810 && y2 - y1 <= 610
+        };
+        assert!(fits(zoom) && !fits(zoom + 1), "zoom {zoom}");
+    }
+
+    /// One marker has no rectangle to fit: zoom 12, centred on it.
+    #[test]
+    fn zoom_to_fit_one_marker_is_zoom_12() {
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        assert!(map.zoom_to_fit(&[at(-35.0, 149.0)]));
+        assert!((map.zoom_level().expect("zoom") - 12.0).abs() < 1e-9);
+        assert!(!map.zoom_to_fit(&[]), "nothing to fit");
+    }
+
+    /// `if ((int) Zoom != maxZoom) Zoom = maxZoom`: a view already in the zoom that fits keeps
+    /// its fraction.
+    #[test]
+    fn zoom_to_fit_keeps_a_fraction_of_the_same_whole_zoom() {
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        map.set_zoom(12.6);
+        assert!(map.zoom_to_fit(&[at(-35.0, 149.0)]));
+        assert!((map.zoom_level().expect("zoom") - 12.6).abs() < 1e-9);
+    }
+
+    /// Zoom to Mission fits home and the overlay's markers, and a map drawing no overlay has none.
+    #[test]
+    fn zoom_to_mission_fits_home_and_the_markers() {
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        map.set_home(Some(at(-35.36, 149.16)));
+        map.set_mission(&[item(1, 16, -35.40, 149.20, 0.0, 0.0)]);
+        assert!(
+            !map.zoom_and_centre_markers(),
+            "no overlay: the log browser's map"
+        );
+        map.set_overlay(Some(Overlay::FLIGHT));
+        assert_eq!(
+            map.overlay_positions(),
+            vec![at(-35.36, 149.16), at(-35.40, 149.20)]
+        );
+        assert!(map.zoom_and_centre_markers());
+        let centre = map.centre().expect("centre");
+        assert!((centre.latitude() - -35.38).abs() < 1e-9);
+        assert!((centre.longitude() - 149.18).abs() < 1e-9);
+    }
+
+    // ---- The overlay: `WPOverlay.CreateOverlay`'s markers and their rects ----
+
+    /// Which items get a marker, and what their rects are given.
+    #[test]
+    fn the_overlay_has_the_markers_create_overlay_makes() {
+        let items = [
+            item(1, 16, -35.1, 149.1, 0.0, 0.0),   // waypoint: WP radius
+            item(2, 18, -35.2, 149.2, 0.0, -60.0), // loiter turns, its own radius
+            item(3, 19, -35.3, 149.3, 0.0, 70.0),  // loiter time: the default, whatever p3 says
+            item(4, 31, -35.4, 149.4, 80.0, 0.0),  // loiter to alt: its own, from p2
+            item(5, 17, -35.5, 0.0, 0.0, 0.0),     // loiter unlimited on one coordinate
+            item(6, 82, 0.0, 0.0, 0.0, 0.0),       // spline, drawn even at 0,0
+            item(7, 201, -35.7, 149.7, 0.0, 0.0),  // DO_SET_ROI: red, no radius, no Alt
+            item(8, 21, 0.0, 0.0, 0.0, 0.0),       // LAND at 0,0: none
+            item(9, 21, -35.9, 149.9, 0.0, 0.0),   // LAND with a position: WP radius
+            item(10, 20, -35.0, 149.0, 0.0, 0.0),  // RTL: none
+            item(11, 177, -35.0, 149.0, 0.0, 0.0), // DO_JUMP: none
+            item(12, 16, -35.0, 0.0, 0.0, 0.0),    // a waypoint needs both coordinates
+            item(13, 189, -35.3, 149.3, 0.0, 0.0), // DO_LAND_START with a position
+            item(14, 22, -35.4, 149.4, 0.0, 0.0),  // takeoff with a position: WP radius
+            item(15, 93, -35.4, 149.4, 0.0, 0.0),  // DELAY: none
+        ];
+        let markers = overlay_markers(&items);
+        let summary: Vec<(u16, RectRadius, u32, bool)> = markers
+            .iter()
+            .map(|marker| {
+                let MarkerTag::Item(seq) = marker.tag else {
+                    panic!("an item's marker")
+                };
+                (seq, marker.radius, marker.colour, marker.alt.is_some())
+            })
+            .collect();
+        assert_eq!(
+            summary,
+            vec![
+                (1, RectRadius::Wp, RECT_WHITE, true),
+                (2, RectRadius::Loiter(Some(-60.0)), RECT_LIGHT_BLUE, true),
+                (3, RectRadius::Loiter(None), RECT_LIGHT_BLUE, true),
+                (4, RectRadius::Loiter(Some(80.0)), RECT_LIGHT_BLUE, true),
+                (5, RectRadius::Loiter(None), RECT_LIGHT_BLUE, true),
+                (6, RectRadius::Wp, RECT_GREEN, true),
+                (7, RectRadius::None, RECT_WHITE, false),
+                (9, RectRadius::Wp, RECT_WHITE, true),
+                (13, RectRadius::Wp, RECT_WHITE, true),
+                (14, RectRadius::Wp, RECT_WHITE, true),
+            ]
+        );
+        // Item 0 is home, and home is drawn from home.
+        assert!(overlay_markers(&[item(0, 16, -35.0, 149.0, 0.0, 0.0)]).is_empty());
+    }
+
+    /// `(int)(LocalPosition.X - D)` truncates toward zero, so the side is `D` rounded up where the
+    /// rect starts right of the map's edge and rounded down where it starts left of it.
+    #[test]
+    fn the_circle_side_truncates_as_the_c_sharp_does() {
+        assert_eq!(rect_diameter(100, 1.0, 10.0), 20);
+        assert_eq!(rect_diameter(100, 1.0, 10.3), 21);
+        assert_eq!(rect_diameter(-50, 1.0, 10.3), 20);
+        assert_eq!(rect_diameter(100, 1.0, 0.2), 1);
+    }
+
+    /// The planner's circle is its radius at the pixels-per-metre of the map's top edge, and a
+    /// zoom in doubles it.
+    #[test]
+    fn a_wp_radius_circle_is_scaled_to_the_zoom() {
+        let mut map = viewport();
+        painted(&mut map, 1e-5);
+        map.set_overlay(Some(Overlay {
+            wp_radius: 30.0,
+            loiter_radius: 45.0,
+            planner: true,
+        }));
+        map.set_mission(&[item(1, 16, -35.363, 149.165, 0.0, 0.0)]);
+        let circles = map.radius_circles();
+        assert_eq!(circles.len(), 1);
+        let (x, y, width, _) = map.last_view.expect("painted");
+        let left = LatLon::from_web_mercator(WebMercator { x, y }).expect("left");
+        let right = LatLon::from_web_mercator(WebMercator { x: x + width, y }).expect("right");
+        let per_metre = 800.0 / (gmap_distance_km(left, right) * 1000.0);
+        #[allow(clippy::cast_precision_loss)]
+        let side = circles[0].diameter as f64;
+        assert!(
+            (side - 60.0 * per_metre).abs() <= 1.0,
+            "{side} px for {} px",
+            60.0 * per_metre
+        );
+        assert!(side > 50.0, "big enough to mean something: {side}");
+        assert_eq!(circles[0].colour, RECT_WHITE);
+        assert!((circles[0].radius - 30.0).abs() < f64::EPSILON);
+
+        let zoom = map.zoom_level().expect("zoom");
+        map.set_zoom(zoom + 1.0);
+        repaint(&mut map);
+        #[allow(clippy::cast_precision_loss)]
+        let zoomed = map.radius_circles()[0].diameter as f64;
+        assert!((zoomed - 2.0 * side).abs() <= 3.0, "{side} -> {zoomed}");
+    }
+
+    /// The flight screen's overlay has no WP radius and no default loiter radius: only a loiter
+    /// with its own radius has a circle, drawn at its size whichever way it turns.
+    #[test]
+    fn the_flight_map_draws_only_loiters_with_their_own_radius() {
+        let mut map = viewport();
+        painted(&mut map, 1e-5);
+        map.set_mission(&[
+            item(1, 16, -35.363, 149.165, 0.0, 0.0),
+            item(2, 18, -35.3631, 149.1651, 0.0, -20.0),
+            item(3, 19, -35.3632, 149.1652, 0.0, 0.0),
+        ]);
+        assert!(map.radius_circles().is_empty(), "no overlay, no circles");
+        map.set_overlay(Some(Overlay::FLIGHT));
+        let circles = map.radius_circles();
+        assert_eq!(circles.len(), 1);
+        assert_eq!(circles[0].tag, MarkerTag::Item(2));
+        assert!((circles[0].radius - 20.0).abs() < f64::EPSILON);
+        // The planner's default loiter radius gives the loiter time its circle, and the
+        // waypoint its WP radius; a WP radius of 0 draws none.
+        map.set_overlay(Some(Overlay {
+            wp_radius: 0.0,
+            loiter_radius: 45.0,
+            planner: true,
+        }));
+        let radii: Vec<f64> = map
+            .radius_circles()
+            .iter()
+            .map(|circle| circle.radius)
+            .collect();
+        assert_eq!(radii, vec![20.0, 45.0]);
+    }
+
+    /// The flight screen's Guided Mode marker has a blue rect of the saved WP radius, whatever
+    /// the mission's overlay draws, and none at a radius of 0.
+    #[test]
+    fn the_guided_mode_marker_has_a_wp_radius_circle() {
+        let mut map = viewport();
+        painted(&mut map, 1e-5);
+        map.set_overlay(Some(Overlay::FLIGHT));
+        map.set_mission(&[item(1, 16, -35.363, 149.165, 0.0, 0.0)]);
+        let guided = GuidedMarker {
+            position: at(-35.3625, 149.1657),
+            alt: 20,
+            wp_radius: 30.0,
+        };
+        map.set_guided(Some(guided));
+        let circles = map.radius_circles();
+        assert_eq!(circles.len(), 1);
+        assert_eq!(circles[0].tag, MarkerTag::Guided);
+        assert_eq!(circles[0].colour, RECT_BLUE);
+        assert!((circles[0].radius - 30.0).abs() < f64::EPSILON);
+        assert_eq!(guided.tooltip(), "Guided Mode : 20");
+        map.set_guided(Some(GuidedMarker {
+            wp_radius: 0.0,
+            ..guided
+        }));
+        assert!(map.radius_circles().is_empty());
+        map.set_guided(None);
+        assert!(map.radius_circles().is_empty());
+    }
+
+    // ---- The pointer over the markers: `IsMouseOver`, `OnMarkerEnter` ----
+
+    /// A planning map with home and two waypoints far enough apart not to overlap.
+    fn hover_map(planner: bool) -> (MapViewport, (f32, f32), (f32, f32)) {
+        let mut map = viewport();
+        painted(&mut map, 1e-5);
+        map.set_overlay(Some(Overlay {
+            wp_radius: 30.0,
+            loiter_radius: 45.0,
+            planner,
+        }));
+        map.set_home(Some(at(-35.3640, 149.1640)));
+        map.set_home_altitude(Some(584.1));
+        map.set_mission(&[
+            item(1, 16, -35.363, 149.165, 0.0, 0.0),
+            item(2, 16, -35.362, 149.166, 0.0, 0.0),
+        ]);
+        let one = map.screen_of(at(-35.363, 149.165)).expect("on screen");
+        let home = map.screen_of(at(-35.3640, 149.1640)).expect("on screen");
+        (map, one, home)
+    }
+
+    /// On a waypoint: its rect is entered, its circle goes red on the planning map, and its
+    /// "Alt:" tooltip shows; the rect reaches 45 above the point where the pin stops at 31.
+    #[test]
+    fn the_pointer_on_a_waypoint_enters_its_rect_and_shows_its_altitude() {
+        let (mut map, (x, y), _) = hover_map(true);
+        let change = map.hover(Some((x, y)));
+        assert_eq!(change.entered, vec![MarkerTag::Item(1)]);
+        assert!(change.changed);
+        let red: Vec<MarkerTag> = map
+            .radius_circles()
+            .iter()
+            .filter(|circle| circle.colour == RECT_RED)
+            .map(|circle| circle.tag)
+            .collect();
+        assert_eq!(red, vec![MarkerTag::Item(1)]);
+        let tips: Vec<String> = map
+            .hover_tooltips()
+            .into_iter()
+            .map(|(_, text)| text)
+            .collect();
+        assert_eq!(tips, vec!["Alt: 50".to_owned()]);
+        // Still there: nothing newly entered.
+        assert!(map.hover(Some((x, y))).entered.is_empty());
+        // Forty above: in the rect, not in the pin - red, and no tooltip.
+        let change = map.hover(Some((x, y - 40.0)));
+        assert!(change.entered.is_empty());
+        assert_eq!(map.hover_tooltips(), Vec::new());
+        assert_eq!(
+            map.radius_circles()
+                .iter()
+                .filter(|circle| circle.colour == RECT_RED)
+                .count(),
+            1
+        );
+        // Off the map: nothing is under it.
+        assert!(map.hover(None).changed);
+        assert!(
+            map.radius_circles()
+                .iter()
+                .all(|circle| circle.colour != RECT_RED)
+        );
+    }
+
+    /// The flight screen's `OnMarkerEnter` only notes the marker: the tooltip shows, the circle
+    /// stays its colour.
+    #[test]
+    fn the_flight_map_does_not_turn_a_rect_red() {
+        let (mut map, (x, y), _) = hover_map(false);
+        map.hover(Some((x, y)));
+        assert!(
+            map.radius_circles()
+                .iter()
+                .all(|circle| circle.colour != RECT_RED)
+        );
+        assert_eq!(map.hover_tooltips().len(), 1);
+    }
+
+    /// Home's pin shows its altitude, the boxes' altitude written `"0"`.
+    #[test]
+    fn home_under_the_pointer_shows_its_altitude() {
+        let (mut map, _, home) = hover_map(true);
+        let change = map.hover(Some(home));
+        assert_eq!(change.entered, vec![MarkerTag::Home]);
+        let tips: Vec<String> = map
+            .hover_tooltips()
+            .into_iter()
+            .map(|(_, text)| text)
+            .collect();
+        assert_eq!(tips, vec!["Alt: 584".to_owned()]);
+        let facts = map.facts();
+        let fact = |key: &str| {
+            facts
+                .iter()
+                .find(|(name, _)| *name == key)
+                .map(|(_, value)| value.clone())
+                .expect("fact")
+        };
+        assert_eq!(fact("map.hover"), "H");
+    }
+
+    /// `writeKML` rebuilds the markers, and a rebuilt marker is not under the pointer until it
+    /// moves.
+    #[test]
+    fn a_changed_mission_leaves_nothing_hovered() {
+        let (mut map, (x, y), _) = hover_map(true);
+        map.hover(Some((x, y)));
+        map.set_mission(&[item(1, 16, -35.363, 149.165, 0.0, 0.0)]);
+        assert!(map.hover_tooltips().is_empty());
+        // The same mission again changes nothing, and the next move finds it.
+        assert_eq!(map.hover(Some((x, y))).entered, vec![MarkerTag::Item(1)]);
+        map.set_mission(&[item(1, 16, -35.363, 149.165, 0.0, 0.0)]);
+        assert_eq!(map.hover_tooltips().len(), 1);
+    }
+
+    /// `double.ToString("0")`.
+    #[test]
+    fn altitudes_are_written_as_whole_numbers() {
+        assert_eq!(format_zero(584.1), "584");
+        assert_eq!(format_zero(2.5), "3");
+        assert_eq!(format_zero(-2.5), "-3");
+        assert_eq!(format_zero(-0.2), "0");
+    }
+
+    // ---- Drawing a circle: the runs of it the map can show ----
+
+    #[test]
+    fn a_circle_on_screen_is_one_closed_run() {
+        let runs = circle_runs((400.0, 300.0), 50.0, (0.0, 0.0, 800.0, 600.0));
+        assert_eq!(runs.len(), 1);
+        let run = &runs[0];
+        let (first, last) = (run[0], run[run.len() - 1]);
+        assert!((first.0 - last.0).abs() < 1e-3 && (first.1 - last.1).abs() < 1e-3);
+        assert!(run.iter().all(|(x, y)| {
+            (((x - 400.0).powi(2) + (y - 300.0).powi(2)).sqrt() - 50.0).abs() < 1e-2
+        }));
+    }
+
+    #[test]
+    fn a_circle_off_screen_is_not_drawn() {
+        assert!(circle_runs((-100.0, -100.0), 50.0, (0.0, 0.0, 800.0, 600.0)).is_empty());
+        assert!(circle_runs((400.0, 300.0), 0.0, (0.0, 0.0, 800.0, 600.0)).is_empty());
+    }
+
+    /// A circle a million pixels round costs its visible arc, not its outline.
+    #[test]
+    fn an_enormous_circle_is_only_its_visible_arc() {
+        let runs = circle_runs((400.0, 1_000_300.0), 1_000_000.0, (0.0, 0.0, 800.0, 600.0));
+        let points: usize = runs.iter().map(Vec::len).sum();
+        assert!(!runs.is_empty());
+        assert!(points < 16, "{points} points");
+        // A circle half off the left edge is one arc.
+        assert_eq!(
+            circle_runs((0.0, 300.0), 100.0, (0.0, 0.0, 800.0, 600.0)).len(),
+            1
+        );
+    }
+
+    // ---- Map Tool > Zoom To's geocoder ----
+
+    /// `MakeGeocoderUrl`: spaces made `+`, and what `System.Uri` escapes escaped.
+    #[test]
+    fn the_geocoder_url_is_osm_with_the_keywords() {
+        assert_eq!(
+            geocoder_url("Perth Airport, Australia"),
+            "https://nominatim.openstreetmap.org/search?q=Perth+Airport,+Australia&format=xml"
+        );
+        assert_eq!(
+            geocoder_url("Zürich"),
+            "https://nominatim.openstreetmap.org/search?q=Z%C3%BCrich&format=xml"
+        );
+    }
+
+    /// The page from `OpenStreetMapProvider.GetPoints`'s own comment: four places, the first of
+    /// which is the answer.
+    const NOMINATIM: &str = r#"<?xml version="1.0" encoding="UTF-8" ?>
+<searchresults timestamp="Wed, 01 Feb 12 09:46:00 -0500" attribution="Data Copyright OpenStreetMap Contributors, Some Rights Reserved. CC-BY-SA 2.0." querystring="lithuania,vilnius" polygon="false" exclude_place_ids="29446018,53849547,8831058,29614806" more_url="http://open.mapquestapi.com/nominatim/v1/search?format=xml&amp;exclude_place_ids=29446018&amp;q=lithuania%2Cvilnius">
+<place place_id="29446018" osm_type="way" osm_id="24598347" place_rank="30" boundingbox="54.6868133544922,54.6879043579102,25.2885360717773,25.2898139953613" lat="54.6873633486028" lon="25.289199818878" display_name="National Museum of Lithuania, 1, Arsenalo g., Vilnius" class="tourism" type="museum"/>
+<place place_id="53849547" osm_type="way" osm_id="55469274" place_rank="30" lat="54.6900227236882" lon="25.2683589759401" display_name="Ministry of Foreign Affairs" class="amenity" type="public_building"/>
+<place place_id="8831058" osm_type="node" osm_id="836234960" place_rank="30" lat="54.677095" lon="25.2738876" display_name="Railway Museum of Lithuania" class="tourism" type="museum"/>
+<place place_id="29614806" osm_type="way" osm_id="24845629" place_rank="30" lat="54.6913385159005" lon="25.2617684209873" display_name="Seimas" class="amenity" type="public_building"/>
+</searchresults>"#;
+
+    #[test]
+    fn the_geocoder_page_gives_its_places() {
+        let (status, points) = parse_geocoder(NOMINATIM);
+        assert_eq!(status, GeocoderStatus::Success);
+        assert_eq!(points.len(), 4);
+        assert!((points[0].latitude() - 54.687_363_348_602_8).abs() < 1e-12);
+        assert!((points[0].longitude() - 25.289_199_818_878).abs() < 1e-12);
+    }
+
+    /// Not a page of places is `Unknow`; one that does not read, or a latitude that is not a
+    /// number, is `ExceptionInCode`; a place ranked below 0 is passed over; a `place` that is not
+    /// directly under `searchresults` is not one; and a page of places with none that count is
+    /// still a success.
+    #[test]
+    fn the_geocoder_page_fails_as_the_c_sharp_does() {
+        assert_eq!(parse_geocoder("").0, GeocoderStatus::Unknow);
+        assert_eq!(parse_geocoder("[]").0, GeocoderStatus::Unknow);
+        assert_eq!(
+            parse_geocoder("<?xml version=\"1.0\"?><searchresults></searchresults>").0,
+            GeocoderStatus::Unknow
+        );
+        assert_eq!(
+            parse_geocoder("<?xml version=\"1.0\"?><searchresults><place lat=\"1\"").0,
+            GeocoderStatus::ExceptionInCode
+        );
+        assert_eq!(
+            parse_geocoder(
+                "<?xml version=\"1.0\"?><searchresults><place lat=\"north\" lon=\"2\"/></searchresults>"
+            )
+            .0,
+            GeocoderStatus::ExceptionInCode
+        );
+        let (status, points) = parse_geocoder(
+            "<?xml version=\"1.0\"?><searchresults><place place_rank=\"-1\" lat=\"1\" lon=\"2\"/><place place_rank=\"x\" lat=\"3\" lon=\"4\"/><more><place lat=\"5\" lon=\"6\"/></more></searchresults>",
+        );
+        assert_eq!(status, GeocoderStatus::Success);
+        assert_eq!(points, vec![at(3.0, 4.0)]);
+        let (status, points) =
+            parse_geocoder("<?xml version=\"1.0\"?><error><place lat=\"1\" lon=\"2\"/></error>");
+        assert_eq!((status, points.len()), (GeocoderStatus::Success, 0));
+    }
+
+    /// `GetPoint` through the fetch it is given: the URL asked for, the first place, and a
+    /// failed request as `ExceptionInCode`.
+    #[test]
+    fn geocoding_asks_for_the_url_and_takes_the_first_place() {
+        let mut asked = String::new();
+        let (status, found) = geocode("lithuania vilnius", |url| {
+            asked = url.to_owned();
+            Ok::<_, ()>(NOMINATIM.to_owned())
+        });
+        assert_eq!(
+            asked,
+            "https://nominatim.openstreetmap.org/search?q=lithuania+vilnius&format=xml"
+        );
+        assert_eq!(status, GeocoderStatus::Success);
+        assert!((found.expect("a place").latitude() - 54.687_363_348_602_8).abs() < 1e-12);
+        assert_eq!(
+            geocode("x", |_| Err::<String, _>("offline")),
+            (GeocoderStatus::ExceptionInCode, None)
+        );
+        assert_eq!(
+            geocode("x", |_| Ok::<_, ()>(String::new())),
+            (GeocoderStatus::Unknow, None)
+        );
+        assert_eq!(GeocoderStatus::Unknow.to_string(), "Unknow");
+        assert_eq!(
+            GeocoderStatus::ExceptionInCode.to_string(),
+            "ExceptionInCode"
+        );
+    }
+
+    /// The facts a script reads: zoom and centre, circles, hover.
+    #[test]
+    fn the_map_publishes_its_zoom_circles_and_hover() {
+        let (mut map, (x, y), _) = hover_map(true);
+        map.set_zoom(18.0);
+        repaint(&mut map);
+        map.hover(Some((x, y)));
+        let facts = map.facts();
+        let fact = |key: &str| {
+            facts
+                .iter()
+                .find(|(name, _)| *name == key)
+                .map(|(_, value)| value.clone())
+                .unwrap_or_else(|| panic!("no fact {key}"))
+        };
+        assert_eq!(fact("map.zoom"), "18.00");
+        assert_eq!(fact("map.zoom.step"), "18");
+        assert_eq!(fact("map.centre"), "-35.3630000,149.1650000");
+        assert_eq!(fact("map.circles"), "2");
+        assert_eq!(fact("map.circles.radii"), "30,30");
+        assert_eq!(fact("map.hover"), "1");
+        assert_eq!(fact("map.tooltip"), "none", "nothing painted yet");
+        let fresh = viewport();
+        let facts = fresh.facts();
+        assert!(facts.contains(&("map.zoom", "none".to_owned())));
+        assert!(facts.contains(&("map.circles", "0".to_owned())));
+        assert!(facts.contains(&("map.hover", "none".to_owned())));
     }
 }

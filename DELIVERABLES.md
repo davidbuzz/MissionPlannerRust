@@ -278,7 +278,7 @@ KML/DXF/shapefile import-export, geotagging hand-off.
   written first on Write and Save, kept apart on read, drawn as GMap's green "H" pin; the
   panel's WP Radius, Loiter Radius, Default Alt, frame and Spline boxes with the C#'s typing
   rules and the parameters set after Write; Geo-Fence's return location, file load and save,
-  and Clear (PLAN.md §13.4 rows 12, 13; **55 done, 54 missing**). Geo-Fence Upload and Download
+  and Clear (PLAN.md §13.4 rows 12, 13); the zoom entries, the Zoom To geocoder prompt, the zoom icon, box and bar, the WP and loiter radius circles scaled as `GMapMarkerRect` scales them, and marker hover with its tooltip (row 30; **59 done, 50 missing**). Geo-Fence Upload and Download
   stay dimmed: the C# uploads with `FENCE_POINT`, which ArduPilot 4.8 removed. Terrain: `srtm.cs`
   is ported whole into `mp-terrain` (tile names, `.hgt` 1"/3" reading, the interpolation and void
   rule, `.asc` grids, the download queue with the C#'s servers and ocean rule, the cache sweep) and
