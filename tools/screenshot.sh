@@ -91,6 +91,28 @@ sleep "${SETTLE:-2}"
 xdotool windowactivate "$WIN_ID" 2>/dev/null
 sleep 1
 
+# Move the window fully on-screen before anything is captured or clicked.
+#
+# The capture below is an x11grab of the *screen* at the window's coordinates, not a read of the
+# window's own buffer, so a window the window manager placed hanging off an edge produces a
+# screenshot of whatever else is at those coordinates - and it produces one silently, which is the
+# dangerous part: the file is the right size, the run reports success, and the image is of
+# somebody's chat window. That happened at 1600x1200 placed at 1428,982 on a 2560x1600 screen.
+#
+# Clicks are window-relative so they were never affected, but they are moved after this anyway:
+# the coordinates the probe publishes are only reachable where the window actually is.
+SCREEN=$(xdotool getdisplaygeometry)
+SCREEN_W="${SCREEN%% *}"
+SCREEN_H="${SCREEN##* }"
+WIN_W=$(xwininfo -id "$WIN_ID" | awk '/Width:/ {print $2}')
+WIN_H=$(xwininfo -id "$WIN_ID" | awk '/Height:/ {print $2}')
+xdotool windowmove "$WIN_ID" 0 0
+sleep 0.5
+if [ "$WIN_W" -gt "$SCREEN_W" ] || [ "$WIN_H" -gt "$SCREEN_H" ]; then
+    echo "warning: window is ${WIN_W}x${WIN_H} on a ${SCREEN_W}x${SCREEN_H} screen;" \
+         "the capture will be clipped to the screen" >&2
+fi
+
 # Clicks happen after the window has settled and been activated: a click delivered to a window
 # that does not have focus goes to whatever does.
 

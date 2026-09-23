@@ -241,10 +241,21 @@ fn record(url: &str, path: &str, seconds: Option<u64>) -> std::process::ExitCode
         std::thread::sleep(Duration::from_millis(100));
         if last.elapsed() >= Duration::from_secs(2) {
             last = Instant::now();
-            println!("  {} frames recorded", link.frames_received());
+            // Both directions, because both are in the file. A count of only what arrived
+            // reads as the file's frame count and is not: replaying the recording shows more
+            // frames than the recorder claimed to have written.
+            println!(
+                "  {} frames recorded ({} received, {} sent)",
+                link.frames_received() + link.stats().frames_sent,
+                link.frames_received(),
+                link.stats().frames_sent
+            );
         }
     }
-    println!("recorded {} frames to {path}", link.frames_received());
+    println!(
+        "recorded {} frames to {path}",
+        link.frames_received() + link.stats().frames_sent
+    );
     std::process::ExitCode::SUCCESS
 }
 

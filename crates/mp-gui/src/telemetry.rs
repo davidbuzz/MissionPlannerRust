@@ -31,6 +31,18 @@ pub const ARMING_SKIPCHK: &str = "ARMING_SKIPCHK";
 
 /// `ARMING_SKIPCHK` value that skips every non-mandatory check.
 pub const SKIP_ALL_CHECKS: f32 = -1.0;
+/// The name a flight recording is given, in local time.
+///
+/// Mission Planner names tlogs `DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss")`, which is local, and
+/// that is the right choice for a filename a pilot matches to a flight they remember by the clock
+/// on the wall. Recorded UTC once by accident and the result was a file called `07-20-54` for a
+/// flight at twenty past five in the afternoon - unreadable at exactly the moment it matters,
+/// which is finding the right log after a crash.
+///
+/// The frames inside the file carry UTC, so nothing about the data depends on this.
+fn flight_stamp() -> String {
+    chrono::Local::now().format("%Y-%m-%d %H-%M-%S").to_string()
+}
 
 /// How many log lines the flight screen shows.
 ///
@@ -113,6 +125,8 @@ pub struct Telemetry {
     link: Option<Link>,
     target: String,
     error: Option<String>,
+    /// Where this session is being recorded.
+    recording: Option<std::path::PathBuf>,
     /// The vehicle the operator chose, if they chose one.
     ///
     /// `None` means whichever the link considers primary, which is the autopilot on the first
@@ -122,23 +136,91 @@ pub struct Telemetry {
 }
 
 impl Telemetry {
+    /// Where a flight is recorded, and what the file is called.
+    ///
+    /// Named for the time the flight started, as Mission Planner names them, so the directory
+    /// sorts chronologically and a file can be matched to a flight without opening it. An index is
+    /// appended if that name is taken, because `TlogWriter::create` refuses to overwrite - two
+    /// connections in the same second must not have one silently lose its recording.
+    #[must_use]
+    pub fn recording_path() -> Option<std::path::PathBuf> {
+        if std::env::var_os("MP_NO_RECORD").is_some() {
+            return None;
+        }
+        let directory = std::env::var_os("MP_LOG_DIR")
+            .map_or_else(Self::log_directory, std::path::PathBuf::from);
+        if std::fs::create_dir_all(&directory).is_err() {
+            return None;
+        }
+
+        Some(Self::recording_path_in(&directory, &flight_stamp()))?
+    }
+
+    /// Where flights are recorded when nothing says otherwise.
+    ///
+    /// `Documents/Mission Planner/logs`, which is where Mission Planner itself writes them, so the
+    /// two programs share one directory and a flight recorded by either is found by both. That
+    /// matters more than it sounds: the reason to open a tlog is usually to answer a question
+    /// about a flight, and a pilot who has both installed should not have to remember which one
+    /// was connected.
+    ///
+    /// Not the working directory. A ground station launched from a desktop icon inherits whatever
+    /// directory the launcher happened to be in - often `/` or the user's home - and writing
+    /// flight recordings there scatters them somewhere nobody thinks to look.
+    fn log_directory() -> std::path::PathBuf {
+        let home = std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(std::path::PathBuf::from);
+        home.map_or_else(
+            // No home directory at all is a strange environment, not a reason to lose the
+            // recording; the temp directory keeps it for the length of the session.
+            || std::env::temp_dir().join("mission-planner-rust-logs"),
+            |home| home.join("Documents").join("Mission Planner").join("logs"),
+        )
+    }
+
+    /// The name to record under in a given directory, avoiding one that is taken.
+    ///
+    /// Separate from `recording_path` so it can be tested: the directory and the stamp are the
+    /// only inputs, where `recording_path` reads the environment, and setting an environment
+    /// variable is `unsafe` in this edition and denied by the workspace.
+    fn recording_path_in(directory: &std::path::Path, stamp: &str) -> Option<std::path::PathBuf> {
+        let first = directory.join(format!("{stamp}.tlog"));
+        if !first.exists() {
+            return Some(first);
+        }
+        // Bounded, because an unbounded loop looking for a free name is a hang waiting for a full
+        // disk. Ninety-nine flights in one second is not a case worth serving.
+        (1..100)
+            .map(|index| directory.join(format!("{stamp}-{index}.tlog")))
+            .find(|candidate| !candidate.exists())
+    }
+
     /// Opens a link. A failure here is shown in the UI rather than killing the process: a ground
     /// station that exits because a USB cable was not plugged in yet is useless in the field.
     #[must_use]
     pub fn connect(url: &str) -> Self {
-        let config = LinkConfig::default();
+        // Every flight is recorded, without being asked. An operator who wanted a recording and
+        // did not press a button has lost the flight; one who did not want it has a file.
+        let recording = Self::recording_path();
+        let config = LinkConfig {
+            record_path: recording.clone(),
+            ..LinkConfig::default()
+        };
         match Link::connect(url, config) {
             Ok(link) => Self {
                 link: Some(link),
                 target: url.to_owned(),
                 error: None,
                 selected: None,
+                recording,
             },
             Err(err) => Self {
                 link: None,
                 target: url.to_owned(),
                 error: Some(err.to_string()),
                 selected: None,
+                recording: None,
             },
         }
     }
@@ -151,7 +233,18 @@ impl Telemetry {
             target: String::new(),
             error: None,
             selected: None,
+            recording: None,
         }
+    }
+
+    /// Where this session is being recorded, if it is.
+    ///
+    /// Shown on screen, because the link reports a failed recording to stderr and carries on -
+    /// which in an application launched from a desktop icon means a failed recording and a
+    /// successful one look identical.
+    #[must_use]
+    pub fn recording(&self) -> Option<&std::path::Path> {
+        self.recording.as_deref()
     }
 
     /// Why the link could not be opened, if it could not.
@@ -671,5 +764,65 @@ impl Telemetry {
             .as_ref()
             .and_then(|state| VehicleFamily::from_mav_type(state.vehicle_type))
             .map_or(&[][..], VehicleFamily::modes)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The name is what a pilot reads off a wall clock, not what a machine reads off a file.
+    #[test]
+    fn stamp_has_the_shape_mission_planner_uses() {
+        let stamp = flight_stamp();
+        assert_eq!(stamp.len(), 19, "{stamp}");
+        let (date, time) = stamp
+            .split_once(' ')
+            .expect("a space between date and time");
+        assert!(
+            date.split('-')
+                .all(|part| part.chars().all(|c| c.is_ascii_digit())),
+            "{date}"
+        );
+        assert_eq!(time.split('-').count(), 3, "{time}");
+        // Colons are what a human would write and what Windows refuses in a filename, which is
+        // why Mission Planner uses hyphens and why this asserts their absence.
+        assert!(!stamp.contains(':'), "{stamp}");
+    }
+
+    /// Two connections in the same second must not have one silently lose its recording.
+    #[test]
+    fn a_taken_name_is_not_reused() {
+        let directory =
+            std::env::temp_dir().join(format!("mpr-record-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).expect("a writable temp directory");
+
+        let first = Telemetry::recording_path_in(&directory, "stamp").expect("a free name");
+        assert!(first.ends_with("stamp.tlog"), "{}", first.display());
+        std::fs::write(&first, b"").expect("writable");
+
+        let second = Telemetry::recording_path_in(&directory, "stamp").expect("a free name");
+        assert!(second.ends_with("stamp-1.tlog"), "{}", second.display());
+        assert_ne!(first, second);
+
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    /// Ninety-nine is the cap, and past it the answer is "no recording" rather than a hang.
+    #[test]
+    fn the_search_for_a_free_name_is_bounded() {
+        let directory =
+            std::env::temp_dir().join(format!("mpr-record-full-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).expect("a writable temp directory");
+
+        std::fs::write(directory.join("full.tlog"), b"").expect("writable");
+        for index in 1..100 {
+            std::fs::write(directory.join(format!("full-{index}.tlog")), b"").expect("writable");
+        }
+        assert!(Telemetry::recording_path_in(&directory, "full").is_none());
+
+        let _ = std::fs::remove_dir_all(&directory);
     }
 }

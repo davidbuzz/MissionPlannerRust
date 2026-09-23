@@ -1226,6 +1226,26 @@ impl Render for MissionPlanner {
                             .items_center()
                             .gap_2()
                             .pb_2()
+                            // Recording, said on screen rather than assumed. The link reports a
+                            // failed recording to stderr and carries on, which in an application
+                            // launched from a desktop icon means a failed recording and a working
+                            // one look identical.
+                            .children(self.telemetry.recording().map(|path| {
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_1()
+                                    .child(div().size_2().rounded_full().bg(rgb(theme::ALERT)))
+                                    .child(div().text_xs().text_color(rgb(theme::DIM)).child(
+                                        format!(
+                                            "recording {}",
+                                            path.file_name().map_or_else(
+                                                || path.display().to_string(),
+                                                |name| name.to_string_lossy().into_owned()
+                                            )
+                                        ),
+                                    ))
+                            }))
                             .child(div().size_2().rounded_full().bg(rgb(status_colour)))
                             .child(div().text_sm().text_color(rgb(theme::DIM)).child(status)),
                     ),

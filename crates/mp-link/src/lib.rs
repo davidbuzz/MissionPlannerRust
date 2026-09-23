@@ -557,6 +557,30 @@ impl Drop for Link {
     }
 }
 
+/// Writes a frame to the transport and to the recording, if one is running.
+///
+/// Both directions belong in a telemetry log. Mission Planner records what it sends as well as
+/// what it receives, and a recording missing every command the ground station sent is exactly the
+/// recording you cannot use to work out why a vehicle did what it did.
+fn send_frame(
+    transport: &mut dyn Transport,
+    recorder: Option<&mut mp_log::TlogWriter>,
+    stats: &mut LinkStats,
+    bytes: &[u8],
+) -> bool {
+    if transport.write_all(bytes).is_err() {
+        return false;
+    }
+    stats.bytes_written += bytes.len() as u64;
+    stats.frames_sent += 1;
+    if let Some(writer) = recorder {
+        // A failed write to the log must not stop the link. The recording is a record of the
+        // flight; the flight matters more.
+        let _ = writer.write_frame(bytes);
+    }
+    true
+}
+
 /// The link thread.
 fn run_link(
     mut transport: Box<dyn Transport>,
@@ -841,11 +865,8 @@ fn run_link(
                     0,
                 ) {
                     tx_seq = tx_seq.wrapping_add(1);
-                    if let Some(bytes) = frame.get(..n)
-                        && transport.write_all(bytes).is_ok()
-                    {
-                        stats.bytes_written += bytes.len() as u64;
-                        stats.frames_sent += 1;
+                    if let Some(bytes) = frame.get(..n) {
+                        send_frame(transport.as_mut(), recorder.as_mut(), &mut stats, bytes);
                     }
                 }
             }
@@ -906,11 +927,8 @@ fn run_link(
                 )
             {
                 tx_seq = tx_seq.wrapping_add(1);
-                if let Some(bytes) = frame.get(..n)
-                    && transport.write_all(bytes).is_ok()
-                {
-                    stats.bytes_written += bytes.len() as u64;
-                    stats.frames_sent += 1;
+                if let Some(bytes) = frame.get(..n) {
+                    send_frame(transport.as_mut(), recorder.as_mut(), &mut stats, bytes);
                 }
             }
         }
@@ -952,11 +970,8 @@ fn run_link(
                         )
                     {
                         tx_seq = tx_seq.wrapping_add(1);
-                        if let Some(bytes) = frame.get(..n)
-                            && transport.write_all(bytes).is_ok()
-                        {
-                            stats.bytes_written += bytes.len() as u64;
-                            stats.frames_sent += 1;
+                        if let Some(bytes) = frame.get(..n) {
+                            send_frame(transport.as_mut(), recorder.as_mut(), &mut stats, bytes);
                         }
                     }
                 }
@@ -1013,11 +1028,8 @@ fn run_link(
                 0,
             ) {
                 tx_seq = tx_seq.wrapping_add(1);
-                if let Some(bytes) = frame.get(..n)
-                    && transport.write_all(bytes).is_ok()
-                {
-                    stats.bytes_written += bytes.len() as u64;
-                    stats.frames_sent += 1;
+                if let Some(bytes) = frame.get(..n) {
+                    send_frame(transport.as_mut(), recorder.as_mut(), &mut stats, bytes);
                 }
             }
             last_heartbeat = Instant::now();
@@ -1033,10 +1045,7 @@ fn run_link(
             if let Some(fixed) = restamp_checksum(&bytes) {
                 bytes = fixed;
             }
-            if transport.write_all(&bytes).is_ok() {
-                stats.bytes_written += bytes.len() as u64;
-                stats.frames_sent += 1;
-            }
+            send_frame(transport.as_mut(), recorder.as_mut(), &mut stats, &bytes);
         }
 
         // Flush the recording periodically so a crash costs seconds, not the whole flight.

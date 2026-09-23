@@ -1017,24 +1017,29 @@ says what *done* means, because a list of nouns is not a plan.
 | 10 | Terrain-relative altitudes | a mission flown at 50 m over a hill is a mission into a hill | D11 | `MAV_FRAME_GLOBAL_TERRAIN_ALT` round-trips and the planner says which frame an item uses | |
 | 11 | Satellite imagery provider | planning over a paddock needs imagery, not a street map | D8 | a second provider is selectable and its attribution is shown | |
 | 12 | Mission Planner tile cache compatibility | D8 asks for it, and it lets an existing cache be reused offline | D8 | tiles written by the C# application are read without a network | |
-| 13 | Waypoint editing from the map | change altitude or command without crossing to the sidebar | D11 | a right-click menu on a waypoint edits it in place | |
-| 14 | Geofence read-back verification | the fence is written and never read back to confirm what the vehicle holds | D11 | after a write, what the vehicle reports is compared and any difference is shown | |
-| 15 | Fuzz targets built and run | they exist, have never been compiled, and D2's DoD requires 24 h clean on `frame_parse` | D19 | the targets build and CI runs a bounded fuzz pass | |
-| 16 | Windows build verified | cross-compilation is checked; the Direct3D 11 path has never been exercised | D7 | a Windows build opens a window and paints, recorded in an ADR | |
-| 17 | Joystick input | flying from a ground station without a transmitter, which D15 names | D15 | axes map to `RC_CHANNELS_OVERRIDE` with a failsafe on disconnect | |
-| 18 | Firmware flashing | the last item in Initial Setup with no counterpart here | D13 | a `.apj` is written to a board over the bootloader and verified | |
-| 19 | Python scripting host | D16, and the owner's stated interest in extensions that need no compiler | D16 | a script can read telemetry and drive a command, sandboxed | |
-| 20 | Packaging and installers | a build nobody can install is a build nobody uses | D20 | a signed artefact per platform, produced by CI | |
+| 13 | Record a `.tlog` for every flight | the link can record and the GUI never turns it on, so every flight flown behind this application is unreviewable | D14 | recording starts on connect, both directions are captured, and the screen says it is on | done |
+| 14 | Save, load and compare `.param` files | how an operator backs up a build, clones an airframe, or works out what a suggested change actually changed | D12 | a set round-trips against a file the C# application wrote, honouring its skip-list | |
+| 15 | EKF and vibration monitors | the two readouts that explain a vehicle that will not arm, flies badly, or climbs on its own | D10 | variance and vibration are shown, with clipping counts | |
+| 16 | Fuzz targets built and run | they exist, have never been compiled, and D2's DoD requires 24 h clean on `frame_parse` | D19 | the targets build and CI runs a bounded fuzz pass | |
+| 17 | Windows build verified | cross-compilation is checked; the Direct3D 11 path has never been exercised | D7 | a Windows build opens a window and paints, recorded in an ADR | |
+| 18 | Joystick input | flying from a ground station without a transmitter, which D15 names | D15 | axes map to `RC_CHANNELS_OVERRIDE` with a failsafe on disconnect | |
+| 19 | Firmware flashing | the last item in Initial Setup with no counterpart here | D13 | a `.apj` is written to a board over the bootloader and verified | |
+| 20 | Python scripting host | D16, and the owner's stated interest in extensions that need no compiler | D16 | a script can read telemetry and drive a command, sandboxed | |
 
 **1 is first because it is load-bearing.** Three separate decisions were made to work around the
 absence of a text input: parameters are browsed by prefix rather than searched, missions save to a
 fixed path, and altitudes are stepped rather than typed. Each was the right call at the time and
 each stops being right the moment typing is possible.
 
+**13, 14 and 15 came from a gap audit** against the deliverables, the C# reference and the test
+suite, and displaced three items that had been on this list: waypoint editing from the map, fence
+read-back, and packaging. All three are worth doing and none of them is as valuable as being able
+to review a flight afterwards.
+
 **10 and 11 change what can be flown** rather than how comfortably it is flown. Everything above
 them is reach; those two are range.
 
-**15 and 16 are verification debt** — the two places where this project currently claims more than
+**16 and 17 are verification debt** — the two places where this project currently claims more than
 it has tested.
 
 ---

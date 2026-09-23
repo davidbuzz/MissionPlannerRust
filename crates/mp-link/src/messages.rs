@@ -108,11 +108,15 @@ pub struct LogMessage {
 
 /// Formats a Unix timestamp as `HH:MM:SS` UTC.
 ///
-/// UTC rather than local time, and labelled as such wherever it is shown. Converting to local
-/// needs a timezone database, which is a dependency and a portability problem; and the logs this
-/// will be read alongside - dataflash and telemetry - are in UTC anyway, so a local clock here
-/// would be the odd one out during the one task this exists for, which is lining up what the
-/// vehicle said with what the log recorded.
+/// UTC rather than local time, and labelled as such wherever it is shown. The logs this will be
+/// read alongside - dataflash and telemetry - are in UTC, so a local clock here would be the odd
+/// one out during the one task this exists for, which is lining up what the vehicle said with
+/// what the log recorded.
+///
+/// A recording's *filename* is local time, deliberately (see `flight_stamp` in mp-gui), because
+/// that is what a pilot matches against the clock on the wall when looking for the right file.
+/// Names are chosen for people, contents for lining up against other logs; they disagree on
+/// purpose, and both say which they are.
 #[must_use]
 pub fn time_of_day(seconds_since_epoch: u64) -> String {
     let seconds_today = seconds_since_epoch % 86_400;

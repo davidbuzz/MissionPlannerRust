@@ -29,6 +29,13 @@ mp-mission.workspace = true
 mp-tiles.workspace = true
 mp-mavlink-dialects.workspace = true
 
+# Local time, for naming a flight recording the way the pilot's own clock reads. std has no
+# timezone support at all, and the alternatives are worse: libc's localtime_r needs unsafe, which
+# the workspace denies, and time's now_local refuses to answer in a multi-threaded process, which
+# this is by the time a link is open. Free here - gpui already depends on chrono, so it is
+# compiled either way.
+chrono = { workspace = true }
+
 # Constructing a gpui RenderImage needs image::Frame, and gpui does not re-export the image crate.
 # The same version mp-tiles decodes with, so a tile crosses the boundary without converting.
 image.workspace = true

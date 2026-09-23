@@ -3314,6 +3314,7 @@ dependencies = [
 name = "mp-gui"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "gpui",
  "gpui_linux",
  "gpui_macos",

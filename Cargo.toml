@@ -28,6 +28,8 @@ sha2 = "0.10"
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
 proptest = "1"
 roxmltree = "0.20"
+# Local time only. Pinned to what gpui already pulls in, so it costs nothing to compile.
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 anyhow = "1"
 # Tile fetching. Blocking and small: the tile thread is a dedicated thread that is allowed to
 # block, exactly like the link's I/O thread, so an async runtime would be machinery with no user.
