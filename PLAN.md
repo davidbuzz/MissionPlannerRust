@@ -996,38 +996,46 @@ cache with its own versioning or just a download.
 
 ---
 
-## 13. First two weeks — do this now, in this order
+## 13. The next twenty, in order
 
-**Week 1 — unblock, then measure.**
+Supersedes the original two-week plan, most of which has been overtaken: the oracle, the ledger
+seed, the Linux GPU spike and the first real units are all behind us. What follows is the current
+queue, ordered by what unblocks the most and then by what an operator hits most often. Each row
+says what *done* means, because a list of nouns is not a plan.
 
-| # | Action | Done when | Owner |
-|---:|---|---|---|
-| 1 | `git submodule update --init` on a scratch copy of `referneces/missionplanner`; measure `ExtLibs/mono` | LOC and file count known; either rows added or one owner-ratified `dropped` row written | eng |
-| 2 | Install `mold`; wire `-C link-arg=-fuse-ld=mold`; set `lto="thin"`; replace `[profile.dev.package."*"]` with zed's ~15 targeted entries; **add `[profile.dev.build-override]`**; add `[profile.dev]` incremental/codegen-units/split-debuginfo; add `cargo-hakari` | cold + warm workspace build times recorded in `docs/baselines.md`, ≥2× better | eng |
-| 3 | **GPU SPIKE A — Linux.** 135 tiles via `paint_image` with a stable `ImageId` per `(provider,z,x,y)` + ~200 HUD-equivalent paths/glyphs, at 2560×1440. Record p50/p99 frame CPU and per-pass GPU on the Quadro T2000 **and** under lavapipe (`VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.json`) | numbers in `docs/adr/0002-gpu.md` | eng |
-| 4 | **GPU SPIKE B — Windows/degraded.** RDP into a Windows box; build and launch a gpui app (zed's own examples will do). Does a window open? Then the same tile+HUD benchmark on D3D11 | A1 and A2 answered yes/no **in writing** | owner+eng |
-| 5 | **Oracle from source.** Replace `tools/csharp-reference/regen.sh`'s `MP_DIST` dependency with `msbuild -t:Restore,Build` over `MissionPlanner.Utilities.csproj` (proven: 18 DLLs, exit 0). Cache as a CI artifact keyed on the MP SHA. Fix `ci.yml`'s "differential" job to actually run it | `mp-oracle geodesy` reproduces `zone=-56` from a clean container in <10 s | eng |
-| 6 | **WinForms-stub experiment** (the one that settles the root-level oracle gap): write a ~300-LOC stub `System.Windows.Forms` + `MissionPlanner.Controls` facade with the ~12 types `MagCalib.cs` touches; `mcs MagCalib.cs` against the built `MissionPlanner.Utilities.dll` | yes/no in writing. If no → MagCalib and all root-level code move to `verification_class = spec+review` + Windows golden files | eng |
-| 7 | Bump `rust-toolchain.toml` and `rust-version` **only if** D2 chooses the git pin; otherwise stay at 1.95.0 and record why | ADR-0003 | owner |
+| # | Item | Why it is next | Deliverable | Done when | Status |
+|---:|---|---|---|---|---|
+| 1 | Text field widget | gpui ships no input element, and three screens have already been shaped around its absence | D6 | typing works in a focused field; backspace does not split a codepoint; chords are not typed | |
+| 2 | Parameter search | 1,408 parameters behind a prefix list; typing `WPNAV` is how people actually find one | D12 | a name fragment filters the list across every group | |
+| 3 | Mission file names | save and load use one fixed path, so a second mission overwrites the first | D11 | a typed name round-trips a mission to and from disk | |
+| 4 | Settings that persist | link URL, tile provider, window size and screen are retyped every launch | D17 | they survive a restart and a corrupt settings file does not stop startup | |
+| 5 | Vehicle selector | the link tracks every vehicle on the wire and the UI always shows the first | D10 | a second vehicle is selectable and the map and HUD follow the selection | |
+| 6 | ADS-B and other vehicles on the map | a ground station that cannot show nearby traffic is missing the thing that prevents a collision | D15 | `ADSB_VEHICLE` is drawn, aged out, and distinguishable from the flown aircraft | |
+| 7 | KML export of a mission and a flown path | the usual way to hand a flight to someone without a ground station | D11 | the file opens in Google Earth with the track and waypoints in the right places | |
+| 8 | Live tuning graph | watching a value against time is how tuning is done, and the flight screen has no plot | D10 | a chosen field plots at telemetry rate without dropping the frame budget | |
+| 9 | Log plotting | the same plot over a dataflash log, which is how a flight is reviewed | D14 | a field from a downloaded `.BIN` plots against time | |
+| 10 | Terrain-relative altitudes | a mission flown at 50 m over a hill is a mission into a hill | D11 | `MAV_FRAME_GLOBAL_TERRAIN_ALT` round-trips and the planner says which frame an item uses | |
+| 11 | Satellite imagery provider | planning over a paddock needs imagery, not a street map | D8 | a second provider is selectable and its attribution is shown | |
+| 12 | Mission Planner tile cache compatibility | D8 asks for it, and it lets an existing cache be reused offline | D8 | tiles written by the C# application are read without a network | |
+| 13 | Waypoint editing from the map | change altitude or command without crossing to the sidebar | D11 | a right-click menu on a waypoint edits it in place | |
+| 14 | Geofence read-back verification | the fence is written and never read back to confirm what the vehicle holds | D11 | after a write, what the vehicle reports is compared and any difference is shown | |
+| 15 | Fuzz targets built and run | they exist, have never been compiled, and D2's DoD requires 24 h clean on `frame_parse` | D19 | the targets build and CI runs a bounded fuzz pass | |
+| 16 | Windows build verified | cross-compilation is checked; the Direct3D 11 path has never been exercised | D7 | a Windows build opens a window and paints, recorded in an ADR | |
+| 17 | Joystick input | flying from a ground station without a transmitter, which D15 names | D15 | axes map to `RC_CHANNELS_OVERRIDE` with a failsafe on disconnect | |
+| 18 | Firmware flashing | the last item in Initial Setup with no counterpart here | D13 | a `.apj` is written to a board over the bootloader and verified | |
+| 19 | Python scripting host | D16, and the owner's stated interest in extensions that need no compiler | D16 | a script can read telemetry and drive a command, sandboxed | |
+| 20 | Packaging and installers | a build nobody can install is a build nobody uses | D20 | a signed artefact per platform, produced by CI | |
 
-**Week 2 — governance, then the first real unit.**
+**1 is first because it is load-bearing.** Three separate decisions were made to work around the
+absence of a text input: parameters are browsed by prefix rather than searched, missions save to a
+fixed path, and altitudes are stepped rather than typed. Each was the right call at the time and
+each stops being right the moment typing is possible.
 
-| # | Action | Done when | Owner |
-|---:|---|---|---|
-| 8 | **Seed the ledger.** All 3,678 rows (+ mono) from the five-tier partition, with `tier`, `disposition`, `target_crate`, `size`, `fidelity_class`, `perf_class`, `verification_class`, `sha256`. `cargo xtask ledger check` exits 0 | LOC sums **exactly** to 1,208,836 + mono; zero unclassified | eng |
-| 9 | **Build the dependency graph.** `petgraph` topo-sort over the 360 `ProjectReference` edges across 129 csproj, then a file-level `using`/type graph via `tree-sitter-c-sharp` with SCC collapse | `deps` column populated; `xtask next --agents 8` emits byte-identical output twice | eng |
-| 10 | **Re-enter the 5 existing commits under contract.** 9 crates, ~8.2k hand-written Rust — none has an omissions list, a fuzz target, a G2 review or a live oracle gate | every existing file has a ledger row in `ported` (not `done`) | eng |
-| 11 | **Spike `tree-sitter-c-sharp 0.23.5` against the `tree-sitter 0.27` runtime** (ABI pair, unverified). Then run `screenspec` on `FlightData`, `FlightPlanner` and `ConfigArducopter` | 3 RON specs that round-trip every `>>Parent`/`>>ZOrder`; ABI verdict recorded | eng |
-| 12 | **`dsdlgen` signature gate.** Parse all 147 `.uavcan`, emit, and compare every `DATA_TYPE_SIGNATURE` + `default_dtid` against `canard_dsdlc/messages.cs` | 147/147 match, or the Python-dump fallback is committed | eng |
-| 13 | **Decomposition session #1:** `MAVLinkInterface.cs` (6,906 LOC, 0 regions). Produce a written module plan: target crates, sub-unit list, shared-type contract | committed to `ledger/decomp/MAVLinkInterface.md`; 6–10 child units created | **owner** |
-| 14 | **Dispatch one real unit end-to-end** through the full contract: `xtask next` → agent → port with provenance header → tests → `xtask diff` green → fuzz target → G1 → G2 (different model) → G3 → merge → ledger flips to `done` **by machine** | the loop closes with nobody touching the ledger by hand | owner+eng |
-| 15 | Start HIL hardware procurement and the Apple Developer / EV cert applications | POs raised — these have 2–8 week lead times that agents cannot compress | **owner** |
-| 16 | Owner rulings on **D1 (mobile)**, **D3 (degraded targets)**, **D12 (staffing)** | ADRs written | **owner** |
+**10 and 11 change what can be flown** rather than how comfortably it is flown. Everything above
+them is reach; those two are range.
 
-**Action 14 is the milestone.** It proves the factory closes its first loop on a real file. Every one
-of the remaining ~1,030 T3 units is then the same loop with different inputs, and project status
-becomes a number the ledger prints rather than an opinion anyone holds. **If that loop cannot be
-closed in week 2, the factory design is wrong and must be fixed before another agent is dispatched.**
+**15 and 16 are verification debt** — the two places where this project currently claims more than
+it has tested.
 
 ---
 

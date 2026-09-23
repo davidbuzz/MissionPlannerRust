@@ -15,6 +15,7 @@ mod plan;
 mod platform;
 mod probe;
 mod setup;
+mod textfield;
 mod telemetry;
 mod ui;
 
