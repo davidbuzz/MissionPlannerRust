@@ -333,3 +333,49 @@ pub fn to_kml(path: &str, out: &str) -> std::process::ExitCode {
         }
     }
 }
+
+/// Lists what a dataflash log offers to plot.
+///
+/// A listing, not a plot. Mission Planner plots logs with ZedGraph in `LogBrowse.cs` - a
+/// WinForms chart - and there is no terminal plotting anywhere in the C#. An earlier version of
+/// this drew an ASCII chart here, which was not a port of anything: it was the shape easiest to
+/// check from a terminal, which is a convenience for whoever is writing the code rather than a
+/// thing Mission Planner does. The plot belongs in the GUI, against `mp_chart`, where D14's
+/// definition of done puts it.
+///
+/// What is useful from a command line is the inventory. The field list comes from the log's own
+/// `FMT` messages rather than a table, so it is right for whatever firmware wrote it - a
+/// hard-coded list goes stale silently, which on a diagnostic tool means a field that exists and
+/// cannot be found.
+pub fn fields(path: &str) -> std::process::ExitCode {
+    let data = match std::fs::read(path) {
+        Ok(data) => data,
+        Err(err) => {
+            eprintln!("could not read {path}: {err}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+
+    let fields = mp_log::plot::plottable(&data);
+    if fields.is_empty() {
+        eprintln!("{path} has nothing plottable - is it a dataflash log?");
+        return std::process::ExitCode::FAILURE;
+    }
+
+    println!("{} plottable fields in {path}:\n", fields.len());
+    // Grouped by message *and instance*, because a log with three IMUs has three VIBE groups and
+    // printing them under one heading makes them look like one series listed three times.
+    let mut heading = String::new();
+    for field in &fields {
+        let group = match field.instance {
+            Some(instance) => format!("{}[{instance}]", field.message),
+            None => field.message.clone(),
+        };
+        if group != heading {
+            heading = group;
+            println!("  {heading}");
+        }
+        println!("    {:<18} {:>7} samples", field.field, field.samples);
+    }
+    std::process::ExitCode::SUCCESS
+}

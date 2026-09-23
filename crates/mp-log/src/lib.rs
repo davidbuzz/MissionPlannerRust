@@ -13,6 +13,7 @@
 #![forbid(unsafe_code)]
 
 pub mod dataflash;
+pub mod plot;
 pub mod reader;
 pub mod writer;
 

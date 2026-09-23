@@ -58,6 +58,18 @@ impl Value {
             Self::Text(_) | Self::Bytes(_) | Self::Samples(_) => None,
         }
     }
+
+    /// The value as text, where it is text.
+    ///
+    /// Needed by `FMTU`, whose `UnitIds` is a string whose *positions* carry meaning - a `#` marks
+    /// which field of a message is its instance number.
+    #[must_use]
+    pub fn as_text(&self) -> Option<&str> {
+        match self {
+            Self::Text(text) => Some(text),
+            _ => None,
+        }
+    }
 }
 
 /// A dataflash field type, as a single character in an `FMT` format string.
