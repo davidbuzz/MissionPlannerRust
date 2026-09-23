@@ -34,7 +34,10 @@ FAILED=0
 for NAME in "$@"; do
     SCRIPT="$ROOT/tests/gui/$NAME.gui"
     if [ ! -f "$SCRIPT" ]; then echo "$NAME: no script"; FAILED=$((FAILED+1)); continue; fi
+    # The header's command line names the argument; a header that only says which SITL port or
+    # which file it needs names it that way.
     ARG=$(grep -m1 -oE "gui-test\.sh tests/gui/$NAME\.gui -- [^ ]+" "$SCRIPT" | awk '{print $NF}')
+    [ -z "$ARG" ] && ARG=$(grep -m1 -oE "(tcp:127\.0\.0\.1:5760|file:[^ ,]+\.tlog)" "$SCRIPT" | head -1)
     for _ in $(seq 1 60); do
         LOAD=$(cut -d' ' -f1 /proc/loadavg | cut -d. -f1)
         [ "$LOAD" -lt "$MAX_LOAD" ] && break

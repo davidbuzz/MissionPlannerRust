@@ -930,6 +930,37 @@ impl MissionPlanner {
                 let view = self.telemetry.view();
                 self.motor_test.activate(&view, crate::metadata::lookup);
             }
+            // The page object's constructor builds the rows, once per screen; `Activate` starts
+            // the bars' timer.
+            // C#: GCSViews/ConfigurationView/ConfigRadioOutput.cs:11-33, 71-74
+            Some("ConfigRadioOutput") => {
+                let view = self.telemetry.view();
+                self.servo_output.activate(
+                    &self.telemetry,
+                    &view.parameters,
+                    Key::of(&view),
+                    crate::metadata::lookup,
+                );
+            }
+            // C#: GCSViews/ConfigurationView/ConfigSerial.cs:37-380
+            Some("ConfigSerial") => {
+                let view = self.telemetry.view();
+                self.serial_ports.activate(
+                    &view.parameters,
+                    Key::of(&view),
+                    crate::metadata::lookup,
+                );
+            }
+            // C#: GCSViews/ConfigurationView/ConfigESCCalibration.cs:15-26
+            Some("ConfigESCCalibration") => {
+                let view = self.telemetry.view();
+                self.esc_calibration.activate(
+                    &self.telemetry,
+                    &view.parameters,
+                    Key::of(&view),
+                    crate::metadata::lookup,
+                );
+            }
             _ => {}
         }
     }
@@ -972,6 +1003,16 @@ impl MissionPlanner {
             // `ConfigMotorTest` is `IActivate` only: hidden, nothing stopped or written.
             Some("ConfigMotorTest") if self.motor_test.is_active() => {
                 self.motor_test.deactivate();
+            }
+            // C#: GCSViews/ConfigurationView/ConfigRadioOutput.cs:76-79
+            Some("ConfigRadioOutput") => {
+                self.servo_output.deactivate(std::time::Instant::now());
+            }
+            // C#: GCSViews/ConfigurationView/ConfigSerial.cs:493-496
+            Some("ConfigSerial") => self.serial_ports.hide(),
+            // `ConfigESCCalibration` is `IActivate` only: hidden, a number being typed into read.
+            Some("ConfigESCCalibration") => {
+                self.esc_calibration.hide(std::time::Instant::now());
             }
             _ => {}
         }
@@ -1094,6 +1135,32 @@ impl MissionPlanner {
                 .children(crate::config::motor_test::page(
                     &self.motor_test,
                     &self.motor_focus,
+                    window,
+                    cx,
+                ))
+                .into_any_element(),
+            // C#: GCSViews/ConfigurationView/ConfigRadioOutput.Designer.cs:28-176
+            "ConfigRadioOutput" => column()
+                .children(crate::config::servo_output::page(
+                    &self.servo_output,
+                    &self.servo_focus,
+                    view,
+                    window,
+                    cx,
+                ))
+                .into_any_element(),
+            // Wider than the other pages: the Designer's table is 789 pixels.
+            // C#: GCSViews/ConfigurationView/ConfigSerial.Designer.cs:29-121
+            "ConfigSerial" => div()
+                .flex()
+                .flex_col()
+                .children(crate::config::serial_ports::page(&self.serial_ports, cx))
+                .into_any_element(),
+            // C#: GCSViews/ConfigurationView/ConfigESCCalibration.resx
+            "ConfigESCCalibration" => column()
+                .children(crate::config::esc_calibration::page(
+                    &self.esc_calibration,
+                    &self.esc_focus,
                     window,
                     cx,
                 ))

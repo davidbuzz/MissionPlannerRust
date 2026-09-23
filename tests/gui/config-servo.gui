@@ -1,0 +1,131 @@
+# Initial Setup's Servo Output page, ported from GCSViews/ConfigurationView/ConfigRadioOutput.cs.
+#
+# The claim: the page's constructor builds a row per output - sixteen, SERVO_32_ENABLE being 0 -
+# each bound to SERVOn_FUNCTION, _REVERSED, _MIN, _TRIM and _MAX (ConfigRadioOutput.cs:11-69), the
+# bars show SERVO_OUTPUT_RAW, and each control writes its own parameter when it is changed, as the
+# Mavlink* controls do: the combo box and the check box at once (Controls/MavlinkComboBox.cs:
+# 169-199, Controls/MavlinkCheckBox.cs:106-143), a number 300 ms after it changes
+# (Controls/MavlinkNumericUpDown.cs:133-180). There is no save button. Each change is proved by
+# the vehicle's echo, and put back.
+#
+# Output 9 is used because a quad leaves it Disabled; nothing is connected to it in SITL.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm, whose
+# outputs are the firmware's defaults: 1-4 Motor1-Motor4, the rest Disabled, every one 1100 /
+# 1500 / 1900 and not reversed. Run as
+#
+#   tools/gui-test.sh tests/gui/config-servo.gui -- tcp:127.0.0.1:5760
+#
+# A run that stops half way can leave SERVO9_TRIM at 1510, SERVO9_REVERSED at 1 or
+# SERVO9_FUNCTION at 1; the first expectations below then fail until a fresh SITL.
+
+screen params
+window 1600x1200
+settle 6
+
+# Initial Setup lists the page once every parameter is in (isConnected && gotAllParams,
+# InitialSetup.cs:213-216), and here parameters are downloaded when asked for.
+click param-download
+settle 15
+expect params.held > 1000
+expect params.value.SERVO9_TRIM 1500
+expect params.value.SERVO9_FUNCTION 0
+expect params.value.SERVO9_REVERSED 0
+
+click tab-setup
+expect config.servo.active false
+click setup-page-ConfigMandatory
+click setup-page-ConfigRadioOutput
+settle 1
+expect setup.page ConfigRadioOutput
+expect config.servo.active true
+expect config.servo.rows 16
+
+# What the constructor read.
+expect config.servo.1.function 33
+expect config.servo.1.function.text Motor1
+expect config.servo.1.function.enabled true
+expect config.servo.4.function.text Motor4
+expect config.servo.9.function 0
+expect config.servo.9.function.text Disabled
+expect config.servo.1.reversed unchecked
+expect config.servo.1.min 1100
+expect config.servo.1.trim 1500
+expect config.servo.1.max 1900
+expect config.servo.16.max 1900
+# The bars are SERVO_OUTPUT_RAW: a disarmed copter holds its motors at the bottom of their range.
+expect config.servo.1.position >= 900
+expect config.servo.write none
+
+# A typed trim, read on Enter and written 300 ms later.
+click servo-SERVO9_TRIM
+expect config.servo.editing SERVO9_TRIM
+key ctrl+u
+type 1510
+key Return
+settle 2
+expect config.servo.9.trim 1510
+expect config.servo.write SERVO9_TRIM 1510 accepted
+expect params.value.SERVO9_TRIM 1510
+
+# The arrows step by one: down to 1509, and the timer writes it.
+click servo-SERVO9_TRIM-down
+settle 2
+expect config.servo.9.trim 1509
+expect config.servo.write SERVO9_TRIM 1509 accepted
+expect params.value.SERVO9_TRIM 1509
+
+# And back to 1500.
+click servo-SERVO9_TRIM
+key ctrl+u
+type 1500
+key Return
+settle 2
+expect config.servo.write SERVO9_TRIM 1500 accepted
+expect params.value.SERVO9_TRIM 1500
+
+# The Reverse box writes 1, then 0.
+click servo-SERVO9_REVERSED
+settle 2
+expect config.servo.9.reversed checked
+expect config.servo.write SERVO9_REVERSED 1 accepted
+expect params.value.SERVO9_REVERSED 1
+click servo-SERVO9_REVERSED
+settle 2
+expect config.servo.9.reversed unchecked
+expect params.value.SERVO9_REVERSED 0
+
+# The function: RCPassThru, then Disabled again. The list shows thirty rows and scrolls three a
+# wheel notch, as Mission Planner's drop-down scrolls; RCPassThru is row 96 of the fetched
+# documentation's list, which orders a SERVOn_FUNCTION's 128 values alphabetically after GPIO and
+# Disabled. Forty notches down stops at the end (row 98 on top), two up puts 92 on top and row 96
+# in view.
+click servo-SERVO9_FUNCTION
+expect config.servo.list.top 0
+scroll servo-SERVO9_FUNCTION-list down 40
+expect config.servo.list.top 98
+scroll servo-SERVO9_FUNCTION-list up 2
+expect config.servo.list.top 92
+click servo-SERVO9_FUNCTION-1
+settle 2
+expect config.servo.9.function 1
+expect config.servo.9.function.text RCPassThru
+expect config.servo.write SERVO9_FUNCTION 1 accepted
+expect params.value.SERVO9_FUNCTION 1
+# Opened on the selected row - RCPassThru at the bottom of the thirty - so Disabled, row 1, is
+# out of view until the wheel brings the top back.
+click servo-SERVO9_FUNCTION
+expect config.servo.list.top 67
+scroll servo-SERVO9_FUNCTION-list up 40
+expect config.servo.list.top 0
+click servo-SERVO9_FUNCTION-0
+settle 2
+expect config.servo.9.function 0
+expect params.value.SERVO9_FUNCTION 0
+expect config.servo.message none
+expect config.servo.writes.pending 0
+
+# Choosing another page deactivates this one (BackstageView.cs:453-464).
+click setup-page-ConfigFlightModes
+expect setup.page ConfigFlightModes
+expect config.servo.active false

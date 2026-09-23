@@ -1,0 +1,128 @@
+# Initial Setup's Serial Ports page, ported from GCSViews/ConfigurationView/ConfigSerial.cs.
+#
+# The claim: Activate builds a row per port up to the highest SERIALn_BAUD - SERIAL1 to SERIAL7 on
+# SITL - with the speed and protocol from the vehicle in combo boxes of the documented values, the
+# set options bits' names and a Set Bitmask button, and the reboot note under them
+# (ConfigSerial.cs:37-380). A change is written at once (:254-296, 467-491); a protocol change then
+# applies SerialOptionRules.json, whose MAVLink2 rule sets the options to 0 and puts its comment
+# in the note (:384-430); a bit ticked in the bitmask window is written and named in the options
+# label (:327-353). Each change is proved by the vehicle's echo, and put back.
+#
+# SERIAL5 is used because SITL leaves it without a protocol; a serial change takes effect only
+# when the board reboots, and nothing here reboots it.
+#
+# The speeds and protocols come from the documentation fetched for the firmware flying: the
+# bundled table lists them for SERIAL1 only, and the C# offers no box for a port whose
+# documentation lists none.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm, whose serial
+# ports are the firmware's defaults: SERIAL1 and 2 MAVLink2 at 57600, 3 and 4 GPS at 230400, 5 to 7
+# none at 57600, every SERIALn_OPTIONS 0. Run as
+#
+#   tools/gui-test.sh tests/gui/config-serial.gui -- tcp:127.0.0.1:5760
+#
+# A run that stops half way can leave SERIAL5_PROTOCOL at 2, SERIAL5_BAUD at 115 or
+# SERIAL5_OPTIONS at 1; the first expectations below then fail until a fresh SITL.
+
+screen params
+window 1600x1200
+settle 6
+
+click param-download
+settle 15
+expect params.held > 1000
+expect params.value.SERIAL5_PROTOCOL -1
+expect params.value.SERIAL5_BAUD 57
+expect params.value.SERIAL5_OPTIONS 0
+# The fetched documentation is read once the banner has named the firmware.
+expect params.metadata.source ~ Copter
+
+click tab-setup
+expect config.serial.active false
+click setup-page-ConfigMandatory
+click setup-page-ConfigSerial
+settle 1
+expect setup.page ConfigSerial
+expect config.serial.active true
+
+# What Activate built.
+expect config.serial.ports 7
+expect config.serial.rows 7
+expect config.serial.note Note: Changes to the serial port settings will not take effect until the board is rebooted.
+expect config.serial.1.label SERIAL PORT 1
+expect config.serial.1.baud 57
+expect config.serial.1.baud.text 57600
+expect config.serial.1.protocol 2
+expect config.serial.1.protocol.text MAVLink2
+expect config.serial.3.protocol.text GPS
+expect config.serial.3.baud.text 230400
+expect config.serial.5.protocol -1
+expect config.serial.5.protocol.text None
+expect config.serial.5.baud.text 57600
+expect config.serial.5.bitmask true
+expect config.serial.write none
+
+# The speed: 115200, then 57600 again.
+click serial-SERIAL5_BAUD
+click serial-SERIAL5_BAUD-115
+settle 3
+expect config.serial.5.baud 115
+expect config.serial.5.baud.text 115200
+expect config.serial.write SERIAL5_BAUD 115 accepted
+expect params.value.SERIAL5_BAUD 115
+click serial-SERIAL5_BAUD
+click serial-SERIAL5_BAUD-57
+settle 3
+expect config.serial.write SERIAL5_BAUD 57 accepted
+expect params.value.SERIAL5_BAUD 57
+
+# The protocol: MAVLink2, whose rule writes the options 0 - which they already are, so the set is
+# not sent - and puts its comment in the note.
+# MAVLink2 is row 30 of the fetched documentation's list (alphabetical after None), one past the
+# thirty the list shows: a notch of the wheel brings it into view.
+click serial-SERIAL5_PROTOCOL
+expect config.serial.list.top 0
+scroll serial-SERIAL5_PROTOCOL-list down 1
+expect config.serial.list.top 3
+click serial-SERIAL5_PROTOCOL-2
+settle 3
+expect config.serial.5.protocol 2
+expect config.serial.5.protocol.text MAVLink2
+expect params.value.SERIAL5_PROTOCOL 2
+expect config.serial.write SERIAL5_OPTIONS 0 unchanged
+expect config.serial.note SERIAL5 : If connecting a Mavlink sensor, consider setting 'Do not forward Mavlink to/from'
+# And back to none, which has no rule.
+# Opened on MAVLink2, the top row is 1 and None, row 0, is just out of view.
+click serial-SERIAL5_PROTOCOL
+expect config.serial.list.top 1
+scroll serial-SERIAL5_PROTOCOL-list up 1
+expect config.serial.list.top 0
+click serial-SERIAL5_PROTOCOL--1
+settle 3
+expect config.serial.5.protocol -1
+expect config.serial.write SERIAL5_PROTOCOL -1 accepted
+expect params.value.SERIAL5_PROTOCOL -1
+
+# The bitmask window: InvertRX ticked writes 1 and names it; unticked writes 0.
+click serial-SERIAL5_OPTIONS-bitmask
+expect config.serial.dialog SERIAL5_OPTIONS
+expect config.serial.dialog.checked none
+click serial-bitmask-SERIAL5_OPTIONS-0
+settle 3
+expect config.serial.dialog.checked 0
+expect config.serial.write SERIAL5_OPTIONS 1 accepted
+expect params.value.SERIAL5_OPTIONS 1
+expect config.serial.5.options InvertRX
+click serial-bitmask-SERIAL5_OPTIONS-0
+settle 3
+expect config.serial.write SERIAL5_OPTIONS 0 accepted
+expect params.value.SERIAL5_OPTIONS 0
+click serial-bitmask-SERIAL5_OPTIONS-close
+expect config.serial.dialog none
+expect config.serial.message none
+expect config.serial.writes.pending 0
+
+# Choosing another page hides this one.
+click setup-page-ConfigFlightModes
+expect setup.page ConfigFlightModes
+expect config.serial.active false

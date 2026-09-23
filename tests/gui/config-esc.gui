@@ -1,0 +1,66 @@
+# Initial Setup's ESC Calibration page, ported from GCSViews/ConfigurationView/ConfigESCCalibration.cs.
+#
+# The claim: the page shows the .resx's words - the heading, the Calibrate ESCs button and beside
+# it the instructions that begin "Remove Props!" - and Activate sets up the ESC type and the five
+# motor numbers from the vehicle (ConfigESCCalibration.cs:15-26). The page's one action, the
+# button, sets ESC_CALIBRATION to 3 (:28-45); SITL has no ESCs, so this script never presses it,
+# and proves that showing the page, and leaving it, sends nothing: the page's count of sets is 0
+# and the vehicle's ESC_CALIBRATION is still 0 at the end. The press itself is covered by the unit
+# tests in crates/mp-gui/src/config/esc_calibration.rs, against a scripted vehicle.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm, whose motor
+# parameters are the firmware's defaults: MOT_PWM_TYPE 0, MOT_PWM_MIN 1000, MOT_PWM_MAX 2000,
+# MOT_SPIN_ARM 0.1, MOT_SPIN_MIN 0.15, MOT_SPIN_MAX 0.95. Run as
+#
+#   tools/gui-test.sh tests/gui/config-esc.gui -- tcp:127.0.0.1:5760
+
+screen params
+window 1600x1200
+settle 6
+
+click param-download
+settle 15
+expect params.held > 1000
+expect params.value.ESC_CALIBRATION 0
+
+click tab-setup
+expect config.esc.active false
+click setup-page-ConfigMandatory
+click setup-page-ConfigESCCalibration
+settle 1
+expect setup.page ConfigESCCalibration
+expect config.esc.active true
+
+# The page's words.
+expect config.esc.heading ESC Calibration (AC3.3+)
+expect config.esc.button Calibrate ESCs
+expect config.esc.button.enabled true
+expect config.esc.text ~ Remove Props!
+expect config.esc.text ~ -Disconnect USB and battery
+expect config.esc.text ~ -ESCs should beep as they are calibrated
+
+# What Activate read.
+expect config.esc.type 0
+expect config.esc.type.text Normal
+expect config.esc.type.enabled true
+expect config.esc.mot_pwm_min 1000
+expect config.esc.mot_pwm_max 2000
+expect config.esc.mot_spin_arm 0.10
+expect config.esc.mot_spin_min 0.15
+expect config.esc.mot_spin_max 0.95
+expect config.esc.mot_spin_max.enabled true
+
+# Nothing sent: the button was not pressed.
+settle 2
+expect config.esc.sent 0
+expect config.esc.calibration none
+expect config.esc.write none
+expect params.value.ESC_CALIBRATION 0
+
+# Leaving the page sends nothing either.
+click setup-page-ConfigFlightModes
+expect setup.page ConfigFlightModes
+expect config.esc.active false
+settle 2
+expect config.esc.sent 0
+expect params.value.ESC_CALIBRATION 0

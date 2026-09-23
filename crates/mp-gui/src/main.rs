@@ -298,6 +298,14 @@ struct MissionPlanner {
     /// Initial Setup's Compass page, and its boxes' focus.
     compass: config::compass::Compass,
     compass_focus: config::compass::Focus,
+    /// Initial Setup's Servo Output page, and the focus of the number being typed into.
+    servo_output: config::servo_output::ServoOutput,
+    servo_focus: gpui::FocusHandle,
+    /// Initial Setup's Serial Ports page.
+    serial_ports: config::serial_ports::SerialPorts,
+    /// Initial Setup's ESC Calibration page, and the focus of the number being typed into.
+    esc_calibration: config::esc_calibration::EscCalibration,
+    esc_focus: gpui::FocusHandle,
 }
 
 impl MissionPlanner {
@@ -475,6 +483,11 @@ impl MissionPlanner {
             install_firmware: config::firmware::InstallFirmware::default(),
             compass: config::compass::Compass::default(),
             compass_focus: config::compass::Focus::new(cx),
+            servo_output: config::servo_output::ServoOutput::default(),
+            servo_focus: cx.focus_handle(),
+            serial_ports: config::serial_ports::SerialPorts::default(),
+            esc_calibration: config::esc_calibration::EscCalibration::default(),
+            esc_focus: cx.focus_handle(),
         };
         // Opening on the planning screen activates it, as switching to it does.
         if this.screen == Screen::Plan {
@@ -1599,6 +1612,27 @@ impl Render for MissionPlanner {
         if self.compass.dialog().is_some() && !self.compass_focus.dialog.is_focused(window) {
             self.compass_focus.dialog.focus(window, cx);
         }
+        // The Servo Output, Serial Ports and ESC Calibration pages: each page object disposed
+        // with its screen, a number that lost the focus read, the numbers' timers, and every
+        // write's answer.
+        let on_setup = self.screen == Screen::Setup;
+        let now = std::time::Instant::now();
+        self.servo_output.tick(
+            &self.telemetry,
+            &view,
+            on_setup,
+            self.servo_focus.is_focused(window),
+            now,
+        );
+        self.serial_ports
+            .tick(&self.telemetry, &view, on_setup, metadata::lookup);
+        self.esc_calibration.tick(
+            &self.telemetry,
+            &view,
+            on_setup,
+            self.esc_focus.is_focused(window),
+            now,
+        );
         let banner = self.telemetry.firmware_banner().map(str::to_owned);
         let mav_type = view.state.as_ref().map_or(0, |state| state.vehicle_type);
         self.metadata.advance(banner.as_deref(), mav_type);
@@ -1811,6 +1845,9 @@ impl Render for MissionPlanner {
             config::radio::record_facts(&self.radio_input, &view);
             config::motor_test::record_facts(&self.motor_test, &view);
             config::compass::record_facts(&self.compass, &view);
+            config::servo_output::record_facts(&self.servo_output, &view);
+            config::serial_ports::record_facts(&self.serial_ports, &view);
+            config::esc_calibration::record_facts(&self.esc_calibration, &view);
             facts::publish();
             // The harness's work, which a normal run does not do, is not the frame's.
             storm::exclude(harness.elapsed());
@@ -2070,6 +2107,21 @@ impl Render for MissionPlanner {
                     cx,
                 ))
                 .children(config::radio::overlay(&self.radio_input, window, cx))
+                .children(config::servo_output::overlay(
+                    &self.servo_output,
+                    window,
+                    cx,
+                ))
+                .children(config::serial_ports::overlay(
+                    &self.serial_ports,
+                    window,
+                    cx,
+                ))
+                .children(config::esc_calibration::overlay(
+                    &self.esc_calibration,
+                    window,
+                    cx,
+                ))
                 .into_any_element(),
             Screen::Config => probe::measured("config-body", div())
                 .flex()

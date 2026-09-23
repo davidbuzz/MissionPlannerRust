@@ -370,21 +370,39 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigRadioOutput"),
         Some(1),
         &[setup(215, "Servo Output", MANDATORY, ANY)],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigRadioOutput.cs:11-92, ported whole: sixteen rows
+        // or thirty-two with SERVO_32_ENABLE, each with its SERVO_OUTPUT_RAW bar and the
+        // Mavlink* controls on SERVOn_REVERSED, _FUNCTION, _MIN, _TRIM and _MAX writing on
+        // change - a number typed or stepped, 300 ms after, with MavlinkNumericUpDown's
+        // out-of-range question. The C# has no RCn_* fallback, and nor does this. A number's
+        // mouse wheel is not carried over.
+        Ours::Done(at("crates/mp-gui/src/config/servo_output.rs", "fn page")),
     ),
     panel(
         "ConfigSerial",
         cv!("ConfigSerial"),
         Some(0),
         &[setup(220, "Serial Ports", MANDATORY, ANY)],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigSerial.cs:37-513, but for the port names, which
+        // Activate downloads from @SYS/uarts.txt over MAVLink FTP - a client this application
+        // does not have.
+        Partial(
+            at("crates/mp-gui/src/config/serial_ports.rs", "fn page"),
+            "a row per SERIALn to the highest SERIALn_BAUD, the speed and protocol combos \
+             writing on change through the page's setParam, SerialOptionRules.json's rules and \
+             MAVLink warning in the note, the options label and the Set Bitmask window; missing \
+             the port names from @SYS/uarts.txt, which need MAVLink FTP",
+        ),
     ),
     panel(
         "ConfigESCCalibration",
         cv!("ConfigESCCalibration"),
         Some(1),
         &[setup(224, "ESC Calibration", MANDATORY, ANY)],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigESCCalibration.cs:10-45, ported whole: the text
+        // with its props warning, Calibrate ESCs setting ESC_CALIBRATION to 3 and disabled once
+        // it has, and MOT_PWM_TYPE, MOT_PWM_MIN/MAX and MOT_SPIN_ARM/MIN/MAX writing on change.
+        Ours::Done(at("crates/mp-gui/src/config/esc_calibration.rs", "fn page")),
     ),
     panel(
         "ConfigFlightModes",
@@ -1558,7 +1576,7 @@ mod tests {
             );
             checked += 1;
         }
-        assert_eq!(checked, 14);
+        assert_eq!(checked, 17);
     }
 
     /// The committed report matches the table.
@@ -1590,7 +1608,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (4, 9, 42, 2, 4)
+            (6, 10, 39, 2, 4)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()
