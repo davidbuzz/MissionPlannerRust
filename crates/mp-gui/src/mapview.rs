@@ -65,6 +65,8 @@ pub struct MapViewport {
     mission: Vec<(WebMercator, u16)>,
     /// The survey area being drawn, if any.
     polygon: Vec<WebMercator>,
+    /// The geofence, if one is being drawn or has been read back.
+    fence: Vec<WebMercator>,
     /// Where map imagery comes from, if any has been configured.
     tiles: Option<Arc<TileStore>>,
     /// Tiles already uploaded to the GPU, keyed so the `ImageId` stays stable.
@@ -193,6 +195,7 @@ impl MapViewport {
             home: None,
             mission: Vec::new(),
             polygon: Vec::new(),
+            fence: Vec::new(),
             tiles: None,
             images: HashMap::new(),
             tiles_drawn: 0,
@@ -318,6 +321,14 @@ impl MapViewport {
     /// Replaces the survey area shown on the map.
     pub fn set_polygon(&mut self, vertices: &[LatLon]) {
         self.polygon = vertices
+            .iter()
+            .map(|vertex| vertex.to_web_mercator())
+            .collect();
+    }
+
+    /// Replaces the geofence shown on the map.
+    pub fn set_fence(&mut self, vertices: &[LatLon]) {
+        self.fence = vertices
             .iter()
             .map(|vertex| vertex.to_web_mercator())
             .collect();
@@ -850,6 +861,24 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
             }
         }
         map.phases[2] = submit.elapsed();
+    }
+
+    // The geofence: a boundary, so it is drawn in the alert colour and closed explicitly. It goes
+    // under everything else, because it is the thing the rest must stay inside.
+    if map.fence.len() > 1 {
+        let mut builder = PathBuilder::stroke(px(2.0));
+        let mut vertices = map.fence.iter();
+        if let Some(first) = vertices.next() {
+            builder.move_to(to_screen(*first));
+            for vertex in vertices {
+                builder.line_to(to_screen(*vertex));
+            }
+            builder.line_to(to_screen(*first));
+        }
+        match builder.build() {
+            Ok(path) => window.paint_path(path, Hsla::from(rgb(0xf8_51_49))),
+            Err(_) => map.track_path_failures += 1,
+        }
     }
 
     // The survey area, drawn first so the grid generated from it sits on top. Closed explicitly

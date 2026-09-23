@@ -204,6 +204,44 @@ impl Telemetry {
         }
     }
 
+    /// Sends a geofence, replacing whatever the vehicle holds.
+    pub fn upload_fence(&self, items: Vec<MissionItem>) {
+        if let Some(link) = &self.link
+            && let Some((id, _)) = link.primary_vehicle()
+        {
+            link.upload_list(id, items, mp_mission::fence::MISSION_TYPE_FENCE);
+        }
+    }
+
+    /// Asks the vehicle for its geofence.
+    pub fn request_fence(&self) {
+        if let Some(link) = &self.link
+            && let Some((id, _)) = link.primary_vehicle()
+        {
+            link.download_list(id, mp_mission::fence::MISSION_TYPE_FENCE);
+        }
+    }
+
+    /// The fence the vehicle reported, once a download has completed.
+    #[must_use]
+    pub fn fence_items(&self) -> Vec<MissionItem> {
+        let Some(link) = &self.link else {
+            return Vec::new();
+        };
+        let Some((id, _)) = link.primary_vehicle() else {
+            return Vec::new();
+        };
+        link.list_transfer(id, mp_mission::fence::MISSION_TYPE_FENCE)
+            .filter(|transfer| {
+                matches!(
+                    transfer.state(),
+                    mp_link::mission_transfer::TransferState::Complete
+                )
+            })
+            .map(|transfer| transfer.items().to_vec())
+            .unwrap_or_default()
+    }
+
     /// The vehicle currently being flown, if any.
     fn target(&self) -> Option<(&Link, VehicleId)> {
         let link = self.link.as_ref()?;

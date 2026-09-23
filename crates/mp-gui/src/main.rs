@@ -106,6 +106,8 @@ struct MissionPlanner {
     screen: Screen,
     /// The mission the operator is editing.
     plan: Plan,
+    /// Whether the next completed fence download should replace the fence on screen.
+    adopt_vehicle_fence: bool,
     /// Whether the next completed download should replace the plan on screen.
     ///
     /// Set when the operator presses "read from vehicle" and cleared once the items arrive. Without
@@ -184,6 +186,7 @@ impl MissionPlanner {
             screen,
             plan: Plan::default(),
             adopt_vehicle_mission: false,
+            adopt_vehicle_fence: false,
             file_status: None,
             dragging_waypoint: None,
         }
@@ -285,6 +288,11 @@ impl MissionPlanner {
         self.map.borrow_mut().set_polygon(self.plan.polygon());
     }
 
+    /// Pushes the geofence to the map after an edit.
+    fn sync_map_fence(&self) {
+        self.map.borrow_mut().set_fence(self.plan.fence());
+    }
+
     /// The tab strip.
     fn tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let current = self.screen;
@@ -360,6 +368,8 @@ impl MissionPlanner {
         let vertices = self.plan.polygon().len();
         let survey = self.plan.survey_options();
         let survey_error = self.plan.survey_error().map(ToOwned::to_owned);
+        let fence_vertices = self.plan.fence().len();
+        let fence_error = self.plan.fence_error().map(ToOwned::to_owned);
 
         div()
             .id("plan-sidebar")
@@ -376,6 +386,13 @@ impl MissionPlanner {
                 vertices,
                 survey,
                 survey_error.as_deref(),
+                cx,
+            ))
+            .child(plan::fence_panel(
+                draw_mode,
+                fence_vertices,
+                fence_error.as_deref(),
+                view,
                 cx,
             ))
             .child(plan::items_panel(&items, selected, cx))
@@ -516,6 +533,10 @@ impl MissionPlanner {
                                         this.plan.add_area_vertex(position);
                                         this.sync_map_polygon();
                                     }
+                                    plan::DrawMode::Fence => {
+                                        this.plan.add_fence_vertex(position);
+                                        this.sync_map_fence();
+                                    }
                                 }
                             } else {
                                 this.fly_here(position);
@@ -653,6 +674,20 @@ impl Render for MissionPlanner {
             }
         } else {
             self.map.borrow_mut().set_mission(self.plan.items());
+        }
+
+        // A completed fence download replaces the fence only if the operator asked for one.
+        if self.adopt_vehicle_fence {
+            let fence = self.telemetry.fence_items();
+            if !fence.is_empty() {
+                self.adopt_vehicle_fence = false;
+                self.plan.adopt_fence(&fence);
+                self.sync_map_fence();
+                self.file_status = Some(format!(
+                    "read a fence of {} items from the vehicle",
+                    fence.len()
+                ));
+            }
         }
 
         if self.auto_read_mission && !self.mission_requested && view.vehicle.is_some() {

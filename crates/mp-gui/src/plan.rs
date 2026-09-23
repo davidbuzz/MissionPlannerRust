@@ -10,6 +10,7 @@
 
 use gpui::{AnyElement, Context, div, prelude::*, px, rgb};
 use mp_mavlink_dialects::all::MavCmd;
+use mp_mission::fence::FenceItem;
 use mp_mission::validate::{Context as ValidationContext, validate_with};
 use mp_mission::{GridOptions, MissionItem, Severity, grid};
 use mp_units::LatLon;
@@ -37,6 +38,8 @@ pub enum DrawMode {
     Waypoints,
     /// Add a vertex to the survey area.
     Area,
+    /// Add a vertex to the geofence.
+    Fence,
 }
 
 /// The mission being edited, separate from the vehicle's.
@@ -53,6 +56,10 @@ pub struct Plan {
     polygon: Vec<LatLon>,
     /// How the survey should be flown.
     survey: GridOptions,
+    /// The geofence the vehicle must stay inside, in the order its vertices were drawn.
+    fence: Vec<LatLon>,
+    /// Why the fence could not be built or sent, if it could not.
+    fence_error: Option<String>,
     /// Why the last survey could not be generated, if it could not.
     survey_error: Option<String>,
 }
@@ -232,13 +239,98 @@ impl Plan {
         self.origin = Origin::Edited;
     }
 
-    /// Discards everything, including the survey area.
+    /// Discards everything, including the survey area and the fence.
     pub fn clear(&mut self) {
         self.items.clear();
         self.origin = Origin::Empty;
         self.selected = None;
         self.polygon.clear();
         self.survey_error = None;
+        self.fence.clear();
+        self.fence_error = None;
+    }
+
+    /// The geofence's vertices.
+    #[must_use]
+    pub fn fence(&self) -> &[LatLon] {
+        &self.fence
+    }
+
+    /// Adds a vertex to the geofence.
+    pub fn add_fence_vertex(&mut self, position: LatLon) {
+        self.fence.push(position);
+        self.fence_error = None;
+    }
+
+    /// Removes the last fence vertex drawn.
+    pub fn undo_fence_vertex(&mut self) {
+        self.fence.pop();
+        self.fence_error = None;
+    }
+
+    /// Discards the geofence, leaving the mission alone.
+    pub fn clear_fence(&mut self) {
+        self.fence.clear();
+        self.fence_error = None;
+    }
+
+    /// Why the fence is not usable, if it is not.
+    #[must_use]
+    pub fn fence_error(&self) -> Option<&str> {
+        self.fence_error.as_deref()
+    }
+
+    /// The fence as the items the protocol carries, or `None` if it is not valid.
+    ///
+    /// An inclusion polygon: the vehicle must stay inside it. Exclusion zones and circles exist in
+    /// the protocol and are not offered here yet, because a fence drawn wrongly is worse than no
+    /// fence - it either does nothing or triggers a return-to-launch in flight.
+    pub fn fence_items(&mut self) -> Option<Vec<MissionItem>> {
+        let fence = FenceItem::Polygon {
+            inclusion: true,
+            vertices: self.fence.clone(),
+        };
+        match fence.validate() {
+            Ok(()) => {
+                self.fence_error = None;
+                Some(fence.to_items(0))
+            }
+            Err(why) => {
+                self.fence_error = Some(why.to_string());
+                None
+            }
+        }
+    }
+
+    /// Replaces the fence with what the vehicle reported.
+    ///
+    /// Only the first inclusion polygon is shown. A vehicle can hold several fences and this
+    /// editor draws one; saying so is better than silently showing a fraction of what is loaded.
+    pub fn adopt_fence(&mut self, items: &[MissionItem]) {
+        match mp_mission::fences_from_items(items) {
+            Ok(fences) => {
+                let polygons: Vec<&FenceItem> = fences
+                    .iter()
+                    .filter(|fence| matches!(fence, FenceItem::Polygon { .. }))
+                    .collect();
+                match polygons.first() {
+                    Some(FenceItem::Polygon { vertices, .. }) => {
+                        self.fence = vertices.clone();
+                        self.fence_error = (polygons.len() > 1).then(|| {
+                            format!(
+                                "the vehicle holds {} polygons; showing the first",
+                                polygons.len()
+                            )
+                        });
+                    }
+                    _ => {
+                        self.fence.clear();
+                        self.fence_error = Some("the vehicle holds no polygon fence".to_owned());
+                    }
+                }
+            }
+            Err(why) => self.fence_error = Some(why.to_string()),
+        }
     }
 
     /// What a click on the map does.
@@ -810,6 +902,116 @@ pub fn survey_panel(
                     cx.notify();
                 }),
             ))
+            .children(error.map(|error| {
+                div()
+                    .text_xs()
+                    .text_color(rgb(theme::ALERT))
+                    .child(error.to_owned())
+            })),
+    )
+}
+
+/// The geofence: draw the boundary the vehicle must stay inside, and move it to and from the
+/// aircraft.
+pub fn fence_panel(
+    mode: DrawMode,
+    vertices: usize,
+    error: Option<&str>,
+    view: &TelemetryView,
+    cx: &mut Context<MissionPlanner>,
+) -> impl IntoElement {
+    let drawing = mode == DrawMode::Fence;
+    let has_vehicle = view.vehicle.is_some();
+    // Three is the fewest that encloses anything; the protocol and the vehicle both refuse fewer.
+    let usable = vertices >= 3;
+
+    panel(
+        "geofence",
+        div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .gap_2()
+                    .child(action(
+                        "fence-draw",
+                        if drawing {
+                            "drawing fence"
+                        } else {
+                            "draw fence"
+                        },
+                        if drawing { theme::ALERT } else { theme::ACCENT },
+                        !drawing,
+                        cx.listener(|this, _event: &(), _window, cx| {
+                            this.plan.set_draw_mode(DrawMode::Fence);
+                            cx.notify();
+                        }),
+                    ))
+                    .child(action(
+                        "fence-undo",
+                        "undo vertex",
+                        theme::TEXT,
+                        vertices > 0,
+                        cx.listener(|this, _event: &(), _window, cx| {
+                            this.plan.undo_fence_vertex();
+                            this.sync_map_fence();
+                            cx.notify();
+                        }),
+                    ))
+                    .child(action(
+                        "fence-clear",
+                        "clear fence",
+                        theme::TEXT,
+                        vertices > 0,
+                        cx.listener(|this, _event: &(), _window, cx| {
+                            this.plan.clear_fence();
+                            this.sync_map_fence();
+                            cx.notify();
+                        }),
+                    )),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .gap_2()
+                    .child(action(
+                        "fence-read",
+                        "read from vehicle",
+                        theme::ACCENT,
+                        has_vehicle,
+                        cx.listener(|this, _event: &(), _window, cx| {
+                            this.telemetry.request_fence();
+                            this.adopt_vehicle_fence = true;
+                            cx.notify();
+                        }),
+                    ))
+                    .child(action(
+                        "fence-write",
+                        "write to vehicle",
+                        theme::WARN,
+                        has_vehicle && usable,
+                        cx.listener(|this, _event: &(), _window, cx| {
+                            if let Some(items) = this.plan.fence_items() {
+                                this.telemetry.upload_fence(items);
+                            }
+                            cx.notify();
+                        }),
+                    )),
+            )
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(if usable { theme::OK } else { theme::DIM }))
+                    .child(match vertices {
+                        0 => "right-click the map to place the boundary's corners".to_owned(),
+                        1 | 2 => format!("{vertices} of at least 3 corners placed"),
+                        _ => format!("{vertices} corners - the vehicle must stay inside"),
+                    }),
+            )
             .children(error.map(|error| {
                 div()
                     .text_xs()
@@ -1486,6 +1688,101 @@ mod tests {
         plan.add_waypoint(at(-35.36, 149.16), 50.0);
         plan.move_to(99, at(0.0, 0.0));
         assert!((plan.items()[0].x - -35.36).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_fence_needs_three_corners_before_it_can_be_sent() {
+        // Fewer encloses nothing, and both the protocol and the vehicle refuse it. Saying why is
+        // better than a write button that fails silently.
+        let mut plan = Plan::default();
+        plan.add_fence_vertex(at(-35.364, 149.164));
+        plan.add_fence_vertex(at(-35.364, 149.168));
+        assert!(plan.fence_items().is_none());
+        let error = plan.fence_error().expect("an explanation");
+        assert!(error.contains('3'), "{error}");
+
+        plan.add_fence_vertex(at(-35.361, 149.168));
+        let items = plan.fence_items().expect("three corners should be enough");
+        assert_eq!(items.len(), 3);
+        assert!(plan.fence_error().is_none());
+    }
+
+    #[test]
+    fn a_drawn_fence_becomes_inclusion_polygon_items() {
+        // Inclusion: the vehicle must stay inside. An exclusion fence drawn by mistake would do
+        // nothing useful, or trigger a return-to-launch in flight.
+        let mut plan = Plan::default();
+        for vertex in area() {
+            plan.add_fence_vertex(vertex);
+        }
+        let items = plan.fence_items().expect("a valid fence");
+        assert_eq!(items.len(), 4);
+        for item in &items {
+            assert_eq!(item.command, mp_mission::fence::CMD_FENCE_POLYGON_INCLUSION);
+            // Every vertex declares the total, which is how the run is delimited on the wire.
+            assert!(
+                (item.param1 - 4.0).abs() < f64::EPSILON,
+                "{:?}",
+                item.param1
+            );
+        }
+    }
+
+    #[test]
+    fn a_fence_round_trips_through_the_items_the_protocol_carries() {
+        let mut plan = Plan::default();
+        for vertex in area() {
+            plan.add_fence_vertex(vertex);
+        }
+        let items = plan.fence_items().expect("a valid fence");
+
+        let mut received = Plan::default();
+        received.adopt_fence(&items);
+        assert_eq!(received.fence().len(), 4);
+        for (sent, got) in area().iter().zip(received.fence()) {
+            assert!((sent.latitude() - got.latitude()).abs() < 1e-9);
+            assert!((sent.longitude() - got.longitude()).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn undoing_and_clearing_the_fence_leave_the_mission_alone() {
+        let mut plan = Plan::default();
+        plan.add_waypoint(at(-35.36, 149.16), 50.0);
+        for vertex in area() {
+            plan.add_fence_vertex(vertex);
+        }
+
+        plan.undo_fence_vertex();
+        assert_eq!(plan.fence().len(), 3);
+        plan.clear_fence();
+        assert!(plan.fence().is_empty());
+        assert_eq!(plan.items().len(), 1, "the mission should be untouched");
+    }
+
+    #[test]
+    fn the_fence_and_the_survey_area_are_separate_shapes() {
+        // They are both polygons drawn by right-clicking, and confusing them would send a survey
+        // boundary to the vehicle as a fence.
+        let mut plan = Plan::default();
+        plan.set_draw_mode(DrawMode::Area);
+        plan.add_area_vertex(at(-35.360, 149.160));
+        plan.set_draw_mode(DrawMode::Fence);
+        plan.add_fence_vertex(at(-35.370, 149.170));
+
+        assert_eq!(plan.polygon().len(), 1);
+        assert_eq!(plan.fence().len(), 1);
+        assert!((plan.polygon()[0].latitude() - -35.360).abs() < 1e-9);
+        assert!((plan.fence()[0].latitude() - -35.370).abs() < 1e-9);
+    }
+
+    #[test]
+    fn adopting_a_vehicle_with_no_polygon_fence_says_so() {
+        // Rather than showing an empty fence that looks like one was read successfully.
+        let mut plan = Plan::default();
+        plan.adopt_fence(&[]);
+        assert!(plan.fence().is_empty());
+        assert!(plan.fence_error().is_some());
     }
 
     #[test]
