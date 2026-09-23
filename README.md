@@ -10,8 +10,11 @@ projects — as a Rust application that is **fast**, **multi-platform** and **GP
 
 ## Status
 
-Early. The protocol and telemetry spine works end to end against a real autopilot; the UI is just
-beginning.
+Early, but flyable behind SITL and a real autopilot. The protocol and telemetry spine is solid; the
+UI covers flying, planning and the first of the setup screens.
+
+Measured on this tree: **13 crates, 36,603 hand-written Rust LOC** (plus 91,634 generated),
+**531 tests** green on `cargo test --workspace`.
 
 | Working today | |
 |---|---|
@@ -21,17 +24,24 @@ beginning.
 | Link engine | I/O thread, multi-vehicle routing, stream requests, commands |
 | Vehicle state | lock-free snapshot bus, packet-loss tracking |
 | Parameters | full download with gap recovery, typed values, 1,408 from SITL |
+| `.param` files | save, load and compare against a vehicle, honouring the C# skip-list |
 | Missions | upload and download, `.waypoints` files, 129-file corpus |
 | Logs | `.tlog` read and write; ArduPilot `.BIN` dataflash parsing |
+| Flight recording | every connection recorded to a `.tlog`, both directions, shown on screen |
+| Health | EKF variances and vibration with ArduPilot's own thresholds, clipping counts |
+| Calibration | accelerometer, compass, radio, motor test |
+| Joystick | axes to `RC_CHANNELS_OVERRIDE` with a release-on-disconnect failsafe (Linux) |
 | Geodesy | typed units, Web Mercator, slippy-map tile arithmetic |
-| CLI | `mpr watch \| record \| fly \| params \| mission \| ports` |
-| GUI | live telemetry, flight path map, primary flight display |
+| Maps | GPU tile rendering, flight path, mission and fence overlays |
+| CLI | `mpr watch \| record \| fly \| params \| param \| mission \| survey \| log \| logs \| ports` |
+| GUI | fly, plan, setup and params screens on gpui |
 
 ## Verification
 
-The port is checked against the original rather than against our reading of it. The C#
-implementation runs headless under mono (`tools/csharp-reference/`), and its output is the
-reference:
+The port is checked against the original rather than against our reading of it. **The C# source is
+in the tree** at `referneces/missionplanner` and is the specification — a behaviour is ported by
+reading the `.cs` file, not by recalling what it probably does. The C# implementation also runs
+headless under mono (`tools/csharp-reference/`), and its output is the reference:
 
 - **35,750 frames** of a real ArduPilot flight decode identically to Mission Planner's own
   `MAVLink.dll` — msgid, sequence, ids, payload length, CRC and raw bytes.
@@ -46,6 +56,12 @@ reference:
 
 Run it yourself: `tools/csharp-reference/regen.sh` regenerates the corpora, `cargo test` compares.
 
+Beyond the differential corpus: five `cargo-fuzz` targets with committed seed corpora (34 million
+executions clean at the last run, `fuzz/README.md` has the numbers); a bounded pass over the same
+properties on stable in every `cargo test --workspace`; and a smoke test that opens a window and
+paints on Linux, Windows and macOS in CI — the only thing that exercises a graphics backend rather
+than merely compiling it.
+
 ## Build and run
 
 ```sh
@@ -56,8 +72,14 @@ mpr watch tcp:127.0.0.1:5760     # ArduPilot SITL
 mpr watch udp:14550              # bind and wait for a vehicle
 mpr watch file:flight.tlog       # replay a recording
 mpr record udp:14550 flight.tlog
+mpr param save tcp:127.0.0.1:5760 backup.param
+mpr param diff backup.param proposed.param
 mpr-gui                          # the graphical front end
 ```
+
+The GUI records every flight to `Documents/Mission Planner/logs` without being asked — the same
+directory the C# application uses, so a flight recorded by either is found by both. `MP_NO_RECORD`
+turns it off.
 
 Requires a recent stable Rust (see `rust-toolchain.toml`).
 
@@ -68,16 +90,23 @@ crates/
   mp-mavlink           wire format: framing, checksums, signing
   mp-mavlink-dialects  generated message types (do not edit)
   mp-transport         serial, TCP, UDP, replay, test doubles
-  mp-vehicle           decoded state and the snapshot bus
-  mp-link              the live link: I/O thread, routing, commands
-  mp-log               .tlog reading and writing
+  mp-vehicle           decoded state, the snapshot bus, EKF and vibration health
+  mp-link              the live link: I/O thread, routing, commands, .param files
+  mp-mission           missions, fences, rally points, survey grids
+  mp-log               .tlog reading and writing, dataflash parsing
+  mp-tiles             map tile fetching, decoding and caching
+  mp-input             joystick and gamepad, mapped to RC channels
   mp-units             typed units and geodesy
+  mp-fuzz-checks       the fuzz properties, so they compile on stable too
   mp-cli               `mpr`
   mp-gui               `mpr-gui`, built on gpui
 xtask/                 codegen and repository invariants
+fuzz/                  libfuzzer targets and their committed seed corpora
 tools/csharp-reference headless C# reference for differential testing
 testdata/              golden corpora
 referneces/            read-only upstream sources (git-excluded)
+    missionplanner/    the C# original — the specification for every ported behaviour
+    zed/               gpui
 ```
 
 ## Licence

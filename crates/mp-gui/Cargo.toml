@@ -28,6 +28,7 @@ mp-units.workspace = true
 mp-mission.workspace = true
 mp-tiles.workspace = true
 mp-mavlink-dialects.workspace = true
+mp-input.workspace = true
 
 # Local time, for naming a flight recording the way the pilot's own clock reads. std has no
 # timezone support at all, and the alternatives are worse: libc's localtime_r needs unsafe, which

@@ -6,7 +6,7 @@
 
 use mp_mavlink_dialects::all::{
     CommandLong, MavMessage, MissionAck, MissionCount, MissionItemInt, MissionRequestInt,
-    MissionRequestList, ParamRequestList, ParamRequestRead, ParamSet, SetMode,
+    MissionRequestList, ParamRequestList, ParamRequestRead, ParamSet, RcChannelsOverride, SetMode,
     SetPositionTargetGlobalInt,
 };
 use mp_mission::MissionItem;
@@ -336,6 +336,41 @@ pub fn send_mission_ack(target: VehicleId, result: u8, mission_type: u8) -> MavM
     })
 }
 
+/// Overrides the vehicle's RC channels with stick positions from a joystick.
+///
+/// Eighteen values, in channel order. The caller decides what each one means - a position, an
+/// "ignore this channel", or a "release this channel back to the transmitter" - because the two
+/// halves of this message use opposite conventions for those and the decision belongs with the
+/// code that knows which convention applies. See `mp_input::mapping`.
+///
+/// Sent repeatedly while a stick is in use and never held: a vehicle that keeps flying the last
+/// position it received is the failure this whole path is shaped around. See `mp_input::Failsafe`.
+#[must_use]
+pub fn rc_override(target: VehicleId, channels: [u16; 18]) -> MavMessage {
+    MavMessage::RcChannelsOverride(RcChannelsOverride {
+        chan1_raw: channels[0],
+        chan2_raw: channels[1],
+        chan3_raw: channels[2],
+        chan4_raw: channels[3],
+        chan5_raw: channels[4],
+        chan6_raw: channels[5],
+        chan7_raw: channels[6],
+        chan8_raw: channels[7],
+        target_system: target.sysid,
+        target_component: target.compid,
+        chan9_raw: channels[8],
+        chan10_raw: channels[9],
+        chan11_raw: channels[10],
+        chan12_raw: channels[11],
+        chan13_raw: channels[12],
+        chan14_raw: channels[13],
+        chan15_raw: channels[14],
+        chan16_raw: channels[15],
+        chan17_raw: channels[16],
+        chan18_raw: channels[17],
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -430,5 +465,82 @@ mod tests {
             }
             other => panic!("expected a COMMAND_LONG, got {}", other.name()),
         }
+    }
+    /// Every channel lands in the field the wire expects, including across the gap where
+    /// `target_system` and `target_component` sit between channel 8 and channel 9.
+    ///
+    /// Untested, a transposition here is invisible: the message encodes, the vehicle accepts it,
+    /// and the aircraft rolls when the pilot asked it to climb. Each channel gets a distinct value
+    /// so a swap cannot hide behind two equal numbers.
+    #[test]
+    fn every_rc_channel_lands_in_its_own_field() {
+        let target = VehicleId {
+            sysid: 7,
+            compid: 42,
+        };
+        // 1001, 1002, ... 1018 - inside the safe band and unique per channel.
+        let mut channels = [0u16; 18];
+        for (index, slot) in channels.iter_mut().enumerate() {
+            #[allow(clippy::cast_possible_truncation)]
+            {
+                *slot = 1001 + index as u16;
+            }
+        }
+
+        let MavMessage::RcChannelsOverride(message) = rc_override(target, channels) else {
+            panic!("rc_override must build an RC_CHANNELS_OVERRIDE");
+        };
+
+        assert_eq!(message.target_system, 7);
+        assert_eq!(message.target_component, 42);
+        let placed = [
+            message.chan1_raw,
+            message.chan2_raw,
+            message.chan3_raw,
+            message.chan4_raw,
+            message.chan5_raw,
+            message.chan6_raw,
+            message.chan7_raw,
+            message.chan8_raw,
+            message.chan9_raw,
+            message.chan10_raw,
+            message.chan11_raw,
+            message.chan12_raw,
+            message.chan13_raw,
+            message.chan14_raw,
+            message.chan15_raw,
+            message.chan16_raw,
+            message.chan17_raw,
+            message.chan18_raw,
+        ];
+        assert_eq!(placed, channels);
+    }
+
+    /// A release built by `mp_input` must survive the trip into the message unchanged - both
+    /// halves, with their opposite conventions.
+    #[test]
+    fn a_release_survives_being_put_on_the_wire() {
+        let target = VehicleId {
+            sysid: 1,
+            compid: 1,
+        };
+        // The same values mp_input::mapping::Channels::release() produces, written out here so
+        // this test fails if either side changes without the other.
+        let mut release = [u16::MAX - 1; 18];
+        for slot in release.iter_mut().take(8) {
+            *slot = 0;
+        }
+
+        let MavMessage::RcChannelsOverride(message) = rc_override(target, release) else {
+            panic!("rc_override must build an RC_CHANNELS_OVERRIDE");
+        };
+        assert_eq!(message.chan1_raw, 0, "channels 1-8 release with 0");
+        assert_eq!(message.chan8_raw, 0);
+        assert_eq!(
+            message.chan9_raw,
+            u16::MAX - 1,
+            "channels 9-18 release with UINT16_MAX-1, not 0"
+        );
+        assert_eq!(message.chan18_raw, u16::MAX - 1);
     }
 }

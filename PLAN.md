@@ -348,25 +348,38 @@ L11 mp-plugin-api  mp-plugin-host  mp-script       L12 xtask  mp-codegen
 
 ### 5.2 Current state — re-baselined honestly
 
-Measured this session: **5 commits, 9 crates, 48,775 Rust LOC** of which **40,547 is the generated
-dialect** → **~8,228 hand-written**, plus 1,100 LOC of `xtask`.
+Measured on this tree: **82 commits, 13 crates, 36,603 hand-written Rust LOC** plus **91,634
+generated**, and **531 tests** green on `cargo test --workspace`.
 
-| Crate | LOC | Note |
-|---|---:|---|
-| `mp-mavlink-dialects` | 40,952 | 40,547 generated |
-| `mp-mavlink` | 2,150 | ~45% tests |
-| `mp-transport` | 1,449 | serial/tcp/udp/replay |
-| `mp-vehicle` | 1,044 | snapshot bus |
-| `mp-link` | 883 | uncommitted changes |
-| `xtask` | 1,100 | mavlink codegen only |
-| `mp-log`, `mp-gui`, `mp-cli`, `mp-units` | 1,197 | `mp-gui`/`mp-log` **untracked** |
+| Crate | Hand-written | Generated | Note |
+|---|---:|---:|---|
+| `mp-gui` | 11,514 | — | fly / plan / setup / params on gpui |
+| `mp-link` | 6,728 | — | link engine, params, missions, calibration, `.param` files |
+| `mp-mission` | 2,621 | — | missions, fences, rally, survey grids |
+| `mp-vehicle` | 2,507 | 46,976 | snapshot bus, param metadata, EKF/vibration health |
+| `mp-mavlink` | 2,346 | — | ~45% tests |
+| `mp-tiles` | 2,030 | — | fetch, decode, cache |
+| `xtask` | 1,748 | — | mavlink codegen |
+| `mp-transport` | 1,631 | — | serial/tcp/udp/replay |
+| `mp-cli` | 1,520 | — | `mpr` |
+| `mp-log` | 1,214 | — | tlog read/write, dataflash |
+| `mp-input` | 980 | — | joystick → RC channels |
+| `mp-units` | 907 | — | typed units and geodesy |
+| `mp-mavlink-dialects` | 488 | 44,658 | |
+| `mp-fuzz-checks` | 369 | — | the fuzz properties, shared with the stable harness |
 
-What exists is *vertical-slice* work (commit messages say so). What does **not** exist: the ledger,
-the dependency graph, the dispatcher, the DSDL/resx/screenspec/paramgen generators, the corpus, the
-GPU spike. And `.github/workflows/ci.yml`'s "differential" job neither installs mono nor references a
-Mission Planner distribution — it runs `cargo test --test differential_tlog` against checked-in CSVs.
-**Phase 0 is ~12% complete, not ~40%.** Every existing file is re-entered into the ledger *under
-contract*, not marked done.
+What exists is still *vertical-slice* work, now a fairly wide slice: the telemetry spine, the map,
+mission planning, parameter configuration including `.param` interop, calibration, flight recording,
+and the first joystick path. What does **not** exist: the ledger, the dependency graph, the
+dispatcher, the DSDL/resx/screenspec/paramgen generators, the full corpus, the 3D and video paths,
+i18n, packaging. The crate graph is also **not yet the L0–L12 layering of §5.1** — `mp-link` carries
+params, missions, calibration and file formats that belong in `mp-params`, `mp-calibration` and
+their own crates, and splitting it is owed before the fleet is dispatched against it.
+
+`.github/workflows/ci.yml`'s "differential" job still neither installs mono nor references a Mission
+Planner distribution — it runs `cargo test --test differential_tlog` against checked-in CSVs. **Phase
+0 remains incomplete**: every existing file is re-entered into the ledger *under contract*, not
+marked done.
 
 ### 5.3 Conventions
 
@@ -937,12 +950,24 @@ description, range, enumeration and bitmask — and of the flight mode tables. A
 | Parameters the vehicle reports | 1,408 |
 | With no bundled documentation | **581 (41%)** |
 | Outside their documented range | 9, including `FENCE_TOTAL` and `EK3_ABIAS_P_NSE` |
-| Renamed since the metadata | `ARMING_CHECK` → `ARMING_OPTIONS`, `WPNAV_SPEED` → `WP_SPD` |
+| Renamed since the metadata | `ARMING_CHECK` → `ARMING_SKIPCHK`, `WPNAV_SPEED` → `WP_SPD` |
 
 **Consequence.** A configuration screen driven by the bundled file alone shows nothing useful for
 two parameters in five, and shows *wrong* ranges for a handful — which is worse, because a range
 that disagrees with the firmware will reject a value the vehicle would have accepted, or accept one
 it will not.
+
+**Corrected here, because the first version of this row was wrong and it mattered.** The successor
+to `ARMING_CHECK` is `ARMING_SKIPCHK`, not `ARMING_OPTIONS`. Both names exist on 4.7 — a parameter
+download from this SITL returns `ARMING_OPTIONS`, `ARMING_SKIPCHK`, `ARMING_RUDDER`,
+`ARMING_ACCTHRESH`, `ARMING_MAGTHRESH`, `ARMING_MIS_ITEMS` and `ARMING_NEED_LOC`, and no
+`ARMING_CHECK` — so writing to `ARMING_OPTIONS` believing it disables checks silently does nothing
+of the kind. **The sense is also inverted**: `ARMING_CHECK` was a bitmask of checks to *run*,
+`ARMING_SKIPCHK` is a bitmask of checks to *skip*, so "all checks off" went from `0` to `-1`. A
+force-arm written against the old name and the old sense is a force-arm that does not disarm
+anything, and the vehicle that then arms does so for an unrelated reason — which is exactly what
+happened here before it was traced. `crates/mp-gui/src/telemetry.rs` probes for one name and falls
+back to the other.
 
 **What D12 has to do instead.** Fetch metadata matching the firmware version the vehicle reports,
 as Mission Planner itself does at runtime, and fall back to the bundled copy only when offline.
@@ -986,7 +1011,7 @@ cache with its own versioning or just a download.
 | **D3** | **Degraded targets: must we support RDP / VM / basic display adapter?** | Enumerate them with users, then make it an A2 kill criterion. | If yes and gpui cannot start, this is a framework-level finding, not tuning — and it is the strongest argument for egui. Decide in **week 2**. |
 | **D4** | **Projections: keep Shapefile import + arbitrary-CRS GeoTIFF?** `DotSpatial.Projections` supplies EPSG/proj4/ESRI-WKT reprojection to `FlightPlanner.cs:3533` and `GeoTiff.cs:232`. | Audit which CRSs real user GeoTIFFs use; if narrow, drop and restrict to WGS84/UTM with a named feature loss. | Keeping it = `proj 0.31` + libproj as a native dep on all three platforms. Dropping it = two silent feature losses. |
 | **D5** | **`httpserver.cs` control routes:** `/command_long`, `/rcoverride`, `/guided?`, `POST /guide`, `/websocket/raw` let any local HTTP client **arm and fly the aircraft with no authentication**. | Keep the read routes (`/hud.jpg`, `/map.jpg`, `*.kml`, `/mav/`), require auth on the control routes, bind to loopback by default. | Shipping them unchanged directly contradicts the plugin-sandbox pitch. Removing them breaks documented third-party integrations. |
-| **D6** | **Scripting: rhai only, or Python compat?** 19 stock scripts, unknown number in the wild. | **rhai** — with the operation limits and kill switch IronPython never had. These scripts send RC overrides to flying aircraft. | Python compat via `pyo3` forfeits the single-static-binary property and complicates signing/notarization on all three OSes. |
+| **D6** | ~~**Scripting: rhai only, or Python compat?**~~ **SETTLED** — see §3 and §10.4. `rustpython-vm` is the default engine, `pyo3` an opt-in feature. rhai was rejected because it forces a rewrite of 19 scripts that work today. | What remains open is narrower: **which of the 19 stock scripts run unmodified**, recorded per script rather than in aggregate. IronPython is a 2.7/3.4-era dialect; rustpython is not. | A script that silently behaves differently is worse than one that refuses to run — these send RC overrides to flying aircraft. Each divergence gets a row, not a hand-wave. |
 | **D7** | **Do extensions get custom UI?** `IHudIconRenderer` (a plugin drawing into the HUD **every paint cycle**) and `IDynamicParameterControl` do not fit "declarative overlays + declarative menus". | A declarative UI-description capability, plus a native trusted tier for first-party features. | Decide **before the WIT is frozen** — retrofitting a versioned ABI is far more expensive later. |
 | **D8** | **Bug-for-bug or corrected?** Per case: MP's NTRIP GGA checksum defect (a transient zero re-seeds the XOR); the MAVLink2 replay window MP computes then discards; LogAnalyzer thresholds tuned for pre-2016 firmware; .NET banker's rounding in param display. | Correct them, each as a logged divergence. | Fixing the replay window means some existing signed setups start rejecting packets. Every one needs an explicit ruling. |
 | **D9** | **Legacy hardware:** APM1/APM2 STK500 (954), 3DR Solo (406, hardcoded root creds in source), Parrot Bebop/Disco (shells out to a bundled `adb.exe`), VRBrain. | Drop all; ~2k LOC and several Windows-only paths. | Small user cohorts with no upgrade path. |
@@ -1022,7 +1047,7 @@ says what *done* means, because a list of nouns is not a plan.
 | 15 | EKF and vibration monitors | the two readouts that explain a vehicle that will not arm, flies badly, or climbs on its own | D10 | variance and vibration are shown, with clipping counts | done |
 | 16 | Fuzz targets built and run | they exist, have never been compiled, and D2's DoD requires 24 h clean on `frame_parse` | D19 | the targets build and CI runs a bounded fuzz pass | done |
 | 17 | Windows build verified | cross-compilation is checked; the Direct3D 11 path has never been exercised | D7 | a Windows build opens a window and paints, recorded in an ADR | done |
-| 18 | Joystick input | flying from a ground station without a transmitter, which D15 names | D15 | axes map to `RC_CHANNELS_OVERRIDE` with a failsafe on disconnect | |
+| 18 | Joystick input | flying from a ground station without a transmitter, which D15 names | D15 | axes map to `RC_CHANNELS_OVERRIDE` with a failsafe on disconnect | in progress |
 | 19 | Firmware flashing | the last item in Initial Setup with no counterpart here | D13 | a `.apj` is written to a board over the bootloader and verified | |
 | 20 | Python scripting host | D16, and the owner's stated interest in extensions that need no compiler | D16 | a script can read telemetry and drive a command, sandboxed | |
 
@@ -1041,6 +1066,22 @@ them is reach; those two are range.
 
 **16 and 17 are verification debt** — the two places where this project currently claims more than
 it has tested.
+
+**What 13–17 cost, recorded because the estimate was wrong in an instructive direction.** Five
+items, all "small". Each one turned up a defect in something already believed finished, and the
+defects were worth more than the features:
+
+| Item | What it was supposed to add | What it actually found |
+|---|---|---|
+| 13 | turn recording on | the link recorded **inbound frames only**, so every command the ground station ever sent was absent from every log |
+| 14 | `.param` files | the C# skip-list has **16 entries and applies on load**, not 7 on save; and its number format is shortest-representation, not fixed decimals. All three were reconstructed from memory instead of read from `ExtLibs/Utilities/ParamFile.cs`, which is in this repository |
+| 15 | show two numbers | `VIBRATION` and `EKF_STATUS_REPORT` were arriving at 4 Hz and being discarded |
+| 16 | run the fuzzers | `frame_parse` reaches **90** coverage edges and stops. It never decodes a message. The 351 per-message decoders — where a length field is trusted — had never been fuzzed by anything. `message_decode` reaches 13,473 |
+| 17 | check Windows | nothing in CI had ever run a graphics backend on **any** platform. `open_window` failing printed an error and exited 0 |
+
+The pattern: the expensive bugs were all in the gap between "the code exists" and "the code has
+been run against the thing it is for". That is an argument for §6.4's five-artifact contract being
+enforced on work done *before* the factory starts, not only on units dispatched through it.
 
 ---
 
@@ -1062,4 +1103,9 @@ Recorded so they are not re-asserted.
 | "`Primitive` has an escape hatch" | **FALSE** | closed 8-variant enum; `paint_surface` macOS-only; `wgpu_renderer.rs:1545` is `PrimitiveBatch::Surfaces(_surfaces) => {}` |
 | "`tsdownsample` crate" | **DOES NOT EXIST** | not on crates.io |
 | "`evalexpr` for the expression engine" | **LICENCE BLOCKER** | 13.1.0 is AGPL-3.0-only |
+| "The C# source is not on this machine" | **FALSE, and it cost real rework** | `referneces/missionplanner` is a full read-only clone, gitignored so it never appears in `git status`. `ExtLibs/Utilities/ParamFile.cs` was reconstructed from memory and got the skip-list length, the side it applies to, and the number format all wrong |
+| "`ARMING_CHECK` → `ARMING_OPTIONS`" | **WRONG NAME, AND THE SENSE IS INVERTED** | 4.7 SITL reports `ARMING_SKIPCHK` and `ARMING_OPTIONS` as separate parameters and no `ARMING_CHECK`. `ARMING_CHECK` was checks-to-run; `ARMING_SKIPCHK` is checks-to-skip, so "all off" went from `0` to `-1` |
+| "`frame_parse` fuzzes the MAVLink parser" | **TRUE BUT NEARLY EMPTY** | it reaches 90 coverage edges and never calls a message decoder. Seeding the corpus with 145 real frames changed nothing, which is what proved it. `message_decode` reaches 13,473 |
+| "Compiling on `windows-latest` proves the Windows build works" | **FALSE** | nothing in CI ran a graphics backend on any platform. D3D11 device creation, swap-chain and shader compilation had never executed |
+| "An event-driven joystick read tells you the device is alive" | **FALSE, and it is a flight-safety bug** | `/dev/input/js*` is edge-triggered: a held stick emits nothing. A failsafe fed by event arrival releases control to the transmitter after 200 ms of a pilot holding a position — on a feature whose premise is that there is no transmitter |
 

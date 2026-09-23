@@ -21,19 +21,19 @@ Reference clone: [referneces/zed](referneces/zed).
 | [D4](#d4-link-engine-the-mavlinkinterface-equivalent) | 0 | Link engine, protocol machines | P0 | In progress | Differential vs C# |
 | [D5](#d5-vehicle-state-model--telemetry-bus) | 0 | Vehicle state snapshot bus | P0 | In progress | Differential vs C# |
 | [D6](#d6-ui-kit-on-gpui) | 1 | gpui widget kit | P0 | In progress | Unit + layout |
-| [D7](#d7-gpu-render-core) | 1 | Shared wgpu render core | P0 | Spiked | Unit |
+| [D7](#d7-gpu-render-core) | 1 | Shared wgpu render core | P0 | In progress | Unit + 3-OS paint smoke |
 | [D8](#d8-map-engine) | 2 | GPU slippy map engine | P0 | In progress | Unit + offline |
 | [D9](#d9-hud--primary-flight-display) | 2 | GPU HUD with video | P0 | In progress | Unit + SITL |
 | [D10](#d10-flight-data-screen) | 2 | Flight Data operations screen | P0 | In progress | Unit + SITL + hardware |
 | [D11](#d11-flight-planner-screen) | 2 | Mission and survey planner | P0 | In progress | Differential vs C# |
 | [D12](#d12-configuration--tuning-screens) | 2 | Parameter config and tuning | P1 | In progress | Unit + SITL |
-| [D13](#d13-initial-setup-calibration-and-firmware) | 2 | Setup, calibration, firmware flashing | P1 | In progress | Unit + hardware |
+| [D13](#d13-initial-setup-calibration-and-firmware) | 2 | Setup, calibration, firmware flashing | P1 | In progress | Unit + SITL + hardware |
 | [D14](#d14-log-engine-and-analysis) | 2 | Dataflash log parsing, plots | P1 | In progress | Unit |
-| [D15](#d15-can-peripherals-and-outboard-features) | 2 | DroneCAN, peripherals, video, joystick | P2 | Not started | Not started |
+| [D15](#d15-can-peripherals-and-outboard-features) | 2 | DroneCAN, peripherals, video, joystick | P2 | In progress | Unit |
 | [D16](#d16-extension-and-scripting-system) | 2 | Python scripting, WASM extensions | P2 | Not started | Not started |
-| [D17](#d17-localization-settings-and-data-compatibility) | 2 | i18n, settings, data compatibility | P1 | Not started | Not started |
+| [D17](#d17-localization-settings-and-data-compatibility) | 2 | i18n, settings, data compatibility | P1 | In progress | Unit |
 | [D18](#d18-translation-factory-and-porting-ledger) | 3 | Translation factory, file ledger | P0 | In progress | Unit |
-| [D19](#d19-verification-suite) | 3 | Differential, SITL, fuzz verification | P0 | In progress | Differential vs C# |
+| [D19](#d19-verification-suite) | 3 | Differential, SITL, fuzz verification | P0 | In progress | Differential vs C# + fuzz |
 | [D20](#d20-release-packaging-and-operations) | 3 | Installers, updates, crash reporting | P1 | Not started | Not started |
 | [D21](#d21-native-in-process-plugin-host) | 2 | Native in-process plugin host | P3 | Not started | Not started |
 
@@ -144,6 +144,10 @@ tessellation, glyph atlas labels, offscreen targets, frame pacing, and a softwar
   RDP/VNC and on llvmpipe; headless rendering works in CI for snapshot tests.
 - **Replaces:** GDI+/`System.Drawing`, `OpenTK`/`GLControl`, `SkiaSharp`, `ExtLibs/MissionPlanner.Drawing`
   (17,602), `ExtLibs/SvgNet`, `ExtLibs/LibTessDotNet`.
+- **Today:** the backends are exercised at runtime, not merely compiled. `MP_SMOKE=1` makes the real
+  binary exit 0 once it has painted three frames, and CI runs it on Linux (xvfb + llvmpipe), Windows
+  (Direct3D 11, WARP on a runner) and macOS. See `docs/adr/0002-verifying-the-windows-build.md` for
+  what that does and does not prove — notably not what the window *looks* like on Windows.
 - **Tests:** `crates/render/tests/headless.rs` renders every primitive on lavapipe (Linux), WARP (Windows) and the macOS software path, diffing against golden PNGs; `tests/shaders.rs` compiles every WGSL shader for all backends and asserts pipeline creation; `tests/viewport_composite.rs` proves a custom wgpu viewport composites correctly inside a gpui window (this is the spike that gates the whole GPU goal — it becomes a permanent regression test); `benches/frame.rs` per-layer frame budget; `tests/fallback.rs` forces the software path and asserts correct output.
 
 ---
@@ -192,6 +196,11 @@ The full parameter system — tree/list/advanced editors driven by parameter met
   `apm.pdef.xml` at build time; every C# config panel enumerated with a checked-in coverage ledger at 100 %;
   param save/restore round-trips against SITL; `.param` files interoperate with the C# app.
 - **Replaces:** `GCSViews/ConfigurationView/*` (the bulk of 67,553 LOC in `GCSViews/`).
+- **Today:** full parameter download with gap recovery (1,408 from SITL), a searchable browser, and
+  `.param` save/load/compare in both the GUI and `mpr param save|load|diff`. The load-time skip-list
+  is ported from `ExtLibs/Utilities/ParamFile.cs:50-76`. **Not yet done:** the C# writes numbers as
+  `value.ToString(InvariantCulture)` — shortest representation — and a byte-for-byte fixture has to
+  come from a run of the C# app rather than be written by hand.
 - **Tests:** `tests/metadata_codegen.rs` asserts the generated parameter metadata matches the source XML and compiles; `tests/panel_coverage.rs` fails if any C# `Config*.cs` panel is missing from the Rust implementation (ledger-driven); `tests/param_roundtrip.rs` writes and re-reads every parameter type against SITL including bitmask/enum/float edge values; per-panel UI snapshots; `tests/param_file_compat.rs` reads and writes `.param` files produced by the C# app byte-for-byte.
 
 ### D13. Initial setup, calibration and firmware
@@ -201,6 +210,10 @@ path: board detect, firmware catalogue, upload via px4/DFU/serial bootloaders.
   **1e-6 relative**, proven by golden-vector tests; board detection matches `MissionPlannerTests`
   `DetectBoardTest` cases; a real board flashes successfully on all three OSes.
 - **Replaces:** `GCSViews/InitialSetup/*`, `MagCalib.cs`, `ExtLibs/ArduPilot` firmware code (23,564).
+- **Today:** accelerometer, compass (`MAV_CMD_DO_START_MAG_CAL` with live progress), radio and motor
+  test are implemented and exercised against SITL and a physical MR-VMU-RT1176. Firmware flashing is
+  not started; when it is, it is ported from `ExtLibs/px4uploader`, and no real board is flashed
+  until the byte trace matches against a mock bootloader.
 - **Tests:** `tests/magcal_vectors.rs` and `tests/accelcal_vectors.rs` assert 1e-6 relative agreement with golden outputs captured from the C# `MagCalib`/calibration code over recorded sensor datasets, including ill-conditioned inputs; `tests/board_detect.rs` ports the existing `MissionPlannerTests` `DetectBoardTest` cases plus USB descriptor fixtures for every supported board; `tests/firmware_upload.rs` runs against an in-process mock px4/DFU bootloader asserting the exact byte protocol and checksum behaviour; `tests/firmware_catalogue.rs` parses real firmware manifests.
 
 ### D14. Log engine and analysis
@@ -212,6 +225,10 @@ Dataflash (`.bin`/`.log`) and tlog parsing, log download, graphing, LogAnalyzer 
 - **Replaces:** `Log/` (9,971), `LogAnalyzer/`, `graphs/`, `ExtLibs/ZedGraph` (52,265),
   `ExtLibs/Exocortex.DSP`, the used subset of `ExtLibs/alglibnet` (251,616 — audit what is actually called),
   `ExtLibs/MetaDataExtractorCSharp240d` (17,800), `ExtLibs/ICSharpCode.SharpZipLib` + `zlib.net` + `7zip`.
+- **Today:** `.tlog` read and write, dataflash `.BIN` parsing, log download from a vehicle, and
+  automatic recording of every flight — both directions of the link, named in local time as Mission
+  Planner names them, into the same `Documents/Mission Planner/logs` directory it uses. Plotting is
+  not started.
 - **Tests:** `tests/parser_diff.rs` parses a corpus of real dataflash and tlog files and diffs every decoded field against the C# parser's output; `fuzz/fuzz_targets/dataflash.rs` and `tlog.rs` asserting no panic and no unbounded allocation on corrupt logs (truncated, bit-flipped, wrong-endian, fabricated FMT messages); `tests/fft.rs` compares against `Exocortex.DSP` golden spectra; `tests/exports.rs` `.mat`/CSV/KML round-trips; `benches/parse_1gb.rs` gates <2 s to first plot and `benches/scrub_10m.rs` gates 120 fps scrubbing.
 
 ### D15. CAN, peripherals and outboard features
@@ -224,6 +241,10 @@ config, joystick input, swarm control, warnings engine, web APIs, ADS-B / Altitu
   `Joystick/`, `Swarm/` (6,365), `Warnings/`, `ExtLibs/WebAPIs` (24,978), `ExtLibs/AltitudeAngelWings`,
   `ExtLibs/NMEA2000`, `ExtLibs/solo`, `ExtLibs/Onvif`, video stack (`DirectShowLib` 37,629, `LibVLC.NET`,
   `AviFile`, `WebCamService`).
+- **Today:** ADS-B traffic on the map, and joystick input on Linux — `/dev/input/js*` read without
+  `unsafe`, mapped to `RC_CHANNELS_OVERRIDE` with expo, reversal and a release-on-disconnect
+  failsafe. **Not yet meeting the bar:** sticks are polled at 20 Hz, so the stick-to-wire path is
+  ~50 ms against a 5 ms p99 target; there is no deadzone; and no virtual-HID fixture test exists.
 - **Tests:** `tests/dsdl_roundtrip.rs` proptest over every generated DroneCAN type; `tests/node_sim.rs` drives a simulated CAN node through enumerate/param-edit/firmware-update; `tests/joystick.rs` uses a virtual HID device fixture to assert mapping, expo/deadzone maths and <5 ms end-to-end latency; `tests/tracker.rs` and `tests/swarm.rs` against SITL; `tests/video_pipeline.rs` smoke-tests each capture/decode backend per OS; `tests/feature_ledger.rs` fails if a feature in this bucket is neither implemented nor explicitly marked dropped.
 
 ### D16. Extension and scripting system
@@ -279,6 +300,10 @@ Proof that the Rust app behaves like the C# original before anyone flies behind 
   ArduPilot SITL integration tests in CI driving scripted missions; UI snapshot tests on headless GPU;
   criterion perf gates that **fail the build on regression**; a documented hardware-in-the-loop checklist
   signed off before each release.
+- **Today:** the differential corpus against `MAVLink.dll` runs in CI; five `cargo-fuzz` targets
+  build and run clean (34.3 M executions at the last pass) with committed seed corpora; the same
+  properties run bounded on stable in `cargo test --workspace`, so a target cannot rot uncompiled;
+  SITL integration tests run behind `--ignored`. The mutation self-test is not written.
 - **Tests:** this deliverable *is* the test infrastructure, so it is proven by **mutation testing**: `tests/harness_selftest.rs` injects known regressions (off-by-one in a parser, a swapped lat/lon, a wrong unit conversion, a dropped retry, a 2 ms frame-budget regression) and asserts the differential harness, the fuzzers, the SITL suite and the perf gates each **fail**. A harness that cannot detect a planted bug is not a harness. Also covers: golden-corpus integrity checks, C#-reference-harness reproducibility, and CI flake tracking with a zero-tolerance quarantine policy.
 
 ### D20. Release, packaging and operations

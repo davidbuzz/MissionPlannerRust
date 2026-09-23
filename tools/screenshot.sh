@@ -16,6 +16,10 @@
 # SHOT_DELAY waits that many seconds after the last interaction before capturing, for state that
 # arrives on the next telemetry message rather than immediately.
 #
+# To capture a screen taller than the window, make the window taller: MP_WINDOW=1100x2200. A wheel
+# scroll was tried and does not work - see the note further down - and a tall window is both
+# simpler and shows the whole thing in one image.
+#
 # CLICK names controls to click before capturing, comma separated, each optionally suffixed with
 # :right for a right-click. Controls are addressed by name rather than coordinate, and a name may
 # carry a position within the control - "map@0.25x0.75:right" right-clicks a quarter of the way
@@ -88,29 +92,82 @@ done
 # window: a simulated GPS takes tens of seconds to acquire, and a shot taken too early shows
 # "no fix" and looks like a bug in the port rather than a vehicle that has not warmed up.
 sleep "${SETTLE:-2}"
-xdotool windowactivate "$WIN_ID" 2>/dev/null
-sleep 1
 
-# Move the window fully on-screen before anything is captured or clicked.
+# Put the window on one nominated monitor and keep it there.
 #
-# The capture below is an x11grab of the *screen* at the window's coordinates, not a read of the
-# window's own buffer, so a window the window manager placed hanging off an edge produces a
-# screenshot of whatever else is at those coordinates - and it produces one silently, which is the
-# dangerous part: the file is the right size, the run reports success, and the image is of
-# somebody's chat window. That happened at 1600x1200 placed at 1428,982 on a 2560x1600 screen.
+# This desktop has three monitors in a single 5120x3040 X screen. Left to itself the window
+# appeared on a different one almost every run - observed at 0,37 then 2998,206 then 3134,240 -
+# which puts somebody's tool window on top of whatever they were doing, somewhere new each time.
+# That is not a cosmetic problem: these run on a real desktop while a person is using it.
 #
-# Clicks are window-relative so they were never affected, but they are moved after this anyway:
-# the coordinates the probe publishes are only reachable where the window actually is.
-SCREEN=$(xdotool getdisplaygeometry)
-SCREEN_W="${SCREEN%% *}"
-SCREEN_H="${SCREEN##* }"
+# SHOT_AT overrides the corner. The default is DP-1-3 at the X screen origin, chosen by the owner
+# of this desktop; on another machine set SHOT_AT to a corner that is out of the way.
+SHOT_AT="${SHOT_AT:-0,0}"
+WANT_X="${SHOT_AT%%,*}"
+WANT_Y="${SHOT_AT##*,}"
+
+# Activated first, then moved. A window manager will often pull a window to the active monitor
+# when it is activated, so activating after the move undoes it - which is exactly what was
+# happening. Moving last, and checking, is what makes the placement stick.
+xdotool windowactivate "$WIN_ID" 2>/dev/null
+sleep 0.5
+
+# Placed, then verified, then placed again. windowmove is a request and a window manager is free
+# to answer it with something else.
+place_window() {
+    for _ in $(seq 1 5); do
+        xdotool windowmove "$WIN_ID" "$WANT_X" "$WANT_Y" 2>/dev/null
+        sleep 0.25
+        AT=$(xwininfo -id "$WIN_ID" | awk '
+            /Absolute upper-left X/ {x=$4}
+            /Absolute upper-left Y/ {y=$4}
+            END {printf "%d,%d", x, y}')
+        # A title bar can offset the y by its own height, which is the window manager doing its
+        # job rather than ignoring the request. Anything within 64px counts as placed.
+        DX=$(( ${AT%%,*} - WANT_X )); DX=${DX#-}
+        DY=$(( ${AT##*,} - WANT_Y )); DY=${DY#-}
+        [ "$DX" -le 64 ] && [ "$DY" -le 64 ] && return 0
+    done
+    echo "warning: asked for the window at $WANT_X,$WANT_Y and it is at $AT" >&2
+    return 1
+}
+place_window
+
+xdotool windowraise "$WIN_ID" 2>/dev/null
+sleep 0.3
+
+# Does the window fit on the monitor it was put on?
+#
+# The monitor, not the X screen. The capture is an x11grab of a rectangle of the X screen, and on
+# a multi-monitor desktop that rectangle can cover areas no monitor is showing - this layout has
+# three monitors at different offsets inside a 5120x3040 screen, so x=0..1600 y=1440..2200 belongs
+# to nothing at all. Grabbing there produces a band of whatever the server happens to hold, in an
+# image that otherwise looks correct, which is the silent-wrong-screenshot failure again.
 WIN_W=$(xwininfo -id "$WIN_ID" | awk '/Width:/ {print $2}')
 WIN_H=$(xwininfo -id "$WIN_ID" | awk '/Height:/ {print $2}')
-xdotool windowmove "$WIN_ID" 0 0
-sleep 0.5
-if [ "$WIN_W" -gt "$SCREEN_W" ] || [ "$WIN_H" -gt "$SCREEN_H" ]; then
-    echo "warning: window is ${WIN_W}x${WIN_H} on a ${SCREEN_W}x${SCREEN_H} screen;" \
-         "the capture will be clipped to the screen" >&2
+# xrandr prints each monitor as "WIDTH/mmxHEIGHT/mm+X+Y"; this pulls out the four numbers and
+# keeps the one whose rectangle contains the window's corner.
+MONITOR=$(xrandr --listmonitors 2>/dev/null | awk -v wx="$WANT_X" -v wy="$WANT_Y" '
+    NR > 1 {
+        geom = $3
+        gsub(/\/[0-9]+/, "", geom)
+        split(geom, parts, /[x+]/)
+        mw = parts[1]; mh = parts[2]; mx = parts[3]; my = parts[4]
+        if (wx >= mx && wx < mx + mw && wy >= my && wy < my + mh) {
+            printf "%d %d %d %d", mw, mh, mx, my
+            exit
+        }
+    }')
+if [ -n "$MONITOR" ]; then
+    set -- $MONITOR
+    MON_W=$1; MON_H=$2; MON_X=$3; MON_Y=$4
+    ROOM_W=$(( MON_X + MON_W - WANT_X ))
+    ROOM_H=$(( MON_Y + MON_H - WANT_Y ))
+    if [ "$WIN_W" -gt "$ROOM_W" ] || [ "$WIN_H" -gt "$ROOM_H" ]; then
+        echo "warning: the window is ${WIN_W}x${WIN_H} but only ${ROOM_W}x${ROOM_H} of this" \
+             "monitor is below and right of $WANT_X,$WANT_Y; the capture will include screen" \
+             "area the window does not cover" >&2
+    fi
 fi
 
 # Clicks happen after the window has settled and been activated: a click delivered to a window
@@ -158,10 +215,46 @@ if [ -n "${DRAG:-}" ]; then
     done
 fi
 
+# There is no scroll step here, and that is deliberate.
+#
+# One was written: it resolved a named control, moved the real pointer over it with XTEST and sent
+# wheel notches. The pointer landed in the right place and nothing scrolled - two captures of the
+# setup screen, one with ten notches and one without, differed only in the frame counter. Whether
+# that is gpui's X11 wheel handling, this window manager, or the application's own scroll state is
+# not established, and it is not established because finding out means opening windows on somebody
+# else's desktop.
+#
+# Rather than ship a step that reports success and does nothing - the failure this file has now
+# been bitten by three times - there is no step. To capture something below the fold, make the
+# window taller with MP_WINDOW; the X screen here is 5120x3040, so most screens fit whole.
+#
 # A pause between the last interaction and the capture. Some things take a moment to come back -
 # an armed flag arrives on the next heartbeat, a second away - and a screenshot taken immediately
 # after a click shows the state before the answer.
 [ -n "${SHOT_DELAY:-}" ] && sleep "$SHOT_DELAY"
+
+# Once more before capturing: a click can raise a window that was underneath, and a tooltip or an
+# input method can take the top for itself.
+#
+# And then check it worked, because it does not always. The capture is an x11grab of the screen at
+# the window's coordinates, so a window that is not on top produces a screenshot of whatever is -
+# and it produces one silently. A shot of the joystick panel came out as a picture of an editor,
+# and the only reason anybody noticed was that a human looked at it. Raising is a request a window
+# manager is free to ignore, so the request is repeated and then verified.
+for _ in $(seq 1 10); do
+    xdotool windowraise "$WIN_ID" 2>/dev/null
+    xdotool windowactivate --sync "$WIN_ID" 2>/dev/null && break
+    sleep 0.3
+done
+# Activating may have pulled it to another monitor again, so put it back before capturing.
+place_window
+sleep 0.4
+ACTIVE=$(xdotool getactivewindow 2>/dev/null)
+if [ "$ACTIVE" != "$WIN_ID" ]; then
+    echo "the window could not be raised (active window is ${ACTIVE:-none}, wanted $WIN_ID);" \
+         "the capture would be of whatever is on top instead" >&2
+    exit 1
+fi
 
 GEO=$(xwininfo -id "$WIN_ID" | awk '
     /Absolute upper-left X/ {x=$4}

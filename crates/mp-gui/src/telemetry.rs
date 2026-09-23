@@ -767,6 +767,26 @@ impl Telemetry {
     }
 }
 
+impl Telemetry {
+    /// Sends one frame of stick positions.
+    ///
+    /// Every call is a complete statement of where the sticks are; nothing is remembered between
+    /// them. That is deliberate and it is the safety property: a caller that stops calling cannot
+    /// leave a vehicle flying the last position, because there is nowhere for that position to be
+    /// held. See `mp_input::Failsafe`, which decides when to stop.
+    /// Returns whether the frame reached the transport. A `false` is not "nothing happened": for a
+    /// release frame it is the difference between an aircraft that has been handed back and one
+    /// that is still being flown by a stick nobody is holding, so the caller has to act on it.
+    pub fn send_rc_override(&self, channels: [u16; 18]) -> bool {
+        match self.target() {
+            Some((link, id)) => link.send(&commands::rc_override(id, channels)),
+            // No vehicle to send to. Reported as a failure rather than swallowed, because the
+            // release the caller is trying to deliver has not been delivered.
+            None => false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

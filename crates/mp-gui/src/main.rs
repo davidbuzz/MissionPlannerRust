@@ -9,6 +9,7 @@
 
 mod fly;
 mod hud;
+mod joystick;
 mod mapview;
 mod params;
 mod plan;
@@ -47,6 +48,25 @@ const DEFAULT_PARAM_FILE: &str = "vehicle.param";
 /// Repaint interval when measuring the renderer: as fast as the executor will schedule, so paint
 /// cost is measured rather than the timer.
 const REFRESH_BENCH: Duration = Duration::from_millis(1);
+
+/// How often the sticks are read and sent.
+///
+/// 20 Hz, on its own timer rather than on the repaint. Repainting is allowed to slow down - a
+/// large mission, a busy machine, a window nobody is looking at - and a stick that is only read
+/// when a frame is drawn would be read erratically, which is the worst possible property for the
+/// thing flying the aircraft. Twice Mission Planner's rate.
+///
+/// **It is still a foreground task, and that is a known limitation, not an oversight.** `cx.spawn`
+/// schedules onto gpui's foreground executor, so the timer fires on the background executor but
+/// the body runs on the main thread - anything that blocks the main thread suspends this too. It
+/// has to touch `MissionPlanner`, which is not `Send`, so moving it off means splitting the sticks
+/// out behind their own channel and a real thread. That is the right answer and it is not written
+/// yet; until it is, the failsafe's timeout is the backstop rather than the guarantee.
+///
+/// DELIVERABLES.md D15 asks for stick-to-wire under 5 ms at p99. 50 ms polling does not meet that
+/// and is not claimed to: the number to beat needs a dedicated thread reading the device blocking,
+/// which is the same change.
+const STICK_POLL: Duration = Duration::from_millis(50);
 
 /// Which screen is showing.
 ///
@@ -155,6 +175,8 @@ struct MissionPlanner {
     param_file_name: textfield::TextField,
     /// Focus for that field.
     param_file_focus: gpui::FocusHandle,
+    /// Joystick state: the device, the mapping and the failsafe.
+    sticks: joystick::Sticks,
     /// The result of the last comparison against a file, newest first.
     ///
     /// Held rather than applied. A comparison is something an operator reads before deciding, and
@@ -213,6 +235,30 @@ impl MissionPlanner {
                 };
                 cx.background_executor().timer(interval).await;
                 if this.update(cx, |_, cx| cx.notify()).is_err() {
+                    break;
+                }
+            }
+        })
+        .detach();
+
+        // The sticks, on their own timer. Deliberately not folded into the repaint loop above:
+        // that one is about how often a person sees fresh numbers, this one is about how often a
+        // vehicle hears where the sticks are, and tying the second to the first makes a slow
+        // frame into a control problem.
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(STICK_POLL).await;
+                let outcome = this.update(cx, |this, _cx| {
+                    if let Some(channels) = this.sticks.poll()
+                        && !this.telemetry.send_rc_override(channels)
+                    {
+                        // The link refused the frame. For a release that is the difference between
+                        // an aircraft handed back and one still flying a stick nobody is holding,
+                        // so it is put back on the budget rather than counted as sent.
+                        this.sticks.send_failed();
+                    }
+                });
+                if outcome.is_err() {
                     break;
                 }
             }
@@ -278,6 +324,7 @@ impl MissionPlanner {
                 field
             },
             param_file_focus: cx.focus_handle(),
+            sticks: joystick::Sticks::new(),
             param_differences: Vec::new(),
             motor_throttle: 5.0,
             capturing_radio: false,
@@ -871,6 +918,7 @@ impl MissionPlanner {
                 cx,
             ))
             .child(setup::motor_panel(view, self.motor_throttle, cx))
+            .child(joystick::panel_for(view, &self.sticks, cx))
             .child(setup::logs_panel(&listings, log_progress, view, cx))
             .child(setup::calibration_panel(view, cx))
     }
@@ -1339,7 +1387,10 @@ impl Render for MissionPlanner {
                     ))
                     .into_any_element()
             }
-            Screen::Setup => div()
+            // Measured so UI tests can address the body itself rather than only the controls in
+            // it. The setup screen runs to nine panels and is taller than most windows, so a test
+            // that wants the screen rather than a button needs a handle on the container.
+            Screen::Setup => probe::measured("setup-body", div())
                 .id("setup-body")
                 .flex()
                 .flex_1()
@@ -1392,6 +1443,36 @@ impl Render for MissionPlanner {
                             .items_center()
                             .gap_2()
                             .pb_2()
+                            // The sticks, when they have control - on every screen, because the
+                            // panel that switches them on is the seventh of nine on a screen
+                            // nobody flies from. A pilot must be able to see that a gamepad is
+                            // driving the aircraft, and stop it, without first finding the tab it
+                            // was started on.
+                            .children(self.sticks.is_enabled().then(|| {
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_1()
+                                    .id("sticks-live")
+                                    .px_2()
+                                    .py(px(1.0))
+                                    .rounded_sm()
+                                    .border_1()
+                                    .border_color(rgb(theme::ALERT))
+                                    .cursor_pointer()
+                                    .hover(|style| style.bg(rgb(theme::BORDER)))
+                                    .child(div().size_2().rounded_full().bg(rgb(theme::ALERT)))
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(rgb(theme::ALERT))
+                                            .child("sticks flying - click to stop"),
+                                    )
+                                    .on_click(cx.listener(|this, _event, _window, cx| {
+                                        this.sticks.set_enabled(false);
+                                        cx.notify();
+                                    }))
+                            }))
                             // Recording, said on screen rather than assumed. The link reports a
                             // failed recording to stderr and carries on, which in an application
                             // launched from a desktop icon means a failed recording and a working

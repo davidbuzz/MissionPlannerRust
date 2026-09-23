@@ -3330,6 +3330,7 @@ dependencies = [
  "gpui_macos",
  "gpui_windows",
  "image",
+ "mp-input",
  "mp-link",
  "mp-mavlink-dialects",
  "mp-mission",
@@ -3337,6 +3338,10 @@ dependencies = [
  "mp-units",
  "mp-vehicle",
 ]
+
+[[package]]
+name = "mp-input"
+version = "0.1.0"
 
 [[package]]
 name = "mp-link"
