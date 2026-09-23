@@ -15,8 +15,26 @@ handoff. Nothing was actually blocking; broad autonomy had already been granted.
 catastrophic because it converts an autonomous build into one that stalls every few minutes
 waiting for a human to say "continue".
 
-**How to apply:** after `git commit`, the very next action is the next task's first tool call, not
-prose. Write progress notes *between* tool calls, briefly, and keep working. Only stop when a
+**This memory existed and was violated anyway**, on 2026-09-23, after the accelerometer
+calibration commit. Writing the rule down was not enough, so here is the mechanism that defeats it:
+
+**The closing summary is the trap, and its quality is what makes it dangerous.** A well-made
+summary — tables, findings, judgment calls, "Next: ..." — reads like a deliverable, and a
+deliverable feels like an ending. The better it reads, the more final it feels. The sentence
+beginning "Next:" is the tell: it describes work instead of performing it. Every single violation
+has had that shape.
+
+**The rule is mechanical, not intentional.** After `git commit` succeeds:
+
+1. The next tool call is the next task's first step. Not a summary. Not a recap table.
+2. Never write a paragraph beginning "Next:", "Next up:", or "Then:". If the next step is known
+   well enough to name it, it is known well enough to start it.
+3. A turn ends only on: a genuine blocker needing the owner's decision, or an explicit stop.
+   Finishing a feature is neither.
+
+**How to apply:** progress notes go *between* tool calls, one or two sentences, then straight back
+to work. Report what a run showed and keep moving. If the urge to summarise appears, that is the
+signal that a commit just landed and the next task should already be underway. Only stop when a
 decision genuinely requires the owner (money, destructive action, a fork in requirements), and then
-say exactly what is needed rather than summarising what is done. A long stretch of uninterrupted
-work is the expected mode here, not an exception.
+say exactly what is needed rather than summarising what is done. Long uninterrupted stretches are
+the expected mode, not an exception.
