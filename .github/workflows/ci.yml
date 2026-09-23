@@ -28,10 +28,43 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libxkbcommon-x11-dev libxcb-shape0-dev libxcb-xfixes0-dev \
-            libwayland-dev libasound2-dev libudev-dev
+            libwayland-dev libasound2-dev libudev-dev xvfb
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets
       - run: cargo test --workspace
+
+      # Open a window and paint it, on every platform.
+      #
+      # This is the only thing in CI that exercises a graphics backend. Everything above compiles
+      # the renderer and never runs it, so a backend that will not initialise, a surface it cannot
+      # create or a shader that will not compile is invisible - it kills the application at
+      # startup on the machine that has the problem and nowhere else. Windows is why this exists:
+      # the Direct3D 11 path had never been run at all, because nobody on the project has a
+      # Windows machine.
+      #
+      # MP_SMOKE makes the real binary exit 0 once it has painted three frames and non-zero if it
+      # has not painted them within thirty seconds. Tiles are off so the result does not depend on
+      # a tile server, and recording is off so a runner does not accumulate .tlog files.
+      - name: Build the GUI
+        run: cargo build -p mp-gui
+      - name: Window opens and paints (Linux)
+        if: runner.os == 'Linux'
+        env: { MP_SMOKE: "1", MP_NO_TILES: "1", MP_NO_RECORD: "1" }
+        # A runner has no display, so one is supplied. llvmpipe does the rendering, which is slow
+        # and entirely sufficient: the question is whether the backend comes up, not how fast.
+        run: xvfb-run -a --server-args="-screen 0 1600x1200x24" ./target/debug/mpr-gui
+      # Named separately from macOS only because of the extension; the runner has a desktop
+      # session, and Direct3D 11 falls back to WARP, the software rasteriser, where there is no
+      # GPU. WARP still goes through the whole backend - device, swap chain, shaders - which is
+      # what is being checked.
+      - name: Window opens and paints (Windows)
+        if: runner.os == 'Windows'
+        env: { MP_SMOKE: "1", MP_NO_TILES: "1", MP_NO_RECORD: "1" }
+        run: ./target/debug/mpr-gui.exe
+      - name: Window opens and paints (macOS)
+        if: runner.os == 'macOS'
+        env: { MP_SMOKE: "1", MP_NO_TILES: "1", MP_NO_RECORD: "1" }
+        run: ./target/debug/mpr-gui
 
   cross-compile:
     name: cross-compile targets

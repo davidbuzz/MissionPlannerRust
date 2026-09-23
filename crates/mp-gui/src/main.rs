@@ -16,6 +16,7 @@ mod platform;
 mod probe;
 mod settings;
 mod setup;
+mod smoke;
 mod telemetry;
 mod textfield;
 mod ui;
@@ -1107,6 +1108,11 @@ impl MissionPlanner {
 
 impl Render for MissionPlanner {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Counted here because this is the one place that only runs when a frame is actually
+        // painted. See smoke.rs: the failure being looked for is a backend that will not
+        // initialise, and every earlier signal - a window handle, a running executor - survives
+        // that.
+        smoke::painted();
         let view = self.telemetry.view();
 
         // Feed the map from the same snapshot the panels read, so the two can never disagree
@@ -1507,6 +1513,10 @@ ENVIRONMENT:
     MP_WINDOW    same as --window
     MP_SCREEN    same as --screen
     MP_PROBE     write control positions to this file, for UI tests
+    MP_SMOKE     exit 0 once the window has painted, non-zero if it does not
+    MP_LOG_DIR   where flights are recorded (default: Documents/Mission Planner/logs)
+    MP_NO_RECORD do not record this flight
+    MP_NO_TILES  do not fetch map imagery
 ";
 
 /// Parses the command line.
@@ -1600,9 +1610,14 @@ fn main() {
             cx.new(|cx| MissionPlanner::new(target, read_mission, screen, cx))
         }) {
             eprintln!("could not open a window: {err}");
-            return;
+            // A non-zero exit, because this is the failure a smoke test exists to catch and a
+            // process that prints an error and exits 0 is a process CI calls a success.
+            std::process::exit(1);
         }
         cx.activate(true);
+        if smoke::enabled() {
+            smoke::watch();
+        }
     });
 }
 
@@ -1704,6 +1719,22 @@ mod tests {
         // And the link forms people actually type.
         for form in ["/dev/ttyACM0", "COM3", "tcp:", "udp:", ".tlog"] {
             assert!(USAGE.contains(form), "usage does not mention {form}");
+        }
+        // The environment variables that change what a run does. An undocumented variable is one
+        // whose behaviour looks like a bug to whoever inherits a machine that has it set.
+        for variable in [
+            "MP_WINDOW",
+            "MP_SCREEN",
+            "MP_PROBE",
+            "MP_SMOKE",
+            "MP_LOG_DIR",
+            "MP_NO_RECORD",
+            "MP_NO_TILES",
+        ] {
+            assert!(
+                USAGE.contains(variable),
+                "usage does not mention {variable}"
+            );
         }
     }
 
