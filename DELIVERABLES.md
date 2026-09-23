@@ -214,9 +214,12 @@ path: board detect, firmware catalogue, upload via px4/DFU/serial bootloaders.
   `DetectBoardTest` cases; a real board flashes successfully on all three OSes.
 - **Replaces:** `GCSViews/InitialSetup/*`, `MagCalib.cs`, `ExtLibs/ArduPilot` firmware code (23,564).
 - **Today:** accelerometer, compass (`MAV_CMD_DO_START_MAG_CAL` with live progress), radio and motor
-  test are implemented and exercised against SITL and a physical MR-VMU-RT1176. Firmware flashing is
-  not started; when it is, it is ported from `ExtLibs/px4uploader`, and no real board is flashed
-  until the byte trace matches against a mock bootloader.
+  test are implemented and exercised against SITL and a physical MR-VMU-RT1176. `mp-firmware` ports
+  the `.apj` container and the px4 bootloader protocol from `ExtLibs/px4uploader/`, with
+  `tests/firmware_upload.rs` driving a complete upload against a strict in-process mock that
+  asserts every byte. **No board has been flashed**, and none will be until an owner asks: the CLI
+  offers `mpr firmware info` and nothing that writes. Board detection and the firmware catalogue
+  are not started.
 - **Tests:** `tests/magcal_vectors.rs` and `tests/accelcal_vectors.rs` assert 1e-6 relative agreement with golden outputs captured from the C# `MagCalib`/calibration code over recorded sensor datasets, including ill-conditioned inputs; `tests/board_detect.rs` ports the existing `MissionPlannerTests` `DetectBoardTest` cases plus USB descriptor fixtures for every supported board; `tests/firmware_upload.rs` runs against an in-process mock px4/DFU bootloader asserting the exact byte protocol and checksum behaviour; `tests/firmware_catalogue.rs` parses real firmware manifests.
 
 ### D14. Log engine and analysis

@@ -100,6 +100,18 @@ fn main() -> std::process::ExitCode {
                 std::process::ExitCode::from(2)
             }
         },
+        Some("firmware") => match (args.get(1).map(String::as_str), args.get(2)) {
+            (Some("info"), Some(path)) => firmware_info(path),
+            _ => {
+                eprintln!(
+                    "usage:\n  \
+                     mpr firmware info <file.apj>   describe a firmware file and its CRC\n\n\
+                     Flashing is not offered here. It can brick a board and has no simulator, so\n\
+                     it goes through the GUI where the board it is about to write to is on screen."
+                );
+                std::process::ExitCode::from(2)
+            }
+        },
         Some("ports") => ports(),
         Some("help" | "--help" | "-h") | None => {
             usage();
@@ -129,7 +141,8 @@ fn usage() {
          mpr survey <url> <file>     generate a survey grid around the vehicle\n  \
          mpr log <file>              summarise a telemetry or dataflash log
   mpr logs <url> [ID] [DIR]   list the vehicle's logs, or download one\n  \
-         mpr ports                   list serial ports\n\n\
+         mpr firmware info <file>    describe a .apj firmware file
+  mpr ports                   list serial ports\n\n\
          url forms:\n  \
          serial:/dev/ttyACM0:115200\n  \
          tcp:127.0.0.1:5760          (ArduPilot SITL)\n  \
@@ -1272,4 +1285,57 @@ fn is_url(argument: &str) -> bool {
         .iter()
         .any(|scheme| argument.starts_with(scheme))
         || argument.starts_with("/dev/")
+}
+
+/// Describes a firmware file without touching any hardware.
+///
+/// Read-only on purpose. Flashing is the one operation in this application that can leave a
+/// vehicle unable to boot, and it has no simulator to rehearse against, so it does not belong
+/// behind a command that a shell-history arrow-up can repeat at the wrong board.
+fn firmware_info(path: &str) -> std::process::ExitCode {
+    let firmware = match mp_firmware::Firmware::load(std::path::Path::new(path)) {
+        Ok(firmware) => firmware,
+        Err(err) => {
+            eprintln!("{path}: {err}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+
+    println!("{path}");
+    println!("  board id            {}", firmware.board_id);
+    if firmware.board_revision != 0 {
+        println!("  board revision      {}", firmware.board_revision);
+    }
+    if !firmware.description.is_empty() {
+        println!("  description         {}", firmware.description);
+    }
+    if !firmware.version.is_empty() {
+        println!("  version             {}", firmware.version);
+    }
+    if !firmware.git_hash.is_empty() {
+        println!("  built from          {}", firmware.git_hash);
+    }
+    println!(
+        "  image               {} bytes declared, {} after padding",
+        firmware.declared_image_size,
+        firmware.image.len()
+    );
+    if !firmware.external_image.is_empty() {
+        println!(
+            "  external flash      {} bytes declared, {} after padding",
+            firmware.declared_external_size,
+            firmware.external_image.len()
+        );
+    }
+    // The CRC depends on the flash size it is padded to, which is the board's, so a few of the
+    // common sizes are shown rather than one that would have to be guessed.
+    println!("  CRC by flash size:");
+    for size in [1 << 20, 2 << 20] {
+        println!(
+            "    {:>4} KiB          {:#010x}",
+            size / 1024,
+            firmware.crc(size)
+        );
+    }
+    std::process::ExitCode::SUCCESS
 }

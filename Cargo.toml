@@ -24,11 +24,17 @@ mp-mavlink-dialects = { path = "crates/mp-mavlink-dialects" }
 mp-transport = { path = "crates/mp-transport" }
 mp-tiles = { path = "crates/mp-tiles" }
 mp-input = { path = "crates/mp-input" }
+mp-firmware = { path = "crates/mp-firmware" }
 thiserror = "2"
 sha2 = "0.10"
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
 proptest = "1"
 roxmltree = "0.20"
+# The firmware container: JSON wrapping a base64 zlib stream. Pinned to what the tree already
+# resolves, so they cost no extra compilation.
+serde_json = "1"
+base64 = "0.22"
+flate2 = "1"
 # Local time only. Pinned to what gpui already pulls in, so it costs nothing to compile.
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 anyhow = "1"

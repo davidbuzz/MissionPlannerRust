@@ -3300,6 +3300,7 @@ dependencies = [
 name = "mp-cli"
 version = "0.1.0"
 dependencies = [
+ "mp-firmware",
  "mp-link",
  "mp-log",
  "mp-mavlink",
@@ -3308,6 +3309,16 @@ dependencies = [
  "mp-transport",
  "mp-units",
  "mp-vehicle",
+]
+
+[[package]]
+name = "mp-firmware"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "flate2",
+ "serde_json",
+ "thiserror 2.0.20",
 ]
 
 [[package]]

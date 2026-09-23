@@ -1,0 +1,19 @@
+[package]
+name = "mp-firmware"
+description = "Firmware files and the px4 bootloader protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror.workspace = true
+# The .apj/.px4 container is JSON holding a base64 zlib stream. All three are already compiled in
+# this workspace's dependency closure, so none of them costs a new build.
+serde_json.workspace = true
+base64.workspace = true
+flate2.workspace = true

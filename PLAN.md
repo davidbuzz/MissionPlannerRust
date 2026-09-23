@@ -1048,7 +1048,7 @@ says what *done* means, because a list of nouns is not a plan.
 | 16 | Fuzz targets built and run | they exist, have never been compiled, and D2's DoD requires 24 h clean on `frame_parse` | D19 | the targets build and CI runs a bounded fuzz pass | done |
 | 17 | Windows build verified | cross-compilation is checked; the Direct3D 11 path has never been exercised | D7 | a Windows build opens a window and paints, recorded in an ADR | done |
 | 18 | Joystick input | flying from a ground station without a transmitter, which D15 names | D15 | axes map to `RC_CHANNELS_OVERRIDE` with a failsafe on disconnect | done |
-| 19 | Firmware flashing | the last item in Initial Setup with no counterpart here | D13 | a `.apj` is written to a board over the bootloader and verified | |
+| 19 | Firmware flashing | the last item in Initial Setup with no counterpart here | D13 | a `.apj` is written to a board over the bootloader and verified | protocol done, no board flashed |
 | 20 | Python scripting host | D16, and the owner's stated interest in extensions that need no compiler | D16 | a script can read telemetry and drive a command, sandboxed | |
 
 **1 is first because it is load-bearing.** Three separate decisions were made to work around the
