@@ -893,6 +893,10 @@ impl MissionPlanner {
             Some("ConfigFailSafe") if !self.failsafe.is_open() => {
                 self.failsafe.toggle(&self.telemetry);
             }
+            // C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring.cs:18-176
+            Some("ConfigBatteryMonitoring") if !self.battery_monitor.is_open() => {
+                self.battery_monitor.toggle(&self.telemetry);
+            }
             _ => {}
         }
     }
@@ -911,6 +915,11 @@ impl MissionPlanner {
             // C#: GCSViews/ConfigurationView/ConfigFailSafe.cs:95-99
             Some("ConfigFailSafe") if self.failsafe.is_open() => {
                 self.failsafe.toggle(&self.telemetry);
+            }
+            // Nothing a box is left holding is validated: `Deactivate` sets `startup` before the
+            // page is hidden (`BackstageView.cs:452-466`).
+            Some("ConfigBatteryMonitoring") if self.battery_monitor.is_open() => {
+                self.battery_monitor.close();
             }
             _ => {}
         }
@@ -1023,6 +1032,13 @@ impl MissionPlanner {
                 .into_any_element(),
             "ConfigFailSafe" => column()
                 .child(crate::config::failsafe::page(&self.failsafe, view, cx))
+                .into_any_element(),
+            "ConfigBatteryMonitoring" => column()
+                .child(crate::config::battery_monitor::page(
+                    &self.battery_monitor,
+                    &self.battery_focus,
+                    cx,
+                ))
                 .into_any_element(),
             "ConfigMotorTest" => column()
                 .child(motor_panel(view, self.motor_throttle, cx))

@@ -279,6 +279,9 @@ struct MissionPlanner {
     config_list: setup::Backstage,
     /// Initial Setup's Frame Type page.
     frame_type: config::frame_type::FrameType,
+    /// Initial Setup's Battery Monitor page, and its text boxes' focus.
+    battery_monitor: config::battery_monitor::BatteryMonitor,
+    battery_focus: config::battery_monitor::Focus,
 }
 
 impl MissionPlanner {
@@ -426,6 +429,8 @@ impl MissionPlanner {
             setup_list: setup::Backstage::new(setup::List::Setup),
             config_list: setup::Backstage::new(setup::List::Config),
             frame_type: config::frame_type::FrameType::default(),
+            battery_monitor: config::battery_monitor::BatteryMonitor::default(),
+            battery_focus: config::battery_monitor::Focus::new(cx),
         };
         // Opening on the planning screen activates it, as switching to it does.
         if this.screen == Screen::Plan {
@@ -1446,6 +1451,13 @@ impl Render for MissionPlanner {
         // The FailSafe page's timers and writes, and closing it when the screen changes.
         self.failsafe
             .tick(&self.telemetry, &view, self.screen == Screen::Setup);
+        // The Battery Monitor's boxes validated as the focus leaves them, its timer, its writes.
+        self.battery_monitor.tick(
+            &self.telemetry,
+            &view,
+            self.battery_focus.focused(window),
+            self.screen == Screen::Setup,
+        );
         let banner = self.telemetry.firmware_banner().map(str::to_owned);
         let mav_type = view.state.as_ref().map_or(0, |state| state.vehicle_type);
         self.metadata.advance(banner.as_deref(), mav_type);
@@ -1611,6 +1623,7 @@ impl Render for MissionPlanner {
             config::failsafe::record_facts(&self.failsafe, &view);
             setup::record_facts([&self.setup_list, &self.config_list]);
             config::frame_type::record_facts(&self.frame_type, &view);
+            config::battery_monitor::record_facts(&self.battery_monitor, &view);
             facts::publish();
         }
 
@@ -1864,6 +1877,12 @@ impl Render for MissionPlanner {
                 .min_h(px(0.0))
                 .child(self.backstage_screen(setup::List::Setup, &view, window, cx))
                 .children(config::failsafe::overlay(&self.failsafe, window, cx))
+                .children(config::battery_monitor::overlay(
+                    &self.battery_monitor,
+                    &self.battery_focus,
+                    window,
+                    cx,
+                ))
                 .into_any_element(),
             Screen::Config => probe::measured("config-body", div())
                 .flex()

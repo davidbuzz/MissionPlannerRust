@@ -467,7 +467,15 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigBatteryMonitoring"),
         Some(13),
         &[setup(270, "Battery Monitor", OPTIONAL, ANY)],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring.cs:18-653, ported but for the
+        // power-module photo, typing into the Sensor and HW Ver combos, and the speech alert,
+        // which lasts a session since nothing writes config.xml.
+        Partial(
+            at("crates/mp-gui/src/config/battery_monitor.rs", "fn page"),
+            "the Monitor, Sensor and HW Ver combos with the nine presets and the pin table, the \
+             divider and amps-per-volt arithmetic in single precision, each box writing its \
+             parameter on leaving through the retrying set; no photo, no typing into the combos",
+        ),
     ),
     panel(
         "ConfigBatteryMonitoring2",
@@ -1541,7 +1549,7 @@ mod tests {
             );
             checked += 1;
         }
-        assert_eq!(checked, 11);
+        assert_eq!(checked, 12);
     }
 
     /// The committed report matches the table.
@@ -1573,7 +1581,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (1, 9, 45, 2, 4)
+            (1, 10, 44, 2, 4)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

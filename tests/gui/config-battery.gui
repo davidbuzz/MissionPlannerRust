@@ -1,0 +1,97 @@
+# Initial Setup's Battery Monitor page, ported from GCSViews/ConfigurationView/ConfigBatteryMonitoring.cs.
+#
+# The claim: Activate reads the monitor type, the sensor, the board and the calibration numbers from
+# the vehicle's parameters (ConfigBatteryMonitoring.cs:18-176), the timer puts the vehicle's own
+# voltage and current beside them (:477-481), and a box is written to the vehicle when it is left -
+# TXT_battcapacity_Validated calls setParam("BATT_CAPACITY", ...) (:184-203); there is no save
+# button - and the vehicle echoes the new value. The value is put back at the end.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm, which sets
+# BATT_MONITOR 4; the rest are the firmware's SITL defaults: BATT_CAPACITY 3300, BATT_VOLT_PIN 13,
+# BATT_CURR_PIN 12, BATT_VOLT_MULT 10.1, BATT_AMP_PERVLT 17, SIM_BATT_VOLTAGE 12.6. Run as
+#
+#   tools/gui-test.sh tests/gui/config-battery.gui -- tcp:127.0.0.1:5760
+#
+# A run that stops half way leaves BATT_CAPACITY at 3400; the next run's first capacity expectation
+# fails, and restoring it by hand (or re-running from a fresh SITL) puts it back.
+
+screen params
+window 1600x1200
+settle 6
+
+# Initial Setup lists the page once every parameter is in (isConnected && gotAllParams,
+# InitialSetup.cs:268-272), and here parameters are downloaded when asked for.
+click param-download
+settle 15
+expect params.held > 1000
+expect params.value.BATT_MONITOR 4
+
+click tab-setup
+expect config.battery.open false
+# Battery Monitor is the first Optional Hardware entry of InitialSetup's list.
+click setup-page-ConfigOptional
+click setup-page-ConfigBatteryMonitoring
+settle 2
+expect config.battery.open true
+expect config.battery.enabled true
+
+# What Activate read. SITL's 17 A/V and 10.1 match no sensor in the table, so "0: Other", and its
+# voltage pin 13 is "2: APM2.5+/ZealotF427 - 3DR Power Module" (:62-164).
+expect config.battery.monitor 4
+expect config.battery.monitor.text ~ Voltage and Current
+expect config.battery.monitor.options >= 3
+expect config.battery.sensor 0
+expect config.battery.sensor.enabled true
+expect config.battery.hwversion 2
+expect config.battery.hwversion.enabled true
+expect config.battery.capacity 3300
+expect config.battery.divider 10.1
+expect config.battery.ampspervolt 17
+expect config.battery.calibration.enabled true
+expect config.battery.divider.enabled true
+expect config.battery.ampspervolt.enabled true
+
+# The readouts: both voltage boxes open at cs.battery_voltage, and the timer has run at least once
+# in the two seconds settled, filling the current (a double's text; SITL's disarmed current is not
+# asserted beyond there being one).
+expect config.battery.voltage ~ 12.
+expect config.battery.measured ~ 12.
+expect config.battery.readouts >= 1
+
+# Activate's own writes - BATT_MONITOR, BATT_AMP_PERVLT and BATT_VOLT_MULT, each with the value the
+# vehicle already holds (:172-173) - have all been answered, and nothing complained.
+settle 2
+expect config.battery.writes.pending 0
+expect config.battery.message none
+expect params.value.BATT_VOLT_MULT 10.1
+expect params.value.BATT_AMP_PERVLT 17
+
+# The capacity to 3400: typed, then the box left for the divider box, which is what raises
+# Validated. (Leaving the divider box later writes its unchanged 10.1 back, as the C# would.)
+click battery-capacity
+key ctrl+u
+type 3400
+settle 1
+click battery-divider
+settle 3
+expect config.battery.capacity 3400
+expect config.battery.write BATT_CAPACITY 3400 accepted
+expect params.value.BATT_CAPACITY 3400
+expect config.battery.message none
+
+# And back.
+click battery-capacity
+key ctrl+u
+type 3300
+settle 1
+click battery-divider
+settle 3
+expect config.battery.write BATT_CAPACITY 3300 accepted
+expect params.value.BATT_CAPACITY 3300
+expect params.value.BATT_VOLT_MULT 10.1
+expect config.battery.message none
+
+# Choosing another page deactivates this one, as BackstageView does on every change.
+click setup-page-ConfigOptional
+settle 1
+expect config.battery.open false

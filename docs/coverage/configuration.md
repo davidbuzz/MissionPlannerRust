@@ -4,11 +4,11 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui c
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 1 | 9 | 45 | 2 | 4 | 569 |
+| 61 | 1 | 10 | 44 | 2 | 4 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 1 | 8 | 33 | 2 | 0 | 258 | 179 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 1 | 9 | 32 | 2 | 0 | 258 | 166 |
 | CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 0 | 1 | 12 | 0 | 0 | 277 | 255 |
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 | 0 |
 
@@ -26,10 +26,10 @@ The largest missing panels, by wirings:
 | `ConfigFirmwareManifest` | Install Firmware | 16 |
 | `ConfigDroneCAN` | DroneCAN/UAVCAN | 15 |
 | `ConfigAdvanced` | Advanced | 13 |
-| `ConfigBatteryMonitoring` | Battery Monitor | 13 |
 | `ConfigFrameType` | Frame Type | 12 |
 | `ConfigTerminal` | Terminal | 12 |
 | `ConfigBatteryMonitoring2` | Battery Monitor 2 | 10 |
+| `ConfigAteryx` | Ateryx Pids | 8 |
 
 Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConnected && gotAllParams`); **always** is connected or not; **connected** and **disconnected** are the link alone; a named vehicle, parameter or view is what the call, or the `if` around it, checks. **Advanced view** is `DisplayView.isAdvancedMode`. A page with a `DisplayView` switch also needs it on, which it is by default unless the vehicles say otherwise. The list shows a heading as `>> title` and indents what is under it (`ExtLibs/Controls/BackstageView/BackstageView.cs:227`, `:232`).
 
@@ -63,7 +63,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConne
 | 259 | `Sikradio` (`Radio/Sikradio.cs`, not a panel) | Sik Radio | Optional Hardware | always | 17 | **missing** |
 | 263 | `ConfigADSB` | ADSB | Mandatory Hardware | any | 5 | **missing** |
 | 266 | `ConfigGPSOrder` | CAN GPS Order | Optional Hardware | any | 1 | **missing** |
-| 270 | `ConfigBatteryMonitoring` | Battery Monitor | Optional Hardware | any | 13 | **missing** |
+| 270 | `ConfigBatteryMonitoring` | Battery Monitor | Optional Hardware | any | 13 | partial: `crates/mp-gui/src/config/battery_monitor.rs` `fn page` - the Monitor, Sensor and HW Ver combos with the nine presets and the pin table, the divider and amps-per-volt arithmetic in single precision, each box writing its parameter on leaving through the retrying set; no photo, no typing into the combos |
 | 271 | `ConfigBatteryMonitoring2` | Battery Monitor 2 | Optional Hardware | any | 10 | **missing** |
 | 276 | `ConfigDroneCAN` | DroneCAN/UAVCAN | Optional Hardware | always | 15 | **missing** |
 | 280 | `JoystickSetup` (`Joystick/JoystickSetup.cs`, not a panel) | Joystick | Optional Hardware | always | 11 | partial: `crates/mp-gui/src/joystick.rs` `fn panel_for` - has the device list and Enable; missing the per-channel axis grid, the button functions, Elevons, Save, Manual Control, Import and Export |
