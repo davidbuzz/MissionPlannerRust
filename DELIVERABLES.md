@@ -88,6 +88,10 @@ signing, zero-copy frame parse/serialize.
   decodes a 1 GB tlog at **> 1 M messages/s single-threaded**, zero heap allocations per packet
   (verified by an allocation-counting test).
 - **Replaces:** `ExtLibs/Mavlink` (40,718 LOC, machine-generated).
+- **Today:** the allocation claim is tested. `crates/mp-mavlink/tests/no_alloc.rs` installs a
+  counting allocator and replays every frame of every recorded flight through the framing and
+  the typed decoder: 211,638 decodes, zero allocations, the same in release. The 24-hour
+  `frame_parse` soak is still owed.
 - **Tests:** `crates/mavlink/tests/roundtrip.rs` proptest encode→decode identity over **every** generated message type; `tests/golden_decode.rs` diffs decoded fields against C#-produced golden JSON for a corpus of real tlogs; `tests/signing.rs` for MAVLink2 signature accept/reject vectors; `tests/truncation.rs` for v2 zero-trimming edge cases; `fuzz/fuzz_targets/frame_parse.rs` and `message_decode.rs` (24 h clean on `frame_parse` required before D2 is done); `crates/mp-fuzz-checks/tests/bounded.rs` runs every fuzz property on stable as part of `cargo test --workspace`, so a target cannot rot uncompiled between nightly runs; `tests/no_alloc.rs` uses a counting global allocator to assert zero allocations per packet; `benches/decode.rs` gates the >1 M msg/s target.
 
 ### D3. Transport layer
@@ -118,6 +122,12 @@ snapshots so the renderer never blocks on the I/O thread.
   path**; no allocation in the ingest→state path; every C# `CurrentState` field accounted for, with a
   checked-in field-coverage report; unit-typed geodesy (no bare `f64` lat/lon) throughout.
 - **Replaces:** `ExtLibs/ArduPilot/CurrentState.cs`, the C# event/timer/`Invoke` marshalling model.
+- **Today:** `crates/mp-vehicle/tests/no_alloc_ingest.rs` and `crates/mp-link/tests/no_alloc_ingest.rs`
+  prove zero allocations per packet from a transport read to a published state, over 70,546 real
+  frames through the real link thread with recording on. `PARAM_VALUE`, `STATUSTEXT` and
+  `COMMAND_ACK` allocate by design and are listed with a bound each. Still owed:
+  `Transport::description()` allocates twice per snapshot publish, which needs the trait to
+  change; the field-coverage report against `CurrentState` does not exist.
 - **Tests:** `tests/field_coverage.rs` reads the D18 ledger and fails if any C# `CurrentState` field lacks a Rust counterpart; `tests/decode_to_state.rs` replays golden tlogs and diffs the resulting state timeline against C# output; `tests/concurrency.rs` stress-tests the snapshot bus (writer at 1 kHz, 8 readers) asserting no torn reads and no reader stall, with a `loom` model of the publish path; `tests/no_alloc_ingest.rs` allocation counter over the ingest→state path; `benches/snapshot.rs` gates publish and read latency.
 
 ---

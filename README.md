@@ -62,6 +62,11 @@ headless under mono (`tools/csharp-reference/`), and its output is the reference
 - On a second corpus we decode **85 frames the C# parser drops**, with none missed — its reader
   loses sync after a corrupt frame. Every extra frame passes CRC with the correct per-message
   seed.
+- **0 heap allocations per packet** from bytes to a published vehicle state, proved by a
+  counting allocator: 211,638 frame decodes and 70,546 frames through the real link thread,
+  recording on (`crates/*/tests/no_alloc*.rs`). The three message types that allocate by design
+  — a parameter arriving, the vehicle speaking, a command acknowledged — are named in the test
+  with a bound each, and the test fails if a fourth appears.
 - A map tile the real Mission Planner wrote on this machine — in its own
   `gmapcache/TileDBv3/en/<provider>/<z>/<y>/<x>.jpg` layout — reads back byte for byte and
   decodes (`crates/mp-tiles/tests/tilecache.rs`; the test says so and skips where no such cache

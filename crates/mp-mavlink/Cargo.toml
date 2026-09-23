@@ -17,6 +17,10 @@ sha2.workspace = true
 [dev-dependencies]
 proptest.workspace = true
 criterion.workspace = true
+# Only for tests/no_alloc.rs, which must decode real frames into typed messages to prove the
+# whole decode path allocation-free. A dev-dependency cycle is fine for integration tests: they
+# link the same non-test build of this crate that the dialect crate does.
+mp-mavlink-dialects.workspace = true
 
 [[bench]]
 name = "decode"
