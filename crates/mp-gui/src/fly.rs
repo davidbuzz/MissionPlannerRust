@@ -12,7 +12,10 @@ use mp_link::messages::{Severity, time_of_day};
 
 use crate::MissionPlanner;
 use crate::telemetry::TelemetryView;
-use crate::ui::{action, action_sized, field, panel, theme};
+use crate::ui::{action, action_sized, field, panel, progress, theme};
+// Aliased because `mp_link::messages::Severity` is already `Severity` here and means something
+// else entirely: that one is how loud a STATUSTEXT was, this one is how bad a reading is.
+use mp_vehicle::health::Severity as Health;
 
 /// Default height for the takeoff button, in metres above home.
 ///
@@ -633,6 +636,48 @@ pub fn health_panel(view: &TelemetryView) -> impl IntoElement {
             theme::TEXT
         }
     });
+    // The two readouts that explain a vehicle nobody can explain, said in a word rather than a
+    // number: "0.62" means nothing to a pilot in a paddock.
+    let (ekf_text, ekf_severity) = view.state.as_ref().map_or_else(
+        || ("--".to_owned(), Health::Good),
+        |s| {
+            if s.ekf.seen {
+                let (name, variance) = s.ekf.worst();
+                let severity = s.ekf.severity();
+                (
+                    match severity {
+                        Health::Good => format!("ok ({variance:.2})"),
+                        _ => format!("{} {name} {variance:.2}", severity.label()),
+                    },
+                    severity,
+                )
+            } else {
+                ("--".to_owned(), Health::Good)
+            }
+        },
+    );
+    let (vibration_text, vibration_severity) = view.state.as_ref().map_or_else(
+        || ("--".to_owned(), Health::Good),
+        |s| {
+            if s.vibration.seen {
+                let (axis, level) = s.vibration.worst();
+                let clipping = s.vibration.total_clipping();
+                let severity = s.vibration.severity();
+                // The axis is named only when it matters. On a healthy vehicle "0 x" reads as
+                // "zero times" rather than "zero on the x axis", and the axis is only interesting
+                // once there is something to chase down.
+                let text = match (severity, clipping) {
+                    (Health::Good, 0) => format!("{level:.0} m/s\u{b2}"),
+                    (Health::Good, clips) => format!("{level:.0} m/s\u{b2}, {clips} clips"),
+                    (_, 0) => format!("{level:.0} on {axis}"),
+                    (_, clips) => format!("{level:.0} on {axis}, {clips} clips"),
+                };
+                (text, severity)
+            } else {
+                ("--".to_owned(), Health::Good)
+            }
+        },
+    );
     let crc_colour = if view.crc_errors > 0 {
         theme::WARN
     } else {
@@ -665,6 +710,190 @@ pub fn health_panel(view: &TelemetryView) -> impl IntoElement {
                         view.vehicle_count.to_string(),
                         theme::TEXT,
                     )),
+            )
+            .child(
+                div()
+                    .flex()
+                    .gap_3()
+                    .child(field("ekf", ekf_text, health_colour(ekf_severity)))
+                    .child(field(
+                        "vibration",
+                        vibration_text,
+                        health_colour(vibration_severity),
+                    )),
             ),
     )
+}
+
+/// The colour a verdict gets.
+const fn health_colour(health: Health) -> u32 {
+    match health {
+        Health::Good => theme::TEXT,
+        Health::Warning => theme::WARN,
+        Health::Bad => theme::ALERT,
+    }
+}
+
+/// The estimator and the frame, in detail.
+///
+/// A vehicle that will not arm, drifts in a hover or climbs when told to hold is almost always one
+/// of these two, and neither is visible anywhere else. The bars are the point: a variance is a
+/// number nobody can read at a glance, and a bar against a threshold is a picture anybody can.
+pub fn estimator_panel(view: &TelemetryView) -> AnyElement {
+    let Some(state) = view.state.as_ref() else {
+        return div().into_any_element();
+    };
+    // Nothing shown until something has been heard. An estimator panel full of zeroes on a vehicle
+    // that has never sent one reads as a perfectly healthy vehicle, which is the opposite of the
+    // truth.
+    if !state.ekf.seen && !state.vibration.seen {
+        return panel(
+            "estimator",
+            div()
+                .text_xs()
+                .text_color(rgb(theme::DIM))
+                .child("no EKF or vibration reports yet"),
+        )
+        .into_any_element();
+    }
+
+    let mut rows = div().flex().flex_col().gap_1();
+    if state.ekf.seen {
+        for (name, variance) in state.ekf.variances() {
+            let severity = if variance >= mp_vehicle::health::VARIANCE_BAD {
+                Health::Bad
+            } else if variance >= mp_vehicle::health::VARIANCE_WARNING {
+                Health::Warning
+            } else {
+                Health::Good
+            };
+            rows = rows.child(bar_row(
+                name,
+                variance,
+                1.0,
+                severity,
+                format!("{variance:.2}"),
+            ));
+        }
+        // The flags say *why* a mode change was refused, which the variances never do.
+        //
+        // Two lines, because two different things are being said. Amber is what a pilot should do
+        // something about; grey is the rest, shown because this is the detail view and somebody
+        // reading it wants the lot - a vehicle with no rangefinder never gets a height-above-
+        // ground estimate and that is not a fault.
+        let missing = state.ekf.unhealthy_estimates();
+        if !missing.is_empty() {
+            rows = rows.child(
+                div()
+                    .pt_1()
+                    .text_xs()
+                    .text_color(rgb(theme::WARN))
+                    .child(format!("not yet good: {}", missing.join(", "))),
+            );
+        }
+        let unavailable: Vec<_> = state
+            .ekf
+            .all_unhealthy_estimates()
+            .into_iter()
+            .filter(|name| !missing.contains(name))
+            .collect();
+        if !unavailable.is_empty() {
+            rows = rows.child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(theme::DIM))
+                    .child(format!("not estimated: {}", unavailable.join(", "))),
+            );
+        }
+        for (set, text) in [
+            (
+                state.ekf.uninitialised(),
+                "the estimator has never been healthy",
+            ),
+            (
+                state.ekf.constant_position_mode(),
+                "holding attitude only - no position source",
+            ),
+            (
+                state.ekf.gps_glitching(),
+                "the estimator is rejecting the GPS",
+            ),
+        ] {
+            if set {
+                rows = rows.child(div().text_xs().text_color(rgb(theme::ALERT)).child(text));
+            }
+        }
+    }
+
+    if state.vibration.seen {
+        for (axis, level) in state.vibration.axes() {
+            let severity = if level >= mp_vehicle::health::VIBRATION_BAD {
+                Health::Bad
+            } else if level >= mp_vehicle::health::VIBRATION_WARNING {
+                Health::Warning
+            } else {
+                Health::Good
+            };
+            rows = rows.child(bar_row(
+                &format!("vibration {axis}"),
+                level,
+                mp_vehicle::health::VIBRATION_BAD,
+                severity,
+                format!("{level:.1}"),
+            ));
+        }
+        let clipping = state.vibration.total_clipping();
+        if clipping > 0 {
+            rows = rows.child(
+                div()
+                    .pt_1()
+                    .text_xs()
+                    .text_color(rgb(theme::ALERT))
+                    .child(format!(
+                        "{clipping} clipping events - an accelerometer has been driven past its range"
+                    )),
+            );
+        }
+    }
+
+    panel("estimator", rows).into_any_element()
+}
+
+/// A labelled bar against a full-scale value.
+fn bar_row(
+    label: &str,
+    value: f32,
+    full_scale: f32,
+    severity: Health,
+    shown: String,
+) -> impl IntoElement {
+    let fraction = if full_scale > 0.0 {
+        (value / full_scale).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    div()
+        .flex()
+        .items_center()
+        .gap_2()
+        .child(
+            div()
+                .w(px(120.0))
+                .text_xs()
+                .text_color(rgb(theme::DIM))
+                .child(label.to_owned()),
+        )
+        .child(
+            div()
+                .flex_1()
+                .min_w(px(0.0))
+                .child(progress(fraction, health_colour(severity))),
+        )
+        .child(
+            div()
+                .w(px(40.0))
+                .text_xs()
+                .text_color(rgb(health_colour(severity)))
+                .child(shown),
+        )
 }

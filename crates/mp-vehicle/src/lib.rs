@@ -19,6 +19,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod health;
 pub mod link_quality;
 /// Flight mode names, generated from Mission Planner's parameter metadata.
 #[path = "generated/modes.rs"]

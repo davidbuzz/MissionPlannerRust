@@ -857,6 +857,10 @@ impl MissionPlanner {
             .p_2()
             .w(px(760.0))
             .child(setup::identity_panel(view))
+            // Second, above the calibrations. The reason somebody opens this screen mid-session
+            // is usually that the vehicle is behaving oddly, and this is the panel that says why -
+            // putting it below six calibration wizards buries the answer under the treatments.
+            .child(fly::estimator_panel(view))
             .child(setup::accelerometer_panel(calibration, view, cx))
             .child(setup::compass_panel(&compass, view, cx))
             .child(setup::radio_panel(

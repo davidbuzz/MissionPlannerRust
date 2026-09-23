@@ -116,6 +116,10 @@ pub struct VehicleState {
     pub sensors: crate::sensors::Sensors,
     /// Radio control channel values, as last reported.
     pub rc: crate::rc::RcChannels,
+    /// The estimator's account of itself.
+    pub ekf: crate::health::EkfStatus,
+    /// How hard the frame is shaking.
+    pub vibration: crate::health::Vibration,
 
     /// Number of MAVLink messages applied to this state.
     pub messages_applied: u64,
@@ -178,6 +182,28 @@ impl VehicleState {
                 if m.hdg != u16::MAX {
                     self.heading = Bearing(Degrees(f64::from(m.hdg) / 100.0));
                 }
+                true
+            }
+            MavMessage::EkfStatusReport(m) => {
+                self.ekf = crate::health::EkfStatus {
+                    velocity_variance: m.velocity_variance,
+                    position_horizontal_variance: m.pos_horiz_variance,
+                    position_vertical_variance: m.pos_vert_variance,
+                    compass_variance: m.compass_variance,
+                    terrain_altitude_variance: m.terrain_alt_variance,
+                    flags: m.flags,
+                    seen: true,
+                };
+                true
+            }
+            MavMessage::Vibration(m) => {
+                self.vibration = crate::health::Vibration {
+                    x: m.vibration_x,
+                    y: m.vibration_y,
+                    z: m.vibration_z,
+                    clipping: [m.clipping_0, m.clipping_1, m.clipping_2],
+                    seen: true,
+                };
                 true
             }
             MavMessage::GpsRawInt(m) => {
