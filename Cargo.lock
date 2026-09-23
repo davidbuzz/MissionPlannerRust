@@ -3297,6 +3297,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "mp-chart"
+version = "0.1.0"
+
+[[package]]
 name = "mp-cli"
 version = "0.1.0"
 dependencies = [
@@ -3342,6 +3346,7 @@ dependencies = [
  "gpui_macos",
  "gpui_windows",
  "image",
+ "mp-chart",
  "mp-input",
  "mp-link",
  "mp-mavlink-dialects",

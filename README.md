@@ -34,6 +34,7 @@ Measured on this tree: **13 crates, 36,603 hand-written Rust LOC** (plus 91,634 
 | Firmware | `.apj` parsing and the px4 bootloader protocol, proven against a mock; nothing flashed yet |
 | Scripting | the `Script.cs` host API, and a measurement of what the 19 shipped scripts need |
 | KML export | a flown path coloured by flight mode, and a mission, for Google Earth |
+| Tuning graph | eleven telemetry fields plotted live, min/max reduced so a spike cannot hide |
 | Geodesy | typed units, Web Mercator, slippy-map tile arithmetic |
 | Maps | GPU tile rendering, flight path, mission and fence overlays |
 | CLI | `mpr watch \| record \| fly \| params \| param \| mission \| survey \| log \| logs \| ports` |
@@ -103,6 +104,7 @@ crates/
   mp-firmware          .apj files and the px4 bootloader protocol
   mp-script            the scripting host API and corpus analysis
   mp-kml               missions and flight paths as KML
+  mp-chart             time series for the tuning graph and log plots
   mp-units             typed units and geodesy
   mp-fuzz-checks       the fuzz properties, so they compile on stable too
   mp-cli               `mpr`

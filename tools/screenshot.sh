@@ -63,12 +63,39 @@ if [ -n "${CLICK:-}" ] || [ -n "${DRAG:-}" ]; then
 fi
 
 echo "launching $BIN $*"
+# Where the pointer was before any of this started.
+#
+# Clicking and scrolling move the *real* pointer - xdotool has no other kind - so a run that does
+# not put it back leaves somebody's cursor on a different monitor. That is rude on its own, and it
+# has a second effect that took a while to see: mutter places a new window on the monitor under
+# the pointer, so the next run's window appears wherever the last run abandoned the mouse. Two runs
+# in a row therefore put the window on two different screens for no reason the caller can see.
+#
+# Recorded before the application starts and restored by the trap, so it is put back on a crash,
+# a timeout and a Ctrl-C as well as a clean exit.
+POINTER_HOME=$(xdotool getmouselocation --shell 2>/dev/null | awk -F= '/^X=/{x=$2} /^Y=/{y=$2} END{print x" "y}')
+
+# Where the window should go, and the pointer put there **before the application starts**.
+#
+# This is the placement fix, and it works with the window manager rather than against it: mutter
+# places a new window on the monitor containing the pointer, so moving the pointer first means the
+# window is *created* in the right place rather than created elsewhere and dragged. Doing it after
+# the launch is too late - the window already exists by the time the pointer moves, which is the
+# bug this replaces. The windowmove later stays as the belt to this braces, for a window manager
+# that does not consult the pointer at all.
+SHOT_AT="${SHOT_AT:-0,0}"
+WANT_X="${SHOT_AT%%,*}"
+WANT_Y="${SHOT_AT##*,}"
+xdotool mousemove "$WANT_X" "$WANT_Y" 2>/dev/null
+
 "$BIN" "$@" &
 APP_PID=$!
 cleanup() {
     kill "$APP_PID" 2>/dev/null
     wait "$APP_PID" 2>/dev/null
     [ -n "$PROBE_FILE" ] && rm -f "$PROBE_FILE" "${PROBE_FILE%.json}.tmp"
+    # shellcheck disable=SC2086 # two words on purpose: x and y
+    [ -n "$POINTER_HOME" ] && xdotool mousemove $POINTER_HOME 2>/dev/null
 }
 trap cleanup EXIT INT TERM HUP
 
@@ -78,15 +105,24 @@ trap cleanup EXIT INT TERM HUP
 # frame, and the frame inherits the title. Matching on the title therefore returns two ids - the
 # frame and the client - and picking either at random makes captures inconsistent in size and
 # position. Only the client window belongs to our process.
+# `--onlyvisible` and a name, not the first id the process owns. A bare `search --pid` returns
+# every window the client has created including unmapped and transient ones, and `head -1` picked
+# one of those: a run failed with "No such window with id 0x3c00001" because the id had been
+# valid for a moment and was gone by the time it was used. A window that is both visible and
+# titled is the one somebody can see.
 WIN_ID=""
 for _ in $(seq 1 60); do
-    WIN_ID=$(xdotool search --pid "$APP_PID" 2>/dev/null | head -1)
-    [ -z "$WIN_ID" ] && WIN_ID=$(xdotool search --name "$WINDOW_TITLE" 2>/dev/null | tail -1)
-    [ -n "$WIN_ID" ] && break
+    WIN_ID=$(xdotool search --pid "$APP_PID" --onlyvisible --name "$WINDOW_TITLE" 2>/dev/null | tail -1)
+    # A fallback by title alone, for a window manager that does not set _NET_WM_PID. Still
+    # requires the window to be visible.
+    [ -z "$WIN_ID" ] && WIN_ID=$(xdotool search --onlyvisible --name "$WINDOW_TITLE" 2>/dev/null | tail -1)
+    # And it has to still be there a moment later, or it was transient.
+    [ -n "$WIN_ID" ] && xwininfo -id "$WIN_ID" >/dev/null 2>&1 && break
+    WIN_ID=""
     kill -0 $APP_PID 2>/dev/null || { echo "app exited before showing a window" >&2; wait $APP_PID; exit 1; }
     sleep 0.5
 done
-[ -n "$WIN_ID" ] || { echo "no window titled '$WINDOW_TITLE' appeared" >&2; exit 1; }
+[ -n "$WIN_ID" ] || { echo "no visible window titled '$WINDOW_TITLE' appeared" >&2; exit 1; }
 
 # Let the window settle before capturing. Telemetry screenshots need longer than a static
 # window: a simulated GPS takes tens of seconds to acquire, and a shot taken too early shows
@@ -102,10 +138,6 @@ sleep "${SETTLE:-2}"
 #
 # SHOT_AT overrides the corner. The default is DP-1-3 at the X screen origin, chosen by the owner
 # of this desktop; on another machine set SHOT_AT to a corner that is out of the way.
-SHOT_AT="${SHOT_AT:-0,0}"
-WANT_X="${SHOT_AT%%,*}"
-WANT_Y="${SHOT_AT##*,}"
-
 # Activated first, then moved. A window manager will often pull a window to the active monitor
 # when it is activated, so activating after the move undoes it - which is exactly what was
 # happening. Moving last, and checking, is what makes the placement stick.

@@ -26,6 +26,7 @@ mp-tiles = { path = "crates/mp-tiles" }
 mp-input = { path = "crates/mp-input" }
 mp-firmware = { path = "crates/mp-firmware" }
 mp-kml = { path = "crates/mp-kml" }
+mp-chart = { path = "crates/mp-chart" }
 mp-script = { path = "crates/mp-script" }
 thiserror = "2"
 sha2 = "0.10"

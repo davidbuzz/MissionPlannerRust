@@ -20,6 +20,7 @@ mod setup;
 mod smoke;
 mod telemetry;
 mod textfield;
+mod tuning;
 mod ui;
 
 use std::time::Duration;
@@ -177,6 +178,8 @@ struct MissionPlanner {
     param_file_focus: gpui::FocusHandle,
     /// Joystick state: the device, the mapping and the failsafe.
     sticks: joystick::Sticks,
+    /// The live tuning graph.
+    tuning: tuning::Tuning,
     /// The result of the last comparison against a file, newest first.
     ///
     /// Held rather than applied. A comparison is something an operator reads before deciding, and
@@ -325,6 +328,7 @@ impl MissionPlanner {
             },
             param_file_focus: cx.focus_handle(),
             sticks: joystick::Sticks::new(),
+            tuning: tuning::Tuning::new(),
             param_differences: Vec::new(),
             motor_throttle: 5.0,
             capturing_radio: false,
@@ -825,7 +829,8 @@ impl MissionPlanner {
                             .child(fly::actions_panel(view, self.disabled_arming_checks, cx))
                             .child(fly::prearm_panel(view))
                             .child(fly::vehicle_panel(view))
-                            .child(fly::health_panel(view)),
+                            .child(fly::health_panel(view))
+                            .child(tuning::panel_for(&self.tuning, cx)),
                     )
                     .children(ui::scroll_indicator(&self.fly_scroll)),
             )
@@ -1162,6 +1167,12 @@ impl Render for MissionPlanner {
         // that.
         smoke::painted();
         let view = self.telemetry.view();
+
+        // The tuning graph is fed here because this is where a fresh snapshot arrives. It samples
+        // only when the snapshot is new - a repeated sample draws a horizontal line that looks
+        // exactly like a steady measurement, and on a tuning graph "steady" and "nothing arriving"
+        // lead to opposite conclusions.
+        self.tuning.sample(&view);
 
         // Feed the map from the same snapshot the panels read, so the two can never disagree
         // about where the vehicle is.

@@ -33,12 +33,25 @@ When a GUI run produces the wrong result, stop running it. Diagnose from the sou
 file and the one capture already taken, make every fix at once, and spend the next run confirming
 rather than exploring. If that is genuinely impossible, say so and ask before opening more windows.
 
-**Pin the window to one monitor.** Buzz has three (eDP-1 2560x1600 +1244+1440, DP-1-1 2560x1440
-+2560+0, DP-1-3 2560x1440 +0+0) in one 5120x3040 X screen. Left to the window manager the window
-landed somewhere different almost every run, on top of whatever he was doing. He chose **DP-1-3,
-at +0+0**, which `tools/screenshot.sh` now defaults to and `SHOT_AT=X,Y` overrides. Note the
-window manager pulls a window to the active monitor on `windowactivate`, so activate first and
-move afterwards, then verify the position and move again — a single `windowmove` does not stick.
+**Pin the window to one monitor, and put the mouse there first.** Buzz has three (eDP-1
+2560x1600 +1244+1440, DP-1-1 2560x1440 +2560+0, DP-1-3 2560x1440 +0+0) in one 5120x3040 X screen.
+He chose **DP-1-3, at +0+0**; `tools/screenshot.sh` defaults to it and `SHOT_AT=X,Y` overrides.
+
+**The window follows the mouse pointer, and the scripts move the pointer.** Buzz worked this out —
+"is app following mouse curson?" — after the window had appeared on a different screen three runs
+running. mutter places a new window on the monitor containing the pointer (`center-new-windows` is
+`false`), and `xdotool mousemove` moves the *real* cursor because there is no other kind. So each
+run dragged his cursor to wherever it last clicked, and the next run's window was created there.
+Two fixes, both in `screenshot.sh`: move the pointer to the target corner **before launching the
+binary**, so the window is created in the right place rather than created elsewhere and dragged;
+and record the pointer's position up front and restore it in the `trap`, so a run does not leave
+somebody's cursor on another screen. `windowmove` afterwards is the backstop, not the mechanism.
+
+Two related traps in the same file, both of which produced a screenshot of the wrong thing while
+reporting success: the capture is an `x11grab` of the *screen* at the window's coordinates, so the
+window must be fully on one monitor and on top — check it, do not assume it; and
+`xdotool search --pid` returns every window a client owns including unmapped transients, so it
+needs `--onlyvisible --name` or it hands back an id that is gone a moment later.
 
 **Do not run `crates/mp-gui/tests/layout.rs` as part of routine verification.** It is `#[ignore]`d
 because it opens four windows in sequence. Buzz interrupted a run of it that was tacked onto an
