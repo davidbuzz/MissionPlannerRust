@@ -1,0 +1,163 @@
+# Initial Setup's Motor Test page, ported from GCSViews/ConfigurationView/ConfigMotorTest.cs.
+#
+# The claim: Activate counts the motors from the frame and builds one button per motor, lettered
+# A, B, C... in test order and labelled from APMotorLayout.json (ConfigMotorTest.cs:43-109,
+# 111-261); each button is testMotor - MAV_CMD_DO_MOTOR_TEST with the motor, the throttle as a
+# percentage, the throttle box, the duration box and a motor count (:305-327) - and the vehicle
+# acknowledges each one. A motor button sends its own number and no count (:290-303), Test all in
+# Sequence sends motor 1 with the count (:274-280), Stop all motors every motor at zero for zero
+# seconds (:282-288), and Test all motors every motor in turn (:263-272). The proof is what the
+# page sent (config.motortest.last.*, .commands), what the link's retrying request ended with
+# (.outcomes), the vehicle's own COMMAND_ACK lines since the press (.ack, .acks), and, for one test
+# long enough to catch, the vehicle's motor outputs (.outputs, SERVO_OUTPUT_RAW). The Set Motor
+# Spin Arm button's write of MOT_SPIN_ARM is proved by the vehicle's echo, and put back.
+#
+# SITL is a simulator: it has no propellers and nothing here can hurt anyone. On a real vehicle the
+# page's own note applies - "NOTE: PLEASE HOLD DOWN YOUR UAV" (ConfigMotorTest.resx label2) - and
+# the propellers come off before any motor is spun. This script is for SITL only.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm, which sets
+# FRAME_CLASS 1 (Quad) and FRAME_TYPE 0 (Plus); MOT_SPIN_ARM is the firmware's 0.1. ArduCopter
+# runs a motor test disarmed, landed and with the radio calibrated (motor_test.cpp,
+# mavlink_motor_control_check), which SITL at rest is. Run as
+#
+#   tools/gui-test.sh tests/gui/config-motortest.gui -- tcp:127.0.0.1:5760
+#
+# A run that stops half way can leave MOT_SPIN_ARM at 0.07; the Spin Arm expectations then fail
+# until it is set back to 0.1, by hand or by a fresh SITL.
+
+screen params
+window 1600x1200
+settle 6
+
+# Initial Setup lists the page once every parameter is in (isConnected && gotAllParams,
+# InitialSetup.cs:315-318), and here parameters are downloaded when asked for.
+click param-download
+settle 15
+expect params.held > 1000
+expect params.value.FRAME_CLASS 1
+expect params.value.FRAME_TYPE 0
+expect params.value.MOT_SPIN_ARM 0.1
+
+click tab-setup
+expect config.motortest.active false
+# Motor Test is an Optional Hardware entry of InitialSetup's list.
+click setup-page-ConfigOptional
+click setup-page-ConfigMotorTest
+settle 2
+expect setup.page ConfigMotorTest
+expect config.motortest.active true
+expect config.motortest.enabled true
+
+# What Activate built. A quad plus has four motors in APMotorLayout.json; it tests motor 3 first,
+# then 1, 4 and 2, so button A is labelled with motor 3.
+expect config.motortest.count 4
+expect config.motortest.letters A,B,C,D
+expect config.motortest.buttons Test motor A,Test motor B,Test motor C,Test motor D
+expect config.motortest.labels A=Motor Number: 3, CW;B=Motor Number: 1, CCW;C=Motor Number: 4, CW;D=Motor Number: 2, CCW
+expect config.motortest.class Class: Quad
+expect config.motortest.type Type: Plus
+# The Designer's values: throttle 5 %, duration 2 s.
+expect config.motortest.throttle 5
+expect config.motortest.duration 2
+expect config.motortest.press none
+expect config.motortest.link ~ connect-escs-and-motors.html
+
+# Test motor A: DO_MOTOR_TEST motor 1, throttle type 0 (percent), 5 %, 2 s, count 0.
+click motortest-motor-A
+settle 1
+expect config.motortest.press Test motor A
+expect config.motortest.last.params 1 0 5 2 0 0 0
+expect config.motortest.commands 1/5/2/0
+expect config.motortest.outcomes accepted
+expect config.motortest.ack MAV_CMD_DO_MOTOR_TEST: accepted
+expect config.motortest.acks 1
+# Let the vehicle's two seconds run out.
+settle 3
+
+# Test all in Sequence: motor 1 with the count, 4.
+click motortest-sequence
+settle 1
+expect config.motortest.press Test all in Sequence
+expect config.motortest.last.params 1 0 5 2 4 0 0
+expect config.motortest.outcomes accepted
+expect config.motortest.ack MAV_CMD_DO_MOTOR_TEST: accepted
+expect config.motortest.acks 1
+
+# Stop all motors, with the sequence still running: every motor, zero throttle, zero seconds, and
+# the vehicle acknowledges all four.
+click motortest-stop
+settle 2
+expect config.motortest.press Stop all motors
+expect config.motortest.commands 1/0/0/0,2/0/0/0,3/0/0/0,4/0/0/0
+expect config.motortest.last.params 4 0 0 0 0 0 0
+expect config.motortest.outcomes accepted,accepted,accepted,accepted
+expect config.motortest.acks 4
+expect config.motortest.ack MAV_CMD_DO_MOTOR_TEST: accepted
+
+# The duration box takes a typed number, read when a button reads it. Ten seconds is long enough
+# to see the motor turn: Test motor B is motor 1, output 1, at 5 % of SITL's 1000-2000 range.
+click motortest-duration
+key ctrl+u
+type 10
+expect config.motortest.duration 10
+click motortest-motor-B
+settle 2
+expect config.motortest.last.params 2 0 5 10 0 0 0
+expect config.motortest.outcomes accepted
+expect config.motortest.outputs 1050,1000,1000,1000
+click motortest-stop
+settle 2
+expect config.motortest.outcomes accepted,accepted,accepted,accepted
+
+# The arrows step by one: back to 2 s, then Test all motors, every motor in turn.
+click motortest-duration
+key ctrl+u
+type 3
+click motortest-duration-down
+expect config.motortest.duration 2
+click motortest-all
+settle 2
+expect config.motortest.press Test all motors
+expect config.motortest.commands 1/5/2/0,2/5/2/0,3/5/2/0,4/5/2/0
+expect config.motortest.outcomes accepted,accepted,accepted,accepted
+expect config.motortest.acks 4
+click motortest-stop
+settle 2
+expect config.motortest.outcomes accepted,accepted,accepted,accepted
+
+# Set Motor Spin Arm: the throttle is under 20, so the InputBox asks for it plus 2, and OK writes
+# 7 / 100 to MOT_SPIN_ARM; the vehicle echoes it and the page is enabled again (:341-367).
+click motortest-spin-arm
+expect config.motortest.enabled false
+expect config.motortest.prompt Enter arm throttle % (deadzone + 2%)
+expect config.motortest.prompt.value 7
+click motortest-prompt-ok
+settle 2
+expect config.motortest.prompt none
+expect config.motortest.spin MOT_SPIN_ARM 0.07 accepted
+expect params.value.MOT_SPIN_ARM 0.07
+expect config.motortest.enabled true
+
+# And back to 0.1: 10 typed over the 7.
+click motortest-spin-arm
+key ctrl+u
+type 10
+click motortest-prompt-ok
+settle 2
+expect config.motortest.spin MOT_SPIN_ARM 0.1 accepted
+expect params.value.MOT_SPIN_ARM 0.1
+
+# Set Motor Spin Min asks for (int)MOT_SPIN_MIN + 3: the fraction truncates, so 3. Cancel writes
+# nothing and enables the page.
+click motortest-spin-min
+expect config.motortest.prompt Enter min spin throttle % (arm min + 3%)
+expect config.motortest.prompt.value 3
+click motortest-prompt-cancel
+expect config.motortest.prompt none
+expect config.motortest.enabled true
+
+# Choosing another page hides this one; ConfigMotorTest has no Deactivate.
+click setup-page-ConfigOptional
+settle 1
+expect config.motortest.active false

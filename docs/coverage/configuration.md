@@ -4,11 +4,11 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui c
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 2 | 11 | 42 | 2 | 4 | 569 |
+| 61 | 3 | 10 | 42 | 2 | 4 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 2 | 10 | 30 | 2 | 0 | 258 | 149 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 3 | 9 | 30 | 2 | 0 | 258 | 149 |
 | CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 0 | 1 | 12 | 0 | 0 | 277 | 255 |
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 | 0 |
 
@@ -75,7 +75,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConne
 | 305 | `ConfigHWOSD` | OSD | Optional Hardware | any | 1 | **missing** |
 | 309 | `ConfigMount` | Camera Gimbal | Optional Hardware | any | 5 | **missing** |
 | 313 | `ConfigAntennaTracker` | Antenna tracker | Optional Hardware | tracker | 3 | **missing** |
-| 317 | `ConfigMotorTest` | Motor Test | Optional Hardware | any | 3 | partial: `crates/mp-gui/src/setup.rs` `fn motor_panel` - has a button per motor, the throttle and Stop all motors, over MAV_CMD_DO_MOTOR_TEST; missing Test all motors, Test all in Sequence, the duration box, the motor count, letters and rotation from the frame layout, the MOT_SPIN_ARM and MOT_SPIN_MIN setters and the motor-order link |
+| 317 | `ConfigMotorTest` | Motor Test | Optional Hardware | any | 3 | done: `crates/mp-gui/src/config/motor_test.rs` `fn page` |
 | 321 | `ConfigHWBT` | Bluetooth Setup | Optional Hardware | always | 1 | **missing** |
 | 325 | `ConfigHWParachute` | Parachute | Optional Hardware | any | 1 | **missing** |
 | 329 | `ConfigHWESP8266` (`ConfigHWesp8266.cs`) | ESP8266 Setup | Optional Hardware | any | 3 | **missing** |
