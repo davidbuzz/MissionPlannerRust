@@ -1,0 +1,309 @@
+# Survey grid cases: the inputs to Mission Planner's Grid.CreateGrid for the golden outputs in
+# golden/, and to crates/mp-mission/tests/grid_vectors.rs. Regenerate the goldens with
+# tools/csharp-reference/regen-grid.sh after any change here; see README.md.
+#
+#   polygon <name> <lat>,<lng> ...          vertices in drawing order, degrees
+#   case <name> <polygon> [<param>=<value> ...]
+#
+# Parameters are CreateGrid's own names (ExtLibs/Utilities/Grid.cs:354). One that is left out takes
+# the value GridUI gives it on a fresh install - the list is in tools/csharp-reference/MpGrid.cs -
+# including the angle, which GridUI sets to the bearing of the polygon's longest side.
+
+# --- Canberra, around the SITL home (-35.363261, 149.165230): UTM zone 55 south -------------------
+
+polygon cbr_square -35.3600,149.1600 -35.3600,149.1710 -35.3690,149.1710 -35.3690,149.1600
+polygon cbr_square_cw -35.3690,149.1600 -35.3690,149.1710 -35.3600,149.1710 -35.3600,149.1600
+polygon cbr_square_closed -35.3600,149.1600 -35.3600,149.1710 -35.3690,149.1710 -35.3690,149.1600 -35.3600,149.1600
+polygon cbr_rect_wide -35.3550,149.1500 -35.3550,149.1680 -35.3604,149.1680 -35.3604,149.1500
+polygon cbr_rect_tall -35.3500,149.1700 -35.3500,149.1755 -35.3617,149.1755 -35.3617,149.1700
+polygon cbr_rot30 -35.354191,149.196608 -35.349699,149.206146 -35.345809,149.203392 -35.350301,149.193854
+polygon cbr_l -35.3600,149.1600 -35.3600,149.1710 -35.3650,149.1710 -35.3650,149.1650 -35.3690,149.1650 -35.3690,149.1600
+polygon cbr_t -35.320000,149.139129 -35.320000,149.141881 -35.314610,149.141881 -35.314610,149.146010 -35.312814,149.146010 -35.312814,149.135000 -35.314610,149.135000 -35.314610,149.139129
+polygon cbr_u -35.3900,149.1800 -35.3900,149.1830 -35.3960,149.1830 -35.3960,149.1880 -35.3900,149.1880 -35.3900,149.1910 -35.3990,149.1910 -35.3990,149.1800
+polygon cbr_comb -35.400000,149.130000 -35.400000,149.139918 -35.393712,149.139918 -35.393712,149.138265 -35.398203,149.138265 -35.398203,149.135786 -35.393712,149.135786 -35.393712,149.134133 -35.398203,149.134133 -35.398203,149.131653 -35.393712,149.131653 -35.393712,149.130000
+polygon cbr_field -35.3710,149.1580 -35.3702,149.1662 -35.3741,149.1671 -35.3748,149.1638 -35.3770,149.1645 -35.3782,149.1601 -35.3760,149.1570 -35.3735,149.1590
+polygon cbr_strip -35.3400,149.1400 -35.33962,149.14047 -35.35232,149.15607 -35.3527,149.1556
+polygon cbr_triangle -35.3800,149.1500 -35.3700,149.1650 -35.3880,149.1690
+polygon cbr_sliver -35.3300,149.2000 -35.3310,149.2150 -35.3304,149.2001
+polygon cbr_pentagon -35.3300,149.1800 -35.3280,149.1890 -35.3330,149.1950 -35.3390,149.1900 -35.3380,149.1810
+polygon cbr_hexagon -35.338407,149.150000 -35.340203,149.153815 -35.343797,149.153815 -35.345593,149.150000 -35.343797,149.146185 -35.340203,149.146185
+polygon cbr_trapezoid -35.3450,149.1750 -35.3450,149.1830 -35.3520,149.1870 -35.3520,149.1720
+polygon cbr_small -35.36300,149.16500 -35.36300,149.16665 -35.36435,149.16665 -35.36435,149.16500
+polygon cbr_tiny -35.363200,149.165200 -35.363200,149.165751 -35.362841,149.165751 -35.362841,149.165200
+polygon cbr_micro -35.363300,149.165300 -35.363300,149.165322 -35.363282,149.165322 -35.363282,149.165300
+polygon cbr_large -35.420000,149.060000 -35.420000,149.104093 -35.393051,149.104093 -35.393051,149.060000
+
+# --- elsewhere south of the equator ---------------------------------------------------------------
+
+polygon bne_field -27.4650,153.0200 -27.4640,153.0290 -27.4710,153.0300 -27.4730,153.0210
+polygon chc_farm -43.5300,172.5900 -43.5290,172.6010 -43.5350,172.6040 -43.5400,172.5980 -43.5370,172.5890
+polygon per_l -31.9500,115.8600 -31.9500,115.8700 -31.9540,115.8700 -31.9540,115.8640 -31.9590,115.8640 -31.9590,115.8600
+polygon cpt_rect -33.9300,18.4200 -33.9300,18.4290 -33.9350,18.4290 -33.9350,18.4200
+polygon sao_triangle -23.5500,-46.6300 -23.5450,-46.6200 -23.5580,-46.6180
+
+# --- north of the equator -------------------------------------------------------------------------
+
+polygon zrh_rect 47.4000,8.5500 47.4000,8.5620 47.3950,8.5620 47.3950,8.5500
+polygon oxf_field 51.7500,-1.2500 51.7510,-1.2400 51.7470,-1.2380 51.7460,-1.2440 51.7430,-1.2450 51.7440,-1.2510
+polygon col_square 40.0000,-105.2000 40.0000,-105.1900 39.9920,-105.1900 39.9920,-105.2000
+polygon rey_rect 64.1300,-21.9000 64.1300,-21.8800 64.1260,-21.8800 64.1260,-21.9000
+polygon trm_field 69.6500,18.9500 69.6520,18.9650 69.6470,18.9700 69.6450,18.9550
+polygon kla_hexagon 0.332603,32.580698 0.330698,32.582603 0.328094,32.581906 0.327397,32.579302 0.329302,32.577397 0.331906,32.578094
+
+# --- frames the C# chooses by the first vertex ----------------------------------------------------
+# A polygon is projected in the zone and hemisphere of its first vertex (PointLatLngAlt.cs:296), so
+# the same area can be laid out in two frames.
+
+polygon equator_north_first 0.0040,32.6000 0.0040,32.6070 -0.0040,32.6070 -0.0040,32.6000
+polygon equator_south_first -0.0040,32.6000 -0.0040,32.6070 0.0040,32.6070 0.0040,32.6000
+polygon zone55_to_56 -35.3000,149.9950 -35.3000,150.0050 -35.3070,150.0050 -35.3070,149.9950
+polygon zone56_to_55 -35.3000,150.0050 -35.3070,150.0050 -35.3070,149.9950 -35.3000,149.9950
+polygon zone32_to_33 50.1000,11.9940 50.1000,12.0060 50.0950,12.0060 50.0950,11.9940
+polygon antimeridian -16.8000,179.9960 -16.8000,-179.9960 -16.8060,-179.9960 -16.8060,179.9960
+
+# --- every polygon at the four angles -------------------------------------------------------------
+# The distance between lanes is scaled to the polygon so each case has a handful to a few dozen
+# lanes; overshoots alternate between none, symmetric and asymmetric.
+
+case cbr_square_a0 cbr_square angle=0 HomeLocation=-35.363261,149.165230
+case cbr_square_a45 cbr_square angle=45 distance=60 overshoot1=20 overshoot2=20 HomeLocation=-35.363261,149.165230
+case cbr_square_a90 cbr_square angle=90 distance=75 HomeLocation=-35.363261,149.165230
+case cbr_square_a137 cbr_square angle=137 distance=40 overshoot1=10 overshoot2=30 HomeLocation=-35.363261,149.165230
+
+case cbr_square_cw_a0 cbr_square_cw angle=0 HomeLocation=-35.363261,149.165230
+case cbr_square_cw_a45 cbr_square_cw angle=45 distance=60 overshoot1=20 overshoot2=20 HomeLocation=-35.363261,149.165230
+case cbr_square_cw_a90 cbr_square_cw angle=90 distance=75 HomeLocation=-35.363261,149.165230
+case cbr_square_cw_a137 cbr_square_cw angle=137 distance=40 overshoot1=10 overshoot2=30 HomeLocation=-35.363261,149.165230
+
+case cbr_square_closed_a0 cbr_square_closed angle=0 HomeLocation=-35.363261,149.165230
+case cbr_square_closed_a45 cbr_square_closed angle=45 distance=60 overshoot1=20 overshoot2=20 HomeLocation=-35.363261,149.165230
+case cbr_square_closed_a90 cbr_square_closed angle=90 distance=75 HomeLocation=-35.363261,149.165230
+case cbr_square_closed_a137 cbr_square_closed angle=137 distance=40 overshoot1=10 overshoot2=30 HomeLocation=-35.363261,149.165230
+
+case cbr_rect_wide_a0 cbr_rect_wide angle=0 distance=100
+case cbr_rect_wide_a45 cbr_rect_wide angle=45 distance=80 overshoot1=25 overshoot2=25
+case cbr_rect_wide_a90 cbr_rect_wide angle=90 distance=50
+case cbr_rect_wide_a137 cbr_rect_wide angle=137 distance=70 overshoot1=5 overshoot2=40
+
+case cbr_rect_tall_a0 cbr_rect_tall angle=0 distance=40 HomeLocation=-35.363261,149.165230
+case cbr_rect_tall_a45 cbr_rect_tall angle=45 distance=60 overshoot1=15 overshoot2=15 HomeLocation=-35.363261,149.165230
+case cbr_rect_tall_a90 cbr_rect_tall angle=90 distance=100 HomeLocation=-35.363261,149.165230
+case cbr_rect_tall_a137 cbr_rect_tall angle=137 distance=55 overshoot1=30 overshoot2=10 HomeLocation=-35.363261,149.165230
+
+case cbr_rot30_a0 cbr_rot30 angle=0 distance=60 HomeLocation=-35.363261,149.165230
+case cbr_rot30_a45 cbr_rot30 angle=45 distance=60 overshoot1=20 overshoot2=20 HomeLocation=-35.363261,149.165230
+case cbr_rot30_a90 cbr_rot30 angle=90 distance=60 HomeLocation=-35.363261,149.165230
+case cbr_rot30_a137 cbr_rot30 angle=137 distance=60 overshoot1=12 overshoot2=24 HomeLocation=-35.363261,149.165230
+
+case cbr_l_a0 cbr_l angle=0 distance=60 HomeLocation=-35.363261,149.165230
+case cbr_l_a45 cbr_l angle=45 distance=60 overshoot1=20 overshoot2=20 HomeLocation=-35.363261,149.165230
+case cbr_l_a90 cbr_l angle=90 distance=60 HomeLocation=-35.363261,149.165230
+case cbr_l_a137 cbr_l angle=137 distance=60 overshoot1=10 overshoot2=30 HomeLocation=-35.363261,149.165230
+
+case cbr_t_a0 cbr_t angle=0 distance=60
+case cbr_t_a45 cbr_t angle=45 distance=60 overshoot1=20 overshoot2=20
+case cbr_t_a90 cbr_t angle=90 distance=50
+case cbr_t_a137 cbr_t angle=137 distance=60 overshoot1=10 overshoot2=30
+
+case cbr_u_a0 cbr_u angle=0 distance=60 HomeLocation=-35.363261,149.165230
+case cbr_u_a45 cbr_u angle=45 distance=60 overshoot1=20 overshoot2=20 HomeLocation=-35.363261,149.165230
+case cbr_u_a90 cbr_u angle=90 distance=60 HomeLocation=-35.363261,149.165230
+case cbr_u_a137 cbr_u angle=137 distance=60 overshoot1=10 overshoot2=30 HomeLocation=-35.363261,149.165230
+
+case cbr_comb_a0 cbr_comb angle=0 distance=50 HomeLocation=-35.363261,149.165230
+case cbr_comb_a45 cbr_comb angle=45 distance=50 overshoot1=20 overshoot2=20 HomeLocation=-35.363261,149.165230
+case cbr_comb_a90 cbr_comb angle=90 distance=50 HomeLocation=-35.363261,149.165230
+case cbr_comb_a137 cbr_comb angle=137 distance=50 overshoot1=10 overshoot2=30 HomeLocation=-35.363261,149.165230
+
+case cbr_field_a0 cbr_field angle=0 distance=40 HomeLocation=-35.363261,149.165230
+case cbr_field_a45 cbr_field angle=45 distance=40 overshoot1=20 overshoot2=20 HomeLocation=-35.363261,149.165230
+case cbr_field_a90 cbr_field angle=90 distance=40 HomeLocation=-35.363261,149.165230
+case cbr_field_a137 cbr_field angle=137 distance=40 overshoot1=10 overshoot2=30 HomeLocation=-35.363261,149.165230
+
+case cbr_strip_a0 cbr_strip angle=0 distance=20 HomeLocation=-35.363261,149.165230
+case cbr_strip_a45 cbr_strip angle=45 distance=20 overshoot1=20 overshoot2=20 HomeLocation=-35.363261,149.165230
+case cbr_strip_a90 cbr_strip angle=90 distance=20 HomeLocation=-35.363261,149.165230
+case cbr_strip_a137 cbr_strip angle=137 distance=20 overshoot1=10 overshoot2=30 HomeLocation=-35.363261,149.165230
+
+case cbr_triangle_a0 cbr_triangle angle=0 distance=80
+case cbr_triangle_a45 cbr_triangle angle=45 distance=80 overshoot1=20 overshoot2=20
+case cbr_triangle_a90 cbr_triangle angle=90 distance=80
+case cbr_triangle_a137 cbr_triangle angle=137 distance=80 overshoot1=10 overshoot2=30
+
+case cbr_sliver_a0 cbr_sliver angle=0 distance=25 HomeLocation=-35.363261,149.165230
+case cbr_sliver_a45 cbr_sliver angle=45 distance=25 overshoot1=20 overshoot2=20 HomeLocation=-35.363261,149.165230
+case cbr_sliver_a90 cbr_sliver angle=90 distance=10 HomeLocation=-35.363261,149.165230
+case cbr_sliver_a137 cbr_sliver angle=137 distance=25 overshoot1=10 overshoot2=30 HomeLocation=-35.363261,149.165230
+
+case cbr_pentagon_a0 cbr_pentagon angle=0 distance=70 HomeLocation=-35.363261,149.165230
+case cbr_pentagon_a45 cbr_pentagon angle=45 distance=70 overshoot1=20 overshoot2=20 HomeLocation=-35.363261,149.165230
+case cbr_pentagon_a90 cbr_pentagon angle=90 distance=70 HomeLocation=-35.363261,149.165230
+case cbr_pentagon_a137 cbr_pentagon angle=137 distance=70 overshoot1=10 overshoot2=30 HomeLocation=-35.363261,149.165230
+
+case cbr_hexagon_a0 cbr_hexagon angle=0 distance=50
+case cbr_hexagon_a45 cbr_hexagon angle=45 distance=50 overshoot1=20 overshoot2=20
+case cbr_hexagon_a90 cbr_hexagon angle=90 distance=50
+case cbr_hexagon_a137 cbr_hexagon angle=137 distance=50 overshoot1=10 overshoot2=30
+
+case cbr_trapezoid_a0 cbr_trapezoid angle=0 distance=60 HomeLocation=-35.363261,149.165230
+case cbr_trapezoid_a45 cbr_trapezoid angle=45 distance=60 overshoot1=20 overshoot2=20 HomeLocation=-35.363261,149.165230
+case cbr_trapezoid_a90 cbr_trapezoid angle=90 distance=60 HomeLocation=-35.363261,149.165230
+case cbr_trapezoid_a137 cbr_trapezoid angle=137 distance=60 overshoot1=10 overshoot2=30 HomeLocation=-35.363261,149.165230
+
+case cbr_small_a0 cbr_small angle=0 distance=15 HomeLocation=-35.363261,149.165230
+case cbr_small_a45 cbr_small angle=45 distance=15 overshoot1=5 overshoot2=5 HomeLocation=-35.363261,149.165230
+case cbr_small_a90 cbr_small angle=90 distance=15 HomeLocation=-35.363261,149.165230
+case cbr_small_a137 cbr_small angle=137 distance=15 overshoot1=3 overshoot2=8 HomeLocation=-35.363261,149.165230
+
+case cbr_tiny_a0 cbr_tiny angle=0 distance=10 HomeLocation=-35.363261,149.165230
+case cbr_tiny_a45 cbr_tiny angle=45 distance=10 overshoot1=5 overshoot2=5 HomeLocation=-35.363261,149.165230
+case cbr_tiny_a90 cbr_tiny angle=90 distance=10 HomeLocation=-35.363261,149.165230
+case cbr_tiny_a137 cbr_tiny angle=137 distance=10 overshoot1=2 overshoot2=6 HomeLocation=-35.363261,149.165230
+
+case cbr_large_a0 cbr_large angle=0 distance=250
+case cbr_large_a45 cbr_large angle=45 distance=250 overshoot1=50 overshoot2=50
+case cbr_large_a90 cbr_large angle=90 distance=250
+case cbr_large_a137 cbr_large angle=137 distance=250 overshoot1=20 overshoot2=60
+
+case bne_field_a0 bne_field angle=0 distance=60 HomeLocation=-27.4680,153.0250
+case bne_field_a45 bne_field angle=45 distance=60 overshoot1=20 overshoot2=20 HomeLocation=-27.4680,153.0250
+case bne_field_a90 bne_field angle=90 distance=60 HomeLocation=-27.4680,153.0250
+case bne_field_a137 bne_field angle=137 distance=60 overshoot1=10 overshoot2=30 HomeLocation=-27.4680,153.0250
+
+case chc_farm_a0 chc_farm angle=0 distance=60
+case chc_farm_a45 chc_farm angle=45 distance=60 overshoot1=20 overshoot2=20
+case chc_farm_a90 chc_farm angle=90 distance=60
+case chc_farm_a137 chc_farm angle=137 distance=60 overshoot1=10 overshoot2=30
+
+case per_l_a0 per_l angle=0 distance=50 HomeLocation=-31.9550,115.8650
+case per_l_a45 per_l angle=45 distance=50 overshoot1=20 overshoot2=20 HomeLocation=-31.9550,115.8650
+case per_l_a90 per_l angle=90 distance=50 HomeLocation=-31.9550,115.8650
+case per_l_a137 per_l angle=137 distance=50 overshoot1=10 overshoot2=30 HomeLocation=-31.9550,115.8650
+
+case cpt_rect_a0 cpt_rect angle=0 distance=50
+case cpt_rect_a45 cpt_rect angle=45 distance=50 overshoot1=20 overshoot2=20
+case cpt_rect_a90 cpt_rect angle=90 distance=50
+case cpt_rect_a137 cpt_rect angle=137 distance=50 overshoot1=10 overshoot2=30
+
+case sao_triangle_a0 sao_triangle angle=0 distance=70 HomeLocation=-23.5500,-46.6250
+case sao_triangle_a45 sao_triangle angle=45 distance=70 overshoot1=20 overshoot2=20 HomeLocation=-23.5500,-46.6250
+case sao_triangle_a90 sao_triangle angle=90 distance=70 HomeLocation=-23.5500,-46.6250
+case sao_triangle_a137 sao_triangle angle=137 distance=70 overshoot1=10 overshoot2=30 HomeLocation=-23.5500,-46.6250
+
+case zrh_rect_a0 zrh_rect angle=0 distance=50 HomeLocation=47.3975,8.5560
+case zrh_rect_a45 zrh_rect angle=45 distance=50 overshoot1=20 overshoot2=20 HomeLocation=47.3975,8.5560
+case zrh_rect_a90 zrh_rect angle=90 distance=50 HomeLocation=47.3975,8.5560
+case zrh_rect_a137 zrh_rect angle=137 distance=50 overshoot1=10 overshoot2=30 HomeLocation=47.3975,8.5560
+
+case oxf_field_a0 oxf_field angle=0 distance=45
+case oxf_field_a45 oxf_field angle=45 distance=45 overshoot1=20 overshoot2=20
+case oxf_field_a90 oxf_field angle=90 distance=45
+case oxf_field_a137 oxf_field angle=137 distance=45 overshoot1=10 overshoot2=30
+
+case col_square_a0 col_square angle=0 distance=60 HomeLocation=40.0010,-105.1950
+case col_square_a45 col_square angle=45 distance=60 overshoot1=20 overshoot2=20 HomeLocation=40.0010,-105.1950
+case col_square_a90 col_square angle=90 distance=60 HomeLocation=40.0010,-105.1950
+case col_square_a137 col_square angle=137 distance=60 overshoot1=10 overshoot2=30 HomeLocation=40.0010,-105.1950
+
+case rey_rect_a0 rey_rect angle=0 distance=60
+case rey_rect_a45 rey_rect angle=45 distance=60 overshoot1=20 overshoot2=20
+case rey_rect_a90 rey_rect angle=90 distance=40
+case rey_rect_a137 rey_rect angle=137 distance=60 overshoot1=10 overshoot2=30
+
+case trm_field_a0 trm_field angle=0 distance=50 HomeLocation=69.6480,18.9600
+case trm_field_a45 trm_field angle=45 distance=50 overshoot1=20 overshoot2=20 HomeLocation=69.6480,18.9600
+case trm_field_a90 trm_field angle=90 distance=50 HomeLocation=69.6480,18.9600
+case trm_field_a137 trm_field angle=137 distance=50 overshoot1=10 overshoot2=30 HomeLocation=69.6480,18.9600
+
+case kla_hexagon_a0 kla_hexagon angle=0 distance=40
+case kla_hexagon_a45 kla_hexagon angle=45 distance=40 overshoot1=20 overshoot2=20
+case kla_hexagon_a90 kla_hexagon angle=90 distance=40
+case kla_hexagon_a137 kla_hexagon angle=137 distance=40 overshoot1=10 overshoot2=30
+
+case equator_north_first_a0 equator_north_first angle=0 distance=50 HomeLocation=-0.0050,32.6035
+case equator_north_first_a45 equator_north_first angle=45 distance=50 overshoot1=20 overshoot2=20 HomeLocation=-0.0050,32.6035
+case equator_north_first_a90 equator_north_first angle=90 distance=50 HomeLocation=-0.0050,32.6035
+case equator_north_first_a137 equator_north_first angle=137 distance=50 overshoot1=10 overshoot2=30 HomeLocation=-0.0050,32.6035
+
+case equator_south_first_a0 equator_south_first angle=0 distance=50 HomeLocation=-0.0050,32.6035
+case equator_south_first_a45 equator_south_first angle=45 distance=50 overshoot1=20 overshoot2=20 HomeLocation=-0.0050,32.6035
+case equator_south_first_a90 equator_south_first angle=90 distance=50 HomeLocation=-0.0050,32.6035
+case equator_south_first_a137 equator_south_first angle=137 distance=50 overshoot1=10 overshoot2=30 HomeLocation=-0.0050,32.6035
+
+case zone55_to_56_a0 zone55_to_56 angle=0 distance=50 HomeLocation=-35.3035,150.0020
+case zone55_to_56_a45 zone55_to_56 angle=45 distance=50 overshoot1=20 overshoot2=20 HomeLocation=-35.3035,150.0020
+case zone55_to_56_a90 zone55_to_56 angle=90 distance=50 HomeLocation=-35.3035,150.0020
+case zone55_to_56_a137 zone55_to_56 angle=137 distance=50 overshoot1=10 overshoot2=30 HomeLocation=-35.3035,150.0020
+
+case zone56_to_55_a0 zone56_to_55 angle=0 distance=50 HomeLocation=-35.3035,149.9980
+case zone56_to_55_a45 zone56_to_55 angle=45 distance=50 overshoot1=20 overshoot2=20 HomeLocation=-35.3035,149.9980
+case zone56_to_55_a90 zone56_to_55 angle=90 distance=50 HomeLocation=-35.3035,149.9980
+case zone56_to_55_a137 zone56_to_55 angle=137 distance=50 overshoot1=10 overshoot2=30 HomeLocation=-35.3035,149.9980
+
+case zone32_to_33_a0 zone32_to_33 angle=0 distance=50
+case zone32_to_33_a45 zone32_to_33 angle=45 distance=50 overshoot1=20 overshoot2=20
+case zone32_to_33_a90 zone32_to_33 angle=90 distance=50
+case zone32_to_33_a137 zone32_to_33 angle=137 distance=50 overshoot1=10 overshoot2=30
+
+case antimeridian_a0 antimeridian angle=0 distance=50 HomeLocation=-16.8030,-179.9990
+case antimeridian_a45 antimeridian angle=45 distance=50 overshoot1=20 overshoot2=20 HomeLocation=-16.8030,-179.9990
+case antimeridian_a90 antimeridian angle=90 distance=50 HomeLocation=-16.8030,-179.9990
+case antimeridian_a137 antimeridian angle=137 distance=50 overshoot1=10 overshoot2=30 HomeLocation=-16.8030,-179.9990
+
+# --- what the dialog gives with nothing changed ---------------------------------------------------
+# No parameters: angle from the longest side, 50 m lanes, home (0, 0).
+
+case cbr_square_gui_defaults cbr_square
+case cbr_l_gui_defaults cbr_l
+case cbr_field_gui_defaults cbr_field
+case oxf_field_gui_defaults oxf_field
+
+# --- trigger spacing: the M points ----------------------------------------------------------------
+
+case cbr_square_trigger30_a0 cbr_square angle=0 distance=100 spacing=30 HomeLocation=-35.363261,149.165230
+case cbr_square_trigger47_5_a137 cbr_square angle=137 distance=100 spacing=47.5 overshoot1=10 overshoot2=10 HomeLocation=-35.363261,149.165230
+case cbr_l_trigger25_a45 cbr_l angle=45 distance=80 spacing=25 HomeLocation=-35.363261,149.165230
+case cbr_field_trigger20_a90 cbr_field angle=90 distance=60 spacing=20 overshoot1=15 overshoot2=15
+case zrh_rect_trigger35_a45 zrh_rect angle=45 distance=80 spacing=35
+
+# --- lead-in, and negative lead-in and overshoot (SM and ME move with S and E) --------------------
+
+case cbr_square_leadin_a90 cbr_square angle=90 distance=100 leadin1=20 leadin2=35 overshoot1=10 overshoot2=25 HomeLocation=-35.363261,149.165230
+case cbr_square_negative_a45 cbr_square angle=45 distance=100 leadin1=-10 leadin2=-5 overshoot1=-15 overshoot2=-20 HomeLocation=-35.363261,149.165230
+case cbr_l_leadin_trigger_a137 cbr_l angle=137 distance=90 spacing=40 leadin1=12.5 leadin2=7.25 overshoot1=18 overshoot2=9 HomeLocation=-35.363261,149.165230
+
+# --- where the survey starts ----------------------------------------------------------------------
+
+case cbr_square_start_bottomleft cbr_square angle=45 distance=100 startpos=BottomLeft
+case cbr_square_start_topleft cbr_square angle=45 distance=100 startpos=TopLeft
+case cbr_square_start_bottomright cbr_square angle=45 distance=100 startpos=BottomRight
+case cbr_square_start_topright cbr_square angle=45 distance=100 startpos=TopRight
+case cbr_square_start_point cbr_square angle=45 distance=100 startpos=Point StartPointLatLngAlt=-35.3690,149.1710
+case cbr_field_start_topright cbr_field angle=137 distance=50 startpos=TopRight
+case cbr_u_start_point cbr_u angle=0 distance=60 startpos=Point StartPointLatLngAlt=-35.3900,149.1910
+case cbr_square_home_far_zone cbr_square angle=0 distance=100 HomeLocation=51.7500,-1.2500
+
+# --- lanes skipped between passes, and the next lane chosen from the overshoot end ----------------
+
+case cbr_square_lanesep1_a0 cbr_square angle=0 distance=60 minLaneSeparation=1 HomeLocation=-35.363261,149.165230
+case cbr_square_lanesep2_ext_a90 cbr_square angle=90 distance=60 minLaneSeparation=2 useextendedendpoint=True overshoot1=30 overshoot2=30 HomeLocation=-35.363261,149.165230
+case cbr_square_extended_a0 cbr_square angle=0 distance=60 useextendedendpoint=True overshoot1=40 overshoot2=40 HomeLocation=-35.363261,149.165230
+case cbr_l_lanesep1_a45 cbr_l angle=45 distance=50 minLaneSeparation=1 HomeLocation=-35.363261,149.165230
+case cbr_field_lanesep3_ext_a137 cbr_field angle=137 distance=40 minLaneSeparation=3 useextendedendpoint=True overshoot1=20 overshoot2=20
+case cbr_comb_lanesep1_a90 cbr_comb angle=90 distance=50 minLaneSeparation=1 HomeLocation=-35.363261,149.165230
+case cbr_rect_wide_lanesep2_a0 cbr_rect_wide angle=0 distance=80 minLaneSeparation=2
+
+# --- altitude, and the clamps: distance and spacing below 0.1 m are 0.1 m -------------------------
+
+case cbr_square_altitude_a45 cbr_square angle=45 distance=100 altitude=37.5 HomeLocation=-35.363261,149.165230
+case cbr_micro_clamps cbr_micro angle=45 distance=0.05 spacing=0.05 HomeLocation=-35.363261,149.165230
+
+# --- areas that enclose nothing -------------------------------------------------------------------
+# A polygon collapsed to a point, and three collinear vertices: what CreateGrid does with an area
+# that has no area.
+
+polygon cbr_point -35.3632,149.1652 -35.3632,149.1652 -35.3632,149.1652
+polygon cbr_flat -35.3500,149.1500 -35.3500,149.1600 -35.3500,149.1700
+case cbr_point_a0 cbr_point angle=0
+case cbr_flat_a0 cbr_flat angle=0 distance=100
+case cbr_flat_a90 cbr_flat angle=90 distance=100

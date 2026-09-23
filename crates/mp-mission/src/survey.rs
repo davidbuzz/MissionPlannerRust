@@ -1,21 +1,14 @@
-//! Survey grid generation.
+//! Survey grid generation for the planner screen.
 //!
-//! Replaces `ExtLibs/Utilities/Grid.cs` (1,013 lines). Given a polygon and a line spacing, produce
-//! the lawnmower pattern that covers it.
-//!
-//! # Projection
-//!
-//! The reference implementation works in UTM. This works in a local tangent plane centred on the
-//! polygon: east-north metres, with longitude scaled by the cosine of the centre latitude. Over a
-//! survey-sized area the two agree to well under a metre, and the tangent plane has no zone
-//! boundaries to straddle - a survey that crosses a UTM zone edge is a real situation that the
-//! reference handles by picking the first vertex's zone and living with the distortion.
-//!
-//! This is a deliberate divergence, recorded rather than hidden. Grid output is therefore **not**
-//! byte-identical to Mission Planner's, and the tests assert geometric properties - coverage,
-//! spacing, containment - rather than matching a golden file.
+//! [`grid`] is Mission Planner's own `Grid.CreateGrid` ([`crate::grid::create_grid`], a
+//! transliteration of `ExtLibs/Utilities/Grid.cs` checked point for point against the C# by
+//! `tests/grid_vectors.rs`), called the way `GridUI` calls it with the handful of settings this
+//! screen exposes. The containment helpers below are this crate's own, for checking waypoints
+//! against an area; they are not part of `Grid.cs`.
 
 use mp_units::LatLon;
+
+use crate::grid::{GridArgs, GridTag, create_grid};
 
 /// Why a grid could not be generated.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -29,22 +22,29 @@ pub enum GridError {
     /// Spacing must be positive and finite.
     #[error("line spacing must be a positive number of metres")]
     BadSpacing,
-    /// The polygon encloses no area.
+    /// No survey line crosses the area: `CreateGrid` returned nothing (`Grid.cs:555`).
     #[error("the survey area has zero extent")]
     DegenerateArea,
+    /// A grid point could not be converted back from UTM, where ProjNet throws for want of
+    /// convergence (`MapProjection.cs:792`). Positions a [`LatLon`] accepts always convert.
+    #[error("a survey point could not be converted from UTM")]
+    Projection,
 }
 
 /// How the survey should be flown.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GridOptions {
-    /// Distance between adjacent lines, in metres.
+    /// Distance between adjacent lines, in metres: `CreateGrid`'s `distance`.
     pub spacing: f64,
-    /// Bearing of the lines, degrees clockwise from north.
+    /// Bearing of the lines, degrees clockwise from north: 0 flies north-south lines, 90
+    /// east-west, as in Mission Planner.
     pub angle: f64,
-    /// Extra distance flown past each end of a line, in metres.
+    /// Extra distance flown on past the area at the end of each line, in metres: Mission Planner's
+    /// overshoot, both directions (`overshoot1` and `overshoot2`, `Grid.cs:646`, `:712`).
     ///
-    /// A camera survey needs this: the aircraft must be straight and level at the first photo, and
-    /// it is still turning at the polygon edge.
+    /// A camera survey needs this: the aircraft must still be straight and level at the last
+    /// photo of a line, and it starts turning as soon as it reaches its waypoint. The matching
+    /// run-up at the start of a line is the lead-in, which this screen does not expose.
     pub overshoot: f64,
     /// Altitude above home for every waypoint, in metres.
     pub altitude: f64,
@@ -61,6 +61,9 @@ impl Default for GridOptions {
     }
 }
 
+/// Metres per degree of latitude on the WGS84 ellipsoid, near enough for a local plane.
+const METRES_PER_DEGREE_LAT: f64 = 111_320.0;
+
 /// Metres east and north of the projection origin.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Enu {
@@ -68,10 +71,7 @@ struct Enu {
     north: f64,
 }
 
-/// Metres per degree of latitude on the WGS84 ellipsoid, near enough for a local plane.
-const METRES_PER_DEGREE_LAT: f64 = 111_320.0;
-
-/// Projects to and from a local tangent plane.
+/// Projects to a local tangent plane, for the containment helpers' distances.
 struct Plane {
     origin_lat: f64,
     origin_lon: f64,
@@ -95,136 +95,53 @@ impl Plane {
             north: (position.latitude() - self.origin_lat) * METRES_PER_DEGREE_LAT,
         }
     }
-
-    fn to_geographic(&self, point: Enu) -> Option<LatLon> {
-        let lat = point.north / METRES_PER_DEGREE_LAT + self.origin_lat;
-        let lon = if self.metres_per_degree_lon.abs() < 1e-6 {
-            self.origin_lon
-        } else {
-            point.east / self.metres_per_degree_lon + self.origin_lon
-        };
-        LatLon::new(lat, lon).ok()
-    }
 }
 
 /// Generates the survey pattern covering `polygon`.
 ///
-/// Returns the waypoints in flight order: down one line, across, back along the next.
+/// This is `Grid.CreateGrid` with `options` in place of the settings they name - `spacing` is the
+/// distance between lanes, `overshoot` is both overshoots - and `GridUI`'s defaults for the rest
+/// ([`GridArgs::default`]): no trigger spacing, no lead-in, adjacent lanes, starting from the
+/// polygon vertex nearest the planned home, which is (0, 0) until a home is planned.
+///
+/// Returns the waypoints in flight order, two per lane: the `S` and `E` points of each lane, which
+/// are the points `GridUI` makes waypoints of (`GridUI.cs:1702`). The trigger points between them
+/// are for camera commands this screen does not add.
+///
+/// # Errors
+///
+/// [`GridError::NotAPolygon`] for fewer than 3 vertices, [`GridError::BadSpacing`] for a spacing
+/// that is not a positive number, [`GridError::DegenerateArea`] when no line crosses the area, and
+/// [`GridError::Projection`] as for [`create_grid`].
 pub fn grid(polygon: &[LatLon], options: &GridOptions) -> Result<Vec<LatLon>, GridError> {
     if polygon.len() < 3 {
         return Err(GridError::NotAPolygon {
             found: polygon.len(),
         });
     }
+    // The C# clamps rather than refusing (`Grid.cs:361`), but its dialog cannot go below 0.3 m
+    // (`GridUI.Designer.cs:1143`); refusing here is this API's equivalent of that floor.
     if !(options.spacing.is_finite() && options.spacing > 0.0) {
         return Err(GridError::BadSpacing);
     }
 
-    // Project into a plane centred on the polygon, so distortion is smallest where the work is.
-    let centre = centroid(polygon)?;
-    let plane = Plane::new(centre);
-    let points: Vec<Enu> = polygon.iter().map(|p| plane.to_plane(*p)).collect();
-
-    // Rotate so the survey lines run east-west in rotated space; generating axis-aligned lines and
-    // rotating back is simpler and more numerically stable than intersecting arbitrary lines.
-    let theta = options.angle.to_radians();
-    let (sin, cos) = theta.sin_cos();
-    let rotate = |p: Enu| Enu {
-        east: p.east * cos - p.north * sin,
-        north: p.east * sin + p.north * cos,
+    let args = GridArgs {
+        altitude: options.altitude,
+        distance: options.spacing,
+        angle: options.angle,
+        overshoot1: options.overshoot,
+        overshoot2: options.overshoot,
+        ..GridArgs::default()
     };
-    let unrotate = |p: Enu| Enu {
-        east: p.east * cos + p.north * sin,
-        north: -p.east * sin + p.north * cos,
-    };
-
-    let rotated: Vec<Enu> = points.iter().map(|p| rotate(*p)).collect();
-
-    let min_north = rotated
-        .iter()
-        .map(|p| p.north)
-        .fold(f64::INFINITY, f64::min);
-    let max_north = rotated
-        .iter()
-        .map(|p| p.north)
-        .fold(f64::NEG_INFINITY, f64::max);
-    if !(min_north.is_finite() && max_north.is_finite()) || (max_north - min_north) < 1e-6 {
+    let ends = create_grid(polygon, &args)?
+        .into_iter()
+        .filter(|point| matches!(point.tag, GridTag::Start | GridTag::End))
+        .map(|point| LatLon::new(point.lat, point.lng).map_err(|_| GridError::Projection))
+        .collect::<Result<Vec<_>, _>>()?;
+    if ends.is_empty() {
         return Err(GridError::DegenerateArea);
     }
-
-    // Start half a spacing inside the edge, so the first and last lines sit within the area rather
-    // than along its boundary where a camera would photograph mostly the outside.
-    let mut lines: Vec<Vec<Enu>> = Vec::new();
-    let mut north = min_north + options.spacing / 2.0;
-    let mut flip = false;
-
-    while north <= max_north {
-        let mut crossings = horizontal_crossings(&rotated, north);
-        crossings.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-
-        // Crossings pair up into inside-segments. An odd count means the line grazed a vertex;
-        // dropping the stray is better than joining two disjoint parts of a concave shape.
-        for pair in crossings.chunks_exact(2) {
-            let (Some(from), Some(to)) = (pair.first(), pair.last()) else {
-                continue;
-            };
-            let (mut start, mut end) = (from - options.overshoot, to + options.overshoot);
-            if flip {
-                std::mem::swap(&mut start, &mut end);
-            }
-            lines.push(vec![Enu { east: start, north }, Enu { east: end, north }]);
-        }
-
-        flip = !flip;
-        north += options.spacing;
-    }
-
-    let mut out = Vec::with_capacity(lines.len() * 2);
-    for line in lines {
-        for point in line {
-            if let Some(position) = plane.to_geographic(unrotate(point)) {
-                out.push(position);
-            }
-        }
-    }
-    Ok(out)
-}
-
-/// Where a horizontal line at `north` crosses the polygon's edges.
-fn horizontal_crossings(polygon: &[Enu], north: f64) -> Vec<f64> {
-    let mut out = Vec::new();
-    for index in 0..polygon.len() {
-        let Some(a) = polygon.get(index) else {
-            continue;
-        };
-        let Some(b) = polygon.get((index + 1) % polygon.len()) else {
-            continue;
-        };
-
-        // Half-open test: a vertex belongs to exactly one of its two edges, which is what stops a
-        // line through a vertex from counting the crossing twice and inverting inside/outside.
-        let crosses =
-            (a.north <= north && b.north > north) || (b.north <= north && a.north > north);
-        if !crosses {
-            continue;
-        }
-        let span = b.north - a.north;
-        if span.abs() < f64::EPSILON {
-            continue;
-        }
-        let t = (north - a.north) / span;
-        out.push(a.east + t * (b.east - a.east));
-    }
-    out
-}
-
-/// Area centroid, which is where the projection distorts least.
-fn centroid(polygon: &[LatLon]) -> Result<LatLon, GridError> {
-    #[allow(clippy::cast_precision_loss)] // vertex counts are small
-    let count = polygon.len() as f64;
-    let lat = polygon.iter().map(|p| p.latitude()).sum::<f64>() / count;
-    let lon = polygon.iter().map(|p| p.longitude()).sum::<f64>() / count;
-    LatLon::new(lat, lon).map_err(|_| GridError::DegenerateArea)
+    Ok(ends)
 }
 
 /// Whether a position lies within `tolerance` metres of being inside the polygon.

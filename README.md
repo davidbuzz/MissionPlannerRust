@@ -26,6 +26,7 @@ Measured on this tree: **18 crates, 46,293 hand-written Rust LOC** (plus 93,771 
 | Parameters | full download with gap recovery, typed values, 1,408 from SITL |
 | `.param` files | save, load and compare against a vehicle, honouring the C# skip-list |
 | Missions | upload and download, `.waypoints` files, 129-file corpus |
+| Survey grids | `Grid.CreateGrid` transliterated over a port of ProjNet's UTM, bit-identical to the C# on 180 golden cases the real code generated under mono |
 | Logs | `.tlog` read and write; ArduPilot `.BIN` dataflash parsing |
 | Flight recording | every connection recorded to a `.tlog`, both directions, into Mission Planner's own logs directory |
 | Data directory | `Settings.cs`'s rules ported, mono quirks included, so files land where the C# application looks; its `config.xml` is read for the last link, map type and log directory, and rendered back byte for byte |
@@ -44,9 +45,8 @@ Measured on this tree: **18 crates, 46,293 hand-written Rust LOC** (plus 93,771 
 | Porting ledger | `ledger/ledger.csv`, one row per C# file with its tier and state; `cargo xtask ledger check` fails on anything unaccounted for |
 | Flight screen coverage | every one of `FlightData`'s 136 wired actions listed with what stands in for it here — 27 done, 87 missing — in `docs/coverage/flightdata.md`, kept current by a test |
 
-**Not yet**: the log browser's data grid and the map beside its chart, a joystick latency
-histogram from a real device (none is attached to this machine), the `mp-link` split, i18n,
-packaging. `PLAN.md` §13.2 is the queue, and says what *done* means for
+**Not yet**: the log browser's chart cursor, a joystick latency histogram from a real device
+(none is attached to this machine), i18n, packaging. `PLAN.md` §13.2 is the queue, and says what *done* means for
 each.
 
 ## Verification

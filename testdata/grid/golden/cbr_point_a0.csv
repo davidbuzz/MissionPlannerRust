@@ -1,0 +1,20 @@
+# Grid.CreateGrid output from tools/csharp-reference/regen-grid.sh - do not edit
+case,cbr_point_a0
+vertex,-35.363199999999999,149.1652
+vertex,-35.363199999999999,149.1652
+vertex,-35.363199999999999,149.1652
+altitude,100
+distance,50
+spacing,0
+angle,0
+overshoot1,0
+overshoot2,0
+startpos,Home
+shutter,False
+minLaneSeparation,0
+leadin1,0
+leadin2,0
+HomeLocation,0,0
+useextendedendpoint,False
+StartPointLatLngAlt,0,0
+points,0

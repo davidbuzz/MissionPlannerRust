@@ -7,13 +7,16 @@
 
 pub mod fence;
 pub mod fence_file;
+pub mod grid;
 pub mod item;
 pub mod survey;
+mod utm;
 pub mod validate;
 pub mod waypoints;
 pub mod wire;
 
 pub use fence::{FenceError, FenceItem, RallyPoint, fences_from_items};
+pub use grid::{GridArgs, GridPoint, GridTag, StartPosition, create_grid};
 pub use item::{MissionItem, MissionItemError};
 pub use survey::{GridError, GridOptions, grid};
 pub use validate::{Finding, Severity, validate};

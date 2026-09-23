@@ -220,6 +220,14 @@ KML/DXF/shapefile import-export, geotagging hand-off.
   reads and writes the existing file formats unchanged.
 - **Replaces:** `GCSViews/FlightPlanner*`, `Grid/` (3,750), `ExtLibs/SimpleGrid`, `ExtLibs/Gridv2`,
   `ExtLibs/SharpKml`, `ExtLibs/KMLib`, `ExtLibs/netDxf` (65,129), `GeoRef/`, `NoFly/`.
+- **Today:** the survey grid is a transliteration of `Grid.CreateGrid` (`crates/mp-mission/src/grid.rs`)
+  over a port of ProjNet's transverse Mercator (`utm.rs`, with `utmpos`'s signed-zone convention),
+  and it is proved against the C# itself: `tools/csharp-reference/MpGrid.cs` runs the real
+  `Grid.CreateGrid` under mono, `regen-grid.sh` regenerates 180 golden cases over 40 polygons
+  (rectangles, L/T/U/comb, concave fields, slivers, zone and equator crossings, the antimeridian,
+  every start position, lead-in, overshoot, trigger spacing), and `tests/grid_vectors.rs` matches
+  every case **bit for bit**. Corridor, rotary and Gridv2 are not ported; a Windows .NET 4.7.2
+  oracle run (PLAN.md R5) is still owed.
 - **Tests:** `tests/mission_bytes.rs` loads a corpus of real `.waypoints`/`.mission` files, round-trips them and asserts **byte identity**; `tests/grid_vectors.rs` survey-grid generation against golden outputs from the C# `Grid`/`Gridv2` for a matrix of polygon/angle/overlap/terrain inputs; `tests/kml_dxf.rs` import→export round-trip against fixture files; `tests/terrain.rs` altitude-following maths against golden vectors; `tests/sitl_upload.rs` uploads missions, fences and rally points to SITL and reads them back.
 
 ### D12. Configuration & tuning screens
@@ -273,8 +281,12 @@ Dataflash (`.bin`/`.log`) and tlog parsing, log download, graphing, LogAnalyzer 
   `.BIN` declares on two axes - left click for the left, one axis per unit, right click for the
   shared right axis, as `Log/LogBrowse.cs` does - with the units and multipliers the log's own
   `FMTU`/`UNIT`/`MULT` messages declare (`mp_log::plot::units`; the C# has the same code and a
-  guard that keeps it from ever running, recorded at the site). Not yet: the data grid, the map
-  beside the chart, the memory-mapped parse.
+  guard that keeps it from ever running, recorded at the site). The data grid is `dataGridView1`
+  as a virtual grid over `mp_log::index` (nine bytes per record, sixteen rows decoded at a time,
+  a per-type filter), with Graph Left/Right acting on the selected cell and refusing what
+  `graphit_clickprocess` refuses; `mp_log::track` draws the log's first GPS route and its logged
+  mission on a map beside the chart. Not yet: the chart cursor and its map marker, the strip's
+  check boxes, the memory-mapped parse.
 - **Tests:** `tests/parser_diff.rs` parses a corpus of real dataflash and tlog files and diffs every decoded field against the C# parser's output; `fuzz/fuzz_targets/dataflash.rs` and `tlog.rs` asserting no panic and no unbounded allocation on corrupt logs (truncated, bit-flipped, wrong-endian, fabricated FMT messages); `tests/fft.rs` compares against `Exocortex.DSP` golden spectra; `tests/exports.rs` `.mat`/CSV/KML round-trips; `benches/parse_1gb.rs` gates <2 s to first plot and `benches/scrub_10m.rs` gates 120 fps scrubbing.
 
 ### D15. CAN, peripherals and outboard features
