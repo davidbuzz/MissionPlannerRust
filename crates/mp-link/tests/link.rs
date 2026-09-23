@@ -206,6 +206,93 @@ fn an_accepted_command_is_not_reported_as_an_error() {
     assert!(!ack.severity.is_urgent());
 }
 
+/// A heartbeat from a chosen system and component.
+fn heartbeat_from(seq: u8, sysid: u8, compid: u8) -> Vec<u8> {
+    let hb = Heartbeat {
+        custom_mode: 0,
+        r#type: 2,
+        autopilot: 3,
+        base_mode: BASE_MODE_DISARMED,
+        system_status: 3,
+        mavlink_version: 3,
+    };
+    let mut payload = [0u8; Heartbeat::LEN];
+    hb.encode(&mut payload);
+    let mut frame = [0u8; 64];
+    let n = encode_v2(
+        &mut frame,
+        seq,
+        sysid,
+        compid,
+        Heartbeat::ID,
+        &payload,
+        Heartbeat::CRC_EXTRA,
+        0,
+    )
+    .unwrap();
+    frame[..n].to_vec()
+}
+
+#[test]
+fn two_vehicles_on_one_link_are_tracked_separately() {
+    // A ground station on a shared radio hears every aircraft on it. Merging them would show one
+    // vehicle's attitude under another's name, and send commands to whichever was heard from
+    // first.
+    let (mut vehicle_side, gcs_side) = Loopback::pair();
+    let link = Link::from_transport(Box::new(gcs_side), LinkConfig::default());
+
+    vehicle_side.write_all(&heartbeat_from(0, 1, 1)).unwrap();
+    vehicle_side.write_all(&heartbeat_from(1, 2, 1)).unwrap();
+
+    wait_for("both vehicles", || link.vehicles().len() >= 2);
+
+    let vehicles = link.vehicles();
+    assert!(
+        vehicles.contains(&VehicleId {
+            sysid: 1,
+            compid: 1
+        }),
+        "{vehicles:?}"
+    );
+    assert!(
+        vehicles.contains(&VehicleId {
+            sysid: 2,
+            compid: 1
+        }),
+        "{vehicles:?}"
+    );
+
+    // Each is individually addressable, which is what a vehicle picker relies on.
+    for id in vehicles {
+        let handle = link.vehicle(id).expect("a handle per vehicle");
+        let state = handle.load();
+        assert_eq!(
+            state.sysid, id.sysid,
+            "a handle returned another vehicle's state"
+        );
+    }
+}
+
+#[test]
+fn the_primary_vehicle_is_the_autopilot_not_whatever_spoke_first() {
+    // A gimbal or a companion computer announces itself on the same link. Treating the first
+    // thing heard as the aircraft would point the whole application at a camera mount.
+    let (mut vehicle_side, gcs_side) = Loopback::pair();
+    let link = Link::from_transport(Box::new(gcs_side), LinkConfig::default());
+
+    // Component 154 is a gimbal, and it speaks first.
+    vehicle_side.write_all(&heartbeat_from(0, 1, 154)).unwrap();
+    vehicle_side.write_all(&heartbeat_from(1, 1, 1)).unwrap();
+
+    wait_for("both components", || link.vehicles().len() >= 2);
+
+    let (primary, _) = link.primary_vehicle().expect("a primary vehicle");
+    assert_eq!(
+        primary.compid, 1,
+        "the autopilot should be primary, got {primary:?}"
+    );
+}
+
 #[test]
 fn a_vehicle_is_discovered_and_its_state_published() {
     let (gcs_side, mut vehicle_side) = Loopback::pair();

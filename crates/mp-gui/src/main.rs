@@ -495,6 +495,65 @@ impl MissionPlanner {
         }
     }
 
+    /// One chip per vehicle on the link, when there is more than one.
+    ///
+    /// Hidden with a single vehicle, which is the usual case: a control that only ever has one
+    /// option is clutter that teaches an operator to ignore that part of the screen.
+    fn vehicle_picker(&self, view: &TelemetryView, cx: &mut Context<Self>) -> impl IntoElement {
+        let vehicles = self.telemetry.vehicles();
+        let current = view.vehicle;
+        let mut strip = div().flex().items_center().gap_1().pb_2();
+        if vehicles.len() < 2 {
+            return strip;
+        }
+
+        strip = strip.child(div().text_xs().text_color(rgb(theme::DIM)).child("vehicle"));
+        for id in vehicles {
+            let selected = current == Some(id);
+            let label = format!("{}:{}", id.sysid, id.compid);
+            strip = strip.child(
+                probe::measured(format!("vehicle-{}-{}", id.sysid, id.compid), div())
+                    .id(gpui::SharedString::from(format!(
+                        "veh-{}-{}",
+                        id.sysid, id.compid
+                    )))
+                    .px_2()
+                    .py(px(1.0))
+                    .rounded_sm()
+                    .border_1()
+                    .border_color(rgb(if selected {
+                        theme::ACCENT
+                    } else {
+                        theme::BORDER
+                    }))
+                    .bg(rgb(if selected {
+                        theme::ACTION
+                    } else {
+                        theme::PANEL
+                    }))
+                    .text_xs()
+                    .text_color(rgb(if selected { theme::ACCENT } else { theme::TEXT }))
+                    .cursor_pointer()
+                    .hover(|style| style.bg(rgb(theme::BORDER)))
+                    .child(label)
+                    .on_click(cx.listener(move |this, _event, _window, cx| {
+                        this.telemetry.select(id);
+                        // A different vehicle has a different mission, a different fence and a
+                        // different parameter set. Keeping the old ones on screen while the
+                        // heading and position switched would be the worst kind of wrong.
+                        this.plan.clear();
+                        this.selected_param_group = None;
+                        this.selected_param = None;
+                        this.map.borrow_mut().follow_vehicle();
+                        this.file_status =
+                            Some(format!("showing vehicle {}:{}", id.sysid, id.compid));
+                        cx.notify();
+                    })),
+            );
+        }
+        strip
+    }
+
     /// The tab strip.
     fn tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let current = self.screen;
@@ -1145,7 +1204,8 @@ impl Render for MissionPlanner {
                                             .child("Rust port - gpui"),
                                     ),
                             )
-                            .child(self.tabs(cx)),
+                            .child(self.tabs(cx))
+                            .child(self.vehicle_picker(&view, cx)),
                     )
                     .child(
                         div()

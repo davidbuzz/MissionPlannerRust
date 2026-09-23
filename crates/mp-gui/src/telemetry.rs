@@ -113,6 +113,12 @@ pub struct Telemetry {
     link: Option<Link>,
     target: String,
     error: Option<String>,
+    /// The vehicle the operator chose, if they chose one.
+    ///
+    /// `None` means whichever the link considers primary, which is the autopilot on the first
+    /// system heard from. A choice is remembered even while that vehicle is quiet, because a
+    /// vehicle going briefly silent is not a reason to start showing a different one.
+    selected: Option<VehicleId>,
 }
 
 impl Telemetry {
@@ -126,11 +132,13 @@ impl Telemetry {
                 link: Some(link),
                 target: url.to_owned(),
                 error: None,
+                selected: None,
             },
             Err(err) => Self {
                 link: None,
                 target: url.to_owned(),
                 error: Some(err.to_string()),
+                selected: None,
             },
         }
     }
@@ -142,6 +150,7 @@ impl Telemetry {
             link: None,
             target: String::new(),
             error: None,
+            selected: None,
         }
     }
 
@@ -159,7 +168,13 @@ impl Telemetry {
         };
         let stats = link.stats();
         let vehicles = link.vehicles();
-        let primary = link.primary_vehicle();
+        // The chosen vehicle drives every screen, not just the commands. Showing one vehicle's
+        // telemetry while commands went to another would be the worst of both.
+        let primary = self
+            .selected
+            .filter(|chosen| vehicles.contains(chosen))
+            .and_then(|id| link.vehicle(id).map(|handle| (id, handle)))
+            .or_else(|| link.primary_vehicle());
 
         // Fetch the mission the link holds, if a download has finished. The UI never triggers
         // one itself: a ground station that silently pulls a mission whenever it connects makes
@@ -306,10 +321,28 @@ impl Telemetry {
     }
 
     /// The vehicle currently being flown, if any.
+    ///
+    /// The chosen one if there is one and it is still on the link, otherwise whichever the link
+    /// considers primary. A vehicle that has been chosen and then disappears falls back rather
+    /// than leaving commands addressed to something that is not there.
     fn target(&self) -> Option<(&Link, VehicleId)> {
         let link = self.link.as_ref()?;
-        let (id, _) = link.primary_vehicle()?;
+        let id = self
+            .selected
+            .filter(|chosen| link.vehicles().contains(chosen))
+            .or_else(|| link.primary_vehicle().map(|(id, _)| id))?;
         Some((link, id))
+    }
+
+    /// Every vehicle heard from, in a stable order.
+    #[must_use]
+    pub fn vehicles(&self) -> Vec<VehicleId> {
+        self.link.as_ref().map(Link::vehicles).unwrap_or_default()
+    }
+
+    /// Chooses which vehicle the screens show and commands address.
+    pub fn select(&mut self, id: VehicleId) {
+        self.selected = Some(id);
     }
 
     /// Arms or disarms, with the vehicle's pre-arm checks applied.
