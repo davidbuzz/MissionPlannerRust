@@ -12,32 +12,34 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
-use gpui::{div, prelude::*, px, rgb};
+use gpui::{AnyElement, Context, div, prelude::*, px, rgb};
+use mp_link::calibration::{AccelCalibration, AccelPosition};
 use mp_mavlink_dialects::all::{MavAutopilot, MavType};
 
+use crate::MissionPlanner;
 use crate::telemetry::TelemetryView;
-use crate::ui::{field, panel, theme};
+use crate::ui::{action, field, panel, theme};
 
-/// What each calibration needs before it can be offered, so the gap is visible rather than
-/// implied. Each entry becomes a deliverable in its own right.
-const PLANNED: &[(&str, &str)] = &[
+/// The calibrations that are a single command.
+///
+/// Each is `MAV_CMD_PREFLIGHT_CALIBRATION` with one parameter set - the definitions are explicit
+/// that only one may be set per message - and each completes on its own without a conversation.
+const SINGLE_SHOT: &[(&str, &str, &str)] = &[
     (
-        "accelerometer",
-        "six-position sequence driven by COMMAND_ACK progress",
+        "cal-level",
+        "level",
+        "tells the vehicle that however it is sitting now is level; run it after mounting the \
+         autopilot even slightly askew",
     ),
     (
+        "cal-compass",
         "compass",
-        "onboard sampling, progress over MAG_CAL_PROGRESS and MAG_CAL_REPORT",
-    ),
-    ("radio", "RC_CHANNELS min/max capture, then trim"),
-    ("level", "single-shot PREFLIGHT_CALIBRATION with param5"),
-    (
-        "escs and motors",
-        "MAV_CMD_DO_MOTOR_TEST, one motor at a time",
+        "samples the magnetometers while you rotate the airframe through every orientation",
     ),
     (
-        "frame and airframe",
-        "FRAME_CLASS and FRAME_TYPE parameters",
+        "cal-baro",
+        "ground pressure",
+        "re-zeroes the barometer; worth doing before a flight when the weather has changed",
     ),
 ];
 
@@ -83,41 +85,186 @@ pub fn identity_panel(view: &TelemetryView) -> impl IntoElement {
     )
 }
 
-/// The calibrations, and what each one still needs.
-pub fn calibration_panel() -> impl IntoElement {
+/// The accelerometer calibration: a conversation, one position at a time.
+///
+/// The vehicle asks for each of six orientations and waits to be told the airframe is in it. The
+/// instruction is shown as something to do rather than as a name, because getting an orientation
+/// wrong produces a calibration that is wrong in a way which only shows up in flight.
+pub fn accelerometer_panel(
+    state: AccelCalibration,
+    view: &TelemetryView,
+    cx: &mut Context<MissionPlanner>,
+) -> impl IntoElement {
+    let has_vehicle = view.vehicle.is_some();
+    let armed = view.state.as_ref().is_some_and(|state| state.armed);
+
+    let body = match state {
+        AccelCalibration::Waiting(position) => div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(
+                div()
+                    .text_lg()
+                    .text_color(rgb(theme::WARN))
+                    .child(position.instruction()),
+            )
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(theme::DIM))
+                    .child("hold it still, then confirm"),
+            )
+            .child(action(
+                "cal-accel-confirm",
+                format!("{} - done", position.label()),
+                theme::OK,
+                true,
+                cx.listener(move |this, _event: &(), _window, cx| {
+                    this.telemetry.confirm_accelerometer_position(position);
+                    cx.notify();
+                }),
+            ))
+            .into_any_element(),
+        AccelCalibration::Succeeded => div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(
+                div()
+                    .text_sm()
+                    .text_color(rgb(theme::OK))
+                    .child("calibration accepted - reboot for it to take effect"),
+            )
+            .child(restart_button(cx))
+            .into_any_element(),
+        AccelCalibration::Failed => div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(
+                div()
+                    .text_sm()
+                    .text_color(rgb(theme::ALERT))
+                    .child("calibration rejected - the airframe usually moved during a sample"),
+            )
+            .child(restart_button(cx))
+            .into_any_element(),
+        AccelCalibration::Idle => div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(div().text_xs().text_color(rgb(theme::DIM)).child(
+                "six positions, in this order: level, left, right, nose down, nose up, \
+                         back. The vehicle asks for each one.",
+            ))
+            .child(action(
+                "cal-accel-start",
+                "start accelerometer calibration",
+                theme::WARN,
+                has_vehicle && !armed,
+                cx.listener(|this, _event: &(), _window, cx| {
+                    this.telemetry.start_accelerometer_calibration();
+                    cx.notify();
+                }),
+            ))
+            .into_any_element(),
+    };
+
+    // Where in the sequence we are. ArduPilot does not report a step number, so this is derived
+    // from the position it asked for - which is the order it always asks in.
+    let mut steps = div().flex().flex_wrap().gap_1();
+    let current = match state {
+        AccelCalibration::Waiting(position) => Some(position),
+        _ => None,
+    };
+    let reached = current.map_or(
+        usize::from(state == AccelCalibration::Succeeded) * AccelPosition::ALL.len(),
+        |position| {
+            AccelPosition::ALL
+                .iter()
+                .position(|candidate| *candidate == position)
+                .unwrap_or(0)
+        },
+    );
+    for (index, position) in AccelPosition::ALL.iter().enumerate() {
+        let done = index < reached;
+        let now = current == Some(*position);
+        steps = steps.child(
+            div()
+                .px_2()
+                .py(px(1.0))
+                .rounded_sm()
+                .bg(rgb(theme::ACTION))
+                .text_xs()
+                .text_color(rgb(if now {
+                    theme::WARN
+                } else if done {
+                    theme::OK
+                } else {
+                    theme::DIM
+                }))
+                .child(position.label()),
+        );
+    }
+
+    panel(
+        "accelerometer",
+        div().flex().flex_col().gap_2().child(steps).child(body),
+    )
+}
+
+/// Starts the sequence again from the beginning.
+fn restart_button(cx: &mut Context<MissionPlanner>) -> AnyElement {
+    action(
+        "cal-accel-restart",
+        "start again",
+        theme::ACCENT,
+        true,
+        cx.listener(|this, _event: &(), _window, cx| {
+            this.telemetry.clear_accel_calibration();
+            cx.notify();
+        }),
+    )
+}
+
+/// The calibrations that are a single command.
+pub fn calibration_panel(
+    view: &TelemetryView,
+    cx: &mut Context<MissionPlanner>,
+) -> impl IntoElement {
+    let has_vehicle = view.vehicle.is_some();
+    let armed = view.state.as_ref().is_some_and(|state| state.armed);
+
     let mut rows = div().flex().flex_col().gap_2();
-    for (name, needs) in PLANNED {
+    for (id, name, explanation) in SINGLE_SHOT {
         rows = rows.child(
             div()
                 .flex()
-                .gap_2()
                 .items_center()
-                .child(
-                    div()
-                        .flex_shrink_0()
-                        .w(px(130.0))
-                        .text_sm()
-                        .text_color(rgb(theme::TEXT))
-                        .child(*name),
-                )
-                .child(
-                    div()
-                        .flex_shrink_0()
-                        .px_2()
-                        .py(px(1.0))
-                        .rounded_sm()
-                        .bg(rgb(theme::ACTION))
-                        .text_xs()
-                        .text_color(rgb(theme::WARN))
-                        .child("not built"),
-                )
+                .gap_3()
+                .child(action(
+                    id,
+                    *name,
+                    theme::WARN,
+                    has_vehicle && !armed,
+                    cx.listener(move |this, _event: &(), _window, cx| {
+                        match *id {
+                            "cal-level" => this.telemetry.calibrate_level(),
+                            "cal-compass" => this.telemetry.calibrate_compass(),
+                            _ => this.telemetry.calibrate_ground_pressure(),
+                        }
+                        this.file_status = Some(format!("{name} calibration started"));
+                        cx.notify();
+                    }),
+                ))
                 .child(
                     div()
                         .flex_1()
                         .min_w(px(0.0))
                         .text_xs()
                         .text_color(rgb(theme::DIM))
-                        .child(*needs),
+                        .child(*explanation),
                 ),
         );
     }
@@ -126,8 +273,8 @@ pub fn calibration_panel() -> impl IntoElement {
         "calibration",
         div().flex().flex_col().gap_2().child(rows).child(
             div().text_xs().text_color(rgb(theme::DIM)).child(
-                "flying and planning come first; each calibration lands with its own \
-                         protocol handling and tests",
+                "watch the messages pane on the flight screen: the vehicle reports what \
+                         it is doing and whether it worked",
             ),
         ),
     )

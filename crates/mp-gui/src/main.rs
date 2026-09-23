@@ -478,14 +478,17 @@ impl MissionPlanner {
     }
 
     /// The setup screen, which is one column and no map.
-    fn setup_body(&self, view: &TelemetryView) -> impl IntoElement {
+    fn setup_body(&self, view: &TelemetryView, cx: &mut Context<Self>) -> impl IntoElement {
+        let calibration = self.telemetry.accel_calibration();
         div()
             .flex()
             .flex_col()
             .gap_2()
             .p_2()
+            .w(px(760.0))
             .child(setup::identity_panel(view))
-            .child(setup::calibration_panel())
+            .child(setup::accelerometer_panel(calibration, view, cx))
+            .child(setup::calibration_panel(view, cx))
     }
 
     /// The map, with the handlers that make it a map rather than a picture.
@@ -874,7 +877,7 @@ impl Render for MissionPlanner {
                 .flex()
                 .flex_1()
                 .overflow_y_scroll()
-                .child(self.setup_body(&view))
+                .child(self.setup_body(&view, cx))
                 .into_any_element(),
         };
 

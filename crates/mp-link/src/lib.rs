@@ -17,6 +17,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod calibration;
 pub mod commands;
 pub mod messages;
 pub mod mission_transfer;
@@ -145,6 +146,8 @@ struct Shared {
     mission_requests: Mutex<Vec<MissionTransfer>>,
     /// What the vehicle has said, and how it answered our commands.
     messages: Mutex<messages::MessageLog>,
+    /// The state of an accelerometer calibration, if one is running.
+    accel_calibration: Mutex<calibration::AccelCalibration>,
     stats: Mutex<LinkStats>,
     running: AtomicBool,
     frames_received: AtomicU64,
@@ -317,6 +320,23 @@ impl Link {
             .unwrap_or(0)
     }
 
+    /// What an accelerometer calibration is waiting for, if one is running.
+    #[must_use]
+    pub fn accel_calibration(&self) -> calibration::AccelCalibration {
+        self.shared
+            .accel_calibration
+            .lock()
+            .map(|held| *held)
+            .unwrap_or(calibration::AccelCalibration::Idle)
+    }
+
+    /// Forgets any calibration state, so a finished run does not look like a running one.
+    pub fn clear_accel_calibration(&self) {
+        if let Ok(mut held) = self.shared.accel_calibration.lock() {
+            *held = calibration::AccelCalibration::Idle;
+        }
+    }
+
     /// Link counters.
     #[must_use]
     pub fn stats(&self) -> LinkStats {
@@ -473,6 +493,23 @@ fn run_link(
                                             messages::Severity::from_wire(text.severity),
                                             messages::decode_status_text(&text.text),
                                         );
+                                    }
+                                }
+                                // The vehicle asking for the airframe to be moved. It uses
+                                // COMMAND_LONG in the reverse of its usual direction, which is
+                                // unusual enough that it is easy to miss: the same command id
+                                // carries the request and our confirmation.
+                                MavMessage::CommandLong(long)
+                                    if long.command == calibration::CMD_ACCELCAL_VEHICLE_POS =>
+                                {
+                                    #[allow(
+                                        clippy::cast_possible_truncation,
+                                        clippy::cast_sign_loss
+                                    )]
+                                    let value = long.param1 as u32;
+                                    let state = calibration::AccelCalibration::from_wire(value);
+                                    if let Ok(mut held) = shared.accel_calibration.lock() {
+                                        *held = state;
                                     }
                                 }
                                 MavMessage::CommandAck(ack) => {

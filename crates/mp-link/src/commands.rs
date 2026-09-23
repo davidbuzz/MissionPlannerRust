@@ -40,7 +40,7 @@ pub mod copter_mode {
     pub const LAND: u32 = 9;
 }
 
-fn command(target: VehicleId, command: u16, params: [f32; 7]) -> MavMessage {
+pub(crate) fn command(target: VehicleId, command: u16, params: [f32; 7]) -> MavMessage {
     MavMessage::CommandLong(CommandLong {
         param1: params[0],
         param2: params[1],

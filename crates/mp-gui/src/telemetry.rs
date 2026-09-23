@@ -299,6 +299,60 @@ impl Telemetry {
         }
     }
 
+    /// Starts a six-position accelerometer calibration.
+    pub fn start_accelerometer_calibration(&self) {
+        if let Some((link, id)) = self.target() {
+            link.clear_accel_calibration();
+            link.send(&mp_link::calibration::start_accelerometer(id));
+        }
+    }
+
+    /// Tells the vehicle the airframe is in the position it asked for.
+    pub fn confirm_accelerometer_position(&self, position: mp_link::calibration::AccelPosition) {
+        if let Some((link, id)) = self.target() {
+            link.send(&mp_link::calibration::accelerometer_position_reached(
+                id, position,
+            ));
+        }
+    }
+
+    /// What the accelerometer calibration is waiting for, if anything.
+    #[must_use]
+    pub fn accel_calibration(&self) -> mp_link::calibration::AccelCalibration {
+        self.link.as_ref().map_or(
+            mp_link::calibration::AccelCalibration::Idle,
+            Link::accel_calibration,
+        )
+    }
+
+    /// Forgets a finished calibration, so it stops being reported as running.
+    pub fn clear_accel_calibration(&self) {
+        if let Some(link) = &self.link {
+            link.clear_accel_calibration();
+        }
+    }
+
+    /// Tells the vehicle that however it is sitting now is level.
+    pub fn calibrate_level(&self) {
+        if let Some((link, id)) = self.target() {
+            link.send(&mp_link::calibration::level(id));
+        }
+    }
+
+    /// Starts an onboard compass calibration.
+    pub fn calibrate_compass(&self) {
+        if let Some((link, id)) = self.target() {
+            link.send(&mp_link::calibration::start_compass(id));
+        }
+    }
+
+    /// Recalibrates the barometer's ground pressure reference.
+    pub fn calibrate_ground_pressure(&self) {
+        if let Some((link, id)) = self.target() {
+            link.send(&mp_link::calibration::ground_pressure(id));
+        }
+    }
+
     /// Reboots the autopilot.
     ///
     /// The link drops when the vehicle obeys, which is what success looks like. Useful after a
