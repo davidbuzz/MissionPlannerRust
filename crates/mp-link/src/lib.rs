@@ -17,7 +17,6 @@
 
 #![forbid(unsafe_code)]
 
-pub mod calibration;
 pub mod commands;
 pub mod logs;
 pub mod messages;
@@ -153,9 +152,9 @@ struct Shared {
     /// What the vehicle has said, and how it answered our commands.
     messages: Mutex<messages::MessageLog>,
     /// The state of an accelerometer calibration, if one is running.
-    accel_calibration: Mutex<calibration::AccelCalibration>,
+    accel_calibration: Mutex<mp_calibration::AccelCalibration>,
     /// Compass calibration progress, one entry per compass being calibrated.
-    compass_calibration: Mutex<BTreeMap<u8, calibration::CompassProgress>>,
+    compass_calibration: Mutex<BTreeMap<u8, mp_calibration::CompassProgress>>,
     /// Other aircraft, from ADS-B.
     traffic: Mutex<traffic::TrafficReport>,
     /// Dataflash logs the vehicle has listed.
@@ -391,24 +390,24 @@ impl Link {
 
     /// What an accelerometer calibration is waiting for, if one is running.
     #[must_use]
-    pub fn accel_calibration(&self) -> calibration::AccelCalibration {
+    pub fn accel_calibration(&self) -> mp_calibration::AccelCalibration {
         self.shared
             .accel_calibration
             .lock()
             .map(|held| *held)
-            .unwrap_or(calibration::AccelCalibration::Idle)
+            .unwrap_or(mp_calibration::AccelCalibration::Idle)
     }
 
     /// Forgets any calibration state, so a finished run does not look like a running one.
     pub fn clear_accel_calibration(&self) {
         if let Ok(mut held) = self.shared.accel_calibration.lock() {
-            *held = calibration::AccelCalibration::Idle;
+            *held = mp_calibration::AccelCalibration::Idle;
         }
     }
 
     /// Compass calibration progress, one entry per compass, lowest id first.
     #[must_use]
-    pub fn compass_calibration(&self) -> Vec<calibration::CompassProgress> {
+    pub fn compass_calibration(&self) -> Vec<mp_calibration::CompassProgress> {
         self.shared
             .compass_calibration
             .lock()
@@ -722,14 +721,14 @@ fn run_link(
                                 // unusual enough that it is easy to miss: the same command id
                                 // carries the request and our confirmation.
                                 MavMessage::CommandLong(long)
-                                    if long.command == calibration::CMD_ACCELCAL_VEHICLE_POS =>
+                                    if long.command == mp_calibration::CMD_ACCELCAL_VEHICLE_POS =>
                                 {
                                     #[allow(
                                         clippy::cast_possible_truncation,
                                         clippy::cast_sign_loss
                                     )]
                                     let value = long.param1 as u32;
-                                    let state = calibration::AccelCalibration::from_wire(value);
+                                    let state = mp_calibration::AccelCalibration::from_wire(value);
                                     if let Ok(mut held) = shared.accel_calibration.lock() {
                                         *held = state;
                                     }
@@ -740,15 +739,15 @@ fn run_link(
                                 MavMessage::MagCalProgress(progress) => {
                                     if let Ok(mut held) = shared.compass_calibration.lock() {
                                         let entry = held.entry(progress.compass_id).or_insert(
-                                            calibration::CompassProgress {
+                                            mp_calibration::CompassProgress {
                                                 compass_id: progress.compass_id,
-                                                status: calibration::CompassStatus::NotStarted,
+                                                status: mp_calibration::CompassStatus::NotStarted,
                                                 percent: 0,
                                                 attempt: 0,
                                                 fitness: None,
                                             },
                                         );
-                                        entry.status = calibration::CompassStatus::from_wire(
+                                        entry.status = mp_calibration::CompassStatus::from_wire(
                                             progress.cal_status,
                                         );
                                         entry.percent = progress.completion_pct;
@@ -758,15 +757,15 @@ fn run_link(
                                 MavMessage::MagCalReport(report) => {
                                     if let Ok(mut held) = shared.compass_calibration.lock() {
                                         let entry = held.entry(report.compass_id).or_insert(
-                                            calibration::CompassProgress {
+                                            mp_calibration::CompassProgress {
                                                 compass_id: report.compass_id,
-                                                status: calibration::CompassStatus::NotStarted,
+                                                status: mp_calibration::CompassStatus::NotStarted,
                                                 percent: 0,
                                                 attempt: 0,
                                                 fitness: None,
                                             },
                                         );
-                                        entry.status = calibration::CompassStatus::from_wire(
+                                        entry.status = mp_calibration::CompassStatus::from_wire(
                                             report.cal_status,
                                         );
                                         // A report means sampling finished, whatever the last

@@ -13,7 +13,7 @@
 #![allow(unreachable_pub)]
 
 use gpui::{AnyElement, Context, div, prelude::*, px, rgb};
-use mp_link::calibration::{AccelCalibration, AccelPosition, CompassProgress, CompassStatus};
+use mp_calibration::{AccelCalibration, AccelPosition, CompassProgress, CompassStatus};
 use mp_mavlink_dialects::all::{MavAutopilot, MavType};
 use mp_vehicle::RcRange;
 
@@ -550,7 +550,7 @@ pub fn motor_panel(
                     this.file_status = Some(format!(
                         "motor {motor} at {:.0}% for {:.0}s",
                         this.motor_throttle,
-                        mp_link::calibration::MOTOR_TEST_SECONDS
+                        mp_calibration::MOTOR_TEST_SECONDS
                     ));
                     cx.notify();
                 })),
@@ -608,7 +608,7 @@ pub fn motor_panel(
             .child(div().text_xs().text_color(rgb(theme::DIM)).child(format!(
                 "each press spins one motor for {:.0} seconds, then the vehicle stops it \
                          on its own",
-                mp_link::calibration::MOTOR_TEST_SECONDS
+                mp_calibration::MOTOR_TEST_SECONDS
             ))),
     )
 }
@@ -633,8 +633,8 @@ fn throttle_step(
         .hover(|style| style.bg(rgb(theme::BORDER)))
         .child(label)
         .on_click(cx.listener(move |this, _event, _window, cx| {
-            this.motor_throttle = (this.motor_throttle + delta)
-                .clamp(1.0, mp_link::calibration::MAX_MOTOR_TEST_THROTTLE);
+            this.motor_throttle =
+                (this.motor_throttle + delta).clamp(1.0, mp_calibration::MAX_MOTOR_TEST_THROTTLE);
             cx.notify();
         }))
 }
