@@ -367,6 +367,33 @@ impl MapViewport {
         self.camera = None;
     }
 
+    /// Centres the view on a position at the current zoom: `GMapControl.Position = point`.
+    ///
+    /// Before anything has framed a view there is no zoom to keep, and the span is the
+    /// automatic fit's smallest, about 400 m.
+    pub fn centre_on(&mut self, at: LatLon) {
+        let span = self.current_view().map_or(3.5e-6 * 1.25, |view| view.span);
+        self.camera = Some(Camera {
+            centre: at.to_web_mercator(),
+            span,
+        });
+    }
+
+    /// The view the user or [`MapViewport::centre_on`] chose, or `None` while it fits itself.
+    #[must_use]
+    pub const fn camera(&self) -> Option<Camera> {
+        self.camera
+    }
+
+    /// Where a position was drawn at the last paint, in window coordinates.
+    ///
+    /// For something painted over the map after it, in the same frame: the map records the
+    /// rectangle it showed as it paints, so this is exact for that frame.
+    #[must_use]
+    pub fn screen_of(&self, at: LatLon) -> Option<(f32, f32)> {
+        self.screen_position(at.to_web_mercator())
+    }
+
     /// Stops the view moving on its own, keeping whatever is on screen now.
     ///
     /// Called when the operator edits the plan. The automatic fit frames everything it knows
@@ -1546,6 +1573,47 @@ mod tests {
         let after = map.camera.expect("a camera");
         assert!((before.span - after.span).abs() < f64::EPSILON);
         assert!((before.centre.x - after.centre.x).abs() < f64::EPSILON);
+    }
+
+    /// Centring moves the view and keeps its zoom, as setting a GMap control's `Position` does.
+    #[test]
+    fn centring_on_a_position_keeps_the_zoom() {
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        let target = LatLon::new(-35.37, 149.17).expect("valid position");
+        map.centre_on(target);
+        let camera = map.camera().expect("a chosen view");
+        assert!((camera.span - 0.001).abs() < f64::EPSILON);
+        let centre = target.to_web_mercator();
+        assert!((camera.centre.x - centre.x).abs() < 1e-12);
+        assert!((camera.centre.y - centre.y).abs() < 1e-12);
+        assert!(!map.is_following());
+    }
+
+    /// With nothing framed yet there is still somewhere to centre.
+    #[test]
+    fn centring_before_anything_is_framed_uses_the_smallest_fit() {
+        let mut map = viewport();
+        map.centre_on(LatLon::new(-35.37, 149.17).expect("valid position"));
+        assert!(map.camera().is_some_and(|camera| camera.span > 0.0));
+    }
+
+    /// Where a position was drawn is the inverse of what is under a point.
+    #[test]
+    fn a_position_is_drawn_where_a_click_would_find_it() {
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        let at = LatLon::new(-35.364, 149.166).expect("valid position");
+        let (x, y) = map.screen_of(at).expect("painted");
+        let back = map.position_at(x, y).expect("painted");
+        assert!((back.latitude() - at.latitude()).abs() < 1e-6);
+        assert!((back.longitude() - at.longitude()).abs() < 1e-6);
+        let centre = LatLon::new(-35.363, 149.165).expect("valid position");
+        let (cx, cy) = map.screen_of(centre).expect("painted");
+        assert!(
+            (cx - 400.0).abs() < 0.5 && (cy - 300.0).abs() < 0.5,
+            "{cx},{cy}"
+        );
     }
 
     #[test]

@@ -17,6 +17,7 @@
 
 pub mod dataflash;
 pub mod index;
+pub mod overlay;
 pub mod plot;
 pub mod reader;
 #[cfg(test)]

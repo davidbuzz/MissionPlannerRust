@@ -1,0 +1,121 @@
+# The log browser's chart cursor and map marker, and the check boxes under the chart, as
+# Log/LogBrowse.cs has them. A double click on the chart (zg1_MouseDoubleClick) puts the cursor on
+# a record - on a time axis the first GPS, GPS2 or POS record at or after the time under the
+# pointer, on a line axis the line under it - and then GoToSample puts a marker on the map where
+# the nearest GPS or POS record says the vehicle was, centres the map on it, and makes that row's
+# time cell the grid's current cell. The Mode, Errors, MSG and Events boxes label the chart, and
+# ticking one redraws the labels, which takes the cursor off. Unticking Time plots against line
+# numbers and clears the chart; Map and Data Table show the map and the grid.
+#
+# Moving the pointer over the chart does nothing in the C# but debounce, so nothing here hovers.
+#
+# Self-contained: the damaged fixture, which came off a vehicle with a GPS fix and logs one mode,
+# 144 messages and five EKF yaw resets; and the healthy one, whose GPS never had a fix. Neither
+# logs an ERR, so the Errors box has no label to show here, and neither spans a minute of GPS time,
+# so an unticked Time box has no minute labels to show either: the unit tests cover both with logs
+# built for them.
+
+env MP_PLAN_DIR $WORK/logs
+setup mkdir -p $WORK/logs && cp testdata/dataflash_damaged.bin $WORK/logs/gpsfix.bin && cp testdata/dataflash.bin $WORK/logs/nofix.bin
+
+screen logs
+window 1600x1200
+settle 3
+
+click log-name
+type gpsfix.bin
+key Return
+settle 3
+
+expect log.open true
+# The boxes as the C# opens with them: Map and Data Table off, the rest on.
+expect log.check.map false
+expect log.check.time true
+expect log.check.datagrid false
+expect log.check.mode true
+expect log.check.errors true
+expect log.check.msg true
+expect log.check.events true
+expect log.axis time
+# Opening a log labels the chart with what the ticked boxes ask for.
+expect log.overlays.modes 1
+expect log.overlays.messages 144
+expect log.overlays.events 5
+expect log.overlays.errors 0
+expect log.overlays.minutes 0
+expect log.cursor.line none
+expect log.cursor.marker none
+
+# Show the map and the grid.
+click log-chk-map
+settle 1
+click log-chk-datagrid
+settle 1
+expect log.check.map true
+expect log.check.datagrid true
+expect log.grid.rows > 0
+
+click logfield-ATT.Roll
+settle 2
+expect log.plotted 1
+
+# The middle of the chart: the cursor on the next position record, the marker where it says the
+# vehicle was, the map centred on it, and the grid on its time cell.
+doubleclick log-chart@0.5x0.5
+settle 1
+expect log.cursor.line > 0
+expect log.cursor.marker ~ -27.51
+expect log.cursor.marker ~ ,153.00
+expect log.cursor.centred true
+expect log.cursor.grid true
+
+# Unticking Events takes its labels off; redrawing the labels takes the cursor off the chart; the
+# marker is on the map and stays.
+click log-chk-events
+settle 1
+expect log.check.events false
+expect log.overlays.events 0
+expect log.overlays.messages 144
+expect log.cursor.line none
+expect log.cursor.marker ~ -27.51
+
+# Unticking Time plots against line numbers, and clears the chart and its labels.
+click log-chk-time
+settle 1
+expect log.axis line
+expect log.plotted 0
+expect log.overlays.messages 0
+
+click logfield-ATT.Roll
+settle 2
+expect log.plotted 1
+expect log.overlays.messages 144
+expect log.overlays.minutes 0
+
+doubleclick log-chart@0.5x0.5
+settle 1
+expect log.cursor.line > 0
+expect log.cursor.grid true
+expect log.cursor.marker ~ -27.51
+
+# The healthy log, whose GPS never had a fix: the new log takes the old marker away, and a double
+# click gives a cursor and no marker.
+click log-name
+key Escape
+type nofix.bin
+key Return
+settle 3
+expect log.open true
+expect log.cursor.marker none
+expect log.cursor.line none
+expect log.overlays.modes 1
+expect log.overlays.messages 14
+
+click logfield-ATT.Roll
+settle 2
+doubleclick log-chart@0.5x0.5
+settle 1
+expect log.cursor.line > 0
+expect log.cursor.marker none
+expect log.cursor.centred false
+expect log.cursor.grid true

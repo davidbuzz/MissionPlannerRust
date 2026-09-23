@@ -420,6 +420,31 @@ impl Grid {
         }
     }
 
+    /// Brings a row to the middle of the screen and makes one of its cells current.
+    ///
+    /// `GoToSample`'s `scrollGrid` and `CurrentCell`. `scrollGrid` scrolls unless the row is
+    /// already in the middle band of the screen - which, with an even number of rows on screen,
+    /// is a band of no rows, so it always scrolls - to put the row half a screen from the top. A
+    /// row past the end is `Rows[SampleID]` throwing, which the C# swallows: nothing happens.
+    /// The row is a row of the grid as it is, filtered or not, as the C# indexes it.
+    /// `// C#: Log/LogBrowse.cs:3299-3327, 3507-3522`
+    pub fn go_to(&mut self, row: usize, column: usize) {
+        if row >= self.rows() || column >= self.columns() {
+            return;
+        }
+        let half = VISIBLE_ROWS / 2;
+        if self.first + half > row || self.first + VISIBLE_ROWS - half <= row {
+            let last = self.rows().saturating_sub(VISIBLE_ROWS);
+            let first = row.saturating_sub(half).min(last);
+            if first != self.first {
+                self.first = first;
+                self.carry = 0.0;
+                self.load();
+            }
+        }
+        self.select(row, column);
+    }
+
     /// Shows or hides the list of types to filter by: a click on a column header.
     pub fn toggle_chooser(&mut self) {
         self.choosing = !self.choosing;
@@ -653,6 +678,34 @@ mod tests {
             }
             first = grid.first();
         }
+    }
+
+    /// Going to a row puts it half a screen down and makes its time cell current; near either end
+    /// the screen stops at the end; past the end nothing happens.
+    #[test]
+    fn going_to_a_row_centres_it_and_makes_its_time_cell_current() {
+        let mut grid = grid();
+        grid.go_to(1374, 1);
+        assert_eq!(grid.first(), 1374 - VISIBLE_ROWS / 2);
+        assert_eq!(grid.current(), Some((1374, 1)));
+        assert!(grid.window().iter().any(|row| row.row == 1374));
+        // The headers are the row's, as RowEnter names them: 1374 is the MODE record.
+        assert_eq!(grid.headers().get(3).map(String::as_str), Some("TimeUS"));
+        assert_eq!(grid.headers().get(4).map(String::as_str), Some("Mode"));
+
+        grid.go_to(3, 2);
+        assert_eq!(grid.first(), 0, "the top stops at the first row");
+        assert_eq!(grid.current(), Some((3, 2)));
+
+        grid.go_to(11_438, 1);
+        assert_eq!(
+            grid.first(),
+            grid.rows() - VISIBLE_ROWS,
+            "the end stops too"
+        );
+
+        grid.go_to(11_439, 1);
+        assert_eq!(grid.current(), Some((11_438, 1)), "past the end, nothing");
     }
 
     /// A wheel moves whole rows, and a movement too small for one is kept, not lost.

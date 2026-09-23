@@ -20,6 +20,11 @@ settle 3
 
 expect log.open true
 expect log.grid.records 11439
+# The grid is hidden, and has no rows, until the Data Table box shows it, as the C# opens.
+expect log.check.datagrid false
+expect log.grid.rows 0
+click log-chk-datagrid
+settle 1
 expect log.grid.rows 11439
 expect log.refused none
 

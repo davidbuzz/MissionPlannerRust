@@ -137,10 +137,38 @@ pub fn plottable(data: &[u8]) -> Vec<PlottableField> {
 /// One extracted sample.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Point {
-    /// Seconds since the first timestamped message in the log.
+    /// Seconds since the first timestamped message in the log: see [`seconds_since`].
     pub seconds: f64,
+    /// The record it came from, counted from the start of the log with the format declarations:
+    /// `DFItem.lineno`, which is what `LogBrowse` plots against when its Time box is unticked.
+    /// `// C#: Log/LogBrowse.cs:1509, 1551-1561`
+    pub line: usize,
     /// The value.
     pub value: f64,
+}
+
+/// The `TimeUS` of the first message in a log that has one: where its time axis starts.
+///
+/// One origin for the whole log, so that two fields plotted together, and the labels drawn over
+/// them, line up in time as they do in the C#, which plots every one against the same clock.
+#[must_use]
+pub fn time_origin(data: &[u8]) -> Option<f64> {
+    let mut reader = DataflashReader::new(data);
+    while let Some(message) = reader.next_message() {
+        if let Some(time) = message.field(TIME_FIELD).and_then(Value::as_f64) {
+            return Some(time);
+        }
+    }
+    None
+}
+
+/// Where a `TimeUS` sits on the time axis: seconds after the log's origin.
+///
+/// A log can contain a time that goes backwards, across a reboot within one file. Clamped rather
+/// than dropped: the samples are real and a negative x would put them off the plot.
+#[must_use]
+pub fn seconds_since(origin: f64, time_us: f64) -> f64 {
+    ((time_us - origin) / 1_000_000.0).max(0.0)
 }
 
 /// Pulls one field's samples out of a log.
@@ -158,6 +186,8 @@ pub fn extract(data: &[u8], message_name: &str, field_name: &str) -> Vec<Point> 
 /// `instance` of `None` takes every record of the message, which is right for a type that has no
 /// instances and wrong for one that does - see [`plottable`]. The caller knows which, because the
 /// inventory told it.
+///
+/// Every record is counted for its line number, and only the named message's are decoded.
 #[must_use]
 pub fn extract_instance(
     data: &[u8],
@@ -169,13 +199,28 @@ pub fn extract_instance(
         .is_some()
         .then(|| instance_fields(data).get(message_name).cloned())
         .flatten();
+    let Some(origin) = time_origin(data) else {
+        return Vec::new();
+    };
     let mut points = Vec::new();
-    let mut origin: Option<f64> = None;
     let mut reader = DataflashReader::new(data);
-    while let Some(message) = reader.next_message() {
-        if message.name != message_name {
+    let mut line = 0usize;
+    while let Some(record) = reader.next_record() {
+        let this_line = line;
+        line += 1;
+        let named = reader
+            .formats()
+            .get(&record.msg_type)
+            .is_some_and(|format| format.name == message_name);
+        if !named || record.msg_type == crate::dataflash::FMT_TYPE {
             continue;
         }
+        let Some(message) = data
+            .get(record.offset..)
+            .and_then(|bytes| crate::dataflash::decode_record(reader.formats(), bytes))
+        else {
+            continue;
+        };
         if let Some(label) = instance_label.as_deref() {
             #[allow(clippy::cast_possible_truncation)] // instance numbers are small
             let found = message
@@ -192,12 +237,12 @@ pub fn extract_instance(
         ) else {
             continue;
         };
-        let start = *origin.get_or_insert(time);
-        // A log can contain a time that goes backwards, across a reboot within one file. Clamped
-        // rather than dropped: the samples are real and a negative x would put them off the plot.
-        let seconds = ((time - start) / 1_000_000.0).max(0.0);
         if value.is_finite() {
-            points.push(Point { seconds, value });
+            points.push(Point {
+                seconds: seconds_since(origin, time),
+                line: this_line,
+                value,
+            });
         }
     }
     points
@@ -540,10 +585,12 @@ mod tests {
         let points = extract(&fixture(), "ATT", "Roll");
         assert!(points.len() > 100, "found only {} samples", points.len());
 
-        // Time starts at zero and never goes backwards.
+        // Time starts near the log's first timestamp - the first ATT is logged within seconds of
+        // it - and never goes backwards; lines climb with it.
         assert!(
-            points[0].seconds.abs() < f64::EPSILON,
-            "the axis starts at zero"
+            (0.0..5.0).contains(&points[0].seconds),
+            "the first sample is {}s into the log",
+            points[0].seconds
         );
         for pair in points.windows(2) {
             assert!(
@@ -552,10 +599,68 @@ mod tests {
                 pair[0].seconds,
                 pair[1].seconds
             );
+            assert!(pair[1].line > pair[0].line, "lines are in log order");
         }
         assert!(
             points.last().is_some_and(|p| p.seconds > 0.0),
             "the series should span some time"
+        );
+    }
+
+    /// Two fields share one clock, as every curve on the C#'s chart does.
+    ///
+    /// Each series used to start its own clock at its own first sample, which put a `GPS` sample
+    /// and the `ATT` sample logged beside it at different places on the same axis - and a mode
+    /// change drawn over both at a third.
+    #[test]
+    fn every_series_is_timed_from_the_logs_first_timestamp() {
+        let data = fixture();
+        let origin = time_origin(&data).expect("the fixture has timestamps");
+        let attitude = extract(&data, "ATT", "Roll");
+        let performance = extract(&data, "PM", "Load");
+        // The fixture logs its first PM record nearly eight seconds after its first ATT, so a
+        // clock of each series' own would put both at 0.
+        assert!(
+            performance[0].seconds > attitude[0].seconds + 7.0,
+            "PM at {}s, ATT at {}s",
+            performance[0].seconds,
+            attitude[0].seconds
+        );
+        // And each is where its own TimeUS says, from the one origin.
+        let mut reader = DataflashReader::new(&data);
+        let mut first = None;
+        while let Some(message) = reader.next_message() {
+            if message.name == "PM" {
+                first = message.field(TIME_FIELD).and_then(Value::as_f64);
+                break;
+            }
+        }
+        let expected = seconds_since(origin, first.expect("a PM record"));
+        assert!((performance[0].seconds - expected).abs() < 1e-9);
+    }
+
+    /// A sample's line is its record's place in the log, format declarations counted: the row the
+    /// grid shows it on, and the x the C# plots it at with Time unticked.
+    #[test]
+    fn a_sample_carries_the_line_its_record_is_on() {
+        let data = fixture();
+        let index = crate::index::RecordIndex::build(&data);
+        let points = extract(&data, "ATT", "Roll");
+        let attitude = index
+            .format_named("ATT")
+            .map(|format| format.msg_type)
+            .expect("ATT is declared");
+        for point in points.iter().take(20) {
+            assert_eq!(index.msg_type(point.line), Some(attitude), "{point:?}");
+        }
+        let rows = index.rows_named("ATT");
+        assert_eq!(
+            points
+                .iter()
+                .map(|point| u32::try_from(point.line).unwrap_or(u32::MAX))
+                .collect::<Vec<_>>(),
+            rows,
+            "every ATT record is a sample, on its own row"
         );
     }
 

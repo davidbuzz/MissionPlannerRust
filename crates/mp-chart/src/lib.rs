@@ -94,6 +94,19 @@ impl Series {
         self.samples.back().map(|sample| sample.at)
     }
 
+    /// The earliest and latest `at` of any sample: the x range an axis fitted to it spans.
+    ///
+    /// Not the first and last sample's: a log's clock can restart part way through, and the
+    /// samples after the restart would then fall outside a range read off the ends.
+    #[must_use]
+    pub fn extent(&self) -> Option<(f64, f64)> {
+        let mut samples = self.samples.iter();
+        let first = samples.next()?.at;
+        Some(samples.fold((first, first), |(low, high), sample| {
+            (low.min(sample.at), high.max(sample.at))
+        }))
+    }
+
     /// Forgets everything.
     pub fn clear(&mut self) {
         self.samples.clear();
@@ -347,6 +360,15 @@ mod tests {
         assert_eq!(window(10.0), (0.0, 10.0));
         assert_eq!(window(12.5), (2.5, 12.5));
         assert_eq!(window(100.0), (90.0, 100.0));
+    }
+
+    /// The extent is the lowest and highest time, not the first and last sample's.
+    #[test]
+    fn the_extent_covers_samples_that_go_back_in_time() {
+        let series = series_of(&[(5.0, 1.0), (9.0, 1.0), (2.0, 1.0), (7.0, 1.0)]);
+        assert_eq!(series.extent(), Some((2.0, 9.0)));
+        assert_eq!(series_of(&[(3.0, 1.0)]).extent(), Some((3.0, 3.0)));
+        assert_eq!(Series::new("empty", 1).extent(), None);
     }
 
     /// Degenerate inputs must not panic; this runs on the flight screen.

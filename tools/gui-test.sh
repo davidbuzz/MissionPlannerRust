@@ -20,6 +20,7 @@
 #   settle 6                    wait, for telemetry to arrive or a view to settle
 #   click map@0.45x0.40         click a named control, as tools/gui-click.sh addresses them
 #   click tab-plan:right        a right-click
+#   doubleclick log-chart@0.5x0.5  a double click: two left presses at one point, 80 ms apart
 #   type flight.bin             type into whatever has focus
 #   key Return                  press a named key
 #   expect mission.items 3      assert a published fact equals a value
@@ -261,9 +262,31 @@ while IFS= read -r RAW; do
             fi
             sleep 0.6
             ;;
+        doubleclick)
+            # Two `click`s cannot make one: each waits for the probe file to settle and then
+            # sleeps, far past the 400 ms a double click must happen in. So the target is resolved
+            # once, the pointer moved there, and both presses sent together.
+            TARGET="${2:?doubleclick needs a target}"
+            if COORDS=$("$ROOT/tools/gui-click.sh" --resolve "$PROBE_FILE" "$WIN_ID" "$TARGET"); then
+                echo "double-clicking '$TARGET' at window-relative ${COORDS/ /,}"
+                # shellcheck disable=SC2086 # "x y", two words on purpose
+                xdotool mousemove --window "$WIN_ID" $COORDS
+                sleep 0.05
+                xdotool click --repeat 2 --delay 80 1
+            else
+                echo "line $LINE_NO: could not double-click '$TARGET'" >&2
+                FAILURES=$((FAILURES + 1))
+            fi
+            sleep 0.6
+            ;;
         type)
             shift
             xdotool type --window "$WIN_ID" --clearmodifiers --delay 60 "$*"
+            # Keystrokes reach the application through the input method when one is running
+            # (ibus over XIM here) and come back after a round trip; a click or a key sent next
+            # does not wait for them, and has overtaken typed text more than once. Give the
+            # text time to land before the next line runs.
+            sleep 1
             sleep 0.6
             ;;
         key)

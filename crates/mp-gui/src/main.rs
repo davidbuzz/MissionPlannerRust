@@ -1455,6 +1455,11 @@ impl Render for MissionPlanner {
                 "log.map.waypoints",
                 self.log_browse.map_contents().waypoints,
             );
+            // The strip's check boxes, the chart's labels, and the cursor a double click puts on
+            // it with the map's marker: listed where they are made, in `LogBrowse::facts`.
+            for (key, value) in self.log_browse.facts() {
+                facts::record(key, value);
+            }
             // What the primary flight display drew, by name, and how many of HUD.cs's elements
             // it cannot show for want of a value - so a port that regresses an element fails a
             // test. Then the health readouts as painted: Vibe's and EKF's colours, the pre-arm
