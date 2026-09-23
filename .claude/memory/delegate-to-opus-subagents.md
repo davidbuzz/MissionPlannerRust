@@ -5,7 +5,7 @@ metadata:
   type: feedback
 ---
 
-**"pls delegate coding tasks to at most 3 Opus 5 subagents"** — Buzz, 2026-09-24. Standing
+**"pls delegate coding tasks to at most 3 Opus 5 subagents"** — Buzz, 2026-09-23 14:08 UTC (the transcript's time; the question "are you capable of delegating coding tasks to Opus 5.1 as a sub agent?" came a minute before). Standing
 authorisation, with a cap of three concurrent.
 
 **Why:** the queue in PLAN.md §13.2 has independent items, and one context working them in series
