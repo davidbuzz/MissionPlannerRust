@@ -140,9 +140,9 @@ snapshots so the renderer never blocks on the I/O thread.
 - **Today:** `crates/mp-vehicle/tests/no_alloc_ingest.rs` and `crates/mp-link/tests/no_alloc_ingest.rs`
   prove zero allocations per packet from a transport read to a published state, over 70,546 real
   frames through the real link thread with recording on. `PARAM_VALUE`, `STATUSTEXT` and
-  `COMMAND_ACK` allocate by design and are listed with a bound each. Still owed:
-  `Transport::description()` allocates twice per snapshot publish, which needs the trait to
-  change. The field-coverage report exists: `crates/mp-vehicle/src/coverage.rs` accounts for all
+  `COMMAND_ACK` allocate by design and are listed with a bound each. `Transport::description()`
+  returns `&str` and the publish path allocates nothing (71,500 allocations over 35,750 publishes
+  before; the tests demand zero now). The field-coverage report exists: `crates/mp-vehicle/src/coverage.rs` accounts for all
   550 public members of `CurrentState` (416 done, 48 derived, 55 missing, 30 plumbing, 1 dropped),
   matched to the C# file by a test, rendered to `docs/coverage/currentstate.md`; the porting that
   took it from 219 done added SYS_STATUS, GPS, battery, radio, wind, terrain, rangefinder, servo,
@@ -300,8 +300,11 @@ path: board detect, firmware catalogue, upload via px4/DFU/serial bootloaders.
   the `.apj` container and the px4 bootloader protocol from `ExtLibs/px4uploader/`, with
   `tests/firmware_upload.rs` driving a complete upload against a strict in-process mock that
   asserts every byte. **No board has been flashed**, and none will be until an owner asks: the CLI
-  offers `mpr firmware info` and nothing that writes. Board detection and the firmware catalogue
-  are not started.
+  offers `mpr firmware info` and `mpr firmware detect` and nothing that writes. Board detection is
+  `Utilities/BoardDetect.cs` ported rule for rule (`crates/mp-firmware/src/detect.rs`), its probes
+  proved against the px4 mock over a pty; all 16 `DetectBoardTest` calls are fixtures, and five of
+  them fail against the C# itself, which the fixture records. The firmware catalogue is not
+  started.
 - **Tests:** `tests/magcal_vectors.rs` and `tests/accelcal_vectors.rs` assert 1e-6 relative agreement with golden outputs captured from the C# `MagCalib`/calibration code over recorded sensor datasets, including ill-conditioned inputs; `tests/board_detect.rs` ports the existing `MissionPlannerTests` `DetectBoardTest` cases plus USB descriptor fixtures for every supported board; `tests/firmware_upload.rs` runs against an in-process mock px4/DFU bootloader asserting the exact byte protocol and checksum behaviour; `tests/firmware_catalogue.rs` parses real firmware manifests.
 
 ### D14. Log engine and analysis

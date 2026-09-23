@@ -35,14 +35,14 @@ they need SITL, a window, or the network), **31 GUI scripts** under `tests/gui/`
 | Health | EKF variances and vibration with ArduPilot's own thresholds, clipping counts |
 | Calibration | accelerometer, compass, radio, motor test |
 | Joystick | axes to `RC_CHANNELS_OVERRIDE` from a thread that blocks on the device and sends on change — 0.1 ms p99 stick-to-link on a fake device — with a release-on-disconnect failsafe (Linux) |
-| Firmware | `.apj` parsing and the px4 bootloader protocol, proven against a mock; nothing flashed yet |
+| Firmware | `.apj` parsing, the px4 bootloader protocol and `BoardDetect.cs`'s board detection, proven against a mock and a pty; nothing flashed, nothing written |
 | Scripting | the `Script.cs` host API, and a measurement of what the 19 shipped scripts need |
 | KML export | a flown path coloured by flight mode, and a mission, for Google Earth |
 | Tuning graph | eleven telemetry fields plotted live, min/max reduced so a spike cannot hide |
 | Geodesy | typed units, Web Mercator, slippy-map tile arithmetic; pixel, inverse, distance, bearing, `newpos` and UTM match the C# under mono bit for bit over 676 points |
 | HUD | all 24 elements `HUD.cs` paints, from a pure scene builder with a coverage table: horizon and ladder, heading tape with target and course marks, cross-track and turn rate, speed and altitude scrollers, VSI, mode and waypoint, link, battery, GPS, ARMED/DISARMED/SAFE/FAILSAFE, the message line, Vibe and EKF with the C#'s thresholds, Ready/Not Ready to Arm, custom items, flight-path vector and AOA scale (the last two await their vehicle values) |
 | Maps | GPU tile rendering; Mission Planner's default `GoogleSatelliteMap` and six of its providers with its URL schemes and version checks, proved against its own `GMap.NET.Core.dll`; overlays; the on-disk cache is Mission Planner's own, so a cache filled by either application is read by both |
-| CLI | `mpr watch \| record \| fly \| params \| param \| mission \| survey \| log \| logs \| kml \| firmware \| ports` |
+| CLI | `mpr watch \| record \| fly \| params \| param \| mission \| survey \| log \| logs \| kml \| firmware info\|detect \| ports` |
 | GUI | fly, plan, setup, params and log screens on gpui |
 | Porting ledger | `ledger/ledger.csv`, one row per C# file with its tier and state; `cargo xtask ledger check` fails on anything unaccounted for |
 | Flight screen coverage | every one of `FlightData`'s 136 wired actions listed with what stands in for it here — 27 done, 87 missing — in `docs/coverage/flightdata.md`, kept current by a test |

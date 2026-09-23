@@ -1,0 +1,230 @@
+{
+  "source": "MissionPlannerTests/Utilities/BoardDetectTests.cs @ efb0801",
+  "about": [
+    "Every BoardDetect.DetectBoard call in the C# test class, in file order, with its inputs as written there. DetectBoardTestMany makes six calls and each is its own case here, numbered from 0; the seventh, 'PX4 BL FMU v1.x' at lines 35-44, is commented out in the C# and is not a case.",
+    "Each call passes port \"com1\" and a list of DeviceInfo (ExtLibs/ArduPilot/DeviceInfo.cs). 'devices' is that list, field for field.",
+    "'csharp_asserts' is what the test checks: {\"equals\": board} for 'if (ans != X) Assert.Fail()', {\"not\": \"none\"} for 'if (ans == none) Assert.Fail()', null for a call whose result is not checked.",
+    "'device_rules' is what BoardDetect.cs:66-197 (the device list) concludes: {\"board\": b} or {\"board\": \"chbootloader\", \"chbootloader\": name}, {\"probe\": \"fmu_v2_or_v3\"} for the replug prompt at :148, or \"no_match\" to go on to WMI.",
+    "Where the device list does not decide, the C# reads the live Win32_SerialPort table (BoardDetect.cs:199), not the list the test passed. 'serial_ports' is the row Windows lists for the same device on com1 - its hardware id, the '\\0' instance suffix BoardDetect.cs:134 shows, and a Name ending '(COM1)' - and 'serial_port_rules' is what BoardDetect.cs:212-367 concludes from it.",
+    "'csharp_result' is what the C# test gets from BoardDetect.cs as it stands, read from the source: \"passes\", \"fails\", \"machine-dependent\" or \"unchecked\", with 'why'. In the test process CustomMessageBox.ShowEvent is never set, so every CustomMessageBox.Show throws 'ShowEvent Not Set' (ExtLibs/Utilities/CustomMessageBox.cs:40-43); the replug prompt at BoardDetect.cs:150 throws into the catch at :194, and the question at :412-413 throws out of DetectBoard."
+  ],
+  "cases": [
+    {
+      "test": "DetectBoardTest",
+      "lines": "15-28",
+      "port": "com1",
+      "devices": [
+        { "board": "fmuv2", "description": "", "hardwareid": "USB\\VID_0483&PID_5740", "name": "" }
+      ],
+      "csharp_asserts": { "equals": "px4v2" },
+      "device_rules": { "board": "px4v2" },
+      "csharp_result": "passes",
+      "why": "0483:5740 is a new-style id (BoardDetect.cs:82) and 'fmuv2' is px4v2 (:87-91)."
+    },
+    {
+      "test": "DetectBoardTestMany[0]",
+      "lines": "45-53",
+      "port": "com1",
+      "devices": [
+        { "board": "PX4 BL FMU v2.x", "description": "", "hardwareid": "USB\\VID_26AC&PID_0011", "name": "" }
+      ],
+      "csharp_asserts": { "not": "none" },
+      "device_rules": "no_match",
+      "serial_ports": [
+        { "pnp_device_id": "USB\\VID_26AC&PID_0011\\0", "name": "USB Serial Port (COM1)" }
+      ],
+      "serial_port_rules": { "probe": "chibios_or_px4" },
+      "csharp_result": "machine-dependent",
+      "why": "'PX4 BL FMU v2.x' is no board string the list rules know, so the C# reads the test machine's own Win32_SerialPort table. With this device on it, 26AC:0011 is the 'chibios or normal px4' rule (:242-291), whose replug prompt at :246 throws out of DetectBoard; with no known id on it, the question at :412-413 throws. It passes only on a machine with some other recognised board attached."
+    },
+    {
+      "test": "DetectBoardTestMany[1]",
+      "lines": "54-62",
+      "port": "com1",
+      "devices": [
+        { "board": "PX4 BL FMU v3.x", "description": "", "hardwareid": "USB\\VID_26AC&PID_0011", "name": "" }
+      ],
+      "csharp_asserts": { "not": "none" },
+      "device_rules": "no_match",
+      "serial_ports": [
+        { "pnp_device_id": "USB\\VID_26AC&PID_0011\\0", "name": "USB Serial Port (COM1)" }
+      ],
+      "serial_port_rules": { "probe": "chibios_or_px4" },
+      "csharp_result": "machine-dependent",
+      "why": "As DetectBoardTestMany[0]: the same id, and the list rules do not know 'PX4 BL FMU v3.x'."
+    },
+    {
+      "test": "DetectBoardTestMany[2]",
+      "lines": "63-71",
+      "port": "com1",
+      "devices": [
+        { "board": "PX4 BL FMU v4.x", "description": "", "hardwareid": "USB\\VID_26AC&PID_0012", "name": "" }
+      ],
+      "csharp_asserts": { "not": "none" },
+      "device_rules": "no_match",
+      "serial_ports": [
+        { "pnp_device_id": "USB\\VID_26AC&PID_0012\\0", "name": "USB Serial Port (COM1)" }
+      ],
+      "serial_port_rules": { "board": "px4v4" },
+      "csharp_result": "machine-dependent",
+      "why": "The list rules know 'PX4 FMU v4.x', not 'PX4 BL FMU v4.x'. From WMI, 26AC:0012 is px4v4 (:297-301), which passes - but only if the device is on the test machine, and the method has already thrown at DetectBoardTestMany[0] unless it is."
+    },
+    {
+      "test": "DetectBoardTestMany[3]",
+      "lines": "72-81",
+      "port": "com1",
+      "devices": [
+        { "board": "PX4 BL FMU v4.x PRO", "description": "", "hardwareid": "USB\\VID_26AC&PID_0013", "name": "" }
+      ],
+      "csharp_asserts": { "not": "none" },
+      "device_rules": "no_match",
+      "serial_ports": [
+        { "pnp_device_id": "USB\\VID_26AC&PID_0013\\0", "name": "USB Serial Port (COM1)" }
+      ],
+      "serial_port_rules": { "board": "px4v4pro" },
+      "csharp_result": "machine-dependent",
+      "why": "From WMI, 26AC:0013 is px4v4pro (:302-306); the list rules do not know the product string."
+    },
+    {
+      "test": "DetectBoardTestMany[4]",
+      "lines": "82-90",
+      "port": "com1",
+      "devices": [
+        { "board": "PX4 BL FMU v5.x", "description": "", "hardwareid": "USB\\VID_26AC&PID_0032", "name": "" }
+      ],
+      "csharp_asserts": { "not": "none" },
+      "device_rules": "no_match",
+      "serial_ports": [
+        { "pnp_device_id": "USB\\VID_26AC&PID_0032\\0", "name": "USB Serial Port (COM1)" }
+      ],
+      "serial_port_rules": { "board": "chbootloader", "chbootloader": "CUAVv5" },
+      "csharp_result": "machine-dependent",
+      "why": "From WMI, 26AC:0032 is a ChibiOS bootloader named CUAVv5 (:231-240); the list rules know 'PX4 FMU v5.x', not 'PX4 BL FMU v5.x'."
+    },
+    {
+      "test": "DetectBoardTestMany[5]",
+      "lines": "91-99",
+      "port": "com1",
+      "devices": [
+        { "board": "ProfiCNC CUBE F4 BL", "description": "", "hardwareid": "USB\\VID_2DAE&PID_0001", "name": "" }
+      ],
+      "csharp_asserts": null,
+      "device_rules": { "board": "chbootloader", "chbootloader": "ProfiCNC CUBE F4 BL" },
+      "csharp_result": "unchecked",
+      "why": "VID_2DAE is a new-style id (:83). The product string has ' BL', not '-BL', so nothing is stripped from the name (:128)."
+    },
+    {
+      "test": "DetectBoardTest1",
+      "lines": "103-117",
+      "port": "com1",
+      "devices": [
+        { "board": "fmuv2-bl", "description": "", "hardwareid": "USB\\VID_1209&PID_5740", "name": "" }
+      ],
+      "csharp_asserts": { "equals": "px4v2" },
+      "device_rules": { "board": "px4v2" },
+      "csharp_result": "passes",
+      "why": "1209:5740 is a new-style id (:85) and 'fmuv2-bl' lower-cased is px4v2 (:87)."
+    },
+    {
+      "test": "DetectBoardTest2",
+      "lines": "119-133",
+      "port": "com1",
+      "devices": [
+        { "board": "CubeBlack", "description": "", "hardwareid": "USB\\VID_2DAE&PID_0016", "name": "" }
+      ],
+      "csharp_asserts": { "equals": "chbootloader" },
+      "device_rules": { "board": "chbootloader", "chbootloader": "CubeBlack" },
+      "csharp_result": "passes",
+      "why": "VID_2DAE is a new-style id (:83) and 'CubeBlack' is not fmuv2/3/4, so it is a ChibiOS bootloader named CubeBlack (:128-129)."
+    },
+    {
+      "test": "DetectBoardTest3",
+      "lines": "135-149",
+      "port": "com1",
+      "devices": [
+        { "board": "PX4 BL FMU v2.x", "description": "", "hardwareid": "USB\\VID_2341&PID_0010", "name": "" },
+        { "board": "PX4 FMU v2.x", "description": "", "hardwareid": "USB\\VID_2341&PID_0010", "name": "" }
+      ],
+      "csharp_asserts": { "equals": "chbootloader" },
+      "device_rules": { "probe": "fmu_v2_or_v3" },
+      "csharp_result": "fails",
+      "why": "The second device's 'PX4 FMU v2.x' reaches the replug prompt (:148-150). In the test process that throws into the catch at :194, and the question at :412-413 then throws out of DetectBoard. In the application the probe returns px4v3, px4v2 or none (:169-189). No path in DetectBoard returns chbootloader for 2341:0010."
+    },
+    {
+      "test": "DetectBoardTest4",
+      "lines": "151-165",
+      "port": "com1",
+      "devices": [
+        { "board": "PX4 BL FMU v2.x", "description": "", "hardwareid": "USB\\VID_26AC&PID_0010", "name": "" },
+        { "board": "PX4 FMU v2.x", "description": "", "hardwareid": "USB\\VID_26AC&PID_0010", "name": "" }
+      ],
+      "csharp_asserts": { "equals": "chbootloader" },
+      "device_rules": { "probe": "fmu_v2_or_v3" },
+      "csharp_result": "fails",
+      "why": "As DetectBoardTest3: 'PX4 FMU v2.x' is the replug prompt, whatever the id. From WMI 26AC:0010 would be px4 (:222-230), not chbootloader, but the list decides first."
+    },
+    {
+      "test": "DetectBoardTest5",
+      "lines": "167-180",
+      "port": "com1",
+      "devices": [
+        { "board": "PX4 BL FMU v5.x", "description": "", "hardwareid": "USB\\VID_26AC&PID_0032", "name": "" },
+        { "board": "PX4 FMU v5.x", "description": "", "hardwareid": "USB\\VID_26AC&PID_0032", "name": "" }
+      ],
+      "csharp_asserts": { "equals": "chbootloader" },
+      "device_rules": { "board": "fmuv5" },
+      "csharp_result": "fails",
+      "why": "The second device's 'PX4 FMU v5.x' is fmuv5 (:132-137), returned before WMI is read. The chbootloader the test expects is the WMI rule for 26AC:0032 (:231-240), which the list rule pre-empts."
+    },
+    {
+      "test": "DetectBoardTest6",
+      "lines": "182-199",
+      "port": "com1",
+      "devices": [
+        { "board": "PX4 BL FMU v3.x", "description": "", "hardwareid": "USB\\VID_26AC&PID_0011", "name": "" },
+        { "board": "PX4 FMU v3.x", "description": "", "hardwareid": "USB\\VID_26AC&PID_0011", "name": "" }
+      ],
+      "csharp_asserts": { "equals": "chbootloader" },
+      "device_rules": { "probe": "fmu_v2_or_v3" },
+      "csharp_result": "fails",
+      "why": "'PX4 FMU v3.x' is the replug prompt (:148), as in DetectBoardTest3."
+    },
+    {
+      "test": "DetectBoardTest7",
+      "lines": "201-220",
+      "port": "com1",
+      "devices": [
+        { "board": "", "description": "chibios or normal px4", "hardwareid": "USB\\VID_0483&PID_5740", "name": "" }
+      ],
+      "csharp_asserts": { "equals": "chbootloader" },
+      "device_rules": { "board": "chbootloader", "chbootloader": "" },
+      "csharp_result": "passes",
+      "why": "0483:5740 is a new-style id (:82); an empty product string is no known board, so it is a ChibiOS bootloader with an empty name (:128-129)."
+    },
+    {
+      "test": "DetectBoardTest8",
+      "lines": "222-245",
+      "port": "com1",
+      "devices": [
+        { "board": "PX4 BL FMU v2.x", "description": "chibios or normal px4", "hardwareid": "USB\\VID_26AC&PID_0011", "name": "" },
+        { "board": "PX4 FMU v2.x", "description": "chibios or normal px4", "hardwareid": "USB\\VID_26AC&PID_0011", "name": "" }
+      ],
+      "csharp_asserts": { "equals": "chbootloader" },
+      "device_rules": { "probe": "fmu_v2_or_v3" },
+      "csharp_result": "fails",
+      "why": "'PX4 FMU v2.x' is the replug prompt (:148), as in DetectBoardTest3. The description is never read."
+    },
+    {
+      "test": "DetectBoardTest9",
+      "lines": "247-264",
+      "port": "com1",
+      "devices": [
+        { "board": "", "description": "chibios or normal px4", "hardwareid": "USB\\VID_1209&PID_5740", "name": "" }
+      ],
+      "csharp_asserts": { "equals": "chbootloader" },
+      "device_rules": { "board": "chbootloader", "chbootloader": "" },
+      "csharp_result": "passes",
+      "why": "1209:5740 is a new-style id (:85), and as DetectBoardTest7."
+    }
+  ]
+}
