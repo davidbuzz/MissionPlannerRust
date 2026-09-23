@@ -1,5 +1,6 @@
 //! TCP and UDP transports.
 
+use std::fmt::Write as _;
 use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs, UdpSocket};
 use std::time::Duration;
@@ -10,7 +11,8 @@ use crate::{DEFAULT_READ_TIMEOUT, OpenError, Transport};
 #[derive(Debug)]
 pub struct TcpTransport {
     stream: TcpStream,
-    peer: String,
+    /// `tcp:<peer>`, kept ready for [`Transport::description`]. A TCP peer cannot change.
+    description: String,
     open: bool,
 }
 
@@ -55,12 +57,12 @@ impl TcpTransport {
         stream
             .set_read_timeout(Some(DEFAULT_READ_TIMEOUT))
             .map_err(|e| OpenError::io("setting read timeout", e))?;
-        let peer = stream
+        let description = stream
             .peer_addr()
-            .map_or_else(|_| "unknown".to_owned(), |a| a.to_string());
+            .map_or_else(|_| "tcp:unknown".to_owned(), |a| format!("tcp:{a}"));
         Ok(Self {
             stream,
-            peer,
+            description,
             open: true,
         })
     }
@@ -88,8 +90,8 @@ impl Transport for TcpTransport {
         })
     }
 
-    fn description(&self) -> String {
-        format!("tcp:{}", self.peer)
+    fn description(&self) -> &str {
+        &self.description
     }
 
     fn is_open(&self) -> bool {
@@ -115,8 +117,17 @@ pub struct UdpTransport {
     socket: UdpSocket,
     peer: Option<SocketAddr>,
     local: String,
+    /// `udp:<local> <-> <peer>`, or `udp:<local> (no peer yet)`, kept ready for
+    /// [`Transport::description`] and rewritten in place when the peer changes.
+    description: String,
     open: bool,
 }
+
+/// The most text a peer's address can print as: a scoped IPv6 address and a port. The
+/// description's buffer is sized for it at bind, so hearing from a new peer - in `read`, on the
+/// ingest path - never allocates, even with two vehicles taking turns on one port.
+const LONGEST_PEER: usize =
+    "[ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255%4294967295]:65535".len();
 
 impl UdpTransport {
     /// Binds a local port.
@@ -129,17 +140,39 @@ impl UdpTransport {
         let local = socket
             .local_addr()
             .map_or_else(|_| "unknown".to_owned(), |a| a.to_string());
-        Ok(Self {
+        let description = String::with_capacity("udp: <-> ".len() + local.len() + LONGEST_PEER);
+        let mut transport = Self {
             socket,
             peer: None,
             local,
+            description,
             open: true,
-        })
+        };
+        transport.describe();
+        Ok(transport)
     }
 
     /// Sets the peer explicitly, for the case where we must speak first.
     pub fn set_peer(&mut self, peer: SocketAddr) {
-        self.peer = Some(peer);
+        self.learn(peer);
+    }
+
+    /// Replies go to `peer` from now on, and the description says so.
+    fn learn(&mut self, peer: SocketAddr) {
+        if self.peer != Some(peer) {
+            self.peer = Some(peer);
+            self.describe();
+        }
+    }
+
+    /// Rewrites the description in the buffer sized at bind.
+    fn describe(&mut self) {
+        self.description.clear();
+        // Writing to a `String` cannot fail.
+        let _ = match self.peer {
+            Some(peer) => write!(self.description, "udp:{} <-> {peer}", self.local),
+            None => write!(self.description, "udp:{} (no peer yet)", self.local),
+        };
     }
 
     /// The peer learned so far, if any.
@@ -153,7 +186,7 @@ impl Transport for UdpTransport {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self.socket.recv_from(buf) {
             Ok((n, from)) => {
-                self.peer = Some(from);
+                self.learn(from);
                 Ok(n)
             }
             Err(e) if is_timeout(&e) => Ok(0),
@@ -170,11 +203,8 @@ impl Transport for UdpTransport {
         self.socket.send_to(buf, peer).map(|_| ())
     }
 
-    fn description(&self) -> String {
-        match self.peer {
-            Some(peer) => format!("udp:{} <-> {peer}", self.local),
-            None => format!("udp:{} (no peer yet)", self.local),
-        }
+    fn description(&self) -> &str {
+        &self.description
     }
 
     fn is_open(&self) -> bool {

@@ -33,10 +33,15 @@
 //! Three message types allocate by design, in [`EXCLUDED`] with the reason for each. They are
 //! events a person reads, not telemetry: a parameter arriving, the vehicle saying something, the
 //! vehicle answering a command. Each is bounded per frame, and the test fails if one stops
-//! allocating, so the list cannot outlive its reasons. Two further costs are not per packet and
-//! are reported separately: the transport's description on each publish, and parameter gap
-//! recovery, which runs on a timer - and only inside a download the caller started, which this
-//! test never does, so here it must not run at all.
+//! allocating, so the list cannot outlive its reasons.
+//!
+//! Nothing else is allowed, publishing included. The link asks the transport for its description
+//! on every publish, to notice a UDP link learning its peer; `Transport::description` lends its
+//! text, so asking costs nothing, and the cost is charged to the packet like everything else the
+//! loop does. [`an_allocating_description_is_caught`] proves a description that allocates again
+//! would fail this test. One further cost is not per packet and is reported separately: parameter
+//! gap recovery, which runs on a timer - and only inside a download the caller started, which
+//! this test never does, so here it must not run at all.
 
 // A global allocator is an `unsafe impl` by definition: `GlobalAlloc`'s contract cannot be
 // stated in safe Rust. This is a test binary; `mp-link`'s own source forbids `unsafe`.
@@ -47,6 +52,7 @@
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 use std::collections::BTreeMap;
+use std::hint::black_box;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -126,8 +132,9 @@ struct Excluded {
     why: &'static str,
 }
 
-/// Everything allowed to allocate per packet. Kept short and named on purpose; a new entry needs
-/// a reason as good as these.
+/// Everything allowed to allocate per packet: these three message types, and nothing else - not
+/// the publish, and not the transport's description the link asks for on each one. Kept short and
+/// named on purpose; a new entry needs a reason as good as these.
 const EXCLUDED: &[Excluded] = &[
     Excluded {
         msgid: 22,
@@ -188,7 +195,8 @@ struct Probe {
     gap_recovery: BTreeMap<u32, (u64, u64)>,
     /// Message ids the link wrote during the measured pass.
     written: BTreeMap<u32, u64>,
-    /// Publishes in the measured pass, and what `Transport::description` allocated during them.
+    /// Publishes in the measured pass, counted as the link's calls to `Transport::description`,
+    /// which it makes once per publish; and what those calls allocated.
     publishes: u64,
     description_allocations: u64,
     measured_frames: u64,
@@ -219,6 +227,9 @@ struct FramePerRead {
     /// What `description` allocated since the last read. `description` takes `&self`.
     description_cost: Cell<u64>,
     description_calls: Cell<u64>,
+    /// Makes `description` allocate as it did when the trait returned a `String`, to prove this
+    /// test notices.
+    allocating_description: bool,
     wrote_param_request: bool,
     /// When the first frame of the measured pass was served.
     measured_from: Option<Instant>,
@@ -238,7 +249,9 @@ impl FramePerRead {
         probe.measured_frames += 1;
         probe.publishes += publishes;
         probe.description_allocations += description;
-        let packet = spent - description;
+        // The description's cost stays in: asking for it is part of publishing, and publishing is
+        // part of every packet here.
+        let packet = spent;
         if wrote_param_request {
             let entry = probe.gap_recovery.entry(msgid).or_default();
             entry.0 += 1;
@@ -298,10 +311,14 @@ impl Transport for FramePerRead {
         Ok(())
     }
 
-    fn description(&self) -> String {
+    fn description(&self) -> &str {
         // Counted, deliberately: this is the production transport's cost, paid on the link
         // thread each time the link calls it.
         let before = allocations_so_far();
+        if self.allocating_description {
+            // What asking cost when the trait returned an owned `String`.
+            black_box(self.replay.description().to_owned());
+        }
         let text = self.replay.description();
         self.description_cost
             .set(self.description_cost.get() + allocations_so_far() - before);
@@ -367,7 +384,7 @@ fn recording_path(name: &str) -> PathBuf {
 }
 
 /// Runs one recording through a real link, twice, and returns what the second pass cost.
-fn run(name: &str, bytes: Vec<u8>) -> (Probe, usize) {
+fn run(name: &str, bytes: Vec<u8>, allocating_description: bool) -> (Probe, usize) {
     let frames = frames_of(&bytes);
     let count = frames.len();
     let probe = Arc::new(Mutex::new(Probe::default()));
@@ -382,6 +399,7 @@ fn run(name: &str, bytes: Vec<u8>) -> (Probe, usize) {
         mark: 0,
         description_cost: Cell::new(0),
         description_calls: Cell::new(0),
+        allocating_description,
         wrote_param_request: false,
         measured_from: None,
         open: true,
@@ -445,7 +463,7 @@ fn the_real_link_thread_allocates_nothing_per_telemetry_packet() {
     let mut excluded_seen: BTreeMap<u32, (u64, u64)> = BTreeMap::new();
 
     for (name, bytes) in fixture_tlogs() {
-        let (probe, count) = run(&name, bytes);
+        let (probe, count) = run(&name, bytes, false);
         assert_eq!(
             probe.measured_frames, count as u64,
             "{name}: every served frame of the measured pass must be accounted for"
@@ -453,6 +471,26 @@ fn the_real_link_thread_allocates_nothing_per_telemetry_packet() {
         assert!(
             count >= 10_000,
             "{name}: only {count} frames; is the fixture truncated?"
+        );
+
+        // Every packet paid for a publish and a heartbeat, and each publish asked the transport
+        // how it describes itself (`run_link`, mp-link/src/lib.rs), to notice a UDP link learning
+        // its peer. Asking is free. Checked first and by name, so a regression says where it is;
+        // the rule below would catch it anyway, on every message type.
+        assert!(
+            probe.publishes >= count as u64,
+            "{name}: the link must publish, and ask for the description, every iteration in this \
+             test"
+        );
+        assert!(
+            probe.written.get(&HEARTBEAT).copied().unwrap_or(0) >= count as u64,
+            "{name}: the link must send a heartbeat every iteration in this test: {:?}",
+            probe.written
+        );
+        assert_eq!(
+            probe.description_allocations, 0,
+            "{name}: Transport::description allocated {} times over {} publishes",
+            probe.description_allocations, probe.publishes
         );
 
         // The rule: zero, for everything not excluded by name.
@@ -507,29 +545,6 @@ fn the_real_link_thread_allocates_nothing_per_telemetry_packet() {
             probe.measured_elapsed
         );
 
-        // KNOWN: `run_link`'s publish block (mp-link/src/lib.rs:1367) calls
-        // `Transport::description()` on every publish, to notice a UDP peer changing. The trait
-        // returns an owned `String`, so each publish allocates: once, or twice when `format!`
-        // outgrows its capacity estimate, as it does for `ReplayTransport`'s
-        // "file:<name> (<n> bytes)" (mp-transport/src/replay.rs:152). Per publish (50 Hz by
-        // default), not per packet; removing it means changing the `Transport` trait.
-        assert!(
-            probe.publishes >= count as u64,
-            "{name}: the link must publish every iteration in this test"
-        );
-        assert!(
-            probe.written.get(&HEARTBEAT).copied().unwrap_or(0) >= count as u64,
-            "{name}: the link must send a heartbeat every iteration in this test: {:?}",
-            probe.written
-        );
-        assert!(
-            probe.description_allocations >= probe.publishes
-                && probe.description_allocations <= 2 * probe.publishes,
-            "{name}: Transport::description cost {} allocations over {} publishes",
-            probe.description_allocations,
-            probe.publishes
-        );
-
         let clean: u64 = probe
             .per_msgid
             .iter()
@@ -574,5 +589,39 @@ fn the_real_link_thread_allocates_nothing_per_telemetry_packet() {
     assert!(
         frames_checked >= 20_000,
         "checked only {frames_checked} frames"
+    );
+}
+
+/// The rule above is only as good as its measurement, so prove it catches a description that
+/// allocates: the same link over the same recording, with `description` made to allocate once per
+/// ask. When the trait returned a `String` it cost two per publish; one is enough to be caught.
+#[test]
+fn an_allocating_description_is_caught() {
+    let (name, bytes) = fixture_tlogs().into_iter().next().unwrap();
+    let name = format!("allocating-description-{name}");
+    let (probe, count) = run(&name, bytes, true);
+
+    assert!(
+        probe.publishes >= count as u64,
+        "{name}: {}",
+        probe.publishes
+    );
+    assert!(
+        probe.description_allocations >= probe.publishes,
+        "{name}: {} publishes, but only {} allocations counted in Transport::description",
+        probe.publishes,
+        probe.description_allocations
+    );
+    // Charged to the packet it was published after, so the per-packet rule fails for every
+    // message type, not only the three excluded ones.
+    let unnoticed: Vec<(u32, Cost)> = probe
+        .per_msgid
+        .iter()
+        .filter(|(_, cost)| cost.allocations < cost.frames)
+        .map(|(msgid, cost)| (*msgid, *cost))
+        .collect();
+    assert!(
+        unnoticed.is_empty(),
+        "{name}: message types whose packets were not charged for the description: {unnoticed:?}"
     );
 }

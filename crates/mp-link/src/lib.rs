@@ -325,7 +325,7 @@ impl Link {
     pub fn from_transport(transport: Box<dyn Transport>, config: LinkConfig) -> Self {
         let shared = Arc::new(Shared::default());
         shared.running.store(true, Ordering::Release);
-        let description = transport.description();
+        let description = transport.description().to_owned();
         shared
             .description
             .lock()
@@ -1364,9 +1364,12 @@ fn run_link(
         if last_publish.elapsed() >= config.publish_interval {
             registry.publish_all();
             if let Ok(mut description) = shared.description.lock() {
+                // Borrowed, so asking is free; the text is copied only when it changed - a UDP
+                // link learning its peer - and then into the buffer the old text had.
                 let current = transport.description();
-                if *description != current {
-                    *description = current;
+                if description.as_str() != current {
+                    description.clear();
+                    description.push_str(current);
                 }
             }
             stats.publishes += 1;

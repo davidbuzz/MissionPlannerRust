@@ -3332,7 +3332,9 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "flate2",
+ "mp-transport",
  "serde_json",
+ "serialport",
  "thiserror 2.0.20",
 ]
 

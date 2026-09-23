@@ -13,10 +13,12 @@
 //! Three details are transliterated rather than improved, because the bootloader on the other end
 //! is not going to change to suit us. Each is marked where it appears.
 
+pub mod detect;
 pub mod firmware;
 pub mod protocol;
 pub mod uploader;
 
+pub use detect::{Boards, Detected, DeviceInfo, detect_board, match_ports};
 pub use firmware::Firmware;
 pub use protocol::{Code, Info};
 pub use uploader::{Uploader, UploaderError};

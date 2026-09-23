@@ -102,10 +102,12 @@ fn main() -> std::process::ExitCode {
         },
         Some("firmware") => match (args.get(1).map(String::as_str), args.get(2)) {
             (Some("info"), Some(path)) => firmware_info(path),
+            (Some("detect"), Some(port)) => firmware_detect(port),
             _ => {
                 eprintln!(
                     "usage:\n  \
-                     mpr firmware info <file.apj>   describe a firmware file and its CRC\n\n\
+                     mpr firmware info <file.apj>   describe a firmware file and its CRC\n  \
+                     mpr firmware detect <port>     name the board from its USB ids, opening nothing\n\n\
                      Flashing is not offered here. It can brick a board and has no simulator, so\n\
                      it goes through the GUI where the board it is about to write to is on screen."
                 );
@@ -158,6 +160,7 @@ fn usage() {
          mpr fields <log.bin>        list what a dataflash log can plot
   mpr kml <log> <out.kml>     export a flown path for Google Earth
   mpr firmware info <file>    describe a .apj firmware file
+  mpr firmware detect <port>  name the board from its USB ids
   mpr ports                   list serial ports\n\n\
          url forms:\n  \
          serial:/dev/ttyACM0:115200\n  \
@@ -1303,6 +1306,61 @@ fn is_url(argument: &str) -> bool {
         || argument.starts_with("/dev/")
 }
 
+/// Names the board as Mission Planner's `BoardDetect.DetectBoard` would from USB descriptors alone.
+///
+/// Runs the two steps of `DetectBoard` that read only the enumeration - the device list, then the
+/// `Win32_SerialPort` table built from the same ports - and opens nothing. What the C# does after
+/// them is said, not done: its replug probe and STK500 probes write to the port, and the rest are
+/// questions for the operator.
+fn firmware_detect(port: &str) -> std::process::ExitCode {
+    let ports = mp_transport::list_ports();
+    print!("{}", detect_report(port, &ports));
+    std::process::ExitCode::SUCCESS
+}
+
+/// The text `mpr firmware detect` prints for an enumeration.
+fn detect_report(port: &str, ports: &[mp_transport::PortInfo]) -> String {
+    use mp_firmware::detect::{DeviceInfo, Probe, Verdict, match_ports};
+    use std::fmt::Write as _;
+
+    // The USB devices, which are the ones Mission Planner's device list holds.
+    let mut out = String::new();
+    for (listed, device) in ports
+        .iter()
+        .filter_map(|listed| Some((listed, DeviceInfo::from_port(listed)?)))
+    {
+        let _ = writeln!(
+            out,
+            "  {}  {}  {}",
+            listed.name,
+            device.hardwareid.as_deref().unwrap_or_default(),
+            device.board.as_deref().unwrap_or_default()
+        );
+    }
+    // Every device counts, not just the one on `port`: the C# compares none of them with it.
+    let _ = match match_ports(port, ports) {
+        Verdict::Board(found) => match found.chbootloader {
+            Some(name) => writeln!(out, "detected: {} ({name})", found.board),
+            None => writeln!(out, "detected: {}", found.board),
+        },
+        Verdict::Probe(probe) => writeln!(
+            out,
+            "probe: Mission Planner would ask for a replug and read the bootloader's board id \
+             for 30 s, to tell {} (not done here)",
+            match probe {
+                Probe::FmuV2OrV3 => "px4v3 from px4v2",
+                Probe::ChibiosOrPx4 => "px4v3, fmuv5 and px4v2 apart",
+            }
+        ),
+        Verdict::NoMatch => writeln!(
+            out,
+            "not recognised from USB ids: Mission Planner would go on to ask, and to probe {port} \
+             for an STK500 bootloader (not done here)"
+        ),
+    };
+    out
+}
+
 /// Describes a firmware file without touching any hardware.
 ///
 /// Read-only on purpose. Flashing is the one operation in this application that can leave a
@@ -1354,4 +1412,77 @@ fn firmware_info(path: &str) -> std::process::ExitCode {
         );
     }
     std::process::ExitCode::SUCCESS
+}
+
+#[cfg(test)]
+mod tests {
+    use super::detect_report;
+    use mp_transport::PortInfo;
+
+    fn usb(name: &str, vid: u16, pid: u16, product: &str) -> PortInfo {
+        PortInfo {
+            name: name.to_owned(),
+            vid: Some(vid),
+            pid: Some(pid),
+            serial_number: None,
+            manufacturer: None,
+            product: Some(product.to_owned()),
+        }
+    }
+
+    #[test]
+    fn detect_names_a_chibios_bootloader_from_its_product_string() {
+        let report = detect_report(
+            "/dev/ttyACM0",
+            &[usb("/dev/ttyACM0", 0x2dae, 0x1016, "CubeOrange-BL")],
+        );
+        assert_eq!(
+            report,
+            "  /dev/ttyACM0  USB\\VID_2DAE&PID_1016  CubeOrange-BL\n\
+             detected: chbootloader (CubeOrange)\n"
+        );
+    }
+
+    #[test]
+    fn detect_says_what_it_does_not_do() {
+        let probe = detect_report(
+            "/dev/ttyACM0",
+            &[usb("/dev/ttyACM0", 0x26ac, 0x0011, "PX4 FMU v2.x")],
+        );
+        assert!(
+            probe.ends_with("to tell px4v3 from px4v2 (not done here)\n"),
+            "{probe}"
+        );
+
+        let unknown = detect_report(
+            "/dev/ttyUSB0",
+            &[usb("/dev/ttyUSB0", 0x0403, 0x6001, "FT232R")],
+        );
+        assert!(
+            unknown.contains("probe /dev/ttyUSB0 for an STK500 bootloader (not done here)"),
+            "{unknown}"
+        );
+        assert!(detect_report("COM3", &[]).starts_with("not recognised"));
+    }
+
+    #[test]
+    fn detect_reports_a_board_named_by_its_usb_id_alone() {
+        let report = detect_report("COM5", &[usb("COM5", 0x27ac, 0x1151, "VRBRAIN")]);
+        assert!(report.ends_with("detected: vrbrainv51\n"), "{report}");
+    }
+
+    #[test]
+    fn detect_lists_only_usb_devices_and_is_not_stopped_by_the_rest() {
+        let report = detect_report(
+            "COM4",
+            &[
+                PortInfo::bare("COM1".to_owned()),
+                usb("COM4", 0x1209, 0x5740, "fmuv3"),
+            ],
+        );
+        assert_eq!(
+            report,
+            "  COM4  USB\\VID_1209&PID_5740  fmuv3\ndetected: px4v3\n"
+        );
+    }
 }

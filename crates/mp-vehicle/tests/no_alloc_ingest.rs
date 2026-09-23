@@ -3,10 +3,12 @@
 //! The path is the one the link thread runs (`mp-link/src/lib.rs`, `run_link`), stage for stage:
 //! a transport read, [`FrameDecoder::push_and_drain`], [`MavMessage::decode`], then
 //! [`VehicleRegistry::apply`] with the frame's system, component and sequence; on the publish
-//! cadence [`VehicleRegistry::publish_all`]; and on the reading side [`StateHandle::load`], which
-//! is what a UI frame calls. The transport is the production `file:` one, [`ReplayTransport`], over
-//! every recorded flight in `testdata/mavlink`. What a reader sees at the end is checked against
-//! the working state, so the test cannot pass by publishing nothing.
+//! cadence [`VehicleRegistry::publish_all`], then [`Transport::description`] compared with the
+//! text the link last showed, as the link does to notice a UDP link learning its peer; and on the
+//! reading side [`StateHandle::load`], which is what a UI frame calls. The transport is the
+//! production `file:` one, [`ReplayTransport`], over every recorded flight in `testdata/mavlink`.
+//! What a reader sees at the end is checked against the working state, so the test cannot pass by
+//! publishing nothing.
 //!
 //! # Steady state
 //!
@@ -174,6 +176,8 @@ struct Pass {
     in_decode: u64,
     in_apply: u64,
     in_publish: u64,
+    /// Asking the transport for its description on each publish, and keeping a changed one.
+    in_describe: u64,
     in_load: u64,
 }
 
@@ -186,11 +190,13 @@ struct Pass {
 /// held by the reader from two publishes ago, and a third to write into.
 ///
 /// `apply_allocations_by_msgid` is indexed by message id and sized before the measured window, so
-/// attributing an allocation to a message type does not itself allocate.
+/// attributing an allocation to a message type does not itself allocate. `shown` is the
+/// description the link last published for the UI.
 fn ingest(
     transport: &mut ReplayTransport,
     decoder: &mut FrameDecoder,
     registry: &mut VehicleRegistry,
+    shown: &mut String,
     readers: &[StateHandle],
     held: &mut Option<Arc<VehicleState>>,
     apply_allocations_by_msgid: &mut [u64],
@@ -223,6 +229,17 @@ fn ingest(
         registry.publish_all();
         pass.in_publish += allocations_so_far() - before;
         pass.publishes += 1;
+
+        // With each publish the link asks the transport how it describes itself, and keeps the
+        // text only if it changed (`run_link`, mp-link/src/lib.rs). The text is lent, so asking
+        // must cost nothing.
+        let before = allocations_so_far();
+        let current = transport.description();
+        if shown.as_str() != current {
+            shown.clear();
+            shown.push_str(current);
+        }
+        pass.in_describe += allocations_so_far() - before;
 
         if pass.publishes % 2 == 1 {
             continue;
@@ -273,11 +290,14 @@ fn replaying_every_fixture_tlog_into_vehicle_state_allocates_nothing_per_packet(
         let mut registry = VehicleRegistry::new();
         let mut held = None;
         let mut by_msgid = vec![0u64; highest as usize + 1];
+        // What the link shows for the UI; the first publish fills it, as the link's connect does.
+        let mut shown = String::new();
 
         let first = ingest(
             &mut warm_up,
             &mut decoder,
             &mut registry,
+            &mut shown,
             &[],
             &mut held,
             &mut by_msgid,
@@ -296,6 +316,7 @@ fn replaying_every_fixture_tlog_into_vehicle_state_allocates_nothing_per_packet(
             &mut warm_readers,
             &mut decoder,
             &mut registry,
+            &mut shown,
             &readers,
             &mut held,
             &mut by_msgid,
@@ -307,6 +328,7 @@ fn replaying_every_fixture_tlog_into_vehicle_state_allocates_nothing_per_packet(
                 &mut measured,
                 &mut decoder,
                 &mut registry,
+                &mut shown,
                 &readers,
                 &mut held,
                 &mut by_msgid,
@@ -329,6 +351,11 @@ fn replaying_every_fixture_tlog_into_vehicle_state_allocates_nothing_per_packet(
         assert_eq!(
             heap.frees, 0,
             "{name}: the ingest path freed memory in steady state: {pass:?}"
+        );
+        assert_eq!(
+            shown,
+            measured.description(),
+            "{name}: what the UI is shown is not the transport's description"
         );
 
         // The replay is identical each time, so the two must agree on what they saw. Anything else

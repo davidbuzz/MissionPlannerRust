@@ -242,8 +242,8 @@ impl Transport for LoopbackEnd {
         Ok(())
     }
 
-    fn description(&self) -> String {
-        self.name.clone()
+    fn description(&self) -> &str {
+        &self.name
     }
 
     fn is_open(&self) -> bool {

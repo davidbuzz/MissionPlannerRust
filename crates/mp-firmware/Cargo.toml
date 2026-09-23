@@ -17,3 +17,9 @@ thiserror.workspace = true
 serde_json.workspace = true
 base64.workspace = true
 flate2.workspace = true
+# Board detection probes ports through the same transport the link uses, and reads its PortInfo.
+mp-transport.workspace = true
+
+[dev-dependencies]
+# For TTYPort::pair(): the bootloader probe is run over a real serial port on a pseudo-terminal.
+serialport = { version = "4.10", default-features = false }

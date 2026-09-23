@@ -111,7 +111,14 @@ pub struct SerialTransport {
     port: Box<dyn serialport::SerialPort>,
     name: String,
     baud: u32,
+    /// `serial:<path>:<baud>`, kept ready for [`Transport::description`].
+    description: String,
     open: bool,
+}
+
+/// What a serial port is called: its path and the rate it runs at.
+fn describe(name: &str, baud: u32) -> String {
+    format!("serial:{name}:{baud}")
 }
 
 impl std::fmt::Debug for SerialTransport {
@@ -149,6 +156,7 @@ impl SerialTransport {
             port,
             name: path.to_owned(),
             baud,
+            description: describe(path, baud),
             open: true,
         })
     }
@@ -164,6 +172,7 @@ impl SerialTransport {
     pub fn set_baud(&mut self, baud: u32) -> io::Result<()> {
         self.port.set_baud_rate(baud).map_err(io::Error::other)?;
         self.baud = baud;
+        self.description = describe(&self.name, baud);
         Ok(())
     }
 }
@@ -189,8 +198,8 @@ impl Transport for SerialTransport {
         })
     }
 
-    fn description(&self) -> String {
-        format!("serial:{}:{}", self.name, self.baud)
+    fn description(&self) -> &str {
+        &self.description
     }
 
     fn is_open(&self) -> bool {

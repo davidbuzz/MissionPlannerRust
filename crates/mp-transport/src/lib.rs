@@ -47,7 +47,11 @@ pub trait Transport: Send {
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()>;
 
     /// Human-readable description, shown in the UI and in logs.
-    fn description(&self) -> String;
+    ///
+    /// Borrowed, so asking costs nothing: the link asks on every snapshot publish, to notice a UDP
+    /// link learning its peer, and that path must not allocate (DELIVERABLES.md D5). A transport
+    /// keeps its text ready and rewrites it only when what it describes changes.
+    fn description(&self) -> &str;
 
     /// Whether the link is still usable.
     fn is_open(&self) -> bool;

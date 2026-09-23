@@ -17,8 +17,15 @@ pub struct ReplayTransport {
     data: Vec<u8>,
     pos: usize,
     chunk: usize,
-    name: String,
+    /// `file:<name> (<n> bytes)`, kept ready for [`Transport::description`]. The log is loaded
+    /// whole and never changes, so neither does this.
+    description: String,
     loop_forever: bool,
+}
+
+/// What a replay is called: the log's name and its size.
+fn describe(name: impl std::fmt::Display, len: usize) -> String {
+    format!("file:{name} ({len} bytes)")
 }
 
 impl ReplayTransport {
@@ -31,10 +38,10 @@ impl ReplayTransport {
         let data = std::fs::read(path)
             .map_err(|e| OpenError::io(format!("reading {}", path.display()), e))?;
         Ok(Self {
+            description: describe(path.display(), data.len()),
             data,
             pos: 0,
             chunk: Self::DEFAULT_CHUNK,
-            name: path.display().to_string(),
             loop_forever: false,
         })
     }
@@ -43,10 +50,10 @@ impl ReplayTransport {
     #[must_use]
     pub fn from_bytes(name: impl Into<String>, data: Vec<u8>) -> Self {
         Self {
+            description: describe(name.into(), data.len()),
             data,
             pos: 0,
             chunk: Self::DEFAULT_CHUNK,
-            name: name.into(),
             loop_forever: false,
         }
     }
@@ -148,8 +155,8 @@ impl Transport for ReplayTransport {
         Ok(())
     }
 
-    fn description(&self) -> String {
-        format!("file:{} ({} bytes)", self.name, self.data.len())
+    fn description(&self) -> &str {
+        &self.description
     }
 
     fn is_open(&self) -> bool {
