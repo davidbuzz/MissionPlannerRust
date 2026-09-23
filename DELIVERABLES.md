@@ -15,31 +15,31 @@ Reference clone: [referneces/zed](referneces/zed).
 
 | # | Layer | Deliverable | Priority | Linux | Windows | macOS | Testing |
 |---|---|---|---|---|---|---|---|
-| [D1](#d1-workspace-crate-graph-and-build-system) | 0 | Cargo workspace and crate graph | P0 | In progress | Not started | Not started | Unit |
-| [D2](#d2-mavlink-protocol-crate) | 0 | MAVLink protocol codec crate | P0 | In progress | Not started | Not started | Differential vs C# |
-| [D3](#d3-transport-layer) | 0 | Serial, TCP, UDP, BLE transports | P0 | In progress | Not started | Not started | Unit |
-| [D4](#d4-link-engine-the-mavlinkinterface-equivalent) | 0 | Link engine, protocol machines | P0 | In progress | Not started | Not started | Differential vs C# |
-| [D5](#d5-vehicle-state-model--telemetry-bus) | 0 | Vehicle state snapshot bus | P0 | In progress | Not started | Not started | Differential vs C# |
-| [D6](#d6-ui-kit-on-gpui) | 1 | gpui widget kit | P0 | In progress | Not started | Not started | Unit + layout |
-| [D7](#d7-gpu-render-core) | 1 | Shared wgpu render core | P0 | In progress | Not started | Not started | Unit + 3-OS paint smoke |
-| [D8](#d8-map-engine) | 2 | GPU slippy map engine | P0 | In progress | Not started | Not started | Unit + offline |
-| [D9](#d9-hud--primary-flight-display) | 2 | GPU HUD with video | P0 | In progress | Not started | Not started | Unit + SITL |
-| [D10](#d10-flight-data-screen) | 2 | Flight Data operations screen | P0 | In progress | Not started | Not started | Unit + SITL + hardware |
-| [D11](#d11-flight-planner-screen) | 2 | Mission and survey planner | P0 | In progress | Not started | Not started | Differential vs C# |
-| [D12](#d12-configuration--tuning-screens) | 2 | Parameter config and tuning | P1 | In progress | Not started | Not started | Unit + SITL |
-| [D13](#d13-initial-setup-calibration-and-firmware) | 2 | Setup, calibration, firmware flashing | P1 | In progress | Not started | Not started | Unit + SITL + hardware |
-| [D14](#d14-log-engine-and-analysis) | 2 | Dataflash log parsing, plots | P1 | In progress | Not started | Not started | Unit |
-| [D15](#d15-can-peripherals-and-outboard-features) | 2 | DroneCAN, peripherals, video, joystick | P2 | In progress | Not started | Not started | Unit |
-| [D16](#d16-extension-and-scripting-system) | 2 | Python scripting, WASM extensions | P2 | In progress | Not started | Not started | Unit |
-| [D17](#d17-localization-settings-and-data-compatibility) | 2 | i18n, settings, data compatibility | P1 | In progress | Not started | Not started | Unit |
-| [D18](#d18-translation-factory-and-porting-ledger) | 3 | Translation factory, file ledger | P0 | In progress | Not started | Not started | Unit |
-| [D19](#d19-verification-suite) | 3 | Differential, SITL, fuzz verification | P0 | In progress | Not started | Not started | Differential vs C# + fuzz |
-| [D20](#d20-release-packaging-and-operations) | 3 | Installers, updates, crash reporting | P1 | Not started | Not started | Not started | Not started |
-| [D21](#d21-native-in-process-plugin-host) | 2 | Native in-process plugin host | P3 | Not started | Not started | Not started | Not started |
+| [D1](#d1-workspace-crate-graph-and-build-system) | 0 | Cargo workspace and crate graph | P0 | In progress (70% completed est) | Not started | Not started | Unit |
+| [D2](#d2-mavlink-protocol-crate) | 0 | MAVLink protocol codec crate | P0 | In progress (80% completed est) | Not started | Not started | Differential vs C# |
+| [D3](#d3-transport-layer) | 0 | Serial, TCP, UDP, BLE transports | P0 | In progress (55% completed est) | Not started | Not started | Unit |
+| [D4](#d4-link-engine-the-mavlinkinterface-equivalent) | 0 | Link engine, protocol machines | P0 | In progress (70% completed est) | Not started | Not started | Differential vs C# |
+| [D5](#d5-vehicle-state-model--telemetry-bus) | 0 | Vehicle state snapshot bus | P0 | In progress (75% completed est) | Not started | Not started | Differential vs C# |
+| [D6](#d6-ui-kit-on-gpui) | 1 | gpui widget kit | P0 | In progress (35% completed est) | Not started | Not started | Unit + layout |
+| [D7](#d7-gpu-render-core) | 1 | Shared wgpu render core | P0 | In progress (40% completed est) | Not started | Not started | Unit + 3-OS paint smoke |
+| [D8](#d8-map-engine) | 2 | GPU slippy map engine | P0 | In progress (55% completed est) | Not started | Not started | Unit + offline |
+| [D9](#d9-hud--primary-flight-display) | 2 | GPU HUD with video | P0 | In progress (60% completed est) | Not started | Not started | Unit + SITL |
+| [D10](#d10-flight-data-screen) | 2 | Flight Data operations screen | P0 | In progress (60% completed est) | Not started | Not started | Unit + SITL + hardware |
+| [D11](#d11-flight-planner-screen) | 2 | Mission and survey planner | P0 | In progress (55% completed est) | Not started | Not started | Differential vs C# |
+| [D12](#d12-configuration--tuning-screens) | 2 | Parameter config and tuning | P1 | In progress (30% completed est) | Not started | Not started | Unit + SITL |
+| [D13](#d13-initial-setup-calibration-and-firmware) | 2 | Setup, calibration, firmware flashing | P1 | In progress (45% completed est) | Not started | Not started | Unit + SITL + hardware |
+| [D14](#d14-log-engine-and-analysis) | 2 | Dataflash log parsing, plots | P1 | In progress (50% completed est) | Not started | Not started | Unit |
+| [D15](#d15-can-peripherals-and-outboard-features) | 2 | DroneCAN, peripherals, video, joystick | P2 | In progress (15% completed est) | Not started | Not started | Unit |
+| [D16](#d16-extension-and-scripting-system) | 2 | Python scripting, WASM extensions | P2 | In progress (15% completed est) | Not started | Not started | Unit |
+| [D17](#d17-localization-settings-and-data-compatibility) | 2 | i18n, settings, data compatibility | P1 | In progress (50% completed est) | Not started | Not started | Unit |
+| [D18](#d18-translation-factory-and-porting-ledger) | 3 | Translation factory, file ledger | P0 | In progress (30% completed est) | Not started | Not started | Unit |
+| [D19](#d19-verification-suite) | 3 | Differential, SITL, fuzz verification | P0 | In progress (45% completed est) | Not started | Not started | Differential vs C# + fuzz |
+| [D20](#d20-release-packaging-and-operations) | 3 | Installers, updates, crash reporting | P1 | Spiked (5% completed est) | Not started | Not started | Not started |
+| [D21](#d21-native-in-process-plugin-host) | 2 | Native in-process plugin host | P3 | Not started (0% completed est) | Not started | Not started | Not started |
 
 **Layer** 0 = foundation (protocol/transport/state) · 1 = rendering and UI foundation · 2 = the application · 3 = the machine that builds the machine.
 **Priority** P0 = nothing ships without it · P1 = required for feature parity · P2 = required for 100% completeness, sequenced last · P3 = the last thing of all, after P2.
-**Linux / Windows / macOS** the implementation status on each operating system, one column each: Not started → Spiked → In progress → Feature complete → Done. A deliverable is brought up on Linux first and the other two columns say *Not started* until its `Tests:` artefacts have been run there; a CI matrix for all three exists in `.github/workflows/ci.yml` but has not run yet (no remote), so nothing is claimed for Windows or macOS.
+**Linux / Windows / macOS** the implementation status on each operating system, one column each: Not started → Spiked → In progress → Feature complete → Done. The Linux figure is an estimate of how much of the row's DoD is met, judged from its "Today" paragraph against its DoD and `Tests:` lines, revised at each documentation commit. A deliverable is brought up on Linux first and the other two columns say *Not started* until its `Tests:` artefacts have been run there; a CI matrix for all three exists in `.github/workflows/ci.yml` but has not run yet (no remote), so nothing is claimed for Windows or macOS.
 **Testing** Not started → Unit → Differential vs C# → Gated in CI → HIL signed off.
 
 ## Test policy (applies to all 20 deliverables)
@@ -301,7 +301,7 @@ The full parameter system — tree/list/advanced editors driven by parameter met
   SITL through the retrying set and reads it back. The SETUP and CONFIG screens are the C#'s
   backstage views: every `AddBackstageViewPage` call of `InitialSetup.cs` and `SoftwareConfig.cs`
   is a list entry with its conditions, headings open and close, the last page is remembered, and
-  pages not yet ported say so under their C# title (row 17). Since then Frame Type, Battery Monitor, Install Firmware, Radio Calibration, Motor Test, both compass pages, and the next three Mandatory Hardware pages - Servo Output (`ConfigRadioOutput.cs`: 16 or 32 rows, the bar from `SERVO_OUTPUT_RAW`, reversed/function/min/trim/max written as the `Mavlink*` controls write them, the 300 ms timer started only when not already running, `:154-160`), ESC Calibration (`ConfigESCCalibration.cs:28-45`: `ESC_CALIBRATION` = 3, the button disabled on success, the `MOT_PWM_*`/`MOT_SPIN_*` boxes) and Serial Ports (`ConfigSerial.cs`: one row per `SERIALn_BAUD`, speed/protocol/options with the Set Bitmask window, `SerialOptionRules.json`'s rules applied on a protocol change, `:382-430`; port names from `@SYS/uarts.txt` await the MAVFTP client) - each proved by a script writing then restoring a parameter on SITL (rows 20-27, 32; **6 done, 10 partial, 39 missing, 2 plumbing, 4 dropped**).
+  pages not yet ported say so under their C# title (row 17). Since then Frame Type, Battery Monitor, Install Firmware, Radio Calibration, Motor Test, both compass pages, and the next three Mandatory Hardware pages - Servo Output (`ConfigRadioOutput.cs`: 16 or 32 rows, the bar from `SERVO_OUTPUT_RAW`, reversed/function/min/trim/max written as the `Mavlink*` controls write them, the 300 ms timer started only when not already running, `:154-160`), ESC Calibration (`ConfigESCCalibration.cs:28-45`: `ESC_CALIBRATION` = 3, the button disabled on success, the `MOT_PWM_*`/`MOT_SPIN_*` boxes) and Serial Ports (`ConfigSerial.cs`: one row per `SERIALn_BAUD`, speed/protocol/options with the Set Bitmask window, `SerialOptionRules.json`'s rules applied on a protocol change, `:382-430`; port names from `@SYS/uarts.txt` await the MAVFTP client) - each proved by a script writing then restoring a parameter on SITL (rows 20-27, 32); and the CONFIG list's Planner page (`ConfigPlanner.cs`, 63 controls and 64 wirings: the display units through `mp_vehicle::units`, the telemetry rate combos sending `REQUEST_DATA_STREAM`, the speech prompt chains, map follow/no-fly, load-on-connect, the map access mode, the joystick window; the video, theme, language and layout controls dimmed with their reasons; row 33 - its keys still land in this application's own file rather than `config.xml`, a defect on the row) (**6 done, 11 partial, 38 missing, 2 plumbing, 4 dropped**).
   **Still owed:** the fixture is
   written from a reading of the C# source, not captured from a run of it; mono's float formatting
   diverges from .NET 4.7.2 (PLAN.md R5), so settling it needs the Windows runner §7.1 budgets.
