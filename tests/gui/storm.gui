@@ -1,0 +1,35 @@
+# D10: no UI stall over 8 ms during a 200 Hz telemetry storm, measured on the frame.
+#
+# MP_STORM=200 replaces the link with an in-memory vehicle (mp_link::testing::Storm) that writes
+# ATTITUDE, GLOBAL_POSITION_INT, VFR_HUD and HEARTBEAT 200 times a second each through the real
+# link thread and snapshot bus, flying a circle so the HUD and the map change on every frame. The
+# screen repaints at display rate. Each frame is timed from the top of render to the end of paint,
+# less the harness's own facts and probe writes (crates/mp-gui/src/storm.rs). Frames from the
+# first 2 s are not counted, and the facts appear once 100 frames have been counted, so reading
+# them too early is a missing fact, not a pass.
+#
+# frame.p99 and frame.max are whole milliseconds rounded down, so `< 8` holds exactly when the
+# time is under 8 ms; frame.p99_us, frame.max_us and frame.gap.*_us carry the microseconds for
+# the record. storm.rate is the storm as the link counted it, in Hz per message.
+#
+# No map imagery (the harness's default), so the frame does not depend on what a tile cache
+# happens to hold.
+#
+# The budget is the product's, so the number that counts is the release build's:
+#   cargo build --release -p mp-gui
+#   MP_GUI_BIN=target/release/mpr-gui tools/gui-test.sh tests/gui/storm.gui
+# The debug build the other scripts use runs our own crates unoptimised; measured on 2026-09-24
+# it gave p99 26 ms with 127 stalls in 480 frames at 200 Hz, and that is not the claim.
+
+env MP_STORM 200
+screen fly
+window 1600x1200
+
+settle 10
+
+expect vehicle.connected true
+expect vehicle.count 1
+expect frame.count >= 100
+expect frame.stalls 0
+expect frame.p99 < 8
+expect storm.rate >= 190

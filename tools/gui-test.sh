@@ -27,6 +27,7 @@
 #   expect status ~ saved       assert a fact contains a substring
 #   expect map.tiles.disk > 0   assert a fact is an integer greater than a value
 #   expect map.tiles.drawn >= 4 ... or at least a value
+#   expect frame.p99 < 8        ... or less than a value
 #   expect log.open true
 #
 # `env` and `setup` are for a test that needs the world arranged before the application starts -
@@ -50,7 +51,9 @@ shift
 [ -r "$SCRIPT" ] || { echo "cannot read $SCRIPT" >&2; exit 2; }
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BIN="$ROOT/target/debug/mpr-gui"
+# The debug binary, as every script runs against; MP_GUI_BIN names another, such as a release
+# build for a measurement whose number the debug build cannot stand for (tests/gui/storm.gui).
+BIN="${MP_GUI_BIN:-$ROOT/target/debug/mpr-gui}"
 WINDOW_TITLE="Mission Planner"
 [ -x "$BIN" ] || { echo "binary not built: $BIN" >&2; exit 1; }
 : "${DISPLAY:=:0}"
@@ -231,6 +234,7 @@ holds() {
     case "$2" in
         ">") [ "$1" -gt "$3" ] ;;
         ">=") [ "$1" -ge "$3" ] ;;
+        "<") [ "$1" -lt "$3" ] ;;
         *) return 1 ;;
     esac
 }
@@ -296,8 +300,8 @@ while IFS= read -r RAW; do
         expect)
             KEY="${2:?expect needs a key}"
             OP="${3:?expect needs a value}"
-            # `expect key value` is equality; `expect key ~ value` is containment; `expect key > n`
-            # and `expect key >= n` compare integers.
+            # `expect key value` is equality; `expect key ~ value` is containment; `expect key > n`,
+            # `expect key >= n` and `expect key < n` compare integers.
             if [ "$OP" = "~" ]; then
                 shift 3
                 WANT="$*"
@@ -309,7 +313,7 @@ while IFS= read -r RAW; do
                         FAILURES=$((FAILURES + 1))
                         ;;
                 esac
-            elif [ "$OP" = ">" ] || [ "$OP" = ">=" ]; then
+            elif [ "$OP" = ">" ] || [ "$OP" = ">=" ] || [ "$OP" = "<" ]; then
                 WANT="${4:-}"
                 GOT=$(fact "$KEY")
                 if ! [[ "$WANT" =~ ^-?[0-9]+$ ]]; then

@@ -67,6 +67,7 @@ pub mod messages;
 pub mod mission_transfer;
 pub mod param_download;
 pub mod requests;
+pub mod testing;
 pub mod timeouts;
 pub mod tlog;
 pub mod traffic;

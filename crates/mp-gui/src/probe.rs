@@ -125,6 +125,9 @@ pub fn measured(name: impl Into<String>, element: Div) -> Div {
     }
     let name = name.into();
     element.on_children_prepainted(move |children, _window, _cx| {
+        // Runs inside a frame, and is harness work a normal run does not do - a file rewritten
+        // whenever something moves - so a storm measurement leaves it out of the frame's cost.
+        let started = std::time::Instant::now();
         let Some(first) = children.first() else {
             return;
         };
@@ -147,6 +150,7 @@ pub fn measured(name: impl Into<String>, element: Div) -> Div {
                 height: bottom - top,
             },
         );
+        crate::storm::exclude(started.elapsed());
     })
 }
 

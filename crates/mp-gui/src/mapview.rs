@@ -57,6 +57,13 @@ pub struct MapViewport {
     drawn_points: usize,
     /// The vehicle's flight path in projected world coordinates.
     path: Vec<WebMercator>,
+    /// The rectangle `path` covers, widened as each point arrives.
+    ///
+    /// The automatic fit frames the whole path on every paint while the map follows the vehicle,
+    /// and finding that rectangle by scanning every point was nearly all of such a paint's CPU
+    /// time on a long track (`crates/mp-units/benches/pan_zoom.rs`, `fit_scan_1m`). The path only
+    /// grows, so its rectangle only widens, one point at a time.
+    path_extent: Option<Extent>,
     /// Where the vehicle is now, and which way it is pointing.
     vehicle: Option<(WebMercator, Bearing)>,
     /// Home, where the screen showing the map puts it: the planner's Home Location boxes, or the
@@ -116,6 +123,36 @@ pub struct MapViewport {
     /// only needs the delta so the difference does not show, but zooming to the cursor does: an
     /// uncorrected offset makes the map drift away from the pointer on every scroll.
     last_origin: (f32, f32),
+}
+
+/// The smallest rectangle holding a set of world points.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Extent {
+    min_x: f64,
+    max_x: f64,
+    min_y: f64,
+    max_y: f64,
+}
+
+impl Extent {
+    /// `extent` widened to hold `p`, or the rectangle of `p` alone. The same minimum and maximum,
+    /// point for point, as a scan of the whole set, whatever order the points came in.
+    fn grow(extent: Option<Self>, p: WebMercator) -> Self {
+        extent.map_or(
+            Self {
+                min_x: p.x,
+                max_x: p.x,
+                min_y: p.y,
+                max_y: p.y,
+            },
+            |e| Self {
+                min_x: e.min_x.min(p.x),
+                max_x: e.max_x.max(p.x),
+                min_y: e.min_y.min(p.y),
+                max_y: e.max_y.max(p.y),
+            },
+        )
+    }
 }
 
 /// A user-chosen view of the world.
@@ -202,6 +239,7 @@ impl MapViewport {
             phases: [Duration::ZERO; 4],
             drawn_points: 0,
             path: Vec::new(),
+            path_extent: None,
             vehicle: None,
             home: None,
             home_position: None,
@@ -311,6 +349,7 @@ impl MapViewport {
         });
         if moved {
             self.path.push(projected);
+            self.path_extent = Some(Extent::grow(self.path_extent, projected));
         }
     }
 
@@ -634,23 +673,24 @@ impl MapViewport {
             .home
             .filter(|home| self.vehicle.as_ref().is_none_or(|(v, _)| near(home, v)));
         let anchor = self.vehicle.as_ref().map(|(p, _)| *p).or(home);
-        let mission_in_view: Vec<&WebMercator> = self
+        let mission_in_view = self
             .mission
             .iter()
             .map(|(p, _)| p)
-            .filter(|p| anchor.is_none_or(|a| near(p, &a)))
-            .collect();
+            .filter(|p| anchor.is_none_or(|a| near(p, &a)));
 
-        let mut points = self.path.iter().chain(home.iter()).chain(mission_in_view);
-        let first = points.next().or(self.vehicle.as_ref().map(|(p, _)| p))?;
-        let (mut min_x, mut max_x) = (first.x, first.x);
-        let (mut min_y, mut max_y) = (first.y, first.y);
-        for p in points.chain(self.vehicle.as_ref().map(|(p, _)| p)) {
-            min_x = min_x.min(p.x);
-            max_x = max_x.max(p.x);
-            min_y = min_y.min(p.y);
-            max_y = max_y.max(p.y);
-        }
+        // The path's rectangle is kept as it grows; only the handful of points besides it are
+        // visited here.
+        let Extent {
+            min_x,
+            max_x,
+            min_y,
+            max_y,
+        } = home
+            .iter()
+            .chain(mission_in_view)
+            .chain(self.vehicle.as_ref().map(|(p, _)| p))
+            .fold(self.path_extent, |extent, p| Some(Extent::grow(extent, *p)))?;
 
         // About 400 m at the equator; enough context around a parked aircraft to be useful.
         const MIN_SPAN: f64 = 3.5e-6;
@@ -1946,5 +1986,116 @@ mod tests {
         let (x, y) = PIN_LABEL;
         assert!((x - PIN_HEAD.0).abs() < PIN_RADIUS);
         assert!((y - PIN_HEAD.1).abs() < PIN_RADIUS);
+    }
+
+    /// The automatic fit as it was before the path's rectangle was kept: a scan of every point.
+    /// The reference the kept rectangle has to match, and the cost it has to beat.
+    fn view_box_by_scanning(map: &MapViewport) -> Option<(f64, f64, f64, f64)> {
+        const FAR_AWAY: f64 = 0.02;
+        const MIN_SPAN: f64 = 3.5e-6;
+        let near = |p: &WebMercator, a: &WebMercator| {
+            (p.x - a.x).abs() < FAR_AWAY && (p.y - a.y).abs() < FAR_AWAY
+        };
+        // A far home is left out of the framing, as the fit leaves it out.
+        let home = map
+            .home
+            .filter(|home| map.vehicle.as_ref().is_none_or(|(v, _)| near(home, v)));
+        let anchor = map.vehicle.as_ref().map(|(p, _)| *p).or(home);
+        let mission_in_view: Vec<&WebMercator> = map
+            .mission
+            .iter()
+            .map(|(p, _)| p)
+            .filter(|p| anchor.is_none_or(|a| near(p, &a)))
+            .collect();
+        let mut points = map.path.iter().chain(home.iter()).chain(mission_in_view);
+        let first = points.next().or(map.vehicle.as_ref().map(|(p, _)| p))?;
+        let (mut min_x, mut max_x) = (first.x, first.x);
+        let (mut min_y, mut max_y) = (first.y, first.y);
+        for p in points.chain(map.vehicle.as_ref().map(|(p, _)| p)) {
+            min_x = min_x.min(p.x);
+            max_x = max_x.max(p.x);
+            min_y = min_y.min(p.y);
+            max_y = max_y.max(p.y);
+        }
+        let span = (max_x - min_x).max(max_y - min_y).max(MIN_SPAN) * 1.25;
+        let (cx, cy) = ((min_x + max_x) / 2.0, (min_y + max_y) / 2.0);
+        Some((cx - span / 2.0, cy - span / 2.0, span, span))
+    }
+
+    /// A survey flown south of Canberra, `points` long: lanes of a thousand reports each, every
+    /// one far enough from the last to be kept, as the link would report them.
+    fn fly_survey(map: &mut MapViewport, points: usize) {
+        for i in 0..points {
+            let (lane, along) = (i / 1000, i % 1000);
+            let along = if lane % 2 == 0 { along } else { 999 - along };
+            map.observe(
+                LatLon::new(
+                    -35.45 + lane as f64 * 1e-4 + (i as f64 * 0.37).sin() * 1e-6,
+                    149.10 + along as f64 * 1e-4,
+                )
+                .expect("valid position"),
+                Bearing(mp_units::Degrees(90.0)),
+            );
+        }
+    }
+
+    #[test]
+    fn the_kept_rectangle_frames_exactly_what_scanning_every_point_did() {
+        // Nothing observed: nothing to frame, either way.
+        let mut map = viewport();
+        assert_eq!(map.view_box(), None);
+        assert_eq!(view_box_by_scanning(&map), None);
+
+        // A mission alone, with no vehicle or home to judge distance from.
+        let near = LatLon::new(-35.40, 149.12).expect("valid position");
+        let far = LatLon::new(39.8, -105.1).expect("valid position");
+        map.set_mission(&[waypoint(1, near), waypoint(2, far)]);
+        assert_eq!(map.view_box(), view_box_by_scanning(&map));
+
+        // Then a home, then a flight: the far waypoint drops out of the framing, the near one
+        // stays in, and the rectangle matches the scan to the last bit at every step.
+        map.set_home(Some(LatLon::new(-35.363, 149.165).expect("valid position")));
+        assert_eq!(map.view_box(), view_box_by_scanning(&map));
+        for points in [1, 2, 1_000, 5_000] {
+            fly_survey(&mut map, points);
+            assert!(map.view_box().is_some());
+            assert_eq!(map.view_box(), view_box_by_scanning(&map), "{points}");
+        }
+        // A vehicle reporting the same place again adds no point to the path, and the fit still
+        // agrees with the scan.
+        let length = map.path_len();
+        let last = LatLon::from_web_mercator(*map.path.last().expect("flown")).expect("valid");
+        map.observe(last, Bearing(mp_units::Degrees(0.0)));
+        assert_eq!(map.path_len(), length);
+        assert_eq!(map.view_box(), view_box_by_scanning(&map));
+    }
+
+    #[test]
+    fn following_a_long_track_no_longer_scans_it_every_paint() {
+        // PLAN.md §13.3 row 8 measured the fit scan over a million points as nearly all of a
+        // following frame's CPU time. With the rectangle kept, the fit costs the same for a
+        // million points as for one. The fastest of several tries on each side, so a thread
+        // descheduled mid-call cannot decide the result.
+        let mut map = viewport();
+        fly_survey(&mut map, 1_000_000);
+        assert_eq!(map.path_len(), 1_000_000);
+        let fastest = |f: &dyn Fn() -> Option<(f64, f64, f64, f64)>, tries: usize| {
+            (0..tries)
+                .map(|_| {
+                    let started = Instant::now();
+                    std::hint::black_box(f());
+                    started.elapsed()
+                })
+                .min()
+                .unwrap_or_default()
+        };
+        let kept = fastest(&|| map.view_box(), 50);
+        let scanned = fastest(&|| view_box_by_scanning(&map), 5);
+        eprintln!("fit over 1,000,000 points: kept rectangle {kept:?}, scanning {scanned:?}");
+        assert_eq!(map.view_box(), view_box_by_scanning(&map));
+        assert!(
+            kept * 100 < scanned,
+            "the fit took {kept:?} against the scan's {scanned:?}: it is scanning the track"
+        );
     }
 }

@@ -25,6 +25,7 @@ mod probe;
 mod settings;
 mod setup;
 mod smoke;
+mod storm;
 mod telemetry;
 mod textfield;
 mod tuning;
@@ -295,20 +296,19 @@ impl MissionPlanner {
         screen: Screen,
         cx: &mut Context<Self>,
     ) -> Self {
-        let telemetry = match target {
-            Some(url) => Telemetry::connect(&url),
-            None => Telemetry::idle(),
+        // MP_STORM puts a synthetic vehicle behind the screens in place of any link: storm.rs.
+        let telemetry = match (storm::telemetry(), target) {
+            (Some(storm), _) => storm,
+            (None, Some(url)) => Telemetry::connect(&url),
+            (None, None) => Telemetry::idle(),
         };
 
         // Repaint on a timer. The link thread owns the data and publishes snapshots; the UI only
         // ever reads one, so this cannot block on I/O.
         cx.spawn(async move |this, cx| {
             loop {
-                let interval = if std::env::var("MP_BENCH").is_ok() {
-                    REFRESH_BENCH
-                } else {
-                    REFRESH
-                };
+                let interval =
+                    refresh_interval(std::env::var("MP_BENCH").is_ok(), storm::enabled());
                 cx.background_executor().timer(interval).await;
                 if this.update(cx, |_, cx| cx.notify()).is_err() {
                     break;
@@ -861,9 +861,8 @@ impl MissionPlanner {
     /// interrupting anyone over.
     fn remember(&mut self) {
         self.settings.screen = Some(self.screen.label().to_owned());
-        let target = self.telemetry.view().target;
-        if !target.is_empty() {
-            self.settings.link = Some(target);
+        if let Some(link) = link_to_remember(self.telemetry.view().target, storm::enabled()) {
+            self.settings.link = Some(link);
         }
         if let Err(err) = self.settings.save() {
             self.file_status = Some(format!(
@@ -1460,6 +1459,9 @@ impl Render for MissionPlanner {
         // initialise, and every earlier signal - a window handle, a running executor - survives
         // that.
         smoke::painted();
+        // Under MP_STORM, the frame's cost is timed from here to the marker at the end of the
+        // root, less the facts' own work: storm.rs.
+        storm::frame_started();
         let view = self.telemetry.view();
 
         // The sticks send from their own thread; this keeps them addressed to the vehicle being
@@ -1523,6 +1525,7 @@ impl Render for MissionPlanner {
         // them is already in hand, and published at the end of the frame so a reader never sees
         // half a set. Costs nothing unless MP_FACTS names a file.
         if facts::enabled() {
+            let harness = std::time::Instant::now();
             facts::record("screen", self.screen.label());
             // Where the map draws home, as `latitude,longitude`, read back from the map, and
             // whether the last paint wrote its "H".
@@ -1687,6 +1690,8 @@ impl Render for MissionPlanner {
             config::battery_monitor::record_facts(&self.battery_monitor, &view);
             config::firmware::record_facts(&self.install_firmware);
             facts::publish();
+            // The harness's work, which a normal run does not do, is not the frame's.
+            storm::exclude(harness.elapsed());
         }
 
         // The tuning graph is fed here because this is where a fresh snapshot arrives. It samples
@@ -2053,7 +2058,27 @@ impl Render for MissionPlanner {
                     ),
             )
             .child(body)
+            // Last, so its paint ends the frame's measurement; absent without MP_STORM.
+            .children(storm::marker(view.frames))
     }
+}
+
+/// How often to repaint: as fast as possible for `MP_BENCH`, at display rate during a storm
+/// (`MP_STORM`, storm.rs), and at [`REFRESH`] otherwise.
+const fn refresh_interval(bench: bool, storm: bool) -> Duration {
+    if bench {
+        REFRESH_BENCH
+    } else if storm {
+        storm::REFRESH
+    } else {
+        REFRESH
+    }
+}
+
+/// The link to remember for the next launch: the one in use, unless there is none or it is the
+/// storm's in-memory link, which no later launch could open.
+fn link_to_remember(target: String, storm: bool) -> Option<String> {
+    (!target.is_empty() && !storm).then_some(target)
 }
 
 /// The initial window size, from `MP_WINDOW` or the default.
@@ -2154,6 +2179,8 @@ ENVIRONMENT:
     MP_LOG_DIR   where flights are recorded (default: Mission Planner's own logs directory)
     MP_NO_RECORD do not record this flight
     MP_NO_TILES  do not fetch map imagery
+    MP_STORM     development only: replace the link with a synthetic vehicle sending this many
+                 Hz of telemetry, and measure each frame (see crates/mp-gui/src/storm.rs)
 ";
 
 /// Parses the command line.
@@ -2368,6 +2395,7 @@ mod tests {
             "MP_LOG_DIR",
             "MP_NO_RECORD",
             "MP_NO_TILES",
+            "MP_STORM",
         ] {
             assert!(
                 USAGE.contains(variable),
@@ -2478,6 +2506,23 @@ mod tests {
             .iter()
             .position(|screen| *screen == Screen::Config);
         assert_eq!(setup.map(|at| at + 1), config);
+    }
+
+    #[test]
+    fn a_storm_repaints_at_display_rate_and_is_never_remembered() {
+        // The storm's frames are what is measured, so there have to be display-rate frames of
+        // them; a normal run keeps its 10 Hz, and a benchmark still repaints flat out.
+        assert_eq!(refresh_interval(false, false), REFRESH);
+        assert_eq!(refresh_interval(false, true), storm::REFRESH);
+        assert!(storm::REFRESH < REFRESH);
+        assert_eq!(refresh_interval(true, true), REFRESH_BENCH);
+        // Remembering the storm's in-memory link would have the next launch try to open it.
+        assert_eq!(
+            link_to_remember("tcp:127.0.0.1:5760".to_owned(), false).as_deref(),
+            Some("tcp:127.0.0.1:5760")
+        );
+        assert_eq!(link_to_remember("loopback:b".to_owned(), true), None);
+        assert_eq!(link_to_remember(String::new(), false), None);
     }
 
     #[test]

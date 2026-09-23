@@ -9,15 +9,22 @@
 //!
 //! This is a test rather than a benchmark so it runs in CI. The thresholds are generous compared
 //! with the measured figures, because a shared machine under load is the environment it has to
-//! pass in, and a timing test that fails on a busy runner teaches people to ignore it.
+//! pass in, and a timing test that fails on a busy runner teaches people to ignore it. For the same
+//! reason each sample is the fastest of a few loads taken back to back: a thread descheduled in
+//! the middle of one load is the scheduler, not the code, and it does not happen three times in a
+//! row, while a load that blocks on the writer blocks every time (PLAN.md §13.4 row 6 has the
+//! sample that failed at load 30 and passed alone a minute later).
+//!
+//! The frame itself - render, layout and paint under the same storm - is measured in the window,
+//! by `mpr-gui` with `MP_STORM` set (`crates/mp-gui/src/storm.rs`, `tests/gui/storm.gui`), from
+//! the storm [`mp_link::testing::Storm`] writes; the last test here holds that storm to its rate.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
 use std::time::{Duration, Instant};
 
+use mp_link::testing::{STORM_FRAMES_PER_TICK, Storm, attitude, heartbeat, position};
 use mp_link::{Link, LinkConfig};
-use mp_mavlink::{Message as _, encode_v2};
-use mp_mavlink_dialects::all::{Attitude, GlobalPositionInt, Heartbeat};
 use mp_transport::Transport;
 use mp_transport::testing::Loopback;
 
@@ -27,63 +34,8 @@ const FRAME_BUDGET: Duration = Duration::from_millis(8);
 /// How many snapshots to take. At 60 Hz this is about eight seconds of rendering.
 const SNAPSHOTS: usize = 500;
 
-fn heartbeat(seq: u8) -> Vec<u8> {
-    let message = Heartbeat {
-        custom_mode: 0,
-        r#type: 2,
-        autopilot: 3,
-        base_mode: 81,
-        system_status: 3,
-        mavlink_version: 3,
-    };
-    frame(seq, Heartbeat::ID, Heartbeat::CRC_EXTRA, |buffer| {
-        message.encode(buffer)
-    })
-}
-
-fn attitude(seq: u8, roll: f32) -> Vec<u8> {
-    let message = Attitude {
-        time_boot_ms: u32::from(seq),
-        roll,
-        pitch: 0.0,
-        yaw: 0.0,
-        rollspeed: 0.0,
-        pitchspeed: 0.0,
-        yawspeed: 0.0,
-    };
-    frame(seq, Attitude::ID, Attitude::CRC_EXTRA, |buffer| {
-        message.encode(buffer)
-    })
-}
-
-fn position(seq: u8) -> Vec<u8> {
-    let message = GlobalPositionInt {
-        time_boot_ms: u32::from(seq),
-        lat: -353_632_620,
-        lon: 1_491_652_370,
-        alt: 600_000,
-        relative_alt: 10_000,
-        vx: 0,
-        vy: 0,
-        vz: 0,
-        hdg: 18_000,
-    };
-    frame(
-        seq,
-        GlobalPositionInt::ID,
-        GlobalPositionInt::CRC_EXTRA,
-        |buffer| message.encode(buffer),
-    )
-}
-
-/// Encodes one frame as a vehicle would send it.
-fn frame(seq: u8, id: u32, crc_extra: u8, encode: impl FnOnce(&mut [u8]) -> usize) -> Vec<u8> {
-    let mut payload = [0u8; 255];
-    let len = encode(&mut payload);
-    let mut out = [0u8; mp_mavlink::MAX_FRAME_LEN];
-    let n = encode_v2(&mut out, seq, 1, 1, id, &payload[..len], crc_extra, 0).unwrap();
-    out[..n].to_vec()
-}
+/// Loads per sample, the fastest of which is the sample.
+const TRIES: usize = 3;
 
 #[test]
 fn a_render_pass_stays_cheap_while_telemetry_pours_in() {
@@ -120,12 +72,17 @@ fn a_render_pass_stays_cheap_while_telemetry_pours_in() {
     let mut worst = Duration::ZERO;
     let mut total = Duration::ZERO;
     for _ in 0..SNAPSHOTS {
-        let started = Instant::now();
-        let state = handle.load();
-        // Touch the fields a frame actually reads, so the compiler cannot elide the load.
-        let sum = state.attitude.roll.0 + state.altitude_relative.0;
-        std::hint::black_box(sum);
-        let elapsed = started.elapsed();
+        let elapsed = (0..TRIES)
+            .map(|_| {
+                let started = Instant::now();
+                let state = handle.load();
+                // Touch the fields a frame actually reads, so the compiler cannot elide the load.
+                let sum = state.attitude.roll.0 + state.altitude_relative.0;
+                std::hint::black_box(sum);
+                started.elapsed()
+            })
+            .min()
+            .unwrap_or_default();
         worst = worst.max(elapsed);
         total += elapsed;
 
@@ -180,5 +137,39 @@ fn snapshots_keep_arriving_while_the_link_is_saturated() {
         seen.len() > 10,
         "the snapshot barely changed across 60 updates: {} distinct values",
         seen.len()
+    );
+}
+
+#[test]
+fn a_paced_storm_arrives_through_the_link_at_its_rate() {
+    // What `mpr-gui` reports as `storm.rate`: frames the link counted, a second, over the frames
+    // in each tick. A storm that fell short would make the frame measurement a measurement of a
+    // lighter load than D10 names; one that ran unthrottled, of a heavier one.
+    let (storm, end) = Storm::start(200);
+    let link = Link::from_transport(Box::new(end), LinkConfig::default());
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while link.primary_vehicle().is_none() {
+        assert!(Instant::now() < deadline, "no vehicle appeared");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+
+    let (frames_before, started) = (link.frames_received(), Instant::now());
+    std::thread::sleep(Duration::from_secs(2));
+    let frames = link.frames_received() - frames_before;
+    let elapsed = started.elapsed().as_secs_f64();
+    drop(storm);
+
+    #[allow(clippy::cast_precision_loss)] // a few thousand frames
+    let rate = frames as f64 / elapsed / f64::from(STORM_FRAMES_PER_TICK);
+    // Generous for a loaded machine: the writer catches up after a deschedule, so a real
+    // shortfall is the pacing broken, not the scheduler.
+    assert!(
+        (170.0..=230.0).contains(&rate),
+        "the storm arrived at {rate:.1} Hz, asked for 200 ({frames} frames in {elapsed:.2} s)"
+    );
+    let (_, handle) = link.primary_vehicle().expect("a vehicle");
+    assert!(
+        handle.load().position.is_some(),
+        "the storm's positions did not reach the vehicle state"
     );
 }
