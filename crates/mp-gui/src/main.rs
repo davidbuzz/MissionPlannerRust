@@ -250,6 +250,8 @@ struct MissionPlanner {
     fly_pages: fly::Pages,
     /// Scroll position of the plan screen's panel column.
     plan_scroll: gpui::ScrollHandle,
+    /// Initial Setup's FailSafe page.
+    failsafe: config::failsafe::FailSafe,
 }
 
 impl MissionPlanner {
@@ -390,6 +392,7 @@ impl MissionPlanner {
             fly_actions: fly::Actions::default(),
             fly_focus: fly::ActionsFocus::new(cx),
             fly_pages: fly::Pages::default(),
+            failsafe: config::failsafe::FailSafe::default(),
         };
         // Opening on the planning screen activates it, as switching to it does.
         if this.screen == Screen::Plan {
@@ -1105,25 +1108,32 @@ impl MissionPlanner {
         let compass = self.telemetry.compass_calibration();
         let listings = self.telemetry.log_listings();
         let log_progress = self.telemetry.log_progress();
-        div()
+        let column = div()
             .flex()
             .flex_col()
             .gap_2()
             .p_2()
             .w(px(760.0))
-            .child(setup::identity_panel(view))
-            // Second, above the calibrations. The reason somebody opens this screen mid-session
-            // is usually that the vehicle is behaving oddly, and this is the panel that says why -
-            // putting it below six calibration wizards buries the answer under the treatments.
-            .child(fly::estimator_panel(view))
-            // Initial Setup's pages that open as pages, and the one open, above the panels that
-            // are always shown so an opened page is on screen rather than below the fold.
+            // Initial Setup's pages that open as pages, in the C#'s list order, first: an opened
+            // page is then on screen rather than below the fold. The strip stays while a page
+            // shows, as the backstage list does beside its page.
             .child(setup::mandatory_hardware_panel(
                 view,
                 self.flight_modes.is_active(),
+                self.failsafe.is_open(),
                 cx,
-            ))
+            ));
+        // A page chosen from that list takes the column's place, as a backstage page does.
+        if self.failsafe.is_open() {
+            return column.child(config::failsafe::page(&self.failsafe, view, cx));
+        }
+        column
             .children(config::flight_modes::page(&self.flight_modes, view, cx))
+            .child(setup::identity_panel(view))
+            // Above the calibrations. The reason somebody opens this screen mid-session is
+            // usually that the vehicle is behaving oddly, and this is the panel that says why -
+            // putting it below six calibration wizards buries the answer under the treatments.
+            .child(fly::estimator_panel(view))
             .child(setup::accelerometer_panel(calibration, view, cx))
             .child(setup::compass_panel(&compass, view, cx))
             .child(setup::radio_panel(
@@ -1396,6 +1406,9 @@ impl Render for MissionPlanner {
         self.telemetry.tick();
         // Save Modes' writes go one at a time, each after the last is answered.
         self.flight_modes.tick(&self.telemetry);
+        // The FailSafe page's timers and writes, and closing it when the screen changes.
+        self.failsafe
+            .tick(&self.telemetry, &view, self.screen == Screen::Setup);
         let banner = self.telemetry.firmware_banner().map(str::to_owned);
         let mav_type = view.state.as_ref().map_or(0, |state| state.vehicle_type);
         self.metadata.advance(banner.as_deref(), mav_type);
@@ -1536,6 +1549,7 @@ impl Render for MissionPlanner {
             self.fly_actions.record_facts(&view);
             self.fly_pages
                 .record_facts(f32::from(self.fly_scroll.max_offset().y));
+            config::failsafe::record_facts(&self.failsafe, &view);
             facts::publish();
         }
 
@@ -1817,6 +1831,7 @@ impl Render for MissionPlanner {
                 .flex_1()
                 .overflow_y_scroll()
                 .child(self.setup_body(&view, cx))
+                .children(config::failsafe::overlay(&self.failsafe, window, cx))
                 .into_any_element(),
         };
 

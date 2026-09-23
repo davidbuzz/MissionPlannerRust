@@ -82,35 +82,57 @@ pub fn identity_panel(view: &TelemetryView) -> impl IntoElement {
 }
 
 /// Initial Setup's Mandatory Hardware pages that open here as pages, in the order
-/// `InitialSetup.cs` adds them: Flight Modes, after ESC Calibration and before FailSafe.
+/// `InitialSetup.cs` adds them: Flight Modes, then FailSafe, after ESC Calibration.
 ///
-/// Each is offered only with a vehicle whose parameters have all arrived, as the C# adds a page
-/// only when `isConnected && gotAllParams`; a press opens the page beneath this and another
-/// closes it, as `Activate` and `Deactivate` bracket a backstage page being shown.
-/// `// C#: GCSViews/InitialSetup.cs:119-131, 182, 226-229; GCSViews/InitialSetup.resx (backstageViewPagemand.Text, backstageViewPageflmode.Text)`
+/// Mission Planner's Initial Setup is a backstage view: a list of pages, the chosen one filling
+/// the rest. This screen is one column of panels, so a page ported whole is listed here and,
+/// once chosen, opens beneath this strip; choosing it again closes it, as `Activate` and
+/// `Deactivate` bracket a backstage page being shown. Each is offered only with a vehicle whose
+/// parameters have all arrived, as the C# adds a page only when `isConnected && gotAllParams`,
+/// or while it is open.
+/// `// C#: GCSViews/InitialSetup.cs:119-131, 182, 226-233; GCSViews/InitialSetup.resx (backstageViewPagemand.Text, backstageViewPageflmode.Text, backstageViewPagefs.Text)`
 pub fn mandatory_hardware_panel(
     view: &TelemetryView,
     flight_modes_open: bool,
+    failsafe_open: bool,
     cx: &mut Context<MissionPlanner>,
 ) -> impl IntoElement {
     let got_all_params = view.parameters.len() >= usize::from(view.parameters_expected);
     let available = view.vehicle.is_some() && got_all_params;
     panel(
         "mandatory hardware",
-        div().flex().flex_wrap().gap_2().child(action(
-            "setup-flightmodes",
-            "Flight Modes",
-            if flight_modes_open {
-                theme::OK
-            } else {
-                theme::ACCENT
-            },
-            available || flight_modes_open,
-            cx.listener(|this, _event: &(), _window, cx| {
-                this.flight_modes.toggle(&this.telemetry);
-                cx.notify();
-            }),
-        )),
+        div()
+            .flex()
+            .flex_wrap()
+            .gap_2()
+            .child(action(
+                "setup-flightmodes",
+                "Flight Modes",
+                if flight_modes_open {
+                    theme::OK
+                } else {
+                    theme::ACCENT
+                },
+                available || flight_modes_open,
+                cx.listener(|this, _event: &(), _window, cx| {
+                    this.flight_modes.toggle(&this.telemetry);
+                    cx.notify();
+                }),
+            ))
+            .child(action(
+                "setup-failsafe",
+                "FailSafe",
+                if failsafe_open {
+                    theme::OK
+                } else {
+                    theme::ACCENT
+                },
+                (available && crate::config::failsafe::available(view)) || failsafe_open,
+                cx.listener(|this, _event: &(), _window, cx| {
+                    this.failsafe.toggle(&this.telemetry);
+                    cx.notify();
+                }),
+            )),
     )
 }
 

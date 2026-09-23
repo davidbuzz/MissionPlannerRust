@@ -378,14 +378,30 @@ pub const PANELS: &[Panel] = &[
             setup(228, "Flight Modes", MANDATORY, ANY),
             config(235, "Flight Modes", "Ateryx"),
         ],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigFlightModes.cs:38-467, ported whole but for the
+        // Ctrl+S shortcut (ProcessCmdKey), standardFlightModesOnly (its default only), and the
+        // message box, which is a line on the page.
+        Partial(
+            at("crates/mp-gui/src/config/flight_modes.rs", "fn page"),
+            "the six combos from the firmware's mode list, the lit PWM band, Simple and Super \
+             Simple, Save through the retrying set; not Ctrl+S, standardFlightModesOnly beyond \
+             its default, nor the message box",
+        ),
     ),
     panel(
         "ConfigFailSafe",
         cv!("ConfigFailSafe"),
         Some(4),
         &[setup(232, "FailSafe", MANDATORY, ANY)],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigFailSafe.cs:24-192, ported whole but for typed
+        // numbers - gpui has no numeric up-down, so the step arrows stand in - and the
+        // out-of-range prompt that only typed values raise.
+        Partial(
+            at("crates/mp-gui/src/config/failsafe.rs", "fn page"),
+            "the channel bars, the mode/armed/GPS readouts, the throttle, battery and GCS \
+             controls writing their parameters on change through the retrying set; numbers by \
+             step arrows only, no typing",
+        ),
     ),
     panel(
         "ConfigInitialParams",
@@ -1491,7 +1507,7 @@ mod tests {
             );
             checked += 1;
         }
-        assert_eq!(checked, 8);
+        assert_eq!(checked, 10);
     }
 
     /// The committed report matches the table.
@@ -1523,7 +1539,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (0, 7, 48, 2, 4)
+            (0, 9, 46, 2, 4)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

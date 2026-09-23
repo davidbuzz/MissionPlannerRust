@@ -4,11 +4,11 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui c
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 0 | 7 | 48 | 2 | 4 | 569 |
+| 61 | 0 | 9 | 46 | 2 | 4 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 0 | 6 | 36 | 2 | 0 | 258 | 210 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 0 | 8 | 34 | 2 | 0 | 258 | 198 |
 | CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 0 | 1 | 12 | 0 | 0 | 277 | 255 |
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 | 0 |
 
@@ -53,8 +53,8 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConne
 | 215 | `ConfigRadioOutput` | Servo Output | Mandatory Hardware | any | 1 | **missing** |
 | 220 | `ConfigSerial` | Serial Ports | Mandatory Hardware | any | 0 | **missing** |
 | 224 | `ConfigESCCalibration` | ESC Calibration | Mandatory Hardware | any | 1 | **missing** |
-| 228 | `ConfigFlightModes` | Flight Modes | Mandatory Hardware | any | 8 | **missing** |
-| 232 | `ConfigFailSafe` | FailSafe | Mandatory Hardware | any | 4 | **missing** |
+| 228 | `ConfigFlightModes` | Flight Modes | Mandatory Hardware | any | 8 | partial: `crates/mp-gui/src/config/flight_modes.rs` `fn page` - the six combos from the firmware's mode list, the lit PWM band, Simple and Super Simple, Save through the retrying set; not Ctrl+S, standardFlightModesOnly beyond its default, nor the message box |
+| 232 | `ConfigFailSafe` | FailSafe | Mandatory Hardware | any | 4 | partial: `crates/mp-gui/src/config/failsafe.rs` `fn page` - the channel bars, the mode/armed/GPS readouts, the throttle, battery and GCS controls writing their parameters on change through the retrying set; numbers by step arrows only, no typing |
 | 237 | `ConfigInitialParams` | Initial Tune Parameter | Mandatory Hardware | copter, quadplane | 3 | **missing** |
 | 241 | `ConfigHWIDs` | HW ID | Mandatory Hardware | any | 0 | **missing** |
 | 243 | `ConfigOptional` | Optional Hardware |  | always | 0 | plumbing: the Optional Hardware heading of the list: one sentence, no controls |
