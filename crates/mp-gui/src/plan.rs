@@ -150,6 +150,23 @@ impl Plan {
         self.origin = Origin::Edited;
     }
 
+    /// Moves an item to a new position, keeping everything else about it.
+    ///
+    /// Only items that have a position are moved. Dragging what the map drew for a
+    /// return-to-launch would write coordinates into a command that ignores them, and the map
+    /// would then draw a waypoint the vehicle has no intention of visiting.
+    pub fn move_to(&mut self, seq: u16, position: LatLon) {
+        let Some(item) = self.items.iter_mut().find(|item| item.seq == seq) else {
+            return;
+        };
+        if !matches!(item.position(), Ok(Some(_))) {
+            return;
+        }
+        item.x = position.latitude();
+        item.y = position.longitude();
+        self.origin = Origin::Edited;
+    }
+
     /// Removes an item.
     pub fn remove(&mut self, seq: u16) {
         self.items.retain(|item| item.seq != seq);
@@ -1423,6 +1440,52 @@ mod tests {
         assert_eq!(plan.draw_mode(), DrawMode::Waypoints);
         plan.set_draw_mode(DrawMode::Area);
         assert_eq!(plan.draw_mode(), DrawMode::Area);
+    }
+
+    #[test]
+    fn dragging_a_waypoint_moves_only_its_position() {
+        let mut plan = Plan::default();
+        plan.add_waypoint(at(-35.36, 149.16), 75.0);
+        plan.move_to(0, at(-35.37, 149.17));
+
+        let item = &plan.items()[0];
+        assert!((item.x - -35.37).abs() < 1e-9);
+        assert!((item.y - 149.17).abs() < 1e-9);
+        // Altitude and command survive the move: dragging on a map says where, not what or how
+        // high.
+        assert!((item.z - 75.0).abs() < 1e-9);
+        assert_eq!(item.command, CMD_WAYPOINT);
+    }
+
+    #[test]
+    fn a_command_with_no_position_cannot_be_dragged_somewhere() {
+        // Writing coordinates into a return-to-launch would make the map draw a waypoint the
+        // vehicle has no intention of visiting.
+        let mut plan = Plan::default();
+        plan.add_waypoint(at(-35.36, 149.16), 50.0);
+        plan.set_command(0, CMD_RTL);
+        plan.move_to(0, at(-35.37, 149.17));
+
+        assert!((plan.items()[0].x).abs() < f64::EPSILON);
+        assert!((plan.items()[0].y).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn dragging_marks_the_plan_as_no_longer_the_vehicles() {
+        let mut plan = Plan::default();
+        plan.add_waypoint(at(-35.36, 149.16), 50.0);
+        plan.adopt_from_vehicle(plan.items().to_vec());
+        assert_eq!(*plan.origin(), Origin::Vehicle);
+        plan.move_to(0, at(-35.37, 149.17));
+        assert_eq!(*plan.origin(), Origin::Edited);
+    }
+
+    #[test]
+    fn dragging_an_item_that_is_not_there_is_ignored() {
+        let mut plan = Plan::default();
+        plan.add_waypoint(at(-35.36, 149.16), 50.0);
+        plan.move_to(99, at(0.0, 0.0));
+        assert!((plan.items()[0].x - -35.36).abs() < 1e-9);
     }
 
     #[test]

@@ -334,6 +334,18 @@ impl MapViewport {
         self.camera = None;
     }
 
+    /// Stops the view moving on its own, keeping whatever is on screen now.
+    ///
+    /// Called when the operator edits the plan. The automatic fit frames everything it knows
+    /// about, so adding a waypoint changes what it has to frame and the map jumps - which means
+    /// the next click lands somewhere the operator did not aim at. Editing must not move the
+    /// ground under the cursor.
+    pub fn freeze_view(&mut self) {
+        if self.camera.is_none() {
+            self.camera = self.current_view();
+        }
+    }
+
     /// Starts a drag at a screen position.
     pub fn begin_drag(&mut self, x: f32, y: f32) {
         self.drag_from = Some((x, y));
@@ -400,6 +412,46 @@ impl MapViewport {
             centre,
             span: new_span,
         });
+    }
+
+    /// Where a world position sits on screen, in window coordinates.
+    ///
+    /// The forward direction of [`MapViewport::position_at`], and like it, built from the
+    /// rectangle the painter recorded rather than a recomputed one.
+    fn screen_position(&self, world: WebMercator) -> Option<(f32, f32)> {
+        let (x, y, width, height) = self.last_view?;
+        if width <= 0.0 || height <= 0.0 {
+            return None;
+        }
+        let (view_width, view_height) = self.last_viewport;
+        #[allow(clippy::cast_possible_truncation)] // screen coordinates are f32 by the renderer
+        let screen = (
+            ((world.x - x) / width) as f32 * view_width + self.last_origin.0,
+            ((world.y - y) / height) as f32 * view_height + self.last_origin.1,
+        );
+        Some(screen)
+    }
+
+    /// The mission waypoint under a window coordinate, if one is close enough to have been meant.
+    ///
+    /// Close enough is generous compared with the drawn marker: the marker is six pixels across
+    /// and nobody hits a six pixel target while looking at an aircraft. Nearest wins, so
+    /// overlapping waypoints still resolve to one rather than to whichever was drawn last.
+    #[must_use]
+    pub fn waypoint_at(&self, window_x: f32, window_y: f32) -> Option<u16> {
+        const GRAB_RADIUS_PX: f32 = 14.0;
+
+        let mut best: Option<(f32, u16)> = None;
+        for (world, seq) in &self.mission {
+            let Some((x, y)) = self.screen_position(*world) else {
+                continue;
+            };
+            let distance = (x - window_x).hypot(y - window_y);
+            if distance <= GRAB_RADIUS_PX && best.is_none_or(|(closest, _)| distance < closest) {
+                best = Some((distance, *seq));
+            }
+        }
+        best.map(|(_, seq)| seq)
     }
 
     /// The position under a window coordinate, or `None` if the map has not painted yet.
@@ -1116,6 +1168,24 @@ mod tests {
         map.camera = Some(Camera { centre, span });
     }
 
+    /// A navigation waypoint at a position, as the plan would produce.
+    fn waypoint(seq: u16, at: LatLon) -> MissionItem {
+        MissionItem {
+            seq,
+            current: 0,
+            frame: 3,
+            command: 16,
+            param1: 0.0,
+            param2: 0.0,
+            param3: 0.0,
+            param4: 0.0,
+            x: at.latitude(),
+            y: at.longitude(),
+            z: 50.0,
+            autocontinue: 1,
+        }
+    }
+
     fn viewport() -> MapViewport {
         // No synthetic scene: these tests are about the camera, not the demo content.
         MapViewport::new(0, 0)
@@ -1265,6 +1335,109 @@ mod tests {
             (at_origin.longitude() - offset.longitude()).abs() < 1e-12,
             "{at_origin:?} vs {offset:?}"
         );
+    }
+
+    #[test]
+    fn a_waypoint_under_the_cursor_is_found() {
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        let at = LatLon::new(-35.363, 149.165).expect("valid");
+        map.set_mission(&[waypoint(7, at)]);
+
+        // The centre of the viewport, where that position was placed.
+        assert_eq!(map.waypoint_at(400.0, 300.0), Some(7));
+    }
+
+    #[test]
+    fn a_click_away_from_every_waypoint_finds_none() {
+        // Otherwise a pan that began near a waypoint would drag it instead, which is the worst
+        // kind of editing bug: it looks like the map moved.
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        map.set_mission(&[waypoint(0, LatLon::new(-35.363, 149.165).expect("valid"))]);
+        assert_eq!(map.waypoint_at(100.0, 100.0), None);
+    }
+
+    #[test]
+    fn the_grab_radius_is_generous_compared_with_the_drawn_marker() {
+        // The marker is six pixels across and nobody hits a six pixel target while looking at an
+        // aircraft.
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        map.set_mission(&[waypoint(3, LatLon::new(-35.363, 149.165).expect("valid"))]);
+        assert_eq!(
+            map.waypoint_at(408.0, 308.0),
+            Some(3),
+            "11px away should hit"
+        );
+        assert_eq!(map.waypoint_at(430.0, 330.0), None, "42px away should miss");
+    }
+
+    #[test]
+    fn the_nearest_waypoint_wins_when_two_overlap() {
+        // Otherwise whichever happened to be drawn last would win, which changes with the order
+        // of the mission rather than with what the operator is pointing at.
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        let centre = LatLon::new(-35.363, 149.165).expect("valid");
+        let nearby = LatLon::new(-35.36305, 149.165).expect("valid");
+        map.set_mission(&[waypoint(1, centre), waypoint(2, nearby)]);
+
+        let found = map.waypoint_at(400.0, 300.0).expect("one of them");
+        assert_eq!(found, 1, "the one actually under the cursor should win");
+    }
+
+    #[test]
+    fn hit_testing_before_the_first_paint_finds_nothing() {
+        let mut map = viewport();
+        map.set_mission(&[waypoint(0, LatLon::new(-35.363, 149.165).expect("valid"))]);
+        assert_eq!(map.waypoint_at(400.0, 300.0), None);
+    }
+
+    #[test]
+    fn screen_position_is_the_inverse_of_position_at() {
+        // The two are used together during a drag: one finds the waypoint, the other decides
+        // where it lands. If they disagree, a waypoint jumps the moment it is grabbed.
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        for (x, y) in [(400.0_f32, 300.0_f32), (120.0, 500.0), (700.0, 80.0)] {
+            let world = map.position_at(x, y).expect("a position");
+            let (back_x, back_y) = map
+                .screen_position(world.to_web_mercator())
+                .expect("a screen position");
+            assert!((back_x - x).abs() < 0.01, "{x} -> {back_x}");
+            assert!((back_y - y).abs() < 0.01, "{y} -> {back_y}");
+        }
+    }
+
+    #[test]
+    fn freezing_the_view_stops_the_automatic_fit_moving_it() {
+        // Editing must not move the ground under the cursor: place a waypoint, and the next click
+        // has to land where the operator aimed.
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        map.camera = None;
+        map.observe(
+            LatLon::new(-35.363, 149.165).expect("valid"),
+            Bearing(mp_units::Degrees(0.0)),
+        );
+        assert!(map.is_following());
+
+        map.freeze_view();
+        assert!(!map.is_following(), "the view should now be the operator's");
+    }
+
+    #[test]
+    fn freezing_an_already_frozen_view_leaves_it_alone() {
+        // Otherwise every placed waypoint would re-freeze to a slightly different view and the
+        // map would creep.
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        let before = map.camera.expect("a camera");
+        map.freeze_view();
+        let after = map.camera.expect("a camera");
+        assert!((before.span - after.span).abs() < f64::EPSILON);
+        assert!((before.centre.x - after.centre.x).abs() < f64::EPSILON);
     }
 
     #[test]

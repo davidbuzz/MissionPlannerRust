@@ -113,6 +113,8 @@ struct MissionPlanner {
     adopt_vehicle_mission: bool,
     /// The last thing a file operation did, shown so a save is not silent.
     file_status: Option<String>,
+    /// The waypoint being dragged on the map, if one is.
+    dragging_waypoint: Option<u16>,
 }
 
 impl MissionPlanner {
@@ -183,6 +185,7 @@ impl MissionPlanner {
             plan: Plan::default(),
             adopt_vehicle_mission: false,
             file_status: None,
+            dragging_waypoint: None,
         }
     }
 
@@ -417,35 +420,58 @@ impl MissionPlanner {
                     // Dragging pans, the wheel zooms about the cursor. The handlers convert window
                     // coordinates to viewport-relative ones using the bounds the painter recorded,
                     // so the map does not need to know where it sits in the layout.
-                    .on_mouse_down(MouseButton::Left, {
-                        let map = self.map.clone();
-                        move |event, _window, _cx| {
-                            map.borrow_mut().begin_drag(
-                                f32::from(event.position.x),
-                                f32::from(event.position.y),
-                            );
-                        }
-                    })
-                    .on_mouse_move({
-                        let map = self.map.clone();
-                        move |event, window, _cx| {
-                            if event.pressed_button == Some(MouseButton::Left) {
-                                map.borrow_mut().drag_to(
-                                    f32::from(event.position.x),
-                                    f32::from(event.position.y),
-                                );
-                                // Repaint immediately: a map that only updates on the next
-                                // telemetry tick feels broken to drag.
-                                window.refresh();
+                    // Pressing on a waypoint while planning grabs it; pressing anywhere else
+                    // pans. Deciding at press time rather than on movement is what makes the two
+                    // gestures feel like one control: the operator is never told which mode they
+                    // are in, because the thing under the cursor already says.
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |this, event: &gpui::MouseDownEvent, _window, cx| {
+                            let (x, y) = (f32::from(event.position.x), f32::from(event.position.y));
+                            let grabbed = planning
+                                .then(|| this.map.borrow().waypoint_at(x, y))
+                                .flatten();
+                            match grabbed {
+                                Some(seq) => {
+                                    this.dragging_waypoint = Some(seq);
+                                    this.plan.select(Some(seq));
+                                    // The same reason as placing one: a refit mid-drag would move
+                                    // the waypoint away from the cursor holding it.
+                                    this.map.borrow_mut().freeze_view();
+                                    cx.notify();
+                                }
+                                None => this.map.borrow_mut().begin_drag(x, y),
                             }
-                        }
-                    })
-                    .on_mouse_up(MouseButton::Left, {
-                        let map = self.map.clone();
-                        move |_event, _window, _cx| {
-                            map.borrow_mut().end_drag();
-                        }
-                    })
+                        }),
+                    )
+                    .on_mouse_move(cx.listener(
+                        move |this, event: &gpui::MouseMoveEvent, window, cx| {
+                            if event.pressed_button != Some(MouseButton::Left) {
+                                return;
+                            }
+                            let (x, y) = (f32::from(event.position.x), f32::from(event.position.y));
+                            if let Some(seq) = this.dragging_waypoint {
+                                let position = this.map.borrow().position_at(x, y);
+                                if let Some(position) = position {
+                                    this.plan.move_to(seq, position);
+                                    this.sync_map_mission();
+                                    cx.notify();
+                                }
+                            } else {
+                                this.map.borrow_mut().drag_to(x, y);
+                            }
+                            // Repaint immediately: a map that only updates on the next telemetry
+                            // tick feels broken to drag.
+                            window.refresh();
+                        },
+                    ))
+                    .on_mouse_up(
+                        MouseButton::Left,
+                        cx.listener(move |this, _event: &gpui::MouseUpEvent, _window, _cx| {
+                            this.dragging_waypoint = None;
+                            this.map.borrow_mut().end_drag();
+                        }),
+                    )
                     .on_scroll_wheel({
                         let map = self.map.clone();
                         move |event, window, _cx| {
@@ -476,6 +502,11 @@ impl MissionPlanner {
                                 return;
                             };
                             if planning {
+                                // Freeze the view before the edit, not after: the automatic fit
+                                // frames everything it knows about, so adding a waypoint changes
+                                // what it has to frame and the map jumps - putting the next click
+                                // somewhere the operator did not aim at.
+                                this.map.borrow_mut().freeze_view();
                                 match this.plan.draw_mode() {
                                     plan::DrawMode::Waypoints => {
                                         this.plan.add_waypoint(position, plan::DEFAULT_ALTITUDE);

@@ -43,7 +43,7 @@ pkill -f "$(basename "$BIN")" 2>/dev/null && sleep 1
 # Clicking needs the application to report where its controls are, so the probe is switched on
 # whenever a click is asked for. It writes nothing otherwise.
 PROBE_FILE=""
-if [ -n "${CLICK:-}" ]; then
+if [ -n "${CLICK:-}" ] || [ -n "${DRAG:-}" ]; then
     PROBE_FILE="$(mktemp -t mpr-probe-XXXXXX.json)"
     export MP_PROBE="$PROBE_FILE"
 fi
@@ -83,6 +83,7 @@ sleep 1
 
 # Clicks happen after the window has settled and been activated: a click delivered to a window
 # that does not have focus goes to whatever does.
+
 if [ -n "${CLICK:-}" ]; then
     IFS=',' read -ra TARGETS <<< "$CLICK"
     for TARGET in "${TARGETS[@]}"; do
@@ -94,6 +95,17 @@ if [ -n "${CLICK:-}" ]; then
         "$ROOT/tools/gui-click.sh" "$PROBE_FILE" "$WIN_ID" "$TARGET" "$BUTTON" || exit 1
         # Let the click take effect and the next frame paint before the following one: a second
         # click sent into the old layout lands on whatever used to be there.
+        sleep 0.6
+    done
+fi
+
+# Drags happen after clicks: a click puts the application into the state a drag then acts on,
+# and a drag that ran first would be dragging whatever was there before.
+if [ -n "${DRAG:-}" ]; then
+    # DRAG="from>to,from2>to2" - each pair separated by >, pairs separated by commas.
+    IFS=',' read -ra DRAGS <<< "$DRAG"
+    for PAIR in "${DRAGS[@]}"; do
+        "$ROOT/tools/gui-drag.sh" "$PROBE_FILE" "$WIN_ID" "${PAIR%%>*}" "${PAIR##*>}" || exit 1
         sleep 0.6
     done
 fi

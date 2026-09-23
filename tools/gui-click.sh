@@ -23,7 +23,15 @@
 #        button: 1 left (default), 2 middle, 3 right
 set -uo pipefail
 
-PROBE="${1:?usage: gui-click.sh <probe-file> <window-id> <control-name>[@fx,fy] [button]}"
+# --resolve prints the window-relative coordinates and does not click, so gui-drag.sh can reuse
+# this lookup rather than reimplementing it and drifting from it.
+RESOLVE_ONLY=""
+if [ "${1:-}" = "--resolve" ]; then
+    RESOLVE_ONLY=1
+    shift
+fi
+
+PROBE="${1:?usage: gui-click.sh [--resolve] <probe-file> <window-id> <control-name>[@fxXfy] [button]}"
 WIN_ID="${2:?window id}"
 TARGET="${3:?control name}"
 BUTTON="${4:-1}"
@@ -65,5 +73,10 @@ fi
 
 # Coordinates from the probe are relative to the window, which is what --window takes. Using
 # absolute screen coordinates would break the moment the window manager moved the window.
+if [ -n "$RESOLVE_ONLY" ]; then
+    echo "$X $Y"
+    exit 0
+fi
+
 echo "clicking '$TARGET' (button $BUTTON) at window-relative $X,$Y"
 xdotool mousemove --window "$WIN_ID" "$X" "$Y" click "$BUTTON"
