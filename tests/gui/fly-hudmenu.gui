@@ -1,0 +1,108 @@
+# The HUD's menu, contextMenuStripHud: the right button over the HUD opens it where it came up,
+# in the Designer's order - Video, Set Aspect Ratio, User Items, Russian Hud, Swap With Map,
+# Ground Color, Battery Cell Voltage, Show icons.
+#
+# Russian Hud turns hud1.Russian over. Ground Color is CheckOnClick: the first click checks it
+# and the ground goes brown, the next unchecks it and the ground goes green. User Items opens
+# "Display This"; a box checked asks "Please enter your item prefix", starting at its name and
+# ": ", and the item is drawn on the HUD; checked again it comes off. Swap With Map puts the HUD
+# where the map was and the map where the HUD was, and again puts them back. The rows not ported
+# - Set Aspect Ratio, Battery Cell Voltage, Show icons and the Video drop-down's - are dimmed,
+# and a click on one says why on the status line. A press anywhere else closes the menu and goes
+# no further.
+# `GCSViews/FlightData.Designer.cs:346, 458-566, GCSViews/FlightData.cs:2436-2472, 3122-3139,
+# 3185-3271, 4735-4739, 5139-5164, ExtLibs/Controls/HUD.cs:2029-2036`
+#
+# Needs SITL, so the HUD draws a vehicle and a user item has a value:
+#   tools/gui-test.sh tests/gui/fly-hudmenu.gui -- tcp:127.0.0.1:5760
+
+screen fly
+window 1600x1200
+settle 8
+
+expect fly.hud.menu false
+expect fly.swapped false
+expect fly.hud.left < 100
+expect fly.hud.russian false
+expect fly.hud.ground hud
+expect fly.hud.items none
+
+# Russian Hud: the flag over, and the menu closed by the click.
+click hud@0.5x0.4:right
+expect fly.hud.menu true
+expect fly.hud.menu.video false
+click fly-hud-russian
+expect fly.hud.menu false
+expect fly.hud.russian true
+click hud@0.5x0.4:right
+click fly-hud-russian
+expect fly.hud.russian false
+
+# Ground Color: brown checked, green unchecked.
+click hud@0.5x0.4:right
+click fly-hud-groundcolor
+expect fly.hud.ground brown
+click hud@0.5x0.4:right
+click fly-hud-groundcolor
+expect fly.hud.ground green
+
+# Video shows its drop-down; its rows and the other three not ported are dimmed and say why.
+click hud@0.5x0.4:right
+click fly-hud-video
+expect fly.hud.menu.video true
+click fly-hud-recordavi
+expect status ~ Record Hud to AVI is not ported
+expect fly.hud.menu true
+click fly-hud-showicons
+expect status ~ Show icons is not ported
+click fly-hud-aspect
+expect status ~ Set Aspect Ratio is not ported
+click fly-hud-batterycells
+expect status ~ Battery Cell Voltage is not ported
+expect fly.hud.menu true
+
+# A press elsewhere closes the menu and presses nothing else: the header strip stays put.
+expect fly.tabs.first 0
+click fly-tabs-right
+expect fly.hud.menu false
+expect fly.tabs.first 0
+
+# User Items: "Display This", a box checked asks its header, and the item is on the HUD.
+expect hud.custom.count 0
+click hud@0.5x0.4:right
+click fly-hud-useritems
+expect fly.hud.menu false
+expect fly.hud.items.open true
+expect fly.hud.items.choices > 300
+click fly-hud-item-alt
+expect fly.prompt Please enter your item prefix
+expect fly.prompt.value ~ alt:
+click fly-prompt-ok
+expect fly.prompt none
+expect fly.hud.items ~ alt=alt:
+settle 1
+expect hud.custom.count 1
+# Checked again, it comes off.
+click fly-hud-item-alt
+expect fly.hud.items none
+settle 1
+expect hud.custom.count 0
+# A header cancelled leaves the box unchecked.
+click fly-hud-item-alt
+click fly-prompt-cancel
+expect fly.hud.items none
+click fly-hud-items-close
+expect fly.hud.items.open false
+
+# Swap With Map: the HUD where the map was, right of the column, and back again.
+click hud@0.5x0.4:right
+click fly-hud-swap
+expect fly.swapped true
+settle 1
+expect fly.hud.left > 400
+click hud@0.5x0.4:right
+expect fly.hud.menu true
+click fly-hud-swap
+expect fly.swapped false
+settle 1
+expect fly.hud.left < 100

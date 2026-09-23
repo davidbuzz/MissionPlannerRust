@@ -883,6 +883,15 @@ pub enum Prompt {
     /// is typed, into a box that starts in the dialog's `InitialDirectory`, `tlogdir`, and the
     /// words are the dialog's first filter. `// C#: GCSViews/FlightData.cs:1276-1302`
     LoadLog,
+    /// One of the DataFlash Logs page's conversions: its `OpenFileDialog`, typed as Load Log's
+    /// is, titled with the button and worded with the dialog's first filter.
+    /// `// C#: GCSViews/FlightData.cs:1084-1089, 1137-1151, 1313-1317, Log/MatLabForms.cs:45-59`
+    Convert(Conversion),
+    /// `InputBox.Show("Jump to Tag", "Tag Id:", ref tag_str)`. `// C#: GCSViews/FlightData.cs:6504-6509`
+    JumpToTag,
+    /// `InputBox.Show("Hud Header", "Please enter your item prefix", ref prefix)`, for a User
+    /// Items box just checked. `// C#: GCSViews/FlightData.cs:2445-2455`
+    HudHeader,
 }
 
 impl Prompt {
@@ -898,6 +907,9 @@ impl Prompt {
             Self::PoiId => crate::poi::ID_TITLE,
             Self::PoiCoords => crate::poi::COORDS_TITLE,
             Self::LoadLog => "Load Log",
+            Self::Convert(kind) => kind.text(),
+            Self::JumpToTag => "Jump to Tag",
+            Self::HudHeader => "Hud Header",
         }
     }
 
@@ -919,6 +931,9 @@ impl Prompt {
             Self::PoiId => crate::poi::ID_TEXT.to_owned(),
             Self::PoiCoords => crate::poi::COORDS_TEXT.to_owned(),
             Self::LoadLog => "Telemetry log (*.tlog)".to_owned(),
+            Self::Convert(kind) => kind.filter().to_owned(),
+            Self::JumpToTag => "Tag Id:".to_owned(),
+            Self::HudHeader => "Please enter your item prefix".to_owned(),
         }
     }
 
@@ -933,6 +948,9 @@ impl Prompt {
                 | Self::PoiId
                 | Self::PoiCoords
                 | Self::LoadLog
+                | Self::Convert(_)
+                | Self::JumpToTag
+                | Self::HudHeader
         )
     }
 
@@ -2544,11 +2562,12 @@ fn actions_tab(
     }
 
     // The map's context menu in the C#. This application's map has no menu - a right click flies
-    // there, which is the menu's Fly To Here - so the two entries that need no point on the map
-    // are here, under the grid.
+    // there, which is the menu's Fly To Here - so the three entries that need no point on the map
+    // are here, under the grid. The row wraps where the column is too narrow for all three.
     body = body.child(
         div()
             .flex()
+            .flex_wrap()
             .items_center()
             .gap_1()
             .child(
@@ -2575,6 +2594,18 @@ fn actions_tab(
                 true,
                 cx.listener(|this, _event: &(), window, cx| {
                     this.fly_ask_guided_alt();
+                    this.fly_focus.prompt.focus(window, cx);
+                    cx.notify();
+                }),
+            ))
+            // `jumpToTagToolStripMenuItem`. `// C#: GCSViews/FlightData.Designer.cs:2645-2649`
+            .child(action(
+                "fly-jumptotag",
+                "Jump To Tag",
+                theme::ACCENT,
+                true,
+                cx.listener(|this, _event: &(), window, cx| {
+                    this.fly_actions.ask(Prompt::JumpToTag, "");
                     this.fly_focus.prompt.focus(window, cx);
                     cx.notify();
                 }),
@@ -2788,7 +2819,8 @@ pub fn prompt_dialog(
                         .child(body),
                 ),
         )
-        .with_priority(2)
+        // Over the HUD's User Items form, which asks its header through this dialog.
+        .with_priority(3)
         .into_any_element(),
     )
 }
@@ -2965,10 +2997,10 @@ impl Page {
             }
             // `// C#: GCSViews/FlightData.Designer.cs:2208`
             Self::TLogs => "Tlog > Kml or Graph is mpr kml, on the command line.",
-            // `// C#: GCSViews/FlightData.Designer.cs:2383-2388`
+            // `// C#: GCSViews/FlightData.Designer.cs:2383, GCSViews/FlightData.cs:5933-5936`
             Self::LogBrowse => {
-                "Auto Analysis, Create KML + gpx, Convert .Bin to .Log, Create Matlab File and \
-                 Geo Reference Images are not ported."
+                "Geo Reference Images, the Georefimage window, is not ported. A log is named \
+                 by typing it, from the log directory."
             }
         })
     }
@@ -3247,7 +3279,7 @@ pub fn page_content(
                 crate::quick::page(&inputs.data.quick, shown.as_ref(), cx)
             }
             Panel::Playback => playback_page(&inputs.data.playback, cx),
-            Panel::DataFlash => dataflash_page(cx),
+            Panel::DataFlash => dataflash_page(inputs.data, cx),
             Panel::Actions => actions_panel(
                 view,
                 inputs.checks_disabled,
@@ -3536,6 +3568,23 @@ impl MissionPlanner {
                     self.fly_load_log(&text);
                 }
             }
+            Prompt::Convert(kind) => {
+                if accepted {
+                    self.fly_convert(kind, &text);
+                }
+            }
+            Prompt::JumpToTag => {
+                if accepted {
+                    self.fly_jump_to_tag(&text, window, cx);
+                }
+            }
+            Prompt::HudHeader => {
+                let pending = self.fly_data.hud_settings.pending.take();
+                // Cancel leaves the box unchecked. `// C#: GCSViews/FlightData.cs:2451-2455`
+                if accepted && let Some(name) = pending {
+                    self.fly_data.hud_settings.add_item(&name, &text);
+                }
+            }
         }
     }
 
@@ -3681,10 +3730,14 @@ impl MissionPlanner {
         });
     }
 
-    /// Once a frame: `cs.lastautowp`, a Resume Mission moved on, and the Telemetry Logs page
-    /// following the log it plays.
+    /// Once a frame: `cs.lastautowp`, a Resume Mission moved on, the Telemetry Logs page
+    /// following the log it plays, and the DataFlash Logs page's conversion finishing.
     pub(crate) fn fly_tick(&mut self, view: &TelemetryView) {
         self.fly_data.playback.tick();
+        // A conversion that has finished says so on the status line.
+        if let Some(outcome) = self.fly_data.conversions.poll() {
+            self.file_status = Some(conversion_status(&outcome));
+        }
         if let Some(state) = view.state.as_deref()
             && mode_name(state).is_some_and(|mode| mode.eq_ignore_ascii_case("auto"))
             && state.mission_current != 0
@@ -3826,6 +3879,15 @@ pub struct FlightData {
     pub mouse_down_start: Option<(mp_units::LatLon, (f32, f32))>,
     /// Where the HUD was laid out, for its click zones.
     pub hud_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
+    /// The DataFlash Logs page's conversions.
+    pub conversions: Conversions,
+    /// The HUD's menu.
+    pub hud_menu: HudMenu,
+    /// What the HUD's menu has set.
+    pub hud_settings: HudSettings,
+    /// Whether Swap With Map has put the HUD where the map was: the C#'s `HudSwap`.
+    /// `// C#: GCSViews/FlightData.cs:5139-5159`
+    pub swapped: bool,
 }
 
 impl FlightData {
@@ -3847,6 +3909,10 @@ impl FlightData {
             vibration_open: false,
             mouse_down_start: None,
             hud_bounds: Rc::new(Cell::new(None)),
+            conversions: Conversions::default(),
+            hud_menu: HudMenu::default(),
+            hud_settings: HudSettings::default(),
+            swapped: false,
         }
     }
 
@@ -3913,6 +3979,43 @@ impl FlightData {
             self.mouse_down_start.map_or_else(
                 || "none".to_owned(),
                 |(at, _)| format!("{:.6};{:.6}", at.latitude(), at.longitude()),
+            ),
+        );
+        self.conversions.record_facts();
+        crate::facts::record("fly.hud.menu", self.hud_menu.open.is_some());
+        crate::facts::record("fly.hud.menu.video", self.hud_menu.video);
+        crate::facts::record("fly.hud.russian", self.hud_settings.russian);
+        crate::facts::record(
+            "fly.hud.ground",
+            match self.hud_settings.ground {
+                None => "hud",
+                Some(true) => "brown",
+                Some(false) => "green",
+            },
+        );
+        crate::facts::record(
+            "fly.hud.items",
+            if self.hud_settings.items.is_empty() {
+                "none".to_owned()
+            } else {
+                self.hud_settings
+                    .items
+                    .iter()
+                    .map(|(name, header)| format!("{name}={header}"))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            },
+        );
+        crate::facts::record("fly.hud.items.open", self.hud_settings.choosing);
+        crate::facts::record("fly.hud.items.choices", hud_item_choices().len());
+        crate::facts::record("fly.swapped", self.swapped);
+        // Where the HUD was laid out, so a swap is seen to move it: the column's left edge, or
+        // the map's place right of the column.
+        crate::facts::record(
+            "fly.hud.left",
+            self.hud_bounds.get().map_or_else(
+                || "none".to_owned(),
+                |laid_out| format!("{:.0}", f32::from(laid_out.origin.x)),
             ),
         );
     }
@@ -4399,11 +4502,13 @@ fn track_bar(playback: &Playback, cx: &mut Context<MissionPlanner>) -> AnyElemen
 
 /// The DataFlash Logs page: `tableLayoutPanel2`, three columns of three rows, as its
 /// `LayoutSettings` place each button. Download DataFlash Log Via Mavlink opens the Log
-/// Downloader and Review a Log the log browser; the other five tools are not ported, and their
-/// cells are empty, as the Actions grid leaves the cells of what it lacks.
+/// Downloader and Review a Log the log browser; the four conversions ask for a log and convert it
+/// on a thread of their own, the page's conversion buttons waiting until it is done as the C#'s
+/// window waits; Geo Reference Images is drawn dimmed, its window not ported.
 /// `// C#: GCSViews/FlightData.Designer.cs:2379-2389, GCSViews/FlightData.resx (tableLayoutPanel2.LayoutSettings)`
-pub fn dataflash_page(cx: &mut Context<MissionPlanner>) -> AnyElement {
-    div()
+pub fn dataflash_page(data: &FlightData, cx: &mut Context<MissionPlanner>) -> AnyElement {
+    let idle = data.conversions.running().is_none();
+    let mut grid = div()
         .grid()
         .grid_cols(3)
         .gap_1()
@@ -4437,8 +4542,399 @@ pub fn dataflash_page(cx: &mut Context<MissionPlanner>) -> AnyElement {
                     cx.notify();
                 }),
             ),
-        ))
-        .into_any_element()
+        ));
+    for kind in Conversion::ALL {
+        let (column, row) = kind.cell();
+        grid = grid.child(cell(
+            column,
+            row,
+            grid_button(
+                kind.id(),
+                kind.text(),
+                theme::ACCENT,
+                idle,
+                cx.listener(move |this, _event: &(), window, cx| {
+                    this.fly_ask_convert(kind, window, cx);
+                    cx.notify();
+                }),
+            ),
+        ));
+    }
+    // `new Georefimage().Show()`: a window of its own, not ported.
+    // `// C#: GCSViews/FlightData.cs:5933-5936`
+    grid = grid.child(cell(
+        0,
+        2,
+        grid_button(
+            "fly-georefimage",
+            "Geo Reference Images",
+            theme::ACCENT,
+            false,
+            |_event: &(), _window, _cx| {},
+        ),
+    ));
+    let mut page = div().flex().flex_col().gap_1().child(grid);
+    if let Some(kind) = data.conversions.running() {
+        page = page.child(
+            crate::probe::measured("fly-convert-running", div())
+                .text_xs()
+                .text_color(rgb(theme::WARN))
+                .child(format!("{}: working", kind.text())),
+        );
+    }
+    page.into_any_element()
+}
+
+// --- The DataFlash Logs page's conversions --------------------------------------------------------
+
+/// One of the DataFlash Logs page's conversion buttons. Each asks for a log and writes what the
+/// C#'s button writes, where it writes it.
+/// `// C#: GCSViews/FlightData.cs:1082-1098, 1135-1202, 1311-1378, 1387-1390`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Conversion {
+    /// `but_bintolog`: `BinaryLog.ConvertBin` to `<name>.log` beside the log.
+    BinToLog,
+    /// `but_dflogtokml`: `LogOutput.writeKML(<log>.kml)` - the `.kmz`, the `.gpx` and the rest.
+    DflogToKml,
+    /// `BUT_matlab`: `MatLab.ProcessLog`, `<log>-<lines>.mat`.
+    Matlab,
+    /// `BUT_loganalysis`: ArduPilot's analyzer run on the log, and its report shown.
+    LogAnalysis,
+}
+
+impl Conversion {
+    /// The four, in the page's order: by row, then by column.
+    pub const ALL: [Self; 4] = [
+        Self::LogAnalysis,
+        Self::DflogToKml,
+        Self::BinToLog,
+        Self::Matlab,
+    ];
+
+    /// The id a script clicks the button by.
+    #[must_use]
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::BinToLog => "fly-bintolog",
+            Self::DflogToKml => "fly-dflogtokml",
+            Self::Matlab => "fly-matlab",
+            Self::LogAnalysis => "fly-loganalysis",
+        }
+    }
+
+    /// The button's `Text` in `FlightData.resx`.
+    #[must_use]
+    pub const fn text(self) -> &'static str {
+        match self {
+            Self::BinToLog => "Convert .Bin to .Log",
+            Self::DflogToKml => "Create KML + gpx",
+            Self::Matlab => "Create Matlab File",
+            Self::LogAnalysis => "Auto Analysis",
+        }
+    }
+
+    /// The name the facts use.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::BinToLog => "bintolog",
+            Self::DflogToKml => "dflogtokml",
+            Self::Matlab => "matlab",
+            Self::LogAnalysis => "loganalysis",
+        }
+    }
+
+    /// The cell `tableLayoutPanel2.LayoutSettings` gives the button: (column, row).
+    /// `// C#: GCSViews/FlightData.resx:5156`
+    #[must_use]
+    pub const fn cell(self) -> (i16, i16) {
+        match self {
+            Self::LogAnalysis => (2, 0),
+            Self::DflogToKml => (0, 1),
+            Self::BinToLog => (1, 1),
+            Self::Matlab => (2, 1),
+        }
+    }
+
+    /// The first description of the dialog's `Filter`, which the prompt says as Load Log's does.
+    /// `// C#: GCSViews/FlightData.cs:1086, 1139, 1315, Log/MatLabForms.cs:47`
+    #[must_use]
+    pub const fn filter(self) -> &'static str {
+        match self {
+            Self::BinToLog => "Binary Log",
+            Self::DflogToKml | Self::Matlab => "Log Files",
+            Self::LogAnalysis => "*.log;*.bin",
+        }
+    }
+
+    /// Where the dialog opens: `tlogdir` - the log directory, or the folder of the last log
+    /// loaded - for Create KML + gpx and Auto Analysis, and the log directory for Create Matlab
+    /// File. Convert .Bin to .Log sets no `InitialDirectory`, so the system's dialog opens where
+    /// it was last; here that is the log directory too.
+    /// `// C#: GCSViews/FlightData.cs:1145, 1316, Log/MatLabForms.cs:53`
+    #[must_use]
+    pub fn directory(
+        self,
+        tlogdir: Option<&std::path::Path>,
+        logdir: Option<&std::path::Path>,
+    ) -> Option<std::path::PathBuf> {
+        match self {
+            Self::DflogToKml | Self::LogAnalysis => tlogdir.or(logdir),
+            Self::BinToLog | Self::Matlab => logdir,
+        }
+        .map(std::path::Path::to_path_buf)
+    }
+}
+
+/// What a conversion made.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Converted {
+    /// The files written, each with its size in bytes.
+    Files(Vec<(std::path::PathBuf, u64)>),
+    /// Auto Analysis's report: the text `Controls.LogAnalyzer` shows.
+    Report(String),
+}
+
+/// The files, each with its size as it lies on the disk.
+fn sized(paths: Vec<std::path::PathBuf>) -> Converted {
+    Converted::Files(
+        paths
+            .into_iter()
+            .map(|path| {
+                let size = std::fs::metadata(&path).map_or(0, |meta| meta.len());
+                (path, size)
+            })
+            .collect(),
+    )
+}
+
+/// One conversion of `log`, as its button's handler runs it once the dialog has given it the
+/// file, with the application's flight mode names. `analyzer` is where Auto Analysis keeps
+/// ArduPilot's analyzer, and `fetch` downloads it (`Download.getFilefromNet`); the other three use
+/// neither.
+///
+/// # Errors
+///
+/// What the C#'s message box says: "Error processing file..." from Create KML + gpx's `catch`,
+/// "Error converting file" from Create Matlab File's, and Auto Analysis's boxes. Convert .Bin to
+/// .Log has no `catch`, and its failure is said as it is.
+/// `// C#: GCSViews/FlightData.cs:1091-1097, 1151-1198, 1319-1377, Log/MatLabForms.cs:59-72`
+pub fn convert(
+    kind: Conversion,
+    log: &std::path::Path,
+    analyzer: Option<&std::path::Path>,
+    fetch: &mut dyn FnMut(&str, &std::path::Path) -> bool,
+) -> Result<Converted, String> {
+    let modes = &mp_log::convert::flight_mode_name;
+    match kind {
+        Conversion::BinToLog => {
+            let target = mp_log::convert::log_path_for(log);
+            mp_log::convert::convert_bin_file(log, &target, modes)
+                .map_err(|err| format!("{}: {err}", log.display()))?;
+            Ok(sized(vec![target]))
+        }
+        Conversion::DflogToKml => {
+            match mp_kml::dflog::dflog_to_kml(log, modes, &mp_kml::dflog::local_zone) {
+                Ok(paths) => Ok(sized(paths)),
+                Err(mp_kml::dflog::DflogKmlError::Io(err)) => Err(format!(
+                    "Error processing file. Make sure the file is not in use.\n{err}"
+                )),
+                // `writeKML` throws after the side files, outside the `catch`.
+                Err(err) => Err(err.to_string()),
+            }
+        }
+        Conversion::Matlab => mp_log::matlab::process_log_file(log, modes)
+            .map(|path| sized(vec![path]))
+            .map_err(|err| format!("Error converting file {err}")),
+        Conversion::LogAnalysis => {
+            let dir = analyzer.ok_or("no home directory to keep the analyzer in")?;
+            let analysis =
+                mp_log::analysis::analyse(log, dir, fetch, modes).map_err(|err| err.to_string())?;
+            Ok(Converted::Report(mp_log::analysis::report(&analysis)))
+        }
+    }
+}
+
+/// `Download.getFilefromNet(url, saveto)`: whether the analyzer arrived.
+/// `// C#: Utilities/LogAnalyzer.cs:42-56`
+fn download(url: &str, to: &std::path::Path) -> bool {
+    use mp_firmware::manifest::Fetch as _;
+    mp_firmware::manifest::Http
+        .get(url)
+        .is_ok_and(|bytes| std::fs::write(to, bytes).is_ok())
+}
+
+/// A conversion's outcome, with the log it was of.
+pub type Outcome = (Conversion, std::path::PathBuf, Result<Converted, String>);
+
+/// A conversion on its way: which, of what, and where its outcome arrives.
+type Running = (
+    Conversion,
+    std::path::PathBuf,
+    std::sync::mpsc::Receiver<Result<Converted, String>>,
+);
+
+/// The conversion running, what the last one made, and Auto Analysis's report window.
+#[derive(Debug, Default)]
+pub struct Conversions {
+    /// The one running.
+    running: Option<Running>,
+    /// The last one to finish.
+    last: Option<Outcome>,
+    /// `Controls.LogAnalyzer`'s report, while its window is open.
+    pub report: Option<String>,
+}
+
+impl Conversions {
+    /// The conversion running, if one is.
+    #[must_use]
+    pub fn running(&self) -> Option<Conversion> {
+        self.running.as_ref().map(|(kind, _, _)| *kind)
+    }
+
+    /// Starts `kind` on `log` on a thread of its own, returning whether it started. The C#
+    /// converts on the window's thread and the window waits until it is done; here the screen
+    /// goes on, and the page's conversion buttons wait instead, so nothing starts while one runs.
+    pub fn start(
+        &mut self,
+        kind: Conversion,
+        log: std::path::PathBuf,
+        analyzer: Option<std::path::PathBuf>,
+    ) -> bool {
+        if self.running.is_some() {
+            return false;
+        }
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let path = log.clone();
+        let spawned = std::thread::Builder::new()
+            .name(format!("mp-convert-{}", kind.name()))
+            .spawn(move || {
+                let outcome = convert(kind, &path, analyzer.as_deref(), &mut download);
+                let _ = sender.send(outcome);
+            });
+        if spawned.is_err() {
+            return false;
+        }
+        self.running = Some((kind, log, receiver));
+        true
+    }
+
+    /// Once a frame: the outcome of a conversion that has just finished, once. An Auto Analysis
+    /// report opens its window. `// C#: GCSViews/FlightData.cs:1348-1354`
+    pub fn poll(&mut self) -> Option<Outcome> {
+        let (kind, log, receiver) = self.running.as_ref()?;
+        let result = match receiver.try_recv() {
+            Ok(result) => result,
+            Err(std::sync::mpsc::TryRecvError::Empty) => return None,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                Err("the conversion stopped without an answer".to_owned())
+            }
+        };
+        let finished = (*kind, log.clone(), result);
+        self.running = None;
+        if let (_, _, Ok(Converted::Report(text))) = &finished {
+            self.report = Some(text.clone());
+        }
+        self.last = Some(finished.clone());
+        Some(finished)
+    }
+
+    /// Publishes what a UI test asserts on: what is running, what finished last, the files it
+    /// wrote by name and size, its error, and the report window's text.
+    pub fn record_facts(&self) {
+        crate::facts::record(
+            "fly.logs.convert.running",
+            self.running().map_or("none", Conversion::name),
+        );
+        let last = self.last.as_ref();
+        crate::facts::record(
+            "fly.logs.convert.last",
+            last.map_or("none", |(kind, _, _)| kind.name()),
+        );
+        let files = match last {
+            Some((_, _, Ok(Converted::Files(files)))) => files
+                .iter()
+                .map(|(path, size)| {
+                    let name = path
+                        .file_name()
+                        .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+                    format!("{name}:{size}")
+                })
+                .collect::<Vec<_>>()
+                .join(","),
+            _ => "none".to_owned(),
+        };
+        crate::facts::record("fly.logs.convert.files", files);
+        crate::facts::record(
+            "fly.logs.convert.error",
+            match last {
+                Some((_, _, Err(why))) => why.as_str(),
+                _ => "none",
+            },
+        );
+        crate::facts::record(
+            "fly.logs.convert.report",
+            self.report.as_deref().unwrap_or("none"),
+        );
+    }
+}
+
+/// The status line's words for a finished conversion: the files it wrote, or the error as its
+/// message box says it. The C# says nothing when a conversion works - its window simply comes
+/// back to life - so this says where the files went.
+#[must_use]
+pub fn conversion_status(outcome: &Outcome) -> String {
+    let (kind, log, result) = outcome;
+    match result {
+        Ok(Converted::Files(files)) => format!(
+            "{}: {}",
+            kind.text(),
+            files
+                .iter()
+                .map(|(path, _)| path.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        Ok(Converted::Report(_)) => format!("{}: {}", kind.text(), log.display()),
+        Err(why) => error_box(why),
+    }
+}
+
+/// `Controls.LogAnalyzer`: "LogAnalyzer", its text box holding the report, shown with `Show()`.
+/// `// C#: GCSViews/FlightData.cs:1348-1354, Controls/LogAnalyzer.Designer.cs:31-52`
+fn log_analyzer_window(report: &str, cx: &mut Context<MissionPlanner>) -> AnyElement {
+    let mut lines = div().flex().flex_col();
+    for line in report.lines() {
+        lines = lines.child(
+            div()
+                .text_xs()
+                .text_color(rgb(theme::TEXT))
+                .child(line.to_owned()),
+        );
+    }
+    let body = div().child(
+        crate::probe::measured("fly-loganalyzer-text", div())
+            .id("fly-loganalyzer-text")
+            .w(px(622.0))
+            .h(px(434.0))
+            .p_1()
+            .border_1()
+            .border_color(rgb(theme::BORDER))
+            .bg(rgb(theme::BG))
+            .overflow_y_scroll()
+            .child(lines),
+    );
+    floating_window(
+        "fly-loganalyzer",
+        "LogAnalyzer",
+        "fly-loganalyzer-close",
+        (420.0, 80.0),
+        body,
+        cx.listener(|this, _event: &(), _window, cx| {
+            this.fly_data.conversions.report = None;
+            cx.notify();
+        }),
+    )
 }
 
 // --- The windows the HUD opens --------------------------------------------------------------------
@@ -4492,7 +4988,9 @@ pub fn hud_zone(scene: &crate::hud::Scene, window: HudWindow) -> Option<(f32, f3
         })
 }
 
-/// The primary flight display, with the two places a click opens a window.
+/// The primary flight display, with the two places a click opens a window and its menu on the
+/// right button. Where the HUD and the map have been swapped it fills the map's place rather than
+/// the column's top.
 pub fn hud_panel(
     inputs: &crate::hud::HudInputs,
     data: &FlightData,
@@ -4503,6 +5001,7 @@ pub fn hud_panel(
     // `HUD.cs` paints them, so nothing is overlaid as widgets any more. The box is 16:9-ish and
     // tall enough that the C#'s `Height / 30` font is legible.
     let painted = inputs.clone();
+    let ground = data.hud_settings.ground_colours();
     let bounds = Rc::clone(&data.hud_bounds);
     // The zones are where the last frame drew the text; before the first, the column's size.
     let (width, height) = data.hud_bounds.get().map_or((398.0, 258.0), |laid_out| {
@@ -4511,21 +5010,30 @@ pub fn hud_panel(
             f32::from(laid_out.size.height),
         )
     });
-    let scene = crate::hud::scene(inputs, width, height);
-    let mut hud = div()
+    let scene = hud_scene(inputs, ground, width, height);
+    let hud = crate::probe::measured("hud", div())
+        .id("hud")
         .relative()
-        .h(px(260.0))
         .w_full()
         .overflow_hidden()
         .rounded_md()
         .border_1()
-        .border_color(rgb(theme::BORDER))
+        .border_color(rgb(theme::BORDER));
+    // `SwapHud1AndMap` puts `hud1` in `MainH.Panel2`, which it fills; otherwise it is the top of
+    // the column. `// C#: GCSViews/FlightData.cs:5139-5159`
+    let hud = if data.swapped {
+        hud.flex_1().min_h(px(0.0))
+    } else {
+        hud.h(px(260.0))
+    };
+    let mut hud = hud
         .child(
             gpui::canvas(
                 move |laid_out, _window, _cx| bounds.set(Some(laid_out)),
                 move |bounds, (), window, cx| {
-                    let scene = crate::hud::scene(
+                    let scene = hud_scene(
                         &painted,
+                        ground,
                         f32::from(bounds.size.width),
                         f32::from(bounds.size.height),
                     );
@@ -4533,6 +5041,18 @@ pub fn hud_panel(
                 },
             )
             .size_full(),
+        )
+        // `hud1.ContextMenuStrip = contextMenuStripHud`: the menu where the right button comes up.
+        // `// C#: GCSViews/FlightData.Designer.cs:346`
+        .on_mouse_up(
+            gpui::MouseButton::Right,
+            cx.listener(|this, event: &gpui::MouseUpEvent, _window, cx| {
+                this.fly_data.hud_menu = HudMenu {
+                    open: Some((f32::from(event.position.x), f32::from(event.position.y))),
+                    video: false,
+                };
+                cx.notify();
+            }),
         );
     for which in [HudWindow::Ekf, HudWindow::Vibration] {
         let Some((left, top, width, height)) = hud_zone(&scene, which) else {
@@ -4875,9 +5395,746 @@ pub fn hud_windows(
     windows
 }
 
+// --- The HUD's menu -------------------------------------------------------------------------------
+
+/// What a row of the HUD's menu does here.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HudAction {
+    /// `videoToolStripMenuItem`: shows its drop-down.
+    Video,
+    /// `userItemsToolStripMenuItem`: `hud_UserItem`, the "Display This" form.
+    UserItems,
+    /// `russianHudToolStripMenuItem`: `hud1.Russian` turned over.
+    Russian,
+    /// `swapWithMapToolStripMenuItem`: `SwapHud1AndMap`.
+    SwapWithMap,
+    /// `groundColorToolStripMenuItem`: checked or unchecked by the click, the ground following.
+    GroundColor,
+}
+
+/// A row of `contextMenuStripHud`, or of its Video drop-down.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HudRow {
+    /// The Designer's name.
+    pub control: &'static str,
+    /// Its `Text` in `FlightData.resx`.
+    pub text: &'static str,
+    /// The id a script clicks it by.
+    pub id: &'static str,
+    /// What it does here, or why it is drawn dimmed.
+    pub does: Result<HudAction, &'static str>,
+}
+
+/// Why the Video drop-down's sources are dimmed.
+const NO_VIDEO: &str =
+    "the HUD's video sources - MJPEG, the camera, GStreamer, HereLink - are not ported";
+
+/// Why Record Hud to AVI and Stop Record are dimmed.
+const NO_AVI: &str = "there is no AVI encoder here, the C#'s AviWriter";
+
+/// `contextMenuStripHud`, in the Designer's order, with each row's words from the `.resx`.
+/// `// C#: GCSViews/FlightData.Designer.cs:458-466, 525-566, GCSViews/FlightData.resx`
+pub const HUD_MENU: [HudRow; 8] = [
+    HudRow {
+        control: "videoToolStripMenuItem",
+        text: "Video",
+        id: "fly-hud-video",
+        does: Ok(HudAction::Video),
+    },
+    HudRow {
+        control: "setAspectRatioToolStripMenuItem",
+        text: "Set Aspect Ratio",
+        id: "fly-hud-aspect",
+        // `// C#: GCSViews/FlightData.cs:4783-4787, ExtLibs/Controls/HUD.cs:3739-3765`
+        does: Err(
+            "the C# makes the HUD 4:3 - or 16:9, once toggled - from its width, and this \
+             screen's HUD is 260 pixels high; the C#'s 4:3 would change the column's layout",
+        ),
+    },
+    HudRow {
+        control: "userItemsToolStripMenuItem",
+        text: "User Items",
+        id: "fly-hud-useritems",
+        does: Ok(HudAction::UserItems),
+    },
+    HudRow {
+        control: "russianHudToolStripMenuItem",
+        text: "Russian Hud",
+        id: "fly-hud-russian",
+        does: Ok(HudAction::Russian),
+    },
+    HudRow {
+        control: "swapWithMapToolStripMenuItem",
+        text: "Swap With Map",
+        id: "fly-hud-swap",
+        does: Ok(HudAction::SwapWithMap),
+    },
+    HudRow {
+        control: "groundColorToolStripMenuItem",
+        text: "Ground Color",
+        id: "fly-hud-groundcolor",
+        does: Ok(HudAction::GroundColor),
+    },
+    HudRow {
+        control: "setBatteryCellCountToolStripMenuItem",
+        text: "Battery Cell Voltage",
+        id: "fly-hud-batterycells",
+        // `// C#: GCSViews/FlightData.cs:6115-6140, ExtLibs/Controls/HUD.cs:2896-2906`
+        does: Err("the HUD's cell voltage line is not drawn here"),
+    },
+    HudRow {
+        control: "showIconsToolStripMenuItem",
+        text: "Show icons",
+        id: "fly-hud-showicons",
+        // `// C#: GCSViews/FlightData.cs:6484-6496, ExtLibs/Controls/HUD.cs:2867-3293`
+        does: Err("the HUD's icons, displayicons, are not ported"),
+    },
+];
+
+/// `videoToolStripMenuItem`'s drop-down, in the Designer's order.
+/// `// C#: GCSViews/FlightData.Designer.cs:470-523`
+pub const HUD_VIDEO_MENU: [HudRow; 7] = [
+    HudRow {
+        control: "recordHudToAVIToolStripMenuItem",
+        text: "Record Hud to AVI",
+        id: "fly-hud-recordavi",
+        // `// C#: GCSViews/FlightData.cs:4653-4672`
+        does: Err(NO_AVI),
+    },
+    HudRow {
+        control: "stopRecordToolStripMenuItem",
+        text: "Stop Record",
+        id: "fly-hud-stoprecord",
+        // `// C#: GCSViews/FlightData.cs:5121-5137`
+        does: Err(NO_AVI),
+    },
+    HudRow {
+        control: "setMJPEGSourceToolStripMenuItem",
+        text: "Set MJPEG source",
+        id: "fly-hud-mjpeg",
+        does: Err(NO_VIDEO),
+    },
+    HudRow {
+        control: "startCameraToolStripMenuItem",
+        text: "Start Camera",
+        id: "fly-hud-startcamera",
+        does: Err(NO_VIDEO),
+    },
+    HudRow {
+        control: "setGStreamerSourceToolStripMenuItem",
+        text: "Set GStreamer Source",
+        id: "fly-hud-gstreamer",
+        does: Err(NO_VIDEO),
+    },
+    HudRow {
+        control: "hereLinkVideoToolStripMenuItem",
+        text: "HereLink Video",
+        id: "fly-hud-herelink",
+        does: Err(NO_VIDEO),
+    },
+    HudRow {
+        control: "gStreamerStopToolStripMenuItem",
+        text: "GStreamer Stop",
+        id: "fly-hud-gstreamerstop",
+        does: Err(NO_VIDEO),
+    },
+];
+
+/// The HUD's menu: where it is open, and whether its Video drop-down shows.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct HudMenu {
+    /// Where the right button came up, in the window, while the menu is open.
+    pub open: Option<(f32, f32)>,
+    /// Whether the Video drop-down shows.
+    pub video: bool,
+}
+
+/// `groundColor1` and `groundColor2` as Ground Color sets them when it is checked: brown.
+/// `// C#: GCSViews/FlightData.cs:3124-3129`
+pub const GROUND_BROWN: (u32, u32) = (0x93_4e_01, 0x3c_21_04);
+
+/// The same when it is not: green. `// C#: GCSViews/FlightData.cs:3130-3135`
+pub const GROUND_GREEN: (u32, u32) = (0x9b_b8_24, 0x41_4f_07);
+
+/// What the HUD's menu has set on `hud1`.
+///
+/// For the session: the C# keeps each in its settings - `russian_hud`,
+/// `groundColorToolStripMenuItem`, `hud1_useritem_<name>` - and the settings file is not this
+/// module's to extend, as the quick views' choices are not.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct HudSettings {
+    /// `hud1.Russian`.
+    pub russian: bool,
+    /// `groundColorToolStripMenuItem.Checked`, once the entry has been clicked. Until then the
+    /// ground is the display's own.
+    pub ground: Option<bool>,
+    /// `hud1.CustomItems`: each property shown, with its header, in the order checked.
+    pub items: Vec<(String, String)>,
+    /// Whether the "Display This" form is open.
+    pub choosing: bool,
+    /// The property whose header is being asked for.
+    pub pending: Option<String>,
+}
+
+impl HudSettings {
+    /// Russian Hud: `hud1.Russian = !hud1.Russian`. `// C#: GCSViews/FlightData.cs:4735-4739`
+    pub fn toggle_russian(&mut self) {
+        self.russian = !self.russian;
+    }
+
+    /// Ground Color: the entry is `CheckOnClick`, so a click checks or unchecks it, and the
+    /// handler then paints the ground brown or green by what it now is.
+    /// `// C#: GCSViews/FlightData.Designer.cs:551, GCSViews/FlightData.cs:3122-3139`
+    pub fn toggle_ground(&mut self) {
+        self.ground = Some(!self.ground.unwrap_or(false));
+    }
+
+    /// The ground's two colours, once Ground Color has been clicked.
+    #[must_use]
+    pub fn ground_colours(&self) -> Option<(u32, u32)> {
+        self.ground
+            .map(|brown| if brown { GROUND_BROWN } else { GROUND_GREEN })
+    }
+
+    /// `hud1.CustomItems.ContainsKey(name)`.
+    #[must_use]
+    pub fn shows(&self, name: &str) -> bool {
+        self.items.iter().any(|(shown, _)| shown == name)
+    }
+
+    /// A box of "Display This" clicked: `chk_box_hud_UserItem_CheckedChanged`. A checked box is
+    /// unchecked and its item comes off the HUD. An unchecked one asks for its header, starting
+    /// at the box's text and ": " - returned for the question, whose answer is [`Self::add_item`].
+    /// `// C#: GCSViews/FlightData.cs:2436-2472`
+    pub fn click_item(&mut self, name: &str) -> Option<String> {
+        if self.shows(name) {
+            self.items.retain(|(shown, _)| shown != name);
+            return None;
+        }
+        self.pending = Some(name.to_owned());
+        Some(format!("{name}: "))
+    }
+
+    /// `addHudUserItem`: `hud1.CustomItems[name] = cust`, the header replaced where the item is
+    /// already there. `// C#: GCSViews/FlightData.cs:948-955`
+    pub fn add_item(&mut self, name: &str, header: &str) {
+        match self.items.iter_mut().find(|(shown, _)| shown == name) {
+            Some(item) => header.clone_into(&mut item.1),
+            None => self.items.push((name.to_owned(), header.to_owned())),
+        }
+    }
+
+    /// Hands the display what the menu has set: the Russian flag, and each user item with its
+    /// value read from the vehicle, as `HUD.Custom` reads its property by reflection as it paints.
+    /// `// C#: ExtLibs/Controls/HUD.cs:949-968`
+    pub fn apply(
+        &self,
+        inputs: &mut crate::hud::HudInputs,
+        state: Option<&mp_vehicle::VehicleState>,
+    ) {
+        inputs.russian = self.russian;
+        inputs.custom_items = self
+            .items
+            .iter()
+            .map(|(name, header)| crate::hud::CustomItem {
+                header: header.clone(),
+                name: name.clone(),
+                value: state.and_then(|state| crate::quick::value(name, state)),
+            })
+            .collect();
+    }
+}
+
+/// `CurrentState.StringCompareTo`, the order "Display This" lists its boxes in: character by
+/// character ignoring case, a run of digits against a run of digits as numbers, and the shorter
+/// first when one runs out.
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4409-4459`
+#[must_use]
+pub fn string_compare_to(a: &str, b: &str) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    let (arr1, arr2): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+    let number = |chars: &[char], at: &mut usize| {
+        let mut digits = String::new();
+        while let Some(&c) = chars.get(*at)
+            && c.is_ascii_digit()
+        {
+            digits.push(c);
+            *at += 1;
+        }
+        digits.parse::<u128>().unwrap_or(u128::MAX)
+    };
+    let lower = |c: char| c.to_lowercase().next().unwrap_or(c);
+    let (mut i, mut j) = (0, 0);
+    while let (Some(&x), Some(&y)) = (arr1.get(i), arr2.get(j)) {
+        if x.is_ascii_digit() && y.is_ascii_digit() {
+            let (s1, s2) = (number(&arr1, &mut i), number(&arr2, &mut j));
+            match s1.cmp(&s2) {
+                Ordering::Equal => {}
+                unequal => return unequal,
+            }
+        } else {
+            match lower(x).cmp(&lower(y)) {
+                Ordering::Equal => {}
+                unequal => return unequal,
+            }
+            i += 1;
+            j += 1;
+        }
+    }
+    arr1.len().cmp(&arr2.len())
+}
+
+/// What "Display This" offers: every numeric `CurrentState` property this application holds -
+/// the quick view's chooser's, less the `bool`s, which `IsNumber` refuses here where the quick
+/// view's form turns them into 0 and 1 - in `StringCompareTo`'s order.
+/// `// C#: GCSViews/FlightData.cs:3203-3236, ExtLibs/Utilities/Extensions.cs:681-705`
+#[must_use]
+pub fn hud_item_choices() -> Vec<&'static str> {
+    let mut names: Vec<&'static str> = crate::quick::choices()
+        .into_iter()
+        .filter(|name| {
+            mp_vehicle::coverage::CURRENTSTATE
+                .iter()
+                .any(|field| field.name == *name && field.ty != "bool")
+        })
+        .collect();
+    names.sort_by(|a, b| string_compare_to(a, b));
+    names
+}
+
+/// The display's scene, with the ground in the colours Ground Color chose.
+///
+/// `hud.rs` paints the sky and the ground each as one fill - the scene's first two items - where
+/// the C# paints each as a gradient; the ground here takes `groundColor1`, the colour the C#'s
+/// gradient has along the horizon. Until Ground Color is clicked the ground is the display's own.
+/// `// C#: ExtLibs/Controls/HUD.cs:2080-2094`
+#[must_use]
+pub fn hud_scene(
+    inputs: &crate::hud::HudInputs,
+    ground: Option<(u32, u32)>,
+    w: f32,
+    h: f32,
+) -> crate::hud::Scene {
+    let mut scene = crate::hud::scene(inputs, w, h);
+    if let Some((top, _)) = ground
+        && let Some(crate::hud::Item::Fill { colour, .. }) = scene.items.get_mut(1)
+    {
+        *colour = top;
+    }
+    scene
+}
+
+/// A menu row's height: fixed, as the planning map's menu has it.
+const HUD_MENU_ROW: f32 = 22.0;
+/// The menu's padding above its first row and below its last.
+const HUD_MENU_PADDING: f32 = 4.0;
+/// The menu's width and its drop-down's.
+const HUD_MENU_WIDTH: f32 = 190.0;
+
+/// One row, as a `ToolStripMenuItem` draws: a check where it is checked, its text, an arrow where
+/// it has a drop-down, and dimmed where it does nothing here. A dimmed row says why on the status
+/// line when it is clicked. The planning map's `menu_row` (`plan.rs`) is that screen's own; this
+/// is the same drawing for this menu.
+fn hud_menu_row(
+    row: &'static HudRow,
+    checked: bool,
+    highlighted: bool,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    let base = crate::probe::measured(row.id, div())
+        .id(row.id)
+        .h(px(HUD_MENU_ROW))
+        .px_2()
+        .flex()
+        .items_center()
+        .justify_between()
+        .gap_2()
+        .text_xs()
+        .child(
+            div()
+                .flex()
+                .gap_1()
+                .child(
+                    div()
+                        .w(px(10.0))
+                        .child(if checked { "\u{2713}" } else { "" }),
+                )
+                .child(row.text),
+        )
+        .children((row.does == Ok(HudAction::Video)).then_some("\u{203a}"));
+    match row.does {
+        Ok(action) => base
+            .text_color(rgb(theme::TEXT))
+            .bg(rgb(if highlighted {
+                theme::ACTION
+            } else {
+                theme::PANEL
+            }))
+            .cursor_pointer()
+            .hover(|style| style.bg(rgb(theme::BORDER)))
+            // The Video row shows its drop-down while the pointer is on it, and any other row
+            // hides it, as a ToolStrip does.
+            .on_hover(cx.listener(move |this, hovered: &bool, _window, cx| {
+                if *hovered && this.fly_data.hud_menu.open.is_some() {
+                    this.fly_data.hud_menu.video = action == HudAction::Video;
+                    cx.notify();
+                }
+            }))
+            .on_click(cx.listener(move |this, _event, _window, cx| {
+                this.fly_hud_menu(action);
+                cx.notify();
+            }))
+            .into_any_element(),
+        Err(why) => base
+            .text_color(rgb(theme::DIM))
+            .on_click(cx.listener(move |this, _event, _window, cx| {
+                this.file_status = Some(format!("{} is not ported: {why}", row.text));
+                cx.notify();
+            }))
+            .into_any_element(),
+    }
+}
+
+/// A column of rows: the menu, or its drop-down.
+fn hud_menu_column(id: &'static str, rows: Vec<AnyElement>) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(id)
+        .flex()
+        .flex_col()
+        .w(px(HUD_MENU_WIDTH))
+        .py(px(HUD_MENU_PADDING))
+        .bg(rgb(theme::PANEL))
+        .border_1()
+        .border_color(rgb(theme::BORDER))
+        .rounded_sm()
+        .occlude()
+        .children(rows)
+}
+
+/// `contextMenuStripHud`, where the right button came up over the HUD, moved in to fit the
+/// window, with the Video drop-down beside its row while it shows. A press anywhere else closes
+/// it, and goes no further, as a `ContextMenuStrip` closes.
+/// `// C#: GCSViews/FlightData.Designer.cs:346, 458-468`
+fn hud_menu(
+    menu: HudMenu,
+    settings: &HudSettings,
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> Option<AnyElement> {
+    let (x, y) = menu.open?;
+    let size = window.viewport_size();
+    #[allow(clippy::cast_precision_loss)] // eight rows
+    let height = 2.0f32.mul_add(HUD_MENU_PADDING, 2.0) + HUD_MENU.len() as f32 * HUD_MENU_ROW;
+    let left = x.min(f32::from(size.width) - HUD_MENU_WIDTH).max(0.0);
+    let top = y.min(f32::from(size.height) - height).max(0.0);
+    let rows = HUD_MENU
+        .iter()
+        .map(|row| {
+            let checked = match row.does {
+                Ok(HudAction::GroundColor) => settings.ground == Some(true),
+                _ => false,
+            };
+            let highlighted = row.does == Ok(HudAction::Video) && menu.video;
+            hud_menu_row(row, checked, highlighted, cx)
+        })
+        .collect();
+    let mut body = div()
+        .absolute()
+        .left(px(left))
+        .top(px(top))
+        .child(hud_menu_column("fly-hud-menu", rows));
+    if menu.video {
+        let rows = HUD_VIDEO_MENU
+            .iter()
+            .map(|row| hud_menu_row(row, false, false, cx))
+            .collect();
+        // Beside the Video row, the menu's first: on its right, or on its left where the window
+        // ends first, as a `ToolStripDropDown` opens.
+        let beside = if left + 2.0 * HUD_MENU_WIDTH > f32::from(size.width) {
+            -HUD_MENU_WIDTH
+        } else {
+            HUD_MENU_WIDTH
+        };
+        body = body.child(
+            div()
+                .absolute()
+                .left(px(beside))
+                .top(px(0.0))
+                .child(hud_menu_column("fly-hud-video-menu", rows)),
+        );
+    }
+    let close = cx.listener(|this, _event: &gpui::MouseDownEvent, _window, cx| {
+        this.fly_data.hud_menu = HudMenu::default();
+        cx.notify();
+    });
+    let close_right = cx.listener(|this, _event: &gpui::MouseDownEvent, _window, cx| {
+        this.fly_data.hud_menu = HudMenu::default();
+        cx.notify();
+    });
+    Some(
+        gpui::deferred(
+            gpui::anchored()
+                .position(gpui::point(px(0.0), px(0.0)))
+                .child(
+                    div()
+                        .relative()
+                        .w(size.width)
+                        .h(size.height)
+                        .child(
+                            div()
+                                .id("fly-hud-menu-backdrop")
+                                .absolute()
+                                .inset_0()
+                                .occlude()
+                                .on_mouse_down(gpui::MouseButton::Left, close)
+                                .on_mouse_down(gpui::MouseButton::Right, close_right),
+                        )
+                        .child(body),
+                ),
+        )
+        .with_priority(2)
+        .into_any_element(),
+    )
+}
+
+/// `hud_UserItem`'s form, "Display This": every property as a check box, in as many columns as
+/// fit in four fifths of the window, each as wide as the longest text and 15 more, filled top to
+/// bottom; the ones on the HUD checked and green. A box checked asks for its header; one
+/// unchecked takes its item off. The form sizes itself to its boxes, up to the window.
+/// `// C#: GCSViews/FlightData.cs:3185-3271`
+fn hud_items_chooser(
+    settings: &HudSettings,
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    let names = hud_item_choices();
+    let size = window.viewport_size();
+    // `TextRenderer.MeasureText` of the longest, at the form's 8.25pt font: about seven pixels a
+    // character, as the quick view's chooser takes it.
+    #[allow(clippy::cast_precision_loss)]
+    let max_length = names.iter().map(|name| name.len()).max().unwrap_or(1) as f32 * 7.0 + 15.0;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let columns = ((f32::from(size.width) * 0.8) / max_length).max(1.0) as usize;
+    let rows = names.len().div_ceil(columns).max(1);
+
+    let mut table = div().flex().gap_1();
+    for column in names.chunks(rows) {
+        let mut list = div().flex().flex_col().w(px(max_length));
+        for name in column {
+            let checked = settings.shows(name);
+            let id = format!("fly-hud-item-{name}");
+            let chosen = (*name).to_owned();
+            list = list.child(
+                crate::probe::measured(id.clone(), div())
+                    .id(SharedString::from(id))
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .h(px(20.0))
+                    .px_1()
+                    .text_xs()
+                    .cursor_pointer()
+                    .bg(rgb(if checked { 0x00_80_00 } else { theme::PANEL }))
+                    .text_color(rgb(theme::TEXT))
+                    .hover(|style| style.bg(rgb(theme::BORDER)))
+                    .child(if checked { "\u{2611}" } else { "\u{2610}" })
+                    .child((*name).to_owned())
+                    .on_click(cx.listener(move |this, _event, window, cx| {
+                        if let Some(header) = this.fly_data.hud_settings.click_item(&chosen) {
+                            this.fly_actions.ask(Prompt::HudHeader, &header);
+                            this.fly_focus.prompt.focus(window, cx);
+                        }
+                        cx.notify();
+                    })),
+            );
+        }
+        table = table.child(list);
+    }
+
+    let dialog = crate::probe::measured("fly-hud-items", div())
+        .id("fly-hud-items")
+        .flex()
+        .flex_col()
+        .gap_2()
+        .max_w(size.width - px(100.0))
+        .max_h(size.height - px(100.0))
+        .p_3()
+        .bg(rgb(theme::PANEL))
+        .border_1()
+        .border_color(rgb(theme::BORDER))
+        .rounded_md()
+        .child(
+            div()
+                .flex()
+                .justify_between()
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(theme::DIM))
+                        .child("Display This"),
+                )
+                .child(action(
+                    "fly-hud-items-close",
+                    "\u{2715}",
+                    theme::TEXT,
+                    true,
+                    cx.listener(|this, _event: &(), _window, cx| {
+                        this.fly_data.hud_settings.choosing = false;
+                        cx.notify();
+                    }),
+                )),
+        )
+        .child(
+            div()
+                .id("fly-hud-items-choices")
+                .flex_1()
+                .min_h(px(0.0))
+                .overflow_y_scroll()
+                .child(table),
+        );
+
+    gpui::deferred(
+        gpui::anchored()
+            .position(gpui::point(px(0.0), px(0.0)))
+            .child(
+                div()
+                    .id("fly-hud-items-backdrop")
+                    .w(size.width)
+                    .h(size.height)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .occlude()
+                    .child(dialog),
+            ),
+    )
+    .with_priority(2)
+    .into_any_element()
+}
+
+/// What the flight screen shows over itself besides the question, the HUD's windows, the Log
+/// Downloader and the quick view's chooser: the HUD's menu, its User Items form, and Auto
+/// Analysis's report.
+pub fn overlays(
+    data: &FlightData,
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> Vec<AnyElement> {
+    let mut shown = Vec::new();
+    if let Some(report) = &data.conversions.report {
+        shown.push(log_analyzer_window(report, cx));
+    }
+    if data.hud_settings.choosing {
+        shown.push(hud_items_chooser(&data.hud_settings, window, cx));
+    }
+    shown.extend(hud_menu(data.hud_menu, &data.hud_settings, window, cx));
+    shown
+}
+
+// --- Jump To Tag ----------------------------------------------------------------------------------
+
+/// The message box Jump To Tag shows for a tag that is not one, before asking again.
+/// `// C#: GCSViews/FlightData.cs:6512-6516`
+pub const INVALID_TAG: &str = "Invalid Tag. Must be a number from 0 to 65535";
+
+/// `UInt16.TryParse` of the tag: an unsigned 16-bit number, with white space around it and a sign
+/// allowed, as `NumberStyles.Integer` allows them. `// C#: GCSViews/FlightData.cs:6512`
+#[must_use]
+pub fn parse_tag(text: &str) -> Option<u16> {
+    let text = text.trim();
+    // "-0" is a zero to .NET; any other minus is out of range.
+    if let Some(rest) = text.strip_prefix('-') {
+        return (!rest.is_empty() && rest.bytes().all(|b| b == b'0')).then_some(0);
+    }
+    text.parse().ok()
+}
+
+/// `doCommand(MAV_CMD.DO_JUMP_TAG, tag, 0, 0, 0, 0, 0, 0)` to the vehicle flown.
+/// `// C#: GCSViews/FlightData.cs:6521`
+#[must_use]
+pub fn jump_to_tag_message(target: VehicleId, tag: u16) -> MavMessage {
+    let command = u16::try_from(MavCmd::MAV_CMD_DO_JUMP_TAG.0).unwrap_or(u16::MAX);
+    commands::command_long(
+        target,
+        command,
+        [f32::from(tag), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    )
+}
+
 // --- The handlers for the pages and the map's POI entries -----------------------------------------
 
 impl MissionPlanner {
+    /// A conversion's button: its dialog, as a question whose box starts in the folder the
+    /// dialog opens in, as Load Log's does. `// C#: GCSViews/FlightData.cs:1084-1089, 1137-1151,
+    /// 1313-1317, Log/MatLabForms.cs:45-59`
+    fn fly_ask_convert(&mut self, kind: Conversion, window: &mut Window, cx: &mut Context<Self>) {
+        let logdir = log_directory();
+        let start = kind
+            .directory(
+                self.fly_data.playback.directory.as_deref(),
+                logdir.as_deref(),
+            )
+            .map_or_else(String::new, |dir| {
+                format!("{}{}", dir.display(), std::path::MAIN_SEPARATOR)
+            });
+        self.fly_actions.ask(Prompt::Convert(kind), &start);
+        self.fly_focus.prompt.focus(window, cx);
+    }
+
+    /// A conversion, once its log is named: started on a thread of its own. A name that is empty
+    /// or only the folder is the dialog closed without a file, which does nothing.
+    /// `// C#: GCSViews/FlightData.cs:1091, 1151, 1319, Log/MatLabForms.cs:59`
+    fn fly_convert(&mut self, kind: Conversion, text: &str) {
+        let path = text.trim();
+        if path.is_empty() || std::path::Path::new(path).is_dir() {
+            return;
+        }
+        let analyzer =
+            mp_settings::data_directory().map(|dir| mp_log::analysis::analyzer_dir(&dir));
+        if self
+            .fly_data
+            .conversions
+            .start(kind, std::path::PathBuf::from(path), analyzer)
+        {
+            self.file_status = Some(format!("{}: {path}", kind.text()));
+        }
+    }
+
+    /// Jump To Tag, once a tag is given: `DO_JUMP_TAG` through `doCommand`, which waits for its
+    /// answer, and `Strings.CommandFailed` when the vehicle refuses or never answers. A tag that
+    /// is not a number from 0 to 65535 is said, and the question asked again, as the C#'s handler
+    /// calls itself. `// C#: GCSViews/FlightData.cs:6504-6531`
+    fn fly_jump_to_tag(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(tag) = parse_tag(text) else {
+            self.file_status = Some(INVALID_TAG.to_owned());
+            self.fly_actions.ask(Prompt::JumpToTag, "");
+            self.fly_focus.prompt.focus(window, cx);
+            return;
+        };
+        let report = Report::on_failure(error_box(strings::COMMAND_FAILED));
+        self.fly_press(&report, |_, target, _| {
+            Ok(vec![jump_to_tag_message(target, tag)])
+        });
+    }
+
+    /// A row of the HUD's menu clicked. Video shows its drop-down, as a click on an entry with
+    /// one opens it; the others do what the C#'s handler does, and the menu closes, as a
+    /// `ToolStripMenuItem`'s click closes it.
+    /// `// C#: GCSViews/FlightData.cs:3185, 4735-4739, 5161-5164, 3122-3139`
+    fn fly_hud_menu(&mut self, action: HudAction) {
+        match action {
+            HudAction::Video => {
+                self.fly_data.hud_menu.video = true;
+                return;
+            }
+            HudAction::UserItems => self.fly_data.hud_settings.choosing = true,
+            HudAction::Russian => self.fly_data.hud_settings.toggle_russian(),
+            HudAction::SwapWithMap => self.fly_data.swapped = !self.fly_data.swapped,
+            HudAction::GroundColor => self.fly_data.hud_settings.toggle_ground(),
+        }
+        self.fly_data.hud_menu = HudMenu::default();
+    }
+
     /// Load Log, once a path is given: the link given over to playing it - or, with a port
     /// open, only its name shown, as the C#'s main loop closes the file straight away.
     /// `// C#: GCSViews/FlightData.cs:669-701, 1276-1302, 3439-3453`
@@ -6506,5 +7763,510 @@ mod tests {
         assert!(Prompt::PoiCoords.takes_text());
         assert!(Prompt::LoadLog.takes_text());
         assert_eq!(Prompt::LoadLog.title(), "Load Log");
+    }
+
+    // --- The DataFlash Logs page's conversions ------------------------------------------------
+
+    fn testdata(name: &str) -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../testdata")
+            .join(name)
+    }
+
+    /// A directory of its own for one test, with the checked-in log copied in as `name`.
+    fn scratch_log(test: &str, name: &str) -> (std::path::PathBuf, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!("mp-gui-{test}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a scratch directory");
+        let log = dir.join(name);
+        std::fs::copy(testdata("dataflash.bin"), &log).expect("the log copied");
+        (dir, log)
+    }
+
+    /// Waits for a started conversion, as the frames' polling does.
+    fn finish(conversions: &mut Conversions) -> Outcome {
+        let deadline = Instant::now() + Duration::from_secs(300);
+        loop {
+            if let Some(outcome) = conversions.poll() {
+                return outcome;
+            }
+            assert!(Instant::now() < deadline, "the conversion never finished");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    /// The buttons are the Designer's: their words from the `.resx`, each in the cell
+    /// `tableLayoutPanel2.LayoutSettings` gives it.
+    #[test]
+    fn the_conversion_buttons_are_the_designers() {
+        let Some(resx) = csharp("GCSViews/FlightData.resx") else {
+            eprintln!("skipped: the C# tree is not checked out here");
+            return;
+        };
+        let layout = resx
+            .lines()
+            .find(|line| line.contains("&lt;Control Name=\"BUT_DFMavlink\""))
+            .expect("tableLayoutPanel2's layout");
+        for (kind, control) in [
+            (Conversion::BinToLog, "but_bintolog"),
+            (Conversion::DflogToKml, "but_dflogtokml"),
+            (Conversion::Matlab, "BUT_matlab"),
+            (Conversion::LogAnalysis, "BUT_loganalysis"),
+        ] {
+            assert_eq!(resx_text(&resx, control).as_deref(), Some(kind.text()));
+            let (column, row) = kind.cell();
+            assert!(
+                layout.contains(&format!(
+                    "&lt;Control Name=\"{control}\" Row=\"{row}\" RowSpan=\"1\" Column=\"{column}\""
+                )),
+                "{control} is at column {column}, row {row}"
+            );
+            assert_eq!(kind.id(), format!("fly-{}", kind.name()));
+        }
+        assert_eq!(
+            resx_text(&resx, "BUT_georefimage").as_deref(),
+            Some("Geo Reference Images")
+        );
+        assert!(
+            layout.contains(
+                "&lt;Control Name=\"BUT_georefimage\" Row=\"2\" RowSpan=\"1\" Column=\"0\""
+            )
+        );
+    }
+
+    /// Each prompt is the dialog's: titled with the button, worded with the filter's first
+    /// description, and starting in the folder the dialog opens in.
+    #[test]
+    fn the_conversion_prompts_open_where_the_dialogs_open() {
+        use std::path::Path;
+        let (tlogdir, logdir) = (Path::new("/flights/last"), Path::new("/logs"));
+        assert_eq!(
+            Conversion::DflogToKml.directory(Some(tlogdir), Some(logdir)),
+            Some(tlogdir.to_path_buf())
+        );
+        assert_eq!(
+            Conversion::LogAnalysis.directory(Some(tlogdir), Some(logdir)),
+            Some(tlogdir.to_path_buf())
+        );
+        assert_eq!(
+            Conversion::Matlab.directory(Some(tlogdir), Some(logdir)),
+            Some(logdir.to_path_buf())
+        );
+        assert_eq!(
+            Conversion::BinToLog.directory(Some(tlogdir), Some(logdir)),
+            Some(logdir.to_path_buf())
+        );
+        assert_eq!(
+            Conversion::DflogToKml.directory(None, Some(logdir)),
+            Some(logdir.to_path_buf())
+        );
+        let prompt = Prompt::Convert(Conversion::BinToLog);
+        assert_eq!(prompt.title(), "Convert .Bin to .Log");
+        assert_eq!(prompt.text(), "Binary Log");
+        assert!(prompt.takes_text());
+        assert_eq!(Prompt::Convert(Conversion::DflogToKml).text(), "Log Files");
+        assert_eq!(Prompt::Convert(Conversion::Matlab).text(), "Log Files");
+        assert_eq!(
+            Prompt::Convert(Conversion::LogAnalysis).text(),
+            "*.log;*.bin"
+        );
+    }
+
+    /// The three conversions that write files, each started as its button starts it - on a
+    /// thread of its own, one at a time - and each leaving what Mission Planner's code leaves:
+    /// the `.log` byte for byte, the KML button's side files at their golden sizes, and the
+    /// `.mat` named for its lines at the golden size.
+    #[test]
+    fn each_conversion_writes_what_its_button_writes() {
+        let (dir, log) = scratch_log("convert", "dataflash.bin");
+        let mut conversions = Conversions::default();
+
+        assert!(conversions.start(Conversion::BinToLog, log.clone(), None));
+        assert_eq!(conversions.running(), Some(Conversion::BinToLog));
+        assert!(
+            !conversions.start(Conversion::Matlab, log.clone(), None),
+            "nothing starts while one runs"
+        );
+        let outcome = finish(&mut conversions);
+        assert_eq!(conversions.running(), None);
+        let target = dir.join("dataflash.log");
+        assert_eq!(
+            outcome.2,
+            Ok(Converted::Files(vec![(target.clone(), 868_884)]))
+        );
+        assert_eq!(
+            std::fs::read(&target).expect("the .log"),
+            std::fs::read(testdata("dataflash/golden/dataflash.log")).expect("the golden")
+        );
+        assert_eq!(
+            conversion_status(&outcome),
+            format!("Convert .Bin to .Log: {}", target.display())
+        );
+
+        assert!(conversions.start(Conversion::DflogToKml, log.clone(), None));
+        let outcome = finish(&mut conversions);
+        let Ok(Converted::Files(files)) = &outcome.2 else {
+            panic!("Create KML + gpx failed: {:?}", outcome.2);
+        };
+        let named: Vec<(String, u64)> = files
+            .iter()
+            .map(|(path, size)| {
+                (
+                    path.file_name()
+                        .expect("a file")
+                        .to_string_lossy()
+                        .into_owned(),
+                    *size,
+                )
+            })
+            .collect();
+        eprintln!("Create KML + gpx wrote {named:?}");
+        for (name, golden) in [
+            (
+                "dataflash.bin.gpx",
+                "dataflash/golden/kml/dataflash.bin.gpx",
+            ),
+            (
+                "dataflash.bin0wp.txt",
+                "dataflash/golden/kml/dataflash.bin0wp.txt",
+            ),
+            (
+                "dataflash.bin.param",
+                "dataflash/golden/kml/dataflash.bin.param",
+            ),
+        ] {
+            let size = std::fs::metadata(testdata(golden)).expect("a golden").len();
+            assert!(
+                named.contains(&(name.to_owned(), size)),
+                "{name} at {size} bytes in {named:?}"
+            );
+        }
+        assert!(
+            named
+                .iter()
+                .any(|(name, size)| name == "dataflash.kmz" && *size > 0)
+        );
+
+        assert!(conversions.start(Conversion::Matlab, log, None));
+        let outcome = finish(&mut conversions);
+        let mat = dir.join("dataflash.bin-11439.mat");
+        let golden = std::fs::metadata(testdata("dataflash/golden/matlab/dataflash.bin-11439.mat"))
+            .expect("the golden")
+            .len();
+        assert_eq!(outcome.2, Ok(Converted::Files(vec![(mat, golden)])));
+        std::fs::remove_dir_all(&dir).expect("the scratch directory removed");
+    }
+
+    /// Where the C# shows a message box, the status line says the same words.
+    #[test]
+    fn a_conversion_that_fails_says_what_the_csharps_box_says() {
+        let missing = std::env::temp_dir().join(format!(
+            "mp-gui-convert-missing-{}/none.bin",
+            std::process::id()
+        ));
+        let mut no_fetch = |_: &str, _: &std::path::Path| false;
+        let kml = convert(Conversion::DflogToKml, &missing, None, &mut no_fetch);
+        assert!(
+            kml.as_ref()
+                .is_err_and(|why| why
+                    .starts_with("Error processing file. Make sure the file is not in use.\n")),
+            "{kml:?}"
+        );
+        let mat = convert(Conversion::Matlab, &missing, None, &mut no_fetch);
+        assert!(
+            mat.as_ref()
+                .is_err_and(|why| why.starts_with("Error converting file ")),
+            "{mat:?}"
+        );
+        let outcome = (Conversion::Matlab, missing, mat);
+        assert!(conversion_status(&outcome).starts_with("Error: Error converting file "));
+    }
+
+    /// Auto Analysis downloads the analyzer - here the download fails, and the one from before is
+    /// used - runs it on the log converted to a temporary `.log`, and shows the report the C#'s
+    /// window shows. The stand-in analyzer is a script that writes the example output where it
+    /// is told to, so this runs where a script can be a program.
+    #[cfg(unix)]
+    #[test]
+    fn auto_analysis_runs_the_analyzer_and_shows_its_report() {
+        use std::os::unix::fs::PermissionsExt;
+        let (dir, log) = scratch_log("analysis", "flight.bin");
+        let analyzer = dir.join("LogAnalyzer");
+        std::fs::create_dir_all(&analyzer).expect("the analyzer's directory");
+        let runner = analyzer.join("runner.exe");
+        std::fs::write(
+            &runner,
+            format!(
+                "#!/bin/sh\ncp '{}' \"$2\"\n",
+                testdata("dataflash/example_output.xml").display()
+            ),
+        )
+        .expect("the stand-in runner");
+        std::fs::set_permissions(&runner, std::fs::Permissions::from_mode(0o755))
+            .expect("the runner made runnable");
+        let mut fetched = Vec::new();
+        let mut fetch = |url: &str, _: &std::path::Path| {
+            fetched.push(url.to_owned());
+            false
+        };
+        let outcome = convert(Conversion::LogAnalysis, &log, Some(&analyzer), &mut fetch);
+        assert_eq!(fetched, [mp_log::analysis::analyzer_url()]);
+        let golden =
+            std::fs::read_to_string(testdata("dataflash/golden/loganalysis/example_output.txt"))
+                .expect("the golden report");
+        assert_eq!(outcome, Ok(Converted::Report(golden)));
+        let outcome = (Conversion::LogAnalysis, log.clone(), outcome);
+        assert_eq!(
+            conversion_status(&outcome),
+            format!("Auto Analysis: {}", log.display())
+        );
+
+        // No download and no analyzer from before: the C#'s "Failed to download LogAnalyzer".
+        std::fs::remove_file(&runner).expect("the runner removed");
+        let failed = convert(
+            Conversion::LogAnalysis,
+            &log,
+            Some(&analyzer),
+            &mut |_, _| false,
+        );
+        assert_eq!(failed, Err("Failed to download LogAnalyzer".to_owned()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // --- The HUD's menu -----------------------------------------------------------------------
+
+    /// The menu is `contextMenuStripHud`'s rows in the Designer's order, and the Video drop-down
+    /// `videoToolStripMenuItem`'s, each with its words from the `.resx`.
+    #[test]
+    fn the_hud_menu_is_the_designers() {
+        let (Some(designer), Some(resx)) = (
+            csharp("GCSViews/FlightData.Designer.cs"),
+            csharp("GCSViews/FlightData.resx"),
+        ) else {
+            eprintln!("skipped: the C# tree is not checked out here");
+            return;
+        };
+        let items = |header: &str| -> Vec<String> {
+            designer
+                .lines()
+                .skip_while(|line| !line.trim().starts_with(header))
+                .skip(1)
+                .map(str::trim)
+                // Each item a line of its own, the last closing the array; the statement after
+                // it is an assignment.
+                .take_while(|line| line.starts_with("this.") && !line.contains(" = "))
+                .map(|line| {
+                    line.trim_start_matches("this.")
+                        .trim_end_matches(['}', ')', ';', ','])
+                        .to_owned()
+                })
+                .collect()
+        };
+        let menu = items("this.contextMenuStripHud.Items.AddRange(");
+        let video = items("this.videoToolStripMenuItem.DropDownItems.AddRange(");
+        assert_eq!(
+            menu,
+            HUD_MENU.iter().map(|row| row.control).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            video,
+            HUD_VIDEO_MENU
+                .iter()
+                .map(|row| row.control)
+                .collect::<Vec<_>>()
+        );
+        for row in HUD_MENU.iter().chain(&HUD_VIDEO_MENU) {
+            assert_eq!(
+                resx_text(&resx, row.control).as_deref(),
+                Some(row.text),
+                "{}",
+                row.control
+            );
+        }
+        // What is ported, and every other row says why it is not.
+        let live: Vec<&str> = HUD_MENU
+            .iter()
+            .filter(|row| row.does.is_ok())
+            .map(|row| row.text)
+            .collect();
+        assert_eq!(
+            live,
+            [
+                "Video",
+                "User Items",
+                "Russian Hud",
+                "Swap With Map",
+                "Ground Color"
+            ]
+        );
+        assert!(HUD_VIDEO_MENU.iter().all(|row| row.does.is_err()));
+    }
+
+    /// Ground Color is `CheckOnClick`: the first click checks it and paints the ground brown,
+    /// the next unchecks it and paints it green. The ground is the scene's second fill, under
+    /// the horizon; before the entry is clicked it is the display's own.
+    #[test]
+    fn ground_color_checks_on_a_click_and_paints_the_ground() {
+        let inputs = crate::hud::HudInputs {
+            has_vehicle: true,
+            ..crate::hud::HudInputs::default()
+        };
+        let (w, h) = (398.0, 258.0);
+        let own = crate::hud::scene(&inputs, w, h);
+        let mean_y = |item: Option<&crate::hud::Item>| match item {
+            Some(crate::hud::Item::Fill { points, .. }) => {
+                #[allow(clippy::cast_precision_loss)]
+                let count = points.len() as f32;
+                points.iter().map(|(_, y)| y).sum::<f32>() / count
+            }
+            other => panic!("not a fill: {other:?}"),
+        };
+        assert!(mean_y(own.items.first()) < h / 2.0, "the sky is first");
+        assert!(mean_y(own.items.get(1)) > h / 2.0, "the ground is second");
+
+        let mut settings = HudSettings::default();
+        assert_eq!(settings.ground_colours(), None);
+        assert_eq!(hud_scene(&inputs, settings.ground_colours(), w, h), own);
+
+        let fill_colour = |scene: &crate::hud::Scene, index: usize| match scene.items.get(index) {
+            Some(crate::hud::Item::Fill { colour, .. }) => *colour,
+            other => panic!("not a fill: {other:?}"),
+        };
+        settings.toggle_ground();
+        assert_eq!(settings.ground, Some(true));
+        let brown = hud_scene(&inputs, settings.ground_colours(), w, h);
+        assert_eq!(fill_colour(&brown, 1), 0x93_4e_01);
+        assert_eq!(
+            fill_colour(&brown, 0),
+            fill_colour(&own, 0),
+            "the sky is left"
+        );
+        assert_eq!(brown.items.len(), own.items.len());
+
+        settings.toggle_ground();
+        assert_eq!(settings.ground, Some(false));
+        let green = hud_scene(&inputs, settings.ground_colours(), w, h);
+        assert_eq!(fill_colour(&green, 1), 0x9b_b8_24);
+    }
+
+    /// A box checked asks for its header, starting at its text and ": ", and the item goes on
+    /// the HUD under the header given, its value read from the vehicle; checked again it comes
+    /// off. A cancelled header leaves nothing.
+    #[test]
+    fn user_items_ask_a_header_and_come_off_when_unchecked() {
+        let mut settings = HudSettings::default();
+        assert_eq!(
+            settings.click_item("groundspeed").as_deref(),
+            Some("groundspeed: ")
+        );
+        assert_eq!(settings.pending.as_deref(), Some("groundspeed"));
+        // The header's answer is `add_item`, which the prompt's OK calls.
+        settings.pending = None;
+        settings.add_item("groundspeed", "GS ");
+        assert!(settings.shows("groundspeed"));
+
+        let mut state = mp_vehicle::VehicleState::default();
+        state.ground_speed = mp_units::MetresPerSecond(3.5);
+        let mut inputs = crate::hud::HudInputs {
+            has_vehicle: true,
+            ..crate::hud::HudInputs::default()
+        };
+        settings.apply(&mut inputs, Some(&state));
+        assert_eq!(
+            inputs.custom_items,
+            [crate::hud::CustomItem {
+                header: "GS ".to_owned(),
+                name: "groundspeed".to_owned(),
+                value: Some(3.5),
+            }]
+        );
+        let scene = crate::hud::scene(&inputs, 398.0, 258.0);
+        assert_eq!(
+            scene.labels_of(crate::hud::Element::CustomItems).len(),
+            1,
+            "drawn on the HUD"
+        );
+
+        assert_eq!(settings.click_item("groundspeed"), None, "unchecked");
+        assert!(!settings.shows("groundspeed"));
+        settings.apply(&mut inputs, Some(&state));
+        assert!(inputs.custom_items.is_empty());
+    }
+
+    /// Russian Hud turns the flag over, and the display is told.
+    #[test]
+    fn russian_hud_turns_the_flag_over() {
+        let mut settings = HudSettings::default();
+        let mut inputs = crate::hud::HudInputs::default();
+        settings.toggle_russian();
+        settings.apply(&mut inputs, None);
+        assert!(inputs.russian);
+        settings.toggle_russian();
+        settings.apply(&mut inputs, None);
+        assert!(!inputs.russian);
+    }
+
+    /// `StringCompareTo`: runs of digits as numbers, case ignored, the shorter first.
+    #[test]
+    fn display_this_lists_numbers_in_string_compare_to_order() {
+        use std::cmp::Ordering::{Equal, Greater, Less};
+        assert_eq!(string_compare_to("ch9in", "ch10in"), Less);
+        assert_eq!(string_compare_to("ch10in", "ch9in"), Greater);
+        assert_eq!(string_compare_to("Alt", "alt"), Equal);
+        assert_eq!(string_compare_to("alt", "altasl"), Less);
+        assert_eq!(string_compare_to("b", "Alt"), Greater);
+        // "01" and "1" are the same number, and then the longer is after.
+        assert_eq!(string_compare_to("a01", "a1"), Greater);
+
+        let names = hud_item_choices();
+        assert!(names.contains(&"groundspeed"));
+        assert!(!names.contains(&"armed"), "a bool is not IsNumber");
+        assert!(
+            names
+                .windows(2)
+                .all(|pair| string_compare_to(pair[0], pair[1]) != Greater),
+            "in StringCompareTo's order"
+        );
+        assert!(names.len() < crate::quick::choices().len());
+    }
+
+    // --- Jump To Tag ----------------------------------------------------------------------------
+
+    /// `UInt16.TryParse`, then `DO_JUMP_TAG` through `doCommand`, which waits for its answer.
+    #[test]
+    fn jump_to_tag_takes_a_uint16_and_sends_do_jump_tag() {
+        assert_eq!(parse_tag("5"), Some(5));
+        assert_eq!(parse_tag(" 65535 "), Some(65_535));
+        assert_eq!(parse_tag("+7"), Some(7));
+        assert_eq!(parse_tag("-0"), Some(0));
+        assert_eq!(parse_tag("65536"), None);
+        assert_eq!(parse_tag("-1"), None);
+        assert_eq!(parse_tag(""), None);
+        assert_eq!(parse_tag("tag"), None);
+
+        let message = jump_to_tag_message(target(), 42);
+        assert_eq!(
+            describe(&message),
+            "COMMAND_LONG MAV_CMD_DO_JUMP_TAG 42,0,0,0,0,0,0"
+        );
+        assert_eq!(
+            route(&message),
+            Route::Command {
+                target: target(),
+                command: 601,
+                params: [42.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            }
+        );
+        assert_eq!(Prompt::JumpToTag.title(), "Jump to Tag");
+        assert_eq!(Prompt::JumpToTag.text(), "Tag Id:");
+        assert!(Prompt::JumpToTag.takes_text());
+        assert_eq!(INVALID_TAG, "Invalid Tag. Must be a number from 0 to 65535");
+    }
+
+    #[test]
+    fn the_hud_header_question_is_the_csharps() {
+        assert_eq!(Prompt::HudHeader.title(), "Hud Header");
+        assert_eq!(Prompt::HudHeader.text(), "Please enter your item prefix");
+        assert!(Prompt::HudHeader.takes_text());
     }
 }

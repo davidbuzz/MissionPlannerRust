@@ -116,7 +116,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "but_bintolog_Click",
         "Convert .Bin to .Log",
-        Missing,
+        Done("fly-bintolog"),
     ),
     row(
         "BUT_clear_track",
@@ -130,7 +130,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "but_dflogtokml_Click",
         "Create KML + gpx",
-        Missing,
+        Done("fly-dflogtokml"),
     ),
     row(
         "BUT_DFMavlink",
@@ -200,7 +200,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUT_loganalysis_Click",
         "Auto Analysis",
-        Missing,
+        Done("fly-loganalysis"),
     ),
     row(
         "BUT_logbrowse",
@@ -214,7 +214,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUT_matlab_Click",
         "Create Matlab File",
-        Missing,
+        Done("fly-matlab"),
     ),
     row(
         "BUT_mountmode",
@@ -508,7 +508,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "groundColorToolStripMenuItem_Click",
         "Ground Color",
-        Missing,
+        Done("fly-hud-groundcolor"),
     ),
     row(
         "Gspeed",
@@ -535,8 +535,8 @@ pub const FLIGHTDATA: &[Action] = &[
         "hud1",
         "DoubleClick",
         "hud1_DoubleClick",
-        "the HUD: swap with the map",
-        Missing,
+        "the HUD: HUD Dropout, its own window",
+        Dropped("one window: the HUD has nowhere to drop out to"),
     ),
     row(
         "hud1",
@@ -573,7 +573,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "jumpToTagToolStripMenuItem_Click",
         "Jump To Tag",
-        Missing,
+        Done("fly-jumptotag"),
     ),
     row(
         "loadFileToolStripMenuItem",
@@ -734,7 +734,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "russianHudToolStripMenuItem_Click",
         "Russian Hud",
-        Missing,
+        Done("fly-hud-russian"),
     ),
     row(
         "saveFileToolStripMenuItem",
@@ -846,7 +846,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "swapWithMapToolStripMenuItem_Click",
         "Swap With Map",
-        Missing,
+        Done("fly-hud-swap"),
     ),
     row(
         "tabControlactions",
@@ -922,7 +922,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "hud_UserItem",
         "User Items",
-        Missing,
+        Done("fly-hud-useritems"),
     ),
     row(
         "XPDRConnect_btn",
@@ -1176,7 +1176,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (59, 1, 57, 18, 1)
+            (68, 1, 47, 18, 2)
         );
     }
 }

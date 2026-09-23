@@ -90,3 +90,5 @@ and the application then starts idle. Run without it, `params.metadata.documente
 link and cost an hour of stash-and-rebuild on 2026-09-24 before the header was read. Always run
 SITL scripts with the argument; self-contained ones (`tiles offline`, no SITL in the header)
 without.
+`tools/gui-suite.sh -o <logdir> name...` reads that argument out of each script's header and
+passes it, waits for the load to fall below 20 first, and prints one PASS/FAIL line per script.

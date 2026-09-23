@@ -4,7 +4,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 
 | total | done | elsewhere | missing | plumbing | dropped |
 |---:|---:|---:|---:|---:|---:|
-| 136 | 59 | 1 | 57 | 18 | 1 |
+| 136 | 68 | 1 | 47 | 18 | 2 |
 
 | control | event | handler | text | ours |
 |---|---|---|---|---|
@@ -14,9 +14,9 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `BUT_abort_script` | Click | `BUT_abort_script_Click` | Abort Running Script | **missing** |
 | `BUTactiondo` | Click | `BUTactiondo_Click` | Do Action | done: `fly-doaction` |
 | `BUT_ARM` | Click | `BUT_ARM_Click` | Arm/ Disarm | done: `arm` |
-| `but_bintolog` | Click | `but_bintolog_Click` | Convert .Bin to .Log | **missing** |
+| `but_bintolog` | Click | `but_bintolog_Click` | Convert .Bin to .Log | done: `fly-bintolog` |
 | `BUT_clear_track` | Click | `BUT_clear_track_Click` | Clear Track | **missing** |
-| `but_dflogtokml` | Click | `but_dflogtokml_Click` | Create KML + gpx | **missing** |
+| `but_dflogtokml` | Click | `but_dflogtokml_Click` | Create KML + gpx | done: `fly-dflogtokml` |
 | `BUT_DFMavlink` | Click | `BUT_DFMavlink_Click` | Download DataFlash Log Via Mavlink | done: `fly-dfmavlink` |
 | `but_disablejoystick` | Click | `but_disablejoystick_Click` | Disable Joystick | done: `joystick-enable` |
 | `BUT_edit_selected` | Click | `BUT_edit_selected_Click` | Edit Selected Script | **missing** |
@@ -26,9 +26,9 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `BUT_joystick` | Click | `BUT_joystick_Click` | Joystick | done: `joystick-refresh` |
 | `BUT_loadtelem` | Click | `BUT_loadtelem_Click` | Load Log | done: `fly-loadtelem` |
 | `BUT_log2kml` | Click | `BUT_log2kml_Click` | Tlog > Kml or Graph | elsewhere: mpr kml |
-| `BUT_loganalysis` | Click | `BUT_loganalysis_Click` | Auto Analysis | **missing** |
+| `BUT_loganalysis` | Click | `BUT_loganalysis_Click` | Auto Analysis | done: `fly-loganalysis` |
 | `BUT_logbrowse` | Click | `BUT_logbrowse_Click` | Review a Log | done: `fly-logbrowse` |
-| `BUT_matlab` | Click | `BUT_matlab_Click` | Create Matlab File | **missing** |
+| `BUT_matlab` | Click | `BUT_matlab_Click` | Create Matlab File | done: `fly-matlab` |
 | `BUT_mountmode` | Click | `BUT_mountmode_Click` | Set Mount | **missing** |
 | `BUT_playlog` | Click | `BUT_playlog_Click` | Play/Pause | done: `fly-playlog` |
 | `BUT_quickauto` | Click | `BUT_quickauto_Click` | Auto | done: `mode` |
@@ -70,18 +70,18 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `gMapControl1` | MouseUp | `gMapControl1_MouseUp` | the map: end a drag | done: `map` |
 | `gMapControl1` | OnPositionChanged | `gMapControl1_OnPositionChanged` | the map | plumbing |
 | `goHereToolStripMenuItem` | Click | `goHereToolStripMenuItem_Click` | Fly To Here | done: `fn fly_here` |
-| `groundColorToolStripMenuItem` | Click | `groundColorToolStripMenuItem_Click` | Ground Color | **missing** |
+| `groundColorToolStripMenuItem` | Click | `groundColorToolStripMenuItem_Click` | Ground Color | done: `fly-hud-groundcolor` |
 | `Gspeed` | DoubleClick | `Gspeed_DoubleClick` | the speed gauge | **missing** |
 | `gStreamerStopToolStripMenuItem` | Click | `GStreamerStopToolStripMenuItem_Click` | GStreamer Stop | **missing** |
 | `hereLinkVideoToolStripMenuItem` | Click | `HereLinkVideoToolStripMenuItem_Click` | HereLink Video | **missing** |
-| `hud1` | DoubleClick | `hud1_DoubleClick` | the HUD: swap with the map | **missing** |
+| `hud1` | DoubleClick | `hud1_DoubleClick` | the HUD: HUD Dropout, its own window | dropped: one window: the HUD has nowhere to drop out to |
 | `hud1` | ekfclick | `hud1_ekfclick` | the HUD's EKF indicator | done: `hud-ekf` |
 | `hud1` | Load | `hud1_Load` | the HUD | plumbing |
 | `hud1` | prearmclick | `hud1_prearmclick` | the HUD's pre-arm indicator | done: `pre-arm` |
 | `hud1` | Resize | `hud1_Resize` | the HUD | plumbing |
 | `hud1` | vibeclick | `hud1_vibeclick` | the HUD's vibration indicator | done: `hud-vibe` |
 | `IDENT_btn` | Click | `IDENT_btn_Click` | IDENT (transponder) | **missing** |
-| `jumpToTagToolStripMenuItem` | Click | `jumpToTagToolStripMenuItem_Click` | Jump To Tag | **missing** |
+| `jumpToTagToolStripMenuItem` | Click | `jumpToTagToolStripMenuItem_Click` | Jump To Tag | done: `fly-jumptotag` |
 | `loadFileToolStripMenuItem` | Click | `loadFileToolStripMenuItem_Click` | Load File | **missing** |
 | `Messagetabtimer` | Tick | `Messagetabtimer_Tick` | the messages tab timer | plumbing |
 | `modifyandSetAlt` | Click | `modifyandSetAlt_Click` | Change Alt | done: `fly-changealt` |
@@ -104,7 +104,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `quickView5` | DoubleClick | `quickView_DoubleClick` | quick view 5: choose its field | done: `fly-quick-5` |
 | `quickView6` | DoubleClick | `quickView_DoubleClick` | quick view 6: choose its field | done: `fly-quick-6` |
 | `recordHudToAVIToolStripMenuItem` | Click | `recordHudToAVIToolStripMenuItem_Click` | Record Hud to AVI | **missing** |
-| `russianHudToolStripMenuItem` | Click | `russianHudToolStripMenuItem_Click` | Russian Hud | **missing** |
+| `russianHudToolStripMenuItem` | Click | `russianHudToolStripMenuItem_Click` | Russian Hud | done: `fly-hud-russian` |
 | `saveFileToolStripMenuItem` | Click | `saveFileToolStripMenuItem_Click` | Save File | **missing** |
 | `scriptChecker` | Tick | `scriptChecker_Tick` | the script status timer | plumbing |
 | `setAspectRatioToolStripMenuItem` | Click | `setAspectRatioToolStripMenuItem_Click` | Set Aspect Ratio | **missing** |
@@ -120,7 +120,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `startCameraToolStripMenuItem` | Click | `startCameraToolStripMenuItem_Click` | Start Camera | **missing** |
 | `STBY_btn` | Click | `STBY_btn_Click` | STBY (transponder) | **missing** |
 | `stopRecordToolStripMenuItem` | Click | `stopRecordToolStripMenuItem_Click` | Stop Record | **missing** |
-| `swapWithMapToolStripMenuItem` | Click | `swapWithMapToolStripMenuItem_Click` | Swap With Map | **missing** |
+| `swapWithMapToolStripMenuItem` | Click | `swapWithMapToolStripMenuItem_Click` | Swap With Map | done: `fly-hud-swap` |
 | `tabControlactions` | DrawItem | `tabControl1_DrawItem` | the actions tabs | plumbing |
 | `tabControlactions` | SelectedIndexChanged | `tabControl1_SelectedIndexChanged` | the actions tabs | done: `fly-tabs` |
 | `tabGauges` | Resize | `tabPage1_Resize` | Gauges | plumbing |
@@ -134,7 +134,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `triggerCameraToolStripMenuItem` | Click | `triggerCameraToolStripMenuItem_Click` | Trigger Camera NOW | **missing** |
 | `TRK_zoom` | Scroll | `TRK_zoom_Scroll` | Zoom | done: `map` |
 | `undockToolStripMenuItem` | Click | `undockDockToolStripMenuItem_Click` | Undock | dropped: one window: nothing to undock from |
-| `userItemsToolStripMenuItem` | Click | `hud_UserItem` | User Items | **missing** |
+| `userItemsToolStripMenuItem` | Click | `hud_UserItem` | User Items | done: `fly-hud-useritems` |
 | `XPDRConnect_btn` | Click | `XPDRConnect_btn_Click` | Connect (transponder) | **missing** |
 | `ZedGraphTimer` | Tick | `ZedGraphTimer_Tick` | the tuning graph timer | plumbing |
 | `zg1` | DoubleClick | `zg1_DoubleClick` | the tuning graph: choose fields | done: `tuning-show` |

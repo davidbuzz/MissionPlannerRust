@@ -37,7 +37,10 @@ mp-mavlink-dialects.workspace = true
 mp-input.workspace = true
 mp-chart.workspace = true
 mp-log.workspace = true
+# The DataFlash Logs page's Create KML + gpx: mp_kml::dflog.
+mp-kml.workspace = true
 # Install Firmware: the firmware catalogue and the board a USB device names, from the port list.
+# Its HTTP fetch also downloads Auto Analysis's LogAnalyzer, as the CLI's `mpr log` does with ureq.
 mp-firmware.workspace = true
 
 # Local time, for naming a flight recording the way the pilot's own clock reads. std has no

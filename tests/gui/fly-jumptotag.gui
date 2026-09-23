@@ -1,0 +1,35 @@
+# Jump To Tag, from the flight map's menu: "Jump to Tag" asks for a "Tag Id:", a number from 0 to
+# 65535 as UInt16.TryParse takes one, and sends MAV_CMD_DO_JUMP_TAG with it through doCommand,
+# which waits for the vehicle's answer. A tag that is not one is "Invalid Tag. Must be a number
+# from 0 to 65535", and the question is asked again, as the C#'s handler calls itself. The C#'s
+# menu is on the map; this application's map menu entries are the row under the Actions grid.
+# `GCSViews/FlightData.cs:6504-6531, GCSViews/FlightData.Designer.cs:2518-2531, 2645-2649`
+#
+# Needs SITL: tools/gui-test.sh tests/gui/fly-jumptotag.gui -- tcp:127.0.0.1:5760
+
+screen fly
+window 1600x1200
+settle 8
+
+click fly-tab-actions
+expect fly.tab tabActions
+expect fly.page.overflow 0
+
+click fly-jumptotag
+expect fly.prompt Tag Id:
+type 70000
+settle 1
+click fly-prompt-ok
+expect status Invalid Tag. Must be a number from 0 to 65535
+expect fly.prompt Tag Id:
+expect fly.sent nothing yet
+
+type 5
+settle 1
+expect fly.prompt.value 5
+click fly-prompt-ok
+expect fly.prompt none
+expect fly.sent COMMAND_LONG MAV_CMD_DO_JUMP_TAG 5,0,0,0,0,0,0
+settle 3
+# SITL answers; with no tag 5 in its mission it refuses, which is Strings.CommandFailed.
+expect fly.ack ~ MAV_CMD_DO_JUMP_TAG:

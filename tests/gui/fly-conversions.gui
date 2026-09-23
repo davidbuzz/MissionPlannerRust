@@ -1,0 +1,106 @@
+# The DataFlash Logs page's conversions: Convert .Bin to .Log, Create KML + gpx and Create
+# Matlab File. Each asks for a log in its dialog's place - here a box that starts in the log
+# directory, as Load Log's does, the name typed after it - and converts it on a thread of its
+# own, the page's conversion buttons waiting until it is done as the C#'s window waits. What each
+# writes is Mission Planner's own: the .log at the golden's 868884 bytes, the KML button's .gpx,
+# waypoint and .param files at the goldens' sizes beside the .kmz, and the .mat named for the
+# log's 11439 lines at the golden's size. The C# says nothing when one works; the status line
+# says where the files went.
+# `GCSViews/FlightData.cs:1082-1098, 1135-1202, 1387-1390, Log/MatLabForms.cs:43-74,
+# GCSViews/FlightData.resx (tableLayoutPanel2.LayoutSettings), testdata/dataflash/golden/`
+#
+# Auto Analysis downloads ArduPilot's analyzer, which a test run does not do; its report is held
+# to the C#'s by fly::tests::auto_analysis_runs_the_analyzer_and_shows_its_report, with a
+# stand-in analyzer.
+#
+# Needs no link: tools/gui-test.sh tests/gui/fly-conversions.gui
+
+env MP_LOG_DIR $WORK/logs
+setup mkdir -p $WORK/logs && cp testdata/dataflash.bin $WORK/logs/
+
+screen fly
+window 1600x1200
+settle 2
+
+# DataFlash Logs is the last header: bring it to the front of the row, then show its page.
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+expect fly.tabs.first 13
+click fly-tab-logbrowse
+expect fly.tab tablogbrowse
+expect fly.page.overflow 0
+expect fly.logs.convert.running none
+expect fly.logs.convert.last none
+
+# Convert .Bin to .Log: the dialog's filter, the box in the log directory, the name typed on.
+click fly-bintolog
+expect fly.prompt Binary Log
+expect fly.prompt.value ~ /logs/
+type dataflash.bin
+settle 1
+expect fly.prompt.value ~ /logs/dataflash.bin
+click fly-prompt-ok
+expect fly.prompt none
+settle 5
+expect fly.logs.convert.running none
+expect fly.logs.convert.last bintolog
+expect fly.logs.convert.error none
+expect fly.logs.convert.files dataflash.log:868884
+expect status ~ Convert .Bin to .Log:
+expect status ~ /logs/dataflash.log
+
+# Create KML + gpx: the files beside the log, the .kmz named for it in lower case.
+click fly-dflogtokml
+expect fly.prompt Log Files
+type dataflash.bin
+settle 1
+click fly-prompt-ok
+settle 5
+expect fly.logs.convert.running none
+expect fly.logs.convert.last dflogtokml
+expect fly.logs.convert.error none
+expect fly.logs.convert.files ~ dataflash.bin.gpx:100
+expect fly.logs.convert.files ~ dataflash.bin0wp.txt:315
+expect fly.logs.convert.files ~ dataflash.bin.param:16473
+expect fly.logs.convert.files ~ dataflash.kmz:
+
+# Create Matlab File: <log>-<lines>.mat beside it.
+click fly-matlab
+expect fly.prompt Log Files
+type dataflash.bin
+settle 1
+click fly-prompt-ok
+settle 8
+expect fly.logs.convert.running none
+expect fly.logs.convert.last matlab
+expect fly.logs.convert.error none
+expect fly.logs.convert.files dataflash.bin-11439.mat:1266584
+
+# A log that is not there is what the C#'s message box says, and nothing is written.
+click fly-matlab
+type missing.bin
+settle 1
+click fly-prompt-ok
+settle 2
+expect fly.logs.convert.last matlab
+expect fly.logs.convert.error ~ Error converting file
+expect fly.logs.convert.files none
+expect status ~ Error: Error converting file
+
+# Cancel is a dialog closed without a file: nothing runs.
+click fly-bintolog
+click fly-prompt-cancel
+expect fly.prompt none
+expect fly.logs.convert.running none
+expect fly.logs.convert.last matlab

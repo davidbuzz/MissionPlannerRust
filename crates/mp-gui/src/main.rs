@@ -1099,7 +1099,25 @@ impl MissionPlanner {
             .min_h(px(0.0))
             .gap_2()
             .w(px(400.0))
-            .child(fly::hud_panel(&self.hud, &self.fly_data, cx))
+            // `SwapHud1AndMap`: `tableMap` - the tuning graph over the map - where `hud1` was.
+            // `// C#: GCSViews/FlightData.cs:5139-5159, GCSViews/FlightData.Designer.cs:2472-2473`
+            .child(if self.fly_data.swapped {
+                div()
+                    .flex()
+                    .flex_col()
+                    .flex_shrink_0()
+                    .gap_2()
+                    .h(px(260.0))
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .child(tuning::panel_for(&self.tuning, cx)),
+                    )
+                    .child(self.map_pane(cx))
+                    .into_any_element()
+            } else {
+                fly::hud_panel(&self.hud, &self.fly_data, cx).into_any_element()
+            })
             .child(fly::page_strip(&self.fly_pages, cx))
             .child(
                 // The scrolling page and its indicator share a positioned parent, so the
@@ -1537,6 +1555,10 @@ impl Render for MissionPlanner {
         // flown and notices a device that has gone. Once a frame, whether or not anything shows.
         self.sticks.tick(self.telemetry.send_handle());
         self.hud = self.hud_inputs(&view);
+        // What the HUD's menu has set: the Russian flag and the user's items.
+        self.fly_data
+            .hud_settings
+            .apply(&mut self.hud, view.state.as_deref());
         // The vehicle's banner names its firmware; its parameter documentation follows from it.
         self.telemetry.tick();
         // SETUP's and CONFIG's lists: built when their screen shows, built again when MainV2
@@ -1969,12 +1991,17 @@ impl Render for MissionPlanner {
                         // `splitContainer1.Panel1`, over the map in `Panel2`, collapsed until
                         // `CB_tuning` opens it. It is on no page of `tabControlactions`.
                         // `// C#: GCSViews/FlightData.Designer.cs:2472, 2483, 2500`
-                        .child(
+                        // Swapped, the HUD is here in their place.
+                        .children((!self.fly_data.swapped).then(|| {
                             div()
                                 .flex_shrink_0()
-                                .child(tuning::panel_for(&self.tuning, cx)),
-                        )
-                        .child(self.map_pane(cx))
+                                .child(tuning::panel_for(&self.tuning, cx))
+                        }))
+                        .child(if self.fly_data.swapped {
+                            fly::hud_panel(&self.hud, &self.fly_data, cx).into_any_element()
+                        } else {
+                            self.map_pane(cx).into_any_element()
+                        })
                         .child(div().flex_shrink_0().child(fly::messages_panel(&view))),
                 )
                 .children(fly::prompt_dialog(
@@ -1993,6 +2020,8 @@ impl Render for MissionPlanner {
                 ))
                 // `ShowDialog()`: the quick view's chooser, over everything.
                 .children(quick::chooser(&self.fly_data.quick, window, cx))
+                // The HUD's menu and its User Items form, and Auto Analysis's report.
+                .children(fly::overlays(&self.fly_data, window, cx))
                 .into_any_element(),
             Screen::Plan => div()
                 .flex()

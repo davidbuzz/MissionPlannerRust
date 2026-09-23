@@ -492,6 +492,11 @@ pub struct HudInputs {
     pub ekf_status: f32,
     /// Whether the vehicle reports its pre-arm checks passing: `prearmstatus`.
     pub prearm_ready: bool,
+    /// `Russian`, which the HUD's menu toggles: the sky and ground held level while the pitch
+    /// ladder, the aircraft symbol and the flight path vector turn with the roll instead, and the
+    /// roll pointer reads the other way. `false` in the Designer.
+    /// `// C#: ExtLibs/Controls/HUD.cs:163, 2029-2036, GCSViews/FlightData.Designer.cs:421`
+    pub russian: bool,
 }
 
 impl Default for HudInputs {
@@ -535,6 +540,7 @@ impl Default for HudInputs {
             cpu_load: 0.0,
             ekf_status: 0.0,
             prearm_ready: false,
+            russian: false,
         }
     }
 }
@@ -613,6 +619,8 @@ impl HudInputs {
             cpu_load: state.load,
             ekf_status: ekf_status(state),
             prearm_ready: prearm_ready(state),
+            // The HUD's own setting, not the vehicle's: the flight screen sets it.
+            russian: false,
         }
     }
 }
@@ -1136,14 +1144,37 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     let (halfwidth, halfheight) = (w / 2.0, h / 2.0);
     let centre = (halfwidth, halfheight);
 
+    // `Russian`: the sky and ground are not turned, and the roll is negated for everything drawn
+    // after them - the ladder, the roll pointer - while the aircraft symbol and the flight path
+    // vector, which are otherwise fixed, are turned by it. C#: HUD.cs:2029-2036, 2107-2110,
+    // 2176-2182, 2210-2211
+    let roll = if inputs.russian {
+        -inputs.roll
+    } else {
+        inputs.roll
+    };
     // Sky and ground, then the horizon geometry everything attitude-relative hangs off.
     let geometry = horizon_geometry(
-        inputs.roll.to_radians(),
+        if inputs.russian {
+            0.0
+        } else {
+            roll.to_radians()
+        },
         inputs.pitch.to_radians(),
         centre,
         w,
         h,
     );
+    // The ladder is turned by the roll as it stands after the negation.
+    let ladder = if inputs.russian {
+        horizon_geometry(roll.to_radians(), inputs.pitch.to_radians(), centre, w, h)
+    } else {
+        geometry
+    };
+    // Where the aircraft symbol and the flight path vector are turned to: `RotateTransform(-_roll)`
+    // with `_roll` negated, so by the roll itself, clockwise for a right wing down.
+    let symbol_turn = if inputs.russian { -roll } else { 0.0 };
+    let turned = |p: (f32, f32)| turn(p, centre, symbol_turn);
     let (along, up) = (geometry.along, geometry.up);
     let horizon = (
         (geometry.left.0 + geometry.right.0) / 2.0,
@@ -1169,7 +1200,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
         if a < inputs.pitch - 29.0 || a > inputs.pitch + 20.0 {
             continue;
         }
-        let rung = offset(centre, up, (a - inputs.pitch) * ppd);
+        let rung = offset(centre, ladder.up, (a - inputs.pitch) * ppd);
         if rung.1 < tape_bottom {
             continue;
         }
@@ -1180,13 +1211,13 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
             colour::INK
         };
         scene.line(
-            offset(rung, along, -half),
-            offset(rung, along, half),
+            offset(rung, ladder.along, -half),
+            offset(rung, ladder.along, half),
             if degrees == 0 { 2.0 } else { 1.5 },
             ink,
         );
         if degrees % 10 == 0 {
-            let at = offset(rung, along, -half - 30.0 - fontoffset * 1.7);
+            let at = offset(rung, ladder.along, -half - 30.0 - fontoffset * 1.7);
             scene.label(
                 degrees.to_string(),
                 (at.0, at.1 - 8.0 - fontoffset),
@@ -1217,7 +1248,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
             colour::INK,
         );
     }
-    let pointer = (-inputs.roll).to_radians();
+    let pointer = (-roll).to_radians();
     scene.fill(
         vec![
             polar(centre, pointer, radius - 14.0),
@@ -1229,12 +1260,28 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     );
     scene.drew(Element::RollIndicator);
 
-    // The aircraft symbol: the one thing on the display that does not move. C#: HUD.cs:2209-2231
+    // The aircraft symbol: the one thing on the display that does not move - but on the Russian
+    // display, where it turns with the roll. C#: HUD.cs:2209-2231
     let wing = w * 0.13;
     let (cx, cy) = centre;
-    scene.line((cx - wing, cy), (cx - wing * 0.35, cy), 3.0, colour::ALERT);
-    scene.line((cx + wing * 0.35, cy), (cx + wing, cy), 3.0, colour::ALERT);
-    scene.line((cx, cy - 4.0), (cx, cy + 4.0), 3.0, colour::ALERT);
+    scene.line(
+        turned((cx - wing, cy)),
+        turned((cx - wing * 0.35, cy)),
+        3.0,
+        colour::ALERT,
+    );
+    scene.line(
+        turned((cx + wing * 0.35, cy)),
+        turned((cx + wing, cy)),
+        3.0,
+        colour::ALERT,
+    );
+    scene.line(
+        turned((cx, cy - 4.0)),
+        turned((cx, cy + 4.0)),
+        3.0,
+        colour::ALERT,
+    );
     scene.drew(Element::Reticle);
 
     if !inputs.has_vehicle {
@@ -1250,22 +1297,27 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     if let Some(angles) = inputs.aoa_ssa {
         let fpv = (angles.ssa.mul_add(ppd, cx), angles.aoa.mul_add(ppd, cy));
         let (outer, inner) = (halfwidth / 20.0, halfwidth / 40.0);
-        scene.stroke(circle(fpv, inner), 2.0, colour::ALERT, 1.0);
+        scene.stroke(
+            circle(fpv, inner).into_iter().map(turned).collect(),
+            2.0,
+            colour::ALERT,
+            1.0,
+        );
         scene.line(
-            (fpv.0 - outer, fpv.1),
-            (fpv.0 - inner, fpv.1),
+            turned((fpv.0 - outer, fpv.1)),
+            turned((fpv.0 - inner, fpv.1)),
             2.0,
             colour::ALERT,
         );
         scene.line(
-            (fpv.0 + outer, fpv.1),
-            (fpv.0 + inner, fpv.1),
+            turned((fpv.0 + outer, fpv.1)),
+            turned((fpv.0 + inner, fpv.1)),
             2.0,
             colour::ALERT,
         );
         scene.line(
-            (fpv.0, fpv.1 - outer),
-            (fpv.0, fpv.1 - inner),
+            turned((fpv.0, fpv.1 - outer)),
+            turned((fpv.0, fpv.1 - inner)),
             2.0,
             colour::ALERT,
         );
@@ -2089,6 +2141,20 @@ fn circle(centre: (f32, f32), radius: f32) -> Vec<(f32, f32)> {
         .collect()
 }
 
+/// `p` turned `degrees` clockwise about `centre`, as `RotateTransform` turns what is drawn after
+/// it on a screen whose y grows downward. Zero leaves it where it is.
+fn turn(p: (f32, f32), centre: (f32, f32), degrees: f32) -> (f32, f32) {
+    if degrees == 0.0 {
+        return p;
+    }
+    let (sin, cos) = degrees.to_radians().sin_cos();
+    let (x, y) = (p.0 - centre.0, p.1 - centre.1);
+    (
+        x.mul_add(cos, -y * sin) + centre.0,
+        x.mul_add(sin, y * cos) + centre.1,
+    )
+}
+
 /// A point at `angle` radians clockwise from straight up, `radius` from `centre`.
 fn polar(centre: (f32, f32), angle: f32, radius: f32) -> (f32, f32) {
     (
@@ -2369,6 +2435,7 @@ mod tests {
             cpu_load: 12.0,
             ekf_status: 0.1,
             prearm_ready: true,
+            russian: false,
         }
     }
 
@@ -3270,5 +3337,158 @@ mod tests {
         );
         assert!(labels.contains(&"23m/s"), "{labels:?}");
         assert!(labels.contains(&"AS 23.0m/s"), "{labels:?}");
+    }
+
+    /// `Russian`: the sky and ground stay level; the ladder, the aircraft symbol and the flight
+    /// path vector turn with the roll - a right wing down turns them clockwise, where the ordinary
+    /// display turns the ladder the other way and holds the symbol still - and the roll pointer
+    /// moves to the other side. `// C#: ExtLibs/Controls/HUD.cs:2029-2036, 2107-2110, 2176-2182,
+    /// 2210-2245`
+    #[test]
+    fn a_russian_hud_holds_the_horizon_level_and_turns_the_symbol() {
+        let rolled = HudInputs {
+            roll: 20.0,
+            pitch: 0.0,
+            ..flying()
+        };
+        let russian = HudInputs {
+            russian: true,
+            ..rolled.clone()
+        };
+        let level = HudInputs {
+            roll: 0.0,
+            pitch: 0.0,
+            ..flying()
+        };
+        let (normal, turned, flat) = (
+            scene(&rolled, W, H),
+            scene(&russian, W, H),
+            scene(&level, W, H),
+        );
+        let (cx, cy) = (W / 2.0, H / 2.0);
+
+        // The sky and the ground are the level display's.
+        assert_eq!(turned.items[..2], flat.items[..2]);
+        assert_ne!(normal.items[..2], flat.items[..2]);
+
+        // The 0° rung, the first green line: its right end rises on the ordinary display, and
+        // falls on the Russian one.
+        let rung = |scene: &Scene| {
+            scene
+                .items
+                .iter()
+                .find_map(|item| match item {
+                    Item::Stroke { points, colour, .. }
+                        if *colour == colour::TARGET && points.len() == 2 =>
+                    {
+                        Some((points[0], points[1]))
+                    }
+                    _ => None,
+                })
+                .expect("the 0° rung")
+        };
+        let (left, right) = rung(&normal);
+        assert!(right.1 < left.1, "ordinary: {left:?} {right:?}");
+        let (left, right) = rung(&turned);
+        assert!(right.1 > left.1, "Russian: {left:?} {right:?}");
+
+        // The wings, the first two red lines three wide: level on the ordinary display, the
+        // right one down on the Russian one.
+        let wings = |scene: &Scene| -> Vec<((f32, f32), (f32, f32))> {
+            scene
+                .items
+                .iter()
+                .filter_map(|item| match item {
+                    Item::Stroke {
+                        points,
+                        colour,
+                        width,
+                        ..
+                    } if *colour == colour::ALERT
+                        && (*width - 3.0).abs() < 0.01
+                        && points.len() == 2 =>
+                    {
+                        Some((points[0], points[1]))
+                    }
+                    _ => None,
+                })
+                .take(2)
+                .collect()
+        };
+        for (from, to) in wings(&normal) {
+            assert!((from.1 - cy).abs() < 0.01 && (to.1 - cy).abs() < 0.01);
+        }
+        let turned_wings = wings(&turned);
+        assert!(turned_wings[0].0.1 < cy, "the left wing tip rises");
+        assert!(turned_wings[1].1.1 > cy, "the right wing tip falls");
+
+        // The roll pointer, the red triangle: left of centre on the ordinary display, right of it
+        // on the Russian one.
+        let pointer = |scene: &Scene| {
+            scene
+                .items
+                .iter()
+                .find_map(|item| match item {
+                    Item::Fill { points, colour, .. }
+                        if *colour == colour::ALERT && points.len() == 3 =>
+                    {
+                        Some(points[0])
+                    }
+                    _ => None,
+                })
+                .expect("the pointer")
+        };
+        assert!(pointer(&normal).0 < cx);
+        assert!(pointer(&turned).0 > cx);
+
+        // The flight path vector turns with the symbol: its fin, straight up from the circle on
+        // the ordinary display, leans right on the Russian one.
+        let fin = |inputs: &HudInputs| {
+            let scene = scene(inputs, W, H);
+            let ring = scene
+                .items
+                .iter()
+                .position(|item| {
+                    matches!(item, Item::Stroke { points, colour, .. }
+                        if points.len() > 8 && *colour == colour::ALERT)
+                })
+                .expect("the ring");
+            // The ring, its two wings, then its fin.
+            scene.items[ring + 1..]
+                .iter()
+                .filter_map(|item| match item {
+                    Item::Stroke { points, colour, .. }
+                        if *colour == colour::ALERT && points.len() == 2 =>
+                    {
+                        Some((points[0], points[1]))
+                    }
+                    _ => None,
+                })
+                .nth(2)
+                .expect("the fin")
+        };
+        let angled = |inputs: HudInputs| HudInputs {
+            aoa_ssa: Some(AoaSsa {
+                aoa: 0.0,
+                ssa: 0.0,
+                crit_aoa: 25.0,
+            }),
+            ..inputs
+        };
+        let (top, bottom) = fin(&angled(rolled));
+        assert!(
+            (top.0 - bottom.0).abs() < 0.01,
+            "upright: {top:?} {bottom:?}"
+        );
+        let (top, bottom) = fin(&angled(russian));
+        assert!(top.0 > bottom.0, "leaning right: {top:?} {bottom:?}");
+    }
+
+    /// Off by default, and a vehicle's inputs leave it off: it is the display's setting.
+    #[test]
+    fn russian_is_off_until_the_menu_turns_it_on() {
+        assert!(!HudInputs::default().russian);
+        let inputs = live(&VehicleState::default(), &mut Timing::default(), &[]);
+        assert!(!inputs.russian);
     }
 }
