@@ -22,7 +22,20 @@ pub struct Sensors {
     pub reported: bool,
 }
 
+/// `MAV_SYS_STATUS_SENSOR_MOTOR_OUTPUTS`: the bit the safety switch clears.
+const MOTOR_OUTPUTS: u32 = 0x4000;
+
 impl Sensors {
+    /// Whether the motor outputs are enabled - false while the safety switch is engaged.
+    ///
+    /// Mission Planner shows `(SAFETY)` on the HUD when the vehicle is armed and this is off,
+    /// which is the state a pilot stares at wondering why the motors will not spin.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:2887-2890`
+    #[must_use]
+    pub const fn motor_outputs_enabled(&self) -> bool {
+        self.enabled & MOTOR_OUTPUTS != 0
+    }
+
     /// The sensors that are switched on but not working, by name.
     ///
     /// Only the enabled ones. A copter with no airspeed sensor reports differential pressure as
@@ -87,6 +100,19 @@ mod tests {
     const ACCEL: u32 = 2;
     const MAG: u32 = 4;
     const GPS: u32 = 32;
+
+    #[test]
+    fn the_safety_switch_is_the_motor_outputs_bit() {
+        let mut sensors = Sensors {
+            present: 0x4000 | GYRO,
+            enabled: GYRO,
+            health: GYRO,
+            reported: true,
+        };
+        assert!(!sensors.motor_outputs_enabled(), "safety engaged");
+        sensors.enabled |= 0x4000;
+        assert!(sensors.motor_outputs_enabled());
+    }
 
     #[test]
     fn a_vehicle_that_has_said_nothing_is_not_reported_as_healthy() {

@@ -359,43 +359,12 @@ fn message_footer(view: &TelemetryView) -> String {
     }
 }
 
-pub fn hud_panel(view: &TelemetryView) -> impl IntoElement {
-    let state = view.state.clone();
-    let (speed, altitude, heading, mode) = view.state.as_ref().map_or_else(
-        || {
-            (
-                "--".to_owned(),
-                "--".to_owned(),
-                "--".to_owned(),
-                "no vehicle".to_owned(),
-            )
-        },
-        |s| {
-            (
-                format!("{:.0}", s.ground_speed.0),
-                format!("{:.0}", s.altitude_relative.0),
-                format!("{:03.0}", s.heading.degrees()),
-                {
-                    // The flight mode matters more than the armed flag on a HUD, so show
-                    // both: the mode by name, with the armed state as a suffix and as the
-                    // colour. An unknown mode shows its number rather than nothing.
-                    let mode = mp_vehicle::flight_mode_name(s.vehicle_type, s.custom_mode)
-                        .map_or_else(|| format!("mode {}", s.custom_mode), ToOwned::to_owned);
-                    if s.armed {
-                        format!("{mode}  ARMED")
-                    } else {
-                        mode
-                    }
-                },
-            )
-        },
-    );
-    let mode_colour = if view.state.as_ref().is_some_and(|s| s.armed) {
-        theme::ALERT
-    } else {
-        theme::DIM
-    };
-
+pub fn hud_panel(inputs: &crate::hud::HudInputs) -> impl IntoElement {
+    // Everything on the display is in the scene now - the tapes carry their own numbers, the
+    // mode and waypoint sit under the altitude scroller, battery and GPS along the bottom - as
+    // `HUD.cs` paints them, so nothing is overlaid as widgets any more. The box is 16:9-ish and
+    // tall enough that the C#'s `Height / 30` font is legible.
+    let inputs = inputs.clone();
     div()
         .relative()
         .h(px(260.0))
@@ -407,63 +376,16 @@ pub fn hud_panel(view: &TelemetryView) -> impl IntoElement {
         .child(
             gpui::canvas(
                 |_bounds, _window, _cx| (),
-                move |bounds, (), window, _cx| {
-                    crate::hud::paint_hud(state.as_deref(), bounds, window);
+                move |bounds, (), window, cx| {
+                    let scene = crate::hud::scene(
+                        &inputs,
+                        f32::from(bounds.size.width),
+                        f32::from(bounds.size.height),
+                    );
+                    crate::hud::paint(&scene, bounds, window, cx);
                 },
             )
             .size_full(),
-        )
-        // The readouts sit on backing strips rather than directly on the artificial horizon.
-        // Without them the pitch ladder runs straight through the text at exactly the attitude
-        // where a pilot most wants to read it.
-        .child(
-            div()
-                .absolute()
-                .top_2()
-                .left_2()
-                .flex()
-                .flex_col()
-                .px_2()
-                .rounded_md()
-                .bg(rgb(theme::PANEL))
-                .child(div().text_xs().text_color(rgb(theme::DIM)).child("m/s"))
-                .child(div().text_lg().text_color(rgb(theme::TEXT)).child(speed)),
-        )
-        .child(
-            div()
-                .absolute()
-                .top_2()
-                .right_2()
-                .flex()
-                .flex_col()
-                .items_end()
-                .px_2()
-                .rounded_md()
-                .bg(rgb(theme::PANEL))
-                .child(div().text_xs().text_color(rgb(theme::DIM)).child("m"))
-                .child(div().text_lg().text_color(rgb(theme::TEXT)).child(altitude)),
-        )
-        .child(
-            div()
-                .absolute()
-                .bottom_2()
-                .left_0()
-                .w_full()
-                .flex()
-                .justify_center()
-                .child(
-                    div()
-                        .flex()
-                        .gap_3()
-                        .px_3()
-                        .py(px(2.0))
-                        .rounded_md()
-                        .bg(rgb(theme::PANEL))
-                        .border_1()
-                        .border_color(rgb(theme::BORDER))
-                        .child(div().text_sm().text_color(rgb(theme::TEXT)).child(heading))
-                        .child(div().text_sm().text_color(rgb(mode_colour)).child(mode)),
-                ),
         )
 }
 

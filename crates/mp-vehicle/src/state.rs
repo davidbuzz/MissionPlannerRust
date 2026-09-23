@@ -22,6 +22,77 @@ pub struct Attitude {
     pub yaw_rate: f32,
 }
 
+/// What the navigation controller is trying to do, from `NAV_CONTROLLER_OUTPUT`.
+///
+/// The HUD's target bugs come from here - the green marks on the heading tape and the two
+/// scrollers - and so does the cross-track bar. Stored as the wire sends them, in the units the
+/// C# keeps: bearings in degrees, distance in metres, errors in metres and metres per second.
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3442-3456`
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Nav {
+    /// Desired roll, degrees.
+    pub roll: f32,
+    /// Desired pitch, degrees.
+    pub pitch: f32,
+    /// Desired heading, degrees.
+    pub bearing: f32,
+    /// Bearing to the current waypoint, degrees.
+    pub target_bearing: f32,
+    /// Distance to the current waypoint, metres.
+    pub wp_distance: f32,
+    /// Altitude error: target minus current, metres.
+    pub alt_error: f32,
+    /// Airspeed error, metres per second.
+    ///
+    /// The wire carries this in m/s and the C# divides it by 100 anyway
+    /// (`aspd_error = nav.aspd_error / 100.0f`), which makes its airspeed target wrong by that
+    /// factor; kept as the wire sends it here, with the divergence noted where the target speed
+    /// is derived.
+    pub airspeed_error: f32,
+    /// Cross-track error, metres. Positive is right of track.
+    pub xtrack_error: f32,
+}
+
+impl VehicleState {
+    /// Rate of turn, degrees per second, as the C# derives it for the HUD.
+    ///
+    /// Not the gyro's yaw rate: a coordinated-turn estimate from bank angle and ground speed,
+    /// `roll * g / groundspeed`, and zero below walking pace where the division would say
+    /// something absurd about a stationary aircraft holding a bank.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1203-1210`
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation)] // display precision
+    pub fn turn_rate(&self) -> f32 {
+        let ground_speed = self.ground_speed.0;
+        if ground_speed <= 1.0 {
+            return 0.0;
+        }
+        (self.attitude.roll.0.to_degrees() * 9.806_65 / ground_speed) as f32
+    }
+
+    /// The altitude the controller is flying to, metres, as the HUD's green mark shows it.
+    ///
+    /// The C# low-pass filters `alt + alt_error` into `targetalt` on every message; the filter
+    /// is a display nicety on a value the wire already provides, so this is the unfiltered sum.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1107`
+    #[must_use]
+    pub fn target_altitude(&self) -> f64 {
+        self.altitude_relative.0 + f64::from(self.nav.alt_error)
+    }
+
+    /// The airspeed the controller is flying to, metres per second.
+    ///
+    /// `airspeed + aspd_error`, the same shape as [`Self::target_altitude`]. **Divergence:** the
+    /// C# divides the wire's `aspd_error` by 100 before this sum, which turns a 5 m/s error into
+    /// 0.05 and pins its target bug to the current speed; the wire's field is in m/s
+    /// (`common.xml`), so it is used as sent.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1130, 3454`
+    #[must_use]
+    pub fn target_airspeed(&self) -> f64 {
+        self.air_speed.0 + f64::from(self.nav.airspeed_error)
+    }
+}
+
 /// GPS receiver status.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct GpsInfo {
@@ -112,6 +183,11 @@ pub struct VehicleState {
     pub home: Option<LatLon>,
     /// Link health.
     pub link: LinkQuality,
+    /// What the navigation controller is aiming for.
+    pub nav: Nav,
+    /// The mission item the vehicle is flying to, from `MISSION_CURRENT`.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3413-3420`
+    pub mission_current: u16,
     /// Sensor health, as reported in `SYS_STATUS`.
     pub sensors: crate::sensors::Sensors,
     /// Radio control channel values, as last reported.
@@ -228,6 +304,23 @@ impl VehicleState {
                 self.ground_speed = MetresPerSecond(f64::from(m.groundspeed));
                 self.climb_rate = MetresPerSecond(f64::from(m.climb));
                 self.throttle_percent = m.throttle as i16;
+                true
+            }
+            MavMessage::NavControllerOutput(m) => {
+                self.nav = Nav {
+                    roll: m.nav_roll,
+                    pitch: m.nav_pitch,
+                    bearing: f32::from(m.nav_bearing),
+                    target_bearing: f32::from(m.target_bearing),
+                    wp_distance: f32::from(m.wp_dist),
+                    alt_error: m.alt_error,
+                    airspeed_error: m.aspd_error,
+                    xtrack_error: m.xtrack_error,
+                };
+                true
+            }
+            MavMessage::MissionCurrent(m) => {
+                self.mission_current = m.seq;
                 true
             }
             // All sixteen channels ArduPilot maps to functions. RC_CHANNELS carries eighteen;

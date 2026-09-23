@@ -191,6 +191,9 @@ struct MissionPlanner {
     param_file_focus: gpui::FocusHandle,
     /// Joystick state: the device, the mapping and the failsafe.
     sticks: joystick::Sticks,
+    /// The primary flight display's inputs for this frame, and the clocks behind its banners.
+    hud: hud::HudInputs,
+    hud_timing: hud::Timing,
     /// The live tuning graph.
     tuning: tuning::Tuning,
     /// The log being reviewed.
@@ -340,6 +343,8 @@ impl MissionPlanner {
             },
             param_file_focus: cx.focus_handle(),
             sticks: joystick::Sticks::new(),
+            hud: hud::HudInputs::default(),
+            hud_timing: hud::Timing::default(),
             tuning: tuning::Tuning::new(),
             log_browse: logbrowse::LogBrowse::new(),
             log_name: textfield::TextField::new("a .BIN or .log in the plan directory"),
@@ -874,6 +879,33 @@ impl MissionPlanner {
     /// column instead was worse: the mode list appears only once a vehicle is heard from, and the
     /// content growing under the scroll container dragged the view down, so the application
     /// started with its primary flight display already off the top of the screen.
+    /// The primary flight display's inputs for this frame.
+    ///
+    /// The clocks - how long since arming, since the mode changed, since a message was raised -
+    /// live in `hud_timing` and are advanced here, once a frame, because the vehicle state says
+    /// only what is true now and the C# HUD shows things for a while after they change.
+    fn hud_inputs(&mut self, view: &TelemetryView) -> hud::HudInputs {
+        let Some(state) = view.state.as_deref() else {
+            return hud::HudInputs::default();
+        };
+        let now = std::time::Instant::now();
+        let (armed_for, mode_changed_for) =
+            self.hud_timing.observe(state.armed, state.custom_mode, now);
+        let mode = mp_vehicle::flight_mode_name(state.vehicle_type, state.custom_mode)
+            .map_or_else(|| format!("mode {}", state.custom_mode), ToOwned::to_owned);
+        let message = self
+            .hud_timing
+            .message(hud::high_priority_message(state), now);
+        hud::HudInputs::from_vehicle(
+            state,
+            mode,
+            armed_for,
+            mode_changed_for,
+            chrono::Local::now().format("%H:%M:%S").to_string(),
+            message,
+        )
+    }
+
     fn fly_sidebar(&self, view: &TelemetryView, cx: &mut Context<Self>) -> impl IntoElement {
         probe::measured("fly-column", div())
             .flex()
@@ -882,7 +914,7 @@ impl MissionPlanner {
             .min_h(px(0.0))
             .gap_2()
             .w(px(400.0))
-            .child(fly::hud_panel(view))
+            .child(fly::hud_panel(&self.hud))
             .child(
                 // The scrolling column and its indicator share a positioned parent, so the
                 // indicator can sit over the column's right edge without taking width from it.
@@ -1290,6 +1322,7 @@ impl Render for MissionPlanner {
         // The sticks send from their own thread; this keeps them addressed to the vehicle being
         // flown and notices a device that has gone. Once a frame, whether or not anything shows.
         self.sticks.tick(self.telemetry.send_handle());
+        self.hud = self.hud_inputs(&view);
 
         // Facts a UI test can assert on. Recorded from render because that is where every one of
         // them is already in hand, and published at the end of the frame so a reader never sees
@@ -1346,6 +1379,14 @@ impl Render for MissionPlanner {
             // rather than merely on the plot, and that the left side split by unit.
             facts::record("log.plotted.right", self.log_browse.right_count());
             facts::record("log.axes.left", self.log_browse.left_units().len());
+            // What the primary flight display drew, by name, and how many of HUD.cs's elements
+            // it still does not - so a port that regresses an element fails a test.
+            facts::record(
+                "hud.drawn",
+                hud::scene(&self.hud, 800.0, 260.0).drawn_names(),
+            );
+            facts::record("hud.missing", hud::missing().len());
+            facts::record("hud.missing.list", hud::missing_report());
             facts::record("sticks.enabled", self.sticks.is_enabled());
             // Frames the link accepted and the measured stick-to-link latency, so a test with a
             // device attached can prove frames go out and how fast.

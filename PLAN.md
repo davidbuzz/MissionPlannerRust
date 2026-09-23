@@ -1170,6 +1170,24 @@ item, three defects in work believed finished.
 
 ---
 
+### 13.3 The ten after
+
+Nine of §13.2 are done and one is in flight, so the next ten are drawn, as the rule says, from
+DELIVERABLES.md in P0 → P1 → P2 order, flying and planning first. Each row says what *done* means.
+
+| # | Item | Why it is next | Deliverable | Done when | Status |
+|---:|---|---|---|---|---|
+| 1 | Split `mp-link` | carried from §13.2 item 9: the L0–L12 layering is the pivot insurance and the code does not have it | D1 | `mp-params`, `mp-calibration` and `mp-ftp` exist, `mp-link` is the link engine only, and `xtask/tests/graph.rs` asserts the §5.1 layer rules over `cargo metadata` and passes | in flight |
+| 2 | LogBrowse's data grid and the map beside the chart | the two halves of `Log/LogBrowse.cs` still missing, and the "Graph Left/Right" buttons act on the grid's selected cell | D14 | the grid shows the log's records with a selectable cell, `BUT_Graphit`/`BUT_Graphit_R` graph that cell (`graphit_clickprocess`), and the flown path from the log is drawn on a map beside the chart | in flight |
+| 3 | Survey grid differential against the C# | D11's DoD is byte-identical missions and numerically verified grids, and nothing compares a grid to `Grid.CreateGrid` yet | D11 | a test runs the mono oracle's `grid` verb over ≥ 30 real polygons and holds §7.2 class C: identical point count, then order, then ≤ 1e-7°, plus the invariants where tie-breaks differ | in flight |
+| 4 | HUD instrument parity | flying is what the application is for, and `HUD.cs doPaint()` (1954–3333) has elements this HUD does not draw | D9 | every element of `doPaint()` is listed in a coverage test with its status, and the missing ones a pilot uses first - pitch ladder clipped to ±40°, heading tape with the target bug, xtrack bar, VSI, dual battery, GPS fix/HDOP, armed banner - are drawn and asserted through facts | done for 18 of `doPaint()`'s 24 elements (`crates/mp-gui/src/hud.rs` `ELEMENTS`, held to the code by a test): the ladder, heading tape and bugs, xtrack and rate of turn, both scrollers, VSI, mode and waypoint, link info, battery, GPS, ARMED/DISARMED/SAFE, FAILSAFE, the message line. Missing, listed: flight-path vector, AOA, custom items, the vibe/EKF/pre-arm indicators. The C# shows the GPS fix only, not HDOP, so neither does this |
+| 5 | Protocol state machines under fault | D4 says every state machine is an explicitly tested machine, and the retry loops are only exercised against a well-behaved SITL | D4 | `tests/retries.rs` injects timeouts, out-of-order `PARAM_VALUE`, every `MAV_MISSION_RESULT` and partial transfers and asserts convergence with the C# retry counts (`setParamAsync` 3, `GetParam` 3, `setWPCurrent` 5, `doCommand` 3); `tests/routing.rs` drives 50 vehicles through one link | |
+| 6 | Transport faults and enumeration | D3's DoD; a surprise unplug is the field failure nobody rehearses | D3 | `tests/faults.rs` (drop, duplicate, reorder, partial write, mid-frame disconnect) and `tests/enumerate.rs` over checked-in per-OS device fixtures pass | |
+| 7 | FlightData action coverage | D10's DoD is every tab, button and action of `GCSViews/FlightData`, and nobody has counted what is missing | D10 | `tests/action_coverage.rs` enumerates the controls and actions from `FlightData.resx`/`Designer.cs` and prints the unimplemented list; the list is the deliverable, and it shrinks in later commits | |
+| 8 | Projection proof and the pan/zoom budget | D8 asks for < 1 mm against ProjNet and 120 fps with a 1 M-point track; both are claimed, neither is gated | D8 | `tests/projection.rs` round-trips a fixture grid against oracle values at < 1 mm; `benches/pan_zoom.rs` exists and its number is recorded | |
+| 9 | Parameter metadata for the firmware actually flying | §10.5 measured 41% of a 4.6 vehicle's parameters undocumented by the bundled file; the C# fetches per version | D12 | `AUTOPILOT_VERSION` resolves to a release, its `apm.pdef.xml` is fetched and cached, and the undocumented count on this SITL is recorded before and after | |
+| 10 | Read Mission Planner's `config.xml` | D17: both applications against one data directory means the shared settings too | D17 | our settings read the keys both applications use (last link, map type, log directory) from a `config.xml` the real application wrote, without conversion, with that file as the fixture | |
+
 ## Appendix A — claims this plan refutes
 
 Recorded so they are not re-asserted.

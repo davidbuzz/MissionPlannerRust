@@ -186,6 +186,12 @@ GPU artificial horizon, tapes, compass, gauges, warnings, with live video underl
 - **DoD:** pixel-comparable to the C# HUD (side-by-side review signed off), **< 16 ms packet-to-pixel**
   at the 99th percentile, runs at 120 fps while using < 3 % CPU; video underlay with hardware decode.
 - **Replaces:** `Controls/HUD*.cs`, `Controls/` PFD widgets.
+- **Today:** `crates/mp-gui/src/hud.rs` builds a pure scene from the vehicle state - the
+  geometry of `HUD.cs doPaint()` with its constants (`Height / 30` font, `Height / 65` per
+  degree of pitch, a `Height / 14` heading tape, `Width / 10` scrollers) - and paints it on a gpui
+  canvas. 18 of the 24 elements are drawn and 6 are listed as missing in a coverage table a test
+  holds to the code; `tests/gui/hud.gui` asserts the drawn set against the real application on
+  SITL. No video underlay, no golden frames, no latency measurement yet.
 - **Tests:** `tests/hud_golden.rs` renders recorded attitude/telemetry sequences and perceptually diffs every frame against golden images, including the degenerate cases (gimbal-lock attitudes, NaN/absent fields, GPS loss, failsafe banners); `tests/latency.rs` timestamps packet-in to frame-presented and gates the <16 ms p99 target; `tests/video_underlay.rs` decodes a fixture stream and asserts composition order and hardware-decode fallback.
 
 ### D10. Flight Data screen

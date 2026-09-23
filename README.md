@@ -13,8 +13,8 @@ projects — as a Rust application that is **fast**, **multi-platform** and **GP
 Early, but flyable behind SITL and a real autopilot. The protocol and telemetry spine is solid; the
 UI covers flying, planning and the first of the setup screens.
 
-Measured on this tree: **17 crates, 40,661 hand-written Rust LOC** (plus 91,634 generated),
-**608 tests** green on `cargo test --workspace`, across 88 commits.
+Measured on this tree: **18 crates, 46,293 hand-written Rust LOC** (plus 93,771 generated),
+**747 tests** green on `cargo test --workspace`, across 102 commits.
 
 | Working today | |
 |---|---|
@@ -37,6 +37,7 @@ Measured on this tree: **17 crates, 40,661 hand-written Rust LOC** (plus 91,634 
 | KML export | a flown path coloured by flight mode, and a mission, for Google Earth |
 | Tuning graph | eleven telemetry fields plotted live, min/max reduced so a spike cannot hide |
 | Geodesy | typed units, Web Mercator, slippy-map tile arithmetic |
+| HUD | 18 of the 24 elements `HUD.cs` paints, from a pure scene builder with a coverage table: horizon and ladder, heading tape with target and course marks, cross-track and turn rate, speed and altitude scrollers, VSI, mode and waypoint, link, battery, GPS, ARMED/DISARMED/SAFE/FAILSAFE, the message line |
 | Maps | GPU tile rendering, three providers including Esri satellite imagery, overlays; the on-disk cache is Mission Planner's own, so a cache filled by either application is read by both |
 | CLI | `mpr watch \| record \| fly \| params \| param \| mission \| survey \| log \| logs \| kml \| firmware \| ports` |
 | GUI | fly, plan, setup, params and log screens on gpui |

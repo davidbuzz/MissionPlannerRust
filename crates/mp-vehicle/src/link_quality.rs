@@ -54,6 +54,49 @@ impl LinkQuality {
     pub fn reset(&mut self) {
         *self = Self::default();
     }
+
+    /// Link quality as Mission Planner's HUD shows it: frames that arrived as a percentage of
+    /// frames sent, capped at 100, and 100 before anything has been counted.
+    ///
+    /// The C# also zeroes it when nothing valid has arrived for ten seconds; that clock is not
+    /// kept here, and the HUD's "no vehicle" state covers the same case.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4590-4599`
+    #[must_use]
+    pub fn quality_percent(&self) -> u8 {
+        let sent = self.received + self.lost;
+        if sent == 0 {
+            return 100;
+        }
+        let quality = self.received.saturating_mul(100) / sent;
+        u8::try_from(quality.min(100)).unwrap_or(100)
+    }
+}
+
+#[cfg(test)]
+mod quality_tests {
+    use super::*;
+
+    #[test]
+    fn quality_is_the_share_of_frames_that_arrived() {
+        let mut link = LinkQuality::default();
+        for seq in [0u8, 1, 2, 3, 6, 7, 8, 9] {
+            link.record(seq);
+        }
+        // Eight received, two lost (4 and 5): 8 / 10.
+        assert_eq!(link.received, 8);
+        assert_eq!(link.lost, 2);
+        assert_eq!(link.quality_percent(), 80);
+    }
+
+    #[test]
+    fn a_perfect_link_and_an_empty_one_both_read_full() {
+        let mut link = LinkQuality::default();
+        assert_eq!(link.quality_percent(), 100);
+        for seq in 0..50u8 {
+            link.record(seq);
+        }
+        assert_eq!(link.quality_percent(), 100);
+    }
 }
 
 #[cfg(test)]

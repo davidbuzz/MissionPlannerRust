@@ -38,4 +38,4 @@ pub use rc::{RcChannels, RcRange};
 pub use registry::{VehicleId, VehicleRegistry};
 pub use sensors::Sensors;
 pub use snapshot::{StateHandle, StatePublisher};
-pub use state::{Attitude, Battery, GpsInfo, VehicleState};
+pub use state::{Attitude, Battery, GpsInfo, Nav, VehicleState};
