@@ -14,12 +14,60 @@
 //!
 //! The C# design instead shares a mutable `MAVLinkInterface` across threads with locks around it,
 //! which is why Mission Planner's UI can hitch when a link degrades.
+//!
+//! # Protocol state machines
+//!
+//! Every conversation that asks the vehicle something and waits is an explicit state machine,
+//! fed each message and each pass of this thread's loop, holding Mission Planner's retry counts
+//! and waits from [`ProtocolTimeouts`] (DELIVERABLES.md D4). `tests/retries.rs` drives each one
+//! against a scripted vehicle that drops, repeats, delays, skips and refuses, and asserts it
+//! stops - complete or a clean failure - within its waits, having sent exactly the C#'s number of
+//! retries; `tests/routing.rs` runs them among fifty vehicles on one link. C# lines are in
+//! `ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs` unless named.
+//!
+//! * [`param_download::ParamDownload`] - `getParamListAsync`. `Streaming` → `Recovering` →
+//!   `Complete`, or `Cancelled` by the caller. Recovery after 4000 ms quiet or the last index
+//!   arriving short (:2089, :2114); the whole list again at most twice under three quarters
+//!   (:2117); then rounds of 10 reads (:2187) every 1000 ms (:2135); never gives up by itself
+//!   (:2226). Tests: `parameters_arriving_in_any_order_*`, `the_last_index_arriving_short_*`,
+//!   `holes_are_read_ten_at_a_time_*`, `a_stream_under_three_quarters_*`,
+//!   `a_hole_never_filled_*`, `a_parameter_outside_a_download_*`,
+//!   `a_parameter_download_over_a_bad_link_*`.
+//! * [`requests::Request`] - one machine for four C# loops, `Queued` → `Waiting` → `Finished`:
+//!   - `SetParam`, `setParamAsync`: 3 retries, 700 ms (:1748, :1754); unknown names and
+//!     unchanged values not sent (:1640-1651). Tests: `a_set_whose_echo_never_comes_*`,
+//!     `a_late_echo_*`, `an_echo_of_a_different_value_*`, `an_echo_of_another_parameter_*`,
+//!     `a_set_that_cannot_or_need_not_be_sent_*`.
+//!   - `ReadParam`, `GetParamAsync`: 3, 700 ms (:2329, :2333). Test:
+//!     `a_read_answered_only_wrongly_*`.
+//!   - `Command`, `doCommandAsync`: 3, 2000 ms (:2729, :2731); arming 10 s (:2764-2768);
+//!     calibration and bootloader 1 retry, 25 s (:2748-2757); `IN_PROGRESS` waits again with no
+//!     retries (:2818-2823); any other result ends it (:2829-2833); reboot and the rest not
+//!     waited for (:2720-2773). Tests: `a_command_never_acknowledged_*`, `in_progress_then_*`,
+//!     `every_refusal_*`, `an_ack_for_another_command_*`, `acks_arriving_in_the_other_order_*`,
+//!     `arming_waits_*`, `a_calibration_is_sent_twice_*`, `the_commands_not_waited_for_*`.
+//!   - `SetCurrent`, `setWPCurrentAsync`: 5, 2000 ms (:2472, :2476). Test:
+//!     `set_current_is_sent_six_times_*`.
+//! * [`mission_transfer::MissionTransfer`] - mission, fence and rally alike.
+//!   - Download, `AwaitingCount` → `Downloading` → `Complete` or `Failed`: `getWPCountAsync` 6,
+//!     700 ms (:3297, :3301); `getWPAsync` 5, 2500 ms (:3459, :3463). Tests: `a_download_*`.
+//!   - Upload, `Uploading` → `Complete` or `Failed`: `setWPTotalAsync` 3, 700 ms (:3779, :3783);
+//!     `setWPAsync` 10, 450 ms (:4250, :4254); each `MAV_MISSION_RESULT` as `mav_mission.upload`
+//!     treats it (ExtLibs/ArduPilot/mav_mission.cs:101-151). Tests: `an_upload_*`,
+//!     `every_mission_result_*`, `a_second_error_*`, `an_item_never_followed_up_*`,
+//!     `a_vehicle_stuck_on_one_item_*`, `a_refused_count_*`, `invalid_sequence_then_silence_*`.
+//!
+//! Where a machine departs from the C# on purpose, its module says why, and the test pinning the
+//! difference cites the C# lines.
 
 #![forbid(unsafe_code)]
 
 pub mod commands;
 pub mod messages;
 pub mod mission_transfer;
+pub mod param_download;
+pub mod requests;
+pub mod timeouts;
 pub mod tlog;
 pub mod traffic;
 
@@ -30,11 +78,16 @@ use std::time::{Duration, Instant};
 
 use mission_transfer::{Action, MissionTransfer};
 use mp_mavlink::{DecodeStats, FrameDecoder, Message as _, encode_v2};
-use mp_mavlink_dialects::all::{DIALECT, Heartbeat, MavCmd, MavMessage, RequestDataStream};
+use mp_mavlink_dialects::all::{
+    DIALECT, Heartbeat, MavCmd, MavMessage, MissionWritePartialList, RequestDataStream,
+};
 use mp_mission::{MISSION_TYPE_MISSION, MissionItem, WireItem};
 use mp_params::{ParamTable, ParamType, ParamValue, decode_param_id};
 use mp_transport::{OpenError, Transport};
 use mp_vehicle::{StateHandle, VehicleId, VehicleRegistry};
+use param_download::{ParamAction, ParamDownload};
+use requests::{ParamKey, Request, RequestKind};
+pub use timeouts::{ProtocolTimeouts, Retry};
 
 /// MAVLink component id for a ground control station.
 pub const MAV_COMP_ID_MISSIONPLANNER: u8 = 190;
@@ -52,11 +105,12 @@ const ADSB_VALID_VELOCITY: u16 = 0x0008;
 /// specification, so which autopilot is on the other end is not a cosmetic detail.
 const MAV_AUTOPILOT_ARDUPILOTMEGA: u8 = 3;
 
-/// How long the parameter stream must be quiet before gaps are re-requested.
-const PARAM_GAP_TIMEOUT: Duration = Duration::from_millis(1500);
-
-/// How many missing parameters to re-request at once.
-const PARAM_RETRY_BURST: usize = 10;
+/// How many finished requests the link keeps for their callers to read.
+///
+/// A caller reads a request's outcome some time after it ends - a frame later, or a second
+/// later on a slow screen - so a finished request cannot be dropped at once. Nor can every one be
+/// kept, or a script setting parameters in a loop grows the link without bound.
+const FINISHED_REQUESTS_KEPT: usize = 256;
 
 /// Minimum time the I/O loop spends per iteration when there is nothing to read.
 const IDLE_POLL: Duration = Duration::from_millis(1);
@@ -87,6 +141,9 @@ pub struct LinkConfig {
     /// Mission Planner sends `REQUEST_DATA_STREAM` on connect for exactly this reason, and a
     /// port that omits it looks like a broken link rather than a quiet vehicle.
     pub stream_rate_hz: u16,
+    /// How long each protocol step waits and how often it retries: Mission Planner's numbers by
+    /// default, which is the only thing to fly with. Tests shorten the waits and keep the counts.
+    pub timeouts: ProtocolTimeouts,
 }
 
 impl Default for LinkConfig {
@@ -99,9 +156,17 @@ impl Default for LinkConfig {
             send_heartbeat: true,
             record_path: None,
             stream_rate_hz: 4,
+            timeouts: ProtocolTimeouts::default(),
         }
     }
 }
+
+/// A request handed to the link: see [`Link::set_param`], [`Link::command`] and their kin.
+///
+/// Numbered in the order they were made, which is also the order an answer is offered to them:
+/// one `COMMAND_ACK` answers the oldest command waiting for it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RequestId(u64);
 
 /// Errors from running a link.
 #[derive(Debug, thiserror::Error)]
@@ -146,10 +211,19 @@ struct Shared {
     /// session - which is exactly wrong on the one screen a pilot looks at.
     description: Mutex<String>,
     handles: Mutex<BTreeMap<VehicleId, StateHandle>>,
-    /// Parameters received per vehicle, and whether a download is in progress.
+    /// Parameters received per vehicle.
     params: Mutex<BTreeMap<VehicleId, ParamTable>>,
-    /// Vehicles whose parameter download the caller has asked for.
-    param_downloads: Mutex<BTreeMap<VehicleId, bool>>,
+    /// Parameter downloads the caller has started, finished ones included so their outcome can
+    /// be read. Gaps are only chased inside one of these: a single `PARAM_VALUE` - the echo of a
+    /// parameter set - carries the vehicle's full count, and treating that as a download with a
+    /// thousand holes would flood the link with requests nobody made.
+    param_downloads: Mutex<BTreeMap<VehicleId, ParamDownload>>,
+    /// Requests the link thread has picked up, finished ones included.
+    requests: Mutex<BTreeMap<RequestId, Request>>,
+    /// Requests the link thread has yet to pick up.
+    request_queue: Mutex<Vec<(RequestId, Request)>>,
+    /// The number the next request gets.
+    next_request: AtomicU64,
     /// Transfers the caller has started, and their current state.
     ///
     /// Keyed by vehicle *and* list type: a mission download and a fence download are separate
@@ -306,13 +380,113 @@ impl Link {
 
     /// Starts a parameter download and returns immediately.
     ///
-    /// Progress is observable through [`Link::params`]; the link thread re-requests any gaps, so
-    /// the caller does not need to implement retry logic.
+    /// Progress is observable through [`Link::params`] and [`Link::param_download`]; the link
+    /// thread re-requests any gaps, as `getParamListAsync` does, so the caller does not need to
+    /// implement retry logic. A download already running for this vehicle starts again from
+    /// nothing, as a second call to the C# does.
     pub fn download_params(&self, target: VehicleId) -> bool {
+        let download = ParamDownload::new(target, self.config.timeouts, Instant::now());
+        let first = download.begin();
         if let Ok(mut downloads) = self.shared.param_downloads.lock() {
-            downloads.insert(target, true);
+            downloads.insert(target, download);
         }
-        self.send(&commands::request_param_list(target))
+        match first {
+            ParamAction::RequestList => self.send(&commands::request_param_list(target)),
+            ParamAction::Nothing | ParamAction::RequestIndices(_) => true,
+        }
+    }
+
+    /// The state of a vehicle's parameter download, if one has been started.
+    #[must_use]
+    pub fn param_download(&self, target: VehicleId) -> Option<ParamDownload> {
+        self.shared
+            .param_downloads
+            .lock()
+            .ok()?
+            .get(&target)
+            .cloned()
+    }
+
+    /// Stops a parameter download, as the C#'s progress dialog's Cancel does. What arrived stays
+    /// in the table.
+    pub fn cancel_param_download(&self, target: VehicleId) {
+        if let Ok(mut downloads) = self.shared.param_downloads.lock()
+            && let Some(download) = downloads.get_mut(&target)
+        {
+            download.cancel();
+        }
+    }
+
+    /// Sets a parameter and waits, on the link thread, for the vehicle to echo it: `setParam`.
+    ///
+    /// Refused without sending when the vehicle has not listed the parameter, and skipped when it
+    /// already holds `value` unless `force`, as the C# does. The outcome is read with
+    /// [`Link::request`].
+    pub fn set_param(&self, target: VehicleId, name: &str, value: f64, force: bool) -> RequestId {
+        self.queue_request(
+            target,
+            RequestKind::SetParam {
+                name: name.to_owned(),
+                value,
+                force,
+            },
+        )
+    }
+
+    /// Reads one parameter by name: `GetParam`.
+    pub fn read_param(&self, target: VehicleId, name: &str) -> RequestId {
+        self.queue_request(
+            target,
+            RequestKind::ReadParam(ParamKey::Name(name.to_owned())),
+        )
+    }
+
+    /// Sends a `COMMAND_LONG` and waits for its `COMMAND_ACK`: `doCommand`.
+    ///
+    /// `require_ack` false sends once and does not wait, as the C#'s `requireack` does.
+    pub fn command(
+        &self,
+        target: VehicleId,
+        command: u16,
+        params: [f32; 7],
+        require_ack: bool,
+    ) -> RequestId {
+        self.queue_request(
+            target,
+            RequestKind::Command {
+                command,
+                params,
+                require_ack,
+            },
+        )
+    }
+
+    /// Makes a mission item the current one and waits for `MISSION_CURRENT`: `setWPCurrent`.
+    pub fn set_current_waypoint(&self, target: VehicleId, seq: u16) -> RequestId {
+        self.queue_request(target, RequestKind::SetCurrent { seq })
+    }
+
+    /// Where a request is, or `None` if the link has forgotten it or never had it.
+    #[must_use]
+    pub fn request(&self, id: RequestId) -> Option<Request> {
+        if let Some(request) = self.shared.requests.lock().ok()?.get(&id) {
+            return Some(request.clone());
+        }
+        self.shared
+            .request_queue
+            .lock()
+            .ok()?
+            .iter()
+            .find(|(queued, _)| *queued == id)
+            .map(|(_, request)| request.clone())
+    }
+
+    fn queue_request(&self, target: VehicleId, kind: RequestKind) -> RequestId {
+        let id = RequestId(self.shared.next_request.fetch_add(1, Ordering::Relaxed));
+        if let Ok(mut queue) = self.shared.request_queue.lock() {
+            queue.push((id, Request::new(target, kind)));
+        }
+        id
     }
 
     /// Starts downloading the vehicle's mission. Progress is observable through
@@ -616,6 +790,59 @@ impl Drop for Link {
     }
 }
 
+/// Drops the oldest finished requests beyond [`FINISHED_REQUESTS_KEPT`]. One still waiting is
+/// never dropped, however old: something is still going to answer it or time it out.
+fn forget_finished_requests(held: &mut BTreeMap<RequestId, Request>) {
+    let mut finished = held
+        .values()
+        .filter(|request| request.is_finished())
+        .count();
+    while finished > FINISHED_REQUESTS_KEPT {
+        let Some(oldest) = held
+            .iter()
+            .find(|(_, request)| request.is_finished())
+            .map(|(id, _)| *id)
+        else {
+            break;
+        };
+        held.remove(&oldest);
+        finished -= 1;
+    }
+}
+
+/// Encodes a message from this link, numbers it, and writes it to the transport and recording.
+fn send_message(
+    transport: &mut dyn Transport,
+    recorder: Option<&mut tlog::TlogWriter>,
+    stats: &mut LinkStats,
+    config: &LinkConfig,
+    tx_seq: &mut u8,
+    message: &MavMessage,
+) -> bool {
+    let mut payload = [0u8; 255];
+    let len = message.encode(&mut payload);
+    let mut frame = [0u8; mp_mavlink::MAX_FRAME_LEN];
+    let Some(body) = payload.get(..len) else {
+        return false;
+    };
+    let Ok(n) = encode_v2(
+        &mut frame,
+        *tx_seq,
+        config.sysid,
+        config.compid,
+        message.id(),
+        body,
+        message.crc_extra(),
+        0,
+    ) else {
+        return false;
+    };
+    *tx_seq = tx_seq.wrapping_add(1);
+    frame
+        .get(..n)
+        .is_some_and(|bytes| send_frame(transport, recorder, stats, bytes))
+}
+
 /// Writes a frame to the transport and to the recording, if one is running.
 ///
 /// Both directions belong in a telemetry log. Mission Planner records what it sends as well as
@@ -660,8 +887,11 @@ fn run_link(
     let mut tx_seq: u8 = 0;
 
     let mut newly_seen: Vec<VehicleId> = Vec::new();
-    let mut last_param = Instant::now();
     let mut pending_actions: Vec<(VehicleId, u8, Action)> = Vec::new();
+    // Reused every pass, so a pass with nothing in flight allocates nothing.
+    let mut param_actions: Vec<(VehicleId, ParamAction)> = Vec::new();
+    let mut picked_up: Vec<(RequestId, Request)> = Vec::new();
+    let mut request_sends: Vec<requests::Outgoing> = Vec::new();
     let mut last_publish = Instant::now();
     let mut last_heartbeat = Instant::now() - config.heartbeat_interval;
     let mut known: BTreeMap<VehicleId, ()> = BTreeMap::new();
@@ -838,7 +1068,29 @@ fn run_link(
                                         }
                                     }
                                 }
+                                // Any MISSION_CURRENT answers a set-current (setWPCurrentAsync).
+                                MavMessage::MissionCurrent(_) => {
+                                    if let Ok(mut held) = shared.requests.lock() {
+                                        for request in held.values_mut() {
+                                            request.on_mission_current(id);
+                                        }
+                                    }
+                                }
                                 MavMessage::CommandAck(ack) => {
+                                    // The oldest command waiting for this ack takes it.
+                                    if let Ok(mut held) = shared.requests.lock() {
+                                        let now = Instant::now();
+                                        for request in held.values_mut() {
+                                            if request.on_command_ack(
+                                                id,
+                                                ack.command,
+                                                ack.result,
+                                                now,
+                                            ) {
+                                                break;
+                                            }
+                                        }
+                                    }
                                     if let Ok(mut log) = shared.messages.lock() {
                                         let severity = if messages::command_failed(ack.result) {
                                             messages::Severity::Error
@@ -873,21 +1125,48 @@ fn run_link(
                                 let is_ardupilot = registry.working(id).is_some_and(|state| {
                                     state.autopilot == MAV_AUTOPILOT_ARDUPILOTMEGA
                                 });
-                                if let (Some(kind), Ok(mut table)) =
-                                    (ParamType::from_wire(param.param_type), shared.params.lock())
+                                // Every PARAM_VALUE counts toward a download, whatever its
+                                // type, as every one does in getParamListAsync.
+                                if let Ok(mut downloads) = shared.param_downloads.lock()
+                                    && let Some(download) = downloads.get_mut(&id)
                                 {
+                                    download.on_param_value(
+                                        param.param_index,
+                                        param.param_count,
+                                        Instant::now(),
+                                    );
+                                }
+                                if let Some(kind) = ParamType::from_wire(param.param_type) {
                                     let value = if is_ardupilot {
                                         ParamValue::from_ardupilot(param.param_value, kind)
                                     } else {
                                         ParamValue::from_param_value_field(param.param_value, kind)
                                     };
-                                    table.entry(id).or_default().insert(
-                                        name,
-                                        value,
-                                        param.param_index,
-                                        param.param_count,
-                                    );
-                                    last_param = Instant::now();
+                                    // A set or read waiting for this parameter is answered by it,
+                                    // before the table takes the name. The requests stay locked
+                                    // until the table has the value, so a caller that sees the
+                                    // request finished finds the table already agreeing with it.
+                                    // Lock order: requests, then parameters.
+                                    let mut held = shared.requests.lock();
+                                    if let Ok(held) = held.as_mut() {
+                                        for request in held.values_mut() {
+                                            request.on_param_value(
+                                                id,
+                                                &name,
+                                                param.param_index,
+                                                value,
+                                            );
+                                        }
+                                    }
+                                    if let Ok(mut table) = shared.params.lock() {
+                                        table.entry(id).or_default().insert(
+                                            name,
+                                            value,
+                                            param.param_index,
+                                            param.param_count,
+                                        );
+                                    }
+                                    drop(held);
                                 }
                             }
                         }
@@ -934,6 +1213,7 @@ fn run_link(
         // Pick up transfers the caller queued, and start them.
         if let Ok(mut queued) = shared.mission_requests.lock() {
             for transfer in queued.drain(..) {
+                let transfer = transfer.with_timeouts(config.timeouts);
                 let id = transfer.target;
                 let kind = transfer.mission_type;
                 let first = transfer.begin();
@@ -957,85 +1237,126 @@ fn run_link(
         // Send whatever the state machines decided, outside their lock.
         for (id, kind, action) in pending_actions.drain(..) {
             let message = match action {
-                Action::RequestList => Some(commands::request_mission_list(id, kind)),
-                Action::RequestItem(seq) => Some(commands::request_mission_item(id, seq, kind)),
-                Action::SendCount(count) => Some(commands::send_mission_count(id, count, kind)),
-                Action::SendItem(item) => Some(commands::send_mission_item(id, &item, kind)),
-                Action::SendAck => Some(commands::send_mission_ack(
-                    id,
-                    mission_transfer::MISSION_ACCEPTED,
-                    kind,
-                )),
-                Action::Nothing => None,
+                Action::RequestList => commands::request_mission_list(id, kind),
+                Action::RequestItem(seq) => commands::request_mission_item(id, seq, kind),
+                Action::SendCount(count) => commands::send_mission_count(id, count, kind),
+                Action::SendItem(item) => commands::send_mission_item(id, &item, kind),
+                Action::SendAck => {
+                    commands::send_mission_ack(id, mission_transfer::MISSION_ACCEPTED, kind)
+                }
+                Action::SendPartialList { start, end } => {
+                    MavMessage::MissionWritePartialList(MissionWritePartialList {
+                        start_index: i16::try_from(start).unwrap_or(i16::MAX),
+                        end_index: i16::try_from(end).unwrap_or(i16::MAX),
+                        target_system: id.sysid,
+                        target_component: id.compid,
+                        mission_type: kind,
+                    })
+                }
+                Action::Nothing => continue,
             };
-            let Some(message) = message else { continue };
+            send_message(
+                transport.as_mut(),
+                recorder.as_mut(),
+                &mut stats,
+                &config,
+                &mut tx_seq,
+                &message,
+            );
+        }
 
-            let mut payload = [0u8; 255];
-            let len = message.encode(&mut payload);
-            let mut frame = [0u8; mp_mavlink::MAX_FRAME_LEN];
-            if let Some(body) = payload.get(..len)
-                && let Ok(n) = encode_v2(
-                    &mut frame,
-                    tx_seq,
-                    config.sysid,
-                    config.compid,
-                    message.id(),
-                    body,
-                    message.crc_extra(),
-                    0,
-                )
-            {
-                tx_seq = tx_seq.wrapping_add(1);
-                if let Some(bytes) = frame.get(..n) {
-                    send_frame(transport.as_mut(), recorder.as_mut(), &mut stats, bytes);
+        // Parameter downloads: chase the holes a lossy stream leaves, as getParamListAsync does.
+        // Only a download the caller started is chased; see `Shared::param_downloads`.
+        if let Ok(mut downloads) = shared.param_downloads.lock() {
+            let now = Instant::now();
+            for (id, download) in downloads.iter_mut() {
+                match download.on_tick(now) {
+                    ParamAction::Nothing => {}
+                    action => param_actions.push((*id, action)),
+                }
+            }
+        }
+        for (id, action) in param_actions.drain(..) {
+            match action {
+                ParamAction::Nothing => {}
+                ParamAction::RequestList => {
+                    send_message(
+                        transport.as_mut(),
+                        recorder.as_mut(),
+                        &mut stats,
+                        &config,
+                        &mut tx_seq,
+                        &commands::request_param_list(id),
+                    );
+                }
+                // Ten at a time rather than every hole at once: asking for hundreds floods a
+                // 57,600 baud radio and the replies collide with the telemetry stream.
+                ParamAction::RequestIndices(burst) => {
+                    for index in burst.as_slice() {
+                        send_message(
+                            transport.as_mut(),
+                            recorder.as_mut(),
+                            &mut stats,
+                            &config,
+                            &mut tx_seq,
+                            &commands::request_param_by_index(id, *index),
+                        );
+                    }
                 }
             }
         }
 
-        // Parameter gap recovery. PARAM_REQUEST_LIST streams once with no retransmission, so a
-        // single lost packet on a telemetry link leaves a hole that never fills by itself. When
-        // the stream goes quiet with gaps outstanding, ask for them individually.
-        if last_param.elapsed() >= PARAM_GAP_TIMEOUT {
-            let outstanding: Vec<(VehicleId, Vec<u16>)> = shared
-                .params
-                .lock()
-                .map(|tables| {
-                    tables
-                        .iter()
-                        .filter(|(_, table)| !table.is_complete() && table.expected().is_some())
-                        .map(|(id, table)| (*id, table.missing()))
-                        .collect()
-                })
-                .unwrap_or_default();
-
-            for (id, missing) in outstanding {
-                // A burst rather than the whole list: asking for hundreds at once floods a
-                // 57,600 baud radio and the replies collide with the telemetry stream.
-                for index in missing.into_iter().take(PARAM_RETRY_BURST) {
-                    let request = commands::request_param_by_index(id, index);
-                    let mut payload = [0u8; 255];
-                    let len = request.encode(&mut payload);
-                    let mut frame = [0u8; mp_mavlink::MAX_FRAME_LEN];
-                    if let Some(body) = payload.get(..len)
-                        && let Ok(n) = encode_v2(
-                            &mut frame,
-                            tx_seq,
-                            config.sysid,
-                            config.compid,
-                            request.id(),
-                            body,
-                            request.crc_extra(),
-                            0,
-                        )
-                    {
-                        tx_seq = tx_seq.wrapping_add(1);
-                        if let Some(bytes) = frame.get(..n) {
-                            send_frame(transport.as_mut(), recorder.as_mut(), &mut stats, bytes);
-                        }
-                    }
+        // Requests: pick up what the caller queued, send it, and retry what is outstanding.
+        if let Ok(mut queue) = shared.request_queue.lock() {
+            picked_up.append(&mut queue);
+        }
+        if !picked_up.is_empty() {
+            let now = Instant::now();
+            for (_, request) in &mut picked_up {
+                let ardupilot = registry
+                    .working(request.target)
+                    .is_some_and(|state| state.autopilot == MAV_AUTOPILOT_ARDUPILOTMEGA);
+                let send = match shared.params.lock() {
+                    Ok(tables) => request.begin(
+                        &config.timeouts,
+                        tables.get(&request.target),
+                        ardupilot,
+                        now,
+                    ),
+                    Err(_) => request.begin(&config.timeouts, None, ardupilot, now),
+                };
+                request_sends.push(send);
+            }
+            if let Ok(mut held) = shared.requests.lock() {
+                held.extend(picked_up.drain(..));
+                forget_finished_requests(&mut held);
+            }
+        }
+        if let Ok(mut held) = shared.requests.lock() {
+            let now = Instant::now();
+            for request in held.values_mut() {
+                match request.on_tick(now) {
+                    requests::Outgoing::Nothing => {}
+                    send => request_sends.push(send),
                 }
             }
-            last_param = Instant::now();
+        }
+        for send in request_sends.drain(..) {
+            let (message, times) = match send {
+                requests::Outgoing::Nothing => continue,
+                requests::Outgoing::Once(message) => (message, 1),
+                requests::Outgoing::Twice(message) => (message, 2),
+            };
+            for _ in 0..times {
+                send_message(
+                    transport.as_mut(),
+                    recorder.as_mut(),
+                    &mut stats,
+                    &config,
+                    &mut tx_seq,
+                    &message,
+                );
+            }
         }
 
         // Publish snapshots on a cadence rather than per packet: no display can show more than

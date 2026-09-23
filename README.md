@@ -21,7 +21,7 @@ Measured on this tree: **21 crates, 55,520 hand-written Rust LOC** (plus 93,834 
 | MAVLink v1/v2 codec | zero-copy parse, allocation-free encode, v2 signing |
 | Generated dialect | 349 messages, 206 enums, generated from the upstream XML |
 | Transports | serial, TCP, UDP, file replay, in-memory test doubles; port enumeration by `CommsSerialPort.GetPortNames`'s rules, held to per-OS fixtures; faults and a real pty unplug rehearsed in tests |
-| Link engine | I/O thread, multi-vehicle routing, stream requests, commands |
+| Link engine | I/O thread, multi-vehicle routing (50 systems in one test), stream requests; parameter sets, reads, commands, set-current and mission transfer with Mission Planner's own retry counts and waits, proved by counting sends under dropped, delayed and duplicated frames |
 | Vehicle state | lock-free snapshot bus, packet-loss tracking |
 | Parameters | full download with gap recovery, typed values, 1,408 from SITL |
 | `.param` files | save, load and compare against a vehicle, honouring the C# skip-list |

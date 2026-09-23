@@ -35,7 +35,8 @@
 //! vehicle answering a command. Each is bounded per frame, and the test fails if one stops
 //! allocating, so the list cannot outlive its reasons. Two further costs are not per packet and
 //! are reported separately: the transport's description on each publish, and parameter gap
-//! recovery, which runs on a timer.
+//! recovery, which runs on a timer - and only inside a download the caller started, which this
+//! test never does, so here it must not run at all.
 
 // A global allocator is an `unsafe impl` by definition: `GlobalAlloc`'s contract cannot be
 // stated in safe Rust. This is a test binary; `mp-link`'s own source forbids `unsafe`.
@@ -131,9 +132,9 @@ const EXCLUDED: &[Excluded] = &[
     Excluded {
         msgid: 22,
         name: "PARAM_VALUE",
-        // `decode_param_id` builds the name (mp-params/src/lib.rs:293) and `ParamTable::insert`
-        // clones it for the index map (lib.rs:346); the table already holds that name, so the
-        // key passed to `values.insert` (lib.rs:348) is dropped, not stored.
+        // `decode_param_id` builds the name (mp-params/src/lib.rs:294) and `ParamTable::insert`
+        // clones it for the index map (lib.rs:347); the table already holds that name, so the
+        // key passed to `values.insert` (lib.rs:349) is dropped, not stored.
         max_per_frame: 2,
         why: "the parameter table is keyed by name, as Mission Planner's is \
               (C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5770 builds a string per \
@@ -142,8 +143,8 @@ const EXCLUDED: &[Excluded] = &[
     Excluded {
         msgid: 77,
         name: "COMMAND_ACK",
-        // In `run_link`'s COMMAND_ACK arm: the command's name (mp-link/src/lib.rs:850, `to_owned`
-        // or `format!`) and the logged line (lib.rs:856, `format!`), which starts with no capacity
+        // In `run_link`'s COMMAND_ACK arm: the command's name (mp-link/src/lib.rs:1101, `to_owned`
+        // or `format!`) and the logged line (lib.rs:1109, `format!`), which starts with no capacity
         // because its format string begins with an argument, so it allocates and then grows.
         max_per_frame: 3,
         why: "the message log holds text an operator reads; an ack answers a command the \
@@ -485,30 +486,28 @@ fn the_real_link_thread_allocates_nothing_per_telemetry_packet() {
             seen.1 = seen.1.max(cost.max_per_frame);
         }
 
-        // Parameter gap recovery (`run_link`, mp-link/src/lib.rs:999-1006) builds a `Vec` of what
-        // is missing per vehicle when the parameter stream has been quiet for 1.5 s with a table
-        // incomplete. Timer-driven, so not per packet; it is recognised by the requests it sends,
-        // and nothing else may have been sent in its place.
+        // Parameter gap recovery (`ParamDownload` in mp-link/src/param_download.rs) runs only
+        // inside a download the caller started with `Link::download_params`, as the C#'s does
+        // inside `getParamListAsync`. This test starts none, so the recorded PARAM_VALUEs - each
+        // carrying the vehicle's full count - must not make the link ask for anything. Before
+        // the download became a machine of its own they did: the old timer chased every table
+        // with holes, ten requests every 1.5 s.
         for msgid in probe.written.keys() {
             assert!(
-                *msgid == PARAM_REQUEST_READ || *msgid == HEARTBEAT,
-                "{name}: the link sent msgid {msgid} in steady state; only heartbeats and \
-                 parameter gap requests are expected: {:?}",
+                *msgid == HEARTBEAT,
+                "{name}: the link sent msgid {msgid} in steady state; only heartbeats are \
+                 expected: {:?}",
                 probe.written
             );
         }
-        // Setting those iterations aside must not become a way to hide a packet's cost, so their
-        // number is held to what the timer allows: one per `PARAM_GAP_TIMEOUT` (1.5 s, private to
-        // mp-link/src/lib.rs) of measured wall time.
         let recoveries: u64 = probe.gap_recovery.values().map(|(n, _)| n).sum();
-        let allowed = (probe.measured_elapsed.as_secs_f64() / 1.5).floor() as u64 + 1;
-        assert!(
-            recoveries <= allowed,
-            "{name}: {recoveries} gap recoveries in {:?}; the timer allows {allowed}",
+        assert_eq!(
+            recoveries, 0,
+            "{name}: parameters were asked for in {:?} with no download running",
             probe.measured_elapsed
         );
 
-        // KNOWN: `run_link`'s publish block (mp-link/src/lib.rs:1046) calls
+        // KNOWN: `run_link`'s publish block (mp-link/src/lib.rs:1367) calls
         // `Transport::description()` on every publish, to notice a UDP peer changing. The trait
         // returns an owned `String`, so each publish allocates: once, or twice when `format!`
         // outgrows its capacity estimate, as it does for `ReplayTransport`'s

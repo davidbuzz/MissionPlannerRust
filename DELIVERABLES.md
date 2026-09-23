@@ -119,6 +119,15 @@ mission/rally/fence up- and download, MAVFTP, log download, command_long/ack, re
   ArduPilot SITL matches the C# app's result set exactly; packet loss/timeout behaviour covered by a
   fault-injection replay harness.
 - **Replaces:** `ExtLibs/ArduPilot/Mavlink/*` (MAVLinkInterface, MAVState, MAVList).
+- **Today:** the machines are explicit and tested under fault. `crates/mp-link/src/timeouts.rs` is the
+  C#'s retry table (`MAVLinkInterface.cs:1748-4380`) in one struct; `requests.rs` retries parameter
+  sets, reads, commands and set-current as `setParamAsync`/`GetParamAsync`/`doCommandAsync`/
+  `setWPCurrentAsync` do, `param_download.rs` is `getParamListAsync`'s whole-list-then-holes recovery,
+  and `mission_transfer.rs` handles every `MAV_MISSION_RESULT` as `mav_mission.cs` does. `tests/retries.rs`
+  counts every send on the wire under timeouts, reordering, duplicates and seeded bad links (40 tests);
+  `tests/routing.rs` runs 50 systems and 56 components through one link. **Not yet:** the GUI's own
+  sends do not use the retrying calls (PLAN.md §13.4 row 11); MAVFTP and log-download machines;
+  `uploadPartial`, `getHomePosition`, `doCommandInt`.
 - **Tests:** one test module per protocol state machine — `tests/params.rs`, `tests/mission.rs`, `tests/fence_rally.rs`, `tests/ftp.rs`, `tests/log_download.rs` — each driven by recorded packet traces plus a scripted peer; `tests/retries.rs` injects timeouts, out-of-order acks and partial transfers and asserts convergence or a clean error; `tests/routing.rs` drives 50 simultaneous sysid/compid vehicles through one link; `tests/sitl_params.rs` (feature `sitl`) downloads the full param set from ArduPilot SITL and diffs it against the C# app's dump.
 
 ### D5. Vehicle state model + telemetry bus
