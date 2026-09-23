@@ -564,14 +564,11 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigMotorTest"),
         Some(3),
         &[setup(317, "Motor Test", OPTIONAL, ANY)],
-        // C#: GCSViews/ConfigurationView/ConfigMotorTest.cs:43 builds the buttons at run time.
-        Partial(
-            at(SETUP_RS, "fn motor_panel"),
-            "has a button per motor, the throttle and Stop all motors, over \
-             MAV_CMD_DO_MOTOR_TEST; missing Test all motors, Test all in Sequence, the duration \
-             box, the motor count, letters and rotation from the frame layout, the MOT_SPIN_ARM \
-             and MOT_SPIN_MIN setters and the motor-order link",
-        ),
+        // C#: GCSViews/ConfigurationView/ConfigMotorTest.cs:43-396 - the motor count and the
+        // lettered, labelled buttons from the frame and APMotorLayout.json, the throttle and
+        // duration boxes, Test all motors, Stop all motors, Test all in Sequence, the
+        // MOT_SPIN_ARM and MOT_SPIN_MIN setters and the motor-order link.
+        Ours::Done(at("crates/mp-gui/src/config/motor_test.rs", "fn page")),
     ),
     panel(
         "ConfigHWBT",
@@ -1590,7 +1587,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (2, 11, 42, 2, 4)
+            (3, 10, 42, 2, 4)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

@@ -30,6 +30,11 @@ settle 10
 expect vehicle.connected true
 expect vehicle.count 1
 expect frame.count >= 100
+# For the record, before the budget: the distribution the run saw.
+expect frame.p50_us >= 0
+expect frame.p99_us >= 0
+expect frame.max_us >= 0
+expect frame.gap.p99_us >= 0
 expect frame.stalls 0
 expect frame.p99 < 8
 expect storm.rate >= 190

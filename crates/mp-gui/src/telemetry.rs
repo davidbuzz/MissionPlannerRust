@@ -220,7 +220,7 @@ pub enum Lookup {
 
 /// What `testMotor` says: its `false` branch's box, and its `catch`'s with the motor's number.
 /// `// C#: GCSViews/ConfigurationView/ConfigMotorTest.cs:318-327`
-fn motor_report(motor: u8) -> Report {
+fn motor_report(motor: i32) -> Report {
     Report {
         refused: Some("Command was denied by the autopilot".to_owned()),
         timed_out: Some(error_box(format!(
@@ -900,28 +900,18 @@ impl Telemetry {
         );
     }
 
-    /// Spins one motor briefly, at a bounded throttle and with a timeout.
-    ///
-    /// `testMotor`: `doCommand`, a refusal said as "Command was denied by the autopilot" and a
-    /// timeout as `Strings.ErrorCommunicating` with the motor's number.
-    /// `// C#: GCSViews/ConfigurationView/ConfigMotorTest.cs:305-328`
-    pub fn test_motor(&mut self, motor: u8, throttle_percent: f32) {
-        let Some(id) = self.target_id() else {
-            return;
-        };
-        self.command_message(
-            &mp_calibration::test_motor(id, motor, throttle_percent),
-            motor_report(motor),
-        );
-    }
-
-    /// Stops a running motor test: the same `testMotor`, at zero throttle.
-    /// `// C#: GCSViews/ConfigurationView/ConfigMotorTest.cs:305-328`
-    pub fn stop_motor(&mut self, motor: u8) {
-        let Some(id) = self.target_id() else {
-            return;
-        };
-        self.command_message(&mp_calibration::stop_motor(id, motor), motor_report(motor));
+    /// One `testMotor` call: `MAV_CMD_DO_MOTOR_TEST` to the vehicle being flown, through the
+    /// link's retrying `doCommand` - sent again two seconds apart up to three more times until the
+    /// vehicle's `COMMAND_ACK` - with a refusal said as "Command was denied by the autopilot" and a
+    /// timeout as `Strings.ErrorCommunicating` with the motor's number. The request, to read its
+    /// outcome with [`Telemetry::request`]; `None` with no vehicle.
+    /// `// C#: GCSViews/ConfigurationView/ConfigMotorTest.cs:305-327, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2688-2836`
+    pub fn test_motor(
+        &mut self,
+        command: mp_calibration::motor::MotorCommand,
+    ) -> Option<RequestId> {
+        let id = self.target_id()?;
+        self.command_message(&command.message(id), motor_report(command.motor))
     }
 
     /// Asks the vehicle to list its dataflash logs.

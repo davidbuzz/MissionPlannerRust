@@ -14,6 +14,9 @@
 //! limits written from them; with the Spektrum bind command and the `RC_CHANNELS` stream request
 //! the same page sends.
 //!
+//! Motor tests are [`motor`]: how many motors a frame has, the letters and labels of their
+//! buttons from [`motor_layouts`], and the `MAV_CMD_DO_MOTOR_TEST` each button sends.
+//!
 //! The protocol half of `GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs`,
 //! `ConfigHWCompass.cs`, `ConfigMotorTest.cs` and `ConfigRadioInput.cs`, without their forms. L3
 //! in PLAN.md §5.1, beside the link rather than inside it: the link thread reads
@@ -22,6 +25,8 @@
 
 #![forbid(unsafe_code)]
 
+pub mod motor;
+pub mod motor_layouts;
 pub mod radio;
 
 use mp_mavlink_dialects::all::{CommandLong, MavMessage};
@@ -381,71 +386,6 @@ impl CompassStatus {
     }
 }
 
-/// `MAV_CMD_DO_MOTOR_TEST`.
-pub const CMD_DO_MOTOR_TEST: u16 = 209;
-
-/// `MOTOR_TEST_THROTTLE_PERCENT`.
-const THROTTLE_PERCENT: f32 = 0.0;
-
-/// The largest throttle a motor test here will command, as a percentage.
-///
-/// Enough to see a motor turn and to hear whether a bearing is dry; not enough to generate useful
-/// thrust. A motor test is done on a bench with the props off, and the times it is done with them
-/// on are the times a low ceiling matters most.
-pub const MAX_MOTOR_TEST_THROTTLE: f32 = 15.0;
-
-/// The longest a motor test will run for, in seconds.
-///
-/// The vehicle stops on its own when this expires, which matters more than it sounds: if the link
-/// drops mid-test, a motor with no timeout keeps turning.
-pub const MOTOR_TEST_SECONDS: f32 = 2.0;
-
-/// Spins one motor briefly.
-///
-/// `motor` is one-based, as ArduPilot numbers them and as they are labelled in its documentation.
-///
-/// The throttle is a percentage and is clamped, and the timeout is always set. Both are deliberate:
-/// a motor test is the one operation here that moves something sharp, and the parameters that
-/// bound it are not the operator's to get wrong from a settings box.
-#[must_use]
-pub fn test_motor(target: VehicleId, motor: u8, throttle_percent: f32) -> MavMessage {
-    let throttle = throttle_percent.clamp(0.0, MAX_MOTOR_TEST_THROTTLE);
-    command(
-        target,
-        CMD_DO_MOTOR_TEST,
-        [
-            f32::from(motor.max(1)),
-            THROTTLE_PERCENT,
-            throttle,
-            MOTOR_TEST_SECONDS,
-            // One motor, not a sequence. Testing them in sequence is how you find out which
-            // output goes where, and it is also how an operator loses track of which one is about
-            // to move.
-            0.0,
-            0.0,
-            0.0,
-        ],
-    )
-}
-
-/// Stops a running motor test by commanding zero throttle.
-#[must_use]
-pub fn stop_motor(target: VehicleId, motor: u8) -> MavMessage {
-    command(
-        target,
-        CMD_DO_MOTOR_TEST,
-        [
-            f32::from(motor.max(1)),
-            THROTTLE_PERCENT,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-        ],
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -507,48 +447,6 @@ mod tests {
                 "{status:?} claims both"
             );
         }
-    }
-
-    #[test]
-    fn a_motor_test_is_bounded_in_throttle_and_in_time() {
-        // The one operation here that moves something sharp. A caller asking for full throttle
-        // gets the ceiling, and the timeout is always set: if the link drops mid-test, a motor
-        // with no timeout keeps turning.
-        let id = VehicleId::new(1, 1);
-        let p = params(&test_motor(id, 1, 100.0));
-        assert!(
-            (p[2] - MAX_MOTOR_TEST_THROTTLE).abs() < f32::EPSILON,
-            "throttle should be clamped, got {}",
-            p[2]
-        );
-        assert!(p[3] > 0.0, "the timeout must be set, got {}", p[3]);
-        assert!(p[3] <= 10.0, "the timeout should be short, got {}", p[3]);
-        assert!(p[1].abs() < f32::EPSILON, "throttle should be a percentage");
-    }
-
-    #[test]
-    fn motors_are_numbered_from_one() {
-        // As ArduPilot numbers them and as its documentation labels them. Zero would be no motor,
-        // and a test that silently moved motor one instead would be worse than none.
-        let id = VehicleId::new(1, 1);
-        assert!((params(&test_motor(id, 0, 5.0))[0] - 1.0).abs() < f32::EPSILON);
-        assert!((params(&test_motor(id, 4, 5.0))[0] - 4.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn one_motor_at_a_time() {
-        // Testing in sequence is how an operator loses track of which one is about to move.
-        let id = VehicleId::new(1, 1);
-        assert!(params(&test_motor(id, 2, 5.0))[4].abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn stopping_commands_zero_throttle() {
-        let id = VehicleId::new(1, 1);
-        let p = params(&stop_motor(id, 3));
-        assert_eq!(command_id(&stop_motor(id, 3)), CMD_DO_MOTOR_TEST);
-        assert!((p[0] - 3.0).abs() < f32::EPSILON);
-        assert!(p[2].abs() < f32::EPSILON, "throttle should be zero");
     }
 
     #[test]

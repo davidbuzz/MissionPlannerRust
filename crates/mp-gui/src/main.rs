@@ -234,10 +234,11 @@ struct MissionPlanner {
     /// the decision is a second, deliberate press - loading a tune because it was compared would
     /// be the worst possible reading of "show me what this would change".
     param_differences: Vec<mp_params::param_file::Difference>,
-    /// Throttle a motor test uses, as a percentage.
-    motor_throttle: f32,
     /// Initial Setup's Radio Calibration page.
     radio_input: config::radio::RadioInput,
+    /// Initial Setup's Motor Test page, and its boxes' focus.
+    motor_test: config::motor_test::MotorTest,
+    motor_focus: config::motor_test::Focus,
     /// Whether this session has turned the vehicle's arming checks off.
     ///
     /// Only to offer putting them back. The parameter is the vehicle's, not ours, so this says
@@ -414,8 +415,9 @@ impl MissionPlanner {
             log_name_focus: cx.focus_handle(),
             log_search: textfield::TextField::new("filter fields"),
             param_differences: Vec::new(),
-            motor_throttle: 5.0,
             radio_input: config::radio::RadioInput::default(),
+            motor_test: config::motor_test::MotorTest::default(),
+            motor_focus: config::motor_test::Focus::new(cx),
             disabled_arming_checks: false,
             forcing_arm_until: None,
             last_force_arm: None,
@@ -1459,6 +1461,10 @@ impl Render for MissionPlanner {
         // The Radio Calibration page's bars, its calibration loop, and its writes and binds.
         self.radio_input
             .tick(&mut self.telemetry, &view, self.screen == Screen::Setup);
+        // The Motor Test page's boxes validated as the focus leaves them, its commands' outcomes,
+        // and its Spin write.
+        self.motor_test
+            .tick(&self.telemetry, self.motor_focus.focused(window));
         let banner = self.telemetry.firmware_banner().map(str::to_owned);
         let mav_type = view.state.as_ref().map_or(0, |state| state.vehicle_type);
         self.metadata.advance(banner.as_deref(), mav_type);
@@ -1660,6 +1666,7 @@ impl Render for MissionPlanner {
             config::battery_monitor::record_facts(&self.battery_monitor, &view);
             config::firmware::record_facts(&self.install_firmware);
             config::radio::record_facts(&self.radio_input, &view);
+            config::motor_test::record_facts(&self.motor_test, &view);
             facts::publish();
             // The harness's work, which a normal run does not do, is not the frame's.
             storm::exclude(harness.elapsed());
