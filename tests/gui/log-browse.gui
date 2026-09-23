@@ -1,7 +1,10 @@
 # Opening a dataflash log reads its fields; a left click plots one on the left axis and a right
 # click on the right, as the tree in Log/LogBrowse.cs does.
 #
-# Run with MP_PLAN_DIR pointing at a directory holding flight.bin.
+# Self-contained: it lays out a plan directory of its own holding the healthy fixture as flight.bin.
+
+env MP_PLAN_DIR $WORK/logs
+setup mkdir -p $WORK/logs && cp testdata/dataflash.bin $WORK/logs/flight.bin
 
 screen logs
 window 1600x1200

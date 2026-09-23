@@ -54,6 +54,17 @@ if ! grep -q "\"$NAME\"" "$PROBE" 2>/dev/null; then
 fi
 
 # One line per control, so a line-oriented read is enough and jq is not a dependency.
+# The application rewrites the probe file whenever a control moves, and a click can move things:
+# a chip whose label grows reflows the row after it. Resolving the target from a file written
+# before that reflow clicks where the control was. So wait until the file has been still for
+# 300 ms (at most 3 s) before reading it.
+STAMP=""
+for _ in $(seq 1 10); do
+    NOW=$(stat -c '%Y%s' "$PROBE" 2>/dev/null || echo "")
+    [ -n "$STAMP" ] && [ "$NOW" = "$STAMP" ] && break
+    STAMP="$NOW"
+    sleep 0.3
+done
 LINE=$(grep "\"$NAME\"" "$PROBE")
 if [ -z "$FRACTION" ]; then
     COORDS=$(echo "$LINE" | sed -n 's/.*"centre_x": \([0-9.-]*\), "centre_y": \([0-9.-]*\).*/\1 \2/p')
@@ -79,4 +90,9 @@ if [ -n "$RESOLVE_ONLY" ]; then
 fi
 
 echo "clicking '$TARGET' (button $BUTTON) at window-relative $X,$Y"
-xdotool mousemove --window "$WIN_ID" "$X" "$Y" click "$BUTTON"
+# Move first and press after a beat: a press in the same batch as the move can reach the
+# application before it has hit-tested the new pointer position, and a click whose press is not
+# over the control is not a click on it.
+xdotool mousemove --window "$WIN_ID" "$X" "$Y"
+sleep 0.05
+xdotool click "$BUTTON"
