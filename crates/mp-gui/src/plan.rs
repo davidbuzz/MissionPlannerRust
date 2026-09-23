@@ -21,6 +21,62 @@ use crate::ui::{action, panel, progress, theme};
 
 /// `MAV_CMD_NAV_WAYPOINT`, the command a click on the map creates.
 pub const CMD_WAYPOINT: u16 = 16;
+/// How far the pointer may move between press and release and still count as a click.
+///
+/// **A divergence from the C#, small and deliberate.** `MainMap_MouseMove` sets `isMouseDraging`
+/// on *any* movement - it compares the press position to the current one and returns early only
+/// when they are exactly equal, and at any real zoom a one-pixel move is a different latitude. So
+/// in Mission Planner, adding a waypoint by clicking requires a click that does not move a single
+/// pixel, which is a thing people complain about. Three pixels absorbs a hand on a mouse and is
+/// far too small to swallow a deliberate drag. Set to 0.0 to match the original exactly.
+pub const CLICK_SLOP: f32 = 3.0;
+
+/// What a release of the left button over the map should do.
+///
+/// Extracted from the event handler so it can be tested. The decision is four lines of `if`, and
+/// four lines of `if` inside a gpui closure is four lines nothing can reach - which is how a rule
+/// as load-bearing as "does this click add a waypoint to the mission" ends up verified by looking
+/// at a screenshot.
+///
+/// `// C#: GCSViews/FlightPlanner.cs:7736-7745`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MapRelease {
+    /// Add a waypoint where the button came up.
+    AddWaypoint,
+    /// Do nothing: a drag, a grabbed waypoint, or not the planning screen.
+    Nothing,
+}
+
+/// Decides what a release means.
+///
+/// `grabbed` is the waypoint the press landed on, if any - `CurentRectMarker` in the C#, and the
+/// reason its comment reads "cant add WP in existing rect". `press` is where the button went
+/// down, absent if the press was never seen.
+#[must_use]
+pub fn map_release(
+    planning: bool,
+    grabbed: Option<u16>,
+    press: Option<(f32, f32)>,
+    release: (f32, f32),
+) -> MapRelease {
+    if !planning || grabbed.is_some() {
+        return MapRelease::Nothing;
+    }
+    // No recorded press means the button went down somewhere else and came up here - dragging in
+    // from off the map, or a press the window never saw. Adding a waypoint for it would put one
+    // wherever a stray release landed.
+    let Some((press_x, press_y)) = press else {
+        return MapRelease::Nothing;
+    };
+    let moved =
+        (release.0 - press_x).abs() > CLICK_SLOP || (release.1 - press_y).abs() > CLICK_SLOP;
+    if moved {
+        MapRelease::Nothing
+    } else {
+        MapRelease::AddWaypoint
+    }
+}
+
 /// `MAV_FRAME_GLOBAL_RELATIVE_ALT`: altitude above home, which is what every pilot means.
 pub const FRAME_RELATIVE: u8 = 3;
 /// Altitude given to a waypoint created by clicking the map, in metres above home.
@@ -120,7 +176,7 @@ pub enum Origin {
 }
 
 impl Origin {
-    fn label(&self) -> String {
+    pub fn label(&self) -> String {
         match self {
             Self::Empty => "empty".to_owned(),
             Self::Vehicle => "read from the vehicle".to_owned(),
@@ -1612,6 +1668,127 @@ pub fn actions_panel(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A still click on empty map adds a waypoint. This is the whole feature.
+    #[test]
+    fn a_still_click_on_empty_map_adds_a_waypoint() {
+        assert_eq!(
+            map_release(true, None, Some((100.0, 100.0)), (100.0, 100.0)),
+            MapRelease::AddWaypoint
+        );
+    }
+
+    /// A drag does not. Moving the map is the commonest thing anybody does to it, and a drag that
+    /// dropped a waypoint every time would make the map unusable.
+    #[test]
+    fn a_drag_does_not_add_a_waypoint() {
+        assert_eq!(
+            map_release(true, None, Some((100.0, 100.0)), (400.0, 260.0)),
+            MapRelease::Nothing
+        );
+        // Either axis is enough.
+        assert_eq!(
+            map_release(true, None, Some((100.0, 100.0)), (100.0, 260.0)),
+            MapRelease::Nothing
+        );
+        assert_eq!(
+            map_release(true, None, Some((100.0, 100.0)), (400.0, 100.0)),
+            MapRelease::Nothing
+        );
+    }
+
+    /// Releasing over a waypoint that was grabbed adds nothing - "cant add WP in existing rect".
+    #[test]
+    fn releasing_a_grabbed_waypoint_adds_nothing() {
+        assert_eq!(
+            map_release(true, Some(3), Some((100.0, 100.0)), (100.0, 100.0)),
+            MapRelease::Nothing
+        );
+    }
+
+    /// The flight screen's map is for watching, not editing.
+    #[test]
+    fn a_click_outside_the_planning_screen_adds_nothing() {
+        assert_eq!(
+            map_release(false, None, Some((100.0, 100.0)), (100.0, 100.0)),
+            MapRelease::Nothing
+        );
+    }
+
+    /// A release with no press behind it is a button that went down somewhere else.
+    ///
+    /// Dragging in from off the map, or a press the window never saw. Adding a waypoint for it
+    /// puts one wherever a stray release landed.
+    #[test]
+    fn a_release_with_no_press_adds_nothing() {
+        assert_eq!(
+            map_release(true, None, None, (100.0, 100.0)),
+            MapRelease::Nothing
+        );
+    }
+
+    /// The slop is a tolerance, not a licence: inside it is a click, outside it is a drag.
+    #[test]
+    fn the_boundary_of_the_click_tolerance_is_where_it_says_it_is() {
+        let press = Some((100.0, 100.0));
+        // Exactly at the tolerance is still a click - the test is `>`, not `>=`.
+        let at = 100.0 + CLICK_SLOP;
+        assert_eq!(
+            map_release(true, None, press, (at, 100.0)),
+            MapRelease::AddWaypoint
+        );
+        // A hair past it is a drag.
+        let past = 100.0 + CLICK_SLOP + 0.5;
+        assert_eq!(
+            map_release(true, None, press, (past, 100.0)),
+            MapRelease::Nothing
+        );
+        // And it works in the negative direction too, which an `abs()` that went missing would
+        // break silently in one direction only.
+        let back = 100.0 - CLICK_SLOP - 0.5;
+        assert_eq!(
+            map_release(true, None, press, (back, 100.0)),
+            MapRelease::Nothing
+        );
+    }
+
+    /// Three clicks make three waypoints, in the order they were clicked.
+    ///
+    /// The decision and the effect together, because "the click was recognised" and "the mission
+    /// grew by one item at that position" are different claims.
+    #[test]
+    fn clicking_three_times_builds_a_three_item_mission() {
+        let mut plan = Plan::default();
+        let points = [
+            (-35.363_262, 149.165_237),
+            (-35.362_000, 149.166_000),
+            (-35.361_000, 149.167_000),
+        ];
+        for (latitude, longitude) in points {
+            let press = Some((10.0, 10.0));
+            assert_eq!(
+                map_release(true, None, press, (10.0, 10.0)),
+                MapRelease::AddWaypoint
+            );
+            plan.add_waypoint(
+                LatLon::new(latitude, longitude).expect("a valid position"),
+                50.0,
+            );
+        }
+
+        assert_eq!(plan.items().len(), 3);
+        for (index, (latitude, longitude)) in points.iter().enumerate() {
+            let item = &plan.items()[index];
+            assert_eq!(u16::try_from(index).unwrap_or(0), item.seq, "sequence");
+            assert!((item.x - latitude).abs() < 1e-9, "latitude of item {index}");
+            assert!(
+                (item.y - longitude).abs() < 1e-9,
+                "longitude of item {index}"
+            );
+            assert_eq!(item.frame, FRAME_RELATIVE);
+            assert_eq!(item.command, CMD_WAYPOINT);
+        }
+    }
 
     fn at(lat: f64, lon: f64) -> LatLon {
         LatLon::new(lat, lon).expect("valid position")

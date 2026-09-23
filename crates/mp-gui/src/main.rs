@@ -7,6 +7,7 @@
 
 #![allow(clippy::print_stderr)]
 
+mod facts;
 mod fly;
 mod hud;
 mod joystick;
@@ -46,17 +47,6 @@ const DEFAULT_PLAN_FILE: &str = "mission.waypoints";
 
 /// The name a parameter backup gets if the operator does not choose one.
 const DEFAULT_PARAM_FILE: &str = "vehicle.param";
-
-/// How far the pointer may move between press and release and still count as a click.
-///
-/// **A divergence from the C#, and a small one, flagged for the owner's ruling.**
-/// `MainMap_MouseMove` sets `isMouseDraging` on *any* movement at all - it compares the
-/// press position to the current one and returns early only if they are exactly equal, and at any
-/// real zoom a one-pixel move is a different latitude. So in Mission Planner, adding a waypoint by
-/// clicking requires a click that does not move a single pixel, which is a thing people complain
-/// about. Three pixels is enough to absorb a hand on a mouse and far too small to swallow a
-/// deliberate drag. Set to 0.0 to match the original exactly.
-const CLICK_SLOP: f32 = 3.0;
 
 /// The altitude a waypoint gets when there is no previous one to copy.
 ///
@@ -1091,14 +1081,10 @@ impl MissionPlanner {
                             // so a click that grabbed an existing waypoint adds nothing, and a
                             // drag - of the map or of a waypoint - adds nothing either.
                             // `// C#: GCSViews/FlightPlanner.cs:7736-7745`
-                            if !planning || grabbed.is_some() {
-                                return;
-                            }
                             let (x, y) = (f32::from(event.position.x), f32::from(event.position.y));
-                            let moved = press.is_some_and(|(px, py)| {
-                                (x - px).abs() > CLICK_SLOP || (y - py).abs() > CLICK_SLOP
-                            });
-                            if moved {
+                            if plan::map_release(planning, grabbed, press, (x, y))
+                                != plan::MapRelease::AddWaypoint
+                            {
                                 return;
                             }
                             let Some(position) = this.map.borrow().position_at(x, y) else {
@@ -1275,6 +1261,31 @@ impl Render for MissionPlanner {
         // that.
         smoke::painted();
         let view = self.telemetry.view();
+
+        // Facts a UI test can assert on. Recorded from render because that is where every one of
+        // them is already in hand, and published at the end of the frame so a reader never sees
+        // half a set. Costs nothing unless MP_FACTS names a file.
+        if facts::enabled() {
+            facts::record("screen", self.screen.label());
+            facts::record("mission.items", self.plan.items().len());
+            facts::record("mission.origin", self.plan.origin().label());
+            facts::record("fence.points", self.plan.fence().len());
+            facts::record("rally.points", self.plan.rally().len());
+            facts::record("vehicle.connected", view.connected);
+            facts::record("vehicle.count", view.vehicle_count);
+            facts::record("link.frames", view.frames);
+            facts::record("params.held", view.parameters.len());
+            facts::record("params.expected", view.parameters_expected);
+            facts::record("tuning.visible", self.tuning.is_visible());
+            facts::record("tuning.series", self.tuning.series().len());
+            facts::record("log.open", self.log_browse.is_open());
+            facts::record("log.fields", self.log_browse.fields().len());
+            facts::record("log.plotted", self.log_browse.plotted().len());
+            facts::record("sticks.enabled", self.sticks.is_enabled());
+            facts::record("recording", self.telemetry.recording().is_some());
+            facts::record("status", self.file_status.as_deref().unwrap_or(""));
+            facts::publish();
+        }
 
         // The tuning graph is fed here because this is where a fresh snapshot arrives. It samples
         // only when the snapshot is new - a repeated sample draws a horizontal line that looks
@@ -1727,6 +1738,7 @@ ENVIRONMENT:
     MP_WINDOW    same as --window
     MP_SCREEN    same as --screen
     MP_PROBE     write control positions to this file, for UI tests
+    MP_FACTS     write what the application believes to this file, for UI tests to assert on
     MP_SMOKE     exit 0 once the window has painted, non-zero if it does not
     MP_LOG_DIR   where flights are recorded (default: Documents/Mission Planner/logs)
     MP_NO_RECORD do not record this flight
@@ -1940,6 +1952,7 @@ mod tests {
             "MP_WINDOW",
             "MP_SCREEN",
             "MP_PROBE",
+            "MP_FACTS",
             "MP_SMOKE",
             "MP_LOG_DIR",
             "MP_NO_RECORD",

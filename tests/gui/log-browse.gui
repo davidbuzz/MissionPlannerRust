@@ -1,0 +1,22 @@
+# Opening a dataflash log reads its fields, and clicking one plots it.
+#
+# Run with MP_PLAN_DIR pointing at a directory holding flight.bin.
+
+screen logs
+window 1600x1200
+settle 3
+
+expect log.open false
+expect log.fields 0
+
+click log-name
+type flight.bin
+key Return
+settle 3
+
+expect log.open true
+expect log.fields 643
+
+click logfield-ATT.Roll
+settle 1
+expect log.plotted 1

@@ -69,6 +69,22 @@ properties on stable in every `cargo test --workspace`; and a smoke test that op
 paints on Linux, Windows and macOS in CI — the only thing that exercises a graphics backend rather
 than merely compiling it.
 
+The UI is driven and **checked**, not photographed. `tools/gui-test.sh` runs a script of clicks
+and keystrokes against the real binary and asserts on what the application says it believes:
+
+```sh
+tools/gui-test.sh tests/gui/waypoint-click.gui -- tcp:127.0.0.1:5760
+```
+```
+  ok   mission.items = 0
+clicking 'map@0.45x0.40' (button 1) at window-relative 945,511
+  ok   mission.items = 3
+```
+
+The facts come from the application itself (`MP_FACTS`, see `crates/mp-gui/src/facts.rs`), so a
+feature that quietly stops working fails the run rather than producing a screenshot somebody has
+to look at. An expectation naming a fact that no longer exists is an error, not a pass.
+
 ## Build and run
 
 ```sh
@@ -114,6 +130,7 @@ crates/
   mp-gui               `mpr-gui`, built on gpui
 xtask/                 codegen and repository invariants
 fuzz/                  libfuzzer targets and their committed seed corpora
+tests/gui/              click-and-assert UI tests, run by tools/gui-test.sh
 tools/csharp-reference headless C# reference for differential testing
 testdata/              golden corpora
 referneces/            read-only upstream sources (git-excluded)

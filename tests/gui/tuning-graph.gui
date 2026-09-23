@@ -1,0 +1,13 @@
+# The tuning graph is hidden until asked for, as splitContainer1.Panel1 is collapsed until
+# CB_tuning uncollapses it, and showing it starts sampling.
+
+screen fly
+window 1600x1200
+settle 4
+
+expect tuning.visible false
+expect tuning.series 2
+
+click tuning-show
+settle 2
+expect tuning.visible true

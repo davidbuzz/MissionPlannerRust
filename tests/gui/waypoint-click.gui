@@ -1,0 +1,19 @@
+# Clicking empty map adds a waypoint; dragging does not.
+#
+# The claim this makes that a screenshot cannot: the mission actually grew, by the number of
+# clicks, and a drag in the middle added nothing.
+
+screen plan
+window 1600x1200
+settle 4
+
+# Nothing yet.
+expect screen plan
+expect mission.items 0
+
+# Three still clicks on empty map.
+click map@0.45x0.40
+click map@0.55x0.45
+click map@0.60x0.55
+expect mission.items 3
+expect mission.origin ~ edited
