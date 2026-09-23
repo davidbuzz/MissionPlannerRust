@@ -7329,6 +7329,7 @@ dependencies = [
  "mp-mavlink",
  "mp-mavlink-dialects",
  "roxmltree 0.20.0",
+ "sha2",
 ]
 
 [[package]]

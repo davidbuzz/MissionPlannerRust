@@ -1,0 +1,6 @@
+# `cargo xtask <command>` is how PLAN.md and the CI workflow name the repository's own tooling.
+# Without this alias the words do not work: cargo has no such command, and the ledger checker
+# spent its first hour being run as `cargo run -p xtask --`. Aliases are the documented way to
+# get an `xtask` verb and cost nothing at build time.
+[alias]
+xtask = "run --quiet --package xtask --"

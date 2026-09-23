@@ -253,7 +253,12 @@ Dataflash (`.bin`/`.log`) and tlog parsing, log download, graphing, LogAnalyzer 
   Planner names them, into the logs directory `Settings.GetDefaultLogDir` names (ported in
   `mp-settings`; not `Documents/` on Linux, as an earlier version of this line said) — and KML
   export of a flown path, coloured by flight mode. `mp-chart` holds the min/max reduction the plot
-  target needs and drives the live tuning graph; plotting a field from a `.BIN` is next (§13.2).
+  target needs and drives the live tuning graph and the log browser, which plots any field a
+  `.BIN` declares on two axes - left click for the left, one axis per unit, right click for the
+  shared right axis, as `Log/LogBrowse.cs` does - with the units and multipliers the log's own
+  `FMTU`/`UNIT`/`MULT` messages declare (`mp_log::plot::units`; the C# has the same code and a
+  guard that keeps it from ever running, recorded at the site). Not yet: the data grid, the map
+  beside the chart, the memory-mapped parse.
 - **Tests:** `tests/parser_diff.rs` parses a corpus of real dataflash and tlog files and diffs every decoded field against the C# parser's output; `fuzz/fuzz_targets/dataflash.rs` and `tlog.rs` asserting no panic and no unbounded allocation on corrupt logs (truncated, bit-flipped, wrong-endian, fabricated FMT messages); `tests/fft.rs` compares against `Exocortex.DSP` golden spectra; `tests/exports.rs` `.mat`/CSV/KML round-trips; `benches/parse_1gb.rs` gates <2 s to first plot and `benches/scrub_10m.rs` gates 120 fps scrubbing.
 
 ### D15. CAN, peripherals and outboard features
@@ -267,9 +272,13 @@ config, joystick input, swarm control, warnings engine, web APIs, ADS-B / Altitu
   `ExtLibs/NMEA2000`, `ExtLibs/solo`, `ExtLibs/Onvif`, video stack (`DirectShowLib` 37,629, `LibVLC.NET`,
   `AviFile`, `WebCamService`).
 - **Today:** ADS-B traffic on the map, and joystick input on Linux — `/dev/input/js*` read without
-  `unsafe`, mapped to `RC_CHANNELS_OVERRIDE` with expo, reversal and a release-on-disconnect
-  failsafe. **Not yet meeting the bar:** sticks are polled at 20 Hz, so the stick-to-wire path is
-  ~50 ms against a 5 ms p99 target; there is no deadzone; and no virtual-HID fixture test exists.
+  `unsafe` on a thread that blocks on the device, mapped to `RC_CHANNELS_OVERRIDE` with expo,
+  reversal and a release-on-disconnect failsafe, and sent on change from a second thread through
+  a `LinkSender` handle: p99 0.109 ms stick-to-link on an in-process fake device
+  (`crates/mp-input/tests/latency.rs`), a 20 ms floor between sends so a stirred gamepad cannot
+  flood a radio, and Mission Planner's 50 ms resend ceiling. **Still owed:** the histogram from a
+  real device (`tests/real_device.rs`, ignored until one is attached); a deadzone; a per-link
+  send budget.
 - **Tests:** `tests/dsdl_roundtrip.rs` proptest over every generated DroneCAN type; `tests/node_sim.rs` drives a simulated CAN node through enumerate/param-edit/firmware-update; `tests/joystick.rs` uses a virtual HID device fixture to assert mapping, expo/deadzone maths and <5 ms end-to-end latency; `tests/tracker.rs` and `tests/swarm.rs` against SITL; `tests/video_pipeline.rs` smoke-tests each capture/decode backend per OS; `tests/feature_ledger.rs` fails if a feature in this bucket is neither implemented nor explicitly marked dropped.
 
 ### D16. Extension and scripting system
@@ -322,12 +331,18 @@ and strict backward compatibility with the C# app's user data.
 The industrial pipeline that converts 1.2M LOC: codegen (MAVLink XML, DSDL, param metadata, `.resx`,
 WinForms `Designer.cs` → screen specs), work-unit definition, dependency-ordered waves, an agent-driven
 per-file porting harness, and a machine-readable ledger tracking every one of the 3,678 source files.
-- **DoD:** `ledger.toml`/`.json` enumerates every C# file with status
-  (`ported | codegen | replaced-by-crate | dropped | n/a`) and its Rust destination; `cargo xtask coverage`
-  prints % complete and fails CI if a file is unaccounted for; one full wave executed end to end to prove
-  the throughput rate; the porting-agent contract (prompt + test + differential check + review gate)
-  documented and versioned.
-- **Tests:** `xtask/tests/codegen.rs` regenerates every generated artefact (MAVLink, DSDL, param metadata, `.resx`→`.ftl`, screen specs) and fails if the checked-in output differs or does not compile; `xtask/tests/ledger.rs` validates the ledger schema, asserts every one of the 3,678 C# files appears exactly once with a valid status, and that every `ported` entry names an existing Rust file with tests; `xtask/tests/coverage.rs` self-tests the `cargo xtask coverage` report against a fixture tree; a dry-run test of the porting-agent contract on a known file.
+- **DoD:** `ledger/ledger.csv` enumerates every C# file with the PLAN.md §6.2 columns and a state
+  from `ready → claimed → ported → tested → verified → reviewed → done`, plus `deferred` and
+  `dropped`; `cargo xtask ledger check` fails CI if a file is unaccounted for, a `done` row lacks
+  evidence, or a `dropped` row lacks the owner's reason; `cargo xtask ledger status` prints progress
+  in retired C# lines; one full wave executed end to end to prove the throughput rate; the
+  porting-agent contract (prompt + test + differential check + review gate) documented and versioned.
+- **Today:** the ledger exists and passes its own check: 3,678 rows, one per `.cs` file, tier from a
+  classifier that names its evidence per vendored root, sha256 for staleness, every row `ready` -
+  existing Rust work is not credited until it is re-entered under contract (PLAN.md §5.2). `init`
+  is deterministic and `refresh` keeps hand-edited columns. Empty: `target_crate`, `unit_id`,
+  `deps`, the class columns. Not started: the other generators, `xtask next`, the contract dry run.
+- **Tests:** `xtask/tests/codegen.rs` regenerates every generated artefact (MAVLink, DSDL, param metadata, `.resx`→`.ftl`, screen specs) and fails if the checked-in output differs or does not compile; `xtask/tests/ledger.rs` (22 tests) validates the schema on a fixture tree and the real ledger, asserts every one of the 3,678 C# files appears exactly once with a valid tier, disposition and state, that a `done` row names existing evidence and a hand-port carries its provenance header, that `init` is byte-deterministic and `refresh` preserves hand-edited columns while flagging upstream changes; a dry-run test of the porting-agent contract on a known file.
 
 ### D19. Verification suite
 Proof that the Rust app behaves like the C# original before anyone flies behind it.

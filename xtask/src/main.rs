@@ -5,6 +5,7 @@
 #![allow(unreachable_pub)]
 
 mod codegen;
+mod ledger;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -25,6 +26,7 @@ fn run() -> Result<()> {
         Some("dump-tlog") => dump_tlog(args.get(1).map(String::as_str)),
         Some("codegen-modes") => codegen_modes(),
         Some("codegen-param-meta") => codegen_param_meta(),
+        Some("ledger") => ledger::run(args.get(1..).unwrap_or_default(), &repo_root()),
         Some("codegen") => {
             let check = args.iter().any(|a| a == "--check");
             let dialect = args
@@ -53,6 +55,7 @@ fn usage() {
          dump-tlog <file>          decode a tlog and print the same CSV the C# reference emits\n  \
          codegen-modes             regenerate flight mode tables from the parameter metadata\n  \
          codegen-param-meta        regenerate parameter descriptions, ranges and enumerations\n  \
+         ledger <init|check|status> the porting ledger: one row per C# file (PLAN.md §6.2)\n  \
          verify-mavlink [dialect]  check generated MAVLink metadata against the C# reference\n  \
          help                      show this message"
     );

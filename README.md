@@ -31,7 +31,7 @@ Measured on this tree: **17 crates, 40,661 hand-written Rust LOC** (plus 91,634 
 | Data directory | `Settings.cs`'s rules ported, mono quirks included, so files land where the C# application looks |
 | Health | EKF variances and vibration with ArduPilot's own thresholds, clipping counts |
 | Calibration | accelerometer, compass, radio, motor test |
-| Joystick | axes to `RC_CHANNELS_OVERRIDE` with a release-on-disconnect failsafe (Linux) |
+| Joystick | axes to `RC_CHANNELS_OVERRIDE` from a thread that blocks on the device and sends on change — 0.1 ms p99 stick-to-link on a fake device — with a release-on-disconnect failsafe (Linux) |
 | Firmware | `.apj` parsing and the px4 bootloader protocol, proven against a mock; nothing flashed yet |
 | Scripting | the `Script.cs` host API, and a measurement of what the 19 shipped scripts need |
 | KML export | a flown path coloured by flight mode, and a mission, for Google Earth |
@@ -39,10 +39,12 @@ Measured on this tree: **17 crates, 40,661 hand-written Rust LOC** (plus 91,634 
 | Geodesy | typed units, Web Mercator, slippy-map tile arithmetic |
 | Maps | GPU tile rendering, three providers including Esri satellite imagery, overlays; the on-disk cache is Mission Planner's own, so a cache filled by either application is read by both |
 | CLI | `mpr watch \| record \| fly \| params \| param \| mission \| survey \| log \| logs \| kml \| firmware \| ports` |
-| GUI | fly, plan, setup and params screens on gpui |
+| GUI | fly, plan, setup, params and log screens on gpui |
+| Porting ledger | `ledger/ledger.csv`, one row per C# file with its tier and state; `cargo xtask ledger check` fails on anything unaccounted for |
 
-**Not yet**: the log browser's second Y axis and data grid, the joystick's 5 ms latency target,
-the porting ledger, i18n, packaging. `PLAN.md` §13.2 is the queue, and says what *done* means for
+**Not yet**: the log browser's data grid and the map beside its chart, a joystick latency
+histogram from a real device (none is attached to this machine), the `mp-link` split, i18n,
+packaging. `PLAN.md` §13.2 is the queue, and says what *done* means for
 each.
 
 ## Verification

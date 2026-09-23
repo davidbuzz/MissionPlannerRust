@@ -232,6 +232,16 @@ Computed this session by classifying **every** `.cs` file
 | **T4** | Mobile (Xamarin app, non-generated) → **drop** pending owner ruling | 198 | 39,234 | 3.2% |
 | | **TOTAL** | **3,678** | **1,208,836** | **100%** |
 
+> **Superseded by the ledger, 2026-09-24.** `ledger/ledger.csv` classifies the same 3,678 files with
+> a rule per vendored root that names its evidence (a licence header, a `LICENSE`, csproj metadata
+> naming a third party, or §4.1) rather than a directory list: **T0 1,623 / 703,375 · T1 473 /
+> 162,686 · T2 186 / 55,872 · T3 1,020 / 246,248 · T4 376 / 40,655**. The moves: swagger-generated
+> `WebAPIs/*/src` to T1; `Core`, `Transitions`, `LEDBulb`, `Half`, `Tools.cs` and `FastJSON` to T3
+> for lack of any third-party evidence in the tree (an owner can send them back with one line each);
+> `uno`, `wasm`, `System.Drawing.android` and `UsbSerialForAndroid` to T4; and a few third-party
+> files that had been hiding in T3 to T0. The table above is kept as the first measurement;
+> `cargo xtask ledger status` is the current one.
+
 > **The denominator has a hole.** `.gitmodules` declares `ExtLibs/mono` →
 > `https://github.com/meee1/mono.git` (shallow). The directory is **empty**, so nothing under it is
 > in the 3,678 / 1,208,836 figures — yet `crowdin.bat` passes `-xr!mono` when zipping `*.resx`, so it
@@ -251,7 +261,7 @@ Computed this session by classifying **every** `.cs` file
 | `ExtLibs/GMap.NET.*` ×3 | 33,899 | `mp-map` (greenfield) | — |
 | `ExtLibs/ICSharpCode.SharpZipLib` | 27,249 | `zip` + `flate2` | 6 call sites |
 | `ExtLibs/BaseClasses` | 24,298 | — | DirectShow COM base classes, **zero** vehicle-domain consumers |
-| `ExtLibs/MetaDataExtractor` | 17,800 | `kamadak-exif` + `little_exif` | check maker-note tags first |
+| `ExtLibs/MetaDataExtractorCSharp240d` | 17,800 | `kamadak-exif` + `little_exif` | check maker-note tags first |
 | `ExtLibs/MissionPlanner.Drawing`+ | ~21,202 | gpui | pure `LIB`-build scaffolding |
 | `ExtLibs/SvgNet` | 13,317 | gpui `svg()` | `GL2.cs` (1,445) dead behind `#if GL`, undefined |
 | `ExtLibs/SharpKml` + `KMLib` | 13,924 | `kml 0.14` | — |
@@ -273,7 +283,7 @@ Computed this session by classifying **every** `.cs` file
 | Source | Generated C# | Generator | Gate |
 |---|---:|---|---|
 | 20 MAVLink XMLs (11,934 lines, ArduPilot fork + `offspec.xml`) | `Mavlink.cs` 37,563 | `xtask codegen mavlink` (in-tree, 759 LOC) | **349** rows of `testdata/mavlink/csharp_message_infos.csv` must match on `(id,name,crc_extra,min_len,len)`. Note: 350 `message_info(` entries exist, one has a null name and is skipped by the dumper — a literal "350" CI gate fails on day one |
-| 147 `.uavcan` DSDL | `out/src` 23,374 (381 files) | `xtask dsdlgen` (**to write**) | all 147 `DATA_TYPE_SIGNATURE` + `default_dtid` must equal `canard_dsdlc/messages.cs` |
+| 147 `.uavcan` DSDL | `out/include` 205 files + `out/src` 176 files, 23,374 LOC | `xtask dsdlgen` (**to write**) | all 147 `DATA_TYPE_SIGNATURE` + `default_dtid` must equal `canard_dsdlc/messages.cs` |
 | Android resources | 65,305 | — | dropped with T4 |
 | `Resources.Designer.cs` / `Settings.Designer.cs` | 6,415 | `xtask assetgen` | — |
 
@@ -303,7 +313,7 @@ and §10):
 | Bucket | Files | LOC | Share of T3 |
 |---|---:|---:|---:|
 | < 200 LOC | ~760 | ~42k | 17% |
-| 200–600 | ~210 | ~75k | 31% |
+| 200–599 | ~210 | ~75k | 31% |
 | 600–1,500 | ~64 | ~55k | 22% |
 | **> 1,500** | **~22** | **~73k** | **30%** |
 
@@ -534,6 +544,11 @@ failure mode of agent porting. Machine-enforced: a ledger patch with an empty `o
 large unit is rejected.
 
 Plus a **behaviour-difference entry**. Empty is allowed; absent is not.
+
+> **As built (2026-09-24):** `cargo xtask ledger check` enforces the non-empty `omissions` from size
+> M upwards - 200 lines and more, which is this section's threshold rather than "L/XL". The
+> behaviour-difference entry and §7.2's tolerance class have no column yet; `fidelity_class` takes
+> §1.3's four names. Adding the two columns is a schema change the checker will have to learn.
 
 ### 6.5 Decomposition — the step that does not exist yet
 
@@ -1120,16 +1135,16 @@ Ordered by what an operator hits first, then by what unblocks the most.
 
 | # | Item | Why it is next | Deliverable | Done when | Status |
 |---:|---|---|---|---|---|
-| 1 | Log plotting from a `.BIN` | the other half of the tuning graph: watching a value live is how a problem is noticed, plotting it afterwards is how it is diagnosed. `mp-chart` already holds the reduction | D14 | a field from a dataflash log plots against time, with the field chosen from what the log actually contains | done; second Y axis and the data grid still owed |
+| 1 | Log plotting from a `.BIN` | the other half of the tuning graph: watching a value live is how a problem is noticed, plotting it afterwards is how it is diagnosed. `mp-chart` already holds the reduction | D14 | a field from a dataflash log plots against time, with the field chosen from what the log actually contains | done, with both axes: a left click graphs on the left, one axis per unit; a right click on the right, one shared axis (`Log/LogBrowse.cs:3079-3128`). The data grid and the map beside the chart are still owed |
 | 2 | Waypoint editing on the map | a mission planner that cannot drag a waypoint is not a mission planner. Displaced twice already | D11 | a waypoint drags to a new position, a click adds one, and the change survives an upload and a read-back | done |
 | 3 | Terrain-relative altitudes | a mission flown at 50 m over a hill is a mission into a hill | D11 | `MAV_FRAME_GLOBAL_TERRAIN_ALT` round-trips, and the planner says which frame every item uses | done |
 | 4 | Fence and rally read-back | upload works and read-back does not, so a fence cannot be checked against what the vehicle actually holds | D11 | a fence and a rally set download and compare against the file that produced them | done |
 | 5 | Satellite imagery | planning over a paddock needs imagery, not a street map | D8 | a second provider is selectable and its attribution is shown | done |
 | 6 | Mission Planner tile cache | D8 asks for it, and operators carry multi-GB offline caches into the field | D8 | tiles written by the C# application are read with the network off | done |
-| 7 | Stick-to-wire under 5 ms | D15 sets p99 ≤5 ms and the joystick path polls at 50 ms, missing it by an order of magnitude. It also runs on gpui's foreground executor, so a slow frame suspends the thing flying the aircraft | D15 | a dedicated thread blocks on the device and sends on change; a histogram over a real device shows p99 ≤5 ms | |
+| 7 | Stick-to-wire under 5 ms | D15 sets p99 ≤5 ms and the joystick path polls at 50 ms, missing it by an order of magnitude. It also runs on gpui's foreground executor, so a slow frame suspends the thing flying the aircraft | D15 | a dedicated thread blocks on the device and sends on change; a histogram over a real device shows p99 ≤5 ms | done on a fake device: p99 0.109 ms. The real-device histogram is owed - no joystick on this machine; `cargo test -p mp-input --test real_device -- --ignored --nocapture` runs it |
 | 8 | Zero-allocation proof on the ingest path | D2's DoD says zero heap allocations per packet "verified by an allocation-counting test". No such test exists, so the claim is untested | D2 | a counting global allocator asserts zero allocations across a replayed tlog's ingest→state path | done |
 | 9 | Split `mp-link` | §5.1's layering is the pivot insurance and `mp-link` currently violates it: 6,728 LOC carrying params, missions, calibration, log download and `.param` files. A CI rule cannot enforce a graph the code does not have | D1 | `mp-params`, `mp-calibration` and `mp-ftp` exist; `xtask/tests/graph.rs` asserts the layer rules and passes | |
-| 10 | The porting ledger | G1 is "3,678 files in a terminal state" and there is no ledger to hold them. Nothing above can be called *done* in the sense this plan defines | D18 | `ledger/ledger.csv` has a row per `.cs` file and `cargo xtask ledger check` exits 0 | |
+| 10 | The porting ledger | G1 is "3,678 files in a terminal state" and there is no ledger to hold them. Nothing above can be called *done* in the sense this plan defines | D18 | `ledger/ledger.csv` has a row per `.cs` file and `cargo xtask ledger check` exits 0 | done: 3,678 rows, every one `ready`; `check` and `status` exist, with 22 tests and a CI step. Still empty: `target_crate`, `unit_id`, `deps` and the class columns; `ExtLibs/mono` is still an unfetched submodule |
 
 **1 to 6 are what a pilot notices.** Everything in §13.1 made the application more trustworthy;
 these make it more capable. 2 is the one that is embarrassing to still owe.
@@ -1141,11 +1156,13 @@ than in a corner, because a performance target nobody is scheduled to meet is a 
 1.2M LOC depends on: without the graph, a framework pivot costs the project instead of two crates,
 and without the ledger there is no definition of finished.
 
-**What 6 and 8 found**, in the manner of §13.1's table, because the pattern held: one small item,
-three defects in work believed finished.
+**What 6, 7 and 8 found**, in the manner of §13.1's table, because the pattern held: one small
+item, three defects in work believed finished.
 
 | Item | What it was supposed to add | What it actually found |
 |---|---|---|
+| 10 | a ledger | `cargo xtask` was not a command in this repository - no `.cargo/config.toml` alias existed, and CI called `cargo run -p xtask --` instead - so every `cargo xtask …` in this document was aspirational. Fixed. The tier counts in §4 came from a scratch script with no evidence rules; the classifier in `xtask/src/ledger/classify.rs` carries a reason per vendored root and moves 215 files between tiers as a result (the table under §4 has both sets). §4.2's rows do not sum to its T1 total, its DroneCAN row miscounts (`out/include` 205 + `out/src` 176, not 381 in `out/src`), it lists Android resources as `regenerate` while §4 drops them, and §4.4's buckets overlapped at 600. §6.4's behaviour-difference entry and §7.2's tolerance class have no column in §6.2 |
+| 7 | a faster send path | `mp_input::reader`: a thread blocks in `read(2)` on the device, a second hands each change to the link, bursts coalesce to the newest position, 0.109 ms p99 on a fake device against 5 ms. Three things about the ported behaviour: **Mission Planner on Linux never notices an unplug** — `IsJoystickValid` is `fs != null` (`JoystickLinux.cs:263`), so it keeps sending the last stick position after the cable is out; ours releases, deliberately stricter. **The 200 ms stick timeout could never fire** — the old GUI loop fed the failsafe and checked it with the same timestamp, so the only real backstop was the vehicle's own RC override timeout; kept as it was, now named. And **sending on every change would flood a radio**: the C# sends at most every 50 ms and in practice every ~80 ms (`MainV2.cs:2249, 2356, 2446`), a gamepad reports at up to 1 kHz, and `mp-link`'s outbound queue has no back-pressure. So the reader has a 20 ms floor between sends (§8.2 measures at 50 Hz) under Mission Planner's 50 ms ceiling; the per-link budget §8.1 describes (a token bucket) is still not built |
 | 8 | a test for a claim | The claim was true: 211,638 frame decodes and 70,546 frames through the real link thread allocate nothing per packet, in debug and release alike (`crates/mp-mavlink/tests/no_alloc.rs`, `crates/mp-vehicle/tests/no_alloc_ingest.rs`, `crates/mp-link/tests/no_alloc_ingest.rs`). Three message types allocate by design and are named in the test with a bound each: `PARAM_VALUE` (stored by name, as `MAVLinkInterface.cs:5770`), `STATUSTEXT` and `COMMAND_ACK` (the operator's message log). What was *not* true: `Transport::description()` is called on every snapshot publish and returns a fresh `String` - two allocations per publish, a hundred a second at 50 Hz, on a path the plan calls allocation-free; owed, and it needs the `Transport` trait to change. Also: §8.1 describes decoding only subscribed msgids, a `slotmap`/`dashmap` registry, a 120 Hz publish cap and `memchr` resync; the link decodes every frame, uses a `BTreeMap`, publishes at a fixed 50 Hz and resyncs a byte at a time. None of it allocates, and the numbers are met without it - so §8.1 describes a design, not the code |
 | 6 | read the C# cache | The cache layout was invented — `<id>/<z>/<x>/<y>.<ext>`, "the one every slippy-map tool uses" — with no C# behind it. `ExtLibs/Maps/MyImageCache.cs:72-74` writes `gmapcache/TileDBv3/en/<Name>/<z>/<y>/<x>.jpg`: **always `.jpg` whatever the bytes**, y before x, the provider's C# `Name`, and it reads nothing else. Replaced wholesale, proved against a tile the real application wrote on this machine (`crates/mp-tiles/tests/tilecache.rs`) |
 | | | **The offline store never read the disk.** `TileStore::offline` started no worker thread, and the worker is what reads the cache; every offline test passed because every offline test pre-loaded the tile by hand. With `MP_OFFLINE` the map drew a graticule over a full cache. Now it runs the worker with a policy that never fetches, and a test asks for a tile the way the map does |

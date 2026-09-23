@@ -32,6 +32,10 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets
       - run: cargo test --workspace
+      # The porting ledger: one row per C# file, every row well-formed. The C# tree is not
+      # checked out here, so this validates the CSV on its own and says so; a row whose state
+      # claims evidence that does not exist still fails.
+      - run: cargo xtask ledger check
 
       # Open a window and paint it, on every platform.
       #
