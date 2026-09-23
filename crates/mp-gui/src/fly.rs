@@ -69,6 +69,17 @@ pub fn vehicle_panel(view: &TelemetryView) -> impl IntoElement {
 /// Arm and disarm are separate buttons rather than one toggle. A toggle whose meaning depends on
 /// state you have to read first is exactly the control you press wrongly when something is going
 /// badly, and "disarm" pressed in the air is not recoverable.
+///
+/// Force arm is a third button rather than a modifier on the first, for the same reason: a control
+/// whose effect depends on something you cannot see is one you press wrongly. It is coloured as
+/// the hazard it is, and it is the only control here that tells the aircraft to ignore its own
+/// judgement.
+///
+/// Order is arm, force arm, disarm - the two ways of arming together, because they are the same
+/// intent with different force, and reaching for one and hitting the other is a mistake between
+/// two things you meant. Only one of the two groups is ever live: force arm is disabled while
+/// armed and disarm is disabled while disarmed, so there is no moment when a slip toward disarm
+/// can arm anything.
 pub fn actions_panel(view: &TelemetryView, cx: &mut Context<MissionPlanner>) -> impl IntoElement {
     let armed = view.state.as_ref().is_some_and(|s| s.armed);
     let has_vehicle = view.vehicle.is_some();
@@ -84,6 +95,16 @@ pub fn actions_panel(view: &TelemetryView, cx: &mut Context<MissionPlanner>) -> 
             has_vehicle && !armed,
             cx.listener(|this, _event: &(), _window, cx| {
                 this.telemetry.arm(true);
+                cx.notify();
+            }),
+        ))
+        .child(action(
+            "force-arm",
+            "force arm",
+            theme::ALERT,
+            has_vehicle && !armed,
+            cx.listener(|this, _event: &(), _window, cx| {
+                this.telemetry.force_arm();
                 cx.notify();
             }),
         ))

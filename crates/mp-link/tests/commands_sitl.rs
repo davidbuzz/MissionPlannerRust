@@ -77,6 +77,29 @@ fn a_real_vehicle_acknowledges_an_arm_request() {
 
 #[test]
 #[ignore = "requires ArduPilot SITL listening on tcp:127.0.0.1:5760"]
+fn a_forced_arm_is_understood_by_the_firmware() {
+    // The point of this test is the magic number. 21196 in param2 tells the vehicle to arm
+    // regardless of its checks; a wrong value there would not fail loudly - the vehicle would
+    // simply refuse, and the operator would be pressing a button that does nothing at the moment
+    // they most need it. What is asserted is that the firmware treats it as a valid command
+    // rather than rejecting it as malformed.
+    let (link, id) = connect();
+    assert!(link.send(&commands::arm(id, true, true)), "send failed");
+
+    let ack = await_message(&link, "a forced arm acknowledgement", |message| {
+        message.text.contains("ARM_DISARM")
+    });
+    assert!(
+        !ack.text.contains("unsupported") && !ack.text.contains("command long only"),
+        "the firmware did not understand a forced arm: {}",
+        ack.text
+    );
+
+    link.send(&commands::arm(id, false, false));
+}
+
+#[test]
+#[ignore = "requires ArduPilot SITL listening on tcp:127.0.0.1:5760"]
 fn a_refusal_comes_with_a_reason_the_pilot_can_act_on() {
     // ArduPilot explains itself in STATUSTEXT, not in the ack. "PreArm: Compass not calibrated" is
     // the difference between a pilot who fixes the problem and one who keeps pressing Arm. If a

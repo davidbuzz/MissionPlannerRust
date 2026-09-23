@@ -277,3 +277,84 @@ pub fn send_mission_ack(target: VehicleId, result: u8, mission_type: u8) -> MavM
         mission_type,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mp_mavlink_dialects::all::MavMessage;
+
+    fn target() -> VehicleId {
+        VehicleId::new(1, 1)
+    }
+
+    /// The value ArduPilot and the MAVLink definitions both use to mean "ignore your own checks".
+    ///
+    /// Pinned here against Mission Planner's own constant - `magic_force_disarm_value = 21196.0f`
+    /// in `ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs` - because a wrong number here would not
+    /// fail loudly. The vehicle would simply refuse to arm and the operator would be left pressing
+    /// a button that does nothing at the moment they most need it.
+    const FORCE_MAGIC: f32 = 21196.0;
+
+    fn params(message: &MavMessage) -> [f32; 7] {
+        match message {
+            MavMessage::CommandLong(command) => [
+                command.param1,
+                command.param2,
+                command.param3,
+                command.param4,
+                command.param5,
+                command.param6,
+                command.param7,
+            ],
+            other => panic!("expected a COMMAND_LONG, got {}", other.name()),
+        }
+    }
+
+    #[test]
+    fn an_ordinary_arm_does_not_force() {
+        // param2 must be zero, or every arm would bypass the checks and the distinction would be
+        // silently meaningless.
+        let message = arm(target(), true, false);
+        let p = params(&message);
+        assert!(
+            (p[0] - 1.0).abs() < f32::EPSILON,
+            "param1 should ask to arm"
+        );
+        assert!(
+            p[1].abs() < f32::EPSILON,
+            "param2 should be zero, got {}",
+            p[1]
+        );
+    }
+
+    #[test]
+    fn forcing_sends_the_magic_the_firmware_looks_for() {
+        let message = arm(target(), true, true);
+        let p = params(&message);
+        assert!((p[0] - 1.0).abs() < f32::EPSILON);
+        assert!(
+            (p[1] - FORCE_MAGIC).abs() < f32::EPSILON,
+            "param2 should be {FORCE_MAGIC}, got {}",
+            p[1]
+        );
+    }
+
+    #[test]
+    fn disarming_asks_to_disarm() {
+        let message = arm(target(), false, false);
+        let p = params(&message);
+        assert!(p[0].abs() < f32::EPSILON, "param1 should ask to disarm");
+        assert!(p[1].abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn a_command_is_addressed_to_the_vehicle_it_names() {
+        match arm(VehicleId::new(7, 42), true, false) {
+            MavMessage::CommandLong(command) => {
+                assert_eq!(command.target_system, 7);
+                assert_eq!(command.target_component, 42);
+            }
+            other => panic!("expected a COMMAND_LONG, got {}", other.name()),
+        }
+    }
+}

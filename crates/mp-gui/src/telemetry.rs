@@ -276,15 +276,25 @@ impl Telemetry {
         Some((link, id))
     }
 
-    /// Arms or disarms.
-    ///
-    /// Never forced. `MAV_CMD_COMPONENT_ARM_DISARM` takes a magic 21196 in param2 that bypasses
-    /// every pre-arm check, and a ground station that offers that behind an ordinary button is how
-    /// aircraft take off with an uncalibrated compass. Forcing belongs behind its own deliberate
-    /// control, which this is not.
+    /// Arms or disarms, with the vehicle's pre-arm checks applied.
     pub fn arm(&self, arm: bool) {
         if let Some((link, id)) = self.target() {
             link.send(&commands::arm(id, arm, false));
+        }
+    }
+
+    /// Arms with the pre-arm checks bypassed.
+    ///
+    /// `MAV_CMD_COMPONENT_ARM_DISARM` takes a magic 21196 in param2 that tells the vehicle to arm
+    /// regardless of what its checks say. This is a real and necessary operation - bench testing,
+    /// motor tests, and flying with a sensor the operator has assessed and accepted - and it is
+    /// also how an aircraft takes off with an uncalibrated compass.
+    ///
+    /// It is a separate call from [`Telemetry::arm`] rather than a flag on it, so that no code
+    /// path can force by accident: forcing is something a caller has to ask for by name.
+    pub fn force_arm(&self) {
+        if let Some((link, id)) = self.target() {
+            link.send(&commands::arm(id, true, true));
         }
     }
 
