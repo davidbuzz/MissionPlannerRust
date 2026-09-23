@@ -20,6 +20,7 @@
 pub mod commands;
 pub mod messages;
 pub mod mission_transfer;
+pub mod tlog;
 pub mod traffic;
 
 use std::collections::BTreeMap;
@@ -111,6 +112,15 @@ pub enum LinkError {
     /// The link thread could not be started.
     #[error("could not start link thread: {0}")]
     Thread(String),
+    /// A recording could not be created or written.
+    #[error("{context}: {source}")]
+    Record {
+        /// What was being attempted.
+        context: String,
+        /// The underlying error.
+        #[source]
+        source: std::io::Error,
+    },
 }
 
 /// Counters describing the link as a whole.
@@ -613,7 +623,7 @@ impl Drop for Link {
 /// recording you cannot use to work out why a vehicle did what it did.
 fn send_frame(
     transport: &mut dyn Transport,
-    recorder: Option<&mut mp_log::TlogWriter>,
+    recorder: Option<&mut tlog::TlogWriter>,
     stats: &mut LinkStats,
     bytes: &[u8],
 ) -> bool {
@@ -640,7 +650,7 @@ fn run_link(
     let mut decoder = FrameDecoder::new();
     let mut registry = VehicleRegistry::new();
     let mut recorder = config.record_path.as_ref().and_then(|path| {
-        mp_log::TlogWriter::create(path)
+        tlog::TlogWriter::create(path)
             .inspect_err(|e| eprintln!("recording disabled: {e}"))
             .ok()
     });

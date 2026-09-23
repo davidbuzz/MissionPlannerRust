@@ -3400,7 +3400,6 @@ version = "0.1.0"
 dependencies = [
  "mp-calibration",
  "mp-ftp",
- "mp-log",
  "mp-mavlink",
  "mp-mavlink-dialects",
  "mp-mission",
@@ -3415,6 +3414,7 @@ dependencies = [
 name = "mp-log"
 version = "0.1.0"
 dependencies = [
+ "mp-link",
  "mp-mavlink",
  "mp-mavlink-dialects",
  "thiserror 2.0.20",

@@ -1,4 +1,7 @@
-//! Telemetry log (`.tlog`) reading and writing.
+//! Telemetry log (`.tlog`) reading.
+//!
+//! Writing is the link's (`mp_link::tlog`): the link records itself, as `MAVLinkInterface` does,
+//! and it sits below this crate in PLAN.md §5.1's layers. `tests/tlog.rs` reads what it writes.
 //!
 //! # Format
 //!
@@ -15,11 +18,9 @@
 pub mod dataflash;
 pub mod plot;
 pub mod reader;
-pub mod writer;
 
 pub use dataflash::{DataflashReader, DataflashStats, LogMessage, MessageFormat, Value};
 pub use reader::{TlogReader, TlogRecord};
-pub use writer::TlogWriter;
 
 /// Size of the timestamp that precedes each frame.
 pub const TIMESTAMP_LEN: usize = 8;

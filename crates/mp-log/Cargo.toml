@@ -1,6 +1,6 @@
 [package]
 name = "mp-log"
-description = "Telemetry log reading and writing (tlog), compatible with Mission Planner"
+description = "Telemetry log reading (tlog) and dataflash parsing, compatible with Mission Planner"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -16,3 +16,5 @@ thiserror.workspace = true
 
 [dev-dependencies]
 mp-mavlink-dialects.workspace = true
+# The tlog writer is the link's recorder; the round-trip tests read back what it writes.
+mp-link.workspace = true
