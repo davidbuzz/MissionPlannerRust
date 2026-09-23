@@ -1,0 +1,17 @@
+[package]
+name = "mp-fuzz-checks"
+description = "The properties the fuzz targets check, in one place so both harnesses share them"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+mp-mavlink.workspace = true
+mp-mavlink-dialects.workspace = true
+mp-mission.workspace = true
+mp-log.workspace = true

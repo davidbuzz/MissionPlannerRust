@@ -1,0 +1,12 @@
+# Build output. Large, and rebuilt from source.
+target/
+
+# Crashing inputs. Deliberately not committed: an artifact here means a live bug, and the right
+# home for it is a regression test in the crate that owns the parser, with the bytes inline and a
+# comment saying what it broke. A crash file in a corner of the repository is a bug nobody reads.
+artifacts/
+
+# What a run discovers. Regenerated from fuzz/seeds in the first minute of the next run - a
+# message_decode run ends with about 2,600 entries, and they are not worth that many files in the
+# repository. The seeds are committed; these are not.
+corpus/

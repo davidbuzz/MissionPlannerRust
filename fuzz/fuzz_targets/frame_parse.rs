@@ -4,23 +4,12 @@
 //! it was given. Every byte on a telemetry link is attacker-influenced in the sense that matters -
 //! radio noise, a misconfigured peer, a corrupted log - and a parser that panics takes the ground
 //! station down mid-flight.
+//!
+//! The property itself lives in `mp_fuzz_checks`, so that `cargo test --workspace` compiles and
+//! exercises it on stable. This file is only the libfuzzer entry point.
 
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use mp_mavlink::parse;
-use mp_mavlink_dialects::all::DIALECT;
 
-fuzz_target!(|data: &[u8]| {
-    if let Ok((frame, used)) = parse(data, &DIALECT) {
-        assert!(used <= data.len(), "claimed to consume {used} of {} bytes", data.len());
-        assert_eq!(frame.raw.len(), used, "raw slice must match the consumed length");
-        assert!(frame.payload.len() <= 255);
-
-        // Zero-extension must never read out of bounds, whatever the payload length claimed.
-        let mut buffer = [0u8; 255];
-        frame.payload_into(&mut buffer);
-        let _ = frame.payload_byte(254);
-        let _ = frame.signable_bytes();
-    }
-});
+fuzz_target!(|data: &[u8]| mp_fuzz_checks::frame_parse(data));

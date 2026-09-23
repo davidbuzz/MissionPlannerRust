@@ -79,6 +79,43 @@ jobs:
         if: failure()
         run: cat /tmp/sitl.log
 
+  fuzz:
+    name: bounded fuzz pass
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Nightly, because libFuzzer needs it. This is the only job that does, which is why the
+      # fuzz crate is excluded from the workspace - an ordinary build must not require it.
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+      # Bounded rather than the 24 hours D2 asks for on frame_parse. A CI job is a regression
+      # check: it proves the targets still build and still hold, and it is the long soak that
+      # finds new things. frame_parse gets the longest slice because it is the one on the
+      # telemetry path, where every byte is attacker-influenced in the sense that matters.
+      - name: frame_parse
+        run: tools/fuzz.sh frame_parse -max_total_time=180
+      - name: frame_stream
+        run: tools/fuzz.sh frame_stream -max_total_time=120
+      - name: waypoint_file
+        run: tools/fuzz.sh waypoint_file -max_total_time=60
+      - name: tlog_reader
+        run: tools/fuzz.sh tlog_reader -max_total_time=60
+      # The one that reaches the per-message decoders, which is 150x more of the codebase than
+      # frame_parse reaches - so it gets a slice to match.
+      - name: message_decode
+        run: tools/fuzz.sh message_decode -max_total_time=180
+      # A crash leaves its input behind; without this the job fails and the input that caused it
+      # is gone, which makes the failure unreproducible and therefore useless.
+      - name: Keep any crashing input
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts
+          path: fuzz/artifacts/
+          if-no-files-found: ignore
+
   codegen:
     name: generated code is up to date
     runs-on: ubuntu-latest

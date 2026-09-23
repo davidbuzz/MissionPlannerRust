@@ -1020,7 +1020,7 @@ says what *done* means, because a list of nouns is not a plan.
 | 13 | Record a `.tlog` for every flight | the link can record and the GUI never turns it on, so every flight flown behind this application is unreviewable | D14 | recording starts on connect, both directions are captured, and the screen says it is on | done |
 | 14 | Save, load and compare `.param` files | how an operator backs up a build, clones an airframe, or works out what a suggested change actually changed | D12 | a set round-trips against a file the C# application wrote, honouring its skip-list | done |
 | 15 | EKF and vibration monitors | the two readouts that explain a vehicle that will not arm, flies badly, or climbs on its own | D10 | variance and vibration are shown, with clipping counts | done |
-| 16 | Fuzz targets built and run | they exist, have never been compiled, and D2's DoD requires 24 h clean on `frame_parse` | D19 | the targets build and CI runs a bounded fuzz pass | |
+| 16 | Fuzz targets built and run | they exist, have never been compiled, and D2's DoD requires 24 h clean on `frame_parse` | D19 | the targets build and CI runs a bounded fuzz pass | done |
 | 17 | Windows build verified | cross-compilation is checked; the Direct3D 11 path has never been exercised | D7 | a Windows build opens a window and paints, recorded in an ADR | |
 | 18 | Joystick input | flying from a ground station without a transmitter, which D15 names | D15 | axes map to `RC_CHANNELS_OVERRIDE` with a failsafe on disconnect | |
 | 19 | Firmware flashing | the last item in Initial Setup with no counterpart here | D13 | a `.apj` is written to a board over the bootloader and verified | |

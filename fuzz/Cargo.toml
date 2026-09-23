@@ -10,10 +10,9 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-mp-mavlink = { path = "../crates/mp-mavlink" }
-mp-mavlink-dialects = { path = "../crates/mp-mavlink-dialects" }
-mp-mission = { path = "../crates/mp-mission" }
-mp-log = { path = "../crates/mp-log" }
+# The properties themselves, shared with the stable harness in crates/mp-fuzz-checks so that a
+# target cannot drift from what `cargo test --workspace` actually checks.
+mp-fuzz-checks = { path = "../crates/mp-fuzz-checks" }
 
 [[bin]]
 name = "frame_parse"
@@ -39,6 +38,13 @@ bench = false
 [[bin]]
 name = "tlog_reader"
 path = "fuzz_targets/tlog_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "message_decode"
+path = "fuzz_targets/message_decode.rs"
 test = false
 doc = false
 bench = false

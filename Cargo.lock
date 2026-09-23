@@ -3311,6 +3311,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "mp-fuzz-checks"
+version = "0.1.0"
+dependencies = [
+ "mp-log",
+ "mp-mavlink",
+ "mp-mavlink-dialects",
+ "mp-mission",
+]
+
+[[package]]
 name = "mp-gui"
 version = "0.1.0"
 dependencies = [

@@ -88,7 +88,7 @@ signing, zero-copy frame parse/serialize.
   decodes a 1 GB tlog at **> 1 M messages/s single-threaded**, zero heap allocations per packet
   (verified by an allocation-counting test).
 - **Replaces:** `ExtLibs/Mavlink` (40,718 LOC, machine-generated).
-- **Tests:** `crates/mavlink/tests/roundtrip.rs` proptest encode→decode identity over **every** generated message type; `tests/golden_decode.rs` diffs decoded fields against C#-produced golden JSON for a corpus of real tlogs; `tests/signing.rs` for MAVLink2 signature accept/reject vectors; `tests/truncation.rs` for v2 zero-trimming edge cases; `fuzz/fuzz_targets/parse_frame.rs` (24 h clean required before D2 is done); `tests/no_alloc.rs` uses a counting global allocator to assert zero allocations per packet; `benches/decode.rs` gates the >1 M msg/s target.
+- **Tests:** `crates/mavlink/tests/roundtrip.rs` proptest encode→decode identity over **every** generated message type; `tests/golden_decode.rs` diffs decoded fields against C#-produced golden JSON for a corpus of real tlogs; `tests/signing.rs` for MAVLink2 signature accept/reject vectors; `tests/truncation.rs` for v2 zero-trimming edge cases; `fuzz/fuzz_targets/frame_parse.rs` and `message_decode.rs` (24 h clean on `frame_parse` required before D2 is done); `crates/mp-fuzz-checks/tests/bounded.rs` runs every fuzz property on stable as part of `cargo test --workspace`, so a target cannot rot uncompiled between nightly runs; `tests/no_alloc.rs` uses a counting global allocator to assert zero allocations per packet; `benches/decode.rs` gates the >1 M msg/s target.
 
 ### D3. Transport layer
 `serial | TCP | UDP | BLE | NTRIP | websocket | file-replay`, device enumeration and hotplug on all three

@@ -122,6 +122,13 @@ name = "mp-fuzz"
 version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
+ "mp-fuzz-checks",
+]
+
+[[package]]
+name = "mp-fuzz-checks"
+version = "0.1.0"
+dependencies = [
  "mp-log",
  "mp-mavlink",
  "mp-mavlink-dialects",
