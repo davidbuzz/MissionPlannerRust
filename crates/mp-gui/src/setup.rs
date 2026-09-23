@@ -13,9 +13,9 @@
 #![allow(unreachable_pub)]
 
 use gpui::{AnyElement, Context, div, prelude::*, px, rgb};
+use mp_calibration::radio::RcRange;
 use mp_calibration::{AccelCalibration, AccelPosition, CompassProgress, CompassStatus};
 use mp_mavlink_dialects::all::{MavAutopilot, MavType};
-use mp_vehicle::RcRange;
 
 use crate::MissionPlanner;
 use crate::telemetry::TelemetryView;

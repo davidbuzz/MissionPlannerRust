@@ -9,13 +9,18 @@
 //! Levelling and compass calibration are single commands by comparison, and are here because they
 //! are the same `MAV_CMD_PREFLIGHT_CALIBRATION` with a different parameter set.
 //!
+//! Radio calibration is not a conversation at all: [`radio`] records the extremes each channel
+//! passes through while the operator sweeps the sticks.
+//!
 //! The protocol half of `GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs`,
-//! `ConfigHWCompass.cs` and `ConfigMotorTest.cs`, without their forms. L3 in PLAN.md §5.1, beside
-//! the link rather than inside it: the link thread reads `MAV_CMD_ACCELCAL_VEHICLE_POS`,
-//! `MAG_CAL_PROGRESS` and `MAG_CAL_REPORT` into the types here as they arrive, and a screen sends
-//! the messages built here.
+//! `ConfigHWCompass.cs`, `ConfigMotorTest.cs` and `ConfigRadioInput.cs`, without their forms. L3
+//! in PLAN.md §5.1, beside the link rather than inside it: the link thread reads
+//! `MAV_CMD_ACCELCAL_VEHICLE_POS`, `MAG_CAL_PROGRESS` and `MAG_CAL_REPORT` into the types here as
+//! they arrive, and a screen sends the messages built here.
 
 #![forbid(unsafe_code)]
+
+pub mod radio;
 
 use mp_mavlink_dialects::all::{CommandLong, MavMessage};
 use mp_vehicle::VehicleId;

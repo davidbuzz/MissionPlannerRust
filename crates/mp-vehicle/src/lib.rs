@@ -32,7 +32,7 @@ pub mod state;
 
 pub use link_quality::LinkQuality;
 pub use modes::{VehicleFamily, flight_mode_name};
-pub use rc::{RcChannels, RcRange};
+pub use rc::RcChannels;
 pub use registry::{VehicleId, VehicleRegistry};
 pub use sensors::Sensors;
 pub use snapshot::{StateHandle, StatePublisher};

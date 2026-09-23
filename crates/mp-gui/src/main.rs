@@ -212,7 +212,7 @@ struct MissionPlanner {
     /// Whether a radio calibration is recording stick limits.
     capturing_radio: bool,
     /// The limits recorded so far.
-    radio_range: mp_vehicle::RcRange,
+    radio_range: mp_calibration::radio::RcRange,
     /// Whether this session has turned the vehicle's arming checks off.
     ///
     /// Only to offer putting them back. The parameter is the vehicle's, not ours, so this says
@@ -348,7 +348,7 @@ impl MissionPlanner {
             param_differences: Vec::new(),
             motor_throttle: 5.0,
             capturing_radio: false,
-            radio_range: mp_vehicle::RcRange::new(),
+            radio_range: mp_calibration::radio::RcRange::new(),
             disabled_arming_checks: false,
             forcing_arm_until: None,
             last_force_arm: None,
@@ -698,7 +698,7 @@ impl MissionPlanner {
     /// carry over a stick position the operator has since changed, and nothing on screen would
     /// say so.
     fn begin_radio_capture(&mut self) {
-        self.radio_range = mp_vehicle::RcRange::new();
+        self.radio_range = mp_calibration::radio::RcRange::new();
         self.capturing_radio = true;
         self.file_status = Some("recording radio limits - sweep every control".to_owned());
     }
