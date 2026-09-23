@@ -112,6 +112,13 @@ fn main() -> std::process::ExitCode {
                 std::process::ExitCode::from(2)
             }
         },
+        Some("kml") => match (args.get(1), args.get(2)) {
+            (Some(input), Some(out)) => logs::to_kml(input, out),
+            _ => {
+                eprintln!("usage: mpr kml <flight.tlog> <out.kml>");
+                std::process::ExitCode::from(2)
+            }
+        },
         Some("ports") => ports(),
         Some("help" | "--help" | "-h") | None => {
             usage();
@@ -141,7 +148,8 @@ fn usage() {
          mpr survey <url> <file>     generate a survey grid around the vehicle\n  \
          mpr log <file>              summarise a telemetry or dataflash log
   mpr logs <url> [ID] [DIR]   list the vehicle's logs, or download one\n  \
-         mpr firmware info <file>    describe a .apj firmware file
+         mpr kml <log> <out.kml>     export a flown path for Google Earth
+  mpr firmware info <file>    describe a .apj firmware file
   mpr ports                   list serial ports\n\n\
          url forms:\n  \
          serial:/dev/ttyACM0:115200\n  \

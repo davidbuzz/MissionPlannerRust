@@ -21,6 +21,7 @@ mp-mavlink-dialects.workspace = true
 mp-transport.workspace = true
 mp-vehicle.workspace = true
 mp-firmware.workspace = true
+mp-kml.workspace = true
 mp-log.workspace = true
 mp-mission.workspace = true
 mp-units.workspace = true

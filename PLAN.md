@@ -1053,7 +1053,7 @@ says what *done* means, because a list of nouns is not a plan.
 | 4 | Settings that persist | link URL, tile provider, window size and screen are retyped every launch | D17 | they survive a restart and a corrupt settings file does not stop startup | done |
 | 5 | Vehicle selector | the link tracks every vehicle on the wire and the UI always shows the first | D10 | a second vehicle is selectable and the map and HUD follow the selection | done |
 | 6 | ADS-B and other vehicles on the map | a ground station that cannot show nearby traffic is missing the thing that prevents a collision | D15 | `ADSB_VEHICLE` is drawn, aged out, and distinguishable from the flown aircraft | done |
-| 7 | KML export of a mission and a flown path | the usual way to hand a flight to someone without a ground station | D11 | the file opens in Google Earth with the track and waypoints in the right places | |
+| 7 | KML export of a mission and a flown path | the usual way to hand a flight to someone without a ground station | D11 | the file opens in Google Earth with the track and waypoints in the right places | done |
 | 8 | Live tuning graph | watching a value against time is how tuning is done, and the flight screen has no plot | D10 | a chosen field plots at telemetry rate without dropping the frame budget | |
 | 9 | Log plotting | the same plot over a dataflash log, which is how a flight is reviewed | D14 | a field from a downloaded `.BIN` plots against time | |
 | 10 | Terrain-relative altitudes | a mission flown at 50 m over a hill is a mission into a hill | D11 | `MAV_FRAME_GLOBAL_TERRAIN_ALT` round-trips and the planner says which frame an item uses | |

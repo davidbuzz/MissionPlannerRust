@@ -1,0 +1,20 @@
+[package]
+name = "mp-kml"
+description = "Writing missions and flight paths as KML"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+mp-log.workspace = true
+mp-mavlink.workspace = true
+mp-mavlink-dialects.workspace = true
+
+[dependencies]
+mp-units.workspace = true
+mp-mission.workspace = true

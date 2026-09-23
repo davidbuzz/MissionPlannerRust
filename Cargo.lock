@@ -3301,6 +3301,7 @@ name = "mp-cli"
 version = "0.1.0"
 dependencies = [
  "mp-firmware",
+ "mp-kml",
  "mp-link",
  "mp-log",
  "mp-mavlink",
@@ -3353,6 +3354,17 @@ dependencies = [
 [[package]]
 name = "mp-input"
 version = "0.1.0"
+
+[[package]]
+name = "mp-kml"
+version = "0.1.0"
+dependencies = [
+ "mp-log",
+ "mp-mavlink",
+ "mp-mavlink-dialects",
+ "mp-mission",
+ "mp-units",
+]
 
 [[package]]
 name = "mp-link"

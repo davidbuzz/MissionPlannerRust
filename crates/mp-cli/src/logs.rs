@@ -240,3 +240,96 @@ fn print_statustexts(texts: &[(u8, String)]) {
         }
     }
 }
+
+/// Writes a flown path from a telemetry log as KML.
+///
+/// The usual way a flight is handed to somebody without a ground station. Mission Planner writes
+/// one beside every log it converts; this does the same from the command line.
+pub fn to_kml(path: &str, out: &str) -> std::process::ExitCode {
+    let data = match std::fs::read(path) {
+        Ok(data) => data,
+        Err(err) => {
+            eprintln!("could not read {path}: {err}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+
+    let mut track: Vec<mp_kml::TrackPoint> = Vec::new();
+    let mut mode = String::from("unknown");
+    let mut first_time: Option<u64> = None;
+
+    let mut reader = TlogReader::new(&data);
+    while let Some(record) = reader.next_record(&DIALECT) {
+        let seconds = record.timestamp_micros.map_or(0.0, |micros| {
+            let start = *first_time.get_or_insert(micros);
+            #[allow(clippy::cast_precision_loss)] // microseconds of a flight fit a f64 exactly
+            {
+                (micros.saturating_sub(start)) as f64 / 1_000_000.0
+            }
+        });
+        let Ok((frame, _)) = mp_mavlink::parse(record.frame, &DIALECT) else {
+            continue;
+        };
+        let Some(message) = MavMessage::decode(frame.msgid, frame.payload) else {
+            continue;
+        };
+        match message {
+            // The mode number means nothing without knowing the airframe, which only the
+            // heartbeat carries - so both are tracked and the name is resolved as they arrive.
+            MavMessage::Heartbeat(m) => {
+                if let Some(family) = mp_vehicle::VehicleFamily::from_mav_type(m.r#type)
+                    && let Some((_, name)) = family
+                        .modes()
+                        .iter()
+                        .find(|(number, _)| *number == m.custom_mode)
+                {
+                    mode = (*name).to_owned();
+                }
+            }
+            MavMessage::GlobalPositionInt(m) => {
+                // (0, 0) is how an unset position is transmitted. Writing it produces a leg
+                // through the Gulf of Guinea in whatever the recipient opens the file with.
+                if m.lat == 0 && m.lon == 0 {
+                    continue;
+                }
+                if let Ok(position) = mp_units::LatLon::from_mavlink_e7(m.lat, m.lon) {
+                    track.push(mp_kml::TrackPoint {
+                        position,
+                        altitude_msl: f64::from(m.alt) / 1000.0,
+                        seconds,
+                        mode: mode.clone(),
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if track.is_empty() {
+        eprintln!("{path} holds no positions to export");
+        return std::process::ExitCode::FAILURE;
+    }
+
+    let name = std::path::Path::new(path).file_stem().map_or_else(
+        || path.to_owned(),
+        |stem| stem.to_string_lossy().into_owned(),
+    );
+    let kml = mp_kml::flight_path(&name, &track);
+    match std::fs::write(out, &kml) {
+        Ok(()) => {
+            let modes: std::collections::BTreeSet<&str> =
+                track.iter().map(|point| point.mode.as_str()).collect();
+            println!(
+                "wrote {} positions to {out} ({:.0} s, modes: {})",
+                track.len(),
+                track.last().map_or(0.0, |point| point.seconds),
+                modes.into_iter().collect::<Vec<_>>().join(", ")
+            );
+            std::process::ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("could not write {out}: {err}");
+            std::process::ExitCode::FAILURE
+        }
+    }
+}

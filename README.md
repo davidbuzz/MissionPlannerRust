@@ -33,6 +33,7 @@ Measured on this tree: **13 crates, 36,603 hand-written Rust LOC** (plus 91,634 
 | Joystick | axes to `RC_CHANNELS_OVERRIDE` with a release-on-disconnect failsafe (Linux) |
 | Firmware | `.apj` parsing and the px4 bootloader protocol, proven against a mock; nothing flashed yet |
 | Scripting | the `Script.cs` host API, and a measurement of what the 19 shipped scripts need |
+| KML export | a flown path coloured by flight mode, and a mission, for Google Earth |
 | Geodesy | typed units, Web Mercator, slippy-map tile arithmetic |
 | Maps | GPU tile rendering, flight path, mission and fence overlays |
 | CLI | `mpr watch \| record \| fly \| params \| param \| mission \| survey \| log \| logs \| ports` |
@@ -76,6 +77,7 @@ mpr watch file:flight.tlog       # replay a recording
 mpr record udp:14550 flight.tlog
 mpr param save tcp:127.0.0.1:5760 backup.param
 mpr param diff backup.param proposed.param
+mpr kml flight.tlog flight.kml
 mpr-gui                          # the graphical front end
 ```
 
@@ -100,6 +102,7 @@ crates/
   mp-input             joystick and gamepad, mapped to RC channels
   mp-firmware          .apj files and the px4 bootloader protocol
   mp-script            the scripting host API and corpus analysis
+  mp-kml               missions and flight paths as KML
   mp-units             typed units and geodesy
   mp-fuzz-checks       the fuzz properties, so they compile on stable too
   mp-cli               `mpr`
