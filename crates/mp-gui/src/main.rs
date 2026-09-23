@@ -14,6 +14,7 @@ mod params;
 mod plan;
 mod platform;
 mod probe;
+mod settings;
 mod setup;
 mod telemetry;
 mod textfield;
@@ -67,10 +68,13 @@ impl Screen {
     ///
     /// Exists so a screenshot can be taken of any screen without driving the tab strip with
     /// synthetic clicks, which is the sort of test that breaks whenever the layout moves.
-    fn initial(requested: Option<&str>) -> Self {
+    fn initial(requested: Option<&str>, saved: Option<&str>) -> Self {
         let named = match requested {
             Some(name) => name.to_owned(),
-            None => std::env::var("MP_SCREEN").unwrap_or_default(),
+            None => match std::env::var("MP_SCREEN") {
+                Ok(name) => name,
+                Err(_) => saved.unwrap_or_default().to_owned(),
+            },
         };
         match named.as_str() {
             "plan" => Self::Plan,
@@ -129,6 +133,8 @@ struct MissionPlanner {
     file_status: Option<String>,
     /// The waypoint being dragged on the map, if one is.
     dragging_waypoint: Option<u16>,
+    /// What was loaded from the settings file, and what will be written back to it.
+    settings: settings::Settings,
     /// The mission file name to save to or load from.
     plan_name: textfield::TextField,
     /// Focus for that field.
@@ -241,6 +247,7 @@ impl MissionPlanner {
             adopt_vehicle_rally: false,
             file_status: None,
             dragging_waypoint: None,
+            settings: settings::Settings::load(),
             plan_name: {
                 let mut field = textfield::TextField::new("mission.waypoints");
                 field.set(DEFAULT_PLAN_FILE);
@@ -469,6 +476,25 @@ impl MissionPlanner {
         self.map.borrow_mut().set_rally(&positions);
     }
 
+    /// Remembers the current choices, so the next launch starts where this one left off.
+    ///
+    /// Called when something worth remembering changes rather than on a timer, and a failure is
+    /// reported on the status line rather than raised: losing a preference is not worth
+    /// interrupting anyone over.
+    fn remember(&mut self) {
+        self.settings.screen = Some(self.screen.label().to_owned());
+        let target = self.telemetry.view().target;
+        if !target.is_empty() {
+            self.settings.link = Some(target);
+        }
+        if let Err(err) = self.settings.save() {
+            self.file_status = Some(format!(
+                "could not save settings to {}: {err}",
+                settings::Settings::path().display()
+            ));
+        }
+    }
+
     /// The tab strip.
     fn tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let current = self.screen;
@@ -491,6 +517,10 @@ impl MissionPlanner {
                     .child(screen.label())
                     .on_click(cx.listener(move |this, _event, _window, cx| {
                         this.screen = screen;
+                        // Remembered here rather than at exit: gpui gives no reliable hook for a
+                        // window closing, and a ground station is as likely to be killed as
+                        // closed.
+                        this.remember();
                         cx.notify();
                     })),
             );
@@ -1136,14 +1166,25 @@ impl Render for MissionPlanner {
 /// A malformed value falls back to the default rather than failing to start: a ground station that
 /// refuses to open because an environment variable is wrong is worse than one that opens at the
 /// wrong size.
-fn window_size(requested: Option<&str>) -> (f32, f32) {
+fn window_size(requested: Option<&str>, saved: Option<(u32, u32)>) -> (f32, f32) {
     const DEFAULT: (f32, f32) = (1600.0, 1200.0);
 
     let value = match requested {
         Some(value) => value.to_owned(),
         None => match std::env::var("MP_WINDOW") {
             Ok(value) => value,
-            Err(_) => return DEFAULT,
+            // Whatever the window was last time. A flag beats the variable, the variable beats
+            // what was remembered, and what was remembered beats the default.
+            Err(_) => {
+                // Window sizes are a few thousand pixels; f32 represents every integer up to
+                // 16,777,216 exactly, so there is nothing here to lose.
+                return saved.map_or(DEFAULT, |(width, height)| {
+                    (
+                        u16::try_from(width).map_or(DEFAULT.0, f32::from),
+                        u16::try_from(height).map_or(DEFAULT.1, f32::from),
+                    )
+                });
+            }
         },
     };
     parse_window_size(&value).unwrap_or_else(|| {
@@ -1275,9 +1316,13 @@ fn main() {
     // A flag beats its environment variable: the variable is the standing preference and the flag
     // is this run. Passed down as values rather than written back into the environment, which
     // would mean mutating a process-global from one thread and is why this crate forbids unsafe.
-    let (width, height) = window_size(arguments.window.as_deref());
-    let screen = Screen::initial(arguments.screen.as_deref());
-    let target = arguments.target;
+    // What was remembered last time, under everything given explicitly. A settings file that is
+    // missing, unreadable or full of rubbish yields defaults rather than stopping startup.
+    let saved = settings::Settings::load();
+    let (width, height) = window_size(arguments.window.as_deref(), saved.window);
+    let screen = Screen::initial(arguments.screen.as_deref(), saved.screen.as_deref());
+    // A link given on the command line wins; otherwise offer the one last connected to.
+    let target = arguments.target.or_else(|| saved.link.clone());
     let read_mission = arguments.read_mission;
 
     platform::application().run(move |cx: &mut App| {
@@ -1412,11 +1457,20 @@ mod tests {
     #[test]
     fn a_flag_beats_its_environment_variable() {
         // The variable is a standing preference; the flag is this run.
-        assert_eq!(window_size(Some("1280x800")), (1280.0, 800.0));
-        assert_eq!(Screen::initial(Some("plan")), Screen::Plan);
-        assert_eq!(Screen::initial(Some("setup")), Screen::Setup);
+        assert_eq!(window_size(Some("1280x800"), None), (1280.0, 800.0));
+        assert_eq!(Screen::initial(Some("plan"), None), Screen::Plan);
+        assert_eq!(Screen::initial(Some("setup"), None), Screen::Setup);
         // A name that is not a screen opens on the one the application is for.
-        assert_eq!(Screen::initial(Some("nonsense")), Screen::Fly);
+        assert_eq!(Screen::initial(Some("nonsense"), None), Screen::Fly);
+
+        // And a flag beats what was remembered, which beats the default.
+        assert_eq!(
+            window_size(Some("1280x800"), Some((800, 600))),
+            (1280.0, 800.0)
+        );
+        assert_eq!(window_size(None, Some((800, 600))), (800.0, 600.0));
+        assert_eq!(Screen::initial(None, Some("setup")), Screen::Setup);
+        assert_eq!(Screen::initial(Some("plan"), Some("setup")), Screen::Plan);
     }
 
     #[test]
@@ -1448,7 +1502,10 @@ mod tests {
     #[test]
     fn an_existing_extension_is_left_alone() {
         let path = MissionPlanner::plan_path_named("survey.txt");
-        assert_eq!(path.file_name().and_then(|n| n.to_str()), Some("survey.txt"));
+        assert_eq!(
+            path.file_name().and_then(|n| n.to_str()),
+            Some("survey.txt")
+        );
     }
 
     #[test]

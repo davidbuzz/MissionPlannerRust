@@ -1008,7 +1008,7 @@ says what *done* means, because a list of nouns is not a plan.
 | 1 | Text field widget | gpui ships no input element, and three screens have already been shaped around its absence | D6 | typing works in a focused field; backspace does not split a codepoint; chords are not typed | done |
 | 2 | Parameter search | 1,408 parameters behind a prefix list; typing `WPNAV` is how people actually find one | D12 | a name fragment filters the list across every group | done |
 | 3 | Mission file names | save and load use one fixed path, so a second mission overwrites the first | D11 | a typed name round-trips a mission to and from disk | done |
-| 4 | Settings that persist | link URL, tile provider, window size and screen are retyped every launch | D17 | they survive a restart and a corrupt settings file does not stop startup | |
+| 4 | Settings that persist | link URL, tile provider, window size and screen are retyped every launch | D17 | they survive a restart and a corrupt settings file does not stop startup | done |
 | 5 | Vehicle selector | the link tracks every vehicle on the wire and the UI always shows the first | D10 | a second vehicle is selectable and the map and HUD follow the selection | |
 | 6 | ADS-B and other vehicles on the map | a ground station that cannot show nearby traffic is missing the thing that prevents a collision | D15 | `ADSB_VEHICLE` is drawn, aged out, and distinguishable from the flown aircraft | |
 | 7 | KML export of a mission and a flown path | the usual way to hand a flight to someone without a ground station | D11 | the file opens in Google Earth with the track and waypoints in the right places | |
