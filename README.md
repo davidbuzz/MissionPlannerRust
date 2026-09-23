@@ -43,7 +43,7 @@ Measured on this tree: **17 crates, 40,661 hand-written Rust LOC** (plus 91,634 
 | Porting ledger | `ledger/ledger.csv`, one row per C# file with its tier and state; `cargo xtask ledger check` fails on anything unaccounted for |
 
 **Not yet**: the log browser's data grid and the map beside its chart, a joystick latency
-histogram from a real device (none is attached to this machine), the `mp-link` split, i18n,
+histogram from a real device (none is attached to this machine), i18n,
 packaging. `PLAN.md` §13.2 is the queue, and says what *done* means for
 each.
 
@@ -130,9 +130,12 @@ crates/
   mp-mavlink-dialects  generated message types (do not edit)
   mp-transport         serial, TCP, UDP, replay, test doubles
   mp-vehicle           decoded state, the snapshot bus, EKF and vibration health
-  mp-link              the live link: I/O thread, routing, commands, .param files
+  mp-link              the live link: I/O thread, routing, commands, mission transfer, recording
+  mp-params            parameter values and metadata, the downloaded table, .param files
+  mp-calibration       accelerometer, compass, radio and motor-test calibration
+  mp-ftp               files off the vehicle: dataflash log download (MAVFTP not yet)
   mp-mission           missions, fences, rally points, survey grids
-  mp-log               .tlog reading and writing, dataflash parsing
+  mp-log               .tlog reading, dataflash parsing
   mp-tiles             map tile fetching, decoding and caching
   mp-input             joystick and gamepad, mapped to RC channels
   mp-firmware          .apj files and the px4 bootloader protocol
