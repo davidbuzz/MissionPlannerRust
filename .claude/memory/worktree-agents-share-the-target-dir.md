@@ -1,13 +1,14 @@
 ---
 name: worktree-agents-share-the-target-dir
-description: Agents in .claude/worktrees build into the main tree's target/, so their artifacts overwrite each other and the main tree's; touch a crate's lib.rs before an integration build
+description: Some worktree agents' builds land in the main tree's target/ and overwrite its artifacts (others build in their own target); touch a crate's lib.rs before an integration build
 metadata:
   type: project
 ---
 
-Worktree agents (`isolation: "worktree"`, checkouts under `.claude/worktrees/agent-*`) build
-into `/home/buzz/MissionPlannerRust/target`, the main tree's target directory, and cargo names a
-worktree's `mp-vehicle` (or any workspace crate) identically to the main tree's. Observed
+Worktree agents (`isolation: "worktree"`, checkouts under `.claude/worktrees/agent-*`) sometimes
+build into `/home/buzz/MissionPlannerRust/target`, the main tree's target directory - it depends
+on how the agent invokes cargo; some worktrees carry a 5-8 GB `target/` of their own - and cargo
+names a worktree's `mp-vehicle` (or any workspace crate) identically to the main tree's. Observed
 2026-09-24: the main tree's `mp-mission` was reported `Fresh` while its rlib lacked modules that
 were in its source, because a worktree agent's build had replaced the artifact; the CurrentState
 agent saw the reverse.
