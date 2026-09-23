@@ -1,0 +1,33 @@
+# Set Loiter Rad writes LOITER_RAD or WP_LOITER_RAD - and on a copter, which has neither, nothing.
+#
+# modifyandSetLoiterRad_Click calls setParam(new[] {"LOITER_RAD", "WP_LOITER_RAD"}, value), which
+# writes the first name the vehicle has and returns false, silently, when it has none. ArduCopter
+# has neither, so the product path on this SITL is the refusal - asserted only after the parameters
+# are downloaded, so the answer comes from the vehicle's own list rather than an empty one.
+# `GCSViews/FlightData.cs:4412-4424, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1609-1650`
+#
+# Needs SITL (a copter): tools/gui-test.sh tests/gui/fly-loiterrad.gui -- tcp:127.0.0.1:5760
+
+screen params
+window 1600x1200
+settle 6
+
+click param-download
+settle 15
+expect params.held > 500
+
+click tab-fly
+settle 1
+
+# The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as
+# tabControlactions.SelectedIndex = 0 has it. `GCSViews/FlightData.Designer.cs:595-611`
+click fly-tab-actions
+expect fly.tab tabActions
+click fly-loiterrad-value
+key ctrl+u
+type 80
+# Keystrokes reach the application through the input method (ibus, over XIM) and come back
+# after a round trip; a click does not. Settle, so the click cannot overtake the typing.
+settle 1
+click fly-setloiterrad
+expect fly.sent nothing: neither LOITER_RAD nor WP_LOITER_RAD is on this vehicle

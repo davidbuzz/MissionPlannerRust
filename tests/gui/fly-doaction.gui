@@ -1,0 +1,53 @@
+# Do Action sends the command CMB_action names - after "Are you sure", except for five entries.
+#
+# CMB_action lists FlightData.actions. Battery_Reset takes the generic path: the question, then
+# doCommand(BATTERY_RESET, 0xff, 100, 0, ...) - which SITL accepts. Answering No sends nothing.
+# System_Time is one of the five handled before the question and goes straight away.
+# `GCSViews/FlightData.cs:183-206, 1680-1878`
+#
+# Needs SITL: tools/gui-test.sh tests/gui/fly-doaction.gui -- tcp:127.0.0.1:5760
+
+screen fly
+window 1600x1200
+settle 8
+
+# The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as
+# tabControlactions.SelectedIndex = 0 has it. `GCSViews/FlightData.Designer.cs:595-611`
+click fly-tab-actions
+expect fly.tab tabActions
+
+expect fly.action Loiter_Unlim
+click fly-action-list
+click fly-action-Battery_Reset
+expect fly.action Battery_Reset
+
+# No: nothing goes.
+click fly-doaction
+expect fly.prompt ~ Are you sure you want to do Battery_Reset
+click fly-prompt-cancel
+expect fly.prompt none
+expect fly.sent nothing yet
+
+# Escape is the message box's No, its CancelButton: the question has no box to type in, and
+# still hears the key. `ExtLibs/Controls/CustomMessageBox.cs:317`
+click fly-doaction
+expect fly.prompt ~ Are you sure you want to do Battery_Reset
+key Escape
+settle 1
+expect fly.prompt none
+expect fly.sent nothing yet
+
+# Yes: the command, with the C#'s parameters, and the vehicle's answer.
+click fly-doaction
+click fly-prompt-ok
+settle 2
+expect fly.prompt none
+expect fly.sent COMMAND_LONG MAV_CMD_BATTERY_RESET 255,100,0,0,0,0,0
+expect fly.ack ~ MAV_CMD_BATTERY_RESET: accepted
+
+# System_Time: no question.
+click fly-action-list
+click fly-action-System_Time
+click fly-doaction
+expect fly.prompt none
+expect fly.sent ~ SYSTEM_TIME time_unix_usec=

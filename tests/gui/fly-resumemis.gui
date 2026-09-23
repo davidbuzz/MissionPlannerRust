@@ -1,0 +1,55 @@
+# Resume Mission reprograms the mission from a waypoint, then (copter) Guided, arm, take off, Auto.
+#
+# BUT_resumemis_Click: a warning, then "Resume mission at waypoint#" (lastautowp, or 1), then the
+# vehicle's mission is read, everything before the waypoint except home, takeoffs and the "do"
+# commands is dropped, the rest is written back and read into the planner, waypoint 1 is made
+# current, and on a copter the vehicle is put in Guided, armed and told to take off to the
+# waypoint's height before Auto. `GCSViews/FlightData.cs:1481-1627`
+#
+# The five-item mission below resumed at 4 keeps home, the takeoff and the DO_CHANGE_SPEED and
+# drops waypoint 2: four items. The assertions stop at "armed". What follows depends on how
+# ArduCopter answers the TAKEOFF the C# re-sends every second until the vehicle is within 2 m of
+# the waypoint's height: ArduCopter's `Mode::do_user_takeoff` refuses a takeoff once the vehicle
+# is off the ground, and the C# - and this port - stop with "Command Failed" on a refusal. Whether
+# that happens here depends on how far the first second's climb gets, so the test does not assert
+# it; it lands the vehicle and waits for it to disarm instead.
+#
+# THIS FLIES SITL: it arms and climbs. Needs a copter SITL:
+#   tools/gui-test.sh tests/gui/fly-resumemis.gui -- tcp:127.0.0.1:5760
+# The setup writes the mission through SITL's second port, 5762.
+
+setup printf 'QGC WPL 110\n0\t1\t0\t16\t0\t0\t0\t0\t-35.363262\t149.165237\t584.09\t1\n1\t0\t3\t22\t0\t0\t0\t0\t0\t0\t10\t1\n2\t0\t3\t16\t0\t0\t0\t0\t-35.3629\t149.165237\t10\t1\n3\t0\t3\t178\t0\t5\t0\t0\t0\t0\t0\t1\n4\t0\t3\t16\t0\t0\t0\t0\t-35.3625\t149.1657\t10\t1\n' > $WORK/mission.waypoints
+setup cargo run -q -p mp-cli --bin mpr -- mission tcp:127.0.0.1:5762 $WORK/mission.waypoints
+
+screen fly
+window 1600x1200
+settle 8
+
+# The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as
+# tabControlactions.SelectedIndex = 0 has it. `GCSViews/FlightData.Designer.cs:595-611`
+click fly-tab-actions
+expect fly.tab tabActions
+
+expect vehicle.armed false
+expect fly.resume idle
+
+click fly-resumemis
+expect fly.prompt ~ Warning this will reprogram your mission, arm and issue a takeoff command
+click fly-prompt-ok
+# lastautowp is -1 until the vehicle has flown in Auto, so the box offers 1.
+expect fly.prompt ~ Resume mission at waypoint
+key ctrl+u
+type 4
+# Keystrokes reach the application through the input method (ibus, over XIM) and come back
+# after a round trip; a click does not. Settle, so the click cannot overtake the typing.
+settle 1
+click fly-prompt-ok
+settle 12
+
+expect mission.items 4
+expect vehicle.armed true
+
+# Down again.
+click land
+settle 30
+expect vehicle.armed false

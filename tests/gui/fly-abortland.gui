@@ -1,0 +1,21 @@
+# Abort Landing sends DO_GO_AROUND with every parameter zero, and the vehicle answers it.
+#
+# BUT_abortland_Click is doAbortLand: doCommand(DO_GO_AROUND, 0, 0, 0, 0, 0, 0, 0). ArduCopter does
+# not support it and says so; the answer in the message log is the proof it arrived.
+# `GCSViews/FlightData.cs:1019-1032, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2660-2663`
+#
+# Needs SITL: tools/gui-test.sh tests/gui/fly-abortland.gui -- tcp:127.0.0.1:5760
+
+screen fly
+window 1600x1200
+settle 8
+
+# The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as
+# tabControlactions.SelectedIndex = 0 has it. `GCSViews/FlightData.Designer.cs:595-611`
+click fly-tab-actions
+expect fly.tab tabActions
+
+click fly-abortland
+settle 2
+expect fly.sent COMMAND_LONG MAV_CMD_DO_GO_AROUND 0,0,0,0,0,0,0
+expect fly.ack ~ MAV_CMD_DO_GO_AROUND:

@@ -45,7 +45,7 @@ they need SITL, a window, or the network), **31 GUI scripts** under `tests/gui/`
 | CLI | `mpr watch \| record \| fly \| params \| param \| mission \| survey \| log \| logs \| kml \| firmware info\|detect \| ports` |
 | GUI | fly, plan, setup, params and log screens on gpui |
 | Porting ledger | `ledger/ledger.csv`, one row per C# file with its tier and state; `cargo xtask ledger check` fails on anything unaccounted for |
-| Flight screen coverage | every one of `FlightData`'s 136 wired actions listed with what stands in for it here — 27 done, 87 missing — in `docs/coverage/flightdata.md`, kept current by a test |
+| Flight screen coverage | every one of `FlightData`'s 136 wired actions listed with what stands in for it here — 40 done, 75 missing — in `docs/coverage/flightdata.md`, kept current by a test; the lower-left is Mission Planner's own fourteen-page tab control, and its Actions page (Set WP, Restart/Resume Mission, Change Alt/Speed/Loiter Radius, Fly To Coords, Abort Landing, Do Action) sends what the C# sends, proved against SITL by a script each |
 | Planner coverage and menu | every one of `FlightPlanner`'s 121 wired actions listed the same way — 40 done, 69 missing — in `docs/coverage/flightplanner.md`; the map's right-click menu is Mission Planner's, in its order, with 22 entries working and proved by a GUI script each |
 
 **Not yet**: the log browser's chart cursor, a joystick latency histogram from a real device

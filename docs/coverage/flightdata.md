@@ -4,15 +4,15 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 
 | total | done | elsewhere | missing | plumbing | dropped |
 |---:|---:|---:|---:|---:|---:|
-| 136 | 27 | 2 | 87 | 19 | 1 |
+| 136 | 40 | 2 | 75 | 18 | 1 |
 
 | control | event | handler | text | ours |
 |---|---|---|---|---|
 | `addPoiToolStripMenuItem` | Click | `addPoiToolStripMenuItem_Click` | Add Poi | **missing** |
 | `ALT_btn` | Click | `ALT_btn_Click` | ALT (transponder) | **missing** |
-| `BUT_abortland` | Click | `BUT_abortland_Click` | Abort Landing | **missing** |
+| `BUT_abortland` | Click | `BUT_abortland_Click` | Abort Landing | done: `fly-abortland` |
 | `BUT_abort_script` | Click | `BUT_abort_script_Click` | Abort Running Script | **missing** |
-| `BUTactiondo` | Click | `BUTactiondo_Click` | Do Action | **missing** |
+| `BUTactiondo` | Click | `BUTactiondo_Click` | Do Action | done: `fly-doaction` |
 | `BUT_ARM` | Click | `BUT_ARM_Click` | Arm/ Disarm | done: `arm` |
 | `but_bintolog` | Click | `but_bintolog_Click` | Convert .Bin to .Log | **missing** |
 | `BUT_clear_track` | Click | `BUT_clear_track_Click` | Clear Track | **missing** |
@@ -22,7 +22,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `BUT_edit_selected` | Click | `BUT_edit_selected_Click` | Edit Selected Script | **missing** |
 | `BUT_georefimage` | Click | `BUT_georefimage_Click` | Geo Reference Images | **missing** |
 | `BUT_GimbalVideo` | Click | `gimbalVideoPopOutToolStripMenuItem_Click` | Video Control | **missing** |
-| `BUT_Homealt` | Click | `BUT_Homealt_Click` | Set Home Alt | **missing** |
+| `BUT_Homealt` | Click | `BUT_Homealt_Click` | Set Home Alt | done: `fly-homealt` |
 | `BUT_joystick` | Click | `BUT_joystick_Click` | Joystick | done: `joystick-refresh` |
 | `BUT_loadtelem` | Click | `BUT_loadtelem_Click` | Load Log | elsewhere: a file: link URL replays a tlog |
 | `BUT_log2kml` | Click | `BUT_log2kml_Click` | Tlog > Kml or Graph | elsewhere: mpr kml |
@@ -36,13 +36,13 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `BUT_quickrtl` | Click | `BUT_quickrtl_Click` | RTL | done: `mode` |
 | `BUT_RAWSensor` | Click | `BUT_RAWSensor_Click` | Raw Sensor View | **missing** |
 | `BUT_resetGimbalPos` | Click | `BUT_resetGimbalPos_Click` | Reset Position | **missing** |
-| `BUTrestartmission` | Click | `BUTrestartmission_Click` | Restart Mission | **missing** |
-| `BUT_resumemis` | Click | `BUT_resumemis_Click` | Resume Mission | **missing** |
+| `BUTrestartmission` | Click | `BUTrestartmission_Click` | Restart Mission | done: `fly-restartmission` |
+| `BUT_resumemis` | Click | `BUT_resumemis_Click` | Resume Mission | done: `fly-resumemis` |
 | `BUT_run_script` | Click | `BUT_run_script_Click` | Run Script | **missing** |
 | `BUT_select_script` | Click | `BUT_select_script_Click` | Select Script | **missing** |
 | `BUT_SendMSG` | Click | `BUT_SendMSG_Click` | Message | **missing** |
 | `BUT_setmode` | Click | `BUT_setmode_Click` | Set Mode | done: `mode` |
-| `BUT_setwp` | Click | `BUT_setwp_Click` | Set WP | **missing** |
+| `BUT_setwp` | Click | `BUT_setwp_Click` | Set WP | done: `fly-setwp` |
 | `BUT_speed10` | Click | `BUT_speed1_Click` | 10x | **missing** |
 | `BUT_speed1_10` | Click | `BUT_speed1_Click` | 0.1 | **missing** |
 | `BUT_speed1_2` | Click | `BUT_speed1_Click` | 0.5 | **missing** |
@@ -53,13 +53,13 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `CB_tuning` | CheckedChanged | `CB_tuning_CheckedChanged` | Tuning | done: `tuning-show` |
 | `CHK_autopan` | CheckedChanged | `CHK_autopan_CheckedChanged` | Auto Pan | done: `map-follow` |
 | `CMB_modes` | Click | `CMB_modes_Click` | the mode list | done: `mode` |
-| `CMB_setwp` | Click | `CMB_setwp_Click` | the waypoint list | **missing** |
+| `CMB_setwp` | Click | `CMB_setwp_Click` | the waypoint list | done: `fly-setwp-list` |
 | `customizeToolStripMenuItem` | Click | `customizeToolStripMenuItem_Click` | Customize | **missing** |
 | `deleteToolStripMenuItem` | Click | `deleteToolStripMenuItem_Click` | Delete (POI) | **missing** |
 | `FlightID_tb` | TextChanged | `FlightID_tb_TextChanged` | FlightID | **missing** |
 | `flightPlannerToolStripMenuItem` | Click | `flightPlannerToolStripMenuItem_Click` | Flight Planner | done: `tab-plan` |
-| `flyToCoordsToolStripMenuItem` | Click | `flyToCoordsToolStripMenuItem_Click` | Fly To Coords | **missing** |
-| `flyToHereAltToolStripMenuItem` | Click | `flyToHereAltToolStripMenuItem_Click` | Fly To Here Alt | **missing** |
+| `flyToCoordsToolStripMenuItem` | Click | `flyToCoordsToolStripMenuItem_Click` | Fly To Coords | done: `fly-flytocoords` |
+| `flyToHereAltToolStripMenuItem` | Click | `flyToHereAltToolStripMenuItem_Click` | Fly To Here Alt | done: `fly-flytohere-alt` |
 | `gimbalVideoFullSizedToolStripMenuItem` | Click | `gimbalVideoFullSizedToolStripMenuItem_Click` | Full Sized | **missing** |
 | `gimbalVideoMiniToolStripMenuItem` | Click | `gimbalVideoMiniToolStripMenuItem_Click` | Mini | **missing** |
 | `gimbalVideoPopOutToolStripMenuItem` | Click | `gimbalVideoPopOutToolStripMenuItem_Click` | Pop Out | **missing** |
@@ -84,9 +84,9 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `jumpToTagToolStripMenuItem` | Click | `jumpToTagToolStripMenuItem_Click` | Jump To Tag | **missing** |
 | `loadFileToolStripMenuItem` | Click | `loadFileToolStripMenuItem_Click` | Load File | **missing** |
 | `Messagetabtimer` | Tick | `Messagetabtimer_Tick` | the messages tab timer | plumbing |
-| `modifyandSetAlt` | Click | `modifyandSetAlt_Click` | Change Alt | **missing** |
-| `modifyandSetLoiterRad` | Click | `modifyandSetLoiterRad_Click` | Change Loiter Radius | **missing** |
-| `modifyandSetSpeed` | Click | `modifyandSetSpeed_Click` | Change Speed | **missing** |
+| `modifyandSetAlt` | Click | `modifyandSetAlt_Click` | Change Alt | done: `fly-changealt` |
+| `modifyandSetLoiterRad` | Click | `modifyandSetLoiterRad_Click` | Set Loiter Rad | done: `fly-setloiterrad` |
+| `modifyandSetSpeed` | Click | `modifyandSetSpeed_Click` | Change Speed | done: `fly-changespeed` |
 | `modifyandSetSpeed` | ParentChanged | `modifyandSetSpeed_ParentChanged` | Change Speed | plumbing |
 | `multiLineToolStripMenuItem` | Click | `multiLineToolStripMenuItem_Click` | MultiLine | **missing** |
 | `myButton1` | Click | `BUT_quickmanual_Click` | Loiter | done: `mode` |
@@ -122,7 +122,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `stopRecordToolStripMenuItem` | Click | `stopRecordToolStripMenuItem_Click` | Stop Record | **missing** |
 | `swapWithMapToolStripMenuItem` | Click | `swapWithMapToolStripMenuItem_Click` | Swap With Map | **missing** |
 | `tabControlactions` | DrawItem | `tabControl1_DrawItem` | the actions tabs | plumbing |
-| `tabControlactions` | SelectedIndexChanged | `tabControl1_SelectedIndexChanged` | the actions tabs | plumbing |
+| `tabControlactions` | SelectedIndexChanged | `tabControl1_SelectedIndexChanged` | the actions tabs | done: `fly-tabs` |
 | `tabGauges` | Resize | `tabPage1_Resize` | Gauges | plumbing |
 | `tabQuick` | Resize | `tabQuick_Resize` | Quick | plumbing |
 | `tabStatus` | Paint | `tabStatus_Paint` | Status | plumbing |

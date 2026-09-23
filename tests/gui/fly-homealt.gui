@@ -1,0 +1,24 @@
+# Set Home Alt switches the altitudes shown between above home and above sea level.
+#
+# BUT_Homealt_Click sets cs.altoffsethome to minus the home altitude when it is zero and back to
+# zero when it is not; cs.alt, which the HUD and the vehicle panel show, is `_alt - altoffsethome`.
+# It sends nothing. `GCSViews/FlightData.cs:1236-1247, ExtLibs/ArduPilot/CurrentState.cs:325-328`
+#
+# Needs SITL, for a home altitude: tools/gui-test.sh tests/gui/fly-homealt.gui -- tcp:127.0.0.1:5760
+
+screen fly
+window 1600x1200
+settle 8
+
+# The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as
+# tabControlactions.SelectedIndex = 0 has it. `GCSViews/FlightData.Designer.cs:595-611`
+click fly-tab-actions
+expect fly.tab tabActions
+
+expect fly.home_alt off
+click fly-homealt
+expect fly.home_alt on
+expect status ~ above sea level
+click fly-homealt
+expect fly.home_alt off
+expect status ~ above home

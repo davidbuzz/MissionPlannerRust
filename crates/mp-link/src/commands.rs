@@ -5,9 +5,10 @@
 //! magic number has exactly one definition with a comment saying what it is.
 
 use mp_mavlink_dialects::all::{
-    CommandLong, MavMessage, MissionAck, MissionCount, MissionItemInt, MissionRequestInt,
-    MissionRequestList, ParamRequestList, ParamRequestRead, ParamSet, RcChannelsOverride, SetMode,
-    SetPositionTargetGlobalInt,
+    CommandInt, CommandLong, MavMessage, MissionAck, MissionCount, MissionItem as FloatItem,
+    MissionItemInt, MissionRequestInt, MissionRequestList, MissionSetCurrent, ParamRequestList,
+    ParamRequestRead, ParamSet, RcChannelsOverride, SetGpsGlobalOrigin, SetMode,
+    SetPositionTargetGlobalInt, SystemTime,
 };
 use mp_mission::MissionItem;
 use mp_vehicle::VehicleId;
@@ -398,6 +399,330 @@ pub fn rc_override(target: VehicleId, channels: [u16; 18]) -> MavMessage {
     })
 }
 
+// The flight screen's Actions tab and its map menu. Each builder below is one message a handler
+// in `GCSViews/FlightData.cs` sends, with the values the C# puts in it; the handler is cited on
+// each. The C# names the commands without the `MAV_CMD_` (and `NAV_`) prefix, so its
+// `MAV_CMD.DO_CHANGE_SPEED` is `MAV_CMD_DO_CHANGE_SPEED` here.
+
+/// `MAV_CMD_NAV_WAYPOINT`.
+pub const CMD_NAV_WAYPOINT: u16 = 16;
+/// `MAV_CMD_NAV_LOITER_UNLIM`; the C#'s `MAV_CMD.LOITER_UNLIM`.
+pub const CMD_NAV_LOITER_UNLIM: u16 = 17;
+/// `MAV_CMD_NAV_RETURN_TO_LAUNCH`; the C#'s `MAV_CMD.RETURN_TO_LAUNCH`.
+pub const CMD_NAV_RETURN_TO_LAUNCH: u16 = 20;
+/// `MAV_CMD_DO_CHANGE_SPEED`.
+pub const CMD_DO_CHANGE_SPEED: u16 = 178;
+/// `MAV_CMD_DO_SET_HOME`.
+pub const CMD_DO_SET_HOME: u16 = 179;
+/// `MAV_CMD_DO_FLIGHTTERMINATION`.
+pub const CMD_DO_FLIGHTTERMINATION: u16 = 185;
+/// `MAV_CMD_DO_GO_AROUND`.
+pub const CMD_DO_GO_AROUND: u16 = 191;
+/// `MAV_CMD_DO_DIGICAM_CONTROL`.
+pub const CMD_DO_DIGICAM_CONTROL: u16 = 203;
+/// `MAV_CMD_DO_PARACHUTE`.
+pub const CMD_DO_PARACHUTE: u16 = 208;
+/// `MAV_CMD_DO_ENGINE_CONTROL`.
+pub const CMD_DO_ENGINE_CONTROL: u16 = 223;
+/// `MAV_CMD_PREFLIGHT_CALIBRATION`.
+pub const CMD_PREFLIGHT_CALIBRATION: u16 = 241;
+/// `MAV_CMD_MISSION_START`.
+pub const CMD_MISSION_START: u16 = 300;
+/// `MAV_CMD_STORAGE_FORMAT`.
+pub const CMD_STORAGE_FORMAT: u16 = 526;
+/// `MAV_CMD_CONTROL_HIGH_LATENCY`.
+pub const CMD_CONTROL_HIGH_LATENCY: u16 = 2600;
+/// `MAV_CMD_BATTERY_RESET`.
+pub const CMD_BATTERY_RESET: u16 = 42_651;
+/// `MAV_CMD_SCRIPTING`.
+pub const CMD_SCRIPTING: u16 = 42_701;
+/// `MAV_FRAME_GLOBAL`: altitude above mean sea level. The frame `doCommandInt` defaults to.
+pub const FRAME_GLOBAL: u8 = 0;
+/// `MAV_FRAME_GLOBAL_RELATIVE_ALT`: altitude above home.
+pub const FRAME_GLOBAL_RELATIVE_ALT: u8 = 3;
+/// `MAV_FRAME_GLOBAL_TERRAIN_ALT`: altitude above the terrain.
+pub const FRAME_GLOBAL_TERRAIN_ALT: u8 = 10;
+/// `MAV_MODE_FLAG_SAFETY_ARMED`, which the C# ORs into `SET_MODE` to toggle the safety switch.
+pub const MODE_FLAG_SAFETY_ARMED: u8 = 128;
+/// `MISSION_ITEM.current` = 2: "this is a guided-mode target", not a mission item.
+pub const CURRENT_GUIDED: u8 = 2;
+/// `MISSION_ITEM.current` = 3: "change the altitude of the guided target".
+pub const CURRENT_CHANGE_ALT: u8 = 3;
+
+/// A `COMMAND_LONG` for any command, with its seven parameters as given.
+///
+/// The public form of the builder every named command here uses, for the flight screen's
+/// `CMB_action` list, which sends whichever `MAV_CMD` its entry names.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2695-2710` (`doCommandAsync`)
+#[must_use]
+pub fn command_long(target: VehicleId, command_id: u16, params: [f32; 7]) -> MavMessage {
+    command(target, command_id, params)
+}
+
+/// A `COMMAND_INT`, as `doCommandIntAsync` fills it: `current` and `autocontinue` zero, the frame
+/// as given (the C# defaults it to `GLOBAL`).
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2847-2881`
+#[must_use]
+pub fn command_int(
+    target: VehicleId,
+    command_id: u16,
+    frame: u8,
+    params: [f32; 4],
+    x: i32,
+    y: i32,
+    z: f32,
+) -> MavMessage {
+    MavMessage::CommandInt(CommandInt {
+        param1: params[0],
+        param2: params[1],
+        param3: params[2],
+        param4: params[3],
+        x,
+        y,
+        z,
+        command: command_id,
+        target_system: target.sysid,
+        target_component: target.compid,
+        frame,
+        current: 0,
+        autocontinue: 0,
+    })
+}
+
+/// Makes a mission item the one the vehicle flies to next: `setWPCurrent`, behind Set WP and
+/// Restart Mission.
+///
+/// The C# re-sends this every 2000 ms, five times, until a `MISSION_CURRENT` arrives from the
+/// vehicle; this builds the message, and whoever sends it owns the retries.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2452-2501`
+#[must_use]
+pub fn mission_set_current(target: VehicleId, seq: u16) -> MavMessage {
+    MavMessage::MissionSetCurrent(MissionSetCurrent {
+        seq,
+        target_system: target.sysid,
+        target_component: target.compid,
+    })
+}
+
+/// A float `MISSION_ITEM` as `setWPAsync` builds one when `use_int` is false: `x` is the
+/// latitude and `y` the longitude, each cast to `f32`.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3996-4043`
+fn float_mission_item(
+    target: VehicleId,
+    frame: u8,
+    current: u8,
+    (latitude, longitude, altitude): (f64, f64, f32),
+) -> MavMessage {
+    #[allow(clippy::cast_possible_truncation)] // the C# casts to float; so does the wire field
+    let (x, y) = (latitude as f32, longitude as f32);
+    MavMessage::MissionItem(FloatItem {
+        param1: 0.0,
+        param2: 0.0,
+        param3: 0.0,
+        param4: 0.0,
+        x,
+        y,
+        z: altitude,
+        seq: 0,
+        command: CMD_NAV_WAYPOINT,
+        target_system: target.sysid,
+        target_component: target.compid,
+        frame,
+        current,
+        autocontinue: 1,
+        mission_type: 0,
+    })
+}
+
+/// Changes the height of the guided target: Change Alt.
+///
+/// `setNewWPAlt` sends a `MISSION_ITEM` with `current` = 3, sequence 0, frame
+/// `GLOBAL_RELATIVE_ALT`, and a location whose only non-zero field is the altitude. The C# waits
+/// 450 ms for a `MISSION_ACK` and re-sends up to ten times.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4470-4481, 3975-4043`
+#[must_use]
+pub fn change_alt(target: VehicleId, altitude_metres: f32) -> MavMessage {
+    float_mission_item(
+        target,
+        FRAME_GLOBAL_RELATIVE_ALT,
+        CURRENT_CHANGE_ALT,
+        (0.0, 0.0, altitude_metres),
+    )
+}
+
+/// A guided-mode target as `setGuidedModeWP` sends it to ArduPlane: a `MISSION_ITEM` with
+/// `current` = 2 in the frame the operator chose.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4441-4448`
+#[must_use]
+pub fn guided_mission_item(
+    target: VehicleId,
+    frame: u8,
+    latitude: f64,
+    longitude: f64,
+    altitude: f32,
+) -> MavMessage {
+    float_mission_item(
+        target,
+        frame,
+        CURRENT_GUIDED,
+        (latitude, longitude, altitude),
+    )
+}
+
+/// A guided-mode target as `setGuidedModeWP` sends it to everything but ArduPlane:
+/// `setPositionTargetGlobalInt` with only the position enabled.
+///
+/// The type mask is built the C#'s way: start from every bit set, clear `FORCE`, then clear the
+/// position bits - or only the altitude bit when there is no latitude and longitude. With a
+/// position that is `0xFDF8`. The frame is whichever the operator chose, not the `_INT` variant;
+/// ArduPilot treats the two alike for this message.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4500-4551, 4450-4454`
+#[must_use]
+pub fn guided_position_target(
+    target: VehicleId,
+    frame: u8,
+    latitude: f64,
+    longitude: f64,
+    altitude: f64,
+) -> MavMessage {
+    const POS_IGNORE: u16 = 0b111;
+    const ALT_IGNORE: u16 = 0b100;
+    const FORCE: u16 = 1 << 9;
+    let mut type_mask = u16::MAX - FORCE;
+    if latitude != 0.0 && longitude != 0.0 {
+        type_mask -= POS_IGNORE;
+    }
+    if latitude == 0.0 && longitude == 0.0 {
+        type_mask -= ALT_IGNORE;
+    }
+    // `(int)(lat * 1e7)`: truncation toward zero, which `as` also does.
+    #[allow(clippy::cast_possible_truncation)]
+    let (lat_int, lon_int, alt) = (
+        (latitude * 1e7) as i32,
+        (longitude * 1e7) as i32,
+        altitude as f32,
+    );
+    MavMessage::SetPositionTargetGlobalInt(SetPositionTargetGlobalInt {
+        time_boot_ms: 0,
+        lat_int,
+        lon_int,
+        alt,
+        vx: 0.0,
+        vy: 0.0,
+        vz: 0.0,
+        afx: 0.0,
+        afy: 0.0,
+        afz: 0.0,
+        yaw: 0.0,
+        yaw_rate: 0.0,
+        type_mask,
+        target_system: target.sysid,
+        target_component: target.compid,
+        coordinate_frame: frame,
+    })
+}
+
+/// Changes the speed: Change Speed.
+///
+/// `MAV_CMD_DO_CHANGE_SPEED` with param1 0 (speed type) and the number in the box as param2.
+/// The C# does not divide it by `CurrentState.multiplierspeed` - it sends whatever the box holds.
+/// `// C#: GCSViews/FlightData.cs:4426-4438`
+#[must_use]
+pub fn change_speed(target: VehicleId, speed: f32) -> MavMessage {
+    command(
+        target,
+        CMD_DO_CHANGE_SPEED,
+        [0.0, speed, 0.0, 0.0, 0.0, 0.0, 0.0],
+    )
+}
+
+/// Abandons a landing: Abort Landing, which is `doAbortLand`, `MAV_CMD_DO_GO_AROUND` with every
+/// parameter zero.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2660-2663`
+#[must_use]
+pub fn go_around(target: VehicleId) -> MavMessage {
+    command(target, CMD_DO_GO_AROUND, [0.0; 7])
+}
+
+/// Moves the home position: Set Home Here, `MAV_CMD_DO_SET_HOME` as a `COMMAND_INT` with the
+/// point in `x`/`y` at 1e7 and the terrain altitude in `z`.
+/// `// C#: GCSViews/FlightData.cs:4871-4874`
+#[must_use]
+pub fn set_home(target: VehicleId, latitude: f64, longitude: f64, altitude: f64) -> MavMessage {
+    #[allow(clippy::cast_possible_truncation)] // `(int)(lat * 1e7)` and `(float)alt` in the C#
+    let (x, y, z) = (
+        (latitude * 1e7) as i32,
+        (longitude * 1e7) as i32,
+        altitude as f32,
+    );
+    command_int(target, CMD_DO_SET_HOME, FRAME_GLOBAL, [0.0; 4], x, y, z)
+}
+
+/// Moves the estimator's origin: Set EKF Origin Here, `SET_GPS_GLOBAL_ORIGIN`.
+///
+/// The altitude is `(int) alt.alt * 1000`: the cast binds first, so the height is truncated to a
+/// whole metre before it is made millimetres. `time_usec` is left at zero, as the C# leaves it.
+/// `// C#: GCSViews/FlightData.cs:4802-4810`
+#[must_use]
+pub fn set_gps_global_origin(
+    target_system: u8,
+    latitude: f64,
+    longitude: f64,
+    altitude: f64,
+) -> MavMessage {
+    #[allow(clippy::cast_possible_truncation)]
+    let (lat, lon, alt) = (
+        (latitude * 1e7) as i32,
+        (longitude * 1e7) as i32,
+        (altitude as i32).saturating_mul(1000),
+    );
+    MavMessage::SetGpsGlobalOrigin(SetGpsGlobalOrigin {
+        latitude: lat,
+        longitude: lon,
+        altitude: alt,
+        target_system,
+        time_usec: 0,
+    })
+}
+
+/// `MAV_CMD_DO_SET_MODE`, the "new" half of the C#'s `setMode`: param1 the base mode, param2 the
+/// custom mode, sent without waiting for an answer.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4631-4641`
+#[must_use]
+pub fn do_set_mode(target: VehicleId, base_mode: u8, custom_mode: u32) -> MavMessage {
+    #[allow(clippy::cast_precision_loss)] // mode numbers are small; the C# passes them as float
+    let custom = custom_mode as f32;
+    command(
+        target,
+        CMD_DO_SET_MODE,
+        [f32::from(base_mode), custom, 0.0, 0.0, 0.0, 0.0, 0.0],
+    )
+}
+
+/// `SET_MODE` with a base mode of the caller's choosing - the "old" half of `setMode`, which the
+/// C# sends twice. [`set_mode`] is this with `CUSTOM_MODE_ENABLED`; Toggle Safety Switch sends it
+/// with `SAFETY_ARMED` instead.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4631-4641, GCSViews/FlightData.cs:1827`
+#[must_use]
+pub fn set_mode_with_base(target_system: u8, base_mode: u8, custom_mode: u32) -> MavMessage {
+    MavMessage::SetMode(SetMode {
+        custom_mode,
+        target_system,
+        base_mode,
+    })
+}
+
+/// The ground station's clock: Do Action's `System_Time`, a `SYSTEM_TIME` with `time_boot_ms`
+/// zero.
+/// `// C#: GCSViews/FlightData.cs:1755-1772`
+#[must_use]
+pub fn system_time(time_unix_usec: u64) -> MavMessage {
+    MavMessage::SystemTime(SystemTime {
+        time_unix_usec,
+        time_boot_ms: 0,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -614,5 +939,212 @@ mod tests {
         assert_eq!(message.command, CMD_DO_SEND_BANNER);
         assert_eq!(message.target_system, 1);
         assert_eq!(message.param1, 0.0);
+    }
+
+    fn long(message: &MavMessage) -> (u16, [f32; 7]) {
+        match message {
+            MavMessage::CommandLong(command) => (command.command, params(message)),
+            other => panic!("expected a COMMAND_LONG, got {}", other.name()),
+        }
+    }
+
+    /// Set WP and Restart Mission: `mavlink_mission_set_current_t` with the target and the
+    /// index, nothing else. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2461-2468`
+    #[test]
+    fn set_current_carries_the_index_and_the_vehicle() {
+        let MavMessage::MissionSetCurrent(message) = mission_set_current(VehicleId::new(7, 42), 3)
+        else {
+            panic!("mission_set_current must build a MISSION_SET_CURRENT");
+        };
+        assert_eq!(message.seq, 3);
+        assert_eq!(message.target_system, 7);
+        assert_eq!(message.target_component, 42);
+    }
+
+    /// Change Alt: a float `MISSION_ITEM`, sequence 0, `current` 3, frame 3, a waypoint whose
+    /// only non-zero field is the altitude. `// C#: MAVLinkInterface.cs:4476, 4027-4043`
+    #[test]
+    fn change_alt_is_a_current_3_mission_item_in_the_relative_frame() {
+        let MavMessage::MissionItem(item) = change_alt(target(), 25.0) else {
+            panic!("change_alt must build a MISSION_ITEM, not the _INT form the C# does not use");
+        };
+        assert_eq!(item.seq, 0);
+        assert_eq!(item.command, CMD_NAV_WAYPOINT);
+        assert_eq!(item.frame, FRAME_GLOBAL_RELATIVE_ALT);
+        assert_eq!(item.current, 3);
+        assert_eq!(item.autocontinue, 1);
+        assert_eq!(item.mission_type, 0);
+        assert_eq!((item.x, item.y, item.z), (0.0, 0.0, 25.0));
+        assert_eq!(
+            (item.param1, item.param2, item.param3, item.param4),
+            (0.0, 0.0, 0.0, 0.0)
+        );
+    }
+
+    /// ArduPlane's guided target: the same item with `current` 2, in the chosen frame, with the
+    /// position cast to float as `setWPAsync` casts it.
+    #[test]
+    fn a_plane_guided_target_is_a_current_2_mission_item() {
+        let MavMessage::MissionItem(item) = guided_mission_item(
+            target(),
+            FRAME_GLOBAL_TERRAIN_ALT,
+            -35.363_261,
+            149.165_23,
+            40.0,
+        ) else {
+            panic!("guided_mission_item must build a MISSION_ITEM");
+        };
+        assert_eq!(item.current, 2);
+        assert_eq!(item.frame, 10);
+        assert_eq!(item.x, -35.363_261_f32);
+        assert_eq!(item.y, 149.165_23_f32);
+        assert_eq!(item.z, 40.0);
+    }
+
+    /// Everything else's guided target: `setPositionTargetGlobalInt(pos: true)`. The mask is the
+    /// C#'s arithmetic - `ushort.MaxValue - FORCE - POS_IGNORE` - which is 0xFDF8, not the
+    /// 0x0FF8 `goto_position` uses; the frame is the operator's, not the `_INT` variant.
+    #[test]
+    fn a_guided_position_target_has_the_csharp_mask_and_frame() {
+        let MavMessage::SetPositionTargetGlobalInt(message) = guided_position_target(
+            target(),
+            FRAME_GLOBAL_RELATIVE_ALT,
+            -35.363_261_7,
+            149.165_23,
+            20.0,
+        ) else {
+            panic!("guided_position_target must build a SET_POSITION_TARGET_GLOBAL_INT");
+        };
+        assert_eq!(message.type_mask, 0xFDF8);
+        assert_eq!(message.type_mask, 65_535 - 512 - 7);
+        assert_eq!(message.coordinate_frame, 3);
+        // `(int)(lat * 1e7)` truncates toward zero.
+        assert_eq!(message.lat_int, -353_632_617);
+        assert_eq!(message.lon_int, 1_491_652_300);
+        assert_eq!(message.alt, 20.0);
+        assert_eq!((message.vx, message.yaw, message.yaw_rate), (0.0, 0.0, 0.0));
+
+        // With no position the C# clears only the altitude-ignore bit.
+        let MavMessage::SetPositionTargetGlobalInt(message) =
+            guided_position_target(target(), FRAME_GLOBAL_RELATIVE_ALT, 0.0, 0.0, 20.0)
+        else {
+            panic!("guided_position_target must build a SET_POSITION_TARGET_GLOBAL_INT");
+        };
+        assert_eq!(message.type_mask, 0xFDFB);
+    }
+
+    /// Change Speed: `DO_CHANGE_SPEED`, param1 0, the box's number in param2, the rest zero.
+    #[test]
+    fn change_speed_puts_the_speed_in_param2() {
+        let (command_id, p) = long(&change_speed(target(), 7.5));
+        assert_eq!(command_id, 178);
+        assert_eq!(p, [0.0, 7.5, 0.0, 0.0, 0.0, 0.0, 0.0]);
+    }
+
+    /// Abort Landing: `DO_GO_AROUND`, every parameter zero.
+    #[test]
+    fn abort_landing_is_a_go_around_with_no_arguments() {
+        let (command_id, p) = long(&go_around(target()));
+        assert_eq!(command_id, 191);
+        assert_eq!(p, [0.0; 7]);
+    }
+
+    /// Set Home Here: `DO_SET_HOME` as a `COMMAND_INT` - frame `GLOBAL`, p1-p4 zero, the point at
+    /// 1e7 in x and y, the altitude in z, `current` and `autocontinue` zero.
+    #[test]
+    fn set_home_is_a_command_int_with_the_point_in_x_and_y() {
+        let MavMessage::CommandInt(message) = set_home(target(), -35.363_261_7, 149.165_23, 584.25)
+        else {
+            panic!("set_home must build a COMMAND_INT");
+        };
+        assert_eq!(message.command, 179);
+        assert_eq!(message.frame, 0);
+        assert_eq!((message.x, message.y), (-353_632_617, 1_491_652_300));
+        assert_eq!(message.z, 584.25);
+        assert_eq!(
+            (
+                message.param1,
+                message.param2,
+                message.param3,
+                message.param4
+            ),
+            (0.0, 0.0, 0.0, 0.0)
+        );
+        assert_eq!((message.current, message.autocontinue), (0, 0));
+    }
+
+    /// Set EKF Origin Here: millimetres of a height truncated to whole metres first, because
+    /// `(int) alt.alt * 1000` casts before it multiplies.
+    #[test]
+    fn the_ekf_origin_height_is_whole_metres_in_millimetres() {
+        let MavMessage::SetGpsGlobalOrigin(message) =
+            set_gps_global_origin(1, -35.363_261_7, 149.165_23, 584.9)
+        else {
+            panic!("set_gps_global_origin must build a SET_GPS_GLOBAL_ORIGIN");
+        };
+        assert_eq!(message.altitude, 584_000);
+        assert_eq!(
+            (message.latitude, message.longitude),
+            (-353_632_617, 1_491_652_300)
+        );
+        assert_eq!(message.target_system, 1);
+        assert_eq!(message.time_usec, 0);
+    }
+
+    /// `setMode`'s new half: `DO_SET_MODE` with the base mode in param1 and the custom mode in
+    /// param2; its old half: `SET_MODE` with whichever base mode the caller asked for.
+    #[test]
+    fn set_mode_halves_carry_the_base_and_custom_modes() {
+        let (command_id, p) = long(&do_set_mode(target(), 1, 4));
+        assert_eq!(command_id, 176);
+        assert_eq!(p, [1.0, 4.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+
+        let MavMessage::SetMode(message) = set_mode_with_base(3, MODE_FLAG_SAFETY_ARMED, 1) else {
+            panic!("set_mode_with_base must build a SET_MODE");
+        };
+        assert_eq!(
+            (
+                message.target_system,
+                message.base_mode,
+                message.custom_mode
+            ),
+            (3, 128, 1)
+        );
+    }
+
+    /// `System_Time`: the clock in microseconds and `time_boot_ms` zero.
+    #[test]
+    fn system_time_sends_the_clock_and_no_boot_time() {
+        let MavMessage::SystemTime(message) = system_time(1_700_000_000_000_000) else {
+            panic!("system_time must build a SYSTEM_TIME");
+        };
+        assert_eq!(message.time_unix_usec, 1_700_000_000_000_000);
+        assert_eq!(message.time_boot_ms, 0);
+    }
+
+    /// The generic builders put every argument where the wire expects it.
+    #[test]
+    fn the_generic_builders_place_every_argument() {
+        let (command_id, p) = long(&command_long(
+            target(),
+            42_651,
+            [255.0, 100.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        ));
+        assert_eq!(command_id, CMD_BATTERY_RESET);
+        assert_eq!(p, [255.0, 100.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+
+        let MavMessage::CommandInt(message) = command_int(
+            target(),
+            CMD_SCRIPTING,
+            FRAME_GLOBAL,
+            [3.0, 0.0, 0.0, 0.0],
+            0,
+            0,
+            0.0,
+        ) else {
+            panic!("command_int must build a COMMAND_INT");
+        };
+        assert_eq!(message.command, 42_701);
+        assert_eq!(message.param1, 3.0);
     }
 }

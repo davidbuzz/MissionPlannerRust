@@ -236,6 +236,12 @@ struct MissionPlanner {
     forcing_arm_until: Option<std::time::Instant>,
     /// Scroll position of the flight screen's panel column, so an indicator can be drawn for it.
     fly_scroll: gpui::ScrollHandle,
+    /// The flight screen's Actions tab: what its boxes and lists hold between presses.
+    fly_actions: fly::Actions,
+    /// Focus for the Actions tab's text boxes.
+    fly_focus: fly::ActionsFocus,
+    /// Which page of the flight screen's `tabControlactions` is showing.
+    fly_pages: fly::Pages,
     /// Scroll position of the plan screen's panel column.
     plan_scroll: gpui::ScrollHandle,
 }
@@ -365,6 +371,9 @@ impl MissionPlanner {
             last_force_arm: None,
             fly_scroll: gpui::ScrollHandle::new(),
             plan_scroll: gpui::ScrollHandle::new(),
+            fly_actions: fly::Actions::default(),
+            fly_focus: fly::ActionsFocus::new(cx),
+            fly_pages: fly::Pages::default(),
         }
     }
 
@@ -643,6 +652,13 @@ impl MissionPlanner {
     /// change height. On the ground it does nothing beyond what the vehicle's own checks allow -
     /// a disarmed vehicle refuses, and says so in the message pane.
     fn fly_here(&mut self, position: mp_units::LatLon) {
+        // Once Fly To Here Alt has set a height, Fly To Here flies at it, in its frame, as
+        // `goHereToolStripMenuItem_Click` does with `GuidedMode.z`.
+        // `// C#: GCSViews/FlightData.cs:3090-3113`
+        if self.fly_actions.guided.z != 0.0 {
+            self.fly_to_here_guided(position);
+            return;
+        }
         let view = self.telemetry.view();
         let Some(state) = view.state.as_ref() else {
             self.file_status = Some("no vehicle to send anywhere".to_owned());
@@ -877,14 +893,6 @@ impl MissionPlanner {
 }
 
 impl MissionPlanner {
-    /// The left column on the flight screen.
-    ///
-    /// The HUD is pinned and everything below it scrolls. The mode list is as long as the
-    /// airframe's - twenty-seven entries on a copter - so a fixed column cut off the panels below
-    /// it, and the link panel was unreachable at any window size anyone uses. Scrolling the whole
-    /// column instead was worse: the mode list appears only once a vehicle is heard from, and the
-    /// content growing under the scroll container dragged the view down, so the application
-    /// started with its primary flight display already off the top of the screen.
     /// The primary flight display's inputs for this frame.
     ///
     /// The clocks - how long since arming, since the mode changed, since a message was raised -
@@ -906,8 +914,15 @@ impl MissionPlanner {
             .message(hud::high_priority_message(state), now);
         // C#: ExtLibs/Controls/HUD.cs:889-930
         let display_aoa_ssa = self.hud_timing.display_aoa_ssa(state.aoa, state.ssa);
+        // The HUD's altitude is `cs.alt`, which Set Home Alt moves to above sea level.
+        // `// C#: ExtLibs/ArduPilot/CurrentState.cs:325-328`
+        let mut shown = *state;
+        shown.altitude_relative = mp_units::Metres(fly::displayed_altitude(
+            state.altitude_relative.0,
+            self.fly_actions.alt_offset_home,
+        ));
         hud::HudInputs::from_vehicle(
-            state,
+            &shown,
             mode,
             armed_for,
             mode_changed_for,
@@ -918,7 +933,32 @@ impl MissionPlanner {
         )
     }
 
-    fn fly_sidebar(&self, view: &TelemetryView, cx: &mut Context<Self>) -> impl IntoElement {
+    /// The left column on the flight screen: `SubMainLeft`, the HUD above `tabControlactions`.
+    ///
+    /// The HUD is pinned, then the page strip, then the one page showing. Only one page shows at
+    /// a time, which is what keeps the column inside the window - the panels used to stack under
+    /// the HUD and ran hundreds of pixels past the bottom of it. The page still scrolls, so a
+    /// window smaller than any page is laid out rather than cut off; the HUD and the strip do
+    /// not, because scrolling the whole column once dragged the HUD off the top of the screen as
+    /// the mode list arrived under it.
+    /// `// C#: GCSViews/FlightData.Designer.cs:321-329`
+    fn fly_sidebar(
+        &self,
+        view: &TelemetryView,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let page = fly::page_content(
+            self.fly_pages.selected(),
+            &fly::PageInputs {
+                view,
+                actions: &self.fly_actions,
+                focus: &self.fly_focus,
+                checks_disabled: self.disabled_arming_checks,
+            },
+            window,
+            cx,
+        );
         probe::measured("fly-column", div())
             .flex()
             .flex_col()
@@ -927,9 +967,10 @@ impl MissionPlanner {
             .gap_2()
             .w(px(400.0))
             .child(fly::hud_panel(&self.hud))
+            .child(fly::page_strip(&self.fly_pages, cx))
             .child(
-                // The scrolling column and its indicator share a positioned parent, so the
-                // indicator can sit over the column's right edge without taking width from it.
+                // The scrolling page and its indicator share a positioned parent, so the
+                // indicator can sit over the page's right edge without taking width from it.
                 div()
                     .relative()
                     .flex()
@@ -947,17 +988,7 @@ impl MissionPlanner {
                             .pr_2()
                             .overflow_y_scroll()
                             .track_scroll(&self.fly_scroll)
-                            // The tuning graph first, because that is where the C# puts it: its
-                            // chart lives in `splitContainer1.Panel1`, which sits above and is
-                            // collapsed until `CB_tuning` uncollapses it, pushing the rest down.
-                            // It is also the only placement that is any use - at the bottom of a
-                            // column that already scrolls, a plot nobody can see without
-                            // scrolling to it is a plot nobody watches.
-                            .child(tuning::panel_for(&self.tuning, cx))
-                            .child(fly::actions_panel(view, self.disabled_arming_checks, cx))
-                            .child(fly::prearm_panel(view))
-                            .child(fly::vehicle_panel(view))
-                            .child(fly::health_panel(view)),
+                            .children(page),
                     )
                     .children(ui::scroll_indicator(&self.fly_scroll)),
             )
@@ -1318,6 +1349,8 @@ impl Render for MissionPlanner {
         let banner = self.telemetry.firmware_banner().map(str::to_owned);
         let mav_type = view.state.as_ref().map_or(0, |state| state.vehicle_type);
         self.metadata.advance(banner.as_deref(), mav_type);
+        // The Actions tab's clock: `cs.lastautowp`, and a Resume Mission moved on a step.
+        self.fly_tick(&view);
 
         // Facts a UI test can assert on. Recorded from render because that is where every one of
         // them is already in hand, and published at the end of the frame so a reader never sees
@@ -1439,6 +1472,10 @@ impl Render for MissionPlanner {
             );
             facts::record("recording", self.telemetry.recording().is_some());
             facts::record("status", self.file_status.as_deref().unwrap_or(""));
+            // What the Actions tab last put on the wire and what the vehicle said back.
+            self.fly_actions.record_facts(&view);
+            self.fly_pages
+                .record_facts(f32::from(self.fly_scroll.max_offset().y));
             facts::publish();
         }
 
@@ -1610,7 +1647,7 @@ impl Render for MissionPlanner {
                 .min_h(px(0.0))
                 .gap_2()
                 .p_2()
-                .child(self.fly_sidebar(&view, cx))
+                .child(self.fly_sidebar(&view, window, cx))
                 .child(
                     div()
                         .flex()
@@ -1619,9 +1656,24 @@ impl Render for MissionPlanner {
                         .min_w(px(0.0))
                         .min_h(px(0.0))
                         .gap_2()
+                        // The tuning graph above the map, where the C# has it: `zg1` is in
+                        // `splitContainer1.Panel1`, over the map in `Panel2`, collapsed until
+                        // `CB_tuning` opens it. It is on no page of `tabControlactions`.
+                        // `// C#: GCSViews/FlightData.Designer.cs:2472, 2483, 2500`
+                        .child(
+                            div()
+                                .flex_shrink_0()
+                                .child(tuning::panel_for(&self.tuning, cx)),
+                        )
                         .child(self.map_pane(cx))
                         .child(div().flex_shrink_0().child(fly::messages_panel(&view))),
                 )
+                .children(fly::prompt_dialog(
+                    &self.fly_actions,
+                    &self.fly_focus,
+                    window,
+                    cx,
+                ))
                 .into_any_element(),
             Screen::Plan => div()
                 .flex()

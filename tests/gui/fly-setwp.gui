@@ -1,0 +1,45 @@
+# Set WP sends MISSION_SET_CURRENT with the index chosen in CMB_setwp, and the vehicle moves to it.
+#
+# The claim: clicking the waypoint list rebuilds it from the mission held (CMB_setwp_Click - "0
+# (Home)" then 1 up to the item count, inclusive), and Set WP puts the chosen index on the wire
+# (BUT_setwp_Click -> setWPCurrent). SITL answers with MISSION_CURRENT, so vehicle.mission_current
+# proves the message arrived. `GCSViews/FlightData.cs:1658-1672, 2542-2582`
+#
+# Needs SITL: tools/gui-test.sh tests/gui/fly-setwp.gui -- tcp:127.0.0.1:5760
+# The setup writes a five-item mission to SITL through its second port, 5762, before the window
+# opens, so the list and the index are known.
+
+setup printf 'QGC WPL 110\n0\t1\t0\t16\t0\t0\t0\t0\t-35.363262\t149.165237\t584.09\t1\n1\t0\t3\t22\t0\t0\t0\t0\t0\t0\t10\t1\n2\t0\t3\t16\t0\t0\t0\t0\t-35.3629\t149.165237\t10\t1\n3\t0\t3\t178\t0\t5\t0\t0\t0\t0\t0\t1\n4\t0\t3\t16\t0\t0\t0\t0\t-35.3625\t149.1657\t10\t1\n' > $WORK/mission.waypoints
+setup cargo run -q -p mp-cli --bin mpr -- mission tcp:127.0.0.1:5762 $WORK/mission.waypoints
+
+screen fly
+window 1600x1200
+settle 8
+
+# The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as
+# tabControlactions.SelectedIndex = 0 has it. `GCSViews/FlightData.Designer.cs:595-611`
+click fly-tab-actions
+expect fly.tab tabActions
+
+# Before the list is opened it holds only the Designer's item.
+expect fly.setwp.items 1
+expect fly.setwp.selected 0 (Home)
+
+# Read the vehicle's mission so the list has something to count.
+click tab-plan
+click plan-read
+settle 4
+expect mission.items 5
+click tab-fly
+settle 1
+
+# Five items held: "0 (Home)" and 1 to 5.
+click fly-setwp-list
+expect fly.setwp.items 6
+click fly-setwp-2
+expect fly.setwp.selected 2
+
+click fly-setwp
+settle 2
+expect fly.sent MISSION_SET_CURRENT seq=2
+expect vehicle.mission_current 2

@@ -1,0 +1,27 @@
+# Change Speed sends DO_CHANGE_SPEED with the box's number in param2, and the vehicle answers it.
+#
+# modifyandSetSpeed_Click: doCommandAsync(DO_CHANGE_SPEED, 0, (float) Value, 0, 0, 0, 0, 0) - no
+# unit conversion. A disarmed SITL copter refuses a speed of type 0, but it answers, and the answer
+# in the message log is the proof the command arrived. `GCSViews/FlightData.cs:4426-4438`
+#
+# Needs SITL: tools/gui-test.sh tests/gui/fly-changespeed.gui -- tcp:127.0.0.1:5760
+
+screen fly
+window 1600x1200
+settle 8
+
+# The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as
+# tabControlactions.SelectedIndex = 0 has it. `GCSViews/FlightData.Designer.cs:595-611`
+click fly-tab-actions
+expect fly.tab tabActions
+
+click fly-speed-value
+key ctrl+u
+type 7.5
+# Keystrokes reach the application through the input method (ibus, over XIM) and come back
+# after a round trip; a click does not. Settle, so the click cannot overtake the typing.
+settle 1
+click fly-changespeed
+settle 2
+expect fly.sent COMMAND_LONG MAV_CMD_DO_CHANGE_SPEED 0,7.5,0,0,0,0,0
+expect fly.ack ~ MAV_CMD_DO_CHANGE_SPEED:

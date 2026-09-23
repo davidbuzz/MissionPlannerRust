@@ -241,6 +241,10 @@ servo/RC, and the vehicle action buttons.
   scripts, tlog playback controls, POIs, set-home/EKF-origin, change alt/speed/loiter, set WP,
   quick-view field choice, HUD menu items, log conversions. `docs/coverage/flightdata.md` is the
   rendered list, and a test fails when it is stale or when a claimed id leaves the source.
+  Since then the Actions tab is ported in its own 5×5 arrangement - Set WP, Restart and Resume
+  Mission, Change Alt/Speed/Loiter Radius, Fly To Coords, Fly To Here Alt, Abort Landing, Set
+  Home Alt, Do Action with the C#'s 19 entries - each sending what `FlightData.cs` sends and proved
+  by a `tests/gui/fly-*.gui` script, inside the C#'s fourteen-page tab control under the HUD: **40 done, 75 missing**.
 - **Tests:** `crates/mp-gui/src/coverage.rs` (in place of `tests/action_coverage.rs`: the crate is a
   binary, so its tests are inline) enumerates every C# `FlightData` control and action from the D18 ledger and fails on anything unimplemented; `tests/sitl_ops.rs` drives arm/disarm/mode-change/RTL/guided-goto against SITL and asserts resulting vehicle state; per-tab UI snapshots; `tests/layout_persist.rs` save/restore of the screen layout; `benches/telemetry_storm.rs` pumps 200 Hz telemetry and asserts no frame exceeds 8 ms.
 

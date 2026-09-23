@@ -88,7 +88,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUT_abortland_Click",
         "Abort Landing",
-        Missing,
+        Done("fly-abortland"),
     ),
     row(
         "BUT_abort_script",
@@ -102,7 +102,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUTactiondo_Click",
         "Do Action",
-        Missing,
+        Done("fly-doaction"),
     ),
     row(
         "BUT_ARM",
@@ -172,7 +172,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUT_Homealt_Click",
         "Set Home Alt",
-        Missing,
+        Done("fly-homealt"),
     ),
     row(
         "BUT_joystick",
@@ -270,14 +270,14 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUTrestartmission_Click",
         "Restart Mission",
-        Missing,
+        Done("fly-restartmission"),
     ),
     row(
         "BUT_resumemis",
         "Click",
         "BUT_resumemis_Click",
         "Resume Mission",
-        Missing,
+        Done("fly-resumemis"),
     ),
     row(
         "BUT_run_script",
@@ -307,7 +307,13 @@ pub const FLIGHTDATA: &[Action] = &[
         "Set Mode",
         Done("mode"),
     ),
-    row("BUT_setwp", "Click", "BUT_setwp_Click", "Set WP", Missing),
+    row(
+        "BUT_setwp",
+        "Click",
+        "BUT_setwp_Click",
+        "Set WP",
+        Done("fly-setwp"),
+    ),
     row("BUT_speed10", "Click", "BUT_speed1_Click", "10x", Missing),
     row("BUT_speed1_10", "Click", "BUT_speed1_Click", "0.1", Missing),
     row("BUT_speed1_2", "Click", "BUT_speed1_Click", "0.5", Missing),
@@ -341,7 +347,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "CMB_setwp_Click",
         "the waypoint list",
-        Missing,
+        Done("fly-setwp-list"),
     ),
     row(
         "customizeToolStripMenuItem",
@@ -376,14 +382,14 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "flyToCoordsToolStripMenuItem_Click",
         "Fly To Coords",
-        Missing,
+        Done("fly-flytocoords"),
     ),
     row(
         "flyToHereAltToolStripMenuItem",
         "Click",
         "flyToHereAltToolStripMenuItem_Click",
         "Fly To Here Alt",
-        Missing,
+        Done("fly-flytohere-alt"),
     ),
     row(
         "gimbalVideoFullSizedToolStripMenuItem",
@@ -546,21 +552,21 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "modifyandSetAlt_Click",
         "Change Alt",
-        Missing,
+        Done("fly-changealt"),
     ),
     row(
         "modifyandSetLoiterRad",
         "Click",
         "modifyandSetLoiterRad_Click",
-        "Change Loiter Radius",
-        Missing,
+        "Set Loiter Rad",
+        Done("fly-setloiterrad"),
     ),
     row(
         "modifyandSetSpeed",
         "Click",
         "modifyandSetSpeed_Click",
         "Change Speed",
-        Missing,
+        Done("fly-changespeed"),
     ),
     row(
         "modifyandSetSpeed",
@@ -807,12 +813,14 @@ pub const FLIGHTDATA: &[Action] = &[
         "the actions tabs",
         Plumbing,
     ),
+    // Choosing a page of the strip under the HUD. The handler's body only refreshes the Status
+    // and Messages pages the C# fills on a timer; the page change is the strip's own.
     row(
         "tabControlactions",
         "SelectedIndexChanged",
         "tabControl1_SelectedIndexChanged",
         "the actions tabs",
-        Plumbing,
+        Done("fly-tabs"),
     ),
     row("tabGauges", "Resize", "tabPage1_Resize", "Gauges", Plumbing),
     row("tabQuick", "Resize", "tabQuick_Resize", "Quick", Plumbing),
@@ -1123,7 +1131,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (27, 2, 87, 19, 1)
+            (40, 2, 75, 18, 1)
         );
     }
 }

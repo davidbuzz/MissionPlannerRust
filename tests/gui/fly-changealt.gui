@@ -1,0 +1,28 @@
+# Change Alt sends the guided "change altitude" MISSION_ITEM with the box's number, decimals dropped.
+#
+# modifyandSetAlt_Click: `int newalt = (int) Value; setNewWPAlt(new Locationwp {alt = newalt /
+# multiplieralt})` - a float MISSION_ITEM, sequence 0, command 16, frame 3 (relative), current 3,
+# x and y zero. 25.9 in the box is 25 on the wire. SITL acknowledges it with MISSION_ACK, which the
+# link does not log outside a transfer, so the assertion is on what was sent.
+# `GCSViews/FlightData.cs:4399-4410, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4470-4481`
+#
+# Needs SITL: tools/gui-test.sh tests/gui/fly-changealt.gui -- tcp:127.0.0.1:5760
+
+screen fly
+window 1600x1200
+settle 8
+
+# The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as
+# tabControlactions.SelectedIndex = 0 has it. `GCSViews/FlightData.Designer.cs:595-611`
+click fly-tab-actions
+expect fly.tab tabActions
+
+click fly-alt-value
+key ctrl+u
+type 25.9
+# Keystrokes reach the application through the input method (ibus, over XIM) and come back
+# after a round trip; a click does not. Settle, so the click cannot overtake the typing.
+settle 1
+click fly-changealt
+settle 1
+expect fly.sent MISSION_ITEM seq=0 cmd=16 frame=3 current=3 x=0 y=0 z=25

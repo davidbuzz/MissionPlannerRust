@@ -1,0 +1,58 @@
+# Fly To Here Alt sets the height and frame Fly To Here flies at; Fly To Here then uses them.
+#
+# flyToHereAltToolStripMenuItem_Click offers 10 on a copter, takes a whole number and a frame from
+# AltInputBox, and stores them in GuidedMode.z and .frame - sending nothing unless the vehicle is
+# already in Guided. goHereToolStripMenuItem_Click (a right click on the map here) then flies to
+# the clicked point at that height. SITL accepts Guided while disarmed and ignores the target on
+# the ground, so nothing moves.
+# `GCSViews/FlightData.cs:2899-2943, 3082-3120`
+#
+# Needs SITL (a copter): tools/gui-test.sh tests/gui/fly-flytohere-alt.gui -- tcp:127.0.0.1:5760
+
+screen fly
+window 1600x1200
+settle 8
+
+# The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as
+# tabControlactions.SelectedIndex = 0 has it. `GCSViews/FlightData.Designer.cs:595-611`
+click fly-tab-actions
+expect fly.tab tabActions
+
+click Stabilize
+settle 2
+
+click fly-flytohere-alt
+expect fly.prompt Enter Guided Mode Alt
+key ctrl+u
+type 25
+# Keystrokes reach the application through the input method (ibus, over XIM) and come back
+# after a round trip; a click does not. Settle, so the click cannot overtake the typing.
+settle 1
+click fly-prompt-frame-relative
+click fly-prompt-ok
+expect fly.prompt none
+expect fly.guided.alt 25
+expect fly.guided.frame 3
+expect status ~ Fly To Here will fly at 25 m
+
+# A height that is not a whole number is refused, as int.TryParse refuses it.
+click fly-flytohere-alt
+key ctrl+u
+type 12.5
+# Keystrokes reach the application through the input method (ibus, over XIM) and come back
+# after a round trip; a click does not. Settle, so the click cannot overtake the typing.
+settle 1
+click fly-prompt-ok
+expect fly.sent nothing: Bad Alt
+expect fly.guided.alt 25
+
+# Fly To Here, now at 25 m in the relative frame.
+click map@0.55x0.45:right
+settle 2
+expect fly.sent ~ SET_POSITION_TARGET_GLOBAL_INT frame=3 mask=0xFDF8
+expect fly.sent ~ alt=25
+expect vehicle.mode Guided
+
+click Stabilize
+settle 2
+expect vehicle.mode Stabilize
