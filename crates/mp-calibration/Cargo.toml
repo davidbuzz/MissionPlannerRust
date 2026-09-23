@@ -1,0 +1,16 @@
+[package]
+name = "mp-calibration"
+description = "Sensor calibration and motor tests: the commands, and what the vehicle says back"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+mp-mavlink-dialects.workspace = true
+mp-vehicle.workspace = true
+thiserror.workspace = true

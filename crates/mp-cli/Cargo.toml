@@ -16,6 +16,7 @@ workspace = true
 
 [dependencies]
 mp-link.workspace = true
+mp-params.workspace = true
 mp-mavlink.workspace = true
 mp-mavlink-dialects.workspace = true
 mp-transport.workspace = true

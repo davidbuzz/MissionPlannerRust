@@ -341,7 +341,7 @@ impl Telemetry {
                 .unwrap_or_default(),
             parameters_expected: parameters
                 .as_ref()
-                .and_then(mp_link::params::ParamTable::expected)
+                .and_then(mp_params::ParamTable::expected)
                 .unwrap_or(0),
         }
     }
@@ -465,14 +465,14 @@ impl Telemetry {
     pub fn start_accelerometer_calibration(&self) {
         if let Some((link, id)) = self.target() {
             link.clear_accel_calibration();
-            link.send(&mp_link::calibration::start_accelerometer(id));
+            link.send(&mp_calibration::start_accelerometer(id));
         }
     }
 
     /// Tells the vehicle the airframe is in the position it asked for.
-    pub fn confirm_accelerometer_position(&self, position: mp_link::calibration::AccelPosition) {
+    pub fn confirm_accelerometer_position(&self, position: mp_calibration::AccelPosition) {
         if let Some((link, id)) = self.target() {
-            link.send(&mp_link::calibration::accelerometer_position_reached(
+            link.send(&mp_calibration::accelerometer_position_reached(
                 id, position,
             ));
         }
@@ -480,9 +480,9 @@ impl Telemetry {
 
     /// What the accelerometer calibration is waiting for, if anything.
     #[must_use]
-    pub fn accel_calibration(&self) -> mp_link::calibration::AccelCalibration {
+    pub fn accel_calibration(&self) -> mp_calibration::AccelCalibration {
         self.link.as_ref().map_or(
-            mp_link::calibration::AccelCalibration::Idle,
+            mp_calibration::AccelCalibration::Idle,
             Link::accel_calibration,
         )
     }
@@ -497,7 +497,7 @@ impl Telemetry {
     /// Tells the vehicle that however it is sitting now is level.
     pub fn calibrate_level(&self) {
         if let Some((link, id)) = self.target() {
-            link.send(&mp_link::calibration::level(id));
+            link.send(&mp_calibration::level(id));
         }
     }
 
@@ -505,13 +505,13 @@ impl Telemetry {
     pub fn calibrate_compass(&self) {
         if let Some((link, id)) = self.target() {
             link.clear_compass_calibration();
-            link.send(&mp_link::calibration::start_compass(id));
+            link.send(&mp_calibration::start_compass(id));
         }
     }
 
     /// Compass calibration progress, one entry per compass.
     #[must_use]
-    pub fn compass_calibration(&self) -> Vec<mp_link::calibration::CompassProgress> {
+    pub fn compass_calibration(&self) -> Vec<mp_calibration::CompassProgress> {
         self.link
             .as_ref()
             .map(Link::compass_calibration)
@@ -521,7 +521,7 @@ impl Telemetry {
     /// Stops a running compass calibration.
     pub fn cancel_compass_calibration(&self) {
         if let Some((link, id)) = self.target() {
-            link.send(&mp_link::calibration::cancel_compass(id));
+            link.send(&mp_calibration::cancel_compass(id));
         }
     }
 
@@ -535,25 +535,21 @@ impl Telemetry {
     /// Recalibrates the barometer's ground pressure reference.
     pub fn calibrate_ground_pressure(&self) {
         if let Some((link, id)) = self.target() {
-            link.send(&mp_link::calibration::ground_pressure(id));
+            link.send(&mp_calibration::ground_pressure(id));
         }
     }
 
     /// Spins one motor briefly, at a bounded throttle and with a timeout.
     pub fn test_motor(&self, motor: u8, throttle_percent: f32) {
         if let Some((link, id)) = self.target() {
-            link.send(&mp_link::calibration::test_motor(
-                id,
-                motor,
-                throttle_percent,
-            ));
+            link.send(&mp_calibration::test_motor(id, motor, throttle_percent));
         }
     }
 
     /// Stops a running motor test.
     pub fn stop_motor(&self, motor: u8) {
         if let Some((link, id)) = self.target() {
-            link.send(&mp_link::calibration::stop_motor(id, motor));
+            link.send(&mp_calibration::stop_motor(id, motor));
         }
     }
 
@@ -566,7 +562,7 @@ impl Telemetry {
 
     /// The logs the vehicle has listed.
     #[must_use]
-    pub fn log_listings(&self) -> Vec<mp_link::logs::LogListing> {
+    pub fn log_listings(&self) -> Vec<mp_ftp::logs::LogListing> {
         self.link
             .as_ref()
             .map(Link::log_listings)

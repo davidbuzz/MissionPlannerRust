@@ -131,9 +131,9 @@ const EXCLUDED: &[Excluded] = &[
     Excluded {
         msgid: 22,
         name: "PARAM_VALUE",
-        // `decode_param_id` builds the name (mp-link/src/params.rs:267) and `ParamTable::insert`
-        // clones it for the index map (params.rs:320); the table already holds that name, so the
-        // key passed to `values.insert` (params.rs:322) is dropped, not stored.
+        // `decode_param_id` builds the name (mp-params/src/lib.rs:293) and `ParamTable::insert`
+        // clones it for the index map (lib.rs:346); the table already holds that name, so the
+        // key passed to `values.insert` (lib.rs:348) is dropped, not stored.
         max_per_frame: 2,
         why: "the parameter table is keyed by name, as Mission Planner's is \
               (C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5770 builds a string per \
@@ -142,8 +142,8 @@ const EXCLUDED: &[Excluded] = &[
     Excluded {
         msgid: 77,
         name: "COMMAND_ACK",
-        // In `run_link`'s COMMAND_ACK arm: the command's name (mp-link/src/lib.rs:844, `to_owned`
-        // or `format!`) and the logged line (lib.rs:850, `format!`), which starts with no capacity
+        // In `run_link`'s COMMAND_ACK arm: the command's name (mp-link/src/lib.rs:850, `to_owned`
+        // or `format!`) and the logged line (lib.rs:856, `format!`), which starts with no capacity
         // because its format string begins with an argument, so it allocates and then grows.
         max_per_frame: 3,
         why: "the message log holds text an operator reads; an ack answers a command the \
@@ -485,7 +485,7 @@ fn the_real_link_thread_allocates_nothing_per_telemetry_packet() {
             seen.1 = seen.1.max(cost.max_per_frame);
         }
 
-        // Parameter gap recovery (`run_link`, mp-link/src/lib.rs:993-1000) builds a `Vec` of what
+        // Parameter gap recovery (`run_link`, mp-link/src/lib.rs:999-1006) builds a `Vec` of what
         // is missing per vehicle when the parameter stream has been quiet for 1.5 s with a table
         // incomplete. Timer-driven, so not per packet; it is recognised by the requests it sends,
         // and nothing else may have been sent in its place.
@@ -508,7 +508,7 @@ fn the_real_link_thread_allocates_nothing_per_telemetry_packet() {
             probe.measured_elapsed
         );
 
-        // KNOWN: `run_link`'s publish block (mp-link/src/lib.rs:1040) calls
+        // KNOWN: `run_link`'s publish block (mp-link/src/lib.rs:1046) calls
         // `Transport::description()` on every publish, to notice a UDP peer changing. The trait
         // returns an owned `String`, so each publish allocates: once, or twice when `format!`
         // outgrows its capacity estimate, as it does for `ReplayTransport`'s

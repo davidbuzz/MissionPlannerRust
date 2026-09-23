@@ -17,7 +17,7 @@
 //! this repository and says otherwise: shortest representation, scientific below 1e-4. A fixture
 //! built to match the implementation tests nothing, and reads as though it tests everything.
 
-use mp_link::param_file::{Change, ParamFile};
+use mp_params::param_file::{Change, ParamFile};
 
 fn fixture(name: &str) -> ParamFile {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -158,7 +158,7 @@ fn a_mission_planner_file_rewrites_to_itself_byte_for_byte() {
         .filter(|line| {
             line.split(',')
                 .next()
-                .is_some_and(mp_link::param_file::is_loaded)
+                .is_some_and(mp_params::param_file::is_loaded)
         })
         .map(|line| format!("{line}\n"))
         .collect();

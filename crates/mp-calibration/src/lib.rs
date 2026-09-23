@@ -1,4 +1,4 @@
-//! Sensor calibration.
+//! Sensor calibration and motor tests: what to send, and what the vehicle's answers mean.
 //!
 //! Accelerometer calibration is a conversation, not a command. The ground station asks the vehicle
 //! to start; the vehicle then asks, one at a time, for the airframe to be put in six orientations,
@@ -8,11 +8,54 @@
 //!
 //! Levelling and compass calibration are single commands by comparison, and are here because they
 //! are the same `MAV_CMD_PREFLIGHT_CALIBRATION` with a different parameter set.
+//!
+//! Radio calibration is not a conversation at all: [`radio`] records the extremes each channel
+//! passes through while the operator sweeps the sticks.
+//!
+//! The protocol half of `GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs`,
+//! `ConfigHWCompass.cs`, `ConfigMotorTest.cs` and `ConfigRadioInput.cs`, without their forms. L3
+//! in PLAN.md §5.1, beside the link rather than inside it: the link thread reads
+//! `MAV_CMD_ACCELCAL_VEHICLE_POS`, `MAG_CAL_PROGRESS` and `MAG_CAL_REPORT` into the types here as
+//! they arrive, and a screen sends the messages built here.
 
-use mp_mavlink_dialects::all::MavMessage;
+#![forbid(unsafe_code)]
+
+pub mod radio;
+
+use mp_mavlink_dialects::all::{CommandLong, MavMessage};
 use mp_vehicle::VehicleId;
 
-use crate::commands::command;
+/// Errors from this crate.
+///
+/// None, and uninhabited so that none can be made up: building a message cannot fail, and reading
+/// one never does either - a value the vehicle sends that this crate does not know is carried as
+/// [`CompassStatus::Unknown`] or read as [`AccelCalibration::Idle`], never refused. This is the
+/// one enum PLAN.md §5.3 gives each crate, so the first operation that can fail has somewhere to
+/// say how.
+#[derive(Debug, thiserror::Error)]
+pub enum CalibrationError {}
+
+/// A `COMMAND_LONG` to `target`.
+///
+/// The same builder `mp_link::commands` uses, repeated rather than shared. The link depends on
+/// this crate - it reads the vehicle's calibration replies into the types here - so this crate
+/// cannot depend on the link without a cycle, and one struct literal is not worth a crate of its
+/// own.
+fn command(target: VehicleId, command: u16, params: [f32; 7]) -> MavMessage {
+    MavMessage::CommandLong(CommandLong {
+        param1: params[0],
+        param2: params[1],
+        param3: params[2],
+        param4: params[3],
+        param5: params[4],
+        param6: params[5],
+        param7: params[6],
+        command,
+        target_system: target.sysid,
+        target_component: target.compid,
+        confirmation: 0,
+    })
+}
 
 /// `MAV_CMD_PREFLIGHT_CALIBRATION`.
 pub const CMD_PREFLIGHT_CALIBRATION: u16 = 241;

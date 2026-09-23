@@ -2,8 +2,8 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use mp_vehicle::param_meta::{copter, lookup};
-use mp_vehicle::{ParamMeta, UserLevel};
+use mp_params::param_meta::{copter, lookup};
+use mp_params::{ParamMeta, UserLevel};
 
 #[test]
 fn the_table_is_substantial_and_sorted() {

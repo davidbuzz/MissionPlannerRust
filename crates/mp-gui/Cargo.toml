@@ -23,6 +23,9 @@ workspace = true
 # gpui_platform cfg-selects the backend per target, so Windows and wasm need no changes here.
 gpui = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f0c8a3af8d5e7e9c4652490d468db8" }
 mp-link.workspace = true
+mp-params.workspace = true
+mp-calibration.workspace = true
+mp-ftp.workspace = true
 mp-vehicle.workspace = true
 mp-units.workspace = true
 mp-settings.workspace = true

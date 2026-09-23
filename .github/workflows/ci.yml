@@ -83,7 +83,8 @@ jobs:
       - name: Windows
         run: cargo check --target x86_64-pc-windows-gnu
              -p mp-mavlink -p mp-mavlink-dialects -p mp-transport -p mp-vehicle
-             -p mp-link -p mp-log -p mp-units -p mp-mission -p mp-cli
+             -p mp-link -p mp-params -p mp-calibration -p mp-ftp -p mp-log -p mp-units
+             -p mp-mission -p mp-cli
       - name: wasm
         run: cargo check --target wasm32-unknown-unknown
              -p mp-mavlink -p mp-mavlink-dialects -p mp-units -p mp-log

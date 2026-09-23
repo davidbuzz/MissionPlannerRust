@@ -392,27 +392,39 @@ generated**, and **531 tests** green on `cargo test --workspace`.
 | Crate | Hand-written | Generated | Note |
 |---|---:|---:|---|
 | `mp-gui` | 11,514 | — | fly / plan / setup / params on gpui |
-| `mp-link` | 6,728 | — | link engine, params, missions, calibration, `.param` files |
+| `mp-link` | 2,903 | — | link engine: I/O thread, routing, snapshot publication, commands, mission transfer, `.tlog` recording |
+| `mp-params` | 1,645 | 46,786 | parameter values, the downloaded table, metadata, `.param` files |
+| `mp-calibration` | 838 | — | accelerometer, level, barometer, compass, radio, motor test |
+| `mp-ftp` | 316 | — | dataflash log download; no MAVFTP yet |
 | `mp-mission` | 2,621 | — | missions, fences, rally, survey grids |
-| `mp-vehicle` | 2,507 | 46,976 | snapshot bus, param metadata, EKF/vibration health |
+| `mp-vehicle` | 1,612 | 190 | snapshot bus, RC channels, EKF/vibration health |
 | `mp-mavlink` | 2,346 | — | ~45% tests |
 | `mp-tiles` | 2,030 | — | fetch, decode, cache |
 | `xtask` | 1,748 | — | mavlink codegen |
 | `mp-transport` | 1,631 | — | serial/tcp/udp/replay |
 | `mp-cli` | 1,520 | — | `mpr` |
-| `mp-log` | 1,214 | — | tlog read/write, dataflash |
+| `mp-log` | 1,330 | — | tlog reading, dataflash, plot extraction |
 | `mp-input` | 980 | — | joystick → RC channels |
 | `mp-units` | 907 | — | typed units and geodesy |
 | `mp-mavlink-dialects` | 488 | 44,658 | |
 | `mp-fuzz-checks` | 369 | — | the fuzz properties, shared with the stable harness |
 
+The `mp-link`, `mp-params`, `mp-calibration`, `mp-ftp`, `mp-vehicle` and `mp-log` rows were
+re-measured after the split (§13.2 item 9) as `wc -l` of `src/`, tests excluded, with
+`src/generated/` in the second column; the other rows are the earlier baseline's.
+
 What exists is still *vertical-slice* work, now a fairly wide slice: the telemetry spine, the map,
 mission planning, parameter configuration including `.param` interop, calibration, flight recording,
 and the first joystick path. What does **not** exist: the ledger, the dependency graph, the
 dispatcher, the DSDL/resx/screenspec/paramgen generators, the full corpus, the 3D and video paths,
-i18n, packaging. The crate graph is also **not yet the L0–L12 layering of §5.1** — `mp-link` carries
-params, missions, calibration and file formats that belong in `mp-params`, `mp-calibration` and
-their own crates, and splitting it is owed before the fleet is dispatched against it.
+i18n, packaging. The crate graph now has §5.1's layering for the crates that exist, and CI holds it
+there: `xtask/tests/graph.rs` places every crate in a layer and fails on a UI framework below L6,
+`mp-link` below L3, a dependency pointing up a layer, or a cycle. `mp-link` is the link engine;
+parameters, calibration and log download are `mp-params`, `mp-calibration` and `mp-ftp`, and the
+mission transfer machine stays in the link because `MAVLinkInterface` is where Mission Planner has
+it. The six crates §5.1 does not name are placed in the test with a reason each, and `mp-gui` still
+names gpui's platform crates, which §5.1 reserves for an `mp-render` that does not exist yet —
+pinned in the test as rule 4's only exception.
 
 `.github/workflows/ci.yml`'s "differential" job still neither installs mono nor references a Mission
 Planner distribution — it runs `cargo test --test differential_tlog` against checked-in CSVs. **Phase
@@ -1143,7 +1155,7 @@ Ordered by what an operator hits first, then by what unblocks the most.
 | 6 | Mission Planner tile cache | D8 asks for it, and operators carry multi-GB offline caches into the field | D8 | tiles written by the C# application are read with the network off | done |
 | 7 | Stick-to-wire under 5 ms | D15 sets p99 ≤5 ms and the joystick path polls at 50 ms, missing it by an order of magnitude. It also runs on gpui's foreground executor, so a slow frame suspends the thing flying the aircraft | D15 | a dedicated thread blocks on the device and sends on change; a histogram over a real device shows p99 ≤5 ms | done on a fake device: an isolated movement reaches the link at p99 0.152 ms; a stick stirred at 1 kHz is capped at 50 frames/s by a 20 ms floor and is at most 20 ms stale (p99 19.9 ms). The real-device histogram is owed - no joystick on this machine; `cargo test -p mp-input --test real_device -- --ignored --nocapture` runs it, and because a hand on a stick is a continuous stream its bound is floor + 5 ms, not 5 |
 | 8 | Zero-allocation proof on the ingest path | D2's DoD says zero heap allocations per packet "verified by an allocation-counting test". No such test exists, so the claim is untested | D2 | a counting global allocator asserts zero allocations across a replayed tlog's ingest→state path | done |
-| 9 | Split `mp-link` | §5.1's layering is the pivot insurance and `mp-link` currently violates it: 6,728 LOC carrying params, missions, calibration, log download and `.param` files. A CI rule cannot enforce a graph the code does not have | D1 | `mp-params`, `mp-calibration` and `mp-ftp` exist; `xtask/tests/graph.rs` asserts the layer rules and passes | |
+| 9 | Split `mp-link` | §5.1's layering is the pivot insurance and `mp-link` currently violates it: 6,728 LOC carrying params, missions, calibration, log download and `.param` files. A CI rule cannot enforce a graph the code does not have | D1 | `mp-params`, `mp-calibration` and `mp-ftp` exist; `xtask/tests/graph.rs` asserts the layer rules and passes | done: `mp-params` (with the parameter metadata, from `mp-vehicle`), `mp-calibration` (with radio calibration's `RcRange`, from `mp-vehicle`) and `mp-ftp` (log download; no MAVFTP code exists yet) exist, and `graph.rs` holds §5.1's four rules plus no upward edge and no cycle, each rule proven able to fail. The mission transfer machine stays in `mp-link`: the C# has it in `MAVLinkInterface`, and in `mp-mission` it would pull `mp-vehicle` and the dialect into `mp-kml`. The upward edge the plan did not name was **recording**: the link wrote `.tlog`s through `mp-log`, which is L4, so the writer moved into the link, where `MAVLinkInterface.SaveToTlog` has it too (`MAVLinkInterface.cs:1467`). Rule 4 is not yet true: `mp-gui` names gpui's platform crates, pinned as the one exception until `mp-render` exists |
 | 10 | The porting ledger | G1 is "3,678 files in a terminal state" and there is no ledger to hold them. Nothing above can be called *done* in the sense this plan defines | D18 | `ledger/ledger.csv` has a row per `.cs` file and `cargo xtask ledger check` exits 0 | done: 3,678 rows, every one `ready`; `check` and `status` exist, with 22 tests and a CI step. Still empty: `target_crate`, `unit_id`, `deps` and the class columns; `ExtLibs/mono` is still an unfetched submodule |
 
 **1 to 6 are what a pilot notices.** Everything in §13.1 made the application more trustworthy;

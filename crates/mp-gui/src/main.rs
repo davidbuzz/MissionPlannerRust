@@ -210,13 +210,13 @@ struct MissionPlanner {
     /// Held rather than applied. A comparison is something an operator reads before deciding, and
     /// the decision is a second, deliberate press - loading a tune because it was compared would
     /// be the worst possible reading of "show me what this would change".
-    param_differences: Vec<mp_link::param_file::Difference>,
+    param_differences: Vec<mp_params::param_file::Difference>,
     /// Throttle a motor test uses, as a percentage.
     motor_throttle: f32,
     /// Whether a radio calibration is recording stick limits.
     capturing_radio: bool,
     /// The limits recorded so far.
-    radio_range: mp_vehicle::RcRange,
+    radio_range: mp_calibration::radio::RcRange,
     /// Whether this session has turned the vehicle's arming checks off.
     ///
     /// Only to offer putting them back. The parameter is the vehicle's, not ours, so this says
@@ -354,7 +354,7 @@ impl MissionPlanner {
             param_differences: Vec::new(),
             motor_throttle: 5.0,
             capturing_radio: false,
-            radio_range: mp_vehicle::RcRange::new(),
+            radio_range: mp_calibration::radio::RcRange::new(),
             disabled_arming_checks: false,
             forcing_arm_until: None,
             last_force_arm: None,
@@ -462,9 +462,9 @@ impl MissionPlanner {
     }
 
     /// The parameters currently held for the vehicle, as a file would hold them.
-    fn params_as_file(&self) -> mp_link::param_file::ParamFile {
+    fn params_as_file(&self) -> mp_params::param_file::ParamFile {
         let view = self.telemetry.view();
-        mp_link::param_file::ParamFile::from_values(
+        mp_params::param_file::ParamFile::from_values(
             view.parameters
                 .iter()
                 .map(|(name, value)| (name.clone(), *value)),
@@ -505,7 +505,7 @@ impl MissionPlanner {
     /// Compares a file against the vehicle, without changing anything.
     fn compare_params(&mut self) {
         let path = self.param_path();
-        let proposed = match mp_link::param_file::ParamFile::load(&path) {
+        let proposed = match mp_params::param_file::ParamFile::load(&path) {
             Ok(file) => file,
             Err(err) => {
                 self.param_differences.clear();
@@ -548,13 +548,13 @@ impl MissionPlanner {
         let mut skipped = 0usize;
         for difference in &self.param_differences {
             match difference.kind {
-                mp_link::param_file::Change::Changed { to, .. } => {
+                mp_params::param_file::Change::Changed { to, .. } => {
                     #[allow(clippy::cast_possible_truncation)] // parameters are f32 on the wire
                     self.telemetry.set_parameter(&difference.name, to as f32);
                     written += 1;
                 }
-                mp_link::param_file::Change::Added { .. }
-                | mp_link::param_file::Change::Missing { .. } => skipped += 1,
+                mp_params::param_file::Change::Added { .. }
+                | mp_params::param_file::Change::Missing { .. } => skipped += 1,
             }
         }
         // The comparison is now stale - it describes a vehicle that no longer exists. Cleared
@@ -688,7 +688,7 @@ impl MissionPlanner {
             return;
         };
         let mut next = current + delta;
-        if let Some(meta) = mp_vehicle::param_meta::lookup(name)
+        if let Some(meta) = mp_params::param_meta::lookup(name)
             && let Some((low, high)) = meta.range
         {
             next = next.clamp(low, high);
@@ -704,7 +704,7 @@ impl MissionPlanner {
     /// carry over a stick position the operator has since changed, and nothing on screen would
     /// say so.
     fn begin_radio_capture(&mut self) {
-        self.radio_range = mp_vehicle::RcRange::new();
+        self.radio_range = mp_calibration::radio::RcRange::new();
         self.capturing_radio = true;
         self.file_status = Some("recording radio limits - sweep every control".to_owned());
     }

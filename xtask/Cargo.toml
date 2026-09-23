@@ -16,3 +16,8 @@ mp-mavlink.workspace = true
 mp-mavlink-dialects.workspace = true
 roxmltree.workspace = true
 sha2.workspace = true
+
+[dev-dependencies]
+# tests/graph.rs reads `cargo metadata`'s JSON. Already in the tree through mp-firmware, so it
+# costs nothing to compile.
+serde_json.workspace = true

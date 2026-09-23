@@ -132,9 +132,12 @@ crates/
   mp-mavlink-dialects  generated message types (do not edit)
   mp-transport         serial, TCP, UDP, replay, test doubles
   mp-vehicle           decoded state, the snapshot bus, EKF and vibration health
-  mp-link              the live link: I/O thread, routing, commands, .param files
+  mp-link              the live link: I/O thread, routing, commands, mission transfer, recording
+  mp-params            parameter values and metadata, the downloaded table, .param files
+  mp-calibration       accelerometer, compass, radio and motor-test calibration
+  mp-ftp               files off the vehicle: dataflash log download (MAVFTP not yet)
   mp-mission           missions, fences, rally points, survey grids
-  mp-log               .tlog reading and writing, dataflash parsing
+  mp-log               .tlog reading, dataflash parsing
   mp-tiles             map tile fetching, decoding and caching
   mp-input             joystick and gamepad, mapped to RC channels
   mp-firmware          .apj files and the px4 bootloader protocol

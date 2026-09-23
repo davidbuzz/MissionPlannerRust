@@ -3297,6 +3297,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mp-calibration"
+version = "0.1.0"
+dependencies = [
+ "mp-mavlink-dialects",
+ "mp-vehicle",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "mp-chart"
 version = "0.1.0"
 
@@ -3311,6 +3320,7 @@ dependencies = [
  "mp-mavlink",
  "mp-mavlink-dialects",
  "mp-mission",
+ "mp-params",
  "mp-transport",
  "mp-units",
  "mp-vehicle",
@@ -3323,6 +3333,14 @@ dependencies = [
  "base64 0.22.1",
  "flate2",
  "serde_json",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "mp-ftp"
+version = "0.1.0"
+dependencies = [
+ "mp-vehicle",
  "thiserror 2.0.20",
 ]
 
@@ -3346,12 +3364,15 @@ dependencies = [
  "gpui_macos",
  "gpui_windows",
  "image",
+ "mp-calibration",
  "mp-chart",
+ "mp-ftp",
  "mp-input",
  "mp-link",
  "mp-log",
  "mp-mavlink-dialects",
  "mp-mission",
+ "mp-params",
  "mp-settings",
  "mp-tiles",
  "mp-units",
@@ -3377,10 +3398,12 @@ dependencies = [
 name = "mp-link"
 version = "0.1.0"
 dependencies = [
- "mp-log",
+ "mp-calibration",
+ "mp-ftp",
  "mp-mavlink",
  "mp-mavlink-dialects",
  "mp-mission",
+ "mp-params",
  "mp-transport",
  "mp-units",
  "mp-vehicle",
@@ -3391,6 +3414,7 @@ dependencies = [
 name = "mp-log"
 version = "0.1.0"
 dependencies = [
+ "mp-link",
  "mp-mavlink",
  "mp-mavlink-dialects",
  "thiserror 2.0.20",
@@ -3419,6 +3443,13 @@ name = "mp-mission"
 version = "0.1.0"
 dependencies = [
  "mp-units",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "mp-params"
+version = "0.1.0"
+dependencies = [
  "thiserror 2.0.20",
 ]
 
@@ -7333,6 +7364,7 @@ dependencies = [
  "mp-mavlink",
  "mp-mavlink-dialects",
  "roxmltree 0.20.0",
+ "serde_json",
  "sha2",
 ]
 

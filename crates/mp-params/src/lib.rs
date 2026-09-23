@@ -1,6 +1,14 @@
-//! Parameter values and the download protocol.
+//! Vehicle parameters: the values and their two encodings, the table a download fills, what each
+//! parameter means, and `.param` files.
 //!
-//! Replaces `ExtLibs/Mavlink/MAVLinkParam.cs` and the parameter half of `MAVLinkInterface`.
+//! Replaces `ExtLibs/Mavlink/MAVLinkParam.cs` and the parameter half of `MAVLinkInterface`; in
+//! [`param_file`], `ExtLibs/Utilities/ParamFile.cs`; and in [`param_meta`], the metadata Mission
+//! Planner reads from `ParameterMetaDataBackup.xml`, generated from the same file.
+//!
+//! L3 in PLAN.md §5.1, beside the link rather than inside it. The download protocol - asking for
+//! the list, then for each gap once the stream goes quiet - is the link thread's, and stays in
+//! `mp-link`; what it fills is a [`ParamTable`], which is data. So a tool that compares a `.param`
+//! file against a saved set needs no link to do it, and the link needs nothing from here but types.
 //!
 //! # The encoding trap, and the second trap inside it
 //!
@@ -26,7 +34,25 @@
 //! to seven significant digits before showing or comparing, which is why its parameter editor
 //! shows `0.8`. We do the same, so that a parameter read back after a write compares equal.
 
+#![forbid(unsafe_code)]
+
+pub mod param_file;
+pub mod param_meta;
+
+pub use param_meta::{ParamMeta, UserLevel};
+
 use std::collections::BTreeMap;
+
+/// Errors from this crate.
+///
+/// None yet, and uninhabited so that none can be made up: every operation here is total, and the
+/// two that touch a disk, [`param_file::ParamFile::save`] and [`param_file::ParamFile::load`],
+/// return the `std::io::Error` that is all they can fail with. A malformed line is not an error -
+/// it is reported in [`param_file::ParamFile::rejected`], because a file with three bad lines in a
+/// thousand is nine hundred and ninety-seven good parameters. This is the one enum PLAN.md §5.3
+/// gives each crate, so the first operation that can fail has somewhere to say how.
+#[derive(Debug, thiserror::Error)]
+pub enum ParamsError {}
 
 /// MAVLink `MAV_PARAM_TYPE`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

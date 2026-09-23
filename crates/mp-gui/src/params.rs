@@ -13,7 +13,7 @@
 #![allow(unreachable_pub)]
 
 use gpui::{AnyElement, Context, div, prelude::*, px, rgb};
-use mp_vehicle::{ParamMeta, UserLevel};
+use mp_params::{ParamMeta, UserLevel};
 
 use crate::MissionPlanner;
 use crate::telemetry::TelemetryView;
@@ -94,7 +94,7 @@ pub fn collect(view: &TelemetryView) -> Vec<Parameter> {
         .map(|(name, value)| Parameter {
             name: name.clone(),
             value: *value,
-            meta: mp_vehicle::param_meta::lookup(name),
+            meta: mp_params::param_meta::lookup(name),
         })
         .collect()
 }
@@ -476,7 +476,7 @@ pub fn file_panel(
     name: &crate::textfield::TextField,
     name_focus: &gpui::FocusHandle,
     focused: bool,
-    differences: &[mp_link::param_file::Difference],
+    differences: &[mp_params::param_file::Difference],
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
     let held = view.parameters.len();
@@ -489,13 +489,13 @@ pub fn file_panel(
     const SHOWN: usize = 40;
     for difference in differences.iter().take(SHOWN) {
         let (value, colour) = match difference.kind {
-            mp_link::param_file::Change::Changed { from, to } => {
+            mp_params::param_file::Change::Changed { from, to } => {
                 (format!("{from} -> {to}"), theme::WARN)
             }
-            mp_link::param_file::Change::Added { to } => {
+            mp_params::param_file::Change::Added { to } => {
                 (format!("not on the vehicle -> {to}"), theme::DIM)
             }
-            mp_link::param_file::Change::Missing { from } => {
+            mp_params::param_file::Change::Missing { from } => {
                 (format!("{from} -> not in the file"), theme::DIM)
             }
         };
@@ -533,7 +533,12 @@ pub fn file_panel(
 
     let changed = differences
         .iter()
-        .filter(|difference| matches!(difference.kind, mp_link::param_file::Change::Changed { .. }))
+        .filter(|difference| {
+            matches!(
+                difference.kind,
+                mp_params::param_file::Change::Changed { .. }
+            )
+        })
         .count();
 
     panel(
@@ -623,7 +628,7 @@ mod tests {
         Parameter {
             name: name.to_owned(),
             value,
-            meta: mp_vehicle::param_meta::lookup(name),
+            meta: mp_params::param_meta::lookup(name),
         }
     }
 
@@ -746,7 +751,7 @@ mod tests {
         // out-of-range write and then behaves oddly.
         // ACCEL_Z_D documents one; BATT_CAPACITY, checked first, does not - not every parameter
         // has a range, which is why the editor only shows one when there is one to show.
-        let meta = mp_vehicle::param_meta::lookup("ACCEL_Z_D").expect("metadata");
+        let meta = mp_params::param_meta::lookup("ACCEL_Z_D").expect("metadata");
         let (low, high) = meta.range.expect("ACCEL_Z_D documents a range");
         assert!(low < high);
         assert!(!meta.accepts(high + 1.0));
@@ -754,7 +759,7 @@ mod tests {
 
         // And a parameter without one is not treated as having an empty range, which would make
         // every value out of bounds.
-        let no_range = mp_vehicle::param_meta::lookup("BATT_CAPACITY").expect("metadata");
+        let no_range = mp_params::param_meta::lookup("BATT_CAPACITY").expect("metadata");
         assert!(no_range.range.is_none());
         assert!(
             no_range.accepts(3300.0),

@@ -2,7 +2,8 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
-use mp_log::{TlogReader, TlogWriter};
+use mp_link::tlog::TlogWriter;
+use mp_log::TlogReader;
 use mp_mavlink::{Message as _, encode_v2};
 use mp_mavlink_dialects::all::{DIALECT, Heartbeat};
 

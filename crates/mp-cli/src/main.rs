@@ -11,9 +11,9 @@ use std::time::{Duration, Instant};
 
 mod logs;
 
-use mp_link::param_file::{Change, ParamFile};
-use mp_link::params::ParamTable;
 use mp_link::{Link, LinkConfig, commands};
+use mp_params::ParamTable;
+use mp_params::param_file::{Change, ParamFile};
 use mp_vehicle::{StateHandle, VehicleId};
 
 fn main() -> std::process::ExitCode {
@@ -682,7 +682,7 @@ fn params(url: &str, filter: Option<&str>) -> std::process::ExitCode {
             Some(value) => {
                 println!("{name} = {} ({:?})", value.as_f64(), value.param_type());
                 // The number alone is rarely what someone needs; the documentation is the point.
-                if let Some(meta) = mp_vehicle::param_meta::lookup(name) {
+                if let Some(meta) = mp_params::param_meta::lookup(name) {
                     if !meta.display_name.is_empty() {
                         println!("  {}", meta.display_name);
                     }
@@ -736,7 +736,7 @@ fn params(url: &str, filter: Option<&str>) -> std::process::ExitCode {
             let mut undocumented = 0usize;
             let mut out_of_range = Vec::new();
             for (name, value) in table.iter() {
-                let meta = mp_vehicle::param_meta::lookup(name);
+                let meta = mp_params::param_meta::lookup(name);
                 let units = meta.map_or("", |m| m.units);
                 if meta.is_none() {
                     undocumented += 1;
@@ -1069,7 +1069,7 @@ fn param_save(url: &str, path: &str) -> std::process::ExitCode {
     let skipped_on_load: Vec<_> = table
         .iter()
         .map(|(name, _)| name.as_str())
-        .filter(|name| !mp_link::param_file::is_loaded(name))
+        .filter(|name| !mp_params::param_file::is_loaded(name))
         .collect();
     if !skipped_on_load.is_empty() {
         println!(
@@ -1140,7 +1140,7 @@ fn param_diff(current: &str, proposed: &str) -> std::process::ExitCode {
     for difference in &differences {
         // The documentation is what turns a number into a decision. Somebody comparing a suggested
         // tune against their own wants to know what ATC_RAT_PIT_D is before changing it.
-        let meta = mp_vehicle::param_meta::lookup(&difference.name);
+        let meta = mp_params::param_meta::lookup(&difference.name);
         let units = meta.map_or("", |m| m.units);
         let units = if units.is_empty() {
             String::new()

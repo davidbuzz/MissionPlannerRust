@@ -17,13 +17,10 @@
 
 #![forbid(unsafe_code)]
 
-pub mod calibration;
 pub mod commands;
-pub mod logs;
 pub mod messages;
 pub mod mission_transfer;
-pub mod param_file;
-pub mod params;
+pub mod tlog;
 pub mod traffic;
 
 use std::collections::BTreeMap;
@@ -35,9 +32,9 @@ use mission_transfer::{Action, MissionTransfer};
 use mp_mavlink::{DecodeStats, FrameDecoder, Message as _, encode_v2};
 use mp_mavlink_dialects::all::{DIALECT, Heartbeat, MavCmd, MavMessage, RequestDataStream};
 use mp_mission::{MISSION_TYPE_MISSION, MissionItem, WireItem};
+use mp_params::{ParamTable, ParamType, ParamValue, decode_param_id};
 use mp_transport::{OpenError, Transport};
 use mp_vehicle::{StateHandle, VehicleId, VehicleRegistry};
-use params::{ParamTable, ParamType, ParamValue, decode_param_id};
 
 /// MAVLink component id for a ground control station.
 pub const MAV_COMP_ID_MISSIONPLANNER: u8 = 190;
@@ -115,6 +112,15 @@ pub enum LinkError {
     /// The link thread could not be started.
     #[error("could not start link thread: {0}")]
     Thread(String),
+    /// A recording could not be created or written.
+    #[error("{context}: {source}")]
+    Record {
+        /// What was being attempted.
+        context: String,
+        /// The underlying error.
+        #[source]
+        source: std::io::Error,
+    },
 }
 
 /// Counters describing the link as a whole.
@@ -155,15 +161,15 @@ struct Shared {
     /// What the vehicle has said, and how it answered our commands.
     messages: Mutex<messages::MessageLog>,
     /// The state of an accelerometer calibration, if one is running.
-    accel_calibration: Mutex<calibration::AccelCalibration>,
+    accel_calibration: Mutex<mp_calibration::AccelCalibration>,
     /// Compass calibration progress, one entry per compass being calibrated.
-    compass_calibration: Mutex<BTreeMap<u8, calibration::CompassProgress>>,
+    compass_calibration: Mutex<BTreeMap<u8, mp_calibration::CompassProgress>>,
     /// Other aircraft, from ADS-B.
     traffic: Mutex<traffic::TrafficReport>,
     /// Dataflash logs the vehicle has listed.
-    log_listings: Mutex<BTreeMap<u16, logs::LogListing>>,
+    log_listings: Mutex<BTreeMap<u16, mp_ftp::logs::LogListing>>,
     /// A log download in progress.
-    log_download: Mutex<Option<logs::LogDownload>>,
+    log_download: Mutex<Option<mp_ftp::logs::LogDownload>>,
     stats: Mutex<LinkStats>,
     running: AtomicBool,
     frames_received: AtomicU64,
@@ -393,24 +399,24 @@ impl Link {
 
     /// What an accelerometer calibration is waiting for, if one is running.
     #[must_use]
-    pub fn accel_calibration(&self) -> calibration::AccelCalibration {
+    pub fn accel_calibration(&self) -> mp_calibration::AccelCalibration {
         self.shared
             .accel_calibration
             .lock()
             .map(|held| *held)
-            .unwrap_or(calibration::AccelCalibration::Idle)
+            .unwrap_or(mp_calibration::AccelCalibration::Idle)
     }
 
     /// Forgets any calibration state, so a finished run does not look like a running one.
     pub fn clear_accel_calibration(&self) {
         if let Ok(mut held) = self.shared.accel_calibration.lock() {
-            *held = calibration::AccelCalibration::Idle;
+            *held = mp_calibration::AccelCalibration::Idle;
         }
     }
 
     /// Compass calibration progress, one entry per compass, lowest id first.
     #[must_use]
-    pub fn compass_calibration(&self) -> Vec<calibration::CompassProgress> {
+    pub fn compass_calibration(&self) -> Vec<mp_calibration::CompassProgress> {
         self.shared
             .compass_calibration
             .lock()
@@ -438,7 +444,7 @@ impl Link {
 
     /// The logs the vehicle has listed, smallest id first.
     #[must_use]
-    pub fn log_listings(&self) -> Vec<logs::LogListing> {
+    pub fn log_listings(&self) -> Vec<mp_ftp::logs::LogListing> {
         self.shared
             .log_listings
             .lock()
@@ -449,14 +455,14 @@ impl Link {
     /// Starts downloading one log.
     pub fn download_log(&self, target: VehicleId, id: u16, size: u32) -> bool {
         if let Ok(mut held) = self.shared.log_download.lock() {
-            *held = Some(logs::LogDownload::new(target, id, size));
+            *held = Some(mp_ftp::logs::LogDownload::new(target, id, size));
         }
         self.last_log_progress.store(0, Ordering::Release);
         self.send(&commands::request_log_data(
             target,
             id,
             0,
-            logs::WINDOW_BYTES.min(size),
+            mp_ftp::logs::WINDOW_BYTES.min(size),
         ))
     }
 
@@ -500,7 +506,7 @@ impl Link {
                     target,
                     id,
                     offset,
-                    logs::WINDOW_BYTES.min(remaining),
+                    mp_ftp::logs::WINDOW_BYTES.min(remaining),
                 ))
             }
             None => self.send(&commands::log_request_end(target)),
@@ -617,7 +623,7 @@ impl Drop for Link {
 /// recording you cannot use to work out why a vehicle did what it did.
 fn send_frame(
     transport: &mut dyn Transport,
-    recorder: Option<&mut mp_log::TlogWriter>,
+    recorder: Option<&mut tlog::TlogWriter>,
     stats: &mut LinkStats,
     bytes: &[u8],
 ) -> bool {
@@ -644,7 +650,7 @@ fn run_link(
     let mut decoder = FrameDecoder::new();
     let mut registry = VehicleRegistry::new();
     let mut recorder = config.record_path.as_ref().and_then(|path| {
-        mp_log::TlogWriter::create(path)
+        tlog::TlogWriter::create(path)
             .inspect_err(|e| eprintln!("recording disabled: {e}"))
             .ok()
     });
@@ -724,14 +730,14 @@ fn run_link(
                                 // unusual enough that it is easy to miss: the same command id
                                 // carries the request and our confirmation.
                                 MavMessage::CommandLong(long)
-                                    if long.command == calibration::CMD_ACCELCAL_VEHICLE_POS =>
+                                    if long.command == mp_calibration::CMD_ACCELCAL_VEHICLE_POS =>
                                 {
                                     #[allow(
                                         clippy::cast_possible_truncation,
                                         clippy::cast_sign_loss
                                     )]
                                     let value = long.param1 as u32;
-                                    let state = calibration::AccelCalibration::from_wire(value);
+                                    let state = mp_calibration::AccelCalibration::from_wire(value);
                                     if let Ok(mut held) = shared.accel_calibration.lock() {
                                         *held = state;
                                     }
@@ -742,15 +748,15 @@ fn run_link(
                                 MavMessage::MagCalProgress(progress) => {
                                     if let Ok(mut held) = shared.compass_calibration.lock() {
                                         let entry = held.entry(progress.compass_id).or_insert(
-                                            calibration::CompassProgress {
+                                            mp_calibration::CompassProgress {
                                                 compass_id: progress.compass_id,
-                                                status: calibration::CompassStatus::NotStarted,
+                                                status: mp_calibration::CompassStatus::NotStarted,
                                                 percent: 0,
                                                 attempt: 0,
                                                 fitness: None,
                                             },
                                         );
-                                        entry.status = calibration::CompassStatus::from_wire(
+                                        entry.status = mp_calibration::CompassStatus::from_wire(
                                             progress.cal_status,
                                         );
                                         entry.percent = progress.completion_pct;
@@ -760,15 +766,15 @@ fn run_link(
                                 MavMessage::MagCalReport(report) => {
                                     if let Ok(mut held) = shared.compass_calibration.lock() {
                                         let entry = held.entry(report.compass_id).or_insert(
-                                            calibration::CompassProgress {
+                                            mp_calibration::CompassProgress {
                                                 compass_id: report.compass_id,
-                                                status: calibration::CompassStatus::NotStarted,
+                                                status: mp_calibration::CompassStatus::NotStarted,
                                                 percent: 0,
                                                 attempt: 0,
                                                 fitness: None,
                                             },
                                         );
-                                        entry.status = calibration::CompassStatus::from_wire(
+                                        entry.status = mp_calibration::CompassStatus::from_wire(
                                             report.cal_status,
                                         );
                                         // A report means sampling finished, whatever the last
@@ -812,7 +818,7 @@ fn run_link(
                                         if entry.num_logs > 0 {
                                             held.insert(
                                                 entry.id,
-                                                logs::LogListing {
+                                                mp_ftp::logs::LogListing {
                                                     id: entry.id,
                                                     size: entry.size,
                                                     time_utc: entry.time_utc,
