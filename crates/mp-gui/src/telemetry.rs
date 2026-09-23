@@ -16,6 +16,22 @@ use mp_mission::MissionItem;
 use mp_units::LatLon;
 use mp_vehicle::{VehicleFamily, VehicleId, VehicleState};
 
+/// The parameter holding the bitmask of checks performed before arming, before ArduPilot 4.7.
+///
+/// A bitmask of checks to *perform*; zero is none of them, and the firmware default is 1 meaning
+/// all.
+pub const ARMING_CHECK: &str = "ARMING_CHECK";
+
+/// The same setting from ArduPilot 4.7 onwards, with the sense inverted.
+///
+/// A bitmask of checks to *skip*; the default is 0, meaning skip nothing. ArduPilot's own
+/// conversion code maps the old `ARMING_CHECK == 0` to this being -1, and its parameter
+/// documentation says -1 skips "all non-mandatory current and future checks".
+pub const ARMING_SKIPCHK: &str = "ARMING_SKIPCHK";
+
+/// `ARMING_SKIPCHK` value that skips every non-mandatory check.
+pub const SKIP_ALL_CHECKS: f32 = -1.0;
+
 /// How many log lines the flight screen shows.
 ///
 /// The pane scrolls, so this is how much history is reachable rather than how much fits. The link
@@ -283,16 +299,111 @@ impl Telemetry {
         }
     }
 
-    /// Arms with the pre-arm checks bypassed.
+    /// Reboots the autopilot.
     ///
-    /// `MAV_CMD_COMPONENT_ARM_DISARM` takes a magic 21196 in param2 that tells the vehicle to arm
-    /// regardless of what its checks say. This is a real and necessary operation - bench testing,
-    /// motor tests, and flying with a sensor the operator has assessed and accepted - and it is
-    /// also how an aircraft takes off with an uncalibrated compass.
+    /// The link drops when the vehicle obeys, which is what success looks like. Useful after a
+    /// calibration, and the usual first thing to try when a board is behaving oddly.
+    pub fn reboot(&self) {
+        if let Some((link, id)) = self.target() {
+            link.send(&commands::reboot(id));
+        }
+    }
+
+    /// Which arming-check parameter this vehicle has, if we have learned it yet.
+    ///
+    /// ArduPilot 4.7 renamed `ARMING_CHECK` to `ARMING_SKIPCHK` and inverted its sense, so the
+    /// right name depends on the firmware at the other end. Asking is the only way to know:
+    /// writing a name the vehicle does not have is silently ignored, which is exactly how this
+    /// went wrong the first time - the button appeared to work, the parameter did not exist, and
+    /// an arm that succeeded for an unrelated reason looked like proof that it had.
+    #[must_use]
+    pub fn arming_check_param(&self) -> Option<&'static str> {
+        let link = self.link.as_ref()?;
+        let (id, _) = link.primary_vehicle()?;
+        let table = link.params(id)?;
+        if table.get(ARMING_SKIPCHK).is_some() {
+            return Some(ARMING_SKIPCHK);
+        }
+        if table.get(ARMING_CHECK).is_some() {
+            return Some(ARMING_CHECK);
+        }
+        None
+    }
+
+    /// Asks the vehicle for both arming-check parameter names.
+    ///
+    /// Cheap - two messages - and the answer says which firmware generation this is without
+    /// downloading a thousand parameters to find out.
+    pub fn probe_arming_check_param(&self) {
+        if let Some((link, id)) = self.target() {
+            link.send(&commands::request_param_by_name(id, ARMING_SKIPCHK));
+            link.send(&commands::request_param_by_name(id, ARMING_CHECK));
+        }
+    }
+
+    /// Turns the vehicle's arming checks off.
+    ///
+    /// Writes whichever parameter this vehicle actually has. Until that is known it asks for both
+    /// and writes both: the one that does not exist is ignored, and the caller retries, by which
+    /// time the answer has arrived and the right one is written on its own.
+    ///
+    /// These are persistent parameters, so they stay off until something sets them back - which is
+    /// the behaviour asked for, and why the caller says so on screen rather than doing it quietly.
+    pub fn disable_arming_checks(&self) {
+        self.write_arming_checks(SKIP_ALL_CHECKS, 0.0);
+    }
+
+    /// Restores the vehicle's arming checks to the firmware defaults.
+    ///
+    /// The defaults differ with the name: nothing skipped for the new parameter, everything
+    /// checked for the old one. Writing the wrong default would be worse than writing nothing.
+    pub fn enable_arming_checks(&self) {
+        self.write_arming_checks(0.0, 1.0);
+    }
+
+    /// Writes whichever arming-check parameter this vehicle has.
+    ///
+    /// `skipchk` is the value for the 4.7-and-later name, `legacy` the value for the older one.
+    /// They are different numbers for the same intent, because the sense was inverted along with
+    /// the rename.
+    ///
+    /// Until the vehicle has said which it has, both are written and both are asked for. The one
+    /// that does not exist is ignored, and the caller retries - by which time the answer has
+    /// arrived and only the right one is written.
+    fn write_arming_checks(&self, skipchk: f32, legacy: f32) {
+        let Some((link, id)) = self.target() else {
+            return;
+        };
+        match self.arming_check_param() {
+            Some(name) if name == ARMING_SKIPCHK => {
+                link.send(&commands::param_set(id, ARMING_SKIPCHK, skipchk));
+            }
+            Some(_) => {
+                link.send(&commands::param_set(id, ARMING_CHECK, legacy));
+            }
+            None => {
+                self.probe_arming_check_param();
+                link.send(&commands::param_set(id, ARMING_SKIPCHK, skipchk));
+                link.send(&commands::param_set(id, ARMING_CHECK, legacy));
+            }
+        }
+    }
+
+    /// Arms with the checks bypassed.
+    ///
+    /// Two things, because one is not enough. The magic 21196 in `MAV_CMD_COMPONENT_ARM_DISARM`
+    /// param2 tells the vehicle to skip its *pre-arm* checks, and a real board refused it anyway,
+    /// listing an uncalibrated accelerometer and a bad GPS fix - those are arming checks, and the
+    /// magic does not touch them. Turning `ARMING_CHECK` off does.
+    ///
+    /// The parameter write and the command are separate messages and the parameter takes effect
+    /// asynchronously, so the caller re-sends the command for a short while rather than assuming
+    /// one attempt lands after the write.
     ///
     /// It is a separate call from [`Telemetry::arm`] rather than a flag on it, so that no code
-    /// path can force by accident: forcing is something a caller has to ask for by name.
+    /// path can force by accident: forcing is something a caller asks for by name.
     pub fn force_arm(&self) {
+        self.disable_arming_checks();
         if let Some((link, id)) = self.target() {
             link.send(&commands::arm(id, true, true));
         }

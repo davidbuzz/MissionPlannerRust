@@ -87,7 +87,11 @@ pub fn vehicle_panel(view: &TelemetryView) -> impl IntoElement {
 /// two things you meant. Only one of the two groups is ever live: force arm is disabled while
 /// armed and disarm is disabled while disarmed, so there is no moment when a slip toward disarm
 /// can arm anything.
-pub fn actions_panel(view: &TelemetryView, cx: &mut Context<MissionPlanner>) -> impl IntoElement {
+pub fn actions_panel(
+    view: &TelemetryView,
+    checks_disabled: bool,
+    cx: &mut Context<MissionPlanner>,
+) -> impl IntoElement {
     let armed = view.state.as_ref().is_some_and(|s| s.armed);
     let has_vehicle = view.vehicle.is_some();
 
@@ -113,7 +117,7 @@ pub fn actions_panel(view: &TelemetryView, cx: &mut Context<MissionPlanner>) -> 
             has_vehicle && !armed,
             Some(ARM_BUTTON_WIDTH),
             cx.listener(|this, _event: &(), _window, cx| {
-                this.telemetry.force_arm();
+                this.begin_force_arm();
                 cx.notify();
             }),
         ))
@@ -146,7 +150,36 @@ pub fn actions_panel(view: &TelemetryView, cx: &mut Context<MissionPlanner>) -> 
                 this.telemetry.land();
                 cx.notify();
             }),
-        ));
+        ))
+        .child(action(
+            "reboot",
+            "reboot",
+            theme::WARN,
+            has_vehicle && !armed,
+            cx.listener(|this, _event: &(), _window, cx| {
+                this.telemetry.reboot();
+                this.file_status = Some("reboot sent; the link will drop".to_owned());
+                cx.notify();
+            }),
+        ))
+        // Only after this session has turned them off. A vehicle that never had its checks
+        // disabled does not need a button offering to restore them, and forcing is meant to stay
+        // in force until the operator decides otherwise.
+        .children(checks_disabled.then(|| {
+            action(
+                "restore-checks",
+                "restore arming checks",
+                theme::OK,
+                has_vehicle,
+                cx.listener(|this, _event: &(), _window, cx| {
+                    this.telemetry.enable_arming_checks();
+                    this.disabled_arming_checks = false;
+                    this.file_status =
+                        Some("arming checks restored to the firmware default".to_owned());
+                    cx.notify();
+                }),
+            )
+        }));
 
     panel(
         "actions",

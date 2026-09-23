@@ -98,6 +98,121 @@ fn a_forced_arm_is_understood_by_the_firmware() {
     link.send(&commands::arm(id, false, false));
 }
 
+/// Sets a parameter and waits for the vehicle to report the new value back.
+///
+/// Reading back is the whole point. `PARAM_SET` has no acknowledgement of its own: the vehicle
+/// answers by broadcasting the parameter, and a write to a name the firmware does not have looks
+/// exactly like one that worked. An earlier version of this test wrote `ARMING_CHECK`, which
+/// ArduPilot 4.7 renamed, and passed anyway - because the vehicle it was testing against could
+/// arm regardless. A test that cannot tell a no-op from a success is not a test.
+fn set_param_and_confirm(link: &Link, id: VehicleId, name: &str, value: f32) -> bool {
+    link.send(&commands::param_set(id, name, value));
+    // Ask for it as well. The vehicle answers a successful write by broadcasting the parameter,
+    // but that single message is easy to miss on a busy link - and a missed broadcast is
+    // indistinguishable from a parameter that does not exist, which is the thing being tested.
+    link.send(&commands::request_param_by_name(id, name));
+
+    // Wait for the table to show the *new* value, not merely some value. The table may already
+    // hold this parameter from an earlier request, and returning on the first value seen reports
+    // the old one - which looks exactly like a write the vehicle refused.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while Instant::now() < deadline {
+        if let Some(table) = link.params(id)
+            && let Some(current) = table.get(name)
+        {
+            #[allow(clippy::cast_possible_truncation)]
+            let read_back = current.as_f64() as f32;
+            if (read_back - value).abs() < 0.001 {
+                return true;
+            }
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    false
+}
+
+/// The arming-check parameter this vehicle has, trying the newer name first.
+///
+/// ArduPilot 4.7 renamed `ARMING_CHECK` to `ARMING_SKIPCHK` and inverted its sense. Try one, and
+/// if the vehicle does not have it, try the other.
+fn arming_check_param(link: &Link, id: VehicleId) -> Option<(&'static str, f32, f32)> {
+    for (name, disable, restore) in [("ARMING_SKIPCHK", -1.0, 0.0), ("ARMING_CHECK", 0.0, 1.0)] {
+        link.send(&commands::request_param_by_name(id, name));
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            if let Some(table) = link.params(id)
+                && table.get(name).is_some()
+            {
+                return Some((name, disable, restore));
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
+    None
+}
+
+#[test]
+#[ignore = "requires ArduPilot SITL listening on tcp:127.0.0.1:5760"]
+fn the_arming_check_parameter_is_one_this_firmware_actually_has() {
+    // ArduPilot 4.7 renamed ARMING_CHECK to ARMING_SKIPCHK and inverted its sense: the old one was
+    // a mask of checks to perform, the new one a mask of checks to skip, and -1 skips all. Writing
+    // the wrong name is silently ignored, so the code tries one and falls back to the other - and
+    // this asserts the vehicle under test has one of them.
+    let (link, id) = connect();
+
+    let (name, disable, restore) =
+        arming_check_param(&link, id).expect("this firmware has neither arming-check parameter");
+
+    assert!(
+        set_param_and_confirm(&link, id, name, disable),
+        "{name} exists but would not take {disable}"
+    );
+    assert!(
+        set_param_and_confirm(&link, id, name, restore),
+        "{name} would not take {restore} again"
+    );
+}
+
+#[test]
+#[ignore = "requires ArduPilot SITL listening on tcp:127.0.0.1:5760"]
+fn disabling_the_arming_checks_arms_a_vehicle_that_was_refusing() {
+    // The magic 21196 skips the pre-arm checks and nothing else. A real board refused a forced arm
+    // and listed an uncalibrated accelerometer and a bad GPS fix - those are arming checks, and
+    // only the skip parameter turns them off. This is the whole force-arm path end to end.
+    let (link, id) = connect();
+    let handle = link.vehicle(id).expect("a state handle");
+
+    let (name, disable, restore) =
+        arming_check_param(&link, id).expect("this firmware has neither arming-check parameter");
+    // Confirmed, not assumed: the assertion below is meaningless if this did nothing. An earlier
+    // version of this test wrote a parameter the firmware had renamed, and passed anyway.
+    assert!(
+        set_param_and_confirm(&link, id, name, disable),
+        "{name} would not take {disable}"
+    );
+
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let mut armed = false;
+    while Instant::now() < deadline {
+        link.send(&commands::arm(id, true, true));
+        std::thread::sleep(Duration::from_millis(400));
+        if handle.load().armed {
+            armed = true;
+            break;
+        }
+    }
+
+    // Put the vehicle and its parameters back before asserting, so a failure here does not leave
+    // SITL armed with its checks off for the next test.
+    link.send(&commands::arm(id, false, true));
+    set_param_and_confirm(&link, id, name, restore);
+
+    assert!(
+        armed,
+        "the vehicle never armed with {name} = {disable} and a forced arm"
+    );
+}
+
 #[test]
 #[ignore = "requires ArduPilot SITL listening on tcp:127.0.0.1:5760"]
 fn a_refusal_comes_with_a_reason_the_pilot_can_act_on() {

@@ -119,6 +119,27 @@ struct MissionPlanner {
     file_status: Option<String>,
     /// The waypoint being dragged on the map, if one is.
     dragging_waypoint: Option<u16>,
+    /// Whether this session has turned the vehicle's arming checks off.
+    ///
+    /// Only to offer putting them back. The parameter is the vehicle's, not ours, so this says
+    /// what we did rather than what the vehicle currently holds.
+    disabled_arming_checks: bool,
+    /// When the last forced arm command went out, so the retry does not flood.
+    ///
+    /// The armed flag comes from the heartbeat, which is 1 Hz. Retrying at the render rate sends
+    /// ten commands before the state can possibly catch up, and the vehicle acknowledges every one
+    /// of them - which buries the message log under its own retries.
+    last_force_arm: Option<std::time::Instant>,
+    /// While a forced arm is in progress, when to stop re-sending it.
+    ///
+    /// The parameter write that disables the checks takes effect asynchronously, so one arm
+    /// command sent straight after it can arrive too early. Re-sending for a couple of seconds
+    /// costs nothing and removes the race.
+    forcing_arm_until: Option<std::time::Instant>,
+    /// Scroll position of the flight screen's panel column, so an indicator can be drawn for it.
+    fly_scroll: gpui::ScrollHandle,
+    /// Scroll position of the plan screen's panel column.
+    plan_scroll: gpui::ScrollHandle,
 }
 
 impl MissionPlanner {
@@ -192,6 +213,11 @@ impl MissionPlanner {
             adopt_vehicle_rally: false,
             file_status: None,
             dragging_waypoint: None,
+            disabled_arming_checks: false,
+            forcing_arm_until: None,
+            last_force_arm: None,
+            fly_scroll: gpui::ScrollHandle::new(),
+            plan_scroll: gpui::ScrollHandle::new(),
         }
     }
 
@@ -278,6 +304,25 @@ impl MissionPlanner {
         ));
     }
 
+    /// Disables the vehicle's arming checks and arms it, re-sending until it takes.
+    ///
+    /// `ARMING_CHECK` stays off afterwards. That is what "always arm the vehicle, no matter" asks
+    /// for, and restoring it quietly would mean the next arm behaved differently for reasons the
+    /// operator could not see. It is said plainly on the status line instead, and the actions
+    /// panel offers putting the checks back.
+    fn begin_force_arm(&mut self) {
+        /// Long enough for a parameter write to be applied and echoed, short enough that a vehicle
+        /// which is never going to arm stops being asked.
+        const GIVE_UP_AFTER: std::time::Duration = std::time::Duration::from_secs(6);
+
+        self.telemetry.force_arm();
+        self.last_force_arm = Some(std::time::Instant::now());
+        self.disabled_arming_checks = true;
+        self.forcing_arm_until = Some(std::time::Instant::now() + GIVE_UP_AFTER);
+        self.file_status =
+            Some("arming checks disabled (ARMING_SKIPCHK=-1); forcing arm".to_owned());
+    }
+
     /// Pushes the plan to the map after an edit.
     ///
     /// The render pass does this too, but only on the next frame; doing it at the edit means the
@@ -356,19 +401,31 @@ impl MissionPlanner {
             .w(px(400.0))
             .child(fly::hud_panel(view))
             .child(
-                probe::measured("fly-sidebar", div())
-                    .id("fly-sidebar")
+                // The scrolling column and its indicator share a positioned parent, so the
+                // indicator can sit over the column's right edge without taking width from it.
+                div()
+                    .relative()
                     .flex()
                     .flex_col()
                     .flex_1()
                     .min_h(px(0.0))
-                    .gap_2()
-                    .pr_2()
-                    .overflow_y_scroll()
-                    .child(fly::actions_panel(view, cx))
-                    .child(fly::prearm_panel(view))
-                    .child(fly::vehicle_panel(view))
-                    .child(fly::health_panel(view)),
+                    .child(
+                        probe::measured("fly-sidebar", div())
+                            .id("fly-sidebar")
+                            .flex()
+                            .flex_col()
+                            .flex_1()
+                            .min_h(px(0.0))
+                            .gap_2()
+                            .pr_2()
+                            .overflow_y_scroll()
+                            .track_scroll(&self.fly_scroll)
+                            .child(fly::actions_panel(view, self.disabled_arming_checks, cx))
+                            .child(fly::prearm_panel(view))
+                            .child(fly::vehicle_panel(view))
+                            .child(fly::health_panel(view)),
+                    )
+                    .children(ui::scroll_indicator(&self.fly_scroll)),
             )
     }
 
@@ -394,19 +451,30 @@ impl MissionPlanner {
         };
 
         div()
-            .id("plan-sidebar")
+            .relative()
             .flex()
             .flex_col()
             .flex_shrink_0()
-            .gap_2()
-            .pr_2()
-            .overflow_y_scroll()
+            .min_h(px(0.0))
             .w(px(400.0))
-            .child(plan::actions_panel(&items, &origin, view, cx))
-            .child(plan::draw_panel(&draw, view, cx))
-            .child(plan::items_panel(&items, selected, cx))
-            .child(plan::editor_panel(&items, selected, cx))
-            .child(plan::checks_panel(&items, view))
+            .child(
+                div()
+                    .id("plan-sidebar")
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .min_h(px(0.0))
+                    .gap_2()
+                    .pr_2()
+                    .overflow_y_scroll()
+                    .track_scroll(&self.plan_scroll)
+                    .child(plan::actions_panel(&items, &origin, view, cx))
+                    .child(plan::draw_panel(&draw, view, cx))
+                    .child(plan::items_panel(&items, selected, cx))
+                    .child(plan::editor_panel(&items, selected, cx))
+                    .child(plan::checks_panel(&items, view)),
+            )
+            .children(ui::scroll_indicator(&self.plan_scroll))
     }
 
     /// The setup screen, which is one column and no map.
@@ -687,6 +755,35 @@ impl Render for MissionPlanner {
             }
         } else {
             self.map.borrow_mut().set_mission(self.plan.items());
+        }
+
+        // Keep re-sending a forced arm until it takes, or until we give up. The parameter write
+        // that disabled the checks may not have been applied when the first command arrived.
+        if let Some(deadline) = self.forcing_arm_until {
+            let armed = view.state.as_ref().is_some_and(|state| state.armed);
+            if armed {
+                self.forcing_arm_until = None;
+                self.file_status = Some("armed with arming checks disabled".to_owned());
+            } else if std::time::Instant::now() >= deadline {
+                self.forcing_arm_until = None;
+                self.file_status = Some(
+                    "forced arm gave up; the vehicle is still refusing - see the messages"
+                        .to_owned(),
+                );
+            } else {
+                // Once per heartbeat interval, so each attempt is judged against a state that
+                // could have changed since the last one.
+                const BETWEEN_ATTEMPTS: std::time::Duration =
+                    std::time::Duration::from_millis(1000);
+                let now = std::time::Instant::now();
+                if self
+                    .last_force_arm
+                    .is_none_or(|last| now.duration_since(last) >= BETWEEN_ATTEMPTS)
+                {
+                    self.last_force_arm = Some(now);
+                    self.telemetry.force_arm();
+                }
+            }
         }
 
         // A completed fence download replaces the fence only if the operator asked for one.

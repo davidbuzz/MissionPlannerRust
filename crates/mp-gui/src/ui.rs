@@ -6,7 +6,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
-use gpui::{AnyElement, App, SharedString, Window, div, prelude::*, px, rgb};
+use gpui::{AnyElement, App, ScrollHandle, SharedString, Window, div, prelude::*, px, rgb};
 
 /// Palette. Deliberately close to Mission Planner's dark theme so the port feels familiar rather
 /// than merely new.
@@ -162,4 +162,83 @@ pub fn progress(fraction: f32, colour: u32) -> impl IntoElement {
                 .rounded_sm()
                 .bg(rgb(colour)),
         )
+}
+
+/// How much of the track the thumb takes up.
+///
+/// Fixed rather than proportional. A proportional thumb needs the viewport height as well as the
+/// scrollable distance, and gpui's `ScrollHandle` reports only the latter; guessing the ratio
+/// would make the thumb lie about how much is hidden. A fixed thumb says "there is more, and you
+/// are here", which is the whole job.
+const THUMB_FRACTION: f32 = 0.2;
+
+/// A scroll indicator for a container that scrolls.
+///
+/// gpui draws none. `overflow_y_scroll()` sets one style field: it clips the content and captures
+/// the wheel, and that is all. There is no scrollbar geometry anywhere in gpui - Zed draws its own
+/// with a component from a crate this does not depend on. The consequence is that a correctly
+/// clipping column is pixel-identical to one whose content runs off the bottom of the window,
+/// which is exactly the confusion that cost two rounds of layout debugging here.
+///
+/// An indicator rather than a control: it cannot be dragged, because the wheel already works and a
+/// thumb that looks draggable and is not would be worse than none.
+///
+/// Note what is deliberately not used. `scrollbar_width()` exists on gpui's `Styled` and looks
+/// like the way to reserve a gutter, but Taffy takes that width out of the container's content
+/// box. On a column that was already too tall for its space, reserving ten pixels would have made
+/// the problem it is meant to reveal slightly worse.
+pub fn scroll_indicator(handle: &ScrollHandle) -> Option<AnyElement> {
+    let max = f32::from(handle.max_offset().y);
+    // Nothing is hidden, so there is nothing to indicate. An always-visible track on a column that
+    // fits would be clutter claiming something is out of sight when nothing is.
+    if max <= 1.0 {
+        return None;
+    }
+
+    let offset = f32::from(handle.offset().y).abs();
+    let travel = (offset / max).clamp(0.0, 1.0) * (1.0 - THUMB_FRACTION);
+
+    Some(
+        div()
+            .absolute()
+            .top_0()
+            .right_0()
+            .bottom_0()
+            .w(px(4.0))
+            .child(
+                div()
+                    .absolute()
+                    .left_0()
+                    .right_0()
+                    .top(gpui::relative(travel))
+                    .h(gpui::relative(THUMB_FRACTION))
+                    .rounded_full()
+                    // DIM rather than BORDER: at four pixels wide the border colour is almost
+                    // invisible against the panel, which defeats the point of drawing it.
+                    .bg(rgb(theme::DIM)),
+            )
+            .into_any_element(),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_column_with_nothing_hidden_gets_no_indicator() {
+        // An always-visible track on a column that fits would be clutter claiming something is out
+        // of sight when nothing is.
+        let handle = ScrollHandle::new();
+        assert!(scroll_indicator(&handle).is_none());
+    }
+
+    #[test]
+    fn the_thumb_leaves_room_to_travel() {
+        // A thumb as tall as its track could not move, and a moving thumb is the only thing that
+        // says which part of the content is on screen. Checked at compile time, because both
+        // sides are constants.
+        const _: () = assert!(THUMB_FRACTION > 0.0);
+        const _: () = assert!(THUMB_FRACTION < 1.0);
+    }
 }

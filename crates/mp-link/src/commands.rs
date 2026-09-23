@@ -205,6 +205,25 @@ pub fn request_param_by_name(target: VehicleId, name: &str) -> MavMessage {
     })
 }
 
+/// `MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN`.
+const CMD_PREFLIGHT_REBOOT_SHUTDOWN: u16 = 246;
+
+/// Reboots the autopilot.
+///
+/// param1 = 1 means reboot; 2 and 3 shut down and reboot to bootloader, which are not offered
+/// here. A shutdown from a ground station is a vehicle that has to be reached physically to come
+/// back, and the bootloader is for firmware tools.
+///
+/// The link drops when this is obeyed, which is the expected outcome rather than a failure.
+#[must_use]
+pub fn reboot(target: VehicleId) -> MavMessage {
+    command(
+        target,
+        CMD_PREFLIGHT_REBOOT_SHUTDOWN,
+        [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    )
+}
+
 /// Asks the vehicle how many items it holds, starting a download.
 ///
 /// `mission_type` selects which list: the mission, the geofence or the rally points. They share
@@ -345,6 +364,22 @@ mod tests {
         let p = params(&message);
         assert!(p[0].abs() < f32::EPSILON, "param1 should ask to disarm");
         assert!(p[1].abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn a_reboot_asks_for_a_reboot_and_not_a_shutdown() {
+        // param1 = 2 shuts the vehicle down, which from a ground station means it has to be
+        // reached physically to come back. Getting this wrong would be discovered in a field.
+        let p = params(&reboot(target()));
+        assert!(
+            (p[0] - 1.0).abs() < f32::EPSILON,
+            "param1 should be 1, got {}",
+            p[0]
+        );
+        assert!(
+            p[1..].iter().all(|value| value.abs() < f32::EPSILON),
+            "{p:?}"
+        );
     }
 
     #[test]

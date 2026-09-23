@@ -6,6 +6,9 @@
 #
 # usage: tools/screenshot.sh <output-name> [seconds-visible] [-- <binary args>]
 #
+# SHOT_DELAY waits that many seconds after the last interaction before capturing, for state that
+# arrives on the next telemetry message rather than immediately.
+#
 # CLICK names controls to click before capturing, comma separated, each optionally suffixed with
 # :right for a right-click. Controls are addressed by name rather than coordinate, and a name may
 # carry a position within the control - "map@0.25x0.75:right" right-clicks a quarter of the way
@@ -109,6 +112,11 @@ if [ -n "${DRAG:-}" ]; then
         sleep 0.6
     done
 fi
+
+# A pause between the last interaction and the capture. Some things take a moment to come back -
+# an armed flag arrives on the next heartbeat, a second away - and a screenshot taken immediately
+# after a click shows the state before the answer.
+[ -n "${SHOT_DELAY:-}" ] && sleep "$SHOT_DELAY"
 
 GEO=$(xwininfo -id "$WIN_ID" | awk '
     /Absolute upper-left X/ {x=$4}

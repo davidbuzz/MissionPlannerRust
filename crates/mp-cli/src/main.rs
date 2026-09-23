@@ -45,6 +45,18 @@ fn main() -> std::process::ExitCode {
                 std::process::ExitCode::from(2)
             }
         },
+        Some("param") => match (
+            args.get(1).map(String::as_str),
+            args.get(2),
+            args.get(3),
+            args.get(4).and_then(|value| value.parse::<f32>().ok()),
+        ) {
+            (Some("set"), Some(url), Some(name), Some(value)) => set_param(url, name, value),
+            _ => {
+                eprintln!("usage: mpr param set <url> <NAME> <VALUE>");
+                std::process::ExitCode::from(2)
+            }
+        },
         Some("mission") => match (args.get(1), args.get(2)) {
             (Some(url), file) => mission(url, file.map(String::as_str)),
             _ => {
@@ -86,7 +98,8 @@ fn usage() {
          mpr watch <url> [seconds]   connect and display live telemetry\n  \
          mpr record <url> <file> [s] record telemetry to a .tlog\n  \
          mpr fly <url> [file]        fly a scripted mission (simulator only)\n  \
-         mpr params <url> [NAME]     download the parameter set, or show one parameter\n  \
+         mpr params <url> [NAME]     download the parameter set, or show one parameter
+  mpr param set <url> N V     set one parameter and read it back\n  \
          mpr mission <url> [file]    download the mission, or upload one from a file\n  \
          mpr survey <url> <file>     generate a survey grid around the vehicle\n  \
          mpr log <file>              summarise a telemetry or dataflash log\n  \
@@ -343,6 +356,83 @@ fn fly(url: &str, record_path: Option<&str>) -> std::process::ExitCode {
 /// Useful on its own, and the fastest way to check the download protocol against a real vehicle:
 /// a parameter set with a hole in it is a protocol bug, and the count is printed so a hole is
 /// visible rather than implied.
+/// Sets one parameter and reads it back.
+///
+/// Reading back is the point. `PARAM_SET` has no acknowledgement of its own - the vehicle answers
+/// by broadcasting the parameter's new value, and a write that was rejected or clamped looks
+/// exactly like one that worked until you look. ArduPilot silently clamps out-of-range values.
+fn set_param(url: &str, name: &str, value: f32) -> std::process::ExitCode {
+    let config = LinkConfig {
+        stream_rate_hz: 0,
+        ..LinkConfig::default()
+    };
+    let link = match Link::connect(url, config) {
+        Ok(link) => link,
+        Err(err) => {
+            eprintln!("could not open {url}: {err}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    println!("connected: {}", link.description());
+
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while link.primary_vehicle().is_none() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let Some((id, _)) = link.primary_vehicle() else {
+        eprintln!("no vehicle appeared on {url}");
+        return std::process::ExitCode::FAILURE;
+    };
+
+    println!("setting {name} = {value} on vehicle {id}");
+    link.send(&mp_link::commands::param_set(id, name, value));
+
+    // The vehicle broadcasts the new value when it accepts the write. Asking for it as well covers
+    // the case where that broadcast was lost, which on a noisy serial link is not rare.
+    // Wait for the table to show the *new* value, not merely some value. It may already hold this
+    // parameter from an earlier read, and returning on the first value seen reports the old one -
+    // which looks exactly like a write the vehicle refused.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut asked_again = false;
+    let mut last_seen: Option<f32> = None;
+    loop {
+        if let Some(table) = link.params(id)
+            && let Some(current) = table.get(name)
+        {
+            #[allow(clippy::cast_possible_truncation)] // parameters are f32 on the wire
+            let read_back = current.as_f64() as f32;
+            last_seen = Some(read_back);
+            if (read_back - value).abs() < 0.001 {
+                println!("{name} = {read_back}");
+                return std::process::ExitCode::SUCCESS;
+            }
+        }
+        if !asked_again && Instant::now() > deadline - Duration::from_secs(7) {
+            asked_again = true;
+            link.send(&mp_link::commands::request_param_by_name(id, name));
+        }
+        if Instant::now() > deadline {
+            return match last_seen {
+                // The vehicle answered; it just did not accept what was asked. ArduPilot silently
+                // clamps out-of-range values, so this is the common shape of a rejected write.
+                Some(held) => {
+                    eprintln!("{name} = {held}; the vehicle did not accept {value}");
+                    std::process::ExitCode::FAILURE
+                }
+                // No answer at all usually means the name does not exist on this firmware.
+                None => {
+                    eprintln!(
+                        "the vehicle did not report {name} back; \
+                         it may not exist on this firmware"
+                    );
+                    std::process::ExitCode::FAILURE
+                }
+            };
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
 fn params(url: &str, filter: Option<&str>) -> std::process::ExitCode {
     let config = LinkConfig {
         stream_rate_hz: 0,
