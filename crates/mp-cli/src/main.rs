@@ -105,11 +105,14 @@ fn main() -> std::process::ExitCode {
         Some("firmware") => match (args.get(1).map(String::as_str), args.get(2)) {
             (Some("info"), Some(path)) => firmware_info(path),
             (Some("detect"), Some(port)) => firmware_detect(port),
+            (Some("list"), _) => firmware_list(args.get(2..).unwrap_or_default()),
             _ => {
                 eprintln!(
                     "usage:\n  \
                      mpr firmware info <file.apj>   describe a firmware file and its CRC\n  \
-                     mpr firmware detect <port>     name the board from its USB ids, opening nothing\n\n\
+                     mpr firmware detect <port>     name the board from its USB ids, opening nothing\n  \
+                     mpr firmware list [--board <id|name>] [--vehicle <type>] [--release <type>]\n    \
+                     the firmware Mission Planner's catalogue would give a board\n\n\
                      Flashing is not offered here. It can brick a board and has no simulator, so\n\
                      it goes through the GUI where the board it is about to write to is on screen."
                 );
@@ -163,6 +166,7 @@ fn usage() {
   mpr kml <log> <out.kml>     export a flown path for Google Earth
   mpr firmware info <file>    describe a .apj firmware file
   mpr firmware detect <port>  name the board from its USB ids
+  mpr firmware list [...]     the firmware the catalogue would give a board
   mpr ports                   list serial ports\n\n\
          url forms:\n  \
          serial:/dev/ttyACM0:115200\n  \
@@ -1441,6 +1445,198 @@ fn detect_report(port: &str, ports: &[mp_transport::PortInfo]) -> String {
     out
 }
 
+/// `mpr firmware list`: what the Install Firmware page would offer, from the same catalogue.
+///
+/// The catalogue is fetched as the page fetches it - the mirror, then ardupilot.org, then
+/// CubePilot's peripherals appended - on every run, because Mission Planner keeps it in memory
+/// and never on disk (`mp_firmware::manifest`). `MP_FIRMWARE_MANIFEST` names a file to read
+/// instead. With no vehicle it prints what the page writes under each vehicle picture; with one,
+/// it runs `LookForPort` up to the download and names the file it would take. Nothing is
+/// downloaded but the catalogue, and nothing is written to any board.
+fn firmware_list(options: &[String]) -> std::process::ExitCode {
+    let request = match ListRequest::parse(options) {
+        Ok(request) => request,
+        Err(why) => {
+            eprintln!("{why}\n{LIST_USAGE}");
+            return std::process::ExitCode::from(2);
+        }
+    };
+    let fetch = mp_firmware::manifest::fetcher();
+    let mut held = None;
+    for error in mp_firmware::manifest::load(&mut held, fetch.as_ref()) {
+        eprintln!("{error}");
+    }
+    let Some(manifest) = held else {
+        eprintln!("no firmware catalogue: every source failed");
+        return std::process::ExitCode::FAILURE;
+    };
+    let devices = match &request.board {
+        Some(BoardArgument::Name(name)) => vec![mp_firmware::DeviceInfo::new(name, "")],
+        // A board id stands for the bootloader's answer, which needs no device to look up.
+        Some(BoardArgument::Id(_)) => vec![mp_firmware::DeviceInfo::default()],
+        None => mp_transport::list_ports()
+            .iter()
+            .filter_map(mp_firmware::DeviceInfo::from_port)
+            .collect(),
+    };
+    print!("{}", list_report(&manifest, &request, &devices));
+    std::process::ExitCode::SUCCESS
+}
+
+/// `mpr firmware list`'s options, for a message about a wrong one.
+const LIST_USAGE: &str = "usage: mpr firmware list [--board <id|name>] [--vehicle <type>] \
+[--release <type>]
+  --board    a board id, as a bootloader reports it, or a USB product string
+             (default: the USB devices on this machine)
+  --vehicle  ANTENNA_TRACKER, Copter, HELICOPTER, FIXED_WING, GROUND_ROVER, SUBMARINE
+             (default: none - print what the page offers for each)
+  --release  OFFICIAL (stable, the default), BETA, DEV (latest)";
+
+/// What `--board` named.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum BoardArgument {
+    /// A board id, standing for the one `Instance_DeviceChanged` reads from a bootloader.
+    Id(i64),
+    /// A USB product string, as a device reports it.
+    Name(String),
+}
+
+/// `mpr firmware list`'s options.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ListRequest {
+    board: Option<BoardArgument>,
+    vehicle: Option<mp_firmware::manifest::MavType>,
+    release: mp_firmware::manifest::ReleaseType,
+}
+
+impl ListRequest {
+    fn parse(options: &[String]) -> Result<Self, String> {
+        use mp_firmware::manifest::{MavType, ReleaseType};
+        let mut request = Self {
+            board: None,
+            vehicle: None,
+            // `REL_Type`'s initial value. C#: ConfigFirmwareManifest.cs:24
+            release: ReleaseType::Official,
+        };
+        let mut options = options.iter();
+        while let Some(option) = options.next() {
+            let value = options
+                .next()
+                .ok_or_else(|| format!("{option} needs a value"))?;
+            match option.as_str() {
+                "--board" => {
+                    request.board = Some(
+                        value
+                            .parse()
+                            .map_or_else(|_| BoardArgument::Name(value.clone()), BoardArgument::Id),
+                    );
+                }
+                "--vehicle" => {
+                    request.vehicle = Some(
+                        MavType::from_name(value)
+                            .ok_or_else(|| format!("not a vehicle: {value}"))?,
+                    );
+                }
+                "--release" => {
+                    request.release = ReleaseType::from_name(value)
+                        .ok_or_else(|| format!("not a release type: {value}"))?;
+                }
+                other => return Err(format!("unknown option: {other}")),
+            }
+        }
+        Ok(request)
+    }
+}
+
+/// The text `mpr firmware list` prints for a catalogue, a request and the devices.
+fn list_report(
+    manifest: &mp_firmware::manifest::Manifest,
+    request: &ListRequest,
+    devices: &[mp_firmware::DeviceInfo],
+) -> String {
+    use mp_firmware::manifest::{FirmwareInfo, MavType, NO_FIRMWARE, NO_PORT, Outcome, icon_name};
+    use std::fmt::Write as _;
+
+    fn chosen(out: &mut String, item: &FirmwareInfo) {
+        let _ = writeln!(
+            out,
+            "chosen: {} {}",
+            item.mav_firmware_version
+                .map(|version| version.to_string())
+                .unwrap_or_default(),
+            item.url.as_deref().unwrap_or("")
+        );
+    }
+
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "{} records, release {}",
+        manifest.firmware.len(),
+        request.release
+    );
+    let Some(vehicle) = request.vehicle else {
+        // What `Activate` writes under each picture.
+        for mav_type in MavType::ALL {
+            let label = manifest
+                .newest(request.release, mav_type)
+                .map_or_else(|| "(none)".to_owned(), icon_name);
+            let _ = writeln!(out, "  {:<16} {label}", mav_type.name());
+        }
+        return out;
+    };
+    let detected = match request.board {
+        Some(BoardArgument::Id(id)) => Some(id),
+        _ => None,
+    };
+    let Some(lookup) = manifest.look_for_port(devices, detected, vehicle, request.release, false)
+    else {
+        let _ = writeln!(out, "{}", NO_PORT.replace("\r\n", "\n"));
+        return out;
+    };
+    let ids: Vec<String> = lookup.board_ids.iter().map(ToString::to_string).collect();
+    let _ = writeln!(
+        out,
+        "board: {} - board id {}",
+        lookup.device.board.as_deref().unwrap_or("(none)"),
+        ids.join(", ")
+    );
+    for item in &lookup.items {
+        let _ = writeln!(
+            out,
+            "  {:<24} {}",
+            item.platform.as_deref().unwrap_or(""),
+            item.url.as_deref().unwrap_or("")
+        );
+    }
+    match lookup.outcome() {
+        Outcome::One(item) => chosen(&mut out, item),
+        Outcome::Choose(selection) => match selection.selected() {
+            Some(item) => {
+                let _ = writeln!(
+                    out,
+                    "FirmwareSelection opens on the {} platform",
+                    selection.platform.as_deref().unwrap_or("")
+                );
+                chosen(&mut out, item);
+            }
+            None => {
+                let _ = writeln!(
+                    out,
+                    "More than one choice exists; Mission Planner asks which:"
+                );
+                for result in selection.results() {
+                    let _ = writeln!(out, "  {result}");
+                }
+            }
+        },
+        Outcome::NoFirmware => {
+            let _ = writeln!(out, "{NO_FIRMWARE}");
+        }
+    }
+    out
+}
+
 /// Describes a firmware file without touching any hardware.
 ///
 /// Read-only on purpose. Flashing is the one operation in this application that can leave a
@@ -1496,8 +1692,108 @@ fn firmware_info(path: &str) -> std::process::ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::detect_report;
+    use super::{BoardArgument, ListRequest, detect_report, list_report};
+    use mp_firmware::DeviceInfo;
+    use mp_firmware::manifest::{Manifest, MavType, ReleaseType};
     use mp_transport::PortInfo;
+
+    fn catalogue() -> Manifest {
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../testdata/firmware/manifest.json.gz");
+        let bytes = std::fs::read(&path).expect("the fixture");
+        Manifest::decode(&bytes, true).expect("parses")
+    }
+
+    fn request(options: &[&str]) -> ListRequest {
+        let options: Vec<String> = options.iter().map(|&s| s.to_owned()).collect();
+        ListRequest::parse(&options).expect("valid options")
+    }
+
+    #[test]
+    fn list_options_parse_as_the_page_names_things() {
+        let parsed = request(&[
+            "--board",
+            "140",
+            "--vehicle",
+            "copter",
+            "--release",
+            "latest",
+        ]);
+        assert_eq!(parsed.board, Some(BoardArgument::Id(140)));
+        assert_eq!(parsed.vehicle, Some(MavType::Copter));
+        assert_eq!(parsed.release, ReleaseType::Dev);
+        assert_eq!(request(&[]).release, ReleaseType::Official);
+        assert_eq!(
+            request(&["--board", "CubeOrange-BL"]).board,
+            Some(BoardArgument::Name("CubeOrange-BL".to_owned()))
+        );
+        for bad in [
+            &["--vehicle"][..],
+            &["--vehicle", "boat"],
+            &["--release", "rc"],
+            &["-x", "1"],
+        ] {
+            let bad: Vec<String> = bad.iter().map(|&s| s.to_owned()).collect();
+            assert!(ListRequest::parse(&bad).is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn list_without_a_vehicle_prints_the_page_labels() {
+        let report = list_report(&catalogue(), &request(&["--release", "beta"]), &[]);
+        assert!(
+            report.starts_with("240 records, release BETA\n"),
+            "{report}"
+        );
+        assert!(
+            report.contains("  Copter           Copter V4.7.1 BETA\n"),
+            "{report}"
+        );
+        assert!(
+            report.contains("  FIXED_WING       Plane V4.7.1 BETA\n"),
+            "{report}"
+        );
+    }
+
+    #[test]
+    fn list_names_the_file_mission_planner_would_take() {
+        let devices = [DeviceInfo::new("CubeOrange-BL", "")];
+        let report = list_report(
+            &catalogue(),
+            &request(&["--board", "CubeOrange-BL", "--vehicle", "Copter"]),
+            &devices,
+        );
+        assert!(
+            report.contains("board: CubeOrange-BL - board id 140\n"),
+            "{report}"
+        );
+        assert!(
+            report.ends_with(
+                "FirmwareSelection opens on the CubeOrange platform\n\
+                 chosen: 4.7.1 https://firmware.ardupilot.org/Copter/stable/CubeOrange/arducopter.apj\n"
+            ),
+            "{report}"
+        );
+
+        // A bootloader's board id alone leaves the platform to the operator.
+        let report = list_report(
+            &catalogue(),
+            &request(&["--board", "140", "--vehicle", "Copter"]),
+            &[DeviceInfo::default()],
+        );
+        assert!(report.contains("More than one choice exists"), "{report}");
+        assert!(!report.contains("chosen:"), "{report}");
+
+        let report = list_report(
+            &catalogue(),
+            &request(&["--vehicle", "Copter"]),
+            &[DeviceInfo::new("FT232R USB UART", "")],
+        );
+        assert!(
+            report.contains("Failed to detect port to upload to"),
+            "{report}"
+        );
+    }
 
     fn usb(name: &str, vid: u16, pid: u16, product: &str) -> PortInfo {
         PortInfo {

@@ -15,6 +15,7 @@
 
 pub mod detect;
 pub mod firmware;
+pub mod manifest;
 pub mod protocol;
 pub mod uploader;
 

@@ -4,11 +4,11 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui c
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 1 | 10 | 44 | 2 | 4 | 569 |
+| 61 | 1 | 12 | 42 | 2 | 4 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 1 | 9 | 32 | 2 | 0 | 258 | 166 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 1 | 11 | 30 | 2 | 0 | 258 | 149 |
 | CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 0 | 1 | 12 | 0 | 0 | 277 | 255 |
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 | 0 |
 
@@ -23,13 +23,13 @@ The largest missing panels, by wirings:
 | `ConfigArduplane` | Basic Tuning | 47 |
 | `ConfigSerialInjectGPS` | RTK/GPS Inject | 24 |
 | `ConfigFirmware` | Install Firmware Legacy | 20 |
-| `ConfigFirmwareManifest` | Install Firmware | 16 |
 | `ConfigDroneCAN` | DroneCAN/UAVCAN | 15 |
 | `ConfigAdvanced` | Advanced | 13 |
 | `ConfigFrameType` | Frame Type | 12 |
 | `ConfigTerminal` | Terminal | 12 |
 | `ConfigBatteryMonitoring2` | Battery Monitor 2 | 10 |
 | `ConfigAteryx` | Ateryx Pids | 8 |
+| `ConfigADSB` | ADSB | 5 |
 
 Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConnected && gotAllParams`); **always** is connected or not; **connected** and **disconnected** are the link alone; a named vehicle, parameter or view is what the call, or the `if` around it, checks. **Advanced view** is `DisplayView.isAdvancedMode`. A page with a `DisplayView` switch also needs it on, which it is by default unless the vehicles say otherwise. The list shows a heading as `>> title` and indents what is under it (`ExtLibs/Controls/BackstageView/BackstageView.cs:227`, `:232`).
 
@@ -38,8 +38,8 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConne
 | line | page | title | under | vehicles | wirings | ours |
 |---:|---|---|---|---|---:|---|
 | 162 | `ConfigParamLoading` | Loading |  | connected, parameters still arriving | 2 | done: `crates/mp-gui/src/setup.rs` `fn param_loading_page` |
-| 169 | `ConfigFirmwareDisabled` | Install Firmware |  | connected | 1 | **missing** |
-| 171 | `ConfigFirmwareManifest` | Install Firmware |  | disconnected | 16 | **missing** |
+| 169 | `ConfigFirmwareDisabled` | Install Firmware |  | connected | 1 | partial: `crates/mp-gui/src/config/firmware.rs` `fn page` - the connected page's text, with Bootloader Update disabled |
+| 171 | `ConfigFirmwareManifest` | Install Firmware |  | disconnected | 16 | partial: `crates/mp-gui/src/config/firmware.rs` `fn page` - the catalogue fetched as APFirmware.GetList fetches it, each vehicle labelled with the newest firmware of the release, Beta, a vehicle's click running LookForPort to the chosen file; Upload disabled - nothing flashes in this build; the vehicle pictures are named boxes |
 | 173 | `ConfigFirmware` | Install Firmware Legacy |  | disconnected | 20 | **missing** |
 | 178 | `ConfigSecureAP` | Secure |  | disconnected | 4 | **missing** |
 | 182 | `ConfigMandatory` | Mandatory Hardware |  | any | 0 | plumbing: the Mandatory Hardware heading of the list: one sentence, no controls |

@@ -322,8 +322,11 @@ path: board detect, firmware catalogue, upload via px4/DFU/serial bootloaders.
   offers `mpr firmware info` and `mpr firmware detect` and nothing that writes. Board detection is
   `Utilities/BoardDetect.cs` ported rule for rule (`crates/mp-firmware/src/detect.rs`), its probes
   proved against the px4 mock over a pty; all 16 `DetectBoardTest` calls are fixtures, and five of
-  them fail against the C# itself, which the fixture records. The firmware catalogue is not
-  started.
+  them fail against the C# itself, which the fixture records. The firmware catalogue is
+  `APFirmware.cs` ported - the manifest, its mirror-then-ardupilot.org order, the board and
+  release selection - proved on a 240-record excerpt of the real manifest, and the Install
+  Firmware page shows what the C# would flash with its Upload button disabled (PLAN.md §13.4
+  row 21).
 - **Tests:** `tests/magcal_vectors.rs` and `tests/accelcal_vectors.rs` assert 1e-6 relative agreement with golden outputs captured from the C# `MagCalib`/calibration code over recorded sensor datasets, including ill-conditioned inputs; `tests/board_detect.rs` ports the existing `MissionPlannerTests` `DetectBoardTest` cases plus USB descriptor fixtures for every supported board; `tests/firmware_upload.rs` runs against an in-process mock px4/DFU bootloader asserting the exact byte protocol and checksum behaviour; `tests/firmware_catalogue.rs` parses real firmware manifests.
 
 ### D14. Log engine and analysis

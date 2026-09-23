@@ -284,6 +284,8 @@ struct MissionPlanner {
     /// Initial Setup's Battery Monitor page, and its text boxes' focus.
     battery_monitor: config::battery_monitor::BatteryMonitor,
     battery_focus: config::battery_monitor::Focus,
+    /// Initial Setup's Install Firmware page, and the firmware catalogue it keeps.
+    install_firmware: config::firmware::InstallFirmware,
 }
 
 impl MissionPlanner {
@@ -434,6 +436,7 @@ impl MissionPlanner {
             frame_type: config::frame_type::FrameType::default(),
             battery_monitor: config::battery_monitor::BatteryMonitor::default(),
             battery_focus: config::battery_monitor::Focus::new(cx),
+            install_firmware: config::firmware::InstallFirmware::default(),
         };
         // Opening on the planning screen activates it, as switching to it does.
         if this.screen == Screen::Plan {
@@ -1482,6 +1485,8 @@ impl Render for MissionPlanner {
             self.battery_focus.focused(window),
             self.screen == Screen::Setup,
         );
+        // Install Firmware's catalogue arriving, and the page closing when the screen changes.
+        self.install_firmware.tick(self.screen == Screen::Setup);
         let banner = self.telemetry.firmware_banner().map(str::to_owned);
         let mav_type = view.state.as_ref().map_or(0, |state| state.vehicle_type);
         self.metadata.advance(banner.as_deref(), mav_type);
@@ -1680,6 +1685,7 @@ impl Render for MissionPlanner {
             setup::record_facts([&self.setup_list, &self.config_list]);
             config::frame_type::record_facts(&self.frame_type, &view);
             config::battery_monitor::record_facts(&self.battery_monitor, &view);
+            config::firmware::record_facts(&self.install_firmware);
             facts::publish();
         }
 

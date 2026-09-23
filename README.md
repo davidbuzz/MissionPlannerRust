@@ -35,7 +35,7 @@ they need SITL, a window, or the network), **31 GUI scripts** under `tests/gui/`
 | Health | EKF variances and vibration with ArduPilot's own thresholds, clipping counts |
 | Calibration | accelerometer, compass, radio, motor test |
 | Joystick | axes to `RC_CHANNELS_OVERRIDE` from a thread that blocks on the device and sends on change — 0.1 ms p99 stick-to-link on a fake device — with a release-on-disconnect failsafe (Linux) |
-| Firmware | `.apj` parsing, the px4 bootloader protocol and `BoardDetect.cs`'s board detection, proven against a mock and a pty; nothing flashed, nothing written |
+| Firmware | `.apj` parsing, the px4 bootloader protocol, `BoardDetect.cs`'s board detection and `APFirmware.cs`'s catalogue with the Install Firmware page, proven against a mock, a pty and a manifest excerpt; nothing flashed, nothing written, Upload disabled |
 | Scripting | the `Script.cs` host API, and a measurement of what the 19 shipped scripts need |
 | KML export | a flown path coloured by flight mode, and a mission, for Google Earth |
 | Tuning graph | eleven telemetry fields plotted live, min/max reduced so a spike cannot hide |

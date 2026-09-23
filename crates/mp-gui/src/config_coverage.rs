@@ -230,14 +230,22 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigFirmwareDisabled"),
         Some(1),
         &[setup(169, "Install Firmware", TOP, CONNECTED)],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigFirmwareDisabled.cs, on the Install Firmware page.
+        Partial(
+            at("crates/mp-gui/src/config/firmware.rs", "fn page"),
+            "the connected page's text, with Bootloader Update disabled",
+        ),
     ),
     panel(
         "ConfigFirmwareManifest",
         cv!("ConfigFirmwareManifest"),
         Some(16),
         &[setup(171, "Install Firmware", TOP, DISCONNECTED)],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs, on the Install Firmware page.
+        Partial(
+            at("crates/mp-gui/src/config/firmware.rs", "fn page"),
+            "the catalogue fetched as APFirmware.GetList fetches it, each vehicle labelled with the newest firmware of the release, Beta, a vehicle's click running LookForPort to the chosen file; Upload disabled - nothing flashes in this build; the vehicle pictures are named boxes",
+        ),
     ),
     panel(
         "ConfigFirmware",
@@ -1549,7 +1557,7 @@ mod tests {
             );
             checked += 1;
         }
-        assert_eq!(checked, 12);
+        assert_eq!(checked, 14);
     }
 
     /// The committed report matches the table.
@@ -1581,7 +1589,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (1, 10, 44, 2, 4)
+            (1, 12, 42, 2, 4)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

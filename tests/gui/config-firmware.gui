@@ -1,0 +1,78 @@
+# Initial Setup's Install Firmware page labels each vehicle from the firmware catalogue and names
+# the file Mission Planner would flash to the board - which it never flashes.
+#
+# ConfigFirmwareManifest.cs: Activate fetches the manifest (APFirmware.GetList) and writes the newest
+# firmware of the release under each vehicle picture, OFFICIAL until "Beta firmwares" is clicked;
+# a picture's click runs LookForPort, which finds the board from the USB product string and takes
+# its firmware - here up to the download and no further, the Upload button disabled. Deactivate
+# puts the release back to OFFICIAL, and the catalogue, a static in the C#, is not fetched again.
+#
+# Self-contained and offline: the catalogue is testdata/firmware/manifest.json.gz, an excerpt of
+# the real manifest, served in place of the network; the one USB device is a CubeOrange in its
+# bootloader, whatever is plugged into this machine; and the data directory is a scratch one, so
+# no link Mission Planner remembers is opened - with a vehicle connected the C# shows
+# ConfigFirmwareDisabled instead.
+
+env XDG_DATA_HOME $WORK
+env MP_FIRMWARE_MANIFEST $WORK/manifest.json.gz
+env MP_FIRMWARE_DEVICE CubeOrange-BL
+setup cp testdata/firmware/manifest.json.gz $WORK/manifest.json.gz
+
+screen setup
+window 1600x1200
+settle 3
+
+expect config.firmware.active false
+# Install Firmware is the first entry of InitialSetup's list, outside any heading; disconnected,
+# the list shows ConfigFirmwareManifest (InitialSetup.cs:169-173).
+click setup-page-ConfigFirmwareManifest
+settle 2
+expect config.firmware.active true
+expect config.firmware.page manifest
+expect config.firmware.manifest loaded
+expect config.firmware.manifest.records 240
+expect config.firmware.manifest.fetches 1
+expect config.firmware.release OFFICIAL
+expect config.firmware.enabled true
+expect config.firmware.label.quad Copter V4.7.1 OFFICIAL
+expect config.firmware.label.plane Plane V4.7.1 OFFICIAL
+expect config.firmware.label.tracker AntennaTracker V4.7.1 OFFICIAL
+expect config.firmware.board CubeOrange-BL
+expect config.firmware.board.ids 140
+expect config.firmware.upload disabled
+
+# Copter, official: three CubeOrange builds share board id 140, and FirmwareSelection opens on the
+# board's own platform.
+click fw-quad
+settle 1
+expect config.firmware.vehicle Copter
+expect config.firmware.candidates 3
+expect config.firmware.chosen https://firmware.ardupilot.org/Copter/stable/CubeOrange/arducopter.apj
+expect config.firmware.chosen.version 4.7.1
+expect config.firmware.message none
+
+# Beta firmwares: the labels and the choice follow the release.
+click fw-beta
+settle 1
+expect config.firmware.release BETA
+expect config.firmware.label.quad Copter V4.7.1 BETA
+expect config.firmware.vehicle none
+click fw-heli
+settle 1
+expect config.firmware.vehicle HELICOPTER
+expect config.firmware.chosen https://firmware.ardupilot.org/Copter/beta/CubeOrange-heli/arducopter-heli.apj
+
+# Choosing another entry is Deactivate: back to OFFICIAL, and reopening fetches nothing. Disconnected,
+# the Mandatory Hardware heading is not listed (InitialSetup.cs:182), so Optional Hardware is used.
+click setup-page-ConfigOptional
+settle 1
+expect config.firmware.active false
+expect config.firmware.release OFFICIAL
+click setup-page-ConfigFirmwareManifest
+settle 1
+expect config.firmware.active true
+expect config.firmware.manifest.fetches 1
+expect config.firmware.label.quad Copter V4.7.1 OFFICIAL
+click fw-quad
+settle 1
+expect config.firmware.chosen https://firmware.ardupilot.org/Copter/stable/CubeOrange/arducopter.apj

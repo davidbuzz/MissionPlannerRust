@@ -881,6 +881,13 @@ impl MissionPlanner {
     /// `IActivate.Activate` for the pages that keep state.
     fn activate_page(&mut self, list: List, index: usize) {
         match entries(list).get(index).map(|entry| entry.class) {
+            // C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs (Activate), and the
+            // connected page's text: ConfigFirmwareDisabled.cs
+            Some("ConfigFirmwareManifest" | "ConfigFirmwareDisabled" | "ConfigFirmware")
+                if !self.install_firmware.is_open() =>
+            {
+                self.install_firmware.toggle(&self.telemetry.view());
+            }
             // C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs:36-54
             Some("ConfigFrameClassType") if !self.frame_type.is_active() => {
                 self.frame_type.toggle(&self.telemetry);
@@ -904,6 +911,12 @@ impl MissionPlanner {
     /// `IDeactivate.Deactivate` for the pages that keep state.
     fn deactivate_page(&mut self, list: List, index: usize) {
         match entries(list).get(index).map(|entry| entry.class) {
+            // C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs (Deactivate): OFFICIAL again
+            Some("ConfigFirmwareManifest" | "ConfigFirmwareDisabled" | "ConfigFirmware")
+                if self.install_firmware.is_open() =>
+            {
+                self.install_firmware.close();
+            }
             // C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs (Deactivate)
             Some("ConfigFrameClassType") if self.frame_type.is_active() => {
                 self.frame_type.toggle(&self.telemetry);
@@ -1019,6 +1032,9 @@ impl MissionPlanner {
                     self.capturing_radio,
                     cx,
                 ))
+                .into_any_element(),
+            "ConfigFirmwareManifest" | "ConfigFirmwareDisabled" | "ConfigFirmware" => column()
+                .child(crate::config::firmware::page(&self.install_firmware, cx))
                 .into_any_element(),
             "ConfigFrameClassType" => column()
                 .children(crate::config::frame_type::page(&self.frame_type, cx))

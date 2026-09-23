@@ -19,6 +19,13 @@ base64.workspace = true
 flate2.workspace = true
 # Board detection probes ports through the same transport the link uses, and reads its PortInfo.
 mp-transport.workspace = true
+# The firmware catalogue (manifest.rs): fetched as mp-params fetches parameter documentation,
+# blocking, on a thread of the caller's choosing; the C#'s VID/PID pattern; and serde itself, so
+# the 77 MB manifest is read record by record instead of as one JSON tree. All three are already
+# compiled for other crates in this workspace.
+ureq.workspace = true
+regex.workspace = true
+serde = "1"
 
 [dev-dependencies]
 # For TTYPort::pair(): the bootloader probe is run over a real serial port on a pseudo-terminal.
