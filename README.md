@@ -22,7 +22,7 @@ they need SITL, a window, or the network), **31 GUI scripts** under `tests/gui/`
 | MAVLink v1/v2 codec | zero-copy parse, allocation-free encode, v2 signing |
 | Generated dialect | 349 messages, 206 enums, generated from the upstream XML |
 | Transports | serial, TCP, UDP, file replay, in-memory test doubles; port enumeration by `CommsSerialPort.GetPortNames`'s rules, held to per-OS fixtures; faults and a real pty unplug rehearsed in tests |
-| Link engine | I/O thread, multi-vehicle routing (50 systems in one test), stream requests; parameter sets, reads, commands, set-current and mission transfer with Mission Planner's own retry counts and waits, proved by counting sends under dropped, delayed and duplicated frames |
+| Link engine | I/O thread, multi-vehicle routing (50 systems in one test), stream requests; parameter sets, reads, commands, set-current and mission transfer with Mission Planner's own retry counts and waits, proved by counting sends under dropped, delayed and duplicated frames; every set and command the screens and `mpr` send goes through them |
 | Vehicle state | lock-free snapshot bus, packet-loss tracking; 416 of `CurrentState`'s 550 fields held with the C#'s rules, the rest listed in `docs/coverage/currentstate.md` by a test that reads the C# |
 | Parameters | full download with gap recovery, typed values, 1,408 from SITL |
 | `.param` files | save, load and compare against a vehicle, honouring the C# skip-list |

@@ -1,0 +1,37 @@
+# A parameter step is setParam's retrying request, and the vehicle's echo is what ends it.
+#
+# The editor's + and - write RTL_ALT through the link's request, which puts PARAM_SET on the wire
+# and sends it again every 700 ms, up to three times, until the vehicle echoes the parameter -
+# setParamAsync's loop. The link counts every send, and params.write.sends publishes the count
+# for the last write to end. `ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1638-1770`
+#
+# SITL does not drop packets, so against it the count is one: this proves the path - the step is
+# a request the link counts, SITL's echo ends it, and the status line says what the vehicle now
+# holds - not the retry. The retry itself, a lost first send answered by a second, is proven
+# against a scripted vehicle that loses it: crates/mp-gui/src/params.rs,
+# a_write_whose_first_send_is_lost_is_sent_again_and_confirmed.
+#
+# Needs SITL (a copter): tools/gui-test.sh tests/gui/params-retry.gui -- tcp:127.0.0.1:5760
+screen params
+window 1600x1200
+settle 6
+click param-download
+settle 15
+expect params.held > 500
+# Nothing written yet.
+expect params.write.outcome none
+# This SITL (Copter 4.7-dev) names the parameter RTL_ALT_M; older firmware says RTL_ALT.
+click param-group-RTL
+click param-RTL_ALT_M
+click param-step-+
+settle 2
+expect params.write.name RTL_ALT_M
+expect params.write.outcome accepted
+expect params.write.sends 1
+expect status ~ RTL_ALT_M =
+# And back to where it was, the same way.
+click param-step--
+settle 2
+expect params.write.name RTL_ALT_M
+expect params.write.outcome accepted
+expect params.write.sends 1

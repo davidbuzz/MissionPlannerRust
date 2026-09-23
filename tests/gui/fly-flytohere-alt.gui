@@ -22,6 +22,7 @@ click Stabilize
 settle 2
 
 click fly-flytohere-alt
+settle 1
 expect fly.prompt Enter Guided Mode Alt
 key ctrl+u
 type 25

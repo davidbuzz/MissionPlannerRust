@@ -23,6 +23,7 @@ settle 2
 expect vehicle.mode Stabilize
 
 click fly-flytocoords
+settle 1
 expect fly.prompt Please enter the coords 'lat;long;alt' or 'lat;long'
 # The minus as a key: `xdotool type -35...` would read the text as an option.
 key minus

@@ -19,9 +19,15 @@ settle 8
 click fly-tab-actions
 expect fly.tab tabActions
 
+# Item 0 is home and goes to the Home Location boxes, not the rows; with the boxes empty,
+# processToScreen asks "Reset Home to loaded coords" (GCSViews/FlightPlanner.cs:5640-5660) and
+# the question is modal, as the C#'s message box is. Yes takes the home, as an operator would.
 click tab-plan
 click plan-read
 settle 4
+expect plan.prompt Reset Home Coords
+click plan-prompt-ok
+settle 1
 click tab-fly
 settle 1
 

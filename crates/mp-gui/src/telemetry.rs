@@ -697,10 +697,10 @@ impl Telemetry {
             .is_some_and(|table| table.get(name).is_some())
     }
 
-    /// Where a request is, as the link has it. `None` once the link has forgotten it, with no
-    /// link - and for a moment while the link picks it up, which is why the screens ask
-    /// [`Telemetry::lookup`] instead; a test polling until an answer is in hand can ask this.
-    #[cfg(test)]
+    /// Where a request is, as the link has it. `None` once the link has forgotten it, or with
+    /// no link. The link once lost sight of a request for a moment while picking it up, which
+    /// is what [`Telemetry::lookup`]'s grace was for; `Link::request` now reads the queue under
+    /// the table's lock, so this is safe to ask from the moment a request is made.
     #[must_use]
     pub fn request(&self, id: RequestId) -> Option<Request> {
         self.link.as_ref()?.request(id)

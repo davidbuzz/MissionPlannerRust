@@ -726,6 +726,51 @@ fn a_set_whose_echo_never_comes_is_sent_four_times_then_times_out() {
     assert!(took < budget + Duration::from_millis(500), "took {took:?}");
 }
 
+/// A request is never out of sight between being queued and being picked up.
+///
+/// The link thread drains the queue, begins each request, and only then puts it in the table;
+/// `Link::request` reads the table and then the queue. For the length of that pick-up a request
+/// was in neither, and a caller that took `None` for "forgotten" gave up on a write the vehicle
+/// then accepted - the GUI's parameter editor saw it. The pick-up now happens under the table's
+/// lock. This queues many requests and looks each one up as fast as it can from the moment it
+/// is queued until it has been sent; a single `None` fails it.
+#[test]
+fn a_request_is_never_missing_between_the_queue_and_the_table() {
+    let t = ProtocolTimeouts::default().faster(20);
+    let (link, mut peer) = with_rtl_alt(t);
+
+    let mut ids = Vec::new();
+    for round in 0..40u32 {
+        let value = 2000.0 + f64::from(round);
+        let id = link.set_param(VEHICLE, "RTL_ALT", value, false);
+        let queued = Instant::now();
+        loop {
+            let Some(request) = link.request(id) else {
+                panic!(
+                    "request {round} was neither queued nor held, {:?} after queueing",
+                    queued.elapsed()
+                );
+            };
+            if request.sends() > 0 || request.outcome().is_some() {
+                break;
+            }
+            assert!(
+                queued.elapsed() < HUNG,
+                "request {round} was never picked up"
+            );
+            std::hint::spin_loop();
+        }
+        ids.push(id);
+    }
+    drive(&mut peer, silent, || {
+        ids.iter().all(|id| outcome(&link, *id).is_some())
+    });
+    assert!(
+        ids.iter()
+            .all(|id| outcome(&link, *id) == Some(RequestOutcome::TimedOut))
+    );
+}
+
 /// The echo comes, late: after the first timeout, answering the first retry. One retry spent,
 /// success, and nothing sent after.
 #[test]

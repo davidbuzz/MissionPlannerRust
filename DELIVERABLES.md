@@ -125,9 +125,10 @@ mission/rally/fence up- and download, MAVFTP, log download, command_long/ack, re
   `setWPCurrentAsync` do, `param_download.rs` is `getParamListAsync`'s whole-list-then-holes recovery,
   and `mission_transfer.rs` handles every `MAV_MISSION_RESULT` as `mav_mission.cs` does. `tests/retries.rs`
   counts every send on the wire under timeouts, reordering, duplicates and seeded bad links (40 tests);
-  `tests/routing.rs` runs 50 systems and 56 components through one link. **Not yet:** the GUI's own
-  sends do not use the retrying calls (PLAN.md §13.4 row 11); MAVFTP and log-download machines;
-  `uploadPartial`, `getHomePosition`, `doCommandInt`.
+  `tests/routing.rs` runs 50 systems and 56 components through one link. The GUI's and the CLI's
+  sets and commands go through those requests, with the C#'s message texts on the status line
+  (PLAN.md §13.4 row 11). **Not yet:** MAVFTP and log-download machines; `uploadPartial`,
+  `getHomePosition`, `doCommandInt` and `setWP` as requests.
 - **Tests:** one test module per protocol state machine — `tests/params.rs`, `tests/mission.rs`, `tests/fence_rally.rs`, `tests/ftp.rs`, `tests/log_download.rs` — each driven by recorded packet traces plus a scripted peer; `tests/retries.rs` injects timeouts, out-of-order acks and partial transfers and asserts convergence or a clean error; `tests/routing.rs` drives 50 simultaneous sysid/compid vehicles through one link; `tests/sitl_params.rs` (feature `sitl`) downloads the full param set from ArduPilot SITL and diffs it against the C# app's dump.
 
 ### D5. Vehicle state model + telemetry bus

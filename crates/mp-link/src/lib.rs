@@ -469,13 +469,16 @@ impl Link {
     /// Where a request is, or `None` if the link has forgotten it or never had it.
     #[must_use]
     pub fn request(&self, id: RequestId) -> Option<Request> {
-        if let Some(request) = self.shared.requests.lock().ok()?.get(&id) {
+        // The table is held while the queue is read, in the link thread's lock order (requests,
+        // then the queue), so the request cannot be picked up between the two reads and be in
+        // neither. It was, once: a caller that took `None` for "forgotten" abandoned a write the
+        // vehicle then accepted.
+        let held = self.shared.requests.lock().ok()?;
+        if let Some(request) = held.get(&id) {
             return Some(request.clone());
         }
-        self.shared
-            .request_queue
-            .lock()
-            .ok()?
+        let queue = self.shared.request_queue.lock().ok()?;
+        queue
             .iter()
             .find(|(queued, _)| *queued == id)
             .map(|(_, request)| request.clone())
@@ -1307,27 +1310,33 @@ fn run_link(
         }
 
         // Requests: pick up what the caller queued, send it, and retry what is outstanding.
-        if let Ok(mut queue) = shared.request_queue.lock() {
-            picked_up.append(&mut queue);
-        }
-        if !picked_up.is_empty() {
-            let now = Instant::now();
-            for (_, request) in &mut picked_up {
-                let ardupilot = registry
-                    .working(request.target)
-                    .is_some_and(|state| state.autopilot == MAV_AUTOPILOT_ARDUPILOTMEGA);
-                let send = match shared.params.lock() {
-                    Ok(tables) => request.begin(
-                        &config.timeouts,
-                        tables.get(&request.target),
-                        ardupilot,
-                        now,
-                    ),
-                    Err(_) => request.begin(&config.timeouts, None, ardupilot, now),
-                };
-                request_sends.push(send);
+        //
+        // The pick-up happens under the table's lock. A caller looking a request up reads the
+        // table and then the queue, and between the queue being drained and the table taking
+        // the request it was in neither: `Link::request` said `None` for a request that was
+        // alive, and a caller that took `None` for "forgotten" gave up on a write the vehicle
+        // then accepted. Lock order, as at the PARAM_VALUE arm: requests, then parameters.
+        if let Ok(mut held) = shared.requests.lock() {
+            if let Ok(mut queue) = shared.request_queue.lock() {
+                picked_up.append(&mut queue);
             }
-            if let Ok(mut held) = shared.requests.lock() {
+            if !picked_up.is_empty() {
+                let now = Instant::now();
+                for (_, request) in &mut picked_up {
+                    let ardupilot = registry
+                        .working(request.target)
+                        .is_some_and(|state| state.autopilot == MAV_AUTOPILOT_ARDUPILOTMEGA);
+                    let send = match shared.params.lock() {
+                        Ok(tables) => request.begin(
+                            &config.timeouts,
+                            tables.get(&request.target),
+                            ardupilot,
+                            now,
+                        ),
+                        Err(_) => request.begin(&config.timeouts, None, ardupilot, now),
+                    };
+                    request_sends.push(send);
+                }
                 held.extend(picked_up.drain(..));
                 forget_finished_requests(&mut held);
             }

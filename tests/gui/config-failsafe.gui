@@ -44,7 +44,9 @@ expect config.failsafe.throttle.vehicle 1
 expect config.failsafe.battery.param BATT_FS_LOW_ACT
 expect config.failsafe.battery 0
 # The text is the firmware's own documentation, fetched for the version flying (PLAN.md 10.5):
-# the current Copter file labels 0 "Warn only" where the bundled older table said "None".
+# the current Copter file labels 0 "Warn only" where the bundled older table said "None". The
+# fetched file is read once the banner has named the firmware, so make sure it has been.
+expect params.metadata.source ~ Copter
 expect config.failsafe.battery.text Warn only
 expect config.failsafe.voltage.param BATT_LOW_VOLT
 expect config.failsafe.mah.param BATT_LOW_MAH
