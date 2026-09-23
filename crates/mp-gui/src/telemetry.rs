@@ -225,19 +225,46 @@ impl Telemetry {
     /// The fence the vehicle reported, once a download has completed.
     #[must_use]
     pub fn fence_items(&self) -> Vec<MissionItem> {
+        self.completed_list(mp_mission::fence::MISSION_TYPE_FENCE)
+    }
+
+    /// Sends rally points, replacing whatever the vehicle holds.
+    pub fn upload_rally(&self, items: Vec<MissionItem>) {
+        if let Some(link) = &self.link
+            && let Some((id, _)) = link.primary_vehicle()
+        {
+            link.upload_list(id, items, mp_mission::fence::MISSION_TYPE_RALLY);
+        }
+    }
+
+    /// Asks the vehicle for its rally points.
+    pub fn request_rally(&self) {
+        if let Some(link) = &self.link
+            && let Some((id, _)) = link.primary_vehicle()
+        {
+            link.download_list(id, mp_mission::fence::MISSION_TYPE_RALLY);
+        }
+    }
+
+    /// The rally points the vehicle reported, once a download has completed.
+    #[must_use]
+    pub fn rally_items(&self) -> Vec<MissionItem> {
+        self.completed_list(mp_mission::fence::MISSION_TYPE_RALLY)
+    }
+
+    /// The items of a finished transfer of one list, or nothing if it has not finished.
+    ///
+    /// Only when complete: a partial list read mid-transfer would be adopted as if it were the
+    /// whole thing, and a fence missing its last side is a fence that does not enclose anything.
+    fn completed_list(&self, mission_type: u8) -> Vec<MissionItem> {
         let Some(link) = &self.link else {
             return Vec::new();
         };
         let Some((id, _)) = link.primary_vehicle() else {
             return Vec::new();
         };
-        link.list_transfer(id, mp_mission::fence::MISSION_TYPE_FENCE)
-            .filter(|transfer| {
-                matches!(
-                    transfer.state(),
-                    mp_link::mission_transfer::TransferState::Complete
-                )
-            })
+        link.list_transfer(id, mission_type)
+            .filter(|transfer| matches!(transfer.state(), TransferState::Complete))
             .map(|transfer| transfer.items().to_vec())
             .unwrap_or_default()
     }

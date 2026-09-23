@@ -67,6 +67,8 @@ pub struct MapViewport {
     polygon: Vec<WebMercator>,
     /// The geofence, if one is being drawn or has been read back.
     fence: Vec<WebMercator>,
+    /// Rally points, where the vehicle goes on a failsafe.
+    rally: Vec<WebMercator>,
     /// Where map imagery comes from, if any has been configured.
     tiles: Option<Arc<TileStore>>,
     /// Tiles already uploaded to the GPU, keyed so the `ImageId` stays stable.
@@ -196,6 +198,7 @@ impl MapViewport {
             mission: Vec::new(),
             polygon: Vec::new(),
             fence: Vec::new(),
+            rally: Vec::new(),
             tiles: None,
             images: HashMap::new(),
             tiles_drawn: 0,
@@ -331,6 +334,14 @@ impl MapViewport {
         self.fence = vertices
             .iter()
             .map(|vertex| vertex.to_web_mercator())
+            .collect();
+    }
+
+    /// Replaces the rally points shown on the map.
+    pub fn set_rally(&mut self, positions: &[LatLon]) {
+        self.rally = positions
+            .iter()
+            .map(|position| position.to_web_mercator())
             .collect();
     }
 
@@ -943,6 +954,25 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
             rgb(0x00_00_00),
             gpui::BorderStyle::default(),
         ));
+    }
+
+    // Rally points: diamonds, so they read as somewhere to go rather than as a waypoint on the
+    // route. Drawn over the mission, because a failsafe overrides it.
+    for rally in &map.rally {
+        let at = to_screen(*rally);
+        for (extent, colour) in [(8.0_f32, 0x00_00_00), (6.0, 0xd2_99_22)] {
+            window.paint_quad(quad(
+                Bounds {
+                    origin: point(at.x - px(extent / 2.0), at.y - px(extent / 2.0)),
+                    size: size(px(extent), px(extent)),
+                },
+                gpui::Corners::all(px(extent / 2.0)),
+                rgb(colour),
+                gpui::Edges::default(),
+                rgb(0x00_00_00),
+                gpui::BorderStyle::default(),
+            ));
+        }
     }
 
     // Home.

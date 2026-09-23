@@ -10,7 +10,7 @@
 
 use gpui::{AnyElement, Context, div, prelude::*, px, rgb};
 use mp_mavlink_dialects::all::MavCmd;
-use mp_mission::fence::FenceItem;
+use mp_mission::fence::{FenceItem, RallyPoint};
 use mp_mission::validate::{Context as ValidationContext, validate_with};
 use mp_mission::{GridOptions, MissionItem, Severity, grid};
 use mp_units::LatLon;
@@ -40,6 +40,43 @@ pub enum DrawMode {
     Area,
     /// Add a vertex to the geofence.
     Fence,
+    /// Place a rally point.
+    Rally,
+}
+
+impl DrawMode {
+    /// The modes, in the order they are offered.
+    pub const ALL: [Self; 4] = [Self::Waypoints, Self::Area, Self::Fence, Self::Rally];
+
+    /// What the button says.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Waypoints => "waypoints",
+            Self::Area => "survey area",
+            Self::Fence => "geofence",
+            Self::Rally => "rally points",
+        }
+    }
+
+    /// The id a test script clicks it by.
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Waypoints => "draw-waypoints",
+            Self::Area => "draw-area",
+            Self::Fence => "draw-fence",
+            Self::Rally => "draw-rally",
+        }
+    }
+
+    /// What a right-click does in this mode, said plainly.
+    pub const fn hint(self) -> &'static str {
+        match self {
+            Self::Waypoints => "right-click the map to add a waypoint",
+            Self::Area => "right-click the map to place the survey area's corners",
+            Self::Fence => "right-click the map to place the fence's corners",
+            Self::Rally => "right-click the map to place a rally point",
+        }
+    }
 }
 
 /// The mission being edited, separate from the vehicle's.
@@ -58,6 +95,10 @@ pub struct Plan {
     survey: GridOptions,
     /// The geofence the vehicle must stay inside, in the order its vertices were drawn.
     fence: Vec<LatLon>,
+    /// Rally points: where the vehicle goes on a failsafe instead of all the way home.
+    rally: Vec<RallyPoint>,
+    /// Why the rally points could not be sent, if they could not.
+    rally_error: Option<String>,
     /// Why the fence could not be built or sent, if it could not.
     fence_error: Option<String>,
     /// Why the last survey could not be generated, if it could not.
@@ -248,6 +289,8 @@ impl Plan {
         self.survey_error = None;
         self.fence.clear();
         self.fence_error = None;
+        self.rally.clear();
+        self.rally_error = None;
     }
 
     /// The geofence's vertices.
@@ -272,6 +315,75 @@ impl Plan {
     pub fn clear_fence(&mut self) {
         self.fence.clear();
         self.fence_error = None;
+    }
+
+    /// The rally points.
+    #[must_use]
+    pub fn rally(&self) -> &[RallyPoint] {
+        &self.rally
+    }
+
+    /// Adds a rally point at the survey altitude, which is the only altitude on this screen.
+    pub fn add_rally_point(&mut self, position: LatLon) {
+        self.rally.push(RallyPoint {
+            position,
+            altitude: self.survey.altitude,
+            break_altitude: None,
+        });
+        self.rally_error = None;
+    }
+
+    /// Removes the last rally point placed.
+    pub fn undo_rally_point(&mut self) {
+        self.rally.pop();
+        self.rally_error = None;
+    }
+
+    /// Discards the rally points.
+    pub fn clear_rally(&mut self) {
+        self.rally.clear();
+        self.rally_error = None;
+    }
+
+    /// Why the rally points are not usable, if they are not.
+    #[must_use]
+    pub fn rally_error(&self) -> Option<&str> {
+        self.rally_error.as_deref()
+    }
+
+    /// The rally points as the items the protocol carries.
+    pub fn rally_items(&mut self) -> Option<Vec<MissionItem>> {
+        if self.rally.is_empty() {
+            self.rally_error = Some("place at least one rally point first".to_owned());
+            return None;
+        }
+        self.rally_error = None;
+        Some(
+            self.rally
+                .iter()
+                .enumerate()
+                .map(|(index, point)| point.to_item(u16::try_from(index).unwrap_or(u16::MAX)))
+                .collect(),
+        )
+    }
+
+    /// Replaces the rally points with what the vehicle reported.
+    pub fn adopt_rally(&mut self, items: &[MissionItem]) {
+        self.rally = items
+            .iter()
+            .filter_map(|item| {
+                let position = item.position().ok().flatten()?;
+                Some(RallyPoint {
+                    position,
+                    altitude: item.z,
+                    break_altitude: (item.param2 != 0.0).then_some(item.param2),
+                })
+            })
+            .collect();
+        self.rally_error = self
+            .rally
+            .is_empty()
+            .then(|| "the vehicle holds no rally points".to_owned());
     }
 
     /// Why the fence is not usable, if it is not.
@@ -754,68 +866,107 @@ pub fn editor_panel(
     .into_any_element()
 }
 
-/// The survey tool: draw an area, choose how to fly it, generate the pattern.
-pub fn survey_panel(
-    mode: DrawMode,
-    vertices: usize,
-    options: GridOptions,
-    error: Option<&str>,
+/// Everything drawn on the map: which mode a right-click is in, and the controls for that mode.
+///
+/// One panel rather than four. The survey area, the geofence and the rally points are all placed
+/// by right-clicking, so the question is always "what does a click do now" - and four panels each
+/// answering it separately made a sidebar that had to be scrolled to find out.
+pub struct DrawState<'a> {
+    /// What a right-click does.
+    pub mode: DrawMode,
+    /// Survey area corners placed.
+    pub area_vertices: usize,
+    /// How the survey should be flown.
+    pub survey: GridOptions,
+    /// Why the last survey failed, if it did.
+    pub survey_error: Option<&'a str>,
+    /// Fence corners placed.
+    pub fence_vertices: usize,
+    /// Why the fence is unusable, if it is.
+    pub fence_error: Option<&'a str>,
+    /// Rally points placed.
+    pub rally_points: usize,
+    /// Why the rally points are unusable, if they are.
+    pub rally_error: Option<&'a str>,
+}
+
+/// The draw panel.
+pub fn draw_panel(
+    state: &DrawState<'_>,
+    view: &TelemetryView,
     cx: &mut Context<MissionPlanner>,
 ) -> impl IntoElement {
-    let drawing = mode == DrawMode::Area;
+    let mut modes = div().flex().flex_wrap().gap_1();
+    for mode in DrawMode::ALL {
+        let selected = mode == state.mode;
+        modes = modes.child(
+            crate::probe::measured(mode.id(), div())
+                .id(mode.id())
+                .px_2()
+                .py_1()
+                .rounded_md()
+                .border_1()
+                .border_color(rgb(if selected {
+                    theme::ACCENT
+                } else {
+                    theme::BORDER
+                }))
+                .bg(rgb(if selected {
+                    theme::ACTION
+                } else {
+                    theme::PANEL
+                }))
+                .text_xs()
+                .text_color(rgb(if selected { theme::ACCENT } else { theme::TEXT }))
+                .cursor_pointer()
+                .hover(|style| style.bg(rgb(theme::BORDER)))
+                .child(mode.label())
+                .on_click(cx.listener(move |this, _event, _window, cx| {
+                    this.plan.set_draw_mode(mode);
+                    cx.notify();
+                })),
+        );
+    }
 
-    let mode_row = div()
-        .flex()
-        .flex_wrap()
-        .gap_2()
-        .child(action(
-            "survey-draw",
-            if drawing { "drawing area" } else { "draw area" },
-            if drawing { theme::WARN } else { theme::ACCENT },
-            !drawing,
-            cx.listener(|this, _event: &(), _window, cx| {
-                this.plan.set_draw_mode(DrawMode::Area);
-                cx.notify();
-            }),
-        ))
-        .child(action(
-            "survey-waypoints",
-            "add waypoints",
-            theme::ACCENT,
-            drawing,
-            cx.listener(|this, _event: &(), _window, cx| {
-                this.plan.set_draw_mode(DrawMode::Waypoints);
-                cx.notify();
-            }),
-        ))
-        .child(action(
-            "survey-undo",
-            "undo vertex",
-            theme::TEXT,
-            vertices > 0,
-            cx.listener(|this, _event: &(), _window, cx| {
-                this.plan.undo_area_vertex();
-                this.sync_map_polygon();
-                cx.notify();
-            }),
-        ))
-        .child(action(
-            "survey-clear",
-            "clear area",
-            theme::TEXT,
-            vertices > 0,
-            cx.listener(|this, _event: &(), _window, cx| {
-                this.plan.clear_area();
-                this.sync_map_polygon();
-                cx.notify();
-            }),
-        ));
+    panel(
+        "draw",
+        div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(modes)
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(theme::DIM))
+                    .child(state.mode.hint()),
+            )
+            .child(mode_controls(state, view, cx)),
+    )
+}
 
-    // Three settings, each a value and a pair of steps. Overshoot is left at its default for now:
-    // it only matters with a camera, and a control that does nothing visible is a control that
-    // gets changed by accident.
-    let setting = |name: &'static str,
-                   label: &'static str,
+/// The controls belonging to the active mode.
+fn mode_controls(
+    state: &DrawState<'_>,
+    view: &TelemetryView,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    match state.mode {
+        DrawMode::Waypoints => div()
+            .text_xs()
+            .text_color(rgb(theme::DIM))
+            .child("drag a waypoint to move it; select one to change what it does")
+            .into_any_element(),
+        DrawMode::Area => survey_controls(state, cx).into_any_element(),
+        DrawMode::Fence => fence_controls(state, view, cx).into_any_element(),
+        DrawMode::Rally => rally_controls(state, view, cx).into_any_element(),
+    }
+}
+
+/// Spacing, angle, altitude and generate.
+fn survey_controls(state: &DrawState<'_>, cx: &mut Context<MissionPlanner>) -> impl IntoElement {
+    let setting = |label: &'static str,
+                   name: &'static str,
                    value: String,
                    down: &'static str,
                    up: &'static str,
@@ -828,14 +979,14 @@ pub fn survey_panel(
             .gap_2()
             .child(
                 div()
-                    .w(px(70.0))
+                    .w(px(64.0))
                     .text_xs()
                     .text_color(rgb(theme::DIM))
                     .child(label),
             )
             .child(
                 div()
-                    .w(px(72.0))
+                    .w(px(68.0))
                     .text_sm()
                     .text_color(rgb(theme::TEXT))
                     .child(value),
@@ -844,184 +995,262 @@ pub fn survey_panel(
             .child(stepper(up, name, step, which, cx))
     };
 
-    panel(
-        "survey",
-        div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(mode_row)
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(if vertices >= 3 { theme::OK } else { theme::DIM }))
-                    .child(match vertices {
-                        0 => "right-click the map to place the area's corners".to_owned(),
-                        1 | 2 => format!("{vertices} of at least 3 corners placed"),
-                        _ => format!("{vertices} corners"),
+    div()
+        .flex()
+        .flex_col()
+        .gap_2()
+        .child(
+            div()
+                .flex()
+                .flex_wrap()
+                .gap_2()
+                .child(action(
+                    "survey-undo",
+                    "undo corner",
+                    theme::TEXT,
+                    state.area_vertices > 0,
+                    cx.listener(|this, _event: &(), _window, cx| {
+                        this.plan.undo_area_vertex();
+                        this.sync_map_polygon();
+                        cx.notify();
                     }),
-            )
-            .child(setting(
-                "survey-spacing",
-                "spacing",
-                format!("{:.0} m", options.spacing),
-                "-5",
-                "+5",
-                5.0,
-                0,
-                cx,
-            ))
-            .child(setting(
-                "survey-angle",
-                "angle",
-                format!("{:.0}°", options.angle),
-                "-15",
-                "+15",
-                15.0,
-                1,
-                cx,
-            ))
-            .child(setting(
-                "survey-altitude",
-                "altitude",
-                format!("{:.0} m", options.altitude),
-                "-10",
-                "+10",
-                10.0,
-                2,
-                cx,
-            ))
-            .child(action(
-                "survey-generate",
-                "generate survey",
-                theme::WARN,
-                vertices >= 3,
-                cx.listener(|this, _event: &(), _window, cx| {
-                    this.plan.generate_survey();
-                    this.sync_map_mission();
-                    cx.notify();
-                }),
-            ))
-            .children(error.map(|error| {
-                div()
-                    .text_xs()
-                    .text_color(rgb(theme::ALERT))
-                    .child(error.to_owned())
-            })),
-    )
+                ))
+                .child(action(
+                    "survey-clear",
+                    "clear area",
+                    theme::TEXT,
+                    state.area_vertices > 0,
+                    cx.listener(|this, _event: &(), _window, cx| {
+                        this.plan.clear_area();
+                        this.sync_map_polygon();
+                        cx.notify();
+                    }),
+                )),
+        )
+        .child(corner_count(state.area_vertices, "corners"))
+        .child(setting(
+            "spacing",
+            "survey-spacing",
+            format!("{:.0} m", state.survey.spacing),
+            "-5",
+            "+5",
+            5.0,
+            0,
+            cx,
+        ))
+        .child(setting(
+            "angle",
+            "survey-angle",
+            format!("{:.0}°", state.survey.angle),
+            "-15",
+            "+15",
+            15.0,
+            1,
+            cx,
+        ))
+        .child(setting(
+            "altitude",
+            "survey-altitude",
+            format!("{:.0} m", state.survey.altitude),
+            "-10",
+            "+10",
+            10.0,
+            2,
+            cx,
+        ))
+        .child(action(
+            "survey-generate",
+            "generate survey",
+            theme::WARN,
+            state.area_vertices >= 3,
+            cx.listener(|this, _event: &(), _window, cx| {
+                this.plan.generate_survey();
+                this.sync_map_mission();
+                cx.notify();
+            }),
+        ))
+        .children(state.survey_error.map(problem))
 }
 
-/// The geofence: draw the boundary the vehicle must stay inside, and move it to and from the
-/// aircraft.
-pub fn fence_panel(
-    mode: DrawMode,
-    vertices: usize,
-    error: Option<&str>,
+/// Undo, clear, read and write for the geofence.
+fn fence_controls(
+    state: &DrawState<'_>,
     view: &TelemetryView,
     cx: &mut Context<MissionPlanner>,
 ) -> impl IntoElement {
-    let drawing = mode == DrawMode::Fence;
     let has_vehicle = view.vehicle.is_some();
     // Three is the fewest that encloses anything; the protocol and the vehicle both refuse fewer.
-    let usable = vertices >= 3;
+    let usable = state.fence_vertices >= 3;
 
-    panel(
-        "geofence",
-        div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .gap_2()
-                    .child(action(
-                        "fence-draw",
-                        if drawing {
-                            "drawing fence"
-                        } else {
-                            "draw fence"
-                        },
-                        if drawing { theme::ALERT } else { theme::ACCENT },
-                        !drawing,
-                        cx.listener(|this, _event: &(), _window, cx| {
-                            this.plan.set_draw_mode(DrawMode::Fence);
-                            cx.notify();
-                        }),
-                    ))
-                    .child(action(
-                        "fence-undo",
-                        "undo vertex",
-                        theme::TEXT,
-                        vertices > 0,
-                        cx.listener(|this, _event: &(), _window, cx| {
-                            this.plan.undo_fence_vertex();
-                            this.sync_map_fence();
-                            cx.notify();
-                        }),
-                    ))
-                    .child(action(
-                        "fence-clear",
-                        "clear fence",
-                        theme::TEXT,
-                        vertices > 0,
-                        cx.listener(|this, _event: &(), _window, cx| {
-                            this.plan.clear_fence();
-                            this.sync_map_fence();
-                            cx.notify();
-                        }),
-                    )),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .gap_2()
-                    .child(action(
-                        "fence-read",
-                        "read from vehicle",
-                        theme::ACCENT,
-                        has_vehicle,
-                        cx.listener(|this, _event: &(), _window, cx| {
-                            this.telemetry.request_fence();
-                            this.adopt_vehicle_fence = true;
-                            cx.notify();
-                        }),
-                    ))
-                    .child(action(
-                        "fence-write",
-                        "write to vehicle",
-                        theme::WARN,
-                        has_vehicle && usable,
-                        cx.listener(|this, _event: &(), _window, cx| {
-                            if let Some(items) = this.plan.fence_items() {
-                                this.telemetry.upload_fence(items);
-                            }
-                            cx.notify();
-                        }),
-                    )),
-            )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(if usable { theme::OK } else { theme::DIM }))
-                    .child(match vertices {
-                        0 => "right-click the map to place the boundary's corners".to_owned(),
-                        1 | 2 => format!("{vertices} of at least 3 corners placed"),
-                        _ => format!("{vertices} corners - the vehicle must stay inside"),
+    div()
+        .flex()
+        .flex_col()
+        .gap_2()
+        .child(
+            div()
+                .flex()
+                .flex_wrap()
+                .gap_2()
+                .child(action(
+                    "fence-undo",
+                    "undo corner",
+                    theme::TEXT,
+                    state.fence_vertices > 0,
+                    cx.listener(|this, _event: &(), _window, cx| {
+                        this.plan.undo_fence_vertex();
+                        this.sync_map_fence();
+                        cx.notify();
                     }),
-            )
-            .children(error.map(|error| {
-                div()
-                    .text_xs()
-                    .text_color(rgb(theme::ALERT))
-                    .child(error.to_owned())
-            })),
-    )
+                ))
+                .child(action(
+                    "fence-clear",
+                    "clear fence",
+                    theme::TEXT,
+                    state.fence_vertices > 0,
+                    cx.listener(|this, _event: &(), _window, cx| {
+                        this.plan.clear_fence();
+                        this.sync_map_fence();
+                        cx.notify();
+                    }),
+                ))
+                .child(action(
+                    "fence-read",
+                    "read",
+                    theme::ACCENT,
+                    has_vehicle,
+                    cx.listener(|this, _event: &(), _window, cx| {
+                        this.telemetry.request_fence();
+                        this.adopt_vehicle_fence = true;
+                        cx.notify();
+                    }),
+                ))
+                .child(action(
+                    "fence-write",
+                    "write",
+                    theme::WARN,
+                    has_vehicle && usable,
+                    cx.listener(|this, _event: &(), _window, cx| {
+                        if let Some(items) = this.plan.fence_items() {
+                            this.telemetry.upload_fence(items);
+                        }
+                        cx.notify();
+                    }),
+                )),
+        )
+        .child(
+            div()
+                .text_xs()
+                .text_color(rgb(if usable { theme::OK } else { theme::DIM }))
+                .child(match state.fence_vertices {
+                    0 => "no fence".to_owned(),
+                    1 | 2 => format!("{} of at least 3 corners", state.fence_vertices),
+                    n => format!("{n} corners - the vehicle must stay inside"),
+                }),
+        )
+        .children(state.fence_error.map(problem))
 }
 
-/// One step button for a survey setting.
+/// Undo, clear, read and write for rally points.
+fn rally_controls(
+    state: &DrawState<'_>,
+    view: &TelemetryView,
+    cx: &mut Context<MissionPlanner>,
+) -> impl IntoElement {
+    let has_vehicle = view.vehicle.is_some();
+
+    div()
+        .flex()
+        .flex_col()
+        .gap_2()
+        .child(
+            div()
+                .flex()
+                .flex_wrap()
+                .gap_2()
+                .child(action(
+                    "rally-undo",
+                    "undo point",
+                    theme::TEXT,
+                    state.rally_points > 0,
+                    cx.listener(|this, _event: &(), _window, cx| {
+                        this.plan.undo_rally_point();
+                        this.sync_map_rally();
+                        cx.notify();
+                    }),
+                ))
+                .child(action(
+                    "rally-clear",
+                    "clear",
+                    theme::TEXT,
+                    state.rally_points > 0,
+                    cx.listener(|this, _event: &(), _window, cx| {
+                        this.plan.clear_rally();
+                        this.sync_map_rally();
+                        cx.notify();
+                    }),
+                ))
+                .child(action(
+                    "rally-read",
+                    "read",
+                    theme::ACCENT,
+                    has_vehicle,
+                    cx.listener(|this, _event: &(), _window, cx| {
+                        this.telemetry.request_rally();
+                        this.adopt_vehicle_rally = true;
+                        cx.notify();
+                    }),
+                ))
+                .child(action(
+                    "rally-write",
+                    "write",
+                    theme::WARN,
+                    has_vehicle && state.rally_points > 0,
+                    cx.listener(|this, _event: &(), _window, cx| {
+                        if let Some(items) = this.plan.rally_items() {
+                            this.telemetry.upload_rally(items);
+                        }
+                        cx.notify();
+                    }),
+                )),
+        )
+        .child(
+            div()
+                .text_xs()
+                .text_color(rgb(if state.rally_points > 0 {
+                    theme::OK
+                } else {
+                    theme::DIM
+                }))
+                .child(match state.rally_points {
+                    0 => "no rally points - a failsafe returns all the way home".to_owned(),
+                    1 => "1 rally point".to_owned(),
+                    n => format!("{n} rally points"),
+                }),
+        )
+        .children(state.rally_error.map(problem))
+}
+
+/// How many corners are placed, and whether that is enough.
+fn corner_count(count: usize, noun: &'static str) -> impl IntoElement {
+    div()
+        .text_xs()
+        .text_color(rgb(if count >= 3 { theme::OK } else { theme::DIM }))
+        .child(match count {
+            0 => format!("no {noun} yet"),
+            1 | 2 => format!("{count} of at least 3 {noun}"),
+            n => format!("{n} {noun}"),
+        })
+}
+
+/// A problem, said in the alert colour.
+fn problem(text: &str) -> impl IntoElement {
+    div()
+        .text_xs()
+        .text_color(rgb(theme::ALERT))
+        .child(text.to_owned())
+}
+
+/// One step button for a survey setting./// One step button for a survey setting.
 ///
 /// `which` selects the setting rather than passing a closure, because the three settings clamp
 /// differently and that logic belongs on the plan, not in the view.
@@ -1783,6 +2012,90 @@ mod tests {
         plan.adopt_fence(&[]);
         assert!(plan.fence().is_empty());
         assert!(plan.fence_error().is_some());
+    }
+
+    #[test]
+    fn a_rally_point_takes_the_altitude_on_screen() {
+        // There is one altitude control on this screen and it is the survey's; a rally point that
+        // silently used a different number would be a surprise in a failsafe.
+        let mut plan = Plan::default();
+        plan.adjust_survey(0.0, 0.0, 30.0);
+        let expected = plan.survey_options().altitude;
+        plan.add_rally_point(at(-35.3625, 149.1655));
+
+        assert_eq!(plan.rally().len(), 1);
+        assert!((plan.rally()[0].altitude - expected).abs() < 1e-9);
+    }
+
+    #[test]
+    fn rally_points_round_trip_through_the_items_the_protocol_carries() {
+        let mut plan = Plan::default();
+        plan.add_rally_point(at(-35.3625, 149.1655));
+        plan.add_rally_point(at(-35.3630, 149.1660));
+        let items = plan.rally_items().expect("two points should send");
+        assert_eq!(items.len(), 2);
+        for (index, item) in items.iter().enumerate() {
+            assert_eq!(item.command, mp_mission::fence::CMD_RALLY_POINT);
+            assert_eq!(usize::from(item.seq), index);
+        }
+
+        let mut received = Plan::default();
+        received.adopt_rally(&items);
+        assert_eq!(received.rally().len(), 2);
+        assert!((received.rally()[0].position.latitude() - -35.3625).abs() < 1e-9);
+    }
+
+    #[test]
+    fn sending_no_rally_points_says_why_rather_than_sending_nothing() {
+        // An empty upload would clear the vehicle's rally points, which is a different intent from
+        // not having drawn any yet.
+        let mut plan = Plan::default();
+        assert!(plan.rally_items().is_none());
+        assert!(plan.rally_error().is_some());
+    }
+
+    #[test]
+    fn adopting_a_vehicle_with_no_rally_points_says_so() {
+        let mut plan = Plan::default();
+        plan.adopt_rally(&[]);
+        assert!(plan.rally().is_empty());
+        assert!(plan.rally_error().is_some());
+    }
+
+    #[test]
+    fn the_four_drawing_modes_are_distinct_and_named() {
+        // The ids address controls a test script clicks; two sharing one would make a click land
+        // on the wrong mode.
+        let mut ids: Vec<&str> = DrawMode::ALL.iter().map(|m| m.id()).collect();
+        let count = ids.len();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), count);
+
+        for mode in DrawMode::ALL {
+            assert!(!mode.label().is_empty());
+            assert!(mode.hint().contains("right-click"), "{}", mode.hint());
+        }
+    }
+
+    #[test]
+    fn the_shapes_do_not_share_storage() {
+        // Four things are placed by right-clicking on the same map. Mixing any two would send one
+        // to the vehicle as another.
+        let mut plan = Plan::default();
+        plan.add_waypoint(at(-35.300, 149.100), 50.0);
+        plan.add_area_vertex(at(-35.310, 149.110));
+        plan.add_fence_vertex(at(-35.320, 149.120));
+        plan.add_rally_point(at(-35.330, 149.130));
+
+        assert_eq!(plan.items().len(), 1);
+        assert_eq!(plan.polygon().len(), 1);
+        assert_eq!(plan.fence().len(), 1);
+        assert_eq!(plan.rally().len(), 1);
+        assert!((plan.items()[0].x - -35.300).abs() < 1e-9);
+        assert!((plan.polygon()[0].latitude() - -35.310).abs() < 1e-9);
+        assert!((plan.fence()[0].latitude() - -35.320).abs() < 1e-9);
+        assert!((plan.rally()[0].position.latitude() - -35.330).abs() < 1e-9);
     }
 
     #[test]
