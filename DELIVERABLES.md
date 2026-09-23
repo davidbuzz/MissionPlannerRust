@@ -198,9 +198,12 @@ The full parameter system — tree/list/advanced editors driven by parameter met
 - **Replaces:** `GCSViews/ConfigurationView/*` (the bulk of 67,553 LOC in `GCSViews/`).
 - **Today:** full parameter download with gap recovery (1,408 from SITL), a searchable browser, and
   `.param` save/load/compare in both the GUI and `mpr param save|load|diff`. The load-time skip-list
-  is ported from `ExtLibs/Utilities/ParamFile.cs:50-76`. **Not yet done:** the C# writes numbers as
-  `value.ToString(InvariantCulture)` — shortest representation — and a byte-for-byte fixture has to
-  come from a run of the C# app rather than be written by hand.
+  is ported from `ExtLibs/Utilities/ParamFile.cs:50-76` (all 16 entries, on the load side as the C#
+  has it), and numbers are written through a `G15` formatter matching
+  `double.ToString(InvariantCulture)` — shortest representation, scientific below 1e-4, which is
+  where gyro offsets live. **Still owed:** the fixture is written from a reading of the C# source,
+  not captured from a run of it; mono's float formatting diverges from .NET 4.7.2 (PLAN.md R5), so
+  settling it needs the Windows runner §7.1 budgets.
 - **Tests:** `tests/metadata_codegen.rs` asserts the generated parameter metadata matches the source XML and compiles; `tests/panel_coverage.rs` fails if any C# `Config*.cs` panel is missing from the Rust implementation (ledger-driven); `tests/param_roundtrip.rs` writes and re-reads every parameter type against SITL including bitmask/enum/float edge values; per-panel UI snapshots; `tests/param_file_compat.rs` reads and writes `.param` files produced by the C# app byte-for-byte.
 
 ### D13. Initial setup, calibration and firmware

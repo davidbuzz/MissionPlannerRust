@@ -6,10 +6,16 @@
 //!
 //! On the fixtures: `mavproxy.parm` is a genuine capture, the first forty lines of a file pulled
 //! off a real vehicle. `mission-planner.param` is written in the C# application's output format -
-//! its `#NOTE:` header, comma separator, six decimal places and sorted order - rather than
-//! captured from a run of it, because that application does not run on this machine. It is a
-//! fixture for the format, not proof that a particular build of Mission Planner produced those
-//! bytes, and it is worth saying so rather than letting a future reader assume otherwise.
+//! its `#NOTE:` header, comma separator, sorted order, and values as
+//! `double.ToString(InvariantCulture)` - rather than captured from a run of it, because that
+//! application does not run on this machine. It is a fixture for the format, not proof that a
+//! particular build of Mission Planner produced those bytes, and it is worth saying so rather than
+//! letting a future reader assume otherwise.
+//!
+//! The first version of this fixture was written with six decimal places throughout, because that
+//! is what the Rust implementation happened to emit. `ExtLibs/Utilities/ParamFile.cs:85-108` is in
+//! this repository and says otherwise: shortest representation, scientific below 1e-4. A fixture
+//! built to match the implementation tests nothing, and reads as though it tests everything.
 
 use mp_link::param_file::{Change, ParamFile};
 
@@ -113,10 +119,52 @@ fn what_we_write_is_shaped_the_way_the_other_tools_read() {
             .split_once(',')
             .unwrap_or_else(|| panic!("a comma in {line:?}"));
         assert!(name > previous.as_str(), "{name} came after {previous}");
+        assert!(!value.is_empty(), "a value in {line:?}");
         assert!(
-            value.contains('.') && value.split('.').nth(1).is_some_and(|part| part.len() == 6),
-            "six decimal places in {line:?}"
+            value.parse::<f64>().is_ok(),
+            "{value:?} in {line:?} is not a number the other tools can read"
         );
+        // Shortest representation: `1`, not `1.0` and not `1.000000`. A trailing zero after a
+        // decimal point is the tell that a fixed-width printer has crept back in.
+        if let Some((_, fraction)) = value.split_once('.')
+            && !fraction.contains(['E', 'e'])
+        {
+            assert!(
+                !fraction.ends_with('0'),
+                "{value:?} has a trailing zero; .NET's ToString would have dropped it"
+            );
+        }
         previous = name.to_owned();
     }
+}
+
+/// Byte-for-byte: reading the fixture and writing it back produces the fixture again.
+///
+/// The strongest statement this can make without a run of the C# application, and the one D12 asks
+/// for. It fails on any formatting drift at all - a decimal place gained, a sort order changed, a
+/// line ending altered - rather than on a semantic difference.
+#[test]
+fn a_mission_planner_file_rewrites_to_itself_byte_for_byte() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/mission-planner.param");
+    let original = std::fs::read_to_string(&path).expect("the fixture");
+    let rewritten = fixture("mission-planner.param").render();
+
+    // The header is a comment we do not reproduce, and the three parameters the load filter drops
+    // are gone by design, so the comparison is over what survives a load.
+    let expected: String = original
+        .lines()
+        .filter(|line| !line.starts_with('#'))
+        .filter(|line| {
+            line.split(',')
+                .next()
+                .is_some_and(mp_link::param_file::is_loaded)
+        })
+        .map(|line| format!("{line}\n"))
+        .collect();
+
+    assert_eq!(
+        rewritten, expected,
+        "what we write no longer matches the format the fixture records"
+    );
 }

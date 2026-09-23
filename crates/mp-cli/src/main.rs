@@ -1032,25 +1032,22 @@ fn param_save(url: &str, path: &str) -> std::process::ExitCode {
         eprintln!("could not write {path}: {err}");
         return std::process::ExitCode::FAILURE;
     }
-    // Saying what was left out, because a file with fewer lines than the vehicle has parameters
-    // looks like a truncated download unless the difference is explained. Named individually
-    // rather than printing the whole skip-list: most of those names do not exist on any one
-    // firmware, and listing seven when one was dropped reads as a bug in the skipping.
-    let omitted: Vec<_> = table
+    // Everything the vehicle reported goes in, because that is what Mission Planner's
+    // `SaveParamFile` does - the filtering happens when a file is read, not when it is written, so
+    // a saved file is a complete record of the airframe. Which of them will be skipped on the way
+    // back in is said here, so a later "why did that not apply" has an answer.
+    println!("wrote {} of {received} parameters to {path}", file.len());
+    let skipped_on_load: Vec<_> = table
         .iter()
         .map(|(name, _)| name.as_str())
-        .filter(|name| !mp_link::param_file::is_saved(name))
+        .filter(|name| !mp_link::param_file::is_loaded(name))
         .collect();
-    println!("wrote {} of {received} parameters to {path}", file.len());
-    if !omitted.is_empty() {
+    if !skipped_on_load.is_empty() {
         println!(
-            "omitted {} the vehicle maintains itself: {}",
-            if omitted.len() == 1 {
-                "a parameter"
-            } else {
-                "parameters"
-            },
-            omitted.join(", ")
+            "{} in the file will be skipped when it is loaded, being state the vehicle keeps for \
+             itself: {}",
+            skipped_on_load.len(),
+            skipped_on_load.join(", ")
         );
     }
     std::process::ExitCode::SUCCESS

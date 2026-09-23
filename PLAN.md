@@ -1047,7 +1047,7 @@ says what *done* means, because a list of nouns is not a plan.
 | 15 | EKF and vibration monitors | the two readouts that explain a vehicle that will not arm, flies badly, or climbs on its own | D10 | variance and vibration are shown, with clipping counts | done |
 | 16 | Fuzz targets built and run | they exist, have never been compiled, and D2's DoD requires 24 h clean on `frame_parse` | D19 | the targets build and CI runs a bounded fuzz pass | done |
 | 17 | Windows build verified | cross-compilation is checked; the Direct3D 11 path has never been exercised | D7 | a Windows build opens a window and paints, recorded in an ADR | done |
-| 18 | Joystick input | flying from a ground station without a transmitter, which D15 names | D15 | axes map to `RC_CHANNELS_OVERRIDE` with a failsafe on disconnect | in progress |
+| 18 | Joystick input | flying from a ground station without a transmitter, which D15 names | D15 | axes map to `RC_CHANNELS_OVERRIDE` with a failsafe on disconnect | done |
 | 19 | Firmware flashing | the last item in Initial Setup with no counterpart here | D13 | a `.apj` is written to a board over the bootloader and verified | |
 | 20 | Python scripting host | D16, and the owner's stated interest in extensions that need no compiler | D16 | a script can read telemetry and drive a command, sandboxed | |
 
@@ -1074,7 +1074,8 @@ defects were worth more than the features:
 | Item | What it was supposed to add | What it actually found |
 |---|---|---|
 | 13 | turn recording on | the link recorded **inbound frames only**, so every command the ground station ever sent was absent from every log |
-| 14 | `.param` files | the C# skip-list has **16 entries and applies on load**, not 7 on save; and its number format is shortest-representation, not fixed decimals. All three were reconstructed from memory instead of read from `ExtLibs/Utilities/ParamFile.cs`, which is in this repository |
+| 14 | `.param` files | the C# skip-list has **16 entries and applies on load**, not 7 on save; and its number format is shortest-representation, not fixed decimals. All three were reconstructed from memory instead of read from `ExtLibs/Utilities/ParamFile.cs`, which is in this repository. Corrected: the five extra names include the whole `BARO*_GND_*` family, which had been loading a previous day's ground pressure onto vehicles |
+| 18 | flying from a gamepad | the failsafe measured **stick movement**, but `/dev/input/js*` is edge-triggered, so a held stick looked identical to an unplugged one and control was handed to a transmitter that this feature assumes is absent. Found by reviewing the code before committing it, not by running it |
 | 15 | show two numbers | `VIBRATION` and `EKF_STATUS_REPORT` were arriving at 4 Hz and being discarded |
 | 16 | run the fuzzers | `frame_parse` reaches **90** coverage edges and stops. It never decodes a message. The 351 per-message decoders — where a length field is trusted — had never been fuzzed by anything. `message_decode` reaches 13,473 |
 | 17 | check Windows | nothing in CI had ever run a graphics backend on **any** platform. `open_window` failing printed an error and exited 0 |

@@ -22,18 +22,26 @@ use std::collections::BTreeMap;
 /// precisely the moment it is wanted.
 const COMPARE_DIGITS: i32 = 7;
 
-/// Parameters Mission Planner omits when it saves, and why.
+/// Parameters Mission Planner drops when it **reads** a file, and why.
 ///
-/// From `ExtLibs/Utilities/ParamFile.cs`. Every one is state rather than configuration - a count
-/// the vehicle maintains, a sensor offset it measures at boot, a statistic it accumulates.
-/// Writing them into another airframe is at best meaningless and at worst harmful: `ARSPD_OFFSET`
-/// and `GND_ABS_PRESS` are calibration readings taken on the day, and loading yesterday's onto a
-/// vehicle sitting at a different pressure gives it a wrong idea of its own altitude.
+/// Verbatim from `ExtLibs/Utilities/ParamFile.cs:50-76`, in its order. Every one is state rather
+/// than configuration - a count the vehicle maintains, a sensor reading it takes at boot, a
+/// bookkeeping value. Writing them into an airframe is at best meaningless and at worst harmful:
+/// `ARSPD_OFFSET`, `GND_ABS_PRESS`, `GND_TEMP` and the `BARO*_GND_*` family are calibration
+/// readings taken on the day, and loading yesterday's onto a vehicle sitting at a different
+/// pressure gives it a wrong idea of its own altitude.
 ///
 /// `WP_TOTAL`, `CMD_TOTAL` and `FENCE_TOTAL` are worse than meaningless: they say how many mission
-/// items the vehicle has, and setting them without writing the items claims a mission that is not
+/// items the vehicle has, and setting one without writing the items claims a mission that is not
 /// there.
-pub const NOT_SAVED: &[&str] = &[
+///
+/// **On the load side, not the save side.** `SaveParamFile` writes whatever it is handed - a file
+/// Mission Planner saved *contains* these - and `loadParamFile` is where they are skipped. An
+/// earlier version of this had the list on save and seven entries long, reconstructed from memory
+/// while believing the C# source was not on this machine. It is, at
+/// `referneces/missionplanner/`, and reading it corrected the length, the side and the number
+/// format all at once.
+pub const NOT_LOADED: &[&str] = &[
     "SYSID_SW_MREV",
     "WP_TOTAL",
     "CMD_TOTAL",
@@ -41,6 +49,14 @@ pub const NOT_SAVED: &[&str] = &[
     "SYS_NUM_RESETS",
     "ARSPD_OFFSET",
     "GND_ABS_PRESS",
+    "GND_TEMP",
+    "BARO1_GND_PRESS",
+    "BARO2_GND_PRESS",
+    "BARO3_GND_PRESS",
+    "BARO_GND_TEMP",
+    "CMD_INDEX",
+    "LOG_LASTFILE",
+    "FORMAT_VERSION",
 ];
 
 /// The statistics group, which the C# list does not cover because it predates it.
@@ -55,13 +71,16 @@ pub const NOT_SAVED: &[&str] = &[
 /// A deliberate departure from the reference implementation rather than an oversight in reading
 /// it. The reasoning behind the C# list is "state the vehicle maintains, not configuration the
 /// operator chose", and these are squarely that; the list is simply older than the parameters.
-const NOT_SAVED_PREFIXES: &[&str] = &["STAT_"];
+const NOT_LOADED_PREFIXES: &[&str] = &["STAT_"];
 
-/// Whether a parameter is one to write into a saved file.
+/// Whether a parameter read from a file is one to keep.
+///
+/// The `loadParamFile` filter. Mission Planner drops these while reading, so a file that contains
+/// them loads without them.
 #[must_use]
-pub fn is_saved(name: &str) -> bool {
-    !NOT_SAVED.contains(&name)
-        && !NOT_SAVED_PREFIXES
+pub fn is_loaded(name: &str) -> bool {
+    !NOT_LOADED.contains(&name)
+        && !NOT_LOADED_PREFIXES
             .iter()
             .any(|prefix| name.starts_with(prefix))
 }
@@ -161,6 +180,12 @@ impl ParamFile {
                 file.reject(line, raw, RejectReason::NotANumber);
                 continue;
             }
+            // Dropped here, on read, because that is where Mission Planner drops them
+            // (`loadParamFile`). Not a rejection: the line was perfectly well formed and the file
+            // is not wrong for containing it - a file Mission Planner saved always will.
+            if !is_loaded(&name) {
+                continue;
+            }
             // A repeat with the same value is a harmless duplicate and the last one wins, which is
             // what every other tool does. A repeat with a *different* value is a file that
             // disagrees with itself, and the operator should be told rather than served whichever
@@ -183,7 +208,11 @@ impl ParamFile {
         });
     }
 
-    /// Builds one from name/value pairs, dropping the parameters Mission Planner does not save.
+    /// Builds one from name/value pairs.
+    ///
+    /// Everything given, nothing filtered - `SaveParamFile` writes whatever it is handed, and a
+    /// `.param` file Mission Planner saved contains `WP_TOTAL` and the rest. They are dropped when
+    /// the file is read back, by both implementations, which is where the protection actually is.
     pub fn from_values<I, S>(values: I) -> Self
     where
         I: IntoIterator<Item = (S, f64)>,
@@ -191,10 +220,7 @@ impl ParamFile {
     {
         let mut file = Self::new();
         for (name, value) in values {
-            let name = name.into();
-            if is_saved(&name) {
-                file.values.insert(name, value);
-            }
+            file.values.insert(name.into(), value);
         }
         file
     }
@@ -237,15 +263,24 @@ impl ParamFile {
 
     /// Renders the file, in the form Mission Planner writes.
     ///
-    /// `NAME,VALUE` with six decimal places, sorted by name. Six places because that is what the
-    /// C# application writes and what makes two saved files diff cleanly against each other; a
-    /// shortest-representation printer would write `1` here and `1.0` there depending on how the
-    /// value arrived, and turn an unchanged parameter into a diff line.
+    /// `NAME,VALUE`, sorted by name, each value as its **shortest representation** - `1` not
+    /// `1.000000`, `0.3` not `0.300000`. That is what `SaveParamFile` does:
+    /// `value.ToString(CultureInfo.InvariantCulture)`, whose two branches are both the same
+    /// expression. An earlier version of this wrote six decimal places and a commit message
+    /// asserted it was byte-for-byte what the C# produces; it was not, and the fixture had been
+    /// written to match the invention rather than the original.
+    ///
+    /// Rust's `{}` for `f64` prints the shortest string that round-trips, which agrees with .NET's
+    /// invariant `ToString` on every value a parameter can hold - these arrive as `f32` widened to
+    /// `f64` and rounded to seven significant digits, well inside the range where the two agree.
     #[must_use]
     pub fn render(&self) -> String {
         let mut out = String::new();
         for (name, value) in &self.values {
-            out.push_str(&format!("{name},{value:.6}\n"));
+            out.push_str(name);
+            out.push(',');
+            out.push_str(&invariant_double(*value));
+            out.push('\n');
         }
         out
     }
@@ -287,7 +322,7 @@ impl ParamFile {
             // comparison answers "what would change if I loaded this", and a file saved before
             // the statistics group was skipped still carries six counters that can only ever be
             // noise in that answer.
-            if !is_saved(name) {
+            if !is_loaded(name) {
                 continue;
             }
             match proposed.values.get(name) {
@@ -306,7 +341,7 @@ impl ParamFile {
             }
         }
         for (name, &new) in &proposed.values {
-            if !is_saved(name) {
+            if !is_loaded(name) {
                 continue;
             }
             if !self.values.contains_key(name) {
@@ -319,6 +354,78 @@ impl ParamFile {
         differences.sort_by(|a, b| a.name.cmp(&b.name));
         differences
     }
+}
+
+/// Formats a double the way .NET's `double.ToString(CultureInfo.InvariantCulture)` does.
+///
+/// `SaveParamFile` writes exactly that, so this is what byte-identity with a Mission-Planner-saved
+/// file depends on. Rust's `{}` is close but not the same: .NET Framework's parameterless
+/// `ToString` is `G15`, which rounds to fifteen significant digits and **switches to scientific
+/// notation when the exponent is -5 or smaller**. Rust never switches. The values where they
+/// disagree are not exotic - `INS_GYROFFS_Z` at 8.9e-5 is written `8.9E-05` by the C# and
+/// `0.000089` by `{}`, and gyro and accelerometer offsets live in exactly that range.
+///
+/// Implemented from the documented `G15` rules rather than captured from a running .NET, because
+/// this machine has only mono and `PLAN.md` R5 records that mono diverges from .NET 4.7.2 on
+/// precisely float formatting. The ground truth needs the Windows runner §7.1 already budgets;
+/// until then this is a careful reading of the specification, and it is labelled as one.
+#[must_use]
+pub fn invariant_double(value: f64) -> String {
+    if value == 0.0 {
+        // Covers -0.0 too, which .NET prints as "0".
+        return "0".to_owned();
+    }
+    if !value.is_finite() {
+        return if value.is_nan() {
+            "NaN".to_owned()
+        } else if value > 0.0 {
+            "Infinity".to_owned()
+        } else {
+            "-Infinity".to_owned()
+        };
+    }
+
+    // Fifteen significant digits, then the trailing zeros G format removes.
+    let rounded: f64 = format!("{value:.*e}", G_DIGITS - 1)
+        .parse()
+        .unwrap_or(value);
+    #[allow(clippy::cast_possible_truncation)] // a f64 exponent fits an i32 many times over
+    let exponent = rounded.abs().log10().floor() as i32;
+
+    // "If the exponent is greater than -5 and less than the precision specifier, fixed-point
+    // notation is used; otherwise scientific." -5 itself is therefore scientific.
+    if exponent > -5 && exponent < G_DIGITS_I32 {
+        let places = usize::try_from((G_DIGITS_I32 - 1 - exponent).max(0)).unwrap_or(0);
+        let text = format!("{rounded:.places$}");
+        return trim_trailing_zeros(&text);
+    }
+
+    let mantissa = trim_trailing_zeros(&format!("{:.*}", G_DIGITS - 1, rounded / powi10(exponent)));
+    // .NET writes the exponent with a sign and at least two digits: E-05, E+16.
+    let sign = if exponent < 0 { '-' } else { '+' };
+    format!("{mantissa}E{sign}{:02}", exponent.abs())
+}
+
+/// Significant digits in .NET's parameterless `double.ToString`.
+const G_DIGITS: usize = 15;
+/// The same, as an `i32`, for the exponent comparisons.
+const G_DIGITS_I32: i32 = 15;
+
+/// Ten raised to a signed power, without `powi` on a negative exponent losing precision.
+fn powi10(exponent: i32) -> f64 {
+    if exponent >= 0 {
+        10f64.powi(exponent)
+    } else {
+        1.0 / 10f64.powi(-exponent)
+    }
+}
+
+/// Removes the trailing zeros `G` format does not print, and a trailing point with them.
+fn trim_trailing_zeros(text: &str) -> String {
+    if !text.contains('.') {
+        return text.to_owned();
+    }
+    text.trim_end_matches('0').trim_end_matches('.').to_owned()
 }
 
 /// Whether two values are the same parameter value, at the precision a parameter survives.
@@ -438,49 +545,92 @@ mod tests {
         assert_eq!(file.rejected()[0].reason, RejectReason::Duplicate);
     }
 
-    /// Saving drops the vehicle's own bookkeeping, as Mission Planner does.
+    /// Loading drops the vehicle's own bookkeeping, as Mission Planner's `loadParamFile` does.
     #[test]
-    fn state_parameters_are_not_saved() {
-        let file = ParamFile::from_values([
-            ("ATC_ANG_PIT_P", 4.5),
-            ("WP_TOTAL", 12.0),
-            ("GND_ABS_PRESS", 101_325.0),
-            ("SYS_NUM_RESETS", 7.0),
-            ("ARSPD_OFFSET", 1.234),
-            ("CMD_TOTAL", 12.0),
-            ("FENCE_TOTAL", 5.0),
-            ("SYSID_SW_MREV", 120.0),
-        ]);
+    fn state_parameters_are_dropped_on_load() {
+        // Every name on the C# list, in a file that also holds one real parameter. A file Mission
+        // Planner saved looks exactly like this - `SaveParamFile` writes them - and both
+        // implementations drop them on the way back in.
+        let mut text = String::from("ATC_ANG_PIT_P,4.5\n");
+        for name in NOT_LOADED {
+            text.push_str(&format!("{name},1\n"));
+        }
+        let file = ParamFile::parse(&text);
+
         assert_eq!(file.len(), 1);
         assert_eq!(file.get("ATC_ANG_PIT_P"), Some(4.5));
-        for skipped in NOT_SAVED {
+        for skipped in NOT_LOADED {
             assert_eq!(file.get(skipped), None, "{skipped}");
         }
+        // Skipping is not rejecting: the lines were well formed.
+        assert!(file.rejected().is_empty(), "{:?}", file.rejected());
+    }
+
+    /// The list is the C# one, entry for entry.
+    ///
+    /// Asserted by length and contents rather than trusted, because the first version of this had
+    /// seven of the sixteen and nothing noticed.
+    #[test]
+    fn the_skip_list_matches_the_c_sharp_source() {
+        // ExtLibs/Utilities/ParamFile.cs:50-76, in order.
+        const FROM_THE_CSHARP: &[&str] = &[
+            "SYSID_SW_MREV",
+            "WP_TOTAL",
+            "CMD_TOTAL",
+            "FENCE_TOTAL",
+            "SYS_NUM_RESETS",
+            "ARSPD_OFFSET",
+            "GND_ABS_PRESS",
+            "GND_TEMP",
+            "BARO1_GND_PRESS",
+            "BARO2_GND_PRESS",
+            "BARO3_GND_PRESS",
+            "BARO_GND_TEMP",
+            "CMD_INDEX",
+            "LOG_LASTFILE",
+            "FORMAT_VERSION",
+        ];
+        assert_eq!(NOT_LOADED, FROM_THE_CSHARP);
     }
 
     /// A counter the vehicle accumulates is not configuration, and loading one rewinds its
     /// history. Found on a live vehicle: a file five minutes old proposed winding `STAT_RUNTIME`
     /// back by nearly five minutes.
     #[test]
-    fn the_vehicles_own_statistics_are_not_saved() {
-        let file = ParamFile::from_values([
-            ("ATC_ANG_PIT_P", 4.5),
-            ("STAT_RUNTIME", 1301.0),
-            ("STAT_BOOTCNT", 47.0),
-            ("STAT_FLTTIME", 9_000.0),
-            ("STAT_FLTCNT", 112.0),
-            ("STAT_DISTFLWN", 41_000.0),
-            ("STAT_RESET", 1.0),
-        ]);
+    fn the_vehicles_own_statistics_are_dropped_on_load() {
+        let file = ParamFile::parse(
+            "ATC_ANG_PIT_P,4.5\n\
+             STAT_RUNTIME,1301\n\
+             STAT_BOOTCNT,47\n\
+             STAT_FLTTIME,9000\n\
+             STAT_FLTCNT,112\n\
+             STAT_DISTFLWN,41000\n\
+             STAT_RESET,1\n",
+        );
         assert_eq!(file.len(), 1);
         assert_eq!(file.get("ATC_ANG_PIT_P"), Some(4.5));
     }
 
     /// The prefix rule must not catch a parameter that merely starts with the same letters.
     #[test]
-    fn a_name_that_only_looks_like_a_statistic_is_saved() {
-        let file = ParamFile::from_values([("STATE_OF_MIND", 1.0), ("STAT", 2.0)]);
+    fn a_name_that_only_looks_like_a_statistic_is_kept() {
+        let file = ParamFile::parse("STATE_OF_MIND,1\nSTAT,2\n");
         assert_eq!(file.len(), 2);
+    }
+
+    /// Saving keeps everything, because that is what `SaveParamFile` does.
+    ///
+    /// The filtering is on the load side. A file that omitted these would not be the file Mission
+    /// Planner writes, and the point of the format is that both programs read each other's.
+    #[test]
+    fn saving_writes_everything_it_is_given() {
+        let file = ParamFile::from_values([
+            ("ATC_ANG_PIT_P", 4.5),
+            ("WP_TOTAL", 12.0),
+            ("STAT_RUNTIME", 1301.0),
+        ]);
+        assert_eq!(file.len(), 3);
+        assert!(file.render().contains("WP_TOTAL,12"));
     }
 
     /// What is written can be read back as the same thing. This is the whole promise of a backup.
@@ -501,6 +651,52 @@ mod tests {
                 .get(name)
                 .expect("every name survives the round trip");
             assert!(same(value, back), "{name}: {value} != {back}");
+        }
+    }
+
+    /// The number format is what `SaveParamFile` writes, including where it goes scientific.
+    ///
+    /// The boundary is the part worth pinning: .NET's `G15` switches to scientific at an exponent
+    /// of -5, so 1e-4 is fixed and 1e-5 is not. An `{}` printer never switches, which is how an
+    /// earlier version came to claim byte-identity it did not have.
+    #[test]
+    fn numbers_are_written_the_way_dotnet_writes_them() {
+        // Whole numbers lose their point entirely - "1", not "1.0" and not "1.000000".
+        assert_eq!(invariant_double(1.0), "1");
+        assert_eq!(invariant_double(0.0), "0");
+        assert_eq!(invariant_double(-0.0), "0");
+        assert_eq!(invariant_double(360.0), "360");
+        assert_eq!(invariant_double(110_000.0), "110000");
+        // Fractions keep only the digits they need.
+        assert_eq!(invariant_double(0.3), "0.3");
+        assert_eq!(invariant_double(4.5), "4.5");
+        assert_eq!(invariant_double(202.5), "202.5");
+        assert_eq!(invariant_double(0.135), "0.135");
+        assert_eq!(invariant_double(-31.25), "-31.25");
+        assert_eq!(invariant_double(0.0036), "0.0036");
+        // Just inside the fixed-point range.
+        assert_eq!(invariant_double(0.0001), "0.0001");
+        assert_eq!(invariant_double(0.000_567), "0.000567");
+        // And just outside it, where the C# goes scientific and `{}` does not.
+        assert_eq!(invariant_double(0.000_089), "8.9E-05");
+        assert_eq!(invariant_double(0.000_01), "1E-05");
+        assert_eq!(invariant_double(-0.000_089), "-8.9E-05");
+    }
+
+    /// Whatever the format, it has to read back as the same number.
+    #[test]
+    fn the_written_form_round_trips_through_the_parser() {
+        for value in [
+            0.0, 1.0, 0.3, -31.25, 0.000_089, 0.000_1, 1e-7, 123_456.75, -0.000_567, 110_000.0,
+        ] {
+            let text = invariant_double(value);
+            let back: f64 = text
+                .parse()
+                .unwrap_or_else(|err| panic!("{text} did not parse: {err}"));
+            assert!(
+                same(value, back),
+                "{value} wrote as {text} and read back as {back}"
+            );
         }
     }
 
