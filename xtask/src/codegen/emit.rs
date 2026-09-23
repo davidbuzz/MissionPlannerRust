@@ -238,8 +238,83 @@ fn emit_enums(dialect: &Dialect, out: &mut String) {
             let _ = writeln!(out, "        }})");
         }
         let _ = writeln!(out, "    }}");
+
+        // For MAV_CMD only: what each command's parameters mean. The definitions label and give
+        // units for every one, which is the difference between a mission editor that shows
+        // "param1" and one that shows "hold time, seconds". A parameter the command does not use
+        // has no label in the XML and is emitted as None, so the editor can hide it rather than
+        // offer a control that does nothing.
+        if e.name == "MAV_CMD" {
+            emit_command_params(&e.entries, out);
+        }
+
         let _ = writeln!(out, "}}\n");
     }
+}
+
+/// A label and units for each of a command's first four parameters.
+///
+/// Four, not seven: 5, 6 and 7 are latitude, longitude and altitude on every command that has a
+/// location, and the editor shows those as a position rather than as numbered parameters.
+fn emit_command_params(entries: &[crate::codegen::mavlink::EnumEntry], out: &mut String) {
+    let _ = writeln!(
+        out,
+        "\n    /// What this command's parameters 1 to 4 mean, as (label, units)."
+    );
+    let _ = writeln!(out, "    ///");
+    let _ = writeln!(
+        out,
+        "    /// `None` for a parameter the command does not use."
+    );
+    let _ = writeln!(out, "    #[must_use]");
+    let _ = writeln!(
+        out,
+        "    pub const fn parameters(self) -> [Option<(&'static str, &'static str)>; 4] {{"
+    );
+    let _ = writeln!(out, "        match self.0 {{");
+
+    let mut emitted = std::collections::HashSet::new();
+    for entry in entries {
+        let Some(value) = entry.value else { continue };
+        let Ok(value) = u32::try_from(value) else {
+            continue;
+        };
+        if !emitted.insert(value) {
+            continue;
+        }
+        let described: Vec<String> = (1..=4)
+            .map(|index| {
+                entry
+                    .params
+                    .iter()
+                    .find(|param| param.index == index)
+                    .and_then(|param| param.label.as_ref().map(|label| (param, label)))
+                    .map_or_else(
+                        || "None".to_owned(),
+                        |(param, label)| {
+                            format!(
+                                "Some((\"{}\", \"{}\"))",
+                                escape(label),
+                                escape(param.units.as_deref().unwrap_or(""))
+                            )
+                        },
+                    )
+            })
+            .collect();
+        if described.iter().all(|value| value == "None") {
+            continue;
+        }
+        let _ = writeln!(out, "            {value} => [{}],", described.join(", "));
+    }
+
+    let _ = writeln!(out, "            _ => [None, None, None, None],");
+    let _ = writeln!(out, "        }}");
+    let _ = writeln!(out, "    }}");
+}
+
+/// Escapes a string for a Rust literal.
+fn escape(text: &str) -> String {
+    text.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 fn emit_messages(dialect: &Dialect, out: &mut String) {

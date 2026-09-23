@@ -262,6 +262,37 @@ impl Plan {
         self.origin = Origin::Edited;
     }
 
+    /// Changes one of an item's four command parameters.
+    ///
+    /// Which parameter means what depends on the command, and the meanings come from the MAVLink
+    /// definitions rather than from a table here - see `MavCmd::parameters`.
+    pub fn set_param(&mut self, seq: u16, index: usize, value: f64) {
+        let Some(item) = self.items.iter_mut().find(|item| item.seq == seq) else {
+            return;
+        };
+        match index {
+            0 => item.param1 = value,
+            1 => item.param2 = value,
+            2 => item.param3 = value,
+            3 => item.param4 = value,
+            _ => return,
+        }
+        self.origin = Origin::Edited;
+    }
+
+    /// One of an item's four command parameters.
+    #[must_use]
+    pub fn param(&self, seq: u16, index: usize) -> Option<f64> {
+        let item = self.items.iter().find(|item| item.seq == seq)?;
+        match index {
+            0 => Some(item.param1),
+            1 => Some(item.param2),
+            2 => Some(item.param3),
+            3 => Some(item.param4),
+            _ => None,
+        }
+    }
+
     /// Changes what an item does.
     ///
     /// Return-to-launch and land take no position, so changing to one zeroes the coordinates.
@@ -847,6 +878,59 @@ pub fn editor_panel(
         );
     }
 
+    // What this command's parameters mean, from the MAVLink definitions. A command that uses none
+    // of them - return-to-launch, land - shows none, rather than four controls doing nothing.
+    let mut parameters = div().flex().flex_col().gap_1();
+    let mut any_parameters = false;
+    for (index, described) in MavCmd(u32::from(current_command))
+        .parameters()
+        .iter()
+        .enumerate()
+    {
+        let Some((label, units)) = described else {
+            continue;
+        };
+        any_parameters = true;
+        let value =
+            plan_items
+                .iter()
+                .find(|item| item.seq == seq)
+                .map_or(0.0, |item| match index {
+                    0 => item.param1,
+                    1 => item.param2,
+                    2 => item.param3,
+                    _ => item.param4,
+                });
+        let shown = if units.is_empty() {
+            format!("{value:.0}")
+        } else {
+            format!("{value:.0} {units}")
+        };
+        parameters = parameters.child(
+            div()
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(
+                    div()
+                        .w(px(96.0))
+                        .text_xs()
+                        .text_color(rgb(theme::DIM))
+                        .child((*label).to_owned()),
+                )
+                .child(
+                    div()
+                        .w(px(68.0))
+                        .text_sm()
+                        .text_color(rgb(theme::TEXT))
+                        .child(shown),
+                )
+                .child(param_stepper(seq, index, -1.0, "-1", cx))
+                .child(param_stepper(seq, index, 1.0, "+1", cx))
+                .child(param_stepper(seq, index, 10.0, "+10", cx)),
+        );
+    }
+
     panel(
         format!("item {seq}").as_str(),
         div()
@@ -861,9 +945,49 @@ pub fn editor_panel(
                     .text_color(rgb(theme::DIM))
                     .child("altitude above home"),
             )
-            .child(steppers),
+            .child(steppers)
+            .children(any_parameters.then(|| {
+                div()
+                    .text_xs()
+                    .text_color(rgb(theme::DIM))
+                    .child("command parameters")
+            }))
+            .child(parameters),
     )
     .into_any_element()
+}
+
+/// One step button for a command parameter.
+///
+/// Parameters are clamped at zero below. Every one the editor offers is a count, a duration, a
+/// radius or an angle, and a negative loiter time is not a thing a vehicle can fly. The exception
+/// the definitions do allow - a negative loiter radius, meaning counter-clockwise - is a direction
+/// rather than a magnitude, and belongs in a control that says so rather than in a stepper that
+/// happens to go below zero.
+fn param_stepper(
+    seq: u16,
+    index: usize,
+    delta: f64,
+    label: &'static str,
+    cx: &mut Context<MissionPlanner>,
+) -> impl IntoElement {
+    crate::probe::measured(format!("param-{index}-{label}"), div())
+        .id((label, index))
+        .px_2()
+        .py_1()
+        .rounded_md()
+        .border_1()
+        .border_color(rgb(theme::BORDER))
+        .text_xs()
+        .text_color(rgb(theme::TEXT))
+        .cursor_pointer()
+        .hover(|style| style.bg(rgb(theme::BORDER)))
+        .child(label)
+        .on_click(cx.listener(move |this, _event, _window, cx| {
+            let current = this.plan.param(seq, index).unwrap_or(0.0);
+            this.plan.set_param(seq, index, (current + delta).max(0.0));
+            cx.notify();
+        }))
 }
 
 /// Everything drawn on the map: which mode a right-click is in, and the controls for that mode.
@@ -2096,6 +2220,65 @@ mod tests {
         assert!((plan.polygon()[0].latitude() - -35.310).abs() < 1e-9);
         assert!((plan.fence()[0].latitude() - -35.320).abs() < 1e-9);
         assert!((plan.rally()[0].position.latitude() - -35.330).abs() < 1e-9);
+    }
+
+    #[test]
+    fn command_parameters_are_labelled_from_the_definitions() {
+        // Not from a table here. A mission editor that shows "param1" is one the operator has to
+        // look the meaning up for, and the definitions already carry it.
+        let waypoint = MavCmd(u32::from(CMD_WAYPOINT)).parameters();
+        assert_eq!(waypoint[0].map(|(label, _)| label), Some("Hold"));
+        assert_eq!(waypoint[0].map(|(_, units)| units), Some("s"));
+
+        let loiter_time = MavCmd(19).parameters();
+        assert_eq!(loiter_time[0].map(|(label, _)| label), Some("Time"));
+        assert_eq!(loiter_time[0].map(|(_, units)| units), Some("s"));
+    }
+
+    #[test]
+    fn a_command_that_uses_no_parameters_offers_none() {
+        // Return-to-launch takes nothing. Four controls doing nothing would imply otherwise.
+        let rtl = MavCmd(u32::from(CMD_RTL)).parameters();
+        assert!(rtl.iter().all(Option::is_none), "{rtl:?}");
+    }
+
+    #[test]
+    fn setting_a_parameter_changes_only_that_one() {
+        let mut plan = Plan::default();
+        plan.add_waypoint(at(-35.36, 149.16), 50.0);
+        plan.set_param(0, 0, 12.0);
+
+        assert!((plan.items()[0].param1 - 12.0).abs() < f64::EPSILON);
+        assert!(plan.items()[0].param2.abs() < f64::EPSILON);
+        assert!(plan.items()[0].param3.abs() < f64::EPSILON);
+        assert!(plan.items()[0].param4.abs() < f64::EPSILON);
+        // And nothing about where or how high it is.
+        assert!((plan.items()[0].x - -35.36).abs() < 1e-9);
+        assert!((plan.items()[0].z - 50.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn every_parameter_slot_is_reachable_and_reads_back() {
+        let mut plan = Plan::default();
+        plan.add_waypoint(at(-35.36, 149.16), 50.0);
+        for index in 0..4 {
+            #[allow(clippy::cast_precision_loss)]
+            let value = (index + 1) as f64;
+            plan.set_param(0, index, value);
+            assert!((plan.param(0, index).expect("a value") - value).abs() < f64::EPSILON);
+        }
+        // Out of range is ignored rather than wrapping onto another parameter.
+        plan.set_param(0, 9, 99.0);
+        assert!(plan.param(0, 9).is_none());
+    }
+
+    #[test]
+    fn editing_a_parameter_marks_the_plan_as_no_longer_the_vehicles() {
+        let mut plan = Plan::default();
+        plan.add_waypoint(at(-35.36, 149.16), 50.0);
+        plan.adopt_from_vehicle(plan.items().to_vec());
+        plan.set_param(0, 0, 5.0);
+        assert_eq!(*plan.origin(), Origin::Edited);
     }
 
     #[test]

@@ -122,6 +122,24 @@ pub struct EnumEntry {
     pub value: Option<i64>,
     /// Documentation text.
     pub description: String,
+    /// For `MAV_CMD` entries, what each of the seven parameters means.
+    ///
+    /// The definitions label and give units for every command parameter, which is the difference
+    /// between a mission editor that shows "param1" and one that shows "hold time, seconds". This
+    /// is the only place that knowledge exists, and it changes with the definitions, so it is
+    /// generated rather than typed out.
+    pub params: Vec<CommandParam>,
+}
+
+/// One parameter of a `MAV_CMD`.
+#[derive(Debug, Clone)]
+pub struct CommandParam {
+    /// Which parameter, 1 to 7.
+    pub index: u8,
+    /// Short label, where the definitions give one.
+    pub label: Option<String>,
+    /// Units, where the definitions give them.
+    pub units: Option<String>,
 }
 
 /// One enum definition.
@@ -242,10 +260,26 @@ fn parse_into(path: &Path, out: &mut Dialect, seen: &mut HashSet<PathBuf>) -> Re
                 let Some(entry_name) = entry.attribute("name") else {
                     continue;
                 };
+                let mut params = Vec::new();
+                for param in entry.children().filter(|n| n.has_tag_name("param")) {
+                    let Some(index) = param.attribute("index").and_then(|i| i.parse().ok()) else {
+                        continue;
+                    };
+                    // A parameter with no label is one the command does not use - the definitions
+                    // write "Empty" in the body and leave the attribute off. Recording it as
+                    // unlabelled lets the editor hide it rather than offer a control that does
+                    // nothing.
+                    params.push(CommandParam {
+                        index,
+                        label: param.attribute("label").map(ToOwned::to_owned),
+                        units: param.attribute("units").map(ToOwned::to_owned),
+                    });
+                }
                 entries.push(EnumEntry {
                     name: entry_name.to_owned(),
                     value: entry.attribute("value").and_then(parse_enum_value),
                     description: child_text(entry, "description"),
+                    params,
                 });
             }
             let enum_def = Enum {
