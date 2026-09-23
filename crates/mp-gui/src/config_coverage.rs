@@ -353,13 +353,14 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigRadioInput"),
         Some(8),
         &[setup(211, "Radio Calibration", MANDATORY, ANY)],
-        // C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:367 writes RCn_MIN, _MAX and _TRIM.
-        Partial(
-            at(SETUP_RS, "fn radio_panel"),
-            "has the live channel bars and Calibrate Radio's capture of each channel's range, \
-             written as RCn_MIN and RCn_MAX; missing RCn_TRIM, the four Reverse boxes, the \
-             Spektrum bind buttons and the plane's elevon boxes",
-        ),
+        // C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:42-508, ported whole: the sixteen
+        // bars bound through RCMAP_*, Calibrate Radio's message boxes, loop, trims and forced
+        // RCn_MIN/_MAX/_TRIM writes with its summary, the Reverse boxes on RCn_REV or
+        // RCn_REVERSED (hidden on a copter) with SWITCH_ENABLE, the plane's elevon boxes, the
+        // three START_RX_PAIR binds, and the RC_CHANNELS stream requests. The vertical bars'
+        // text is a word to a line where WinForms rotates it; requestDatastream's rate check and
+        // the cs.rate* fields only CurrentState's stream re-request reads are not carried over.
+        Ours::Done(at("crates/mp-gui/src/config/radio.rs", "fn page")),
     ),
     panel(
         "ConfigRadioOutput",
@@ -1589,7 +1590,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (1, 12, 42, 2, 4)
+            (2, 11, 42, 2, 4)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

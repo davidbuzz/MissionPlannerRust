@@ -9,8 +9,10 @@
 //! Levelling and compass calibration are single commands by comparison, and are here because they
 //! are the same `MAV_CMD_PREFLIGHT_CALIBRATION` with a different parameter set.
 //!
-//! Radio calibration is not a conversation at all: [`radio`] records the extremes each channel
-//! passes through while the operator sweeps the sticks.
+//! Radio calibration is not a conversation with the vehicle at all: [`radio`] is the arithmetic of
+//! the extremes each channel passes through while the operator sweeps the sticks, and the trims and
+//! limits written from them; with the Spektrum bind command and the `RC_CHANNELS` stream request
+//! the same page sends.
 //!
 //! The protocol half of `GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs`,
 //! `ConfigHWCompass.cs`, `ConfigMotorTest.cs` and `ConfigRadioInput.cs`, without their forms. L3

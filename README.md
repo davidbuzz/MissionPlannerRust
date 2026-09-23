@@ -33,7 +33,7 @@ they need SITL, a window, or the network), **31 GUI scripts** under `tests/gui/`
 | Flight recording | every connection recorded to a `.tlog`, both directions, into Mission Planner's own logs directory |
 | Data directory | `Settings.cs`'s rules ported, mono quirks included, so files land where the C# application looks; its `config.xml` is read for the last link, map type and log directory, and rendered back byte for byte |
 | Health | EKF variances and vibration with ArduPilot's own thresholds, clipping counts |
-| Calibration | accelerometer, compass, radio, motor test |
+| Calibration | accelerometer, compass, radio and motor test as Mission Planner's own pages, `ConfigHWCompass2`, `ConfigRadioInput` and `ConfigMotorTest` ported whole, in its SETUP list |
 | Joystick | axes to `RC_CHANNELS_OVERRIDE` from a thread that blocks on the device and sends on change — 0.1 ms p99 stick-to-link on a fake device — with a release-on-disconnect failsafe (Linux) |
 | Firmware | `.apj` parsing, the px4 bootloader protocol, `BoardDetect.cs`'s board detection and `APFirmware.cs`'s catalogue with the Install Firmware page, proven against a mock, a pty and a manifest excerpt; nothing flashed, nothing written, Upload disabled |
 | Scripting | the `Script.cs` host API, and a measurement of what the 19 shipped scripts need |

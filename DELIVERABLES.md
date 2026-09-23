@@ -314,8 +314,11 @@ path: board detect, firmware catalogue, upload via px4/DFU/serial bootloaders.
   **1e-6 relative**, proven by golden-vector tests; board detection matches `MissionPlannerTests`
   `DetectBoardTest` cases; a real board flashes successfully on all three OSes.
 - **Replaces:** `GCSViews/InitialSetup/*`, `MagCalib.cs`, `ExtLibs/ArduPilot` firmware code (23,564).
-- **Today:** accelerometer, compass (`MAV_CMD_DO_START_MAG_CAL` with live progress), radio and motor
-  test are implemented and exercised against SITL and a physical MR-VMU-RT1176. `mp-firmware` ports
+- **Today:** accelerometer, compass, radio and motor test are pages of the C#'s setup list;
+  compass, radio and motor test are their `Config*.cs` whole - the priority table and onboard
+  calibration of `ConfigHWCompass2`, `ConfigRadioInput`'s calibration conversation writing
+  MIN/MAX/TRIM, `ConfigMotorTest`'s buttons from the frame's motor layout - each proved by a script
+  against SITL (PLAN.md §13.4 rows 25-27), and exercised on a physical MR-VMU-RT1176 earlier. `mp-firmware` ports
   the `.apj` container and the px4 bootloader protocol from `ExtLibs/px4uploader/`, with
   `tests/firmware_upload.rs` driving a complete upload against a strict in-process mock that
   asserts every byte. **No board has been flashed**, and none will be until an owner asks: the CLI

@@ -28,7 +28,6 @@
 #![allow(unreachable_pub)]
 
 use gpui::{AnyElement, Context, FontWeight, SharedString, Window, div, prelude::*, px, rgb};
-use mp_calibration::radio::RcRange;
 use mp_calibration::{AccelCalibration, AccelPosition, CompassProgress, CompassStatus};
 use mp_mavlink_dialects::all::{MavAutopilot, MavType};
 use mp_vehicle::VehicleId;
@@ -904,6 +903,10 @@ impl MissionPlanner {
             Some("ConfigBatteryMonitoring") if !self.battery_monitor.is_open() => {
                 self.battery_monitor.toggle(&self.telemetry);
             }
+            // C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:42-177
+            Some("ConfigRadioInput") if !self.radio_input.is_active() => {
+                self.radio_input.toggle(&self.telemetry);
+            }
             _ => {}
         }
     }
@@ -933,6 +936,10 @@ impl MissionPlanner {
             // page is hidden (`BackstageView.cs:452-466`).
             Some("ConfigBatteryMonitoring") if self.battery_monitor.is_open() => {
                 self.battery_monitor.close();
+            }
+            // C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:179-182
+            Some("ConfigRadioInput") if self.radio_input.is_active() => {
+                self.radio_input.deactivate();
             }
             _ => {}
         }
@@ -1026,12 +1033,7 @@ impl MissionPlanner {
                 ))
                 .into_any_element(),
             "ConfigRadioInput" => column()
-                .child(radio_panel(
-                    view,
-                    &self.radio_range,
-                    self.capturing_radio,
-                    cx,
-                ))
+                .children(crate::config::radio::page(&self.radio_input, cx))
                 .into_any_element(),
             "ConfigFirmwareManifest" | "ConfigFirmwareDisabled" | "ConfigFirmware" => column()
                 .child(crate::config::firmware::page(&self.install_firmware, cx))
@@ -1633,165 +1635,6 @@ pub fn compass_panel(
                     }),
                 )),
         ),
-    )
-}
-
-/// The pulse widths a bar is drawn between.
-///
-/// Not the observed range: a bar scaled to what has been seen so far would move its own endpoints
-/// as the stick is swept, which makes it impossible to tell travel from rescaling. These are the
-/// limits an RC receiver works within, so a stick at its stop sits at the end of the bar.
-const PULSE_MINIMUM: f32 = 900.0;
-/// The upper end of that scale.
-const PULSE_MAXIMUM: f32 = 2100.0;
-
-/// Radio calibration: live channel values, and the limits recorded while the sticks are swept.
-///
-/// All sixteen channels ArduPilot maps to functions, not the eight of the older message. A radio
-/// with switches on channels nine and up is ordinary, and a calibration screen that stopped at
-/// eight would leave them uncalibrated with nothing saying so.
-pub fn radio_panel(
-    view: &TelemetryView,
-    range: &RcRange,
-    capturing: bool,
-    cx: &mut Context<MissionPlanner>,
-) -> impl IntoElement {
-    let rc = view
-        .state
-        .as_ref()
-        .map(|state| state.rc)
-        .unwrap_or_default();
-    let has_vehicle = view.vehicle.is_some();
-    let armed = view.state.as_ref().is_some_and(|state| state.armed);
-
-    let mut rows = div().flex().flex_col().gap_1();
-    for number in 1..=mp_vehicle::rc::CHANNELS {
-        let Some(value) = rc.channel(number) else {
-            continue;
-        };
-        let fraction =
-            ((f32::from(value) - PULSE_MINIMUM) / (PULSE_MAXIMUM - PULSE_MINIMUM)).clamp(0.0, 1.0);
-        let recorded = range.channel(number);
-        rows = rows.child(
-            div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .child(
-                    div()
-                        .w(px(28.0))
-                        .text_xs()
-                        .text_color(rgb(theme::DIM))
-                        .child(number.to_string()),
-                )
-                .child(
-                    div()
-                        .w(px(52.0))
-                        .text_xs()
-                        .text_color(rgb(theme::TEXT))
-                        .child(value.to_string()),
-                )
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w(px(0.0))
-                        .child(progress_bar(fraction, theme::ACCENT)),
-                )
-                .child(
-                    div()
-                        .w(px(110.0))
-                        .text_xs()
-                        .text_color(rgb(if recorded.is_some() {
-                            theme::OK
-                        } else {
-                            theme::DIM
-                        }))
-                        .child(recorded.map_or_else(
-                            || "not swept".to_owned(),
-                            |(low, high)| format!("{low} - {high}"),
-                        )),
-                ),
-        );
-    }
-
-    if rc.live() == 0 {
-        rows = rows.child(
-            div()
-                .text_xs()
-                .text_color(rgb(theme::DIM))
-                .child(if rc.reported {
-                    "the vehicle reports no live channels - is the receiver bound and powered?"
-                } else {
-                    "no channel data yet"
-                }),
-        );
-    }
-
-    let usable = range.usable();
-
-    panel(
-        "radio",
-        div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .children(rc.rssi_percent().map(|rssi| {
-                div()
-                    .text_xs()
-                    .text_color(rgb(if rssi < 30 { theme::WARN } else { theme::DIM }))
-                    .child(format!("signal {rssi}%"))
-            }))
-            .child(rows)
-            .child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .gap_2()
-                    .child(action(
-                        "radio-capture",
-                        if capturing {
-                            "recording"
-                        } else {
-                            "record limits"
-                        },
-                        theme::WARN,
-                        has_vehicle && !armed && !capturing,
-                        cx.listener(|this, _event: &(), _window, cx| {
-                            this.begin_radio_capture();
-                            cx.notify();
-                        }),
-                    ))
-                    .child(action(
-                        "radio-stop",
-                        "stop",
-                        theme::ACCENT,
-                        capturing,
-                        cx.listener(|this, _event: &(), _window, cx| {
-                            this.capturing_radio = false;
-                            cx.notify();
-                        }),
-                    ))
-                    .child(action(
-                        "radio-save",
-                        format!("save {usable} channels"),
-                        theme::ALERT,
-                        has_vehicle && !armed && !capturing && usable > 0,
-                        cx.listener(|this, _event: &(), _window, cx| {
-                            this.save_radio_limits();
-                            cx.notify();
-                        }),
-                    )),
-            )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(theme::DIM))
-                    .child(if capturing {
-                        "move every stick and switch to both of its limits, then stop"
-                    } else {
-                        "record, sweep every control to its limits, stop, then save"
-                    }),
-            ),
     )
 }
 

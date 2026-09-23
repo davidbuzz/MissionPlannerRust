@@ -236,10 +236,8 @@ struct MissionPlanner {
     param_differences: Vec<mp_params::param_file::Difference>,
     /// Throttle a motor test uses, as a percentage.
     motor_throttle: f32,
-    /// Whether a radio calibration is recording stick limits.
-    capturing_radio: bool,
-    /// The limits recorded so far.
-    radio_range: mp_calibration::radio::RcRange,
+    /// Initial Setup's Radio Calibration page.
+    radio_input: config::radio::RadioInput,
     /// Whether this session has turned the vehicle's arming checks off.
     ///
     /// Only to offer putting them back. The parameter is the vehicle's, not ours, so this says
@@ -417,8 +415,7 @@ impl MissionPlanner {
             log_search: textfield::TextField::new("filter fields"),
             param_differences: Vec::new(),
             motor_throttle: 5.0,
-            capturing_radio: false,
-            radio_range: mp_calibration::radio::RcRange::new(),
+            radio_input: config::radio::RadioInput::default(),
             disabled_arming_checks: false,
             forcing_arm_until: None,
             last_force_arm: None,
@@ -793,36 +790,6 @@ impl MissionPlanner {
         }
         self.file_status = Some(format!("{name} = {next}"));
         self.start_param_writes(params::ParamWrites::nudge(name, next));
-    }
-
-    /// Starts recording the radio's stick limits from scratch.
-    ///
-    /// From scratch, not continuing: a calibration that kept limits from a previous sweep would
-    /// carry over a stick position the operator has since changed, and nothing on screen would
-    /// say so.
-    fn begin_radio_capture(&mut self) {
-        self.radio_range = mp_calibration::radio::RcRange::new();
-        self.capturing_radio = true;
-        self.file_status = Some("recording radio limits - sweep every control".to_owned());
-    }
-
-    /// Writes the recorded limits to the vehicle as RCn_MIN and RCn_MAX.
-    ///
-    /// Only channels that actually moved. A channel left alone has a minimum equal to its
-    /// maximum, and writing that is a stick with no travel or a switch with one position.
-    ///
-    /// One at a time and forced, each sent again until the vehicle echoes it, as the C#'s save
-    /// makes them; a channel never echoed is said as "Failed to set Channel N".
-    /// `// C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:355-385`
-    fn save_radio_limits(&mut self) {
-        let limits: Vec<(usize, u16, u16)> = (1..=mp_vehicle::rc::CHANNELS)
-            .filter_map(|number| {
-                self.radio_range
-                    .channel(number)
-                    .map(|(minimum, maximum)| (number, minimum, maximum))
-            })
-            .collect();
-        self.start_param_writes(params::ParamWrites::radio(&limits));
     }
 
     /// Pushes the plan to the map after an edit.
@@ -1489,6 +1456,9 @@ impl Render for MissionPlanner {
         );
         // Install Firmware's catalogue arriving, and the page closing when the screen changes.
         self.install_firmware.tick(self.screen == Screen::Setup);
+        // The Radio Calibration page's bars, its calibration loop, and its writes and binds.
+        self.radio_input
+            .tick(&mut self.telemetry, &view, self.screen == Screen::Setup);
         let banner = self.telemetry.firmware_banner().map(str::to_owned);
         let mav_type = view.state.as_ref().map_or(0, |state| state.vehicle_type);
         self.metadata.advance(banner.as_deref(), mav_type);
@@ -1689,6 +1659,7 @@ impl Render for MissionPlanner {
             config::frame_type::record_facts(&self.frame_type, &view);
             config::battery_monitor::record_facts(&self.battery_monitor, &view);
             config::firmware::record_facts(&self.install_firmware);
+            config::radio::record_facts(&self.radio_input, &view);
             facts::publish();
             // The harness's work, which a normal run does not do, is not the frame's.
             storm::exclude(harness.elapsed());
@@ -1764,15 +1735,6 @@ impl Render for MissionPlanner {
             } else {
                 self.telemetry.nudge_log_download();
             }
-        }
-
-        // Fold live channel values into the recorded limits while a radio calibration runs.
-        // Done here because this is the only place that sees every snapshot; sampling on a timer
-        // would miss the extremes, which are exactly what is being recorded.
-        if self.capturing_radio
-            && let Some(state) = view.state.as_ref()
-        {
-            self.radio_range.observe(&state.rc);
         }
 
         // Keep re-sending a forced arm until it takes, or until we give up. The parameter write
@@ -1950,6 +1912,7 @@ impl Render for MissionPlanner {
                     window,
                     cx,
                 ))
+                .children(config::radio::overlay(&self.radio_input, window, cx))
                 .into_any_element(),
             Screen::Config => probe::measured("config-body", div())
                 .flex()

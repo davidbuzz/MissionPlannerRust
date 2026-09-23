@@ -650,11 +650,6 @@ pub enum Finish {
         /// Differences not written because this firmware has no such parameter.
         skipped: usize,
     },
-    /// The radio's recorded limits, over this many channels.
-    Radio {
-        /// Channels that moved.
-        channels: usize,
-    },
 }
 
 /// How one write ended: for the facts, so a test can see the retry from outside.
@@ -707,7 +702,7 @@ pub struct Progress {
 /// sending again every 700 ms up to three times, until the vehicle echoes the parameter, and only
 /// then is the next one sent. A write that is never echoed is said in the C#'s words and the list
 /// goes on.
-/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:313-370, ConfigRadioInput.cs:355-385`
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:313-370`
 #[derive(Debug)]
 pub struct ParamWrites {
     queue: VecDeque<ParamWrite>,
@@ -765,30 +760,6 @@ impl ParamWrites {
             })
             .collect();
         Self::new(writes, Finish::Apply { skipped })
-    }
-
-    /// The radio calibration's save: each channel's `RCn_MIN` and `RCn_MAX`, forced as the C#
-    /// forces them, and "Failed to set Channel N" for a channel whose write is never echoed.
-    /// `// C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:355-385`
-    #[must_use]
-    pub fn radio(limits: &[(usize, u16, u16)]) -> Self {
-        let writes = limits
-            .iter()
-            .flat_map(|&(number, minimum, maximum)| {
-                [("MIN", minimum), ("MAX", maximum)].map(|(end, value)| ParamWrite {
-                    name: format!("RC{number}_{end}"),
-                    value: f64::from(value),
-                    force: true,
-                    failure: format!("Failed to set Channel {number}"),
-                })
-            })
-            .collect();
-        Self::new(
-            writes,
-            Finish::Radio {
-                channels: limits.len(),
-            },
-        )
     }
 
     /// Whether every write has ended and the summary has been said.
@@ -927,10 +898,6 @@ impl ParamWrites {
                     said
                 }
             }
-            Finish::Radio { channels } if failed.is_empty() => {
-                format!("wrote limits for {channels} channels; reboot for them to take effect")
-            }
-            Finish::Radio { .. } => failed,
         })
     }
 }
@@ -1252,14 +1219,19 @@ mod tests {
         );
     }
 
-    /// The radio's limits, on a vehicle whose parameters were never downloaded: each name is
-    /// read before it is written - `setParam` sends only a name the vehicle has listed - and
-    /// each is written even though it already holds that value, as the C#'s save forces it.
-    /// `// C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:367-372`
+    /// Parameters on a vehicle whose list was never downloaded: each name is read before it is
+    /// written - `setParam` sends only a name the vehicle has listed - and then written.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1640-1644`
     #[test]
-    fn radio_limits_are_read_then_written_whatever_the_vehicle_holds() {
+    fn a_parameter_not_yet_listed_is_read_then_written() {
         let (telemetry, mut vehicle) = Vehicle::connect(fast());
-        let mut writes = ParamWrites::radio(&[(1, 1100, 1900)]);
+        let mut writes = ParamWrites::apply(
+            [
+                ("RC1_MIN".to_owned(), 1100.0),
+                ("RC1_MAX".to_owned(), 1900.0),
+            ],
+            0,
+        );
         let (said, _) = run(
             &mut writes,
             &telemetry,
@@ -1268,9 +1240,9 @@ mod tests {
                 MavMessage::ParamRequestRead(read) => {
                     let name = mp_params::decode_param_id(&read.param_id);
                     let held = if name.ends_with("MIN") {
-                        1100.0
+                        1000.0
                     } else {
-                        1900.0
+                        2000.0
                     };
                     vehicle.send(&param(&name, held, INT16));
                 }
@@ -1288,7 +1260,7 @@ mod tests {
         );
         assert_eq!(
             said.last().map(String::as_str),
-            Some("wrote limits for 1 channels; reboot for them to take effect")
+            Some("2 parameters successfully saved.")
         );
     }
 }

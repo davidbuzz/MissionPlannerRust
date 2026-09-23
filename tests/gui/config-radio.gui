@@ -1,0 +1,185 @@
+# Initial Setup's Radio Calibration page, ported from GCSViews/ConfigurationView/ConfigRadioInput.cs.
+#
+# The claims, each read from the application's facts and, for the vehicle, its own echo:
+#
+# * Activate (ConfigRadioInput.cs:42-177) binds roll, pitch, throttle and yaw through RCMAP_* and
+#   adds each one's channel to its label, binds BAR5-BAR16 to channels 5-16, and asks for
+#   RC_CHANNELS at 2 Hz; the sixteen bars show what the receiver reports.
+# * On a copter the four Reverse boxes are bound to RCn_REVERSED and then hidden
+#   (ConfigRadioInput.cs:140-147, 167-174), and the elevon group is hidden (:126-137). No Reverse
+#   box can be clicked on SITL's copter, so none is here: the test asserts they are bound and
+#   hidden. The Reverse write and its restore - RC1_REVERSED written 1 with the bar mirrored, then
+#   written 0 - are proven through the real link to a scripted plane in config/radio.rs's
+#   a_reverse_box_writes_its_parameter_and_mirrors_its_bar, with SWITCH_ENABLE's Dip Switch step
+#   in the_dip_switches_are_disabled_before_the_reverse_is_written.
+# * Calibrate Radio's conversation (ConfigRadioInput.cs:197-406), step by step: its messages in
+#   order, the button's text at each, RC_CHANNELS at 10 Hz while it runs and back to the link's
+#   rate once it is saved, the minimum and maximum the loop folds in, the trims, and the summary.
+#   SITL's RC inputs are static - ch1-8 read 1500 1500 1000 1500 1800 1000 1000 1800 and nothing
+#   is reported above 8 (ArduPilot's AP_RCProtocol_UDP::set_default_pwm_input_values) - so no
+#   channel moves, every minimum equals its maximum, and the C# writes nothing: its save wants
+#   rcmin < rcmax (ConfigRadioInput.cs:363-365). The test asserts exactly that - no write, and
+#   RCn_MIN, _MAX and _TRIM unchanged on the vehicle. The forced writes of a swept radio are
+#   proven through the real link in a_swept_radio_writes_min_max_and_trim_forced_then_the_summary.
+# * Bind DSM2 sends MAV_CMD_START_RX_PAIR with 0 in its second parameter, which SITL accepts, and
+#   the C# then says to put the transmitter in bind mode (ConfigRadioInput.cs:471-482).
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm, which sets
+# RC1-8_MIN 1000, _MAX 2000 and _TRIM 1500 and leaves RCMAP_* and RCn_REVERSED at the firmware's
+# defaults (1 2 3 4, and 0). Run as
+#
+#   tools/gui-test.sh tests/gui/config-radio.gui -- tcp:127.0.0.1:5760
+#
+# Nothing this test does changes a parameter, so a run that stops half way leaves the vehicle as
+# it found it.
+
+screen params
+window 1600x1200
+settle 6
+
+# Initial Setup lists the page once every parameter is in (InitialSetup.cs:211, isConnected &&
+# gotAllParams), and here parameters are downloaded when asked for.
+click param-download
+settle 15
+expect params.held > 1000
+expect params.value.RC1_MIN 1000
+expect params.value.RC1_MAX 2000
+expect params.value.RC1_TRIM 1500
+expect params.value.RC3_TRIM 1500
+expect params.value.RC1_REVERSED 0
+expect config.radio.active false
+
+# The page is under Mandatory Hardware, which choosing opens.
+click tab-setup
+click setup-page-ConfigMandatory
+click setup-page-ConfigRadioInput
+settle 2
+expect setup.page ConfigRadioInput
+expect config.radio.active true
+expect config.radio.enabled true
+expect config.radio.firmware ArduCopter2
+expect config.radio.map 1,2,3,4
+expect config.radio.stream 2
+
+# The bars: each stick's bound to its RCMAP channel and labelled with it, the rest to 5-16.
+expect config.radio.bar.roll.channel 1
+expect config.radio.bar.roll.text ~ Roll (rc1)
+expect config.radio.bar.roll 1500
+expect config.radio.bar.pitch.channel 2
+expect config.radio.bar.pitch.text ~ Pitch (rc2)
+expect config.radio.bar.pitch 1500
+expect config.radio.bar.throttle.channel 3
+expect config.radio.bar.throttle.text ~ Throttle (rc3)
+expect config.radio.bar.throttle 1000
+expect config.radio.bar.yaw.channel 4
+expect config.radio.bar.yaw.text ~ Yaw (rc4)
+expect config.radio.bar.yaw 1500
+expect config.radio.bar.5.channel 5
+expect config.radio.bar.5.text ~ Radio 5
+expect config.radio.bar.5 1800
+expect config.radio.bar.6 1000
+expect config.radio.bar.7 1000
+expect config.radio.bar.8 1800
+expect config.radio.bar.9 0
+expect config.radio.bar.16.channel 16
+expect config.radio.bar.16 0
+# Nothing reversed, and no red lines before a calibration.
+expect config.radio.bar.roll.reverse false
+expect config.radio.bar.roll.min 0
+
+# The Reverse boxes, bound to RCn_REVERSED on the RCMAP channels and hidden on a copter.
+expect config.radio.reverse.1.param RC1_REVERSED
+expect config.radio.reverse.1 unchecked
+expect config.radio.reverse.1.enabled true
+expect config.radio.reverse.1.visible false
+expect config.radio.reverse.2.param RC2_REVERSED
+expect config.radio.reverse.2.visible false
+expect config.radio.reverse.3.param RC3_REVERSED
+expect config.radio.reverse.3.visible false
+expect config.radio.reverse.4.param RC4_REVERSED
+expect config.radio.reverse.4.visible false
+expect config.radio.elevons.visible false
+expect config.radio.button Calibrate Radio
+expect config.radio.message none
+
+# Calibrate Radio: the first message; the button's text is unchanged until it is dismissed.
+click radio-calibrate
+settle 1
+expect config.radio.message ~ Ensure your transmitter is on and receiver is powered and connected
+expect config.radio.message ~ Ensure your motor does not have power/no props!!!
+expect config.radio.button Calibrate Radio
+click radio-message-ok
+settle 1
+# RC_CHANNELS at 10 Hz, the button's new text, and the second message.
+expect config.radio.stream 10
+expect config.radio.button Click when Done
+expect config.radio.message ~ Click OK and move all RC sticks and switches to their
+click radio-message-ok
+settle 2
+# The loop: every channel folded into its minimum and maximum, and the bars' red lines on them.
+expect config.radio.running true
+expect config.radio.message none
+expect config.radio.min.1 1500
+expect config.radio.max.1 1500
+expect config.radio.min.3 1000
+expect config.radio.max.3 1000
+expect config.radio.min.5 1800
+expect config.radio.max.8 1800
+expect config.radio.min.9 0
+expect config.radio.max.16 0
+expect config.radio.bar.roll.min 1500
+expect config.radio.bar.roll.max 1500
+expect config.radio.bar.throttle.min 1000
+expect config.radio.bar.5.max 1800
+# Static sticks: nothing the save would write.
+expect config.radio.writes none
+
+# Click when Done: the loop ends, channel 1 read a real pulse, so the sticks-centred message.
+click radio-calibrate
+settle 1
+expect config.radio.running false
+expect config.radio.button Completed
+expect config.radio.message ~ Ensure all your sticks are centered and throttle is down
+click radio-message-ok
+settle 2
+# The trims, each reading constrained into its range; nothing to write; RC_CHANNELS back at the
+# rate the link asked for on connecting; and the summary, with only its rule under the heading.
+expect config.radio.trim.1 1500
+expect config.radio.trim.3 1000
+expect config.radio.trim.5 1800
+expect config.radio.trim.9 0
+expect config.radio.writes none
+expect config.radio.pending 0
+expect config.radio.write none
+expect config.radio.stream 4
+expect config.radio.button Saving
+expect config.radio.message.title Radio
+expect config.radio.message ~ Here are the detected radio options
+expect config.radio.message ~ Normal values are around 1100 | 1900
+expect config.radio.message ~ ---------------
+click radio-message-ok
+settle 1
+expect config.radio.button Completed
+expect config.radio.message none
+
+# The vehicle holds what it held.
+expect params.value.RC1_MIN 1000
+expect params.value.RC1_MAX 2000
+expect params.value.RC1_TRIM 1500
+expect params.value.RC3_MIN 1000
+expect params.value.RC3_TRIM 1500
+expect params.value.RC8_MAX 2000
+
+# Bind DSM2: START_RX_PAIR with 0, accepted, and the C#'s message.
+click radio-bind-dsm2
+settle 3
+expect config.radio.bind START_RX_PAIR 0 accepted
+expect config.radio.message Put the transmitter in bind mode. Receiver is waiting.
+click radio-message-ok
+settle 1
+expect config.radio.message none
+
+# Choosing another page deactivates this one (BackstageView.cs:453-464).
+click setup-page-ConfigMandatory
+settle 1
+expect config.radio.active false
