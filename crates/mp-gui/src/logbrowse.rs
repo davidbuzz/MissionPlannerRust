@@ -253,6 +253,12 @@ fn file_panel(
 }
 
 /// The chart.
+///
+/// One Y axis, auto-ranged over every series shown. `LogBrowse` has two - `BUT_Graphit` puts a
+/// field on the left axis and `BUT_Graphit_R` on the right - which matters as soon as two fields
+/// have different magnitudes: roll in degrees beside a battery voltage flattens both. Not built
+/// yet, and named here so the single axis is not mistaken for a decision.
+/// `// C#: Log/LogBrowse.designer.cs:245,251`
 fn plot_panel(browse: &LogBrowse, cx: &mut Context<MissionPlanner>) -> AnyElement {
     let borrowed: Vec<&Series> = browse.plotted().iter().map(|(_, series)| series).collect();
     let from = borrowed
@@ -404,7 +410,7 @@ fn field_panel(browse: &LogBrowse, search: &str, cx: &mut Context<MissionPlanner
         let label = field.to_string();
         let chosen = field.clone();
         list = list.child(
-            div()
+            crate::probe::measured(format!("logfield-{label}"), div())
                 .id(gpui::SharedString::from(format!("logfield-{label}")))
                 .px_2()
                 .py(px(1.0))

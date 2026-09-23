@@ -57,7 +57,7 @@ pkill -f "$(basename "$BIN")" 2>/dev/null && sleep 1
 # Clicking needs the application to report where its controls are, so the probe is switched on
 # whenever a click is asked for. It writes nothing otherwise.
 PROBE_FILE=""
-if [ -n "${CLICK:-}" ] || [ -n "${DRAG:-}" ]; then
+if [ -n "${CLICK:-}" ] || [ -n "${CLICK_AFTER:-}" ] || [ -n "${DRAG:-}" ]; then
     PROBE_FILE="$(mktemp -t mpr-probe-XXXXXX.json)"
     export MP_PROBE="$PROBE_FILE"
 fi
@@ -252,6 +252,45 @@ if [ -n "${TYPE:-}" ]; then
     echo "typing '$TYPE'"
     xdotool type --window "$WIN_ID" --clearmodifiers --delay 60 "$TYPE"
     sleep 0.6
+fi
+
+# Named keys, after typing. `xdotool type` turns a newline into a space, so a field whose Enter
+# does something cannot be driven by TYPE alone - and a second CLICK is not available because
+# clicks all happen before typing, by design: a click puts the application into the state the
+# typing then goes into.
+#
+# KEY="Return" or KEY="Return,Escape" - whatever `xdotool key` accepts.
+if [ -n "${KEY:-}" ]; then
+    IFS=',' read -ra KEYS <<< "$KEY"
+    for PRESS in "${KEYS[@]}"; do
+        echo "pressing $PRESS"
+        xdotool key --window "$WIN_ID" --clearmodifiers "$PRESS"
+        sleep 0.4
+    done
+fi
+
+# A second click phase, after the typing and the keys.
+#
+# The phases are ordered clicks, typing, keys - a click puts the application into the state the
+# typing goes into. But a control that only exists *because* of the typing cannot be clicked in
+# the first phase: opening a log creates its field list, and nothing in the first phase can reach
+# a button that did not exist when it ran. CLICK_AFTER is that reach, with the same syntax as
+# CLICK.
+if [ -n "${CLICK_AFTER:-}" ]; then
+    IFS=',' read -ra AFTER_TARGETS <<< "$CLICK_AFTER"
+    for TARGET in "${AFTER_TARGETS[@]}"; do
+        BUTTON=1
+        WAIT=0.6
+        case "$TARGET" in
+            *~*) WAIT="${TARGET##*~}"; TARGET="${TARGET%~*}" ;;
+        esac
+        case "$TARGET" in
+            *:right) BUTTON=3; TARGET="${TARGET%:right}" ;;
+            *:middle) BUTTON=2; TARGET="${TARGET%:middle}" ;;
+        esac
+        "$ROOT/tools/gui-click.sh" "$PROBE_FILE" "$WIN_ID" "$TARGET" "$BUTTON" || exit 1
+        sleep "$WAIT"
+    done
 fi
 
 if [ -n "${DRAG:-}" ]; then
