@@ -267,6 +267,14 @@ one of them.
   extensions are sandboxed and cannot crash the app; a migration guide plus at least one real C# plugin and
   one IronPython script reimplemented as proof; API versioned and documented.
 - **Replaces:** `Plugin/`, `Plugins/`, `plugins/` (13,289 total), `Script.cs` + `Scripts/` + IronPython.
+- **Today:** `mp-script` implements the `Script.cs` host API with the C#'s semantics - including
+  `GetParam` returning 0.0 for a missing parameter, `ChangeMode` always returning true, `WaitFor`
+  substring-matching messages that arrived before the call, channels capped at 8 and an override
+  sent twice 20 ms apart - and measures what the corpus needs. **The measurement changes the
+  estimate:** 15 of the 19 scripts reach .NET types directly through IronPython's assembly loading
+  and cannot run unmodified on any Rust engine; only 4 stay inside the scope bindings. 11 call into
+  `MAV`, which is where a compatibility shim has to start. No interpreter is wired yet, and the
+  scan says why that was the right order.
 - **Tests:** `tests/stock_scripts.rs` runs every `testdata/scripts/*.py` against a simulated
   vehicle and asserts each either completes or fails with a recorded, reviewed reason - the file
   count is asserted too, so a script silently disappearing from the corpus fails;

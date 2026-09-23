@@ -32,6 +32,7 @@ Measured on this tree: **13 crates, 36,603 hand-written Rust LOC** (plus 91,634 
 | Calibration | accelerometer, compass, radio, motor test |
 | Joystick | axes to `RC_CHANNELS_OVERRIDE` with a release-on-disconnect failsafe (Linux) |
 | Firmware | `.apj` parsing and the px4 bootloader protocol, proven against a mock; nothing flashed yet |
+| Scripting | the `Script.cs` host API, and a measurement of what the 19 shipped scripts need |
 | Geodesy | typed units, Web Mercator, slippy-map tile arithmetic |
 | Maps | GPU tile rendering, flight path, mission and fence overlays |
 | CLI | `mpr watch \| record \| fly \| params \| param \| mission \| survey \| log \| logs \| ports` |
@@ -98,6 +99,7 @@ crates/
   mp-tiles             map tile fetching, decoding and caching
   mp-input             joystick and gamepad, mapped to RC channels
   mp-firmware          .apj files and the px4 bootloader protocol
+  mp-script            the scripting host API and corpus analysis
   mp-units             typed units and geodesy
   mp-fuzz-checks       the fuzz properties, so they compile on stable too
   mp-cli               `mpr`

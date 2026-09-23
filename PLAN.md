@@ -914,6 +914,23 @@ The compatibility test is concrete: the 19 stock scripts must run unmodified, an
 checked in. IronPython is a Python 2.7/3.4-era dialect, so where a stock script does not run, the
 divergence is recorded per script rather than hand-waved.
 
+> **Measured, and it changes this section's premise.** `crates/mp-script` scans the corpus and
+> `cargo test -p mp-script` prints the result: **15 of the 19 reach into .NET directly** —
+> `MissionPlanner.MainV2.instance`, `System.Threading.Thread`, `clr.AddReference`. `Script.cs:40-44`
+> loads every loaded assembly into the script namespace, so those are CLR types reached through
+> Python syntax. **No Rust engine can provide them**, rustpython or otherwise, because there is no
+> CLR behind it.
+>
+> Only **4** — `debugenv.py`, `example1.py`, `rc.py`, `wipe.py` — stay inside the scope bindings
+> and could run on a Python engine alone.
+>
+> So the engine choice decides far less than this section assumed. Python is still right, because
+> the scripts are Python and the four that are portable stay portable — but "the 19 run unmodified"
+> is not a thing an engine choice buys. It needs a compatibility shim answering to the names the
+> scripts already use (`MissionPlanner.MainV2`, `MAV.doARM`, `cs.alt`), which is a different and
+> larger piece of work, and D16's estimate has to carry it. The eleven scripts that call `MAV.*`
+> say where it starts.
+
 **PHP was considered and rejected.** Not from taste: the Rust ecosystem has `php` 0.1.0 bindings
 and `phprs` 0.1.x, a from-scratch VM — both far too immature to put under a ground control
 station — and no Mission Planner user has a PHP script to preserve. Python is the compatible
@@ -1049,7 +1066,7 @@ says what *done* means, because a list of nouns is not a plan.
 | 17 | Windows build verified | cross-compilation is checked; the Direct3D 11 path has never been exercised | D7 | a Windows build opens a window and paints, recorded in an ADR | done |
 | 18 | Joystick input | flying from a ground station without a transmitter, which D15 names | D15 | axes map to `RC_CHANNELS_OVERRIDE` with a failsafe on disconnect | done |
 | 19 | Firmware flashing | the last item in Initial Setup with no counterpart here | D13 | a `.apj` is written to a board over the bootloader and verified | protocol done, no board flashed |
-| 20 | Python scripting host | D16, and the owner's stated interest in extensions that need no compiler | D16 | a script can read telemetry and drive a command, sandboxed | |
+| 20 | Python scripting host | D16, and the owner's stated interest in extensions that need no compiler | D16 | a script can read telemetry and drive a command, sandboxed | host API done, engine not wired |
 
 **1 is first because it is load-bearing.** Three separate decisions were made to work around the
 absence of a text input: parameters are browsed by prefix rather than searched, missions save to a
@@ -1109,4 +1126,6 @@ Recorded so they are not re-asserted.
 | "`frame_parse` fuzzes the MAVLink parser" | **TRUE BUT NEARLY EMPTY** | it reaches 90 coverage edges and never calls a message decoder. Seeding the corpus with 145 real frames changed nothing, which is what proved it. `message_decode` reaches 13,473 |
 | "Compiling on `windows-latest` proves the Windows build works" | **FALSE** | nothing in CI ran a graphics backend on any platform. D3D11 device creation, swap-chain and shader compilation had never executed |
 | "An event-driven joystick read tells you the device is alive" | **FALSE, and it is a flight-safety bug** | `/dev/input/js*` is edge-triggered: a held stick emits nothing. A failsafe fed by event arrival releases control to the transmitter after 200 ms of a pilot holding a position — on a feature whose premise is that there is no transmitter |
+| "The 19 stock scripts are Python, so a Python engine keeps them working" | **TRUE of the language, FALSE of the scripts** | 15 of 19 reach .NET types directly through IronPython's assembly loading. 4 are portable. Measured by `cargo test -p mp-script` |
+| "`Script.cs` is the scripting API to port" | **IT IS A QUARTER OF IT** | 11 of 19 scripts call `MAV.*` (`MAVLinkInterface`), 6 call `cs.*` (`CurrentState`); only 1 uses `Script.*` alone and 5 need no host at all |
 

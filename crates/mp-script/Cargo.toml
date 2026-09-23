@@ -1,0 +1,14 @@
+[package]
+name = "mp-script"
+description = "The scripting host API, and what the shipped scripts need from it"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror.workspace = true
