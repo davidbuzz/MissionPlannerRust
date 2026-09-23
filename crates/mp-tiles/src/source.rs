@@ -87,8 +87,36 @@ pub const OPENTOPOMAP: TileSource = TileSource {
     attribution: "© OpenStreetMap contributors, SRTM | © OpenTopoMap (CC-BY-SA)",
 };
 
+/// Esri's World Imagery: aerial and satellite photography.
+///
+/// Planning over a paddock needs imagery, not a street map - a survey grid over farmland is drawn
+/// against field boundaries and tree lines that a road map does not have, and a landing site is
+/// chosen by looking at the ground.
+///
+/// **The URL is `{z}/{y}/{x}`, not `{z}/{x}/{y}`.** ArcGIS orders it row-then-column where every
+/// other provider here orders it column-then-row, and the C# says so plainly:
+/// `string.Format(UrlFormat, zoom, pos.Y, pos.X)`. Getting it backwards does not fail - it
+/// returns a real tile, of somewhere else, and the map looks like imagery that does not match the
+/// roads under it.
+/// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/ArcGIS/ArcGIS_Imagery_World_2D_MapProvider.cs:55`
+///
+/// **The endpoint is not the one Mission Planner ships.** Its provider points at
+/// `ESRI_Imagery_World_2D`, which Esri retired - it answers 301 today. `World_Imagery` is the
+/// current service and returns tiles. PLAN.md §9.1 predicted this ("audit the dead endpoints");
+/// this is one of them, found by asking the server rather than by reading the C#.
+pub const ESRI_WORLD_IMAGERY: TileSource = TileSource {
+    id: "esri-imagery",
+    label: "Satellite (Esri)",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    subdomains: &[],
+    // Esri serves 23 levels, but coverage above 17 is patchy outside cities and a missing tile
+    // costs a request and a blank square. 19 is where the imagery generally stops being useful.
+    max_zoom: 19,
+    attribution: "Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+};
+
 /// Every provider we ship.
-pub const SOURCES: &[TileSource] = &[OPENSTREETMAP, OPENTOPOMAP];
+pub const SOURCES: &[TileSource] = &[OPENSTREETMAP, OPENTOPOMAP, ESRI_WORLD_IMAGERY];
 
 /// Finds a provider by its identifier.
 #[must_use]
@@ -99,6 +127,69 @@ pub fn source_by_id(id: &str) -> Option<&'static TileSource> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// ArcGIS orders its path row-then-column, and every other provider here does the opposite.
+    ///
+    /// Getting it backwards does not fail. It returns a real tile of somewhere else, so the map
+    /// shows imagery that quietly does not match the roads drawn over it - which is worse than a
+    /// blank square, because a blank square is obviously wrong.
+    #[test]
+    fn the_imagery_url_is_zoom_then_row_then_column() {
+        // The SITL home field outside Canberra at zoom 16.
+        let tile = TileId {
+            z: 16,
+            x: 59_922,
+            y: 39_658,
+        };
+        let url = ESRI_WORLD_IMAGERY.url_for(tile).expect("zoom 16 is served");
+        assert!(
+            url.ends_with("/tile/16/39658/59922"),
+            "the path must be zoom/y/x, got {url}"
+        );
+        assert!(
+            !url.ends_with("/tile/16/59922/39658"),
+            "x and y are transposed: {url}"
+        );
+    }
+
+    /// The endpoint is the live one, not the retired one the C# still points at.
+    #[test]
+    fn the_imagery_endpoint_is_not_the_retired_one() {
+        assert!(
+            ESRI_WORLD_IMAGERY.url.contains("World_Imagery"),
+            "{}",
+            ESRI_WORLD_IMAGERY.url
+        );
+        assert!(
+            !ESRI_WORLD_IMAGERY.url.contains("ESRI_Imagery_World_2D"),
+            "that service answers 301 - see the note on this provider"
+        );
+        assert!(ESRI_WORLD_IMAGERY.url.starts_with("https://"));
+    }
+
+    /// Esri's terms require attribution by name, not merely some attribution - which
+    /// `every_provider_carries_attribution` already covers for all of them.
+    #[test]
+    fn the_imagery_attribution_names_esri() {
+        assert!(ESRI_WORLD_IMAGERY.attribution.contains("Esri"));
+    }
+
+    /// Identifiers are the cache directory names, so a collision mixes two providers' tiles.
+    #[test]
+    fn provider_identifiers_are_unique() {
+        let mut ids: Vec<&str> = SOURCES.iter().map(|source| source.id).collect();
+        let count = ids.len();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), count, "two providers share a cache directory");
+    }
+
+    /// There is a satellite option at all, which is the point of the item.
+    #[test]
+    fn imagery_is_among_the_providers_offered() {
+        assert!(source_by_id("esri-imagery").is_some());
+        assert!(SOURCES.len() >= 3);
+    }
 
     fn tile(z: u8, x: i64, y: i64) -> TileId {
         TileId::new(z, x, y).expect("a valid tile")

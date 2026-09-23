@@ -14,6 +14,7 @@
 #   # comments and blank lines are ignored
 #   screen plan                 open on a screen (MP_SCREEN)
 #   window 1600x1200            window size (MP_WINDOW)
+#   tiles offline               configure a tile source but fetch nothing (default: no tiles)
 #   settle 6                    wait, for telemetry to arrive or a view to settle
 #   click map@0.45x0.40         click a named control, as tools/gui-click.sh addresses them
 #   click tab-plan:right        a right-click
@@ -57,6 +58,7 @@ while IFS= read -r LINE; do
     case "${1:-}" in
         screen) export MP_SCREEN="${2:-fly}" ;;
         window) export MP_WINDOW="${2:-1600x1200}" ;;
+        tiles) TILES="${2:-off}" ;;
     esac
 done < "$SCRIPT"
 
@@ -64,7 +66,21 @@ done < "$SCRIPT"
 # caller asked for one: a test run that leaves .tlog files behind or hits a tile server is a test
 # nobody can run twice.
 export MP_NO_RECORD=1
-: "${MP_NO_TILES:=1}"; export MP_NO_TILES
+
+# Map tiles, which a test does not want by default.
+#
+#   (nothing)      no tile source at all - the fastest, and right for anything not about maps
+#   tiles offline  the source is configured but nothing is fetched; use this to assert on which
+#                  provider is selected without asking a tile server for anything
+#   tiles on       fetches for real. Only for a test that is about fetching.
+#
+# The default is off because a test suite that pulls tiles is one that fails when the network
+# does, and one that a provider is entitled to be annoyed about.
+case "${TILES:-off}" in
+    on)      unset MP_NO_TILES; unset MP_OFFLINE ;;
+    offline) unset MP_NO_TILES; export MP_OFFLINE=1 ;;
+    *)       export MP_NO_TILES=1 ;;
+esac
 
 PROBE_FILE="$(mktemp -t mpr-probe-XXXXXX.json)"
 FACTS_FILE="$(mktemp -t mpr-facts-XXXXXX.conf)"
@@ -133,7 +149,7 @@ while IFS= read -r RAW; do
     [ $# -eq 0 ] && continue
 
     case "$1" in
-        screen|window) ;;  # already applied before launch
+        screen|window|tiles) ;;  # already applied before launch
         settle)
             sleep "${2:-1}"
             ;;

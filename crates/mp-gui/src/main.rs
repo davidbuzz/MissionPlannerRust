@@ -326,8 +326,11 @@ impl MissionPlanner {
         let mut map = MapViewport::new(track_points, markers);
         if std::env::var("MP_NO_TILES").is_err() {
             let cache = TileCache::new(TileCache::default_root());
+            // The environment wins over the remembered choice, so a screenshot or a test can
+            // pin a provider without disturbing what the operator picked.
             let source = std::env::var("MP_TILE_SOURCE")
                 .ok()
+                .or_else(|| settings::Settings::load().tile_source)
                 .and_then(|id| mp_tiles::source::source_by_id(&id))
                 .unwrap_or(&mp_tiles::source::OPENSTREETMAP);
             let store = if std::env::var("MP_OFFLINE").is_ok() {
@@ -597,6 +600,34 @@ impl MissionPlanner {
                 "wrote {written} parameters, skipped {skipped} this firmware does not have - refresh to confirm"
             )
         });
+    }
+
+    /// Switches the map to another tile provider, and remembers it.
+    ///
+    /// Mission Planner's `comboBoxMapType`, which sits on the planning screen and changes the
+    /// flight screen's map with it - `FlightData.mymap.MapProvider` is set from the same handler -
+    /// so an operator picks imagery once rather than twice.
+    /// `// C#: GCSViews/FlightPlanner.cs:2209-2237`
+    fn set_tile_source(&mut self, source: &'static mp_tiles::source::TileSource) {
+        if std::env::var("MP_NO_TILES").is_ok() {
+            return;
+        }
+        let cache = TileCache::new(TileCache::default_root());
+        let store = if std::env::var("MP_OFFLINE").is_ok() {
+            TileStore::offline(source, cache)
+        } else {
+            TileStore::new(source, cache)
+        };
+        self.map.borrow_mut().set_tiles(std::sync::Arc::new(store));
+        self.settings.tile_source = Some(source.id.to_owned());
+        if let Err(err) = self.settings.save() {
+            self.file_status = Some(format!("could not remember the map provider: {err}"));
+        }
+    }
+
+    /// Which provider the map is showing.
+    fn tile_source_id(&self) -> Option<&'static str> {
+        self.map.borrow().source_id()
     }
 
     /// Chooses the altitude frame new waypoints are created in, and remembers it.
@@ -980,6 +1011,7 @@ impl MissionPlanner {
                             focused: self.plan_name_focus.is_focused(window),
                         },
                         self.altitude_frame,
+                        self.tile_source_id(),
                         cx,
                     ))
                     .child(plan::draw_panel(&draw, view, cx))
@@ -1301,6 +1333,11 @@ impl Render for MissionPlanner {
             facts::record("mission.items", self.plan.items().len());
             facts::record("mission.origin", self.plan.origin().label());
             facts::record("plan.frame", self.altitude_frame.key());
+            facts::record("map.source", self.tile_source_id().unwrap_or("none"));
+            facts::record(
+                "map.attribution",
+                self.map.borrow().attribution().unwrap_or(""),
+            );
             // Every frame in the mission, deduplicated. A test asserting on this catches a
             // waypoint created in the wrong frame, which every other field would hide.
             facts::record("mission.frames", {

@@ -624,6 +624,12 @@ impl MapViewport {
         self.tiles.as_ref().map(|store| store.source().attribution)
     }
 
+    /// Which provider is being shown, if any.
+    #[must_use]
+    pub fn source_id(&self) -> Option<&'static str> {
+        self.tiles.as_ref().map(|store| store.source().id)
+    }
+
     /// The uploaded image for a tile, uploading it if this is the first sight of it.
     ///
     /// The cache is keyed on `TileId` so the `ImageId` inside stays the same across frames. It is

@@ -36,7 +36,7 @@ Measured on this tree: **17 crates, 40,661 hand-written Rust LOC** (plus 91,634 
 | KML export | a flown path coloured by flight mode, and a mission, for Google Earth |
 | Tuning graph | eleven telemetry fields plotted live, min/max reduced so a spike cannot hide |
 | Geodesy | typed units, Web Mercator, slippy-map tile arithmetic |
-| Maps | GPU tile rendering, flight path, mission and fence overlays |
+| Maps | GPU tile rendering, three providers including Esri satellite imagery, overlays |
 | CLI | `mpr watch \| record \| fly \| params \| param \| mission \| survey \| log \| logs \| kml \| firmware \| ports` |
 | GUI | fly, plan, setup and params screens on gpui |
 

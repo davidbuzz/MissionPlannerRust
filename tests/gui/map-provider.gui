@@ -1,0 +1,22 @@
+# The map provider is selectable and its attribution follows it.
+tiles offline
+#
+# Satellite imagery is the point of the item: planning over a paddock needs imagery, not a street
+# map. The attribution is not decoration - Esri's terms require it by name.
+
+screen plan
+window 1600x1200
+settle 5
+
+expect map.source osm
+expect map.attribution ~ OpenStreetMap
+
+click plan-map-esri-imagery
+settle 3
+expect map.source esri-imagery
+expect map.attribution ~ Esri
+
+# And back, so the choice is a choice rather than a one-way door.
+click plan-map-osm
+settle 2
+expect map.source osm

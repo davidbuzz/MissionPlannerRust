@@ -1676,6 +1676,7 @@ pub fn actions_panel(
     view: &TelemetryView,
     name: &NameField<'_>,
     frame: AltitudeFrame,
+    tile_source: Option<&'static str>,
     cx: &mut Context<MissionPlanner>,
 ) -> impl IntoElement {
     let (name_focus, name_focused) = (name.focus, name.focused);
@@ -1713,6 +1714,38 @@ pub fn actions_panel(
                 })),
         );
     }
+    // The map provider - `comboBoxMapType`, which lives on this screen in the C# and changes the
+    // flight screen's map with it. Buttons rather than a combo, because gpui has no combo and
+    // three providers do not need one.
+    // `// C#: GCSViews/FlightPlanner.cs:176-180`
+    let mut providers = div()
+        .flex()
+        .items_center()
+        .flex_wrap()
+        .gap_1()
+        .child(div().text_xs().text_color(rgb(theme::DIM)).child("map:"));
+    for source in mp_tiles::source::SOURCES {
+        let chosen = Some(source.id) == tile_source;
+        providers = providers.child(
+            crate::probe::measured(format!("plan-map-{}", source.id), div())
+                .id(gpui::SharedString::from(format!("map-{}", source.id)))
+                .px_2()
+                .py(px(1.0))
+                .rounded_sm()
+                .border_1()
+                .border_color(rgb(if chosen { theme::ACCENT } else { theme::BORDER }))
+                .text_xs()
+                .text_color(rgb(if chosen { theme::ACCENT } else { theme::TEXT }))
+                .cursor_pointer()
+                .hover(|style| style.bg(rgb(theme::BORDER)))
+                .child(source.label)
+                .on_click(cx.listener(move |this, _event, _window, cx| {
+                    this.set_tile_source(source);
+                    cx.notify();
+                })),
+        );
+    }
+
     // Said in words, because "terrain" on a button is not a warning and this one needs to be:
     // a vehicle without terrain data refuses the mission at upload, long after it was planned.
     let frame_note = (frame == AltitudeFrame::Terrain).then(|| {
@@ -1752,6 +1785,7 @@ pub fn actions_panel(
             .gap_2()
             .child(frames)
             .children(frame_note)
+            .child(providers)
             .child(
                 div()
                     .flex()
