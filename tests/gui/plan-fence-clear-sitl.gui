@@ -1,0 +1,44 @@
+# Geo-Fence > Clear on a vehicle (PLAN.md 13.4, D11).
+#
+# clearToolStripMenuItem_Click sets FENCE_ENABLE, FENCE_ACTION and FENCE_TOTAL to 0 with setParam,
+# one after another, each waiting for the vehicle's echo; a set that goes unanswered says "Failed
+# to set ..." and stops there; then the geofence goes from the map (GCSViews/FlightPlanner.cs:
+# 2112-2155). The sets go through the link's set_param with the C#'s retries, and plan.params is
+# what each did: NAME=0 echoed, or NAME=0 unchanged where the vehicle already held 0 - which
+# FENCE_ENABLE and FENCE_TOTAL do on a fresh SITL, and FENCE_ACTION (1, RTL and land) does not.
+#
+# The vehicle is left with FENCE_ACTION 0, as the C# leaves it.
+#
+# Needs SITL (a copter): tools/gui-test.sh tests/gui/plan-fence-clear-sitl.gui -- tcp:127.0.0.1:5760
+
+env XDG_DATA_HOME $WORK
+env MP_PLAN_DIR $WORK
+
+screen params
+window 1600x1200
+settle 6
+
+click param-download
+settle 15
+expect params.held > 500
+
+click tab-plan
+settle 1
+
+# A geofence drawn on the map, to be cleared.
+click draw-fence
+click map@0.40x0.40
+click map@0.60x0.40
+click map@0.60x0.60
+expect fence.points 3
+
+click map@0.30x0.70:right
+click menu-geoFence
+click menu-clear
+settle 4
+expect plan.params.busy false
+expect plan.prompt none
+expect plan.params ~ FENCE_ENABLE=0
+expect plan.params ~ FENCE_ACTION=0
+expect plan.params ~ FENCE_TOTAL=0
+expect fence.points 0

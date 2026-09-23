@@ -1,6 +1,6 @@
 # DO_SET_ROI: setROIToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:6673). Appends a DO_SET_ROI
-# (201) at the click, at the default altitude. The ROI carries a position, as Mavlink.cs's
-# [hasLocation] says, so it is scaled as one on the wire.
+# (201) at the click, at Default Alt (TXT_DefaultAlt, 100). The ROI carries a position, as
+# Mavlink.cs's [hasLocation] says, so it is scaled as one on the wire.
 
 screen plan
 window 1600x1200
@@ -12,4 +12,4 @@ click menu-setROI
 expect mission.items 2
 expect mission.commands 16,201
 expect mission.last.position true
-expect mission.last.alt 50
+expect mission.last.alt 100

@@ -1,0 +1,64 @@
+# The panel boxes and the vehicle's parameters: setWPParams reads them in, Write sets them back.
+#
+# Activate runs setWPParams, which reads WP Radius from WP_RADIUS, WPNAV_RADIUS (cm) or, from 4.7,
+# WP_RADIUS_M, written {0:N2}, and Loiter Radius from LOITER_RADIUS or WP_LOITER_RAD - disabling it
+# when the vehicle has neither, as a copter does (GCSViews/FlightPlanner.cs:6695-6750). Write's
+# saveWPs, once the mission is on the vehicle, sets the radius into all three names - "use brute
+# force, for all three possible params" - and Loiter Radius into LOITER_RAD or WP_LOITER_RAD
+# (:6296-6317). setParam passes over a name the vehicle does not have (MAVLinkInterface.cs:1640),
+# so on this copter only WP_RADIUS_M is set. plan.params is what each set did, from the vehicle's
+# own echo through the link's retrying set_param.
+#
+# Needs SITL (a copter): tools/gui-test.sh tests/gui/plan-panel-params.gui -- tcp:127.0.0.1:5760
+
+env XDG_DATA_HOME $WORK
+env MP_PLAN_DIR $WORK
+
+screen params
+window 1600x1200
+settle 6
+
+click param-download
+settle 15
+expect params.held > 500
+
+# The planning screen shown reads the radii in.
+click tab-plan
+settle 1
+expect plan.wprad 2.00
+expect plan.loiterrad.enabled false
+expect plan.prompt none
+
+# A home from the vehicle, one waypoint, a radius of 3, and Write.
+click plan-home-link
+settle 1
+expect mission.home true
+click map@0.45x0.40
+expect mission.items 1
+click plan-wprad
+key ctrl+u
+type 3
+settle 1
+click plan-write
+settle 10
+expect plan.params.busy false
+expect plan.params ~ WP_RADIUS=unknown
+expect plan.params ~ WP_RADIUS_M=3
+expect plan.params ~ WPNAV_RADIUS=unknown
+expect plan.params ~ WP_LOITER_RAD=unknown
+
+# Shown again, the planning screen reads back what was set.
+click tab-fly
+settle 1
+click tab-plan
+settle 1
+expect plan.wprad 3.00
+
+# Put the vehicle's radius back as it was, for whatever runs next.
+click plan-wprad
+key ctrl+u
+type 2
+settle 1
+click plan-write
+settle 10
+expect plan.params ~ WP_RADIUS_M=2

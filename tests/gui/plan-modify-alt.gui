@@ -8,7 +8,8 @@ settle 4
 
 click map@0.45x0.40
 click map@0.60x0.55
-expect mission.last.alt 50
+expect plan.defaultalt 100
+expect mission.last.alt 100
 
 click map@0.30x0.70:right
 click menu-modifyAlt
@@ -17,14 +18,14 @@ expect plan.prompt.value 0
 key ctrl+u
 type 20
 key Return
-expect mission.last.alt 70
+expect mission.last.alt 120
 
 click map@0.30x0.70:right
 click menu-modifyAlt
 key ctrl+u
 type 5.5
 key Return
-expect mission.last.alt 75.5
+expect mission.last.alt 125.5
 
 # Text float.Parse refuses changes nothing.
 click map@0.30x0.70:right
@@ -34,4 +35,4 @@ type up
 key Return
 expect plan.prompt Error
 expect plan.prompt.text Invalid number entered
-expect mission.last.alt 75.5
+expect mission.last.alt 125.5

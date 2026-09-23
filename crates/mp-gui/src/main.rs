@@ -190,6 +190,8 @@ struct MissionPlanner {
     plan_prompt_focus: gpui::FocusHandle,
     /// Focus for the Home Location boxes: Lat, Long and ASL.
     plan_home_focus: [gpui::FocusHandle; 3],
+    /// Focus for the panel boxes: WP Radius, Loiter Radius and Default Alt.
+    plan_panel_focus: plan::PanelFocus,
     /// The mission file name to save to or load from.
     plan_name: textfield::TextField,
     /// Focus for that field.
@@ -353,13 +355,13 @@ impl MissionPlanner {
             map.set_tiles(std::sync::Arc::new(store));
         }
 
-        // The home the planning screen remembers, which `MainV2` reads at start-up.
+        // The home the planning screen remembers, which `MainV2` reads at start-up, and the
+        // panel boxes it saved, which `FlightPlanner_Load` reads.
         let mut plan = Plan::default();
-        plan.set_planned_home(plan::planned_home_from_config(
-            mp_settings::Config::default_path()
-                .and_then(|path| mp_settings::Config::load(&path).ok())
-                .as_ref(),
-        ));
+        let config = mp_settings::Config::default_path()
+            .and_then(|path| mp_settings::Config::load(&path).ok());
+        plan.set_planned_home(plan::planned_home_from_config(config.as_ref()));
+        plan.apply_panel_config(config.as_ref());
 
         let mut this = Self {
             telemetry,
@@ -390,6 +392,7 @@ impl MissionPlanner {
             plan_menus: plan::PlanMenus::default(),
             plan_prompt_focus: cx.focus_handle(),
             plan_home_focus: [cx.focus_handle(), cx.focus_handle(), cx.focus_handle()],
+            plan_panel_focus: plan::PanelFocus::new(cx),
             param_search: textfield::TextField::new("search parameters"),
             param_search_focus: cx.focus_handle(),
             selected_param_group: None,
@@ -514,6 +517,9 @@ impl MissionPlanner {
                 if let Some(home) = self.plan.adopt_from_file(name, &items) {
                     self.plan_menus.offer_home_reset(home);
                 }
+                // `processToScreen` ends with `setWPParams`.
+                // `// C#: GCSViews/FlightPlanner.cs:5630`
+                self.plan.set_wp_params(&self.telemetry.view().parameters);
                 let count = self.plan.items().len();
                 self.file_status = Some(format!("loaded {count} items from {}", path.display()));
             }
@@ -826,7 +832,7 @@ impl MissionPlanner {
 
     /// Pushes the survey area to the map after an edit.
     fn sync_map_polygon(&self) {
-        self.map.borrow_mut().set_polygon(self.plan.polygon());
+        self.map.borrow_mut().set_polygon(self.plan.shown_polygon());
     }
 
     /// Pushes the geofence to the map after an edit.
@@ -1115,7 +1121,6 @@ impl MissionPlanner {
                             focus: &self.plan_name_focus,
                             focused: self.plan_name_focus.is_focused(window),
                         },
-                        self.altitude_frame,
                         self.tile_source_id(),
                         cx,
                     ))
@@ -1131,7 +1136,23 @@ impl MissionPlanner {
                         cx,
                     ))
                     .child(plan::draw_panel(&draw, view, cx))
-                    .child(plan::items_panel(&items, selected, cx))
+                    .child({
+                        let strip = plan::waypoint_strip(
+                            &self.plan,
+                            &plan::StripState {
+                                focus: &self.plan_panel_focus,
+                                focused: self
+                                    .plan_panel_focus
+                                    .handles
+                                    .each_ref()
+                                    .map(|handle| handle.is_focused(window)),
+                                frame: self.altitude_frame,
+                                spline_visible: plan::firmware_is_copter(view),
+                            },
+                            cx,
+                        );
+                        plan::items_panel(&items, selected, strip, cx)
+                    })
                     .child(plan::editor_panel(&items, selected, cx))
                     .child(plan::checks_panel(&items, view)),
             )
@@ -1217,8 +1238,12 @@ impl MissionPlanner {
                     // are in, because the thing under the cursor already says.
                     .on_mouse_down(
                         MouseButton::Left,
-                        cx.listener(move |this, event: &gpui::MouseDownEvent, _window, cx| {
+                        cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
                             let (x, y) = (f32::from(event.position.x), f32::from(event.position.y));
+                            // The map takes the focus in the C#, which is a panel box's Leave.
+                            if planning {
+                                plan::leave_panel_boxes(this, window, cx);
+                            }
                             if this.plan_menus.swallows_press((x, y)) {
                                 return;
                             }
@@ -1262,7 +1287,7 @@ impl MissionPlanner {
                     ))
                     .on_mouse_up(
                         MouseButton::Left,
-                        cx.listener(move |this, event: &gpui::MouseUpEvent, _window, cx| {
+                        cx.listener(move |this, event: &gpui::MouseUpEvent, window, cx| {
                             let grabbed = this.dragging_waypoint.take();
                             let press = this.map_press.take();
                             this.map.borrow_mut().end_drag();
@@ -1289,9 +1314,7 @@ impl MissionPlanner {
                             };
                             // What the click adds follows what is being drawn: AddWPToMap.
                             // `// C#: GCSViews/FlightPlanner.cs:558-600`
-                            let altitude = this.plan.default_altitude();
-                            this.plan
-                                .add_wp_to_map(position, altitude, this.altitude_frame);
+                            plan::map_click(this, position, window, cx);
                             this.sync_map_mission();
                             this.sync_map_polygon();
                             this.sync_map_fence();
@@ -1319,9 +1342,10 @@ impl MissionPlanner {
                     // `// C#: GCSViews/FlightPlanner.Designer.cs:875`
                     .on_mouse_up(
                         MouseButton::Right,
-                        cx.listener(move |this, event: &gpui::MouseUpEvent, _window, cx| {
+                        cx.listener(move |this, event: &gpui::MouseUpEvent, window, cx| {
                             let (x, y) = (f32::from(event.position.x), f32::from(event.position.y));
                             if planning {
+                                plan::leave_panel_boxes(this, window, cx);
                                 plan::open_map_menu(this, x, y);
                             } else {
                                 let position = this.map.borrow().position_at(x, y);
@@ -1471,11 +1495,43 @@ impl Render for MissionPlanner {
         }
         self.advance_param_writes();
 
+        // Home on the map: the planner's boxes on the planning screen, the vehicle's home on the
+        // flight screen once its mission is held - one map, two homes.
+        let map_home = if self.screen == Screen::Plan {
+            plan::planner_map_home(&self.plan)
+        } else {
+            plan::flight_map_home(
+                view.state.as_ref().and_then(|state| state.home),
+                !view.mission.is_empty(),
+                self.plan.planned_home_location(),
+            )
+        };
+        self.map.borrow_mut().set_home(map_home);
+        // A panel box that lost the keyboard since the last frame has its Leave, and a row of
+        // parameter sets moves on.
+        if self.screen == Screen::Plan {
+            plan::track_panel_focus(self, window);
+        }
+        plan::drive_writes(self, &view, window, cx);
+
         // Facts a UI test can assert on. Recorded from render because that is where every one of
         // them is already in hand, and published at the end of the frame so a reader never sees
         // half a set. Costs nothing unless MP_FACTS names a file.
         if facts::enabled() {
             facts::record("screen", self.screen.label());
+            // Where the map draws home, as `latitude,longitude`, read back from the map, and
+            // whether the last paint wrote its "H".
+            {
+                let map = self.map.borrow();
+                facts::record(
+                    "map.home",
+                    map.home().map_or_else(
+                        || "none".to_owned(),
+                        |home| format!("{},{}", home.latitude(), home.longitude()),
+                    ),
+                );
+                facts::record("map.home.label", map.home_label_drawn());
+            }
             facts::record("mission.items", self.plan.items().len());
             facts::record("mission.origin", self.plan.origin().label());
             facts::record("plan.frame", self.altitude_frame.key());
@@ -1640,9 +1696,6 @@ impl Render for MissionPlanner {
             if let Some(position) = state.position {
                 map.observe(position, state.heading);
             }
-            if let Some(home) = state.home {
-                map.set_home(home);
-            }
         }
 
         // A completed download replaces the plan only if the operator asked for one. Otherwise it
@@ -1653,6 +1706,9 @@ impl Render for MissionPlanner {
                 self.plan_menus.offer_home_reset(home);
                 self.plan_prompt_focus.focus(window, cx);
             }
+            // `processToScreen` ends with `setWPParams`.
+            // `// C#: GCSViews/FlightPlanner.cs:5630`
+            self.plan.set_wp_params(&view.parameters);
             self.file_status = Some(format!(
                 "read {} items from the vehicle",
                 view.mission.len()

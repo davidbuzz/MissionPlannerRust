@@ -1,0 +1,60 @@
+# The home marker on the planning map (PLAN.md 13.4 row 13, DELIVERABLES.md D8, D11).
+#
+# writeKML builds home from the three Home Location boxes - only when all three hold a number,
+# otherwise `new PointLatLngAlt()`, which is not drawn - and WPOverlay.CreateOverlay draws it as
+# GMapMarkerWP(point, "H"): a green pin with an "H" on its head (GCSViews/FlightPlanner.cs:
+# 1400-1415, ExtLibs/Maps/WPOverlay.cs:44-50, ExtLibs/Maps/GMapMarkerWP.cs). So the marker follows
+# every edit of a box, and goes when one is emptied. map.home is read back from the map itself.
+#
+# The flight screen draws the vehicle's home instead, and only once the vehicle's mission is held
+# (FlightData.cs:3808-3845): with no vehicle there is none. plan-home-marker-vehicle.gui has the
+# vehicle's.
+#
+# Self-contained: its own Mission Planner data directory, holding a config.xml with the home the
+# planning screen saved last time, which Activate puts in the boxes (FlightPlanner.cs:7208-7216).
+
+env XDG_DATA_HOME $WORK
+env MP_PLAN_DIR $WORK
+setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
+
+screen plan
+window 1600x1200
+settle 4
+
+# The saved home is in the boxes, and the map draws its marker there. With nothing else to show
+# the map is fitted close round it, past GMap's zoom 16, so the "H" is written on the pin
+# (GMapMarkerWP.cs:58-59).
+expect plan.home -35.3632621,149.1652374,584.10
+expect map.home -35.3632621,149.1652374
+expect map.home.label true
+
+# A home typed into the boxes moves the marker with each box (TXT_home*_TextChanged -> writeKML).
+click plan-home-lat
+key ctrl+u
+type 51.5
+settle 1
+expect map.home 51.5,149.1652374
+click plan-home-lng
+key ctrl+u
+type 7.25
+settle 1
+expect map.home 51.5,7.25
+
+# An empty box is no home, and no marker; the others still parse, so the altitude is what goes.
+click plan-home-alt
+key ctrl+u
+settle 1
+expect plan.home 51.5,7.25,
+expect map.home none
+expect map.home.label false
+type 100
+settle 1
+expect map.home 51.5,7.25
+
+# The flight screen draws the vehicle's home, and there is no vehicle.
+click tab-fly
+settle 1
+expect map.home none
+click tab-plan
+settle 1
+expect map.home 51.5,7.25

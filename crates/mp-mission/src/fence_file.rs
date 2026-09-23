@@ -51,27 +51,101 @@ pub struct RallyPointFile {
     pub flags: u8,
 }
 
-/// The header Mission Planner writes, and skips on read.
-const HEADER: &str = "#saved by Mission Planner";
+/// The header a `.fen` starts with, `"#saved by APM Planner " + Application.ProductVersion`, and
+/// which a reader skips. This application's version stands in for Mission Planner's.
+/// `// C#: GCSViews/FlightPlanner.cs:5978`
+const FENCE_HEADER: &str = concat!("#saved by APM Planner ", env!("CARGO_PKG_VERSION"));
+
+/// The header a `.ral` starts with, `"#saved by Mission Planner " + Application.ProductVersion`.
+/// `// C#: GCSViews/FlightPlanner.cs:6046`
+const RALLY_HEADER: &str = concat!("#saved by Mission Planner ", env!("CARGO_PKG_VERSION"));
+
+/// `double.ToString(CultureInfo.InvariantCulture)` as Mission Planner's .NET Framework runtime
+/// writes it, which is the general format at fifteen significant digits: trailing zeros dropped,
+/// and scientific notation - `1E-05`, `1.5E+15` - once the exponent is below -4 or above 14.
+/// (.NET Core writes the shortest text that reads back instead; Mission Planner targets
+/// `net472`, and Mono writes it as the Framework does.) `mp_params::param_file::invariant_double`
+/// is the same function for `.param` files; this crate does not depend on that one, and a test in
+/// `mp-gui`, which has both, holds them to the same answers.
+#[must_use]
+pub fn invariant_double(value: f64) -> String {
+    if value.is_nan() {
+        return "NaN".to_owned();
+    }
+    if value.is_infinite() {
+        return if value > 0.0 { "Infinity" } else { "-Infinity" }.to_owned();
+    }
+    if value == 0.0 {
+        // The Framework writes negative zero as "0".
+        return "0".to_owned();
+    }
+    // Fifteen significant digits, correctly rounded.
+    let scientific = format!("{:.14e}", value.abs());
+    let Some((mantissa, exponent)) = scientific.split_once('e') else {
+        return scientific;
+    };
+    let Ok(exponent) = exponent.parse::<i32>() else {
+        return scientific;
+    };
+    let digits: String = mantissa.chars().filter(char::is_ascii_digit).collect();
+    let digits = digits.trim_end_matches('0');
+    let digits = if digits.is_empty() { "0" } else { digits };
+    let sign = if value < 0.0 { "-" } else { "" };
+
+    if (-5 < exponent) && (exponent < 15) {
+        let body = if exponent >= 0 {
+            let whole_len = usize::try_from(exponent).unwrap_or(0) + 1;
+            if digits.len() <= whole_len {
+                format!("{digits}{}", "0".repeat(whole_len - digits.len()))
+            } else {
+                let (whole, fraction) = digits.split_at(whole_len);
+                format!("{whole}.{fraction}")
+            }
+        } else {
+            let zeros = usize::try_from(-exponent - 1).unwrap_or(0);
+            format!("0.{}{digits}", "0".repeat(zeros))
+        };
+        return format!("{sign}{body}");
+    }
+    let (first, rest) = digits.split_at(1);
+    let mantissa = if rest.is_empty() {
+        first.to_owned()
+    } else {
+        format!("{first}.{rest}")
+    };
+    let exponent_sign = if exponent < 0 { '-' } else { '+' };
+    format!(
+        "{sign}{mantissa}E{exponent_sign}{:02}",
+        exponent.unsigned_abs()
+    )
+}
 
 /// Writes a `.fen`.
 ///
 /// The return point first, then every vertex, then the first vertex again to close the ring -
-/// which is what `savefence` does and what ArduPilot's own tools expect to read back.
+/// which is what `saveToFileToolStripMenuItem_Click` does and what ArduPilot's own tools expect to
+/// read back. Each line is `lat.ToString(InvariantCulture) + " " + lng.ToString(...)`.
 /// `// C#: GCSViews/FlightPlanner.cs:5976-6008`
 #[must_use]
 pub fn write_fence(fence: &FenceFile) -> String {
-    let mut out = format!("{HEADER}\n");
+    let line = |position: LatLon| {
+        format!(
+            "{} {}\n",
+            invariant_double(position.latitude()),
+            invariant_double(position.longitude())
+        )
+    };
+    let mut out = format!("{FENCE_HEADER}\n");
     if let Some(point) = fence.return_point {
-        out.push_str(&format!("{} {}\n", point.latitude(), point.longitude()));
+        out.push_str(&line(point));
     }
     for vertex in &fence.vertices {
-        out.push_str(&format!("{} {}\n", vertex.latitude(), vertex.longitude()));
+        out.push_str(&line(*vertex));
     }
     // The ring is closed by repeating the first vertex. Not a formatting nicety: a reader that
     // takes the points as given draws an open shape, and an open geofence is not a fence.
     if let Some(first) = fence.vertices.first() {
-        out.push_str(&format!("{} {}\n", first.latitude(), first.longitude()));
+        out.push_str(&line(*first));
     }
     out
 }
@@ -109,8 +183,10 @@ pub fn read_fence(text: &str) -> FenceFile {
 
     // Drop the closing repeat. Compared by value rather than by counting, because a file written
     // by something other than Mission Planner may not have one - and dropping the last vertex of
-    // a fence that was not closed removes a real corner.
-    if vertices.len() > 2 && vertices.first() == vertices.last() {
+    // a fence that was not closed removes a real corner. "remove loop close": more than one
+    // point, and the last the same as the first.
+    // `// C#: GCSViews/FlightPlanner.cs:4398-4403`
+    if vertices.len() > 1 && vertices.first() == vertices.last() {
         vertices.pop();
     }
 
@@ -125,7 +201,7 @@ pub fn read_fence(text: &str) -> FenceFile {
 /// Tab separated, one `RALLY` row per point. `// C#: GCSViews/FlightPlanner.cs:6049-6054`
 #[must_use]
 pub fn write_rally(points: &[RallyPointFile]) -> String {
-    let mut out = format!("{HEADER}\n");
+    let mut out = format!("{RALLY_HEADER}\n");
     for point in points {
         out.push_str(&format!(
             "RALLY\t{}\t{}\t{}\t{}\t{}\t{}\n",
@@ -337,6 +413,51 @@ mod tests {
         // Five data lines: the return point, three vertices, and the closing repeat.
         assert_eq!(text.lines().filter(|l| !l.starts_with('#')).count(), 5);
         assert_eq!(read_fence(&text), fence);
+    }
+
+    /// Numbers are written as the .NET Framework writes a `double`: fifteen significant digits,
+    /// trailing zeros dropped, scientific past the exponents where the general format switches.
+    #[test]
+    fn numbers_are_written_as_the_framework_writes_a_double() {
+        assert_eq!(invariant_double(-35.362_938), "-35.362938");
+        assert_eq!(invariant_double(149.165_085), "149.165085");
+        assert_eq!(invariant_double(100.0), "100");
+        assert_eq!(invariant_double(0.0), "0");
+        assert_eq!(invariant_double(-0.0), "0");
+        // A clicked position carries more digits than fifteen, and the sixteenth goes.
+        assert_eq!(
+            invariant_double(-35.363_262_345_678_91),
+            "-35.3632623456789"
+        );
+        // A float parameter widened to a double shows its binary noise to fifteen digits.
+        assert_eq!(invariant_double(f64::from(0.3_f32)), "0.300000011920929");
+        assert_eq!(invariant_double(0.0001), "0.0001");
+        assert_eq!(invariant_double(0.000_01), "1E-05");
+        assert_eq!(invariant_double(-0.000_000_15), "-1.5E-07");
+        assert_eq!(invariant_double(123_456_789_012_345.0), "123456789012345");
+        assert_eq!(
+            invariant_double(1_234_567_890_123_456.0),
+            "1.23456789012346E+15"
+        );
+    }
+
+    /// The header is the C#'s for a fence, and a reader skips it.
+    #[test]
+    fn a_fence_file_starts_with_the_c_sharp_header() {
+        let text = write_fence(&FenceFile {
+            return_point: Some(at(-35.0, 149.0)),
+            vertices: Vec::new(),
+        });
+        let first = text.lines().next().expect("a header");
+        assert!(first.starts_with("#saved by APM Planner "), "{first}");
+        assert_eq!(read_fence(&text).return_point, Some(at(-35.0, 149.0)));
+    }
+
+    /// Two points the same are a closed loop of one, as the C#'s `Count > 1` has it.
+    #[test]
+    fn two_equal_points_close_on_one() {
+        let fence = read_fence("-35.0 149.0\n-35.1 149.1\n-35.1 149.1\n");
+        assert_eq!(fence.vertices, vec![at(-35.1, 149.1)]);
     }
 
     /// A fence with no vertices writes no closing line and reads back empty.

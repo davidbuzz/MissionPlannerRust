@@ -1,0 +1,44 @@
+# The flight screen's home marker is the vehicle's home (PLAN.md 13.4 row 13).
+#
+# FlightData draws home as part of the vehicle's mission overlay: once MAV.wps holds anything, a
+# GMapMarkerWP "H" at cs.HomeLocation - HOME_POSITION - or at cs.PlannedHomeLocation while that is
+# 0,0 (GCSViews/FlightData.cs:3808-3845). So there is no marker until the mission has been read,
+# and then it is the vehicle's home. SITL's is the Canberra Model Aircraft Club, -35.36 149.16.
+#
+# Its own Mission Planner data directory, with a planned home in Brisbane. ArduPilot sends
+# HOME_POSITION when its home is set, which may be before this application connected; if it has
+# not been heard, the planner's boxes still hold Brisbane when the mission is read, and reading it
+# asks "Reset Home to loaded coords" (processToScreen, FlightPlanner.cs:5640-5660) - Enter is Yes,
+# and the boxes, the planned home and so the fallback all become the vehicle's item 0. Either way
+# the flight map's home ends up the vehicle's.
+#
+# Needs SITL (a copter): tools/gui-test.sh tests/gui/plan-home-marker-vehicle.gui -- tcp:127.0.0.1:5760
+
+env XDG_DATA_HOME $WORK
+env MP_PLAN_DIR $WORK
+setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-27.5097083</TXT_homelat><TXT_homelng>153.0153894</TXT_homelng><TXT_homealt>8.10</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
+
+screen fly
+window 1600x1200
+settle 8
+
+# A vehicle, but its mission not read: no home on the flight map.
+expect vehicle.connected true
+expect map.home none
+
+# Read the mission from the planning screen.
+click tab-plan
+settle 1
+click plan-read
+settle 6
+key Return
+settle 1
+expect plan.prompt none
+expect plan.home ~ -35.36
+expect map.home ~ -35.36
+
+# The flight map now draws the vehicle's home.
+click tab-fly
+settle 1
+expect map.home ~ -35.36
+expect map.home ~ 149.16

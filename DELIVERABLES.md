@@ -270,8 +270,11 @@ KML/DXF/shapefile import-export, geotagging hand-off.
   (40 done, 69 missing, 12 plumbing; `docs/coverage/flightplanner.md`), and the map's right-click
   menu is the C#'s in its order, with 22 entries ported from their handlers and proved by one
   `tests/gui/plan-*.gui` script each. Home is the C#'s: the Home Location boxes, not a row,
-  written first on Write and Save, kept apart on read (PLAN.md §13.4 row 12; **44 done, 65
-  missing**).
+  written first on Write and Save, kept apart on read, drawn as GMap's green "H" pin; the
+  panel's WP Radius, Loiter Radius, Default Alt, frame and Spline boxes with the C#'s typing
+  rules and the parameters set after Write; Geo-Fence's return location, file load and save,
+  and Clear (PLAN.md §13.4 rows 12, 13; **55 done, 54 missing**). Geo-Fence Upload and Download
+  stay dimmed: the C# uploads with `FENCE_POINT`, which ArduPilot 4.8 removed.
 - **Tests:** `tests/mission_bytes.rs` loads a corpus of real `.waypoints`/`.mission` files, round-trips them and asserts **byte identity**; `tests/grid_vectors.rs` survey-grid generation against golden outputs from the C# `Grid`/`Gridv2` for a matrix of polygon/angle/overlap/terrain inputs; `tests/kml_dxf.rs` import→export round-trip against fixture files; `tests/terrain.rs` altitude-following maths against golden vectors; `tests/sitl_upload.rs` uploads missions, fences and rally points to SITL and reads them back.
 
 ### D12. Configuration & tuning screens

@@ -1,0 +1,76 @@
+# Geo-Fence > Load from File and Save to File, the .fen format (PLAN.md 13.4, D11).
+#
+# loadFromFileToolStripMenuItem_Click reads a .fen: '#' lines skipped, the first data line the
+# return location, the rest the drawn polygon's corners with the closing repeat of the first taken
+# off (GCSViews/FlightPlanner.cs:4345-4412). saveToFileToolStripMenuItem_Click writes
+# "#saved by APM Planner <version>", the return location, then the drawn polygon - or the geofence
+# when nothing is drawn - and its first corner again (:5959-6021). Each dialog here is a name
+# typed into a prompt, the file in the plan directory, .fen added when it has none.
+#
+# A .fen laid out beforehand, as another Mission Planner would have saved it (less its header
+# line: this harness takes a '#' anywhere as a comment, and the reader skips the line anyway), is
+# loaded; saved under another name; the polygon cleared; and the saved file loaded back - the same
+# corners and the same return location, so what Save wrote is what Load reads.
+
+env XDG_DATA_HOME $WORK
+env MP_PLAN_DIR $WORK
+setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
+setup printf '%s\n' '-35.3625 149.166' '-35.364 149.164' '-35.364 149.168' '-35.361 149.168' '-35.364 149.164' > "$WORK/seeded.fen"
+
+screen plan
+window 1600x1200
+settle 4
+
+expect survey.points 0
+expect fence.return none
+
+# Load from File: the dialog, then the file's return location and three corners.
+click map@0.30x0.70:right
+click menu-geoFence
+click menu-loadFromFile
+expect plan.prompt Open
+# The filter the C# gives the dialog, "Fence (*.fen)"; matched on its first word, as this
+# harness would glob the star.
+expect plan.prompt.text ~ Fence
+type seeded
+key Return
+expect plan.prompt none
+expect status ~ loaded a fence
+expect survey.points 3
+expect fence.return -35.3625,149.166
+
+# Save to File, under another name.
+click map@0.30x0.70:right
+click menu-geoFence
+click menu-saveToFile
+expect plan.prompt Save As
+type copy
+key Return
+expect plan.prompt none
+expect status ~ saved the fence
+
+# The polygon cleared, the return location moved; loading the saved file brings both back.
+click map@0.30x0.70:right
+click menu-polygon
+click menu-clearPolygon2
+expect survey.points 0
+click map@0.20x0.20:right
+click menu-geoFence
+click menu-setReturnLocation
+click map@0.30x0.70:right
+click menu-geoFence
+click menu-loadFromFile
+type copy.fen
+key Return
+expect status ~ loaded a fence
+expect survey.points 3
+expect fence.return -35.3625,149.166
+
+# A name that is not there reads nothing and changes nothing.
+click map@0.30x0.70:right
+click menu-geoFence
+click menu-loadFromFile
+type missing
+key Return
+expect status ~ could not read
+expect survey.points 3

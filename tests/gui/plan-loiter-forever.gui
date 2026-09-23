@@ -1,5 +1,6 @@
 # Loiter > Forever: loiterForeverToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:4763). A
-# LOITER_UNLIM (17) at the click, at the default altitude, with no question asked.
+# LOITER_UNLIM (17) at the click, at Default Alt (TXT_DefaultAlt, 100 as the .resx has it and as
+# setfromMap takes it, FlightPlanner.cs:4758, 1164-1208), with no question asked.
 
 screen plan
 window 1600x1200
@@ -14,5 +15,6 @@ expect plan.prompt none
 expect mission.items 1
 expect mission.last.command 17
 expect mission.last.position true
-expect mission.last.alt 50
+expect plan.defaultalt 100
+expect mission.last.alt 100
 expect mission.last.p1 0

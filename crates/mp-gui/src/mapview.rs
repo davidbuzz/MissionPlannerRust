@@ -20,8 +20,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use gpui::{
-    App, Bounds, Corners, Hsla, Path, PathBuilder, Pixels, Point, RenderImage, Window, canvas,
-    point, px, quad, rgb, size,
+    App, Bounds, Corners, Hsla, Path, PathBuilder, Pixels, Point, RenderImage, SharedString,
+    TextAlign, TextRun, Window, canvas, point, px, quad, rgb, size,
 };
 use mp_mission::MissionItem;
 use mp_tiles::store::{TileAnswer, TileStore};
@@ -59,8 +59,15 @@ pub struct MapViewport {
     path: Vec<WebMercator>,
     /// Where the vehicle is now, and which way it is pointing.
     vehicle: Option<(WebMercator, Bearing)>,
-    /// The home point, once the vehicle reports one.
+    /// Home, where the screen showing the map puts it: the planner's Home Location boxes, or the
+    /// vehicle's home on the flight screen. Drawn as the C#'s "H" marker.
     home: Option<WebMercator>,
+    /// The same, as it was given, for the facts a test reads.
+    home_position: Option<LatLon>,
+    /// Whether the last paint drew the home marker's "H", which the C# shows only past zoom 16.
+    home_label_drawn: bool,
+    /// The geofence's return location, `geofenceoverlay.Markers[0]`: a red marker.
+    fence_return: Option<WebMercator>,
     /// The planned mission, projected once when it is set rather than every frame.
     mission: Vec<(WebMercator, u16)>,
     /// The survey area being drawn, if any.
@@ -197,6 +204,9 @@ impl MapViewport {
             path: Vec::new(),
             vehicle: None,
             home: None,
+            home_position: None,
+            home_label_drawn: false,
+            fence_return: None,
             mission: Vec::new(),
             polygon: Vec::new(),
             fence: Vec::new(),
@@ -304,9 +314,45 @@ impl MapViewport {
         }
     }
 
-    /// Records the home point.
-    pub fn set_home(&mut self, home: LatLon) {
-        self.home = Some(home.to_web_mercator());
+    /// Puts home where the screen showing the map says it is, or takes it away.
+    ///
+    /// Set every frame, because the two screens that share this map draw different homes: the
+    /// planner's is the Home Location boxes (`writeKML`'s `home`), the flight screen's the
+    /// vehicle's `cs.HomeLocation` - see `plan::planner_map_home` and `plan::flight_map_home`.
+    /// `// C#: GCSViews/FlightPlanner.cs:1400-1415; GCSViews/FlightData.cs:3808-3845`
+    pub fn set_home(&mut self, home: Option<LatLon>) {
+        self.home = home.map(LatLon::to_web_mercator);
+        self.home_position = home;
+    }
+
+    /// Where home is drawn, as it was given.
+    #[must_use]
+    pub const fn home(&self) -> Option<LatLon> {
+        self.home_position
+    }
+
+    /// Whether the last paint drew the "H" on the home marker.
+    #[must_use]
+    pub const fn home_label_drawn(&self) -> bool {
+        self.home_label_drawn
+    }
+
+    /// Puts the geofence's return location on the map, or takes it away: the red marker that the
+    /// Geo-Fence drop-down's Set Return Location, Load from File and Download leave on
+    /// `geofenceoverlay`.
+    /// `// C#: GCSViews/FlightPlanner.cs:6663-6670, 4368-4381, 881-889`
+    pub fn set_fence_return(&mut self, position: Option<LatLon>) {
+        self.fence_return = position.map(LatLon::to_web_mercator);
+    }
+
+    /// Clear Track: the flown route goes, and the map starts recording it again from the
+    /// vehicle's next position. (The C# also empties `MAV.camerapoints`, which this map does not
+    /// hold.) The flight screen's Actions grid has no Clear Track button yet; this is what it
+    /// will call.
+    /// `// C#: GCSViews/FlightData.cs:1101-1107`
+    #[allow(dead_code)] // the flight screen's Actions grid has no Clear Track button to call it yet
+    pub fn clear_track(&mut self) {
+        self.path.clear();
     }
 
     /// Replaces the planned mission shown on the map.
@@ -578,21 +624,24 @@ impl MapViewport {
         // is still drawn; the view simply does not chase it.
         const FAR_AWAY: f64 = 0.02; // about 2% of the world, several hundred kilometres
 
-        let anchor = self.vehicle.as_ref().map(|(p, _)| *p).or(self.home);
+        let near = |p: &WebMercator, a: &WebMercator| {
+            (p.x - a.x).abs() < FAR_AWAY && (p.y - a.y).abs() < FAR_AWAY
+        };
+        // Home by the same rule, measured from the vehicle. The planner's home is whatever the
+        // Home Location boxes hold, and at start-up that is the home Mission Planner saved last,
+        // which can be a city away from the vehicle that has just connected.
+        let home = self
+            .home
+            .filter(|home| self.vehicle.as_ref().is_none_or(|(v, _)| near(home, v)));
+        let anchor = self.vehicle.as_ref().map(|(p, _)| *p).or(home);
         let mission_in_view: Vec<&WebMercator> = self
             .mission
             .iter()
             .map(|(p, _)| p)
-            .filter(|p| {
-                anchor.is_none_or(|a| (p.x - a.x).abs() < FAR_AWAY && (p.y - a.y).abs() < FAR_AWAY)
-            })
+            .filter(|p| anchor.is_none_or(|a| near(p, &a)))
             .collect();
 
-        let mut points = self
-            .path
-            .iter()
-            .chain(self.home.iter())
-            .chain(mission_in_view);
+        let mut points = self.path.iter().chain(home.iter()).chain(mission_in_view);
         let first = points.next().or(self.vehicle.as_ref().map(|(p, _)| p))?;
         let (mut min_x, mut max_x) = (first.x, first.x);
         let (mut min_y, mut max_y) = (first.y, first.y);
@@ -828,11 +877,145 @@ fn paint_graticule(origin: Point<Pixels>, w: f32, h: f32, window: &mut Window) {
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Markers drawn as the C# draws them: GMap's Google-style pins.
+// ---------------------------------------------------------------------------------------------
+
+/// Where a `GMarkerGoogle` pin's head is, from its point. The pin bitmaps are 32 x 32 and drawn
+/// with `Offset = (-Size.Width / 2 + 1, -Size.Height + 1)`, so their pixel (15, 31) sits on the
+/// position; the head is the circle about pixel (15, 9), nine and a half pixels round.
+/// `// C#: ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/Markers/GMarkerGoogle.cs:111-127; ExtLibs/GMap.NET.Drawing/Resources/green.png`
+pub const PIN_HEAD: (f32, f32) = (0.0, -22.0);
+/// The head's radius, to the outside of its dark edge.
+pub const PIN_RADIUS: f32 = 9.5;
+/// Where the taper from the head ends and the three-pixel stalk to the point begins.
+pub const PIN_STALK: f32 = -6.0;
+/// The pins' dark edge, as the bitmaps have it.
+const PIN_EDGE: u32 = 0x04_00_01;
+/// `GMarkerGoogleType.green`'s fill, which `GMapMarkerWP` - home and every waypoint - is drawn in.
+pub const PIN_GREEN: u32 = 0x00_e1_3c;
+/// `GMarkerGoogleType.red`'s fill: the geofence's return location.
+pub const PIN_RED: u32 = 0xfc_63_55;
+/// Where `GMapMarkerWP` writes its label, from the point: `LocalPosition + (10, 3)`, and
+/// `LocalPosition` is the point less the offset above, (-15, -31).
+/// `// C#: ExtLibs/Maps/GMapMarkerWP.cs:52-59`
+pub const PIN_LABEL: (f32, f32) = (-5.0, -28.0);
+/// `SystemFonts.DefaultFont`, 8.25 pt, in pixels at 96 dpi.
+const PIN_LABEL_SIZE: f32 = 11.0;
+
+/// A pin's outline, with its point at the origin: from the end of the taper at `tip` up round
+/// the head of `radius` and back. The two straight sides are tangents to the head.
+#[must_use]
+pub fn pin_outline(radius: f32, tip: f32) -> Vec<(f32, f32)> {
+    const SEGMENTS: u16 = 24;
+    let (cx, cy) = PIN_HEAD;
+    let distance = tip - cy;
+    if distance <= radius {
+        return Vec::new();
+    }
+    // Straight down is a quarter turn on a screen, where y grows downward. The tangent points are
+    // either side of it, and the arc between them goes the long way round, over the top.
+    let down = std::f32::consts::FRAC_PI_2;
+    let half = (radius / distance).acos();
+    let start = down + half;
+    let sweep = std::f32::consts::TAU - 2.0 * half;
+    let mut points = vec![(cx, tip)];
+    for step in 0..=SEGMENTS {
+        let angle = start + sweep * f32::from(step) / f32::from(SEGMENTS);
+        points.push((cx + radius * angle.cos(), cy + radius * angle.sin()));
+    }
+    points
+}
+
+/// GMap's zoom level for a view `span` world units across `width` pixels: a map is
+/// `256 * 2^zoom` pixels round at `zoom`.
+#[must_use]
+pub fn gmap_zoom(span: f64, width: f32) -> f64 {
+    if span <= 0.0 || width <= 0.0 {
+        return 0.0;
+    }
+    (f64::from(width) / (256.0 * span)).log2()
+}
+
+/// Whether `GMapMarkerWP` writes its label at this zoom: `Overlay.Control.Zoom > 16 ||
+/// IsMouseOver`. (The map here does not track the pointer over a marker, so it is the zoom.)
+/// `// C#: ExtLibs/Maps/GMapMarkerWP.cs:58-59`
+#[must_use]
+pub fn pin_label_shown(zoom: f64) -> bool {
+    zoom > 16.0
+}
+
+/// Paints a pin with its point at `at`, and its label if it has one.
+fn paint_pin(window: &mut Window, cx: &mut App, at: Point<Pixels>, fill: u32, label: Option<&str>) {
+    let polygon = |window: &mut Window, points: &[(f32, f32)], colour: u32| {
+        let mut builder = PathBuilder::fill();
+        let mut points = points.iter();
+        let Some((x, y)) = points.next() else {
+            return;
+        };
+        builder.move_to(point(at.x + px(*x), at.y + px(*y)));
+        for (x, y) in points {
+            builder.line_to(point(at.x + px(*x), at.y + px(*y)));
+        }
+        builder.close();
+        if let Ok(path) = builder.build() {
+            window.paint_path(path, Hsla::from(rgb(colour)));
+        }
+    };
+    // The edge, the stalk, then the fill inside the edge.
+    polygon(window, &pin_outline(PIN_RADIUS, PIN_STALK + 1.0), PIN_EDGE);
+    window.paint_quad(quad(
+        Bounds {
+            origin: point(at.x - px(1.5), at.y + px(PIN_STALK)),
+            size: size(px(3.0), px(-PIN_STALK)),
+        },
+        Corners::default(),
+        rgb(PIN_EDGE),
+        gpui::Edges::default(),
+        rgb(PIN_EDGE),
+        gpui::BorderStyle::default(),
+    ));
+    polygon(
+        window,
+        &pin_outline(PIN_RADIUS - 1.5, PIN_STALK - 0.5),
+        fill,
+    );
+
+    let Some(text) = label else {
+        return;
+    };
+    let run = TextRun {
+        len: text.len(),
+        font: window.text_style().font(),
+        color: Hsla::from(rgb(0x00_00_00)),
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+    };
+    let line = window.text_system().shape_line(
+        SharedString::from(text.to_owned()),
+        px(PIN_LABEL_SIZE),
+        &[run],
+        None,
+    );
+    let origin = point(at.x + px(PIN_LABEL.0), at.y + px(PIN_LABEL.1));
+    // A label that will not paint leaves the pin without it, which is what the C# shows below
+    // zoom 16 anyway.
+    let _ = line.paint(
+        origin,
+        px(PIN_LABEL_SIZE * 1.2),
+        TextAlign::Left,
+        None,
+        window,
+        cx,
+    );
+}
+
 /// Paints the live map: the vehicle's real flight path, home, and the vehicle itself.
 ///
 /// Screen mapping goes through Web Mercator, the projection tile servers use, so the same
 /// transform will place raster tiles when D8 adds them.
-fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window) {
+fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
     let started = Instant::now();
     let origin = bounds.origin;
     let w = f32::from(bounds.size.width);
@@ -840,6 +1023,8 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
 
     map.last_viewport = (w, h);
     map.last_origin = (f32::from(origin.x), f32::from(origin.y));
+    // Until the home marker is drawn below, it is not - including by a paint with nothing to frame.
+    map.home_label_drawn = false;
     // A view the user chose wins over the automatic fit; that is what makes panning stick.
     let fitted = map.camera.map_or_else(
         || map.view_box(),
@@ -1051,20 +1236,20 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
         ));
     }
 
-    // Home.
+    // The geofence's return location: a red pin, `GMarkerGoogleType.red`, whose "GeoFence Return"
+    // is a tooltip the C# shows on hover.
+    // `// C#: GCSViews/FlightPlanner.cs:6663-6670`
+    if let Some(position) = map.fence_return {
+        paint_pin(window, cx, to_screen(position), PIN_RED, None);
+    }
+
+    // Home: `WPOverlay.CreateOverlay` adds it as `GMapMarkerWP(point, "H")`, a green pin with an
+    // "H" written on its head once the map is zoomed in past 16.
+    // `// C#: ExtLibs/Maps/WPOverlay.cs:44-50, 385-398; ExtLibs/Maps/GMapMarkerWP.cs:20-59`
     if let Some(home) = map.home {
-        let at = to_screen(home);
-        window.paint_quad(quad(
-            Bounds {
-                origin: point(at.x - px(5.0), at.y - px(5.0)),
-                size: size(px(10.0), px(10.0)),
-            },
-            gpui::Corners::all(px(2.0)),
-            rgb(0x58_a6_ff),
-            gpui::Edges::all(px(1.0)),
-            rgb(0xe6_ed_f3),
-            gpui::BorderStyle::Solid,
-        ));
+        let shown = pin_label_shown(gmap_zoom(vw, w));
+        paint_pin(window, cx, to_screen(home), PIN_GREEN, shown.then_some("H"));
+        map.home_label_drawn = shown;
     }
 
     // The vehicle, as an arrow pointing where it is heading. Bearing is clockwise from north and
@@ -1268,7 +1453,7 @@ pub fn map_element(map: std::rc::Rc<std::cell::RefCell<MapViewport>>) -> impl gp
     use gpui::Styled as _;
     canvas(
         |_bounds, _window, _cx| (),
-        move |bounds: Bounds<Pixels>, (), window: &mut Window, _cx: &mut App| {
+        move |bounds: Bounds<Pixels>, (), window: &mut Window, cx: &mut App| {
             let mut map = map.borrow_mut();
             // The synthetic 100k-point scene is for benchmarking the renderer and nothing else;
             // MP_MAP_DEMO=1 selects it. It used to be what you saw whenever there was no fix,
@@ -1278,7 +1463,7 @@ pub fn map_element(map: std::rc::Rc<std::cell::RefCell<MapViewport>>) -> impl gp
             if std::env::var("MP_MAP_DEMO").is_ok() {
                 paint_map(&mut map, bounds, window);
             } else {
-                paint_live(&mut map, bounds, window);
+                paint_live(&mut map, bounds, window, cx);
             }
         },
     )
@@ -1621,5 +1806,145 @@ mod tests {
         // Better than a coordinate derived from a view that has never been shown.
         let map = viewport();
         assert!(map.position_at(400.0, 300.0).is_none());
+    }
+
+    fn canberra() -> LatLon {
+        LatLon::new(-35.363, 149.165).expect("valid")
+    }
+
+    /// Home is where the screen put it, and goes when the screen says there is none: the two
+    /// screens sharing this map draw different homes, so a stale one must not linger.
+    #[test]
+    fn home_is_drawn_where_it_was_set_and_goes_when_taken_away() {
+        let mut map = viewport();
+        assert_eq!(map.home(), None);
+        map.set_home(Some(canberra()));
+        assert_eq!(map.home(), Some(canberra()));
+        assert!(
+            map.home.is_some(),
+            "the projected home is what the painter draws"
+        );
+        map.set_home(None);
+        assert_eq!(map.home(), None);
+        assert!(map.home.is_none());
+    }
+
+    /// A home with nothing else on the map is enough to frame it, so the planner can be clicked
+    /// before any vehicle has connected.
+    #[test]
+    fn a_home_alone_frames_the_map() {
+        let mut map = viewport();
+        assert!(map.view_box().is_none());
+        map.set_home(Some(canberra()));
+        let (x, y, width, _) = map.view_box().expect("a view");
+        let home = canberra().to_web_mercator();
+        assert!(home.x > x && home.x < x + width, "home should be in view");
+        assert!(home.y > y && home.y < y + width, "home should be in view");
+    }
+
+    /// The home the planner saved last time can be a city away from the vehicle that has just
+    /// connected. It is drawn, but framing both would shrink them to two dots.
+    #[test]
+    fn a_home_far_from_the_vehicle_is_not_framed() {
+        let mut map = viewport();
+        map.observe(canberra(), Bearing(mp_units::Degrees(0.0)));
+        let (_, _, alone, _) = map.view_box().expect("a view");
+        let brisbane = LatLon::new(-27.5097, 153.0154).expect("valid");
+        map.set_home(Some(brisbane));
+        let (_, _, with_home, _) = map.view_box().expect("a view");
+        assert!(
+            (with_home - alone).abs() < 1e-12,
+            "a far home moved the fit: {alone} -> {with_home}"
+        );
+        // Near the vehicle, it is framed.
+        map.set_home(Some(LatLon::new(-35.36, 149.17).expect("valid")));
+        let (_, _, near, _) = map.view_box().expect("a view");
+        assert!(near > alone, "a near home should widen the fit");
+    }
+
+    /// Clear Track empties the flown route and keeps the vehicle; the route starts again from its
+    /// next position. `// C#: GCSViews/FlightData.cs:1101-1107`
+    #[test]
+    fn clear_track_empties_the_flown_path_and_recording_starts_again() {
+        let mut map = viewport();
+        let heading = Bearing(mp_units::Degrees(0.0));
+        map.observe(canberra(), heading);
+        map.observe(LatLon::new(-35.364, 149.166).expect("valid"), heading);
+        map.observe(LatLon::new(-35.365, 149.167).expect("valid"), heading);
+        assert_eq!(map.path_len(), 3);
+
+        map.clear_track();
+        assert_eq!(map.path_len(), 0);
+        assert!(map.has_fix(), "the vehicle is still where it was");
+
+        map.observe(LatLon::new(-35.366, 149.168).expect("valid"), heading);
+        assert_eq!(
+            map.path_len(),
+            1,
+            "the next position starts the route again"
+        );
+    }
+
+    /// The return location is a marker of its own, set and taken away.
+    #[test]
+    fn the_fence_return_marker_is_set_and_taken_away() {
+        let mut map = viewport();
+        map.set_fence_return(Some(canberra()));
+        assert!(map.fence_return.is_some());
+        map.set_fence_return(None);
+        assert!(map.fence_return.is_none());
+    }
+
+    /// The pin is GMap's 32 x 32 bitmap: its point at the position, its head at the top of the
+    /// bitmap, nineteen pixels across at the widest - pixels 6 to 24 of `green.png`.
+    #[test]
+    fn a_pin_has_the_shape_of_the_gmap_bitmap() {
+        let outline = pin_outline(PIN_RADIUS, PIN_STALK + 1.0);
+        assert!(outline.len() > 20);
+        assert_eq!(
+            outline.first(),
+            Some(&(0.0, -5.0)),
+            "the taper ends over the point"
+        );
+        let top = outline.iter().map(|p| p.1).fold(f32::MAX, f32::min);
+        let left = outline.iter().map(|p| p.0).fold(f32::MAX, f32::min);
+        let right = outline.iter().map(|p| p.0).fold(f32::MIN, f32::max);
+        let bottom = outline.iter().map(|p| p.1).fold(f32::MIN, f32::max);
+        // The bitmap's row 0 is 31 pixels above the point.
+        assert!((top - -31.5).abs() < 0.1, "top {top}");
+        assert!((right - left - 19.0).abs() < 0.1, "width {}", right - left);
+        assert!(bottom <= 0.0, "nothing below the point");
+        // The fill sits inside the edge.
+        let fill = pin_outline(PIN_RADIUS - 1.5, PIN_STALK - 0.5);
+        let fill_top = fill.iter().map(|p| p.1).fold(f32::MAX, f32::min);
+        assert!(fill_top > top);
+        // A head that does not fit above its tip has no outline rather than a folded one.
+        assert!(pin_outline(10.0, PIN_HEAD.1 + 5.0).is_empty());
+    }
+
+    /// `GMapMarkerWP` writes its label only past zoom 16, in GMap's zoom, where a 256 pixel tile
+    /// covers the world at zero.
+    #[test]
+    fn the_home_label_shows_past_zoom_16_only() {
+        let width = 1024.0_f32;
+        let at_zoom = |zoom: i32| f64::from(width) / (256.0 * 2_f64.powi(zoom));
+        assert!((gmap_zoom(at_zoom(16), width) - 16.0).abs() < 1e-9);
+        assert!(pin_label_shown(gmap_zoom(at_zoom(17), width)));
+        assert!(
+            !pin_label_shown(gmap_zoom(at_zoom(16), width)),
+            "16 is not past 16"
+        );
+        assert!(!pin_label_shown(gmap_zoom(at_zoom(12), width)));
+        assert!(!pin_label_shown(gmap_zoom(0.0, width)), "no view, no label");
+    }
+
+    /// The label is where the C# writes it: ten pixels in and three down from the bitmap's corner,
+    /// which is on the head.
+    #[test]
+    fn the_label_is_written_on_the_head() {
+        assert_eq!(PIN_LABEL, (-15.0 + 10.0, -31.0 + 3.0));
+        let (x, y) = PIN_LABEL;
+        assert!((x - PIN_HEAD.0).abs() < PIN_RADIUS);
+        assert!((y - PIN_HEAD.1).abs() < PIN_RADIUS);
     }
 }

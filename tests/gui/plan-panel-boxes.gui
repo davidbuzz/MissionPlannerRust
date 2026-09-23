@@ -1,0 +1,72 @@
+# The planning panel's boxes: WP Radius, Loiter Radius, Default Alt and Spline, at the head of the
+# waypoint table where the .resx puts them over the Commands grid (panelWaypoints).
+#
+# config(false) fills the three boxes from config.xml when the screen loads (FlightPlanner.cs:
+# 2592-2612). Each box's KeyPress keeps only what float.TryParse takes of one character - digits,
+# and a '.' in WP Radius, a '-' in Loiter Radius (:6984-6990, 7054-7064, 7075-7085) - and its Leave
+# puts a number back when it is left holding none: Default Alt 100, Loiter Radius 45, an empty WP
+# Radius the saved one (:6992-6999, 7066-7073, 7087-7106). Clicking the map takes the focus, as
+# the map does in the C#, so it is a Leave. A new waypoint takes Default Alt (setfromMap,
+# :1164-1208), and with Spline ticked a click adds a SPLINE_WAYPOINT, 82 (:588-592, 2059-2062).
+# With no vehicle setWPParams finds no loiter radius parameter and disables that box (:6726-6745).
+#
+# Self-contained: its own Mission Planner data directory, holding the boxes config(true) saved
+# last time and a home, so the map has something to show without a vehicle.
+
+env XDG_DATA_HOME $WORK
+env MP_PLAN_DIR $WORK
+setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt><TXT_WPRad>12</TXT_WPRad><TXT_loiterrad>80</TXT_loiterrad><TXT_DefaultAlt>120</TXT_DefaultAlt></Config>' > "$WORK/Mission Planner/config.xml"
+
+screen plan
+window 1600x1200
+settle 4
+
+# What config.xml saved; no vehicle, so no loiter radius to take.
+expect plan.wprad 12
+expect plan.loiterrad 80
+expect plan.defaultalt 120
+expect plan.loiterrad.enabled false
+expect plan.spline false
+
+# A click on the map is a waypoint at Default Alt.
+click map@0.45x0.40
+expect mission.items 1
+expect mission.last.alt 120
+expect mission.last.command 16
+
+# Default Alt takes digits and nothing else.
+click plan-defaultalt
+key ctrl+u
+type 7a.5
+settle 1
+expect plan.defaultalt 75
+
+# Left empty, by a click on the map, it is 100 again - and the click's waypoint is at 100.
+key ctrl+u
+settle 1
+click map@0.55x0.45
+expect plan.defaultalt 100
+expect mission.items 2
+expect mission.last.alt 100
+
+# WP Radius takes a point; emptied and left for another box, it is the saved radius again.
+click plan-wprad
+key ctrl+u
+type 2.5x
+settle 1
+expect plan.wprad 2.5
+key ctrl+u
+settle 1
+click plan-defaultalt
+expect plan.wprad 12
+
+# Spline: the next click is a spline waypoint, and unticked the one after is not.
+click plan-spline
+expect plan.spline true
+click map@0.60x0.55
+expect mission.items 3
+expect mission.last.command 82
+click plan-spline
+expect plan.spline false
+click map@0.35x0.55
+expect mission.last.command 16

@@ -9,8 +9,8 @@ window 1600x1200
 settle 4
 
 expect coverage.flightplanner.total 121
-expect coverage.flightplanner.done 44
-expect coverage.flightplanner.missing 65
+expect coverage.flightplanner.done 55
+expect coverage.flightplanner.missing 54
 expect plan.menu closed
 
 # The right button opens the menu, as MainMap.ContextMenuStrip does, and adds nothing.

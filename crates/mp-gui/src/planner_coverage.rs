@@ -78,42 +78,42 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "KeyPress",
         "TXT_WPRad_KeyPress",
         "WP Radius",
-        Missing,
+        Done("plan-wprad"),
     ),
     row(
         "TXT_WPRad",
         "Leave",
         "TXT_WPRad_Leave",
         "WP Radius",
-        Missing,
+        Done("fn panel_leave"),
     ),
     row(
         "TXT_DefaultAlt",
         "KeyPress",
         "TXT_DefaultAlt_KeyPress",
         "Default Alt",
-        Missing,
+        Done("plan-defaultalt"),
     ),
     row(
         "TXT_DefaultAlt",
         "Leave",
         "TXT_DefaultAlt_Leave",
         "Default Alt",
-        Missing,
+        Done("fn panel_leave"),
     ),
     row(
         "TXT_loiterrad",
         "KeyPress",
         "TXT_loiterrad_KeyPress",
         "Loiter Radius",
-        Missing,
+        Done("plan-loiterrad"),
     ),
     row(
         "TXT_loiterrad",
         "Leave",
         "TXT_loiterrad_Leave",
         "Loiter Radius",
-        Missing,
+        Done("fn panel_leave"),
     ),
     row(
         "but_writewpfast",
@@ -204,7 +204,7 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "CheckedChanged",
         "CHK_splinedefault_CheckedChanged",
         "Spline",
-        Missing,
+        Done("plan-spline"),
     ),
     row(
         "Commands",
@@ -515,28 +515,28 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "Click",
         "setReturnLocationToolStripMenuItem_Click",
         "Set Return Location",
-        Missing,
+        Done("menu-setReturnLocation"),
     ),
     row(
         "loadFromFileToolStripMenuItem",
         "Click",
         "loadFromFileToolStripMenuItem_Click",
         "Load from File",
-        Missing,
+        Done("menu-loadFromFile"),
     ),
     row(
         "saveToFileToolStripMenuItem",
         "Click",
         "saveToFileToolStripMenuItem_Click",
         "Save to File",
-        Missing,
+        Done("menu-saveToFile"),
     ),
     row(
         "clearToolStripMenuItem",
         "Click",
         "clearToolStripMenuItem_Click",
         "Clear",
-        Missing,
+        Done("menu-clear"),
     ),
     row(
         "setRallyPointToolStripMenuItem",
@@ -1304,7 +1304,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (44, 0, 65, 12, 0)
+            (55, 0, 54, 12, 0)
         );
     }
 }

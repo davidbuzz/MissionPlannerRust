@@ -151,6 +151,17 @@ impl AltitudeFrame {
         }
     }
 
+    /// What `CMB_altmode` lists it as: the enum's name (`EnumTranslator.EnumToList<altmode>()`).
+    /// `// C#: GCSViews/FlightPlanner.cs:234-236, 416-421`
+    #[must_use]
+    pub const fn combo_text(self) -> &'static str {
+        match self {
+            Self::Relative => "Relative",
+            Self::Absolute => "Absolute",
+            Self::Terrain => "Terrain",
+        }
+    }
+
     /// The name the settings file stores, and reads back.
     #[must_use]
     pub const fn key(self) -> &'static str {
@@ -194,8 +205,6 @@ pub fn frame_label(frame: u8) -> String {
         |known| known.label().to_owned(),
     )
 }
-/// Altitude given to a waypoint created by clicking the map, in metres above home.
-pub const DEFAULT_ALTITUDE: f64 = 50.0;
 /// `MAV_CMD_NAV_RETURN_TO_LAUNCH`, which takes no position.
 const CMD_RTL: u16 = 20;
 /// `MAV_CMD_NAV_LAND` with no coordinates: land where the vehicle is.
@@ -267,6 +276,11 @@ pub struct Plan {
     draw_mode: DrawMode,
     /// The survey area, in the order its vertices were drawn.
     polygon: Vec<LatLon>,
+    /// Whether the survey area is off the map while its corners are kept: Geo-Fence > Clear
+    /// empties `drawnpolygonsoverlay` and leaves `drawnpolygon.Points`, and the corners come back
+    /// the next time the polygon is redrawn - by an edit of it.
+    /// `// C#: GCSViews/FlightPlanner.cs:2150-2151, 1014-1030`
+    polygon_hidden: bool,
     /// How the survey should be flown.
     survey: GridOptions,
     /// The geofence the vehicle must stay inside, in the order its vertices were drawn.
@@ -285,6 +299,17 @@ pub struct Plan {
     /// `cs.PlannedHomeLocation`: the home the operator set, which the boxes show when the vehicle
     /// has not sent one. Every edit of a box that parses writes through to it.
     planned_home: Home,
+    /// The boxes at the head of `panelWaypoints`: WP Radius, Loiter Radius, Default Alt, Spline.
+    panel: PanelBoxes,
+    /// The geofence's return location, `geofenceoverlay.Markers[0]`, once one is set.
+    fence_return: Option<LatLon>,
+    /// A row of parameter sets under way - Write's radii, Geo-Fence > Clear's three - one at a
+    /// time as the C# makes them.
+    writes: Option<ParamWrites>,
+    /// What the last row of sets did, parameter by parameter, for the facts.
+    write_results: String,
+    /// A Write whose upload has not finished, and the sets that follow it.
+    pending_write: Option<PendingWrite>,
 }
 
 /// Which of the three Home Location boxes.
@@ -362,6 +387,201 @@ impl Default for HomeBoxes {
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// The planning panel's boxes: WP Radius, Loiter Radius, Default Alt, and the Spline check box.
+// ---------------------------------------------------------------------------------------------
+
+/// One of the three number boxes at the head of `panelWaypoints`, left to right as the `.resx`
+/// places them, each with its label above it.
+/// `// C#: GCSViews/FlightPlanner.resx (LBL_WPRad, TXT_WPRad, label5, TXT_loiterrad, LBL_defalutalt, TXT_DefaultAlt)`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PanelBox {
+    /// `TXT_WPRad`: how near a waypoint counts as reaching it.
+    WpRadius,
+    /// `TXT_loiterrad`: the loiter circle's radius.
+    LoiterRadius,
+    /// `TXT_DefaultAlt`: the altitude a new row gets.
+    DefaultAlt,
+}
+
+impl PanelBox {
+    /// The three, left to right.
+    pub const ALL: [Self; 3] = [Self::WpRadius, Self::LoiterRadius, Self::DefaultAlt];
+
+    /// The label above the box: `LBL_WPRad`, `label5` and `LBL_defalutalt` in the `.resx`.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::WpRadius => "WP Radius",
+            Self::LoiterRadius => "Loiter Radius",
+            Self::DefaultAlt => "Default Alt",
+        }
+    }
+
+    /// The id a test script clicks it by.
+    #[must_use]
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::WpRadius => "plan-wprad",
+            Self::LoiterRadius => "plan-loiterrad",
+            Self::DefaultAlt => "plan-defaultalt",
+        }
+    }
+
+    /// The box's `Text` in the `.resx`, what it holds before anything is loaded.
+    /// `// C#: GCSViews/FlightPlanner.resx (TXT_WPRad.Text, TXT_loiterrad.Text, TXT_DefaultAlt.Text)`
+    #[must_use]
+    pub const fn resx_text(self) -> &'static str {
+        match self {
+            Self::WpRadius => "30",
+            Self::LoiterRadius => "45",
+            Self::DefaultAlt => "100",
+        }
+    }
+
+    /// The key `config(true)` saves the box under in `config.xml`, and `config(false)` reads.
+    /// `// C#: GCSViews/FlightPlanner.cs:2581-2585, 2598-2608`
+    #[must_use]
+    pub const fn config_key(self) -> &'static str {
+        match self {
+            Self::WpRadius => "TXT_WPRad",
+            Self::LoiterRadius => "TXT_loiterrad",
+            Self::DefaultAlt => "TXT_DefaultAlt",
+        }
+    }
+
+    /// `TXT_*_KeyPress`: whether a typed character goes in. The three handlers let backspace
+    /// through and otherwise keep a character only when `float.TryParse` takes it on its own,
+    /// which is a digit; WP Radius lets a `.` through as well ("Allow floating values to be
+    /// set") and Loiter Radius a `-`, for a loiter the other way round.
+    /// `// C#: GCSViews/FlightPlanner.cs:6984-6990, 7054-7064, 7075-7085`
+    #[must_use]
+    pub fn accepts(self, character: char) -> bool {
+        if character.is_ascii_digit() {
+            return true;
+        }
+        match self {
+            Self::WpRadius => character == '.',
+            Self::LoiterRadius => character == '-',
+            Self::DefaultAlt => false,
+        }
+    }
+}
+
+/// The boxes' text, and what goes with them.
+#[derive(Debug)]
+pub struct PanelBoxes {
+    wp_radius: TextField,
+    loiter_radius: TextField,
+    default_alt: TextField,
+    /// `startupWPradius`: what an emptied WP Radius goes back to - the saved value, else "5.0".
+    /// `// C#: GCSViews/FlightPlanner.cs:118, 2600-2601`
+    startup_wp_radius: String,
+    /// `TXT_loiterrad.Enabled`, which `setWPParams` turns off unless the vehicle has a loiter
+    /// radius parameter.
+    loiter_enabled: bool,
+    /// `CHK_splinedefault.Checked`, the C#'s `splinemode`.
+    spline: bool,
+}
+
+impl PanelBoxes {
+    const fn get(&self, which: PanelBox) -> &TextField {
+        match which {
+            PanelBox::WpRadius => &self.wp_radius,
+            PanelBox::LoiterRadius => &self.loiter_radius,
+            PanelBox::DefaultAlt => &self.default_alt,
+        }
+    }
+
+    const fn get_mut(&mut self, which: PanelBox) -> &mut TextField {
+        match which {
+            PanelBox::WpRadius => &mut self.wp_radius,
+            PanelBox::LoiterRadius => &mut self.loiter_radius,
+            PanelBox::DefaultAlt => &mut self.default_alt,
+        }
+    }
+}
+
+impl Default for PanelBoxes {
+    /// As the `.resx` has them: 30, 45 and 100, Loiter Radius enabled, Spline clear.
+    fn default() -> Self {
+        let field = |which: PanelBox| {
+            let mut field = TextField::new("");
+            field.set(which.resx_text());
+            field
+        };
+        Self {
+            wp_radius: field(PanelBox::WpRadius),
+            loiter_radius: field(PanelBox::LoiterRadius),
+            default_alt: field(PanelBox::DefaultAlt),
+            startup_wp_radius: "5.0".to_owned(),
+            loiter_enabled: true,
+            spline: false,
+        }
+    }
+}
+
+/// `string.Format("{0:N2}", value)` in the invariant culture's shape: two decimals, the half
+/// rounded away from zero, and the thousands grouped with commas.
+///
+/// The .NET Framework formats a `double` from its fifteen significant digits and rounds that
+/// decimal, not the binary value: 2.345 is stored a hair below itself and is still "2.35".
+#[must_use]
+pub fn number_n2(value: f64) -> String {
+    let hundredths = hundredths_from_fifteen_digits(value.abs()).unwrap_or(0);
+    let (whole, fraction) = (hundredths / 100, hundredths % 100);
+    let digits = whole.to_string();
+    let mut grouped = String::new();
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index) % 3 == 0 {
+            grouped.push(',');
+        }
+        grouped.push(digit);
+    }
+    let sign = if value < 0.0 && hundredths > 0 {
+        "-"
+    } else {
+        ""
+    };
+    format!("{sign}{grouped}.{fraction:02}")
+}
+
+/// A non-negative number in hundredths, from its fifteen significant digits, the half rounded
+/// up. `None` for one too large to count.
+fn hundredths_from_fifteen_digits(value: f64) -> Option<u128> {
+    if !value.is_finite() || value == 0.0 {
+        return Some(0);
+    }
+    let scientific = format!("{value:.14e}");
+    let (mantissa, exponent) = scientific.split_once('e')?;
+    let exponent = exponent.parse::<i64>().ok()?;
+    let digits: Vec<u8> = mantissa
+        .bytes()
+        .filter(u8::is_ascii_digit)
+        .map(|digit| digit - b'0')
+        .collect();
+    // The digits kept are those down to the hundredths: the integer digits and two more.
+    let kept = exponent + 1 + 2;
+    let mut hundredths: u128 = 0;
+    for index in 0..kept.max(0) {
+        let digit = usize::try_from(index)
+            .ok()
+            .and_then(|index| digits.get(index))
+            .copied()
+            .unwrap_or(0);
+        hundredths = hundredths.checked_mul(10)?.checked_add(u128::from(digit))?;
+    }
+    let next = usize::try_from(kept)
+        .ok()
+        .and_then(|index| digits.get(index))
+        .copied()
+        .unwrap_or(0);
+    if next >= 5 {
+        hundredths = hundredths.checked_add(1)?;
+    }
+    Some(hundredths)
+}
+
 /// `double.ToString()`: the shortest text that reads back as the same number, which is what the
 /// C# puts in a box when it sets one from a number.
 #[must_use]
@@ -386,6 +606,269 @@ pub const HOME_INVALID: &str = "Your home location is invalid";
 pub const HOME_NEEDS_A_FIX: &str = "If you're at the field, connect to your APM and wait for GPS lock. Then click 'Home Location' link to set home to your location";
 /// `MAV_AUTOPILOT_ARDUPILOTMEGA`: the one autopilot `saveWPs` puts home in front for.
 pub const MAV_AUTOPILOT_ARDUPILOTMEGA: u8 = 3;
+/// What `setfromMap` says when Default Alt is not a whole number.
+/// `// C#: GCSViews/FlightPlanner.cs:1182-1186`
+pub const DEFAULT_ALT_INVALID: &str = "Your default alt is not valid";
+/// What `Activate` says when Default Alt is not a whole number, before putting 50 in it.
+/// `// C#: GCSViews/FlightPlanner.cs:329-337`
+pub const DEFAULT_ALT_FIX: &str = "Please fix your default alt value";
+/// `FormatException`'s message, which is what `float.Parse` on a WP Radius it cannot read ends
+/// the write's "Setting params" with.
+pub const FORMAT_EXCEPTION: &str = "Input string was not in a correct format.";
+/// What Geo-Fence > Save to File says without a return location.
+/// `// C#: GCSViews/FlightPlanner.cs:5961-5965`
+pub const SET_RETURN_LOCATION: &str = "Please set a return location";
+/// What Geo-Fence > Save to File says when writing throws.
+/// `// C#: GCSViews/FlightPlanner.cs:6012-6016`
+pub const FENCE_FILE_FAILED: &str = "Failed to write fence file";
+
+/// `float.TryParse`, for the Leave handlers: surrounding white space, a sign, a point and an
+/// exponent, and nothing a `float` cannot hold - .NET Framework refuses an overflow, where Rust
+/// would give infinity.
+#[must_use]
+pub fn float_parses(text: &str) -> bool {
+    text.trim().parse::<f32>().is_ok_and(f32::is_finite)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Parameter sets in a row, as the C# makes them: one `setParam` after another, each waiting for
+// the vehicle's echo with the link's retries.
+// ---------------------------------------------------------------------------------------------
+
+/// What a set that goes unanswered does to the rest of its row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OnTimeout {
+    /// The C# throws, or catches and shows a message and returns: the row stops there, and this
+    /// is said.
+    Stop {
+        /// The message box's caption.
+        title: &'static str,
+        /// Its text.
+        text: String,
+    },
+    /// The C# catches it and carries on.
+    CarryOn,
+}
+
+/// One `setParam` in a row of them.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParamStep {
+    /// The names to try, in order: the first the vehicle has takes the value, as
+    /// `setParam(string[] paramnames, double value)` does.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1609-1620`
+    pub names: Vec<&'static str>,
+    /// The value.
+    pub value: f64,
+    /// What a timeout does.
+    pub on_timeout: OnTimeout,
+}
+
+impl ParamStep {
+    /// A set of one parameter.
+    #[must_use]
+    pub fn one(name: &'static str, value: f64, on_timeout: OnTimeout) -> Self {
+        Self {
+            names: vec![name],
+            value,
+            on_timeout,
+        }
+    }
+}
+
+/// What a row of sets goes on to do once every set in it has been made.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AfterWrites {
+    /// Nothing: Write's radii.
+    Nothing,
+    /// Geo-Fence > Clear's clearing of the map.
+    ClearFence,
+}
+
+/// How a row of sets ended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WritesEnd {
+    /// Every set was made, or passed over as the C# passes it over.
+    Done,
+    /// A set went unanswered where the C# stops: this is said.
+    Stopped {
+        /// The caption.
+        title: &'static str,
+        /// The text.
+        text: String,
+    },
+}
+
+/// A row of `setParam`s, made one at a time: the next is sent only once the last has been
+/// answered, as the C#'s blocking calls make them.
+///
+/// `setParamAsync` returns false without sending for a parameter the vehicle has not listed,
+/// true without sending for one that already holds the value, and throws `TimeoutException` when
+/// its retries go unanswered (`MAVLinkInterface.cs:1636-1765`); the link's `set_param` ends in
+/// the same three ways (`mp_link::requests`), and this decides what each does to the row.
+#[derive(Debug, Clone)]
+pub struct ParamWrites {
+    steps: std::collections::VecDeque<ParamStep>,
+    /// The step being made, and which of its names.
+    current: Option<(ParamStep, usize)>,
+    /// The request carrying the set in flight.
+    request: Option<mp_link::RequestId>,
+    /// What each set did: `NAME=value` with the value the vehicle echoed, `NAME=value unchanged`
+    /// for one it already held, `NAME=unknown` for one it does not have, `NAME=timeout`.
+    results: Vec<String>,
+    after: AfterWrites,
+    end: Option<WritesEnd>,
+}
+
+impl ParamWrites {
+    /// A row of sets, the first ready to send.
+    #[must_use]
+    pub fn new(steps: Vec<ParamStep>, after: AfterWrites) -> Self {
+        let mut writes = Self {
+            steps: steps.into(),
+            current: None,
+            request: None,
+            results: Vec::new(),
+            after,
+            end: None,
+        };
+        writes.advance();
+        writes
+    }
+
+    fn advance(&mut self) {
+        if self.current.is_some() || self.end.is_some() {
+            return;
+        }
+        match self.steps.pop_front() {
+            Some(step) => self.current = Some((step, 0)),
+            None => self.end = Some(WritesEnd::Done),
+        }
+    }
+
+    /// The set to put on the wire now: none while one is out, or once the row has ended.
+    #[must_use]
+    pub fn due(&self) -> Option<(&'static str, f64)> {
+        if self.request.is_some() || self.end.is_some() {
+            return None;
+        }
+        let (step, index) = self.current.as_ref()?;
+        Some((*step.names.get(*index)?, step.value))
+    }
+
+    /// The set that is due has gone out, carried by `request`.
+    pub const fn sent(&mut self, request: mp_link::RequestId) {
+        self.request = Some(request);
+    }
+
+    /// The request carrying the set in flight.
+    #[must_use]
+    pub const fn in_flight(&self) -> Option<mp_link::RequestId> {
+        self.request
+    }
+
+    /// How the set in flight ended. `None` is a set that could not be sent - no vehicle, or no
+    /// link - which the C#, finding no such parameter in an empty list, treats as one the vehicle
+    /// does not have.
+    pub fn answer(&mut self, outcome: Option<mp_link::requests::RequestOutcome>) {
+        use mp_link::requests::RequestOutcome;
+        self.request = None;
+        let Some((step, index)) = self.current.take() else {
+            return;
+        };
+        let name = step.names.get(index).copied().unwrap_or("");
+        match outcome {
+            Some(RequestOutcome::Accepted { value }) => {
+                let value = value.map_or(step.value, |value| value.as_f64());
+                self.results.push(format!("{name}={value}"));
+            }
+            Some(RequestOutcome::Unchanged) => {
+                self.results
+                    .push(format!("{name}={} unchanged", step.value));
+            }
+            None | Some(RequestOutcome::UnknownParameter) => {
+                self.results.push(format!("{name}=unknown"));
+                if index + 1 < step.names.len() {
+                    self.current = Some((step, index + 1));
+                    return;
+                }
+            }
+            Some(RequestOutcome::TimedOut) => {
+                self.results.push(format!("{name}=timeout"));
+                if let OnTimeout::Stop { title, text } = step.on_timeout {
+                    self.steps.clear();
+                    self.end = Some(WritesEnd::Stopped { title, text });
+                    return;
+                }
+            }
+            // A command's answers, which a set does not get.
+            Some(RequestOutcome::Rejected(_) | RequestOutcome::Sent) => {
+                self.results.push(format!("{name}=sent"));
+            }
+        }
+        self.advance();
+    }
+
+    /// How the row ended, once it has.
+    #[must_use]
+    pub const fn end(&self) -> Option<&WritesEnd> {
+        self.end.as_ref()
+    }
+
+    /// What it goes on to do.
+    #[must_use]
+    pub const fn after(&self) -> AfterWrites {
+        self.after
+    }
+
+    /// What each set did, in order.
+    #[must_use]
+    pub fn results(&self) -> String {
+        self.results.join(",")
+    }
+}
+
+/// A Write waiting for its upload, and the sets `saveWPs` makes once it is done.
+#[derive(Debug, Clone)]
+pub struct PendingWrite {
+    /// What was sent, to know the transfer that is finishing is this one.
+    items: Vec<MissionItem>,
+    /// The sets, or why `float.Parse` refused WP Radius.
+    steps: Result<Vec<ParamStep>, &'static str>,
+    /// Whether the transfer has been seen under way since.
+    seen_running: bool,
+}
+
+impl PendingWrite {
+    /// A write of `items`, to be followed by `steps`.
+    #[must_use]
+    pub const fn new(items: Vec<MissionItem>, steps: Result<Vec<ParamStep>, &'static str>) -> Self {
+        Self {
+            items,
+            steps,
+            seen_running: false,
+        }
+    }
+
+    /// Whether the upload has ended, and how: `None` while it runs, `Some(true)` once the vehicle
+    /// has taken it. The link reports the last transfer it ran, which just after Write can still
+    /// be an earlier one; the upload is this one once it has been seen running, or once it holds
+    /// exactly what was sent.
+    pub fn upload_ended(
+        &mut self,
+        transfer: Option<&crate::telemetry::TransferStatus>,
+        transferred: &[MissionItem],
+    ) -> Option<bool> {
+        let status = transfer?;
+        if !status.finished {
+            self.seen_running = true;
+            return None;
+        }
+        if !self.seen_running && transferred != self.items.as_slice() {
+            return None;
+        }
+        Some(!status.failed)
+    }
+}
 
 /// Where the plan on screen came from.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -638,6 +1121,294 @@ impl Plan {
         mp_mission::waypoints::write_planned(self.home(), &self.items)
     }
 
+    /// `cs.PlannedHomeLocation`, which the flight screen's map falls back on.
+    #[must_use]
+    pub const fn planned_home_location(&self) -> Home {
+        self.planned_home
+    }
+
+    // ---- The panel boxes: `TXT_WPRad`, `TXT_loiterrad`, `TXT_DefaultAlt`, `CHK_splinedefault` ----
+
+    /// One of the panel boxes.
+    #[must_use]
+    pub fn panel_field(&self, which: PanelBox) -> &TextField {
+        self.panel.get(which)
+    }
+
+    /// What one of the panel boxes holds.
+    #[must_use]
+    pub fn panel_text(&self, which: PanelBox) -> &str {
+        self.panel.get(which).value()
+    }
+
+    /// Sets a panel box's text, as the C# does when it loads one or reads a parameter into it.
+    pub fn set_panel_text(&mut self, which: PanelBox, text: impl Into<String>) {
+        self.panel.get_mut(which).set(text);
+    }
+
+    /// A key pressed in a panel box: its `KeyPress` first, which throws away a character the box
+    /// does not take (`e.Handled = true`), then the box. A disabled Loiter Radius takes nothing.
+    /// `// C#: GCSViews/FlightPlanner.cs:6984-6990, 7054-7064, 7075-7085`
+    pub fn panel_key(
+        &mut self,
+        which: PanelBox,
+        event: &gpui::KeyDownEvent,
+    ) -> crate::textfield::KeyOutcome {
+        if which == PanelBox::LoiterRadius && !self.panel.loiter_enabled {
+            return crate::textfield::KeyOutcome::Ignored;
+        }
+        let keystroke = &event.keystroke;
+        let chord = keystroke.modifiers.control || keystroke.modifiers.platform;
+        if !chord
+            && let Some(text) = keystroke.key_char.as_ref()
+            && !text.chars().any(char::is_control)
+            && !text.chars().all(|character| which.accepts(character))
+        {
+            return crate::textfield::KeyOutcome::Ignored;
+        }
+        self.panel.get_mut(which).key(event)
+    }
+
+    /// `TXT_*_Leave`: a box left holding what `float.TryParse` refuses goes back to a number -
+    /// Default Alt to "100", Loiter Radius to "45", and WP Radius, only when it is empty, to
+    /// `startupWPradius`. (WP Radius's also redraws the waypoints' radius circles, which this
+    /// map does not draw.)
+    /// `// C#: GCSViews/FlightPlanner.cs:6992-6999, 7066-7073, 7087-7106`
+    pub fn panel_leave(&mut self, which: PanelBox) {
+        if float_parses(self.panel_text(which)) {
+            return;
+        }
+        match which {
+            PanelBox::DefaultAlt => self.set_panel_text(which, "100"),
+            PanelBox::LoiterRadius => self.set_panel_text(which, "45"),
+            PanelBox::WpRadius => {
+                if self.panel_text(which).is_empty() {
+                    let startup = self.panel.startup_wp_radius.clone();
+                    self.set_panel_text(which, startup);
+                }
+            }
+        }
+    }
+
+    /// `config(false)`, when the planning screen loads: each box takes what `config.xml` saved
+    /// for it, and WP Radius's saved value becomes the one an emptied box goes back to.
+    /// `// C#: GCSViews/FlightPlanner.cs:2592-2612, 3428`
+    pub fn apply_panel_config(&mut self, config: Option<&mp_settings::Config>) {
+        let Some(config) = config else {
+            return;
+        };
+        for which in PanelBox::ALL {
+            let Some(text) = config.get(which.config_key()) else {
+                continue;
+            };
+            self.set_panel_text(which, text);
+            if which == PanelBox::WpRadius {
+                text.clone_into(&mut self.panel.startup_wp_radius);
+            }
+        }
+    }
+
+    /// `setWPParams`, run when the planning screen is shown and when a mission has been read: WP
+    /// Radius from `WP_RADIUS`, then `WPNAV_RADIUS` in centimetres, then `WP_RADIUS_M` (4.7 and
+    /// later) - the last of them the vehicle has wins - each written `{0:N2}`; Loiter Radius from
+    /// `LOITER_RADIUS`, or else `WP_LOITER_RAD`, and disabled when the vehicle has neither.
+    /// Distances are metres here, so `multiplierdist` is 1.
+    /// `// C#: GCSViews/FlightPlanner.cs:6695-6750`
+    pub fn set_wp_params(&mut self, parameters: &[(String, f64)]) {
+        let param = |name: &str| {
+            parameters
+                .iter()
+                .find(|(held, _)| held == name)
+                .map(|(_, value)| *value)
+        };
+        if let Some(value) = param("WP_RADIUS") {
+            self.set_panel_text(PanelBox::WpRadius, number_n2(value));
+        }
+        if let Some(value) = param("WPNAV_RADIUS") {
+            self.set_panel_text(PanelBox::WpRadius, number_n2(value / 100.0));
+        }
+        if let Some(value) = param("WP_RADIUS_M") {
+            self.set_panel_text(PanelBox::WpRadius, number_n2(value));
+        }
+        self.panel.loiter_enabled = false;
+        if let Some(value) = param("LOITER_RADIUS").or_else(|| param("WP_LOITER_RAD")) {
+            self.set_panel_text(
+                PanelBox::LoiterRadius,
+                mp_params::param_file::invariant_double(value),
+            );
+            self.panel.loiter_enabled = true;
+        }
+    }
+
+    /// `TXT_loiterrad.Enabled`.
+    #[must_use]
+    pub const fn loiter_enabled(&self) -> bool {
+        self.panel.loiter_enabled
+    }
+
+    /// `CHK_splinedefault.Checked`.
+    #[must_use]
+    pub const fn spline(&self) -> bool {
+        self.panel.spline
+    }
+
+    /// `CHK_splinedefault_CheckedChanged`: `splinemode = CHK_splinedefault.Checked`, which makes
+    /// a click on the map add a spline waypoint.
+    /// `// C#: GCSViews/FlightPlanner.cs:2059-2062, 588-592`
+    pub fn set_spline(&mut self, on: bool) {
+        self.panel.spline = on;
+    }
+
+    /// `Activate`'s check of Default Alt: one `int.Parse` refuses is replaced with 50, and "Please
+    /// fix your default alt value" is said.
+    /// `// C#: GCSViews/FlightPlanner.cs:329-337`
+    pub fn check_default_alt(&mut self) -> Option<&'static str> {
+        if self
+            .panel_text(PanelBox::DefaultAlt)
+            .trim()
+            .parse::<i32>()
+            .is_ok()
+        {
+            return None;
+        }
+        self.set_panel_text(PanelBox::DefaultAlt, "50");
+        Some(DEFAULT_ALT_FIX)
+    }
+
+    /// The altitude `setfromMap` gives a new row, from Default Alt and the altitude its handler
+    /// passes - 0 from a click on the map, the vehicle's for At Current Position, Default Alt's
+    /// own for the menu's entries. Default Alt must be a whole number, or "Your default alt is
+    /// not valid"; the passed altitude wins over it unless that is 0; and a Default Alt of 0
+    /// gives 50, or 15 on a copter, whatever was passed.
+    ///
+    /// Two things before that are not ported: a Home Location altitude that does not parse asks
+    /// for one ("You must have a home altitude"), and a Default Alt of 0 asks for another
+    /// ("Default Altitude", offering 100) - the row takes what the C# gives an answer of 0. And
+    /// where the C# has already added the row when it refuses, nothing is added here.
+    /// `// C#: GCSViews/FlightPlanner.cs:1164-1208`
+    pub fn new_row_altitude(&self, passed: f64, copter: bool) -> Result<f64, &'static str> {
+        let default = self
+            .panel_text(PanelBox::DefaultAlt)
+            .trim()
+            .parse::<i32>()
+            .map_err(|_| DEFAULT_ALT_INVALID)?;
+        if default == 0 {
+            return Ok(if copter { 15.0 } else { 50.0 });
+        }
+        Ok(if passed == 0.0 {
+            f64::from(default)
+        } else {
+            passed
+        })
+    }
+
+    /// What `saveWPs` sets once the mission is written, "Setting params": the radius into all
+    /// three names ArduPilot has used for it - "use brute force, for all three possible params" -
+    /// `WPNAV_RADIUS` in centimetres, then Loiter Radius into `LOITER_RAD`, else `WP_LOITER_RAD`.
+    /// `float.Parse` refusing WP Radius ends the write there; a failed loiter set is caught.
+    /// `// C#: GCSViews/FlightPlanner.cs:6296-6317`
+    pub fn wp_param_steps(&self) -> Result<Vec<ParamStep>, &'static str> {
+        let radius = self
+            .panel_text(PanelBox::WpRadius)
+            .trim()
+            .parse::<f32>()
+            .map_err(|_| FORMAT_EXCEPTION)?;
+        let radius = f64::from(radius);
+        let stop = |name: &'static str| OnTimeout::Stop {
+            title: ERROR,
+            text: format!("Timeout on read - setParam {name}"),
+        };
+        let mut steps = vec![
+            ParamStep::one("WP_RADIUS", radius, stop("WP_RADIUS")),
+            ParamStep::one("WP_RADIUS_M", radius, stop("WP_RADIUS_M")),
+            ParamStep::one("WPNAV_RADIUS", radius * 100.0, stop("WPNAV_RADIUS")),
+        ];
+        // `try { port.setParam(new[] {"LOITER_RAD", "WP_LOITER_RAD"}, ...) } catch { }`: a
+        // loiter radius that does not parse, or a set that times out, is passed over.
+        if let Ok(loiter) = self
+            .panel_text(PanelBox::LoiterRadius)
+            .trim()
+            .parse::<f32>()
+        {
+            steps.push(ParamStep {
+                names: vec!["LOITER_RAD", "WP_LOITER_RAD"],
+                value: f64::from(loiter),
+                on_timeout: OnTimeout::CarryOn,
+            });
+        }
+        Ok(steps)
+    }
+
+    // ---- The Geo-Fence drop-down's state ----
+
+    /// The geofence's return location, `geofenceoverlay.Markers[0]`.
+    #[must_use]
+    pub const fn fence_return(&self) -> Option<LatLon> {
+        self.fence_return
+    }
+
+    /// Geo-Fence > Set Return Location: the red marker, moved to where the menu was opened.
+    /// `// C#: GCSViews/FlightPlanner.cs:6663-6670`
+    pub fn set_fence_return(&mut self, position: LatLon) {
+        self.fence_return = Some(position);
+    }
+
+    /// Geo-Fence > Load from File, once the file is read: the drawn polygon is emptied and takes
+    /// the file's corners, and the file's first line, if it has one, moves the return marker.
+    /// The C#'s `drawnpolygon` is this screen's survey area, and it is what Upload would send.
+    /// `// C#: GCSViews/FlightPlanner.cs:4345-4412`
+    pub fn adopt_fence_file(&mut self, file: mp_mission::fence_file::FenceFile) {
+        self.polygon = file.vertices;
+        self.polygon_hidden = false;
+        self.survey_error = None;
+        if let Some(position) = file.return_point {
+            self.fence_return = Some(position);
+        }
+    }
+
+    /// What Geo-Fence > Save to File writes: the return location, then the drawn polygon, or the
+    /// geofence when nothing is drawn, closed by its first corner again. With neither, the C#
+    /// throws on the closing corner and says "Failed to write fence file"; with no return
+    /// location it has said "Please set a return location" before asking for a file.
+    /// `// C#: GCSViews/FlightPlanner.cs:5959-6021`
+    pub fn fence_file(&self) -> Result<mp_mission::fence_file::FenceFile, &'static str> {
+        let return_point = self.fence_return.ok_or(SET_RETURN_LOCATION)?;
+        let vertices = if self.polygon.is_empty() {
+            self.fence.clone()
+        } else {
+            self.polygon.clone()
+        };
+        if vertices.is_empty() {
+            return Err(FENCE_FILE_FAILED);
+        }
+        Ok(mp_mission::fence_file::FenceFile {
+            return_point: Some(return_point),
+            vertices,
+        })
+    }
+
+    /// The end of Geo-Fence > Clear, once its three sets are done: the geofence goes, and the drawn
+    /// polygon goes off the map - its corners stay, and come back with the next one drawn, as
+    /// `drawnpolygon.Points` does. The return marker stays: the C# clears the overlay's polygons,
+    /// not its markers.
+    /// `// C#: GCSViews/FlightPlanner.cs:2150-2155`
+    pub fn clear_geofence(&mut self) {
+        self.clear_fence();
+        self.hide_polygon();
+    }
+
+    /// The row of parameter sets under way, if one is.
+    #[must_use]
+    pub const fn writes(&self) -> Option<&ParamWrites> {
+        self.writes.as_ref()
+    }
+
+    /// What the last row of sets did, parameter by parameter.
+    #[must_use]
+    pub fn write_results(&self) -> &str {
+        &self.write_results
+    }
+
     /// Appends a waypoint at a position.
     ///
     /// Sequence numbers are reassigned from scratch rather than incremented, because a mission
@@ -792,6 +1563,7 @@ impl Plan {
         self.origin = Origin::Empty;
         self.selected = None;
         self.polygon.clear();
+        self.polygon_hidden = false;
         self.survey_error = None;
         self.fence.clear();
         self.fence_error = None;
@@ -968,21 +1740,40 @@ impl Plan {
         &self.polygon
     }
 
+    /// The survey area as the map shows it: its corners, or none while Geo-Fence > Clear has
+    /// taken it off the map.
+    #[must_use]
+    pub fn shown_polygon(&self) -> &[LatLon] {
+        if self.polygon_hidden {
+            &[]
+        } else {
+            &self.polygon
+        }
+    }
+
+    /// Takes the survey area off the map and keeps its corners: `drawnpolygonsoverlay` cleared.
+    pub const fn hide_polygon(&mut self) {
+        self.polygon_hidden = true;
+    }
+
     /// Adds a vertex to the survey area.
     pub fn add_area_vertex(&mut self, position: LatLon) {
         self.polygon.push(position);
+        self.polygon_hidden = false;
         self.survey_error = None;
     }
 
     /// Removes the last vertex, which is the undo an operator reaches for while drawing.
     pub fn undo_area_vertex(&mut self) {
         self.polygon.pop();
+        self.polygon_hidden = false;
         self.survey_error = None;
     }
 
     /// Discards the survey area, leaving the mission alone.
     pub fn clear_area(&mut self) {
         self.polygon.clear();
+        self.polygon_hidden = false;
         self.survey_error = None;
     }
 
@@ -1053,23 +1844,6 @@ impl Plan {
     /// Numbers the rows 1..n, as the grid's headers read, so the sequence has no gaps.
     fn renumber(&mut self) {
         mp_mission::rows::number_rows(&mut self.items);
-    }
-
-    /// The altitude a new item gets: the stand-in for `TXT_DefaultAlt`.
-    ///
-    /// Mission Planner takes it from a box on the planning screen (`FlightPlanner.cs:6873`), which
-    /// this screen does not have. A new item copies the last item that has a position, which is
-    /// what an operator gets from that box anyway - set once, inherited by everything after - and
-    /// falls back to [`DEFAULT_ALTITUDE`]. Items without a position are skipped because their
-    /// altitude field is zero or means something else, and the C# never hands out zero:
-    /// `if (ans == 0) cell.Value = 50;` (`FlightPlanner.cs:1197`).
-    #[must_use]
-    pub fn default_altitude(&self) -> f64 {
-        self.items
-            .iter()
-            .rev()
-            .find(|item| matches!(item.position(), Ok(Some(_))))
-            .map_or(DEFAULT_ALTITUDE, |item| item.z)
     }
 
     /// `Commands.Rows.Add()` and the handler filling the new row: an item at the end.
@@ -1185,6 +1959,7 @@ impl Plan {
             return false;
         }
         self.polygon = mp_mission::rows::waypoint_positions(&self.items);
+        self.polygon_hidden = false;
         self.survey_error = None;
         true
     }
@@ -1196,7 +1971,15 @@ impl Plan {
     /// `// C#: GCSViews/FlightPlanner.cs:558-600`
     pub fn add_wp_to_map(&mut self, position: LatLon, altitude: f64, frame: AltitudeFrame) {
         match self.draw_mode {
-            DrawMode::Waypoints => self.add_waypoint_in(position, altitude, frame),
+            DrawMode::Waypoints => {
+                self.add_waypoint_in(position, altitude, frame);
+                // `else if (splinemode)`: a SPLINE_WAYPOINT where it would be a WAYPOINT.
+                if self.panel.spline
+                    && let Some(row) = self.items.last_mut()
+                {
+                    row.command = mp_mission::commands::SPLINE_WAYPOINT;
+                }
+            }
             DrawMode::Area => self.add_area_vertex(position),
             DrawMode::Fence => self.add_fence_vertex(position),
             DrawMode::Rally => self.add_rally_point(position),
@@ -1304,10 +2087,183 @@ fn row_controls(seq: u16, selected: bool, cx: &mut Context<MissionPlanner>) -> V
     ]
 }
 
+/// What the strip at the head of the waypoint table needs.
+pub struct StripState<'a> {
+    /// The panel boxes' focus.
+    pub focus: &'a PanelFocus,
+    /// Which of them has the keyboard.
+    pub focused: [bool; 3],
+    /// `CMB_altmode`.
+    pub frame: AltitudeFrame,
+    /// Whether the Spline check box shows: only on a copter.
+    pub spline_visible: bool,
+}
+
+/// A check box: a box, ticked or not, and its text.
+fn check_box(
+    id: &'static str,
+    text: &'static str,
+    checked: bool,
+    enabled: bool,
+) -> gpui::Stateful<gpui::Div> {
+    let colour = if enabled { theme::TEXT } else { theme::DIM };
+    crate::probe::measured(id, div())
+        .id(id)
+        .flex()
+        .items_center()
+        .gap_1()
+        .text_xs()
+        .text_color(rgb(colour))
+        .child(
+            div()
+                .w(px(11.0))
+                .h(px(11.0))
+                .rounded_sm()
+                .border_1()
+                .border_color(rgb(if enabled {
+                    theme::ACCENT
+                } else {
+                    theme::BORDER
+                }))
+                .bg(rgb(if checked {
+                    theme::ACCENT
+                } else {
+                    theme::ACTION
+                })),
+        )
+        .child(text)
+}
+
+/// The head of `panelWaypoints`, left to right as the `.resx` places it over the `Commands`
+/// grid: WP Radius, Loiter Radius and Default Alt with their labels above them, the altitude
+/// frame (`CMB_altmode`), and the Spline and MAVFTP check boxes. Verify Height and Add Below sit
+/// between them in the C# and are not here.
+///
+/// `CMB_altmode` is a combo box there and three buttons here, because gpui has no combo and three
+/// values do not need one; its handler keeps the choice for the next session as `FPaltmode` does.
+/// MAVFTP is drawn dimmed: this application has no MAVFTP mission transfer to switch to.
+/// `// C#: GCSViews/FlightPlanner.resx (panelWaypoints); GCSViews/FlightPlanner.cs:234-239, 2157-2168, 8403-8406`
+pub fn waypoint_strip(
+    plan: &Plan,
+    state: &StripState<'_>,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    let mut boxes = div().flex().items_end().gap_2();
+    for (index, which) in PanelBox::ALL.into_iter().enumerate() {
+        let (Some(handle), Some(focused)) = (
+            state.focus.handles.get(index),
+            state.focused.get(index).copied(),
+        ) else {
+            continue;
+        };
+        let enabled = which != PanelBox::LoiterRadius || plan.loiter_enabled();
+        let label = div()
+            .text_xs()
+            .text_color(rgb(theme::DIM))
+            .child(which.label());
+        let field = if enabled {
+            crate::textfield::text_field(
+                which.id(),
+                plan.panel_field(which),
+                handle,
+                focused,
+                px(64.0),
+                cx.listener(move |this, event: &gpui::KeyDownEvent, _window, cx| {
+                    if this.plan.panel_key(which, event) == crate::textfield::KeyOutcome::Ignored {
+                        return;
+                    }
+                    cx.notify();
+                }),
+            )
+            .into_any_element()
+        } else {
+            // `TXT_loiterrad.Enabled = false`: shown, greyed, and not typed into.
+            crate::probe::measured(which.id(), div())
+                .w(px(64.0))
+                .px_2()
+                .py_1()
+                .rounded_md()
+                .border_1()
+                .border_color(rgb(theme::BORDER))
+                .bg(rgb(theme::PANEL))
+                .text_sm()
+                .text_color(rgb(theme::DIM))
+                .child(plan.panel_text(which).to_owned())
+                .into_any_element()
+        };
+        boxes = boxes.child(div().flex().flex_col().gap_1().child(label).child(field));
+    }
+
+    let mut frames = div().flex().items_center().gap_1();
+    for choice in AltitudeFrame::all() {
+        let chosen = choice == state.frame;
+        frames = frames.child(
+            crate::probe::measured(format!("plan-frame-{}", choice.key()), div())
+                .id(gpui::SharedString::from(format!("frame-{}", choice.key())))
+                .px_2()
+                .py(px(1.0))
+                .rounded_sm()
+                .border_1()
+                .border_color(rgb(if chosen { theme::ACCENT } else { theme::BORDER }))
+                .text_xs()
+                .text_color(rgb(if chosen { theme::ACCENT } else { theme::TEXT }))
+                .cursor_pointer()
+                .hover(|style| style.bg(rgb(theme::BORDER)))
+                .child(choice.combo_text())
+                .on_click(cx.listener(move |this, _event, _window, cx| {
+                    this.set_altitude_frame(choice);
+                    cx.notify();
+                })),
+        );
+    }
+    // Said in words, because "Terrain" on a button is not a warning and this one needs to be: a
+    // vehicle without terrain data refuses the mission at upload, long after it was planned.
+    let frame_note = (state.frame == AltitudeFrame::Terrain).then(|| {
+        div()
+            .text_xs()
+            .text_color(rgb(theme::WARN))
+            .child("terrain frame needs TERRAIN_ENABLE and terrain data on the vehicle")
+    });
+
+    let spline = state.spline_visible.then(|| {
+        let checked = plan.spline();
+        check_box("plan-spline", "Spline", checked, true)
+            .cursor_pointer()
+            .on_click(cx.listener(move |this, _event, _window, cx| {
+                this.plan.set_spline(!checked);
+                cx.notify();
+            }))
+    });
+    let checks = div()
+        .flex()
+        .items_center()
+        .gap_3()
+        .children(spline)
+        .child(check_box("plan-mavftp", "MAVFTP", false, false));
+
+    div()
+        .flex()
+        .flex_col()
+        .gap_2()
+        .child(boxes)
+        .child(
+            div()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap_3()
+                .child(frames)
+                .child(checks),
+        )
+        .children(frame_note)
+        .into_any_element()
+}
+
 /// The waypoint table.
 pub fn items_panel(
     plan_items: &[MissionItem],
     selected: Option<u16>,
+    strip: AnyElement,
     cx: &mut Context<MissionPlanner>,
 ) -> impl IntoElement {
     let mut rows = div().flex().flex_col();
@@ -1411,6 +2367,8 @@ pub fn items_panel(
         div()
             .flex()
             .flex_col()
+            .gap_2()
+            .child(strip)
             .child(
                 div()
                     .id("plan-items")
@@ -2118,7 +3076,6 @@ pub fn actions_panel(
     origin: &Origin,
     view: &TelemetryView,
     name: &NameField<'_>,
-    frame: AltitudeFrame,
     tile_source: Option<&'static str>,
     cx: &mut Context<MissionPlanner>,
 ) -> impl IntoElement {
@@ -2126,37 +3083,6 @@ pub fn actions_panel(
     let name = name.field;
     let has_vehicle = view.vehicle.is_some();
     let has_items = !plan_items.is_empty();
-
-    // The altitude frame new waypoints get - `CMB_altmode` on the planning screen. A combo box
-    // there, three buttons here, because gpui has no combo and three values do not need one.
-    // `// C#: GCSViews/FlightPlanner.cs:234-239`
-    let mut frames = div().flex().items_center().gap_1().child(
-        div()
-            .text_xs()
-            .text_color(rgb(theme::DIM))
-            .child("new waypoints:"),
-    );
-    for choice in AltitudeFrame::all() {
-        let chosen = choice == frame;
-        frames = frames.child(
-            crate::probe::measured(format!("plan-frame-{}", choice.key()), div())
-                .id(gpui::SharedString::from(format!("frame-{}", choice.key())))
-                .px_2()
-                .py(px(1.0))
-                .rounded_sm()
-                .border_1()
-                .border_color(rgb(if chosen { theme::ACCENT } else { theme::BORDER }))
-                .text_xs()
-                .text_color(rgb(if chosen { theme::ACCENT } else { theme::TEXT }))
-                .cursor_pointer()
-                .hover(|style| style.bg(rgb(theme::BORDER)))
-                .child(choice.label())
-                .on_click(cx.listener(move |this, _event, _window, cx| {
-                    this.set_altitude_frame(choice);
-                    cx.notify();
-                })),
-        );
-    }
     // The map provider - `comboBoxMapType`, which lives on this screen in the C# and changes the
     // flight screen's map with it. Buttons rather than a combo, because gpui has no combo and
     // three providers do not need one.
@@ -2189,15 +3115,6 @@ pub fn actions_panel(
         );
     }
 
-    // Said in words, because "terrain" on a button is not a warning and this one needs to be:
-    // a vehicle without terrain data refuses the mission at upload, long after it was planned.
-    let frame_note = (frame == AltitudeFrame::Terrain).then(|| {
-        div()
-            .text_xs()
-            .text_color(rgb(theme::WARN))
-            .child("terrain frame needs TERRAIN_ENABLE and terrain data on the vehicle")
-    });
-
     let transfer_line = view.transfer.as_ref().map_or_else(
         || {
             div()
@@ -2226,8 +3143,6 @@ pub fn actions_panel(
             .flex()
             .flex_col()
             .gap_2()
-            .child(frames)
-            .children(frame_note)
             .child(providers)
             .child(
                 div()
@@ -2383,11 +3298,323 @@ pub fn planned_home_from_config(config: Option<&mp_settings::Config>) -> Home {
     home
 }
 
-/// `FlightPlanner.Activate`'s `updateHome()`, run each time the planning screen is shown.
-/// `// C#: GCSViews/FlightPlanner.cs:321, 1344-1349`
+/// `FlightPlanner.Activate`, run each time the planning screen is shown: `updateHome()`, then
+/// `setWPParams()`, then the check that Default Alt is a whole number.
+/// `// C#: GCSViews/FlightPlanner.cs:321-337, 1344-1349`
 pub fn activate(this: &mut MissionPlanner) {
-    let vehicle = vehicle_home(&this.telemetry.view());
-    this.plan.update_home_text(vehicle);
+    let view = this.telemetry.view();
+    this.plan.update_home_text(vehicle_home(&view));
+    this.plan.set_wp_params(&view.parameters);
+    if let Some(text) = this.plan.check_default_alt() {
+        this.plan_menus.say("", text);
+    }
+}
+
+/// `cs.firmware == Firmwares.ArduCopter2`, which it is until a vehicle says otherwise: what
+/// shows the Spline check box and makes a Default Alt of 0 give 15 rather than 50.
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:102; GCSViews/FlightPlanner.cs:313-317, 1207-1208`
+#[must_use]
+pub fn firmware_is_copter(view: &TelemetryView) -> bool {
+    view.state
+        .as_ref()
+        .and_then(|state| mp_vehicle::VehicleFamily::from_mav_type(state.vehicle_type))
+        .is_none_or(|family| family == mp_vehicle::VehicleFamily::Copter)
+}
+
+/// Where the planning map draws home: the Home Location boxes, once all three hold a number -
+/// `writeKML`'s `home`, which `WPOverlay.CreateOverlay` draws as the "H" marker. A box that is
+/// empty or does not parse leaves `new PointLatLngAlt()`, which is not drawn.
+///
+/// (With a box that is not empty and does not parse, `writeKML` also says "Invalid home
+/// location" - on every keystroke that leaves it so, a `-` typed first included. Not ported.)
+/// `// C#: GCSViews/FlightPlanner.cs:1400-1415; ExtLibs/Maps/WPOverlay.cs:44-50`
+#[must_use]
+pub fn planner_map_home(plan: &Plan) -> Option<LatLon> {
+    let home = plan.home()?;
+    LatLon::new(home.lat, home.lng).ok()
+}
+
+/// Where the flight map draws home: the vehicle's `cs.HomeLocation`, or `cs.PlannedHomeLocation`
+/// while that is 0,0, and only once the vehicle's mission is held (`MAV.wps.Count >= 1`), because
+/// the flight screen draws home as part of the vehicle's mission overlay.
+///
+/// Where both are 0,0 the C# draws the marker there, off the coast of Africa; this map frames
+/// the home it is given, so it is given none.
+/// `// C#: GCSViews/FlightData.cs:3808-3845`
+#[must_use]
+pub fn flight_map_home(
+    vehicle: Option<LatLon>,
+    mission_held: bool,
+    planned: Home,
+) -> Option<LatLon> {
+    if !mission_held {
+        return None;
+    }
+    if let Some(home) = vehicle.filter(|home| home.latitude() != 0.0 || home.longitude() != 0.0) {
+        return Some(home);
+    }
+    if planned.lat == 0.0 && planned.lng == 0.0 {
+        return None;
+    }
+    LatLon::new(planned.lat, planned.lng).ok()
+}
+
+/// The panel boxes' focus handles, and which had the keyboard at the last frame.
+pub struct PanelFocus {
+    /// One per box, in [`PanelBox::ALL`] order.
+    pub handles: [gpui::FocusHandle; 3],
+    was: [bool; 3],
+}
+
+impl PanelFocus {
+    /// Three handles, none focused.
+    pub fn new(cx: &mut Context<MissionPlanner>) -> Self {
+        Self {
+            handles: [cx.focus_handle(), cx.focus_handle(), cx.focus_handle()],
+            was: [false; 3],
+        }
+    }
+}
+
+/// `TXT_*_Leave` for a panel box that has the keyboard, and the keyboard taken from it: what a
+/// press on the map or on Write does in the C#, where both take the focus. gpui leaves the focus
+/// where it was when something that cannot take it is clicked, so it is taken here.
+pub fn leave_panel_boxes(
+    this: &mut MissionPlanner,
+    window: &mut gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) {
+    let mut left = false;
+    for (index, which) in PanelBox::ALL.into_iter().enumerate() {
+        if this
+            .plan_panel_focus
+            .handles
+            .get(index)
+            .is_some_and(|handle| handle.is_focused(window))
+        {
+            this.plan.panel_leave(which);
+            left = true;
+        }
+    }
+    if left {
+        window.blur(cx);
+    }
+}
+
+/// `Leave` for a panel box that has lost the keyboard some other way since the last frame - to
+/// another box, say.
+pub fn track_panel_focus(this: &mut MissionPlanner, window: &gpui::Window) {
+    for (index, which) in PanelBox::ALL.into_iter().enumerate() {
+        let (Some(handle), Some(was)) = (
+            this.plan_panel_focus.handles.get(index),
+            this.plan_panel_focus.was.get(index).copied(),
+        ) else {
+            continue;
+        };
+        let now = handle.is_focused(window);
+        if was && !now {
+            this.plan.panel_leave(which);
+        }
+        if let Some(slot) = this.plan_panel_focus.was.get_mut(index) {
+            *slot = now;
+        }
+    }
+}
+
+/// A click on the map that adds something: `AddWPToMap(lat, lng, 0)`, the altitude from Default
+/// Alt as `setfromMap` takes it for a waypoint - or "Your default alt is not valid", and nothing.
+/// `// C#: GCSViews/FlightPlanner.cs:558-600, 7743`
+pub fn map_click(
+    this: &mut MissionPlanner,
+    position: LatLon,
+    window: &mut gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) {
+    let altitude = if this.plan.draw_mode() == DrawMode::Waypoints {
+        let copter = firmware_is_copter(&this.telemetry.view());
+        match this.plan.new_row_altitude(0.0, copter) {
+            Ok(altitude) => altitude,
+            Err(why) => {
+                this.plan_menus.say("", why);
+                this.plan_prompt_focus.focus(window, cx);
+                return;
+            }
+        }
+    } else {
+        0.0
+    };
+    this.plan
+        .add_wp_to_map(position, altitude, this.altitude_frame);
+}
+
+/// Geo-Fence > Clear: `FENCE_ENABLE`, `FENCE_ACTION` and `FENCE_TOTAL` set to 0, one after
+/// another, stopping at "Failed to set ..." when one goes unanswered; then the geofence cleared
+/// from the map. A parameter the vehicle does not have is passed over, as `setParam` returns
+/// false for it rather than throwing.
+/// `// C#: GCSViews/FlightPlanner.cs:2112-2155`
+fn start_fence_clear(this: &mut MissionPlanner) {
+    // One row at a time, as the C#'s blocking calls allow.
+    if this.plan.writes.is_some() {
+        return;
+    }
+    let step = |name: &'static str| {
+        ParamStep::one(
+            name,
+            0.0,
+            OnTimeout::Stop {
+                title: "",
+                text: format!("Failed to set {name}"),
+            },
+        )
+    };
+    this.plan.writes = Some(ParamWrites::new(
+        vec![
+            step("FENCE_ENABLE"),
+            step("FENCE_ACTION"),
+            step("FENCE_TOTAL"),
+        ],
+        AfterWrites::ClearFence,
+    ));
+}
+
+/// Moves the rows of parameter sets on, each frame, as far as they go without waiting: a Write
+/// whose upload has finished starts its sets, a set that has been answered lets the next one go,
+/// and a finished row does what follows it.
+pub fn drive_writes(
+    this: &mut MissionPlanner,
+    view: &TelemetryView,
+    window: &mut gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) {
+    if let Some(pending) = this.plan.pending_write.as_mut() {
+        match pending.upload_ended(view.transfer.as_ref(), &view.mission) {
+            None => {}
+            Some(false) => this.plan.pending_write = None,
+            Some(true) => {
+                let steps = this
+                    .plan
+                    .pending_write
+                    .take()
+                    .map_or(Ok(Vec::new()), |pending| pending.steps);
+                match steps {
+                    Ok(steps) if this.plan.writes.is_none() => {
+                        this.plan.writes = Some(ParamWrites::new(steps, AfterWrites::Nothing));
+                    }
+                    Ok(_) => {}
+                    Err(why) => {
+                        this.plan_menus.say(ERROR, why);
+                        this.plan_prompt_focus.focus(window, cx);
+                    }
+                }
+            }
+        }
+    }
+
+    loop {
+        let Some(writes) = this.plan.writes.as_mut() else {
+            return;
+        };
+        if let Some(request) = writes.in_flight() {
+            match this.telemetry.request(request) {
+                Some(request) => match request.outcome() {
+                    Some(outcome) => writes.answer(Some(outcome)),
+                    None => return,
+                },
+                None => writes.answer(None),
+            }
+            continue;
+        }
+        if let Some(end) = writes.end().cloned() {
+            this.plan.write_results = writes.results();
+            let after = writes.after();
+            this.plan.writes = None;
+            match end {
+                WritesEnd::Done => {
+                    if after == AfterWrites::ClearFence {
+                        this.plan.clear_geofence();
+                        this.sync_map_fence();
+                        this.sync_map_polygon();
+                    }
+                }
+                WritesEnd::Stopped { title, text } => {
+                    this.plan_menus.say(title, text);
+                    this.plan_prompt_focus.focus(window, cx);
+                }
+            }
+            return;
+        }
+        let Some((name, value)) = writes.due() else {
+            return;
+        };
+        match this.telemetry.set_parameter_confirmed(name, value) {
+            Some(request) => writes.sent(request),
+            None => writes.answer(None),
+        }
+    }
+}
+
+/// The file a typed name means for a `.fen`, in the plan directory: a name rather than a path,
+/// and `.fen` added when it has no extension, as the dialogs' `AddExtension` does. Nothing for an
+/// empty name: the C# acts only on `sf.FileName != ""`, and `File.Exists("")` is false.
+#[must_use]
+pub fn fence_file_name(typed: &str) -> Option<String> {
+    let leaf = typed
+        .trim()
+        .rsplit(['/', '\\'])
+        .next()
+        .filter(|part| !part.is_empty() && *part != "." && *part != "..")?;
+    Some(if leaf.contains('.') {
+        leaf.to_owned()
+    } else {
+        format!("{leaf}.fen")
+    })
+}
+
+/// Geo-Fence > Load from File and Save to File, once the file has been named.
+fn fence_file(
+    this: &mut MissionPlanner,
+    request: FileRequest,
+    window: &mut gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) {
+    match request {
+        FileRequest::LoadFence(name) => {
+            let Some(name) = fence_file_name(&name) else {
+                return;
+            };
+            let path = MissionPlanner::plan_directory().join(name);
+            match std::fs::read_to_string(&path) {
+                Ok(text) => {
+                    this.plan
+                        .adopt_fence_file(mp_mission::fence_file::read_fence(&text));
+                    this.file_status = Some(format!("loaded a fence from {}", path.display()));
+                }
+                // `if (File.Exists(fd.FileName))`: nothing happens, bar the status line.
+                Err(err) => {
+                    this.file_status = Some(format!("could not read {}: {err}", path.display()));
+                }
+            }
+        }
+        FileRequest::SaveFence(name) => {
+            let Some(name) = fence_file_name(&name) else {
+                return;
+            };
+            let path = MissionPlanner::plan_directory().join(name);
+            let written = this.plan.fence_file().and_then(|file| {
+                std::fs::write(&path, mp_mission::fence_file::write_fence(&file))
+                    .map_err(|_| FENCE_FILE_FAILED)
+            });
+            match written {
+                Ok(()) => {
+                    this.file_status = Some(format!("saved the fence to {}", path.display()));
+                }
+                Err(why) => {
+                    this.plan_menus.say("", why);
+                    this.plan_prompt_focus.focus(window, cx);
+                }
+            }
+        }
+    }
 }
 
 /// Write: `BUT_write_Click`'s home check, then `saveWPs`' list - home from the boxes at item 0
@@ -2404,8 +3631,15 @@ fn write_to_vehicle(
         .state
         .as_ref()
         .is_some_and(|state| state.autopilot == MAV_AUTOPILOT_ARDUPILOTMEGA);
+    // Clicking Write takes the focus, so a panel box being typed in is left first.
+    leave_panel_boxes(this, window, cx);
     match this.plan.vehicle_mission(ardupilot) {
-        Ok(items) => this.telemetry.upload_mission(items),
+        Ok(items) => {
+            // The radii follow once the vehicle has the mission: `saveWPs`' "Setting params".
+            this.plan.pending_write =
+                Some(PendingWrite::new(items.clone(), this.plan.wp_param_steps()));
+            this.telemetry.upload_mission(items);
+        }
         Err(why) => {
             this.plan_menus.say(ERROR, why);
             this.plan_prompt_focus.focus(window, cx);
@@ -2562,6 +3796,14 @@ pub enum MenuAction {
     SaveWpFile,
     /// `modifyAltToolStripMenuItem_Click`.
     ModifyAlt,
+    /// `setReturnLocationToolStripMenuItem_Click`.
+    SetReturnLocation,
+    /// `loadFromFileToolStripMenuItem_Click`.
+    FenceLoadFromFile,
+    /// `saveToFileToolStripMenuItem_Click`.
+    FenceSaveToFile,
+    /// `clearToolStripMenuItem_Click`.
+    FenceClear,
 }
 
 /// One entry of `contextMenuStrip1` or of one of its drop-downs.
@@ -2634,10 +3876,10 @@ const fn drop_down(
 /// `// C#: GCSViews/FlightPlanner.Designer.cs:899-922`
 pub const MAP_MENU: &[MenuEntry] = {
     use MenuAction::{
-        ClearMission, ClearPolygon, DeleteWp, DrawPolygon, InsertAtCurrentPosition, InsertSplineWp,
-        InsertWp, JumpStart, JumpWp, Land, LoadWpFile, LoiterCircles, LoiterForever, LoiterTime,
-        MeasureDistance, ModifyAlt, PolygonFromWaypoints, ReverseWps, Rtl, SaveWpFile, SetRoi,
-        Takeoff,
+        ClearMission, ClearPolygon, DeleteWp, DrawPolygon, FenceClear, FenceLoadFromFile,
+        FenceSaveToFile, InsertAtCurrentPosition, InsertSplineWp, InsertWp, JumpStart, JumpWp,
+        Land, LoadWpFile, LoiterCircles, LoiterForever, LoiterTime, MeasureDistance, ModifyAlt,
+        PolygonFromWaypoints, ReverseWps, Rtl, SaveWpFile, SetReturnLocation, SetRoi, Takeoff,
     };
     &[
         item(
@@ -2809,21 +4051,26 @@ pub const MAP_MENU: &[MenuEntry] = {
                     "menu-setReturnLocation",
                     "setReturnLocationToolStripMenuItem",
                     "Set Return Location",
-                    None,
+                    Some(SetReturnLocation),
                 ),
                 item(
                     "menu-loadFromFile",
                     "loadFromFileToolStripMenuItem",
                     "Load from File",
-                    None,
+                    Some(FenceLoadFromFile),
                 ),
                 item(
                     "menu-saveToFile",
                     "saveToFileToolStripMenuItem",
                     "Save to File",
-                    None,
+                    Some(FenceSaveToFile),
                 ),
-                item("menu-clear", "clearToolStripMenuItem", "Clear", None),
+                item(
+                    "menu-clear",
+                    "clearToolStripMenuItem",
+                    "Clear",
+                    Some(FenceClear),
+                ),
             ],
         ),
         // `// C#: GCSViews/FlightPlanner.Designer.cs:1149-1155`
@@ -3123,9 +4370,31 @@ pub enum PromptKind {
     /// `processToScreen`'s "Reset Home to loaded coords", Yes or No, with the home a mission
     /// just read carries at item 0.
     ResetHome(Home),
+    /// Geo-Fence > Load from File's `OpenFileDialog`, filtered to `Fence (*.fen)`: a name typed
+    /// here, read from the plan directory, as the mission file is.
+    FenceLoadFile,
+    /// Geo-Fence > Save to File's `SaveFileDialog`, likewise.
+    FenceSaveFile,
     /// A message with an OK.
     Message,
 }
+
+/// A file a dialog has named, for the screen to read or write.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FileRequest {
+    /// Geo-Fence > Load from File.
+    LoadFence(String),
+    /// Geo-Fence > Save to File.
+    SaveFence(String),
+}
+
+/// The caption of the dialog standing in for `OpenFileDialog`: its own default.
+pub const OPEN_FILE: &str = "Open";
+/// The caption of the dialog standing in for `SaveFileDialog`: its own default.
+pub const SAVE_FILE: &str = "Save As";
+/// The filter both fence dialogs are given.
+/// `// C#: GCSViews/FlightPlanner.cs:4349, 5969`
+pub const FENCE_FILTER: &str = "Fence (*.fen)";
 
 /// A dialog: an `InputBox` with its field, a Yes/No question, or a message.
 ///
@@ -3194,6 +4463,8 @@ pub struct MenuContext {
     pub vehicle: Option<(LatLon, f64)>,
     /// Whether Takeoff asks for a pitch: on ArduPlane, unless `Q_OPTIONS` lacks bit 1.
     pub takeoff_pitch: bool,
+    /// `cs.firmware == Firmwares.ArduCopter2`, for a Default Alt of 0.
+    pub copter: bool,
 }
 
 impl MenuContext {
@@ -3328,7 +4599,9 @@ impl PlanMenus {
         };
         let position = menu.position;
         let frame = context.frame.mav_frame();
-        let altitude = plan.default_altitude();
+        // Default Alt as `setfromMap` takes it; the handlers that add a row at it refuse here
+        // when it is not a whole number.
+        let altitude = plan.new_row_altitude(0.0, context.copter);
         match action {
             MenuAction::DeleteWp => {
                 if let Some(seq) = menu.marker {
@@ -3353,25 +4626,23 @@ impl PlanMenus {
                     self.tell(ERROR, "Invalid Location");
                     return;
                 };
-                let vehicle_altitude = vehicle_altitude.trunc();
-                let altitude = if vehicle_altitude == 0.0 {
-                    altitude
-                } else {
-                    vehicle_altitude
-                };
                 // Drawing a polygon, AddWPToMap adds a corner at MouseDownStart, the menu's
                 // position, not the vehicle's.
                 if plan.draw_mode() == DrawMode::Area {
                     plan.add_area_vertex(position);
-                } else {
-                    plan.add_wp_to_map(at, altitude, context.frame);
+                    return;
+                }
+                match plan.new_row_altitude(vehicle_altitude.trunc(), context.copter) {
+                    Ok(altitude) => plan.add_wp_to_map(at, altitude, context.frame),
+                    Err(why) => self.tell("", why),
                 }
             }
-            MenuAction::LoiterForever => {
-                plan.append(mp_mission::commands::loiter_unlimited(
+            MenuAction::LoiterForever => match altitude {
+                Ok(altitude) => plan.append(mp_mission::commands::loiter_unlimited(
                     position, altitude, frame,
-                ));
-            }
+                )),
+                Err(why) => self.tell("", why),
+            },
             MenuAction::LoiterTime => self.ask(Prompt::input(
                 "Loiter Time",
                 "Loiter Time",
@@ -3409,9 +4680,12 @@ impl PlanMenus {
             )),
             // `cmdParamNames.ContainsKey("DO_SET_ROI")` is true in all three of mavcmd.xml's
             // vehicle sections, so the C#'s "not enabled in your firmware" never shows.
-            MenuAction::SetRoi => {
-                plan.append(mp_mission::commands::set_roi(position, altitude, frame));
-            }
+            MenuAction::SetRoi => match altitude {
+                Ok(altitude) => {
+                    plan.append(mp_mission::commands::set_roi(position, altitude, frame))
+                }
+                Err(why) => self.tell("", why),
+            },
             MenuAction::ClearMission => plan.clear_mission(),
             MenuAction::DrawPolygon => plan.draw_polygon(position),
             MenuAction::ClearPolygon => plan.clear_polygon(),
@@ -3443,7 +4717,30 @@ impl PlanMenus {
                 "0",
                 PromptKind::ModifyAlt,
             )),
-            MenuAction::LoadWpFile | MenuAction::SaveWpFile => {}
+            MenuAction::SetReturnLocation => plan.set_fence_return(position),
+            // `OpenFileDialog`, filtered to `.fen`.
+            // `// C#: GCSViews/FlightPlanner.cs:4347-4351`
+            MenuAction::FenceLoadFromFile => self.ask(Prompt::input(
+                OPEN_FILE,
+                FENCE_FILTER,
+                "",
+                PromptKind::FenceLoadFile,
+            )),
+            // "Please set a return location" first, then `SaveFileDialog`, filtered to `.fen`.
+            // `// C#: GCSViews/FlightPlanner.cs:5961-5970`
+            MenuAction::FenceSaveToFile => {
+                if plan.fence_return().is_none() {
+                    self.tell("", SET_RETURN_LOCATION);
+                } else {
+                    self.ask(Prompt::input(
+                        SAVE_FILE,
+                        FENCE_FILTER,
+                        "",
+                        PromptKind::FenceSaveFile,
+                    ));
+                }
+            }
+            MenuAction::LoadWpFile | MenuAction::SaveWpFile | MenuAction::FenceClear => {}
         }
     }
 
@@ -3453,13 +4750,23 @@ impl PlanMenus {
     /// the typed text in the grid unchecked and fail later, at "Invalid number on row" when the
     /// mission is written; an item here holds a number, so that text is refused as it is typed,
     /// with `Strings.InvalidNumberEntered`.
-    pub fn submit(&mut self, plan: &mut Plan, context: &MenuContext) {
-        let Some(prompt) = self.prompt.take() else {
-            return;
-        };
+    pub fn submit(&mut self, plan: &mut Plan, context: &MenuContext) -> Option<FileRequest> {
+        let prompt = self.prompt.take()?;
         let value = prompt.value().to_owned();
         let frame = context.frame.mav_frame();
-        let altitude = plan.default_altitude();
+        // Default Alt, read once the answer is in, as the handlers read it after `InputBox`.
+        let altitude = match prompt.kind {
+            PromptKind::InsertWp { .. }
+            | PromptKind::LoiterTime { .. }
+            | PromptKind::LoiterTurns { .. } => match plan.new_row_altitude(0.0, context.copter) {
+                Ok(altitude) => altitude,
+                Err(why) => {
+                    self.tell("", why);
+                    return None;
+                }
+            },
+            _ => 0.0,
+        };
         let number = || {
             value
                 .trim()
@@ -3543,8 +4850,11 @@ impl PlanMenus {
             }
             PromptKind::ClearWaypoints => plan.clear_mission(),
             PromptKind::ResetHome(loaded) => plan.reset_home_to(loaded),
+            PromptKind::FenceLoadFile => return Some(FileRequest::LoadFence(value)),
+            PromptKind::FenceSaveFile => return Some(FileRequest::SaveFence(value)),
             PromptKind::Message => {}
         }
+        None
     }
 
     /// Cancel, or No: the handler returns.
@@ -3568,6 +4878,7 @@ fn menu_context(this: &MissionPlanner) -> MenuContext {
             state.map(|state| state.vehicle_type),
             &view.parameters,
         ),
+        copter: firmware_is_copter(&view),
     }
 }
 
@@ -3577,6 +4888,9 @@ fn sync_everything(this: &MissionPlanner) {
     this.sync_map_polygon();
     this.sync_map_fence();
     this.sync_map_rally();
+    this.map
+        .borrow_mut()
+        .set_fence_return(this.plan.fence_return());
 }
 
 /// Opens the menu for a right click on the map, as `MainMap.ContextMenuStrip = contextMenuStrip1`
@@ -3612,6 +4926,10 @@ fn choose_entry(
             this.plan_menus.open = None;
             this.save_plan();
         }
+        MenuAction::FenceClear => {
+            this.plan_menus.open = None;
+            start_fence_clear(this);
+        }
         _ => {
             let context = menu_context(this);
             this.plan_menus.choose(&mut this.plan, action, &context);
@@ -3631,7 +4949,9 @@ fn submit_prompt(
     cx: &mut Context<MissionPlanner>,
 ) {
     let context = menu_context(this);
-    this.plan_menus.submit(&mut this.plan, &context);
+    if let Some(request) = this.plan_menus.submit(&mut this.plan, &context) {
+        fence_file(this, request, window, cx);
+    }
     sync_everything(this);
     if this.plan_menus.prompt.is_some() {
         this.plan_prompt_focus.focus(window, cx);
@@ -4095,6 +5415,36 @@ pub fn record_facts(plan: &Plan, menus: &PlanMenus) {
             .is_some(),
     );
     record("survey.points", plan.polygon().len());
+    // The corners the map shows, which Geo-Fence > Clear takes off it while keeping them.
+    record("survey.shown", plan.shown_polygon().len());
+    // The panel boxes as they read, whether Loiter Radius takes typing and Spline is ticked, and
+    // what the last row of parameter sets did - `NAME=value` for each the vehicle echoed,
+    // `unknown` for one it does not have - with whether one is still going.
+    record("plan.wprad", plan.panel_text(PanelBox::WpRadius));
+    record("plan.loiterrad", plan.panel_text(PanelBox::LoiterRadius));
+    record("plan.defaultalt", plan.panel_text(PanelBox::DefaultAlt));
+    record("plan.loiterrad.enabled", plan.loiter_enabled());
+    record("plan.spline", plan.spline());
+    record(
+        "plan.params",
+        if plan.write_results().is_empty() {
+            "none"
+        } else {
+            plan.write_results()
+        },
+    );
+    record(
+        "plan.params.busy",
+        plan.writes().is_some() || plan.pending_write.is_some(),
+    );
+    // The geofence's return location, as `latitude,longitude`.
+    record(
+        "fence.return",
+        plan.fence_return().map_or_else(
+            || "none".to_owned(),
+            |at| format!("{},{}", at.latitude(), at.longitude()),
+        ),
+    );
     record("plan.draw", plan.draw_mode().id());
     record(
         "plan.menu",
@@ -4485,7 +5835,7 @@ mod tests {
     #[test]
     fn map_clicks_produce_items_a_vehicle_will_fly() {
         let mut plan = Plan::default();
-        plan.add_waypoint(at(-35.363, 149.165), DEFAULT_ALTITUDE);
+        plan.add_waypoint(at(-35.363, 149.165), 50.0);
         let item = plan.items().first().expect("one item");
         assert_eq!(item.command, CMD_WAYPOINT);
         // Relative to home, not above the ellipsoid: an operator typing 50 means 50 above where
@@ -5106,6 +6456,7 @@ mod tests {
             frame: AltitudeFrame::Relative,
             vehicle: None,
             takeoff_pitch: false,
+            copter: false,
         }
     }
 
@@ -5719,14 +7070,700 @@ mod tests {
         assert_eq!(plan.items().len(), 1, "only the first click was a waypoint");
     }
 
-    /// The default altitude copies the last item with a position, and never a zero from an RTL.
+    // ---- The panel boxes: TXT_WPRad, TXT_loiterrad, TXT_DefaultAlt, CHK_splinedefault ----
+
+    fn key(key: &str, key_char: Option<&str>) -> gpui::KeyDownEvent {
+        gpui::KeyDownEvent {
+            keystroke: gpui::Keystroke {
+                modifiers: gpui::Modifiers::default(),
+                key: key.to_owned(),
+                key_char: key_char.map(ToOwned::to_owned),
+            },
+            is_held: false,
+            prefer_character_input: false,
+        }
+    }
+
+    /// Types `text` into a panel box a character at a time, as the keyboard would.
+    fn type_into(plan: &mut Plan, which: PanelBox, text: &str) {
+        for character in text.chars() {
+            let character = character.to_string();
+            plan.panel_key(which, &key(&character, Some(&character)));
+        }
+    }
+
+    /// The boxes start as the `.resx` has them, left to right under their labels.
     #[test]
-    fn the_default_altitude_skips_items_without_a_position() {
+    fn the_panel_boxes_start_as_the_resx_has_them() {
+        let plan = Plan::default();
+        let texts: Vec<(&str, &str)> = PanelBox::ALL
+            .iter()
+            .map(|which| (which.label(), plan.panel_text(*which)))
+            .collect();
+        assert_eq!(
+            texts,
+            vec![
+                ("WP Radius", "30"),
+                ("Loiter Radius", "45"),
+                ("Default Alt", "100")
+            ]
+        );
+        assert!(plan.loiter_enabled());
+        assert!(!plan.spline());
+    }
+
+    /// KeyPress: digits in every box, a point only in WP Radius, a minus only in Loiter Radius,
+    /// and nothing else; backspace always.
+    #[test]
+    fn each_box_takes_the_characters_its_key_press_lets_through() {
         let mut plan = Plan::default();
-        assert!((plan.default_altitude() - DEFAULT_ALTITUDE).abs() < 1e-9);
-        plan.append(cmd::waypoint(canberra(), 75.0, FRAME_RELATIVE));
-        plan.append(cmd::return_to_launch(FRAME_RELATIVE));
-        assert!((plan.default_altitude() - 75.0).abs() < 1e-9);
+        for which in PanelBox::ALL {
+            plan.set_panel_text(which, "");
+            type_into(&mut plan, which, "1.-2a 3");
+        }
+        assert_eq!(plan.panel_text(PanelBox::WpRadius), "1.23");
+        assert_eq!(plan.panel_text(PanelBox::LoiterRadius), "1-23");
+        assert_eq!(plan.panel_text(PanelBox::DefaultAlt), "123");
+        plan.panel_key(PanelBox::DefaultAlt, &key("backspace", None));
+        assert_eq!(plan.panel_text(PanelBox::DefaultAlt), "12");
+    }
+
+    /// Leave: what does not parse goes back to 100 and 45; WP Radius only when empty, to the
+    /// startup value.
+    #[test]
+    fn leaving_a_box_that_does_not_parse_puts_a_number_back() {
+        let mut plan = Plan::default();
+        for which in PanelBox::ALL {
+            plan.set_panel_text(which, "");
+            plan.panel_leave(which);
+        }
+        assert_eq!(plan.panel_text(PanelBox::WpRadius), "5.0");
+        assert_eq!(plan.panel_text(PanelBox::LoiterRadius), "45");
+        assert_eq!(plan.panel_text(PanelBox::DefaultAlt), "100");
+
+        // Not empty and not a number: WP Radius keeps it, the other two do not.
+        plan.set_panel_text(PanelBox::WpRadius, "1.2.3");
+        plan.set_panel_text(PanelBox::LoiterRadius, "-");
+        plan.set_panel_text(PanelBox::DefaultAlt, "7");
+        for which in PanelBox::ALL {
+            plan.panel_leave(which);
+        }
+        assert_eq!(plan.panel_text(PanelBox::WpRadius), "1.2.3");
+        assert_eq!(plan.panel_text(PanelBox::LoiterRadius), "45");
+        assert_eq!(plan.panel_text(PanelBox::DefaultAlt), "7", "a number stays");
+    }
+
+    /// config(false): the saved texts, and WP Radius's becomes the one an emptied box gets back.
+    #[test]
+    fn the_saved_boxes_come_back_from_config_xml() {
+        let mut config = mp_settings::Config::default();
+        config.set("TXT_WPRad", "12");
+        config.set("TXT_loiterrad", "80");
+        config.set("TXT_DefaultAlt", "120");
+        let mut plan = Plan::default();
+        plan.apply_panel_config(Some(&config));
+        assert_eq!(plan.panel_text(PanelBox::WpRadius), "12");
+        assert_eq!(plan.panel_text(PanelBox::LoiterRadius), "80");
+        assert_eq!(plan.panel_text(PanelBox::DefaultAlt), "120");
+        plan.set_panel_text(PanelBox::WpRadius, "");
+        plan.panel_leave(PanelBox::WpRadius);
+        assert_eq!(plan.panel_text(PanelBox::WpRadius), "12");
+        // No config.xml: the .resx texts stay.
+        let mut plan = Plan::default();
+        plan.apply_panel_config(None);
+        assert_eq!(plan.panel_text(PanelBox::DefaultAlt), "100");
+    }
+
+    fn params(list: &[(&str, f64)]) -> Vec<(String, f64)> {
+        list.iter()
+            .map(|(name, value)| ((*name).to_owned(), *value))
+            .collect()
+    }
+
+    /// setWPParams: the last radius name the vehicle has wins, `{0:N2}`; WPNAV_RADIUS is
+    /// centimetres; Loiter Radius from LOITER_RADIUS or WP_LOITER_RAD, disabled without either.
+    #[test]
+    fn the_vehicles_radii_fill_the_boxes() {
+        let mut plan = Plan::default();
+        // A copter of 4.8: WP_RADIUS_M, and no loiter radius at all.
+        plan.set_wp_params(&params(&[("WP_RADIUS_M", 2.0), ("ANGLE_MAX", 3000.0)]));
+        assert_eq!(plan.panel_text(PanelBox::WpRadius), "2.00");
+        assert!(!plan.loiter_enabled());
+        assert_eq!(
+            plan.panel_text(PanelBox::LoiterRadius),
+            "45",
+            "left as it was"
+        );
+
+        // An older copter: centimetres.
+        plan.set_wp_params(&params(&[("WPNAV_RADIUS", 250.0)]));
+        assert_eq!(plan.panel_text(PanelBox::WpRadius), "2.50");
+
+        // A plane: WP_RADIUS and WP_LOITER_RAD.
+        plan.set_wp_params(&params(&[("WP_RADIUS", 90.0), ("WP_LOITER_RAD", 60.0)]));
+        assert_eq!(plan.panel_text(PanelBox::WpRadius), "90.00");
+        assert_eq!(plan.panel_text(PanelBox::LoiterRadius), "60");
+        assert!(plan.loiter_enabled());
+
+        // WP_RADIUS_M is read last, so it wins over WP_RADIUS.
+        plan.set_wp_params(&params(&[("WP_RADIUS", 90.0), ("WP_RADIUS_M", 3.0)]));
+        assert_eq!(plan.panel_text(PanelBox::WpRadius), "3.00");
+
+        // No vehicle: nothing to read, and Loiter Radius disabled.
+        plan.set_wp_params(&[]);
+        assert!(!plan.loiter_enabled());
+    }
+
+    /// A disabled Loiter Radius takes no typing.
+    #[test]
+    fn a_disabled_loiter_radius_takes_nothing() {
+        let mut plan = Plan::default();
+        plan.set_wp_params(&[]);
+        type_into(&mut plan, PanelBox::LoiterRadius, "9");
+        assert_eq!(plan.panel_text(PanelBox::LoiterRadius), "45");
+    }
+
+    /// `.fen` files and `.param` files are written with the same `double.ToString()`, ported twice
+    /// because `mp-mission` does not depend on `mp-params`; the two must agree.
+    #[test]
+    fn the_two_ports_of_double_to_string_agree() {
+        for value in [
+            0.0,
+            -0.0,
+            1.0,
+            0.3,
+            f64::from(0.3_f32),
+            -31.25,
+            -35.363_262_345_678_91,
+            149.165_237_4,
+            0.0001,
+            0.000_089,
+            0.000_01,
+            1e-7,
+            -0.000_000_15,
+            110_000.0,
+            123_456_789_012_345.0,
+            1_234_567_890_123_456.0,
+        ] {
+            assert_eq!(
+                mp_mission::fence_file::invariant_double(value),
+                mp_params::param_file::invariant_double(value),
+                "{value}"
+            );
+        }
+    }
+
+    /// `{0:N2}`: two decimals, halves away from zero, thousands grouped.
+    #[test]
+    fn n2_is_two_decimals_with_thousands_grouped() {
+        assert_eq!(number_n2(2.0), "2.00");
+        assert_eq!(number_n2(2.345), "2.35");
+        assert_eq!(number_n2(0.125), "0.13");
+        assert_eq!(number_n2(1234.5), "1,234.50");
+        assert_eq!(number_n2(1_234_567.0), "1,234,567.00");
+        assert_eq!(number_n2(-3.0), "-3.00");
+        assert_eq!(number_n2(-0.001), "0.00");
+        assert_eq!(number_n2(0.005), "0.01");
+        assert_eq!(number_n2(0.0049), "0.00");
+        assert_eq!(number_n2(f64::from(0.3_f32)), "0.30");
+        assert_eq!(
+            number_n2(1.005),
+            "1.01",
+            "the fifteen-digit decimal, not the binary value"
+        );
+    }
+
+    /// setfromMap's altitude: Default Alt, unless the handler passed one; 0 in the box is 50, or
+    /// 15 on a copter, whatever was passed; and a box that is not a whole number refuses.
+    #[test]
+    fn a_new_row_takes_default_alt_as_set_from_map_does() {
+        let mut plan = Plan::default();
+        assert_eq!(plan.new_row_altitude(0.0, false), Ok(100.0));
+        assert_eq!(
+            plan.new_row_altitude(37.0, false),
+            Ok(37.0),
+            "the passed one wins"
+        );
+        plan.set_panel_text(PanelBox::DefaultAlt, "0");
+        assert_eq!(plan.new_row_altitude(0.0, false), Ok(50.0));
+        assert_eq!(plan.new_row_altitude(37.0, true), Ok(15.0));
+        plan.set_panel_text(PanelBox::DefaultAlt, "");
+        assert_eq!(plan.new_row_altitude(0.0, false), Err(DEFAULT_ALT_INVALID));
+        plan.set_panel_text(PanelBox::DefaultAlt, "12.5");
+        assert_eq!(plan.new_row_altitude(0.0, false), Err(DEFAULT_ALT_INVALID));
+    }
+
+    /// Activate: a Default Alt `int.Parse` refuses becomes 50, and it is said.
+    #[test]
+    fn activating_fixes_a_default_alt_that_is_not_a_whole_number() {
+        let mut plan = Plan::default();
+        assert_eq!(plan.check_default_alt(), None);
+        plan.set_panel_text(PanelBox::DefaultAlt, "abc");
+        assert_eq!(plan.check_default_alt(), Some(DEFAULT_ALT_FIX));
+        assert_eq!(plan.panel_text(PanelBox::DefaultAlt), "50");
+    }
+
+    /// The menu's rows take Default Alt, and refuse with the C#'s words when it will not parse.
+    #[test]
+    fn the_menus_rows_take_default_alt() {
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        plan.set_panel_text(PanelBox::DefaultAlt, "120");
+        choose(&mut plan, &mut menus, MenuAction::LoiterForever, None);
+        assert!((last(&plan).z - 120.0).abs() < 1e-9);
+        choose(&mut plan, &mut menus, MenuAction::LoiterTime, None);
+        answer(&mut plan, &mut menus, "5");
+        assert!((last(&plan).z - 120.0).abs() < 1e-9);
+
+        plan.set_panel_text(PanelBox::DefaultAlt, "");
+        choose(&mut plan, &mut menus, MenuAction::SetRoi, None);
+        assert_eq!(plan.items().len(), 2, "nothing added");
+        assert_eq!(
+            menus.prompt.as_ref().map(|prompt| prompt.text.as_str()),
+            Some(DEFAULT_ALT_INVALID)
+        );
+    }
+
+    /// Spline: a click adds a SPLINE_WAYPOINT; a fence corner is still a fence corner.
+    #[test]
+    fn spline_makes_a_click_a_spline_waypoint() {
+        let mut plan = Plan::default();
+        plan.set_spline(true);
+        plan.add_wp_to_map(canberra(), 100.0, AltitudeFrame::Relative);
+        assert_eq!(commands(&plan), vec![cmd::SPLINE_WAYPOINT]);
+        plan.set_spline(false);
+        plan.add_wp_to_map(canberra(), 100.0, AltitudeFrame::Relative);
+        assert_eq!(commands(&plan), vec![cmd::SPLINE_WAYPOINT, cmd::WAYPOINT]);
+        plan.set_spline(true);
+        plan.set_draw_mode(DrawMode::Fence);
+        plan.add_wp_to_map(canberra(), 100.0, AltitudeFrame::Relative);
+        assert_eq!(plan.items().len(), 2);
+    }
+
+    /// saveWPs' "Setting params": the radius into all three names, WPNAV_RADIUS in centimetres,
+    /// then the loiter radius into the first of LOITER_RAD and WP_LOITER_RAD.
+    #[test]
+    fn a_write_sets_the_radii_as_save_wps_does() {
+        let mut plan = Plan::default();
+        plan.set_panel_text(PanelBox::WpRadius, "3.5");
+        plan.set_panel_text(PanelBox::LoiterRadius, "-60");
+        let steps = plan.wp_param_steps().expect("the radius parses");
+        let names: Vec<(Vec<&str>, f64)> = steps
+            .iter()
+            .map(|step| (step.names.clone(), step.value))
+            .collect();
+        assert_eq!(
+            names,
+            vec![
+                (vec!["WP_RADIUS"], 3.5),
+                (vec!["WP_RADIUS_M"], 3.5),
+                (vec!["WPNAV_RADIUS"], 350.0),
+                (vec!["LOITER_RAD", "WP_LOITER_RAD"], -60.0),
+            ]
+        );
+        assert!(matches!(steps[0].on_timeout, OnTimeout::Stop { .. }));
+        assert_eq!(
+            steps[3].on_timeout,
+            OnTimeout::CarryOn,
+            "the loiter set is caught"
+        );
+
+        plan.set_panel_text(PanelBox::WpRadius, ".");
+        assert_eq!(plan.wp_param_steps(), Err(FORMAT_EXCEPTION));
+        // A loiter radius that will not parse is passed over, as the C# catches it.
+        plan.set_panel_text(PanelBox::WpRadius, "2");
+        plan.set_panel_text(PanelBox::LoiterRadius, "-");
+        assert_eq!(plan.wp_param_steps().map(|steps| steps.len()), Ok(3));
+    }
+
+    // ---- A row of parameter sets ----
+
+    use mp_link::requests::RequestOutcome;
+
+    /// Runs a row to its end, answering each set from `answers` by name; a name not listed is
+    /// one that could not be sent.
+    fn run(writes: &mut ParamWrites, answers: &[(&str, RequestOutcome)]) -> Vec<String> {
+        let mut sent = Vec::new();
+        while let Some((name, value)) = writes.due() {
+            sent.push(format!("{name}={value}"));
+            let outcome = answers
+                .iter()
+                .find(|(answered, _)| *answered == name)
+                .map(|(_, outcome)| *outcome);
+            writes.answer(outcome);
+        }
+        sent
+    }
+
+    fn accepted(value: f32) -> RequestOutcome {
+        RequestOutcome::Accepted {
+            value: Some(mp_params::ParamValue::from_ardupilot(
+                value,
+                mp_params::ParamType::Real32,
+            )),
+        }
+    }
+
+    /// Each set goes out only once the last is answered; a name the vehicle does not have is
+    /// passed over for the next name in its step, and then for the next step.
+    #[test]
+    fn a_row_of_sets_goes_one_at_a_time_as_the_c_sharp_makes_them() {
+        let mut plan = Plan::default();
+        plan.set_panel_text(PanelBox::WpRadius, "3");
+        plan.set_panel_text(PanelBox::LoiterRadius, "70");
+        let mut writes =
+            ParamWrites::new(plan.wp_param_steps().expect("steps"), AfterWrites::Nothing);
+        // A copter of 4.8: WP_RADIUS_M only.
+        let sent = run(
+            &mut writes,
+            &[
+                ("WP_RADIUS", RequestOutcome::UnknownParameter),
+                ("WP_RADIUS_M", accepted(3.0)),
+                ("WPNAV_RADIUS", RequestOutcome::UnknownParameter),
+                ("LOITER_RAD", RequestOutcome::UnknownParameter),
+                ("WP_LOITER_RAD", RequestOutcome::UnknownParameter),
+            ],
+        );
+        assert_eq!(
+            sent,
+            vec![
+                "WP_RADIUS=3",
+                "WP_RADIUS_M=3",
+                "WPNAV_RADIUS=300",
+                "LOITER_RAD=70",
+                "WP_LOITER_RAD=70"
+            ]
+        );
+        assert_eq!(writes.end(), Some(&WritesEnd::Done));
+        assert_eq!(
+            writes.results(),
+            "WP_RADIUS=unknown,WP_RADIUS_M=3,WPNAV_RADIUS=unknown,LOITER_RAD=unknown,WP_LOITER_RAD=unknown"
+        );
+    }
+
+    /// `setParam(string[])` stops at the first name the vehicle has.
+    #[test]
+    fn the_first_name_the_vehicle_has_takes_the_value() {
+        let mut writes = ParamWrites::new(
+            vec![ParamStep {
+                names: vec!["LOITER_RAD", "WP_LOITER_RAD"],
+                value: 80.0,
+                on_timeout: OnTimeout::CarryOn,
+            }],
+            AfterWrites::Nothing,
+        );
+        let sent = run(&mut writes, &[("LOITER_RAD", RequestOutcome::Unchanged)]);
+        assert_eq!(sent, vec!["LOITER_RAD=80"], "WP_LOITER_RAD is never tried");
+        assert_eq!(writes.results(), "LOITER_RAD=80 unchanged");
+    }
+
+    /// A timeout where the C# stops ends the row with its message; where it catches, the row goes
+    /// on.
+    #[test]
+    fn a_timeout_stops_the_row_only_where_the_c_sharp_does() {
+        let mut writes = ParamWrites::new(
+            vec![
+                ParamStep {
+                    names: vec!["LOITER_RAD"],
+                    value: 1.0,
+                    on_timeout: OnTimeout::CarryOn,
+                },
+                ParamStep::one(
+                    "FENCE_ACTION",
+                    0.0,
+                    OnTimeout::Stop {
+                        title: "",
+                        text: "Failed to set FENCE_ACTION".to_owned(),
+                    },
+                ),
+                ParamStep::one("FENCE_TOTAL", 0.0, OnTimeout::CarryOn),
+            ],
+            AfterWrites::ClearFence,
+        );
+        let sent = run(
+            &mut writes,
+            &[
+                ("LOITER_RAD", RequestOutcome::TimedOut),
+                ("FENCE_ACTION", RequestOutcome::TimedOut),
+            ],
+        );
+        assert_eq!(
+            sent,
+            vec!["LOITER_RAD=1", "FENCE_ACTION=0"],
+            "FENCE_TOTAL never goes"
+        );
+        assert_eq!(
+            writes.end(),
+            Some(&WritesEnd::Stopped {
+                title: "",
+                text: "Failed to set FENCE_ACTION".to_owned()
+            })
+        );
+        assert_eq!(writes.after(), AfterWrites::ClearFence);
+    }
+
+    /// With no vehicle every set is one that could not be sent, and the row still ends - as the
+    /// C#'s `setParam` returns false against an empty parameter list.
+    #[test]
+    fn with_no_vehicle_the_row_ends_having_sent_nothing() {
+        let mut writes = ParamWrites::new(
+            vec![ParamStep::one("FENCE_ENABLE", 0.0, OnTimeout::CarryOn)],
+            AfterWrites::ClearFence,
+        );
+        run(&mut writes, &[]);
+        assert_eq!(writes.end(), Some(&WritesEnd::Done));
+        assert_eq!(writes.results(), "FENCE_ENABLE=unknown");
+        // An empty row is done at once.
+        assert_eq!(
+            ParamWrites::new(Vec::new(), AfterWrites::Nothing).end(),
+            Some(&WritesEnd::Done)
+        );
+    }
+
+    fn transfer(finished: bool, failed: bool) -> crate::telemetry::TransferStatus {
+        crate::telemetry::TransferStatus {
+            label: String::new(),
+            fraction: 0.0,
+            finished,
+            failed,
+        }
+    }
+
+    /// The sets follow the upload they belong to: not the transfer that was already finished when
+    /// Write was pressed, unless it holds exactly what was sent.
+    #[test]
+    fn the_sets_wait_for_this_writes_upload() {
+        let items = vec![cmd::waypoint(canberra(), 100.0, FRAME_RELATIVE)];
+        let earlier = vec![cmd::waypoint(at(-35.0, 149.0), 50.0, FRAME_RELATIVE)];
+        let mut pending = PendingWrite::new(items.clone(), Ok(Vec::new()));
+        assert_eq!(pending.upload_ended(None, &[]), None, "nothing has started");
+        assert_eq!(
+            pending.upload_ended(Some(&transfer(true, false)), &earlier),
+            None,
+            "an earlier transfer's end is not this one's"
+        );
+        assert_eq!(
+            pending.upload_ended(Some(&transfer(false, false)), &items),
+            None
+        );
+        assert_eq!(
+            pending.upload_ended(Some(&transfer(true, false)), &items),
+            Some(true)
+        );
+
+        // Too quick to be seen running, but holding what was sent.
+        let mut pending = PendingWrite::new(items.clone(), Ok(Vec::new()));
+        assert_eq!(
+            pending.upload_ended(Some(&transfer(true, false)), &items),
+            Some(true)
+        );
+        // A failed upload sets nothing.
+        let mut pending = PendingWrite::new(items.clone(), Ok(Vec::new()));
+        pending.upload_ended(Some(&transfer(false, false)), &items);
+        assert_eq!(
+            pending.upload_ended(Some(&transfer(true, true)), &items),
+            Some(false)
+        );
+    }
+
+    // ---- Home on the map ----
+
+    /// The planner draws home at the boxes once all three parse, and not before.
+    #[test]
+    fn the_planning_map_draws_home_at_the_boxes() {
+        let mut plan = Plan::default();
+        assert_eq!(planner_map_home(&plan), None);
+        type_home(&mut plan, "-35.36", "149.16", "");
+        assert_eq!(planner_map_home(&plan), None, "an empty ASL box is no home");
+        type_home(&mut plan, "-35.36", "149.16", "584");
+        assert_eq!(planner_map_home(&plan), Some(at(-35.36, 149.16)));
+        type_home(&mut plan, "-35.36", "x", "584");
+        assert_eq!(planner_map_home(&plan), None);
+        // `Tag = "H"` makes even 0,0 a home to draw.
+        type_home(&mut plan, "0", "0", "0");
+        assert_eq!(planner_map_home(&plan), Some(at(0.0, 0.0)));
+    }
+
+    /// The flight screen draws the vehicle's home once its mission is held, falling back on the
+    /// planned home while the vehicle's is 0,0.
+    #[test]
+    fn the_flight_map_draws_the_vehicles_home_with_its_mission() {
+        let vehicle = Some(at(-35.3632, 149.1652));
+        let planned = Home {
+            lat: -27.5,
+            lng: 153.0,
+            alt: 8.0,
+        };
+        assert_eq!(
+            flight_map_home(vehicle, false, planned),
+            None,
+            "no mission, no home"
+        );
+        assert_eq!(flight_map_home(vehicle, true, planned), vehicle);
+        assert_eq!(
+            flight_map_home(None, true, planned),
+            Some(at(-27.5, 153.0)),
+            "HOME_POSITION not yet sent"
+        );
+        assert_eq!(
+            flight_map_home(Some(at(0.0, 0.0)), true, planned),
+            Some(at(-27.5, 153.0))
+        );
+        assert_eq!(flight_map_home(None, true, Home::default()), None);
+    }
+
+    // ---- The Geo-Fence drop-down ----
+
+    /// Set Return Location puts the marker where the menu was opened.
+    #[test]
+    fn set_return_location_puts_the_marker_at_the_click() {
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        assert_eq!(plan.fence_return(), None);
+        choose(&mut plan, &mut menus, MenuAction::SetReturnLocation, None);
+        assert_eq!(plan.fence_return(), Some(canberra()));
+        assert!(menus.prompt.is_none());
+        assert!(menus.open.is_none(), "choosing closes the menu");
+    }
+
+    /// Save to File without a return location says so before any file is asked for; with one,
+    /// it asks for a `.fen`.
+    #[test]
+    fn save_to_file_needs_a_return_location_first() {
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::FenceSaveToFile, None);
+        assert_eq!(
+            menus.prompt.as_ref().map(|prompt| prompt.text.as_str()),
+            Some(SET_RETURN_LOCATION)
+        );
+        menus.cancel();
+        choose(&mut plan, &mut menus, MenuAction::SetReturnLocation, None);
+        choose(&mut plan, &mut menus, MenuAction::FenceSaveToFile, None);
+        let prompt = menus.prompt.as_ref().expect("the file dialog");
+        assert_eq!(
+            (prompt.title, prompt.text.as_str()),
+            (SAVE_FILE, FENCE_FILTER)
+        );
+        menus
+            .prompt
+            .as_mut()
+            .and_then(|prompt| prompt.field.as_mut())
+            .expect("a name field")
+            .set("square");
+        assert_eq!(
+            menus.submit(&mut plan, &context()),
+            Some(FileRequest::SaveFence("square".to_owned()))
+        );
+    }
+
+    /// Load from File asks for a `.fen`, and hands the name back to be read.
+    #[test]
+    fn load_from_file_asks_for_a_fence_file() {
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::FenceLoadFromFile, None);
+        let prompt = menus.prompt.as_ref().expect("the file dialog");
+        assert_eq!(
+            (prompt.title, prompt.text.as_str()),
+            (OPEN_FILE, FENCE_FILTER)
+        );
+        menus
+            .prompt
+            .as_mut()
+            .and_then(|prompt| prompt.field.as_mut())
+            .expect("a name field")
+            .set("square.fen");
+        assert_eq!(
+            menus.submit(&mut plan, &context()),
+            Some(FileRequest::LoadFence("square.fen".to_owned()))
+        );
+    }
+
+    /// The file is the return location, then the drawn polygon closed - or the geofence when
+    /// nothing is drawn - and it reads back into the drawn polygon and the marker.
+    #[test]
+    fn a_fence_file_round_trips_through_the_drawn_polygon() {
+        let square = [
+            at(-35.364, 149.164),
+            at(-35.364, 149.168),
+            at(-35.361, 149.168),
+            at(-35.361, 149.164),
+        ];
+        let mut plan = Plan::default();
+        plan.set_fence_return(at(-35.3625, 149.166));
+        assert_eq!(
+            plan.fence_file(),
+            Err(FENCE_FILE_FAILED),
+            "nothing drawn, no geofence"
+        );
+
+        // The geofence, when nothing is drawn.
+        for corner in &square {
+            plan.add_fence_vertex(*corner);
+        }
+        let file = plan.fence_file().expect("a file");
+        assert_eq!(file.vertices, square.to_vec());
+        // The drawn polygon, when there is one.
+        plan.add_area_vertex(square[0]);
+        plan.add_area_vertex(square[1]);
+        plan.add_area_vertex(square[2]);
+        let file = plan.fence_file().expect("a file");
+        assert_eq!(file.vertices.len(), 3);
+
+        let text = mp_mission::fence_file::write_fence(&file);
+        // Return, three corners, the first again.
+        assert_eq!(
+            text.lines().filter(|line| !line.starts_with('#')).count(),
+            5
+        );
+
+        let mut other = Plan::default();
+        other.adopt_fence_file(mp_mission::fence_file::read_fence(&text));
+        assert_eq!(other.polygon(), &square[..3]);
+        assert_eq!(other.fence_return(), Some(at(-35.3625, 149.166)));
+        // A file with no lines leaves the marker where it was, and empties the polygon.
+        other.adopt_fence_file(mp_mission::fence_file::read_fence(
+            "#nothing
+",
+        ));
+        assert!(other.polygon().is_empty());
+        assert_eq!(other.fence_return(), Some(at(-35.3625, 149.166)));
+    }
+
+    /// A typed name is a name in the plan directory, `.fen` added when it has no extension, and
+    /// nothing at all when empty.
+    #[test]
+    fn a_fence_file_name_is_a_name_with_its_extension() {
+        assert_eq!(fence_file_name("square"), Some("square.fen".to_owned()));
+        assert_eq!(fence_file_name("square.fen"), Some("square.fen".to_owned()));
+        assert_eq!(
+            fence_file_name("../../etc/square"),
+            Some("square.fen".to_owned())
+        );
+        assert_eq!(fence_file_name("  "), None);
+        assert_eq!(fence_file_name(""), None);
+    }
+
+    /// Clear's ending: the geofence goes, the return marker stays, the drawn corners stay but go
+    /// off the map until the polygon is next drawn.
+    #[test]
+    fn clearing_the_geofence_keeps_the_return_marker_and_the_drawn_corners() {
+        let mut plan = Plan::default();
+        plan.set_fence_return(canberra());
+        plan.add_fence_vertex(at(-35.364, 149.164));
+        plan.add_area_vertex(at(-35.364, 149.164));
+        plan.clear_geofence();
+        assert!(plan.fence().is_empty());
+        assert_eq!(plan.fence_return(), Some(canberra()));
+        assert_eq!(plan.polygon().len(), 1);
+        assert!(plan.shown_polygon().is_empty(), "off the map");
+        plan.add_area_vertex(at(-35.365, 149.165));
+        assert_eq!(
+            plan.shown_polygon().len(),
+            2,
+            "both corners, back with the next"
+        );
     }
 
     // ---- Home is item 0: the Home Location boxes against BUT_write_Click, saveWPs,
@@ -6105,6 +8142,10 @@ mod tests {
                 "menu-addPolygonPoint2",
                 "menu-clearPolygon2",
                 "menu-fromCurrentWaypoints",
+                "menu-setReturnLocation",
+                "menu-loadFromFile",
+                "menu-saveToFile",
+                "menu-clear",
                 "menu-ContextMeasure",
                 "menu-reverseWPs",
                 "menu-loadWPFile",

@@ -1,0 +1,53 @@
+# Geo-Fence > Clear with no vehicle (PLAN.md 13.4, D11).
+#
+# clearToolStripMenuItem_Click sets FENCE_ENABLE, FENCE_ACTION and FENCE_TOTAL to 0, one after
+# another, then clears the geofence and the drawn polygon's overlay from the map
+# (GCSViews/FlightPlanner.cs:2112-2155). The drawn polygon's corners stay in drawnpolygon.Points,
+# and come back on the map when it is next drawn (:1014-1030). setParam returns false for a
+# parameter the vehicle has not listed, without sending, and with no vehicle it has listed none,
+# so each set is passed over and the clearing still happens. The return location stays: the C#
+# clears the overlay's polygons, not its markers. plan-fence-clear-sitl.gui clears a vehicle's.
+
+env XDG_DATA_HOME $WORK
+env MP_PLAN_DIR $WORK
+setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
+
+screen plan
+window 1600x1200
+settle 4
+
+# A return location, a drawn polygon of three corners, and a geofence of three.
+click map@0.50x0.50:right
+click menu-geoFence
+click menu-setReturnLocation
+expect fence.return ~ -35.36
+click draw-area
+click map@0.35x0.35
+click map@0.65x0.35
+click map@0.65x0.65
+expect survey.points 3
+expect survey.shown 3
+click draw-fence
+click map@0.40x0.40
+click map@0.60x0.40
+click map@0.60x0.60
+expect fence.points 3
+
+# Clear.
+click map@0.30x0.70:right
+click menu-geoFence
+click menu-clear
+expect plan.menu closed
+settle 1
+expect plan.params.busy false
+expect plan.params FENCE_ENABLE=unknown,FENCE_ACTION=unknown,FENCE_TOTAL=unknown
+expect fence.points 0
+expect fence.return ~ -35.36
+expect plan.prompt none
+# The drawn polygon is off the map with its corners kept, and back with the next one drawn.
+expect survey.points 3
+expect survey.shown 0
+click draw-area
+click map@0.50x0.30
+expect survey.points 4
+expect survey.shown 4

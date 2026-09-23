@@ -4,16 +4,15 @@ Generated from `crates/mp-gui/src/planner_coverage.rs` by `cargo test -p mp-gui 
 
 | total | done | elsewhere | missing | plumbing | dropped |
 |---:|---:|---:|---:|---:|---:|
-| 121 | 44 | 0 | 65 | 12 | 0 |
+| 121 | 55 | 0 | 54 | 12 | 0 |
 
 Missing, by where the control sits:
 
 | group | missing |
 |---|---:|
-| planning panel | 16 |
+| planning panel | 9 |
 | Map Tool | 7 |
 | polygon icon menu | 7 |
-| Geo-Fence | 6 |
 | Rally Points | 6 |
 | Auto WP | 5 |
 | Polygon | 5 |
@@ -21,15 +20,16 @@ Missing, by where the control sits:
 | File Load/Save | 3 |
 | POI | 3 |
 | zoom icon menu | 3 |
+| Geo-Fence | 2 |
 
 | control | event | handler | text | ours |
 |---|---|---|---|---|
-| `TXT_WPRad` | KeyPress | `TXT_WPRad_KeyPress` | WP Radius | **missing** |
-| `TXT_WPRad` | Leave | `TXT_WPRad_Leave` | WP Radius | **missing** |
-| `TXT_DefaultAlt` | KeyPress | `TXT_DefaultAlt_KeyPress` | Default Alt | **missing** |
-| `TXT_DefaultAlt` | Leave | `TXT_DefaultAlt_Leave` | Default Alt | **missing** |
-| `TXT_loiterrad` | KeyPress | `TXT_loiterrad_KeyPress` | Loiter Radius | **missing** |
-| `TXT_loiterrad` | Leave | `TXT_loiterrad_Leave` | Loiter Radius | **missing** |
+| `TXT_WPRad` | KeyPress | `TXT_WPRad_KeyPress` | WP Radius | done: `plan-wprad` |
+| `TXT_WPRad` | Leave | `TXT_WPRad_Leave` | WP Radius | done: `fn panel_leave` |
+| `TXT_DefaultAlt` | KeyPress | `TXT_DefaultAlt_KeyPress` | Default Alt | done: `plan-defaultalt` |
+| `TXT_DefaultAlt` | Leave | `TXT_DefaultAlt_Leave` | Default Alt | done: `fn panel_leave` |
+| `TXT_loiterrad` | KeyPress | `TXT_loiterrad_KeyPress` | Loiter Radius | done: `plan-loiterrad` |
+| `TXT_loiterrad` | Leave | `TXT_loiterrad_Leave` | Loiter Radius | done: `fn panel_leave` |
 | `but_writewpfast` | Click | `but_writewpfast_Click` | Write Fast | **missing** |
 | `BUT_write` | Click | `BUT_write_Click` | Write | done: `plan-write` |
 | `BUT_read` | Click | `BUT_read_Click` | Read | done: `plan-read` |
@@ -42,7 +42,7 @@ Missing, by where the control sits:
 | `chk_usemavftp` | CheckedChanged | `chk_usemavftp_CheckedChanged` | MAVFTP | **missing** |
 | `but_mincommands` | Click | `but_mincommands_Click` | ˅ | **missing** |
 | `CMB_altmode` | SelectedIndexChanged | `CMB_altmode_SelectedIndexChanged` | the altitude frame | done: `fn set_altitude_frame` |
-| `CHK_splinedefault` | CheckedChanged | `CHK_splinedefault_CheckedChanged` | Spline | **missing** |
+| `CHK_splinedefault` | CheckedChanged | `CHK_splinedefault_CheckedChanged` | Spline | done: `plan-spline` |
 | `Commands` | CellContentClick | `Commands_CellContentClick` | the waypoint grid: Delete, Up, Down | done: `fn row_controls` |
 | `Commands` | CellEndEdit | `Commands_CellEndEdit` | the waypoint grid: a cell edited | done: `fn editor_panel` |
 | `Commands` | DataError | `Commands_DataError` | the waypoint grid | plumbing |
@@ -89,10 +89,10 @@ Missing, by where the control sits:
 | `areaToolStripMenuItem2` | Click | `areaToolStripMenuItem_Click` | Area | **missing** |
 | `GeoFenceuploadToolStripMenuItem` | Click | `GeoFenceuploadToolStripMenuItem_Click` | Upload | **missing** |
 | `GeoFencedownloadToolStripMenuItem` | Click | `GeoFencedownloadToolStripMenuItem_Click` | Download | **missing** |
-| `setReturnLocationToolStripMenuItem` | Click | `setReturnLocationToolStripMenuItem_Click` | Set Return Location | **missing** |
-| `loadFromFileToolStripMenuItem` | Click | `loadFromFileToolStripMenuItem_Click` | Load from File | **missing** |
-| `saveToFileToolStripMenuItem` | Click | `saveToFileToolStripMenuItem_Click` | Save to File | **missing** |
-| `clearToolStripMenuItem` | Click | `clearToolStripMenuItem_Click` | Clear | **missing** |
+| `setReturnLocationToolStripMenuItem` | Click | `setReturnLocationToolStripMenuItem_Click` | Set Return Location | done: `menu-setReturnLocation` |
+| `loadFromFileToolStripMenuItem` | Click | `loadFromFileToolStripMenuItem_Click` | Load from File | done: `menu-loadFromFile` |
+| `saveToFileToolStripMenuItem` | Click | `saveToFileToolStripMenuItem_Click` | Save to File | done: `menu-saveToFile` |
+| `clearToolStripMenuItem` | Click | `clearToolStripMenuItem_Click` | Clear | done: `menu-clear` |
 | `setRallyPointToolStripMenuItem` | Click | `setRallyPointToolStripMenuItem_Click` | Set Rally Point | **missing** |
 | `getRallyPointsToolStripMenuItem` | Click | `getRallyPointsToolStripMenuItem_Click` | Download | **missing** |
 | `saveRallyPointsToolStripMenuItem` | Click | `saveRallyPointsToolStripMenuItem_Click` | Upload | **missing** |
