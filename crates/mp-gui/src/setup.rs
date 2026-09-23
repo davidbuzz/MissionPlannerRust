@@ -71,11 +71,11 @@ pub fn identity_panel(view: &TelemetryView) -> impl IntoElement {
         div()
             .flex()
             .flex_col()
-            .gap_3()
+            .gap_2()
             .child(
                 div()
                     .flex()
-                    .gap_4()
+                    .gap_2()
                     .child(field("type", vehicle, theme::TEXT))
                     .child(field("autopilot", autopilot, theme::TEXT)),
             )
@@ -90,7 +90,7 @@ pub fn calibration_panel() -> impl IntoElement {
         rows = rows.child(
             div()
                 .flex()
-                .gap_3()
+                .gap_2()
                 .items_center()
                 .child(
                     div()
@@ -124,7 +124,7 @@ pub fn calibration_panel() -> impl IntoElement {
 
     panel(
         "calibration",
-        div().flex().flex_col().gap_3().child(rows).child(
+        div().flex().flex_col().gap_2().child(rows).child(
             div().text_xs().text_color(rgb(theme::DIM)).child(
                 "flying and planning come first; each calibration lands with its own \
                          protocol handling and tests",

@@ -50,13 +50,13 @@ pub fn vehicle_panel(view: &TelemetryView) -> impl IntoElement {
         div()
             .flex()
             .flex_col()
-            .gap_3()
+            .gap_2()
             .child(field("state", armed, armed_colour))
             .child(field("position", position, theme::TEXT))
             .child(
                 div()
                     .flex()
-                    .gap_4()
+                    .gap_3()
                     .child(field("altitude", altitude, theme::TEXT))
                     .child(field("ground speed", speed, theme::TEXT))
                     .child(field("heading", heading, theme::TEXT)),
@@ -388,7 +388,7 @@ pub fn hud_panel(view: &TelemetryView) -> impl IntoElement {
                 .child(
                     div()
                         .flex()
-                        .gap_4()
+                        .gap_3()
                         .px_3()
                         .py(px(2.0))
                         .rounded_md()
@@ -401,8 +401,13 @@ pub fn hud_panel(view: &TelemetryView) -> impl IntoElement {
         )
 }
 
-/// Satellite fix quality and battery state: the two numbers that decide whether to fly.
-pub fn gps_panel(view: &TelemetryView) -> impl IntoElement {
+/// Fix quality, power and link health: everything that decides whether to fly, and whether the
+/// aircraft is still listening.
+///
+/// One panel rather than two. They were separate and each cost a title, a border and twenty-four
+/// pixels of padding for four numbers - which is how the panel below them ended up off the bottom
+/// of the column. They answer one question between them: is this aircraft fit to fly right now.
+pub fn health_panel(view: &TelemetryView) -> impl IntoElement {
     let (fix_text, fix_colour) = match view.state.as_ref().map(|s| s.gps.fix_type) {
         Some(0 | 1) | None => ("no fix".to_owned(), theme::ALERT),
         Some(2) => ("2D".to_owned(), theme::WARN),
@@ -420,34 +425,23 @@ pub fn gps_panel(view: &TelemetryView) -> impl IntoElement {
         || "--".to_owned(),
         |s| {
             format!(
-                "{:.2} V  {}%",
+                "{:.1} V  {}%",
                 s.battery.voltage, s.battery.remaining_percent
             )
         },
     );
-
-    panel(
-        "gps and power",
-        div()
-            .flex()
-            .flex_col()
-            .gap_3()
-            .child(
-                div()
-                    .flex()
-                    .gap_4()
-                    .child(field("fix", fix_text, fix_colour))
-                    .child(field("satellites", sats, theme::TEXT)),
-            )
-            .child(field("battery", battery, theme::TEXT)),
-    )
-}
-
-/// Telemetry link health.
-pub fn link_panel(view: &TelemetryView) -> impl IntoElement {
+    let battery_colour = view.state.as_ref().map_or(theme::DIM, |s| {
+        // Ten percent is where a copter's own failsafe starts acting, so it is where the number
+        // should start shouting rather than an arbitrary round figure.
+        if s.battery.remaining_percent >= 0 && s.battery.remaining_percent < 10 {
+            theme::ALERT
+        } else {
+            theme::TEXT
+        }
+    });
     let loss = view.state.as_ref().map_or_else(
         || "--".to_owned(),
-        |s| format!("{:.2} %", s.link.loss_percent()),
+        |s| format!("{:.1} %", s.link.loss_percent()),
     );
     let loss_colour = view.state.as_ref().map_or(theme::DIM, |s| {
         if s.link.loss_percent() > 5.0 {
@@ -463,23 +457,31 @@ pub fn link_panel(view: &TelemetryView) -> impl IntoElement {
     };
 
     panel(
-        "link",
+        "health",
         div()
             .flex()
             .flex_col()
-            .gap_3()
+            .gap_2()
             .child(
                 div()
                     .flex()
-                    .gap_4()
+                    .gap_3()
+                    .child(field("fix", fix_text, fix_colour))
+                    .child(field("satellites", sats, theme::TEXT))
+                    .child(field("battery", battery, battery_colour)),
+            )
+            .child(
+                div()
+                    .flex()
+                    .gap_3()
                     .child(field("frames", view.frames.to_string(), theme::TEXT))
                     .child(field("loss", loss, loss_colour))
-                    .child(field("crc errors", view.crc_errors.to_string(), crc_colour)),
-            )
-            .child(field(
-                "systems on link",
-                view.vehicle_count.to_string(),
-                theme::TEXT,
-            )),
+                    .child(field("crc errors", view.crc_errors.to_string(), crc_colour))
+                    .child(field(
+                        "systems",
+                        view.vehicle_count.to_string(),
+                        theme::TEXT,
+                    )),
+            ),
     )
 }

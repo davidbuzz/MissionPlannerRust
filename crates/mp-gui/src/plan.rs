@@ -613,7 +613,7 @@ pub fn editor_panel(
         div()
             .flex()
             .flex_col()
-            .gap_3()
+            .gap_2()
             .child(div().text_xs().text_color(rgb(theme::DIM)).child("command"))
             .child(commands)
             .child(
@@ -722,7 +722,7 @@ pub fn survey_panel(
         div()
             .flex()
             .flex_col()
-            .gap_3()
+            .gap_2()
             .child(mode_row)
             .child(
                 div()
@@ -914,7 +914,7 @@ pub fn actions_panel(
         div()
             .flex()
             .flex_col()
-            .gap_3()
+            .gap_2()
             .child(
                 div()
                     .flex()

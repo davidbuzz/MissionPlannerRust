@@ -262,8 +262,8 @@ impl MissionPlanner {
             strip = strip.child(
                 probe::measured(screen.id(), div())
                     .id(screen.id())
-                    .px_4()
-                    .py_2()
+                    .px_3()
+                    .py_1()
                     .rounded_t_md()
                     .text_sm()
                     .cursor_pointer()
@@ -293,28 +293,27 @@ impl MissionPlanner {
     /// content growing under the scroll container dragged the view down, so the application
     /// started with its primary flight display already off the top of the screen.
     fn fly_sidebar(&self, view: &TelemetryView, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
+        probe::measured("fly-column", div())
             .flex()
             .flex_col()
             .flex_shrink_0()
             .min_h(px(0.0))
-            .gap_4()
+            .gap_2()
             .w(px(400.0))
             .child(fly::hud_panel(view))
             .child(
-                div()
+                probe::measured("fly-sidebar", div())
                     .id("fly-sidebar")
                     .flex()
                     .flex_col()
                     .flex_1()
                     .min_h(px(0.0))
-                    .gap_4()
+                    .gap_2()
                     .pr_2()
                     .overflow_y_scroll()
                     .child(fly::actions_panel(view, cx))
                     .child(fly::vehicle_panel(view))
-                    .child(fly::gps_panel(view))
-                    .child(fly::link_panel(view)),
+                    .child(fly::health_panel(view)),
             )
     }
 
@@ -335,7 +334,7 @@ impl MissionPlanner {
             .flex()
             .flex_col()
             .flex_shrink_0()
-            .gap_4()
+            .gap_2()
             .pr_2()
             .overflow_y_scroll()
             .w(px(400.0))
@@ -357,8 +356,8 @@ impl MissionPlanner {
         div()
             .flex()
             .flex_col()
-            .gap_4()
-            .p_4()
+            .gap_2()
+            .p_2()
             .child(setup::identity_panel(view))
             .child(setup::calibration_panel())
     }
@@ -604,12 +603,12 @@ impl Render for MissionPlanner {
         };
 
         let body = match self.screen {
-            Screen::Fly => div()
+            Screen::Fly => probe::measured("body", div())
                 .flex()
                 .flex_1()
                 .min_h(px(0.0))
-                .gap_4()
-                .p_4()
+                .gap_2()
+                .p_2()
                 .child(self.fly_sidebar(&view, cx))
                 .child(
                     div()
@@ -618,7 +617,7 @@ impl Render for MissionPlanner {
                         .flex_1()
                         .min_w(px(0.0))
                         .min_h(px(0.0))
-                        .gap_4()
+                        .gap_2()
                         .child(self.map_pane(cx))
                         .child(div().flex_shrink_0().child(fly::messages_panel(&view))),
                 )
@@ -627,8 +626,8 @@ impl Render for MissionPlanner {
                 .flex()
                 .flex_1()
                 .min_h(px(0.0))
-                .gap_4()
-                .p_4()
+                .gap_2()
+                .p_2()
                 .child(self.plan_sidebar(&view, cx))
                 .child(self.map_pane(cx))
                 .into_any_element(),
@@ -641,7 +640,7 @@ impl Render for MissionPlanner {
                 .into_any_element(),
         };
 
-        div()
+        probe::measured("root", div())
             .flex()
             .flex_col()
             .size_full()
@@ -649,12 +648,12 @@ impl Render for MissionPlanner {
             .bg(rgb(theme::BG))
             .text_color(rgb(theme::TEXT))
             .child(
-                div()
+                probe::measured("header", div())
                     .flex()
                     .items_center()
                     .justify_between()
-                    .px_5()
-                    .pt_3()
+                    .px_4()
+                    .pt_2()
                     .bg(rgb(theme::PANEL))
                     .border_b_1()
                     .border_color(rgb(theme::BORDER))
@@ -662,12 +661,12 @@ impl Render for MissionPlanner {
                         div()
                             .flex()
                             .items_end()
-                            .gap_6()
+                            .gap_4()
                             .child(
                                 div()
                                     .flex()
                                     .flex_col()
-                                    .pb_3()
+                                    .pb_2()
                                     .child(div().text_xl().child("Mission Planner"))
                                     .child(
                                         div()
@@ -683,7 +682,7 @@ impl Render for MissionPlanner {
                             .flex()
                             .items_center()
                             .gap_2()
-                            .pb_3()
+                            .pb_2()
                             .child(div().size_2().rounded_full().bg(rgb(status_colour)))
                             .child(div().text_sm().text_color(rgb(theme::DIM)).child(status)),
                     ),
