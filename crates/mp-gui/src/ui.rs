@@ -97,11 +97,27 @@ pub fn action(
     enabled: bool,
     on_click: impl Fn(&(), &mut Window, &mut App) + 'static,
 ) -> AnyElement {
+    action_sized(id, label, colour, enabled, None, on_click)
+}
+
+/// An action control with a minimum width.
+///
+/// Used to make controls that belong together the same size regardless of how long their labels
+/// are. Two buttons that do nearly the same thing looking like different kinds of control is a
+/// small thing that reads as carelessness.
+pub fn action_sized(
+    id: &'static str,
+    label: impl Into<SharedString>,
+    colour: u32,
+    enabled: bool,
+    min_width: Option<gpui::Pixels>,
+    on_click: impl Fn(&(), &mut Window, &mut App) + 'static,
+) -> AnyElement {
     // measured() wraps the plain div before `.id()`, because `.id()` yields a Stateful<Div> and
     // the bounds hook lives on Div. It reports where this control ended up, so a test script can
     // click it by name rather than by a coordinate that goes stale the next time the layout
     // changes, and it adds nothing to the element tree when probing is off.
-    let base = crate::probe::measured(id, div())
+    let mut base = crate::probe::measured(id, div())
         .id(id)
         .px_3()
         .py_1()
@@ -109,6 +125,11 @@ pub fn action(
         .border_1()
         .text_sm()
         .child(label.into());
+    if let Some(min_width) = min_width {
+        // Centred, so a short label in a wide button does not sit against the left edge looking
+        // like the button was stretched by accident.
+        base = base.min_w(min_width).flex().justify_center();
+    }
 
     if enabled {
         base.bg(rgb(theme::ACTION))

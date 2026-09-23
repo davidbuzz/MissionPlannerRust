@@ -12,7 +12,7 @@ use mp_link::messages::{Severity, time_of_day};
 
 use crate::MissionPlanner;
 use crate::telemetry::TelemetryView;
-use crate::ui::{action, field, panel, theme};
+use crate::ui::{action, action_sized, field, panel, theme};
 
 /// Default height for the takeoff button, in metres above home.
 ///
@@ -20,6 +20,13 @@ use crate::ui::{action, field, panel, theme};
 /// first pass than a text field nobody reads, and it is deliberately low: a wrong 10 is a hover,
 /// a wrong 100 is an incident.
 pub const TAKEOFF_ALTITUDE: f32 = 10.0;
+
+/// Width shared by the arm and force arm buttons.
+///
+/// Wide enough for "force arm" so both are the same size. They are the same decision with
+/// different force, and two controls that do nearly the same thing should not look like different
+/// kinds of control.
+const ARM_BUTTON_WIDTH: gpui::Pixels = px(104.0);
 
 /// What the aircraft is and whether it is armed.
 pub fn vehicle_panel(view: &TelemetryView) -> impl IntoElement {
@@ -88,21 +95,23 @@ pub fn actions_panel(view: &TelemetryView, cx: &mut Context<MissionPlanner>) -> 
         .flex()
         .flex_wrap()
         .gap_2()
-        .child(action(
+        .child(action_sized(
             "arm",
             "arm",
-            theme::WARN,
+            theme::OK,
             has_vehicle && !armed,
+            Some(ARM_BUTTON_WIDTH),
             cx.listener(|this, _event: &(), _window, cx| {
                 this.telemetry.arm(true);
                 cx.notify();
             }),
         ))
-        .child(action(
+        .child(action_sized(
             "force-arm",
             "force arm",
             theme::ALERT,
             has_vehicle && !armed,
+            Some(ARM_BUTTON_WIDTH),
             cx.listener(|this, _event: &(), _window, cx| {
                 this.telemetry.force_arm();
                 cx.notify();
