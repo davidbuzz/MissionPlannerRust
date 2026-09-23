@@ -13,12 +13,12 @@
 #![allow(unreachable_pub)]
 
 use gpui::{AnyElement, Context, div, prelude::*, px, rgb};
-use mp_link::calibration::{AccelCalibration, AccelPosition};
+use mp_link::calibration::{AccelCalibration, AccelPosition, CompassProgress, CompassStatus};
 use mp_mavlink_dialects::all::{MavAutopilot, MavType};
 
 use crate::MissionPlanner;
 use crate::telemetry::TelemetryView;
-use crate::ui::{action, field, panel, theme};
+use crate::ui::{action, field, panel, progress as progress_bar, theme};
 
 /// The calibrations that are a single command.
 ///
@@ -30,11 +30,6 @@ const SINGLE_SHOT: &[(&str, &str, &str)] = &[
         "level",
         "tells the vehicle that however it is sitting now is level; run it after mounting the \
          autopilot even slightly askew",
-    ),
-    (
-        "cal-compass",
-        "compass",
-        "samples the magnetometers while you rotate the airframe through every orientation",
     ),
     (
         "cal-baro",
@@ -228,6 +223,130 @@ fn restart_button(cx: &mut Context<MissionPlanner>) -> AnyElement {
     )
 }
 
+/// Compass calibration, with a progress bar per compass.
+///
+/// One row per compass because ArduPilot calibrates every enabled one at once and reports each
+/// separately. A vehicle with an external and an internal compass can have the first pass and the
+/// second fail, and saying only "failed" would send the operator to the wrong hardware.
+pub fn compass_panel(
+    progress: &[CompassProgress],
+    view: &TelemetryView,
+    cx: &mut Context<MissionPlanner>,
+) -> impl IntoElement {
+    let has_vehicle = view.vehicle.is_some();
+    let armed = view.state.as_ref().is_some_and(|state| state.armed);
+    let running = progress.iter().any(|entry| entry.status.in_progress());
+
+    let mut rows = div().flex().flex_col().gap_2();
+    for entry in progress {
+        let colour = match entry.status {
+            CompassStatus::Succeeded => theme::OK,
+            CompassStatus::Failed | CompassStatus::BadOrientation => theme::ALERT,
+            CompassStatus::Running | CompassStatus::WaitingToStart => theme::WARN,
+            _ => theme::DIM,
+        };
+        rows = rows.child(
+            div()
+                .flex()
+                .flex_col()
+                .gap_1()
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_3()
+                        .child(
+                            div()
+                                .w(px(80.0))
+                                .text_sm()
+                                .text_color(rgb(theme::TEXT))
+                                .child(format!("compass {}", entry.compass_id)),
+                        )
+                        .child(
+                            div()
+                                .w(px(48.0))
+                                .text_sm()
+                                .text_color(rgb(colour))
+                                .child(format!("{}%", entry.percent)),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w(px(0.0))
+                                .text_xs()
+                                .text_color(rgb(colour))
+                                .child(entry.status.describe()),
+                        ),
+                )
+                .child(progress_bar(f32::from(entry.percent) / 100.0, colour))
+                .children(entry.fitness.map(|fitness| {
+                    // ArduPilot's own threshold for a good fit is well under 100. A large value
+                    // means the samples did not describe a sphere, which means the airframe was
+                    // not rotated enough - a different fix from trying again the same way.
+                    let good = fitness < 100.0;
+                    div()
+                        .text_xs()
+                        .text_color(rgb(if good { theme::DIM } else { theme::WARN }))
+                        .child(if good {
+                            format!("fitness {fitness:.1}")
+                        } else {
+                            format!("fitness {fitness:.1} - poor; rotate through more orientations")
+                        })
+                })),
+        );
+    }
+
+    if progress.is_empty() {
+        rows = rows.child(div().text_xs().text_color(rgb(theme::DIM)).child(
+            "start, then rotate the airframe slowly through every orientation - nose up, \
+                     nose down, on each side, and upside down",
+        ));
+    }
+
+    panel(
+        "compass",
+        div().flex().flex_col().gap_2().child(rows).child(
+            div()
+                .flex()
+                .gap_2()
+                .child(action(
+                    "cal-compass-start",
+                    if running {
+                        "sampling"
+                    } else {
+                        "start compass calibration"
+                    },
+                    theme::WARN,
+                    has_vehicle && !armed && !running,
+                    cx.listener(|this, _event: &(), _window, cx| {
+                        this.telemetry.calibrate_compass();
+                        cx.notify();
+                    }),
+                ))
+                .child(action(
+                    "cal-compass-cancel",
+                    "cancel",
+                    theme::ALERT,
+                    running,
+                    cx.listener(|this, _event: &(), _window, cx| {
+                        this.telemetry.cancel_compass_calibration();
+                        cx.notify();
+                    }),
+                ))
+                .child(action(
+                    "cal-compass-clear",
+                    "clear",
+                    theme::TEXT,
+                    !progress.is_empty() && !running,
+                    cx.listener(|this, _event: &(), _window, cx| {
+                        this.telemetry.clear_compass_calibration();
+                        cx.notify();
+                    }),
+                )),
+        ),
+    )
+}
+
 /// The calibrations that are a single command.
 pub fn calibration_panel(
     view: &TelemetryView,
@@ -251,7 +370,6 @@ pub fn calibration_panel(
                     cx.listener(move |this, _event: &(), _window, cx| {
                         match *id {
                             "cal-level" => this.telemetry.calibrate_level(),
-                            "cal-compass" => this.telemetry.calibrate_compass(),
                             _ => this.telemetry.calibrate_ground_pressure(),
                         }
                         this.file_status = Some(format!("{name} calibration started"));

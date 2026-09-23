@@ -480,6 +480,7 @@ impl MissionPlanner {
     /// The setup screen, which is one column and no map.
     fn setup_body(&self, view: &TelemetryView, cx: &mut Context<Self>) -> impl IntoElement {
         let calibration = self.telemetry.accel_calibration();
+        let compass = self.telemetry.compass_calibration();
         div()
             .flex()
             .flex_col()
@@ -488,6 +489,7 @@ impl MissionPlanner {
             .w(px(760.0))
             .child(setup::identity_panel(view))
             .child(setup::accelerometer_panel(calibration, view, cx))
+            .child(setup::compass_panel(&compass, view, cx))
             .child(setup::calibration_panel(view, cx))
     }
 

@@ -342,7 +342,31 @@ impl Telemetry {
     /// Starts an onboard compass calibration.
     pub fn calibrate_compass(&self) {
         if let Some((link, id)) = self.target() {
+            link.clear_compass_calibration();
             link.send(&mp_link::calibration::start_compass(id));
+        }
+    }
+
+    /// Compass calibration progress, one entry per compass.
+    #[must_use]
+    pub fn compass_calibration(&self) -> Vec<mp_link::calibration::CompassProgress> {
+        self.link
+            .as_ref()
+            .map(Link::compass_calibration)
+            .unwrap_or_default()
+    }
+
+    /// Stops a running compass calibration.
+    pub fn cancel_compass_calibration(&self) {
+        if let Some((link, id)) = self.target() {
+            link.send(&mp_link::calibration::cancel_compass(id));
+        }
+    }
+
+    /// Forgets compass calibration progress.
+    pub fn clear_compass_calibration(&self) {
+        if let Some(link) = &self.link {
+            link.clear_compass_calibration();
         }
     }
 

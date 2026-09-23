@@ -148,6 +148,8 @@ struct Shared {
     messages: Mutex<messages::MessageLog>,
     /// The state of an accelerometer calibration, if one is running.
     accel_calibration: Mutex<calibration::AccelCalibration>,
+    /// Compass calibration progress, one entry per compass being calibrated.
+    compass_calibration: Mutex<BTreeMap<u8, calibration::CompassProgress>>,
     stats: Mutex<LinkStats>,
     running: AtomicBool,
     frames_received: AtomicU64,
@@ -337,6 +339,23 @@ impl Link {
         }
     }
 
+    /// Compass calibration progress, one entry per compass, lowest id first.
+    #[must_use]
+    pub fn compass_calibration(&self) -> Vec<calibration::CompassProgress> {
+        self.shared
+            .compass_calibration
+            .lock()
+            .map(|held| held.values().copied().collect())
+            .unwrap_or_default()
+    }
+
+    /// Forgets compass calibration progress.
+    pub fn clear_compass_calibration(&self) {
+        if let Ok(mut held) = self.shared.compass_calibration.lock() {
+            held.clear();
+        }
+    }
+
     /// Link counters.
     #[must_use]
     pub fn stats(&self) -> LinkStats {
@@ -510,6 +529,47 @@ fn run_link(
                                     let state = calibration::AccelCalibration::from_wire(value);
                                     if let Ok(mut held) = shared.accel_calibration.lock() {
                                         *held = state;
+                                    }
+                                }
+                                // Compass calibration reports per compass, because ArduPilot
+                                // calibrates every enabled one at once. A vehicle can have its
+                                // external compass pass and its internal one fail.
+                                MavMessage::MagCalProgress(progress) => {
+                                    if let Ok(mut held) = shared.compass_calibration.lock() {
+                                        let entry = held.entry(progress.compass_id).or_insert(
+                                            calibration::CompassProgress {
+                                                compass_id: progress.compass_id,
+                                                status: calibration::CompassStatus::NotStarted,
+                                                percent: 0,
+                                                attempt: 0,
+                                                fitness: None,
+                                            },
+                                        );
+                                        entry.status = calibration::CompassStatus::from_wire(
+                                            progress.cal_status,
+                                        );
+                                        entry.percent = progress.completion_pct;
+                                        entry.attempt = progress.attempt;
+                                    }
+                                }
+                                MavMessage::MagCalReport(report) => {
+                                    if let Ok(mut held) = shared.compass_calibration.lock() {
+                                        let entry = held.entry(report.compass_id).or_insert(
+                                            calibration::CompassProgress {
+                                                compass_id: report.compass_id,
+                                                status: calibration::CompassStatus::NotStarted,
+                                                percent: 0,
+                                                attempt: 0,
+                                                fitness: None,
+                                            },
+                                        );
+                                        entry.status = calibration::CompassStatus::from_wire(
+                                            report.cal_status,
+                                        );
+                                        // A report means sampling finished, whatever the last
+                                        // progress message happened to say.
+                                        entry.percent = 100;
+                                        entry.fitness = Some(report.fitness);
                                     }
                                 }
                                 MavMessage::CommandAck(ack) => {

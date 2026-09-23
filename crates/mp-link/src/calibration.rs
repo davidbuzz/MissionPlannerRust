@@ -197,16 +197,41 @@ pub fn level(target: VehicleId) -> MavMessage {
     )
 }
 
-/// Starts an onboard compass calibration.
+/// `MAV_CMD_DO_START_MAG_CAL`.
+pub const CMD_DO_START_MAG_CAL: u16 = 42_424;
+/// `MAV_CMD_DO_ACCEPT_MAG_CAL`.
+pub const CMD_DO_ACCEPT_MAG_CAL: u16 = 42_425;
+/// `MAV_CMD_DO_CANCEL_MAG_CAL`.
+pub const CMD_DO_CANCEL_MAG_CAL: u16 = 42_426;
+
+/// Starts an onboard compass calibration on every compass.
 ///
-/// param2 = 1. The vehicle samples while the airframe is rotated through every orientation and
-/// reports progress in `MAG_CAL_PROGRESS`.
+/// `MAV_CMD_DO_START_MAG_CAL`, not `MAV_CMD_PREFLIGHT_CALIBRATION`. The latter's magnetometer
+/// parameter is the legacy offset calibration; it is accepted by the firmware and never produces a
+/// `MAG_CAL_PROGRESS` message, so a ground station that sends it shows a progress panel that stays
+/// empty forever. This was found by sending the wrong one.
+///
+/// param1 = 0 calibrates every compass; param2 = 1 retries on failure; param3 = 1 saves the result
+/// without asking again, which is what the operator pressing "start" already asked for.
 #[must_use]
 pub fn start_compass(target: VehicleId) -> MavMessage {
     command(
         target,
-        CMD_PREFLIGHT_CALIBRATION,
-        [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        CMD_DO_START_MAG_CAL,
+        [0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+    )
+}
+
+/// Stops a running compass calibration on every compass.
+///
+/// Worth having: the sequence otherwise runs until it succeeds or times out, and an operator who
+/// started it by accident, or who cannot rotate the airframe after all, has no other way out.
+#[must_use]
+pub fn cancel_compass(target: VehicleId) -> MavMessage {
+    command(
+        target,
+        CMD_DO_CANCEL_MAG_CAL,
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
     )
 }
 
@@ -221,6 +246,94 @@ pub fn ground_pressure(target: VehicleId) -> MavMessage {
         CMD_PREFLIGHT_CALIBRATION,
         [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
     )
+}
+
+/// How a compass calibration is going, per compass.
+///
+/// ArduPilot calibrates every enabled compass at once and reports each separately, which is why
+/// this is per-compass rather than a single state. A vehicle with an external compass and an
+/// internal one can have the first pass and the second fail, and telling the operator "failed"
+/// without saying which would send them looking at the wrong hardware.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CompassProgress {
+    /// Which compass, as the vehicle numbers them.
+    pub compass_id: u8,
+    /// What it is doing.
+    pub status: CompassStatus,
+    /// How far through, zero to a hundred.
+    pub percent: u8,
+    /// How many attempts it has made.
+    pub attempt: u8,
+    /// Fitness, once a report arrives: the residual after fitting, lower being better.
+    ///
+    /// ArduPilot's own threshold for a good calibration is well under 100; a large value means the
+    /// samples did not describe a sphere, usually because the airframe was not rotated enough.
+    pub fitness: Option<f32>,
+}
+
+/// What a compass calibration is doing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompassStatus {
+    /// Not started.
+    NotStarted,
+    /// Accepted, about to begin.
+    WaitingToStart,
+    /// Collecting samples.
+    Running,
+    /// Finished and accepted.
+    Succeeded,
+    /// Finished and rejected.
+    Failed,
+    /// The samples imply the compass is mounted differently from what the parameters say.
+    ///
+    /// A distinct outcome rather than a failure, because the fix is different: this one is a
+    /// wrong `COMPASS_ORIENT`, not a badly performed rotation.
+    BadOrientation,
+    /// A status this dialect does not name.
+    Unknown(u8),
+}
+
+impl CompassStatus {
+    /// Reads the wire value.
+    #[must_use]
+    pub const fn from_wire(value: u8) -> Self {
+        match value {
+            0 => Self::NotStarted,
+            1 => Self::WaitingToStart,
+            // Two running steps; the operator does not need to know which, only that it is going.
+            2 | 3 => Self::Running,
+            4 => Self::Succeeded,
+            5 => Self::Failed,
+            6 => Self::BadOrientation,
+            other => Self::Unknown(other),
+        }
+    }
+
+    /// Whether sampling is still under way.
+    #[must_use]
+    pub const fn in_progress(self) -> bool {
+        matches!(self, Self::WaitingToStart | Self::Running)
+    }
+
+    /// Whether this is a finished outcome, good or bad.
+    #[must_use]
+    pub const fn is_finished(self) -> bool {
+        matches!(self, Self::Succeeded | Self::Failed | Self::BadOrientation)
+    }
+
+    /// What to tell the operator.
+    #[must_use]
+    pub const fn describe(self) -> &'static str {
+        match self {
+            Self::NotStarted => "not started",
+            Self::WaitingToStart => "starting",
+            Self::Running => "rotate the airframe through every orientation",
+            Self::Succeeded => "accepted - reboot for it to take effect",
+            Self::Failed => "rejected - rotate through more orientations and try again",
+            Self::BadOrientation => "the compass appears mounted differently from COMPASS_ORIENT",
+            Self::Unknown(_) => "an outcome this dialect does not name",
+        }
+    }
 }
 
 #[cfg(test)]
@@ -242,6 +355,47 @@ mod tests {
         match message {
             MavMessage::CommandLong(c) => c.command,
             other => panic!("expected a COMMAND_LONG, got {}", other.name()),
+        }
+    }
+
+    #[test]
+    fn both_running_steps_read_as_running() {
+        // ArduPilot reports two sampling steps. The operator does not need to know which, only
+        // that it is going; showing "step two" invites the question of what step one was.
+        assert_eq!(CompassStatus::from_wire(2), CompassStatus::Running);
+        assert_eq!(CompassStatus::from_wire(3), CompassStatus::Running);
+        assert!(CompassStatus::from_wire(2).in_progress());
+    }
+
+    #[test]
+    fn a_bad_orientation_is_not_just_a_failure() {
+        // The fix is different: a wrong COMPASS_ORIENT rather than a badly performed rotation.
+        // Reporting it as a plain failure sends the operator to rotate the airframe again, which
+        // cannot help.
+        let bad = CompassStatus::from_wire(6);
+        assert_eq!(bad, CompassStatus::BadOrientation);
+        assert!(bad.is_finished());
+        assert!(!bad.in_progress());
+        assert_ne!(bad.describe(), CompassStatus::Failed.describe());
+        assert!(bad.describe().contains("COMPASS_ORIENT"));
+    }
+
+    #[test]
+    fn an_unnamed_status_is_carried_rather_than_dropped() {
+        // A newer firmware's status shown as "not started" would be a lie that looks like data.
+        assert_eq!(CompassStatus::from_wire(200), CompassStatus::Unknown(200));
+        assert!(!CompassStatus::from_wire(200).in_progress());
+        assert!(!CompassStatus::from_wire(200).is_finished());
+    }
+
+    #[test]
+    fn finished_and_in_progress_are_never_both_true() {
+        for value in 0..=10 {
+            let status = CompassStatus::from_wire(value);
+            assert!(
+                !(status.in_progress() && status.is_finished()),
+                "{status:?} claims both"
+            );
         }
     }
 
@@ -298,7 +452,6 @@ mod tests {
         for (what, built) in [
             ("accelerometer", start_accelerometer(id)),
             ("level", level(id)),
-            ("compass", start_compass(id)),
             ("ground pressure", ground_pressure(id)),
         ] {
             let set = params(&built)
@@ -308,6 +461,37 @@ mod tests {
             assert_eq!(set, 1, "{what} sets {set} parameters, not 1");
             assert_eq!(command_id(&built), CMD_PREFLIGHT_CALIBRATION);
         }
+    }
+
+    #[test]
+    fn the_compass_calibration_is_the_command_that_reports_progress() {
+        // MAV_CMD_PREFLIGHT_CALIBRATION's magnetometer parameter is the legacy offset
+        // calibration. The firmware accepts it and never sends a MAG_CAL_PROGRESS, so the
+        // progress panel stays empty forever - which is exactly what happened before this test
+        // existed.
+        let id = VehicleId::new(1, 1);
+        let built = start_compass(id);
+        assert_eq!(command_id(&built), CMD_DO_START_MAG_CAL);
+        assert_ne!(command_id(&built), CMD_PREFLIGHT_CALIBRATION);
+
+        let p = params(&built);
+        assert!(
+            p[0].abs() < f32::EPSILON,
+            "param1 should be 0, meaning every compass"
+        );
+        assert!(
+            (p[1] - 1.0).abs() < f32::EPSILON,
+            "param2 should retry on failure"
+        );
+        assert!((p[2] - 1.0).abs() < f32::EPSILON, "param3 should autosave");
+    }
+
+    #[test]
+    fn a_compass_calibration_can_be_cancelled() {
+        // Without this the sequence runs until it succeeds or times out, and an operator who
+        // cannot rotate the airframe after all has no way out.
+        let id = VehicleId::new(1, 1);
+        assert_eq!(command_id(&cancel_compass(id)), CMD_DO_CANCEL_MAG_CAL);
     }
 
     #[test]
