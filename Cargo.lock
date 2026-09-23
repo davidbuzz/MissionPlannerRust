@@ -3322,6 +3322,7 @@ dependencies = [
  "mp-mission",
  "mp-params",
  "mp-settings",
+ "mp-terrain",
  "mp-transport",
  "mp-units",
  "mp-vehicle",
@@ -3486,6 +3487,17 @@ version = "0.1.0"
 dependencies = [
  "roxmltree 0.20.0",
  "thiserror 2.0.20",
+]
+
+[[package]]
+name = "mp-terrain"
+version = "0.1.0"
+dependencies = [
+ "mp-log",
+ "mp-settings",
+ "mp-tiles",
+ "regex",
+ "ureq",
 ]
 
 [[package]]

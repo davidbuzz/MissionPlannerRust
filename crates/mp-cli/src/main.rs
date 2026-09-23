@@ -148,6 +148,16 @@ fn main() -> std::process::ExitCode {
                 std::process::ExitCode::from(2)
             }
         },
+        Some("terrain") => match (
+            args.get(1).and_then(|s| s.parse::<f64>().ok()),
+            args.get(2).and_then(|s| s.parse::<f64>().ok()),
+        ) {
+            (Some(lat), Some(lng)) => terrain(lat, lng),
+            _ => {
+                eprintln!("usage: mpr terrain <lat> <lng>");
+                std::process::ExitCode::from(2)
+            }
+        },
         Some("ports") => ports(),
         Some("help" | "--help" | "-h") | None => {
             usage();
@@ -186,6 +196,7 @@ fn usage() {
   mpr firmware info <file>    describe a .apj firmware file
   mpr firmware detect <port>  name the board from its USB ids
   mpr firmware list [...]     the firmware the catalogue would give a board
+  mpr terrain <lat> <lng>     the ground there, from the SRTM tiles the planner uses
   mpr ports                   list serial ports\n\n\
          url forms:\n  \
          serial:/dev/ttyACM0:115200\n  \
@@ -193,6 +204,62 @@ fn usage() {
          udp:14550                   (bind and wait for the vehicle)\n  \
          file:flight.tlog            (replay a recording)"
     );
+}
+
+/// How long `mpr terrain` waits for a tile it had to queue: `HttpClient`'s 100 seconds for each of
+/// the three requests a found tile takes, and the queue thread's pauses.
+const TERRAIN_WAIT: Duration = Duration::from_secs(330);
+
+/// `mpr terrain <lat> <lng>`: `srtm.getAltitude` at a point, over the terrain cache Mission Planner
+/// keeps (`MainV2.cs:737`), swept as `MainV2` sweeps it at startup (`MainV2.cs:739-750`).
+fn terrain(lat: f64, lng: f64) -> std::process::ExitCode {
+    let Some(dir) = mp_terrain::srtm_directory() else {
+        eprintln!("no home directory to find the terrain cache under");
+        return std::process::ExitCode::FAILURE;
+    };
+    mp_terrain::clean_cache_directory(&dir);
+    let srtm = mp_terrain::Srtm::new(dir);
+    let answer = terrain_answer(&srtm, lat, lng, TERRAIN_WAIT);
+    println!("{}", terrain_line(&answer));
+    if answer.current_type == mp_terrain::TileType::Invalid {
+        std::process::ExitCode::FAILURE
+    } else {
+        std::process::ExitCode::SUCCESS
+    }
+}
+
+/// Asks at the C#'s default zoom and, if that queued the tile, waits for the queue thread to be
+/// done with it and asks again - what the planner's status line does on the next mouse move
+/// (`FlightPlanner.cs:1274-1284`). A tile a failing server holds at the head of the queue is waited
+/// for until `wait` runs out, and the answer is then the C#'s `Invalid`.
+fn terrain_answer(
+    srtm: &mp_terrain::Srtm,
+    lat: f64,
+    lng: f64,
+    wait: Duration,
+) -> mp_terrain::AltResponse {
+    let answer = srtm.get_altitude(lat, lng, mp_terrain::DEFAULT_ZOOM);
+    let Some(tile) = mp_terrain::tile_name(lat, lng) else {
+        return answer;
+    };
+    if !srtm.queued().contains(&tile) {
+        return answer;
+    }
+    let deadline = Instant::now() + wait;
+    while srtm.queued().contains(&tile) && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    srtm.get_altitude(lat, lng, mp_terrain::DEFAULT_ZOOM)
+}
+
+/// An answer as the C# holds it: `altresponce`'s three fields, the altitude to the last bit.
+fn terrain_line(answer: &mp_terrain::AltResponse) -> String {
+    format!(
+        "alt={} altsource={} currenttype={}",
+        answer.alt,
+        answer.alt_source,
+        answer.current_type.name()
+    )
 }
 
 fn ports() -> std::process::ExitCode {
@@ -2082,5 +2149,130 @@ mod retries {
             })
             .collect();
         assert_eq!(confirmations, [0, 1]);
+    }
+}
+
+/// `mpr terrain`: the lookup and its wait, against a server this test serves.
+#[cfg(test)]
+mod terrain {
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
+
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
+
+    use mp_terrain::{AltResponse, Http, HttpError, Srtm, TileType};
+
+    use super::{terrain_answer, terrain_line};
+
+    const BASE: &str = "http://terrain.test";
+
+    /// The index lists nothing, the 1-arc-second listing lists N00W001, and N00W001 is a tile of
+    /// one height - or, if `broken`, every request fails.
+    struct Server {
+        zip: Vec<u8>,
+        broken: bool,
+        requests: Mutex<Vec<String>>,
+    }
+
+    impl Http for Server {
+        fn get(&self, url: &str) -> Result<Vec<u8>, HttpError> {
+            self.requests.lock().unwrap().push(url.to_owned());
+            if self.broken {
+                return Err(HttpError("connection refused".to_owned()));
+            }
+            Ok(match url.strip_prefix(BASE) {
+                Some("/SRTM1/") => b"<a href=\"N00W001.hgt.zip\">".to_vec(),
+                Some("/SRTM1/N00W001.hgt.zip") => self.zip.clone(),
+                _ => Vec::new(),
+            })
+        }
+    }
+
+    fn server(height: i16, broken: bool) -> Arc<Server> {
+        let entry = mp_log::zip::Entry {
+            name: "N00W001.hgt".to_owned(),
+            data: height.to_be_bytes().repeat(1201 * 1201),
+        };
+        let when = mp_log::zip::DosTime {
+            year: 2022,
+            month: 6,
+            day: 20,
+            hour: 0,
+            minute: 0,
+            second: 0,
+        };
+        Arc::new(Server {
+            zip: mp_log::zip::write(&[entry], when).unwrap(),
+            broken,
+            requests: Mutex::new(Vec::new()),
+        })
+    }
+
+    fn scratch(test: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("mpr-terrain-{test}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        dir
+    }
+
+    #[test]
+    fn a_missing_tile_is_downloaded_and_then_answered() {
+        let dir = scratch("download");
+        let srtm = Srtm::with_http(&dir, server(321, false) as Arc<dyn Http>);
+        srtm.set_baseurl1sec(format!("{BASE}/SRTM1/"));
+        srtm.set_baseurl(format!("{BASE}/SRTM3/"));
+
+        let answer = terrain_answer(&srtm, 0.25, -0.75, Duration::from_secs(60));
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(
+            (answer.current_type, answer.alt, answer.alt_source),
+            (TileType::Valid, 321.0, "SRTM")
+        );
+        assert_eq!(
+            terrain_line(&answer),
+            "alt=321 altsource=SRTM currenttype=valid"
+        );
+    }
+
+    #[test]
+    fn a_failing_server_is_waited_for_and_then_the_answer_is_invalid() {
+        let dir = scratch("broken");
+        let broken = server(0, true);
+        let srtm = Srtm::with_http(&dir, Arc::clone(&broken) as Arc<dyn Http>);
+        srtm.set_baseurl(format!("{BASE}/SRTM3/"));
+
+        let answer = terrain_answer(&srtm, 0.25, -0.75, Duration::from_millis(1500));
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(answer, AltResponse::INVALID);
+        // Still at the head of the queue, as the C# leaves it.
+        assert_eq!(srtm.queued(), vec!["N00W001.hgt"]);
+        assert_eq!(
+            broken.requests.lock().unwrap().first().map(String::as_str),
+            Some("http://terrain.test/SRTM3/")
+        );
+        assert_eq!(
+            terrain_line(&answer),
+            "alt=0 altsource=Invalid currenttype=invalid"
+        );
+    }
+
+    #[test]
+    fn a_point_with_no_tile_is_answered_at_once() {
+        let srtm = Srtm::without_thread(scratch("none"), server(0, true) as Arc<dyn Http>);
+        let answer = terrain_answer(&srtm, 91.0, 0.0, Duration::from_secs(60));
+        assert_eq!(answer, AltResponse::INVALID);
+        assert!(srtm.queued().is_empty());
+    }
+
+    #[test]
+    fn an_ascii_hit_prints_its_empty_source() {
+        let answer = AltResponse {
+            current_type: TileType::Valid,
+            alt: -0.5,
+            alt_source: "",
+        };
+        assert_eq!(
+            terrain_line(&answer),
+            "alt=-0.5 altsource= currenttype=valid"
+        );
     }
 }

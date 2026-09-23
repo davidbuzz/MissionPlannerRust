@@ -69,8 +69,8 @@ const LAYERS: &[(u8, &[&str])] = &[
     // L4. Not yet, by these names: mp-log-dataflash, mp-log-tlog, mp-log-analysis, mp-logstore.
     // The first two are mp-log, below, unsplit.
     //
-    // L5. Not yet: mp-geo, mp-terrain, mp-survey, mp-georef, mp-nofly.
-    (5, &["mp-kml"]),
+    // L5. Not yet: mp-geo, mp-survey, mp-georef, mp-nofly.
+    (5, &["mp-kml", "mp-terrain"]),
     // L6, above the gpui boundary. Not yet: mp-render, mp-map, mp-hud, mp-video, mp-terrain3d,
     // mp-icons.
     (6, &["mp-chart"]),

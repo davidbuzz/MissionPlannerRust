@@ -29,3 +29,5 @@ mp-units.workspace = true
 # `mpr log loganalysis`: where the analyzer lives, and the download of it.
 mp-settings.workspace = true
 ureq.workspace = true
+# `mpr terrain`: srtm.getAltitude over the planner's terrain cache.
+mp-terrain.workspace = true

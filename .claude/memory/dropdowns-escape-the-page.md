@@ -17,6 +17,6 @@ by `on_scroll_wheel` (`config/servo_output.rs::dropdown`, shared by the serial a
 scripts clicked them at y=1941 and y=862 and failed (2026-09-24).
 
 **How to apply:** in a script, `click <combo>`, `scroll <combo>-list down N`, assert
-`config.<page>.list.top`, then click the row. Forty notches down clamps at the end and two up
+`config.<page>.list.top`, then click the row. Sixty notches down clamps at the end (forty once lost some under load) and two up
 gives a known top whatever the rows-per-notch; `expect` pins the exact value once measured.
 Reuse `servo_output::dropdown` for any new page's combo rather than writing a list.

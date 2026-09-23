@@ -1,0 +1,27 @@
+[package]
+name = "mp-terrain"
+description = "Terrain altitude from SRTM tiles, ported from Mission Planner's srtm.cs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Settings.GetDataDirectory, which the srtm directory hangs off (MainV2.cs:737).
+mp-settings.workspace = true
+# FastZip.ExtractZip, which srtm.gethgt unpacks a downloaded tile with (srtm.cs:664-667). mp-log
+# already ports it for the analyzer download; L4, below this crate's L5.
+mp-log.workspace = true
+# getListing's `href="([^"]+)"` over a directory page (srtm.cs:717). Pinned to what the tree
+# already resolves.
+regex.workspace = true
+# HttpClient.GetAsync. Blocking, on the queue thread, like mp-tiles' fetch thread.
+ureq.workspace = true
+
+[dev-dependencies]
+# Only to hold the User-Agent to the one the map tiles send; both are Program.cs:373's.
+mp-tiles.workspace = true

@@ -13,7 +13,7 @@ projects — as a Rust application that is **fast**, **multi-platform** and **GP
 Early, but flyable behind SITL and a real autopilot. The protocol and telemetry spine is solid; the
 UI covers flying, planning and the first of the setup screens.
 
-Measured on this tree: **21 crates, 138,542 hand-written Rust LOC** (plus 91,634 generated; `.rs` files
+Measured on this tree: **22 crates, 138,542 hand-written Rust LOC** (plus 91,634 generated; `.rs` files
 under `crates/`, tests included), **1,743 tests** green on `cargo test --workspace` (31 ignored:
 they need SITL, a window, or the network), **69 GUI scripts** under `tests/gui/`, across 159 commits.
 
@@ -150,6 +150,7 @@ crates/
   mp-chart             time series for the tuning graph and log plots
   mp-units             typed units and geodesy
   mp-settings          where Mission Planner keeps things on disk, ported from Settings.cs
+  mp-terrain           srtm.cs: SRTM tiles, the download queue, getAltitude, proved against the C# DLL
   mp-fuzz-checks       the fuzz properties, so they compile on stable too
   mp-cli               `mpr`
   mp-gui               `mpr-gui`, built on gpui

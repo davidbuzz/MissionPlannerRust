@@ -274,7 +274,12 @@ KML/DXF/shapefile import-export, geotagging hand-off.
   panel's WP Radius, Loiter Radius, Default Alt, frame and Spline boxes with the C#'s typing
   rules and the parameters set after Write; Geo-Fence's return location, file load and save,
   and Clear (PLAN.md §13.4 rows 12, 13; **55 done, 54 missing**). Geo-Fence Upload and Download
-  stay dimmed: the C# uploads with `FENCE_POINT`, which ArduPilot 4.8 removed.
+  stay dimmed: the C# uploads with `FENCE_POINT`, which ArduPilot 4.8 removed. Terrain: `srtm.cs`
+  is ported whole into `mp-terrain` (tile names, `.hgt` 1"/3" reading, the interpolation and void
+  rule, `.asc` grids, the download queue with the C#'s servers and ocean rule, the cache sweep) and
+  held to `MissionPlanner.Utilities.dll`'s own `srtm.getAltitude` under mono over 1,259 lookups bit
+  for bit (`tools/csharp-reference/SrtmOracle.cs`, PLAN.md §13.4 row 34); the screens do not call
+  it yet (row 35).
 - **Tests:** `tests/mission_bytes.rs` loads a corpus of real `.waypoints`/`.mission` files, round-trips them and asserts **byte identity**; `tests/grid_vectors.rs` survey-grid generation against golden outputs from the C# `Grid`/`Gridv2` for a matrix of polygon/angle/overlap/terrain inputs; `tests/kml_dxf.rs` import→export round-trip against fixture files; `tests/terrain.rs` altitude-following maths against golden vectors; `tests/sitl_upload.rs` uploads missions, fences and rally points to SITL and reads them back.
 
 ### D12. Configuration & tuning screens
