@@ -1,0 +1,11 @@
+# ClipperLib.ClipperOffset output from tools/csharp-reference/regen-grid.sh - do not edit
+case,offset_hole_touching
+path,0,0,1000,0,1000,1000,0,1000
+path,0,250,0,750,500,750,500,250
+execute,0,1
+node,1,1000,0,1000,1000,0,1000,0,750,500,750,500,250,0,250,0,0
+execute,-50,1
+node,1,950,950,50,950,50,800,550,800,550,200,50,200,50,50,950,50
+execute,50,1
+node,1,1050,1050,-50,1050,-50,-50,1050,-50
+node,2,50,300,50,700,450,700,450,300

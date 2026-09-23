@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
-# Regenerates testdata/grid/golden from Mission Planner's own Grid.CreateGrid: the `grid` verb of
-# PLAN.md §7.1, for §13.3 item 3 and crates/mp-mission/tests/grid_vectors.rs.
+# Regenerates testdata/grid/golden from Mission Planner's own Grid.CreateGrid, Grid.CreateCorridor
+# and Grid.CreateRotary: the `grid`, `corridor` and `rotary` verbs of PLAN.md §7.1, for §13.3 item 3,
+# §13.4 item 8 and crates/mp-mission/tests/{grid,corridor,rotary}_vectors.rs.
 #
 # Unlike regen.sh this builds from the pinned source tree, not a downloaded binary distribution:
 #   1. copy referneces/missionplanner/ExtLibs out of tree, so the reference tree stays read-only;
 #   2. msbuild ExtLibs/Utilities/MissionPlanner.Utilities.csproj under mono - the project §7.1
-#      proved builds on Linux, and the one Grid.cs, utmpos.cs and PointLatLngAlt.cs live in, so no
-#      WinForms stub is needed;
+#      proved builds on Linux, and the one Grid.cs, clipper.cs, utmpos.cs and PointLatLngAlt.cs live
+#      in, so no WinForms stub is needed;
 #   3. mcs MpGrid.cs against the result;
-#   4. run every case of testdata/grid/cases.txt, one golden/<case>.csv each.
+#   4. run every directive of testdata/grid/cases.txt through its verb: `case` lines as
+#      golden/<case>.csv, `corridor` lines as golden/corridor/<case>.csv, `rotary` lines as
+#      golden/rotary/<case>.csv and `offset` lines - ClipperLib's offset on its own, for
+#      crates/mp-mission/src/clipper.rs - as golden/offset/<case>.csv.
 #
 # The build is cached per Mission Planner commit ($MP_ORACLE_CACHE, default ~/.cache). Requires
 # mono 6.12 (mono, msbuild, mcs), rsync, and the NuGet packages the csproj restores - from the
@@ -54,9 +58,13 @@ mcs -nologo -nowarn:1685 -out:"$OUT/MpGrid.exe" \
 # Write to a scratch directory and swap it in, so a failed run leaves the old goldens untouched.
 TMP="$(mktemp -d "$DATA/.golden.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
+mkdir "$TMP/corridor" "$TMP/rotary" "$TMP/offset"
 mono "$OUT/MpGrid.exe" grid "$DATA/cases.txt" "$TMP"
+mono "$OUT/MpGrid.exe" corridor "$DATA/cases.txt" "$TMP/corridor"
+mono "$OUT/MpGrid.exe" rotary "$DATA/cases.txt" "$TMP/rotary"
+mono "$OUT/MpGrid.exe" offset "$DATA/cases.txt" "$TMP/offset"
 rm -rf "$DATA/golden"
 mv "$TMP" "$DATA/golden"
-chmod 755 "$DATA/golden"
+chmod 755 "$DATA/golden" "$DATA/golden/corridor" "$DATA/golden/rotary" "$DATA/golden/offset"
 trap - EXIT
-echo "regenerated $(ls "$DATA/golden" | wc -l) goldens in $DATA/golden from Mission Planner $SHA" >&2
+echo "regenerated $(find "$DATA/golden" -name '*.csv' | wc -l) goldens in $DATA/golden from Mission Planner $SHA" >&2

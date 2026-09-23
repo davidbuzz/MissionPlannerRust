@@ -1,0 +1,11 @@
+# ClipperLib.ClipperOffset output from tools/csharp-reference/regen-grid.sh - do not edit
+case,offset_triangle_diamond
+path,0,0,1000,0,0,1000
+path,1000,0,2000,1000,1000,2000,0,1000
+execute,0,1
+node,1,1000,0,2000,1000,1000,2000,0,1000,0,0
+execute,-50,2
+node,1,1930,1000,1000,1930,70,1000,1000,70
+node,1,50,880,50,50,880,50
+execute,50,1
+node,1,1021,-50,1033,-50,1042,-29,2071,1000,1000,2071,-29,1042,-50,1033,-50,1021,-71,1000,-50,979,-50,-50,979,-50,1000,-71

@@ -1,19 +1,38 @@
-// Headless survey-grid oracle: the `grid` verb of PLAN.md §7.1, for §13.3 item 3 and D11.
+// Headless survey-grid oracle: the `grid`, `corridor` and `rotary` verbs of PLAN.md §7.1, for §13.3
+// item 3, §13.4 item 8 and D11.
 //
-// Runs Mission Planner's own `MissionPlanner.Utilities.Grid.CreateGrid` (ExtLibs/Utilities/Grid.cs)
-// over the cases in testdata/grid/cases.txt and writes exactly what it returns, so
-// crates/mp-mission/tests/grid_vectors.rs holds the Rust port to the C# rather than to our reading
-// of it. The assembly is built from the pinned source tree by regen-grid.sh, not taken from a
-// binary distribution. Console-only: Grid.cs, utmpos.cs and PointLatLngAlt.cs never touch WinForms.
+// Runs Mission Planner's own generators in `MissionPlanner.Utilities.Grid` (ExtLibs/Utilities/Grid.cs)
+// - CreateGrid, CreateCorridor and CreateRotary - over the cases in testdata/grid/cases.txt and
+// writes exactly what they return, so crates/mp-mission/tests/grid_vectors.rs,
+// corridor_vectors.rs and rotary_vectors.rs hold the Rust port to the C# rather than to our reading
+// of it. The assembly is built from the pinned source tree by regen-grid.sh, not taken from a binary
+// distribution. Console-only: Grid.cs, clipper.cs, utmpos.cs and PointLatLngAlt.cs never touch
+// WinForms.
 //
 // Build:  see regen-grid.sh (mcs against the msbuild output of ExtLibs/Utilities)
-// Run:    mono MpGrid.exe grid <cases.txt> <outdir>
+// Run:    mono MpGrid.exe <verb> <cases.txt> <outdir>      <verb> is grid, corridor, rotary or offset
 //
 // cases.txt, one directive per line, `#` starts a comment:
 //   polygon <name> <lat>,<lng> <lat>,<lng> ...
-//   case <name> <polygon> [<parameter>=<value> ...]
-// Parameters are named as CreateGrid names them (Grid.cs:354). One that is left out takes the value
-// GridUI gives it on a fresh install, so a case reads as "what the user gets unless they change X":
+//   case <name> <polygon> [<parameter>=<value> ...]        run by the grid verb
+//   corridor <name> <polygon> [<parameter>=<value> ...]    run by the corridor verb
+//   rotary <name> <polygon> [<parameter>=<value> ...]      run by the rotary verb
+//   path <name> <x>,<y> <x>,<y> ...                        ClipperLib.IntPoint coordinates
+//   offset <name> <path>[+<path>...] <delta>[/<delta>...]  run by the offset verb
+// Each verb runs its own directive and passes over the others; a name is a case of one verb only.
+//
+// The offset verb is ClipperLib itself (ExtLibs/Utilities/clipper.cs), the offset CreateRotary
+// insets with (Grid.cs:248-257): one ClipperOffset built as Grid.cs builds it, every path added
+// with JoinType.jtMiter and EndType.etClosedPolygon, then Execute(ref PolyTree, delta) once per
+// delta in turn on the same object. Its paths are integers chosen to be exactly collinear and to
+// touch, which latitudes and longitudes projected to millimetres almost never are, so it reaches
+// the joins, splits and hole fixups of the union that the rotary cases leave alone. Output: the
+// arguments, then per delta an `execute,<delta>,<top-level count>` line and one
+// `node,<depth>,<x>,<y>,...` line per PolyTree node, depth first in PolyTreeToPaths order
+// (clipper.cs:4400-4424).
+// Parameters are named as the generator names them (CreateGrid Grid.cs:354, CreateCorridor
+// Grid.cs:55, CreateRotary Grid.cs:196). One that is left out takes the value GridUI gives it on a
+// fresh install, so a case reads as "what the user gets unless they change X":
 //   altitude            100      NUM_altitude.Value, GridUI.Designer.cs:1333 (metres display unit)
 //   distance            50       NUM_Distance.Value, GridUI.Designer.cs:1149
 //   spacing             0        NUM_spacing has no Value in GridUI.Designer.cs:1164, so 0
@@ -21,16 +40,25 @@
 //   overshoot1          0        NUM_overshoot, no Value in the designer
 //   overshoot2          0        NUM_overshoot2, likewise
 //   startpos            Home     CMB_startfrom.SelectedIndex = 0, GridUI.cs:101
-//   shutter             False    the literal GridUI.cs:614 passes
+//   shutter             False    the literal GridUI.cs:594, :603 and :614 pass
 //   minLaneSeparation   0        NUM_Lane_Dist, no Value in the designer
-//   leadin1             0        NUM_leadin, likewise
-//   leadin2             0        NUM_leadin2, likewise
+//   leadin1             0        NUM_leadin, likewise                          (grid)
+//   leadin2             0        NUM_leadin2, likewise                         (grid)
+//   leadin              0        NUM_leadin                                    (corridor, rotary)
 //   HomeLocation        0,0      PlannedHomeLocation before a home is planned, CurrentState.cs:41
-//   useextendedendpoint False    chk_optimize_for_distance is unchecked in the designer
+//                                                                              (grid, rotary)
+//   useextendedendpoint False    chk_optimize_for_distance is unchecked in the designer (grid)
+//   width               100      num_corridorwidth.Value, GridUI.Designer.cs:1011, passed through
+//                                float as GridUI.cs:596 passes it              (corridor)
+//   clockwise_laps      0        NUM_clockwise_laps has no Value, GridUI.Designer.cs:797 (rotary)
+//   match_spiral_perimeter False CHK_match_spiral_perimeter is unchecked, GridUI.Designer.cs:781
+//                                                                              (rotary)
+//   laps                200      NUM_laps.Value, GridUI.Designer.cs:772        (rotary)
 //   StartPointLatLngAlt 0,0      Grid.StartPointLatLngAlt, Grid.cs:34; read only for startpos=Point
+//                                                                              (grid, rotary)
 //
 // Output, one <outdir>/<case>.csv per case, every line `key,value[,value...]`: the case name, every
-// polygon vertex and every argument exactly as CreateGrid received it (so a default the harness
+// polygon vertex and every argument exactly as the generator received it (so a default the harness
 // resolved is recorded, not re-derived), then one `wp,lat,lng,alt,tag` line per returned point.
 // Doubles are G17 and floats G9, invariant culture: both always round-trip, which "R" does not on
 // every runtime.
@@ -50,14 +78,15 @@ public static class MpGrid
     {
         // Parsing and formatting must not depend on the machine's locale.
         System.Threading.Thread.CurrentThread.CurrentCulture = Inv;
-        if (args.Length != 3 || args[0] != "grid")
+        if (args.Length != 3
+            || (args[0] != "grid" && args[0] != "corridor" && args[0] != "rotary" && args[0] != "offset"))
         {
-            Console.Error.WriteLine("usage: MpGrid grid <cases.txt> <outdir>");
+            Console.Error.WriteLine("usage: MpGrid grid|corridor|rotary|offset <cases.txt> <outdir>");
             return 2;
         }
         try
         {
-            return RunGrid(args[1], args[2]);
+            return RunCases(args[0], args[1], args[2]);
         }
         catch (Exception ex)
         {
@@ -67,9 +96,12 @@ public static class MpGrid
         }
     }
 
-    static int RunGrid(string casesPath, string outDir)
+    static int RunCases(string verb, string casesPath, string outDir)
     {
+        // The directive this verb runs.
+        string directive = verb == "grid" ? "case" : verb;
         var polygons = new Dictionary<string, List<PointLatLngAlt>>();
+        var paths = new Dictionary<string, List<ClipperLib.IntPoint>>();
         var names = new HashSet<string>();
         int count = 0;
         int lineNo = 0;
@@ -96,16 +128,62 @@ public static class MpGrid
                     throw new FormatException(where + ": polygon " + words[1] + " defined twice");
                 polygons[words[1]] = poly;
             }
-            else if (words[0] == "case")
+            else if (words[0] == "path")
             {
                 if (words.Length < 3)
-                    throw new FormatException(where + ": case needs a name and a polygon");
+                    throw new FormatException(where + ": path needs a name and points");
+                var path = new List<ClipperLib.IntPoint>();
+                for (int i = 2; i < words.Length; i++)
+                {
+                    var xy = words[i].Split(',');
+                    if (xy.Length != 2)
+                        throw new FormatException(where + ": expected x,y, got " + words[i]);
+                    path.Add(new ClipperLib.IntPoint(long.Parse(xy[0], Inv), long.Parse(xy[1], Inv)));
+                }
+                if (paths.ContainsKey(words[1]))
+                    throw new FormatException(where + ": path " + words[1] + " defined twice");
+                paths[words[1]] = path;
+            }
+            else if (words[0] == "offset")
+            {
+                if (words.Length != 4)
+                    throw new FormatException(where + ": offset needs a name, paths and deltas");
+                if (!names.Add(words[1]))
+                    throw new FormatException(where + ": case " + words[1] + " defined twice");
+                var input = new List<List<ClipperLib.IntPoint>>();
+                foreach (var pathName in words[2].Split('+'))
+                {
+                    List<ClipperLib.IntPoint> path;
+                    if (!paths.TryGetValue(pathName, out path))
+                        throw new FormatException(where + ": unknown path " + pathName);
+                    input.Add(path);
+                }
+                var deltas = new List<double>();
+                foreach (var delta in words[3].Split('/'))
+                    deltas.Add(double.Parse(delta, Inv));
+                if (verb != "offset")
+                    continue;
+                RunOffsetCase(words[1], words[2], input, deltas, Path.Combine(outDir, words[1] + ".csv"));
+                count++;
+            }
+            else if (words[0] == "case" || words[0] == "corridor" || words[0] == "rotary")
+            {
+                if (words.Length < 3)
+                    throw new FormatException(where + ": " + words[0] + " needs a name and a polygon");
                 if (!names.Add(words[1]))
                     throw new FormatException(where + ": case " + words[1] + " defined twice");
                 List<PointLatLngAlt> poly;
                 if (!polygons.TryGetValue(words[2], out poly))
                     throw new FormatException(where + ": unknown polygon " + words[2]);
-                RunCase(words, poly, where, Path.Combine(outDir, words[1] + ".csv"));
+                if (words[0] != directive)
+                    continue;
+                string outPath = Path.Combine(outDir, words[1] + ".csv");
+                if (verb == "grid")
+                    RunCase(words, poly, where, outPath);
+                else if (verb == "corridor")
+                    RunCorridorCase(words, poly, where, outPath);
+                else
+                    RunRotaryCase(words, poly, where, outPath);
                 count++;
             }
             else
@@ -113,7 +191,10 @@ public static class MpGrid
                 throw new FormatException(where + ": unknown directive " + words[0]);
             }
         }
-        Console.Error.WriteLine("MpGrid: wrote " + count + " cases to " + outDir);
+        if (verb == "grid")
+            Console.Error.WriteLine("MpGrid: wrote " + count + " cases to " + outDir);
+        else
+            Console.Error.WriteLine("MpGrid: wrote " + count + " " + verb + " cases to " + outDir);
         return 0;
     }
 
@@ -173,12 +254,7 @@ public static class MpGrid
         // calls, so every case sets it rather than inheriting the previous case's.
         Grid.StartPointLatLngAlt = startPoint;
 
-        // CreateGrid mutates nothing it is given, but hand it a copy so that stays true of this
-        // harness whatever a later Grid.cs does.
-        var input = new List<PointLatLngAlt>();
-        polygon.ForEach(p => input.Add(new PointLatLngAlt(p)));
-
-        List<PointLatLngAlt> result = Grid.CreateGrid(input, altitude, distance, spacing, resolvedAngle,
+        List<PointLatLngAlt> result = Grid.CreateGrid(Copy(polygon), altitude, distance, spacing, resolvedAngle,
             overshoot1, overshoot2, startpos, shutter, minLaneSeparation, leadin1, leadin2, home,
             useextendedendpoint);
 
@@ -201,6 +277,208 @@ public static class MpGrid
         Row(sb, "HomeLocation", D(home.Lat), D(home.Lng));
         Row(sb, "useextendedendpoint", useextendedendpoint.ToString());
         Row(sb, "StartPointLatLngAlt", D(startPoint.Lat), D(startPoint.Lng));
+        WritePoints(sb, result, outPath);
+    }
+
+    // Grid.CreateCorridor (Grid.cs:55), called as GridUI.cs:592-596 calls it.
+    static void RunCorridorCase(string[] words, List<PointLatLngAlt> polygon, string where, string outPath)
+    {
+        var parameters = Parameters(words, where);
+        string v;
+        double altitude = (v = Take(parameters, "altitude")) != null ? double.Parse(v, Inv) : 100;
+        double distance = (v = Take(parameters, "distance")) != null ? double.Parse(v, Inv) : 50;
+        double spacing = (v = Take(parameters, "spacing")) != null ? double.Parse(v, Inv) : 0;
+        double angle = ResolveAngle(Take(parameters, "angle"), polygon);
+        double overshoot1 = (v = Take(parameters, "overshoot1")) != null ? double.Parse(v, Inv) : 0;
+        double overshoot2 = (v = Take(parameters, "overshoot2")) != null ? double.Parse(v, Inv) : 0;
+        var startpos = (v = Take(parameters, "startpos")) != null
+            ? (Grid.StartPosition)Enum.Parse(typeof(Grid.StartPosition), v)
+            : Grid.StartPosition.Home;
+        bool shutter = (v = Take(parameters, "shutter")) != null ? bool.Parse(v) : false;
+        float minLaneSeparation = (v = Take(parameters, "minLaneSeparation")) != null ? float.Parse(v, Inv) : 0;
+        // GridUI.cs:596 passes (float)num_corridorwidth.Value for the double parameter.
+        float width = (v = Take(parameters, "width")) != null ? float.Parse(v, Inv) : 100;
+        float leadin = (v = Take(parameters, "leadin")) != null ? float.Parse(v, Inv) : 0;
+        NoneLeft(parameters, where);
+
+        List<PointLatLngAlt> result = Grid.CreateCorridor(Copy(polygon), altitude, distance, spacing, angle,
+            overshoot1, overshoot2, startpos, shutter, minLaneSeparation, width, leadin);
+
+        var sb = new StringBuilder();
+        sb.Append("# Grid.CreateCorridor output from tools/csharp-reference/regen-grid.sh - do not edit\n");
+        Row(sb, "case", words[1]);
+        foreach (var p in polygon)
+            Row(sb, "vertex", D(p.Lat), D(p.Lng));
+        Row(sb, "altitude", D(altitude));
+        Row(sb, "distance", D(distance));
+        Row(sb, "spacing", D(spacing));
+        Row(sb, "angle", D(angle));
+        Row(sb, "overshoot1", D(overshoot1));
+        Row(sb, "overshoot2", D(overshoot2));
+        Row(sb, "startpos", startpos.ToString());
+        Row(sb, "shutter", shutter.ToString());
+        Row(sb, "minLaneSeparation", F(minLaneSeparation));
+        // The double CreateCorridor received, which is the float widened.
+        Row(sb, "width", D(width));
+        Row(sb, "leadin", F(leadin));
+        WritePoints(sb, result, outPath);
+    }
+
+    // Grid.CreateRotary (Grid.cs:196), called as GridUI.cs:600-605 calls it.
+    static void RunRotaryCase(string[] words, List<PointLatLngAlt> polygon, string where, string outPath)
+    {
+        var parameters = Parameters(words, where);
+        string v;
+        double altitude = (v = Take(parameters, "altitude")) != null ? double.Parse(v, Inv) : 100;
+        double distance = (v = Take(parameters, "distance")) != null ? double.Parse(v, Inv) : 50;
+        double spacing = (v = Take(parameters, "spacing")) != null ? double.Parse(v, Inv) : 0;
+        double angle = ResolveAngle(Take(parameters, "angle"), polygon);
+        double overshoot1 = (v = Take(parameters, "overshoot1")) != null ? double.Parse(v, Inv) : 0;
+        double overshoot2 = (v = Take(parameters, "overshoot2")) != null ? double.Parse(v, Inv) : 0;
+        var startpos = (v = Take(parameters, "startpos")) != null
+            ? (Grid.StartPosition)Enum.Parse(typeof(Grid.StartPosition), v)
+            : Grid.StartPosition.Home;
+        bool shutter = (v = Take(parameters, "shutter")) != null ? bool.Parse(v) : false;
+        float minLaneSeparation = (v = Take(parameters, "minLaneSeparation")) != null ? float.Parse(v, Inv) : 0;
+        float leadin = (v = Take(parameters, "leadin")) != null ? float.Parse(v, Inv) : 0;
+        var home = (v = Take(parameters, "HomeLocation")) != null ? ParseLatLng(v, where) : new PointLatLngAlt();
+        int clockwiseLaps = (v = Take(parameters, "clockwise_laps")) != null ? int.Parse(v, Inv) : 0;
+        bool matchSpiralPerimeter = (v = Take(parameters, "match_spiral_perimeter")) != null ? bool.Parse(v) : false;
+        int laps = (v = Take(parameters, "laps")) != null ? int.Parse(v, Inv) : 200;
+        var startPoint = (v = Take(parameters, "StartPointLatLngAlt")) != null ? ParseLatLng(v, where) : PointLatLngAlt.Zero;
+        NoneLeft(parameters, where);
+
+        // A static that CreateRotary reads for startpos=Point (Grid.cs:241). It persists between
+        // calls, so every case sets it rather than inheriting the previous case's.
+        Grid.StartPointLatLngAlt = startPoint;
+
+        List<PointLatLngAlt> result = Grid.CreateRotary(Copy(polygon), altitude, distance, spacing, angle,
+            overshoot1, overshoot2, startpos, shutter, minLaneSeparation, leadin, home, clockwiseLaps,
+            matchSpiralPerimeter, laps);
+
+        var sb = new StringBuilder();
+        sb.Append("# Grid.CreateRotary output from tools/csharp-reference/regen-grid.sh - do not edit\n");
+        Row(sb, "case", words[1]);
+        foreach (var p in polygon)
+            Row(sb, "vertex", D(p.Lat), D(p.Lng));
+        Row(sb, "altitude", D(altitude));
+        Row(sb, "distance", D(distance));
+        Row(sb, "spacing", D(spacing));
+        Row(sb, "angle", D(angle));
+        Row(sb, "overshoot1", D(overshoot1));
+        Row(sb, "overshoot2", D(overshoot2));
+        Row(sb, "startpos", startpos.ToString());
+        Row(sb, "shutter", shutter.ToString());
+        Row(sb, "minLaneSeparation", F(minLaneSeparation));
+        Row(sb, "leadin", F(leadin));
+        Row(sb, "HomeLocation", D(home.Lat), D(home.Lng));
+        Row(sb, "clockwise_laps", clockwiseLaps.ToString(Inv));
+        Row(sb, "match_spiral_perimeter", matchSpiralPerimeter.ToString());
+        Row(sb, "laps", laps.ToString(Inv));
+        Row(sb, "StartPointLatLngAlt", D(startPoint.Lat), D(startPoint.Lng));
+        WritePoints(sb, result, outPath);
+    }
+
+    // ClipperLib.ClipperOffset as Grid.cs:248-257 drives it, over integer paths.
+    static void RunOffsetCase(string name, string pathNames, List<List<ClipperLib.IntPoint>> input,
+        List<double> deltas, string outPath)
+    {
+        var sb = new StringBuilder();
+        sb.Append("# ClipperLib.ClipperOffset output from tools/csharp-reference/regen-grid.sh - do not edit\n");
+        Row(sb, "case", name);
+        var offset = new ClipperLib.ClipperOffset();
+        foreach (var path in input)
+        {
+            var copy = new List<ClipperLib.IntPoint>(path);
+            var values = new List<string>();
+            foreach (var p in copy)
+            {
+                values.Add(p.X.ToString(Inv));
+                values.Add(p.Y.ToString(Inv));
+            }
+            Row(sb, "path", values.ToArray());
+            offset.AddPath(copy, ClipperLib.JoinType.jtMiter, ClipperLib.EndType.etClosedPolygon);
+        }
+        foreach (var delta in deltas)
+        {
+            var tree = new ClipperLib.PolyTree();
+            offset.Execute(ref tree, delta);
+            Row(sb, "execute", D(delta), tree.ChildCount.ToString(Inv));
+            foreach (var child in tree.Childs)
+                WriteNode(sb, child, 1);
+        }
+        File.WriteAllText(outPath, sb.ToString(), new UTF8Encoding(false));
+    }
+
+    // One PolyNode and, depth first, its children: the order PolyTreeToPaths visits them.
+    static void WriteNode(StringBuilder sb, ClipperLib.PolyNode node, int depth)
+    {
+        var values = new List<string>();
+        values.Add(depth.ToString(Inv));
+        foreach (var p in node.Contour)
+        {
+            values.Add(p.X.ToString(Inv));
+            values.Add(p.Y.ToString(Inv));
+        }
+        Row(sb, "node", values.ToArray());
+        foreach (var child in node.Childs)
+            WriteNode(sb, child, depth + 1);
+    }
+
+    // The `parameter=value` words of a corridor or rotary directive, each at most once.
+    static Dictionary<string, string> Parameters(string[] words, string where)
+    {
+        var result = new Dictionary<string, string>();
+        for (int i = 3; i < words.Length; i++)
+        {
+            int eq = words[i].IndexOf('=');
+            if (eq <= 0)
+                throw new FormatException(where + ": expected parameter=value, got " + words[i]);
+            string key = words[i].Substring(0, eq);
+            if (result.ContainsKey(key))
+                throw new FormatException(where + ": " + key + " given twice");
+            result[key] = words[i].Substring(eq + 1);
+        }
+        return result;
+    }
+
+    // The value given for `key`, or null for none; either way the key is used up.
+    static string Take(Dictionary<string, string> parameters, string key)
+    {
+        string value;
+        if (!parameters.TryGetValue(key, out value))
+            return null;
+        parameters.Remove(key);
+        return value;
+    }
+
+    // A parameter the generator does not take is a typo, not a default.
+    static void NoneLeft(Dictionary<string, string> parameters, string where)
+    {
+        foreach (var key in parameters.Keys)
+            throw new FormatException(where + ": unknown parameter " + key);
+    }
+
+    // The generators mutate nothing they are given, but hand them a copy so that stays true of this
+    // harness whatever a later Grid.cs does.
+    static List<PointLatLngAlt> Copy(List<PointLatLngAlt> polygon)
+    {
+        var input = new List<PointLatLngAlt>();
+        polygon.ForEach(p => input.Add(new PointLatLngAlt(p)));
+        return input;
+    }
+
+    // GridUI.cs:104 stores the angle in a NumericUpDown, so it passes through decimal on its way to
+    // the generator (GridUI.cs:593, :601). CreateCorridor and CreateRotary never read it.
+    static double ResolveAngle(string value, List<PointLatLngAlt> polygon)
+    {
+        if (value != null)
+            return double.Parse(value, Inv);
+        return (double)(decimal)((GetAngleOfLongestSide(polygon) + 360) % 360);
+    }
+
+    static void WritePoints(StringBuilder sb, List<PointLatLngAlt> result, string outPath)
+    {
         Row(sb, "points", result.Count.ToString(Inv));
         foreach (var p in result)
             Row(sb, "wp", D(p.Lat), D(p.Lng), D(p.Alt), p.Tag);

@@ -1,0 +1,11 @@
+# ClipperLib.ClipperOffset output from tools/csharp-reference/regen-grid.sh - do not edit
+case,offset_bowtie
+path,0,0,1000,1000,1000,0,0,1000
+execute,0,1
+node,1,500,500,0,1000,0,0
+execute,-50,1
+node,1,430,500,50,880,50,120
+execute,50,3
+node,1,570,500,12,1059,-50,1033,-50,-33,12,-59
+node,1,1035,965,1000,1000,950,1000,950,880
+node,1,1035,35,950,120,950,0,1000,0

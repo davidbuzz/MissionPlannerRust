@@ -1,7 +1,8 @@
 //! Survey grids as Mission Planner lays them out: `Grid.CreateGrid`, transliterated.
 //!
 //! Replaces `ExtLibs/Utilities/Grid.cs:327-1010`: `CreateGrid` and every helper it calls. The
-//! corridor and rotary patterns in the same file are not ported here.
+//! corridor and rotary patterns in the same file are [`crate::corridor`] and [`crate::rotary`],
+//! which share the helpers here that `Grid.cs` shares between them.
 //!
 //! This is a line-by-line port, not a reimplementation. The C# works in the UTM zone of the
 //! polygon's first vertex, lays a family of parallel lines across the polygon's bounding
@@ -252,16 +253,40 @@ fn cs_max(val1: f64, val2: f64) -> f64 {
     }
 }
 
+/// `(int)x` as mono 6.12 compiles it on x86-64, `cvttsd2si`: toward zero, and `int.MinValue` for
+/// NaN or anything out of range - where Rust's `as` saturates and sends NaN to 0. Probed under the
+/// oracle's mono: `(int)1e12`, `(int)-1e12` and `(int)double.NaN` are all -2147483648.
+#[allow(clippy::cast_possible_truncation)] // in range, `as` truncates toward zero as the C# does
+pub(crate) fn cs_int(x: f64) -> i32 {
+    if x > -2_147_483_649.0 && x < 2_147_483_648.0 {
+        x as i32
+    } else {
+        i32::MIN
+    }
+}
+
+/// `(long)x` likewise: `long.MinValue` for NaN or out of range (`(long)1e19` under the oracle's
+/// mono is -9223372036854775808, as is `(long)double.NaN`).
+#[allow(clippy::cast_possible_truncation)] // in range, `as` truncates toward zero as the C# does
+pub(crate) fn cs_long(x: f64) -> i64 {
+    // -2^63 is a double; 2^63 is the first one past the end.
+    if (-9_223_372_036_854_775_808.0..9_223_372_036_854_775_808.0).contains(&x) {
+        x as i64
+    } else {
+        i64::MIN
+    }
+}
+
 /// `Rect`, `ExtLibs/Utilities/Rect.cs`.
 ///
 /// `Right` and `Bottom` are stored as `Left + Width` and `Top + Height`, which is not always the
 /// same double as the maximum they were computed from; the grid's start line depends on it.
 #[derive(Debug, Clone, Copy, Default)]
-struct Rect {
-    top: f64,
-    bottom: f64,
-    left: f64,
-    right: f64,
+pub(crate) struct Rect {
+    pub(crate) top: f64,
+    pub(crate) bottom: f64,
+    pub(crate) left: f64,
+    pub(crate) right: f64,
 }
 
 impl Rect {
@@ -298,7 +323,7 @@ impl Rect {
 }
 
 /// `Grid.getPolyMinMax`, `Grid.cs:750-770`.
-fn get_poly_min_max(utmpos: &[UtmPos]) -> Rect {
+pub(crate) fn get_poly_min_max(utmpos: &[UtmPos]) -> Rect {
     let Some(first) = utmpos.first() else {
         return Rect::default();
     };
@@ -315,7 +340,7 @@ fn get_poly_min_max(utmpos: &[UtmPos]) -> Rect {
 }
 
 /// `Grid.newpos(ref x, ref y, bearing, distance)`, `Grid.cs:773-780`: polar to rectangular.
-fn newpos_xy(x: &mut f64, y: &mut f64, bearing: f64, distance: f64) {
+pub(crate) fn newpos_xy(x: &mut f64, y: &mut f64, bearing: f64, distance: f64) {
     let mut deg_n = 90.0 - bearing;
     if deg_n < 0.0 {
         deg_n += 360.0;
@@ -325,7 +350,7 @@ fn newpos_xy(x: &mut f64, y: &mut f64, bearing: f64, distance: f64) {
 }
 
 /// `Grid.newpos(utmpos, bearing, distance)`, `Grid.cs:783-792`.
-fn newpos(input: UtmPos, bearing: f64, distance: f64) -> UtmPos {
+pub(crate) fn newpos(input: UtmPos, bearing: f64, distance: f64) -> UtmPos {
     let (mut x, mut y) = (input.x, input.y);
     newpos_xy(&mut x, &mut y, bearing, distance);
     UtmPos::new(x, y, input.zone)
@@ -359,8 +384,8 @@ fn find_line_intersection(start1: UtmPos, end1: UtmPos, start2: UtmPos, end2: Ut
 }
 
 /// `Grid.FindLineIntersectionExtension`, `Grid.cs:830-852`: where the two lines through the
-/// segments cross, wherever that is.
-fn find_line_intersection_extension(
+/// segments cross, wherever that is, or [`UtmPos::ZERO`] if they are parallel.
+pub(crate) fn find_line_intersection_extension(
     start1: UtmPos,
     end1: UtmPos,
     start2: UtmPos,
@@ -385,7 +410,7 @@ fn find_line_intersection_extension(
 
 /// `Grid.findClosestPoint`, `Grid.cs:854-871`: the first of the nearest, or [`UtmPos::ZERO`] for
 /// an empty list.
-fn find_closest_point(start: UtmPos, list: &[UtmPos]) -> UtmPos {
+pub(crate) fn find_closest_point(start: UtmPos, list: &[UtmPos]) -> UtmPos {
     let mut answer = UtmPos::ZERO;
     let mut currentbest = f64::MAX;
     for pnt in list {

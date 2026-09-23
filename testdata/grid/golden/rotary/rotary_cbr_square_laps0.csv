@@ -1,0 +1,22 @@
+# Grid.CreateRotary output from tools/csharp-reference/regen-grid.sh - do not edit
+case,rotary_cbr_square_laps0
+vertex,-35.359999999999999,149.16
+vertex,-35.359999999999999,149.17099999999999
+vertex,-35.369,149.17099999999999
+vertex,-35.369,149.16
+altitude,100
+distance,50
+spacing,0
+angle,180
+overshoot1,0
+overshoot2,0
+startpos,Home
+shutter,False
+minLaneSeparation,0
+leadin,0
+HomeLocation,0,0
+clockwise_laps,0
+match_spiral_perimeter,False
+laps,0
+StartPointLatLngAlt,0,0
+points,0

@@ -414,6 +414,15 @@ impl UtmPos {
         (pow2((self.x - b.x).abs()) + pow2((self.y - b.y).abs())).sqrt()
     }
 
+    /// `utmpos.GetBearing`, `utmpos.cs:99-105`: degrees clockwise from grid north, in [0, 360).
+    /// `MathHelper.rad2deg` (`Math.cs:10`) is `180 / Math.PI`, the same double as [`R2D`].
+    pub(crate) fn bearing(self, b: Self) -> f64 {
+        let y = b.y - self.y;
+        let x = b.x - self.x;
+
+        (R2D * x.atan2(y) + 360.0) % 360.0
+    }
+
     /// `utmpos.operator ==`, `utmpos.cs:116-119`: position and zone.
     pub(crate) fn op_eq(self, other: Self) -> bool {
         self.x == other.x && self.y == other.y && self.zone == other.zone

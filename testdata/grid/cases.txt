@@ -1,13 +1,18 @@
-# Survey grid cases: the inputs to Mission Planner's Grid.CreateGrid for the golden outputs in
-# golden/, and to crates/mp-mission/tests/grid_vectors.rs. Regenerate the goldens with
+# Survey grid cases: the inputs to Mission Planner's Grid.CreateGrid, Grid.CreateCorridor and
+# Grid.CreateRotary for the golden outputs in golden/, and to crates/mp-mission/tests/
+# grid_vectors.rs, corridor_vectors.rs and rotary_vectors.rs. Regenerate the goldens with
 # tools/csharp-reference/regen-grid.sh after any change here; see README.md.
 #
 #   polygon <name> <lat>,<lng> ...          vertices in drawing order, degrees
-#   case <name> <polygon> [<param>=<value> ...]
+#   case <name> <polygon> [<param>=<value> ...]        CreateGrid, golden/<name>.csv
+#   corridor <name> <polygon> [<param>=<value> ...]    CreateCorridor, golden/corridor/<name>.csv
+#   rotary <name> <polygon> [<param>=<value> ...]      CreateRotary, golden/rotary/<name>.csv
 #
-# Parameters are CreateGrid's own names (ExtLibs/Utilities/Grid.cs:354). One that is left out takes
-# the value GridUI gives it on a fresh install - the list is in tools/csharp-reference/MpGrid.cs -
-# including the angle, which GridUI sets to the bearing of the polygon's longest side.
+# Parameters are the generator's own names (ExtLibs/Utilities/Grid.cs:354, :55 and :196); a
+# corridor's polygon is the centre line, which Grid.cs also calls `polygon`. One that is left out
+# takes the value GridUI gives it on a fresh install - the list is in
+# tools/csharp-reference/MpGrid.cs - including the angle, which GridUI sets to the bearing of the
+# polygon's longest side.
 
 # --- Canberra, around the SITL home (-35.363261, 149.165230): UTM zone 55 south -------------------
 
@@ -307,3 +312,290 @@ polygon cbr_flat -35.3500,149.1500 -35.3500,149.1600 -35.3500,149.1700
 case cbr_point_a0 cbr_point angle=0
 case cbr_flat_a0 cbr_flat angle=0 distance=100
 case cbr_flat_a90 cbr_flat angle=90 distance=100
+
+# ==================================================================================================
+# Corridors: Grid.CreateCorridor (Grid.cs:55-188) flies `width / distance` lanes offset either side
+# of a centre line, alternating direction. Only altitude, distance, spacing, startpos (Home or not)
+# and width reach the pattern; the rest of the signature is taken and never read.
+# ==================================================================================================
+
+# --- centre lines ---------------------------------------------------------------------------------
+
+polygon cbr_road2 -35.3600,149.1600 -35.3650,149.1680
+polygon cbr_road3 -35.3600,149.1600 -35.3650,149.1680 -35.3620,149.1760
+polygon cbr_road4 -35.3500,149.1500 -35.3540,149.1560 -35.3500,149.1620 -35.3540,149.1680
+polygon cbr_road8 -35.3400,149.1400 -35.3420,149.1450 -35.3470,149.1470 -35.3500,149.1430 -35.3550,149.1440 -35.3570,149.1500 -35.3560,149.1560 -35.3600,149.1590
+polygon cbr_hairpin -35.3700,149.1500 -35.3800,149.1520 -35.3705,149.1535
+polygon cbr_nearly_straight -35.3300,149.1300 -35.3350,149.1350 -35.3400,149.14005
+polygon cbr_right_angle -35.3900,149.1700 -35.3900,149.1780 -35.3960,149.1780
+polygon cbr_road_dup -35.3600,149.1600 -35.3650,149.1680 -35.3650,149.1680 -35.3620,149.1760
+polygon zrh_road 47.4000,8.5500 47.3970,8.5560 47.3990,8.5620 47.3950,8.5680
+polygon trm_road 69.6500,18.9500 69.6480,18.9600 69.6450,18.9650
+polygon bne_road -27.4650,153.0200 -27.4680,153.0240 -27.4670,153.0290 -27.4710,153.0310 -27.4730,153.0280
+# 147 E is zone 55's central meridian, where every easting is exactly 500 km: three vertices on it
+# are collinear to the last bit, and the two legs never meet (Grid.cs:834).
+polygon meridian_collinear -35.3000,147.0000 -35.3050,147.0000 -35.3100,147.0000
+# Frames: the whole line is projected in the zone and hemisphere of its first vertex.
+polygon equator_road_north_first 0.0040,32.6000 -0.0010,32.6030 -0.0050,32.6010
+polygon equator_road_south_first -0.0050,32.6010 -0.0010,32.6030 0.0040,32.6000
+polygon zone55_to_56_road -35.3000,149.9950 -35.3030,150.0010 -35.3070,150.0060
+polygon zone56_to_55_road -35.3070,150.0060 -35.3030,150.0010 -35.3000,149.9950
+polygon antimeridian_road -16.8000,179.9960 -16.8030,-179.9990 -16.8060,-179.9950
+
+# --- the dialog's defaults: 100 m wide, 50 m lanes, so three lanes --------------------------------
+
+corridor corridor_cbr_road3_gui_defaults cbr_road3
+corridor corridor_cbr_road8_gui_defaults cbr_road8
+# Two points make no corner, and the C# lays lanes only around corners (Grid.cs:109): nothing.
+corridor corridor_cbr_road2_gui_defaults cbr_road2
+
+# --- lanes: 2 * (int)(width / distance / 2) + 1 of them -------------------------------------------
+
+corridor corridor_cbr_road3_w30_d10 cbr_road3 width=30 distance=10
+corridor corridor_cbr_road3_w250_d40 cbr_road3 width=250 distance=40
+corridor corridor_cbr_road3_w200_d50 cbr_road3 width=200 distance=50
+corridor corridor_cbr_road3_w150_d50 cbr_road3 width=150 distance=50
+corridor corridor_cbr_road3_single_lane cbr_road3 width=1 distance=50
+corridor corridor_cbr_road3_w33_3_d10 cbr_road3 width=33.3 distance=10
+corridor corridor_cbr_road4_w60_d20 cbr_road4 width=60 distance=20
+corridor corridor_cbr_road8_w40_d10 cbr_road8 width=40 distance=10
+
+# --- trigger spacing: the M points, laid at whole metres (Grid.cs:143) -----------------------------
+
+corridor corridor_cbr_road3_s4 cbr_road3 width=60 distance=20 spacing=4
+corridor corridor_cbr_road3_s2_clamped cbr_road3 width=60 distance=20 spacing=2
+corridor corridor_cbr_road3_s10_5 cbr_road3 width=60 distance=20 spacing=10.5
+corridor corridor_cbr_road4_s15 cbr_road4 width=60 distance=20 spacing=15
+corridor corridor_cbr_road8_s25 cbr_road8 width=120 distance=30 spacing=25
+corridor corridor_cbr_road3_s400 cbr_road3 width=60 distance=20 spacing=400
+
+# --- the other direction: any start but Home flies the line from its far end ---------------------
+
+corridor corridor_cbr_road3_bottomleft cbr_road3 width=60 distance=20 startpos=BottomLeft
+corridor corridor_cbr_road3_topright cbr_road3 width=60 distance=20 spacing=20 startpos=TopRight
+corridor corridor_cbr_road3_point cbr_road3 width=60 distance=20 startpos=Point
+corridor corridor_cbr_road4_bottomright cbr_road4 width=80 distance=20 spacing=12 startpos=BottomRight
+corridor corridor_cbr_road8_topleft cbr_road8 width=40 distance=10 spacing=4 startpos=TopLeft
+
+# --- corners: a hairpin, one barely bent, a right angle -------------------------------------------
+
+corridor corridor_cbr_hairpin cbr_hairpin width=60 distance=20
+corridor corridor_cbr_hairpin_s10 cbr_hairpin width=60 distance=20 spacing=10
+corridor corridor_cbr_nearly_straight cbr_nearly_straight width=50 distance=25
+corridor corridor_cbr_right_angle_s20 cbr_right_angle width=100 distance=25 spacing=20
+corridor corridor_cbr_l_as_line cbr_l width=60 distance=20 spacing=30
+
+# --- what the rest of the signature does: nothing -------------------------------------------------
+
+corridor corridor_cbr_road3_w60_d20 cbr_road3 width=60 distance=20
+corridor corridor_cbr_road3_unused_args cbr_road3 width=60 distance=20 angle=45 overshoot1=20 overshoot2=30 shutter=True minLaneSeparation=2 leadin=15
+corridor corridor_cbr_road3_altitude cbr_road3 width=60 distance=20 altitude=37.5
+
+# --- the clamps: distance below 0.1 m is 0.1 m, spacing below 4 m is 4 m ------------------------
+
+corridor corridor_cbr_road3_distance_clamp cbr_road3 width=1 distance=0.05
+
+# --- legs that never meet: a repeated vertex, and three collinear ones ----------------------------
+# FindLineIntersectionExtension returns utmpos.Zero for parallel legs (Grid.cs:834), and the C#
+# flies to it: a point at easting 0, northing 0 in zone 0. Without trigger spacing; with it, the
+# C# lays a trigger every few metres all the way there.
+
+corridor corridor_cbr_road_dup cbr_road_dup width=60 distance=20
+corridor corridor_meridian_collinear meridian_collinear width=60 distance=20
+
+# --- elsewhere, and the frames ---------------------------------------------------------------------
+
+corridor corridor_zrh_road zrh_road width=80 distance=20 spacing=30
+corridor corridor_trm_road trm_road width=50 distance=25 spacing=10 startpos=BottomLeft
+corridor corridor_bne_road bne_road width=90 distance=30 spacing=20
+corridor corridor_equator_north_first equator_road_north_first width=60 distance=20 spacing=15
+corridor corridor_equator_south_first equator_road_south_first width=60 distance=20 spacing=15
+corridor corridor_zone55_to_56 zone55_to_56_road width=60 distance=20 spacing=15
+corridor corridor_zone56_to_55 zone56_to_55_road width=60 distance=20 spacing=15
+corridor corridor_antimeridian antimeridian_road width=60 distance=20 spacing=15
+
+# ==================================================================================================
+# Rotary: Grid.CreateRotary (Grid.cs:196-310) flies the polygon's outline, then the outline inset
+# by `distance`, again and again, through ClipperLib's miter offset (clipper.cs:4449-4922), each lap
+# rotated to start at the vertex nearest the end of the last. Only altitude, distance, startpos,
+# HomeLocation, clockwise_laps, match_spiral_perimeter, laps and Grid.StartPointLatLngAlt reach the
+# pattern; spacing is overwritten with 0 and the rest is never read.
+# ==================================================================================================
+
+# --- the dialog's defaults: 50 m laps until the area runs out, 200 at most ------------------------
+
+rotary rotary_cbr_square_gui_defaults cbr_square
+rotary rotary_cbr_square_home cbr_square HomeLocation=-35.363261,149.165230
+rotary rotary_cbr_field_gui_defaults cbr_field
+
+# --- laps -------------------------------------------------------------------------------------------
+
+rotary rotary_cbr_square_laps1 cbr_square laps=1 HomeLocation=-35.363261,149.165230
+rotary rotary_cbr_square_laps3 cbr_square laps=3 distance=80 HomeLocation=-35.363261,149.165230
+rotary rotary_cbr_square_laps0 cbr_square laps=0
+rotary rotary_cbr_square_d10 cbr_square distance=10 HomeLocation=-35.363261,149.165230
+
+# --- direction: the first clockwise_laps laps reversed, all of them for -1 --------------------------
+
+rotary rotary_cbr_square_cw1 cbr_square clockwise_laps=1 HomeLocation=-35.363261,149.165230
+rotary rotary_cbr_square_cw2 cbr_square clockwise_laps=2 distance=70 HomeLocation=-35.363261,149.165230
+rotary rotary_cbr_square_cw_all cbr_square clockwise_laps=-1 distance=70 HomeLocation=-35.363261,149.165230
+rotary rotary_cbr_square_cw_beyond_laps cbr_square clockwise_laps=50 laps=4 HomeLocation=-35.363261,149.165230
+
+# --- match the spiral perimeter: the first lap closed on itself, unless exactly one lap is clockwise
+
+rotary rotary_cbr_square_match cbr_square match_spiral_perimeter=True HomeLocation=-35.363261,149.165230
+rotary rotary_cbr_square_match_cw1 cbr_square match_spiral_perimeter=True clockwise_laps=1 HomeLocation=-35.363261,149.165230
+rotary rotary_cbr_square_match_cw3 cbr_square match_spiral_perimeter=True clockwise_laps=3 distance=60 HomeLocation=-35.363261,149.165230
+rotary rotary_cbr_field_match_cw2 cbr_field match_spiral_perimeter=True clockwise_laps=2 distance=40
+
+# --- where it starts --------------------------------------------------------------------------------
+
+rotary rotary_cbr_square_start_bottomleft cbr_square startpos=BottomLeft distance=90
+rotary rotary_cbr_square_start_topleft cbr_square startpos=TopLeft distance=90
+rotary rotary_cbr_square_start_bottomright cbr_square startpos=BottomRight distance=90
+rotary rotary_cbr_square_start_topright cbr_square startpos=TopRight distance=90
+rotary rotary_cbr_square_start_point cbr_square startpos=Point distance=90 StartPointLatLngAlt=-35.3650,149.1710
+rotary rotary_cbr_field_start_point cbr_field startpos=Point distance=40 StartPointLatLngAlt=-35.3760,149.1570
+rotary rotary_cbr_square_home_far_zone cbr_square distance=90 HomeLocation=51.7500,-1.2500
+
+# --- how the polygon is drawn: clockwise, and closed on its first vertex --------------------------
+
+rotary rotary_cbr_square_cw_drawn cbr_square_cw HomeLocation=-35.363261,149.165230
+rotary rotary_cbr_square_closed cbr_square_closed HomeLocation=-35.363261,149.165230
+
+# --- shapes: concave ones split into separate outlines as they shrink ------------------------------
+
+rotary rotary_cbr_l cbr_l distance=40 HomeLocation=-35.363261,149.165230
+rotary rotary_cbr_t cbr_t distance=30
+rotary rotary_cbr_u cbr_u distance=40 HomeLocation=-35.363261,149.165230
+rotary rotary_cbr_comb cbr_comb distance=40 HomeLocation=-35.363261,149.165230
+rotary rotary_cbr_comb_cw_all_match cbr_comb distance=60 clockwise_laps=-1 match_spiral_perimeter=True
+rotary rotary_cbr_rot30 cbr_rot30 distance=45 HomeLocation=-35.363261,149.165230
+rotary rotary_cbr_strip cbr_strip distance=15
+rotary rotary_cbr_triangle cbr_triangle distance=60 HomeLocation=-35.363261,149.165230
+rotary rotary_cbr_sliver cbr_sliver distance=20
+rotary rotary_cbr_pentagon_cw1 cbr_pentagon distance=50 clockwise_laps=1
+rotary rotary_cbr_hexagon cbr_hexagon distance=25
+rotary rotary_cbr_trapezoid cbr_trapezoid distance=45 HomeLocation=-35.363261,149.165230
+rotary rotary_cbr_small_d7_5 cbr_small distance=7.5 HomeLocation=-35.363261,149.165230
+rotary rotary_cbr_large cbr_large distance=250
+
+# --- what the rest of the signature does: nothing -------------------------------------------------
+
+rotary rotary_cbr_square_unused_args cbr_square spacing=30 angle=45 overshoot1=10 overshoot2=20 shutter=True minLaneSeparation=2 leadin=5 HomeLocation=-35.363261,149.165230
+rotary rotary_cbr_square_altitude cbr_square altitude=37.5 distance=90 HomeLocation=-35.363261,149.165230
+
+# --- the clamp, and areas that enclose nothing -----------------------------------------------------
+
+rotary rotary_cbr_micro_clamp cbr_micro distance=0.05 HomeLocation=-35.363261,149.165230
+rotary rotary_cbr_point cbr_point
+rotary rotary_cbr_flat cbr_flat distance=100
+
+# --- elsewhere, and the frames ---------------------------------------------------------------------
+
+rotary rotary_bne_field bne_field distance=60 HomeLocation=-27.4680,153.0250
+rotary rotary_zrh_rect zrh_rect distance=50 HomeLocation=47.3975,8.5560
+rotary rotary_trm_field trm_field distance=50 HomeLocation=69.6480,18.9600
+rotary rotary_oxf_field_cw_all oxf_field distance=45 clockwise_laps=-1
+rotary rotary_kla_hexagon kla_hexagon distance=40
+rotary rotary_equator_north_first equator_north_first distance=50 HomeLocation=-0.0050,32.6035
+rotary rotary_equator_south_first equator_south_first distance=50 HomeLocation=-0.0050,32.6035
+rotary rotary_zone55_to_56 zone55_to_56 distance=50 HomeLocation=-35.3035,150.0020
+rotary rotary_zone56_to_55 zone56_to_55 distance=50 HomeLocation=-35.3035,149.9980
+rotary rotary_antimeridian antimeridian distance=50 HomeLocation=-16.8030,-179.9990
+
+# --- shapes for the corners of ClipperLib the areas above leave alone ------------------------------
+# A notch so sharp its tip is squared off rather than mitred (clipper.cs:4870); a vertex exactly on
+# its neighbours' line, on zone 55's central meridian (clipper.cs:4844); polygons drawn crossing
+# themselves; and a comb whose teeth end on the equator, where every northing is exactly 0, so its
+# tips are exact horizontals on one scanline.
+
+polygon cbr_vnotch -35.3400,149.1300 -35.3400,149.1410 -35.3490,149.1410 -35.3490,149.1356 -35.3420,149.1355 -35.3490,149.1354 -35.3490,149.1300
+polygon meridian_rect -35.3000,147.0000 -35.3050,147.0000 -35.3100,147.0000 -35.3100,147.0100 -35.3000,147.0100
+polygon cbr_bowtie -35.3600,149.1600 -35.3690,149.1710 -35.3690,149.1600 -35.3600,149.1710
+polygon cbr_pentagram -35.3555,149.1600 -35.36364,149.15677 -35.35861,149.16523 -35.35861,149.15477 -35.36364,149.16323
+polygon equator_comb 0.0000,32.6000 0.0000,32.6006 -0.0030,32.6006 -0.0030,32.6010 0.0000,32.6010 0.0000,32.6016 -0.0030,32.6016 -0.0030,32.6020 0.0000,32.6020 0.0000,32.6026 -0.0030,32.6026 -0.0030,32.6030 0.0000,32.6030 0.0000,32.6036 -0.0030,32.6036 -0.0030,32.6040 0.0000,32.6040 0.0000,32.6046 -0.0030,32.6046 -0.0030,32.6050 0.0000,32.6050 0.0000,32.6056 -0.0030,32.6056 -0.0030,32.6060 0.0000,32.6060 0.0000,32.6066 -0.0030,32.6066 -0.0030,32.6070 0.0000,32.6070 0.0000,32.6076 -0.0040,32.6076 -0.0040,32.6000
+
+rotary rotary_cbr_vnotch cbr_vnotch distance=60 HomeLocation=-35.363261,149.165230
+rotary rotary_meridian_rect meridian_rect distance=50
+rotary rotary_cbr_bowtie cbr_bowtie distance=50 HomeLocation=-35.363261,149.165230
+rotary rotary_cbr_pentagram cbr_pentagram distance=30
+rotary rotary_equator_comb equator_comb distance=20
+rotary rotary_equator_comb_cw_all equator_comb distance=12 clockwise_laps=-1 match_spiral_perimeter=True
+
+polygon cbr_figure8 -35.3600,149.1600 -35.3600,149.1710 -35.3645,149.1655 -35.3690,149.1710 -35.3690,149.1600 -35.3645,149.1655
+polygon cbr_dumbbell -35.3600,149.1600 -35.3600,149.1650 -35.3625,149.1650 -35.3625,149.1700 -35.3600,149.1700 -35.3600,149.1750 -35.3650,149.1750 -35.3650,149.1700 -35.3625,149.1700 -35.3625,149.1650 -35.3650,149.1650 -35.3650,149.1600
+polygon cbr_doubled_edge -35.3600,149.1600 -35.3600,149.1710 -35.3600,149.1655 -35.3690,149.1655 -35.3690,149.1600
+polygon equator_dumbbell 0.0000,32.6000 0.0000,32.6040 -0.0010,32.6040 -0.0010,32.6060 0.0000,32.6060 0.0000,32.6100 -0.0040,32.6100 -0.0040,32.6060 -0.0011,32.6060 -0.0011,32.6040 -0.0040,32.6040 -0.0040,32.6000
+
+rotary rotary_cbr_figure8 cbr_figure8 distance=40
+rotary rotary_cbr_dumbbell cbr_dumbbell distance=40
+rotary rotary_cbr_doubled_edge cbr_doubled_edge distance=40
+rotary rotary_equator_dumbbell equator_dumbbell distance=5
+
+# ==================================================================================================
+# ClipperLib's offset on its own: ClipperOffset as Grid.cs:248-257 builds it (mitred, closed), each
+# path added in turn, then Execute(ref PolyTree, delta) for each delta on the same object. For
+# crates/mp-mission/src/clipper.rs, whose union the rotary cases above reach only where latitudes
+# and longitudes happen to put it: these integer paths are exactly collinear and touch, so they
+# reach its joins, splits, holes and the partitioning sort. Positive deltas, which CreateRotary
+# never passes, take the offset's other branch (clipper.cs:4801).
+#
+#   path <name> <x>,<y> ...                             ClipperLib.IntPoint coordinates
+#   offset <name> <path>[+<path>...] <delta>[/<delta>...]
+# ==================================================================================================
+
+path sq_a 0,0 1000,0 1000,1000 0,1000
+path sq_b 1000,0 2000,0 2000,1000 1000,1000
+path sq_c 500,500 1500,500 1500,1500 500,1500
+path sq_hole 250,250 250,750 750,750 750,250
+path sq_island 400,400 600,400 600,600 400,600
+path comb 0,0 1000,0 1000,3000 800,3000 800,1000 600,1000 600,3000 400,3000 400,1000 200,1000 200,3000 0,3000
+path lshape 0,0 2000,0 2000,500 500,500 500,2000 0,2000
+path keyhole 0,0 1000,0 1000,1000 500,1000 500,400 500,1000 0,1000
+path figure8 0,0 1000,0 500,500 1000,1000 0,1000 500,500
+path bowtie 0,0 1000,1000 1000,0 0,1000
+path stairs 0,0 3000,0 3000,1000 2000,1000 2000,2000 1000,2000 1000,3000 0,3000
+path crenellations 0,0 3000,0 3000,1200 2800,1200 2800,1000 2400,1000 2400,1200 2000,1200 2000,1000 1600,1000 1600,1200 1200,1200 1200,1000 800,1000 800,1200 400,1200 400,1000 0,1000
+path thin_rect 0,0 10000,0 10000,30 0,30
+path sq_d 0,1000 1000,1000 1000,2000 0,2000
+path sq_e 500,1000 1500,1000 1500,2000 500,2000
+path sq_f 1000,1000 2000,1000 2000,2000 1000,2000
+path sq_hole_touching 0,250 0,750 500,750 500,250
+path tri_a 0,0 1000,0 0,1000
+path tri_b 1000,0 1000,1000 0,1000
+path diamond 1000,0 2000,1000 1000,2000 0,1000
+path slit_ring 0,0 1000,0 1000,1000 0,1000 0,500 250,500 250,750 750,750 750,250 250,250 250,500 0,500
+path twin_lobes 500,0 1000,500 1000,1000 600,600 500,0 0,500 0,1000 400,600
+path slit_twins 0,0 1000,0 1000,500 1500,500 1500,0 2500,0 2500,1000 1500,1000 1500,500 1000,500 1000,1000 0,1000
+path slit_ring_reversed 0,500 250,500 250,250 750,250 750,750 250,750 250,500 0,500 0,1000 1000,1000 1000,0 0,0
+path tri_left 500,0 300,1000 0,1000
+path tri_right 500,0 1000,1000 700,1000
+path star25 0,10000 -1253,-9921 2487,9686 -3681,-9298 4818,8763 -5878,-8090 6845,7290 -7705,-6374 8443,5358 -9048,-4258 9511,3090 -9823,-1874 9980,628 -9980,628 9823,-1874 -9511,3090 9048,-4258 -8443,5358 7705,-6374 -6845,7290 5878,-8090 -4818,8763 3681,-9298 -2487,9686 1253,-9921
+
+offset offset_squares_touching sq_a+sq_b 0/-100/100/250
+offset offset_squares_overlapping sq_a+sq_c 0/-100/100
+offset offset_square_with_hole sq_a+sq_hole 0/-50/-120/50/200
+offset offset_hole_island sq_a+sq_hole+sq_island 0/-30/30/-60
+offset offset_comb comb 0/-50/-100/-150/50/150
+offset offset_lshape lshape 0/-100/-250/100/400
+offset offset_keyhole keyhole 0/-50/50/-200
+offset offset_figure8 figure8 0/-50/50/-150
+offset offset_bowtie bowtie 0/-50/50
+offset offset_stairs stairs 0/-100/-400/100/500
+offset offset_crenellations crenellations 0/-50/-100/50/100/150
+offset offset_thin thin_rect 0/-10/-15/-16/10
+offset offset_star25 star25 0/-200/200/-800
+offset offset_everything sq_a+sq_b+sq_c+sq_hole+comb+lshape+stairs 0/-60/60/-150/150
+offset offset_stacked sq_a+sq_d 0/-100/100
+offset offset_stacked_shifted sq_a+sq_e 0/-100/100
+offset offset_corner_touch sq_a+sq_f 0/-100/100
+offset offset_hole_touching sq_a+sq_hole_touching 0/-50/50
+offset offset_triangles tri_a+tri_b 0/-50/50
+offset offset_triangle_diamond tri_a+diamond 0/-50/50
+offset offset_slit_ring slit_ring 0/-40/40/-100
+offset offset_twin_lobes twin_lobes 0/-30/30
+offset offset_slit_twins slit_twins 0/-50/50/-200
+offset offset_slit_ring_reversed slit_ring_reversed 0/-40/40
+offset offset_shared_bottom tri_left+tri_right 0/-20/20

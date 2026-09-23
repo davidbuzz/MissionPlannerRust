@@ -1,0 +1,16 @@
+# Grid.CreateCorridor output from tools/csharp-reference/regen-grid.sh - do not edit
+case,corridor_cbr_road2_gui_defaults
+vertex,-35.359999999999999,149.16
+vertex,-35.365000000000002,149.16800000000001
+altitude,100
+distance,50
+spacing,0
+angle,127.468676562734
+overshoot1,0
+overshoot2,0
+startpos,Home
+shutter,False
+minLaneSeparation,0
+width,100
+leadin,0
+points,0
