@@ -60,25 +60,6 @@ const DEFAULT_WAYPOINT_ALTITUDE: f64 = 50.0;
 /// cost is measured rather than the timer.
 const REFRESH_BENCH: Duration = Duration::from_millis(1);
 
-/// How often the sticks are read and sent.
-///
-/// 20 Hz, on its own timer rather than on the repaint. Repainting is allowed to slow down - a
-/// large mission, a busy machine, a window nobody is looking at - and a stick that is only read
-/// when a frame is drawn would be read erratically, which is the worst possible property for the
-/// thing flying the aircraft. Twice Mission Planner's rate.
-///
-/// **It is still a foreground task, and that is a known limitation, not an oversight.** `cx.spawn`
-/// schedules onto gpui's foreground executor, so the timer fires on the background executor but
-/// the body runs on the main thread - anything that blocks the main thread suspends this too. It
-/// has to touch `MissionPlanner`, which is not `Send`, so moving it off means splitting the sticks
-/// out behind their own channel and a real thread. That is the right answer and it is not written
-/// yet; until it is, the failsafe's timeout is the backstop rather than the guarantee.
-///
-/// DELIVERABLES.md D15 asks for stick-to-wire under 5 ms at p99. 50 ms polling does not meet that
-/// and is not claimed to: the number to beat needs a dedicated thread reading the device blocking,
-/// which is the same change.
-const STICK_POLL: Duration = Duration::from_millis(50);
-
 /// Which screen is showing.
 ///
 /// Mission Planner's tab order, and for the same reason: flying is what the application is for,
@@ -284,29 +265,10 @@ impl MissionPlanner {
         })
         .detach();
 
-        // The sticks, on their own timer. Deliberately not folded into the repaint loop above:
-        // that one is about how often a person sees fresh numbers, this one is about how often a
-        // vehicle hears where the sticks are, and tying the second to the first makes a slow
-        // frame into a control problem.
-        cx.spawn(async move |this, cx| {
-            loop {
-                cx.background_executor().timer(STICK_POLL).await;
-                let outcome = this.update(cx, |this, _cx| {
-                    if let Some(channels) = this.sticks.poll()
-                        && !this.telemetry.send_rc_override(channels)
-                    {
-                        // The link refused the frame. For a release that is the difference between
-                        // an aircraft handed back and one still flying a stick nobody is holding,
-                        // so it is put back on the budget rather than counted as sent.
-                        this.sticks.send_failed();
-                    }
-                });
-                if outcome.is_err() {
-                    break;
-                }
-            }
-        })
-        .detach();
+        // No timer for the sticks. They are read and sent on threads of their own in `mp_input`
+        // (D15's 5 ms from stick to wire is not reachable from a timer on this executor, and a
+        // slow frame must not become a control problem); the screen only keeps the reader
+        // pointed at the vehicle, once a frame in `render`.
 
         // The synthetic scene is off unless asked for. MP_TRACK_POINTS=100000 MP_MARKERS=2000
         // MP_MAP_DEMO=1 reproduces the benchmark the renderer was measured with; those were the
@@ -1325,6 +1287,10 @@ impl Render for MissionPlanner {
         smoke::painted();
         let view = self.telemetry.view();
 
+        // The sticks send from their own thread; this keeps them addressed to the vehicle being
+        // flown and notices a device that has gone. Once a frame, whether or not anything shows.
+        self.sticks.tick(self.telemetry.send_handle());
+
         // Facts a UI test can assert on. Recorded from render because that is where every one of
         // them is already in hand, and published at the end of the frame so a reader never sees
         // half a set. Costs nothing unless MP_FACTS names a file.
@@ -1376,7 +1342,18 @@ impl Render for MissionPlanner {
             facts::record("log.open", self.log_browse.is_open());
             facts::record("log.fields", self.log_browse.fields().len());
             facts::record("log.plotted", self.log_browse.plotted().len());
+            // The two axes. A test that right-clicks a field can prove it went on the right
+            // rather than merely on the plot, and that the left side split by unit.
+            facts::record("log.plotted.right", self.log_browse.right_count());
+            facts::record("log.axes.left", self.log_browse.left_units().len());
             facts::record("sticks.enabled", self.sticks.is_enabled());
+            // Frames the link accepted and the measured stick-to-link latency, so a test with a
+            // device attached can prove frames go out and how fast.
+            facts::record("sticks.sent", self.sticks.sent());
+            facts::record(
+                "sticks.p99_us",
+                self.sticks.latency().map_or(0, |(_, p99)| p99.as_micros()),
+            );
             facts::record("recording", self.telemetry.recording().is_some());
             facts::record("status", self.file_status.as_deref().unwrap_or(""));
             facts::publish();

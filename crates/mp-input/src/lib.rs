@@ -9,13 +9,22 @@
 //! value; every channel comes with a deadline, and a mapping that has not been fed produces a
 //! release rather than a repeat. The interesting code is `Failsafe` and the tests around it,
 //! and the mapping is the easy part.
+//!
+//! Getting a stick onto the wire fast is [`StickReader`]: a thread that blocks on the device and a
+//! thread that sends, so that neither the latency nor the failsafe depends on how quickly a user
+//! interface gets round to it. Its module documentation is the wiring guide.
 
+pub mod event;
+pub mod latency;
 pub mod mapping;
+pub mod reader;
 
 #[cfg(target_os = "linux")]
 pub mod linux;
 
+pub use latency::LatencyHistogram;
 pub use mapping::{Axis, Binding, Channels, Mapping, Source};
+pub use reader::{Cause, Frame, MIN_INTERVAL, RESEND, StickReader};
 
 use std::time::{Duration, Instant};
 
@@ -26,6 +35,20 @@ use std::time::{Duration, Instant};
 /// aircraft for a second and a half. Mission Planner sends overrides at around 10 Hz, so this is
 /// two missed sends.
 pub const STICK_TIMEOUT: Duration = Duration::from_millis(200);
+
+/// Whether a device is still there.
+///
+/// Deliberately not a `bool`. The question a failsafe must ask is "is this device still there",
+/// and the question a `bool` invites is "did something happen" - which on an edge-triggered API
+/// are different questions with the same answer most of the time and opposite answers at the worst
+/// possible moment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Poll {
+    /// The device answered. The reading is current, whether or not it changed.
+    Alive,
+    /// The device has gone away.
+    Gone,
+}
 
 /// One connected input device.
 #[derive(Debug, Clone, PartialEq)]
@@ -90,11 +113,11 @@ pub struct Failsafe {
 
 /// How many times a release is repeated before going quiet.
 ///
-/// Five, which at `STICK_POLL` is a quarter of a second. Enough that a 20% loss rate has a
+/// Five, which at [`RESEND`] is a quarter of a second. Enough that a 20% loss rate has a
 /// one-in-3,000 chance of losing all of them, and still short enough to leave the vehicle's own
 /// failsafe timer to do its job - sending releases forever would stop that timer ever expiring,
 /// which is the opposite of handing control back.
-const RELEASE_REPEATS: u8 = 5;
+pub(crate) const RELEASE_REPEATS: u8 = 5;
 
 impl Default for Failsafe {
     fn default() -> Self {

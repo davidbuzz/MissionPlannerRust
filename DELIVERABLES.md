@@ -274,9 +274,11 @@ config, joystick input, swarm control, warnings engine, web APIs, ADS-B / Altitu
 - **Today:** ADS-B traffic on the map, and joystick input on Linux — `/dev/input/js*` read without
   `unsafe` on a thread that blocks on the device, mapped to `RC_CHANNELS_OVERRIDE` with expo,
   reversal and a release-on-disconnect failsafe, and sent on change from a second thread through
-  a `LinkSender` handle: p99 0.109 ms stick-to-link on an in-process fake device
-  (`crates/mp-input/tests/latency.rs`), a 20 ms floor between sends so a stirred gamepad cannot
-  flood a radio, and Mission Planner's 50 ms resend ceiling. **Still owed:** the histogram from a
+  a `LinkSender` handle: p99 0.152 ms stick-to-link for an isolated movement on an in-process
+  fake device (`crates/mp-input/tests/latency.rs`), a 20 ms floor between sends so a stirred
+  gamepad cannot flood a radio (a stick stirred at 1 kHz puts 50 frames/s on the wire, each at
+  most 20 ms stale), and Mission Planner's 50 ms resend ceiling. The 5 ms target is therefore met
+  for a movement, not for a continuous stir, which no floor could meet without flooding. **Still owed:** the histogram from a
   real device (`tests/real_device.rs`, ignored until one is attached); a deadzone; a per-link
   send budget.
 - **Tests:** `tests/dsdl_roundtrip.rs` proptest over every generated DroneCAN type; `tests/node_sim.rs` drives a simulated CAN node through enumerate/param-edit/firmware-update; `tests/joystick.rs` uses a virtual HID device fixture to assert mapping, expo/deadzone maths and <5 ms end-to-end latency; `tests/tracker.rs` and `tests/swarm.rs` against SITL; `tests/video_pipeline.rs` smoke-tests each capture/decode backend per OS; `tests/feature_ledger.rs` fails if a feature in this bucket is neither implemented nor explicitly marked dropped.

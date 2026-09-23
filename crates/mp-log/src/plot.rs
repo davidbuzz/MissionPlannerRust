@@ -203,6 +203,193 @@ pub fn extract_instance(
     points
 }
 
+/// The unit and scale a field is declared with.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FieldUnit {
+    /// The unit's label as the log declares it - `deg`, `m/s`, `V` - or empty when the field
+    /// declares none, or the log predates `UNIT` messages.
+    pub unit: String,
+    /// What to multiply a stored value by to put it in that unit. 1 when there is nothing to do.
+    ///
+    /// ArduPilot writes `0` in a `MULT` record to mean "no multiplier", and the C# treats both 0
+    /// and 1 as "leave the value alone" (`GraphItem_AddCurve` scales only when the multiplier is
+    /// neither), so 0 is folded into 1 here rather than handed to a caller who would multiply by
+    /// it and get a flat line.
+    pub multiplier: f64,
+}
+
+impl Default for FieldUnit {
+    fn default() -> Self {
+        Self {
+            unit: String::new(),
+            multiplier: 1.0,
+        }
+    }
+}
+
+/// Every field's unit, as the log declares it: the C#'s `UnitMultiList`.
+#[derive(Debug, Default, Clone)]
+pub struct UnitTable {
+    by_field: std::collections::BTreeMap<(String, String), FieldUnit>,
+}
+
+impl UnitTable {
+    /// The unit of one field, or the unitless default: the C#'s `GetUnit`.
+    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:821-829`
+    #[must_use]
+    pub fn get(&self, message: &str, field: &str) -> FieldUnit {
+        self.by_field
+            .get(&(message.to_owned(), field.to_owned()))
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// How many fields have a declared unit.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.by_field.len()
+    }
+
+    /// Whether the log declared any units at all.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.by_field.is_empty()
+    }
+}
+
+/// Reads the units a log declares for its fields.
+///
+/// Three message types carry them: `FMTU` gives each format a string of unit ids and a string of
+/// multiplier ids, one character per field; `UNIT` maps a unit id to its label; `MULT` maps a
+/// multiplier id to a number. A field whose stored value is already scaled by its format
+/// character - `c`/`C`/`e`/`E` are hundredths and `L` is a coordinate in 1e-7 degrees, all of
+/// which [`crate::dataflash::FieldType::decode`] has already divided out - gets a multiplier of 1
+/// whatever `MULT` says, as the C# does, or the value would be scaled twice.
+/// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:230-292, 503-545`
+///
+/// **Deliberate divergence.** In the C#, the loops that read `UNIT` and `MULT` are guarded by
+/// `if (Unit.Count > 0)` and `if (Mult.Count > 0)` over dictionaries nothing ever seeds, so the
+/// shipping application resolves every unit to `""` and its per-unit axes never separate. The
+/// code around the guards is unambiguous about what was meant - a left axis per unit - and that
+/// is what is done here. The owner can rule the other way; the site is this comment.
+#[must_use]
+pub fn units(data: &[u8]) -> UnitTable {
+    use std::collections::BTreeMap;
+
+    let mut fmtu: BTreeMap<u8, (String, String)> = BTreeMap::new();
+    let mut unit_labels: BTreeMap<char, String> = BTreeMap::new();
+    let mut multipliers: BTreeMap<char, f64> = BTreeMap::new();
+
+    let mut reader = DataflashReader::new(data);
+    while let Some(message) = reader.next_message() {
+        match message.name.as_str() {
+            "FMTU" => {
+                if let (Some(format_type), Some(unit_ids), Some(mult_ids)) = (
+                    message.field("FmtType").and_then(Value::as_f64),
+                    message.field("UnitIds").and_then(Value::as_text),
+                    message.field("MultIds").and_then(Value::as_text),
+                ) {
+                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                    // a format type is a byte
+                    let key = format_type as u8;
+                    fmtu.insert(
+                        key,
+                        (unit_ids.trim().to_owned(), mult_ids.trim().to_owned()),
+                    );
+                }
+            }
+            "UNIT" => {
+                if let (Some(id), Some(label)) = (
+                    message.field("Id").and_then(Value::as_f64),
+                    message.field("Label").and_then(text_of),
+                ) && let Some(id) = unit_id(id)
+                {
+                    unit_labels.insert(id, label);
+                }
+            }
+            "MULT" => {
+                if let (Some(id), Some(mult)) = (
+                    message.field("Id").and_then(Value::as_f64),
+                    message.field("Mult").and_then(Value::as_f64),
+                ) && let Some(id) = unit_id(id)
+                {
+                    multipliers.insert(id, mult);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let mut table = UnitTable::default();
+    for (key, format) in reader.formats() {
+        let Some((unit_ids, mult_ids)) = fmtu.get(key) else {
+            continue;
+        };
+        // A format whose type string and label list disagree is skipped whole, as the C# skips
+        // it: with the columns out of step there is no saying which unit belongs to which field.
+        if format.format.len() != format.labels.len() {
+            continue;
+        }
+        for (index, (label, type_char)) in
+            format.labels.iter().zip(format.format.chars()).enumerate()
+        {
+            let unit = unit_ids
+                .chars()
+                .nth(index)
+                .and_then(|id| unit_labels.get(&id))
+                .cloned()
+                .unwrap_or_default();
+            let multiplier = if matches!(type_char, 'c' | 'C' | 'e' | 'E' | 'L') {
+                1.0
+            } else {
+                mult_ids
+                    .chars()
+                    .nth(index)
+                    .and_then(|id| multipliers.get(&id))
+                    .copied()
+                    .filter(|value| value.is_finite() && *value != 0.0)
+                    .unwrap_or(1.0)
+            };
+            table.by_field.insert(
+                (format.name.clone(), label.clone()),
+                FieldUnit { unit, multiplier },
+            );
+        }
+    }
+    table
+}
+
+/// Text from a field that may be stored as `Z`, sixty-four raw bytes.
+///
+/// ArduPilot uses `Z` both for text - `UNIT.Label` is `QbZ` - and for the contents of an embedded
+/// file, so the decoder hands it back as bytes and cannot know which. Here it is text: NUL
+/// terminated, trimmed, as the firmware writes a label. The first version of this read the field
+/// with `as_text` and got nothing, and every unit in every log was `""` - which is exactly what
+/// the C# ends up with by a different route, so the test that caught it was the one against a
+/// hand-built log with known labels, not the one against the real file.
+fn text_of(value: &Value) -> Option<String> {
+    match value {
+        Value::Text(text) => Some(text.trim().to_owned()),
+        Value::Bytes(bytes) => {
+            let end = bytes.iter().position(|b| *b == 0).unwrap_or(bytes.len());
+            Some(String::from_utf8_lossy(bytes.get(..end)?).trim().to_owned())
+        }
+        _ => None,
+    }
+}
+
+/// A `UNIT`/`MULT` id as the log stores it - an `int8` holding a character.
+fn unit_id(value: f64) -> Option<char> {
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    // the field is a byte, checked to be one before use
+    let byte = if value >= 0.0 && value <= f64::from(u8::MAX) {
+        value as u8
+    } else {
+        return None;
+    };
+    char::from_u32(u32::from(byte))
+}
+
 /// Splits a `MSG.FIELD` selector.
 ///
 /// Returns `None` for anything without exactly one dot, rather than guessing - `ATT.Roll.Extra` is
@@ -404,5 +591,194 @@ mod tests {
         assert_eq!(parse_selector(".Roll"), None);
         assert_eq!(parse_selector("ATT."), None);
         assert_eq!(parse_selector(""), None);
+    }
+
+    /// One dataflash record: the two head bytes, the type, the payload.
+    fn record(msg_type: u8, payload: &[u8]) -> Vec<u8> {
+        let mut out = vec![
+            crate::dataflash::HEAD_BYTE1,
+            crate::dataflash::HEAD_BYTE2,
+            msg_type,
+        ];
+        out.extend_from_slice(payload);
+        out
+    }
+
+    /// A fixed-width text field, zero padded as the firmware writes them.
+    fn fixed(text: &str, width: usize) -> Vec<u8> {
+        let mut out = text.as_bytes().to_vec();
+        out.resize(width, 0);
+        out
+    }
+
+    /// An `FMT` record declaring a message type: `BBnNZ` = Type, Length, Name, Format, Columns.
+    fn fmt(msg_type: u8, length: u8, name: &str, format: &str, columns: &str) -> Vec<u8> {
+        let mut payload = vec![msg_type, length];
+        payload.extend(fixed(name, 4));
+        payload.extend(fixed(format, 16));
+        payload.extend(fixed(columns, 64));
+        record(crate::dataflash::FMT_TYPE, &payload)
+    }
+
+    const FMTU: u8 = 129;
+    const UNIT: u8 = 130;
+    const MULT: u8 = 131;
+    const TEST: u8 = 132;
+
+    /// A log that declares units the way ArduPilot does, small enough to reason about.
+    ///
+    /// `TEST` has five fields. `A` is a float in degrees with multiplier `0` (the id for "1");
+    /// `B` is a hundredths integer (`c`) in metres whose `MULT` says 0.01 - which must be ignored,
+    /// because the decoder already divided by 100; `C` is a float in m/s with a real 0.1
+    /// multiplier; `D` has the `-` multiplier, which the log stores as 0 and means "none".
+    fn log_with_units() -> Vec<u8> {
+        let mut log = Vec::new();
+        log.extend(fmt(
+            crate::dataflash::FMT_TYPE,
+            89,
+            "FMT",
+            "BBnNZ",
+            "Type,Length,Name,Format,Columns",
+        ));
+        log.extend(fmt(
+            FMTU,
+            44,
+            "FMTU",
+            "QBNN",
+            "TimeUS,FmtType,UnitIds,MultIds",
+        ));
+        log.extend(fmt(UNIT, 76, "UNIT", "QbZ", "TimeUS,Id,Label"));
+        log.extend(fmt(MULT, 20, "MULT", "Qbd", "TimeUS,Id,Mult"));
+        log.extend(fmt(TEST, 25, "TEST", "Qfcff", "TimeUS,A,B,C,D"));
+
+        let mut fmtu = 0u64.to_le_bytes().to_vec();
+        fmtu.push(TEST);
+        fmtu.extend(fixed("sdmnn", 16));
+        fmtu.extend(fixed("F0BA-", 16));
+        log.extend(record(FMTU, &fmtu));
+
+        for (id, label) in [('s', "s"), ('d', "deg"), ('m', "m"), ('n', "m/s")] {
+            let mut unit = 0u64.to_le_bytes().to_vec();
+            unit.push(id as u8);
+            unit.extend(fixed(label, 64));
+            log.extend(record(UNIT, &unit));
+        }
+        for (id, mult) in [
+            ('F', 1e-6_f64),
+            ('0', 1.0),
+            ('B', 0.01),
+            ('A', 0.1),
+            ('-', 0.0),
+        ] {
+            let mut record_bytes = 0u64.to_le_bytes().to_vec();
+            record_bytes.push(id as u8);
+            record_bytes.extend(mult.to_le_bytes());
+            log.extend(record(MULT, &record_bytes));
+        }
+        log
+    }
+
+    /// The unit and multiplier of each field come from FMTU, UNIT and MULT together.
+    #[test]
+    fn units_are_read_from_the_logs_fmtu_unit_and_mult_messages() {
+        let table = units(&log_with_units());
+        assert_eq!(
+            table.len(),
+            5,
+            "every TEST field has a row, TimeUS included"
+        );
+        assert_eq!(
+            table.get("TEST", "A"),
+            FieldUnit {
+                unit: "deg".to_owned(),
+                multiplier: 1.0
+            }
+        );
+        assert_eq!(
+            table.get("TEST", "C"),
+            FieldUnit {
+                unit: "m/s".to_owned(),
+                multiplier: 0.1
+            }
+        );
+        assert_eq!(table.get("TEST", "TimeUS").unit, "s");
+        assert!((table.get("TEST", "TimeUS").multiplier - 1e-6).abs() < 1e-12);
+    }
+
+    /// A field the decoder already scales is not scaled again.
+    ///
+    /// `c` is stored as hundredths and read back divided by 100, so a MULT of 0.01 on top of
+    /// that would shrink every value a hundredfold. The C# forces these to 1 for the same
+    /// reason. C#: ExtLibs/Utilities/DFLogBuffer.cs:528-534
+    #[test]
+    fn a_format_the_decoder_already_scales_keeps_a_multiplier_of_one() {
+        let table = units(&log_with_units());
+        assert_eq!(
+            table.get("TEST", "B"),
+            FieldUnit {
+                unit: "m".to_owned(),
+                multiplier: 1.0
+            }
+        );
+    }
+
+    /// The `-` multiplier is stored as 0 and means "none", not "multiply by nothing".
+    #[test]
+    fn a_zero_multiplier_means_no_multiplier() {
+        let table = units(&log_with_units());
+        assert_eq!(table.get("TEST", "D").multiplier, 1.0);
+        assert_eq!(table.get("TEST", "D").unit, "m/s");
+    }
+
+    /// A field the log says nothing about is unitless and unscaled, as `GetUnit` answers.
+    #[test]
+    fn an_unknown_field_is_unitless_and_unscaled() {
+        let table = units(&log_with_units());
+        assert_eq!(table.get("TEST", "Nope"), FieldUnit::default());
+        assert_eq!(table.get("NOPE", "A"), FieldUnit::default());
+        assert!(units(&[]).is_empty());
+        assert_eq!(units(&[]).get("ATT", "Roll"), FieldUnit::default());
+    }
+
+    /// A format whose type string and column list disagree is skipped whole.
+    ///
+    /// With the columns out of step there is no saying which unit belongs to which field, and
+    /// guessing would label a field with its neighbour's unit.
+    #[test]
+    fn a_format_whose_columns_disagree_with_its_types_gets_no_units() {
+        let mut log = log_with_units();
+        // Three type characters, two labels.
+        log.extend(fmt(133, 19, "ODD", "Qff", "TimeUS,A"));
+        let mut fmtu = 0u64.to_le_bytes().to_vec();
+        fmtu.push(133);
+        fmtu.extend(fixed("sdd", 16));
+        fmtu.extend(fixed("F00", 16));
+        log.extend(record(FMTU, &fmtu));
+
+        let table = units(&log);
+        assert_eq!(table.get("ODD", "A"), FieldUnit::default());
+        assert_eq!(
+            table.get("TEST", "A").unit,
+            "deg",
+            "the good format is unaffected"
+        );
+    }
+
+    /// A real log declares its units, and attitude is in degrees.
+    #[test]
+    fn a_real_log_declares_units_for_attitude() {
+        let table = units(&fixture());
+        assert!(
+            !table.is_empty(),
+            "a modern ArduPilot log carries UNIT messages"
+        );
+        let roll = table.get("ATT", "Roll");
+        assert_eq!(roll.unit, "deg", "{roll:?}");
+        assert_eq!(roll.multiplier, 1.0, "{roll:?}");
+        // A coordinate is stored in 1e-7 degrees under format `L`, which the decoder already
+        // scales, so whatever MULT says the multiplier is 1.
+        let lat = table.get("GPS", "Lat");
+        assert_eq!(lat.multiplier, 1.0, "{lat:?}");
+        assert!(lat.unit.starts_with("deg"), "{lat:?}");
     }
 }

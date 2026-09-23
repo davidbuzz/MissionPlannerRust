@@ -500,3 +500,72 @@ fn talks_to_a_real_ardupilot_sitl() {
         handle.load().link.loss_percent()
     );
 }
+
+#[test]
+fn a_sender_handle_puts_frames_on_the_wire_from_another_thread() {
+    // The joystick reader has to send from a thread of its own - D15's 5 ms from stick to wire
+    // is not reachable through a UI timer - and it cannot borrow the link across threads. The
+    // handle carries copies of what `send` needs and nothing else.
+    let (gcs_side, mut vehicle_side) = Loopback::pair();
+    let config = LinkConfig {
+        send_heartbeat: false,
+        stream_rate_hz: 0,
+        ..LinkConfig::default()
+    };
+    let link = Link::from_transport(Box::new(gcs_side), config);
+    let sender = link.sender();
+    let target = VehicleId {
+        sysid: 1,
+        compid: 1,
+    };
+    let mut channels = [0u16; 18];
+    channels[0] = 1500;
+    channels[2] = 1100;
+
+    let worker =
+        std::thread::spawn(move || sender.send(&mp_link::commands::rc_override(target, channels)));
+    assert!(
+        worker.join().expect("the sending thread finished"),
+        "the link is running, so the frame is queued"
+    );
+
+    let mut decoder = FrameDecoder::new();
+    let mut seen = None;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut buf = [0u8; 512];
+    while Instant::now() < deadline && seen.is_none() {
+        let n = vehicle_side.read(&mut buf).unwrap();
+        if n > 0 {
+            decoder.push_and_drain(&buf[..n], &DIALECT, |frame| {
+                if let Some(MavMessage::RcChannelsOverride(rc)) =
+                    MavMessage::decode(frame.msgid, frame.payload)
+                {
+                    assert_eq!(frame.sysid, 255, "framed with the link's own system id");
+                    assert_eq!(frame.compid, LinkConfig::default().compid);
+                    seen = Some(rc);
+                }
+            });
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let rc = seen.expect("the override should reach the wire");
+    assert_eq!(rc.chan1_raw, 1500);
+    assert_eq!(rc.chan3_raw, 1100);
+    assert_eq!(rc.target_system, 1);
+
+    // Once the link is gone the handle says so rather than pretending. For a release frame
+    // that is the difference between an aircraft handed back and one still being flown by a
+    // stick nobody is holding, and the caller acts on it.
+    let after = link.sender();
+    drop(link);
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut refused = false;
+    while Instant::now() < deadline && !refused {
+        refused = !after.send(&mp_link::commands::rc_override(target, channels));
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(
+        refused,
+        "a handle to a stopped link must report the send as not delivered"
+    );
+}

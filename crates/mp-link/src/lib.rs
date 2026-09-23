@@ -169,6 +169,58 @@ struct Shared {
     frames_received: AtomicU64,
 }
 
+/// A way to send on a link without holding the link.
+///
+/// See [`Link::sender`]. Sends are queued for the link thread, which numbers and writes them;
+/// a `false` from [`LinkSender::send`] means the link is gone, not that the frame was slow.
+#[derive(Debug, Clone)]
+pub struct LinkSender {
+    outbound: std::sync::mpsc::Sender<Vec<u8>>,
+    sysid: u8,
+    compid: u8,
+}
+
+impl LinkSender {
+    /// Queues a message for transmission. Never blocks; false once the link has stopped.
+    pub fn send(&self, message: &MavMessage) -> bool {
+        queue_frame(&self.outbound, self.sysid, self.compid, message)
+    }
+}
+
+/// Encodes a message as a v2 frame from `sysid`/`compid` and queues it for the link thread.
+///
+/// Sequence numbering is the link thread's job, so it is applied there; zero here. Shared by
+/// [`Link::send`] and [`LinkSender::send`] so the two cannot drift - a sender that framed
+/// differently from the link would be a bug found on the wire, by a vehicle.
+fn queue_frame(
+    outbound: &std::sync::mpsc::Sender<Vec<u8>>,
+    sysid: u8,
+    compid: u8,
+    message: &MavMessage,
+) -> bool {
+    let mut payload = [0u8; 255];
+    let len = message.encode(&mut payload);
+    let mut frame = [0u8; mp_mavlink::MAX_FRAME_LEN];
+    let Some(payload) = payload.get(..len) else {
+        return false;
+    };
+    let Ok(n) = encode_v2(
+        &mut frame,
+        0,
+        sysid,
+        compid,
+        message.id(),
+        payload,
+        message.crc_extra(),
+        0,
+    ) else {
+        return false;
+    };
+    frame
+        .get(..n)
+        .is_some_and(|bytes| outbound.send(bytes.to_vec()).is_ok())
+}
+
 /// A running link.
 #[derive(Debug)]
 pub struct Link {
@@ -508,29 +560,29 @@ impl Link {
     /// Returns false if the link has stopped. Never blocks: a wedged link must not stall the
     /// caller.
     pub fn send(&self, message: &MavMessage) -> bool {
-        let mut payload = [0u8; 255];
-        let len = message.encode(&mut payload);
-        let mut frame = [0u8; mp_mavlink::MAX_FRAME_LEN];
-        let Some(payload) = payload.get(..len) else {
-            return false;
-        };
-
-        // Sequence numbering is the link thread's job, so it is applied there; zero here.
-        let Ok(n) = encode_v2(
-            &mut frame,
-            0,
+        queue_frame(
+            &self.outbound,
             self.config.sysid,
             self.config.compid,
-            message.id(),
-            payload,
-            message.crc_extra(),
-            0,
-        ) else {
-            return false;
-        };
-        frame
-            .get(..n)
-            .is_some_and(|bytes| self.outbound.send(bytes.to_vec()).is_ok())
+            message,
+        )
+    }
+
+    /// A handle that can send on this link from another thread.
+    ///
+    /// For the thing that must not wait for a frame: the joystick reader (D15's 5 ms from stick
+    /// to wire is not reachable from a UI timer, so it runs on a thread of its own and sends
+    /// from there). Everything `send` needs is cheap to copy - the outbound queue is a channel
+    /// and the ids are two bytes - so the handle carries copies rather than a borrow of the link,
+    /// and it cannot keep anything alive: when the link thread stops, the channel closes and
+    /// [`LinkSender::send`] reports false, exactly as [`Link::send`] does.
+    #[must_use]
+    pub fn sender(&self) -> LinkSender {
+        LinkSender {
+            outbound: self.outbound.clone(),
+            sysid: self.config.sysid,
+            compid: self.config.compid,
+        }
     }
 
     /// How the link describes itself right now, e.g. `udp:0.0.0.0:14550 <-> 127.0.0.1:52341`.

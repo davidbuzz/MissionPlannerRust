@@ -5,18 +5,35 @@
 //! a stick that stops reporting while the vehicle keeps flying the last position it heard.
 //!
 //! The safety is in `mp_input`, which is a separate crate with its own tests, precisely so the
-//! decision about when to hand control back is not tangled up with how a panel is laid out. This
-//! module polls the device, feeds the failsafe, and sends whatever the failsafe says to send.
+//! decision about when to hand control back is not tangled up with how a panel is laid out. So is
+//! the speed: the device is read and the frames are sent on threads of that crate's own
+//! (`mp_input::reader`), because D15's five milliseconds from stick to wire cannot be met from a
+//! screen that sends what it polled once a frame. This module chooses the device, switches control
+//! on and off, keeps the reader pointed at the vehicle being flown, and shows what the sticks are
+//! doing.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
+use std::time::Duration;
+
 use gpui::{AnyElement, Context, div, prelude::*, px, rgb};
-use mp_input::{Device, Failsafe, Mapping, Reading};
+use mp_input::{Device, Mapping, Reading};
+use mp_link::LinkSender;
+use mp_vehicle::VehicleId;
 
 use crate::MissionPlanner;
 use crate::telemetry::TelemetryView;
 use crate::ui::{action, field, panel, progress, theme};
+
+/// Where frames go: a handle that sends on the link, and the vehicle to address them to.
+///
+/// `None` while there is no vehicle. The reader's send thread reads this on every frame, so a
+/// vehicle chosen on screen is the vehicle the next frame goes to, and a link that has closed is
+/// a frame that is refused - which for a release means it is retried, not forgotten.
+pub type Target = Option<(LinkSender, VehicleId)>;
 
 /// Everything the joystick screen needs to keep between frames.
 #[derive(Debug)]
@@ -25,15 +42,15 @@ pub struct Sticks {
     devices: Vec<Device>,
     /// The device being used, by path.
     chosen: Option<String>,
-    /// The open device, if one is open.
+    /// The open device and its threads, if one is open.
     #[cfg(target_os = "linux")]
-    open: Option<mp_input::linux::Joystick>,
-    /// The last positions read.
-    reading: Reading,
+    reader: Option<mp_input::StickReader>,
     /// How stick positions become channels.
     mapping: Mapping,
-    /// When to stop believing the sticks.
-    failsafe: Failsafe,
+    /// Where the send thread puts its frames. Shared with it; set from the screen every frame.
+    target: Arc<Mutex<Target>>,
+    /// Frames the link accepted, for the status line and the facts.
+    sent: Arc<AtomicU64>,
     /// The last thing that happened, shown so a refusal is never silent.
     status: Option<String>,
 }
@@ -52,10 +69,10 @@ impl Sticks {
             devices: Vec::new(),
             chosen: None,
             #[cfg(target_os = "linux")]
-            open: None,
-            reading: Reading::default(),
+            reader: None,
             mapping: Mapping::gamepad(),
-            failsafe: Failsafe::default(),
+            target: Arc::new(Mutex::new(None)),
+            sent: Arc::new(AtomicU64::new(0)),
             status: None,
         }
     }
@@ -74,23 +91,41 @@ impl Sticks {
     }
 
     /// Opens a device, replacing whichever was open.
+    ///
+    /// Overrides do not carry across a device change: the new reader starts switched off, and
+    /// the old one, if it was flying, sends its release from its own thread as it is dropped.
+    /// Carrying an enabled state across is the obvious convenience and exactly wrong - the new
+    /// device's sticks are wherever they happen to be, and adopting them without the operator
+    /// saying so hands the aircraft a stick position nobody chose.
     pub fn choose(&mut self, id: &str) {
-        // Overrides go off across a device change, and off means a release is sent. Carrying an
-        // enabled state across is the obvious convenience and exactly wrong: the new device's
-        // sticks are wherever they happen to be, and adopting them without the operator saying so
-        // hands the aircraft a stick position nobody chose.
-        self.failsafe.set_enabled(false);
-        self.reading = Reading::default();
         #[cfg(target_os = "linux")]
         {
-            match mp_input::linux::Joystick::open(id) {
-                Ok(device) => {
-                    self.open = Some(device);
+            let target = Arc::clone(&self.target);
+            let sent = Arc::clone(&self.sent);
+            // Runs on the reader's send thread. It must not block, and it must say whether the
+            // link took the frame: for a release that is the difference between an aircraft
+            // handed back and one still being flown by a stick nobody is holding.
+            let sink = move |frame: &mp_input::Frame| -> bool {
+                let guard = target.lock().unwrap_or_else(PoisonError::into_inner);
+                let Some((sender, vehicle)) = guard.as_ref() else {
+                    // No vehicle to send to. Not delivered, and said so, rather than swallowed.
+                    return false;
+                };
+                let accepted =
+                    sender.send(&mp_link::commands::rc_override(*vehicle, frame.channels.0));
+                if accepted {
+                    sent.fetch_add(1, Ordering::Relaxed);
+                }
+                accepted
+            };
+            match mp_input::StickReader::open(id, self.mapping.clone(), sink) {
+                Ok(reader) => {
+                    self.reader = Some(reader);
                     self.chosen = Some(id.to_owned());
                     self.status = Some(format!("using {id}"));
                 }
                 Err(err) => {
-                    self.open = None;
+                    self.reader = None;
                     self.chosen = None;
                     // Permissions are the usual cause and the usual thing nobody guesses, so it
                     // is named rather than left as "permission denied".
@@ -112,16 +147,49 @@ impl Sticks {
 
     /// Turns overrides on or off.
     pub fn set_enabled(&mut self, enabled: bool) {
-        if enabled && !self.is_open() {
-            self.status = Some("choose a joystick first".to_owned());
-            return;
+        #[cfg(target_os = "linux")]
+        {
+            let Some(reader) = self.reader.as_ref() else {
+                self.status = Some("choose a joystick first".to_owned());
+                return;
+            };
+            // Refused for a device that has gone: switching on sticks that are not there would
+            // fly the aircraft on the last position they reported.
+            self.status = Some(if !reader.set_enabled(enabled) {
+                "the joystick is gone - control stays with the transmitter".to_owned()
+            } else if enabled {
+                "sticks are flying the vehicle".to_owned()
+            } else {
+                "control handed back to the transmitter".to_owned()
+            });
         }
-        self.failsafe.set_enabled(enabled);
-        self.status = Some(if enabled {
-            "sticks are flying the vehicle".to_owned()
-        } else {
-            "control handed back to the transmitter".to_owned()
-        });
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = enabled;
+            self.status = Some("joysticks are only supported on Linux so far".to_owned());
+        }
+    }
+
+    /// Keeps the reader pointed at the vehicle, and notices a device that has gone.
+    ///
+    /// Called once a frame. The reader does the flying on its own threads; what it cannot know
+    /// is which vehicle the operator has chosen since the last frame, and what the screen cannot
+    /// know without asking is that the device was unplugged - by which time the release has
+    /// already been sent, from the reader's thread, so all that is left is to say so and let the
+    /// reader go. A half-open device that might come back is a device somebody will believe is
+    /// working.
+    pub fn tick(&mut self, target: Target) {
+        *self.target.lock().unwrap_or_else(PoisonError::into_inner) = target;
+        #[cfg(target_os = "linux")]
+        if self
+            .reader
+            .as_ref()
+            .is_some_and(|reader| reader.liveness() == mp_input::Poll::Gone)
+        {
+            self.reader = None;
+            self.chosen = None;
+            self.status = Some("the joystick was unplugged - control handed back".to_owned());
+        }
     }
 
     /// Whether a device is open.
@@ -129,7 +197,7 @@ impl Sticks {
     pub const fn is_open(&self) -> bool {
         #[cfg(target_os = "linux")]
         {
-            self.open.is_some()
+            self.reader.is_some()
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -137,75 +205,61 @@ impl Sticks {
         }
     }
 
-    /// Whether overrides are switched on.
+    /// Whether overrides are switched on. Goes false by itself when the device is unplugged.
     #[must_use]
-    pub const fn is_enabled(&self) -> bool {
-        self.failsafe.is_enabled()
+    pub fn is_enabled(&self) -> bool {
+        #[cfg(target_os = "linux")]
+        {
+            self.reader
+                .as_ref()
+                .is_some_and(mp_input::StickReader::is_enabled)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            false
+        }
     }
 
-    /// The current stick positions.
+    /// The current stick positions, as the reader last saw them.
     #[must_use]
-    pub const fn reading(&self) -> &Reading {
-        &self.reading
+    pub fn reading(&self) -> Reading {
+        #[cfg(target_os = "linux")]
+        {
+            self.reader
+                .as_ref()
+                .map(mp_input::StickReader::reading)
+                .unwrap_or_default()
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            Reading::default()
+        }
+    }
+
+    /// How many frames the link has accepted since the application started.
+    #[must_use]
+    pub fn sent(&self) -> u64 {
+        self.sent.load(Ordering::Relaxed)
+    }
+
+    /// Stick-to-link latency so far, as (p50, p99), once anything has been measured.
+    #[must_use]
+    pub fn latency(&self) -> Option<(Duration, Duration)> {
+        #[cfg(target_os = "linux")]
+        {
+            let histogram = self.reader.as_ref()?.latency();
+            Some((histogram.p50()?, histogram.p99()?))
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            None
+        }
     }
 
     /// The last thing that happened.
     #[must_use]
     pub fn status(&self) -> Option<&str> {
         self.status.as_deref()
-    }
-
-    /// Reads the device and returns what to send, if anything.
-    ///
-    /// Called once per frame. The return is `None` most of the time - once control has been handed
-    /// back there is nothing more to say, and a ground station that keeps sending releases stops
-    /// the vehicle's own failsafe timer from ever running.
-    pub fn poll(&mut self) -> Option<[u16; 18]> {
-        let now = std::time::Instant::now();
-        #[cfg(target_os = "linux")]
-        {
-            if let Some(device) = self.open.as_mut() {
-                match device.poll() {
-                    // Alive means the device answered, not that anything moved. Feeding the
-                    // failsafe on movement was a flight-safety bug: the joystick API is
-                    // edge-triggered, so a pilot holding a stick steady emits nothing, and the
-                    // failsafe would hand control to a transmitter that this feature assumes is
-                    // not there. `STICK_TIMEOUT` now guards what it was written to guard - this
-                    // function not running at all.
-                    mp_input::linux::Poll::Alive => {
-                        self.reading = device.reading().clone();
-                        self.failsafe.fed(now);
-                    }
-                    mp_input::linux::Poll::Gone => {
-                        // Released here rather than left to time out. The timeout is for a lapse
-                        // that cannot be detected; this one has been, and sending a stale stick
-                        // position for another 200 ms after the code already knows the device is
-                        // gone is not a failsafe, it is a delay.
-                        self.failsafe.release_now();
-                        // Dropped rather than kept for a retry. A half-open device that might come
-                        // back is a device somebody will believe is working.
-                        self.open = None;
-                        self.chosen = None;
-                        // The positions go with it, so the panel does not keep showing axis values
-                        // for a device that is not there.
-                        self.reading = Reading::default();
-                        self.status =
-                            Some("the joystick was unplugged - control handed back".to_owned());
-                    }
-                }
-            }
-        }
-        let channels = self.mapping.channels(&self.reading);
-        self.failsafe.outgoing(now, channels).map(|out| out.0)
-    }
-
-    /// Notes that a frame the link refused is not a frame that was delivered.
-    ///
-    /// The transport is unacknowledged, so "delivered" can never be certain - but a send the link
-    /// actively refused certainly was not, and counting it against the release budget is how the
-    /// one frame that hands an aircraft back to its pilot gets silently dropped.
-    pub fn send_failed(&mut self) {
-        self.failsafe.retry_release();
     }
 }
 
@@ -218,6 +272,7 @@ pub fn panel_for(
     let has_vehicle = view.vehicle.is_some();
     let enabled = sticks.is_enabled();
     let open = sticks.is_open();
+    let reading = sticks.reading();
 
     let mut devices = div().flex().flex_col().gap_1();
     for device in &sticks.devices {
@@ -247,7 +302,7 @@ pub fn panel_for(
     // device gets mapped in practice, and it is why the numbers are here rather than a picture of
     // a gamepad that will not match theirs.
     let mut axes = div().flex().flex_col().gap_1();
-    for (index, value) in sticks.reading().axes.iter().enumerate() {
+    for (index, value) in reading.axes.iter().enumerate() {
         let fraction = (value + 1.0) * 0.5;
         axes = axes.child(
             div()
@@ -277,14 +332,25 @@ pub fn panel_for(
         );
     }
 
-    let pressed: Vec<String> = sticks
-        .reading()
+    let pressed: Vec<String> = reading
         .buttons
         .iter()
         .enumerate()
         .filter(|(_, down)| **down)
         .map(|(index, _)| index.to_string())
         .collect();
+
+    // What the sticks are costing: frames on the wire and how long a movement took to get
+    // there. The number D15 is judged on, shown where the person judging it is looking.
+    let wire = match sticks.latency() {
+        Some((p50, p99)) => format!(
+            "{} frames sent, stick to link p50 {:.1} ms, p99 {:.1} ms",
+            sticks.sent(),
+            p50.as_secs_f64() * 1000.0,
+            p99.as_secs_f64() * 1000.0
+        ),
+        None => format!("{} frames sent", sticks.sent()),
+    };
 
     panel(
         "joystick",
@@ -338,8 +404,9 @@ pub fn panel_for(
                     .text_color(rgb(theme::DIM))
                     .child(status.to_owned())
             }))
+            .children(open.then(|| div().text_xs().text_color(rgb(theme::DIM)).child(wire)))
             .child(devices)
-            .children((!sticks.reading().axes.is_empty()).then_some(axes))
+            .children((!reading.axes.is_empty()).then_some(axes))
             .children((!pressed.is_empty()).then(|| {
                 div()
                     .text_xs()

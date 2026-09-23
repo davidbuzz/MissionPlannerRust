@@ -10,27 +10,15 @@
 //! names are wrong on half the devices anyway, and the screen shows live axis values so a person
 //! can push a stick and see which number moves.
 
+use crate::event::LEN as EVENT_LEN;
 use crate::{Device, Reading};
 use std::fs::File;
 use std::io::{ErrorKind, Read};
 use std::path::{Path, PathBuf};
 
-/// Size of a `js_event`: `__u32 time`, `__s16 value`, `__u8 type`, `__u8 number`.
-const EVENT_LEN: usize = 8;
-
-/// `JS_EVENT_BUTTON`.
-const EVENT_BUTTON: u8 = 0x01;
-/// `JS_EVENT_AXIS`.
-const EVENT_AXIS: u8 = 0x02;
-/// `JS_EVENT_INIT`, or-ed into the type on the synthetic events sent when a device is opened.
-///
-/// Those carry the current position of everything, which is exactly what is wanted: without them
-/// a device reads as centred until something moves, and a throttle that is actually up reads as
-/// down until the pilot touches it.
-const EVENT_INIT: u8 = 0x80;
-
-/// Full scale of an axis in the joystick API.
-const AXIS_SCALE: f32 = 32_767.0;
+/// What a poll found. Defined at the crate root, because the threaded reader answers the same
+/// question with the same two answers; re-exported here so existing callers keep their path.
+pub use crate::Poll;
 
 /// Where the joystick nodes live.
 const INPUT_DIR: &str = "/dev/input";
@@ -95,20 +83,6 @@ fn describe(path: &Path) -> Device {
         axes: count("abs"),
         buttons: count("key"),
     }
-}
-
-/// What a poll found.
-///
-/// Deliberately not a `bool`. The question a failsafe must ask is "is this device still there",
-/// and the question a `bool` invites is "did something happen" - which on an edge-triggered API
-/// are different questions with the same answer most of the time and opposite answers at the worst
-/// possible moment.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Poll {
-    /// The device answered. The reading is current, whether or not it changed.
-    Alive,
-    /// The device has gone away.
-    Gone,
 }
 
 /// An open joystick.
@@ -201,33 +175,9 @@ impl Joystick {
     }
 
     fn apply(&mut self, event: &[u8; EVENT_LEN]) {
-        let value = i16::from_le_bytes([event[4], event[5]]);
-        // The init bit is masked off rather than filtered on: an init event carries a real
-        // position and should be applied like any other.
-        let kind = event[6] & !EVENT_INIT;
-        let number = usize::from(event[7]);
-        match kind {
-            EVENT_AXIS => {
-                if self.reading.axes.len() <= number {
-                    self.reading.axes.resize(number + 1, 0.0);
-                }
-                if let Some(slot) = self.reading.axes.get_mut(number) {
-                    // Divided by 32767 rather than 32768, so full deflection reaches exactly 1.0.
-                    // The API's negative extreme is -32768, which this clamps; losing one part in
-                    // 32768 at one end is better than never quite reaching full travel.
-                    *slot = (f32::from(value) / AXIS_SCALE).clamp(-1.0, 1.0);
-                }
-            }
-            EVENT_BUTTON => {
-                if self.reading.buttons.len() <= number {
-                    self.reading.buttons.resize(number + 1, false);
-                }
-                if let Some(slot) = self.reading.buttons.get_mut(number) {
-                    *slot = value != 0;
-                }
-            }
-            _ => {}
-        }
+        // The decoding lives in `event`, shared with the threaded reader, so the two cannot come
+        // to disagree about what a stick position is.
+        crate::event::apply(&mut self.reading, event);
     }
 
     /// The current position of everything.
@@ -246,6 +196,7 @@ impl Joystick {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::event::{AXIS as EVENT_AXIS, BUTTON as EVENT_BUTTON, INIT as EVENT_INIT};
 
     fn event(kind: u8, number: u8, value: i16) -> [u8; EVENT_LEN] {
         let value = value.to_le_bytes();

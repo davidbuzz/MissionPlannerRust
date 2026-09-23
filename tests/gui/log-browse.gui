@@ -1,4 +1,5 @@
-# Opening a dataflash log reads its fields, and clicking one plots it.
+# Opening a dataflash log reads its fields; a left click plots one on the left axis and a right
+# click on the right, as the tree in Log/LogBrowse.cs does.
 #
 # Run with MP_PLAN_DIR pointing at a directory holding flight.bin.
 
@@ -20,3 +21,18 @@ expect log.fields 643
 click logfield-ATT.Roll
 settle 1
 expect log.plotted 1
+expect log.plotted.right 0
+expect log.axes.left 1
+
+# A right click puts a field on the other axis.
+click logfield-ATT.Pitch:right
+settle 1
+expect log.plotted 2
+expect log.plotted.right 1
+
+# And a click on a plotted field, whichever button, removes it.
+click logfield-ATT.Roll:right
+settle 1
+expect log.plotted 1
+expect log.plotted.right 1
+expect log.axes.left 0
