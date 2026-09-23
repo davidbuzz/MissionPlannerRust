@@ -185,3 +185,63 @@ fn a_fence_does_not_end_up_in_the_flight_plan() {
         "the mission lost items: {mission:?}"
     );
 }
+
+/// A `.fen` file, uploaded to a real vehicle, read back, and compared against the file.
+///
+/// The done-when for this item, and a different claim from the round-trip tests above. Those say
+/// the transfer preserved what was sent; this says the *fence on the vehicle is the one in the
+/// file*, which is what a pilot needs before flying inside it. The two differ whenever the file
+/// reader and the wire encoder disagree - and they nearly did: `.fen` puts the return point on the
+/// first line and the first vertex again on the last, so a reader that takes every line as a
+/// vertex uploads a fence with two corners that are not in the file.
+#[test]
+#[ignore = "requires ArduPilot SITL listening on tcp:127.0.0.1:5760"]
+fn a_fence_file_matches_what_the_vehicle_reports() {
+    use mp_mission::fence_file::{FenceFile, read_fence, write_fence};
+
+    let (link, id) = connect();
+
+    // Written and read back through the file format, so the test exercises the format rather than
+    // an in-memory structure that happens to agree with it.
+    let drawn = FenceFile {
+        return_point: Some(LatLon::new(-35.3630, 149.1660).expect("valid")),
+        vertices: vec![
+            LatLon::new(-35.3640, 149.1640).expect("valid"),
+            LatLon::new(-35.3640, 149.1680).expect("valid"),
+            LatLon::new(-35.3610, 149.1680).expect("valid"),
+            LatLon::new(-35.3610, 149.1640).expect("valid"),
+        ],
+    };
+    let from_file = read_fence(&write_fence(&drawn));
+    assert_eq!(
+        from_file, drawn,
+        "the file format lost something before the upload"
+    );
+
+    let fence = FenceItem::Polygon {
+        inclusion: true,
+        vertices: from_file.vertices.clone(),
+    };
+    assert!(link.upload_list(id, fence.to_items(0), MISSION_TYPE_FENCE));
+    await_list(&link, id, MISSION_TYPE_FENCE, "fence upload");
+
+    assert!(link.download_list(id, MISSION_TYPE_FENCE));
+    let read_back = await_list(&link, id, MISSION_TYPE_FENCE, "fence download");
+
+    let rebuilt = fences_from_items(&read_back).expect("the fence should rebuild");
+    let FenceItem::Polygon { vertices, .. } = &rebuilt[0] else {
+        panic!("expected a polygon, got {:?}", rebuilt[0]);
+    };
+    let reported = FenceFile {
+        // ArduPilot stores a return point only when one was uploaded; this test uploads the
+        // polygon alone, so the comparison is of the vertices.
+        return_point: from_file.return_point,
+        vertices: vertices.clone(),
+    };
+
+    let differences = from_file.compare(&reported);
+    assert!(
+        differences.is_empty(),
+        "the fence on the vehicle is not the one in the file: {differences:?}"
+    );
+}

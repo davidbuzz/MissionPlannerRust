@@ -6,6 +6,7 @@
 #![forbid(unsafe_code)]
 
 pub mod fence;
+pub mod fence_file;
 pub mod item;
 pub mod survey;
 pub mod validate;
