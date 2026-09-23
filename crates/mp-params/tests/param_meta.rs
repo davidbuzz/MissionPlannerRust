@@ -107,21 +107,17 @@ fn enumerated_parameters_name_their_values() {
 }
 
 #[test]
-fn indexed_parameter_names_still_find_their_documentation() {
-    // Vehicles report SERVO9_FUNCTION while the metadata documents a specific index. Without the
-    // digit-folding fallback a servo configuration screen is blank.
-    let direct = lookup("SERVO1_FUNCTION");
-    let higher = lookup("SERVO9_FUNCTION");
-    assert!(
-        direct.is_some() || higher.is_some(),
-        "no servo function parameter resolved at all"
+fn indexed_parameter_names_find_their_own_documentation() {
+    // The table documents each index by its own name, as the XML it is generated from does, and
+    // a lookup finds exactly that entry (`ParameterMetaDataRepositoryAPM.cs:70-104`).
+    let direct = lookup("SERVO1_FUNCTION").expect("SERVO1_FUNCTION is documented");
+    let higher = lookup("SERVO9_FUNCTION").expect("SERVO9_FUNCTION is documented");
+    assert_eq!(direct.name, "SERVO1_FUNCTION");
+    assert_eq!(higher.name, "SERVO9_FUNCTION");
+    assert_eq!(
+        direct.units, higher.units,
+        "indexed siblings share documentation"
     );
-    if let (Some(a), Some(b)) = (direct, higher) {
-        assert_eq!(
-            a.units, b.units,
-            "indexed siblings should share documentation"
-        );
-    }
 }
 
 #[test]

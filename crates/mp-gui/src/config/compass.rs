@@ -1029,7 +1029,7 @@ impl Autopilot for Telemetry {
     }
 
     fn parameters(&self) -> Vec<(String, f64)> {
-        self.view().parameters
+        self.view().parameters.to_vec()
     }
 }
 
@@ -4311,9 +4311,9 @@ mod tests {
         compass.click_start(true);
         compass.answer(true, &mut fake);
         assert_eq!(fake.reboots, 1);
-        run(&mut compass, &mut fake, Instant::now());
-        assert!(fake.made.is_empty(), "not before the message is dismissed");
-        compass.answer(true, &mut fake);
+        // The divergence at REBOOT_FAILED: the reboot went out, so no "failed" message stands
+        // between the answer and the start the question interrupted.
+        assert!(compass.dialog().is_none());
         run(&mut compass, &mut fake, Instant::now());
         assert_eq!(fake.names(), ["start"]);
 
@@ -4579,7 +4579,7 @@ mod tests {
         let mut compass = legacy_page(&copter_40(), copter_40_info());
         let mut fake = Fake::default();
         let view = TelemetryView {
-            parameters: copter_40(),
+            parameters: copter_40().into(),
             ..TelemetryView::disconnected("test")
         };
         compass.legacy.minutes.set("15");

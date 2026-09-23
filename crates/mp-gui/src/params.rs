@@ -12,7 +12,9 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::sync::Arc;
 use std::time::Instant;
 
 use gpui::{AnyElement, Context, div, prelude::*, px, rgb};
@@ -74,34 +76,144 @@ impl Parameter {
 /// it - somebody looking for the loiter speed is as likely to type "speed" as "WPNAV". A search
 /// crosses groups, because the point of typing is to stop having to know which group a parameter
 /// is in.
+///
+/// Over the list [`collect`] handed out, the answer is worked out once per search and kept with
+/// the list (`positions_of`), so a frame that shows the same search of the same parameters as
+/// the last does not search again.
 #[must_use]
 pub fn matching<'a>(parameters: &'a [Parameter], search: &str) -> Vec<&'a Parameter> {
-    let needle = search.trim().to_ascii_uppercase();
-    if needle.is_empty() {
-        return parameters.iter().collect();
-    }
-    parameters
+    positions_of(parameters, search)
         .iter()
-        .filter(|parameter| {
-            parameter.name.to_ascii_uppercase().contains(&needle)
-                || parameter
-                    .meta
-                    .is_some_and(|meta| meta.display_name.to_ascii_uppercase().contains(&needle))
-        })
+        .filter_map(|&position| parameters.get(position))
         .collect()
 }
 
+/// Whether a parameter matches a search already trimmed and upper-cased. Everything matches an
+/// empty one.
+fn matches(parameter: &Parameter, needle: &str) -> bool {
+    needle.is_empty()
+        || parameter.name.to_ascii_uppercase().contains(needle)
+        || parameter
+            .meta
+            .is_some_and(|meta| meta.display_name.to_ascii_uppercase().contains(needle))
+}
+
 /// Collects the vehicle's parameters into the form the screen uses.
+///
+/// Each row carries its documentation, which is fourteen hundred lookups, so what was collected
+/// is kept and handed out again while nothing it was made from has changed: the view's list,
+/// which [`crate::telemetry::Telemetry::view`] shares between frames until a parameter arrives,
+/// and the documentation, which changes when a fetched file is installed
+/// ([`crate::metadata::generation`]).
 #[must_use]
-pub fn collect(view: &TelemetryView) -> Vec<Parameter> {
-    view.parameters
-        .iter()
-        .map(|(name, value)| Parameter {
-            name: name.clone(),
-            value: *value,
-            meta: crate::metadata::lookup(name),
-        })
-        .collect()
+pub fn collect(view: &TelemetryView) -> Arc<[Parameter]> {
+    collected(view, crate::metadata::generation(), crate::metadata::lookup)
+}
+
+/// What [`collect`] made last, and from what.
+struct Collected {
+    /// The view's list it was made from, held so the allocation cannot be reused by another list
+    /// and mistaken for this one.
+    from: Arc<[(String, f64)]>,
+    /// The documentation's generation at the time.
+    documentation: u64,
+    parameters: Arc<[Parameter]>,
+    /// [`groups`] of `parameters`, once the screen has asked.
+    groups: Option<Arc<[(String, usize)]>>,
+    /// The last search the screen made of `parameters`, and the positions of what it matched.
+    search: Option<(String, Arc<[usize]>)>,
+}
+
+thread_local! {
+    /// The screen draws on one thread; a test's collections stay on its own.
+    static COLLECTED: RefCell<Option<Collected>> = const { RefCell::new(None) };
+}
+
+/// [`collect`] with the documentation, and which generation of it, given.
+fn collected(
+    view: &TelemetryView,
+    documentation: u64,
+    lookup: fn(&str) -> Option<&'static ParamMeta>,
+) -> Arc<[Parameter]> {
+    COLLECTED.with(|held| {
+        let mut held = held.borrow_mut();
+        if let Some(held) = held.as_ref()
+            && Arc::ptr_eq(&held.from, &view.parameters)
+            && held.documentation == documentation
+        {
+            return Arc::clone(&held.parameters);
+        }
+        let parameters: Arc<[Parameter]> = view
+            .parameters
+            .iter()
+            .map(|(name, value)| Parameter {
+                name: name.clone(),
+                value: *value,
+                meta: lookup(name),
+            })
+            .collect();
+        *held = Some(Collected {
+            from: Arc::clone(&view.parameters),
+            documentation,
+            parameters: Arc::clone(&parameters),
+            groups: None,
+            search: None,
+        });
+        parameters
+    })
+}
+
+/// Runs `work` with the collection `parameters` is, if it is the one [`collect`] handed out last,
+/// so what is worked out from it can be kept beside it; with `None` for any other list.
+///
+/// "Is" means the same allocation, which the collection's own handle keeps from being freed and
+/// reused, so a list that merely looks the same is never taken for it.
+fn with_collection<R>(
+    parameters: &[Parameter],
+    work: impl FnOnce(Option<&mut Collected>) -> R,
+) -> R {
+    COLLECTED.with(|held| {
+        let mut held = held.borrow_mut();
+        work(held.as_mut().filter(|held| {
+            std::ptr::eq(held.parameters.as_ptr(), parameters.as_ptr())
+                && held.parameters.len() == parameters.len()
+        }))
+    })
+}
+
+/// [`groups`], worked out once per collection rather than once per frame.
+fn groups_of(parameters: &[Parameter]) -> Arc<[(String, usize)]> {
+    with_collection(parameters, |held| match held {
+        Some(held) => Arc::clone(held.groups.get_or_insert_with(|| groups(parameters).into())),
+        None => groups(parameters).into(),
+    })
+}
+
+/// Where in `parameters` what a search matches is, worked out once per collection and search
+/// rather than once per frame: [`matching`], by position.
+fn positions_of(parameters: &[Parameter], search: &str) -> Arc<[usize]> {
+    let find = || -> Arc<[usize]> {
+        let needle = search.trim().to_ascii_uppercase();
+        parameters
+            .iter()
+            .enumerate()
+            .filter(|(_, parameter)| matches(parameter, &needle))
+            .map(|(position, _)| position)
+            .collect()
+    };
+    with_collection(parameters, |held| match held {
+        Some(held) => {
+            if let Some((searched, found)) = &held.search
+                && searched == search
+            {
+                return Arc::clone(found);
+            }
+            let found = find();
+            held.search = Some((search.to_owned(), Arc::clone(&found)));
+            found
+        }
+        None => find(),
+    })
 }
 
 /// The groups present, in order, with how many parameters each holds.
@@ -138,7 +250,8 @@ pub fn browser_panel(
     let complete = expected > 0 && held >= usize::from(expected);
 
     let mut group_list = div().flex().flex_wrap().gap_1();
-    for (group, count) in groups(parameters) {
+    for (group, count) in groups_of(parameters).iter() {
+        let group = group.clone();
         let chosen = selected_group == Some(group.as_str());
         let label = format!("{group} {count}");
         group_list = group_list.child(
@@ -929,6 +1042,168 @@ impl MissionPlanner {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SITL's 1,408 parameters, as a view carries them: every line of the dump, including the
+    /// dozen a `.param` file load drops (`WP_TOTAL` and the like), since the vehicle sends those.
+    fn sitl_view() -> TelemetryView {
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../testdata/params/sitl-copter.param");
+        let text = std::fs::read_to_string(&fixture).expect("the SITL dump");
+        let mut view = TelemetryView::disconnected("test");
+        view.parameters = text
+            .lines()
+            .filter_map(|line| {
+                let (name, value) = line.split_once(',')?;
+                Some((name.to_owned(), value.trim().parse().ok()?))
+            })
+            .collect();
+        assert_eq!(view.parameters.len(), 1408);
+        view
+    }
+
+    /// The bundled documentation, which no test installs over as one can the fetched file.
+    fn bundled(name: &str) -> Option<&'static ParamMeta> {
+        mp_params::param_meta::lookup(name)
+    }
+
+    /// A frame whose view carries the same list as the last collects nothing: it is handed what
+    /// the last one collected. A new list - a parameter arrived - or new documentation is
+    /// collected afresh, and what is collected is the list, row for row, with its documentation.
+    #[test]
+    fn collecting_the_same_list_twice_collects_it_once() {
+        let view = sitl_view();
+        let first = collected(&view, 1, bundled);
+        assert_eq!(first.len(), view.parameters.len());
+        for (row, (name, value)) in first.iter().zip(view.parameters.iter()) {
+            assert_eq!(&row.name, name);
+            assert!((row.value - value).abs() < f64::EPSILON);
+            assert_eq!(row.meta, bundled(name), "{name}");
+        }
+
+        let started = Instant::now();
+        let again = collected(&view, 1, bundled);
+        let reused = started.elapsed();
+        assert!(
+            Arc::ptr_eq(&first, &again),
+            "the same list was collected again"
+        );
+        let frame = view.clone();
+        assert!(
+            Arc::ptr_eq(&first, &collected(&frame, 1, bundled)),
+            "a view cloned from the same frame shares its list"
+        );
+
+        let mut arrived = view.clone();
+        let mut rows: Vec<(String, f64)> = view.parameters.to_vec();
+        if let Some(row) = rows.iter_mut().find(|(name, _)| name == "RTL_ALT_M") {
+            row.1 = 42.5;
+        }
+        arrived.parameters = rows.into();
+        let fresh = collected(&arrived, 1, bundled);
+        assert!(!Arc::ptr_eq(&first, &fresh), "a new list must be collected");
+        let rtl = fresh
+            .iter()
+            .find(|row| row.name == "RTL_ALT_M")
+            .expect("held");
+        assert!(
+            (rtl.value - 42.5).abs() < f64::EPSILON,
+            "the new value is shown"
+        );
+        assert!(Arc::ptr_eq(&fresh, &collected(&arrived, 1, bundled)));
+
+        let documented = collected(&arrived, 2, bundled);
+        assert!(
+            !Arc::ptr_eq(&fresh, &documented),
+            "new documentation must be looked up"
+        );
+
+        let started = Instant::now();
+        let _ = std::hint::black_box(collected(&view, 3, bundled));
+        let collecting = started.elapsed();
+        eprintln!(
+            "collecting SITL's 1,408 parameters: {collecting:?}; handing the last collection \
+             out again: {reused:?}"
+        );
+    }
+
+    /// The group list and a search's matches are worked out once per collection and search, not
+    /// once per frame, and are what [`groups`] and [`matching`] say. A new collection, or a
+    /// different search, works them out again; a list that is not the collection is never
+    /// answered from it.
+    #[test]
+    fn groups_and_matches_are_worked_out_once_per_collection_and_search() {
+        let view = sitl_view();
+        let parameters = collected(&view, 1, bundled);
+
+        let started = Instant::now();
+        let listed = groups_of(&parameters);
+        let grouping = started.elapsed();
+        assert_eq!(listed.to_vec(), groups(&parameters));
+        let started = Instant::now();
+        assert!(
+            Arc::ptr_eq(&listed, &groups_of(&parameters)),
+            "grouped again"
+        );
+        let regrouping = started.elapsed();
+
+        let started = Instant::now();
+        let found = positions_of(&parameters, "batt");
+        let searching = started.elapsed();
+        let names = |positions: &[usize]| -> Vec<String> {
+            positions
+                .iter()
+                .map(|&position| parameters[position].name.clone())
+                .collect()
+        };
+        // What a search is, said again from scratch: the fragment in the name or the display
+        // name, in any case, in list order.
+        let spelled_out = |fragment: &str| -> Vec<String> {
+            parameters
+                .iter()
+                .filter(|parameter| {
+                    parameter.name.to_ascii_uppercase().contains(fragment)
+                        || parameter.meta.is_some_and(|meta| {
+                            meta.display_name.to_ascii_uppercase().contains(fragment)
+                        })
+                })
+                .map(|parameter| parameter.name.clone())
+                .collect()
+        };
+        let expected = spelled_out("BATT");
+        assert!(expected.len() > 10, "{expected:?}");
+        assert_eq!(names(&found), expected);
+        assert_eq!(
+            matching(&parameters, "batt")
+                .into_iter()
+                .map(|parameter| parameter.name.clone())
+                .collect::<Vec<_>>(),
+            expected
+        );
+        let started = Instant::now();
+        assert!(
+            Arc::ptr_eq(&found, &positions_of(&parameters, "batt")),
+            "searched again"
+        );
+        let researching = started.elapsed();
+        let other = positions_of(&parameters, "wpnav");
+        assert!(!Arc::ptr_eq(&found, &other));
+        assert_eq!(names(&other), spelled_out("WPNAV"));
+        eprintln!(
+            "groups: {grouping:?} worked out, {regrouping:?} kept; search: {searching:?} worked \
+             out, {researching:?} kept"
+        );
+
+        // A list that looks the same but is not the collection is worked out for itself.
+        let copy: Vec<Parameter> = parameters.to_vec();
+        assert!(!Arc::ptr_eq(&listed, &groups_of(&copy)));
+        assert_eq!(groups_of(&copy).to_vec(), groups(&copy));
+        assert!(!Arc::ptr_eq(&other, &positions_of(&copy, "wpnav")));
+
+        // A new collection starts with nothing worked out.
+        let fresh = collected(&view, 2, bundled);
+        assert!(!Arc::ptr_eq(&listed, &groups_of(&fresh)));
+        assert!(!Arc::ptr_eq(&other, &positions_of(&fresh, "wpnav")));
+    }
 
     fn parameter(name: &str, value: f64) -> Parameter {
         Parameter {

@@ -101,26 +101,102 @@ impl ParamMeta {
 #[path = "generated/param_meta_copter.rs"]
 pub mod copter;
 
-/// Looks a parameter up by name.
+/// Looks a parameter up by its exact name.
 ///
-/// Parameter names on the vehicle sometimes carry an index suffix the metadata does not, such as
-/// `SERVO9_FUNCTION` against a documented `SERVO_FUNCTION`. Exact match first, then a digit-folded
-/// retry, so a servo output screen is not blank.
+/// Mission Planner's rule, and the only one: its fallback, `ParameterMetaDataRepositoryAPM`, asks
+/// the XML this table is generated from for the element named exactly as the parameter
+/// (`// C#: ExtLibs/Utilities/ParameterMetaDataRepositoryAPM.cs:70-104`), as the `apm.pdef.xml`
+/// it reads first is asked for exactly `Vehicle:NAME` or `NAME`
+/// (`// C#: ExtLibs/Utilities/ParameterMetaDataRepositoryAPMpdef.cs:219-231`). A numbered name
+/// the table does not list - `SERVO33_FUNCTION` against a table that stops at 32 - has no
+/// documentation, as it has none in Mission Planner; it does not borrow a sibling's.
+///
+/// A bisection of the table, which is sorted by name.
 #[must_use]
 pub fn lookup(name: &str) -> Option<&'static ParamMeta> {
-    if let Ok(index) = copter::PARAMETERS.binary_search_by(|meta| meta.name.cmp(name)) {
-        return copter::PARAMETERS.get(index);
+    copter::PARAMETERS
+        .binary_search_by(|meta| meta.name.cmp(name))
+        .ok()
+        .and_then(|index| copter::PARAMETERS.get(index))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// SITL's 1,408 names, as `testdata/params/sitl-copter.param` lists them.
+    fn sitl_names() -> Vec<String> {
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../testdata/params/sitl-copter.param");
+        let text = std::fs::read_to_string(&fixture).expect("the SITL parameter dump");
+        let names: Vec<String> = text
+            .lines()
+            .filter(|line| !line.starts_with('#'))
+            .filter_map(|line| line.split(',').next())
+            .map(str::to_owned)
+            .collect();
+        assert_eq!(names.len(), 1408, "the dump PLAN.md 10.5 counted");
+        names
     }
 
-    // Fold trailing and embedded digits: SERVO9_FUNCTION -> SERVO_FUNCTION.
-    let folded: String = name.chars().filter(|c| !c.is_ascii_digit()).collect();
-    if folded == name {
-        return None;
+    /// The lookup is exact, as `ParameterMetaDataRepositoryAPM.GetParameterMetaData` asks the
+    /// XML for the element of exactly that name (`ParameterMetaDataRepositoryAPM.cs:70-104`) and
+    /// the pdef lookup for exactly `Vehicle:NAME` or `NAME`
+    /// (`ParameterMetaDataRepositoryAPMpdef.cs:219-231`): `RC5_MIN` is documented only if the
+    /// table has `RC5_MIN`, and a renumbered name the table lacks is not documented at all - not
+    /// by a sibling with other digits, which is what a digit-folding retry here used to do.
+    #[test]
+    fn the_bundled_lookup_is_exact() {
+        let listed = |name: &str| copter::PARAMETERS.iter().any(|meta| meta.name == name);
+
+        for name in ["RC5_MIN", "SERVO9_FUNCTION", "BATT2_MONITOR"] {
+            assert_eq!(
+                lookup(name).map(|meta| meta.name),
+                listed(name).then_some(name),
+                "{name}"
+            );
+        }
+        assert!(listed("RC5_MIN"), "the table documents RC5_MIN by name");
+
+        // Renumbered names the table lacks, each with a sibling it does list.
+        for (absent, sibling) in [
+            ("RC99_MIN", "RC5_MIN"),
+            ("SERVO99_FUNCTION", "SERVO9_FUNCTION"),
+            ("BATT99_MONITOR", "BATT2_MONITOR"),
+            ("SERVO_FUNCTION", "SERVO1_FUNCTION"),
+        ] {
+            assert!(listed(sibling), "{sibling} is in the table");
+            assert!(!listed(absent), "{absent} is not in the table");
+            assert_eq!(
+                lookup(absent),
+                None,
+                "{absent} borrowed a sibling's documentation"
+            );
+        }
+
+        // Every name in the table finds its own entry, and every SITL name finds an entry of
+        // exactly its own name or nothing.
+        for meta in copter::PARAMETERS {
+            assert!(
+                lookup(meta.name).is_some_and(|found| std::ptr::eq(found, meta)),
+                "{}",
+                meta.name
+            );
+        }
+        let names = sitl_names();
+        let mut documented = 0;
+        for name in &names {
+            match lookup(name) {
+                Some(meta) => {
+                    assert_eq!(meta.name, name.as_str());
+                    documented += 1;
+                }
+                None => assert!(!listed(name), "{name} is in the table"),
+            }
+        }
+        eprintln!(
+            "bundled table documents {documented} of {} SITL names, by exact name",
+            names.len()
+        );
     }
-    copter::PARAMETERS.iter().find(|meta| {
-        meta.name
-            .chars()
-            .filter(|c| !c.is_ascii_digit())
-            .eq(folded.chars())
-    })
 }

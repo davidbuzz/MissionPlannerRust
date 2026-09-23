@@ -139,9 +139,9 @@ const EXCLUDED: &[Excluded] = &[
     Excluded {
         msgid: 22,
         name: "PARAM_VALUE",
-        // `decode_param_id` builds the name (mp-params/src/lib.rs:294) and `ParamTable::insert`
-        // clones it for the index map (lib.rs:347); the table already holds that name, so the
-        // key passed to `values.insert` (lib.rs:349) is dropped, not stored.
+        // `decode_param_id` builds the name (mp-params/src/lib.rs:295) and `ParamTable::insert`
+        // clones it for the index map (lib.rs:353); the table already holds that name, so the
+        // key passed to `values.insert` (lib.rs:355) is dropped, not stored.
         max_per_frame: 2,
         why: "the parameter table is keyed by name, as Mission Planner's is \
               (C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5770 builds a string per \
@@ -150,8 +150,8 @@ const EXCLUDED: &[Excluded] = &[
     Excluded {
         msgid: 77,
         name: "COMMAND_ACK",
-        // In `run_link`'s COMMAND_ACK arm: the command's name (mp-link/src/lib.rs:1101, `to_owned`
-        // or `format!`) and the logged line (lib.rs:1109, `format!`), which starts with no capacity
+        // In `run_link`'s COMMAND_ACK arm: the command's name (mp-link/src/lib.rs:1120, `to_owned`
+        // or `format!`) and the logged line (lib.rs:1126, `format!`), which starts with no capacity
         // because its format string begins with an argument, so it allocates and then grows.
         max_per_frame: 3,
         why: "the message log holds text an operator reads; an ack answers a command the \

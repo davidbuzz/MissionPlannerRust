@@ -7,7 +7,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use mp_link::messages::LogMessage;
@@ -86,7 +86,10 @@ pub struct TelemetryView {
     /// What the mission transfer is doing, if one has been started.
     pub transfer: Option<TransferStatus>,
     /// The vehicle's parameters, by name.
-    pub parameters: Vec<(String, f64)>,
+    ///
+    /// Shared rather than owned: the same list is handed to every frame until a parameter
+    /// arrives ([`Telemetry::view`]), so taking a view does not copy fourteen hundred names.
+    pub parameters: Arc<[(String, f64)]>,
     /// How many the vehicle says it has, once it has said.
     pub parameters_expected: u16,
 }
@@ -124,10 +127,19 @@ impl TelemetryView {
             messages: Vec::new(),
             messages_dropped: 0,
             transfer: None,
-            parameters: Vec::new(),
+            parameters: Arc::default(),
             parameters_expected: 0,
         }
     }
+}
+
+/// The parameter list the last view carried, kept for the next: see [`Telemetry::parameters_of`].
+#[derive(Debug)]
+struct SharedParameters {
+    /// The table's [`mp_params::ParamTable::generation`] when the list was made from it.
+    generation: u64,
+    list: Arc<[(String, f64)]>,
+    expected: u16,
 }
 
 /// What a screen says when a request it made ends, as the C# says it around the call it blocks on.
@@ -251,6 +263,8 @@ pub struct Telemetry {
     banner: Option<String>,
     /// Requests the screens made and have not yet heard the end of, oldest first.
     awaited: Vec<Awaited>,
+    /// What [`Telemetry::parameters_of`] built last, for the next frame to reuse.
+    parameters: Mutex<Option<SharedParameters>>,
 }
 
 impl Telemetry {
@@ -366,6 +380,7 @@ impl Telemetry {
             banner: None,
             recording: None,
             awaited: Vec::new(),
+            parameters: Mutex::new(None),
         }
     }
 
@@ -415,7 +430,10 @@ impl Telemetry {
         // Fetch the mission the link holds, if a download has finished. The UI never triggers
         // one itself: a ground station that silently pulls a mission whenever it connects makes
         // it impossible to tell whether what is on screen came from the vehicle or the operator.
-        let parameters = primary.as_ref().and_then(|(id, _)| link.params(*id));
+        let (parameters, parameters_expected) = primary.as_ref().map_or_else(
+            || (Arc::default(), 0),
+            |(id, _)| self.parameters_of(link, *id),
+        );
         let transfer = primary
             .as_ref()
             .and_then(|(id, _)| link.mission_transfer(*id));
@@ -461,20 +479,48 @@ impl Telemetry {
             messages: link.recent_messages(MESSAGE_LINES),
             messages_dropped: link.messages_dropped(),
             transfer,
-            parameters: parameters
-                .as_ref()
-                .map(|table| {
-                    table
-                        .iter()
-                        .map(|(name, value)| (name.clone(), value.as_f64()))
-                        .collect()
-                })
-                .unwrap_or_default(),
-            parameters_expected: parameters
-                .as_ref()
-                .and_then(mp_params::ParamTable::expected)
-                .unwrap_or(0),
+            parameters,
+            parameters_expected,
         }
+    }
+
+    /// A vehicle's parameters for a view, and how many it says it has.
+    ///
+    /// A view is taken every frame and the table holds some fourteen hundred parameters, which
+    /// change only when one arrives. Copying them out each frame cost a millisecond a frame in a
+    /// debug build to find them unchanged, so the link is asked only which generation its table
+    /// is at, and the list is made again only when that has moved; otherwise the last one is
+    /// handed out again. Generations are numbered across every table in the process, so a list
+    /// made for one vehicle is never handed out for another.
+    fn parameters_of(&self, link: &Link, id: VehicleId) -> (Arc<[(String, f64)]>, u16) {
+        let Some(generation) = link.params_generation(id) else {
+            return (Arc::default(), 0);
+        };
+        let mut shared = self
+            .parameters
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if let Some(held) = shared.as_ref()
+            && held.generation == generation
+        {
+            return (Arc::clone(&held.list), held.expected);
+        }
+        let Some(table) = link.params(id) else {
+            return (Arc::default(), 0);
+        };
+        let list: Arc<[(String, f64)]> = table
+            .iter()
+            .map(|(name, value)| (name.clone(), value.as_f64()))
+            .collect();
+        let expected = table.expected().unwrap_or(0);
+        // The table's own generation, which a parameter arriving since the question may have
+        // moved past the one asked about; the list is of this table, so it is kept under it.
+        *shared = Some(SharedParameters {
+            generation: table.generation(),
+            list: Arc::clone(&list),
+            expected,
+        });
+        (list, expected)
     }
 
     /// Asks the vehicle for its mission. Explicit, never automatic.
@@ -1377,6 +1423,112 @@ pub mod scripted {
             assert!(Instant::now() < deadline, "timed out waiting for {what}");
             std::thread::sleep(Duration::from_millis(1));
         }
+    }
+}
+
+/// A view shares its parameter list with the last one until a parameter arrives.
+#[cfg(test)]
+mod shared_parameters {
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+
+    use mp_link::ProtocolTimeouts;
+    use mp_mavlink_dialects::all::{MavMessage, ParamValue};
+
+    use super::scripted::{Vehicle, param, until};
+
+    /// `MAV_PARAM_TYPE_REAL32`.
+    const REAL32: u8 = 9;
+
+    /// Equal as a float carried on the wire can be.
+    fn close(left: f64, right: f64) -> bool {
+        (left - right).abs() <= 1e-6 * right.abs().max(1.0)
+    }
+
+    /// SITL's 1,408 parameters, every line of the dump, sent as the vehicle sends a download.
+    fn send_sitl(vehicle: &mut Vehicle) -> Vec<(String, f64)> {
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../testdata/params/sitl-copter.param");
+        let text = std::fs::read_to_string(&fixture).expect("the SITL dump");
+        let sent: Vec<(String, f64)> = text
+            .lines()
+            .filter_map(|line| {
+                let (name, value) = line.split_once(',')?;
+                Some((name.to_owned(), value.trim().parse().ok()?))
+            })
+            .collect();
+        assert_eq!(sent.len(), 1408);
+        let count = u16::try_from(sent.len()).expect("fits");
+        for (index, (name, value)) in sent.iter().enumerate() {
+            #[allow(clippy::cast_possible_truncation)] // SITL's values are f32 on the wire
+            vehicle.send(&MavMessage::ParamValue(ParamValue {
+                param_value: *value as f32,
+                param_count: count,
+                param_index: u16::try_from(index).expect("fits"),
+                param_id: mp_params::encode_param_id(name),
+                param_type: REAL32,
+            }));
+        }
+        sent
+    }
+
+    fn per_view(telemetry: &super::Telemetry) -> Duration {
+        const VIEWS: u32 = 200;
+        let started = Instant::now();
+        for _ in 0..VIEWS {
+            let _ = std::hint::black_box(telemetry.view());
+        }
+        started.elapsed() / VIEWS
+    }
+
+    /// Two frames over the same table carry the same list - one allocation, not a copy each - and
+    /// a parameter arriving gives the next frame a new list with the new value, which is then
+    /// shared in its turn. The list is the table's, in the table's order, either way.
+    #[test]
+    fn a_view_shares_the_parameter_list_until_a_parameter_arrives() {
+        let (telemetry, mut vehicle) = Vehicle::connect(ProtocolTimeouts::default());
+        let empty = per_view(&telemetry);
+        let sent = send_sitl(&mut vehicle);
+        until("every parameter", || {
+            telemetry.view().parameters.len() == sent.len()
+        });
+
+        let first = telemetry.view();
+        let second = telemetry.view();
+        assert!(
+            Arc::ptr_eq(&first.parameters, &second.parameters),
+            "the second frame copied a table that had not changed"
+        );
+        assert_eq!(first.parameters_expected, 1408);
+        let mut expected = sent;
+        expected.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(first.parameters.len(), expected.len());
+        for ((name, value), (sent_name, sent_value)) in first.parameters.iter().zip(&expected) {
+            assert_eq!(name, sent_name);
+            assert!(
+                close(*value, *sent_value),
+                "{name}: {value} for {sent_value}"
+            );
+        }
+        let full = per_view(&telemetry);
+        eprintln!("a view with no parameters: {empty:?}; with SITL's 1,408: {full:?}");
+
+        vehicle.send(&param("RTL_ALT_M", 42.5, REAL32));
+        until("the new value", || {
+            telemetry
+                .view()
+                .parameters
+                .iter()
+                .any(|(name, value)| name == "RTL_ALT_M" && close(*value, 42.5))
+        });
+        let third = telemetry.view();
+        assert!(
+            !Arc::ptr_eq(&first.parameters, &third.parameters),
+            "a parameter arrived and the old list was handed out"
+        );
+        assert_eq!(third.parameters.len(), 1408, "RTL_ALT_M was already held");
+        assert_eq!(third.parameters_expected, 1408, "the largest count claimed");
+        assert!(Arc::ptr_eq(&third.parameters, &telemetry.view().parameters));
     }
 }
 

@@ -18,6 +18,7 @@
 
 use std::collections::BTreeMap;
 use std::sync::RwLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, channel};
 
 use mp_params::ParamMeta;
@@ -32,15 +33,46 @@ struct Loaded {
 
 static LOADED: RwLock<Option<Loaded>> = RwLock::new(None);
 
+/// How many times documentation has been installed; see [`generation`].
+static GENERATION: AtomicU64 = AtomicU64::new(0);
+
 /// Documentation for one parameter: the fetched file's if it has it, else the bundled table's.
+///
+/// Mission Planner's rule for both: the parameter named exactly. In the fetched file, the first
+/// of that name in the file's order (`// C#: ExtLibs/Utilities/ParameterMetaDataRepositoryAPMpdef.cs:219-231`,
+/// kept by [`Pdef::parse`]); in the bundled table, the entry of that name
+/// ([`mp_params::param_meta::lookup`]). Both are searches, not scans.
 #[must_use]
 pub fn lookup(name: &str) -> Option<&'static ParamMeta> {
-    let loaded = LOADED.read().ok().and_then(|guard| {
+    let guard = LOADED.read().ok();
+    lookup_in(
         guard
             .as_ref()
-            .and_then(|loaded| loaded.table.get(name).copied())
-    });
-    loaded.or_else(|| mp_params::param_meta::lookup(name))
+            .and_then(|guard| guard.as_ref())
+            .map(|loaded| &loaded.table),
+        name,
+    )
+}
+
+/// [`lookup`] against a given fetched table rather than the installed one.
+fn lookup_in(
+    fetched: Option<&BTreeMap<String, &'static ParamMeta>>,
+    name: &str,
+) -> Option<&'static ParamMeta> {
+    fetched
+        .and_then(|table| table.get(name).copied())
+        .or_else(|| mp_params::param_meta::lookup(name))
+}
+
+/// Which documentation [`lookup`] is answering from: a number that moves each time a fetched
+/// file is installed, and only then.
+///
+/// A screen that keeps what it looked up - the parameter list, fourteen hundred lookups - keeps
+/// it while this is unchanged and looks again when it moves, so a file that arrives mid-session
+/// is shown on the next frame.
+#[must_use]
+pub fn generation() -> u64 {
+    GENERATION.load(Ordering::Acquire)
 }
 
 /// Where the documentation currently comes from: `bundled`, or the fetched file's name.
@@ -65,10 +97,7 @@ pub fn documented() -> usize {
 
 /// Makes a fetched file the first source. Returns how many parameters it documents.
 pub fn install(source: impl Into<String>, pdef: &Pdef) -> usize {
-    let table: BTreeMap<String, &'static ParamMeta> = pdef
-        .params()
-        .map(|param| (param.name.clone(), leak(param)))
-        .collect();
+    let table = table_of(pdef);
     let count = table.len();
     if let Ok(mut guard) = LOADED.write() {
         *guard = Some(Loaded {
@@ -76,7 +105,17 @@ pub fn install(source: impl Into<String>, pdef: &Pdef) -> usize {
             table,
         });
     }
+    // After the table is in place, never before: a reader that sees the new number must find
+    // the new table, or it would keep what it built from the old one as if it were current.
+    GENERATION.fetch_add(1, Ordering::Release);
     count
+}
+
+/// A fetched file's documentation, by name.
+fn table_of(pdef: &Pdef) -> BTreeMap<String, &'static ParamMeta> {
+    pdef.params()
+        .map(|param| (param.name.clone(), leak(param)))
+        .collect()
 }
 
 fn leak_str(text: &str) -> &'static str {
@@ -238,7 +277,9 @@ mod tests {
     #[allow(clippy::unwrap_used)]
     fn the_fetched_file_comes_first_and_the_bundle_fills_in() {
         let pdef = Pdef::parse(SAMPLE).unwrap();
+        let before = generation();
         let count = install("Copter9.9.9", &pdef);
+        assert!(generation() > before, "an install moves the generation");
         assert_eq!(count, 2);
         assert_eq!(source(), "Copter9.9.9");
         assert_eq!(documented(), 2);
@@ -253,6 +294,63 @@ mod tests {
         );
         let bundled = lookup("BATT_MONITOR").expect("only the bundle has it");
         assert!(!bundled.description.is_empty());
+    }
+
+    /// Over the file Mission Planner fetched onto this machine, when it is here, and without it:
+    /// every one of SITL's 1,408 names is documented by the entry of exactly its own name - the
+    /// file's where the file has it, the bundle's otherwise - or by nothing when neither has it.
+    #[test]
+    fn every_sitl_name_is_documented_by_its_own_name_with_or_without_the_real_file() {
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../testdata/params/sitl-copter.param");
+        let text = std::fs::read_to_string(&fixture).expect("the SITL dump");
+        let names: Vec<&str> = text
+            .lines()
+            .filter_map(|line| line.split(',').next())
+            .collect();
+        assert_eq!(names.len(), 1408);
+        let bundled = |name: &str| {
+            mp_params::param_meta::copter::PARAMETERS
+                .iter()
+                .find(|meta| meta.name == name)
+        };
+        let same = |left: Option<&'static ParamMeta>, right: Option<&'static ParamMeta>| match (
+            left, right,
+        ) {
+            (Some(left), Some(right)) => std::ptr::eq(left, right),
+            (None, None) => true,
+            _ => false,
+        };
+
+        for name in &names {
+            assert!(same(lookup_in(None, name), bundled(name)), "{name}");
+        }
+
+        let Some(dir) = mp_settings::data_directory() else {
+            eprintln!("skipped the fetched file: no home directory");
+            return;
+        };
+        let path = pdef::unversioned_path(&dir, "ArduCopter");
+        let Ok(pdef) = Pdef::load(&path) else {
+            eprintln!("skipped the fetched file: no {}", path.display());
+            return;
+        };
+        let table = table_of(&pdef);
+        let mut from_file = 0;
+        for name in &names {
+            let expected = table.get(*name).copied().or_else(|| bundled(name));
+            assert!(same(lookup_in(Some(&table), name), expected), "{name}");
+            if let Some(found) = lookup_in(Some(&table), name) {
+                assert_eq!(found.name, *name);
+            }
+            from_file += usize::from(table.contains_key(*name));
+        }
+        eprintln!(
+            "{}: {from_file} of {} SITL names from the file, the rest from the bundle",
+            path.display(),
+            names.len()
+        );
+        assert!(from_file > 1000);
     }
 
     #[test]

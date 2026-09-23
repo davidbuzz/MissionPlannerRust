@@ -552,6 +552,21 @@ impl Link {
         self.shared.params.lock().ok()?.get(&target).cloned()
     }
 
+    /// Which state a vehicle's parameter table is in, without copying it: its
+    /// [`ParamTable::generation`], which moves each time a parameter arrives.
+    ///
+    /// For a caller that keeps what it made from [`Link::params`] and asks every frame whether
+    /// that is still current - the copy is fourteen hundred names, the question is a number.
+    #[must_use]
+    pub fn params_generation(&self, target: VehicleId) -> Option<u64> {
+        self.shared
+            .params
+            .lock()
+            .ok()?
+            .get(&target)
+            .map(ParamTable::generation)
+    }
+
     /// The most recent messages from the vehicle, newest last.
     ///
     /// Bounded by `count` because the caller is usually a render pass, and a render pass that

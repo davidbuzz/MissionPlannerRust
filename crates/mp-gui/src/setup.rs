@@ -2204,7 +2204,7 @@ mod tests {
         assert_eq!(vehicle.firmware, Firmware::ArduCopter2);
         assert_eq!(vehicle.version, (4, 5));
 
-        view.parameters = parameters(&["FRAME_CLASS"]);
+        view.parameters = parameters(&["FRAME_CLASS"]).into();
         view.parameters_expected = 2;
         assert!(!Vehicle::of(&view, None).got_all_params, "one of two");
         view.parameters_expected = 1;

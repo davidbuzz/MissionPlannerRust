@@ -1405,7 +1405,7 @@ mod tests {
     fn the_page_is_listed_for_frame_class_or_a_recent_copter() {
         let mut view = TelemetryView::disconnected("test");
         assert!(!available(&view));
-        view.parameters = sitl();
+        view.parameters = sitl().into();
         assert!(available(&view), "FRAME_CLASS alone lists it");
 
         let vehicle = |vehicle_type: u8, version: [u8; 4]| {
@@ -1415,7 +1415,7 @@ mod tests {
             state.autopilot_info.version = version;
             Some(std::sync::Arc::new(state))
         };
-        view.parameters = table(&[("FLTMODE1", 7.0)]);
+        view.parameters = table(&[("FLTMODE1", 7.0)]).into();
         view.parameters_expected = 1;
         view.state = vehicle(2, [4, 5, 7, 255]);
         assert!(!available(&view), "not connected");
@@ -1424,9 +1424,9 @@ mod tests {
         view.parameters_expected = 2;
         assert!(!available(&view), "not every parameter in");
         view.parameters_expected = 0;
-        view.parameters.clear();
+        view.parameters = Default::default();
         assert!(!available(&view), "none downloaded yet");
-        view.parameters = table(&[("FLTMODE1", 7.0)]);
+        view.parameters = table(&[("FLTMODE1", 7.0)]).into();
         view.parameters_expected = 1;
 
         view.state = vehicle(2, [3, 4, 0, 255]);

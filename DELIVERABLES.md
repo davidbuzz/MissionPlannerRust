@@ -292,7 +292,7 @@ The full parameter system — tree/list/advanced editors driven by parameter met
   where gyro offsets live. Parameter documentation is fetched for the firmware actually flying,
   as the C# fetches it (`mp_params::pdef`: the version from the banner, the versioned or
   unversioned `apm.pdef.xml` into the C#'s directory, read before the bundled table) - on this
-  SITL that takes documented parameters from 827 of 1,408 to 1,407. The panel ledger exists:
+  SITL that takes documented parameters from 798 of 1,408 to 1,407. The panel ledger exists:
   `crates/mp-gui/src/config_coverage.rs` lists all 61 `Config*.cs` panels in the C#'s two menus'
   order with their titles - **0 done, 7 partial, 48 missing, 2 plumbing, 4 dropped**, 569 wirings -
   held to `InitialSetup.cs`/`SoftwareConfig.cs` by tests and rendered to

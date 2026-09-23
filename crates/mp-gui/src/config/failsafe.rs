@@ -2452,7 +2452,7 @@ mod tests {
         view.connected = true;
         view.vehicle = Some(mp_vehicle::VehicleId::new(1, 1));
         assert!(!available(&view), "no parameters yet");
-        view.parameters = copter();
+        view.parameters = copter().into();
         view.parameters_expected = 1400;
         assert!(!available(&view), "7 of 1400 is not all of them");
         view.parameters_expected = 7;

@@ -43,6 +43,7 @@ pub mod pdef;
 pub use param_meta::{ParamMeta, UserLevel};
 
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Errors from this crate.
 ///
@@ -315,7 +316,12 @@ pub struct ParamTable {
     expected: Option<u16>,
     /// Whether the vehicle ever revised its own total upward.
     count_revised: bool,
+    /// See [`ParamTable::generation`].
+    generation: u64,
 }
+
+/// The generation the next change to any table is given; see [`ParamTable::generation`].
+static NEXT_GENERATION: AtomicU64 = AtomicU64::new(1);
 
 impl ParamTable {
     /// An empty table.
@@ -347,6 +353,19 @@ impl ParamTable {
             self.indices.insert(index, name.clone());
         }
         self.values.insert(name, value);
+        self.generation = NEXT_GENERATION.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Which state the table is in: a number that changes every time a parameter arrives.
+    ///
+    /// Numbered across every table in the process rather than per table, so two tables with the
+    /// same generation hold the same parameters - one is a copy of the other - whichever vehicle
+    /// or link they came from; zero is a table nothing has arrived in. A screen that shows the
+    /// table every frame keeps what it built from it and builds again only when this moves,
+    /// rather than copying fourteen hundred names sixty times a second to find them unchanged.
+    #[must_use]
+    pub const fn generation(&self) -> u64 {
+        self.generation
     }
 
     /// Looks a parameter up by name.
@@ -444,6 +463,32 @@ impl ParamTable {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The generation moves on every arrival, a copy keeps it, and no two tables that have
+    /// diverged share one - so "same generation" can stand for "same parameters".
+    #[test]
+    fn a_table_generation_moves_with_every_arrival() {
+        let value = ParamValue::from_param_value_field(1.0, ParamType::Real32);
+        let mut table = ParamTable::new();
+        assert_eq!(table.generation(), 0, "nothing has arrived");
+        table.insert("RTL_ALT".to_owned(), value, 0, 2);
+        let first = table.generation();
+        assert_ne!(first, 0);
+
+        let copy = table.clone();
+        assert_eq!(copy.generation(), first, "a copy holds the same parameters");
+
+        // The same value again still moves it: the echo of a set is an arrival.
+        table.insert("RTL_ALT".to_owned(), value, 0, 2);
+        let second = table.generation();
+        assert_ne!(second, first);
+
+        // Another table's arrivals are numbered apart from this one's.
+        let mut other = copy;
+        other.insert("RTL_ALT".to_owned(), value, 0, 2);
+        assert_ne!(other.generation(), second);
+        assert_ne!(other.generation(), first);
+    }
 
     #[test]
     fn integer_parameters_reinterpret_the_bytes_rather_than_the_number() {
