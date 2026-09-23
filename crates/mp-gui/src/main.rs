@@ -119,6 +119,10 @@ struct MissionPlanner {
     file_status: Option<String>,
     /// The waypoint being dragged on the map, if one is.
     dragging_waypoint: Option<u16>,
+    /// Whether a radio calibration is recording stick limits.
+    capturing_radio: bool,
+    /// The limits recorded so far.
+    radio_range: mp_vehicle::RcRange,
     /// Whether this session has turned the vehicle's arming checks off.
     ///
     /// Only to offer putting them back. The parameter is the vehicle's, not ours, so this says
@@ -213,6 +217,8 @@ impl MissionPlanner {
             adopt_vehicle_rally: false,
             file_status: None,
             dragging_waypoint: None,
+            capturing_radio: false,
+            radio_range: mp_vehicle::RcRange::new(),
             disabled_arming_checks: false,
             forcing_arm_until: None,
             last_force_arm: None,
@@ -321,6 +327,38 @@ impl MissionPlanner {
         self.forcing_arm_until = Some(std::time::Instant::now() + GIVE_UP_AFTER);
         self.file_status =
             Some("arming checks disabled (ARMING_SKIPCHK=-1); forcing arm".to_owned());
+    }
+
+    /// Starts recording the radio's stick limits from scratch.
+    ///
+    /// From scratch, not continuing: a calibration that kept limits from a previous sweep would
+    /// carry over a stick position the operator has since changed, and nothing on screen would
+    /// say so.
+    fn begin_radio_capture(&mut self) {
+        self.radio_range = mp_vehicle::RcRange::new();
+        self.capturing_radio = true;
+        self.file_status = Some("recording radio limits - sweep every control".to_owned());
+    }
+
+    /// Writes the recorded limits to the vehicle as RCn_MIN and RCn_MAX.
+    ///
+    /// Only channels that actually moved. A channel left alone has a minimum equal to its
+    /// maximum, and writing that is a stick with no travel or a switch with one position.
+    fn save_radio_limits(&mut self) {
+        let mut written = 0;
+        for number in 1..=mp_vehicle::rc::CHANNELS {
+            let Some((minimum, maximum)) = self.radio_range.channel(number) else {
+                continue;
+            };
+            self.telemetry
+                .set_parameter(&format!("RC{number}_MIN"), f32::from(minimum));
+            self.telemetry
+                .set_parameter(&format!("RC{number}_MAX"), f32::from(maximum));
+            written += 1;
+        }
+        self.file_status = Some(format!(
+            "wrote limits for {written} channels; reboot for them to take effect"
+        ));
     }
 
     /// Pushes the plan to the map after an edit.
@@ -490,6 +528,12 @@ impl MissionPlanner {
             .child(setup::identity_panel(view))
             .child(setup::accelerometer_panel(calibration, view, cx))
             .child(setup::compass_panel(&compass, view, cx))
+            .child(setup::radio_panel(
+                view,
+                &self.radio_range,
+                self.capturing_radio,
+                cx,
+            ))
             .child(setup::calibration_panel(view, cx))
     }
 
@@ -760,6 +804,15 @@ impl Render for MissionPlanner {
             }
         } else {
             self.map.borrow_mut().set_mission(self.plan.items());
+        }
+
+        // Fold live channel values into the recorded limits while a radio calibration runs.
+        // Done here because this is the only place that sees every snapshot; sampling on a timer
+        // would miss the extremes, which are exactly what is being recorded.
+        if self.capturing_radio
+            && let Some(state) = view.state.as_ref()
+        {
+            self.radio_range.observe(&state.rc);
         }
 
         // Keep re-sending a forced arm until it takes, or until we give up. The parameter write

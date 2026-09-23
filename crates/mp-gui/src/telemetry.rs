@@ -377,6 +377,13 @@ impl Telemetry {
         }
     }
 
+    /// Writes one parameter.
+    pub fn set_parameter(&self, name: &str, value: f32) {
+        if let Some((link, id)) = self.target() {
+            link.send(&commands::param_set(id, name, value));
+        }
+    }
+
     /// Reboots the autopilot.
     ///
     /// The link drops when the vehicle obeys, which is what success looks like. Useful after a

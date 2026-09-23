@@ -114,6 +114,8 @@ pub struct VehicleState {
     pub link: LinkQuality,
     /// Sensor health, as reported in `SYS_STATUS`.
     pub sensors: crate::sensors::Sensors,
+    /// Radio control channel values, as last reported.
+    pub rc: crate::rc::RcChannels,
 
     /// Number of MAVLink messages applied to this state.
     pub messages_applied: u64,
@@ -200,6 +202,55 @@ impl VehicleState {
                 self.ground_speed = MetresPerSecond(f64::from(m.groundspeed));
                 self.climb_rate = MetresPerSecond(f64::from(m.climb));
                 self.throttle_percent = m.throttle as i16;
+                true
+            }
+            // All sixteen channels ArduPilot maps to functions. RC_CHANNELS carries eighteen;
+            // the last two are beyond what the firmware reads, and offering limits on channels
+            // nothing looks at would be a calibration screen inviting a pointless setting.
+            MavMessage::RcChannels(m) => {
+                self.rc.values = [
+                    m.chan1_raw,
+                    m.chan2_raw,
+                    m.chan3_raw,
+                    m.chan4_raw,
+                    m.chan5_raw,
+                    m.chan6_raw,
+                    m.chan7_raw,
+                    m.chan8_raw,
+                    m.chan9_raw,
+                    m.chan10_raw,
+                    m.chan11_raw,
+                    m.chan12_raw,
+                    m.chan13_raw,
+                    m.chan14_raw,
+                    m.chan15_raw,
+                    m.chan16_raw,
+                ];
+                self.rc.count = m.chancount;
+                self.rc.rssi = m.rssi;
+                self.rc.reported = true;
+                true
+            }
+            // The older eight-channel message, still sent by some links. Taken only when the
+            // newer one has not been seen, so a receiver reporting both does not have its
+            // upper channels blanked by the shorter message arriving second.
+            MavMessage::RcChannelsRaw(m) if !self.rc.reported => {
+                self.rc.values = [crate::rc::UNAVAILABLE; crate::rc::CHANNELS];
+                let raw = [
+                    m.chan1_raw,
+                    m.chan2_raw,
+                    m.chan3_raw,
+                    m.chan4_raw,
+                    m.chan5_raw,
+                    m.chan6_raw,
+                    m.chan7_raw,
+                    m.chan8_raw,
+                ];
+                for (slot, value) in self.rc.values.iter_mut().zip(raw) {
+                    *slot = value;
+                }
+                self.rc.count = 8;
+                self.rc.rssi = m.rssi;
                 true
             }
             MavMessage::SysStatus(m) => {
