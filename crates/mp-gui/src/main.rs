@@ -178,6 +178,12 @@ struct MissionPlanner {
     file_status: Option<String>,
     /// The waypoint being dragged on the map, if one is.
     dragging_waypoint: Option<u16>,
+    /// The altitude frame new waypoints are created in.
+    ///
+    /// A screen-level choice that a new item copies, as `CMB_altmode` is. Remembered across runs,
+    /// because Mission Planner does: `Settings.Instance.GetInt32("FPaltmode", ...)`.
+    /// `// C#: GCSViews/FlightPlanner.cs:102`
+    altitude_frame: plan::AltitudeFrame,
     /// Where the left button went down on the map, and whether it has moved since.
     ///
     /// A press that never moves is a click, and a click on empty map adds a waypoint. `MainMap`
@@ -344,6 +350,12 @@ impl MissionPlanner {
             adopt_vehicle_rally: false,
             file_status: None,
             dragging_waypoint: None,
+            altitude_frame: plan::AltitudeFrame::from_key(
+                settings::Settings::load()
+                    .altitude_frame
+                    .as_deref()
+                    .unwrap_or_default(),
+            ),
             map_press: None,
             settings: settings::Settings::load(),
             plan_name: {
@@ -585,6 +597,21 @@ impl MissionPlanner {
                 "wrote {written} parameters, skipped {skipped} this firmware does not have - refresh to confirm"
             )
         });
+    }
+
+    /// Chooses the altitude frame new waypoints are created in, and remembers it.
+    ///
+    /// Remembered because Mission Planner remembers it (`FPaltmode`), and because a planner that
+    /// forgets makes every session start in relative - which is the safe default and the wrong
+    /// one for somebody who plans over terrain every time.
+    fn set_altitude_frame(&mut self, frame: plan::AltitudeFrame) {
+        self.altitude_frame = frame;
+        self.settings.altitude_frame = Some(frame.key().to_owned());
+        // A settings file that cannot be written is not a reason to refuse the change: the choice
+        // applies to this session either way, and the worst case is that it is not remembered.
+        if let Err(err) = self.settings.save() {
+            self.file_status = Some(format!("could not remember the altitude frame: {err}"));
+        }
     }
 
     /// Opens the log named in the log field.
@@ -947,9 +974,12 @@ impl MissionPlanner {
                         &items,
                         &origin,
                         view,
-                        &self.plan_name,
-                        &self.plan_name_focus,
-                        self.plan_name_focus.is_focused(window),
+                        &plan::NameField {
+                            field: &self.plan_name,
+                            focus: &self.plan_name_focus,
+                            focused: self.plan_name_focus.is_focused(window),
+                        },
+                        self.altitude_frame,
                         cx,
                     ))
                     .child(plan::draw_panel(&draw, view, cx))
@@ -1095,7 +1125,8 @@ impl MissionPlanner {
                                 .items()
                                 .last()
                                 .map_or(DEFAULT_WAYPOINT_ALTITUDE, |last| last.z);
-                            this.plan.add_waypoint(position, altitude);
+                            this.plan
+                                .add_waypoint_in(position, altitude, this.altitude_frame);
                             this.sync_map_mission();
                             cx.notify();
                         }),
@@ -1269,6 +1300,19 @@ impl Render for MissionPlanner {
             facts::record("screen", self.screen.label());
             facts::record("mission.items", self.plan.items().len());
             facts::record("mission.origin", self.plan.origin().label());
+            facts::record("plan.frame", self.altitude_frame.key());
+            // Every frame in the mission, deduplicated. A test asserting on this catches a
+            // waypoint created in the wrong frame, which every other field would hide.
+            facts::record("mission.frames", {
+                let mut frames: Vec<String> = self
+                    .plan
+                    .items()
+                    .iter()
+                    .map(|item| plan::frame_label(item.frame))
+                    .collect();
+                frames.dedup();
+                frames.join(",")
+            });
             facts::record("fence.points", self.plan.fence().len());
             facts::record("rally.points", self.plan.rally().len());
             facts::record("vehicle.connected", view.connected);

@@ -71,6 +71,16 @@ FACTS_FILE="$(mktemp -t mpr-facts-XXXXXX.conf)"
 export MP_PROBE="$PROBE_FILE"
 export MP_FACTS="$FACTS_FILE"
 
+# A settings file of its own, per run.
+#
+# The application remembers things on purpose - the last link, the window size, the altitude frame
+# new waypoints get. A test that inherits them is a test whose result depends on what the last
+# test did: the altitude-frame test passed, wrote "terrain" to the real settings file, and the
+# next run of the same test started in terrain and failed its first expectation. Tests that must
+# be run in a particular order, once, are not tests.
+SETTINGS_FILE="$(mktemp -t mpr-settings-XXXXXX.conf)"
+export MP_SETTINGS="$SETTINGS_FILE"
+
 POINTER_HOME=$(xdotool getmouselocation --shell 2>/dev/null | awk -F= '/^X=/{x=$2} /^Y=/{y=$2} END{print x" "y}')
 SHOT_AT="${SHOT_AT:-2560,0}"
 xdotool mousemove "${SHOT_AT%%,*}" "${SHOT_AT##*,}" 2>/dev/null
@@ -80,7 +90,8 @@ APP_PID=$!
 cleanup() {
     kill "$APP_PID" 2>/dev/null
     wait "$APP_PID" 2>/dev/null
-    rm -f "$PROBE_FILE" "$FACTS_FILE" "${FACTS_FILE%.conf}.facts.tmp"
+    rm -f "$PROBE_FILE" "$FACTS_FILE" "${FACTS_FILE%.conf}.facts.tmp" \
+          "$SETTINGS_FILE" "${SETTINGS_FILE%.conf}.tmp"
     # shellcheck disable=SC2086 # two words on purpose
     [ -n "$POINTER_HOME" ] && xdotool mousemove $POINTER_HOME 2>/dev/null
 }

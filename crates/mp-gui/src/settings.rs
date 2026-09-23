@@ -28,6 +28,12 @@ pub struct Settings {
     pub screen: Option<String>,
     /// Where missions are read and written.
     pub plan_directory: Option<String>,
+    /// The altitude frame new waypoints are created in: relative, absolute or terrain.
+    ///
+    /// Mission Planner keeps the same choice as `FPaltmode`. Stored as a name rather than the
+    /// `MAV_FRAME` number so a hand-edited settings file is readable, and so a number that stops
+    /// meaning what it did cannot silently change the frame a mission is planned in.
+    pub altitude_frame: Option<String>,
 }
 
 impl Settings {
@@ -87,6 +93,7 @@ impl Settings {
             window: values.get("window").and_then(|value| parse_size(value)),
             screen: non_empty("screen"),
             plan_directory: non_empty("plan_directory"),
+            altitude_frame: non_empty("altitude_frame"),
         }
     }
 
@@ -114,6 +121,9 @@ impl Settings {
         }
         if let Some(screen) = &self.screen {
             write("screen", screen);
+        }
+        if let Some(frame) = &self.altitude_frame {
+            write("altitude_frame", frame);
         }
         if let Some(directory) = &self.plan_directory {
             write("plan_directory", directory);
@@ -159,6 +169,7 @@ mod tests {
             window: Some((1600, 1200)),
             screen: Some("plan".to_owned()),
             plan_directory: Some("/home/pilot/missions".to_owned()),
+            altitude_frame: Some("terrain".to_owned()),
         };
         assert_eq!(Settings::parse(&settings.render()), settings);
     }

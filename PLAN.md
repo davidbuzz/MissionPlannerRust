@@ -1122,7 +1122,7 @@ Ordered by what an operator hits first, then by what unblocks the most.
 |---:|---|---|---|---|---|
 | 1 | Log plotting from a `.BIN` | the other half of the tuning graph: watching a value live is how a problem is noticed, plotting it afterwards is how it is diagnosed. `mp-chart` already holds the reduction | D14 | a field from a dataflash log plots against time, with the field chosen from what the log actually contains | done; second Y axis and the data grid still owed |
 | 2 | Waypoint editing on the map | a mission planner that cannot drag a waypoint is not a mission planner. Displaced twice already | D11 | a waypoint drags to a new position, a click adds one, and the change survives an upload and a read-back | done |
-| 3 | Terrain-relative altitudes | a mission flown at 50 m over a hill is a mission into a hill | D11 | `MAV_FRAME_GLOBAL_TERRAIN_ALT` round-trips, and the planner says which frame every item uses | |
+| 3 | Terrain-relative altitudes | a mission flown at 50 m over a hill is a mission into a hill | D11 | `MAV_FRAME_GLOBAL_TERRAIN_ALT` round-trips, and the planner says which frame every item uses | done |
 | 4 | Fence and rally read-back | upload works and read-back does not, so a fence cannot be checked against what the vehicle actually holds | D11 | a fence and a rally set download and compare against the file that produced them | |
 | 5 | Satellite imagery | planning over a paddock needs imagery, not a street map | D8 | a second provider is selectable and its attribution is shown | |
 | 6 | Mission Planner tile cache | D8 asks for it, and operators carry multi-GB offline caches into the field | D8 | tiles written by the C# application are read with the network off | |

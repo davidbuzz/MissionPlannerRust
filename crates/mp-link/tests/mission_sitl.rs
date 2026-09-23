@@ -143,3 +143,100 @@ fn an_empty_mission_download_succeeds_rather_than_hanging() {
         items.len()
     );
 }
+
+/// A terrain-frame mission survives the trip to a real vehicle and back.
+///
+/// The frame is the whole point of the item. A mission planned at 80 m above the ground, uploaded
+/// and read back as 80 m above *home*, is a mission that flies into the first hill - and it reads
+/// identically in every other field, so nothing else in a round-trip test would notice.
+///
+/// ArduPilot accepts `MAV_FRAME_GLOBAL_TERRAIN_ALT` in a mission whether or not it has terrain
+/// data; it refuses at execution, not at upload. So this asserts storage fidelity, which is what
+/// a ground station is responsible for.
+#[test]
+#[ignore = "needs ArduPilot SITL on tcp:127.0.0.1:5760"]
+fn a_terrain_frame_mission_reads_back_in_the_same_frame() {
+    /// `MAV_FRAME_GLOBAL_TERRAIN_ALT`.
+    const TERRAIN: u8 = 10;
+    let (link, id) = connect();
+
+    let items = vec![
+        MissionItem {
+            seq: 0,
+            current: 1,
+            frame: 0,
+            command: 16,
+            param1: 0.0,
+            param2: 0.0,
+            param3: 0.0,
+            param4: 0.0,
+            x: -35.363_262,
+            y: 149.165_237,
+            z: 584.0,
+            autocontinue: 1,
+        },
+        MissionItem {
+            seq: 1,
+            current: 0,
+            frame: TERRAIN,
+            command: 16,
+            param1: 0.0,
+            param2: 0.0,
+            param3: 0.0,
+            param4: 0.0,
+            x: -35.362_000,
+            y: 149.166_000,
+            z: 80.0,
+            autocontinue: 1,
+        },
+        MissionItem {
+            seq: 2,
+            current: 0,
+            frame: TERRAIN,
+            command: 16,
+            param1: 0.0,
+            param2: 0.0,
+            param3: 0.0,
+            param4: 0.0,
+            x: -35.361_000,
+            y: 149.167_000,
+            z: 120.0,
+            autocontinue: 1,
+        },
+    ];
+
+    link.upload_mission(id, items.clone());
+    let uploaded = await_transfer(&link, id);
+    assert!(
+        uploaded.is_empty() || uploaded.len() == items.len(),
+        "upload reported {} items",
+        uploaded.len()
+    );
+
+    link.download_mission(id);
+    let read_back = await_transfer(&link, id);
+    assert_eq!(read_back.len(), items.len(), "item count changed");
+
+    for (sent, got) in items.iter().zip(read_back.iter()) {
+        assert_eq!(
+            got.frame, sent.frame,
+            "item {} came back in frame {} having been sent in {}",
+            sent.seq, got.frame, sent.frame
+        );
+        assert!(
+            (got.z - sent.z).abs() < 0.01,
+            "item {} altitude {} != {}",
+            sent.seq,
+            got.z,
+            sent.z
+        );
+    }
+    assert!(
+        read_back
+            .iter()
+            .filter(|item| item.frame == TERRAIN)
+            .count()
+            == 2,
+        "both terrain waypoints should come back in the terrain frame"
+    );
+}

@@ -1,0 +1,24 @@
+# The altitude frame a new waypoint gets comes from the screen's selector, as CMB_altmode does.
+#
+# The claim: choosing terrain and then clicking the map produces a waypoint in frame 10, not 3.
+# "50 m" means three different heights depending on this and one of them flies into a hill.
+
+screen plan
+window 1600x1200
+settle 4
+
+expect mission.items 0
+expect plan.frame relative
+
+# A waypoint in the default frame.
+click map@0.45x0.40
+expect mission.items 1
+expect mission.frames ~ relative
+
+# Switch to terrain and add two more.
+click plan-frame-terrain
+expect plan.frame terrain
+click map@0.55x0.45
+click map@0.60x0.55
+expect mission.items 3
+expect mission.frames ~ terrain

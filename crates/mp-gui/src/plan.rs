@@ -79,6 +79,119 @@ pub fn map_release(
 
 /// `MAV_FRAME_GLOBAL_RELATIVE_ALT`: altitude above home, which is what every pilot means.
 pub const FRAME_RELATIVE: u8 = 3;
+/// `MAV_FRAME_GLOBAL`: altitude above mean sea level. What the home item always uses.
+pub const FRAME_ABSOLUTE: u8 = 0;
+/// `MAV_FRAME_GLOBAL_TERRAIN_ALT`: altitude above the ground beneath the waypoint.
+///
+/// The one that changes what can be flown. A mission at 50 m relative, planned over flat ground
+/// and flown over a hill, is a mission into the hill; the same mission in this frame clears it.
+/// It needs terrain data on the vehicle - `TERRAIN_ENABLE`, and either an SD card of SRTM tiles
+/// or a ground station feeding `TERRAIN_DATA` - and a vehicle without it will refuse the mission
+/// rather than guess.
+pub const FRAME_TERRAIN: u8 = 10;
+
+/// Which altitude frame new items are created in.
+///
+/// Mission Planner's `altmode`, and the same three values:
+///
+/// ```csharp
+/// public enum altmode {
+///     Relative = MAVLink.MAV_FRAME.GLOBAL_RELATIVE_ALT,
+///     Absolute = MAVLink.MAV_FRAME.GLOBAL,
+///     Terrain  = MAVLink.MAV_FRAME.GLOBAL_TERRAIN_ALT
+/// }
+/// ```
+///
+/// A per-screen choice, not a per-item one: `CMB_altmode` sets the frame a *new* row gets
+/// (`FlightPlanner.cs:2347`), and every row keeps its own afterwards. So a mission can mix frames
+/// and usually does not.
+/// `// C#: GCSViews/FlightPlanner.cs:416-421`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AltitudeFrame {
+    /// Above home. What almost every mission uses.
+    #[default]
+    Relative,
+    /// Above mean sea level.
+    Absolute,
+    /// Above the ground beneath the waypoint.
+    Terrain,
+}
+
+impl AltitudeFrame {
+    /// The `MAV_FRAME` value.
+    #[must_use]
+    pub const fn mav_frame(self) -> u8 {
+        match self {
+            Self::Relative => FRAME_RELATIVE,
+            Self::Absolute => FRAME_ABSOLUTE,
+            Self::Terrain => FRAME_TERRAIN,
+        }
+    }
+
+    /// The frame a `MAV_FRAME` value names, if it is one of the three a mission uses.
+    #[must_use]
+    pub const fn from_mav_frame(frame: u8) -> Option<Self> {
+        match frame {
+            FRAME_RELATIVE => Some(Self::Relative),
+            FRAME_ABSOLUTE => Some(Self::Absolute),
+            FRAME_TERRAIN => Some(Self::Terrain),
+            _ => None,
+        }
+    }
+
+    /// What to call it on screen.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Relative => "relative",
+            Self::Absolute => "absolute",
+            Self::Terrain => "terrain",
+        }
+    }
+
+    /// The name the settings file stores, and reads back.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::Relative => "relative",
+            Self::Absolute => "absolute",
+            Self::Terrain => "terrain",
+        }
+    }
+
+    /// The frame a stored name means, defaulting to relative.
+    ///
+    /// A setting file that has been hand-edited into nonsense gives the frame every mission uses,
+    /// rather than refusing to start or silently choosing terrain - which a vehicle without
+    /// terrain data will reject at upload time, long after the choice was made.
+    #[must_use]
+    pub fn from_key(key: &str) -> Self {
+        match key {
+            "absolute" => Self::Absolute,
+            "terrain" => Self::Terrain,
+            _ => Self::Relative,
+        }
+    }
+
+    /// All three, in the order `CMB_altmode` lists them.
+    #[must_use]
+    pub const fn all() -> [Self; 3] {
+        [Self::Relative, Self::Absolute, Self::Terrain]
+    }
+}
+
+/// A short label for an item's frame, for the mission list.
+///
+/// A frame the three-value enum does not cover is shown as its number rather than hidden: a
+/// mission read back from a vehicle can hold `MAV_FRAME_LOCAL_NED` or anything else, and showing
+/// nothing would say the item is relative when it is not.
+#[must_use]
+pub fn frame_label(frame: u8) -> String {
+    AltitudeFrame::from_mav_frame(frame).map_or_else(
+        || format!("frame {frame}"),
+        |known| known.label().to_owned(),
+    )
+}
 /// Altitude given to a waypoint created by clicking the map, in metres above home.
 pub const DEFAULT_ALTITUDE: f64 = 50.0;
 /// `MAV_CMD_NAV_RETURN_TO_LAUNCH`, which takes no position.
@@ -236,10 +349,19 @@ impl Plan {
     /// with a gap in its sequence is rejected by the vehicle at upload time - a failure that
     /// happens minutes after the mistake, with no indication of which edit caused it.
     pub fn add_waypoint(&mut self, position: LatLon, altitude: f64) {
+        self.add_waypoint_in(position, altitude, AltitudeFrame::Relative);
+    }
+
+    /// Adds a waypoint in a given altitude frame.
+    ///
+    /// The frame comes from the screen's `CMB_altmode` rather than the item, because that is where
+    /// Mission Planner takes it from: `e.Row.Cells[Frame.Index].Value = CMB_altmode.SelectedValue`
+    /// on row creation. `// C#: GCSViews/FlightPlanner.cs:2347`
+    pub fn add_waypoint_in(&mut self, position: LatLon, altitude: f64, frame: AltitudeFrame) {
         self.items.push(MissionItem {
             seq: 0,
             current: 0,
-            frame: FRAME_RELATIVE,
+            frame: frame.mav_frame(),
             command: CMD_WAYPOINT,
             param1: 0.0,
             param2: 0.0,
@@ -811,6 +933,20 @@ pub fn items_panel(
                 .child(div().w(px(120.0)).child(command_label(item.command)))
                 .child(div().w(px(150.0)).child(position))
                 .child(div().w(px(70.0)).child(format!("{:.0} m", item.z)))
+                // Which frame that altitude is in. The C# shows it as a `Frame` column on every
+                // row, and it has to be visible: "50 m" means three different heights depending
+                // on this, and one of them flies into a hill.
+                // `// C#: GCSViews/FlightPlanner.cs:262, 2347`
+                .child(
+                    div()
+                        .w(px(60.0))
+                        .text_color(rgb(if item.frame == FRAME_TERRAIN {
+                            theme::WARN
+                        } else {
+                            theme::DIM
+                        }))
+                        .child(frame_label(item.frame)),
+                )
                 .children(row_controls(seq, is_selected, cx))
                 .on_click(cx.listener(move |this, _event, _window, cx| {
                     // Clicking the selected row clears the selection, so there is always a way
@@ -1524,17 +1660,67 @@ pub fn checks_panel(plan_items: &[MissionItem], view: &TelemetryView) -> AnyElem
 }
 
 /// Read, write, load, save and clear.
+/// The mission file name field and its focus, which travel together everywhere.
+pub struct NameField<'a> {
+    /// What has been typed.
+    pub field: &'a crate::textfield::TextField,
+    /// Its focus handle.
+    pub focus: &'a gpui::FocusHandle,
+    /// Whether it currently has focus.
+    pub focused: bool,
+}
+
 pub fn actions_panel(
     plan_items: &[MissionItem],
     origin: &Origin,
     view: &TelemetryView,
-    name: &crate::textfield::TextField,
-    name_focus: &gpui::FocusHandle,
-    name_focused: bool,
+    name: &NameField<'_>,
+    frame: AltitudeFrame,
     cx: &mut Context<MissionPlanner>,
 ) -> impl IntoElement {
+    let (name_focus, name_focused) = (name.focus, name.focused);
+    let name = name.field;
     let has_vehicle = view.vehicle.is_some();
     let has_items = !plan_items.is_empty();
+
+    // The altitude frame new waypoints get - `CMB_altmode` on the planning screen. A combo box
+    // there, three buttons here, because gpui has no combo and three values do not need one.
+    // `// C#: GCSViews/FlightPlanner.cs:234-239`
+    let mut frames = div().flex().items_center().gap_1().child(
+        div()
+            .text_xs()
+            .text_color(rgb(theme::DIM))
+            .child("new waypoints:"),
+    );
+    for choice in AltitudeFrame::all() {
+        let chosen = choice == frame;
+        frames = frames.child(
+            crate::probe::measured(format!("plan-frame-{}", choice.key()), div())
+                .id(gpui::SharedString::from(format!("frame-{}", choice.key())))
+                .px_2()
+                .py(px(1.0))
+                .rounded_sm()
+                .border_1()
+                .border_color(rgb(if chosen { theme::ACCENT } else { theme::BORDER }))
+                .text_xs()
+                .text_color(rgb(if chosen { theme::ACCENT } else { theme::TEXT }))
+                .cursor_pointer()
+                .hover(|style| style.bg(rgb(theme::BORDER)))
+                .child(choice.label())
+                .on_click(cx.listener(move |this, _event, _window, cx| {
+                    this.set_altitude_frame(choice);
+                    cx.notify();
+                })),
+        );
+    }
+    // Said in words, because "terrain" on a button is not a warning and this one needs to be:
+    // a vehicle without terrain data refuses the mission at upload, long after it was planned.
+    let frame_note = (frame == AltitudeFrame::Terrain).then(|| {
+        div()
+            .text_xs()
+            .text_color(rgb(theme::WARN))
+            .child("terrain frame needs TERRAIN_ENABLE and terrain data on the vehicle")
+    });
 
     let transfer_line = view.transfer.as_ref().map_or_else(
         || {
@@ -1564,6 +1750,8 @@ pub fn actions_panel(
             .flex()
             .flex_col()
             .gap_2()
+            .child(frames)
+            .children(frame_note)
             .child(
                 div()
                     .flex()
@@ -1668,6 +1856,111 @@ pub fn actions_panel(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The three frames are the three MAV_FRAME values the C# enum names.
+    #[test]
+    fn the_altitude_frames_are_the_mav_frame_values_they_claim() {
+        // C#: Relative = GLOBAL_RELATIVE_ALT (3), Absolute = GLOBAL (0),
+        //     Terrain = GLOBAL_TERRAIN_ALT (10).
+        assert_eq!(AltitudeFrame::Relative.mav_frame(), 3);
+        assert_eq!(AltitudeFrame::Absolute.mav_frame(), 0);
+        assert_eq!(AltitudeFrame::Terrain.mav_frame(), 10);
+    }
+
+    /// Every frame survives the trip out to a number and back.
+    #[test]
+    fn a_frame_round_trips_through_its_mav_frame_value() {
+        for frame in AltitudeFrame::all() {
+            assert_eq!(
+                AltitudeFrame::from_mav_frame(frame.mav_frame()),
+                Some(frame),
+                "{} did not round trip",
+                frame.label()
+            );
+        }
+    }
+
+    /// And through the settings file, which stores a name rather than a number.
+    #[test]
+    fn a_frame_round_trips_through_the_settings_key() {
+        for frame in AltitudeFrame::all() {
+            assert_eq!(AltitudeFrame::from_key(frame.key()), frame);
+        }
+    }
+
+    /// A settings file hand-edited into nonsense gives the frame every mission uses.
+    ///
+    /// Not terrain: a vehicle without terrain data refuses a terrain mission at upload, long
+    /// after the choice was made, and nobody would connect the refusal to a typo in a config file.
+    #[test]
+    fn an_unrecognised_frame_name_falls_back_to_relative() {
+        for nonsense in ["", "TERRAIN", "3", "above ground", "🙂"] {
+            assert_eq!(AltitudeFrame::from_key(nonsense), AltitudeFrame::Relative);
+        }
+    }
+
+    /// A waypoint is created in the frame the screen is set to.
+    #[test]
+    fn a_waypoint_takes_the_chosen_frame() {
+        for frame in AltitudeFrame::all() {
+            let mut plan = Plan::default();
+            plan.add_waypoint_in(
+                LatLon::new(-35.363_262, 149.165_237).expect("valid"),
+                50.0,
+                frame,
+            );
+            assert_eq!(
+                plan.items().first().map(|item| item.frame),
+                Some(frame.mav_frame()),
+                "a waypoint added in {} did not get that frame",
+                frame.label()
+            );
+        }
+    }
+
+    /// A terrain mission survives being written to a file and read back.
+    ///
+    /// The frame is column three of the QGC WPL format, and losing it turns a mission that clears
+    /// a hill into one that flies at the same number above home.
+    #[test]
+    fn a_terrain_frame_survives_a_waypoints_file() {
+        let mut plan = Plan::default();
+        for (latitude, longitude) in [(-35.36, 149.16), (-35.35, 149.17)] {
+            plan.add_waypoint_in(
+                LatLon::new(latitude, longitude).expect("valid"),
+                80.0,
+                AltitudeFrame::Terrain,
+            );
+        }
+
+        let text = mp_mission::write_waypoints(plan.items());
+        assert!(
+            text.lines()
+                .skip(1)
+                .all(|line| line.split('\t').nth(2) == Some("10")),
+            "the terrain frame should be column three of every row:\n{text}"
+        );
+
+        let read = mp_mission::read_waypoints(&text).expect("our own output must parse");
+        assert_eq!(read.len(), plan.items().len());
+        assert!(
+            read.iter().all(|item| item.frame == FRAME_TERRAIN),
+            "the frame did not survive the round trip"
+        );
+    }
+
+    /// An item in a frame the enum does not name is shown as its number, not as relative.
+    ///
+    /// A mission read back from a vehicle can hold anything; showing nothing for an unknown frame
+    /// tells the operator it is relative when it is not.
+    #[test]
+    fn an_unknown_frame_is_shown_rather_than_hidden() {
+        assert_eq!(frame_label(FRAME_RELATIVE), "relative");
+        assert_eq!(frame_label(FRAME_ABSOLUTE), "absolute");
+        assert_eq!(frame_label(FRAME_TERRAIN), "terrain");
+        assert_eq!(frame_label(1), "frame 1");
+        assert_eq!(frame_label(255), "frame 255");
+    }
 
     /// A still click on empty map adds a waypoint. This is the whole feature.
     #[test]
