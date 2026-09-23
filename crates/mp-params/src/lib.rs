@@ -1,8 +1,9 @@
-//! Vehicle parameters: the values and their two encodings, the table a download fills, and
-//! `.param` files.
+//! Vehicle parameters: the values and their two encodings, the table a download fills, what each
+//! parameter means, and `.param` files.
 //!
-//! Replaces `ExtLibs/Mavlink/MAVLinkParam.cs` and the parameter half of `MAVLinkInterface`, and in
-//! [`param_file`], `ExtLibs/Utilities/ParamFile.cs`.
+//! Replaces `ExtLibs/Mavlink/MAVLinkParam.cs` and the parameter half of `MAVLinkInterface`; in
+//! [`param_file`], `ExtLibs/Utilities/ParamFile.cs`; and in [`param_meta`], the metadata Mission
+//! Planner reads from `ParameterMetaDataBackup.xml`, generated from the same file.
 //!
 //! L3 in PLAN.md §5.1, beside the link rather than inside it. The download protocol - asking for
 //! the list, then for each gap once the stream goes quiet - is the link thread's, and stays in
@@ -36,6 +37,9 @@
 #![forbid(unsafe_code)]
 
 pub mod param_file;
+pub mod param_meta;
+
+pub use param_meta::{ParamMeta, UserLevel};
 
 use std::collections::BTreeMap;
 

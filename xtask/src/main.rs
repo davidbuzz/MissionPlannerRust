@@ -317,7 +317,7 @@ fn codegen_param_meta() -> Result<()> {
     }
 
     let source = codegen::param_meta::generate(&metadata, "ArduCopter2")?;
-    let out_dir = root.join("crates/mp-vehicle/src/generated");
+    let out_dir = root.join("crates/mp-params/src/generated");
     std::fs::create_dir_all(&out_dir)?;
     let out_file = out_dir.join("param_meta_copter.rs");
     std::fs::write(&out_file, &source)?;

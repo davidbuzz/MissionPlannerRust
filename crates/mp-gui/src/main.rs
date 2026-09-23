@@ -682,7 +682,7 @@ impl MissionPlanner {
             return;
         };
         let mut next = current + delta;
-        if let Some(meta) = mp_vehicle::param_meta::lookup(name)
+        if let Some(meta) = mp_params::param_meta::lookup(name)
             && let Some((low, high)) = meta.range
         {
             next = next.clamp(low, high);

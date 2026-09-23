@@ -24,7 +24,6 @@ pub mod link_quality;
 /// Flight mode names, generated from Mission Planner's parameter metadata.
 #[path = "generated/modes.rs"]
 pub mod modes;
-pub mod param_meta;
 pub mod rc;
 pub mod registry;
 pub mod sensors;
@@ -33,7 +32,6 @@ pub mod state;
 
 pub use link_quality::LinkQuality;
 pub use modes::{VehicleFamily, flight_mode_name};
-pub use param_meta::{ParamMeta, UserLevel};
 pub use rc::{RcChannels, RcRange};
 pub use registry::{VehicleId, VehicleRegistry};
 pub use sensors::Sensors;
