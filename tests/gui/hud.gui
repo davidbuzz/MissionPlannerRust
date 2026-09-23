@@ -3,9 +3,11 @@
 # The facts name the elements the scene drew this frame; a vehicle on the link (SITL at
 # tcp:127.0.0.1:5760) is what makes the readouts appear, since without one the display is a
 # horizon at rest. `hud.missing` counts the doPaint() elements a live vehicle cannot show because
-# mp_vehicle does not carry their value - the flight path vector and the AOA scale, both waiting
-# on AOA_SSA - so a port that regresses one fails here and one that unblocks one has to update
-# the count. The health readouts along the bottom have their own script, hud-health.gui.
+# mp_vehicle does not carry their value, and is 0: the last two, the flight path vector and the
+# AOA scale, draw from AOA_SSA and the AOA_CRIT parameter. A regression that loses a value has to
+# raise the count here. The two are not in `hud.drawn` against SITL's copter, which sends no
+# AOA_SSA, so the C#'s displayAOASSA never turns on (HUD.cs:889-930); hud-health.gui asserts
+# that. The health readouts along the bottom have their own script, hud-health.gui.
 
 screen fly
 window 1600x1200
@@ -27,6 +29,6 @@ expect hud.drawn ~ custom-items
 expect hud.drawn ~ vibe
 expect hud.drawn ~ ekf
 expect hud.drawn ~ prearm
-expect hud.missing 2
-expect hud.missing.list ~ flight-path-vector
-expect hud.missing.list ~ CurrentState.AOA
+expect hud.missing 0
+# "none", because a script cannot expect an empty value.
+expect hud.missing.list none

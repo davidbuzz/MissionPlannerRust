@@ -1,8 +1,8 @@
 # The HUD's health readouts - Vibe, EKF, the pre-arm line - drawn as HUD.cs draws them.
 #
 # The facts are read from the scene the display paints: each readout's colour by the C#'s brush
-# name (white, orange, red), the pre-arm text, and whether the elements that wait on values
-# mp_vehicle does not carry showed. Needs SITL copter on tcp:127.0.0.1:5760, disarmed, sitting on
+# name (white, orange, red), the pre-arm text, whether the red CPU is up, and whether the
+# angle-of-attack elements showed. Needs SITL copter on tcp:127.0.0.1:5760, disarmed, sitting on
 # the ground and past its start-up: GPS locked and the EKF settled, which takes SITL about half a
 # minute from launch. The thresholds and every colour are in hud.rs's unit tests; this proves the
 # live values reach them.
@@ -13,7 +13,9 @@ settle 6
 
 # A copter at rest in SITL shakes far below the C#'s 30 m/s² line (HUD.cs:3166).
 expect hud.vibe.colour white
-# No SYS_STATUS.load in mp_vehicle, so the red CPU is never up (HUD.cs:3206).
+# The red CPU is up only at a SYS_STATUS.load of exactly 1000, a full 100% (HUD.cs:3206,
+# CurrentState.cs:2949). A copter at rest in SITL reports far less - the copter recording in
+# testdata/mavlink/autotest.tlog reports 0 throughout - so it is down.
 expect hud.cpu false
 # A settled SITL EKF has attitude and horizontal velocity and variances near zero, so ekfstatus
 # is under the C#'s 0.5 (HUD.cs:3226).
@@ -24,6 +26,9 @@ expect hud.prearm Ready to Arm
 expect hud.prearm.colour white
 # No editor for the user's extra fields and no stored list, so none are drawn.
 expect hud.custom.count 0
-# SITL copter does not send AOA_SSA and mp_vehicle does not ingest it: neither shows.
+# The flight path vector and the AOA scale are live, from AOA_SSA and AOA_CRIT, but show only
+# once the vehicle sends an angle that is not 0 (displayAOASSA, HUD.cs:889-930). SITL's copter
+# sends no AOA_SSA - there is none in testdata/mavlink/autotest.tlog - so neither shows here;
+# hud.rs's unit tests drive them through an AOA_SSA message.
 expect hud.fpv.shown false
 expect hud.aoa.shown false

@@ -18,7 +18,8 @@
 //! whether this file draws it. A test holds the table to what [`scene`] produces, so the table
 //! cannot claim more than the code does, and what is missing is listed rather than forgotten.
 //! An element whose drawing is ported but whose value `mp_vehicle` does not carry is
-//! [`Status::Blocked`], with the `CurrentState` property it waits on named in the table.
+//! [`Status::Blocked`], with the `CurrentState` property it waits on named in the table. None
+//! is: all 24 draw from a live vehicle.
 //!
 //! # Conventions, stated because getting them wrong is invisible in code review
 //!
@@ -195,19 +196,13 @@ pub enum Status {
     /// Drawn by [`scene`] when [`HudInputs`] carries its value, but `mp_vehicle` does not keep
     /// that value, so [`HudInputs::from_vehicle`] cannot supply it and a live display never
     /// shows the element. The text names the `CurrentState` property and why it is absent.
+    ///
+    /// No element is blocked now - the last two, the flight path vector and the AOA scale, draw
+    /// from `AOA_SSA` and the `AOA_CRIT` parameter - so nothing constructs this. It stays so that
+    /// an element whose value is lost has a row to fall back to, and `hud.missing` a count.
+    #[allow(dead_code)]
     Blocked(&'static str),
 }
-
-/// Why the flight path vector never shows on a live vehicle.
-const FPV_BLOCKED: &str = "needs CurrentState.AOA and CurrentState.SSA, which come from the \
-                           AOA_SSA message (CurrentState.cs:3903-3911); mp_vehicle does not \
-                           ingest it";
-
-/// Why the AOA scale never shows on a live vehicle.
-const AOA_BLOCKED: &str = "needs CurrentState.AOA and CurrentState.SSA from the AOA_SSA message \
-                           (CurrentState.cs:3903-3911), and CurrentState.crit_AOA from the \
-                           AOA_CRIT parameter (CurrentState.cs:1017-1036); mp_vehicle does not \
-                           ingest AOA_SSA";
 
 /// The coverage table: every element `doPaint()` draws.
 pub const ELEMENTS: &[(Element, Status)] = &[
@@ -215,7 +210,9 @@ pub const ELEMENTS: &[(Element, Status)] = &[
     (Element::PitchLadder, Status::Drawn),
     (Element::RollIndicator, Status::Drawn),
     (Element::Reticle, Status::Drawn),
-    (Element::FlightPathVector, Status::Blocked(FPV_BLOCKED)),
+    // From `AOA` and `SSA`, once the vehicle has sent a non-zero one (`displayAOASSA`).
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:3903-3911, ExtLibs/Controls/HUD.cs:889-930
+    (Element::FlightPathVector, Status::Drawn),
     (Element::HeadingTape, Status::Drawn),
     (Element::HeadingBugs, Status::Drawn),
     (Element::XtrackBar, Status::Drawn),
@@ -225,7 +222,9 @@ pub const ELEMENTS: &[(Element, Status)] = &[
     (Element::Vsi, Status::Drawn),
     (Element::ModeAndWaypoint, Status::Drawn),
     (Element::LinkInfo, Status::Drawn),
-    (Element::Aoa, Status::Blocked(AOA_BLOCKED)),
+    // From `AOA` against `crit_AOA`, the `AOA_CRIT` parameter, shown with the flight path
+    // vector. C#: ExtLibs/ArduPilot/CurrentState.cs:1017-1036, 3903-3911
+    (Element::Aoa, Status::Drawn),
     (Element::Battery, Status::Drawn),
     (Element::Gps, Status::Drawn),
     // Drawn from a given list. There is no editor for the list and no stored one yet: the C#'s
@@ -235,18 +234,19 @@ pub const ELEMENTS: &[(Element, Status)] = &[
     (Element::ArmedBanner, Status::Drawn),
     (Element::Failsafe, Status::Drawn),
     (Element::Message, Status::Drawn),
-    // Vibe's own text is live; the "CPU" beside it (HUD.cs:3206-3207) needs CurrentState.load,
-    // SYS_STATUS.load (CurrentState.cs:2949), which mp_vehicle does not keep.
+    // Vibe, and the "CPU" beside it (HUD.cs:3206-3207) from `load`, `SYS_STATUS.load` / 10.
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:2949
     (Element::Vibe, Status::Drawn),
     (Element::Ekf, Status::Drawn),
     (Element::Prearm, Status::Drawn),
 ];
 
 /// The elements a live display cannot show, with their C# lines and what each waits on, one
-/// string, for the facts and the plan.
+/// string, for the facts and the plan. "none" when there are none, as the other facts say it: a
+/// `.gui` script cannot expect an empty value.
 #[must_use]
 pub fn missing_report() -> String {
-    ELEMENTS
+    let report = ELEMENTS
         .iter()
         .filter_map(|(element, status)| match status {
             Status::Blocked(why) => {
@@ -256,7 +256,12 @@ pub fn missing_report() -> String {
             Status::Drawn => None,
         })
         .collect::<Vec<_>>()
-        .join("; ")
+        .join("; ");
+    if report.is_empty() {
+        "none".to_owned()
+    } else {
+        report
+    }
 }
 
 /// The elements a live display cannot show: those the table marks [`Status::Blocked`].
@@ -291,6 +296,7 @@ pub struct Timing {
     mode: Option<u32>,
     mode_changed_at: Option<Instant>,
     message: Option<(String, Instant)>,
+    display_aoa_ssa: bool,
 }
 
 impl Timing {
@@ -321,6 +327,21 @@ impl Timing {
                 .map(|at| now.saturating_duration_since(at)),
         )
     }
+
+    /// Notes this frame's angle of attack and sideslip; returns whether the display shows them:
+    /// the C#'s `displayAOASSA`.
+    ///
+    /// Off when the display is made, and turned on by the `AOA` or `SSA` setter when the bound
+    /// value differs from the one held, which starts at 0 - so the first time either angle is
+    /// not 0. Nothing turns it off again, not a later 0 and not a new vehicle. `!=` is the C#'s
+    /// float comparison: -0 is 0, and a NaN turns it on.
+    /// `// C#: ExtLibs/Controls/HUD.cs:276, 352-353, 889-930; GCSViews/FlightData.Designer.cs:400`
+    pub fn display_aoa_ssa(&mut self, aoa: f32, ssa: f32) -> bool {
+        if aoa != 0.0 || ssa != 0.0 {
+            self.display_aoa_ssa = true;
+        }
+        self.display_aoa_ssa
+    }
 }
 
 /// GPS fix as the C# names it.
@@ -348,8 +369,25 @@ pub struct AoaSsa {
     /// Sideslip angle, degrees: `SSA`.
     pub ssa: f32,
     /// The critical angle of attack, degrees: `critAOA`, bound to `CurrentState.crit_AOA` - the
-    /// `AOA_CRIT` parameter, or 25 without one.
+    /// `AOA_CRIT` parameter cut to a whole number, or 25 without one. See [`crit_aoa`].
     pub crit_aoa: f32,
+}
+
+/// `CurrentState.crit_AOA`: the vehicle's `AOA_CRIT` parameter, cast to `int` - so cut toward
+/// zero, 15.9 reading as 15 - or 25 when the vehicle has no such parameter, the name matched
+/// exactly as `MAVLinkParamList.ContainsKey` matches it.
+///
+/// The C#'s `catch` returning 0 guards a vehicle object that is not there; here the table
+/// always is, empty until the parameters are read. A NaN or a value past `int`'s range is
+/// unspecified for the C#'s unchecked cast; Rust's `as` saturates, and NaN reads 0.
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1017-1036, ExtLibs/Mavlink/MAVLinkParamList.cs:114-122`
+#[must_use]
+#[allow(clippy::cast_possible_truncation)] // the C#'s `(int)`, truncation is the point
+pub fn crit_aoa(parameters: &[(String, f64)]) -> f32 {
+    parameters
+        .iter()
+        .find(|(name, _)| name == "AOA_CRIT")
+        .map_or(25.0, |(_, value)| *value as i32 as f32)
 }
 
 /// One of the user's extra fields: `HUD.Custom`.
@@ -440,14 +478,16 @@ pub struct HudInputs {
     pub message: Option<(String, u32)>,
     /// The angle of attack and sideslip. `None` is the C#'s `displayAOASSA == false`, which
     /// hides the flight path vector and the AOA scale; the C# turns it on the first time either
-    /// angle changes from zero and never turns it off (HUD.cs:889-930).
+    /// angle changes from zero and never turns it off (HUD.cs:889-930), which
+    /// [`Timing::display_aoa_ssa`] keeps.
     pub aoa_ssa: Option<AoaSsa>,
     /// The user's extra fields, drawn bottom up.
     pub custom_items: Vec<CustomItem>,
     /// Vibration on x, y and z, m/s²: `vibex`, `vibey`, `vibez`.
     pub vibe: [f32; 3],
-    /// The autopilot's CPU load, percent: `load`. `None` when unknown, which shows no warning.
-    pub cpu_load: Option<f32>,
+    /// The autopilot's main-loop load, percent: `load`, `SYS_STATUS.load` / 10. 0 until the
+    /// vehicle reports one, as the C#'s `_load` starts (HUD.cs:3388).
+    pub cpu_load: f32,
     /// The worst EKF variance, or 1 when the flags say the filter has no answer: `ekfstatus`.
     pub ekf_status: f32,
     /// Whether the vehicle reports its pre-arm checks passing: `prearmstatus`.
@@ -492,7 +532,7 @@ impl Default for HudInputs {
             aoa_ssa: None,
             custom_items: Vec::new(),
             vibe: [0.0; 3],
-            cpu_load: None,
+            cpu_load: 0.0,
             ekf_status: 0.0,
             prearm_ready: false,
         }
@@ -506,9 +546,14 @@ impl HudInputs {
     /// `ExtLibs/ArduPilot/CurrentState.cs` for the derived ones: `turnrate` (1203), `targetalt`
     /// (1107), `targetairspeed` (1130), `failsafe` from `MAV_STATE_CRITICAL` (2895), the safety
     /// message when armed with motor control disabled (2887), `linkqualitygcs` (4595),
-    /// `ekfstatus` (2649-2741), `prearmstatus` (179-182), `vibex`..`vibez` (2592-2606).
+    /// `ekfstatus` (2649-2741), `prearmstatus` (179-182), `vibex`..`vibez` (2592-2606), `load`
+    /// (2949), `AOA` and `SSA` (3903-3911), and `crit_AOA` from the parameters (1017-1036).
+    ///
+    /// `display_aoa_ssa` is the display's own `displayAOASSA`, which [`Timing::display_aoa_ssa`]
+    /// keeps; `parameters` is the vehicle's parameter table, which `crit_AOA` reads.
     #[must_use]
     #[allow(clippy::cast_possible_truncation)] // display precision
+    #[allow(clippy::too_many_arguments)] // the bindings' sources: the state, the display's clocks
     pub fn from_vehicle(
         state: &VehicleState,
         mode: String,
@@ -516,6 +561,8 @@ impl HudInputs {
         mode_changed_for: Option<Duration>,
         clock: String,
         message: Option<(String, u32)>,
+        display_aoa_ssa: bool,
+        parameters: &[(String, f64)],
     ) -> Self {
         const MAV_STATE_CRITICAL: u8 = 5;
         Self {
@@ -551,14 +598,19 @@ impl HudInputs {
             failsafe: state.system_status == MAV_STATE_CRITICAL,
             safety: state.armed && state.sensors.reported && !state.sensors.motor_outputs_enabled(),
             message,
-            // mp_vehicle does not ingest AOA_SSA, so the C#'s `displayAOASSA` never turns on.
-            // C#: ExtLibs/ArduPilot/CurrentState.cs:3903-3911
-            aoa_ssa: None,
+            // The angles as `AOA_SSA` sent them, in degrees, and the critical angle, drawn only
+            // while `displayAOASSA` is on. C#: GCSViews/FlightData.Designer.cs:395-397,
+            // ExtLibs/Controls/HUD.cs:2233, 2805
+            aoa_ssa: display_aoa_ssa.then(|| AoaSsa {
+                aoa: state.aoa,
+                ssa: state.ssa,
+                crit_aoa: crit_aoa(parameters),
+            }),
             // No editor and no stored list yet. C#: GCSViews/FlightData.cs:336-348, 2436-2472
             custom_items: Vec::new(),
             vibe: [state.vibration.x, state.vibration.y, state.vibration.z],
-            // mp_vehicle does not keep SYS_STATUS.load. C#: ExtLibs/ArduPilot/CurrentState.cs:2949
-            cpu_load: None,
+            // C#: GCSViews/FlightData.Designer.cs:354, ExtLibs/ArduPilot/CurrentState.cs:2949
+            cpu_load: state.load,
             ekf_status: ekf_status(state),
             prearm_ready: prearm_ready(state),
         }
@@ -1798,8 +1850,8 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
         Align::Left,
     );
     // "CPU" in red at the right edge of Vibe's 40-pixel box when the autopilot reports a full
-    // load. C#: HUD.cs:3206-3207
-    if inputs.cpu_load.is_some_and(|load| load == 100.0) {
+    // load - exactly 100, as the C# compares it. C#: HUD.cs:3206-3207
+    if inputs.cpu_load == 100.0 {
         scene.owned_label(
             Element::Vibe,
             "CPU",
@@ -2184,6 +2236,7 @@ fn label(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mp_mavlink_dialects::all::{AoaSsa as AoaSsaMessage, MavMessage};
 
     const CENTRE: (f32, f32) = (200.0, 150.0);
     const W: f32 = 400.0;
@@ -2313,7 +2366,7 @@ mod tests {
             aoa_ssa: None,
             custom_items: Vec::new(),
             vibe: [3.0, 4.0, 5.0],
-            cpu_load: Some(12.0),
+            cpu_load: 12.0,
             ekf_status: 0.1,
             prearm_ready: true,
         }
@@ -2364,35 +2417,54 @@ mod tests {
         (a.0 - b.0).abs() < 0.01 && (a.1 - b.1).abs() < 0.01
     }
 
-    /// The coverage table is held to the code: every element it calls drawn is in the scene,
-    /// and every element it calls blocked is drawn when given its value and never from what
-    /// `from_vehicle` makes of a vehicle.
+    /// What `main.rs`'s `hud_inputs` makes of a vehicle: the angles through the display's
+    /// `displayAOASSA`, then `from_vehicle` with the parameter table.
+    fn live(state: &VehicleState, timing: &mut Timing, parameters: &[(String, f64)]) -> HudInputs {
+        let display_aoa_ssa = timing.display_aoa_ssa(state.aoa, state.ssa);
+        HudInputs::from_vehicle(
+            state,
+            "Stabilize".to_owned(),
+            None,
+            None,
+            String::new(),
+            None,
+            display_aoa_ssa,
+            parameters,
+        )
+    }
+
+    /// An `AOA_SSA` message with these angles, in degrees as the vehicle sends them.
+    fn aoa_ssa(aoa: f32, ssa: f32) -> MavMessage {
+        MavMessage::AoaSsa(AoaSsaMessage {
+            time_usec: 0,
+            aoa,
+            ssa,
+        })
+    }
+
+    /// The coverage table is held to the code: every element it calls drawn is in the scene
+    /// given every value, and in the scene `from_vehicle` makes of a vehicle that has sent them -
+    /// the path the display takes; every element it calls blocked is drawn when given its value
+    /// and never from a live vehicle.
     #[test]
     fn the_coverage_table_matches_what_the_scene_draws() {
-        let scene = scene(&flying(), W, H);
-        let given = super::scene(&with_angles(4.0, -2.0), W, H);
+        let given = scene(&with_angles(4.0, -2.0), W, H);
         let mut state = VehicleState::default();
         state.ekf.seen = true;
         state.vibration.seen = true;
-        let live = super::scene(
-            &HudInputs::from_vehicle(
-                &state,
-                "Stabilize".to_owned(),
-                None,
-                None,
-                String::new(),
-                None,
-            ),
-            W,
-            H,
-        );
+        state.apply(&aoa_ssa(4.0, -2.0));
+        let live = scene(&live(&state, &mut Timing::default(), &[]), W, H);
         for (element, status) in ELEMENTS {
             match status {
-                Status::Drawn => assert!(
-                    scene.drawn.contains(element),
-                    "{} is listed as drawn and was not",
-                    element.name()
-                ),
+                Status::Drawn => {
+                    for (which, drawn) in [("given", &given), ("live", &live)] {
+                        assert!(
+                            drawn.drawn.contains(element),
+                            "{} is listed as drawn and the {which} scene did not draw it",
+                            element.name()
+                        );
+                    }
+                }
                 Status::Blocked(why) => {
                     assert!(
                         given.drawn.contains(element),
@@ -2415,30 +2487,153 @@ mod tests {
         names.dedup();
         assert_eq!(names.len(), count);
         assert_eq!(ELEMENTS.len(), 24, "doPaint() has 24 elements");
-        // The list of what is missing, printed so it is read.
-        let missing = missing();
-        eprintln!(
-            "HUD elements a live vehicle cannot show ({}): {}",
-            missing.len(),
-            missing
-                .iter()
-                .map(|e| format!(
-                    "{} (HUD.cs:{}-{})",
-                    e.name(),
-                    e.csharp_lines().0,
-                    e.csharp_lines().1
-                ))
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-        assert_eq!(missing, [Element::FlightPathVector, Element::Aoa]);
+        // Nothing a live vehicle cannot show, and the facts say so in a word a script can match.
         let report = missing_report();
+        assert!(missing().is_empty(), "{report}");
+        assert_eq!(report, "none");
+    }
+
+    /// `displayAOASSA`: off until an angle is not 0 - by the C#'s `!=`, so -0 leaves it off and
+    /// a NaN turns it on - and never off again. C#: ExtLibs/Controls/HUD.cs:276, 889-930
+    #[test]
+    fn display_aoa_ssa_turns_on_at_the_first_non_zero_angle_and_stays_on() {
+        let mut timing = Timing::default();
+        assert!(!timing.display_aoa_ssa(0.0, 0.0), "off when made");
+        assert!(!timing.display_aoa_ssa(-0.0, -0.0), "-0 is 0");
         assert!(
-            report.starts_with("flight-path-vector (HUD.cs:2232-2252) needs CurrentState.AOA"),
-            "{report}"
+            timing.display_aoa_ssa(0.0, 0.5),
+            "a sideslip alone turns it on"
         );
-        assert!(report.contains("aoa (HUD.cs:2804-2845)"), "{report}");
-        assert!(report.contains("CurrentState.crit_AOA"), "{report}");
+        assert!(
+            timing.display_aoa_ssa(0.0, 0.0),
+            "and a later 0 does not turn it off"
+        );
+        let mut timing = Timing::default();
+        assert!(
+            timing.display_aoa_ssa(-3.0, 0.0),
+            "an angle of attack alone"
+        );
+        let mut timing = Timing::default();
+        assert!(timing.display_aoa_ssa(f32::NAN, 0.0), "NaN != 0");
+    }
+
+    /// `crit_AOA`: the `AOA_CRIT` parameter cast to `int`, or 25 without it.
+    /// C#: ExtLibs/ArduPilot/CurrentState.cs:1017-1036
+    #[test]
+    fn crit_aoa_is_the_parameter_cut_to_a_whole_number_or_25() {
+        let with = |value: f64| {
+            crit_aoa(&[
+                ("AHRS_ORIENT".to_owned(), 0.0),
+                ("AOA_CRIT".to_owned(), value),
+                ("ARSPD_USE".to_owned(), 1.0),
+            ])
+        };
+        assert_eq!(crit_aoa(&[]), 25.0, "no parameters read yet");
+        assert_eq!(
+            crit_aoa(&[("aoa_crit".to_owned(), 12.0)]),
+            25.0,
+            "ContainsKey matches the name exactly"
+        );
+        assert_eq!(with(20.0), 20.0);
+        assert_eq!(with(15.9), 15.0, "(int) cuts, it does not round");
+        assert_eq!(with(-3.7), -3.0, "toward zero");
+        assert_eq!(with(0.0), 0.0, "a 0 is taken, not replaced by 25");
+    }
+
+    /// The angles reach the display from an `AOA_SSA` message through `displayAOASSA`: nothing
+    /// until the vehicle sends an angle that is not 0; then the flight path vector at the
+    /// message's degrees and the AOA scale against `AOA_CRIT`; and both stay up when the angles
+    /// go back to 0. C#: ExtLibs/ArduPilot/CurrentState.cs:1017-1036, 3903-3911,
+    /// ExtLibs/Controls/HUD.cs:889-930, 2232-2245, 2804-2843
+    #[test]
+    fn the_angles_come_from_aoa_ssa_once_one_is_not_zero() {
+        let mut state = VehicleState::default();
+        let mut timing = Timing::default();
+        let parameters = vec![("AOA_CRIT".to_owned(), 15.9)];
+        let shown = |inputs: &HudInputs, want: bool| {
+            let facts = health_facts(&scene(inputs, W, H));
+            for key in ["hud.fpv.shown", "hud.aoa.shown"] {
+                assert!(
+                    facts.contains(&(key, want.to_string())),
+                    "{key} not {want} in {facts:?}"
+                );
+            }
+        };
+
+        let before = live(&state, &mut timing, &parameters);
+        assert_eq!(before.aoa_ssa, None, "nothing sent");
+        shown(&before, false);
+        state.apply(&aoa_ssa(0.0, 0.0));
+        let zeroes = live(&state, &mut timing, &parameters);
+        assert_eq!(zeroes.aoa_ssa, None, "zeroes change nothing");
+        shown(&zeroes, false);
+
+        state.apply(&aoa_ssa(15.0, -2.5));
+        let flying = live(&state, &mut timing, &parameters);
+        assert_eq!(
+            flying.aoa_ssa,
+            Some(AoaSsa {
+                aoa: 15.0,
+                ssa: -2.5,
+                crit_aoa: 15.0
+            })
+        );
+        shown(&flying, true);
+        let drawn = scene(&flying, W, H);
+        // The ring's centre: the sideslip to the left, the angle of attack down.
+        let ppd = H / 65.0;
+        let centre = (W / 2.0 - 2.5 * ppd, H / 2.0 + 15.0 * ppd);
+        let ring = drawn
+            .items
+            .iter()
+            .find_map(|item| match item {
+                Item::Stroke { points, colour, .. }
+                    if points.len() > 8 && *colour == colour::ALERT =>
+                {
+                    Some(points.clone())
+                }
+                _ => None,
+            })
+            .expect("a red ring");
+        for p in &ring {
+            let r = (p.0 - centre.0).hypot(p.1 - centre.1);
+            assert!(
+                (r - W / 2.0 / 40.0).abs() < 0.01,
+                "{p:?} is {r} from {centre:?}"
+            );
+        }
+        // At the critical angle the arrow's tip sits on the red band's bottom edge, a tenth of
+        // the way down the bar; with the default 25 it would be at 0.42.
+        let tip = drawn
+            .items
+            .iter()
+            .find_map(|item| match item {
+                Item::Fill { points, colour, .. }
+                    if *colour == colour::BLACK && points.len() == 3 =>
+                {
+                    Some(points[0])
+                }
+                _ => None,
+            })
+            .expect("an arrow");
+        let (left, top, width, height) = (W - W / 6.0, H / 2.0 + H / 20.0, W / 25.0, H / 5.0);
+        assert!(
+            close(tip, (left + width / 5.0, top + 0.1 * height)),
+            "{tip:?}"
+        );
+
+        state.apply(&aoa_ssa(0.0, 0.0));
+        let level = live(&state, &mut timing, &parameters);
+        assert_eq!(
+            level.aoa_ssa,
+            Some(AoaSsa {
+                aoa: 0.0,
+                ssa: 0.0,
+                crit_aoa: 15.0
+            }),
+            "back at 0 and still shown"
+        );
+        shown(&level, true);
     }
 
     /// The flight path vector sits at the sideslip across and the angle of attack down from the
@@ -2658,19 +2853,25 @@ mod tests {
         assert_eq!(colour_at([0.0, 0.0, 61.0]), colour::ALERT);
     }
 
-    /// "CPU" appears in red at the right of Vibe's box only at a load of exactly 100.
-    /// C#: HUD.cs:3206-3207
+    /// "CPU" appears in red at the right of Vibe's box only at a load of exactly 100: a
+    /// `SYS_STATUS.load` of 1000, the message counting in tenths of a percent.
+    /// C#: HUD.cs:3206-3207, ExtLibs/ArduPilot/CurrentState.cs:2949
     #[test]
     fn cpu_shows_only_at_full_load() {
         let (fontsize, _, lower) = text_lines(H);
-        for (load, shown) in [(None, false), (Some(99.9), false), (Some(100.0), true)] {
-            let inputs = HudInputs {
-                cpu_load: load,
-                ..flying()
+        let mut state = VehicleState::default();
+        assert_eq!(live(&state, &mut Timing::default(), &[]).cpu_load, 0.0);
+        for (raw, shown) in [(0, false), (999, false), (1000, true), (1001, false)] {
+            let Some(MavMessage::SysStatus(mut sys_status)) = MavMessage::decode(1, &[]) else {
+                panic!("no SYS_STATUS")
             };
+            sys_status.load = raw;
+            state.apply(&MavMessage::SysStatus(sys_status));
+            let inputs = live(&state, &mut Timing::default(), &[]);
+            assert_eq!(inputs.cpu_load, f32::from(raw) / 10.0);
             let scene = scene(&inputs, W, H);
             let cpu = label_at(&scene, "CPU");
-            assert_eq!(cpu.is_some(), shown, "{load:?}");
+            assert_eq!(cpu.is_some(), shown, "{raw}");
             if let Some((at, _, colour)) = cpu {
                 assert!(close(at, (W - 18.0 * fontsize + 40.0, lower)), "{at:?}");
                 assert_eq!(colour, colour::ALERT);
@@ -2769,8 +2970,9 @@ mod tests {
         assert!(prearm_ready(&state), "enabled and passing");
     }
 
-    /// `from_vehicle` feeds the health readouts from the vehicle and leaves what it cannot know
-    /// unset, and the facts read the scene it makes.
+    /// `from_vehicle` feeds the health readouts from the vehicle, and the facts read the scene
+    /// it makes. This vehicle is SITL's copter: a part load, no `AOA_SSA`, so the angles stay
+    /// off whatever the parameters say.
     #[test]
     fn from_vehicle_feeds_the_health_readouts() {
         let mut state = VehicleState::default();
@@ -2781,19 +2983,17 @@ mod tests {
         state.ekf.compass_variance = 0.9;
         state.sensors.enabled = PREARM_CHECK;
         state.sensors.reported = true;
-        let inputs = HudInputs::from_vehicle(
+        state.load = 35.0;
+        let inputs = live(
             &state,
-            "Stabilize".to_owned(),
-            None,
-            None,
-            String::new(),
-            None,
+            &mut Timing::default(),
+            &[("AOA_CRIT".to_owned(), 18.0)],
         );
         assert_eq!(inputs.vibe, [45.0, 0.0, 0.0]);
         assert_eq!(inputs.ekf_status, 0.9);
         assert!(!inputs.prearm_ready);
         assert_eq!(inputs.aoa_ssa, None);
-        assert_eq!(inputs.cpu_load, None);
+        assert_eq!(inputs.cpu_load, 35.0);
         assert!(inputs.custom_items.is_empty());
         let facts = health_facts(&scene(&inputs, 800.0, 260.0));
         for expected in [

@@ -889,7 +889,9 @@ impl MissionPlanner {
     ///
     /// The clocks - how long since arming, since the mode changed, since a message was raised -
     /// live in `hud_timing` and are advanced here, once a frame, because the vehicle state says
-    /// only what is true now and the C# HUD shows things for a while after they change.
+    /// only what is true now and the C# HUD shows things for a while after they change. The
+    /// display's `displayAOASSA` lives there too: it turns on at the first angle of attack or
+    /// sideslip that is not 0, and stays on.
     fn hud_inputs(&mut self, view: &TelemetryView) -> hud::HudInputs {
         let Some(state) = view.state.as_deref() else {
             return hud::HudInputs::default();
@@ -902,6 +904,8 @@ impl MissionPlanner {
         let message = self
             .hud_timing
             .message(hud::high_priority_message(state), now);
+        // C#: ExtLibs/Controls/HUD.cs:889-930
+        let display_aoa_ssa = self.hud_timing.display_aoa_ssa(state.aoa, state.ssa);
         hud::HudInputs::from_vehicle(
             state,
             mode,
@@ -909,6 +913,8 @@ impl MissionPlanner {
             mode_changed_for,
             chrono::Local::now().format("%H:%M:%S").to_string(),
             message,
+            display_aoa_ssa,
+            &view.parameters,
         )
     }
 
