@@ -462,6 +462,159 @@ fn step_button(
         }))
 }
 
+/// Saving, loading and comparing `.param` files.
+///
+/// This is how a build gets backed up before it is changed, how a setup is cloned onto a second
+/// airframe, and how a tune somebody posted gets read before it is trusted. The order of the
+/// buttons is the order of the task: save what is there, compare what is proposed, then - and
+/// only then - apply it.
+///
+/// Compare and apply are deliberately two presses. A comparison that applied itself would make
+/// "show me what this changes" the most destructive button on the screen.
+pub fn file_panel(
+    view: &TelemetryView,
+    name: &crate::textfield::TextField,
+    name_focus: &gpui::FocusHandle,
+    focused: bool,
+    differences: &[mp_link::param_file::Difference],
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    let held = view.parameters.len();
+    let expected = usize::from(view.parameters_expected);
+    let complete = held > 0 && held >= expected;
+
+    let mut rows = div().flex().flex_col();
+    // Bounded. A comparison against another firmware version runs to hundreds of lines, and a
+    // panel that long buries the buttons under it; the count above says how many there are.
+    const SHOWN: usize = 40;
+    for difference in differences.iter().take(SHOWN) {
+        let (value, colour) = match difference.kind {
+            mp_link::param_file::Change::Changed { from, to } => {
+                (format!("{from} -> {to}"), theme::WARN)
+            }
+            mp_link::param_file::Change::Added { to } => {
+                (format!("not on the vehicle -> {to}"), theme::DIM)
+            }
+            mp_link::param_file::Change::Missing { from } => {
+                (format!("{from} -> not in the file"), theme::DIM)
+            }
+        };
+        rows = rows.child(
+            div()
+                .flex()
+                .items_center()
+                .gap_2()
+                .py(px(1.0))
+                .child(
+                    div()
+                        .w(px(150.0))
+                        .text_xs()
+                        .text_color(rgb(theme::TEXT))
+                        .child(difference.name.clone()),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .text_xs()
+                        .text_color(rgb(colour))
+                        .child(value),
+                ),
+        );
+    }
+    if differences.len() > SHOWN {
+        rows = rows.child(
+            div()
+                .pt_1()
+                .text_xs()
+                .text_color(rgb(theme::DIM))
+                .child(format!("... and {} more", differences.len() - SHOWN)),
+        );
+    }
+
+    let changed = differences
+        .iter()
+        .filter(|difference| matches!(difference.kind, mp_link::param_file::Change::Changed { .. }))
+        .count();
+
+    panel(
+        "parameter files",
+        div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(crate::textfield::text_field(
+                        "param-file-name",
+                        name,
+                        name_focus,
+                        focused,
+                        px(200.0),
+                        cx.listener(|this, event: &gpui::KeyDownEvent, _window, cx| {
+                            match this.param_file_name.key(event) {
+                                // Enter saves, matching the mission name field beside it. A file
+                                // name box where enter does nothing is a box that swallows the
+                                // press an operator expects to act on it.
+                                crate::textfield::KeyOutcome::Submitted => this.save_params(),
+                                crate::textfield::KeyOutcome::Cancelled => {
+                                    this.param_file_name.clear();
+                                }
+                                crate::textfield::KeyOutcome::Ignored => return,
+                                crate::textfield::KeyOutcome::Changed => {}
+                            }
+                            cx.notify();
+                        }),
+                    ))
+                    .child(action(
+                        "param-save",
+                        "save",
+                        theme::ACCENT,
+                        complete,
+                        cx.listener(|this, _event: &(), _window, cx| {
+                            this.save_params();
+                            cx.notify();
+                        }),
+                    ))
+                    .child(action(
+                        "param-compare",
+                        "compare",
+                        theme::ACCENT,
+                        held > 0,
+                        cx.listener(|this, _event: &(), _window, cx| {
+                            this.compare_params();
+                            cx.notify();
+                        }),
+                    ))
+                    .child(action(
+                        "param-apply",
+                        if changed == 0 {
+                            "apply".to_owned()
+                        } else {
+                            format!("apply {changed}")
+                        },
+                        theme::WARN,
+                        changed > 0,
+                        cx.listener(|this, _event: &(), _window, cx| {
+                            this.apply_params();
+                            cx.notify();
+                        }),
+                    )),
+            )
+            // Why save is refused, said where the refusal happens rather than only after the
+            // press. A greyed button with no reason reads as a broken screen.
+            .children((!complete && held > 0).then(|| {
+                div().text_xs().text_color(rgb(theme::DIM)).child(format!(
+                    "{held} of {expected} downloaded - saving waits for the rest"
+                ))
+            }))
+            .children((!differences.is_empty()).then_some(rows)),
+    )
+    .into_any_element()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

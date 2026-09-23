@@ -40,6 +40,9 @@ const REFRESH: Duration = Duration::from_millis(100);
 /// The mission file name used when nothing has been typed.
 const DEFAULT_PLAN_FILE: &str = "mission.waypoints";
 
+/// The name a parameter backup gets if the operator does not choose one.
+const DEFAULT_PARAM_FILE: &str = "vehicle.param";
+
 /// Repaint interval when measuring the renderer: as fast as the executor will schedule, so paint
 /// cost is measured rather than the timer.
 const REFRESH_BENCH: Duration = Duration::from_millis(1);
@@ -147,6 +150,16 @@ struct MissionPlanner {
     selected_param_group: Option<String>,
     /// The parameter being looked at.
     selected_param: Option<String>,
+    /// The `.param` file name to save to, load from or compare against.
+    param_file_name: textfield::TextField,
+    /// Focus for that field.
+    param_file_focus: gpui::FocusHandle,
+    /// The result of the last comparison against a file, newest first.
+    ///
+    /// Held rather than applied. A comparison is something an operator reads before deciding, and
+    /// the decision is a second, deliberate press - loading a tune because it was compared would
+    /// be the worst possible reading of "show me what this would change".
+    param_differences: Vec<mp_link::param_file::Difference>,
     /// Throttle a motor test uses, as a percentage.
     motor_throttle: f32,
     /// Whether a radio calibration is recording stick limits.
@@ -258,6 +271,13 @@ impl MissionPlanner {
             param_search_focus: cx.focus_handle(),
             selected_param_group: None,
             selected_param: None,
+            param_file_name: {
+                let mut field = textfield::TextField::new(DEFAULT_PARAM_FILE);
+                field.set(DEFAULT_PARAM_FILE);
+                field
+            },
+            param_file_focus: cx.focus_handle(),
+            param_differences: Vec::new(),
             motor_throttle: 5.0,
             capturing_radio: false,
             radio_range: mp_vehicle::RcRange::new(),
@@ -346,6 +366,134 @@ impl MissionPlanner {
                 self.file_status = Some(format!("{} is not a mission file: {err}", path.display()));
             }
         }
+    }
+
+    /// Where a named parameter file lives.
+    ///
+    /// The same directory as missions and by the same rule: a name, not a path, so a typed
+    /// separator cannot write outside it.
+    fn param_path(&self) -> std::path::PathBuf {
+        let name = self.param_file_name.value().trim();
+        let leaf = name
+            .rsplit(['/', '\\'])
+            .next()
+            .filter(|part| !part.is_empty() && *part != "." && *part != "..")
+            .unwrap_or(DEFAULT_PARAM_FILE);
+        let leaf = if leaf.contains('.') {
+            leaf.to_owned()
+        } else {
+            format!("{leaf}.param")
+        };
+        Self::plan_directory().join(leaf)
+    }
+
+    /// The parameters currently held for the vehicle, as a file would hold them.
+    fn params_as_file(&self) -> mp_link::param_file::ParamFile {
+        let view = self.telemetry.view();
+        mp_link::param_file::ParamFile::from_values(
+            view.parameters
+                .iter()
+                .map(|(name, value)| (name.clone(), *value)),
+        )
+    }
+
+    /// Writes the vehicle's parameters to a file.
+    ///
+    /// Refused while the download is incomplete. A backup missing four hundred parameters is
+    /// indistinguishable from a complete one once it is on disk, and it will be found and loaded
+    /// by somebody who believes it is a backup.
+    fn save_params(&mut self) {
+        let view = self.telemetry.view();
+        let expected = usize::from(view.parameters_expected);
+        let held = view.parameters.len();
+        if held == 0 {
+            self.file_status = Some("no parameters to save - download them first".to_owned());
+            return;
+        }
+        if expected > held {
+            self.file_status = Some(format!(
+                "only {held} of {expected} parameters are here; wait for the download to finish"
+            ));
+            return;
+        }
+        let path = self.param_path();
+        let file = self.params_as_file();
+        self.file_status = match file.save(&path) {
+            Ok(()) => Some(format!(
+                "saved {} of {held} parameters to {}",
+                file.len(),
+                path.display()
+            )),
+            Err(err) => Some(format!("could not save to {}: {err}", path.display())),
+        };
+    }
+
+    /// Compares a file against the vehicle, without changing anything.
+    fn compare_params(&mut self) {
+        let path = self.param_path();
+        let proposed = match mp_link::param_file::ParamFile::load(&path) {
+            Ok(file) => file,
+            Err(err) => {
+                self.param_differences.clear();
+                self.file_status = Some(format!("could not read {}: {err}", path.display()));
+                return;
+            }
+        };
+        let current = self.params_as_file();
+        if current.is_empty() {
+            self.file_status = Some("no parameters from the vehicle to compare against".to_owned());
+            return;
+        }
+        self.param_differences = current.compare(&proposed);
+        let unreadable = proposed.rejected().len();
+        self.file_status = Some(match (self.param_differences.len(), unreadable) {
+            (0, 0) => format!("the vehicle already matches {}", path.display()),
+            (0, bad) => format!(
+                "the vehicle matches {}, but {bad} lines of it could not be read",
+                path.display()
+            ),
+            (n, 0) => format!("{n} parameters differ from {}", path.display()),
+            (n, bad) => format!(
+                "{n} parameters differ from {}; {bad} lines could not be read",
+                path.display()
+            ),
+        });
+    }
+
+    /// Writes the differences found by the last comparison to the vehicle.
+    ///
+    /// Only what the comparison found, and only what the vehicle already has. A parameter in the
+    /// file that this firmware does not know is skipped rather than sent: ArduPilot ignores a set
+    /// for an unknown name silently, so sending it would report success for nothing happening.
+    fn apply_params(&mut self) {
+        if self.param_differences.is_empty() {
+            self.file_status = Some("compare a file first - there is nothing to apply".to_owned());
+            return;
+        }
+        let mut written = 0usize;
+        let mut skipped = 0usize;
+        for difference in &self.param_differences {
+            match difference.kind {
+                mp_link::param_file::Change::Changed { to, .. } => {
+                    #[allow(clippy::cast_possible_truncation)] // parameters are f32 on the wire
+                    self.telemetry.set_parameter(&difference.name, to as f32);
+                    written += 1;
+                }
+                mp_link::param_file::Change::Added { .. }
+                | mp_link::param_file::Change::Missing { .. } => skipped += 1,
+            }
+        }
+        // The comparison is now stale - it describes a vehicle that no longer exists. Cleared
+        // rather than left on screen, because a list of differences beside an "apply" button that
+        // has already been pressed invites pressing it again.
+        self.param_differences.clear();
+        self.file_status = Some(if skipped == 0 {
+            format!("wrote {written} parameters - refresh to confirm")
+        } else {
+            format!(
+                "wrote {written} parameters, skipped {skipped} this firmware does not have - refresh to confirm"
+            )
+        });
     }
 
     /// Commands a guided move to a position, holding the current height.
@@ -1171,6 +1319,14 @@ impl Render for MissionPlanner {
                         cx,
                     ))
                     .child(params::editor_panel(&parameters, selected.as_deref(), cx))
+                    .child(params::file_panel(
+                        &view,
+                        &self.param_file_name,
+                        &self.param_file_focus,
+                        self.param_file_focus.is_focused(window),
+                        &self.param_differences,
+                        cx,
+                    ))
                     .into_any_element()
             }
             Screen::Setup => div()

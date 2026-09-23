@@ -22,6 +22,7 @@ pub mod commands;
 pub mod logs;
 pub mod messages;
 pub mod mission_transfer;
+pub mod param_file;
 pub mod params;
 pub mod traffic;
 

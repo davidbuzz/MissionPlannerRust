@@ -11,6 +11,8 @@ use std::time::{Duration, Instant};
 
 mod logs;
 
+use mp_link::param_file::{Change, ParamFile};
+use mp_link::params::ParamTable;
 use mp_link::{Link, LinkConfig, commands};
 use mp_vehicle::{StateHandle, VehicleId};
 
@@ -63,8 +65,17 @@ fn main() -> std::process::ExitCode {
             args.get(4).and_then(|value| value.parse::<f32>().ok()),
         ) {
             (Some("set"), Some(url), Some(name), Some(value)) => set_param(url, name, value),
+            (Some("save"), Some(url), Some(path), _) => param_save(url, path),
+            (Some("load"), Some(url), Some(path), _) => param_load(url, path),
+            (Some("diff"), Some(current), Some(proposed), _) => param_diff(current, proposed),
             _ => {
-                eprintln!("usage: mpr param set <url> <NAME> <VALUE>");
+                eprintln!(
+                    "usage:\n  \
+                     mpr param set  <url> <NAME> <VALUE>\n  \
+                     mpr param save <url> <file.param>\n  \
+                     mpr param load <url> <file.param>\n  \
+                     mpr param diff <url|file.param> <file.param>"
+                );
                 std::process::ExitCode::from(2)
             }
         },
@@ -110,7 +121,10 @@ fn usage() {
          mpr record <url> <file> [s] record telemetry to a .tlog\n  \
          mpr fly <url> [file]        fly a scripted mission (simulator only)\n  \
          mpr params <url> [NAME]     download the parameter set, or show one parameter
-  mpr param set <url> N V     set one parameter and read it back\n  \
+  mpr param set <url> N V     set one parameter and read it back
+  mpr param save <url> <file> save the parameter set to a .param file
+  mpr param load <url> <file> write a .param file to the vehicle
+  mpr param diff <a> <b>      compare a vehicle or file against a file\n  \
          mpr mission <url> [file]    download the mission, or upload one from a file\n  \
          mpr survey <url> <file>     generate a survey grid around the vehicle\n  \
          mpr log <file>              summarise a telemetry or dataflash log
@@ -552,7 +566,12 @@ fn set_param(url: &str, name: &str, value: f32) -> std::process::ExitCode {
     }
 }
 
-fn params(url: &str, filter: Option<&str>) -> std::process::ExitCode {
+/// Connects, waits for a vehicle, and downloads its whole parameter set.
+///
+/// Shared by every command that needs one, because they all need the same twenty-second wait for a
+/// heartbeat, the same progress reporting, and the same tolerance for a download that ends a few
+/// parameters short. A `None` return has already said why on stderr.
+fn connect_and_download(url: &str) -> Option<(Link, mp_vehicle::VehicleId, ParamTable)> {
     let config = LinkConfig {
         stream_rate_hz: 0,
         ..LinkConfig::default()
@@ -561,7 +580,7 @@ fn params(url: &str, filter: Option<&str>) -> std::process::ExitCode {
         Ok(link) => link,
         Err(err) => {
             eprintln!("could not open {url}: {err}");
-            return std::process::ExitCode::FAILURE;
+            return None;
         }
     };
     println!("connected: {}", link.description());
@@ -572,7 +591,7 @@ fn params(url: &str, filter: Option<&str>) -> std::process::ExitCode {
     }
     let Some((id, _)) = link.primary_vehicle() else {
         eprintln!("no vehicle appeared on {url}");
-        return std::process::ExitCode::FAILURE;
+        return None;
     };
 
     println!("downloading parameters from vehicle {id}");
@@ -619,6 +638,13 @@ fn params(url: &str, filter: Option<&str>) -> std::process::ExitCode {
 
     let Some(table) = link.params(id) else {
         eprintln!("no parameters received");
+        return None;
+    };
+    Some((link, id, table))
+}
+
+fn params(url: &str, filter: Option<&str>) -> std::process::ExitCode {
+    let Some((_link, _id, table)) = connect_and_download(url) else {
         return std::process::ExitCode::FAILURE;
     };
 
@@ -993,4 +1019,260 @@ fn survey(url: &str, out_path: &str, spacing: Option<f64>) -> std::process::Exit
     }
     println!("wrote {} items to {out_path}", items.len());
     std::process::ExitCode::SUCCESS
+}
+
+/// Downloads the parameter set and writes it to a `.param` file.
+fn param_save(url: &str, path: &str) -> std::process::ExitCode {
+    let Some((_link, _id, table)) = connect_and_download(url) else {
+        return std::process::ExitCode::FAILURE;
+    };
+    let received = table.len();
+    let file = ParamFile::from_values(table.iter().map(|(name, value)| (name, value.as_f64())));
+    if let Err(err) = file.save(std::path::Path::new(path)) {
+        eprintln!("could not write {path}: {err}");
+        return std::process::ExitCode::FAILURE;
+    }
+    // Saying what was left out, because a file with fewer lines than the vehicle has parameters
+    // looks like a truncated download unless the difference is explained. Named individually
+    // rather than printing the whole skip-list: most of those names do not exist on any one
+    // firmware, and listing seven when one was dropped reads as a bug in the skipping.
+    let omitted: Vec<_> = table
+        .iter()
+        .map(|(name, _)| name.as_str())
+        .filter(|name| !mp_link::param_file::is_saved(name))
+        .collect();
+    println!("wrote {} of {received} parameters to {path}", file.len());
+    if !omitted.is_empty() {
+        println!(
+            "omitted {} the vehicle maintains itself: {}",
+            if omitted.len() == 1 {
+                "a parameter"
+            } else {
+                "parameters"
+            },
+            omitted.join(", ")
+        );
+    }
+    std::process::ExitCode::SUCCESS
+}
+
+/// Compares a `.param` file against the vehicle, or against a second file.
+///
+/// The vehicle, or the first file, is the current state; the second argument is the proposal. So
+/// the output reads as what would change if the proposal were loaded.
+fn param_diff(current: &str, proposed: &str) -> std::process::ExitCode {
+    let proposed_file = match ParamFile::load(std::path::Path::new(proposed)) {
+        Ok(file) => file,
+        Err(err) => {
+            eprintln!("could not read {proposed}: {err}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    report_rejected(proposed, &proposed_file);
+
+    // A url is a vehicle and anything else is a file. Distinguished by the scheme rather than by
+    // trying to open it as both, so a typo in a filename is a missing file rather than a
+    // twenty-second wait for a vehicle that was never going to appear.
+    // What the left-hand side is called in the output. "not on the vehicle" is wrong when the
+    // comparison is between two files, and it is the line an operator reads to decide whether a
+    // parameter is missing or merely from a different firmware.
+    let absent_from_current = if is_url(current) {
+        "not on the vehicle".to_owned()
+    } else {
+        format!("not in {current}")
+    };
+    let current_file = if is_url(current) {
+        let Some((_link, _id, table)) = connect_and_download(current) else {
+            return std::process::ExitCode::FAILURE;
+        };
+        ParamFile::from_values(table.iter().map(|(name, value)| (name, value.as_f64())))
+    } else {
+        match ParamFile::load(std::path::Path::new(current)) {
+            Ok(file) => {
+                report_rejected(current, &file);
+                file
+            }
+            Err(err) => {
+                eprintln!("could not read {current}: {err}");
+                return std::process::ExitCode::FAILURE;
+            }
+        }
+    };
+
+    let differences = current_file.compare(&proposed_file);
+    if differences.is_empty() {
+        println!(
+            "no differences ({} parameters compared)",
+            current_file.len()
+        );
+        return std::process::ExitCode::SUCCESS;
+    }
+    println!(
+        "{} differences, reading as \"{current} -> {proposed}\":\n",
+        differences.len()
+    );
+    for difference in &differences {
+        // The documentation is what turns a number into a decision. Somebody comparing a suggested
+        // tune against their own wants to know what ATC_RAT_PIT_D is before changing it.
+        let meta = mp_vehicle::param_meta::lookup(&difference.name);
+        let units = meta.map_or("", |m| m.units);
+        let units = if units.is_empty() {
+            String::new()
+        } else {
+            format!(" {units}")
+        };
+        match difference.kind {
+            Change::Changed { from, to } => {
+                println!("  {:<17} {from}{units} -> {to}{units}", difference.name);
+            }
+            Change::Added { to } => {
+                println!(
+                    "  {:<17} {absent_from_current} -> {to}{units}",
+                    difference.name
+                );
+            }
+            Change::Missing { from } => {
+                println!(
+                    "  {:<17} {from}{units} -> not in {proposed}",
+                    difference.name
+                );
+            }
+        }
+        if let Some(meta) = meta
+            && !meta.display_name.is_empty()
+        {
+            println!("                    {}", meta.display_name);
+        }
+    }
+    std::process::ExitCode::SUCCESS
+}
+
+/// Loads a `.param` file onto the vehicle, writing only what differs.
+///
+/// Only what differs, because writing all fourteen hundred takes minutes and wears the flash for
+/// no reason - and because a write that changes nothing still produces a `PARAM_VALUE` the
+/// operator has to read past to find the ones that mattered.
+fn param_load(url: &str, path: &str) -> std::process::ExitCode {
+    let proposed = match ParamFile::load(std::path::Path::new(path)) {
+        Ok(file) => file,
+        Err(err) => {
+            eprintln!("could not read {path}: {err}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    report_rejected(path, &proposed);
+    if proposed.is_empty() {
+        eprintln!("{path} holds no parameters");
+        return std::process::ExitCode::FAILURE;
+    }
+
+    let Some((link, id, table)) = connect_and_download(url) else {
+        return std::process::ExitCode::FAILURE;
+    };
+    let current = ParamFile::from_values(table.iter().map(|(name, value)| (name, value.as_f64())));
+
+    let differences = current.compare(&proposed);
+    let to_write: Vec<_> = differences
+        .iter()
+        .filter_map(|difference| match difference.kind {
+            Change::Changed { to, .. } => Some((difference.name.as_str(), to)),
+            // A parameter in the file that the vehicle does not have cannot be written: the
+            // firmware decides what exists. Reported rather than attempted, because an attempt
+            // fails silently - ArduPilot ignores a set for an unknown name.
+            Change::Added { .. } | Change::Missing { .. } => None,
+        })
+        .collect();
+
+    for difference in &differences {
+        if let Change::Added { .. } = difference.kind {
+            println!(
+                "skipping {}: the vehicle has no such parameter",
+                difference.name
+            );
+        }
+    }
+    if to_write.is_empty() {
+        println!("the vehicle already matches {path}");
+        return std::process::ExitCode::SUCCESS;
+    }
+
+    println!("writing {} parameters", to_write.len());
+    let mut failed = Vec::new();
+    for (name, value) in to_write {
+        #[allow(clippy::cast_possible_truncation)] // parameters are f32 on the wire
+        let wire = value as f32;
+        link.send(&commands::param_set(id, name, wire));
+        // One at a time, confirmed. ArduPilot accepts a burst and drops most of it; a loader that
+        // does not read back reports success for a vehicle it changed a third of.
+        if confirm_param(&link, id, name, wire) {
+            println!("  {name} = {wire}");
+        } else {
+            failed.push(name.to_owned());
+            eprintln!("  {name}: not confirmed");
+        }
+    }
+
+    if failed.is_empty() {
+        println!("done");
+        std::process::ExitCode::SUCCESS
+    } else {
+        eprintln!(
+            "{} parameters were not confirmed: {}",
+            failed.len(),
+            failed.join(", ")
+        );
+        std::process::ExitCode::FAILURE
+    }
+}
+
+/// Waits for the vehicle to report a parameter at the value just written.
+fn confirm_param(link: &Link, id: VehicleId, name: &str, value: f32) -> bool {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut asked_again = false;
+    loop {
+        if let Some(table) = link.params(id)
+            && let Some(current) = table.get(name)
+        {
+            #[allow(clippy::cast_possible_truncation)] // parameters are f32 on the wire
+            let read_back = current.as_f64() as f32;
+            if (read_back - value).abs() < 0.000_01 {
+                return true;
+            }
+        }
+        if !asked_again && Instant::now() > deadline - Duration::from_secs(3) {
+            asked_again = true;
+            link.send(&commands::request_param_by_name(id, name));
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+/// Prints the lines of a file that did not become parameters.
+///
+/// Bounded, because a file that is not a parameter file at all produces one of these per line and
+/// burying the useful output under a thousand of them helps nobody.
+fn report_rejected(path: &str, file: &ParamFile) {
+    const SHOWN: usize = 10;
+    let rejected = file.rejected();
+    if rejected.is_empty() {
+        return;
+    }
+    eprintln!("{path}: {} lines were not read", rejected.len());
+    for line in rejected.iter().take(SHOWN) {
+        eprintln!("  line {}: {} - {}", line.line, line.reason, line.text);
+    }
+    if rejected.len() > SHOWN {
+        eprintln!("  ... and {} more", rejected.len() - SHOWN);
+    }
+}
+
+/// Whether an argument names a vehicle rather than a file.
+fn is_url(argument: &str) -> bool {
+    ["serial:", "tcp:", "udp:", "udpout:", "file:", "COM"]
+        .iter()
+        .any(|scheme| argument.starts_with(scheme))
+        || argument.starts_with("/dev/")
 }
