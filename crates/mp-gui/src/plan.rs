@@ -514,14 +514,32 @@ pub fn items_panel(
         );
     }
 
+    // Scrolls, rather than clipping at a fixed height. A survey over a modest area generates
+    // dozens of waypoints and clipping made everything past the twelfth unreachable - the operator
+    // could see that item 40 existed, because the checks panel named it, and could not select it
+    // to change or delete it.
+    let count = plan_items.len();
     panel(
         "mission items",
         div()
             .flex()
             .flex_col()
-            .max_h(px(320.0))
-            .overflow_hidden()
-            .child(rows),
+            .child(
+                div()
+                    .id("plan-items")
+                    .flex()
+                    .flex_col()
+                    .max_h(px(280.0))
+                    .overflow_y_scroll()
+                    .child(rows),
+            )
+            .children((count > 8).then(|| {
+                div()
+                    .pt_1()
+                    .text_xs()
+                    .text_color(rgb(theme::DIM))
+                    .child(format!("{count} items - scroll for the rest"))
+            })),
     )
 }
 

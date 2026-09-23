@@ -421,13 +421,21 @@ pub fn health_panel(view: &TelemetryView) -> impl IntoElement {
         .state
         .as_ref()
         .map_or_else(|| "--".to_owned(), |s| s.gps.satellites_visible.to_string());
+    // MAVLink uses -1 for "this vehicle does not know", which is not the same as zero and must
+    // not be printed as "-1%". A bench board with no battery attached reports exactly that.
     let battery = view.state.as_ref().map_or_else(
         || "--".to_owned(),
         |s| {
-            format!(
-                "{:.1} V  {}%",
-                s.battery.voltage, s.battery.remaining_percent
-            )
+            let volts = if s.battery.voltage > 0.0 {
+                format!("{:.1} V", s.battery.voltage)
+            } else {
+                "-- V".to_owned()
+            };
+            if s.battery.remaining_percent < 0 {
+                volts
+            } else {
+                format!("{volts}  {}%", s.battery.remaining_percent)
+            }
         },
     );
     let battery_colour = view.state.as_ref().map_or(theme::DIM, |s| {

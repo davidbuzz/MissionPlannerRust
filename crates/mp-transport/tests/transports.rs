@@ -114,8 +114,11 @@ fn link_urls_round_trip_through_display() {
 
 #[test]
 fn bad_link_urls_explain_themselves() {
+    // A bare device path is no longer an error: it is the form a shell completes, so it parses as
+    // a serial port. What still has to fail is a bare word that names nothing recognisable -
+    // guessing at one would turn a typo into a confusing connection attempt.
     assert!(matches!(
-        "/dev/ttyACM0".parse::<LinkUrl>(),
+        "localhost".parse::<LinkUrl>(),
         Err(UrlError::MissingScheme(_))
     ));
     assert!(matches!(

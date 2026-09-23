@@ -183,12 +183,14 @@ impl MapViewport {
 
     /// Points in the track.
     #[must_use]
+    #[allow(dead_code)] // the synthetic scene is opt-in; these describe it when it is on
     pub fn track_len(&self) -> usize {
         self.track.len()
     }
 
     /// Markers drawn.
     #[must_use]
+    #[allow(dead_code)] // the synthetic scene is opt-in; these describe it when it is on
     pub fn marker_len(&self) -> usize {
         self.markers.len()
     }
@@ -487,6 +489,39 @@ impl MapViewport {
     }
 }
 
+/// Paints the checkerboard that stands in for raster tiles until the tile pipeline exists.
+///
+/// Drawn whether or not there is anything to plot on it. A map with no fix should look like a map
+/// waiting for a position, not like a panel that failed to paint.
+#[allow(clippy::cast_precision_loss)] // tile counts are single digits
+fn paint_graticule(origin: Point<Pixels>, w: f32, h: f32, window: &mut Window) {
+    let tile_w = w / TILE_COLS as f32;
+    let tile_h = h / TILE_ROWS as f32;
+    for row in 0..TILE_ROWS {
+        for col in 0..TILE_COLS {
+            let shade = if (row + col) % 2 == 0 {
+                0x20_2a_33
+            } else {
+                0x1c_25_2d
+            };
+            window.paint_quad(quad(
+                Bounds {
+                    origin: point(
+                        origin.x + px(col as f32 * tile_w),
+                        origin.y + px(row as f32 * tile_h),
+                    ),
+                    size: size(px(tile_w), px(tile_h)),
+                },
+                gpui::Corners::default(),
+                rgb(shade),
+                gpui::Edges::default(),
+                rgb(0x00_00_00),
+                gpui::BorderStyle::default(),
+            ));
+        }
+    }
+}
+
 /// Paints the live map: the vehicle's real flight path, home, and the vehicle itself.
 ///
 /// Screen mapping goes through Web Mercator, the projection tile servers use, so the same
@@ -514,6 +549,12 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
     );
     map.last_view = fitted;
     let Some((vx, vy, vw, vh)) = fitted else {
+        // Nothing to frame: no fix, no home, no mission. Draw the empty graticule rather than
+        // returning and leaving whatever was underneath. A vehicle on a bench indoors sits in
+        // this state for as long as it takes to get outside, and it should look like a map
+        // waiting for a position rather than like a panel that failed to paint.
+        paint_graticule(origin, w, h, window);
+        map.record(started.elapsed());
         return;
     };
     // Projection maths is f64 because Web Mercator near the poles needs the range; screen
@@ -529,31 +570,7 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
 
     // Graticule, standing in for raster tiles until the tile pipeline exists.
     let phase_tiles = Instant::now();
-    let tile_w = w / TILE_COLS as f32;
-    let tile_h = h / TILE_ROWS as f32;
-    for row in 0..TILE_ROWS {
-        for col in 0..TILE_COLS {
-            let shade = if (row + col) % 2 == 0 {
-                0x20_2a_33
-            } else {
-                0x1c_25_2d
-            };
-            window.paint_quad(quad(
-                Bounds {
-                    origin: point(
-                        origin.x + px(col as f32 * tile_w),
-                        origin.y + px(row as f32 * tile_h),
-                    ),
-                    size: size(px(tile_w), px(tile_h)),
-                },
-                gpui::Corners::default(),
-                rgb(shade),
-                gpui::Edges::default(),
-                rgb(0x00_00_00),
-                gpui::BorderStyle::default(),
-            ));
-        }
-    }
+    paint_graticule(origin, w, h, window);
     map.phases[0] = phase_tiles.elapsed();
 
     // The flown path. Decimated to screen resolution for the reasons measured in ADR 0001, and
@@ -887,9 +904,12 @@ pub fn map_element(map: std::rc::Rc<std::cell::RefCell<MapViewport>>) -> impl gp
         |_bounds, _window, _cx| (),
         move |bounds: Bounds<Pixels>, (), window: &mut Window, _cx: &mut App| {
             let mut map = map.borrow_mut();
-            // The synthetic 100k-point scene stays available for benchmarking the renderer;
-            // MP_MAP_DEMO=1 selects it. Everything else draws the real vehicle.
-            if std::env::var("MP_MAP_DEMO").is_ok() || !map.has_fix() {
+            // The synthetic 100k-point scene is for benchmarking the renderer and nothing else;
+            // MP_MAP_DEMO=1 selects it. It used to be what you saw whenever there was no fix,
+            // which is precisely the situation a real flight controller is in on a bench indoors:
+            // connecting to actual hardware filled the map with a hundred thousand points of
+            // meaningless green squiggle, which looks like the application is broken.
+            if std::env::var("MP_MAP_DEMO").is_ok() {
                 paint_map(&mut map, bounds, window);
             } else {
                 paint_live(&mut map, bounds, window);
