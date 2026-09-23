@@ -288,7 +288,11 @@ The full parameter system — tree/list/advanced editors driven by parameter met
   where gyro offsets live. Parameter documentation is fetched for the firmware actually flying,
   as the C# fetches it (`mp_params::pdef`: the version from the banner, the versioned or
   unversioned `apm.pdef.xml` into the C#'s directory, read before the bundled table) - on this
-  SITL that takes documented parameters from 827 of 1,408 to 1,407. **Still owed:** the fixture is
+  SITL that takes documented parameters from 827 of 1,408 to 1,407. The panel ledger exists:
+  `crates/mp-gui/src/config_coverage.rs` lists all 61 `Config*.cs` panels in the C#'s two menus'
+  order with their titles - **0 done, 7 partial, 48 missing, 2 plumbing, 4 dropped**, 569 wirings -
+  held to `InitialSetup.cs`/`SoftwareConfig.cs` by tests and rendered to
+  `docs/coverage/configuration.md` (PLAN.md §13.4 row 14). **Still owed:** the fixture is
   written from a reading of the C# source, not captured from a run of it; mono's float formatting
   diverges from .NET 4.7.2 (PLAN.md R5), so settling it needs the Windows runner §7.1 budgets.
 - **Tests:** `tests/metadata_codegen.rs` asserts the generated parameter metadata matches the source XML and compiles; `tests/panel_coverage.rs` fails if any C# `Config*.cs` panel is missing from the Rust implementation (ledger-driven); `tests/param_roundtrip.rs` writes and re-reads every parameter type against SITL including bitmask/enum/float edge values; per-panel UI snapshots; `tests/param_file_compat.rs` reads and writes `.param` files produced by the C# app byte-for-byte.

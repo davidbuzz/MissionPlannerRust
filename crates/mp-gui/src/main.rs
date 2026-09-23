@@ -7,6 +7,7 @@
 
 #![allow(clippy::print_stderr)]
 
+mod config_coverage;
 mod coverage;
 mod facts;
 mod fly;
@@ -1486,6 +1487,10 @@ impl Render for MissionPlanner {
                 "coverage.flightplanner.total",
                 planner_coverage::FLIGHTPLANNER.len(),
             );
+            // And Mission Planner's setup and configuration panels (D12), from their ledger.
+            for (key, value) in config_coverage::facts() {
+                facts::record(key, value);
+            }
             plan::record_facts(&self.plan, &self.plan_menus);
             // Where the parameter documentation comes from and how much of this vehicle it
             // covers: PLAN.md 10.5's measurement, live.
