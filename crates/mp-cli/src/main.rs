@@ -45,6 +45,17 @@ fn main() -> std::process::ExitCode {
                 std::process::ExitCode::from(2)
             }
         },
+        Some("logs") => match args.get(1) {
+            Some(url) => logs(
+                url,
+                args.get(2).and_then(|id| id.parse().ok()),
+                args.get(3).map_or(".", String::as_str),
+            ),
+            None => {
+                eprintln!("usage: mpr logs <url> [ID] [OUT_DIR]");
+                std::process::ExitCode::from(2)
+            }
+        },
         Some("param") => match (
             args.get(1).map(String::as_str),
             args.get(2),
@@ -102,7 +113,8 @@ fn usage() {
   mpr param set <url> N V     set one parameter and read it back\n  \
          mpr mission <url> [file]    download the mission, or upload one from a file\n  \
          mpr survey <url> <file>     generate a survey grid around the vehicle\n  \
-         mpr log <file>              summarise a telemetry or dataflash log\n  \
+         mpr log <file>              summarise a telemetry or dataflash log
+  mpr logs <url> [ID] [DIR]   list the vehicle's logs, or download one\n  \
          mpr ports                   list serial ports\n\n\
          url forms:\n  \
          serial:/dev/ttyACM0:115200\n  \
@@ -356,6 +368,102 @@ fn fly(url: &str, record_path: Option<&str>) -> std::process::ExitCode {
 /// Useful on its own, and the fastest way to check the download protocol against a real vehicle:
 /// a parameter set with a hole in it is a protocol bug, and the count is printed so a hole is
 /// visible rather than implied.
+/// Lists the vehicle's dataflash logs, or downloads one.
+fn logs(url: &str, wanted: Option<u16>, out_dir: &str) -> std::process::ExitCode {
+    let config = LinkConfig {
+        stream_rate_hz: 0,
+        ..LinkConfig::default()
+    };
+    let link = match Link::connect(url, config) {
+        Ok(link) => link,
+        Err(err) => {
+            eprintln!("could not open {url}: {err}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    println!("connected: {}", link.description());
+
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while link.primary_vehicle().is_none() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let Some((id, _)) = link.primary_vehicle() else {
+        eprintln!("no vehicle appeared on {url}");
+        return std::process::ExitCode::FAILURE;
+    };
+
+    link.request_log_list(id);
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while link.log_listings().is_empty() {
+        if Instant::now() > deadline {
+            eprintln!("the vehicle listed no logs");
+            return std::process::ExitCode::FAILURE;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let listings = link.log_listings();
+
+    let Some(wanted) = wanted else {
+        println!("{:>5}  {:>12}  started", "id", "bytes");
+        for listing in &listings {
+            let when = if listing.has_timestamp() {
+                // Seconds since the epoch, as the vehicle reported them. Not converted to a local
+                // calendar date here: that needs a timezone database, and the number is enough to
+                // tell one flight from another.
+                format!("utc {}", listing.time_utc)
+            } else {
+                // A flight controller with no GPS fix and no clock reports zero. Showing
+                // "1 January 1970" for every log is less useful than saying we do not know.
+                "no clock".to_owned()
+            };
+            println!("{:>5}  {:>12}  {when}", listing.id, listing.size);
+        }
+        return std::process::ExitCode::SUCCESS;
+    };
+
+    let Some(listing) = listings.iter().find(|listing| listing.id == wanted) else {
+        eprintln!("the vehicle has no log {wanted}");
+        return std::process::ExitCode::FAILURE;
+    };
+
+    println!("downloading log {} ({} bytes)", listing.id, listing.size);
+    link.download_log(id, listing.id, listing.size);
+
+    let mut last_report = Instant::now();
+    let stall_deadline = Duration::from_secs(60);
+    let mut last_progress = (Instant::now(), 0u32);
+    loop {
+        if let Some((_, bytes)) = link.finished_log() {
+            let path = std::path::Path::new(out_dir).join(format!("log_{}.bin", listing.id));
+            return match std::fs::write(&path, &bytes) {
+                Ok(()) => {
+                    println!("wrote {} ({} bytes)", path.display(), bytes.len());
+                    std::process::ExitCode::SUCCESS
+                }
+                Err(err) => {
+                    eprintln!("could not write {}: {err}", path.display());
+                    std::process::ExitCode::FAILURE
+                }
+            };
+        }
+
+        let (_, filled, size) = link.log_download_progress().unwrap_or((0, 0, 0));
+        if filled > last_progress.1 {
+            last_progress = (Instant::now(), filled);
+        } else if last_progress.0.elapsed() > stall_deadline {
+            eprintln!("the download stalled at {filled} of {size} bytes");
+            return std::process::ExitCode::FAILURE;
+        }
+        if last_report.elapsed() > Duration::from_secs(2) {
+            last_report = Instant::now();
+            println!("  {filled} of {size} bytes");
+        }
+
+        link.nudge_log_download(id);
+        std::thread::sleep(Duration::from_millis(400));
+    }
+}
+
 /// Sets one parameter and reads it back.
 ///
 /// Reading back is the point. `PARAM_SET` has no acknowledgement of its own - the vehicle answers
