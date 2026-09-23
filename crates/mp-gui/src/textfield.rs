@@ -24,22 +24,24 @@ use crate::ui::theme;
 ///
 /// Held by the screen that owns it rather than by the widget, so its value survives a re-render
 /// and can be read without asking the view for it.
+///
+/// The focus handle is deliberately *not* here. A `FocusHandle` can only be made from an `App`,
+/// and keeping it out means the whole of the key handling - which is where the bugs are - can be
+/// tested without a running application.
 #[derive(Debug)]
 pub struct TextField {
     /// What has been typed.
     value: String,
-    /// Focus, so keystrokes arrive here and not somewhere else.
-    pub focus: FocusHandle,
     /// Shown when empty, to say what the field is for.
     placeholder: &'static str,
 }
 
 impl TextField {
     /// A field with a placeholder and no content.
-    pub fn new(placeholder: &'static str, cx: &mut gpui::App) -> Self {
+    #[must_use]
+    pub const fn new(placeholder: &'static str) -> Self {
         Self {
             value: String::new(),
-            focus: cx.focus_handle(),
             placeholder,
         }
     }
@@ -128,6 +130,7 @@ pub enum KeyOutcome {
 pub fn text_field(
     id: &'static str,
     field: &TextField,
+    focus: &FocusHandle,
     focused: bool,
     width: gpui::Pixels,
     on_key: impl Fn(&KeyDownEvent, &mut gpui::Window, &mut gpui::App) + 'static,
@@ -141,7 +144,7 @@ pub fn text_field(
 
     crate::probe::measured(id, div())
         .id(id)
-        .track_focus(&field.focus)
+        .track_focus(focus)
         .key_context("TextField")
         .on_key_down(move |event, window, cx| on_key(event, window, cx))
         .flex()
@@ -152,7 +155,11 @@ pub fn text_field(
         .py_1()
         .rounded_md()
         .border_1()
-        .border_color(rgb(if focused { theme::ACCENT } else { theme::BORDER }))
+        .border_color(rgb(if focused {
+            theme::ACCENT
+        } else {
+            theme::BORDER
+        }))
         .bg(rgb(theme::ACTION))
         .text_sm()
         .text_color(rgb(if empty { theme::DIM } else { theme::TEXT }))
@@ -161,12 +168,7 @@ pub fn text_field(
         // A caret only while focused, and always at the end, because that is the only place the
         // insertion point can be. A caret that could sit anywhere would be a promise this field
         // does not keep.
-        .children(focused.then(|| {
-            div()
-                .w(px(1.0))
-                .h(px(14.0))
-                .bg(rgb(theme::ACCENT))
-        }))
+        .children(focused.then(|| div().w(px(1.0)).h(px(14.0)).bg(rgb(theme::ACCENT))))
 }
 
 #[cfg(test)]
@@ -192,13 +194,8 @@ mod tests {
         event
     }
 
-    /// A field without a focus handle, for testing the key handling alone.
     fn field() -> TextField {
-        TextField {
-            value: String::new(),
-            focus: FocusHandle::dangling(),
-            placeholder: "search",
-        }
+        TextField::new("search")
     }
 
     #[test]
@@ -230,7 +227,10 @@ mod tests {
     #[test]
     fn enter_and_escape_are_reported_rather_than_typed() {
         let mut field = field();
-        assert_eq!(field.key(&press("enter", Some("\\r"))), KeyOutcome::Submitted);
+        assert_eq!(
+            field.key(&press("enter", Some("\r"))),
+            KeyOutcome::Submitted
+        );
         assert_eq!(field.key(&press("escape", None)), KeyOutcome::Cancelled);
         assert_eq!(field.value(), "", "neither should have typed anything");
     }
@@ -255,7 +255,7 @@ mod tests {
     fn control_characters_are_not_typed() {
         // A tab or a newline in a search box is not wanted, and they arrive as key_char.
         let mut field = field();
-        assert_eq!(field.key(&press("tab", Some("\\t"))), KeyOutcome::Ignored);
+        assert_eq!(field.key(&press("tab", Some("\t"))), KeyOutcome::Ignored);
         assert_eq!(field.value(), "");
     }
 

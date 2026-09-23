@@ -1472,6 +1472,9 @@ pub fn actions_panel(
     plan_items: &[MissionItem],
     origin: &Origin,
     view: &TelemetryView,
+    name: &crate::textfield::TextField,
+    name_focus: &gpui::FocusHandle,
+    name_focused: bool,
     cx: &mut Context<MissionPlanner>,
 ) -> impl IntoElement {
     let has_vehicle = view.vehicle.is_some();
@@ -1558,6 +1561,36 @@ pub fn actions_panel(
                         has_items,
                         cx.listener(|this, _event: &(), _window, cx| {
                             this.plan.clear();
+                            cx.notify();
+                        }),
+                    )),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .w(px(36.0))
+                            .text_xs()
+                            .text_color(rgb(theme::DIM))
+                            .child("file"),
+                    )
+                    .child(crate::textfield::text_field(
+                        "plan-name",
+                        name,
+                        name_focus,
+                        name_focused,
+                        px(240.0),
+                        cx.listener(|this, event: &gpui::KeyDownEvent, _window, cx| {
+                            // Enter saves. A file name field where enter does nothing is a field
+                            // that has to be followed by finding the button.
+                            match this.plan_name.key(event) {
+                                crate::textfield::KeyOutcome::Submitted => this.save_plan(),
+                                crate::textfield::KeyOutcome::Ignored => return,
+                                _ => {}
+                            }
                             cx.notify();
                         }),
                     )),

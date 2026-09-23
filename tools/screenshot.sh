@@ -9,6 +9,10 @@
 # A target may carry a ~N suffix to wait N seconds after clicking it, for when a click starts
 # something slow and the next control does not exist until it finishes.
 #
+# TYPE sends keystrokes after the clicks, for text fields. Given as "text" or as
+# "control:target=text" pairs separated by commas is not supported - keep it simple: click the
+# field with CLICK, then TYPE the text.
+#
 # SHOT_DELAY waits that many seconds after the last interaction before capturing, for state that
 # arrives on the next telemetry message rather than immediately.
 #
@@ -114,6 +118,15 @@ fi
 
 # Drags happen after clicks: a click puts the application into the state a drag then acts on,
 # and a drag that ran first would be dragging whatever was there before.
+if [ -n "${TYPE:-}" ]; then
+    # --clearmodifiers so a held modifier from an earlier click does not turn letters into
+    # shortcuts, and a small delay so the application sees discrete key events rather than a burst
+    # the event loop coalesces.
+    echo "typing '$TYPE'"
+    xdotool type --window "$WIN_ID" --clearmodifiers --delay 60 "$TYPE"
+    sleep 0.6
+fi
+
 if [ -n "${DRAG:-}" ]; then
     # DRAG="from>to,from2>to2" - each pair separated by >, pairs separated by commas.
     IFS=',' read -ra DRAGS <<< "$DRAG"

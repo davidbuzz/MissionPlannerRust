@@ -63,6 +63,29 @@ impl Parameter {
     }
 }
 
+/// Narrows a parameter list to those matching a search.
+///
+/// Case-insensitive substring over the name, and over the display name when there is metadata for
+/// it - somebody looking for the loiter speed is as likely to type "speed" as "WPNAV". A search
+/// crosses groups, because the point of typing is to stop having to know which group a parameter
+/// is in.
+#[must_use]
+pub fn matching<'a>(parameters: &'a [Parameter], search: &str) -> Vec<&'a Parameter> {
+    let needle = search.trim().to_ascii_uppercase();
+    if needle.is_empty() {
+        return parameters.iter().collect();
+    }
+    parameters
+        .iter()
+        .filter(|parameter| {
+            parameter.name.to_ascii_uppercase().contains(&needle)
+                || parameter
+                    .meta
+                    .is_some_and(|meta| meta.display_name.to_ascii_uppercase().contains(&needle))
+        })
+        .collect()
+}
+
 /// Collects the vehicle's parameters into the form the screen uses.
 #[must_use]
 pub fn collect(view: &TelemetryView) -> Vec<Parameter> {
@@ -91,6 +114,9 @@ pub fn browser_panel(
     view: &TelemetryView,
     parameters: &[Parameter],
     selected_group: Option<&str>,
+    search: &crate::textfield::TextField,
+    search_focus: &gpui::FocusHandle,
+    focused: bool,
     cx: &mut Context<MissionPlanner>,
 ) -> impl IntoElement {
     let has_vehicle = view.vehicle.is_some();
@@ -153,6 +179,29 @@ pub fn browser_panel(
                             cx.notify();
                         }),
                     ))
+                    .child(crate::textfield::text_field(
+                        "param-search",
+                        search,
+                        search_focus,
+                        focused,
+                        px(220.0),
+                        cx.listener(|this, event: &gpui::KeyDownEvent, _window, cx| {
+                            match this.param_search.key(event) {
+                                crate::textfield::KeyOutcome::Cancelled => {
+                                    this.param_search.clear();
+                                }
+                                crate::textfield::KeyOutcome::Ignored => return,
+                                _ => {}
+                            }
+                            // A search that crosses groups makes the chosen group meaningless, so
+                            // it is dropped rather than left highlighted while showing something
+                            // else.
+                            if !this.param_search.is_empty() {
+                                this.selected_param_group = None;
+                            }
+                            cx.notify();
+                        }),
+                    ))
                     .child(
                         div()
                             .flex_1()
@@ -175,22 +224,42 @@ pub fn browser_panel(
 pub fn list_panel(
     parameters: &[Parameter],
     group: Option<&str>,
+    search: &str,
     selected: Option<&str>,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
-    let Some(group) = group else {
+    // A search crosses groups: the point of typing is to stop having to know which group a
+    // parameter is in. With nothing typed, the chosen group is the filter instead.
+    let searching = !search.trim().is_empty();
+    let shown: Vec<&Parameter> = if searching {
+        matching(parameters, search)
+    } else {
+        let Some(group) = group else {
+            return panel(
+                "values",
+                div()
+                    .text_xs()
+                    .text_color(rgb(theme::DIM))
+                    .child("choose a group above, or type to search"),
+            )
+            .into_any_element();
+        };
+        parameters.iter().filter(|p| p.group() == group).collect()
+    };
+
+    if shown.is_empty() {
         return panel(
             "values",
             div()
                 .text_xs()
                 .text_color(rgb(theme::DIM))
-                .child("choose a group above"),
+                .child(format!("nothing matches \"{}\"", search.trim())),
         )
         .into_any_element();
-    };
+    }
 
     let mut rows = div().flex().flex_col();
-    for parameter in parameters.iter().filter(|p| p.group() == group) {
+    for parameter in shown {
         let chosen = selected == Some(parameter.name.as_str());
         let name = parameter.name.clone();
         let units = parameter.meta.map_or("", |meta| meta.units);
@@ -462,6 +531,47 @@ mod tests {
             "{}",
             fractional.shown()
         );
+    }
+
+    #[test]
+    fn a_search_matches_part_of_a_name_in_any_case() {
+        let parameters = vec![
+            parameter("WPNAV_SPEED", 0.0),
+            parameter("WPNAV_SPEED_UP", 0.0),
+            parameter("BATT_CAPACITY", 0.0),
+        ];
+        let found = matching(&parameters, "wpnav");
+        assert_eq!(
+            found.len(),
+            2,
+            "{:?}",
+            found.iter().map(|p| &p.name).collect::<Vec<_>>()
+        );
+
+        // A fragment from the middle works too, which is the point of a substring search.
+        assert_eq!(matching(&parameters, "CAPAC").len(), 1);
+    }
+
+    #[test]
+    fn a_search_also_looks_at_what_the_parameter_is_called_in_words() {
+        // Somebody looking for the loiter speed is as likely to type "speed" as "WPNAV".
+        let parameters = vec![parameter("WPNAV_SPEED", 0.0)];
+        let by_display = matching(&parameters, "speed");
+        assert_eq!(by_display.len(), 1, "should match on the display name too");
+    }
+
+    #[test]
+    fn an_empty_search_matches_everything() {
+        // Otherwise clearing the box would empty the list rather than restoring it.
+        let parameters = vec![parameter("A_ONE", 0.0), parameter("B_TWO", 0.0)];
+        assert_eq!(matching(&parameters, "").len(), 2);
+        assert_eq!(matching(&parameters, "   ").len(), 2);
+    }
+
+    #[test]
+    fn a_search_that_matches_nothing_returns_nothing_rather_than_everything() {
+        let parameters = vec![parameter("WPNAV_SPEED", 0.0)];
+        assert!(matching(&parameters, "zzzz").is_empty());
     }
 
     #[test]

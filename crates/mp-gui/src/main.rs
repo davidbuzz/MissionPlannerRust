@@ -15,8 +15,8 @@ mod plan;
 mod platform;
 mod probe;
 mod setup;
-mod textfield;
 mod telemetry;
+mod textfield;
 mod ui;
 
 use std::time::Duration;
@@ -35,6 +35,9 @@ use ui::{action, theme};
 /// How often to repaint. 10 Hz is plenty for numeric readouts and keeps an idle GCS cheap; the
 /// map and HUD (D7-D9) will drive their own higher-rate rendering.
 const REFRESH: Duration = Duration::from_millis(100);
+
+/// The mission file name used when nothing has been typed.
+const DEFAULT_PLAN_FILE: &str = "mission.waypoints";
 
 /// Repaint interval when measuring the renderer: as fast as the executor will schedule, so paint
 /// cost is measured rather than the timer.
@@ -126,6 +129,14 @@ struct MissionPlanner {
     file_status: Option<String>,
     /// The waypoint being dragged on the map, if one is.
     dragging_waypoint: Option<u16>,
+    /// The mission file name to save to or load from.
+    plan_name: textfield::TextField,
+    /// Focus for that field.
+    plan_name_focus: gpui::FocusHandle,
+    /// What has been typed into the parameter search.
+    param_search: textfield::TextField,
+    /// Focus for that field.
+    param_search_focus: gpui::FocusHandle,
     /// The parameter group being browsed.
     selected_param_group: Option<String>,
     /// The parameter being looked at.
@@ -230,6 +241,14 @@ impl MissionPlanner {
             adopt_vehicle_rally: false,
             file_status: None,
             dragging_waypoint: None,
+            plan_name: {
+                let mut field = textfield::TextField::new("mission.waypoints");
+                field.set(DEFAULT_PLAN_FILE);
+                field
+            },
+            plan_name_focus: cx.focus_handle(),
+            param_search: textfield::TextField::new("search parameters"),
+            param_search_focus: cx.focus_handle(),
             selected_param_group: None,
             selected_param: None,
             motor_throttle: 5.0,
@@ -243,25 +262,48 @@ impl MissionPlanner {
         }
     }
 
-    /// Where missions are read and written.
+    /// The directory missions are read from and written to.
     ///
-    /// A file dialog needs a platform integration gpui does not give us for free, so for now the
-    /// path is fixed and reported in the UI. Silently writing somewhere the operator cannot find
-    /// would be worse than a fixed location they can.
-    fn plan_path() -> std::path::PathBuf {
-        std::env::var("MP_PLAN_FILE").map_or_else(
-            |_| {
-                std::env::current_dir()
-                    .unwrap_or_else(|_| std::path::PathBuf::from("."))
-                    .join("mission.waypoints")
-            },
+    /// A file dialog needs a platform integration gpui does not give us for free. A typed name in
+    /// a known directory is the next best thing, and better than the fixed path this had before -
+    /// which meant a second mission silently overwrote the first.
+    fn plan_directory() -> std::path::PathBuf {
+        std::env::var("MP_PLAN_DIR").map_or_else(
+            |_| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
             std::path::PathBuf::from,
         )
     }
 
+    /// Where a named mission lives.
+    ///
+    /// The name is treated as a name, not a path: anything with a separator in it is reduced to
+    /// its last component. A typed "../../etc/passwd" writing outside the mission directory would
+    /// be a surprise at best.
+    fn plan_path_named(name: &str) -> std::path::PathBuf {
+        let trimmed = name.trim();
+        let leaf = trimmed
+            .rsplit(['/', '\\'])
+            .next()
+            .filter(|part| !part.is_empty() && *part != "." && *part != "..")
+            .unwrap_or(DEFAULT_PLAN_FILE);
+        // A missing extension is added rather than refused, because the operator meant a mission
+        // file and typing the suffix is not the interesting part.
+        let leaf = if leaf.contains('.') {
+            leaf.to_owned()
+        } else {
+            format!("{leaf}.waypoints")
+        };
+        Self::plan_directory().join(leaf)
+    }
+
+    /// The path the currently typed name refers to.
+    fn plan_path(&self) -> std::path::PathBuf {
+        Self::plan_path_named(self.plan_name.value())
+    }
+
     /// Writes the plan in QGC WPL 110 format, the one every ground station reads.
     fn save_plan(&mut self) {
-        let path = Self::plan_path();
+        let path = self.plan_path();
         let text = mp_mission::write_waypoints(self.plan.items());
         self.file_status = match std::fs::write(&path, text) {
             Ok(()) => Some(format!(
@@ -275,7 +317,7 @@ impl MissionPlanner {
 
     /// Reads a plan from the same location.
     fn load_plan(&mut self) {
-        let path = Self::plan_path();
+        let path = self.plan_path();
         let text = match std::fs::read_to_string(&path) {
             Ok(text) => text,
             Err(err) => {
@@ -505,7 +547,12 @@ impl MissionPlanner {
     }
 
     /// The left column on the plan screen.
-    fn plan_sidebar(&self, view: &TelemetryView, cx: &mut Context<Self>) -> impl IntoElement {
+    fn plan_sidebar(
+        &self,
+        view: &TelemetryView,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         // Copied out of the plan before building the elements: the listeners the panels install
         // take `&mut self`, so holding a borrow of `self.plan` across them would not compile.
         let items = self.plan.items().to_vec();
@@ -543,7 +590,15 @@ impl MissionPlanner {
                     .pr_2()
                     .overflow_y_scroll()
                     .track_scroll(&self.plan_scroll)
-                    .child(plan::actions_panel(&items, &origin, view, cx))
+                    .child(plan::actions_panel(
+                        &items,
+                        &origin,
+                        view,
+                        &self.plan_name,
+                        &self.plan_name_focus,
+                        self.plan_name_focus.is_focused(window),
+                        cx,
+                    ))
                     .child(plan::draw_panel(&draw, view, cx))
                     .child(plan::items_panel(&items, selected, cx))
                     .child(plan::editor_panel(&items, selected, cx))
@@ -810,7 +865,7 @@ impl MissionPlanner {
 }
 
 impl Render for MissionPlanner {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let view = self.telemetry.view();
 
         // Feed the map from the same snapshot the panels read, so the two can never disagree
@@ -853,10 +908,7 @@ impl Render for MissionPlanner {
         if self.telemetry.log_progress().is_some() {
             if let Some((id, bytes)) = self.telemetry.finished_log() {
                 self.telemetry.clear_log_download();
-                let path = Self::plan_path()
-                    .parent()
-                    .unwrap_or(std::path::Path::new("."))
-                    .join(format!("log_{id}.bin"));
+                let path = Self::plan_directory().join(format!("log_{id}.bin"));
                 self.file_status = Some(match std::fs::write(&path, &bytes) {
                     Ok(()) => format!("wrote {} ({} bytes)", path.display(), bytes.len()),
                     Err(err) => format!("could not write {}: {err}", path.display()),
@@ -984,7 +1036,7 @@ impl Render for MissionPlanner {
                 .min_h(px(0.0))
                 .gap_2()
                 .p_2()
-                .child(self.plan_sidebar(&view, cx))
+                .child(self.plan_sidebar(&view, window, cx))
                 .child(self.map_pane(cx))
                 .into_any_element(),
             Screen::Params => {
@@ -1004,11 +1056,15 @@ impl Render for MissionPlanner {
                         &view,
                         &parameters,
                         group.as_deref(),
+                        &self.param_search,
+                        &self.param_search_focus,
+                        self.param_search_focus.is_focused(window),
                         cx,
                     ))
                     .child(params::list_panel(
                         &parameters,
                         group.as_deref(),
+                        self.param_search.value(),
                         selected.as_deref(),
                         cx,
                     ))
@@ -1361,6 +1417,59 @@ mod tests {
         assert_eq!(Screen::initial(Some("setup")), Screen::Setup);
         // A name that is not a screen opens on the one the application is for.
         assert_eq!(Screen::initial(Some("nonsense")), Screen::Fly);
+    }
+
+    #[test]
+    fn a_mission_name_is_a_name_not_a_path() {
+        // A typed "../../etc/passwd" writing outside the mission directory would be a surprise at
+        // best. The name is reduced to its last component.
+        let directory = MissionPlanner::plan_directory();
+        for typed in ["../../etc/passwd", "/etc/passwd", "a/b/c.waypoints"] {
+            let path = MissionPlanner::plan_path_named(typed);
+            assert_eq!(
+                path.parent(),
+                Some(directory.as_path()),
+                "{typed} escaped the mission directory: {}",
+                path.display()
+            );
+        }
+    }
+
+    #[test]
+    fn a_name_without_an_extension_gets_one() {
+        // The operator meant a mission file; typing the suffix is not the interesting part.
+        let path = MissionPlanner::plan_path_named("survey");
+        assert_eq!(
+            path.file_name().and_then(|n| n.to_str()),
+            Some("survey.waypoints")
+        );
+    }
+
+    #[test]
+    fn an_existing_extension_is_left_alone() {
+        let path = MissionPlanner::plan_path_named("survey.txt");
+        assert_eq!(path.file_name().and_then(|n| n.to_str()), Some("survey.txt"));
+    }
+
+    #[test]
+    fn an_empty_or_useless_name_falls_back_to_the_default() {
+        // Rather than writing to a file called "" or to the directory itself.
+        for typed in ["", "   ", ".", "..", "/"] {
+            let path = MissionPlanner::plan_path_named(typed);
+            assert_eq!(
+                path.file_name().and_then(|n| n.to_str()),
+                Some(DEFAULT_PLAN_FILE),
+                "{typed:?} should fall back"
+            );
+        }
+    }
+
+    #[test]
+    fn two_missions_do_not_overwrite_each_other() {
+        // The whole point of the change: the path used to be fixed.
+        let first = MissionPlanner::plan_path_named("survey");
+        let second = MissionPlanner::plan_path_named("delivery");
+        assert_ne!(first, second);
     }
 
     #[test]
