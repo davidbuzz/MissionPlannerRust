@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: 1b798b4e-7109-4ec9-985c-603dbc9dc7de
-  modified: 2026-09-22T15:14:46.925Z
+  modified: 2026-09-23T00:00:00.000Z
 ---
 
 Anything that puts a window on Buzz's desktop — screenshots, GPU probes, manual GUI checks — runs
@@ -24,6 +24,12 @@ where it can be seen and stopped.
 
 **One 5-second run is normally enough.** Repeated runs to refine a number are not worth the
 interruption; take the measurement once and record it.
+
+**Do not run `crates/mp-gui/tests/layout.rs` as part of routine verification.** It is `#[ignore]`d
+because it opens four windows in sequence. Buzz interrupted a run of it that was tacked onto an
+ordinary `cargo test --workspace` after a commit that had not touched layout. Plain
+`cargo test --workspace` skips it, which is the point of the ignore; run it deliberately, and only
+when panel geometry actually changed.
 
 **How to apply:** `tools/screenshot.sh` defaults to 5 s visible. Size probe runs in frames that
 come to roughly 5 s (~300 at 60 fps), not in minutes. Never leave `MP_BENCH` set for an ordinary
