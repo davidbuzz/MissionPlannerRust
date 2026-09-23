@@ -158,25 +158,26 @@ impl Telemetry {
 
     /// Where flights are recorded when nothing says otherwise.
     ///
-    /// `Documents/Mission Planner/logs`, which is where Mission Planner itself writes them, so the
-    /// two programs share one directory and a flight recorded by either is found by both. That
-    /// matters more than it sounds: the reason to open a tlog is usually to answer a question
-    /// about a flight, and a pilot who has both installed should not have to remember which one
-    /// was connected.
+    /// The directory Mission Planner itself records into and browses, `Settings.GetDefaultLogDir`:
+    /// the user data directory plus `logs`. Sharing it is the point - the two programs see one set
+    /// of flights, and a recording made by either is found by both. That matters more than it
+    /// sounds: the reason to open a tlog is usually to answer a question about a flight, and a
+    /// pilot who has both installed should not have to remember which one was connected.
+    ///
+    /// The user data directory is not where a Linux user would guess, and guessing it is how this
+    /// function once recorded into a directory the C# application never reads. The rule and how
+    /// it was measured are in `crates/mp-settings/src/lib.rs`; this only asks it.
     ///
     /// Not the working directory. A ground station launched from a desktop icon inherits whatever
     /// directory the launcher happened to be in - often `/` or the user's home - and writing
     /// flight recordings there scatters them somewhere nobody thinks to look.
+    /// `// C#: ExtLibs/Utilities/Settings.cs:146-158`
     fn log_directory() -> std::path::PathBuf {
-        let home = std::env::var_os("HOME")
-            .or_else(|| std::env::var_os("USERPROFILE"))
-            .map(std::path::PathBuf::from);
-        home.map_or_else(
+        mp_settings::default_log_directory().unwrap_or_else(|| {
             // No home directory at all is a strange environment, not a reason to lose the
             // recording; the temp directory keeps it for the length of the session.
-            || std::env::temp_dir().join("mission-planner-rust-logs"),
-            |home| home.join("Documents").join("Mission Planner").join("logs"),
-        )
+            std::env::temp_dir().join("mission-planner-rust-logs")
+        })
     }
 
     /// The name to record under in a given directory, avoiding one that is taken.
@@ -827,6 +828,28 @@ mod tests {
         assert_ne!(first, second);
 
         let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    /// Recordings go where Mission Planner looks for them, whichever rule this platform takes.
+    ///
+    /// Asserted through `mp_settings` rather than against a spelled-out path, because the right
+    /// answer differs by platform and by whether an old installation exists - what cannot differ
+    /// is that it is the C# application's own `logs` directory. The previous default,
+    /// `~/Documents/Mission Planner/logs`, ends the same way; the equality is what catches it.
+    #[test]
+    fn flights_are_recorded_where_mission_planner_looks_for_them() {
+        let directory = Telemetry::log_directory();
+        let Some(expected) = mp_settings::default_log_directory() else {
+            // No home directory: the fallback, which must still not be the working directory.
+            assert!(directory.is_absolute(), "{}", directory.display());
+            return;
+        };
+        assert_eq!(directory, expected);
+        assert!(
+            directory.ends_with("Mission Planner/logs"),
+            "{}",
+            directory.display()
+        );
     }
 
     /// Ninety-nine is the cap, and past it the answer is "no recording" rather than a hang.

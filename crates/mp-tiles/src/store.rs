@@ -173,9 +173,14 @@ impl TileStore {
     ///
     /// Still serves everything already cached, which is what "full function with the network
     /// disabled" has to mean: a survey flown from a cache filled at home works in a paddock.
+    ///
+    /// The worker thread runs, because it is the thread that reads the disk - the policy only
+    /// stops it going to the network afterwards. An earlier version started no thread here and
+    /// so served nothing from disk unless a caller pre-loaded it by hand; every test passed,
+    /// because every test pre-loaded by hand, and the map showed a graticule over a full cache.
     #[must_use]
     pub fn offline(source: &'static TileSource, cache: TileCache) -> Self {
-        Self::start(source, cache, FetchPolicy::offline(), false)
+        Self::start(source, cache, FetchPolicy::offline(), true)
     }
 
     fn start(
@@ -308,7 +313,7 @@ impl TileStore {
     ///
     /// For tests and for pre-loading; the map uses [`TileStore::get`], which never blocks.
     pub fn load_from_cache(&self, tile: TileId) -> Option<Arc<DecodedTile>> {
-        let cached = self.cache.read(self.source.id, tile)?;
+        let cached = self.cache.read(self.source.cache_name, tile)?;
         let decoded = Arc::new(DecodedTile::decode(&cached.bytes)?);
         if let Ok(mut memory) = self.shared.memory.lock() {
             memory.insert(tile, Arc::clone(&decoded));
@@ -355,7 +360,7 @@ fn run_fetcher(source: &'static TileSource, cache: &TileCache, shared: &Arc<Shar
 
         // The cache is the primary source. Checked here rather than on the render thread because
         // reading and decoding a tile is far too slow to do in a painter.
-        if let Some(cached) = cache.read(source.id, tile)
+        if let Some(cached) = cache.read(source.cache_name, tile)
             && let Some(decoded) = DecodedTile::decode(&cached.bytes)
         {
             publish(shared, tile, decoded, |stats| stats.disk_hits += 1);
@@ -377,7 +382,7 @@ fn run_fetcher(source: &'static TileSource, cache: &TileCache, shared: &Arc<Shar
         match fetcher.fetch(source, tile) {
             Ok(bytes) => {
                 // Written before decoding, so a tile survives even if this build cannot decode it.
-                let _ = cache.write(source.id, tile, &bytes);
+                let _ = cache.write(source.cache_name, tile, &bytes);
                 if let Ok(mut policy) = shared.policy.lock() {
                     policy.succeeded(tile);
                 }

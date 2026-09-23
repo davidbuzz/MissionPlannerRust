@@ -27,7 +27,8 @@ Measured on this tree: **17 crates, 40,661 hand-written Rust LOC** (plus 91,634 
 | `.param` files | save, load and compare against a vehicle, honouring the C# skip-list |
 | Missions | upload and download, `.waypoints` files, 129-file corpus |
 | Logs | `.tlog` read and write; ArduPilot `.BIN` dataflash parsing |
-| Flight recording | every connection recorded to a `.tlog`, both directions, shown on screen |
+| Flight recording | every connection recorded to a `.tlog`, both directions, into Mission Planner's own logs directory |
+| Data directory | `Settings.cs`'s rules ported, mono quirks included, so files land where the C# application looks |
 | Health | EKF variances and vibration with ArduPilot's own thresholds, clipping counts |
 | Calibration | accelerometer, compass, radio, motor test |
 | Joystick | axes to `RC_CHANNELS_OVERRIDE` with a release-on-disconnect failsafe (Linux) |
@@ -36,12 +37,13 @@ Measured on this tree: **17 crates, 40,661 hand-written Rust LOC** (plus 91,634 
 | KML export | a flown path coloured by flight mode, and a mission, for Google Earth |
 | Tuning graph | eleven telemetry fields plotted live, min/max reduced so a spike cannot hide |
 | Geodesy | typed units, Web Mercator, slippy-map tile arithmetic |
-| Maps | GPU tile rendering, three providers including Esri satellite imagery, overlays |
+| Maps | GPU tile rendering, three providers including Esri satellite imagery, overlays; the on-disk cache is Mission Planner's own, so a cache filled by either application is read by both |
 | CLI | `mpr watch \| record \| fly \| params \| param \| mission \| survey \| log \| logs \| kml \| firmware \| ports` |
 | GUI | fly, plan, setup and params screens on gpui |
 
-**Not yet**: log plotting, waypoint editing on the map, terrain-relative altitudes, satellite
-imagery, i18n, packaging. `PLAN.md` §13.2 is the queue, and says what *done* means for each.
+**Not yet**: the log browser's second Y axis and data grid, the joystick's 5 ms latency target,
+the porting ledger, i18n, packaging. `PLAN.md` §13.2 is the queue, and says what *done* means for
+each.
 
 ## Verification
 
@@ -60,6 +62,10 @@ headless under mono (`tools/csharp-reference/`), and its output is the reference
 - On a second corpus we decode **85 frames the C# parser drops**, with none missed — its reader
   loses sync after a corrupt frame. Every extra frame passes CRC with the correct per-message
   seed.
+- A map tile the real Mission Planner wrote on this machine — in its own
+  `gmapcache/TileDBv3/en/<provider>/<z>/<y>/<x>.jpg` layout — reads back byte for byte and
+  decodes (`crates/mp-tiles/tests/tilecache.rs`; the test says so and skips where no such cache
+  exists).
 
 Run it yourself: `tools/csharp-reference/regen.sh` regenerates the corpora, `cargo test` compares.
 
@@ -101,9 +107,11 @@ mpr kml flight.tlog flight.kml
 mpr-gui                          # the graphical front end
 ```
 
-The GUI records every flight to `Documents/Mission Planner/logs` without being asked — the same
-directory the C# application uses, so a flight recorded by either is found by both. `MP_NO_RECORD`
-turns it off.
+The GUI records every flight without being asked, into Mission Planner's own logs directory —
+`~/.local/share/Mission Planner/logs` on Linux, `Documents\Mission Planner\logs` on Windows, by
+the same rules `Settings.cs` uses (which are not the obvious ones: see `crates/mp-settings`) — so
+a flight recorded by either application is found by both. Map tiles go to the same place's
+`gmapcache`. `MP_NO_RECORD` turns recording off.
 
 Requires a recent stable Rust (see `rust-toolchain.toml`).
 
@@ -125,6 +133,7 @@ crates/
   mp-kml               missions and flight paths as KML
   mp-chart             time series for the tuning graph and log plots
   mp-units             typed units and geodesy
+  mp-settings          where Mission Planner keeps things on disk, ported from Settings.cs
   mp-fuzz-checks       the fuzz properties, so they compile on stable too
   mp-cli               `mpr`
   mp-gui               `mpr-gui`, built on gpui

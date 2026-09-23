@@ -1338,6 +1338,20 @@ impl Render for MissionPlanner {
                 "map.attribution",
                 self.map.borrow().attribution().unwrap_or(""),
             );
+            // What the last paint drew, and where the store got it. Together they let a test
+            // prove imagery came from the disk cache and nothing was fetched - the one claim a
+            // screenshot cannot make, since a fetched tile and a cached one look the same. The
+            // counts are the previous paint's, because painting happens after this.
+            {
+                let map = self.map.borrow();
+                let (drawn, approximate, missing) = map.tile_counts();
+                let stats = map.tile_stats().unwrap_or_default();
+                facts::record("map.tiles.drawn", drawn);
+                facts::record("map.tiles.approximate", approximate);
+                facts::record("map.tiles.missing", missing);
+                facts::record("map.tiles.disk", stats.disk_hits);
+                facts::record("map.tiles.fetched", stats.fetched);
+            }
             // Every frame in the mission, deduplicated. A test asserting on this catches a
             // waypoint created in the wrong frame, which every other field would hide.
             facts::record("mission.frames", {
@@ -1821,7 +1835,7 @@ ENVIRONMENT:
     MP_PROBE     write control positions to this file, for UI tests
     MP_FACTS     write what the application believes to this file, for UI tests to assert on
     MP_SMOKE     exit 0 once the window has painted, non-zero if it does not
-    MP_LOG_DIR   where flights are recorded (default: Documents/Mission Planner/logs)
+    MP_LOG_DIR   where flights are recorded (default: Mission Planner's own logs directory)
     MP_NO_RECORD do not record this flight
     MP_NO_TILES  do not fetch map imagery
 ";

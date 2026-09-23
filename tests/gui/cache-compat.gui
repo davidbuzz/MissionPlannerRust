@@ -1,0 +1,21 @@
+# Tiles written by the C# application are read with the network off.
+#
+# The cache is laid out by the seed script exactly as ExtLibs/Maps/MyImageCache.cs writes it:
+# gmapcache/TileDBv3/en/OpenStreetMap/<z>/<y>/<x>.jpg, PNG bytes under a .jpg name. Nothing is
+# fetched - `tiles offline` - so every tile on screen came from that directory or from nowhere.
+# Needs a vehicle on the link (SITL at tcp:127.0.0.1:5760): the map frames the vehicle, and with
+# nothing to frame it draws a graticule and asks for no tiles at all.
+
+tiles offline
+env MP_TILE_CACHE $WORK/gmapcache
+env MP_TILE_SOURCE osm
+setup tests/gui/seed-csharp-cache.py $WORK/gmapcache
+
+screen plan
+window 1600x1200
+settle 6
+
+expect map.source osm
+expect map.tiles.fetched 0
+expect map.tiles.disk > 0
+expect map.tiles.drawn > 0

@@ -3352,6 +3352,7 @@ dependencies = [
  "mp-log",
  "mp-mavlink-dialects",
  "mp-mission",
+ "mp-settings",
  "mp-tiles",
  "mp-units",
  "mp-vehicle",
@@ -3400,6 +3401,7 @@ name = "mp-mavlink"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "mp-mavlink-dialects",
  "proptest",
  "sha2",
  "thiserror 2.0.20",
@@ -3428,10 +3430,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mp-settings"
+version = "0.1.0"
+
+[[package]]
 name = "mp-tiles"
 version = "0.1.0"
 dependencies = [
  "image",
+ "mp-settings",
  "mp-units",
  "thiserror 2.0.20",
  "ureq",

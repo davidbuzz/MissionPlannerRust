@@ -9,8 +9,17 @@ use mp_units::TileId;
 /// a map ends up with one provider that ignores the cache or blocks the render thread.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TileSource {
-    /// Short identifier, used as the cache directory name. Stable: changing it orphans the cache.
+    /// Short identifier, used in settings and `MP_TILE_SOURCE`. Stable: changing it forgets the
+    /// operator's choice.
     pub id: &'static str,
+    /// The directory this provider's tiles are cached under, which is the C# provider's `Name`.
+    ///
+    /// Not `id`. The cache is shared with the C# application, and it files tiles under
+    /// `GMapProviders.TryGetProvider(type).Name` - so this must be that string exactly, or the two
+    /// applications keep two caches of the same imagery side by side and neither finds the
+    /// other's. Stable for the same reason `id` is, and more so: changing it orphans gigabytes.
+    /// `// C#: ExtLibs/Maps/MyImageCache.cs:72`
+    pub cache_name: &'static str,
     /// What to call it on screen.
     pub label: &'static str,
     /// URL with `{z}`, `{x}`, `{y}` and optionally `{s}` for a subdomain.
@@ -69,6 +78,9 @@ impl TileSource {
 /// use the policy contemplates.
 pub const OPENSTREETMAP: TileSource = TileSource {
     id: "osm",
+    // `readonly string name = "OpenStreetMap"` - the directory the C# has been filing these under.
+    // C#: ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/OpenStreetMap/OpenStreetMapProvider.cs:508
+    cache_name: "OpenStreetMap",
     label: "OpenStreetMap",
     url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
     // OSM retired its a/b/c subdomains; using them now is a redirect at best.
@@ -78,8 +90,14 @@ pub const OPENSTREETMAP: TileSource = TileSource {
 };
 
 /// OpenTopoMap: contour lines and hillshading, which is what a pilot wants over terrain.
+///
+/// **Not a Mission Planner provider.** Nothing in the C# fetches from opentopomap.org, so there is
+/// no C# name to file its tiles under and no existing cache to share; the directory name is ours.
+/// Whether it stays is a question for the owner under the not-in-the-C# rule, not one to settle
+/// while porting the cache.
 pub const OPENTOPOMAP: TileSource = TileSource {
     id: "opentopo",
+    cache_name: "OpenTopoMap",
     label: "OpenTopoMap",
     url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
     subdomains: &["a", "b", "c"],
@@ -104,8 +122,14 @@ pub const OPENTOPOMAP: TileSource = TileSource {
 /// `ESRI_Imagery_World_2D`, which Esri retired - it answers 301 today. `World_Imagery` is the
 /// current service and returns tiles. PLAN.md §9.1 predicted this ("audit the dead endpoints");
 /// this is one of them, found by asking the server rather than by reading the C#.
+///
+/// **The satellite provider Mission Planner actually defaults to is `GoogleSatelliteMap`**
+/// (`GCSViews/FlightPlanner.cs:8429`), and a real installation's cache holds that directory, not
+/// this one. Its tiles come from Google's `khms` hosts with a scraped version number, which is
+/// the owner's call to port or not; until then this directory name is ours and shares nothing.
 pub const ESRI_WORLD_IMAGERY: TileSource = TileSource {
     id: "esri-imagery",
+    cache_name: "EsriWorldImagery",
     label: "Satellite (Esri)",
     url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     subdomains: &[],
@@ -174,14 +198,40 @@ mod tests {
         assert!(ESRI_WORLD_IMAGERY.attribution.contains("Esri"));
     }
 
-    /// Identifiers are the cache directory names, so a collision mixes two providers' tiles.
+    /// Cache names are directories in a tree shared with the C# application, so a collision
+    /// mixes two providers' tiles - and one that differs from the C# name by a character keeps
+    /// a second copy of everything.
     #[test]
-    fn provider_identifiers_are_unique() {
-        let mut ids: Vec<&str> = SOURCES.iter().map(|source| source.id).collect();
-        let count = ids.len();
-        ids.sort_unstable();
-        ids.dedup();
-        assert_eq!(ids.len(), count, "two providers share a cache directory");
+    fn cache_names_are_unique() {
+        let mut names: Vec<&str> = SOURCES.iter().map(|source| source.cache_name).collect();
+        let count = names.len();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), count, "two providers share a cache directory");
+    }
+
+    /// The one provider Mission Planner also ships must file its tiles where Mission Planner does.
+    #[test]
+    fn openstreetmap_is_cached_under_the_csharp_providers_name() {
+        // C#: ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/OpenStreetMap/OpenStreetMapProvider.cs:508
+        assert_eq!(OPENSTREETMAP.cache_name, "OpenStreetMap");
+    }
+
+    /// A cache name is a path component, so it must not contain anything a path would interpret.
+    #[test]
+    fn cache_names_are_plain_directory_names() {
+        for source in SOURCES {
+            assert!(!source.cache_name.is_empty(), "{}", source.id);
+            assert!(
+                source
+                    .cache_name
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_'),
+                "{} has a cache name a path would mangle: {}",
+                source.id,
+                source.cache_name
+            );
+        }
     }
 
     /// There is a satellite option at all, which is the point of the item.

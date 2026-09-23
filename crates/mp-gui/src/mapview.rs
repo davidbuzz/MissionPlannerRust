@@ -618,6 +618,15 @@ impl MapViewport {
         (self.tiles_drawn, self.tiles_approximate, self.tiles_missing)
     }
 
+    /// Where the tiles asked for so far came from, or `None` with no imagery configured.
+    ///
+    /// Cumulative over the store's life, where [`Self::tile_counts`] is the last paint only: the
+    /// two answer different questions, "what is on screen" and "how did it get there".
+    #[must_use]
+    pub fn tile_stats(&self) -> Option<mp_tiles::StoreStats> {
+        self.tiles.as_ref().map(|store| store.stats())
+    }
+
     /// What must be shown on screen about where the imagery came from.
     #[must_use]
     pub fn attribution(&self) -> Option<&'static str> {

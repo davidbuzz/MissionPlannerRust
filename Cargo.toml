@@ -15,6 +15,7 @@ authors = ["Mission Planner Rust contributors"]
 
 [workspace.dependencies]
 mp-units = { path = "crates/mp-units" }
+mp-settings = { path = "crates/mp-settings" }
 mp-vehicle = { path = "crates/mp-vehicle" }
 mp-link = { path = "crates/mp-link" }
 mp-mission = { path = "crates/mp-mission" }

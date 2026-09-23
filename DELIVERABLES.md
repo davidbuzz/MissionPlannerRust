@@ -162,6 +162,13 @@ markers, tracks, polygons, geofences, survey grids, and full editing interaction
   the C# app; projection round-trips verified against ProjNet/GDAL to **< 1 mm**.
 - **Replaces:** `ExtLibs/GMap.NET.*` (33,899), `ExtLibs/Maps` (7,992), `ExtLibs/ProjNet` (10,212),
   `ExtLibs/GeoUtility` (8,006), `ExtLibs/GDAL`, `ExtLibs/GeoidHeightsDotNet`.
+- **Today:** GPU tile rendering with three providers, and the on-disk cache in Mission Planner's
+  own layout — `gmapcache/TileDBv3/en/<Name>/<z>/<y>/<x>.jpg`, ported from
+  `ExtLibs/Maps/MyImageCache.cs` and proved against a tile the C# application wrote
+  (`crates/mp-tiles/tests/tilecache.rs`); offline mode serves the cache. **Not yet:** the `redb`
+  index; provider parity — two of the three providers (OpenTopoMap, Esri World Imagery) are not
+  Mission Planner's, and its default satellite provider `GoogleSatelliteMap` is not ported, which
+  is the owner's call; projections; editing beyond click-to-add and drag.
 - **Tests:** `tests/projection.rs` round-trips a fixture grid of coordinates against ProjNet/GDAL reference values asserting <1 mm error; `tests/tilecache.rs` cache hit/miss/evict/corrupt-entry recovery and compatibility with the existing Mission Planner cache layout; `tests/overlays.rs` golden-image renders of tracks, polygons, fences and marker clusters; `tests/editing.rs` drag/snap/rubber-band interaction via the test executor; `tests/offline.rs` asserts full function with the network disabled; `benches/pan_zoom.rs` gates 120 fps with a 1 M-point track + 10 k markers.
 
 ### D9. HUD / primary flight display
@@ -233,7 +240,8 @@ Dataflash (`.bin`/`.log`) and tlog parsing, log download, graphing, LogAnalyzer 
   `ExtLibs/MetaDataExtractorCSharp240d` (17,800), `ExtLibs/ICSharpCode.SharpZipLib` + `zlib.net` + `7zip`.
 - **Today:** `.tlog` read and write, dataflash `.BIN` parsing, log download from a vehicle,
   automatic recording of every flight — both directions of the link, named in local time as Mission
-  Planner names them, into the same `Documents/Mission Planner/logs` directory it uses — and KML
+  Planner names them, into the logs directory `Settings.GetDefaultLogDir` names (ported in
+  `mp-settings`; not `Documents/` on Linux, as an earlier version of this line said) — and KML
   export of a flown path, coloured by flight mode. `mp-chart` holds the min/max reduction the plot
   target needs and drives the live tuning graph; plotting a field from a `.BIN` is next (§13.2).
 - **Tests:** `tests/parser_diff.rs` parses a corpus of real dataflash and tlog files and diffs every decoded field against the C# parser's output; `fuzz/fuzz_targets/dataflash.rs` and `tlog.rs` asserting no panic and no unbounded allocation on corrupt logs (truncated, bit-flipped, wrong-endian, fabricated FMT messages); `tests/fft.rs` compares against `Exocortex.DSP` golden spectra; `tests/exports.rs` `.mat`/CSV/KML round-trips; `benches/parse_1gb.rs` gates <2 s to first plot and `benches/scrub_10m.rs` gates 120 fps scrubbing.
@@ -290,6 +298,10 @@ and strict backward compatibility with the C# app's user data.
   `.waypoints`, `.param`, `.tlog`, mission/fence/rally files and map cache without conversion; a user can
   run both apps against the same data directory.
 - **Replaces:** `L10N.cs`, `ExtLibs/Strings`, the per-culture `.resx` sprawl, `crowdin.bat`, settings code.
+- **Today:** `mp-settings` ports the data-directory rules from `ExtLibs/Utilities/Settings.cs`,
+  including the mono quirk that puts a Linux installation under `~/.local/share/Mission Planner`
+  rather than `~/Documents`; flight recordings and the map cache use them, so both applications
+  find each other's files. `config.xml` is not read; our own settings live in their own file.
 - **Tests:** `tests/resx_conversion.rs` asserts zero string loss for every culture present in the C# repo and fails on any English key without a Rust counterpart; `tests/placeholders.rs` asserts argument arity and type agreement between every translation and its English source; `tests/pseudolocale.rs` renders screens in a pseudo-locale to catch truncation and hard-coded strings; `tests/data_compat.rs` reads real `config.xml`, `.waypoints`, `.param`, `.tlog` and map-cache fixtures produced by the C# app, writes them back, and asserts byte equality — the both-apps-same-data-directory guarantee.
 
 ---

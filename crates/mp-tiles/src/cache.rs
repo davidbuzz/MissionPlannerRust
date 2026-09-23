@@ -1,12 +1,40 @@
-//! The on-disk tile cache.
+//! The on-disk tile cache, in Mission Planner's own layout.
 //!
 //! Tiles are the one thing a ground station downloads that it will want again tomorrow, in a field
 //! with no signal. The cache is therefore the primary source and the network is what fills it, not
 //! the other way round.
+//!
+//! The layout is the C# application's, byte for byte, because operators carry multi-gigabyte
+//! caches into the field and a cache that had to be migrated is one that would not be:
+//!
+//! ```text
+//! <data directory>/gmapcache/TileDBv3/<language>/<provider>/<zoom>/<y>/<x>.jpg
+//! ```
+//!
+//! `// C#: ExtLibs/Maps/MyImageCache.cs:27-42` (the root) and `:72-74` (the file).
+//!
+//! Three things about it are not what the file name suggests, and each is deliberate here because
+//! each is what makes a tile written by one application readable by the other. The extension is
+//! always `.jpg` whatever the bytes are: OpenStreetMap serves PNG and the C# writes it under
+//! `.jpg` regardless, then sniffs the format on the way back - `GetImageFromCache` hands the bytes
+//! to the image decoder and never looks at the name. The path is `zoom/y/x`, row before column,
+//! where every slippy-map tool writes `z/x/y`. And the provider directory is the C# provider's
+//! `Name` - `OpenStreetMap`, `GoogleSatelliteMap` - not any identifier of ours.
 
 use std::path::{Path, PathBuf};
 
 use mp_units::TileId;
+
+/// `GMapProvider.LanguageStr`, the directory between `TileDBv3` and the provider.
+///
+/// A constant rather than a setting: it starts as `"en"` and nothing in Mission Planner ever
+/// assigns `GMapProvider.Language`, so every cache the C# has written is under `en`.
+/// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/GMapProvider.cs:350-357`
+pub const LANGUAGE: &str = "en";
+
+/// The directory under the cache root that holds the tile tree.
+/// `// C#: ExtLibs/Maps/MyImageCache.cs:40`
+pub const TILE_DB: &str = "TileDBv3";
 
 /// Why a cache operation failed.
 #[derive(Debug, thiserror::Error)]
@@ -29,8 +57,9 @@ pub enum CacheError {
 
 /// The image formats a tile may be in.
 ///
-/// Checked on the way in and on the way out. A tile server having a bad day answers with an HTML
-/// error page and HTTP 200, and a cache that stores it will serve that page as a tile forever.
+/// Checked on the way in and on the way out, from the bytes and never from the file name - the
+/// name is always `.jpg`. A tile server having a bad day answers with an HTML error page and HTTP
+/// 200, and a cache that stores it will serve that page as a tile forever.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImageFormat {
     /// PNG, what most raster providers serve.
@@ -54,7 +83,10 @@ impl ImageFormat {
         None
     }
 
-    /// The extension used on disk.
+    /// The extension this format is conventionally given.
+    ///
+    /// Not the one used on disk: every cached tile is `.jpg`, see the module documentation. This
+    /// is for anything that exports a tile under its own name.
     #[must_use]
     pub const fn extension(self) -> &'static str {
         match self {
@@ -64,6 +96,10 @@ impl ImageFormat {
     }
 }
 
+/// The extension every cached tile has, whatever its bytes are.
+/// `// C#: ExtLibs/Maps/MyImageCache.cs:74`
+const CACHED_EXTENSION: &str = "jpg";
+
 /// The smallest a real tile can be.
 ///
 /// A 256x256 PNG of one flat colour is a few hundred bytes; anything under this is a truncated
@@ -71,90 +107,103 @@ impl ImageFormat {
 const MINIMUM_TILE_BYTES: usize = 64;
 
 /// A directory of cached tiles.
+///
+/// Rooted at the `gmapcache` directory - what the C# calls `CacheLocation` before it appends the
+/// tile database and language to it.
 #[derive(Debug, Clone)]
 pub struct TileCache {
     root: PathBuf,
 }
 
 impl TileCache {
-    /// A cache rooted at a directory. The directory is created when something is first written.
+    /// A cache rooted at a `gmapcache` directory. Created when something is first written.
     #[must_use]
     pub fn new(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into() }
     }
 
-    /// The default location, following each platform's convention.
+    /// Where the C# application keeps its cache on this machine, which is where ours goes too.
     ///
-    /// Tiles are regenerable downloads, so on Linux they belong in the cache directory rather than
-    /// alongside configuration - a user who clears their cache should lose tiles and keep their
-    /// parameter files.
+    /// `%ProgramData%\Mission Planner\gmapcache` on Windows and, under mono,
+    /// `~/.local/share/Mission Planner/gmapcache` (or `~/Mission Planner/gmapcache` on an
+    /// installation old enough to predate that). `MP_TILE_CACHE` overrides it, for tests and for
+    /// a screenshot that must not depend on what is cached here.
     #[must_use]
     pub fn default_root() -> PathBuf {
         if let Some(explicit) = std::env::var_os("MP_TILE_CACHE") {
             return PathBuf::from(explicit);
         }
-        let base = std::env::var_os("XDG_CACHE_HOME")
-            .map(PathBuf::from)
-            .or_else(|| std::env::var_os("LOCALAPPDATA").map(PathBuf::from))
-            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))
-            .unwrap_or_else(std::env::temp_dir);
-        base.join("mission-planner-rust").join("tiles")
+        mp_settings::map_cache_directory()
+            // No home directory at all is a strange environment, not a reason to have no cache;
+            // the temp directory keeps tiles for the length of the session.
+            .unwrap_or_else(|| {
+                std::env::temp_dir()
+                    .join("mission-planner-rust")
+                    .join("gmapcache")
+            })
     }
 
-    /// Where this cache lives.
+    /// The `gmapcache` directory this cache lives in.
     #[must_use]
     pub fn root(&self) -> &Path {
         &self.root
     }
 
-    /// The directory holding one provider's tiles at one zoom and column.
-    fn directory_for(&self, source_id: &str, tile: TileId) -> PathBuf {
-        // provider/z/x/y.ext, the layout every slippy-map tool uses, so the cache can be
-        // inspected, copied to a field laptop, or seeded from another tool with cp -r.
-        self.root
-            .join(source_id)
+    /// The directory the tile tree starts at: `<root>/TileDBv3/en`.
+    /// `// C#: ExtLibs/Maps/MyImageCache.cs:40-42`
+    #[must_use]
+    pub fn tile_root(&self) -> PathBuf {
+        self.root.join(TILE_DB).join(LANGUAGE)
+    }
+
+    /// The file one tile is stored in: `<root>/TileDBv3/en/<provider>/<z>/<y>/<x>.jpg`.
+    ///
+    /// `provider` is the C# provider's `Name`, which is [`crate::TileSource::cache_name`]. Public
+    /// because a test that wants to prove compatibility lays the file out by hand and then checks
+    /// this agrees, rather than trusting one function to be consistent with itself.
+    /// `// C#: ExtLibs/Maps/MyImageCache.cs:72-74`
+    #[must_use]
+    pub fn path_for(&self, provider: &str, tile: TileId) -> PathBuf {
+        self.tile_root()
+            .join(provider)
             .join(tile.z.to_string())
-            .join(tile.x.to_string())
+            .join(tile.y.to_string())
+            .join(format!("{}.{CACHED_EXTENSION}", tile.x))
     }
 
     /// Reads a tile, or `None` if it is not cached or is not usable.
     ///
     /// A corrupt entry is deleted rather than returned. Recovering silently is right here: the
     /// tile will simply be fetched again, and an operator has no use for being told that one of
-    /// several thousand cached images had a bad byte.
+    /// several thousand cached images had a bad byte. The C# returns null and leaves the file,
+    /// so it fails to decode the same tile on every visit for the rest of time; that is the one
+    /// place this diverges from it.
+    /// `// C#: ExtLibs/Maps/MyImageCache.cs:94-130`
     #[must_use]
-    pub fn read(&self, source_id: &str, tile: TileId) -> Option<CachedTile> {
-        let directory = self.directory_for(source_id, tile);
-        for format in [ImageFormat::Png, ImageFormat::Jpeg] {
-            let path = directory.join(format!("{}.{}", tile.y, format.extension()));
-            let Ok(bytes) = std::fs::read(&path) else {
-                continue;
-            };
-            match ImageFormat::sniff(&bytes) {
-                Some(actual) if bytes.len() >= MINIMUM_TILE_BYTES => {
-                    return Some(CachedTile {
-                        bytes,
-                        format: actual,
-                    });
-                }
-                _ => {
-                    // Truncated, empty, or an error page saved as a tile. Remove it so the next
-                    // request fetches rather than finding the same rubbish again.
-                    let _ = std::fs::remove_file(&path);
-                }
+    pub fn read(&self, provider: &str, tile: TileId) -> Option<CachedTile> {
+        let path = self.path_for(provider, tile);
+        let bytes = std::fs::read(&path).ok()?;
+        match ImageFormat::sniff(&bytes) {
+            Some(format) if bytes.len() >= MINIMUM_TILE_BYTES => Some(CachedTile { bytes, format }),
+            _ => {
+                // Truncated, empty, or an error page saved as a tile. Remove it so the next
+                // request fetches rather than finding the same rubbish again.
+                let _ = std::fs::remove_file(&path);
+                None
             }
         }
-        None
     }
 
     /// Stores a tile.
     ///
     /// Written to a temporary file and renamed, so a process killed mid-write leaves either the
     /// old tile or the new one, never half of one. A half-written tile is exactly the corrupt
-    /// entry `read` then has to clean up.
+    /// entry `read` then has to clean up. The temporary name ends in `.part`, which neither this
+    /// crate nor the C# ever looks for, so a leftover one is invisible rather than served.
+    /// `// C#: ExtLibs/Maps/MyImageCache.cs:65-92`
     pub fn write(
         &self,
-        source_id: &str,
+        provider: &str,
         tile: TileId,
         bytes: &[u8],
     ) -> Result<ImageFormat, CacheError> {
@@ -165,14 +214,16 @@ impl TileCache {
             return Err(CacheError::NotAnImage { bytes: bytes.len() });
         }
 
-        let directory = self.directory_for(source_id, tile);
+        let final_path = self.path_for(provider, tile);
+        let directory = final_path
+            .parent()
+            .map_or_else(|| self.tile_root(), Path::to_path_buf);
         std::fs::create_dir_all(&directory).map_err(|source| CacheError::Io {
             path: directory.clone(),
             source,
         })?;
 
-        let final_path = directory.join(format!("{}.{}", tile.y, format.extension()));
-        let temporary = directory.join(format!("{}.{}.part", tile.y, format.extension()));
+        let temporary = directory.join(format!("{}.{CACHED_EXTENSION}.part", tile.x));
         std::fs::write(&temporary, bytes).map_err(|source| CacheError::Io {
             path: temporary.clone(),
             source,
@@ -188,23 +239,20 @@ impl TileCache {
     }
 
     /// Whether a tile is cached, without reading it.
+    /// `// C#: ExtLibs/Maps/MyImageCache.cs:186-215`
     #[must_use]
-    pub fn contains(&self, source_id: &str, tile: TileId) -> bool {
-        let directory = self.directory_for(source_id, tile);
-        [ImageFormat::Png, ImageFormat::Jpeg].iter().any(|format| {
-            directory
-                .join(format!("{}.{}", tile.y, format.extension()))
-                .exists()
-        })
+    pub fn contains(&self, provider: &str, tile: TileId) -> bool {
+        self.path_for(provider, tile).is_file()
     }
 
-    /// Total bytes held, and how many tiles that is.
+    /// Total bytes held, and how many tiles that is, across every provider - including ones the
+    /// C# application cached and this one has no source for.
     ///
     /// Walks the tree, so it is for a settings screen rather than for every frame.
     #[must_use]
     pub fn usage(&self) -> CacheUsage {
         let mut usage = CacheUsage::default();
-        walk(&self.root, &mut |entry| {
+        walk(&self.tile_root(), &mut |entry| {
             if let Ok(metadata) = entry.metadata() {
                 usage.tiles += 1;
                 usage.bytes += metadata.len();
@@ -214,8 +262,8 @@ impl TileCache {
     }
 
     /// Deletes every cached tile for one provider.
-    pub fn clear(&self, source_id: &str) -> Result<(), CacheError> {
-        let directory = self.root.join(source_id);
+    pub fn clear(&self, provider: &str) -> Result<(), CacheError> {
+        let directory = self.tile_root().join(provider);
         match std::fs::remove_dir_all(&directory) {
             Ok(()) => Ok(()),
             // Nothing cached is not a failure to clear it.
@@ -233,7 +281,7 @@ impl TileCache {
 pub struct CachedTile {
     /// The encoded image.
     pub bytes: Vec<u8>,
-    /// What it is encoded as.
+    /// What it is encoded as - from the bytes, since the name always says JPEG.
     pub format: ImageFormat,
 }
 
@@ -264,6 +312,9 @@ fn walk(directory: &Path, visit: &mut impl FnMut(&std::fs::DirEntry)) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The C# provider name for OpenStreetMap, as the tests file tiles under it.
+    const OSM: &str = "OpenStreetMap";
 
     /// A temporary directory that removes itself, so tests leave nothing behind.
     struct Scratch(PathBuf);
@@ -303,25 +354,66 @@ mod tests {
     }
 
     #[test]
+    fn the_layout_is_mission_planners_zoom_then_row_then_column_under_jpg() {
+        // `CacheLocation + sep + Name + sep + zoom + sep + pos.Y + sep + pos.X + ".jpg"`, with
+        // CacheLocation already `gmapcache/TileDBv3/en/`.
+        // C#: ExtLibs/Maps/MyImageCache.cs:72-74
+        let cache = TileCache::new("/tmp/gmapcache");
+        assert_eq!(
+            cache.path_for(OSM, tile()),
+            PathBuf::from("/tmp/gmapcache/TileDBv3/en/OpenStreetMap/14/9814/15089.jpg")
+        );
+    }
+
+    #[test]
+    fn a_png_is_filed_under_jpg_because_that_is_what_the_csharp_reads() {
+        // OpenStreetMap serves PNG. The C# writes every tile as `<x>.jpg` and sniffs the bytes on
+        // the way back, so a PNG written under `.png` would be invisible to it.
+        let scratch = Scratch::new("png-as-jpg");
+        let cache = TileCache::new(&scratch.0);
+        let format = cache.write(OSM, tile(), &png(512)).expect("should write");
+        assert_eq!(
+            format,
+            ImageFormat::Png,
+            "the format is reported from the bytes"
+        );
+
+        let on_disk = scratch
+            .0
+            .join("TileDBv3/en/OpenStreetMap/14/9814/15089.jpg");
+        assert!(on_disk.is_file(), "{}", on_disk.display());
+        assert!(
+            !scratch
+                .0
+                .join("TileDBv3/en/OpenStreetMap/14/9814/15089.png")
+                .exists()
+        );
+
+        let read = cache.read(OSM, tile()).expect("should read back");
+        assert_eq!(read.format, ImageFormat::Png);
+        assert_eq!(read.bytes, png(512));
+    }
+
+    #[test]
     fn a_written_tile_reads_back_byte_for_byte() {
         let scratch = Scratch::new("round-trip");
         let cache = TileCache::new(&scratch.0);
-        let bytes = png(512);
-
-        let format = cache.write("osm", tile(), &bytes).expect("should write");
-        assert_eq!(format, ImageFormat::Png);
-
-        let read = cache.read("osm", tile()).expect("should read back");
+        let bytes = jpeg(512);
+        assert_eq!(
+            cache.write(OSM, tile(), &bytes).expect("write"),
+            ImageFormat::Jpeg
+        );
+        let read = cache.read(OSM, tile()).expect("should read back");
         assert_eq!(read.bytes, bytes);
-        assert_eq!(read.format, ImageFormat::Png);
+        assert_eq!(read.format, ImageFormat::Jpeg);
     }
 
     #[test]
     fn a_tile_that_was_never_written_is_a_miss() {
         let scratch = Scratch::new("miss");
         let cache = TileCache::new(&scratch.0);
-        assert!(cache.read("osm", tile()).is_none());
-        assert!(!cache.contains("osm", tile()));
+        assert!(cache.read(OSM, tile()).is_none());
+        assert!(!cache.contains(OSM, tile()));
     }
 
     #[test]
@@ -330,9 +422,9 @@ mod tests {
         // view and be nearly impossible to diagnose.
         let scratch = Scratch::new("providers");
         let cache = TileCache::new(&scratch.0);
-        cache.write("osm", tile(), &png(512)).expect("write osm");
-        assert!(cache.contains("osm", tile()));
-        assert!(!cache.contains("opentopo", tile()));
+        cache.write(OSM, tile(), &png(512)).expect("write osm");
+        assert!(cache.contains(OSM, tile()));
+        assert!(!cache.contains("GoogleSatelliteMap", tile()));
     }
 
     #[test]
@@ -342,10 +434,9 @@ mod tests {
         let scratch = Scratch::new("error-page");
         let cache = TileCache::new(&scratch.0);
         let html = b"<!DOCTYPE html><html><body>503 Service Unavailable</body></html>";
-
-        let refused = cache.write("osm", tile(), html);
+        let refused = cache.write(OSM, tile(), html);
         assert!(matches!(refused, Err(CacheError::NotAnImage { .. })));
-        assert!(!cache.contains("osm", tile()));
+        assert!(!cache.contains(OSM, tile()));
     }
 
     #[test]
@@ -353,28 +444,25 @@ mod tests {
         let scratch = Scratch::new("truncated");
         let cache = TileCache::new(&scratch.0);
         // Correct magic bytes, far too short to be an image.
-        let stub = png(8);
         assert!(matches!(
-            cache.write("osm", tile(), &stub),
+            cache.write(OSM, tile(), &png(8)),
             Err(CacheError::NotAnImage { .. })
         ));
     }
 
     #[test]
     fn a_corrupt_entry_is_removed_and_reported_as_a_miss() {
-        // Recovery rather than an error: the tile is simply fetched again, and an operator has no
-        // use for being told one of several thousand cached images had a bad byte.
+        // Recovery rather than an error: the tile is simply fetched again. The C# would return
+        // null and leave the file, and fail on it again next time.
         let scratch = Scratch::new("corrupt");
         let cache = TileCache::new(&scratch.0);
-        cache.write("osm", tile(), &png(512)).expect("write");
+        cache.write(OSM, tile(), &png(512)).expect("write");
 
         // Corrupt it behind the cache's back, as a half-finished write or a bad disk would.
-        let path = cache
-            .directory_for("osm", tile())
-            .join(format!("{}.png", tile().y));
+        let path = cache.path_for(OSM, tile());
         std::fs::write(&path, b"nonsense").expect("overwrite");
 
-        assert!(cache.read("osm", tile()).is_none());
+        assert!(cache.read(OSM, tile()).is_none());
         assert!(!path.exists(), "the corrupt entry should have been removed");
     }
 
@@ -382,54 +470,38 @@ mod tests {
     fn an_empty_file_is_treated_as_corrupt() {
         let scratch = Scratch::new("empty");
         let cache = TileCache::new(&scratch.0);
-        let directory = cache.directory_for("osm", tile());
-        std::fs::create_dir_all(&directory).expect("mkdir");
-        let path = directory.join(format!("{}.png", tile().y));
+        let path = cache.path_for(OSM, tile());
+        std::fs::create_dir_all(path.parent().expect("a parent")).expect("mkdir");
         std::fs::write(&path, b"").expect("write empty");
 
-        assert!(cache.read("osm", tile()).is_none());
+        assert!(cache.read(OSM, tile()).is_none());
         assert!(!path.exists());
     }
 
     #[test]
-    fn jpeg_tiles_work_too() {
-        let scratch = Scratch::new("jpeg");
-        let cache = TileCache::new(&scratch.0);
-        let bytes = jpeg(512);
-        assert_eq!(
-            cache.write("aerial", tile(), &bytes).expect("write"),
-            ImageFormat::Jpeg
-        );
-        let read = cache.read("aerial", tile()).expect("read");
-        assert_eq!(read.format, ImageFormat::Jpeg);
-        assert_eq!(read.bytes, bytes);
-    }
-
-    #[test]
     fn writing_leaves_no_partial_files_behind() {
-        // The temporary file is renamed into place; a .part left in the tree would be served as a
-        // tile by another tool reading this cache, and counted by usage().
+        // The temporary file is renamed into place; a .part left in the tree would be counted by
+        // usage() and copied into the field with everything else.
         let scratch = Scratch::new("atomic");
         let cache = TileCache::new(&scratch.0);
-        cache.write("osm", tile(), &png(512)).expect("write");
+        cache.write(OSM, tile(), &png(512)).expect("write");
 
         let mut names = Vec::new();
         walk(&scratch.0, &mut |entry| {
             names.push(entry.file_name().to_string_lossy().into_owned());
         });
-        assert_eq!(names.len(), 1, "{names:?}");
-        assert!(!names[0].ends_with(".part"), "{names:?}");
+        assert_eq!(names, vec!["15089.jpg".to_owned()], "{names:?}");
     }
 
     #[test]
     fn rewriting_a_tile_replaces_it() {
         let scratch = Scratch::new("replace");
         let cache = TileCache::new(&scratch.0);
-        cache.write("osm", tile(), &png(512)).expect("first");
+        cache.write(OSM, tile(), &png(512)).expect("first");
         let updated = png(1024);
-        cache.write("osm", tile(), &updated).expect("second");
+        cache.write(OSM, tile(), &updated).expect("second");
 
-        assert_eq!(cache.read("osm", tile()).expect("read").bytes, updated);
+        assert_eq!(cache.read(OSM, tile()).expect("read").bytes, updated);
         assert_eq!(cache.usage().tiles, 1, "the old tile should not linger");
     }
 
@@ -441,7 +513,7 @@ mod tests {
 
         for x in 0..3 {
             let id = TileId::new(10, x, 5).expect("a valid tile");
-            cache.write("osm", id, &png(512)).expect("write");
+            cache.write(OSM, id, &png(512)).expect("write");
         }
         let usage = cache.usage();
         assert_eq!(usage.tiles, 3);
@@ -449,31 +521,36 @@ mod tests {
     }
 
     #[test]
+    fn usage_includes_what_the_other_application_cached() {
+        // A provider this crate has no source for is still in the tree the operator carries.
+        let scratch = Scratch::new("usage-foreign");
+        let cache = TileCache::new(&scratch.0);
+        cache
+            .write("GoogleSatelliteMap", tile(), &jpeg(700))
+            .expect("write");
+        assert_eq!(cache.usage().tiles, 1);
+        assert_eq!(cache.usage().bytes, 700);
+    }
+
+    #[test]
     fn clearing_one_provider_leaves_the_others() {
         let scratch = Scratch::new("clear");
         let cache = TileCache::new(&scratch.0);
-        cache.write("osm", tile(), &png(512)).expect("osm");
-        cache.write("opentopo", tile(), &png(512)).expect("topo");
+        cache.write(OSM, tile(), &png(512)).expect("osm");
+        cache
+            .write("GoogleSatelliteMap", tile(), &jpeg(512))
+            .expect("google");
 
-        cache.clear("osm").expect("clear");
-        assert!(!cache.contains("osm", tile()));
-        assert!(cache.contains("opentopo", tile()));
+        cache.clear(OSM).expect("clear");
+        assert!(!cache.contains(OSM, tile()));
+        assert!(cache.contains("GoogleSatelliteMap", tile()));
     }
 
     #[test]
     fn clearing_what_was_never_cached_is_not_an_error() {
         let scratch = Scratch::new("clear-empty");
         let cache = TileCache::new(&scratch.0);
-        assert!(cache.clear("osm").is_ok());
-    }
-
-    #[test]
-    fn the_layout_is_the_one_every_slippy_map_tool_uses() {
-        // So the cache can be inspected by hand, copied to a field laptop, or seeded from another
-        // tool with cp -r.
-        let cache = TileCache::new("/tmp/example");
-        let path = cache.directory_for("osm", tile());
-        assert!(path.ends_with("osm/14/15089"), "{}", path.display());
+        assert!(cache.clear(OSM).is_ok());
     }
 
     #[test]
@@ -486,11 +563,21 @@ mod tests {
     }
 
     #[test]
-    fn the_default_root_is_under_a_cache_directory_not_a_config_one() {
-        // Tiles are regenerable downloads. A user who clears their cache should lose tiles and
-        // keep their parameter files.
+    fn the_default_root_is_the_csharp_applications_gmapcache() {
+        // Unless a test or a screenshot points it elsewhere, which this test cannot tell from
+        // here; either way it ends in the directory name the C# uses.
         let root = TileCache::default_root();
         let shown = root.display().to_string();
-        assert!(shown.contains("tiles"), "{shown}");
+        assert!(
+            std::env::var_os("MP_TILE_CACHE").is_some() || shown.ends_with("gmapcache"),
+            "{shown}"
+        );
+    }
+
+    #[test]
+    fn the_language_directory_is_the_one_the_csharp_never_changes() {
+        assert_eq!(LANGUAGE, "en");
+        assert_eq!(TILE_DB, "TileDBv3");
+        assert!(TileCache::new("/x").tile_root().ends_with("TileDBv3/en"));
     }
 }

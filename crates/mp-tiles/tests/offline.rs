@@ -56,7 +56,7 @@ fn an_offline_store_serves_everything_that_was_cached() {
     let cache = TileCache::new(&scratch.0);
     let subject = tile(14, 15_089, 9_814);
     cache
-        .write(OPENSTREETMAP.id, subject, &small_png())
+        .write(OPENSTREETMAP.cache_name, subject, &small_png())
         .expect("seeding the cache");
 
     let store = TileStore::offline(&OPENSTREETMAP, cache);
@@ -70,6 +70,40 @@ fn an_offline_store_serves_everything_that_was_cached() {
     // And it is then served from memory, which is the path a pan takes.
     assert!(matches!(store.get(subject), TileAnswer::Exact(_)));
     assert_eq!(store.stats().memory_hits, 1);
+}
+
+#[test]
+fn an_offline_store_reads_the_disk_without_being_asked_to() {
+    // The path the map takes: `get` misses memory, queues the tile, and the worker reads it from
+    // disk. `load_from_cache` above is the pre-loading shortcut; this is the one that has to work
+    // in a paddock, and for a while it did not - an offline store had no worker, so nothing was
+    // ever read unless a test read it by hand.
+    let scratch = Scratch::new("reads-disk");
+    let cache = TileCache::new(&scratch.0);
+    let subject = tile(14, 15_089, 9_814);
+    cache
+        .write(OPENSTREETMAP.cache_name, subject, &small_png())
+        .expect("seeding the cache");
+
+    let store = TileStore::offline(&OPENSTREETMAP, cache);
+    assert!(
+        matches!(store.get(subject), TileAnswer::Missing),
+        "the first ask is a miss: nothing blocks on the disk in a render pass"
+    );
+
+    // Bounded: the worker has a whole second to read one file, and a test that waits for ever
+    // when it does not is a hang rather than a failure.
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while store.generation() == 0 && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(
+        matches!(store.get(subject), TileAnswer::Exact(_)),
+        "the worker should have read the tile from disk: {:?}",
+        store.stats()
+    );
+    assert_eq!(store.stats().disk_hits, 1);
+    assert_eq!(store.stats().fetched, 0, "offline means offline");
 }
 
 #[test]
@@ -116,7 +150,7 @@ fn a_missing_tile_is_answered_with_an_ancestor_to_scale_up() {
         .parent()
         .expect("a grandparent");
     cache
-        .write(OPENSTREETMAP.id, grandparent, &small_png())
+        .write(OPENSTREETMAP.cache_name, grandparent, &small_png())
         .expect("seeding");
 
     let store = TileStore::offline(&OPENSTREETMAP, cache);
@@ -136,7 +170,7 @@ fn an_ancestor_search_gives_up_rather_than_walking_to_the_whole_world() {
     let scratch = Scratch::new("ancestor-depth");
     let cache = TileCache::new(&scratch.0);
     cache
-        .write(OPENSTREETMAP.id, tile(0, 0, 0), &small_png())
+        .write(OPENSTREETMAP.cache_name, tile(0, 0, 0), &small_png())
         .expect("seeding");
 
     let store = TileStore::offline(&OPENSTREETMAP, cache);
@@ -159,7 +193,9 @@ fn memory_use_is_bounded_however_far_you_pan() {
     let count = mp_tiles::store::MEMORY_TILES + 50;
     for x in 0..count {
         let id = tile(14, u32::try_from(x).expect("small"), 9_814);
-        cache.write(OPENSTREETMAP.id, id, &png).expect("seeding");
+        cache
+            .write(OPENSTREETMAP.cache_name, id, &png)
+            .expect("seeding");
     }
 
     let store = TileStore::offline(&OPENSTREETMAP, cache);
@@ -187,7 +223,9 @@ fn the_tile_most_recently_used_survives_eviction() {
     let count = mp_tiles::store::MEMORY_TILES + 10;
     for x in 0..count {
         let id = tile(14, u32::try_from(x).expect("small"), 9_814);
-        cache.write(OPENSTREETMAP.id, id, &png).expect("seeding");
+        cache
+            .write(OPENSTREETMAP.cache_name, id, &png)
+            .expect("seeding");
     }
 
     let store = TileStore::offline(&OPENSTREETMAP, cache);
@@ -207,16 +245,11 @@ fn a_corrupt_cached_tile_does_not_take_the_store_down_with_it() {
     let cache = TileCache::new(&scratch.0);
     let subject = tile(14, 15_089, 9_814);
     cache
-        .write(OPENSTREETMAP.id, subject, &small_png())
+        .write(OPENSTREETMAP.cache_name, subject, &small_png())
         .expect("seeding");
 
     // Corrupt it behind the cache's back.
-    let path = scratch
-        .0
-        .join(OPENSTREETMAP.id)
-        .join("14")
-        .join("15089")
-        .join("9814.png");
+    let path = cache.path_for(OPENSTREETMAP.cache_name, subject);
     std::fs::write(&path, b"not a png at all").expect("corrupting");
 
     let store = TileStore::offline(&OPENSTREETMAP, cache);

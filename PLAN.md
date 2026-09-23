@@ -1125,7 +1125,7 @@ Ordered by what an operator hits first, then by what unblocks the most.
 | 3 | Terrain-relative altitudes | a mission flown at 50 m over a hill is a mission into a hill | D11 | `MAV_FRAME_GLOBAL_TERRAIN_ALT` round-trips, and the planner says which frame every item uses | done |
 | 4 | Fence and rally read-back | upload works and read-back does not, so a fence cannot be checked against what the vehicle actually holds | D11 | a fence and a rally set download and compare against the file that produced them | done |
 | 5 | Satellite imagery | planning over a paddock needs imagery, not a street map | D8 | a second provider is selectable and its attribution is shown | done |
-| 6 | Mission Planner tile cache | D8 asks for it, and operators carry multi-GB offline caches into the field | D8 | tiles written by the C# application are read with the network off | |
+| 6 | Mission Planner tile cache | D8 asks for it, and operators carry multi-GB offline caches into the field | D8 | tiles written by the C# application are read with the network off | done |
 | 7 | Stick-to-wire under 5 ms | D15 sets p99 ≤5 ms and the joystick path polls at 50 ms, missing it by an order of magnitude. It also runs on gpui's foreground executor, so a slow frame suspends the thing flying the aircraft | D15 | a dedicated thread blocks on the device and sends on change; a histogram over a real device shows p99 ≤5 ms | |
 | 8 | Zero-allocation proof on the ingest path | D2's DoD says zero heap allocations per packet "verified by an allocation-counting test". No such test exists, so the claim is untested | D2 | a counting global allocator asserts zero allocations across a replayed tlog's ingest→state path | |
 | 9 | Split `mp-link` | §5.1's layering is the pivot insurance and `mp-link` currently violates it: 6,728 LOC carrying params, missions, calibration, log download and `.param` files. A CI rule cannot enforce a graph the code does not have | D1 | `mp-params`, `mp-calibration` and `mp-ftp` exist; `xtask/tests/graph.rs` asserts the layer rules and passes | |
@@ -1140,6 +1140,15 @@ than in a corner, because a performance target nobody is scheduled to meet is a 
 **9 and 10 are the factory.** They buy nothing an operator can see and everything the remaining
 1.2M LOC depends on: without the graph, a framework pivot costs the project instead of two crates,
 and without the ledger there is no definition of finished.
+
+**What 6 found**, in the manner of §13.1's table, because the pattern held: one small item, three
+defects in work believed finished.
+
+| Item | What it was supposed to add | What it actually found |
+|---|---|---|
+| 6 | read the C# cache | The cache layout was invented — `<id>/<z>/<x>/<y>.<ext>`, "the one every slippy-map tool uses" — with no C# behind it. `ExtLibs/Maps/MyImageCache.cs:72-74` writes `gmapcache/TileDBv3/en/<Name>/<z>/<y>/<x>.jpg`: **always `.jpg` whatever the bytes**, y before x, the provider's C# `Name`, and it reads nothing else. Replaced wholesale, proved against a tile the real application wrote on this machine (`crates/mp-tiles/tests/tilecache.rs`) |
+| | | **The offline store never read the disk.** `TileStore::offline` started no worker thread, and the worker is what reads the cache; every offline test passed because every offline test pre-loaded the tile by hand. With `MP_OFFLINE` the map drew a graticule over a full cache. Now it runs the worker with a policy that never fetches, and a test asks for a tile the way the map does |
+| | | **Recordings were going where the C# never looks.** `Settings.GetUserDataDirectory` asks .NET for `MyDocuments`, and under mono that is `$HOME` — mono printed `/home/buzz` when asked — so a Linux installation lives in `~/.local/share/Mission Planner/`, where this machine's real one keeps its logs, parameter metadata and cache. Item 13 recorded to `~/Documents/Mission Planner/logs`, reconstructed from the enum's name. `mp-settings` now ports the rules; both the cache and the recordings use them |
 
 ---
 

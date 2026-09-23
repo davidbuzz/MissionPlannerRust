@@ -12,6 +12,7 @@ workspace = true
 
 [dependencies]
 mp-units.workspace = true
+mp-settings.workspace = true
 thiserror.workspace = true
 ureq.workspace = true
 image.workspace = true

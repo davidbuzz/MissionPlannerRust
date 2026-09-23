@@ -230,6 +230,7 @@ mod tests {
         let fetcher = TileFetcher::new();
         let source = TileSource {
             id: "broken",
+            cache_name: "Test",
             label: "Broken",
             url: "https://tiles.invalid.example/{z}/{x}/{y}.png",
             subdomains: &[],
