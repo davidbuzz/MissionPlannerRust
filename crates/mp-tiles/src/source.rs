@@ -55,9 +55,9 @@ impl TileSource {
         if self.subdomains.is_empty() {
             return None;
         }
-        #[allow(clippy::cast_sign_loss)] // coordinates are non-negative by TileId's invariant
-        let index = (tile.x as u64).wrapping_add(tile.y as u64) % self.subdomains.len() as u64;
-        self.subdomains.get(index as usize).copied()
+        // Summed as u64 and reduced with a u64 modulus, so nothing truncates on a 32-bit target.
+        let index = (u64::from(tile.x) + u64::from(tile.y)) % self.subdomains.len() as u64;
+        self.subdomains.get(usize::try_from(index).ok()?).copied()
     }
 }
 

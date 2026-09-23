@@ -13,3 +13,4 @@ workspace = true
 [dependencies]
 mp-units.workspace = true
 thiserror.workspace = true
+ureq.workspace = true

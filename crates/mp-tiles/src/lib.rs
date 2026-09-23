@@ -9,8 +9,12 @@
 //! corresponding piece of the tile one zoom level up, scaled - which is why the map fills in
 //! progressively rather than appearing blank.
 
+pub mod cache;
+pub mod fetch;
 pub mod policy;
 pub mod source;
 
+pub use cache::{CacheError, CacheUsage, CachedTile, ImageFormat, TileCache};
+pub use fetch::{FetchError, TileFetcher};
 pub use policy::{Decision, FetchPolicy};
 pub use source::{OPENSTREETMAP, OPENTOPOMAP, SOURCES, TileSource, source_by_id};

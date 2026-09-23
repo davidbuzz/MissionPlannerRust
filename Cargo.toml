@@ -29,6 +29,11 @@ criterion = { version = "0.5", default-features = false, features = ["cargo_benc
 proptest = "1"
 roxmltree = "0.20"
 anyhow = "1"
+# Tile fetching. Blocking and small: the tile thread is a dedicated thread that is allowed to
+# block, exactly like the link's I/O thread, so an async runtime would be machinery with no user.
+# rustls rather than the system TLS, so a Windows build needs no extra toolchain and a Linux one
+# needs no OpenSSL headers.
+ureq = { version = "3", default-features = false, features = ["rustls"] }
 
 [workspace.lints.rust]
 unsafe_code = "deny"
