@@ -338,7 +338,11 @@ and strict backward compatibility with the C# app's user data.
 - **Today:** `mp-settings` ports the data-directory rules from `ExtLibs/Utilities/Settings.cs`,
   including the mono quirk that puts a Linux installation under `~/.local/share/Mission Planner`
   rather than `~/Documents`; flight recordings and the map cache use them, so both applications
-  find each other's files. `config.xml` is not read; our own settings live in their own file.
+  find each other's files. `mp_settings::Config` reads and writes `config.xml` exactly as
+  `Settings.Load`/`Save` do - keys sorted case-insensitively, `/` spelled `____`, a UTF-8 BOM,
+  no final newline - and a test renders this machine's real file back byte for byte. The GUI
+  reads the recording directory, the last link and the map type from it; its own choices still
+  live in its own file, and nothing writes `config.xml` yet.
 - **Tests:** `tests/resx_conversion.rs` asserts zero string loss for every culture present in the C# repo and fails on any English key without a Rust counterpart; `tests/placeholders.rs` asserts argument arity and type agreement between every translation and its English source; `tests/pseudolocale.rs` renders screens in a pseudo-locale to catch truncation and hard-coded strings; `tests/data_compat.rs` reads real `config.xml`, `.waypoints`, `.param`, `.tlog` and map-cache fixtures produced by the C# app, writes them back, and asserts byte equality — the both-apps-same-data-directory guarantee.
 
 ---

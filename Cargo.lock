@@ -3432,6 +3432,10 @@ dependencies = [
 [[package]]
 name = "mp-settings"
 version = "0.1.0"
+dependencies = [
+ "roxmltree 0.20.0",
+ "thiserror 2.0.20",
+]
 
 [[package]]
 name = "mp-tiles"

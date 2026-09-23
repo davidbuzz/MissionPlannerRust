@@ -11,3 +11,5 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+roxmltree.workspace = true
+thiserror.workspace = true

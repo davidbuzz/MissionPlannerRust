@@ -1,0 +1,30 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Config>
+  <APMFirmware>ArduCopter2</APMFirmware>
+  <AUTO_BAUD>115200</AUTO_BAUD>
+  <AutoConnect>[
+  {
+    "Label": "Mavlink default port",
+    "Enabled": true,
+    "Port": 14550,
+    "Protocol": "Udp",
+    "Format": "MAVLink",
+    "Direction": "Inbound",
+    "ConfigString": ""
+  }
+]</AutoConnect>
+  <CMB_altmode>Relative</CMB_altmode>
+  <comport>TCP</comport>
+  <kindex>1</kindex>
+  <logdirectory>/home/pilot/.local/share/Mission Planner/logs</logdirectory>
+  <MainHeight>1000</MainHeight>
+  <maplast_lat>-35.363262</maplast_lat>
+  <maplast_lng>149.165237</maplast_lng>
+  <maplast_zoom>16</maplast_zoom>
+  <MapType>GoogleSatelliteMap</MapType>
+  <rawparam____panel1collapsed>True</rawparam____panel1collapsed>
+  <TCP_BAUD>115200</TCP_BAUD>
+  <TCP_host>127.0.0.1</TCP_host>
+  <TCP_port>5760</TCP_port>
+  <update_check>9/20/2026 &lt;beta&gt; &amp; more</update_check>
+</Config>

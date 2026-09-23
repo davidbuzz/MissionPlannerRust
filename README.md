@@ -28,7 +28,7 @@ Measured on this tree: **18 crates, 46,293 hand-written Rust LOC** (plus 93,771 
 | Missions | upload and download, `.waypoints` files, 129-file corpus |
 | Logs | `.tlog` read and write; ArduPilot `.BIN` dataflash parsing |
 | Flight recording | every connection recorded to a `.tlog`, both directions, into Mission Planner's own logs directory |
-| Data directory | `Settings.cs`'s rules ported, mono quirks included, so files land where the C# application looks |
+| Data directory | `Settings.cs`'s rules ported, mono quirks included, so files land where the C# application looks; its `config.xml` is read for the last link, map type and log directory, and rendered back byte for byte |
 | Health | EKF variances and vibration with ArduPilot's own thresholds, clipping counts |
 | Calibration | accelerometer, compass, radio, motor test |
 | Joystick | axes to `RC_CHANNELS_OVERRIDE` from a thread that blocks on the device and sends on change — 0.1 ms p99 stick-to-link on a fake device — with a release-on-disconnect failsafe (Linux) |

@@ -173,11 +173,26 @@ impl Telemetry {
     /// flight recordings there scatters them somewhere nobody thinks to look.
     /// `// C#: ExtLibs/Utilities/Settings.cs:146-158`
     fn log_directory() -> std::path::PathBuf {
-        mp_settings::default_log_directory().unwrap_or_else(|| {
-            // No home directory at all is a strange environment, not a reason to lose the
-            // recording; the temp directory keeps it for the length of the session.
-            std::env::temp_dir().join("mission-planner-rust-logs")
-        })
+        let chosen = mp_settings::Config::default_path()
+            .and_then(|path| mp_settings::Config::load(&path).ok());
+        Self::log_directory_from(chosen.as_ref())
+    }
+
+    /// The recording directory given the C# application's settings, if it has any.
+    ///
+    /// `Settings.LogDir` is the `logdirectory` key when the operator set one, else the default
+    /// under the user data directory. Reading the key means a pilot who pointed Mission Planner
+    /// at a drive of their own finds this application's recordings on the same drive.
+    /// `// C#: ExtLibs/Utilities/Settings.cs:127-140`
+    fn log_directory_from(config: Option<&mp_settings::Config>) -> std::path::PathBuf {
+        config
+            .and_then(mp_settings::Config::log_directory)
+            .or_else(mp_settings::default_log_directory)
+            .unwrap_or_else(|| {
+                // No home directory at all is a strange environment, not a reason to lose the
+                // recording; the temp directory keeps it for the length of the session.
+                std::env::temp_dir().join("mission-planner-rust-logs")
+            })
     }
 
     /// The name to record under in a given directory, avoiding one that is taken.
@@ -843,6 +858,23 @@ mod tests {
             directory.ends_with("Mission Planner/logs"),
             "{}",
             directory.display()
+        );
+    }
+
+    /// A `logdirectory` the operator chose in Mission Planner wins over the default.
+    #[test]
+    fn a_log_directory_chosen_in_mission_planner_is_used() {
+        let mut config = mp_settings::Config::default();
+        config.set("logdirectory", "/mnt/flights/logs");
+        assert_eq!(
+            Telemetry::log_directory_from(Some(&config)),
+            std::path::PathBuf::from("/mnt/flights/logs")
+        );
+        // An empty key is "not chosen", as the C# treats it.
+        config.set("logdirectory", "");
+        assert_eq!(
+            Telemetry::log_directory_from(Some(&config)),
+            Telemetry::log_directory_from(None)
         );
     }
 

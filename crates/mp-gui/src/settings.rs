@@ -57,10 +57,41 @@ impl Settings {
     /// Reads the settings, or the defaults if anything at all is wrong.
     #[must_use]
     pub fn load() -> Self {
-        std::fs::read_to_string(Self::path())
+        let own = std::fs::read_to_string(Self::path())
             .ok()
             .map(|text| Self::parse(&text))
-            .unwrap_or_default()
+            .unwrap_or_default();
+        let theirs = mp_settings::Config::default_path()
+            .and_then(|path| mp_settings::Config::load(&path).ok());
+        own.with_mission_planner_defaults(theirs.as_ref())
+    }
+
+    /// Fills what this file does not say from what Mission Planner's `config.xml` says.
+    ///
+    /// A pilot who has used Mission Planner on this machine has already chosen a link and a map;
+    /// the first run here should open the same link on the same map rather than ask again. Only
+    /// the keys both applications mean the same thing by: the link (`comport` and its
+    /// companions) and the map provider (`MapType`, matched by the C# provider's name, so a
+    /// provider this application does not have is simply not taken). This file's own choices
+    /// win once made.
+    /// `// C#: ExtLibs/Utilities/Settings.cs:88-125; GCSViews/FlightPlanner.cs:7247`
+    #[must_use]
+    pub fn with_mission_planner_defaults(mut self, config: Option<&mp_settings::Config>) -> Self {
+        let Some(config) = config else {
+            return self;
+        };
+        if self.link.is_none() {
+            self.link = config.last_link();
+        }
+        if self.tile_source.is_none() {
+            self.tile_source = config.map_type().and_then(|name| {
+                mp_tiles::source::SOURCES
+                    .iter()
+                    .find(|source| source.cache_name == name)
+                    .map(|source| source.id.to_owned())
+            });
+        }
+        self
     }
 
     /// Parses the file's contents.
@@ -160,6 +191,38 @@ fn parse_size(value: &str) -> Option<(u32, u32)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mission_planners_config_fills_what_ours_does_not_say() {
+        let mut theirs = mp_settings::Config::default();
+        theirs.set("comport", "TCP");
+        theirs.set("TCP_host", "127.0.0.1");
+        theirs.set("TCP_port", "5760");
+        theirs.set("MapType", "OpenStreetMap");
+
+        let fresh = Settings::default().with_mission_planner_defaults(Some(&theirs));
+        assert_eq!(fresh.link.as_deref(), Some("tcp:127.0.0.1:5760"));
+        assert_eq!(fresh.tile_source.as_deref(), Some("osm"));
+
+        // Our own choices, once made, are not overridden.
+        let chosen = Settings {
+            link: Some("udp:14550".to_owned()),
+            tile_source: Some("esri-imagery".to_owned()),
+            ..Settings::default()
+        }
+        .with_mission_planner_defaults(Some(&theirs));
+        assert_eq!(chosen.link.as_deref(), Some("udp:14550"));
+        assert_eq!(chosen.tile_source.as_deref(), Some("esri-imagery"));
+
+        // A provider this application does not have is not taken.
+        theirs.set("MapType", "GoogleSatelliteMap");
+        let fresh = Settings::default().with_mission_planner_defaults(Some(&theirs));
+        assert_eq!(fresh.tile_source, None);
+        assert_eq!(
+            Settings::default().with_mission_planner_defaults(None),
+            Settings::default()
+        );
+    }
 
     #[test]
     fn settings_round_trip_through_the_file_format() {

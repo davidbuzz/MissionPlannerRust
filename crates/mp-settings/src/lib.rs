@@ -15,6 +15,10 @@
 //! inferred from the enum's name - which is how this crate's predecessor came to record flights
 //! under `~/Documents/Mission Planner/logs`, a directory the C# application never reads.
 
+pub mod config;
+
+pub use config::{Config, ConfigError};
+
 use std::path::{Path, PathBuf};
 
 /// `Settings.AppConfigName`: the directory name under every base the C# uses. With the space.
