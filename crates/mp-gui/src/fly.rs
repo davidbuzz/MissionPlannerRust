@@ -12,14 +12,15 @@ use std::time::{Duration, Instant};
 use gpui::{
     AnyElement, Context, FocusHandle, KeyDownEvent, SharedString, Window, div, prelude::*, px, rgb,
 };
-use mp_link::commands;
 use mp_link::messages::{LogMessage, Severity, time_of_day};
-use mp_mavlink_dialects::all::{MavCmd, MavMessage};
+use mp_link::requests::{self, RequestOutcome, RequestState};
+use mp_link::{RequestId, commands};
+use mp_mavlink_dialects::all::{DigicamControl, MavCmd, MavMessage};
 use mp_mission::MissionItem;
 use mp_vehicle::{VehicleFamily, VehicleId};
 
 use crate::MissionPlanner;
-use crate::telemetry::TelemetryView;
+use crate::telemetry::{Lookup, Report, TelemetryView};
 use crate::textfield::{KeyOutcome, TextField};
 use crate::ui::{action, action_sized, field, panel, progress, theme};
 // Aliased because `mp_link::messages::Severity` is already `Severity` here and means something
@@ -877,8 +878,20 @@ pub mod strings {
     pub const BAD_COORDS: &str = "Bad Lat/Lng";
     /// `Strings.ErrorNoResponse`.
     pub const ERROR_NO_RESPONSE: &str = "Error: no response from MAV";
+    /// `Strings.ErrorCommunicating`.
+    /// `// C#: ExtLibs/Strings/Strings.resx:136-138`
+    pub const ERROR_COMMUNICATING: &str = "Error communicating with the autopilot";
+    /// `Strings.Completed`.
+    /// `// C#: ExtLibs/Strings/Strings.resx:537-539`
+    pub const COMPLETED: &str = "Completed";
     /// The literal `CustomMessageBox.Show("Bad Alt")` in `flyToHereAltToolStripMenuItem_Click`.
     pub const BAD_ALT: &str = "Bad Alt";
+}
+
+/// A message box titled `Strings.ERROR`, as the status line says it.
+#[must_use]
+pub fn error_box(text: impl std::fmt::Display) -> String {
+    format!("Error: {text}")
 }
 
 /// Why a press sent nothing.
@@ -911,6 +924,91 @@ impl Refusal {
 
 /// What a press puts on the wire, or why it puts nothing.
 pub type Sends = Result<Vec<MavMessage>, Refusal>;
+
+/// How one of a press's messages reaches the vehicle.
+///
+/// Through the link's retrying request where the C# blocks on the call that sends it - the link
+/// then sends it again as the C# does, and the press's [`Report`] is said when it ends - and
+/// straight onto the wire where the C# does not wait.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Route {
+    /// `setWPCurrent`: `MISSION_SET_CURRENT` until a `MISSION_CURRENT` arrives.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2452-2501`
+    SetCurrent {
+        /// The vehicle.
+        target: VehicleId,
+        /// The item made current.
+        seq: u16,
+    },
+    /// `doCommand` with `requireack`: `COMMAND_LONG` until its `COMMAND_ACK`.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2688-2836`
+    Command {
+        /// The vehicle.
+        target: VehicleId,
+        /// `MAV_CMD`.
+        command: u16,
+        /// param1 to param7.
+        params: [f32; 7],
+    },
+    /// `setParam`: `PARAM_SET` until the vehicle echoes the parameter.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1628-1770`
+    SetParam {
+        /// The vehicle.
+        target: VehicleId,
+        /// The parameter.
+        name: String,
+        /// The value asked for.
+        value: f64,
+    },
+    /// Sent once and not waited for.
+    Raw,
+}
+
+/// Which way a message the flight screen sends goes: [`Route`].
+///
+/// Decided by what the C# does with the message the screen builds, and the screen builds each
+/// one only where the C# sends it:
+///
+/// * `MISSION_SET_CURRENT` is only ever `setWPCurrent`'s, which waits.
+/// * `COMMAND_LONG` is `doCommand`'s, which waits - except `DO_SET_MODE`, which `setMode` sends
+///   with `requireack` false (:4636), and `PREFLIGHT_REBOOT_SHUTDOWN`, which `doCommand` sends
+///   twice and does not wait for (:2758-2763); the press already holds both of those sends.
+/// * `PARAM_SET` is only ever `setParam`'s, which waits.
+/// * Everything else goes once. `SET_MODE`, `SET_POSITION_TARGET_GLOBAL_INT` and `SYSTEM_TIME`
+///   are `generatePacket` and `sendPacket` in the C#, not waited for. `COMMAND_INT` is
+///   `doCommandInt`'s, which does wait (:2847-2951), and a float `MISSION_ITEM` - Change Alt,
+///   and ArduPlane's guided target - is `setWP`'s, which waits for `MISSION_ACK`
+///   (:3975-4290); the link has no request for either, so both still go once.
+///
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs` for every line above.
+#[must_use]
+pub fn route(message: &MavMessage) -> Route {
+    match message {
+        MavMessage::MissionSetCurrent(m) => Route::SetCurrent {
+            target: VehicleId::new(m.target_system, m.target_component),
+            seq: m.seq,
+        },
+        MavMessage::CommandLong(m)
+            if m.command == commands::CMD_DO_SET_MODE
+                || m.command == requests::CMD_PREFLIGHT_REBOOT_SHUTDOWN =>
+        {
+            Route::Raw
+        }
+        MavMessage::CommandLong(m) => Route::Command {
+            target: VehicleId::new(m.target_system, m.target_component),
+            command: m.command,
+            params: [
+                m.param1, m.param2, m.param3, m.param4, m.param5, m.param6, m.param7,
+            ],
+        },
+        MavMessage::ParamSet(m) => Route::SetParam {
+            target: VehicleId::new(m.target_system, m.target_component),
+            name: mp_params::decode_param_id(&m.param_id),
+            value: f64::from(m.param_value),
+        },
+        _ => Route::Raw,
+    }
+}
 
 /// One `ModifyandSet`: a `NumericUpDown` beside a button.
 /// `// C#: Controls/ModifyandSet.cs`
@@ -1169,8 +1267,8 @@ pub struct ActionContext {
 /// The messages Do Action sends for one `CMB_action` entry, once any question has been answered.
 ///
 /// Each branch is the C#'s, in its order. `Trigger_Camera`'s fallback - a `DIGICAM_CONTROL`
-/// message when the vehicle refuses the command - needs the refusal first, and is the only part
-/// of this list not sent here.
+/// message when the vehicle refuses the command - needs the refusal first, so it travels with
+/// the press's [`action_report`] and goes when the refusal arrives.
 /// `// C#: GCSViews/FlightData.cs:1680-1878`
 pub fn action_messages(action: &str, context: &ActionContext) -> Sends {
     let target = context.target;
@@ -1259,6 +1357,61 @@ pub fn action_messages(action: &str, context: &ActionContext) -> Sends {
         }
     };
     Ok(messages)
+}
+
+/// What Do Action says when the vehicle refuses one `CMB_action` entry or never answers it.
+///
+/// The generic path shows `Strings.CommandFailed` and the command's name when `doCommand`
+/// returns false, and `Strings.CommandFailed` alone from its `catch`. The entries handled before
+/// it ignore what `doCommand` returns and have only the `catch`. `Trigger_Camera` is
+/// `setDigicamControl`, which sends `DIGICAM_CONTROL` when the command is refused. The rest are
+/// not waited for at all - `doReboot`, `setMode`, `sendPacket` - or are `doCommandInt`, which the
+/// link has no request for (see [`route`]); they have nothing to say.
+/// `// C#: GCSViews/FlightData.cs:1697-1878, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4557-4569`
+#[must_use]
+pub fn action_report(action: &str, target: VehicleId) -> Report {
+    let failed = error_box(strings::COMMAND_FAILED);
+    match action {
+        "Format_SD_Card"
+        | "Scripting_cmd_stop_and_restart"
+        | "Scripting_cmd_stop"
+        | "System_Time"
+        | "Preflight_Reboot_Shutdown"
+        | "Toggle_Safety_Switch" => Report::default(),
+        "Trigger_Camera" => Report {
+            fallback: Some(MavMessage::DigicamControl(DigicamControl {
+                extra_value: 0.0,
+                target_system: target.sysid,
+                target_component: target.compid,
+                session: 0,
+                zoom_pos: 0,
+                zoom_step: 0,
+                focus_lock: 0,
+                shot: 1,
+                command_id: 0,
+                extra_param: 0,
+            })),
+            ..Report::on_timeout(failed)
+        },
+        "Terminate_Flight"
+        | "HighLatency_Enable"
+        | "HighLatency_Disable"
+        | "Engine_Start"
+        | "Engine_Stop" => Report::on_timeout(failed),
+        _ => {
+            // `cmd`, as `Enum.Parse` found it: the name itself, or with `DO_START_` in front.
+            let upper = action.to_uppercase();
+            let name = if csharp_mav_cmd(&upper).is_some() {
+                upper
+            } else {
+                format!("DO_START_{upper}")
+            };
+            Report {
+                refused: Some(error_box(format!("{} {name}", strings::COMMAND_FAILED))),
+                ..Report::on_timeout(failed)
+            }
+        }
+    }
 }
 
 // --- Modes ----------------------------------------------------------------------------------------
@@ -1606,8 +1759,22 @@ pub struct ResumeInput<'a> {
     pub family: Option<VehicleFamily>,
     /// Where commands go.
     pub target: Option<VehicleId>,
-    /// The message log, for the vehicle's answer to a takeoff.
-    pub messages: &'a [LogMessage],
+    /// The request the last [`ResumeStep::Send`] made, as the link has it: `None` if that step
+    /// made none, or the link has forgotten it.
+    pub request: Option<RequestState>,
+}
+
+/// A call inside Resume Mission that the C# blocks on until the vehicle answers or its retries
+/// run out, and so a request the next step waits for.
+/// `// C#: GCSViews/FlightData.cs:1553, 1574, 1589-1594`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Blocking {
+    /// `setWPCurrent(..., 1)`.
+    SetCurrent,
+    /// `doARM(true)`.
+    Arm,
+    /// `doCommand(..., TAKEOFF, ...)`.
+    Takeoff,
 }
 
 /// How long the C# sleeps between attempts in each of Resume Mission's waiting loops.
@@ -1629,8 +1796,10 @@ const TRANSFER_START: Duration = Duration::from_secs(10);
 /// The C# runs the whole sequence on the UI thread with `Thread.Sleep` and `Application.DoEvents`
 /// between attempts. Here each loop is a phase and each attempt is one frame's work, at the C#'s
 /// one-second spacing and with its attempt limits: 30 for Guided, arming and Auto, 40 for the
-/// climb. Each attempt is one send; the C#'s `doARM` and `doCommand` also wait for the vehicle's
-/// acknowledgement inside the attempt, which this does not.
+/// climb. `setWPCurrent`, `doARM` and `doCommand` block the C# until the vehicle answers or their
+/// retries run out; here they are the link's retrying requests, and the sequence waits for the
+/// one it made before it moves on, with the second between attempts counted from when it ended,
+/// as the C#'s `Thread.Sleep(1000)` follows the call's return.
 /// `// C#: GCSViews/FlightData.cs:1481-1627`
 #[derive(Debug, Clone)]
 pub struct Resume {
@@ -1646,8 +1815,8 @@ pub struct Resume {
     last_attempt: Option<Instant>,
     /// `lastwpdata.alt`.
     takeoff_altitude: f64,
-    /// The newest message when the last takeoff went out, so its answer can be found.
-    takeoff_sent_after: u64,
+    /// The call the last step made that the C# would still be inside.
+    blocked_on: Option<Blocking>,
 }
 
 /// What a waiting loop does this frame.
@@ -1671,7 +1840,7 @@ impl Resume {
                 attempts: 0,
                 last_attempt: None,
                 takeoff_altitude: 0.0,
-                takeoff_sent_after: 0,
+                blocked_on: None,
             },
             vec![ResumeStep::DownloadMission],
         )
@@ -1756,6 +1925,40 @@ impl Resume {
         Attempt::Again
     }
 
+    /// Whether the call the last step made has returned, and what its return means.
+    ///
+    /// `None` to carry on this frame; `Some` to stop here - still inside the call, or failed by
+    /// it. A timeout throws in the C#, and the outer `catch` shows `Strings.CommandFailed`; a
+    /// refused take-off is `doCommand` returning false, which shows the same. `doARM`'s answer is
+    /// not looked at, so a refused arm is asked again a second later.
+    /// `// C#: GCSViews/FlightData.cs:1553, 1574, 1589-1594, 1624-1627`
+    fn answered(&mut self, input: &ResumeInput<'_>) -> Option<Vec<ResumeStep>> {
+        let blocking = self.blocked_on?;
+        match input.request {
+            Some(RequestState::Queued | RequestState::Waiting) => {
+                // The second's sleep starts once the call returns.
+                if self.last_attempt.is_some() {
+                    self.last_attempt = Some(input.now);
+                }
+                Some(Vec::new())
+            }
+            Some(RequestState::Finished(outcome)) => {
+                self.blocked_on = None;
+                let failed = matches!(
+                    (blocking, outcome),
+                    (_, RequestOutcome::TimedOut)
+                        | (Blocking::Takeoff, RequestOutcome::Rejected(_))
+                );
+                failed.then(|| self.fail(strings::COMMAND_FAILED))
+            }
+            // Nothing to wait for: the step made no request, or the link has let it go.
+            None => {
+                self.blocked_on = None;
+                None
+            }
+        }
+    }
+
     /// Moves on as far as this frame allows.
     pub fn advance(&mut self, input: &ResumeInput<'_>) -> Vec<ResumeStep> {
         let now = input.now;
@@ -1765,6 +1968,9 @@ impl Resume {
         let Some(target) = input.target else {
             return self.fail(strings::ERROR_NO_RESPONSE);
         };
+        if let Some(steps) = self.answered(input) {
+            return steps;
+        }
         let mode_is = |name: &str| {
             input
                 .mode
@@ -1804,6 +2010,7 @@ impl Resume {
                         ResumePhase::Auto
                     };
                     self.enter(next, now);
+                    self.blocked_on = Some(Blocking::SetCurrent);
                     vec![ResumeStep::Send(vec![commands::mission_set_current(
                         target, 1,
                     )])]
@@ -1829,20 +2036,14 @@ impl Resume {
                     self.enter(ResumePhase::Takeoff, now);
                     self.advance(input)
                 }
-                Attempt::Again => vec![ResumeStep::Send(vec![commands::arm(target, true, false)])],
+                Attempt::Again => {
+                    self.blocked_on = Some(Blocking::Arm);
+                    vec![ResumeStep::Send(vec![commands::arm(target, true, false)])]
+                }
             },
             ResumePhase::Takeoff => {
-                // `if (!doCommand(... TAKEOFF ...)) { Show(CommandFailed); return; }`
-                if self.last_attempt.is_some()
-                    && let Some(answer) = ack_line(
-                        input.messages,
-                        commands::CMD_NAV_TAKEOFF,
-                        self.takeoff_sent_after,
-                    )
-                    && answer.severity == Severity::Error
-                {
-                    return self.fail(strings::COMMAND_FAILED);
-                }
+                // `if (!doCommand(... TAKEOFF ...)) { Show(CommandFailed); return; }` is
+                // `answered`, on the frame the request ends.
                 let climbed = input.altitude >= self.takeoff_altitude - 2.0;
                 match self.attempt(now, climbed, 40) {
                     Attempt::Wait => Vec::new(),
@@ -1852,7 +2053,7 @@ impl Resume {
                         self.advance(input)
                     }
                     Attempt::Again => {
-                        self.takeoff_sent_after = input.messages.last().map_or(0, |m| m.seq);
+                        self.blocked_on = Some(Blocking::Takeoff);
                         #[allow(clippy::cast_possible_truncation)] // the C# passes a float
                         let altitude = self.takeoff_altitude as f32;
                         vec![ResumeStep::Send(vec![commands::takeoff(target, altitude)])]
@@ -2001,6 +2202,8 @@ pub struct Actions {
     pub last_auto_wp: i32,
     /// A Resume Mission in progress, or the last one.
     pub resume: Option<Resume>,
+    /// The request the Resume Mission's last step made, which its next step waits for, and when.
+    pub resume_request: Option<(RequestId, Instant)>,
     /// What the last press put on the wire, or why it put nothing.
     pub last_sent: String,
     /// The command last sent that the vehicle answers with `COMMAND_ACK`, and the newest message
@@ -2029,6 +2232,7 @@ impl Default for Actions {
             alt_offset_home: 0.0,
             last_auto_wp: -1,
             resume: None,
+            resume_request: None,
             last_sent: "nothing yet".to_owned(),
             awaiting_ack: None,
         }
@@ -3241,33 +3445,38 @@ pub fn page_content(
 impl MissionPlanner {
     /// Puts a press's messages on the wire to the vehicle being flown and records them - or
     /// records why nothing went.
-    fn fly_send(&mut self, sends: Sends, view: &TelemetryView) {
+    ///
+    /// Each message goes the way [`route`] says: the ones the C# blocks on become the link's
+    /// retrying requests, with `report` said on the status line when each ends, and the rest go
+    /// once. Returns the requests made, in order.
+    fn fly_send(&mut self, sends: Sends, view: &TelemetryView, report: &Report) -> Vec<RequestId> {
         let messages = match sends {
             Ok(messages) if !messages.is_empty() => messages,
             Ok(_) => {
                 self.fly_actions.record_nothing("nothing to send");
-                return;
+                return Vec::new();
             }
             Err(refusal) => {
                 self.fly_actions.record_nothing(refusal.text());
                 self.file_status = Some(match refusal {
-                    Refusal::Error(text) => format!("Error: {text}"),
+                    Refusal::Error(text) => error_box(text),
                     Refusal::Quiet(text) => text,
                 });
-                return;
+                return Vec::new();
             }
         };
         let Some((sender, _)) = self.telemetry.send_handle() else {
             self.fly_actions.record_nothing("no vehicle");
             self.file_status = Some("no vehicle to send to".to_owned());
-            return;
+            return Vec::new();
         };
-        // Every message is offered to the link, even after one is refused: a loop rather than
-        // `all`, which would stop at the first refusal.
-        let mut queued = true;
-        for message in &messages {
-            queued &= sender.send(message);
-        }
+        let (requests, queued) = send_routed(
+            &mut self.telemetry,
+            &sender,
+            &messages,
+            report,
+            view.connected,
+        );
         self.fly_actions
             .record(&messages, view.messages.last().map_or(0, |m| m.seq));
         self.file_status = Some(if queued {
@@ -3275,16 +3484,22 @@ impl MissionPlanner {
         } else {
             "the link has closed; nothing was sent".to_owned()
         });
+        requests
     }
 
-    /// Builds a press's messages for the vehicle being flown and sends them.
-    fn fly_press(&mut self, build: impl FnOnce(&mut Actions, VehicleId, &TelemetryView) -> Sends) {
+    /// Builds a press's messages for the vehicle being flown and sends them, with `report` said
+    /// when a request among them ends.
+    fn fly_press(
+        &mut self,
+        report: &Report,
+        build: impl FnOnce(&mut Actions, VehicleId, &TelemetryView) -> Sends,
+    ) {
         let view = self.telemetry.view();
         let sends = match self.telemetry.send_handle() {
             Some((_, target)) => build(&mut self.fly_actions, target, &view),
             None => Err(Refusal::quiet("no vehicle")),
         };
-        self.fly_send(sends, &view);
+        self.fly_send(sends, &view, report);
     }
 
     /// `CMB_setwp_Click`: the list rebuilt, and opened.
@@ -3297,44 +3512,64 @@ impl MissionPlanner {
         self.fly_actions.action_open = false;
     }
 
-    /// Set WP: `setWPCurrent(sysid, compid, (ushort) CMB_setwp.SelectedIndex)`.
+    /// Set WP: `setWPCurrent(sysid, compid, (ushort) CMB_setwp.SelectedIndex)`, and
+    /// `Strings.CommandFailed` from its `catch` when every retry goes unanswered.
     /// `// C#: GCSViews/FlightData.cs:1658-1672`
     fn fly_set_wp(&mut self) {
         let seq = u16::try_from(self.fly_actions.setwp_selected).unwrap_or(u16::MAX);
-        self.fly_press(|_, target, _| Ok(vec![commands::mission_set_current(target, seq)]));
+        let report = Report::on_timeout(error_box(strings::COMMAND_FAILED));
+        self.fly_press(&report, |_, target, _| {
+            Ok(vec![commands::mission_set_current(target, seq)])
+        });
     }
 
-    /// Restart Mission: `setWPCurrent(sysid, compid, 0)`.
+    /// Restart Mission: `setWPCurrent(sysid, compid, 0)`, with the same `catch`.
     /// `// C#: GCSViews/FlightData.cs:1881-1895`
     fn fly_restart_mission(&mut self) {
-        self.fly_press(|_, target, _| Ok(vec![commands::mission_set_current(target, 0)]));
+        let report = Report::on_timeout(error_box(strings::COMMAND_FAILED));
+        self.fly_press(&report, |_, target, _| {
+            Ok(vec![commands::mission_set_current(target, 0)])
+        });
     }
 
     /// Change Alt: `setNewWPAlt(new Locationwp {alt = (int) Value / multiplieralt})`.
+    ///
+    /// Sent once: `setNewWPAlt` is `setWP`, which waits for `MISSION_ACK`, and the link has no
+    /// single-item request to do that with (see [`route`]).
     /// `// C#: GCSViews/FlightData.cs:4399-4410`
     fn fly_change_alt(&mut self) {
-        self.fly_press(|actions, target, _| change_alt_sends(target, actions.alt.commit()));
+        self.fly_press(&Report::default(), |actions, target, _| {
+            change_alt_sends(target, actions.alt.commit())
+        });
     }
 
-    /// Change Speed: `DO_CHANGE_SPEED` with the box's number, undivided.
+    /// Change Speed: `DO_CHANGE_SPEED` with the box's number, undivided; its answer not looked
+    /// at, and `Strings.ErrorCommunicating` from its `catch`.
     /// `// C#: GCSViews/FlightData.cs:4426-4438`
     fn fly_change_speed(&mut self) {
-        self.fly_press(|actions, target, _| change_speed_sends(target, actions.speed.commit()));
+        let report = Report::on_timeout(error_box(strings::ERROR_COMMUNICATING));
+        self.fly_press(&report, |actions, target, _| {
+            change_speed_sends(target, actions.speed.commit())
+        });
     }
 
-    /// Set Loiter Rad: the first of `LOITER_RAD` and `WP_LOITER_RAD` the vehicle has.
+    /// Set Loiter Rad: the first of `LOITER_RAD` and `WP_LOITER_RAD` the vehicle has, and
+    /// `Strings.ErrorCommunicating` from the `catch`.
     /// `// C#: GCSViews/FlightData.cs:4412-4424`
     fn fly_set_loiter_rad(&mut self) {
-        self.fly_press(|actions, target, view| {
+        let report = Report::on_timeout(error_box(strings::ERROR_COMMUNICATING));
+        self.fly_press(&report, |actions, target, view| {
             let value = actions.loiter_rad.commit();
             loiter_rad_messages(target, &view.parameters, value)
         });
     }
 
-    /// Abort Landing: `doAbortLand`, only with the link open.
+    /// Abort Landing: `doAbortLand`, only with the link open; its answer not looked at, and
+    /// `Strings.CommandFailed` from its `catch`.
     /// `// C#: GCSViews/FlightData.cs:1019-1032`
     fn fly_abort_land(&mut self) {
-        self.fly_press(|_, target, view| {
+        let report = Report::on_timeout(error_box(strings::COMMAND_FAILED));
+        self.fly_press(&report, |_, target, view| {
             if view.connected {
                 Ok(vec![commands::go_around(target)])
             } else {
@@ -3373,10 +3608,15 @@ impl MissionPlanner {
         }
     }
 
-    /// Sends one `CMB_action` entry.
+    /// Sends one `CMB_action` entry, with its [`action_report`].
     fn fly_run_action(&mut self, index: usize) {
         let action = ACTIONS.get(index).copied().unwrap_or(ACTIONS[0]);
-        self.fly_press(|_, target, view| {
+        let report = self
+            .telemetry
+            .send_handle()
+            .map(|(_, target)| action_report(action, target))
+            .unwrap_or_default();
+        self.fly_press(&report, |_, target, view| {
             let state = view.state.as_deref();
             let context = ActionContext {
                 target,
@@ -3462,15 +3702,23 @@ impl MissionPlanner {
             .ok()
             .and_then(|number| u16::try_from(number).ok())
         else {
-            self.fly_send(Err(Refusal::error(strings::COMMAND_FAILED)), &view);
+            self.fly_send(
+                Err(Refusal::error(strings::COMMAND_FAILED)),
+                &view,
+                &Report::default(),
+            );
             return;
         };
         let (resume, steps) = Resume::start(resume_at, Instant::now());
         self.fly_actions.resume = Some(resume);
+        self.fly_actions.resume_request = None;
         self.fly_resume_steps(steps, &view);
     }
 
     /// Does what a Resume Mission asked for this frame.
+    ///
+    /// A send's request, if it made one, is what the sequence waits for next. The sequence says
+    /// its own failures, so the requests say nothing.
     fn fly_resume_steps(&mut self, steps: Vec<ResumeStep>, view: &TelemetryView) {
         for step in steps {
             match step {
@@ -3480,16 +3728,21 @@ impl MissionPlanner {
                     self.adopt_vehicle_mission = true;
                     self.telemetry.request_mission();
                 }
-                ResumeStep::Send(messages) => self.fly_send(Ok(messages), view),
+                ResumeStep::Send(messages) => {
+                    let requests = self.fly_send(Ok(messages), view, &Report::default());
+                    self.fly_actions.resume_request =
+                        requests.last().map(|&id| (id, Instant::now()));
+                }
             }
         }
     }
 
-    /// Fly To Coords: `lat;long;alt` or `lat;long`, flown to in Guided.
+    /// Fly To Coords: `lat;long;alt` or `lat;long`, flown to in Guided. Everything it sends goes
+    /// once: `setMode` and `setGuidedModeWP` do not wait (see [`route`]).
     /// `// C#: GCSViews/FlightData.cs:5938-6008`
     fn fly_to_coords(&mut self, text: &str) {
         let coords = parse_coords(text);
-        self.fly_press(|actions, target, view| {
+        self.fly_press(&Report::default(), |actions, target, view| {
             let frame = fly_to_coords_frame(&actions.guided, actions.guided_frame_setting);
             let (latitude, longitude, altitude) = match coords? {
                 Coords::Full {
@@ -3527,7 +3780,11 @@ impl MissionPlanner {
         self.fly_actions.guided_frame_setting = Some(frame);
         let Ok(whole) = text.trim().parse::<i32>() else {
             let view = self.telemetry.view();
-            self.fly_send(Err(Refusal::error(strings::BAD_ALT)), &view);
+            self.fly_send(
+                Err(Refusal::error(strings::BAD_ALT)),
+                &view,
+                &Report::default(),
+            );
             return;
         };
         #[allow(clippy::cast_precision_loss)] // a height in metres
@@ -3542,7 +3799,7 @@ impl MissionPlanner {
             ));
             return;
         }
-        self.fly_press(|actions, target, view| {
+        self.fly_press(&Report::default(), |actions, target, view| {
             let guided = actions.guided;
             guided_sends(
                 actions,
@@ -3562,7 +3819,7 @@ impl MissionPlanner {
     /// which flies to the clicked point at `GuidedMode.z` in `GuidedMode.frame`.
     /// `// C#: GCSViews/FlightData.cs:3082-3120`
     pub(crate) fn fly_to_here_guided(&mut self, position: mp_units::LatLon) {
-        self.fly_press(|actions, target, view| {
+        self.fly_press(&Report::default(), |actions, target, view| {
             if position.latitude() == 0.0 || position.longitude() == 0.0 {
                 return Err(Refusal::error(strings::BAD_COORDS));
             }
@@ -3607,11 +3864,17 @@ impl MissionPlanner {
             }),
             family: family(view),
             target: self.telemetry.send_handle().map(|(_, id)| id),
-            messages: &view.messages,
+            request: self.fly_actions.resume_request.and_then(|(id, made)| {
+                match self.telemetry.lookup(id, made) {
+                    Lookup::Found(request) => Some(request.state()),
+                    Lookup::PickingUp => Some(RequestState::Queued),
+                    Lookup::Gone => None,
+                }
+            }),
         });
         // Said once, on the frame it ends; the strip under the grid keeps saying it after that.
         match resume.phase() {
-            ResumePhase::Failed(why) => self.file_status = Some(format!("Error: {why}")),
+            ResumePhase::Failed(why) => self.file_status = Some(error_box(why)),
             ResumePhase::Done => {
                 self.file_status = Some(format!("Resume Mission: {}", resume.label()))
             }
@@ -3620,6 +3883,48 @@ impl MissionPlanner {
         self.fly_actions.resume = Some(resume);
         self.fly_resume_steps(steps, view);
     }
+}
+
+/// A press's messages on their way, each as [`route`] says: the requests made, in order, and
+/// whether everything was queued - false once the link has closed.
+///
+/// Every message is offered to the link, even after one is refused: a loop rather than `all`,
+/// which would stop at the first refusal.
+pub fn send_routed(
+    telemetry: &mut crate::telemetry::Telemetry,
+    sender: &mp_link::LinkSender,
+    messages: &[MavMessage],
+    report: &Report,
+    connected: bool,
+) -> (Vec<RequestId>, bool) {
+    let mut queued = true;
+    let mut requests = Vec::new();
+    for message in messages {
+        let request = match route(message) {
+            Route::Raw => {
+                queued &= sender.send(message);
+                continue;
+            }
+            Route::SetCurrent { target, seq } => {
+                telemetry.set_current_waypoint(target, seq, report.clone())
+            }
+            Route::Command {
+                target,
+                command,
+                params,
+            } => telemetry.command(target, command, params, report.clone()),
+            // `setParam(name, value)`: `force` is false.
+            Route::SetParam {
+                target,
+                name,
+                value,
+            } => telemetry.set_parameter_on(target, &name, value, false, report.clone()),
+        };
+        // A request is queued for the link thread, which is only there while the link is.
+        queued &= request.is_some() && connected;
+        requests.extend(request);
+    }
+    (requests, queued)
 }
 
 /// `setGuidedModeWP` for the vehicle being flown, as a press's sends.
@@ -4227,7 +4532,8 @@ mod tests {
         mode: &'static str,
         armed: bool,
         altitude: f64,
-        messages: Vec<LogMessage>,
+        /// The last step's request, as the link would report it.
+        request: Option<RequestState>,
     }
 
     impl Vehicle {
@@ -4239,7 +4545,7 @@ mod tests {
                 mode: "Stabilize",
                 armed: false,
                 altitude: 0.0,
-                messages: Vec::new(),
+                request: None,
             }
         }
 
@@ -4253,7 +4559,7 @@ mod tests {
                 altitude: self.altitude,
                 family: Some(VehicleFamily::Copter),
                 target: Some(target()),
-                messages: &self.messages,
+                request: self.request,
             }
         }
 
@@ -4396,19 +4702,189 @@ mod tests {
         // Already in Guided and armed: straight through to the first takeoff.
         resume.advance(&vehicle.input());
         assert_eq!(resume.phase(), &ResumePhase::Takeoff);
-        vehicle.messages.push(LogMessage {
-            from: target(),
-            severity: Severity::Error,
-            text: "MAV_CMD_NAV_TAKEOFF: denied".to_owned(),
-            seq: 1,
-            received: 0,
-        });
-        vehicle.later(1000);
+        vehicle.request = Some(RequestState::Finished(RequestOutcome::Rejected(4)));
         resume.advance(&vehicle.input());
         assert_eq!(
             resume.phase(),
             &ResumePhase::Failed(strings::COMMAND_FAILED.to_owned())
         );
+    }
+
+    /// A Resume Mission run to the frame it asks for waypoint 1 to be made current.
+    fn at_set_current(vehicle: &mut Vehicle) -> Resume {
+        let (mut resume, _) = Resume::start(6, vehicle.now);
+        vehicle.transfer = Some((false, false, ""));
+        resume.advance(&vehicle.input());
+        let mut last = Vec::new();
+        for _ in 0..3 {
+            vehicle.transfer = Some((true, false, ""));
+            vehicle.later(1100);
+            last = resume.advance(&vehicle.input());
+        }
+        let [ResumeStep::Send(set_current)] = last.as_slice() else {
+            panic!("expected MISSION_SET_CURRENT, got {last:?}");
+        };
+        assert_eq!(
+            route(&set_current[0]),
+            Route::SetCurrent {
+                target: target(),
+                seq: 1
+            }
+        );
+        resume
+    }
+
+    /// `setWPCurrent`, `doARM` and `doCommand` block the C#: nothing more is sent while the link
+    /// is still retrying the call, and the second before the next attempt starts when it ends.
+    /// `// C#: GCSViews/FlightData.cs:1553-1597`
+    #[test]
+    fn resume_waits_inside_each_call_it_blocks_on() {
+        let mut vehicle = Vehicle::new();
+        let mut resume = at_set_current(&mut vehicle);
+
+        // Still asking for waypoint 1: Guided is not asked for, however long it takes.
+        vehicle.request = Some(RequestState::Waiting);
+        vehicle.later(9000);
+        assert!(resume.advance(&vehicle.input()).is_empty());
+        // Answered: Guided at once.
+        vehicle.request = Some(RequestState::Finished(RequestOutcome::Accepted {
+            value: None,
+        }));
+        let steps = resume.advance(&vehicle.input());
+        assert_eq!(sends(&steps)[0].0, commands::CMD_DO_SET_MODE);
+
+        // The mode step makes no request; in Guided, arming is asked for.
+        vehicle.request = None;
+        vehicle.mode = "Guided";
+        vehicle.later(1000);
+        let arm = (400, [1., 0., 0., 0., 0., 0., 0.]);
+        assert_eq!(sends(&resume.advance(&vehicle.input())), [arm]);
+
+        // `doARM` waiting ten seconds a try for its answer: not asked again meanwhile.
+        vehicle.request = Some(RequestState::Waiting);
+        for _ in 0..5 {
+            vehicle.later(1000);
+            assert!(resume.advance(&vehicle.input()).is_empty());
+        }
+        // Refused - its answer is not looked at - so asked again, a second after it returned.
+        vehicle.request = Some(RequestState::Finished(RequestOutcome::Rejected(4)));
+        assert!(resume.advance(&vehicle.input()).is_empty());
+        assert_eq!(resume.phase(), &ResumePhase::Arm);
+        vehicle.later(500);
+        assert!(resume.advance(&vehicle.input()).is_empty());
+        vehicle.later(500);
+        assert_eq!(sends(&resume.advance(&vehicle.input())), [arm]);
+    }
+
+    /// Every retry unanswered throws in the C#, and the outer `catch` says `CommandFailed`.
+    /// `// C#: GCSViews/FlightData.cs:1624-1627`
+    #[test]
+    fn resume_fails_when_a_call_it_blocks_on_times_out() {
+        let mut vehicle = Vehicle::new();
+        let mut resume = at_set_current(&mut vehicle);
+        vehicle.request = Some(RequestState::Finished(RequestOutcome::TimedOut));
+        assert!(resume.advance(&vehicle.input()).is_empty());
+        assert_eq!(
+            resume.phase(),
+            &ResumePhase::Failed(strings::COMMAND_FAILED.to_owned())
+        );
+
+        let mut vehicle = Vehicle::new();
+        vehicle.mode = "Guided";
+        let mut resume = at_set_current(&mut vehicle);
+        let steps = resume.advance(&vehicle.input());
+        assert_eq!(sends(&steps), [(400, [1., 0., 0., 0., 0., 0., 0.])]);
+        vehicle.request = Some(RequestState::Finished(RequestOutcome::TimedOut));
+        vehicle.later(40_000);
+        resume.advance(&vehicle.input());
+        assert_eq!(
+            resume.phase(),
+            &ResumePhase::Failed(strings::COMMAND_FAILED.to_owned())
+        );
+    }
+
+    // --- Which way each message goes ----------------------------------------------------------
+
+    /// The calls the C# blocks on become the link's retrying requests; what it sends and forgets
+    /// goes once.
+    #[test]
+    fn the_calls_the_csharp_waits_on_become_requests_and_the_rest_go_once() {
+        let t = target();
+        assert_eq!(
+            route(&commands::mission_set_current(t, 2)),
+            Route::SetCurrent { target: t, seq: 2 }
+        );
+        assert_eq!(
+            route(&commands::change_speed(t, 7.5)),
+            Route::Command {
+                target: t,
+                command: commands::CMD_DO_CHANGE_SPEED,
+                params: [0.0, 7.5, 0.0, 0.0, 0.0, 0.0, 0.0],
+            }
+        );
+        assert_eq!(
+            route(&commands::param_set(t, "LOITER_RAD", 80.0)),
+            Route::SetParam {
+                target: t,
+                name: "LOITER_RAD".to_owned(),
+                value: 80.0,
+            }
+        );
+        // `setMode`, `doReboot`, `setGuidedModeWP`, `sendPacket`; `doCommandInt` and `setWP`,
+        // which the link has no request for.
+        let once = [
+            set_mode_messages(t, Some(VehicleFamily::Copter), "GUIDED"),
+            vec![
+                commands::reboot(t),
+                commands::change_alt(t, 25.0),
+                commands::system_time(1),
+                commands::guided_position_target(t, 3, -35.36, 149.16, 20.0),
+                commands::command_int(
+                    t,
+                    commands::CMD_STORAGE_FORMAT,
+                    commands::FRAME_GLOBAL,
+                    [1.0, 1.0, 0.0, 0.0],
+                    0,
+                    0,
+                    0.0,
+                ),
+            ],
+        ]
+        .concat();
+        for message in &once {
+            assert_eq!(route(message), Route::Raw, "{}", describe(message));
+        }
+    }
+
+    /// Do Action's message boxes, per entry: the generic path's refusal names the command,
+    /// `Trigger_Camera` falls back to `DIGICAM_CONTROL`, and what is not waited on says nothing.
+    /// `// C#: GCSViews/FlightData.cs:1697-1878`
+    #[test]
+    fn do_action_says_what_the_csharp_says_when_refused_or_unanswered() {
+        let generic = action_report("Battery_Reset", target());
+        assert_eq!(
+            generic.refused.as_deref(),
+            Some("Error: The Command failed to execute BATTERY_RESET")
+        );
+        assert_eq!(
+            generic.timed_out.as_deref(),
+            Some("Error: The Command failed to execute")
+        );
+        let engine = action_report("Engine_Start", target());
+        assert_eq!(
+            engine.refused, None,
+            "doEngineControl's answer is not looked at"
+        );
+        assert!(engine.timed_out.is_some());
+        let camera = action_report("Trigger_Camera", target());
+        assert!(
+            matches!(camera.fallback, Some(MavMessage::DigicamControl(m)) if m.shot == 1 && m.target_system == 1),
+            "{camera:?}"
+        );
+        assert_eq!(camera.refused, None);
+        for quiet in ["Preflight_Reboot_Shutdown", "System_Time", "Format_SD_Card"] {
+            assert_eq!(action_report(quiet, target()), Report::default(), "{quiet}");
+        }
     }
 
     // --- What was sent and what came back ---------------------------------------------------------

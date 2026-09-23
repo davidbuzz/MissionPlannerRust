@@ -72,3 +72,13 @@ when panel geometry actually changed.
 come to roughly 5 s (~300 at 60 fps), not in minutes. Never leave `MP_BENCH` set for an ordinary
 screenshot. Always clean up on exit — trap EXIT/INT/TERM and pre-kill leftovers — so a killed run
 cannot leave a window behind. See [[no-foreground-waiting]].
+
+**Never run the GUI scripts while worktree agents are cold-building.** On 2026-09-24 a batch of
+eighteen scripts ran with five agents each compiling gpui from scratch: load average 87 on 16
+cores. Under that, keystrokes sent through the input method were lost mid-word, a prompt's fact was
+read before the frame that showed it, and four scripts failed with nothing wrong in the
+application. Every one passed again once the load was under 25. Check `/proc/loadavg` first and
+wait (`until [ "$(cut -d. -f1 /proc/loadavg)" -lt 25 ]; do sleep 30; done`), or the failures cost
+an hour of diagnosis each. A script that fails only under load is not a defect to fix in the
+script with longer settles; it is a run to repeat when the machine is quiet. See
+[[worktree-agents-share-the-target-dir]].

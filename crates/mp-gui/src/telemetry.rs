@@ -8,13 +8,18 @@
 #![allow(unreachable_pub)]
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use mp_link::messages::LogMessage;
 use mp_link::mission_transfer::TransferState;
-use mp_link::{Link, LinkConfig, commands};
+use mp_link::requests::{Request, RequestOutcome};
+use mp_link::{Link, LinkConfig, RequestId, commands};
+use mp_mavlink_dialects::all::MavMessage;
 use mp_mission::MissionItem;
 use mp_units::LatLon;
 use mp_vehicle::{VehicleFamily, VehicleId, VehicleState};
+
+use crate::fly::{error_box, strings};
 
 /// The parameter holding the bitmask of checks performed before arming, before ArduPilot 4.7.
 ///
@@ -125,6 +130,107 @@ impl TelemetryView {
     }
 }
 
+/// What a screen says when a request it made ends, as the C# says it around the call it blocks on.
+///
+/// Mission Planner blocks the screen inside `setParam`, `doCommand` and `setWPCurrent` while they
+/// send and send again, and wraps each call in its own `try`/`catch` and `if (!ok)` with a message
+/// box in one or both. Here the link runs the retries and the screen carries on, so the message
+/// box's text travels with the request and is said on the status line when the request ends.
+/// `None` is the C# saying nothing.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Report {
+    /// Every retry went unanswered: the C#'s `catch` around the `TimeoutException`.
+    pub timed_out: Option<String>,
+    /// The vehicle said no - a `MAV_RESULT` other than accepted and in progress - or has no
+    /// parameter of that name: the C#'s `false` branch.
+    pub refused: Option<String>,
+    /// It worked, where the C# says so on screen.
+    pub accepted: Option<String>,
+    /// Sent when the vehicle says no: `setDigicamControl` falls back to `DIGICAM_CONTROL` when
+    /// its command is refused.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4557-4569`
+    pub fallback: Option<MavMessage>,
+}
+
+impl Report {
+    /// Says `text` if every retry goes unanswered, and nothing otherwise.
+    #[must_use]
+    pub fn on_timeout(text: impl Into<String>) -> Self {
+        Self {
+            timed_out: Some(text.into()),
+            ..Self::default()
+        }
+    }
+
+    /// Says `text` if the vehicle refuses or never answers, and nothing otherwise.
+    #[must_use]
+    pub fn on_failure(text: impl Into<String>) -> Self {
+        let text = text.into();
+        Self {
+            timed_out: Some(text.clone()),
+            refused: Some(text),
+            ..Self::default()
+        }
+    }
+
+    /// What to say for an outcome, if anything.
+    #[must_use]
+    pub fn text(&self, outcome: RequestOutcome) -> Option<&str> {
+        match outcome {
+            RequestOutcome::TimedOut => self.timed_out.as_deref(),
+            RequestOutcome::Rejected(_) | RequestOutcome::UnknownParameter => {
+                self.refused.as_deref()
+            }
+            // `setParam` returns true for a value already held (C#: MAVLinkInterface.cs:1647-1651),
+            // and `doCommand` true for the commands it does not wait on.
+            RequestOutcome::Accepted { .. } | RequestOutcome::Sent | RequestOutcome::Unchanged => {
+                self.accepted.as_deref()
+            }
+        }
+    }
+}
+
+/// A request a screen handed to the link, and what to say when it ends.
+#[derive(Debug, Clone)]
+struct Awaited {
+    id: RequestId,
+    /// When it was handed over, for [`Telemetry::lookup`].
+    made: Instant,
+    report: Report,
+}
+
+/// How long a request may be missing from the link before it is taken as forgotten.
+///
+/// The link moves what it picks up from its queue into its table in two steps, with neither lock
+/// held in between (mp-link's `run_link`, `picked_up`), and in that moment `Link::request` finds
+/// the request in neither. The moment is microseconds unless the link thread is descheduled in
+/// it; a request missing for longer than this has been let go.
+pub const PICKUP_GRACE: Duration = Duration::from_millis(500);
+
+/// What the link says of a request a screen made.
+#[derive(Debug, Clone)]
+pub enum Lookup {
+    /// Where it is. Boxed: a request carries the message it sends, which dwarfs the other two.
+    Found(Box<Request>),
+    /// Neither queued nor held, but made a moment ago: the link is picking it up.
+    PickingUp,
+    /// Forgotten, or the link is gone: it will never be heard of again.
+    Gone,
+}
+
+/// What `testMotor` says: its `false` branch's box, and its `catch`'s with the motor's number.
+/// `// C#: GCSViews/ConfigurationView/ConfigMotorTest.cs:318-327`
+fn motor_report(motor: u8) -> Report {
+    Report {
+        refused: Some("Command was denied by the autopilot".to_owned()),
+        timed_out: Some(error_box(format!(
+            "{} Motor: {motor}",
+            strings::ERROR_COMMUNICATING
+        ))),
+        ..Report::default()
+    }
+}
+
 /// Owns the link and produces views of it.
 #[derive(Debug)]
 pub struct Telemetry {
@@ -143,6 +249,8 @@ pub struct Telemetry {
     banner_requested: std::collections::BTreeSet<VehicleId>,
     /// The firmware banner, once a vehicle has said it: `ArduCopter V4.5.7 (1c0c8d9c)`.
     banner: Option<String>,
+    /// Requests the screens made and have not yet heard the end of, oldest first.
+    awaited: Vec<Awaited>,
 }
 
 impl Telemetry {
@@ -235,22 +343,13 @@ impl Telemetry {
         };
         match Link::connect(url, config) {
             Ok(link) => Self {
-                link: Some(link),
-                target: url.to_owned(),
-                error: None,
-                selected: None,
-                banner_requested: std::collections::BTreeSet::new(),
-                banner: None,
                 recording,
+                ..Self::over(link, url)
             },
             Err(err) => Self {
-                link: None,
-                target: url.to_owned(),
                 error: Some(err.to_string()),
-                selected: None,
-                banner_requested: std::collections::BTreeSet::new(),
-                banner: None,
-                recording: None,
+                target: url.to_owned(),
+                ..Self::idle()
             },
         }
     }
@@ -266,6 +365,18 @@ impl Telemetry {
             banner_requested: std::collections::BTreeSet::new(),
             banner: None,
             recording: None,
+            awaited: Vec::new(),
+        }
+    }
+
+    /// Screens over a link that is already open: [`Telemetry::connect`]'s, and a test's over an
+    /// in-memory transport.
+    #[must_use]
+    pub fn over(link: Link, url: &str) -> Self {
+        Self {
+            link: Some(link),
+            target: url.to_owned(),
+            ..Self::idle()
         }
     }
 
@@ -474,14 +585,200 @@ impl Telemetry {
         self.selected = Some(id);
     }
 
-    /// Arms or disarms, with the vehicle's pre-arm checks applied.
-    pub fn arm(&self, arm: bool) {
-        if let Some((link, id)) = self.target() {
-            link.send(&commands::arm(id, arm, false));
+    /// The vehicle currently being flown, without the link.
+    fn target_id(&self) -> Option<VehicleId> {
+        self.target().map(|(_, id)| id)
+    }
+
+    // --- Requests: the calls the C# blocks on, retried by the link ---------------------------------
+
+    /// Keeps what to say when a request ends.
+    fn awaiting(&mut self, id: RequestId, report: Report) -> RequestId {
+        self.awaited.push(Awaited {
+            id,
+            made: Instant::now(),
+            report,
+        });
+        id
+    }
+
+    /// `doCommand` with its acknowledgement waited for: `COMMAND_LONG` to `target` until a
+    /// `COMMAND_ACK` for it, sent again by the link as the C# sends again - three more times, two
+    /// seconds apart; ten for arming; once more after 25 for a calibration - and `report` said
+    /// when it ends. `None` without a link.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2688-2836`
+    pub fn command(
+        &mut self,
+        target: VehicleId,
+        command: u16,
+        params: [f32; 7],
+        report: Report,
+    ) -> Option<RequestId> {
+        let id = self.link.as_ref()?.command(target, command, params, true);
+        Some(self.awaiting(id, report))
+    }
+
+    /// A `COMMAND_LONG` a builder made, sent as [`Telemetry::command`] sends one: to the vehicle
+    /// it names, with its parameters. Nothing else is sent.
+    ///
+    /// The builders in `mp_link::commands` and `mp_calibration` stay the one place a command's
+    /// parameters are written down; this only reads them back out.
+    pub fn command_message(&mut self, message: &MavMessage, report: Report) -> Option<RequestId> {
+        let MavMessage::CommandLong(long) = message else {
+            return None;
+        };
+        self.command(
+            VehicleId::new(long.target_system, long.target_component),
+            long.command,
+            [
+                long.param1,
+                long.param2,
+                long.param3,
+                long.param4,
+                long.param5,
+                long.param6,
+                long.param7,
+            ],
+            report,
+        )
+    }
+
+    /// `setWPCurrent`: `MISSION_SET_CURRENT` until a `MISSION_CURRENT` arrives, sent again every
+    /// two seconds up to five times, and `report` said when it ends.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2452-2501`
+    pub fn set_current_waypoint(
+        &mut self,
+        target: VehicleId,
+        seq: u16,
+        report: Report,
+    ) -> Option<RequestId> {
+        let id = self.link.as_ref()?.set_current_waypoint(target, seq);
+        Some(self.awaiting(id, report))
+    }
+
+    /// `setParam` on `target`: `PARAM_SET` until the vehicle echoes the parameter, sent again every
+    /// 700 ms up to three times, and `report` said when it ends. Refused without sending for a
+    /// name the vehicle has not listed, and not sent for a value it already holds unless `force`.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1628-1770`
+    pub fn set_parameter_on(
+        &mut self,
+        target: VehicleId,
+        name: &str,
+        value: f64,
+        force: bool,
+        report: Report,
+    ) -> Option<RequestId> {
+        let id = self.link.as_ref()?.set_param(target, name, value, force);
+        Some(self.awaiting(id, report))
+    }
+
+    /// `setParam` on the vehicle being flown, for a caller that reads the outcome itself with
+    /// [`Telemetry::request`] - a list of writes made one after another, as the C#'s are.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1628-1770`
+    pub fn write_parameter(&self, name: &str, value: f64, force: bool) -> Option<RequestId> {
+        let (link, id) = self.target()?;
+        Some(link.set_param(id, name, value, force))
+    }
+
+    /// `GetParam`: `PARAM_REQUEST_READ` until the parameter arrives, sent again every 700 ms up to
+    /// three times. What arrives goes into the vehicle's table.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2296-2380`
+    pub fn read_parameter(&self, name: &str) -> Option<RequestId> {
+        let (link, id) = self.target()?;
+        Some(link.read_param(id, name))
+    }
+
+    /// Whether the vehicle being flown has listed a parameter of this name - which `setParam`
+    /// needs before it will send one.
+    #[must_use]
+    pub fn holds_parameter(&self, name: &str) -> bool {
+        self.target()
+            .and_then(|(link, id)| link.params(id))
+            .is_some_and(|table| table.get(name).is_some())
+    }
+
+    /// Where a request is, as the link has it. `None` once the link has forgotten it, with no
+    /// link - and for a moment while the link picks it up, which is why the screens ask
+    /// [`Telemetry::lookup`] instead; a test polling until an answer is in hand can ask this.
+    #[cfg(test)]
+    #[must_use]
+    pub fn request(&self, id: RequestId) -> Option<Request> {
+        self.link.as_ref()?.request(id)
+    }
+
+    /// Where a request made at `made` is, telling a request the link is still picking up from
+    /// one it has let go (see [`PICKUP_GRACE`]).
+    #[must_use]
+    pub fn lookup(&self, id: RequestId, made: Instant) -> Lookup {
+        let Some(link) = &self.link else {
+            return Lookup::Gone;
+        };
+        match link.request(id) {
+            Some(request) => Lookup::Found(Box::new(request)),
+            None if link.is_running() && made.elapsed() < PICKUP_GRACE => Lookup::PickingUp,
+            None => Lookup::Gone,
         }
     }
 
+    /// Once a frame: what the requests that have ended say, oldest first. A refused command's
+    /// fallback goes on the wire here, as `setDigicamControl` sends it after `doCommand` returns
+    /// false. A request the link has let go says nothing.
+    pub fn take_reports(&mut self) -> Vec<String> {
+        let Some(link) = &self.link else {
+            self.awaited.clear();
+            return Vec::new();
+        };
+        let mut said = Vec::new();
+        let awaited = std::mem::take(&mut self.awaited);
+        for waiting in awaited {
+            let request = match self.lookup(waiting.id, waiting.made) {
+                Lookup::Found(request) => request,
+                Lookup::PickingUp => {
+                    self.awaited.push(waiting);
+                    continue;
+                }
+                Lookup::Gone => continue,
+            };
+            let Some(outcome) = request.outcome() else {
+                self.awaited.push(waiting);
+                continue;
+            };
+            if matches!(outcome, RequestOutcome::Rejected(_))
+                && let Some(fallback) = &waiting.report.fallback
+            {
+                link.send(fallback);
+            }
+            if let Some(text) = waiting.report.text(outcome) {
+                said.push(text.to_owned());
+            }
+        }
+        said
+    }
+
+    /// Arms or disarms, with the vehicle's pre-arm checks applied: `doARM`, which waits ten
+    /// seconds a try for the acknowledgement "as may need an imu calib". A refusal is said as
+    /// `BUT_ARM_Click`'s message box begins, a timeout as its `catch` says it.
+    /// `// C#: GCSViews/FlightData.cs:1034-1079, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2632-2657`
+    pub fn arm(&mut self, arm: bool) {
+        let Some(id) = self.target_id() else {
+            return;
+        };
+        let action = if arm { "Arm" } else { "Disarm" };
+        let report = Report {
+            refused: Some(error_box(format!("{action} failed."))),
+            timed_out: Some(error_box(strings::ERROR_NO_RESPONSE)),
+            ..Report::default()
+        };
+        self.command_message(&commands::arm(id, arm, false), report);
+    }
+
     /// Starts a six-position accelerometer calibration.
+    ///
+    /// Sent and not waited for: `doCommand` returns at once for a calibration with param5 = 1,
+    /// "for advanced accel offsets, and blocks execution", so the C#'s `if` always takes the
+    /// true branch and the vehicle's own `COMMAND_LONG` asking for the first position is the
+    /// answer.
+    /// `// C#: GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs:68-80, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2734-2739`
     pub fn start_accelerometer_calibration(&self) {
         if let Some((link, id)) = self.target() {
             link.clear_accel_calibration();
@@ -490,6 +787,10 @@ impl Telemetry {
     }
 
     /// Tells the vehicle the airframe is in the position it asked for.
+    ///
+    /// Sent and not waited for: the C# puts this `COMMAND_LONG` on the wire with `sendPacket`,
+    /// and the vehicle's next request for a position is the answer.
+    /// `// C#: GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs:50-51`
     pub fn confirm_accelerometer_position(&self, position: mp_calibration::AccelPosition) {
         if let Some((link, id)) = self.target() {
             link.send(&mp_calibration::accelerometer_position_reached(
@@ -515,18 +816,41 @@ impl Telemetry {
     }
 
     /// Tells the vehicle that however it is sitting now is level.
-    pub fn calibrate_level(&self) {
-        if let Some((link, id)) = self.target() {
-            link.send(&mp_calibration::level(id));
-        }
+    ///
+    /// `BUT_level_Click`: `doCommand`, a calibration, so sent twice at most, 25 seconds apart. A
+    /// refusal is `Strings.CommandFailed`, a timeout "Failed to level", and success turns the
+    /// button's text to `Strings.Completed`.
+    /// `// C#: GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs:143-162`
+    pub fn calibrate_level(&mut self) {
+        let Some(id) = self.target_id() else {
+            return;
+        };
+        let report = Report {
+            refused: Some(error_box(strings::COMMAND_FAILED)),
+            timed_out: Some(error_box("Failed to level")),
+            accepted: Some(format!("level calibration: {}", strings::COMPLETED)),
+            fallback: None,
+        };
+        self.command_message(&mp_calibration::level(id), report);
     }
 
     /// Starts an onboard compass calibration.
-    pub fn calibrate_compass(&self) {
-        if let Some((link, id)) = self.target() {
+    ///
+    /// `BUT_OBmagcalstart_Click`: `doCommand`, its answer not looked at, and a timeout said.
+    /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:264-279`
+    pub fn calibrate_compass(&mut self) {
+        let Some(id) = self.target_id() else {
+            return;
+        };
+        if let Some(link) = &self.link {
             link.clear_compass_calibration();
-            link.send(&mp_calibration::start_compass(id));
         }
+        self.command_message(
+            &mp_calibration::start_compass(id),
+            Report::on_timeout(error_box(
+                "Failed to start MAG CAL, check the autopilot is still responding.",
+            )),
+        );
     }
 
     /// Compass calibration progress, one entry per compass.
@@ -539,10 +863,18 @@ impl Telemetry {
     }
 
     /// Stops a running compass calibration.
-    pub fn cancel_compass_calibration(&self) {
-        if let Some((link, id)) = self.target() {
-            link.send(&mp_calibration::cancel_compass(id));
-        }
+    ///
+    /// `BUT_OBmagcalcancel_Click`: `doCommand`, its answer not looked at; a timeout shows the
+    /// exception, whose message is `doCommand`'s "Timeout on read - doCommand".
+    /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:341-350, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2797`
+    pub fn cancel_compass_calibration(&mut self) {
+        let Some(id) = self.target_id() else {
+            return;
+        };
+        self.command_message(
+            &mp_calibration::cancel_compass(id),
+            Report::on_timeout(error_box("Timeout on read - doCommand")),
+        );
     }
 
     /// Forgets compass calibration progress.
@@ -553,24 +885,43 @@ impl Telemetry {
     }
 
     /// Recalibrates the barometer's ground pressure reference.
-    pub fn calibrate_ground_pressure(&self) {
-        if let Some((link, id)) = self.target() {
-            link.send(&mp_calibration::ground_pressure(id));
-        }
+    ///
+    /// The same `doCommand(PREFLIGHT_CALIBRATION, ...)` as the level, waited on the same way,
+    /// with its refusal and timeout said as `Strings.CommandFailed`, as `BUTactiondo_Click` says
+    /// them for the calibration it sends.
+    /// `// C#: GCSViews/FlightData.cs:1860-1874`
+    pub fn calibrate_ground_pressure(&mut self) {
+        let Some(id) = self.target_id() else {
+            return;
+        };
+        self.command_message(
+            &mp_calibration::ground_pressure(id),
+            Report::on_failure(error_box(strings::COMMAND_FAILED)),
+        );
     }
 
     /// Spins one motor briefly, at a bounded throttle and with a timeout.
-    pub fn test_motor(&self, motor: u8, throttle_percent: f32) {
-        if let Some((link, id)) = self.target() {
-            link.send(&mp_calibration::test_motor(id, motor, throttle_percent));
-        }
+    ///
+    /// `testMotor`: `doCommand`, a refusal said as "Command was denied by the autopilot" and a
+    /// timeout as `Strings.ErrorCommunicating` with the motor's number.
+    /// `// C#: GCSViews/ConfigurationView/ConfigMotorTest.cs:305-328`
+    pub fn test_motor(&mut self, motor: u8, throttle_percent: f32) {
+        let Some(id) = self.target_id() else {
+            return;
+        };
+        self.command_message(
+            &mp_calibration::test_motor(id, motor, throttle_percent),
+            motor_report(motor),
+        );
     }
 
-    /// Stops a running motor test.
-    pub fn stop_motor(&self, motor: u8) {
-        if let Some((link, id)) = self.target() {
-            link.send(&mp_calibration::stop_motor(id, motor));
-        }
+    /// Stops a running motor test: the same `testMotor`, at zero throttle.
+    /// `// C#: GCSViews/ConfigurationView/ConfigMotorTest.cs:305-328`
+    pub fn stop_motor(&mut self, motor: u8) {
+        let Some(id) = self.target_id() else {
+            return;
+        };
+        self.command_message(&mp_calibration::stop_motor(id, motor), motor_report(motor));
     }
 
     /// Asks the vehicle to list its dataflash logs.
@@ -635,32 +986,24 @@ impl Telemetry {
         }
     }
 
-    /// Writes one parameter.
-    pub fn set_parameter(&self, name: &str, value: f32) {
-        if let Some((link, id)) = self.target() {
-            link.send(&commands::param_set(id, name, value));
-        }
-    }
-
     /// Writes one parameter and waits, on the link thread, for the vehicle to echo it: the C#'s
-    /// `setParam`, with its checks and its retries. `None` with no vehicle to write to; the
-    /// outcome is read with [`Telemetry::request`].
+    /// `setParam`, with its checks and its retries, not forced. `None` with no vehicle to write
+    /// to; the outcome is read with [`Telemetry::request`] or [`Telemetry::lookup`]. The config
+    /// pages use this; the parameter editor uses [`Telemetry::write_parameter`] directly.
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1628-1766`
-    pub fn set_parameter_confirmed(&self, name: &str, value: f64) -> Option<mp_link::RequestId> {
-        let (link, id) = self.target()?;
-        Some(link.set_param(id, name, value, false))
-    }
-
-    /// Where a request made through the link is, or `None` if the link has forgotten it.
-    #[must_use]
-    pub fn request(&self, id: mp_link::RequestId) -> Option<mp_link::requests::Request> {
-        self.link.as_ref()?.request(id)
+    pub fn set_parameter_confirmed(&self, name: &str, value: f64) -> Option<RequestId> {
+        self.write_parameter(name, value, false)
     }
 
     /// Reboots the autopilot.
     ///
     /// The link drops when the vehicle obeys, which is what success looks like. Useful after a
     /// calibration, and the usual first thing to try when a board is behaving oddly.
+    ///
+    /// Sent and not waited for: `doReboot`'s `doCommand` puts `PREFLIGHT_REBOOT_SHUTDOWN` on the
+    /// wire and returns without an acknowledgement, because a vehicle that obeys has no time to
+    /// send one.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2553-2567, 2758-2763`
     pub fn reboot(&self) {
         if let Some((link, id)) = self.target() {
             link.send(&commands::reboot(id));
@@ -690,24 +1033,24 @@ impl Telemetry {
 
     /// Asks the vehicle for both arming-check parameter names.
     ///
-    /// Cheap - two messages - and the answer says which firmware generation this is without
-    /// downloading a thousand parameters to find out.
+    /// Cheap - two reads - and the answer says which firmware generation this is without
+    /// downloading a thousand parameters to find out. Each is `GetParam`, asked again by the link
+    /// until it arrives or its retries run out; the name this firmware does not have is the one
+    /// that runs out.
     pub fn probe_arming_check_param(&self) {
-        if let Some((link, id)) = self.target() {
-            link.send(&commands::request_param_by_name(id, ARMING_SKIPCHK));
-            link.send(&commands::request_param_by_name(id, ARMING_CHECK));
-        }
+        self.read_parameter(ARMING_SKIPCHK);
+        self.read_parameter(ARMING_CHECK);
     }
 
     /// Turns the vehicle's arming checks off.
     ///
     /// Writes whichever parameter this vehicle actually has. Until that is known it asks for both
-    /// and writes both: the one that does not exist is ignored, and the caller retries, by which
-    /// time the answer has arrived and the right one is written on its own.
+    /// and writes neither: `setParam` refuses a name the vehicle has not listed, and the caller
+    /// retries, by which time the answer has arrived and the right one is written.
     ///
     /// These are persistent parameters, so they stay off until something sets them back - which is
     /// the behaviour asked for, and why the caller says so on screen rather than doing it quietly.
-    pub fn disable_arming_checks(&self) {
+    pub fn disable_arming_checks(&mut self) {
         self.write_arming_checks(SKIP_ALL_CHECKS, 0.0);
     }
 
@@ -715,7 +1058,7 @@ impl Telemetry {
     ///
     /// The defaults differ with the name: nothing skipped for the new parameter, everything
     /// checked for the old one. Writing the wrong default would be worse than writing nothing.
-    pub fn enable_arming_checks(&self) {
+    pub fn enable_arming_checks(&mut self) {
         self.write_arming_checks(0.0, 1.0);
     }
 
@@ -725,31 +1068,34 @@ impl Telemetry {
     /// They are different numbers for the same intent, because the sense was inverted along with
     /// the rename.
     ///
-    /// Until the vehicle has said which it has, both are written and both are asked for. The one
-    /// that does not exist is ignored, and the caller retries - by which time the answer has
-    /// arrived and only the right one is written.
-    fn write_arming_checks(&self, skipchk: f32, legacy: f32) {
-        let Some((link, id)) = self.target() else {
+    /// Until the vehicle has said which it has, both are asked for and nothing is written: the
+    /// write is `setParam`, which will not send a name the vehicle has not listed. A timeout is
+    /// said as the C#'s parameter screen says one.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:359-363`
+    fn write_arming_checks(&mut self, skipchk: f32, legacy: f32) {
+        let Some(id) = self.target_id() else {
             return;
         };
-        match self.arming_check_param() {
-            Some(name) if name == ARMING_SKIPCHK => {
-                link.send(&commands::param_set(id, ARMING_SKIPCHK, skipchk));
-            }
-            Some(_) => {
-                link.send(&commands::param_set(id, ARMING_CHECK, legacy));
-            }
+        let (name, value) = match self.arming_check_param() {
+            Some(name) if name == ARMING_SKIPCHK => (ARMING_SKIPCHK, skipchk),
+            Some(_) => (ARMING_CHECK, legacy),
             None => {
                 self.probe_arming_check_param();
-                link.send(&commands::param_set(id, ARMING_SKIPCHK, skipchk));
-                link.send(&commands::param_set(id, ARMING_CHECK, legacy));
+                return;
             }
-        }
+        };
+        self.set_parameter_on(
+            id,
+            name,
+            f64::from(value),
+            false,
+            Report::on_timeout(format!("Set {name} Failed")),
+        );
     }
 
     /// Arms with the checks bypassed.
     ///
-    /// Two things, because one is not enough. The magic 21196 in `MAV_CMD_COMPONENT_ARM_DISARM`
+    /// Two things, because one is not enough. The magic 2989 in `MAV_CMD_COMPONENT_ARM_DISARM`
     /// param2 tells the vehicle to skip its *pre-arm* checks, and a real board refused it anyway,
     /// listing an uncalibrated accelerometer and a bad GPS fix - those are arming checks, and the
     /// magic does not touch them. Turning `ARMING_CHECK` off does.
@@ -760,14 +1106,23 @@ impl Telemetry {
     ///
     /// It is a separate call from [`Telemetry::arm`] rather than a flag on it, so that no code
     /// path can force by accident: forcing is something a caller asks for by name.
-    pub fn force_arm(&self) {
+    ///
+    /// The arm is `doARM(..., force: true)`: a `doCommand` the link waits on and retries. Its
+    /// request is returned so the caller asks again only once this one has ended, as the C#'s
+    /// caller can only call again once `doARM` has returned; nothing is said when it ends,
+    /// because the caller says it.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2632-2645`
+    pub fn force_arm(&mut self) -> Option<RequestId> {
         self.disable_arming_checks();
-        if let Some((link, id)) = self.target() {
-            link.send(&commands::arm(id, true, true));
-        }
+        let id = self.target_id()?;
+        self.command_message(&commands::arm(id, true, true), Report::default())
     }
 
     /// Changes flight mode.
+    ///
+    /// Sent and not waited for: `setMode` sends `DO_SET_MODE` with `requireack` false and then
+    /// `SET_MODE`, and returns; the mode in the next heartbeat is the answer.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4631-4641`
     pub fn set_mode(&self, custom_mode: u32) {
         if let Some((link, id)) = self.target() {
             link.send(&commands::set_mode(id, custom_mode));
@@ -775,20 +1130,39 @@ impl Telemetry {
     }
 
     /// Takes off to the given height above home.
-    pub fn takeoff(&self, altitude_metres: f32) {
-        if let Some((link, id)) = self.target() {
-            link.send(&commands::takeoff(id, altitude_metres));
-        }
+    ///
+    /// `takeOffToolStripMenuItem_Click`: `doCommand(TAKEOFF, ...)`, its answer not looked at, and
+    /// a timeout said as `Strings.CommandFailed`.
+    /// `// C#: GCSViews/FlightData.cs:5305-5313`
+    pub fn takeoff(&mut self, altitude_metres: f32) {
+        let Some(id) = self.target_id() else {
+            return;
+        };
+        self.command_message(
+            &commands::takeoff(id, altitude_metres),
+            Report::on_timeout(error_box(strings::COMMAND_FAILED)),
+        );
     }
 
     /// Lands where the vehicle is.
-    pub fn land(&self) {
-        if let Some((link, id)) = self.target() {
-            link.send(&commands::land(id));
-        }
+    ///
+    /// A `doCommand` waited on as the take-off is, with a timeout said the same way.
+    /// `// C#: GCSViews/FlightData.cs:5305-5313`
+    pub fn land(&mut self) {
+        let Some(id) = self.target_id() else {
+            return;
+        };
+        self.command_message(
+            &commands::land(id),
+            Report::on_timeout(error_box(strings::COMMAND_FAILED)),
+        );
     }
 
     /// Flies to a position at the given height, in Guided.
+    ///
+    /// Sent and not waited for: `setGuidedModeWP` puts `SET_POSITION_TARGET_GLOBAL_INT` on the
+    /// wire with `generatePacket` and returns.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4449-4454, 4500-4554`
     pub fn goto(&self, position: LatLon, altitude_metres: f32) {
         if let Some((link, id)) = self.target() {
             link.send(&commands::goto_position(
@@ -819,8 +1193,9 @@ impl Telemetry {
     ///
     /// Mission Planner sends `DO_SEND_BANNER` at connect and for each new vehicle, and takes the
     /// firmware version from the `STATUSTEXT` that names the vehicle; the parameter
-    /// documentation for that release is fetched from it.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:930, 1822-1830, 1856`
+    /// documentation for that release is fetched from it. Sent and not waited for: the C#'s
+    /// `doCommand` passes `requireack` false.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:930-931, 1822-1830, 1856-1857`
     pub fn tick(&mut self) {
         let Some(link) = &self.link else {
             return;
@@ -857,9 +1232,424 @@ impl Telemetry {
     }
 }
 
+/// A scripted vehicle on the far end of an in-memory link, for driving a screen's sets and
+/// commands through the real link - its thread, its request machines, their retries - in a test.
+///
+/// The arrangement of `mp-link`'s `tests/retries.rs`: the link is the real one over a
+/// [`mp_transport::testing::Loopback`], and the vehicle is a script that reads what the link sent
+/// and decides what, if anything, to answer. A send the script does not answer is a send lost on
+/// the way.
+#[cfg(test)]
+pub mod scripted {
+    use std::time::{Duration, Instant};
+
+    use mp_link::{Link, LinkConfig, ProtocolTimeouts};
+    use mp_mavlink::{FrameDecoder, encode_v2};
+    use mp_mavlink_dialects::all::{CommandAck, DIALECT, Heartbeat, MavMessage, ParamValue};
+    use mp_transport::Transport;
+    use mp_transport::testing::{Loopback, LoopbackEnd};
+    use mp_vehicle::VehicleId;
+
+    use super::Telemetry;
+
+    /// The autopilot every test talks to.
+    pub const VEHICLE: VehicleId = VehicleId::new(1, 1);
+    /// The link's own address, which the vehicle's acknowledgements are addressed to.
+    const GCS: VehicleId = VehicleId::new(255, 190);
+    /// `MAV_PARAM_TYPE_INT32`, which is how ArduPilot declares `RTL_ALT`.
+    pub const INT32: u8 = 6;
+    /// How long anything may take before the test is declared hung.
+    const HUNG: Duration = Duration::from_secs(5);
+
+    /// The vehicle's end of the link.
+    pub struct Vehicle {
+        end: LoopbackEnd,
+        decoder: FrameDecoder,
+        seq: u8,
+        /// Everything the link has sent it, in order.
+        pub heard: Vec<MavMessage>,
+    }
+
+    impl Vehicle {
+        /// A link with Mission Planner's retry counts and these waits, the screens' telemetry
+        /// over it, and an ArduPilot copter on the other end that has announced itself.
+        pub fn connect(timeouts: ProtocolTimeouts) -> (Telemetry, Self) {
+            let (vehicle_side, gcs_side) = Loopback::pair();
+            let config = LinkConfig {
+                send_heartbeat: false,
+                stream_rate_hz: 0,
+                timeouts,
+                ..LinkConfig::default()
+            };
+            let telemetry =
+                Telemetry::over(Link::from_transport(Box::new(gcs_side), config), "loopback");
+            let mut vehicle = Self {
+                end: vehicle_side,
+                decoder: FrameDecoder::new(),
+                seq: 0,
+                heard: Vec::new(),
+            };
+            vehicle.send(&MavMessage::Heartbeat(Heartbeat {
+                custom_mode: 0,
+                r#type: 2,
+                autopilot: 3,
+                base_mode: 81,
+                system_status: 3,
+                mavlink_version: 3,
+            }));
+            until("the vehicle to be seen", || {
+                telemetry.vehicles().contains(&VEHICLE)
+            });
+            (telemetry, vehicle)
+        }
+
+        /// Sends a message as the autopilot.
+        pub fn send(&mut self, message: &MavMessage) {
+            let mut payload = [0u8; 255];
+            let len = message.encode(&mut payload);
+            let mut frame = [0u8; mp_mavlink::MAX_FRAME_LEN];
+            let n = encode_v2(
+                &mut frame,
+                self.seq,
+                VEHICLE.sysid,
+                VEHICLE.compid,
+                message.id(),
+                &payload[..len],
+                message.crc_extra(),
+                0,
+            )
+            .unwrap();
+            self.seq = self.seq.wrapping_add(1);
+            self.end.write_all(&frame[..n]).unwrap();
+        }
+
+        /// What the link has sent since the last call; each is also kept in `heard`.
+        pub fn read(&mut self) -> Vec<MavMessage> {
+            let mut buf = [0u8; 4096];
+            let mut fresh = Vec::new();
+            loop {
+                let n = self.end.read(&mut buf).unwrap_or(0);
+                if n == 0 {
+                    break;
+                }
+                self.decoder.push_and_drain(&buf[..n], &DIALECT, |frame| {
+                    if let Some(message) = MavMessage::decode(frame.msgid, frame.payload) {
+                        fresh.push(message);
+                    }
+                });
+            }
+            self.heard.extend(fresh.iter().copied());
+            fresh
+        }
+
+        /// How many of the messages heard `pick` recognises.
+        pub fn count(&self, pick: impl Fn(&MavMessage) -> bool) -> usize {
+            self.heard.iter().filter(|message| pick(message)).count()
+        }
+    }
+
+    /// A `PARAM_VALUE` as the vehicle sends it: the only parameter of a one-parameter vehicle.
+    pub fn param(name: &str, value: f32, param_type: u8) -> MavMessage {
+        MavMessage::ParamValue(ParamValue {
+            param_value: value,
+            param_count: 1,
+            param_index: 0,
+            param_id: mp_params::encode_param_id(name),
+            param_type,
+        })
+    }
+
+    /// The vehicle's `COMMAND_ACK` for `command`.
+    pub fn ack(command: u16, result: u8) -> MavMessage {
+        MavMessage::CommandAck(CommandAck {
+            command,
+            result,
+            progress: 0,
+            result_param2: 0,
+            target_system: GCS.sysid,
+            target_component: GCS.compid,
+        })
+    }
+
+    /// Polls until `check` holds, failing rather than hanging.
+    pub fn until(what: &str, mut check: impl FnMut() -> bool) {
+        let deadline = Instant::now() + HUNG;
+        while !check() {
+            assert!(Instant::now() < deadline, "timed out waiting for {what}");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::scripted::{INT32, VEHICLE, Vehicle, ack, param, until};
     use super::*;
+    use crate::fly::{Route, action_report, route, send_routed, set_mode_messages};
+    use mp_link::ProtocolTimeouts;
+    use mp_link::requests::MAV_RESULT_ACCEPTED;
+
+    /// `MAV_RESULT_DENIED`.
+    const DENIED: u8 = 2;
+
+    /// The link's waits, divided so a test runs the C#'s full retry ladder in a blink; every
+    /// count stays the C#'s.
+    fn fast() -> ProtocolTimeouts {
+        ProtocolTimeouts::default().faster(20)
+    }
+
+    /// The `COMMAND_LONG`s the vehicle heard, as (command, confirmation).
+    fn longs(vehicle: &Vehicle) -> Vec<(u16, u8)> {
+        vehicle
+            .heard
+            .iter()
+            .filter_map(|message| match message {
+                MavMessage::CommandLong(long) => Some((long.command, long.confirmation)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Change Speed's `DO_CHANGE_SPEED`, the way the flight screen sends it: through [`route`]
+    /// to the link's retrying command. The first send is lost - the vehicle never hears it
+    /// answered - so the link sends it again with its confirmation counted up, the vehicle
+    /// accepts that one, and the press has nothing to say: `doCommand`'s retry, on the screen's
+    /// own path.
+    /// `// C#: GCSViews/FlightData.cs:4426-4438, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2783-2834`
+    #[test]
+    fn a_command_whose_first_send_is_lost_is_sent_again_and_accepted() {
+        let (mut telemetry, mut vehicle) = Vehicle::connect(fast());
+        let press = [commands::change_speed(VEHICLE, 7.5)];
+        let Route::Command { command, .. } = route(&press[0]) else {
+            panic!("DO_CHANGE_SPEED is doCommand's");
+        };
+        let report = Report::on_timeout(error_box(strings::ERROR_COMMUNICATING));
+        let (sender, _) = telemetry.send_handle().unwrap();
+        let (requests, queued) = send_routed(&mut telemetry, &sender, &press, &report, true);
+        assert!(queued);
+        let [id] = requests[..] else {
+            panic!("one request: {requests:?}");
+        };
+
+        let mut said = Vec::new();
+        until("the command to end", || {
+            for message in vehicle.read() {
+                if matches!(message, MavMessage::CommandLong(_)) && longs(&vehicle).len() == 2 {
+                    vehicle.send(&ack(command, MAV_RESULT_ACCEPTED));
+                }
+            }
+            said.extend(telemetry.take_reports());
+            telemetry
+                .request(id)
+                .is_some_and(|request| request.is_finished())
+        });
+
+        assert_eq!(longs(&vehicle), [(command, 0), (command, 1)]);
+        let request = telemetry.request(id).unwrap();
+        assert_eq!(request.sends(), 2);
+        assert_eq!(
+            request.outcome(),
+            Some(RequestOutcome::Accepted { value: None })
+        );
+        said.extend(telemetry.take_reports());
+        assert!(said.is_empty(), "{said:?}");
+    }
+
+    /// Set WP's `MISSION_SET_CURRENT`, the way the flight screen sends it, with the first lost:
+    /// sent again, and the vehicle's `MISSION_CURRENT` ends it with nothing to say. The mode
+    /// request in the same kind of press goes once, as `setMode` sends it, however long the
+    /// vehicle stays quiet about it.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2457-2501, 4631-4641`
+    #[test]
+    fn set_wp_whose_first_send_is_lost_is_sent_again_and_a_mode_request_is_sent_once() {
+        let (mut telemetry, mut vehicle) = Vehicle::connect(fast());
+        let (sender, _) = telemetry.send_handle().unwrap();
+        let report = Report::on_timeout(error_box(strings::COMMAND_FAILED));
+        let (requests, _) = send_routed(
+            &mut telemetry,
+            &sender,
+            &[commands::mission_set_current(VEHICLE, 2)],
+            &report,
+            true,
+        );
+        let [id] = requests[..] else {
+            panic!("one request: {requests:?}");
+        };
+        let is_set_current = |m: &MavMessage| matches!(m, MavMessage::MissionSetCurrent(_));
+        let mut said = Vec::new();
+        until("the set-current to end", || {
+            for message in vehicle.read() {
+                if is_set_current(&message) && vehicle.count(is_set_current) == 2 {
+                    vehicle.send(&MavMessage::MissionCurrent(
+                        mp_mavlink_dialects::all::MissionCurrent {
+                            seq: 2,
+                            total: 0,
+                            mission_state: 0,
+                            mission_mode: 0,
+                        },
+                    ));
+                }
+            }
+            said.extend(telemetry.take_reports());
+            telemetry.request(id).is_some_and(|r| r.is_finished())
+        });
+        let request = telemetry.request(id).unwrap();
+        assert_eq!(request.sends(), 2);
+        assert_eq!(
+            request.outcome(),
+            Some(RequestOutcome::Accepted { value: None })
+        );
+        assert!(said.is_empty(), "{said:?}");
+
+        // Guided: DO_SET_MODE without an ack waited for, then SET_MODE twice. No request.
+        let press = set_mode_messages(VEHICLE, Some(VehicleFamily::Copter), "GUIDED");
+        let (requests, queued) = send_routed(&mut telemetry, &sender, &press, &report, true);
+        assert!(requests.is_empty() && queued);
+        std::thread::sleep(fast().command.timeout * 3);
+        vehicle.read();
+        assert_eq!(
+            vehicle.count(|m| matches!(m, MavMessage::CommandLong(l) if l.command == commands::CMD_DO_SET_MODE)),
+            1
+        );
+        assert_eq!(vehicle.count(|m| matches!(m, MavMessage::SetMode(_))), 2);
+    }
+
+    /// Set WP to a vehicle that never answers: `MISSION_SET_CURRENT` six times, two seconds
+    /// apart in the C#, then its `catch` - said on the status line, once.
+    /// `// C#: GCSViews/FlightData.cs:1658-1672, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2472-2491`
+    #[test]
+    fn every_retry_unanswered_is_said_as_the_csharps_catch_says_it() {
+        let (mut telemetry, mut vehicle) = Vehicle::connect(fast());
+        let report = Report::on_timeout(error_box(strings::COMMAND_FAILED));
+        telemetry.set_current_waypoint(VEHICLE, 2, report).unwrap();
+
+        let mut said = Vec::new();
+        until("the set-current to give up", || {
+            vehicle.read();
+            said.extend(telemetry.take_reports());
+            !said.is_empty()
+        });
+        vehicle.read();
+
+        assert_eq!(said, ["Error: The Command failed to execute"]);
+        assert_eq!(
+            vehicle.count(|m| matches!(m, MavMessage::MissionSetCurrent(s) if s.seq == 2)),
+            6
+        );
+        assert!(telemetry.take_reports().is_empty(), "said once");
+    }
+
+    /// Trigger Camera refused: `setDigicamControl` falls back to `DIGICAM_CONTROL`, and the
+    /// press says nothing more.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4557-4569`
+    #[test]
+    fn a_refused_camera_trigger_falls_back_to_digicam_control() {
+        let (mut telemetry, mut vehicle) = Vehicle::connect(fast());
+        let message = crate::fly::action_messages(
+            "Trigger_Camera",
+            &crate::fly::ActionContext {
+                target: VEHICLE,
+                copter: true,
+                motor_outputs_enabled: false,
+                now_unix_usec: 0,
+            },
+        )
+        .unwrap()
+        .remove(0);
+        telemetry
+            .command_message(&message, action_report("Trigger_Camera", VEHICLE))
+            .unwrap();
+
+        let mut said = Vec::new();
+        until("the fallback", || {
+            for message in vehicle.read() {
+                if let MavMessage::CommandLong(long) = message {
+                    vehicle.send(&ack(long.command, DENIED));
+                }
+            }
+            said.extend(telemetry.take_reports());
+            vehicle.count(|m| matches!(m, MavMessage::DigicamControl(d) if d.shot == 1)) == 1
+        });
+        assert!(said.is_empty(), "{said:?}");
+        assert_eq!(longs(&vehicle).len(), 1, "a refusal is not retried");
+    }
+
+    /// A request missing from the link a moment after it was made is being picked up - the link
+    /// moves it from queue to table in two steps, and finds it in neither between them - and one
+    /// missing for longer has been let go. Without this, a write polled in that moment was taken
+    /// as never answered and the next write overtook it.
+    #[test]
+    fn a_request_missing_a_moment_after_it_was_made_is_being_picked_up() {
+        let (mut elsewhere, _vehicle) = Vehicle::connect(fast());
+        let id = elsewhere
+            .set_current_waypoint(VEHICLE, 1, Report::default())
+            .unwrap();
+        // Requests are numbered per link, and this link has made none.
+        let (telemetry, _other) = Vehicle::connect(fast());
+        assert!(matches!(
+            telemetry.lookup(id, Instant::now()),
+            Lookup::PickingUp
+        ));
+        let long_ago = Instant::now().checked_sub(PICKUP_GRACE).unwrap();
+        assert!(matches!(telemetry.lookup(id, long_ago), Lookup::Gone));
+        until("the request to be held", || {
+            matches!(elsewhere.lookup(id, long_ago), Lookup::Found(_))
+        });
+    }
+
+    /// Arm refused: `BUT_ARM_Click`'s message box begins "Arm failed."; the status line says it.
+    /// `// C#: GCSViews/FlightData.cs:1057-1066`
+    #[test]
+    fn a_refused_arm_says_so() {
+        let (mut telemetry, mut vehicle) = Vehicle::connect(fast());
+        telemetry.arm(true);
+        let mut said = Vec::new();
+        until("the refusal", || {
+            for message in vehicle.read() {
+                if let MavMessage::CommandLong(long) = message {
+                    vehicle.send(&ack(long.command, DENIED));
+                }
+            }
+            said.extend(telemetry.take_reports());
+            !said.is_empty()
+        });
+        assert_eq!(said, ["Error: Arm failed."]);
+        assert_eq!(longs(&vehicle), [(commands::CMD_COMPONENT_ARM_DISARM, 0)]);
+    }
+
+    /// The arming-check write goes only to a name the vehicle has listed; until then it is
+    /// asked for, and nothing is written.
+    #[test]
+    fn arming_checks_are_written_only_once_the_vehicle_has_named_its_parameter() {
+        let (mut telemetry, mut vehicle) = Vehicle::connect(fast());
+        telemetry.disable_arming_checks();
+        until("both names asked for", || {
+            vehicle.read();
+            vehicle.count(|m| matches!(m, MavMessage::ParamRequestRead(_))) >= 2
+        });
+        assert_eq!(vehicle.count(|m| matches!(m, MavMessage::ParamSet(_))), 0);
+
+        vehicle.send(&param(ARMING_SKIPCHK, 0.0, INT32));
+        until("the name to be known", || {
+            telemetry.arming_check_param() == Some(ARMING_SKIPCHK)
+        });
+        telemetry.disable_arming_checks();
+        until("the write", || {
+            vehicle.read();
+            vehicle.count(|m| matches!(m, MavMessage::ParamSet(_))) == 1
+        });
+        let sets: Vec<_> = vehicle
+            .heard
+            .iter()
+            .filter_map(|m| match m {
+                MavMessage::ParamSet(set) => {
+                    Some((mp_params::decode_param_id(&set.param_id), set.param_value))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(sets, [(ARMING_SKIPCHK.to_owned(), SKIP_ALL_CHECKS)]);
+    }
 
     /// The name is what a pilot reads off a wall clock, not what a machine reads off a file.
     #[test]

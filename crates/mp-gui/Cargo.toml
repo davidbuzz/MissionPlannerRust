@@ -59,3 +59,10 @@ gpui_windows = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd
 
 [target.'cfg(target_os = "macos")'.dependencies]
 gpui_macos = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f0c8a3af8d5e7e9c4652490d468db8" }
+
+# A scripted vehicle on the far end of an in-memory link, so a screen's sets and commands can be
+# driven through the real link and its retries in a unit test: the transport double and the frame
+# codec that vehicle speaks with.
+[dev-dependencies]
+mp-transport.workspace = true
+mp-mavlink.workspace = true

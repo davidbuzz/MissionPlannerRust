@@ -12,11 +12,16 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use std::collections::VecDeque;
+use std::time::Instant;
+
 use gpui::{AnyElement, Context, div, prelude::*, px, rgb};
+use mp_link::RequestId;
+use mp_link::requests::RequestOutcome;
 use mp_params::{ParamMeta, UserLevel};
 
 use crate::MissionPlanner;
-use crate::telemetry::TelemetryView;
+use crate::telemetry::{Lookup, Telemetry, TelemetryView};
 use crate::ui::{action, panel, progress, theme};
 
 /// One parameter as the screen needs it.
@@ -620,6 +625,340 @@ pub fn file_panel(
     .into_any_element()
 }
 
+// --- Writing -------------------------------------------------------------------------------------
+
+/// One parameter write in a list, and what the C# says when it fails.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParamWrite {
+    /// The parameter.
+    pub name: String,
+    /// The value asked for.
+    pub value: f64,
+    /// Written even when the vehicle already holds the value: `setParam(..., force: true)`.
+    pub force: bool,
+    /// Said when every retry of the write goes unanswered.
+    pub failure: String,
+}
+
+/// What a list of writes says when it has finished.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Finish {
+    /// One step of a value in the editor: the value the vehicle now holds.
+    Nudge,
+    /// A file's differences: Write Params' summary, and how many the firmware does not have.
+    Apply {
+        /// Differences not written because this firmware has no such parameter.
+        skipped: usize,
+    },
+    /// The radio's recorded limits, over this many channels.
+    Radio {
+        /// Channels that moved.
+        channels: usize,
+    },
+}
+
+/// How one write ended: for the facts, so a test can see the retry from outside.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Written {
+    /// The parameter.
+    pub name: String,
+    /// How the vehicle answered.
+    pub outcome: RequestOutcome,
+    /// How many times the `PARAM_SET` went on the wire.
+    pub sends: u16,
+}
+
+impl Written {
+    /// The outcome in a word or two.
+    #[must_use]
+    pub const fn outcome_word(&self) -> &'static str {
+        match self.outcome {
+            RequestOutcome::Accepted { .. } => "accepted",
+            RequestOutcome::Unchanged => "unchanged",
+            RequestOutcome::TimedOut => "timed out",
+            RequestOutcome::UnknownParameter => "not on this vehicle",
+            RequestOutcome::Rejected(_) => "refused",
+            RequestOutcome::Sent => "sent",
+        }
+    }
+}
+
+/// Where the write under way is.
+#[derive(Debug, Clone, Copy)]
+enum Step {
+    /// `GetParam` first. `setParam` sends only a name the vehicle has listed, and the C# always
+    /// holds the whole list by the time a screen writes; this application downloads it only when
+    /// asked, so a name not yet heard of is read before it is written.
+    Reading(RequestId),
+    /// `setParam`, retried by the link until the vehicle echoes the parameter.
+    Writing(RequestId),
+}
+
+/// What one turn of [`ParamWrites::advance`] has to say.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Progress {
+    /// For the status line, when it changes.
+    pub status: Option<String>,
+    /// A write that ended this turn.
+    pub written: Option<Written>,
+}
+
+/// A list of parameter writes made one after another, as the C#'s are: each `setParam` blocks,
+/// sending again every 700 ms up to three times, until the vehicle echoes the parameter, and only
+/// then is the next one sent. A write that is never echoed is said in the C#'s words and the list
+/// goes on.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:313-370, ConfigRadioInput.cs:355-385`
+#[derive(Debug)]
+pub struct ParamWrites {
+    queue: VecDeque<ParamWrite>,
+    /// The write under way, its step, and when that step's request was made.
+    current: Option<(ParamWrite, Step, Instant)>,
+    total: usize,
+    failures: Vec<String>,
+    finish: Finish,
+    finished: bool,
+    /// The last write that ended and the value the vehicle now holds for it.
+    reported: Option<(String, f64)>,
+}
+
+impl ParamWrites {
+    fn new(writes: Vec<ParamWrite>, finish: Finish) -> Self {
+        Self {
+            total: writes.len(),
+            queue: writes.into(),
+            current: None,
+            failures: Vec::new(),
+            finish,
+            finished: false,
+            reported: None,
+        }
+    }
+
+    /// The editor's one step: `setParam(name, value)`, and "Set NAME Failed" if it is never
+    /// echoed.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:323, 359-363`
+    #[must_use]
+    pub fn nudge(name: &str, value: f64) -> Self {
+        Self::new(
+            vec![ParamWrite {
+                name: name.to_owned(),
+                value,
+                force: false,
+                failure: format!("Set {name} Failed"),
+            }],
+            Finish::Nudge,
+        )
+    }
+
+    /// Write Params: every difference, one after another, each "Set NAME Failed" if it is never
+    /// echoed.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:313-370`
+    #[must_use]
+    pub fn apply(writes: impl IntoIterator<Item = (String, f64)>, skipped: usize) -> Self {
+        let writes = writes
+            .into_iter()
+            .map(|(name, value)| ParamWrite {
+                failure: format!("Set {name} Failed"),
+                name,
+                value,
+                force: false,
+            })
+            .collect();
+        Self::new(writes, Finish::Apply { skipped })
+    }
+
+    /// The radio calibration's save: each channel's `RCn_MIN` and `RCn_MAX`, forced as the C#
+    /// forces them, and "Failed to set Channel N" for a channel whose write is never echoed.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:355-385`
+    #[must_use]
+    pub fn radio(limits: &[(usize, u16, u16)]) -> Self {
+        let writes = limits
+            .iter()
+            .flat_map(|&(number, minimum, maximum)| {
+                [("MIN", minimum), ("MAX", maximum)].map(|(end, value)| ParamWrite {
+                    name: format!("RC{number}_{end}"),
+                    value: f64::from(value),
+                    force: true,
+                    failure: format!("Failed to set Channel {number}"),
+                })
+            })
+            .collect();
+        Self::new(
+            writes,
+            Finish::Radio {
+                channels: limits.len(),
+            },
+        )
+    }
+
+    /// Whether every write has ended and the summary has been said.
+    #[must_use]
+    pub const fn is_finished(&self) -> bool {
+        self.finished
+    }
+
+    /// Moves on as far as the link allows: the write under way checked, the next one started
+    /// when it has ended, and the summary when the last one has.
+    pub fn advance(&mut self, telemetry: &Telemetry) -> Progress {
+        let mut progress = Progress::default();
+        if self.finished {
+            return progress;
+        }
+        loop {
+            if let Some((write, step, made)) = self.current.take() {
+                let id = match step {
+                    Step::Reading(id) | Step::Writing(id) => id,
+                };
+                // A request the link has let go, or a link that has gone, is a write that never
+                // got its answer.
+                let request = match telemetry.lookup(id, made) {
+                    Lookup::Found(request) => Some(request),
+                    Lookup::PickingUp => {
+                        self.current = Some((write, step, made));
+                        return progress;
+                    }
+                    Lookup::Gone => None,
+                };
+                let outcome = request
+                    .as_ref()
+                    .map_or(Some(RequestOutcome::TimedOut), |request| request.outcome());
+                let Some(outcome) = outcome else {
+                    self.current = Some((write, step, made));
+                    return progress;
+                };
+                match step {
+                    // Heard of now: write it.
+                    Step::Reading(_) if matches!(outcome, RequestOutcome::Accepted { .. }) => {
+                        self.write(write, telemetry);
+                        continue;
+                    }
+                    // The vehicle has no such parameter. `setParam` returns false for that
+                    // without an exception, which none of its callers counts as a failure.
+                    Step::Reading(_) => {
+                        progress.written = Some(Written {
+                            name: write.name,
+                            outcome: RequestOutcome::UnknownParameter,
+                            sends: 0,
+                        });
+                    }
+                    Step::Writing(_) => {
+                        if outcome == RequestOutcome::TimedOut
+                            && !self.failures.contains(&write.failure)
+                        {
+                            self.failures.push(write.failure.clone());
+                        }
+                        let held = match outcome {
+                            RequestOutcome::Accepted { value: Some(value) } => value.as_f64(),
+                            _ => write.value,
+                        };
+                        self.reported = Some((write.name.clone(), held));
+                        progress.written = Some(Written {
+                            name: write.name,
+                            outcome,
+                            sends: request.map_or(0, |request| request.sends()),
+                        });
+                    }
+                }
+            }
+            let Some(next) = self.queue.pop_front() else {
+                self.finished = true;
+                progress.status = self.summary();
+                return progress;
+            };
+            if !matches!(self.finish, Finish::Nudge) {
+                progress.status = Some(format!(
+                    "writing {} of {}: {}",
+                    self.total - self.queue.len(),
+                    self.total,
+                    next.name
+                ));
+            }
+            if telemetry.holds_parameter(&next.name) {
+                self.write(next, telemetry);
+            } else {
+                match telemetry.read_parameter(&next.name) {
+                    Some(id) => self.current = Some((next, Step::Reading(id), Instant::now())),
+                    None => self.fail_to_start(next),
+                }
+            }
+            if self.current.is_some() {
+                return progress;
+            }
+        }
+    }
+
+    /// Starts the write itself.
+    fn write(&mut self, write: ParamWrite, telemetry: &Telemetry) {
+        match telemetry.write_parameter(&write.name, write.value, write.force) {
+            Some(id) => self.current = Some((write, Step::Writing(id), Instant::now())),
+            None => self.fail_to_start(write),
+        }
+    }
+
+    /// No link to write on: the write fails as one never echoed does.
+    fn fail_to_start(&mut self, write: ParamWrite) {
+        if !self.failures.contains(&write.failure) {
+            self.failures.push(write.failure);
+        }
+    }
+
+    /// What the C# says when the list is done, if anything.
+    fn summary(&self) -> Option<String> {
+        let failed = self.failures.join("; ");
+        Some(match self.finish {
+            // What the vehicle now holds, which is what the C#'s grid shows once `setParam` has
+            // stored the echo - not necessarily what was asked for.
+            Finish::Nudge if failed.is_empty() => {
+                let (name, value) = self.reported.as_ref()?;
+                format!("{name} = {value}")
+            }
+            Finish::Nudge => failed,
+            // "Set X Failed" for each, then the summary box.
+            // `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:362-371`
+            Finish::Apply { skipped } => {
+                let said = if failed.is_empty() {
+                    format!("{} parameters successfully saved.", self.total)
+                } else {
+                    format!("{failed}. Not all parameters successfully saved.")
+                };
+                if skipped > 0 {
+                    format!("{said} Skipped {skipped} this firmware does not have.")
+                } else {
+                    said
+                }
+            }
+            Finish::Radio { channels } if failed.is_empty() => {
+                format!("wrote limits for {channels} channels; reboot for them to take effect")
+            }
+            Finish::Radio { .. } => failed,
+        })
+    }
+}
+
+impl MissionPlanner {
+    /// Starts a list of parameter writes.
+    pub(crate) fn start_param_writes(&mut self, writes: ParamWrites) {
+        self.param_writes.push(writes);
+        self.advance_param_writes();
+    }
+
+    /// Once a frame: every list of writes moved on, what they say put on the status line, and
+    /// the last write to end kept for the facts.
+    pub(crate) fn advance_param_writes(&mut self) {
+        let telemetry = &self.telemetry;
+        for writes in &mut self.param_writes {
+            let progress = writes.advance(telemetry);
+            if let Some(text) = progress.status {
+                self.file_status = Some(text);
+            }
+            if let Some(written) = progress.written {
+                self.last_param_write = Some(written);
+            }
+        }
+        self.param_writes.retain(|writes| !writes.is_finished());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -764,6 +1103,192 @@ mod tests {
         assert!(
             no_range.accepts(3300.0),
             "a parameter with no range accepts anything"
+        );
+    }
+
+    // --- Writing, through the real link to a scripted vehicle ------------------------------------
+
+    use crate::telemetry::scripted::{INT32, Vehicle, param, until};
+    use mp_link::ProtocolTimeouts;
+    use mp_mavlink_dialects::all::MavMessage;
+
+    /// `MAV_PARAM_TYPE_INT16`, as ArduPilot declares `RCn_MIN` and `RCn_MAX`.
+    const INT16: u8 = 4;
+
+    /// The link's waits, divided so a test runs the C#'s whole retry ladder in a blink; every
+    /// count stays the C#'s.
+    fn fast() -> ProtocolTimeouts {
+        ProtocolTimeouts::default().faster(20)
+    }
+
+    /// The name of each `PARAM_SET` and `PARAM_REQUEST_READ` the vehicle heard, in order.
+    fn traffic(vehicle: &Vehicle) -> Vec<String> {
+        vehicle
+            .heard
+            .iter()
+            .filter_map(|message| match message {
+                MavMessage::ParamSet(set) => {
+                    Some(format!("set {}", mp_params::decode_param_id(&set.param_id)))
+                }
+                MavMessage::ParamRequestRead(read) => Some(format!(
+                    "read {}",
+                    mp_params::decode_param_id(&read.param_id)
+                )),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Runs a list of writes against a vehicle playing `answer`, and returns everything it said.
+    fn run(
+        writes: &mut ParamWrites,
+        telemetry: &Telemetry,
+        vehicle: &mut Vehicle,
+        mut answer: impl FnMut(&mut Vehicle, &MavMessage),
+    ) -> (Vec<String>, Vec<Written>) {
+        let mut said = Vec::new();
+        let mut written = Vec::new();
+        until("the writes to finish", || {
+            for message in vehicle.read() {
+                answer(&mut *vehicle, &message);
+            }
+            let progress = writes.advance(telemetry);
+            said.extend(progress.status);
+            written.extend(progress.written);
+            writes.is_finished()
+        });
+        (said, written)
+    }
+
+    /// The editor's one step, whose first `PARAM_SET` is lost: the link sends it again, the
+    /// vehicle echoes the second, and the status line says what the vehicle now holds. The C#'s
+    /// `setParam` retry, driven through the screen's own list of writes and the real link.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1748-1770`
+    #[test]
+    fn a_write_whose_first_send_is_lost_is_sent_again_and_confirmed() {
+        let (telemetry, mut vehicle) = Vehicle::connect(fast());
+        vehicle.send(&param("RTL_ALT", 1500.0, INT32));
+        until("RTL_ALT to be listed", || {
+            telemetry.holds_parameter("RTL_ALT")
+        });
+
+        let mut writes = ParamWrites::nudge("RTL_ALT", 1501.0);
+        let mut sets = 0;
+        let (said, written) = run(&mut writes, &telemetry, &mut vehicle, |vehicle, message| {
+            if let MavMessage::ParamSet(set) = message {
+                sets += 1;
+                // The first is lost on the way.
+                if sets == 2 {
+                    vehicle.send(&param("RTL_ALT", set.param_value, INT32));
+                }
+            }
+        });
+
+        assert_eq!(traffic(&vehicle), ["set RTL_ALT", "set RTL_ALT"]);
+        assert_eq!(said, ["RTL_ALT = 1501"]);
+        let [written] = written.as_slice() else {
+            panic!("one write: {written:?}");
+        };
+        assert_eq!(written.name, "RTL_ALT");
+        assert_eq!(written.outcome_word(), "accepted");
+        assert_eq!(written.sends, 2);
+    }
+
+    /// A file's differences go one at a time: the second `PARAM_SET` waits until the first has
+    /// had every retry, and the one never echoed is named, as the C#'s Write Params names it.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:313-371`
+    #[test]
+    fn a_file_is_written_one_parameter_at_a_time_and_the_lost_one_is_named() {
+        let (telemetry, mut vehicle) = Vehicle::connect(fast());
+        vehicle.send(&param("RTL_ALT", 1500.0, INT32));
+        until("RTL_ALT", || telemetry.holds_parameter("RTL_ALT"));
+        vehicle.send(&param("WPNAV_SPEED", 500.0, INT32));
+        until("WPNAV_SPEED", || telemetry.holds_parameter("WPNAV_SPEED"));
+
+        let mut writes = ParamWrites::apply(
+            [
+                ("RTL_ALT".to_owned(), 2000.0),
+                ("WPNAV_SPEED".to_owned(), 750.0),
+            ],
+            1,
+        );
+        // RTL_ALT is never echoed; WPNAV_SPEED is, first time.
+        let (said, written) = run(&mut writes, &telemetry, &mut vehicle, |vehicle, message| {
+            if let MavMessage::ParamSet(set) = message
+                && mp_params::decode_param_id(&set.param_id) == "WPNAV_SPEED"
+            {
+                vehicle.send(&param("WPNAV_SPEED", set.param_value, INT32));
+            }
+        });
+
+        assert_eq!(
+            traffic(&vehicle),
+            [
+                "set RTL_ALT",
+                "set RTL_ALT",
+                "set RTL_ALT",
+                "set RTL_ALT",
+                "set WPNAV_SPEED"
+            ]
+        );
+        assert_eq!(
+            said.last().map(String::as_str),
+            Some(
+                "Set RTL_ALT Failed. Not all parameters successfully saved. \
+                 Skipped 1 this firmware does not have."
+            )
+        );
+        assert!(
+            said.contains(&"writing 2 of 2: WPNAV_SPEED".to_owned()),
+            "{said:?}"
+        );
+        let outcomes: Vec<_> = written
+            .iter()
+            .map(|w| (w.name.as_str(), w.outcome_word(), w.sends))
+            .collect();
+        assert_eq!(
+            outcomes,
+            [("RTL_ALT", "timed out", 4), ("WPNAV_SPEED", "accepted", 1)]
+        );
+    }
+
+    /// The radio's limits, on a vehicle whose parameters were never downloaded: each name is
+    /// read before it is written - `setParam` sends only a name the vehicle has listed - and
+    /// each is written even though it already holds that value, as the C#'s save forces it.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:367-372`
+    #[test]
+    fn radio_limits_are_read_then_written_whatever_the_vehicle_holds() {
+        let (telemetry, mut vehicle) = Vehicle::connect(fast());
+        let mut writes = ParamWrites::radio(&[(1, 1100, 1900)]);
+        let (said, _) = run(
+            &mut writes,
+            &telemetry,
+            &mut vehicle,
+            |vehicle, message| match message {
+                MavMessage::ParamRequestRead(read) => {
+                    let name = mp_params::decode_param_id(&read.param_id);
+                    let held = if name.ends_with("MIN") {
+                        1100.0
+                    } else {
+                        1900.0
+                    };
+                    vehicle.send(&param(&name, held, INT16));
+                }
+                MavMessage::ParamSet(set) => {
+                    let name = mp_params::decode_param_id(&set.param_id);
+                    vehicle.send(&param(&name, set.param_value, INT16));
+                }
+                _ => {}
+            },
+        );
+
+        assert_eq!(
+            traffic(&vehicle),
+            ["read RC1_MIN", "set RC1_MIN", "read RC1_MAX", "set RC1_MAX"]
+        );
+        assert_eq!(
+            said.last().map(String::as_str),
+            Some("wrote limits for 1 channels; reboot for them to take effect")
         );
     }
 }

@@ -240,6 +240,13 @@ struct MissionPlanner {
     /// command sent straight after it can arrive too early. Re-sending for a couple of seconds
     /// costs nothing and removes the race.
     forcing_arm_until: Option<std::time::Instant>,
+    /// The forced arm the link may still be retrying, and when it was made, so the next is sent
+    /// only once it has ended.
+    force_arm_request: Option<(mp_link::RequestId, std::time::Instant)>,
+    /// Lists of parameter writes under way, each made one write at a time.
+    param_writes: Vec<params::ParamWrites>,
+    /// The last parameter write to end, for the facts.
+    last_param_write: Option<params::Written>,
     /// Scroll position of the flight screen's panel column, so an indicator can be drawn for it.
     fly_scroll: gpui::ScrollHandle,
     /// The flight screen's Actions tab: what its boxes and lists hold between presses.
@@ -387,6 +394,9 @@ impl MissionPlanner {
             disabled_arming_checks: false,
             forcing_arm_until: None,
             last_force_arm: None,
+            force_arm_request: None,
+            param_writes: Vec::new(),
+            last_param_write: None,
             fly_scroll: gpui::ScrollHandle::new(),
             plan_scroll: gpui::ScrollHandle::new(),
             fly_actions: fly::Actions::default(),
@@ -582,19 +592,21 @@ impl MissionPlanner {
     /// Only what the comparison found, and only what the vehicle already has. A parameter in the
     /// file that this firmware does not know is skipped rather than sent: ArduPilot ignores a set
     /// for an unknown name silently, so sending it would report success for nothing happening.
+    ///
+    /// One at a time, each waiting for the vehicle's echo and sent again until it comes, as the
+    /// C#'s Write Params loop does; the status line follows it and ends with the C#'s summary.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:313-371`
     fn apply_params(&mut self) {
         if self.param_differences.is_empty() {
             self.file_status = Some("compare a file first - there is nothing to apply".to_owned());
             return;
         }
-        let mut written = 0usize;
+        let mut writes = Vec::new();
         let mut skipped = 0usize;
         for difference in &self.param_differences {
             match difference.kind {
                 mp_params::param_file::Change::Changed { to, .. } => {
-                    #[allow(clippy::cast_possible_truncation)] // parameters are f32 on the wire
-                    self.telemetry.set_parameter(&difference.name, to as f32);
-                    written += 1;
+                    writes.push((difference.name.clone(), to));
                 }
                 mp_params::param_file::Change::Added { .. }
                 | mp_params::param_file::Change::Missing { .. } => skipped += 1,
@@ -604,13 +616,7 @@ impl MissionPlanner {
         // rather than left on screen, because a list of differences beside an "apply" button that
         // has already been pressed invites pressing it again.
         self.param_differences.clear();
-        self.file_status = Some(if skipped == 0 {
-            format!("wrote {written} parameters - refresh to confirm")
-        } else {
-            format!(
-                "wrote {written} parameters, skipped {skipped} this firmware does not have - refresh to confirm"
-            )
-        });
+        self.start_param_writes(params::ParamWrites::apply(writes, skipped));
     }
 
     /// Switches the map to another tile provider, and remembers it.
@@ -719,8 +725,9 @@ impl MissionPlanner {
         /// which is never going to arm stops being asked.
         const GIVE_UP_AFTER: std::time::Duration = std::time::Duration::from_secs(6);
 
-        self.telemetry.force_arm();
-        self.last_force_arm = Some(std::time::Instant::now());
+        let now = std::time::Instant::now();
+        self.force_arm_request = self.telemetry.force_arm().map(|id| (id, now));
+        self.last_force_arm = Some(now);
         self.disabled_arming_checks = true;
         self.forcing_arm_until = Some(std::time::Instant::now() + GIVE_UP_AFTER);
         self.file_status =
@@ -732,6 +739,10 @@ impl MissionPlanner {
     /// Clamped rather than refused: the operator asked to move it, and stopping at the limit is
     /// what they meant. ArduPilot accepts an out-of-range write and then behaves oddly, so the
     /// editor is the last place to catch it.
+    ///
+    /// `setParam`, sent again until the vehicle echoes it; the status line then says what the
+    /// vehicle holds, or the C#'s "Set NAME Failed".
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:323, 359-363`
     fn nudge_parameter(&mut self, name: &str, delta: f64) {
         let view = self.telemetry.view();
         let Some((_, current)) = view.parameters.iter().find(|(held, _)| held == name) else {
@@ -743,9 +754,8 @@ impl MissionPlanner {
         {
             next = next.clamp(low, high);
         }
-        #[allow(clippy::cast_possible_truncation)] // parameters are f32 on the wire
-        self.telemetry.set_parameter(name, next as f32);
         self.file_status = Some(format!("{name} = {next}"));
+        self.start_param_writes(params::ParamWrites::nudge(name, next));
     }
 
     /// Starts recording the radio's stick limits from scratch.
@@ -763,21 +773,19 @@ impl MissionPlanner {
     ///
     /// Only channels that actually moved. A channel left alone has a minimum equal to its
     /// maximum, and writing that is a stick with no travel or a switch with one position.
+    ///
+    /// One at a time and forced, each sent again until the vehicle echoes it, as the C#'s save
+    /// makes them; a channel never echoed is said as "Failed to set Channel N".
+    /// `// C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:355-385`
     fn save_radio_limits(&mut self) {
-        let mut written = 0;
-        for number in 1..=mp_vehicle::rc::CHANNELS {
-            let Some((minimum, maximum)) = self.radio_range.channel(number) else {
-                continue;
-            };
-            self.telemetry
-                .set_parameter(&format!("RC{number}_MIN"), f32::from(minimum));
-            self.telemetry
-                .set_parameter(&format!("RC{number}_MAX"), f32::from(maximum));
-            written += 1;
-        }
-        self.file_status = Some(format!(
-            "wrote limits for {written} channels; reboot for them to take effect"
-        ));
+        let limits: Vec<(usize, u16, u16)> = (1..=mp_vehicle::rc::CHANNELS)
+            .filter_map(|number| {
+                self.radio_range
+                    .channel(number)
+                    .map(|(minimum, maximum)| (number, minimum, maximum))
+            })
+            .collect();
+        self.start_param_writes(params::ParamWrites::radio(&limits));
     }
 
     /// Pushes the plan to the map after an edit.
@@ -1414,6 +1422,13 @@ impl Render for MissionPlanner {
         self.metadata.advance(banner.as_deref(), mav_type);
         // The Actions tab's clock: `cs.lastautowp`, and a Resume Mission moved on a step.
         self.fly_tick(&view);
+        // The sets and commands the link is retrying: what those that ended say goes on the
+        // status line, where this application says what the C# puts in a message box, and
+        // parameter writes move on to their next.
+        for said in self.telemetry.take_reports() {
+            self.file_status = Some(said);
+        }
+        self.advance_param_writes();
 
         // Facts a UI test can assert on. Recorded from render because that is where every one of
         // them is already in hand, and published at the end of the frame so a reader never sees
@@ -1461,6 +1476,21 @@ impl Render for MissionPlanner {
             facts::record("link.frames", view.frames);
             facts::record("params.held", view.parameters.len());
             facts::record("params.expected", view.parameters_expected);
+            // The last parameter write to end: which, how the vehicle answered, and how many
+            // times the link put the PARAM_SET on the wire - one, unless it had to ask again.
+            let written = self.last_param_write.as_ref();
+            facts::record(
+                "params.write.name",
+                written.map_or("none", |written| written.name.as_str()),
+            );
+            facts::record(
+                "params.write.outcome",
+                written.map_or("none", params::Written::outcome_word),
+            );
+            facts::record(
+                "params.write.sends",
+                written.map_or(0, |written| written.sends),
+            );
             facts::record("tuning.visible", self.tuning.is_visible());
             facts::record("tuning.series", self.tuning.series().len());
             facts::record("log.open", self.log_browse.is_open());
@@ -1649,16 +1679,27 @@ impl Render for MissionPlanner {
                 );
             } else {
                 // Once per heartbeat interval, so each attempt is judged against a state that
-                // could have changed since the last one.
+                // could have changed since the last one - and never while the link is still
+                // retrying the last: `doARM` blocks its caller until the vehicle answers or its
+                // retries run out, so the C# cannot ask again before then either.
+                // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2632-2645, 2764-2768`
                 const BETWEEN_ATTEMPTS: std::time::Duration =
                     std::time::Duration::from_millis(1000);
                 let now = std::time::Instant::now();
-                if self
-                    .last_force_arm
-                    .is_none_or(|last| now.duration_since(last) >= BETWEEN_ATTEMPTS)
+                let in_flight = self.force_arm_request.is_some_and(|(id, made)| {
+                    match self.telemetry.lookup(id, made) {
+                        telemetry::Lookup::Found(request) => !request.is_finished(),
+                        telemetry::Lookup::PickingUp => true,
+                        telemetry::Lookup::Gone => false,
+                    }
+                });
+                if !in_flight
+                    && self
+                        .last_force_arm
+                        .is_none_or(|last| now.duration_since(last) >= BETWEEN_ATTEMPTS)
                 {
                     self.last_force_arm = Some(now);
-                    self.telemetry.force_arm();
+                    self.force_arm_request = self.telemetry.force_arm().map(|id| (id, now));
                 }
             }
         }

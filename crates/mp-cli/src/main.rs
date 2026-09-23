@@ -11,7 +11,9 @@ use std::time::{Duration, Instant};
 
 mod logs;
 
-use mp_link::{Link, LinkConfig, commands};
+use mp_link::requests::RequestOutcome;
+use mp_link::{Link, LinkConfig, RequestId, commands};
+use mp_mavlink_dialects::all::MavMessage;
 use mp_params::ParamTable;
 use mp_params::param_file::{Change, ParamFile};
 use mp_vehicle::{StateHandle, VehicleId};
@@ -367,23 +369,26 @@ fn fly(url: &str, record_path: Option<&str>) -> std::process::ExitCode {
     println!("  waiting for the EKF to settle");
     std::thread::sleep(Duration::from_secs(12));
 
+    // Sent and not waited for, as `setMode` sends it: the mode in the next heartbeat is the answer.
+    // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4631-4641`
     println!("mode GUIDED");
     link.send(&commands::set_mode(id, commands::copter_mode::GUIDED));
     std::thread::sleep(Duration::from_millis(500));
 
+    // `doARM`: the command sent again until the vehicle answers it, ten seconds a try.
     println!("arming");
-    link.send(&commands::arm(id, true, false));
+    run_command(&link, &commands::arm(id, true, false));
     if !await_state(&handle, "armed", Duration::from_secs(20), |s| s.armed) {
         // Retry once: a first arm attempt often lands while a pre-arm check is still failing.
         println!("  retrying arm");
-        link.send(&commands::arm(id, true, false));
+        run_command(&link, &commands::arm(id, true, false));
         if !await_state(&handle, "armed", Duration::from_secs(30), |s| s.armed) {
             return std::process::ExitCode::FAILURE;
         }
     }
 
     println!("takeoff to 40 m");
-    link.send(&commands::takeoff(id, 40.0));
+    run_command(&link, &commands::takeoff(id, 40.0));
     await_state(&handle, "reached 35 m", Duration::from_secs(60), |s| {
         s.altitude_relative.0 > 35.0
     });
@@ -396,6 +401,8 @@ fn fly(url: &str, record_path: Option<&str>) -> std::process::ExitCode {
             mp_units::Metres(metres),
         );
         println!("leg: bearing {bearing}, {metres} m");
+        // Sent and not waited for, as `setGuidedModeWP` sends its position target.
+        // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4449-4454`
         link.send(&commands::goto_position(
             id,
             target.latitude(),
@@ -418,6 +425,117 @@ fn fly(url: &str, record_path: Option<&str>) -> std::process::ExitCode {
 
     println!("flight complete: {} frames", link.frames_received());
     std::process::ExitCode::SUCCESS
+}
+
+/// Waits for a request made just now to end: bounded by the link's own retries, which end every
+/// request. `None` if the link lets it go or stops first.
+fn await_request(link: &Link, id: RequestId) -> Option<RequestOutcome> {
+    /// How long a request may be missing before it is taken as let go. The link moves what it
+    /// picks up from its queue into its table in two steps, with neither lock held in between
+    /// (mp-link's `run_link`), and in that moment `Link::request` finds it in neither.
+    const PICKUP_GRACE: Duration = Duration::from_millis(500);
+
+    let made = Instant::now();
+    loop {
+        match link.request(id) {
+            Some(request) => {
+                if let Some(outcome) = request.outcome() {
+                    return Some(outcome);
+                }
+            }
+            None if made.elapsed() < PICKUP_GRACE => {}
+            None => return None,
+        }
+        if !link.is_running() {
+            return None;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+/// `doCommand`: a built `COMMAND_LONG` sent to the vehicle it names and sent again until that
+/// vehicle acknowledges it - three more times, two seconds apart; ten seconds a try for arming -
+/// and how it ended said on stderr when it did not end well. Anything but a `COMMAND_LONG` is
+/// not sent.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2688-2836`
+fn run_command(link: &Link, message: &MavMessage) -> Option<RequestOutcome> {
+    let MavMessage::CommandLong(long) = message else {
+        return None;
+    };
+    let id = link.command(
+        VehicleId::new(long.target_system, long.target_component),
+        long.command,
+        [
+            long.param1,
+            long.param2,
+            long.param3,
+            long.param4,
+            long.param5,
+            long.param6,
+            long.param7,
+        ],
+        true,
+    );
+    let outcome = await_request(link, id);
+    let name = mp_mavlink_dialects::all::MavCmd(u32::from(long.command))
+        .name()
+        .map_or_else(|| format!("command {}", long.command), ToOwned::to_owned);
+    match outcome {
+        Some(RequestOutcome::Rejected(result)) => eprintln!(
+            "  {name}: {}",
+            mp_link::messages::command_result_name(result)
+        ),
+        // `doCommand`'s `TimeoutException`. `// C#: MAVLinkInterface.cs:2797`
+        Some(RequestOutcome::TimedOut) | None => {
+            eprintln!("  {name}: Timeout on read - doCommand");
+        }
+        Some(_) => {}
+    }
+    outcome
+}
+
+/// How a parameter write ended.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Written {
+    /// The vehicle echoed it, and now holds this.
+    Holds(f64),
+    /// The vehicle has no parameter of that name.
+    NotOnVehicle,
+    /// Every retry went unanswered: `setParam`'s "Timeout on read - setParam".
+    NoEcho,
+}
+
+/// `setParam`: `PARAM_SET` until the vehicle echoes the parameter, sent again every 700 ms up to
+/// three times by the link. `setParam` sends only a name the vehicle has listed, and the C#
+/// holds the whole list by the time anything writes; `mpr` connects and writes at once, so a
+/// name not yet heard of is read first - `GetParam`, retried the same way - and one the vehicle
+/// never reports is not on it.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1638-1770, 2296-2380`
+fn write_param(link: &Link, id: VehicleId, name: &str, value: f64) -> Written {
+    let listed = link
+        .params(id)
+        .is_some_and(|table| table.get(name).is_some());
+    if !listed
+        && !matches!(
+            await_request(link, link.read_param(id, name)),
+            Some(RequestOutcome::Accepted { .. })
+        )
+    {
+        return Written::NotOnVehicle;
+    }
+    match await_request(link, link.set_param(id, name, value, false)) {
+        Some(RequestOutcome::Accepted { value: Some(held) }) => Written::Holds(held.as_f64()),
+        Some(RequestOutcome::Unchanged) => Written::Holds(value),
+        Some(RequestOutcome::UnknownParameter) => Written::NotOnVehicle,
+        _ => Written::NoEcho,
+    }
+}
+
+/// Whether what the vehicle holds is what was written, at the precision the wire carries.
+fn holds_what_was_written(held: f64, value: f64) -> bool {
+    #[allow(clippy::cast_possible_truncation)] // parameters are f32 on the wire
+    let (held, value) = (held as f32, value as f32);
+    (held - value).abs() <= f32::EPSILON * value.abs().max(1.0)
 }
 
 /// Downloads the vehicle's parameters and prints them.
@@ -526,6 +644,9 @@ fn logs(url: &str, wanted: Option<u16>, out_dir: &str) -> std::process::ExitCode
 /// Reading back is the point. `PARAM_SET` has no acknowledgement of its own - the vehicle answers
 /// by broadcasting the parameter's new value, and a write that was rejected or clamped looks
 /// exactly like one that worked until you look. ArduPilot silently clamps out-of-range values.
+///
+/// The write is `setParam`'s: sent again until that echo comes, and the echo's value is what the
+/// vehicle holds (see [`write_param`]).
 fn set_param(url: &str, name: &str, value: f32) -> std::process::ExitCode {
     let config = LinkConfig {
         stream_rate_hz: 0,
@@ -550,51 +671,29 @@ fn set_param(url: &str, name: &str, value: f32) -> std::process::ExitCode {
     };
 
     println!("setting {name} = {value} on vehicle {id}");
-    link.send(&mp_link::commands::param_set(id, name, value));
-
-    // The vehicle broadcasts the new value when it accepts the write. Asking for it as well covers
-    // the case where that broadcast was lost, which on a noisy serial link is not rare.
-    // Wait for the table to show the *new* value, not merely some value. It may already hold this
-    // parameter from an earlier read, and returning on the first value seen reports the old one -
-    // which looks exactly like a write the vehicle refused.
-    let deadline = Instant::now() + Duration::from_secs(10);
-    let mut asked_again = false;
-    let mut last_seen: Option<f32> = None;
-    loop {
-        if let Some(table) = link.params(id)
-            && let Some(current) = table.get(name)
-        {
-            #[allow(clippy::cast_possible_truncation)] // parameters are f32 on the wire
-            let read_back = current.as_f64() as f32;
-            last_seen = Some(read_back);
-            if (read_back - value).abs() < 0.001 {
-                println!("{name} = {read_back}");
-                return std::process::ExitCode::SUCCESS;
-            }
+    match write_param(&link, id, name, f64::from(value)) {
+        Written::Holds(held) if holds_what_was_written(held, f64::from(value)) => {
+            println!("{name} = {held}");
+            std::process::ExitCode::SUCCESS
         }
-        if !asked_again && Instant::now() > deadline - Duration::from_secs(7) {
-            asked_again = true;
-            link.send(&mp_link::commands::request_param_by_name(id, name));
+        // The vehicle answered; it just did not accept what was asked. ArduPilot silently clamps
+        // out-of-range values, so this is the common shape of a rejected write.
+        Written::Holds(held) => {
+            eprintln!("{name} = {held}; the vehicle did not accept {value}");
+            std::process::ExitCode::FAILURE
         }
-        if Instant::now() > deadline {
-            return match last_seen {
-                // The vehicle answered; it just did not accept what was asked. ArduPilot silently
-                // clamps out-of-range values, so this is the common shape of a rejected write.
-                Some(held) => {
-                    eprintln!("{name} = {held}; the vehicle did not accept {value}");
-                    std::process::ExitCode::FAILURE
-                }
-                // No answer at all usually means the name does not exist on this firmware.
-                None => {
-                    eprintln!(
-                        "the vehicle did not report {name} back; \
-                         it may not exist on this firmware"
-                    );
-                    std::process::ExitCode::FAILURE
-                }
-            };
+        Written::NotOnVehicle => {
+            eprintln!(
+                "the vehicle did not report {name} back; \
+                 it may not exist on this firmware"
+            );
+            std::process::ExitCode::FAILURE
         }
-        std::thread::sleep(Duration::from_millis(100));
+        // `setParam`'s `TimeoutException`. `// C#: MAVLinkInterface.cs:1765`
+        Written::NoEcho => {
+            eprintln!("Timeout on read - setParam {name}");
+            std::process::ExitCode::FAILURE
+        }
     }
 }
 
@@ -1228,16 +1327,22 @@ fn param_load(url: &str, path: &str) -> std::process::ExitCode {
     println!("writing {} parameters", to_write.len());
     let mut failed = Vec::new();
     for (name, value) in to_write {
-        #[allow(clippy::cast_possible_truncation)] // parameters are f32 on the wire
-        let wire = value as f32;
-        link.send(&commands::param_set(id, name, wire));
-        // One at a time, confirmed. ArduPilot accepts a burst and drops most of it; a loader that
-        // does not read back reports success for a vehicle it changed a third of.
-        if confirm_param(&link, id, name, wire) {
-            println!("  {name} = {wire}");
-        } else {
-            failed.push(name.to_owned());
-            eprintln!("  {name}: not confirmed");
+        // One at a time, each `setParam` waiting for its echo and sent again until it comes, as
+        // the C#'s Write Params loop makes them. ArduPilot accepts a burst and drops most of it; a
+        // loader that does not wait for the echo reports success for a vehicle it changed a third
+        // of. `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:313-363`
+        match write_param(&link, id, name, value) {
+            Written::Holds(held) if holds_what_was_written(held, value) => {
+                println!("  {name} = {held}");
+            }
+            Written::Holds(held) => {
+                failed.push(name.to_owned());
+                eprintln!("  {name} = {held}; the vehicle did not accept {value}");
+            }
+            Written::NotOnVehicle | Written::NoEcho => {
+                failed.push(name.to_owned());
+                eprintln!("  Set {name} Failed");
+            }
         }
     }
 
@@ -1251,31 +1356,6 @@ fn param_load(url: &str, path: &str) -> std::process::ExitCode {
             failed.join(", ")
         );
         std::process::ExitCode::FAILURE
-    }
-}
-
-/// Waits for the vehicle to report a parameter at the value just written.
-fn confirm_param(link: &Link, id: VehicleId, name: &str, value: f32) -> bool {
-    let deadline = Instant::now() + Duration::from_secs(5);
-    let mut asked_again = false;
-    loop {
-        if let Some(table) = link.params(id)
-            && let Some(current) = table.get(name)
-        {
-            #[allow(clippy::cast_possible_truncation)] // parameters are f32 on the wire
-            let read_back = current.as_f64() as f32;
-            if (read_back - value).abs() < 0.000_01 {
-                return true;
-            }
-        }
-        if !asked_again && Instant::now() > deadline - Duration::from_secs(3) {
-            asked_again = true;
-            link.send(&commands::request_param_by_name(id, name));
-        }
-        if Instant::now() >= deadline {
-            return false;
-        }
-        std::thread::sleep(Duration::from_millis(50));
     }
 }
 
@@ -1484,5 +1564,208 @@ mod tests {
             report,
             "  COM4  USB\\VID_1209&PID_5740  fmuv3\ndetected: px4v3\n"
         );
+    }
+}
+
+/// `mpr`'s sets and commands through the real link and its retries, against a scripted vehicle
+/// on an in-memory transport: the arrangement of `mp-link`'s `tests/retries.rs`, where a send the
+/// script does not answer is a send lost on the way.
+#[cfg(test)]
+mod retries {
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
+
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::{Duration, Instant};
+
+    use mp_link::requests::MAV_RESULT_ACCEPTED;
+    use mp_link::{Link, LinkConfig, ProtocolTimeouts, commands};
+    use mp_mavlink::{FrameDecoder, encode_v2};
+    use mp_mavlink_dialects::all::{CommandAck, DIALECT, Heartbeat, MavMessage, ParamValue};
+    use mp_transport::Transport;
+    use mp_transport::testing::{Loopback, LoopbackEnd};
+    use mp_vehicle::VehicleId;
+
+    use super::{RequestOutcome, Written, run_command, write_param};
+
+    const VEHICLE: VehicleId = VehicleId::new(1, 1);
+    const GCS: VehicleId = VehicleId::new(255, 190);
+    /// `MAV_PARAM_TYPE_INT32`.
+    const INT32: u8 = 6;
+
+    fn frame(seq: u8, message: &MavMessage) -> Vec<u8> {
+        let mut payload = [0u8; 255];
+        let len = message.encode(&mut payload);
+        let mut frame = [0u8; mp_mavlink::MAX_FRAME_LEN];
+        let n = encode_v2(
+            &mut frame,
+            seq,
+            VEHICLE.sysid,
+            VEHICLE.compid,
+            message.id(),
+            &payload[..len],
+            message.crc_extra(),
+            0,
+        )
+        .unwrap();
+        frame[..n].to_vec()
+    }
+
+    /// The vehicle, on a thread of its own because `mpr` blocks while it waits: it announces
+    /// itself as ArduPilot, then hands everything the link sends to `script` and sends back
+    /// whatever that returns, until stopped. Returns everything it heard.
+    fn vehicle(
+        mut end: LoopbackEnd,
+        stop: Arc<AtomicBool>,
+        mut script: impl FnMut(&MavMessage) -> Option<MavMessage> + Send + 'static,
+    ) -> std::thread::JoinHandle<Vec<MavMessage>> {
+        std::thread::spawn(move || {
+            let mut seq = 0u8;
+            let mut send = |end: &mut LoopbackEnd, message: &MavMessage| {
+                end.write_all(&frame(seq, message)).unwrap();
+                seq = seq.wrapping_add(1);
+            };
+            send(
+                &mut end,
+                &MavMessage::Heartbeat(Heartbeat {
+                    custom_mode: 0,
+                    r#type: 2,
+                    autopilot: 3,
+                    base_mode: 81,
+                    system_status: 3,
+                    mavlink_version: 3,
+                }),
+            );
+            let mut decoder = FrameDecoder::new();
+            let mut heard = Vec::new();
+            let mut buf = [0u8; 4096];
+            while !stop.load(Ordering::Acquire) {
+                let n = end.read(&mut buf).unwrap_or(0);
+                if n == 0 {
+                    std::thread::sleep(Duration::from_millis(1));
+                    continue;
+                }
+                let mut fresh = Vec::new();
+                decoder.push_and_drain(&buf[..n], &DIALECT, |frame| {
+                    if let Some(message) = MavMessage::decode(frame.msgid, frame.payload) {
+                        fresh.push(message);
+                    }
+                });
+                for message in fresh {
+                    heard.push(message);
+                    if let Some(answer) = script(&message) {
+                        send(&mut end, &answer);
+                    }
+                }
+            }
+            heard
+        })
+    }
+
+    /// A link with Mission Planner's retry counts and its waits divided by twenty, once the
+    /// vehicle on the other end has been heard.
+    fn link(end: LoopbackEnd) -> Link {
+        let config = LinkConfig {
+            send_heartbeat: false,
+            stream_rate_hz: 0,
+            timeouts: ProtocolTimeouts::default().faster(20),
+            ..LinkConfig::default()
+        };
+        let link = Link::from_transport(Box::new(end), config);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while link.vehicle(VEHICLE).is_none() {
+            assert!(Instant::now() < deadline, "the vehicle was never heard");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        link
+    }
+
+    fn param(name: &str, value: f32) -> MavMessage {
+        MavMessage::ParamValue(ParamValue {
+            param_value: value,
+            param_count: 1,
+            param_index: 0,
+            param_id: mp_params::encode_param_id(name),
+            param_type: INT32,
+        })
+    }
+
+    /// `mpr param set` on a vehicle whose list was never downloaded: `RTL_ALT` is read first,
+    /// since `setParam` sends only a listed name; the first `PARAM_SET` is lost, the link sends it
+    /// again, and the vehicle's echo of the second is what `mpr` reports it holds.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1640-1644, 1748-1770`
+    #[test]
+    fn a_parameter_is_read_then_written_and_a_lost_set_is_sent_again() {
+        let (vehicle_side, gcs_side) = Loopback::pair();
+        let stop = Arc::new(AtomicBool::new(false));
+        let mut sets = 0;
+        let script = vehicle(
+            vehicle_side,
+            Arc::clone(&stop),
+            move |message| match message {
+                MavMessage::ParamRequestRead(_) => Some(param("RTL_ALT", 1500.0)),
+                MavMessage::ParamSet(set) => {
+                    sets += 1;
+                    (sets == 2).then(|| param("RTL_ALT", set.param_value))
+                }
+                _ => None,
+            },
+        );
+        let link = link(gcs_side);
+
+        let written = write_param(&link, VEHICLE, "RTL_ALT", 2000.0);
+        stop.store(true, Ordering::Release);
+        let heard = script.join().unwrap();
+
+        assert_eq!(written, Written::Holds(2000.0));
+        let names: Vec<&str> = heard
+            .iter()
+            .filter_map(|message| match message {
+                MavMessage::ParamRequestRead(_) => Some("read"),
+                MavMessage::ParamSet(_) => Some("set"),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(names, ["read", "set", "set"]);
+    }
+
+    /// `mpr fly`'s arm, whose first `COMMAND_LONG` is lost: sent again with its confirmation
+    /// counted up, and accepted.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2783-2834`
+    #[test]
+    fn a_command_whose_first_send_is_lost_is_sent_again_and_accepted() {
+        let (vehicle_side, gcs_side) = Loopback::pair();
+        let stop = Arc::new(AtomicBool::new(false));
+        let mut longs = 0;
+        let script = vehicle(vehicle_side, Arc::clone(&stop), move |message| {
+            let MavMessage::CommandLong(long) = message else {
+                return None;
+            };
+            longs += 1;
+            // The first is lost on the way.
+            (longs == 2).then_some(MavMessage::CommandAck(CommandAck {
+                command: long.command,
+                result: MAV_RESULT_ACCEPTED,
+                progress: 0,
+                result_param2: 0,
+                target_system: GCS.sysid,
+                target_component: GCS.compid,
+            }))
+        });
+        let link = link(gcs_side);
+
+        let outcome = run_command(&link, &commands::arm(VEHICLE, true, false));
+        stop.store(true, Ordering::Release);
+        let heard = script.join().unwrap();
+
+        assert_eq!(outcome, Some(RequestOutcome::Accepted { value: None }));
+        let confirmations: Vec<u8> = heard
+            .iter()
+            .filter_map(|message| match message {
+                MavMessage::CommandLong(long) => Some(long.confirmation),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(confirmations, [0, 1]);
     }
 }

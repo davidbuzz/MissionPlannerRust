@@ -3372,11 +3372,13 @@ dependencies = [
  "mp-input",
  "mp-link",
  "mp-log",
+ "mp-mavlink",
  "mp-mavlink-dialects",
  "mp-mission",
  "mp-params",
  "mp-settings",
  "mp-tiles",
+ "mp-transport",
  "mp-units",
  "mp-vehicle",
 ]
