@@ -1,0 +1,15 @@
+[package]
+name = "mp-tiles"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Map tile providers, cache and fetch policy"
+
+[lints]
+workspace = true
+
+[dependencies]
+mp-units.workspace = true
+thiserror.workspace = true
