@@ -29,6 +29,7 @@ mod settings;
 mod setup;
 mod smoke;
 mod storm;
+mod survey_ui;
 mod telemetry;
 mod textfield;
 mod tuning;
@@ -195,6 +196,8 @@ struct MissionPlanner {
     plan_menus: plan::PlanMenus,
     /// Focus for those dialogs, which take the keyboard while they show.
     plan_prompt_focus: gpui::FocusHandle,
+    /// The Survey (Grid) dialog the map menu's Auto WP opens.
+    survey: survey_ui::SurveyUi,
     /// Focus for the Home Location boxes: Lat, Long and ASL.
     plan_home_focus: [gpui::FocusHandle; 3],
     /// Focus for the panel boxes: WP Radius, Loiter Radius and Default Alt.
@@ -445,6 +448,7 @@ impl MissionPlanner {
             plan_name_focus: cx.focus_handle(),
             plan_menus: plan::PlanMenus::default(),
             plan_prompt_focus: cx.focus_handle(),
+            survey: survey_ui::SurveyUi::new(cx),
             plan_home_focus: [cx.focus_handle(), cx.focus_handle(), cx.focus_handle()],
             plan_panel_focus: plan::PanelFocus::new(cx),
             param_search: textfield::TextField::new("search parameters"),
@@ -895,12 +899,26 @@ impl MissionPlanner {
     /// The render pass does this too, but only on the next frame; doing it at the edit means the
     /// map never shows a waypoint the operator has just deleted.
     fn sync_map_mission(&self) {
-        self.map.borrow_mut().set_mission(self.plan.items());
+        match self.survey_preview() {
+            Some((preview, _)) => self.map.borrow_mut().set_mission(&preview),
+            None => self.map.borrow_mut().set_mission(self.plan.items()),
+        }
     }
 
-    /// Pushes the survey area to the map after an edit.
+    /// Pushes the survey area to the map after an edit: the Survey (Grid) dialog's boundary
+    /// while it is open.
     fn sync_map_polygon(&self) {
-        self.map.borrow_mut().set_polygon(self.plan.shown_polygon());
+        match self.survey_preview() {
+            Some((_, boundary)) => self.map.borrow_mut().set_polygon(&boundary),
+            None => self.map.borrow_mut().set_polygon(self.plan.shown_polygon()),
+        }
+    }
+
+    /// What the Survey (Grid) dialog shows on the map, while it is open on the planning screen.
+    fn survey_preview(&self) -> Option<(Vec<mp_mission::MissionItem>, Vec<mp_units::LatLon>)> {
+        (self.screen == Screen::Plan)
+            .then(|| self.survey.preview())
+            .flatten()
     }
 
     /// Pushes the geofence to the map after an edit.
@@ -1182,14 +1200,11 @@ impl MissionPlanner {
         let items = self.plan.items().to_vec();
         let origin = self.plan.origin().clone();
         let selected = self.plan.selected();
-        let survey_error = self.plan.survey_error().map(ToOwned::to_owned);
         let fence_error = self.plan.fence_error().map(ToOwned::to_owned);
         let rally_error = self.plan.rally_error().map(ToOwned::to_owned);
         let draw = plan::DrawState {
             mode: self.plan.draw_mode(),
             area_vertices: self.plan.polygon().len(),
-            survey: self.plan.survey_options(),
-            survey_error: survey_error.as_deref(),
             fence_vertices: self.plan.fence().len(),
             fence_error: fence_error.as_deref(),
             rally_points: self.plan.rally().len(),
@@ -1894,6 +1909,7 @@ impl Render for MissionPlanner {
                     facts::record(key, value);
                 }
             }
+            survey_ui::record_facts(&self.survey);
             // Where the parameter documentation comes from and how much of this vehicle it
             // covers: PLAN.md 10.5's measurement, live.
             facts::record("params.metadata.source", metadata::source());
@@ -1980,8 +1996,11 @@ impl Render for MissionPlanner {
 
         // The map shows the plan being edited when there is one, and what the vehicle holds
         // otherwise. Showing the vehicle's mission while the operator draws a different one is
-        // how people fly the mission they thought they had replaced.
-        if self.plan.is_empty() {
+        // how people fly the mission they thought they had replaced. While the Survey (Grid)
+        // dialog is open it is the dialog's map, showing its grid.
+        if let Some((preview, _)) = self.survey_preview() {
+            self.map.borrow_mut().set_mission(&preview);
+        } else if self.plan.is_empty() {
             if !view.mission.is_empty() {
                 self.map.borrow_mut().set_mission(&view.mission);
             }
@@ -2152,6 +2171,14 @@ impl Render for MissionPlanner {
                 .children(quick::chooser(&self.fly_data.quick, window, cx))
                 // The HUD's menu and its User Items form, and Auto Analysis's report.
                 .children(fly::overlays(&self.fly_data, window, cx))
+                .into_any_element(),
+            // The Survey (Grid) dialog is modal: while it shows it is the screen.
+            Screen::Plan if self.survey.is_open() => div()
+                .flex()
+                .flex_1()
+                .min_h(px(0.0))
+                .p_2()
+                .children(survey_ui::form(self, window, cx))
                 .into_any_element(),
             Screen::Plan => div()
                 .flex()

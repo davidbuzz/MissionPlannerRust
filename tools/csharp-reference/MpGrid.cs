@@ -19,7 +19,10 @@
 //   rotary <name> <polygon> [<parameter>=<value> ...]      run by the rotary verb
 //   path <name> <x>,<y> <x>,<y> ...                        ClipperLib.IntPoint coordinates
 //   offset <name> <path>[+<path>...] <delta>[/<delta>...]  run by the offset verb
+//   accept <name> <polygon> [<control>=<value> ...]        run by the accept verb
 // Each verb runs its own directive and passes over the others; a name is a case of one verb only.
+// The accept verb is the Survey (Grid) dialog, Grid/GridUI.cs, and lives in MpGridUi.cs; it takes
+// camerasBuiltin.xml as a fourth argument (`mono MpGrid.exe accept <cases.txt> <outdir> <xml>`).
 //
 // The offset verb is ClipperLib itself (ExtLibs/Utilities/clipper.cs), the offset CreateRotary
 // insets with (Grid.cs:248-257): one ClipperOffset built as Grid.cs builds it, every path added
@@ -78,14 +81,18 @@ public static class MpGrid
     {
         // Parsing and formatting must not depend on the machine's locale.
         System.Threading.Thread.CurrentThread.CurrentCulture = Inv;
-        if (args.Length != 3
-            || (args[0] != "grid" && args[0] != "corridor" && args[0] != "rotary" && args[0] != "offset"))
+        if ((args.Length != 3 && !(args.Length == 4 && args[0] == "accept"))
+            || (args[0] != "grid" && args[0] != "corridor" && args[0] != "rotary" && args[0] != "offset"
+                && args[0] != "accept"))
         {
             Console.Error.WriteLine("usage: MpGrid grid|corridor|rotary|offset <cases.txt> <outdir>");
+            Console.Error.WriteLine("       MpGrid accept <cases.txt> <outdir> <camerasBuiltin.xml>");
             return 2;
         }
         try
         {
+            if (args[0] == "accept")
+                builtinCameras = args[3];
             return RunCases(args[0], args[1], args[2]);
         }
         catch (Exception ex)
@@ -96,10 +103,15 @@ public static class MpGrid
         }
     }
 
+    // The accept verb's camerasBuiltin.xml, which GridUI's constructor reads (GridUI.cs:125).
+    static string builtinCameras;
+
     static int RunCases(string verb, string casesPath, string outDir)
     {
         // The directive this verb runs.
         string directive = verb == "grid" ? "case" : verb;
+        if (verb == "accept")
+            MpGridUi.WriteCameras(builtinCameras, Path.Combine(outDir, "cameras.csv"));
         var polygons = new Dictionary<string, List<PointLatLngAlt>>();
         var paths = new Dictionary<string, List<ClipperLib.IntPoint>>();
         var names = new HashSet<string>();
@@ -164,6 +176,21 @@ public static class MpGrid
                 if (verb != "offset")
                     continue;
                 RunOffsetCase(words[1], words[2], input, deltas, Path.Combine(outDir, words[1] + ".csv"));
+                count++;
+            }
+            else if (words[0] == "accept")
+            {
+                // The Survey (Grid) dialog over a polygon, run by the accept verb (MpGridUi.cs).
+                if (words.Length < 3)
+                    throw new FormatException(where + ": accept needs a name and a polygon");
+                if (!names.Add(words[1]))
+                    throw new FormatException(where + ": case " + words[1] + " defined twice");
+                List<PointLatLngAlt> poly;
+                if (!polygons.TryGetValue(words[2], out poly))
+                    throw new FormatException(where + ": unknown polygon " + words[2]);
+                if (verb != "accept")
+                    continue;
+                MpGridUi.RunCase(words, Copy(poly), where, Path.Combine(outDir, words[1] + ".csv"), builtinCameras);
                 count++;
             }
             else if (words[0] == "case" || words[0] == "corridor" || words[0] == "rotary")

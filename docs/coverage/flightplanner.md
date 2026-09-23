@@ -103,7 +103,7 @@ Missing, by where the control sits:
 | `areaToolStripMenuItem1` | Click | `areaToolStripMenuItem_Click` | Area | **missing** |
 | `textToolStripMenuItem` | Click | `textToolStripMenuItem_Click` | Text | **missing** |
 | `createCircleSurveyToolStripMenuItem` | Click | `createCircleSurveyToolStripMenuItem_Click` | Create Circle Survey | **missing** |
-| `surveyGridToolStripMenuItem` | Click | `surveyGridToolStripMenuItem_Click` | Survey (Grid) | done: `survey-generate` |
+| `surveyGridToolStripMenuItem` | Click | `surveyGridToolStripMenuItem_Click` | Survey (Grid) | done: `menu-surveyGrid` |
 | `ContextMeasure` | Click | `ContextMeasure_Click` | Measure Distance | done: `menu-ContextMeasure` |
 | `rotateMapToolStripMenuItem` | Click | `rotateMapToolStripMenuItem_Click` | Rotate Map | **missing** |
 | `zoomToToolStripMenuItem` | Click | `zoomToToolStripMenuItem_Click` | Zoom To | done: `menu-zoomTo` |

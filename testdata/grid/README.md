@@ -9,6 +9,7 @@ What Mission Planner's own survey generators (`ExtLibs/Utilities/Grid.cs`) retur
 | `corridor` | `Grid.CreateCorridor`                | `golden/corridor/<case>.csv`   | `crates/mp-mission/tests/corridor_vectors.rs` |
 | `rotary`   | `Grid.CreateRotary`                  | `golden/rotary/<case>.csv`     | `crates/mp-mission/tests/rotary_vectors.rs`   |
 | `offset`   | `ClipperLib.ClipperOffset` (below)   | `golden/offset/<case>.csv`     | `crates/mp-mission/src/clipper.rs`, its tests |
+| `accept`   | `Grid/GridUI.cs`, the dialog (below) | `golden/accept/<case>.csv`     | `crates/mp-mission/tests/gridui_vectors.rs`   |
 
 Each test runs the Rust port (`mp_mission::grid::create_grid`, `mp_mission::corridor::create_corridor`,
 `mp_mission::rotary::create_rotary`, and the crate's own ClipperLib port) over every case of its
@@ -24,9 +25,9 @@ kind and compares. PLAN.md §13.3 item 3 and §13.4 item 8, DELIVERABLES.md D11.
 2. builds `ExtLibs/Utilities/MissionPlanner.Utilities.csproj` there with mono's `msbuild` - the
    project PLAN.md §7.1 showed builds on Linux. `Grid.cs`, `clipper.cs`, `utmpos.cs`,
    `PointLatLngAlt.cs`, `Rect.cs` and the ProjNet they use all build in it, so nothing is stubbed;
-3. compiles `tools/csharp-reference/MpGrid.cs` against the result with `mcs`;
-4. runs its `grid`, `corridor`, `rotary` and `offset` verbs over `cases.txt`, each picking out its
-   own directive, and swaps the output in as `golden/`.
+3. compiles `tools/csharp-reference/MpGrid.cs` and `MpGridUi.cs` against the result with `mcs`;
+4. runs its `grid`, `corridor`, `rotary`, `offset` and `accept` verbs over `cases.txt`, each picking
+   out its own directive, and swaps the output in as `golden/`.
 
 The first run restores NuGet packages (from the network, or `~/.nuget/packages`) and builds: 15 s
 from a cold cache with the packages already local. Later runs reuse the build and take about a
@@ -101,6 +102,43 @@ hole fixups exist for, and projected latitudes and longitudes almost never produ
 reach the parts of the ported ClipperLib that the rotary cases do not; positive deltas also take
 the offset's other branch. Each golden records the paths, then per delta the top-level count and
 every node of the `PolyTree`, depth first.
+
+### The Survey (Grid) dialog
+
+40 cases of `Grid/GridUI.cs`, the dialog the planner's Auto WP > Survey (Grid) opens. `GridUI` is a
+WinForms form - its constructor needs the form's controls, a GMap control and `MainV2` - so it
+cannot run headless; `tools/csharp-reference/MpGridUi.cs` is its code for everything that is not
+the map, statement for statement, with each control a field holding what the control holds (a
+`NumericUpDown`'s `decimal` with its Designer range, a `TextBox`'s text) and raising the events the
+Designer wires. Its arithmetic is the C#'s own: `decimal`, `float` and `double` as the dialog mixes
+them, .NET's formatting of the Stats labels, the real `Grid.CreateGrid`, `CreateCorridor` and
+`CreateRotary`, ProjNet for the area, GMap's route distance. Fixed rather than read from a running
+Mission Planner, and recorded in each golden: metric units; no terrain data (`srtm` answers 0, as
+it does in this application); the planned home, the firmware, the rows the planner already holds
+and the vehicle's `WPNAV_SPEED` / `WP_SPD`, from the case.
+
+A case names the polygon and what the operator does, in order, to controls named as the Designer
+names them - typed into, clicked, picked. The cases cover the defaults on a square, a field, a
+closed polygon (which `calcpolygonarea` opens) and a plane; cameras picked from the shipped list,
+with overlap and sidelap, sideways, internals, and at 1 m and 12 km where `doCalc`'s assignments
+fall outside a `NumericUpDown`'s range and it stops half way; typed camera values; all four
+trigger methods with and without breaking up; heading hold, a delay, splines, an angle ending in .5
+(`CalcHeadingHold`); a speed with and without the vehicle's parameters; landing rather than RTL,
+no takeoff, a split refused, a split into three after existing rows, a split of 2.5; start
+positions, a start point, a cross grid with and without one; lead-in and overshoot; lane
+separation; corridor; spiral; a polygon too small for a lane ("Bad Grid"); a lane distance typed
+past both ends of its range.
+
+Each golden records the case's context and changes, then every control after them (a decimal as
+`Value.ToString()`, so its scale too), the text boxes `doCalc` writes, the thirteen Stats labels,
+how many times the grid was generated, `Grid.StartPointLatLngAlt`, the grid's size and its tags in
+order, Accept's refusal or every `AddWPtoList` and `InsertWP` call - the command and its seven
+numbers, G17 - the command list they leave, and the settings `savesettings` writes. Text values
+are written with `%20` for a space, `%2C` for a comma and `%25` for a percent sign.
+`golden/accept/cameras.csv` is `xmlcamera` over the shipped `camerasBuiltin.xml`: each camera's
+floats (G9), its focal length as `(decimal)float` and the four `float.ToString()` texts
+`CMB_camera_SelectedIndexChanged` puts in the boxes. All of it is compared exactly: every call's
+numbers bit for bit, every label character for character.
 
 ## Tolerance
 

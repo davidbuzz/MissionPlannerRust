@@ -626,7 +626,7 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "Click",
         "surveyGridToolStripMenuItem_Click",
         "Survey (Grid)",
-        Done("survey-generate"),
+        Done("menu-surveyGrid"),
     ),
     row(
         "ContextMeasure",

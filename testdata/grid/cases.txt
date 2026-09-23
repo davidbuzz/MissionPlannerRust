@@ -599,3 +599,71 @@ offset offset_twin_lobes twin_lobes 0/-30/30
 offset offset_slit_twins slit_twins 0/-50/50/-200
 offset offset_slit_ring_reversed slit_ring_reversed 0/-40/40
 offset offset_shared_bottom tri_left+tri_right 0/-20/20
+
+# ==================================================================================================
+# The Survey (Grid) dialog, Grid/GridUI.cs: the accept verb (tools/csharp-reference/MpGridUi.cs),
+# golden/accept/<name>.csv, compared by crates/mp-mission/tests/gridui_vectors.rs.
+#
+#   accept <name> <polygon> [<control>=<value> ...]
+#
+# A control is named as the Designer names it and set as the operator sets it, in order: a
+# NumericUpDown typed into, a CheckBox or RadioButton clicked, a TextBox's text replaced, an item
+# picked in CMB_camera or CMB_startfrom (spaces written %20). `point=<n>` answers CMB_startfrom's
+# "Enter point #". The planner around the dialog: `HomeLocation=<lat>,<lng>[,<alt>]` (the planned
+# home, 0,0 until one is set), `firmware=` (ArduCopter2 by default, CurrentState.cs:102), `rows=`
+# (the rows the planner already holds), `WPNAV_SPEED=` and `WP_SPD=` (the vehicle's parameters).
+
+# --- what Accept makes of the defaults: takeoff, CAM_TRIGG_DIST broken up per lane, RTL -----------
+accept accept_cbr_square_defaults cbr_square
+accept accept_gui_defaults cbr_square HomeLocation=-35.3632621,149.1652374,584.1
+accept accept_gui_angle_alt cbr_square HomeLocation=-35.3632621,149.1652374,584.1 NUM_angle=45 NUM_altitude=120
+accept accept_cbr_field_defaults cbr_field HomeLocation=-35.3632621,149.1652374,584.1
+accept accept_cbr_square_closed cbr_square_closed HomeLocation=-35.3632621,149.1652374,584.1
+accept accept_cbr_l_plane cbr_l firmware=ArduPlane HomeLocation=-35.3632621,149.1652374,584.1
+
+# --- a camera: doCalc sets the trigger distance and the lane distance from overlap and sidelap ----
+accept accept_camera_sx230 cbr_square HomeLocation=-35.3632621,149.1652374,584.1 CMB_camera=Canon%20SX230%20HS
+accept accept_camera_a6000_overlap cbr_field HomeLocation=-35.3632621,149.1652374,584.1 CMB_camera=Sony%20A6000 num_overlap=70 num_sidelap=75.5
+accept accept_camera_flir_sideways cbr_square HomeLocation=-35.3632621,149.1652374,584.1 CMB_camera=FLIR%20Vue%20336%206,8mm CHK_camdirection=False
+accept accept_camera_internals cbr_square HomeLocation=-35.3632621,149.1652374,584.1 CMB_camera=Canon%20S110-S120 CHK_internals=True
+# Out of a NumericUpDown's range, doCalc's assignment throws and the rest of it is skipped: at 1 m
+# the lane distance falls under NUM_Distance's 0.3, at 12 km the trigger distance over
+# NUM_spacing's 5000.
+accept accept_camera_low cbr_tiny HomeLocation=-35.3632621,149.1652374,584.1 CMB_camera=Canon%20SX230%20HS num_sidelap=90 NUM_altitude=1
+accept accept_camera_high cbr_small HomeLocation=-35.3632621,149.1652374,584.1 CMB_camera=Canon%20SX230%20HS NUM_altitude=12000
+accept accept_camera_typed cbr_square HomeLocation=-35.3632621,149.1652374,584.1 CMB_camera=Nex5%2016mm TXT_imgwidth=4000 TXT_sensheight=15.6 NUM_focallength=16.25
+
+# --- the trigger methods ---------------------------------------------------------------------------
+accept accept_trigdist_once cbr_square HomeLocation=-35.3632621,149.1652374,584.1 CMB_camera=Canon%20SX230%20HS chk_stopstart=False
+accept accept_digicam cbr_square HomeLocation=-35.3632621,149.1652374,584.1 CMB_camera=Canon%20SX230%20HS rad_digicam=True
+accept accept_repeatservo_breakup cbr_square HomeLocation=-35.3632621,149.1652374,584.1 CMB_camera=Canon%20SX230%20HS rad_repeatservo=True NUM_reptservo=7 num_reptpwm=1900 NUM_repttime=3
+accept accept_repeatservo_each cbr_square HomeLocation=-35.3632621,149.1652374,584.1 CMB_camera=Canon%20SX230%20HS rad_repeatservo=True chk_stopstart=False
+accept accept_setservo cbr_square HomeLocation=-35.3632621,149.1652374,584.1 CMB_camera=Canon%20SX230%20HS rad_do_set_servo=True num_setservono=9 num_setservolow=1000 num_setservohigh=2000
+
+# --- AddWP's options: heading hold, a delay, splines ------------------------------------------------
+accept accept_headinghold cbr_square HomeLocation=-35.3632621,149.1652374,584.1 CHK_copter_headinghold=True
+accept accept_delay cbr_square HomeLocation=-35.3632621,149.1652374,584.1 NUM_copter_delay=2.25
+accept accept_spline cbr_rect_wide HomeLocation=-35.3632621,149.1652374,584.1 chk_spline=True CMB_camera=Canon%20SX230%20HS rad_digicam=True
+accept accept_angle_half cbr_square HomeLocation=-35.3632621,149.1652374,584.1 NUM_angle=44.5 CHK_copter_headinghold=True
+
+# --- speed, landing, splitting ----------------------------------------------------------------------
+accept accept_speed_wpnav cbr_square HomeLocation=-35.3632621,149.1652374,584.1 CHK_usespeed=True NUM_UpDownFlySpeed=7.5 WPNAV_SPEED=500
+accept accept_speed_wpspd cbr_square HomeLocation=-35.3632621,149.1652374,584.1 CHK_usespeed=True WP_SPD=3.5
+accept accept_speed_none cbr_square HomeLocation=-35.3632621,149.1652374,584.1 CHK_usespeed=True NUM_UpDownFlySpeed=0
+accept accept_land cbr_square HomeLocation=-35.3632621,149.1652374,584.1 CHK_toandland_RTL=False
+accept accept_no_takeoff cbr_square HomeLocation=-35.3632621,149.1652374,584.1 CHK_toandland=False
+accept accept_split_refused cbr_square HomeLocation=-35.3632621,149.1652374,584.1 CHK_toandland=False NUM_split=2
+accept accept_split3 cbr_field HomeLocation=-35.3632621,149.1652374,584.1 NUM_split=3 rows=2
+accept accept_split_fraction cbr_square HomeLocation=-35.3632621,149.1652374,584.1 NUM_split=2.5
+
+# --- the grid options: start, cross grid, lead-in and overshoot, lanes, corridor and spiral ---------
+accept accept_bottomleft cbr_l HomeLocation=-35.3632621,149.1652374,584.1 CMB_startfrom=BottomLeft
+accept accept_point cbr_l HomeLocation=-35.3632621,149.1652374,584.1 point=3 CMB_startfrom=Point
+accept accept_crossgrid cbr_square HomeLocation=-35.3632621,149.1652374,584.1 chk_crossgrid=True
+accept accept_crossgrid_point cbr_square HomeLocation=-35.3632621,149.1652374,584.1 point=2 CMB_startfrom=Point chk_crossgrid=True NUM_altitude=110
+accept accept_leadin_overshoot cbr_field HomeLocation=-35.3632621,149.1652374,584.1 NUM_overshoot=20 NUM_overshoot2=-5 NUM_leadin=15 NUM_leadin2=30 NUM_Distance=37.5
+accept accept_lanes cbr_rect_wide HomeLocation=-35.3632621,149.1652374,584.1 NUM_Lane_Dist=2 chk_optimize_for_distance=True NUM_Distance=30
+accept accept_corridor cbr_road3 HomeLocation=-35.3632621,149.1652374,584.1 chk_Corridor=True CMB_camera=Canon%20SX230%20HS num_corridorwidth=120.5
+accept accept_spiral cbr_pentagon HomeLocation=-35.3632621,149.1652374,584.1 chk_spiral=True NUM_laps=4 NUM_clockwise_laps=1
+accept accept_bad_grid cbr_micro HomeLocation=-35.3632621,149.1652374,584.1
+accept accept_distance_clamped cbr_small HomeLocation=-35.3632621,149.1652374,584.1 NUM_Distance=0.1 NUM_Distance=20000

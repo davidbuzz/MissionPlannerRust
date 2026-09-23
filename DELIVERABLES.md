@@ -269,7 +269,7 @@ KML/DXF/shapefile import-export, geotagging hand-off.
   (rectangles, L/T/U/comb, concave fields, slivers, zone and equator crossings, the antimeridian,
   every start position, lead-in, overshoot, trigger spacing), and `tests/grid_vectors.rs` matches
   every case **bit for bit**. The corridor and rotary generators are ported the same way, with the
-  C#'s Clipper inside the rotary (`clipper.rs`), and match on 41 + 63 cases; Gridv2 is not ported;
+  C#'s Clipper inside the rotary (`clipper.rs`), and match on 41 + 63 cases; the Survey (Grid) dialog itself is `GridUI.cs` (`crates/mp-mission/src/gridui.rs` with `System.Decimal` and .NET's number formats in `dotnet.rs`, the camera list from the shipped `camerasBuiltin.xml`, the form from `GridUI.resx` in `crates/mp-gui/src/survey_ui.rs`), and `tools/csharp-reference/MpGridUi.cs` runs GridUI's own code statement for statement under mono over 40 cases and 5,656 Accept calls that `tests/gridui_vectors.rs` matches bit for bit - every control, Stats label and emitted item (PLAN.md §13.4 row 29); Gridv2 is not ported;
   a Windows .NET 4.7.2 oracle run (PLAN.md R5) is still owed. The screen's actions are counted:
   `crates/mp-gui/src/planner_coverage.rs` lists all 121 event wirings of `FlightPlanner.Designer.cs`
   (40 done, 69 missing, 12 plumbing; `docs/coverage/flightplanner.md`), and the map's right-click

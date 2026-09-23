@@ -1,0 +1,155 @@
+# Auto WP > Survey (Grid): surveyGridToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:6755) runs
+# GridPlugin.but_Click, which shows Grid/GridUI.cs over the drawn polygon - its tabs and controls
+# from GridUI.Designer.cs and GridUI.resx, the grid redrawn on every change
+# (domainUpDown1_ValueChanged), the Stats, and Accept adding the rows BUT_Accept_Click hands the
+# planner (crates/mp-gui/src/survey_ui.rs, crates/mp-mission/src/gridui.rs).
+#
+# First a polygon drawn with Polygon > Draw a Polygon, as plan-draw-polygon.gui draws one: the
+# dialog opens on it at the Designer's values, and its close box adds nothing. Then, for numbers
+# held to the C#, the 1 km square cbr_square of testdata/grid/cases.txt from a .fen, with the SITL
+# home planned: the angle of its longest side, the Stats, the angle and the altitude typed, Accept -
+# and the mission is golden/accept/accept_gui_angle_alt.csv's, item for item, which
+# crates/mp-mission/tests/gridui_vectors.rs checks this script asserts. Opened again, the dialog has
+# the altitude Accept saved (savesettings, loadsettings).
+
+env XDG_DATA_HOME $WORK
+env MP_PLAN_DIR $WORK
+setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
+setup printf '%s\n' '-35.3632621 149.1652374' '-35.3600 149.1600' '-35.3600 149.1710' '-35.3690 149.1710' '-35.3690 149.1600' '-35.3600 149.1600' > "$WORK/square.fen"
+
+screen plan
+window 1600x1200
+settle 4
+
+expect survey.dialog closed
+
+# No polygon: the C#'s "Please define a polygon." (its "Load a file?" first is not ported).
+click map@0.50x0.50:right
+click menu-autoWP
+expect plan.menu.submenu menu-autoWP
+click menu-surveyGrid
+expect plan.prompt Error
+expect plan.prompt.text Please define a polygon.
+click plan-prompt-ok
+expect survey.dialog closed
+
+# A polygon drawn with the menu.
+click map@0.20x0.20:right
+click menu-polygon
+click menu-addPolygonPoint2
+click map@0.20x0.20:right
+click menu-polygon
+click menu-addPolygonPoint2
+click map@0.80x0.20
+click map@0.80x0.80
+click map@0.20x0.80
+expect survey.points 4
+
+click map@0.50x0.50:right
+click menu-autoWP
+click menu-surveyGrid
+expect survey.dialog open
+expect survey.dialog.tabs tabSimple
+expect survey.dialog.tab tabSimple
+expect survey.dialog.NUM_altitude 100
+expect survey.dialog.NUM_UpDownFlySpeed 5.0
+expect survey.dialog.NUM_split 1
+expect survey.dialog.NUM_Distance 50.00
+expect survey.dialog.num_overlap 50.0
+expect survey.dialog.num_sidelap 60.0
+expect survey.dialog.CHK_camdirection True
+expect survey.dialog.CHK_toandland True
+expect survey.dialog.CHK_toandland_RTL True
+expect survey.dialog.CHK_advanced False
+expect survey.dialog.rad_trigdist True
+expect survey.dialog.chk_stopstart True
+expect survey.dialog.CMB_startfrom Home
+expect survey.dialog.cameras 31
+expect survey.dialog.recomputes 1
+expect survey.dialog.grid.points > 0
+expect survey.dialog.lbl_pictures 0
+expect survey.dialog.lbl_spacing 0 m
+expect survey.dialog.lbl_distbetweenlines 50 m
+expect survey.dialog.lbl_turnrad 5 m
+expect survey.dialog.lbl_gndelev 0-0 m
+
+# Advanced Options adds Grid Options and Camera Config (CHK_advanced_CheckedChanged).
+click survey-CHK_advanced
+expect survey.dialog.tabs tabSimple,tabGrid,tabCamera
+click survey-tabCamera
+expect survey.dialog.tab tabCamera
+expect survey.dialog.TXT_imgwidth 4608
+expect survey.dialog.TXT_sensheight 4.62
+click survey-tabSimple
+click survey-CHK_advanced
+expect survey.dialog.tabs tabSimple
+
+# The close box adds nothing.
+click survey-close
+expect survey.dialog closed
+expect mission.items 0
+
+# The square from a .fen, and the dialog over it.
+click map@0.50x0.50:right
+click menu-polygon
+click menu-clearPolygon2
+expect survey.points 0
+click map@0.30x0.70:right
+click menu-geoFence
+click menu-loadFromFile
+type square
+key Return
+expect survey.points 4
+
+click map@0.50x0.50:right
+click menu-autoWP
+click menu-surveyGrid
+expect survey.dialog open
+expect survey.dialog.NUM_angle 180
+expect survey.dialog.TXT_headinghold 180
+expect survey.dialog.grid.points 80
+expect survey.dialog.lbl_area 998376 m^2
+expect survey.dialog.lbl_distance 22.19 km
+expect survey.dialog.lbl_strips 20
+expect survey.dialog.lbl_flighttime 1:32:26 Hours
+expect survey.dialog.lbl_photoevery 0.00 Seconds
+
+# The angle and the altitude typed, each redrawing the grid.
+click survey-NUM_angle
+expect survey.dialog.editing NUM_angle
+key ctrl+u
+type 45
+key Return
+expect survey.dialog.editing none
+expect survey.dialog.NUM_angle 45
+click survey-NUM_altitude
+key ctrl+u
+type 120
+key Return
+expect survey.dialog.NUM_altitude 120
+expect survey.dialog.recomputes 3
+expect survey.dialog.grid.points 112
+expect survey.dialog.lbl_strips 28
+expect survey.dialog.lbl_distance 23.25 km
+expect survey.dialog.lbl_flighttime 1:36:52 Hours
+
+# Accept: a takeoff, each lane's waypoints with CAM_TRIGG_DIST started and stopped, the trigger
+# stopped, RTL.
+click survey-BUT_Accept
+expect survey.dialog closed
+expect survey.dialog.added 115
+expect mission.items 115
+expect mission.commands 22,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,206,20
+expect mission.last.command 20
+expect survey.points 4
+
+# Opened again, it has the altitude Accept saved; the angle is saved but never loaded.
+click map@0.50x0.50:right
+click menu-autoWP
+click menu-surveyGrid
+expect survey.dialog open
+expect survey.dialog.NUM_altitude 120
+expect survey.dialog.NUM_angle 180
+click survey-close
+expect survey.dialog closed
+expect mission.items 115

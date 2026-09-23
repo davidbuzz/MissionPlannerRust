@@ -13,7 +13,7 @@ use mp_mavlink_dialects::all::MavCmd;
 use mp_mission::fence::{FenceItem, RallyPoint};
 use mp_mission::rows::Home;
 use mp_mission::validate::{Context as ValidationContext, validate_with};
-use mp_mission::{GridOptions, MissionItem, Severity, grid};
+use mp_mission::{MissionItem, Severity};
 use mp_units::LatLon;
 
 use crate::MissionPlanner;
@@ -282,8 +282,6 @@ pub struct Plan {
     /// the next time the polygon is redrawn - by an edit of it.
     /// `// C#: GCSViews/FlightPlanner.cs:2150-2151, 1014-1030`
     polygon_hidden: bool,
-    /// How the survey should be flown.
-    survey: GridOptions,
     /// The geofence the vehicle must stay inside, in the order its vertices were drawn.
     fence: Vec<LatLon>,
     /// Rally points: where the vehicle goes on a failsafe instead of all the way home.
@@ -292,8 +290,6 @@ pub struct Plan {
     rally_error: Option<String>,
     /// Why the fence could not be built or sent, if it could not.
     fence_error: Option<String>,
-    /// Why the last survey could not be generated, if it could not.
-    survey_error: Option<String>,
     /// The Home Location boxes, `TXT_homelat`, `TXT_homelng` and `TXT_homealt`: home, as the
     /// planning screen holds it and every write takes it.
     home: HomeBoxes,
@@ -1361,7 +1357,6 @@ impl Plan {
     pub fn adopt_fence_file(&mut self, file: mp_mission::fence_file::FenceFile) {
         self.polygon = file.vertices;
         self.polygon_hidden = false;
-        self.survey_error = None;
         if let Some(position) = file.return_point {
             self.fence_return = Some(position);
         }
@@ -1565,7 +1560,6 @@ impl Plan {
         self.selected = None;
         self.polygon.clear();
         self.polygon_hidden = false;
-        self.survey_error = None;
         self.fence.clear();
         self.fence_error = None;
         self.rally.clear();
@@ -1602,11 +1596,11 @@ impl Plan {
         &self.rally
     }
 
-    /// Adds a rally point at the survey altitude, which is the only altitude on this screen.
+    /// Adds a rally point at [`RALLY_ALTITUDE`].
     pub fn add_rally_point(&mut self, position: LatLon) {
         self.rally.push(RallyPoint {
             position,
-            altitude: self.survey.altitude,
+            altitude: RALLY_ALTITUDE,
             break_altitude: None,
         });
         self.rally_error = None;
@@ -1761,85 +1755,18 @@ impl Plan {
     pub fn add_area_vertex(&mut self, position: LatLon) {
         self.polygon.push(position);
         self.polygon_hidden = false;
-        self.survey_error = None;
     }
 
     /// Removes the last vertex, which is the undo an operator reaches for while drawing.
     pub fn undo_area_vertex(&mut self) {
         self.polygon.pop();
         self.polygon_hidden = false;
-        self.survey_error = None;
     }
 
     /// Discards the survey area, leaving the mission alone.
     pub fn clear_area(&mut self) {
         self.polygon.clear();
         self.polygon_hidden = false;
-        self.survey_error = None;
-    }
-
-    /// How the survey should be flown.
-    #[must_use]
-    pub const fn survey_options(&self) -> GridOptions {
-        self.survey
-    }
-
-    /// Adjusts the survey settings, keeping each within a range that produces a flyable grid.
-    ///
-    /// Spacing has a floor because a survey at one metre spacing over a field generates tens of
-    /// thousands of waypoints, which no autopilot will accept and no operator intended. The angle
-    /// wraps rather than clamps: a bearing is circular, and stopping at 359 would be arbitrary.
-    pub fn adjust_survey(&mut self, spacing: f64, angle: f64, altitude: f64) {
-        self.survey.spacing = (self.survey.spacing + spacing).clamp(5.0, 1000.0);
-        self.survey.angle = (self.survey.angle + angle).rem_euclid(360.0);
-        self.survey.altitude = (self.survey.altitude + altitude).clamp(1.0, MAX_STEPPED_ALTITUDE);
-        self.survey_error = None;
-    }
-
-    /// Why the last survey could not be generated.
-    #[must_use]
-    pub fn survey_error(&self) -> Option<&str> {
-        self.survey_error.as_deref()
-    }
-
-    /// Replaces the mission with a lawnmower pattern covering the survey area.
-    ///
-    /// Replaces rather than appends. A survey joined onto an existing mission would fly the old
-    /// waypoints first and then transit to the area, which is almost never what was meant, and
-    /// the operator who wanted that can save the two separately.
-    pub fn generate_survey(&mut self) {
-        match grid(&self.polygon, &self.survey) {
-            Ok(positions) if positions.is_empty() => {
-                self.survey_error = Some(
-                    "the area is smaller than one line spacing; reduce the spacing".to_owned(),
-                );
-            }
-            Ok(positions) => {
-                let altitude = self.survey.altitude;
-                self.items = positions
-                    .into_iter()
-                    .map(|position| MissionItem {
-                        seq: 0,
-                        current: 0,
-                        frame: FRAME_RELATIVE,
-                        command: CMD_WAYPOINT,
-                        param1: 0.0,
-                        param2: 0.0,
-                        param3: 0.0,
-                        param4: 0.0,
-                        x: position.latitude(),
-                        y: position.longitude(),
-                        z: altitude,
-                        autocontinue: 1,
-                    })
-                    .collect();
-                self.renumber();
-                self.origin = Origin::Edited;
-                self.selected = None;
-                self.survey_error = None;
-            }
-            Err(err) => self.survey_error = Some(err.to_string()),
-        }
     }
 
     /// Numbers the rows 1..n, as the grid's headers read, so the sequence has no gaps.
@@ -1961,7 +1888,6 @@ impl Plan {
         }
         self.polygon = mp_mission::rows::waypoint_positions(&self.items);
         self.polygon_hidden = false;
-        self.survey_error = None;
         true
     }
 
@@ -2021,6 +1947,13 @@ pub const ALTITUDE_STEPS: [(f64, &str); 4] = [
 /// stops a held button from walking a waypoint into the stratosphere, which is a data entry
 /// accident rather than a decision.
 pub const MAX_STEPPED_ALTITUDE: f64 = 1000.0;
+
+/// The altitude the draw panel's rally mode places a rally point at.
+///
+/// It was the survey panel's altitude, the only other altitude on this screen, which started at
+/// 50 m; that panel is now the Survey (Grid) dialog (`survey_ui.rs`), so the rally points keep the
+/// number it started at.
+pub const RALLY_ALTITUDE: f64 = 50.0;
 
 /// A short name for a mission command.
 ///
@@ -2594,10 +2527,6 @@ pub struct DrawState<'a> {
     pub mode: DrawMode,
     /// Survey area corners placed.
     pub area_vertices: usize,
-    /// How the survey should be flown.
-    pub survey: GridOptions,
-    /// Why the last survey failed, if it did.
-    pub survey_error: Option<&'a str>,
     /// Fence corners placed.
     pub fence_vertices: usize,
     /// Why the fence is unusable, if it is.
@@ -2681,38 +2610,9 @@ fn mode_controls(
     }
 }
 
-/// Spacing, angle, altitude and generate.
+/// Undo and clear for the survey area's corners. How the survey is flown is the Survey (Grid)
+/// dialog's, from the map menu's Auto WP (`survey_ui.rs`).
 fn survey_controls(state: &DrawState<'_>, cx: &mut Context<MissionPlanner>) -> impl IntoElement {
-    let setting = |label: &'static str,
-                   name: &'static str,
-                   value: String,
-                   down: &'static str,
-                   up: &'static str,
-                   step: f64,
-                   which: usize,
-                   cx: &mut Context<MissionPlanner>| {
-        div()
-            .flex()
-            .items_center()
-            .gap_2()
-            .child(
-                div()
-                    .w(px(64.0))
-                    .text_xs()
-                    .text_color(rgb(theme::DIM))
-                    .child(label),
-            )
-            .child(
-                div()
-                    .w(px(68.0))
-                    .text_sm()
-                    .text_color(rgb(theme::TEXT))
-                    .child(value),
-            )
-            .child(stepper(down, name, -step, which, cx))
-            .child(stepper(up, name, step, which, cx))
-    };
-
     div()
         .flex()
         .flex_col()
@@ -2746,48 +2646,6 @@ fn survey_controls(state: &DrawState<'_>, cx: &mut Context<MissionPlanner>) -> i
                 )),
         )
         .child(corner_count(state.area_vertices, "corners"))
-        .child(setting(
-            "spacing",
-            "survey-spacing",
-            format!("{:.0} m", state.survey.spacing),
-            "-5",
-            "+5",
-            5.0,
-            0,
-            cx,
-        ))
-        .child(setting(
-            "angle",
-            "survey-angle",
-            format!("{:.0}°", state.survey.angle),
-            "-15",
-            "+15",
-            15.0,
-            1,
-            cx,
-        ))
-        .child(setting(
-            "altitude",
-            "survey-altitude",
-            format!("{:.0} m", state.survey.altitude),
-            "-10",
-            "+10",
-            10.0,
-            2,
-            cx,
-        ))
-        .child(action(
-            "survey-generate",
-            "generate survey",
-            theme::WARN,
-            state.area_vertices >= 3,
-            cx.listener(|this, _event: &(), _window, cx| {
-                this.plan.generate_survey();
-                this.sync_map_mission();
-                cx.notify();
-            }),
-        ))
-        .children(state.survey_error.map(problem))
 }
 
 /// Undo, clear, read and write for the geofence.
@@ -2966,43 +2824,6 @@ fn problem(text: &str) -> impl IntoElement {
         .text_xs()
         .text_color(rgb(theme::ALERT))
         .child(text.to_owned())
-}
-
-/// One step button for a survey setting./// One step button for a survey setting.
-///
-/// `which` selects the setting rather than passing a closure, because the three settings clamp
-/// differently and that logic belongs on the plan, not in the view.
-fn stepper(
-    label: &'static str,
-    name: &'static str,
-    delta: f64,
-    which: usize,
-    cx: &mut Context<MissionPlanner>,
-) -> impl IntoElement {
-    crate::probe::measured(
-        format!("{name}{}", if delta > 0.0 { "-up" } else { "-down" }),
-        div(),
-    )
-    .id((name, which * 2 + usize::from(delta > 0.0)))
-    .px_2()
-    .py_1()
-    .rounded_md()
-    .border_1()
-    .border_color(rgb(theme::BORDER))
-    .text_xs()
-    .text_color(rgb(theme::TEXT))
-    .cursor_pointer()
-    .hover(|style| style.bg(rgb(theme::BORDER)))
-    .child(label)
-    .on_click(cx.listener(move |this, _event, _window, cx| {
-        let (spacing, angle, altitude) = match which {
-            0 => (delta, 0.0, 0.0),
-            1 => (0.0, delta, 0.0),
-            _ => (0.0, 0.0, delta),
-        };
-        this.plan.adjust_survey(spacing, angle, altitude);
-        cx.notify();
-    }))
 }
 
 /// What the validator says about the plan.
@@ -3813,6 +3634,8 @@ pub enum MenuAction {
     FenceSaveToFile,
     /// `clearToolStripMenuItem_Click`.
     FenceClear,
+    /// `surveyGridToolStripMenuItem_Click`: the Survey (Grid) dialog, `survey_ui.rs`.
+    SurveyGrid,
 }
 
 /// One entry of `contextMenuStrip1` or of one of its drop-downs.
@@ -3888,8 +3711,8 @@ pub const MAP_MENU: &[MenuEntry] = {
         ClearMission, ClearPolygon, DeleteWp, DrawPolygon, FenceClear, FenceLoadFromFile,
         FenceSaveToFile, InsertAtCurrentPosition, InsertSplineWp, InsertWp, JumpStart, JumpWp,
         Land, LoadWpFile, LoiterCircles, LoiterForever, LoiterTime, MeasureDistance, ModifyAlt,
-        PolygonFromWaypoints, ReverseWps, Rtl, SaveWpFile, SetReturnLocation, SetRoi, Takeoff,
-        ZoomTo,
+        PolygonFromWaypoints, ReverseWps, Rtl, SaveWpFile, SetReturnLocation, SetRoi, SurveyGrid,
+        Takeoff, ZoomTo,
     };
     &[
         item(
@@ -4159,7 +3982,7 @@ pub const MAP_MENU: &[MenuEntry] = {
                     "menu-surveyGrid",
                     "surveyGridToolStripMenuItem",
                     "Survey (Grid)",
-                    None,
+                    Some(SurveyGrid),
                 ),
             ],
         ),
@@ -4892,7 +4715,10 @@ impl PlanMenus {
                     ));
                 }
             }
-            MenuAction::LoadWpFile | MenuAction::SaveWpFile | MenuAction::FenceClear => {}
+            MenuAction::LoadWpFile
+            | MenuAction::SaveWpFile
+            | MenuAction::FenceClear
+            | MenuAction::SurveyGrid => {}
         }
     }
 
@@ -5673,6 +5499,11 @@ fn choose_entry(
         MenuAction::ZoomToVehicle | MenuAction::ZoomToMission | MenuAction::ZoomToHome => {
             this.plan_menus.zoom_menu = None;
             zoom_menu_entry(this, action);
+        }
+        // `// C#: GCSViews/FlightPlanner.cs:6755-6760`
+        MenuAction::SurveyGrid => {
+            this.plan_menus.open = None;
+            crate::survey_ui::open(this, window, cx);
         }
         _ => {
             let context = menu_context(this);
@@ -6750,121 +6581,6 @@ mod tests {
     }
 
     #[test]
-    fn a_survey_covers_the_area_it_was_drawn_over() {
-        let mut plan = Plan::default();
-        for vertex in area() {
-            plan.add_area_vertex(vertex);
-        }
-        plan.adjust_survey(0.0, 0.0, 0.0);
-        plan.generate_survey();
-
-        assert!(plan.survey_error().is_none(), "{:?}", plan.survey_error());
-        assert!(
-            plan.items().len() >= 4,
-            "a 300 m square at default spacing should need several lines, got {}",
-            plan.items().len()
-        );
-        // Every generated point must be inside the area, or the aircraft flies outside what the
-        // operator drew.
-        for item in plan.items() {
-            let position = item
-                .position()
-                .expect("a valid position")
-                .expect("a position");
-            assert!(
-                mp_mission::survey::contains_within(plan.polygon(), position, 5.0),
-                "generated {position:?} outside the drawn area"
-            );
-        }
-    }
-
-    #[test]
-    fn a_survey_uses_the_chosen_altitude_and_a_relative_frame() {
-        let mut plan = Plan::default();
-        for vertex in area() {
-            plan.add_area_vertex(vertex);
-        }
-        plan.adjust_survey(0.0, 0.0, 25.0);
-        let expected = plan.survey_options().altitude;
-        plan.generate_survey();
-
-        assert!(!plan.items().is_empty());
-        for item in plan.items() {
-            assert!((item.z - expected).abs() < 1e-9, "{} vs {expected}", item.z);
-            assert_eq!(item.frame, FRAME_RELATIVE);
-            assert_eq!(item.command, CMD_WAYPOINT);
-        }
-    }
-
-    #[test]
-    fn a_survey_replaces_the_mission_rather_than_appending_to_it() {
-        // A survey joined onto an existing mission would fly the old waypoints first and then
-        // transit to the area, which is almost never what was meant.
-        let mut plan = Plan::default();
-        plan.add_waypoint(at(-35.30, 149.10), 50.0);
-        for vertex in area() {
-            plan.add_area_vertex(vertex);
-        }
-        plan.generate_survey();
-
-        let strays = plan
-            .items()
-            .iter()
-            .filter(|item| (item.x - -35.30).abs() < 1e-9)
-            .count();
-        assert_eq!(strays, 0, "the old waypoint survived the survey");
-    }
-
-    #[test]
-    fn too_few_corners_reports_why_rather_than_generating_nothing() {
-        let mut plan = Plan::default();
-        plan.add_area_vertex(at(-35.36, 149.16));
-        plan.add_area_vertex(at(-35.36, 149.17));
-        plan.generate_survey();
-
-        assert!(plan.items().is_empty());
-        let error = plan.survey_error().expect("an explanation");
-        assert!(error.contains('3'), "{error}");
-    }
-
-    #[test]
-    fn spacing_cannot_be_set_low_enough_to_generate_an_unflyable_mission() {
-        // At one metre spacing a field-sized area generates tens of thousands of waypoints, which
-        // no autopilot accepts and no operator intended.
-        let mut plan = Plan::default();
-        for _ in 0..100 {
-            plan.adjust_survey(-100.0, 0.0, 0.0);
-        }
-        assert!(plan.survey_options().spacing >= 5.0);
-    }
-
-    #[test]
-    fn the_survey_angle_wraps_rather_than_sticking_at_one_end() {
-        // A bearing is circular; stopping at 359 would be arbitrary.
-        let mut plan = Plan::default();
-        plan.adjust_survey(0.0, -15.0, 0.0);
-        assert!((plan.survey_options().angle - 345.0).abs() < 1e-9);
-        plan.adjust_survey(0.0, 30.0, 0.0);
-        assert!((plan.survey_options().angle - 15.0).abs() < 1e-9);
-    }
-
-    #[test]
-    fn changing_the_angle_changes_the_pattern() {
-        let mut plan = Plan::default();
-        for vertex in area() {
-            plan.add_area_vertex(vertex);
-        }
-        plan.generate_survey();
-        let north_south: Vec<f64> = plan.items().iter().map(|item| item.x).collect();
-
-        plan.adjust_survey(0.0, 90.0, 0.0);
-        plan.generate_survey();
-        let east_west: Vec<f64> = plan.items().iter().map(|item| item.x).collect();
-
-        assert_ne!(north_south, east_west, "the angle had no effect");
-    }
-
-    #[test]
     fn clearing_the_area_leaves_the_mission_alone() {
         let mut plan = Plan::default();
         plan.add_waypoint(at(-35.36, 149.16), 50.0);
@@ -7026,12 +6742,11 @@ mod tests {
     }
 
     #[test]
-    fn a_rally_point_takes_the_altitude_on_screen() {
-        // There is one altitude control on this screen and it is the survey's; a rally point that
-        // silently used a different number would be a surprise in a failsafe.
+    fn a_rally_point_takes_the_rally_altitude() {
+        // The survey panel's altitude, which rally points took, is gone to the Survey (Grid)
+        // dialog; they keep the 50 m it started at.
         let mut plan = Plan::default();
-        plan.adjust_survey(0.0, 0.0, 30.0);
-        let expected = plan.survey_options().altitude;
+        let expected = RALLY_ALTITUDE;
         plan.add_rally_point(at(-35.3625, 149.1655));
 
         assert_eq!(plan.rally().len(), 1);
@@ -8891,6 +8606,7 @@ mod tests {
                 "menu-loadFromFile",
                 "menu-saveToFile",
                 "menu-clear",
+                "menu-surveyGrid",
                 "menu-ContextMeasure",
                 "menu-zoomTo",
                 "menu-reverseWPs",

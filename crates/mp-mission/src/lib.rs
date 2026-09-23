@@ -5,12 +5,15 @@
 
 #![forbid(unsafe_code)]
 
+pub mod cameras;
 mod clipper;
 pub mod commands;
 pub mod corridor;
+pub mod dotnet;
 pub mod fence;
 pub mod fence_file;
 pub mod grid;
+pub mod gridui;
 pub mod item;
 pub mod rotary;
 pub mod rows;

@@ -1,10 +1,11 @@
-//! Survey grid generation for the planner screen.
+//! A survey grid's lane ends, and whether positions lie in an area.
 //!
 //! [`grid`] is Mission Planner's own `Grid.CreateGrid` ([`crate::grid::create_grid`], a
 //! transliteration of `ExtLibs/Utilities/Grid.cs` checked point for point against the C# by
-//! `tests/grid_vectors.rs`), called the way `GridUI` calls it with the handful of settings this
-//! screen exposes. The containment helpers below are this crate's own, for checking waypoints
-//! against an area; they are not part of `Grid.cs`.
+//! `tests/grid_vectors.rs`) with a handful of its settings, returning the lane ends. The planning
+//! screen's Survey (Grid) dialog does not use it: it is [`crate::gridui`], `GridUI.cs` whole. The
+//! containment helpers below are this crate's own, for checking waypoints against an area; they
+//! are not part of `Grid.cs`.
 
 use mp_units::LatLon;
 
