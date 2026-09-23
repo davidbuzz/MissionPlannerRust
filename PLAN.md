@@ -1038,12 +1038,12 @@ cache with its own versioning or just a download.
 
 ---
 
-## 13. The next twenty, in order
+## 13. The queue
 
-Supersedes the original two-week plan, most of which has been overtaken: the oracle, the ledger
-seed, the Linux GPU spike and the first real units are all behind us. What follows is the current
-queue, ordered by what unblocks the most and then by what an operator hits most often. Each row
-says what *done* means, because a list of nouns is not a plan.
+### 13.1 The twenty, and what they cost
+
+Superseded the original two-week plan. Eighteen are closed, two are partly closed and say so. Each
+row says what *done* means, because a list of nouns is not a plan.
 
 | # | Item | Why it is next | Deliverable | Done when | Status |
 |---:|---|---|---|---|---|
@@ -1068,23 +1068,7 @@ says what *done* means, because a list of nouns is not a plan.
 | 19 | Firmware flashing | the last item in Initial Setup with no counterpart here | D13 | a `.apj` is written to a board over the bootloader and verified | protocol done, no board flashed |
 | 20 | Python scripting host | D16, and the owner's stated interest in extensions that need no compiler | D16 | a script can read telemetry and drive a command, sandboxed | host API done, engine not wired |
 
-**1 is first because it is load-bearing.** Three separate decisions were made to work around the
-absence of a text input: parameters are browsed by prefix rather than searched, missions save to a
-fixed path, and altitudes are stepped rather than typed. Each was the right call at the time and
-each stops being right the moment typing is possible.
-
-**13, 14 and 15 came from a gap audit** against the deliverables, the C# reference and the test
-suite, and displaced three items that had been on this list: waypoint editing from the map, fence
-read-back, and packaging. All three are worth doing and none of them is as valuable as being able
-to review a flight afterwards.
-
-**10 and 11 change what can be flown** rather than how comfortably it is flown. Everything above
-them is reach; those two are range.
-
-**16 and 17 are verification debt** — the two places where this project currently claims more than
-it has tested.
-
-**What 13–17 cost, recorded because the estimate was wrong in an instructive direction.** Five
+**What they cost, recorded because the estimate was wrong in an instructive direction.** Six
 items, all "small". Each one turned up a defect in something already believed finished, and the
 defects were worth more than the features:
 
@@ -1100,6 +1084,34 @@ defects were worth more than the features:
 The pattern: the expensive bugs were all in the gap between "the code exists" and "the code has
 been run against the thing it is for". That is an argument for §6.4's five-artifact contract being
 enforced on work done *before* the factory starts, not only on units dispatched through it.
+
+### 13.2 The next ten, in order
+
+Four carried over from §13.1 (9–12, never started), and six that the last stretch showed are owed.
+Ordered by what an operator hits first, then by what unblocks the most.
+
+| # | Item | Why it is next | Deliverable | Done when | Status |
+|---:|---|---|---|---|---|
+| 1 | Log plotting from a `.BIN` | the other half of the tuning graph: watching a value live is how a problem is noticed, plotting it afterwards is how it is diagnosed. `mp-chart` already holds the reduction | D14 | a field from a dataflash log plots against time, with the field chosen from what the log actually contains | |
+| 2 | Waypoint editing on the map | a mission planner that cannot drag a waypoint is not a mission planner. Displaced twice already | D11 | a waypoint drags to a new position, a click adds one, and the change survives an upload and a read-back | |
+| 3 | Terrain-relative altitudes | a mission flown at 50 m over a hill is a mission into a hill | D11 | `MAV_FRAME_GLOBAL_TERRAIN_ALT` round-trips, and the planner says which frame every item uses | |
+| 4 | Fence and rally read-back | upload works and read-back does not, so a fence cannot be checked against what the vehicle actually holds | D11 | a fence and a rally set download and compare against the file that produced them | |
+| 5 | Satellite imagery | planning over a paddock needs imagery, not a street map | D8 | a second provider is selectable and its attribution is shown | |
+| 6 | Mission Planner tile cache | D8 asks for it, and operators carry multi-GB offline caches into the field | D8 | tiles written by the C# application are read with the network off | |
+| 7 | Stick-to-wire under 5 ms | D15 sets p99 ≤5 ms and the joystick path polls at 50 ms, missing it by an order of magnitude. It also runs on gpui's foreground executor, so a slow frame suspends the thing flying the aircraft | D15 | a dedicated thread blocks on the device and sends on change; a histogram over a real device shows p99 ≤5 ms | |
+| 8 | Zero-allocation proof on the ingest path | D2's DoD says zero heap allocations per packet "verified by an allocation-counting test". No such test exists, so the claim is untested | D2 | a counting global allocator asserts zero allocations across a replayed tlog's ingest→state path | |
+| 9 | Split `mp-link` | §5.1's layering is the pivot insurance and `mp-link` currently violates it: 6,728 LOC carrying params, missions, calibration, log download and `.param` files. A CI rule cannot enforce a graph the code does not have | D1 | `mp-params`, `mp-calibration` and `mp-ftp` exist; `xtask/tests/graph.rs` asserts the layer rules and passes | |
+| 10 | The porting ledger | G1 is "3,678 files in a terminal state" and there is no ledger to hold them. Nothing above can be called *done* in the sense this plan defines | D18 | `ledger/ledger.csv` has a row per `.cs` file and `cargo xtask ledger check` exits 0 | |
+
+**1 to 6 are what a pilot notices.** Everything in §13.1 made the application more trustworthy;
+these make it more capable. 2 is the one that is embarrassing to still owe.
+
+**7 and 8 are numbers this document claims and has not met.** They are listed with the rest rather
+than in a corner, because a performance target nobody is scheduled to meet is a wish.
+
+**9 and 10 are the factory.** They buy nothing an operator can see and everything the remaining
+1.2M LOC depends on: without the graph, a framework pivot costs the project instead of two crates,
+and without the ledger there is no definition of finished.
 
 ---
 

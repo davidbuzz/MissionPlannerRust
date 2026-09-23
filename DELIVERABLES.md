@@ -30,7 +30,7 @@ Reference clone: [referneces/zed](referneces/zed).
 | [D13](#d13-initial-setup-calibration-and-firmware) | 2 | Setup, calibration, firmware flashing | P1 | In progress | Unit + SITL + hardware |
 | [D14](#d14-log-engine-and-analysis) | 2 | Dataflash log parsing, plots | P1 | In progress | Unit |
 | [D15](#d15-can-peripherals-and-outboard-features) | 2 | DroneCAN, peripherals, video, joystick | P2 | In progress | Unit |
-| [D16](#d16-extension-and-scripting-system) | 2 | Python scripting, WASM extensions | P2 | Not started | Not started |
+| [D16](#d16-extension-and-scripting-system) | 2 | Python scripting, WASM extensions | P2 | In progress | Unit |
 | [D17](#d17-localization-settings-and-data-compatibility) | 2 | i18n, settings, data compatibility | P1 | In progress | Unit |
 | [D18](#d18-translation-factory-and-porting-ledger) | 3 | Translation factory, file ledger | P0 | In progress | Unit |
 | [D19](#d19-verification-suite) | 3 | Differential, SITL, fuzz verification | P0 | In progress | Differential vs C# + fuzz |
@@ -231,10 +231,11 @@ Dataflash (`.bin`/`.log`) and tlog parsing, log download, graphing, LogAnalyzer 
 - **Replaces:** `Log/` (9,971), `LogAnalyzer/`, `graphs/`, `ExtLibs/ZedGraph` (52,265),
   `ExtLibs/Exocortex.DSP`, the used subset of `ExtLibs/alglibnet` (251,616 — audit what is actually called),
   `ExtLibs/MetaDataExtractorCSharp240d` (17,800), `ExtLibs/ICSharpCode.SharpZipLib` + `zlib.net` + `7zip`.
-- **Today:** `.tlog` read and write, dataflash `.BIN` parsing, log download from a vehicle, and
+- **Today:** `.tlog` read and write, dataflash `.BIN` parsing, log download from a vehicle,
   automatic recording of every flight — both directions of the link, named in local time as Mission
-  Planner names them, into the same `Documents/Mission Planner/logs` directory it uses. Plotting is
-  not started.
+  Planner names them, into the same `Documents/Mission Planner/logs` directory it uses — and KML
+  export of a flown path, coloured by flight mode. `mp-chart` holds the min/max reduction the plot
+  target needs and drives the live tuning graph; plotting a field from a `.BIN` is next (§13.2).
 - **Tests:** `tests/parser_diff.rs` parses a corpus of real dataflash and tlog files and diffs every decoded field against the C# parser's output; `fuzz/fuzz_targets/dataflash.rs` and `tlog.rs` asserting no panic and no unbounded allocation on corrupt logs (truncated, bit-flipped, wrong-endian, fabricated FMT messages); `tests/fft.rs` compares against `Exocortex.DSP` golden spectra; `tests/exports.rs` `.mat`/CSV/KML round-trips; `benches/parse_1gb.rs` gates <2 s to first plot and `benches/scrub_10m.rs` gates 120 fps scrubbing.
 
 ### D15. CAN, peripherals and outboard features

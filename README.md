@@ -13,8 +13,8 @@ projects — as a Rust application that is **fast**, **multi-platform** and **GP
 Early, but flyable behind SITL and a real autopilot. The protocol and telemetry spine is solid; the
 UI covers flying, planning and the first of the setup screens.
 
-Measured on this tree: **13 crates, 36,603 hand-written Rust LOC** (plus 91,634 generated),
-**531 tests** green on `cargo test --workspace`.
+Measured on this tree: **17 crates, 40,661 hand-written Rust LOC** (plus 91,634 generated),
+**608 tests** green on `cargo test --workspace`, across 88 commits.
 
 | Working today | |
 |---|---|
@@ -37,8 +37,11 @@ Measured on this tree: **13 crates, 36,603 hand-written Rust LOC** (plus 91,634 
 | Tuning graph | eleven telemetry fields plotted live, min/max reduced so a spike cannot hide |
 | Geodesy | typed units, Web Mercator, slippy-map tile arithmetic |
 | Maps | GPU tile rendering, flight path, mission and fence overlays |
-| CLI | `mpr watch \| record \| fly \| params \| param \| mission \| survey \| log \| logs \| ports` |
+| CLI | `mpr watch \| record \| fly \| params \| param \| mission \| survey \| log \| logs \| kml \| firmware \| ports` |
 | GUI | fly, plan, setup and params screens on gpui |
+
+**Not yet**: log plotting, waypoint editing on the map, terrain-relative altitudes, satellite
+imagery, i18n, packaging. `PLAN.md` §13.2 is the queue, and says what *done* means for each.
 
 ## Verification
 
