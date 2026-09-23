@@ -826,11 +826,17 @@ impl MissionPlanner {
                             .pr_2()
                             .overflow_y_scroll()
                             .track_scroll(&self.fly_scroll)
+                            // The tuning graph first, because that is where the C# puts it: its
+                            // chart lives in `splitContainer1.Panel1`, which sits above and is
+                            // collapsed until `CB_tuning` uncollapses it, pushing the rest down.
+                            // It is also the only placement that is any use - at the bottom of a
+                            // column that already scrolls, a plot nobody can see without
+                            // scrolling to it is a plot nobody watches.
+                            .child(tuning::panel_for(&self.tuning, cx))
                             .child(fly::actions_panel(view, self.disabled_arming_checks, cx))
                             .child(fly::prearm_panel(view))
                             .child(fly::vehicle_panel(view))
-                            .child(fly::health_panel(view))
-                            .child(tuning::panel_for(&self.tuning, cx)),
+                            .child(fly::health_panel(view)),
                     )
                     .children(ui::scroll_indicator(&self.fly_scroll)),
             )

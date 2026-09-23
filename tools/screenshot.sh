@@ -83,7 +83,7 @@ POINTER_HOME=$(xdotool getmouselocation --shell 2>/dev/null | awk -F= '/^X=/{x=$
 # the launch is too late - the window already exists by the time the pointer moves, which is the
 # bug this replaces. The windowmove later stays as the belt to this braces, for a window manager
 # that does not consult the pointer at all.
-SHOT_AT="${SHOT_AT:-0,0}"
+SHOT_AT="${SHOT_AT:-2560,0}"
 WANT_X="${SHOT_AT%%,*}"
 WANT_Y="${SHOT_AT##*,}"
 xdotool mousemove "$WANT_X" "$WANT_Y" 2>/dev/null
@@ -136,8 +136,9 @@ sleep "${SETTLE:-2}"
 # which puts somebody's tool window on top of whatever they were doing, somewhere new each time.
 # That is not a cosmetic problem: these run on a real desktop while a person is using it.
 #
-# SHOT_AT overrides the corner. The default is DP-1-3 at the X screen origin, chosen by the owner
-# of this desktop; on another machine set SHOT_AT to a corner that is out of the way.
+# SHOT_AT overrides the corner. The default is **DP-1-1 at +2560+0**, the right-hand external
+# monitor on this desktop, chosen by its owner. On another machine set SHOT_AT to a corner that is
+# out of the way; `xrandr --listmonitors` prints the origins to choose from.
 # Activated first, then moved. A window manager will often pull a window to the active monitor
 # when it is activated, so activating after the move undoes it - which is exactly what was
 # happening. Moving last, and checking, is what makes the placement stick.

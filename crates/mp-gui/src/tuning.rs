@@ -67,6 +67,12 @@ pub struct Tuning {
     /// The snapshot count last sampled, so a stalled link does not draw a flat line that looks
     /// like a real measurement of zero.
     last_seen: u64,
+    /// Whether the graph is showing.
+    ///
+    /// Off until asked for, as in the C#: `splitContainer1.Panel1` holds the chart and starts
+    /// collapsed, and `CB_tuning` is what uncollapses it.
+    /// `// C#: GCSViews/FlightData.cs:1902-1918`
+    visible: bool,
 }
 
 impl Default for Tuning {
@@ -84,6 +90,7 @@ impl Tuning {
             chosen: Vec::new(),
             started: std::time::Instant::now(),
             last_seen: 0,
+            visible: false,
         };
         tuning.toggle(0);
         tuning.toggle(1);
@@ -116,6 +123,12 @@ impl Tuning {
     /// looks exactly like a measurement of a steady value, when what it means is that nothing has
     /// arrived - and on a tuning graph those two readings lead to opposite conclusions.
     pub fn sample(&mut self, view: &TelemetryView) {
+        // Nothing is sampled while the graph is hidden. The C# stops `ZedGraphTimer` when the
+        // panel collapses, and doing the same means a session that never opens the graph does no
+        // work for it at all.
+        if !self.visible {
+            return;
+        }
         let Some(state) = view.state.as_ref() else {
             return;
         };
@@ -136,6 +149,24 @@ impl Tuning {
     /// The series being shown.
     pub fn series(&self) -> &[Series] {
         &self.series
+    }
+
+    /// Whether the graph is showing.
+    #[must_use]
+    pub const fn is_visible(&self) -> bool {
+        self.visible
+    }
+
+    /// Shows or hides the graph.
+    ///
+    /// Showing restarts the clock, so the ten seconds on screen are the ten seconds since it was
+    /// asked for rather than a window into a buffer filled while nobody was looking - which is
+    /// what the C# does by only running `ZedGraphTimer` while the panel is uncollapsed.
+    pub fn set_visible(&mut self, visible: bool) {
+        if visible && !self.visible {
+            self.clear();
+        }
+        self.visible = visible;
     }
 
     /// Forgets everything drawn so far.
@@ -159,6 +190,25 @@ const TRACE_COLOURS: &[u32] = &[
 
 /// The tuning panel.
 pub fn panel_for(tuning: &Tuning, cx: &mut Context<MissionPlanner>) -> AnyElement {
+    // Hidden until asked for, so a screen that already scrolls does not carry a plot nobody is
+    // watching. `// C#: GCSViews/FlightData.cs:1902-1918`
+    if !tuning.is_visible() {
+        return panel(
+            "tuning",
+            div().child(action(
+                "tuning-show",
+                "show tuning graph",
+                theme::ACCENT,
+                true,
+                cx.listener(|this, _event: &(), _window, cx| {
+                    this.tuning.set_visible(true);
+                    cx.notify();
+                }),
+            )),
+        )
+        .into_any_element();
+    }
+
     let latest = tuning
         .series()
         .iter()
@@ -284,16 +334,31 @@ pub fn panel_for(tuning: &Tuning, cx: &mut Context<MissionPlanner>) -> AnyElemen
                             .text_color(rgb(theme::DIM))
                             .child(format!("{from:.0}s to {to:.0}s")),
                     )
-                    .child(action(
-                        "tuning-clear",
-                        "clear",
-                        theme::ACCENT,
-                        true,
-                        cx.listener(|this, _event: &(), _window, cx| {
-                            this.tuning.clear();
-                            cx.notify();
-                        }),
-                    )),
+                    .child(
+                        div()
+                            .flex()
+                            .gap_2()
+                            .child(action(
+                                "tuning-clear",
+                                "clear",
+                                theme::ACCENT,
+                                true,
+                                cx.listener(|this, _event: &(), _window, cx| {
+                                    this.tuning.clear();
+                                    cx.notify();
+                                }),
+                            ))
+                            .child(action(
+                                "tuning-hide",
+                                "hide",
+                                theme::DIM,
+                                true,
+                                cx.listener(|this, _event: &(), _window, cx| {
+                                    this.tuning.set_visible(false);
+                                    cx.notify();
+                                }),
+                            )),
+                    ),
             )
             .child(legend)
             .child(chooser),
@@ -304,6 +369,26 @@ pub fn panel_for(tuning: &Tuning, cx: &mut Context<MissionPlanner>) -> AnyElemen
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Off until asked for, as the C# panel starts collapsed.
+    #[test]
+    fn the_graph_is_hidden_until_it_is_asked_for() {
+        let mut tuning = Tuning::new();
+        assert!(!tuning.is_visible());
+        tuning.set_visible(true);
+        assert!(tuning.is_visible());
+        tuning.set_visible(false);
+        assert!(!tuning.is_visible());
+    }
+
+    /// A hidden graph does no work, as the C# stops its timer when the panel collapses.
+    #[test]
+    fn nothing_is_sampled_while_it_is_hidden() {
+        let mut tuning = Tuning::new();
+        let view = crate::telemetry::TelemetryView::disconnected(String::new());
+        tuning.sample(&view);
+        assert!(tuning.series().iter().all(mp_chart::Series::is_empty));
+    }
 
     /// The default is the pair a tune is usually watched on.
     #[test]
