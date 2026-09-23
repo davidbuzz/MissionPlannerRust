@@ -4,11 +4,11 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui c
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 3 | 10 | 42 | 2 | 4 | 569 |
+| 61 | 4 | 9 | 42 | 2 | 4 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 3 | 9 | 30 | 2 | 0 | 258 | 149 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 4 | 8 | 30 | 2 | 0 | 258 | 149 |
 | CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 0 | 1 | 12 | 0 | 0 | 277 | 255 |
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 | 0 |
 
@@ -47,8 +47,8 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConne
 | 188 | `ConfigFrameType` | Frame Type | Mandatory Hardware | copter before 3.5 | 12 | **missing** |
 | 189 | `ConfigFrameClassType` | Frame Type | Mandatory Hardware | any with FRAME_CLASS; copter 3.5 and later | 19 | partial: `crates/mp-gui/src/config/frame_type.rs` `fn page` - the eight class buttons and six type rows from Common.ValidList, each click writing FRAME_CLASS then FRAME_TYPE through the retrying set; the frame pictures are named boxes, not the C#'s images |
 | 196 | `ConfigAccelerometerCalibration` | Accel Calibration | Mandatory Hardware | any | 3 | partial: `crates/mp-gui/src/setup.rs` `fn accelerometer_panel` - has Calibrate Accel's six positions, and Calibrate Level as `cal-level` on the page; missing Simple Accel Cal |
-| 203 | `ConfigHWCompass2` | Compass | Mandatory Hardware | any with COMPASS_PRIO1_ID | 11 | partial: `crates/mp-gui/src/setup.rs` `fn compass_panel` - has the onboard calibration's start and cancel with each compass's progress; missing Accept, the priority grid (order, use, external, remove missing), Large Vehicle MagCal and Reboot |
-| 206 | `ConfigHWCompass` | Compass | Mandatory Hardware | any without COMPASS_PRIO1_ID | 21 | partial: `crates/mp-gui/src/setup.rs` `fn compass_panel` - has the onboard calibration's start and cancel; missing declination, each compass's use and external boxes, the board presets, live calibration, compass learn and Large Vehicle MagCal |
+| 203 | `ConfigHWCompass2` | Compass | Mandatory Hardware | any with COMPASS_PRIO1_ID | 11 | done: `crates/mp-gui/src/config/compass.rs` `fn page` |
+| 206 | `ConfigHWCompass` | Compass | Mandatory Hardware | any without COMPASS_PRIO1_ID | 21 | partial: `crates/mp-gui/src/config/compass.rs` `fn page` - has the declination and its automatic box, learn, the primary compass, each compass's use, external, orientation, offsets and MOT, the three quick-configure buttons, the onboard calibration and Large Vehicle MagCal; missing Live Calibration (MagCalib.DoGUIMagCalib, drawn and inert) |
 | 211 | `ConfigRadioInput` | Radio Calibration | Mandatory Hardware | any | 8 | done: `crates/mp-gui/src/config/radio.rs` `fn page` |
 | 215 | `ConfigRadioOutput` | Servo Output | Mandatory Hardware | any | 1 | **missing** |
 | 220 | `ConfigSerial` | Serial Ports | Mandatory Hardware | any | 0 | **missing** |

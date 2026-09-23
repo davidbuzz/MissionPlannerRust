@@ -207,6 +207,7 @@ const LOADING: &str = "connected, parameters still arriving";
 const SETUP_RS: &str = "crates/mp-gui/src/setup.rs";
 const PARAMS_RS: &str = "crates/mp-gui/src/params.rs";
 const JOYSTICK_RS: &str = "crates/mp-gui/src/joystick.rs";
+const COMPASS_RS: &str = "crates/mp-gui/src/config/compass.rs";
 
 /// Every `Config*.cs` in `GCSViews/ConfigurationView/`, in the order `InitialSetup` and then
 /// `SoftwareConfig` first list it, then the ones neither lists.
@@ -324,12 +325,11 @@ pub const PANELS: &[Panel] = &[
             MANDATORY,
             "any with COMPASS_PRIO1_ID",
         )],
-        Partial(
-            at(SETUP_RS, "fn compass_panel"),
-            "has the onboard calibration's start and cancel with each compass's progress; \
-             missing Accept, the priority grid (order, use, external, remove missing), Large \
-             Vehicle MagCal and Reboot",
-        ),
+        // C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:86-532 - the priority table with its
+        // up and down writes of COMPASS_PRIO1_ID to PRIO3_ID, Remove Missing, the Use and learn
+        // boxes, Reboot and its CheckReboot, the onboard calibration's Start, Accept and Cancel
+        // with the timer's bars, lights and text, the fitness combo, and Large Vehicle MagCal.
+        Ours::Done(at(COMPASS_RS, "fn page")),
     ),
     panel(
         "ConfigHWCompass",
@@ -341,11 +341,14 @@ pub const PANELS: &[Panel] = &[
             MANDATORY,
             "any without COMPASS_PRIO1_ID",
         )],
+        // C#: GCSViews/ConfigurationView/ConfigHWCompass.cs:31-780. Shown for ArduPilot before
+        // 4.1, which has no COMPASS_PRIO1_ID.
         Partial(
-            at(SETUP_RS, "fn compass_panel"),
-            "has the onboard calibration's start and cancel; missing declination, each \
-             compass's use and external boxes, the board presets, live calibration, compass \
-             learn and Large Vehicle MagCal",
+            at(COMPASS_RS, "fn page"),
+            "has the declination and its automatic box, learn, the primary compass, each \
+             compass's use, external, orientation, offsets and MOT, the three quick-configure \
+             buttons, the onboard calibration and Large Vehicle MagCal; missing Live \
+             Calibration (MagCalib.DoGUIMagCalib, drawn and inert)",
         ),
     ),
     panel(
@@ -1587,7 +1590,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (3, 10, 42, 2, 4)
+            (4, 9, 42, 2, 4)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

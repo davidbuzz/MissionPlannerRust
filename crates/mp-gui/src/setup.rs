@@ -28,14 +28,14 @@
 #![allow(unreachable_pub)]
 
 use gpui::{AnyElement, Context, FontWeight, SharedString, Window, div, prelude::*, px, rgb};
-use mp_calibration::{AccelCalibration, AccelPosition, CompassProgress, CompassStatus};
+use mp_calibration::{AccelCalibration, AccelPosition};
 use mp_vehicle::VehicleId;
 
 use crate::MissionPlanner;
 use crate::config::flight_modes::{Firmware, firmware_of};
 pub use crate::config_coverage::Screen as List;
 use crate::telemetry::TelemetryView;
-use crate::ui::{action, action_sized, panel, progress as progress_bar, theme};
+use crate::ui::{action, action_sized, panel, theme};
 
 /// `WidthMenu`: the list's width.
 /// `// C#: GCSViews/InitialSetup.Designer.cs:72; GCSViews/SoftwareConfig.Designer.cs:41`
@@ -886,6 +886,23 @@ impl MissionPlanner {
             {
                 self.install_firmware.toggle(&self.telemetry.view());
             }
+            // C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:86-145; ConfigHWCompass.cs:31-243
+            Some(class @ ("ConfigHWCompass2" | "ConfigHWCompass")) if !self.compass.is_active() => {
+                let view = self.telemetry.view();
+                let info = crate::config::compass::VehicleInfo::of(
+                    &view,
+                    self.telemetry.firmware_banner(),
+                );
+                if let Some(class) = crate::config::compass::Class::of(class) {
+                    self.compass.activate(
+                        class,
+                        &view.parameters,
+                        Key::of(&view),
+                        info,
+                        crate::metadata::lookup,
+                    );
+                }
+            }
             // C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs:36-54
             Some("ConfigFrameClassType") if !self.frame_type.is_active() => {
                 self.frame_type.toggle(&self.telemetry);
@@ -925,6 +942,11 @@ impl MissionPlanner {
                 if self.install_firmware.is_open() =>
             {
                 self.install_firmware.close();
+            }
+            // C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:147-152; ConfigHWCompass.cs:252-255
+            Some("ConfigHWCompass2" | "ConfigHWCompass") if self.compass.is_active() => {
+                let open = self.telemetry.view().connected;
+                self.compass.deactivate(open);
             }
             // C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs (Deactivate)
             Some("ConfigFrameClassType") if self.frame_type.is_active() => {
@@ -1033,10 +1055,12 @@ impl MissionPlanner {
                 ))
                 .child(calibration_panel(&["cal-level"], view, cx))
                 .into_any_element(),
-            "ConfigHWCompass" | "ConfigHWCompass2" => column()
-                .child(compass_panel(
-                    &self.telemetry.compass_calibration(),
-                    view,
+            // C#: GCSViews/ConfigurationView/ConfigHWCompass2.Designer.cs:84-571;
+            // GCSViews/ConfigurationView/ConfigHWCompass.resx
+            "ConfigHWCompass2" | "ConfigHWCompass" => column()
+                .child(crate::config::compass::page(
+                    &self.compass,
+                    &self.compass_focus,
                     cx,
                 ))
                 .into_any_element(),
@@ -1465,130 +1489,6 @@ fn restart_button(cx: &mut Context<MissionPlanner>) -> AnyElement {
             this.telemetry.clear_accel_calibration();
             cx.notify();
         }),
-    )
-}
-
-/// Compass calibration, with a progress bar per compass.
-///
-/// One row per compass because ArduPilot calibrates every enabled one at once and reports each
-/// separately. A vehicle with an external and an internal compass can have the first pass and the
-/// second fail, and saying only "failed" would send the operator to the wrong hardware.
-pub fn compass_panel(
-    progress: &[CompassProgress],
-    view: &TelemetryView,
-    cx: &mut Context<MissionPlanner>,
-) -> impl IntoElement {
-    let has_vehicle = view.vehicle.is_some();
-    let armed = view.state.as_ref().is_some_and(|state| state.armed);
-    let running = progress.iter().any(|entry| entry.status.in_progress());
-
-    let mut rows = div().flex().flex_col().gap_2();
-    for entry in progress {
-        let colour = match entry.status {
-            CompassStatus::Succeeded => theme::OK,
-            CompassStatus::Failed | CompassStatus::BadOrientation => theme::ALERT,
-            CompassStatus::Running | CompassStatus::WaitingToStart => theme::WARN,
-            _ => theme::DIM,
-        };
-        rows = rows.child(
-            div()
-                .flex()
-                .flex_col()
-                .gap_1()
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_3()
-                        .child(
-                            div()
-                                .w(px(80.0))
-                                .text_sm()
-                                .text_color(rgb(theme::TEXT))
-                                .child(format!("compass {}", entry.compass_id)),
-                        )
-                        .child(
-                            div()
-                                .w(px(48.0))
-                                .text_sm()
-                                .text_color(rgb(colour))
-                                .child(format!("{}%", entry.percent)),
-                        )
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w(px(0.0))
-                                .text_xs()
-                                .text_color(rgb(colour))
-                                .child(entry.status.describe()),
-                        ),
-                )
-                .child(progress_bar(f32::from(entry.percent) / 100.0, colour))
-                .children(entry.fitness.map(|fitness| {
-                    // ArduPilot's own threshold for a good fit is well under 100. A large value
-                    // means the samples did not describe a sphere, which means the airframe was
-                    // not rotated enough - a different fix from trying again the same way.
-                    let good = fitness < 100.0;
-                    div()
-                        .text_xs()
-                        .text_color(rgb(if good { theme::DIM } else { theme::WARN }))
-                        .child(if good {
-                            format!("fitness {fitness:.1}")
-                        } else {
-                            format!("fitness {fitness:.1} - poor; rotate through more orientations")
-                        })
-                })),
-        );
-    }
-
-    if progress.is_empty() {
-        rows = rows.child(div().text_xs().text_color(rgb(theme::DIM)).child(
-            "start, then rotate the airframe slowly through every orientation - nose up, \
-                     nose down, on each side, and upside down",
-        ));
-    }
-
-    panel(
-        "compass",
-        div().flex().flex_col().gap_2().child(rows).child(
-            div()
-                .flex()
-                .gap_2()
-                .child(action(
-                    "cal-compass-start",
-                    if running {
-                        "sampling"
-                    } else {
-                        "start compass calibration"
-                    },
-                    theme::WARN,
-                    has_vehicle && !armed && !running,
-                    cx.listener(|this, _event: &(), _window, cx| {
-                        this.telemetry.calibrate_compass();
-                        cx.notify();
-                    }),
-                ))
-                .child(action(
-                    "cal-compass-cancel",
-                    "cancel",
-                    theme::ALERT,
-                    running,
-                    cx.listener(|this, _event: &(), _window, cx| {
-                        this.telemetry.cancel_compass_calibration();
-                        cx.notify();
-                    }),
-                ))
-                .child(action(
-                    "cal-compass-clear",
-                    "clear",
-                    theme::TEXT,
-                    !progress.is_empty() && !running,
-                    cx.listener(|this, _event: &(), _window, cx| {
-                        this.telemetry.clear_compass_calibration();
-                        cx.notify();
-                    }),
-                )),
-        ),
     )
 }
 

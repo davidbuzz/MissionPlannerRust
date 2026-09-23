@@ -6,8 +6,9 @@
 //! `MAV_CMD_ACCELCAL_VEHICLE_POS` in both directions - the vehicle sends it to ask, the ground
 //! station sends it back to confirm - which is unusual enough to be worth saying out loud.
 //!
-//! Levelling and compass calibration are single commands by comparison, and are here because they
-//! are the same `MAV_CMD_PREFLIGHT_CALIBRATION` with a different parameter set.
+//! Levelling is a single command by comparison, `MAV_CMD_PREFLIGHT_CALIBRATION` with a different
+//! parameter set. Compass calibration is [`compass`]: Start, Accept and Cancel, and what the
+//! vehicle reports of each compass while it runs.
 //!
 //! Radio calibration is not a conversation with the vehicle at all: [`radio`] is the arithmetic of
 //! the extremes each channel passes through while the operator sweeps the sticks, and the trims and
@@ -25,9 +26,16 @@
 
 #![forbid(unsafe_code)]
 
+pub mod compass;
 pub mod motor;
 pub mod motor_layouts;
 pub mod radio;
+
+pub use compass::{
+    CMD_DO_ACCEPT_MAG_CAL, CMD_DO_CANCEL_MAG_CAL, CMD_DO_START_MAG_CAL, CMD_FIXED_MAG_CAL_YAW,
+    CompassProgress, CompassReport, MagCalLog, accept_compass, cancel_compass, fixed_mag_cal_yaw,
+    mag_cal_status_name, start_compass,
+};
 
 use mp_mavlink_dialects::all::{CommandLong, MavMessage};
 use mp_vehicle::VehicleId;
@@ -36,7 +44,7 @@ use mp_vehicle::VehicleId;
 ///
 /// None, and uninhabited so that none can be made up: building a message cannot fail, and reading
 /// one never does either - a value the vehicle sends that this crate does not know is carried as
-/// [`CompassStatus::Unknown`] or read as [`AccelCalibration::Idle`], never refused. This is the
+/// its number ([`mag_cal_status_name`]) or read as [`AccelCalibration::Idle`], never refused. This is the
 /// one enum PLAN.md §5.3 gives each crate, so the first operation that can fail has somewhere to
 /// say how.
 #[derive(Debug, thiserror::Error)]
@@ -247,44 +255,6 @@ pub fn level(target: VehicleId) -> MavMessage {
     )
 }
 
-/// `MAV_CMD_DO_START_MAG_CAL`.
-pub const CMD_DO_START_MAG_CAL: u16 = 42_424;
-/// `MAV_CMD_DO_ACCEPT_MAG_CAL`.
-pub const CMD_DO_ACCEPT_MAG_CAL: u16 = 42_425;
-/// `MAV_CMD_DO_CANCEL_MAG_CAL`.
-pub const CMD_DO_CANCEL_MAG_CAL: u16 = 42_426;
-
-/// Starts an onboard compass calibration on every compass.
-///
-/// `MAV_CMD_DO_START_MAG_CAL`, not `MAV_CMD_PREFLIGHT_CALIBRATION`. The latter's magnetometer
-/// parameter is the legacy offset calibration; it is accepted by the firmware and never produces a
-/// `MAG_CAL_PROGRESS` message, so a ground station that sends it shows a progress panel that stays
-/// empty forever. This was found by sending the wrong one.
-///
-/// param1 = 0 calibrates every compass; param2 = 1 retries on failure; param3 = 1 saves the result
-/// without asking again, which is what the operator pressing "start" already asked for.
-#[must_use]
-pub fn start_compass(target: VehicleId) -> MavMessage {
-    command(
-        target,
-        CMD_DO_START_MAG_CAL,
-        [0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0],
-    )
-}
-
-/// Stops a running compass calibration on every compass.
-///
-/// Worth having: the sequence otherwise runs until it succeeds or times out, and an operator who
-/// started it by accident, or who cannot rotate the airframe after all, has no other way out.
-#[must_use]
-pub fn cancel_compass(target: VehicleId) -> MavMessage {
-    command(
-        target,
-        CMD_DO_CANCEL_MAG_CAL,
-        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-    )
-}
-
 /// Calibrates the barometer's ground pressure reference.
 ///
 /// param3 = 1. Quick, and worth doing before a flight when the weather has changed: the altitude
@@ -296,29 +266,6 @@ pub fn ground_pressure(target: VehicleId) -> MavMessage {
         CMD_PREFLIGHT_CALIBRATION,
         [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
     )
-}
-
-/// How a compass calibration is going, per compass.
-///
-/// ArduPilot calibrates every enabled compass at once and reports each separately, which is why
-/// this is per-compass rather than a single state. A vehicle with an external compass and an
-/// internal one can have the first pass and the second fail, and telling the operator "failed"
-/// without saying which would send them looking at the wrong hardware.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct CompassProgress {
-    /// Which compass, as the vehicle numbers them.
-    pub compass_id: u8,
-    /// What it is doing.
-    pub status: CompassStatus,
-    /// How far through, zero to a hundred.
-    pub percent: u8,
-    /// How many attempts it has made.
-    pub attempt: u8,
-    /// Fitness, once a report arrives: the residual after fitting, lower being better.
-    ///
-    /// ArduPilot's own threshold for a good calibration is well under 100; a large value means the
-    /// samples did not describe a sphere, usually because the airframe was not rotated enough.
-    pub fitness: Option<f32>,
 }
 
 /// What a compass calibration is doing.
@@ -511,37 +458,6 @@ mod tests {
             assert_eq!(set, 1, "{what} sets {set} parameters, not 1");
             assert_eq!(command_id(&built), CMD_PREFLIGHT_CALIBRATION);
         }
-    }
-
-    #[test]
-    fn the_compass_calibration_is_the_command_that_reports_progress() {
-        // MAV_CMD_PREFLIGHT_CALIBRATION's magnetometer parameter is the legacy offset
-        // calibration. The firmware accepts it and never sends a MAG_CAL_PROGRESS, so the
-        // progress panel stays empty forever - which is exactly what happened before this test
-        // existed.
-        let id = VehicleId::new(1, 1);
-        let built = start_compass(id);
-        assert_eq!(command_id(&built), CMD_DO_START_MAG_CAL);
-        assert_ne!(command_id(&built), CMD_PREFLIGHT_CALIBRATION);
-
-        let p = params(&built);
-        assert!(
-            p[0].abs() < f32::EPSILON,
-            "param1 should be 0, meaning every compass"
-        );
-        assert!(
-            (p[1] - 1.0).abs() < f32::EPSILON,
-            "param2 should retry on failure"
-        );
-        assert!((p[2] - 1.0).abs() < f32::EPSILON, "param3 should autosave");
-    }
-
-    #[test]
-    fn a_compass_calibration_can_be_cancelled() {
-        // Without this the sequence runs until it succeeds or times out, and an operator who
-        // cannot rotate the airframe after all has no way out.
-        let id = VehicleId::new(1, 1);
-        assert_eq!(command_id(&cancel_compass(id)), CMD_DO_CANCEL_MAG_CAL);
     }
 
     #[test]

@@ -1,0 +1,160 @@
+# Initial Setup's Compass page, ported from GCSViews/ConfigurationView/ConfigHWCompass2.cs - the page
+# the list offers a vehicle with COMPASS_PRIO1_ID, ArduPilot 4.1 and later (InitialSetup.cs:200-207).
+#
+# The claims: Activate builds the priority table from COMPASS_PRIO1_ID..3_ID then every other nonzero
+# COMPASS_DEV_IDn, each id decoded as Device.cs decodes it (ConfigHWCompass2.cs:86-145); a Use box is
+# a MavlinkCheckBox that writes COMPASS_USE when clicked and the vehicle echoes it; Start sends
+# DO_START_MAG_CAL 0,1,1 and the timer fills the text box from MAG_CAL_PROGRESS; Accept and Cancel
+# send their commands and stop the timer (:264-356); Large Vehicle MagCal asks for a heading first
+# (:476-498); Up writes the first three rows as COMPASS_PRIOn_ID and leaves a reboot required, which
+# leaving the page asks about (:147-262).
+#
+# SITL cannot finish a calibration: it completes one only while the airframe is rotated through every
+# orientation, and the simulated vehicle sits still, so completion stays at 0%. This script Starts,
+# sees the progress messages arrive, Accepts - which ArduPilot refuses while sampling, and which stops
+# the timer all the same - Starts again and Cancels. It never sends Large Vehicle MagCal (that would
+# rewrite the SITL's offsets) and never reboots: the reboot question is answered No.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm, whose compasses
+# are the firmware's SITL defaults: COMPASS_DEV_ID 97539 (DroneCAN, node 125), DEV_ID2 131874 (SPI 4,
+# LSM303D), DEV_ID3 263178 (SPI 1, AK8963), DEV_ID4-6 97283, 97795, 98051, PRIO1-3 the first three,
+# COMPASS_EXTERNAL 1, COMPASS_USE 1, COMPASS_LEARN 0, COMPASS_CAL_FIT 16. Run as
+#
+#   tools/gui-test.sh tests/gui/config-compass.gui -- tcp:127.0.0.1:5760
+#
+# It ends where it started. A run that stops half way can leave COMPASS_USE 0 or the first two
+# priorities swapped; restoring them by hand, or a fresh SITL, puts them back. With the priorities
+# swapped ArduPilot refuses a calibration ("Compass cal requires reboot after priority change").
+
+screen params
+window 1600x1200
+settle 6
+
+# The page is listed once every parameter is in (isConnected && gotAllParams).
+click param-download
+settle 15
+expect params.held > 1000
+expect params.value.COMPASS_USE 1
+expect params.value.COMPASS_PRIO1_ID 97539
+
+click tab-setup
+settle 1
+expect config.compass.active false
+click setup-page-ConfigMandatory
+click setup-page-ConfigHWCompass2
+settle 2
+expect setup.page ConfigHWCompass2
+expect config.compass.active true
+expect config.compass.class ConfigHWCompass2
+
+# The table: the three priorities, then the other three devices, each decoded.
+expect config.compass.rows 6
+expect config.compass.devids 97539,131874,263178,97283,97795,98051
+expect config.compass.row.1 1 97539 UAVCAN 0 125 SENSOR_ID#1 false true None
+expect config.compass.row.2 2 131874 SPI 4 3 LSM303D false false None
+expect config.compass.row.3 3 263178 SPI 1 4 AK8963 false false None
+expect config.compass.row.4 ~ 4 97283 UAVCAN 0 124 SENSOR_ID#1 false false
+expect config.compass.missing false
+expect config.compass.dialog none
+expect config.compass.orientations > 40
+
+# The boxes and the fitness combo, as the vehicle holds them.
+expect config.compass.use1 checked
+expect config.compass.use1.enabled true
+expect config.compass.use2 checked
+expect config.compass.use3 checked
+expect config.compass.learn unchecked
+expect config.compass.fitness 16
+expect config.compass.fitness.text Default
+expect config.compass.rebootrequired false
+
+# Use Compass 1 off - written, echoed - and back on.
+click compass-use1
+settle 3
+expect config.compass.use1 unchecked
+expect config.compass.write COMPASS_USE accepted
+expect params.value.COMPASS_USE 0
+expect config.compass.dialog none
+click compass-use1
+settle 3
+expect config.compass.use1 checked
+expect config.compass.write COMPASS_USE accepted
+expect params.value.COMPASS_USE 1
+
+# The calibration group before Start: Accept and Cancel disabled, the timer stopped.
+expect config.compass.accept.enabled false
+expect config.compass.cancel.enabled false
+expect config.compass.cal.timer stopped
+
+# Start: accepted, the buttons enabled, the timer running, and the progress messages in the text box.
+click compass-cal-start
+settle 3
+expect config.compass.command DO_START_MAG_CAL accepted
+expect config.compass.cal.timer running
+expect config.compass.accept.enabled true
+expect config.compass.cancel.enabled true
+expect config.compass.cal.progress ~ id:0 0%
+expect config.compass.cal.progress ~ id:1 0%
+expect config.compass.cal.progress ~ id:2 0%
+expect config.compass.cal.bars 0,0,0
+expect config.compass.dialog none
+
+# Accept while sampling: ArduPilot refuses it, the C# says nothing, and the timer stops.
+click compass-cal-accept
+settle 3
+expect config.compass.command DO_ACCEPT_MAG_CAL refused
+expect config.compass.cal.timer stopped
+expect config.compass.dialog none
+
+# Start again, then Cancel: accepted, the timer stopped, Accept and Cancel still enabled as the C#
+# leaves them.
+click compass-cal-start
+settle 3
+expect config.compass.command DO_START_MAG_CAL accepted
+expect config.compass.cal.timer running
+expect config.compass.cal.progress ~ id:0 0%
+click compass-cal-cancel
+settle 3
+expect config.compass.command DO_CANCEL_MAG_CAL accepted
+expect config.compass.cal.timer stopped
+expect config.compass.cancel.enabled true
+expect config.compass.dialog none
+
+# Large Vehicle MagCal asks for the heading; Cancel sends nothing.
+click compass-largemagcal
+settle 1
+expect config.compass.dialog ~ Enter current heading in degrees
+click compass-dialog-cancel
+settle 1
+expect config.compass.dialog none
+expect config.compass.command DO_CANCEL_MAG_CAL accepted
+
+# Up on the second compass: the first two swap and the first three are written as the priorities.
+click compass-row-2-up
+settle 4
+expect config.compass.devids 131874,97539,263178,97283,97795,98051
+expect config.compass.jobs 0
+expect params.value.COMPASS_PRIO1_ID 131874
+expect params.value.COMPASS_PRIO2_ID 97539
+expect params.value.COMPASS_PRIO3_ID 263178
+expect config.compass.rebootrequired true
+expect config.compass.dialog none
+
+# And back.
+click compass-row-2-up
+settle 4
+expect config.compass.devids 97539,131874,263178,97283,97795,98051
+expect params.value.COMPASS_PRIO1_ID 97539
+expect params.value.COMPASS_PRIO2_ID 131874
+expect config.compass.write COMPASS_PRIO3_ID accepted
+
+# Leaving the page runs Deactivate, whose CheckReboot asks; No leaves the vehicle as it is.
+click setup-page-ConfigMandatory
+settle 1
+expect config.compass.active false
+expect config.compass.dialog Reboot required, reboot now?
+click compass-dialog-cancel
+settle 1
+expect config.compass.dialog none
+expect params.value.COMPASS_USE 1
+expect params.value.COMPASS_PRIO1_ID 97539

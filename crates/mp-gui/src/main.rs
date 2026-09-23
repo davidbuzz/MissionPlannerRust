@@ -292,6 +292,9 @@ struct MissionPlanner {
     battery_focus: config::battery_monitor::Focus,
     /// Initial Setup's Install Firmware page, and the firmware catalogue it keeps.
     install_firmware: config::firmware::InstallFirmware,
+    /// Initial Setup's Compass page, and its boxes' focus.
+    compass: config::compass::Compass,
+    compass_focus: config::compass::Focus,
 }
 
 impl MissionPlanner {
@@ -455,6 +458,8 @@ impl MissionPlanner {
             battery_monitor: config::battery_monitor::BatteryMonitor::default(),
             battery_focus: config::battery_monitor::Focus::new(cx),
             install_firmware: config::firmware::InstallFirmware::default(),
+            compass: config::compass::Compass::default(),
+            compass_focus: config::compass::Focus::new(cx),
         };
         // Opening on the planning screen activates it, as switching to it does.
         if this.screen == Screen::Plan {
@@ -1497,6 +1502,18 @@ impl Render for MissionPlanner {
         // and its Spin write.
         self.motor_test
             .tick(&self.telemetry, self.motor_focus.focused(window));
+        // The Compass page's writes and commands, its calibration timer, and its boxes, which
+        // take the keyboard while they show.
+        self.compass.tick(
+            &mut self.telemetry,
+            &view,
+            self.screen == Screen::Setup,
+            self.compass_focus.declination(window),
+            std::time::Instant::now(),
+        );
+        if self.compass.dialog().is_some() && !self.compass_focus.dialog.is_focused(window) {
+            self.compass_focus.dialog.focus(window, cx);
+        }
         let banner = self.telemetry.firmware_banner().map(str::to_owned);
         let mav_type = view.state.as_ref().map_or(0, |state| state.vehicle_type);
         self.metadata.advance(banner.as_deref(), mav_type);
@@ -1704,6 +1721,7 @@ impl Render for MissionPlanner {
             config::firmware::record_facts(&self.install_firmware);
             config::radio::record_facts(&self.radio_input, &view);
             config::motor_test::record_facts(&self.motor_test, &view);
+            config::compass::record_facts(&self.compass, &view);
             facts::publish();
             // The harness's work, which a normal run does not do, is not the frame's.
             storm::exclude(harness.elapsed());
@@ -2064,6 +2082,13 @@ impl Render for MissionPlanner {
                     ),
             )
             .child(body)
+            // The Compass page's boxes: modal over every screen, since leaving SETUP can ask one.
+            .children(config::compass::overlay(
+                &self.compass,
+                &self.compass_focus,
+                window,
+                cx,
+            ))
             // Last, so its paint ends the frame's measurement; absent without MP_STORM.
             .children(storm::marker(view.frames))
     }

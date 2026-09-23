@@ -834,50 +834,54 @@ impl Telemetry {
         self.command_message(&mp_calibration::level(id), report);
     }
 
-    /// Starts an onboard compass calibration.
-    ///
-    /// `BUT_OBmagcalstart_Click`: `doCommand`, its answer not looked at, and a timeout said.
-    /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:264-279`
-    pub fn calibrate_compass(&mut self) {
-        let Some(id) = self.target_id() else {
-            return;
-        };
-        if let Some(link) = &self.link {
-            link.clear_compass_calibration();
-        }
-        self.command_message(
-            &mp_calibration::start_compass(id),
-            Report::on_timeout(error_box(
-                "Failed to start MAG CAL, check the autopilot is still responding.",
-            )),
-        );
+    /// Start: `doCommand(DO_START_MAG_CAL, 0, 1, 1, 0, 0, 0, 0)` to the vehicle being flown, retried
+    /// by the link as the C# retries it. The Compass page reads the answer with
+    /// [`Telemetry::request`] and says what `BUT_OBmagcalstart_Click` says; nothing is said here.
+    /// `None` without a vehicle, where `doCommand` returns false.
+    /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:271-280`
+    pub fn start_compass_calibration(&mut self) -> Option<RequestId> {
+        let id = self.target_id()?;
+        self.command_message(&mp_calibration::start_compass(id), Report::default())
     }
 
-    /// Compass calibration progress, one entry per compass.
+    /// Accept: `doCommand(DO_ACCEPT_MAG_CAL, 0, 0, 1, 0, 0, 0, 0)`, answered as Start is.
+    /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:323-333`
+    pub fn accept_compass_calibration(&mut self) -> Option<RequestId> {
+        let id = self.target_id()?;
+        self.command_message(&mp_calibration::accept_compass(id), Report::default())
+    }
+
+    /// Cancel: `doCommand(DO_CANCEL_MAG_CAL, 0, 0, 1, 0, 0, 0, 0)`, answered as Start is.
+    /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:341-350`
+    pub fn cancel_compass_calibration(&mut self) -> Option<RequestId> {
+        let id = self.target_id()?;
+        self.command_message(&mp_calibration::cancel_compass(id), Report::default())
+    }
+
+    /// Large Vehicle MagCal: `doCommand(FIXED_MAG_CAL_YAW, heading, 0, 0, 0, 0, 0, 0)`, answered
+    /// as Start is.
+    /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:476-498`
+    pub fn fixed_mag_cal_yaw(&mut self, yaw_degrees: f32) -> Option<RequestId> {
+        let id = self.target_id()?;
+        self.command_message(
+            &mp_calibration::fixed_mag_cal_yaw(id, yaw_degrees),
+            Report::default(),
+        )
+    }
+
+    /// Every `MAG_CAL_PROGRESS` and `MAG_CAL_REPORT` since the last clear, as the Compass page's
+    /// timer reads them.
+    /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:296-321`
     #[must_use]
-    pub fn compass_calibration(&self) -> Vec<mp_calibration::CompassProgress> {
+    pub fn compass_calibration(&self) -> mp_calibration::MagCalLog {
         self.link
             .as_ref()
             .map(Link::compass_calibration)
             .unwrap_or_default()
     }
 
-    /// Stops a running compass calibration.
-    ///
-    /// `BUT_OBmagcalcancel_Click`: `doCommand`, its answer not looked at; a timeout shows the
-    /// exception, whose message is `doCommand`'s "Timeout on read - doCommand".
-    /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:341-350, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2797`
-    pub fn cancel_compass_calibration(&mut self) {
-        let Some(id) = self.target_id() else {
-            return;
-        };
-        self.command_message(
-            &mp_calibration::cancel_compass(id),
-            Report::on_timeout(error_box("Timeout on read - doCommand")),
-        );
-    }
-
-    /// Forgets compass calibration progress.
+    /// `mprog.Clear()` and `mrep.Clear()`: forgets what the vehicle has said of a calibration.
+    /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:282-283`
     pub fn clear_compass_calibration(&self) {
         if let Some(link) = &self.link {
             link.clear_compass_calibration();
@@ -994,9 +998,14 @@ impl Telemetry {
     /// wire and returns without an acknowledgement, because a vehicle that obeys has no time to
     /// send one.
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2553-2567, 2758-2763`
-    pub fn reboot(&self) {
+    ///
+    /// Whether there was a vehicle to send it to: `doReboot`'s return.
+    pub fn reboot(&self) -> bool {
         if let Some((link, id)) = self.target() {
             link.send(&commands::reboot(id));
+            true
+        } else {
+            false
         }
     }
 

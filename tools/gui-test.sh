@@ -243,7 +243,10 @@ FAILURES=0
 LINE_NO=0
 while IFS= read -r RAW; do
     LINE_NO=$((LINE_NO + 1))
-    LINE="${RAW%%#*}"
+    # A comment is a line starting with # or a # after whitespace; a # inside a value stays, as
+    # in the compass page's SENSOR_ID#1 device text, which is the C#'s own.
+    case "$RAW" in \#*) continue ;; esac
+    LINE="${RAW%%[[:space:]]#*}"
     # shellcheck disable=SC2086 # deliberate word splitting into positional parameters
     set -- $LINE
     [ $# -eq 0 ] && continue

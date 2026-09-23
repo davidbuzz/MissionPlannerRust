@@ -237,8 +237,8 @@ struct Shared {
     messages: Mutex<messages::MessageLog>,
     /// The state of an accelerometer calibration, if one is running.
     accel_calibration: Mutex<mp_calibration::AccelCalibration>,
-    /// Compass calibration progress, one entry per compass being calibrated.
-    compass_calibration: Mutex<BTreeMap<u8, mp_calibration::CompassProgress>>,
+    /// Every compass calibration message since the last clear, as the Compass page reads them.
+    compass_calibration: Mutex<mp_calibration::MagCalLog>,
     /// Other aircraft, from ADS-B.
     traffic: Mutex<traffic::TrafficReport>,
     /// Dataflash logs the vehicle has listed.
@@ -592,20 +592,21 @@ impl Link {
         }
     }
 
-    /// Compass calibration progress, one entry per compass, lowest id first.
+    /// What the vehicle has said about a compass calibration since the last clear: the last
+    /// progress and report per compass, in the order each compass was first heard.
     #[must_use]
-    pub fn compass_calibration(&self) -> Vec<mp_calibration::CompassProgress> {
+    pub fn compass_calibration(&self) -> mp_calibration::MagCalLog {
         self.shared
             .compass_calibration
             .lock()
-            .map(|held| held.values().copied().collect())
+            .map(|held| held.clone())
             .unwrap_or_default()
     }
 
-    /// Forgets compass calibration progress.
+    /// Forgets compass calibration progress: the C#'s `mprog.Clear()` and `mrep.Clear()`.
     pub fn clear_compass_calibration(&self) {
         if let Ok(mut held) = self.shared.compass_calibration.lock() {
-            held.clear();
+            *held = mp_calibration::MagCalLog::default();
         }
     }
 
@@ -981,40 +982,12 @@ fn run_link(
                                 // external compass pass and its internal one fail.
                                 MavMessage::MagCalProgress(progress) => {
                                     if let Ok(mut held) = shared.compass_calibration.lock() {
-                                        let entry = held.entry(progress.compass_id).or_insert(
-                                            mp_calibration::CompassProgress {
-                                                compass_id: progress.compass_id,
-                                                status: mp_calibration::CompassStatus::NotStarted,
-                                                percent: 0,
-                                                attempt: 0,
-                                                fitness: None,
-                                            },
-                                        );
-                                        entry.status = mp_calibration::CompassStatus::from_wire(
-                                            progress.cal_status,
-                                        );
-                                        entry.percent = progress.completion_pct;
-                                        entry.attempt = progress.attempt;
+                                        held.observe_progress(progress);
                                     }
                                 }
                                 MavMessage::MagCalReport(report) => {
                                     if let Ok(mut held) = shared.compass_calibration.lock() {
-                                        let entry = held.entry(report.compass_id).or_insert(
-                                            mp_calibration::CompassProgress {
-                                                compass_id: report.compass_id,
-                                                status: mp_calibration::CompassStatus::NotStarted,
-                                                percent: 0,
-                                                attempt: 0,
-                                                fitness: None,
-                                            },
-                                        );
-                                        entry.status = mp_calibration::CompassStatus::from_wire(
-                                            report.cal_status,
-                                        );
-                                        // A report means sampling finished, whatever the last
-                                        // progress message happened to say.
-                                        entry.percent = 100;
-                                        entry.fitness = Some(report.fitness);
+                                        held.observe_report(report);
                                     }
                                 }
                                 // The vehicle listing what it holds. One message per log.
