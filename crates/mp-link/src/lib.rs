@@ -19,12 +19,13 @@
 
 pub mod calibration;
 pub mod commands;
+pub mod logs;
 pub mod messages;
 pub mod mission_transfer;
 pub mod params;
 
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -150,6 +151,10 @@ struct Shared {
     accel_calibration: Mutex<calibration::AccelCalibration>,
     /// Compass calibration progress, one entry per compass being calibrated.
     compass_calibration: Mutex<BTreeMap<u8, calibration::CompassProgress>>,
+    /// Dataflash logs the vehicle has listed.
+    log_listings: Mutex<BTreeMap<u16, logs::LogListing>>,
+    /// A log download in progress.
+    log_download: Mutex<Option<logs::LogDownload>>,
     stats: Mutex<LinkStats>,
     running: AtomicBool,
     frames_received: AtomicU64,
@@ -158,6 +163,8 @@ struct Shared {
 /// A running link.
 #[derive(Debug)]
 pub struct Link {
+    /// Bytes received at the previous nudge, so a stall can be told from a transfer in flight.
+    last_log_progress: AtomicU32,
     shared: Arc<Shared>,
     outbound: std::sync::mpsc::Sender<Vec<u8>>,
     thread: Option<std::thread::JoinHandle<()>>,
@@ -193,6 +200,7 @@ impl Link {
             .ok();
 
         Self {
+            last_log_progress: AtomicU32::new(0),
             shared,
             outbound: tx,
             thread,
@@ -353,6 +361,105 @@ impl Link {
     pub fn clear_compass_calibration(&self) {
         if let Ok(mut held) = self.shared.compass_calibration.lock() {
             held.clear();
+        }
+    }
+
+    /// Asks the vehicle to list its dataflash logs.
+    ///
+    /// Clears what was listed before, so a second listing does not leave logs that have since
+    /// been erased sitting in the list.
+    pub fn request_log_list(&self, target: VehicleId) -> bool {
+        if let Ok(mut held) = self.shared.log_listings.lock() {
+            held.clear();
+        }
+        self.send(&commands::request_log_list(target))
+    }
+
+    /// The logs the vehicle has listed, smallest id first.
+    #[must_use]
+    pub fn log_listings(&self) -> Vec<logs::LogListing> {
+        self.shared
+            .log_listings
+            .lock()
+            .map(|held| held.values().copied().collect())
+            .unwrap_or_default()
+    }
+
+    /// Starts downloading one log.
+    pub fn download_log(&self, target: VehicleId, id: u16, size: u32) -> bool {
+        if let Ok(mut held) = self.shared.log_download.lock() {
+            *held = Some(logs::LogDownload::new(target, id, size));
+        }
+        self.last_log_progress.store(0, Ordering::Release);
+        self.send(&commands::request_log_data(
+            target,
+            id,
+            0,
+            logs::WINDOW_BYTES.min(size),
+        ))
+    }
+
+    /// How far a log download has got, if one is running.
+    #[must_use]
+    pub fn log_download_progress(&self) -> Option<(u16, u32, u32)> {
+        let held = self.shared.log_download.lock().ok()?;
+        let download = held.as_ref()?;
+        Some((download.id, download.filled(), download.size))
+    }
+
+    /// Asks again for the first gap, but only if nothing has arrived since the last nudge.
+    ///
+    /// Called on a timer by the owner. Two failure modes to avoid, and they pull in opposite
+    /// directions: a transfer that only waits never finishes over a lossy link, and a transfer
+    /// that re-requests while data is still flowing throttles itself to one window per nudge.
+    /// Measured against SITL, the second cost a factor of thirty. So: nudge only on a stall.
+    pub fn nudge_log_download(&self, target: VehicleId) -> bool {
+        let Ok(held) = self.shared.log_download.lock() else {
+            return false;
+        };
+        let Some(download) = held.as_ref() else {
+            return false;
+        };
+        let id = download.id;
+        let filled = download.filled();
+        let gap = download.first_gap();
+        let size = download.size;
+        drop(held);
+
+        // Still arriving. Leave it alone; the vehicle is working through the window it was given.
+        let previous = self.last_log_progress.swap(filled, Ordering::AcqRel);
+        if filled > previous {
+            return true;
+        }
+
+        match gap {
+            Some(offset) => {
+                let remaining = size.saturating_sub(offset);
+                self.send(&commands::request_log_data(
+                    target,
+                    id,
+                    offset,
+                    logs::WINDOW_BYTES.min(remaining),
+                ))
+            }
+            None => self.send(&commands::log_request_end(target)),
+        }
+    }
+
+    /// The assembled log, once every byte has arrived.
+    #[must_use]
+    pub fn finished_log(&self) -> Option<(u16, Vec<u8>)> {
+        let held = self.shared.log_download.lock().ok()?;
+        let download = held.as_ref()?;
+        download
+            .is_complete()
+            .then(|| (download.id, download.assemble()))
+    }
+
+    /// Forgets a download.
+    pub fn clear_log_download(&self) {
+        if let Ok(mut held) = self.shared.log_download.lock() {
+            *held = None;
         }
     }
 
@@ -570,6 +677,35 @@ fn run_link(
                                         // progress message happened to say.
                                         entry.percent = 100;
                                         entry.fitness = Some(report.fitness);
+                                    }
+                                }
+                                // The vehicle listing what it holds. One message per log.
+                                MavMessage::LogEntry(entry) => {
+                                    if let Ok(mut held) = shared.log_listings.lock() {
+                                        // num_logs of zero means the vehicle holds none, and it
+                                        // still sends one LOG_ENTRY to say so. Recording that as
+                                        // a log would offer the operator a download of nothing.
+                                        if entry.num_logs > 0 {
+                                            held.insert(
+                                                entry.id,
+                                                logs::LogListing {
+                                                    id: entry.id,
+                                                    size: entry.size,
+                                                    time_utc: entry.time_utc,
+                                                },
+                                            );
+                                        }
+                                    }
+                                }
+                                MavMessage::LogData(data) => {
+                                    if let Ok(mut held) = shared.log_download.lock()
+                                        && let Some(download) = held.as_mut()
+                                        && download.id == data.id
+                                    {
+                                        let count = usize::from(data.count);
+                                        if let Some(slice) = data.data.get(..count) {
+                                            download.receive(data.ofs, slice);
+                                        }
                                     }
                                 }
                                 MavMessage::CommandAck(ack) => {

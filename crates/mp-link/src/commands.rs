@@ -224,6 +224,45 @@ pub fn reboot(target: VehicleId) -> MavMessage {
     )
 }
 
+/// Asks the vehicle to list the dataflash logs it holds.
+///
+/// The range is inclusive and 0 to `u16::MAX` means all of them, which is what a ground station
+/// wants: the vehicle knows how many there are and we do not.
+#[must_use]
+pub fn request_log_list(target: VehicleId) -> MavMessage {
+    MavMessage::LogRequestList(mp_mavlink_dialects::all::LogRequestList {
+        start: 0,
+        end: u16::MAX,
+        target_system: target.sysid,
+        target_component: target.compid,
+    })
+}
+
+/// Asks for part of one log.
+///
+/// A window rather than the whole log. Asking for all of it works and leaves no way to notice a
+/// stall; asking in windows means a gap can be re-requested without starting again, which matters
+/// because a log download happens over a telemetry radio and takes minutes.
+#[must_use]
+pub fn request_log_data(target: VehicleId, id: u16, offset: u32, count: u32) -> MavMessage {
+    MavMessage::LogRequestData(mp_mavlink_dialects::all::LogRequestData {
+        ofs: offset,
+        count,
+        id,
+        target_system: target.sysid,
+        target_component: target.compid,
+    })
+}
+
+/// Tells the vehicle the download is finished, so it stops sending.
+#[must_use]
+pub fn log_request_end(target: VehicleId) -> MavMessage {
+    MavMessage::LogRequestEnd(mp_mavlink_dialects::all::LogRequestEnd {
+        target_system: target.sysid,
+        target_component: target.compid,
+    })
+}
+
 /// Asks the vehicle how many items it holds, starting a download.
 ///
 /// `mission_type` selects which list: the mission, the geofence or the rally points. They share
