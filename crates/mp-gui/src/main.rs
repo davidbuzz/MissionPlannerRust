@@ -47,6 +47,25 @@ const DEFAULT_PLAN_FILE: &str = "mission.waypoints";
 /// The name a parameter backup gets if the operator does not choose one.
 const DEFAULT_PARAM_FILE: &str = "vehicle.param";
 
+/// How far the pointer may move between press and release and still count as a click.
+///
+/// **A divergence from the C#, and a small one, flagged for the owner's ruling.**
+/// `MainMap_MouseMove` sets `isMouseDraging` on *any* movement at all - it compares the
+/// press position to the current one and returns early only if they are exactly equal, and at any
+/// real zoom a one-pixel move is a different latitude. So in Mission Planner, adding a waypoint by
+/// clicking requires a click that does not move a single pixel, which is a thing people complain
+/// about. Three pixels is enough to absorb a hand on a mouse and far too small to swallow a
+/// deliberate drag. Set to 0.0 to match the original exactly.
+const CLICK_SLOP: f32 = 3.0;
+
+/// The altitude a waypoint gets when there is no previous one to copy.
+///
+/// Mission Planner takes it from `TXT_DefaultAlt`, a box on the planning screen
+/// (`FlightPlanner.cs:6873`). There is no such box here yet, so a new waypoint copies the one
+/// before it and falls back to this - which is the behaviour an operator gets from that box
+/// anyway, since they set it once and every waypoint after inherits it.
+const DEFAULT_WAYPOINT_ALTITUDE: f64 = 50.0;
+
 /// Repaint interval when measuring the renderer: as fast as the executor will schedule, so paint
 /// cost is measured rather than the timer.
 const REFRESH_BENCH: Duration = Duration::from_millis(1);
@@ -169,6 +188,12 @@ struct MissionPlanner {
     file_status: Option<String>,
     /// The waypoint being dragged on the map, if one is.
     dragging_waypoint: Option<u16>,
+    /// Where the left button went down on the map, and whether it has moved since.
+    ///
+    /// A press that never moves is a click, and a click on empty map adds a waypoint. `MainMap`
+    /// decides the same way with `isMouseDraging`, set by any movement while the button is down.
+    /// `// C#: GCSViews/FlightPlanner.cs:7436, 7736-7745`
+    map_press: Option<(f32, f32)>,
     /// What was loaded from the settings file, and what will be written back to it.
     settings: settings::Settings,
     /// The mission file name to save to or load from.
@@ -329,6 +354,7 @@ impl MissionPlanner {
             adopt_vehicle_rally: false,
             file_status: None,
             dragging_waypoint: None,
+            map_press: None,
             settings: settings::Settings::load(),
             plan_name: {
                 let mut field = textfield::TextField::new("mission.waypoints");
@@ -1012,6 +1038,7 @@ impl MissionPlanner {
                             let grabbed = planning
                                 .then(|| this.map.borrow().waypoint_at(x, y))
                                 .flatten();
+                            this.map_press = Some((x, y));
                             match grabbed {
                                 Some(seq) => {
                                     this.dragging_waypoint = Some(seq);
@@ -1048,9 +1075,43 @@ impl MissionPlanner {
                     ))
                     .on_mouse_up(
                         MouseButton::Left,
-                        cx.listener(move |this, _event: &gpui::MouseUpEvent, _window, _cx| {
-                            this.dragging_waypoint = None;
+                        cx.listener(move |this, event: &gpui::MouseUpEvent, _window, cx| {
+                            let grabbed = this.dragging_waypoint.take();
+                            let press = this.map_press.take();
                             this.map.borrow_mut().end_drag();
+
+                            // A press that did not move, on empty map, while planning, adds a
+                            // waypoint where it landed. `MainMap_MouseUp` does the same:
+                            //
+                            //   if (!isMouseDraging) {
+                            //       if (CurentRectMarker != null) { /* cant add WP in existing
+                            //       rect */ } else { AddWPToMap(...); }
+                            //   }
+                            //
+                            // so a click that grabbed an existing waypoint adds nothing, and a
+                            // drag - of the map or of a waypoint - adds nothing either.
+                            // `// C#: GCSViews/FlightPlanner.cs:7736-7745`
+                            if !planning || grabbed.is_some() {
+                                return;
+                            }
+                            let (x, y) = (f32::from(event.position.x), f32::from(event.position.y));
+                            let moved = press.is_some_and(|(px, py)| {
+                                (x - px).abs() > CLICK_SLOP || (y - py).abs() > CLICK_SLOP
+                            });
+                            if moved {
+                                return;
+                            }
+                            let Some(position) = this.map.borrow().position_at(x, y) else {
+                                return;
+                            };
+                            let altitude = this
+                                .plan
+                                .items()
+                                .last()
+                                .map_or(DEFAULT_WAYPOINT_ALTITUDE, |last| last.z);
+                            this.plan.add_waypoint(position, altitude);
+                            this.sync_map_mission();
+                            cx.notify();
                         }),
                     )
                     .on_scroll_wheel({
