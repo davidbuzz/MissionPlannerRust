@@ -139,7 +139,7 @@ crates/
   mp-link              the live link: I/O thread, routing, commands, mission transfer, recording
   mp-params            parameter values and metadata, the downloaded table, .param files
   mp-calibration       accelerometer, compass, radio and motor-test calibration
-  mp-ftp               files off the vehicle: dataflash log download (MAVFTP not yet)
+  mp-ftp               files off the vehicle: dataflash log download and MAVFTP, from MAVFtp.cs
   mp-mission           missions, fences, rally points, survey grids
   mp-log               .tlog reading, dataflash parsing
   mp-tiles             map tile fetching, decoding and caching

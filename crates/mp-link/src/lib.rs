@@ -63,6 +63,7 @@
 #![forbid(unsafe_code)]
 
 pub mod commands;
+pub mod ftp;
 pub mod messages;
 pub mod mission_transfer;
 pub mod param_download;
@@ -89,6 +90,10 @@ use mp_vehicle::{StateHandle, VehicleId, VehicleRegistry};
 use param_download::{ParamAction, ParamDownload};
 use requests::{ParamKey, Request, RequestKind};
 pub use timeouts::{ProtocolTimeouts, Retry};
+
+/// MAVFTP's requests, outcomes and errors, for callers of [`Link::ftp`] that do not depend on
+/// `mp-ftp` themselves.
+pub use mp_ftp::{FtpError, mavftp};
 
 /// MAVLink component id for a ground control station.
 pub const MAV_COMP_ID_MISSIONPLANNER: u8 = 190;
@@ -245,6 +250,8 @@ struct Shared {
     log_listings: Mutex<BTreeMap<u16, mp_ftp::logs::LogListing>>,
     /// A log download in progress.
     log_download: Mutex<Option<mp_ftp::logs::LogDownload>>,
+    /// Each vehicle's MAVFTP client, made on its first request and kept (see [`ftp`]).
+    ftp: Mutex<BTreeMap<VehicleId, mp_ftp::mavftp::MavFtp>>,
     stats: Mutex<LinkStats>,
     running: AtomicBool,
     frames_received: AtomicU64,
@@ -912,6 +919,7 @@ fn run_link(
     let mut param_actions: Vec<(VehicleId, ParamAction)> = Vec::new();
     let mut picked_up: Vec<(RequestId, Request)> = Vec::new();
     let mut request_sends: Vec<requests::Outgoing> = Vec::new();
+    let mut ftp_sends: Vec<(VehicleId, mp_ftp::mavftp::wire::Header)> = Vec::new();
     let mut last_publish = Instant::now();
     let mut last_heartbeat = Instant::now() - config.heartbeat_interval;
     let mut known: BTreeMap<VehicleId, ()> = BTreeMap::new();
@@ -1048,6 +1056,10 @@ fn run_link(
                                             );
                                         }
                                     }
+                                }
+                                // MAVFTP: to the sending vehicle's client (see `ftp`).
+                                MavMessage::FileTransferProtocol(message) => {
+                                    ftp::route(shared, id, message, Instant::now(), &mut ftp_sends);
                                 }
                                 MavMessage::LogData(data) => {
                                     if let Ok(mut held) = shared.log_download.lock()
@@ -1200,6 +1212,20 @@ fn run_link(
                     }
                 }
             }
+        }
+
+        // MAVFTP: let each client's wait run out, and send what the clients want sent - this
+        // pass's replies' answers included.
+        ftp::tick(shared, Instant::now(), &mut ftp_sends);
+        for (id, payload) in ftp_sends.drain(..) {
+            send_message(
+                transport.as_mut(),
+                recorder.as_mut(),
+                &mut stats,
+                &config,
+                &mut tx_seq,
+                &ftp::ftp_message(id, &payload),
+            );
         }
 
         // Pick up transfers the caller queued, and start them.

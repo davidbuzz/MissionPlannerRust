@@ -10,6 +10,7 @@
 use std::time::{Duration, Instant};
 
 mod dflog;
+mod ftp;
 mod logs;
 
 use mp_link::requests::RequestOutcome;
@@ -158,6 +159,7 @@ fn main() -> std::process::ExitCode {
                 std::process::ExitCode::from(2)
             }
         },
+        Some("ftp") => ftp::run(args.get(1..).unwrap_or_default()),
         Some("ports") => ports(),
         Some("help" | "--help" | "-h") | None => {
             usage();
@@ -190,7 +192,8 @@ fn usage() {
   mpr log dflogtokml <log> [dir] Create KML + gpx (.kmz, .gpx, waypoints, .param, RINEX)
   mpr log matlab <log> [out]     Create Matlab file (.mat)
   mpr log loganalysis <log> [dir] Auto Analysis: run ArduPilot's LogAnalyzer, print its report
-  mpr logs <url> [ID] [DIR]   list the vehicle's logs, or download one\n  \
+  mpr logs <url> [ID] [DIR]   list the vehicle's logs, or download one
+  mpr ftp ls|get|put|rm|crc   the vehicle's files over MAVFTP (mpr ftp for more)\n  \
          mpr fields <log.bin>        list what a dataflash log can plot
   mpr kml <log> <out.kml>     export a flown path for Google Earth
   mpr firmware info <file>    describe a .apj firmware file

@@ -127,7 +127,7 @@ mission/rally/fence up- and download, MAVFTP, log download, command_long/ack, re
   counts every send on the wire under timeouts, reordering, duplicates and seeded bad links (40 tests);
   `tests/routing.rs` runs 50 systems and 56 components through one link. The GUI's and the CLI's
   sets and commands go through those requests, with the C#'s message texts on the status line
-  (PLAN.md §13.4 row 11). **Not yet:** MAVFTP and log-download machines; `uploadPartial`,
+  (PLAN.md §13.4 row 11). MAVFTP is `MAVFtp.cs` whole (row 36): the burst read with its gap filling, list, upload, remove, rename, CRC32, the C#'s retry table, as a state machine in `mp-ftp` the link drives, with `mpr ftp`; the C#'s own `MAVFtp` under mono gives the same request bytes and the same `param.pck` from SITL. **Not yet:** the log-download machine as a request; `uploadPartial`,
   `getHomePosition`, `doCommandInt` and `setWP` as requests.
 - **Tests:** one test module per protocol state machine — `tests/params.rs`, `tests/mission.rs`, `tests/fence_rally.rs`, `tests/ftp.rs`, `tests/log_download.rs` — each driven by recorded packet traces plus a scripted peer; `tests/retries.rs` injects timeouts, out-of-order acks and partial transfers and asserts convergence or a clean error; `tests/routing.rs` drives 50 simultaneous sysid/compid vehicles through one link; `tests/sitl_params.rs` (feature `sitl`) downloads the full param set from ArduPilot SITL and diffs it against the C# app's dump.
 

@@ -1,6 +1,6 @@
 [package]
 name = "mp-ftp"
-description = "Getting files off a vehicle: dataflash log download"
+description = "Getting files off a vehicle and onto it: dataflash log download and MAVFTP"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

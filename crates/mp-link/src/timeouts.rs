@@ -97,6 +97,8 @@ pub struct ProtocolTimeouts {
     ///
     /// C#: MAVLinkInterface.cs:2117 (`retry < 2`).
     pub param_list_full_retries: u8,
+    /// Every MAVFTP command's `RetryTimeout`, from `MAVFtp.cs`; see [`mp_ftp::mavftp::retry`].
+    pub ftp: mp_ftp::mavftp::FtpTimeouts,
 }
 
 impl Default for ProtocolTimeouts {
@@ -116,6 +118,7 @@ impl Default for ProtocolTimeouts {
             param_list_quiet: Duration::from_millis(4000),
             param_list_round: Duration::from_millis(1000),
             param_list_full_retries: 2,
+            ftp: mp_ftp::mavftp::FtpTimeouts::default(),
         }
     }
 }
@@ -148,6 +151,7 @@ impl ProtocolTimeouts {
             param_list_quiet: self.param_list_quiet / divisor,
             param_list_round: self.param_list_round / divisor,
             param_list_full_retries: self.param_list_full_retries,
+            ftp: self.ftp.faster(divisor),
         }
     }
 }
@@ -165,5 +169,7 @@ mod tests {
         assert_eq!(fast.param_list_full_retries, 2);
         assert_eq!(fast.param_set.timeout, Duration::from_millis(7));
         assert_eq!(fast.param_list_quiet, Duration::from_millis(40));
+        assert_eq!(fast.ftp.other.retries, 30);
+        assert_eq!(fast.ftp.other.timeout, Duration::from_millis(10));
     }
 }
