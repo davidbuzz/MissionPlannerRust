@@ -1,0 +1,172 @@
+year	2026
+list	0	None	null		
+list	1	OpenStreetMap	null	https://www.openstreetmap.org/	OpenStreetMap
+list	2	OpenStreet4UMap	null	http://www.4umaps.eu/map.htm	OpenStreet4UMap
+list	3	OpenCycleMap	null	http://www.opencyclemap.org/	OpenCycleMap
+list	4	OpenCycleLandscapeMap	null	http://www.opencyclemap.org/	OpenCycleLandscapeMap
+list	5	OpenCycleTransportMap	null	http://www.opencyclemap.org/	OpenCycleTransportMap
+list	6	OpenStreetMapQuest	null	https://www.openstreetmap.org/	OpenStreetMapQuest
+list	7	OpenStreetMapQuestSattelite	null	https://www.openstreetmap.org/	OpenStreetMapQuestSattelite
+list	8	OpenStreetMapQuestHybrid	null	https://www.openstreetmap.org/	OpenStreetMapQuestSattelite+OpenStreetMapQuestHybrid
+list	9	OpenSeaMapHybrid	null	http://openseamap.org/	OpenStreetMap+OpenSeaMapHybrid
+list	10	WikiMapiaMap	22	http://wikimapia.org/	WikiMapiaMap
+list	11	BingMap	null	http://www.bing.com/maps/	BingMap
+list	12	BingSatelliteMap	null	http://www.bing.com/maps/	BingSatelliteMap
+list	13	BingHybridMap	null	http://www.bing.com/maps/	BingHybridMap
+list	14	AMap	null	http://www.amap.com/	AMap
+list	15	AMapSatellite	null	http://www.amap.com/	AMapSatellite
+list	16	GoogleMap	null	https://www.google.com/maps/preview	GoogleMap
+list	17	GoogleSatelliteMap	null	https://www.google.com/maps/preview	GoogleSatelliteMap
+list	18	GoogleHybridMap	null	https://www.google.com/maps/preview	GoogleSatelliteMap+GoogleHybridMap
+list	19	GoogleTerrainMap	null	https://www.google.com/maps/preview	GoogleTerrainMap
+list	20	GoogleChinaMap	null	http://ditu.google.cn/	GoogleChinaMap
+list	21	GoogleChinaSatelliteMap	null	http://ditu.google.cn/	GoogleChinaSatelliteMap
+list	22	GoogleChinaHybridMap	null	http://ditu.google.cn/	GoogleChinaSatelliteMap+GoogleChinaHybridMap
+list	23	GoogleChinaTerrainMap	null	http://ditu.google.cn/	GoogleChinaTerrainMap
+list	24	GoogleKoreaMap	null	https://www.google.com/maps/preview	GoogleKoreaMap
+list	25	GoogleKoreaSatelliteMap	null	https://www.google.com/maps/preview	GoogleKoreaSatelliteMap
+list	26	GoogleKoreaHybridMap	null	https://www.google.com/maps/preview	GoogleKoreaSatelliteMap+GoogleKoreaHybridMap
+list	27	NearMap	17	http://www.nearmap.com/	NearMap
+list	28	NearSatelliteMap	17		NearSatelliteMap
+list	29	NearHybridMap	17		NearSatelliteMap+NearHybridMap
+list	30	OviMap	null	http://maps.ovi.com/	OviMap
+list	31	OviSatelliteMap	null	http://maps.ovi.com/	OviSatelliteMap
+list	32	OviHybridMap	null	http://maps.ovi.com/	OviHybridMap
+list	33	OviTerrainMap	null	http://maps.ovi.com/	OviTerrainMap
+list	34	YandexMap	17	http://maps.yandex.com/	YandexMap
+list	35	YandexSatelliteMap	17		YandexSatelliteMap
+list	36	YandexHybridMap	17		YandexSatelliteMap+YandexHybridMap
+list	37	LithuaniaMap	12	http://www.maps.lt/map/	LithuaniaMap
+list	38	Lithuania 2.5d Map	12	http://www.maps.lt/map/	Lithuania 2.5d Map
+list	39	LithuaniaOrtoFotoMap	12	http://www.maps.lt/map/	LithuaniaOrtoFotoMap
+list	40	LithuaniaOrtoFotoMapOld	12	http://www.maps.lt/map/	LithuaniaOrtoFotoMapOld
+list	41	LithuaniaHybridMap	12	http://www.maps.lt/map/	LithuaniaOrtoFotoMap+LithuaniaHybridMap
+list	42	LithuaniaHybridMapOld	12	http://www.maps.lt/map/	LithuaniaOrtoFotoMapOld+LithuaniaHybridMap
+list	43	LithuaniaTOP50	15		LithuaniaTOP50
+list	44	LatviaMap	11	http://www.ikarte.lv/map/default.aspx?lang=en	LatviaMap
+list	45	MapBender, WMS demo	17		MapBender, WMS demo
+list	46	TurkeyMap	17		TurkeyMap
+list	47	CloudMade, Demo	null		CloudMade, Demo
+list	48	SpainMap	17		SpainMap
+list	49	CzechMap	17	http://www.mapy.cz/	CzechMap
+list	50	CzechSatelliteMap	20	http://www.mapy.cz/	CzechSatelliteMap
+list	51	CzechHybridMap	20	http://www.mapy.cz/	CzechSatelliteMap+CzechHybridMap
+list	52	CzechTuristMap	17	http://www.mapy.cz/	CzechTuristMap
+list	53	CzechTuristWinterMap	17	http://www.mapy.cz/	CzechTuristWinterMap
+list	54	CzechHistoryMap	15	http://www.mapy.cz/	CzechHistoryMap+CzechHybridMap
+list	55	CzechGeographicMap	17	http://www.mapy.cz/	CzechGeographicMap
+list	56	ArcGIS_Imagery_World_2D_Map	17		ArcGIS_Imagery_World_2D_Map
+list	57	ArcGIS_ShadedRelief_World_2D_Map	17		ArcGIS_ShadedRelief_World_2D_Map
+list	58	ArcGIS_StreetMap_World_2D_Map	17		ArcGIS_StreetMap_World_2D_Map
+list	59	ArcGIS_Topo_US_2D_Map	17		ArcGIS_Topo_US_2D_Map
+list	60	ArcGIS_World_Physical_Map	null		ArcGIS_World_Physical_Map
+list	61	ArcGIS_World_Shaded_Relief_Map	null		ArcGIS_World_Shaded_Relief_Map
+list	62	ArcGIS_World_Street_Map	null		ArcGIS_World_Street_Map
+list	63	ArcGIS_World_Terrain_Base_Map	null		ArcGIS_World_Terrain_Base_Map
+list	64	ArcGIS_World_Topo_Map	null		ArcGIS_World_Topo_Map
+list	65	ArcGIS_DarbAE_Q2_2011_NAVTQ_Eng_V5_MapProvider	12		ArcGIS_DarbAE_Q2_2011_NAVTQ_Eng_V5_MapProvider
+provider	GoogleMap	m@354000000	©2026 Google - Map data ©2026 Tele Atlas, Imagery ©2026 TerraMetrics
+url	GoogleMap	0	0	0	https://mts0.google.com/vt/lyrs=m@354000000&hl=en&x=0&y=0&z=0&s=
+url	GoogleMap	1	2	5	https://mts1.google.com/vt/lyrs=m@354000000&hl=en&x=1&y=2&z=5&s=Galil
+url	GoogleMap	3	1	2	https://mts1.google.com/vt/lyrs=m@354000000&hl=en&x=3&y=1&z=2&s=Ga
+url	GoogleMap	2	1	2	https://mts0.google.com/vt/lyrs=m@354000000&hl=en&x=2&y=1&z=2&s=Galileo
+url	GoogleMap	7	5	3	https://mts1.google.com/vt/lyrs=m@354000000&hl=en&x=7&y=5&z=3&s=Ga
+url	GoogleMap	2	3	2	https://mts0.google.com/vt/lyrs=m@354000000&hl=en&x=2&y=3&z=2&s=G
+url	GoogleMap	511	340	10	https://mts3.google.com/vt/lyrs=m@354000000&hl=en&x=511&y=340&z=10&s=G
+url	GoogleMap	15089	9814	14	https://mts1.google.com/vt/lyrs=m@354000000&hl=en&x=15089&y=9814&z=14&s=G
+url	GoogleMap	59922	39658	16	https://mts2.google.com/vt/lyrs=m@354000000&hl=en&x=59922&s=&y=39658&z=16&s=
+url	GoogleMap	12345	67890	17	https://mts1.google.com/vt/lyrs=m@354000000&hl=en&x=12345&s=&y=67890&z=17&s=Galil
+url	GoogleMap	120000	90000	18	https://mts0.google.com/vt/lyrs=m@354000000&hl=en&x=120000&s=&y=90000&z=18&s=
+url	GoogleMap	200000	150000	19	https://mts0.google.com/vt/lyrs=m@354000000&hl=en&x=200000&y=150000&z=19&s=
+url	GoogleMap	3879839	2430784	22	https://mts3.google.com/vt/lyrs=m@354000000&hl=en&x=3879839&y=2430784&z=22&s=Galil
+url	GoogleMap	4194303	4194303	22	https://mts1.google.com/vt/lyrs=m@354000000&hl=en&x=4194303&y=4194303&z=22&s=Gali
+provider	GoogleSatelliteMap	955	©2026 Google - Map data ©2026 Tele Atlas, Imagery ©2026 TerraMetrics
+url	GoogleSatelliteMap	0	0	0	https://khms0.google.com/kh/v=955&hl=en&x=0&y=0&z=0&s=
+url	GoogleSatelliteMap	1	2	5	https://khms1.google.com/kh/v=955&hl=en&x=1&y=2&z=5&s=Galil
+url	GoogleSatelliteMap	3	1	2	https://khms1.google.com/kh/v=955&hl=en&x=3&y=1&z=2&s=Ga
+url	GoogleSatelliteMap	2	1	2	https://khms0.google.com/kh/v=955&hl=en&x=2&y=1&z=2&s=Galileo
+url	GoogleSatelliteMap	7	5	3	https://khms1.google.com/kh/v=955&hl=en&x=7&y=5&z=3&s=Ga
+url	GoogleSatelliteMap	2	3	2	https://khms0.google.com/kh/v=955&hl=en&x=2&y=3&z=2&s=G
+url	GoogleSatelliteMap	511	340	10	https://khms3.google.com/kh/v=955&hl=en&x=511&y=340&z=10&s=G
+url	GoogleSatelliteMap	15089	9814	14	https://khms1.google.com/kh/v=955&hl=en&x=15089&y=9814&z=14&s=G
+url	GoogleSatelliteMap	59922	39658	16	https://khms2.google.com/kh/v=955&hl=en&x=59922&s=&y=39658&z=16&s=
+url	GoogleSatelliteMap	12345	67890	17	https://khms1.google.com/kh/v=955&hl=en&x=12345&s=&y=67890&z=17&s=Galil
+url	GoogleSatelliteMap	120000	90000	18	https://khms0.google.com/kh/v=955&hl=en&x=120000&s=&y=90000&z=18&s=
+url	GoogleSatelliteMap	200000	150000	19	https://khms0.google.com/kh/v=955&hl=en&x=200000&y=150000&z=19&s=
+url	GoogleSatelliteMap	3879839	2430784	22	https://khms3.google.com/kh/v=955&hl=en&x=3879839&y=2430784&z=22&s=Galil
+url	GoogleSatelliteMap	4194303	4194303	22	https://khms1.google.com/kh/v=955&hl=en&x=4194303&y=4194303&z=22&s=Gali
+provider	GoogleHybridMap	h@333000000	©2026 Google - Map data ©2026 Tele Atlas, Imagery ©2026 TerraMetrics
+url	GoogleHybridMap	0	0	0	https://mts0.google.com/maps/vt/lyrs=h@333000000&hl=en&x=0&y=0&z=0&s=
+url	GoogleHybridMap	1	2	5	https://mts1.google.com/maps/vt/lyrs=h@333000000&hl=en&x=1&y=2&z=5&s=Galil
+url	GoogleHybridMap	3	1	2	https://mts1.google.com/maps/vt/lyrs=h@333000000&hl=en&x=3&y=1&z=2&s=Ga
+url	GoogleHybridMap	2	1	2	https://mts0.google.com/maps/vt/lyrs=h@333000000&hl=en&x=2&y=1&z=2&s=Galileo
+url	GoogleHybridMap	7	5	3	https://mts1.google.com/maps/vt/lyrs=h@333000000&hl=en&x=7&y=5&z=3&s=Ga
+url	GoogleHybridMap	2	3	2	https://mts0.google.com/maps/vt/lyrs=h@333000000&hl=en&x=2&y=3&z=2&s=G
+url	GoogleHybridMap	511	340	10	https://mts3.google.com/maps/vt/lyrs=h@333000000&hl=en&x=511&y=340&z=10&s=G
+url	GoogleHybridMap	15089	9814	14	https://mts1.google.com/maps/vt/lyrs=h@333000000&hl=en&x=15089&y=9814&z=14&s=G
+url	GoogleHybridMap	59922	39658	16	https://mts2.google.com/maps/vt/lyrs=h@333000000&hl=en&x=59922&s=&y=39658&z=16&s=
+url	GoogleHybridMap	12345	67890	17	https://mts1.google.com/maps/vt/lyrs=h@333000000&hl=en&x=12345&s=&y=67890&z=17&s=Galil
+url	GoogleHybridMap	120000	90000	18	https://mts0.google.com/maps/vt/lyrs=h@333000000&hl=en&x=120000&s=&y=90000&z=18&s=
+url	GoogleHybridMap	200000	150000	19	https://mts0.google.com/maps/vt/lyrs=h@333000000&hl=en&x=200000&y=150000&z=19&s=
+url	GoogleHybridMap	3879839	2430784	22	https://mts3.google.com/maps/vt/lyrs=h@333000000&hl=en&x=3879839&y=2430784&z=22&s=Galil
+url	GoogleHybridMap	4194303	4194303	22	https://mts1.google.com/maps/vt/lyrs=h@333000000&hl=en&x=4194303&y=4194303&z=22&s=Gali
+provider	GoogleTerrainMap	t@354,r@354000000	©2026 Google - Map data ©2026 Tele Atlas, Imagery ©2026 TerraMetrics
+url	GoogleTerrainMap	0	0	0	https://mts0.google.com/maps/vt/lyrs=t@354,r@354000000&hl=en&x=0&y=0&z=0&s=
+url	GoogleTerrainMap	1	2	5	https://mts1.google.com/maps/vt/lyrs=t@354,r@354000000&hl=en&x=1&y=2&z=5&s=Galil
+url	GoogleTerrainMap	3	1	2	https://mts1.google.com/maps/vt/lyrs=t@354,r@354000000&hl=en&x=3&y=1&z=2&s=Ga
+url	GoogleTerrainMap	2	1	2	https://mts0.google.com/maps/vt/lyrs=t@354,r@354000000&hl=en&x=2&y=1&z=2&s=Galileo
+url	GoogleTerrainMap	7	5	3	https://mts1.google.com/maps/vt/lyrs=t@354,r@354000000&hl=en&x=7&y=5&z=3&s=Ga
+url	GoogleTerrainMap	2	3	2	https://mts0.google.com/maps/vt/lyrs=t@354,r@354000000&hl=en&x=2&y=3&z=2&s=G
+url	GoogleTerrainMap	511	340	10	https://mts3.google.com/maps/vt/lyrs=t@354,r@354000000&hl=en&x=511&y=340&z=10&s=G
+url	GoogleTerrainMap	15089	9814	14	https://mts1.google.com/maps/vt/lyrs=t@354,r@354000000&hl=en&x=15089&y=9814&z=14&s=G
+url	GoogleTerrainMap	59922	39658	16	https://mts2.google.com/maps/vt/lyrs=t@354,r@354000000&hl=en&x=59922&s=&y=39658&z=16&s=
+url	GoogleTerrainMap	12345	67890	17	https://mts1.google.com/maps/vt/lyrs=t@354,r@354000000&hl=en&x=12345&s=&y=67890&z=17&s=Galil
+url	GoogleTerrainMap	120000	90000	18	https://mts0.google.com/maps/vt/lyrs=t@354,r@354000000&hl=en&x=120000&s=&y=90000&z=18&s=
+url	GoogleTerrainMap	200000	150000	19	https://mts0.google.com/maps/vt/lyrs=t@354,r@354000000&hl=en&x=200000&y=150000&z=19&s=
+url	GoogleTerrainMap	3879839	2430784	22	https://mts3.google.com/maps/vt/lyrs=t@354,r@354000000&hl=en&x=3879839&y=2430784&z=22&s=Galil
+url	GoogleTerrainMap	4194303	4194303	22	https://mts1.google.com/maps/vt/lyrs=t@354,r@354000000&hl=en&x=4194303&y=4194303&z=22&s=Gali
+provider	BingMap	4810	©2026 Microsoft Corporation, ©2026 NAVTEQ, ©2026 Image courtesy of NASA
+url	BingMap	0	0	0	http://ecn.t0.tiles.virtualearth.net/tiles/r?g=4810&mkt=en&lbl=l1&stl=h&shading=hill&n=z
+url	BingMap	1	2	5	http://ecn.t1.tiles.virtualearth.net/tiles/r00021?g=4810&mkt=en&lbl=l1&stl=h&shading=hill&n=z
+url	BingMap	3	1	2	http://ecn.t1.tiles.virtualearth.net/tiles/r13?g=4810&mkt=en&lbl=l1&stl=h&shading=hill&n=z
+url	BingMap	2	1	2	http://ecn.t0.tiles.virtualearth.net/tiles/r12?g=4810&mkt=en&lbl=l1&stl=h&shading=hill&n=z
+url	BingMap	7	5	3	http://ecn.t1.tiles.virtualearth.net/tiles/r313?g=4810&mkt=en&lbl=l1&stl=h&shading=hill&n=z
+url	BingMap	2	3	2	http://ecn.t0.tiles.virtualearth.net/tiles/r32?g=4810&mkt=en&lbl=l1&stl=h&shading=hill&n=z
+url	BingMap	511	340	10	http://ecn.t3.tiles.virtualearth.net/tiles/r0313131311?g=4810&mkt=en&lbl=l1&stl=h&shading=hill&n=z
+url	BingMap	15089	9814	14	http://ecn.t1.tiles.virtualearth.net/tiles/r31123013130221?g=4810&mkt=en&lbl=l1&stl=h&shading=hill&n=z
+url	BingMap	59922	39658	16	http://ecn.t2.tiles.virtualearth.net/tiles/r3112303022212030?g=4810&mkt=en&lbl=l1&stl=h&shading=hill&n=z
+url	BingMap	12345	67890	17	http://ecn.t1.tiles.virtualearth.net/tiles/r20011200200331021?g=4810&mkt=en&lbl=l1&stl=h&shading=hill&n=z
+url	BingMap	120000	90000	18	http://ecn.t0.tiles.virtualearth.net/tiles/r031303232231020000?g=4810&mkt=en&lbl=l1&stl=h&shading=hill&n=z
+url	BingMap	200000	150000	19	http://ecn.t0.tiles.virtualearth.net/tiles/r0310200310323220000?g=4810&mkt=en&lbl=l1&stl=h&shading=hill&n=z
+url	BingMap	3879839	2430784	22	http://ecn.t3.tiles.virtualearth.net/tiles/r3112130013023312011111?g=4810&mkt=en&lbl=l1&stl=h&shading=hill&n=z
+url	BingMap	4194303	4194303	22	http://ecn.t1.tiles.virtualearth.net/tiles/r3333333333333333333333?g=4810&mkt=en&lbl=l1&stl=h&shading=hill&n=z
+provider	BingSatelliteMap	4810	©2026 Microsoft Corporation, ©2026 NAVTEQ, ©2026 Image courtesy of NASA
+url	BingSatelliteMap	0	0	0	http://ecn.t0.tiles.virtualearth.net/tiles/a.jpeg?g=4810&mkt=en&n=z
+url	BingSatelliteMap	1	2	5	http://ecn.t1.tiles.virtualearth.net/tiles/a00021.jpeg?g=4810&mkt=en&n=z
+url	BingSatelliteMap	3	1	2	http://ecn.t1.tiles.virtualearth.net/tiles/a13.jpeg?g=4810&mkt=en&n=z
+url	BingSatelliteMap	2	1	2	http://ecn.t0.tiles.virtualearth.net/tiles/a12.jpeg?g=4810&mkt=en&n=z
+url	BingSatelliteMap	7	5	3	http://ecn.t1.tiles.virtualearth.net/tiles/a313.jpeg?g=4810&mkt=en&n=z
+url	BingSatelliteMap	2	3	2	http://ecn.t0.tiles.virtualearth.net/tiles/a32.jpeg?g=4810&mkt=en&n=z
+url	BingSatelliteMap	511	340	10	http://ecn.t3.tiles.virtualearth.net/tiles/a0313131311.jpeg?g=4810&mkt=en&n=z
+url	BingSatelliteMap	15089	9814	14	http://ecn.t1.tiles.virtualearth.net/tiles/a31123013130221.jpeg?g=4810&mkt=en&n=z
+url	BingSatelliteMap	59922	39658	16	http://ecn.t2.tiles.virtualearth.net/tiles/a3112303022212030.jpeg?g=4810&mkt=en&n=z
+url	BingSatelliteMap	12345	67890	17	http://ecn.t1.tiles.virtualearth.net/tiles/a20011200200331021.jpeg?g=4810&mkt=en&n=z
+url	BingSatelliteMap	120000	90000	18	http://ecn.t0.tiles.virtualearth.net/tiles/a031303232231020000.jpeg?g=4810&mkt=en&n=z
+url	BingSatelliteMap	200000	150000	19	http://ecn.t0.tiles.virtualearth.net/tiles/a0310200310323220000.jpeg?g=4810&mkt=en&n=z
+url	BingSatelliteMap	3879839	2430784	22	http://ecn.t3.tiles.virtualearth.net/tiles/a3112130013023312011111.jpeg?g=4810&mkt=en&n=z
+url	BingSatelliteMap	4194303	4194303	22	http://ecn.t1.tiles.virtualearth.net/tiles/a3333333333333333333333.jpeg?g=4810&mkt=en&n=z
+provider	BingHybridMap	4810	©2026 Microsoft Corporation, ©2026 NAVTEQ, ©2026 Image courtesy of NASA
+url	BingHybridMap	0	0	0	http://ecn.t0.tiles.virtualearth.net/tiles/h.jpeg?g=4810&mkt=en&n=z
+url	BingHybridMap	1	2	5	http://ecn.t1.tiles.virtualearth.net/tiles/h00021.jpeg?g=4810&mkt=en&n=z
+url	BingHybridMap	3	1	2	http://ecn.t1.tiles.virtualearth.net/tiles/h13.jpeg?g=4810&mkt=en&n=z
+url	BingHybridMap	2	1	2	http://ecn.t0.tiles.virtualearth.net/tiles/h12.jpeg?g=4810&mkt=en&n=z
+url	BingHybridMap	7	5	3	http://ecn.t1.tiles.virtualearth.net/tiles/h313.jpeg?g=4810&mkt=en&n=z
+url	BingHybridMap	2	3	2	http://ecn.t0.tiles.virtualearth.net/tiles/h32.jpeg?g=4810&mkt=en&n=z
+url	BingHybridMap	511	340	10	http://ecn.t3.tiles.virtualearth.net/tiles/h0313131311.jpeg?g=4810&mkt=en&n=z
+url	BingHybridMap	15089	9814	14	http://ecn.t1.tiles.virtualearth.net/tiles/h31123013130221.jpeg?g=4810&mkt=en&n=z
+url	BingHybridMap	59922	39658	16	http://ecn.t2.tiles.virtualearth.net/tiles/h3112303022212030.jpeg?g=4810&mkt=en&n=z
+url	BingHybridMap	12345	67890	17	http://ecn.t1.tiles.virtualearth.net/tiles/h20011200200331021.jpeg?g=4810&mkt=en&n=z
+url	BingHybridMap	120000	90000	18	http://ecn.t0.tiles.virtualearth.net/tiles/h031303232231020000.jpeg?g=4810&mkt=en&n=z
+url	BingHybridMap	200000	150000	19	http://ecn.t0.tiles.virtualearth.net/tiles/h0310200310323220000.jpeg?g=4810&mkt=en&n=z
+url	BingHybridMap	3879839	2430784	22	http://ecn.t3.tiles.virtualearth.net/tiles/h3112130013023312011111.jpeg?g=4810&mkt=en&n=z
+url	BingHybridMap	4194303	4194303	22	http://ecn.t1.tiles.virtualearth.net/tiles/h3333333333333333333333.jpeg?g=4810&mkt=en&n=z
