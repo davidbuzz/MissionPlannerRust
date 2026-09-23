@@ -25,6 +25,7 @@ pub mod link_quality;
 pub mod modes;
 pub mod param_meta;
 pub mod registry;
+pub mod sensors;
 pub mod snapshot;
 pub mod state;
 
@@ -32,5 +33,6 @@ pub use link_quality::LinkQuality;
 pub use modes::{VehicleFamily, flight_mode_name};
 pub use param_meta::{ParamMeta, UserLevel};
 pub use registry::{VehicleId, VehicleRegistry};
+pub use sensors::Sensors;
 pub use snapshot::{StateHandle, StatePublisher};
 pub use state::{Attitude, Battery, GpsInfo, VehicleState};

@@ -366,6 +366,7 @@ impl MissionPlanner {
                     .pr_2()
                     .overflow_y_scroll()
                     .child(fly::actions_panel(view, cx))
+                    .child(fly::prearm_panel(view))
                     .child(fly::vehicle_panel(view))
                     .child(fly::health_panel(view)),
             )

@@ -401,6 +401,118 @@ pub fn hud_panel(view: &TelemetryView) -> impl IntoElement {
         )
 }
 
+/// Why the aircraft will not arm.
+///
+/// Two sources, because neither alone is enough. `SYS_STATUS` names which sensors are switched on
+/// and not working, which is structured and always current. `STATUSTEXT` carries ArduPilot's own
+/// explanations - "PreArm: Compass not calibrated" - which are specific but arrive only when the
+/// vehicle decides to say them, and scroll away in the message log.
+///
+/// Shown only while disarmed. Once the aircraft is flying, a pre-arm panel is a distraction from
+/// the ones that matter.
+pub fn prearm_panel(view: &TelemetryView) -> AnyElement {
+    let Some(state) = view.state.as_ref() else {
+        return div().into_any_element();
+    };
+    if state.armed {
+        return div().into_any_element();
+    }
+
+    let unhealthy = state.sensors.unhealthy();
+    let unnamed = state
+        .sensors
+        .unhealthy_count()
+        .saturating_sub(u32::try_from(unhealthy.len()).unwrap_or(u32::MAX));
+
+    // The most recent of each distinct complaint, newest first. ArduPilot repeats them every few
+    // seconds, so without collapsing duplicates the panel would be one message twenty times.
+    let mut seen = std::collections::BTreeSet::new();
+    let mut complaints: Vec<String> = Vec::new();
+    for message in view.messages.iter().rev() {
+        let text = message.text.trim();
+        let is_prearm = text.starts_with("PreArm:") || text.starts_with("Arm:");
+        if is_prearm && seen.insert(text.to_owned()) {
+            complaints.push(text.to_owned());
+        }
+        if complaints.len() >= 6 {
+            break;
+        }
+    }
+
+    if unhealthy.is_empty() && unnamed == 0 && complaints.is_empty() {
+        let ready = state.sensors.all_healthy();
+        return panel(
+            "pre-arm",
+            div()
+                .text_xs()
+                .text_color(rgb(if ready { theme::OK } else { theme::DIM }))
+                .child(if ready {
+                    "every sensor that is switched on is healthy"
+                } else {
+                    "waiting for the vehicle to report its sensors"
+                }),
+        )
+        .into_any_element();
+    }
+
+    let mut lines = div().flex().flex_col().gap_1();
+
+    if !unhealthy.is_empty() {
+        lines = lines.child(
+            div()
+                .flex()
+                .gap_2()
+                .text_xs()
+                .child(
+                    div()
+                        .flex_shrink_0()
+                        .w(px(56.0))
+                        .text_color(rgb(theme::DIM))
+                        .child("sensors"),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w(px(0.0))
+                        .text_color(rgb(theme::ALERT))
+                        .child(unhealthy.join(", ").to_lowercase()),
+                ),
+        );
+    }
+    if unnamed > 0 {
+        // Counted from the bits, so a sensor this dialect has no name for is still reported. A
+        // pilot told everything is healthy while one is failing is worse off than one told
+        // "1 unnamed" with no name for it.
+        lines = lines.child(div().text_xs().text_color(rgb(theme::WARN)).child(format!(
+            "{unnamed} unhealthy sensor(s) this dialect cannot name"
+        )));
+    }
+    for complaint in &complaints {
+        lines = lines.child(
+            div()
+                .flex()
+                .gap_2()
+                .text_xs()
+                .child(
+                    div()
+                        .flex_shrink_0()
+                        .w(px(56.0))
+                        .text_color(rgb(theme::DIM))
+                        .child("vehicle"),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w(px(0.0))
+                        .text_color(rgb(theme::ALERT))
+                        .child(complaint.clone()),
+                ),
+        );
+    }
+
+    panel("pre-arm", lines).into_any_element()
+}
+
 /// Fix quality, power and link health: everything that decides whether to fly, and whether the
 /// aircraft is still listening.
 ///

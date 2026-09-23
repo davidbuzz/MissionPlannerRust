@@ -112,6 +112,8 @@ pub struct VehicleState {
     pub home: Option<LatLon>,
     /// Link health.
     pub link: LinkQuality,
+    /// Sensor health, as reported in `SYS_STATUS`.
+    pub sensors: crate::sensors::Sensors,
 
     /// Number of MAVLink messages applied to this state.
     pub messages_applied: u64,
@@ -201,6 +203,14 @@ impl VehicleState {
                 true
             }
             MavMessage::SysStatus(m) => {
+                // The sensor masks are why an aircraft refuses to arm more often than anything
+                // else, and they were being thrown away with the rest of this message.
+                self.sensors = crate::sensors::Sensors {
+                    present: m.onboard_control_sensors_present,
+                    enabled: m.onboard_control_sensors_enabled,
+                    health: m.onboard_control_sensors_health,
+                    reported: true,
+                };
                 self.battery.voltage = f32::from(m.voltage_battery) / 1000.0;
                 self.battery.current = if m.current_battery < 0 {
                     -1.0
