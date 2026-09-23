@@ -881,6 +881,10 @@ impl MissionPlanner {
     /// `IActivate.Activate` for the pages that keep state.
     fn activate_page(&mut self, list: List, index: usize) {
         match entries(list).get(index).map(|entry| entry.class) {
+            // C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs:36-54
+            Some("ConfigFrameClassType") if !self.frame_type.is_active() => {
+                self.frame_type.toggle(&self.telemetry);
+            }
             // C#: GCSViews/ConfigurationView/ConfigFlightModes.cs:38-232
             Some("ConfigFlightModes") if !self.flight_modes.is_active() => {
                 self.flight_modes.toggle(&self.telemetry);
@@ -896,6 +900,10 @@ impl MissionPlanner {
     /// `IDeactivate.Deactivate` for the pages that keep state.
     fn deactivate_page(&mut self, list: List, index: usize) {
         match entries(list).get(index).map(|entry| entry.class) {
+            // C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs (Deactivate)
+            Some("ConfigFrameClassType") if self.frame_type.is_active() => {
+                self.frame_type.toggle(&self.telemetry);
+            }
             // C#: GCSViews/ConfigurationView/ConfigFlightModes.cs:234-237
             Some("ConfigFlightModes") if self.flight_modes.is_active() => {
                 self.flight_modes.toggle(&self.telemetry);
@@ -1002,6 +1010,9 @@ impl MissionPlanner {
                     self.capturing_radio,
                     cx,
                 ))
+                .into_any_element(),
+            "ConfigFrameClassType" => column()
+                .children(crate::config::frame_type::page(&self.frame_type, cx))
                 .into_any_element(),
             "ConfigFlightModes" => column()
                 .children(crate::config::flight_modes::page(

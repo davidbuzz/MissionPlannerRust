@@ -4,11 +4,11 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui c
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 1 | 8 | 46 | 2 | 4 | 569 |
+| 61 | 1 | 9 | 45 | 2 | 4 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 1 | 7 | 34 | 2 | 0 | 258 | 198 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 1 | 8 | 33 | 2 | 0 | 258 | 179 |
 | CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 0 | 1 | 12 | 0 | 0 | 277 | 255 |
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 | 0 |
 
@@ -23,13 +23,13 @@ The largest missing panels, by wirings:
 | `ConfigArduplane` | Basic Tuning | 47 |
 | `ConfigSerialInjectGPS` | RTK/GPS Inject | 24 |
 | `ConfigFirmware` | Install Firmware Legacy | 20 |
-| `ConfigFrameClassType` | Frame Type | 19 |
 | `ConfigFirmwareManifest` | Install Firmware | 16 |
 | `ConfigDroneCAN` | DroneCAN/UAVCAN | 15 |
 | `ConfigAdvanced` | Advanced | 13 |
 | `ConfigBatteryMonitoring` | Battery Monitor | 13 |
 | `ConfigFrameType` | Frame Type | 12 |
 | `ConfigTerminal` | Terminal | 12 |
+| `ConfigBatteryMonitoring2` | Battery Monitor 2 | 10 |
 
 Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConnected && gotAllParams`); **always** is connected or not; **connected** and **disconnected** are the link alone; a named vehicle, parameter or view is what the call, or the `if` around it, checks. **Advanced view** is `DisplayView.isAdvancedMode`. A page with a `DisplayView` switch also needs it on, which it is by default unless the vehicles say otherwise. The list shows a heading as `>> title` and indents what is under it (`ExtLibs/Controls/BackstageView/BackstageView.cs:227`, `:232`).
 
@@ -45,7 +45,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConne
 | 182 | `ConfigMandatory` | Mandatory Hardware |  | any | 0 | plumbing: the Mandatory Hardware heading of the list: one sentence, no controls |
 | 187 | `ConfigTradHeli4` | Heli Setup | Mandatory Hardware | heli | 0 | **missing** |
 | 188 | `ConfigFrameType` | Frame Type | Mandatory Hardware | copter before 3.5 | 12 | **missing** |
-| 189 | `ConfigFrameClassType` | Frame Type | Mandatory Hardware | any with FRAME_CLASS; copter 3.5 and later | 19 | **missing** |
+| 189 | `ConfigFrameClassType` | Frame Type | Mandatory Hardware | any with FRAME_CLASS; copter 3.5 and later | 19 | partial: `crates/mp-gui/src/config/frame_type.rs` `fn page` - the eight class buttons and six type rows from Common.ValidList, each click writing FRAME_CLASS then FRAME_TYPE through the retrying set; the frame pictures are named boxes, not the C#'s images |
 | 196 | `ConfigAccelerometerCalibration` | Accel Calibration | Mandatory Hardware | any | 3 | partial: `crates/mp-gui/src/setup.rs` `fn accelerometer_panel` - has Calibrate Accel's six positions, and Calibrate Level as `cal-level` on the page; missing Simple Accel Cal |
 | 203 | `ConfigHWCompass2` | Compass | Mandatory Hardware | any with COMPASS_PRIO1_ID | 11 | partial: `crates/mp-gui/src/setup.rs` `fn compass_panel` - has the onboard calibration's start and cancel with each compass's progress; missing Accept, the priority grid (order, use, external, remove missing), Large Vehicle MagCal and Reboot |
 | 206 | `ConfigHWCompass` | Compass | Mandatory Hardware | any without COMPASS_PRIO1_ID | 21 | partial: `crates/mp-gui/src/setup.rs` `fn compass_panel` - has the onboard calibration's start and cancel; missing declination, each compass's use and external boxes, the board presets, live calibration, compass learn and Large Vehicle MagCal |

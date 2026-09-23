@@ -285,7 +285,15 @@ pub const PANELS: &[Panel] = &[
             MANDATORY,
             "any with FRAME_CLASS; copter 3.5 and later",
         )],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs:36-336, ported but for the
+        // frame pictures (the C#'s PNG resources, drawn as named boxes), the "Other" button that
+        // has no handler, and the pre-3.5 ConfigFrameType page.
+        Partial(
+            at("crates/mp-gui/src/config/frame_type.rs", "fn page"),
+            "the eight class buttons and six type rows from Common.ValidList, each click \
+             writing FRAME_CLASS then FRAME_TYPE through the retrying set; the frame pictures \
+             are named boxes, not the C#'s images",
+        ),
     ),
     panel(
         "ConfigAccelerometerCalibration",
@@ -1533,7 +1541,7 @@ mod tests {
             );
             checked += 1;
         }
-        assert_eq!(checked, 10);
+        assert_eq!(checked, 11);
     }
 
     /// The committed report matches the table.
@@ -1565,7 +1573,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (1, 8, 46, 2, 4)
+            (1, 9, 45, 2, 4)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

@@ -277,6 +277,8 @@ struct MissionPlanner {
     setup_list: setup::Backstage,
     /// The CONFIG screen's: `SoftwareConfig`'s.
     config_list: setup::Backstage,
+    /// Initial Setup's Frame Type page.
+    frame_type: config::frame_type::FrameType,
 }
 
 impl MissionPlanner {
@@ -423,6 +425,7 @@ impl MissionPlanner {
             failsafe: config::failsafe::FailSafe::default(),
             setup_list: setup::Backstage::new(setup::List::Setup),
             config_list: setup::Backstage::new(setup::List::Config),
+            frame_type: config::frame_type::FrameType::default(),
         };
         // Opening on the planning screen activates it, as switching to it does.
         if this.screen == Screen::Plan {
@@ -1438,6 +1441,8 @@ impl Render for MissionPlanner {
         self.backstage_tick(&view);
         // Save Modes' writes go one at a time, each after the last is answered.
         self.flight_modes.tick(&self.telemetry);
+        // The Frame Type page's FRAME_CLASS and FRAME_TYPE writes, in the same way.
+        self.frame_type.tick(&self.telemetry);
         // The FailSafe page's timers and writes, and closing it when the screen changes.
         self.failsafe
             .tick(&self.telemetry, &view, self.screen == Screen::Setup);
@@ -1605,6 +1610,7 @@ impl Render for MissionPlanner {
                 .record_facts(f32::from(self.fly_scroll.max_offset().y));
             config::failsafe::record_facts(&self.failsafe, &view);
             setup::record_facts([&self.setup_list, &self.config_list]);
+            config::frame_type::record_facts(&self.frame_type, &view);
             facts::publish();
         }
 

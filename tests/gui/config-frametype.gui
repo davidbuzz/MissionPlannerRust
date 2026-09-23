@@ -1,0 +1,88 @@
+# Initial Setup's Frame Type page, ported from GCSViews/ConfigurationView/ConfigFrameClassType.cs.
+#
+# The claim: the page shows the vehicle's frame - the class button down and the type radio button
+# checked are FRAME_CLASS and FRAME_TYPE (Activate, ConfigFrameClassType.cs:36-54) - enables the
+# types ArduPilot.Common.ValidList gives that class, and a click on a type writes FRAME_CLASS and
+# then FRAME_TYPE at once, with no confirmation (SetFrameParam, ConfigFrameClassType.cs:281-293).
+# The vehicle's own echo, params.value.*, is the proof, not the page. The type is put back at the
+# end.
+#
+# Only the type is changed. The class is left alone: FRAME_CLASS decides which motor library the
+# copter builds at boot, so changing it on SITL is a reboot-level change and not something this
+# test can undo by writing the old value back. The page would write it - a class button writes
+# FRAME_CLASS with the current type - so no class button is clicked here.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm, which sets
+# FRAME_CLASS 1 (Quad) and FRAME_TYPE 0 (Plus). Run as
+#
+#   tools/gui-test.sh tests/gui/config-frametype.gui -- tcp:127.0.0.1:5760
+#
+# A run that stops half way leaves FRAME_TYPE at 1 (X); the next run's first expectations fail,
+# its restore step still writes 0, and the run after that passes.
+
+screen params
+window 1600x1200
+settle 6
+
+# Initial Setup lists the page once the vehicle has FRAME_CLASS (InitialSetup.cs:189-191), and
+# here parameters are downloaded when asked for.
+expect config.frame.available false
+click param-download
+settle 12
+expect params.held > 1000
+expect params.value.FRAME_CLASS 1
+expect params.value.FRAME_TYPE 0
+expect config.frame.available true
+
+click tab-setup
+settle 1
+expect config.frame.active false
+# Frame Type is the second Mandatory Hardware entry of InitialSetup's list (InitialSetup.cs:189).
+click setup-page-ConfigMandatory
+click setup-page-ConfigFrameClassType
+settle 2
+expect config.frame.active true
+expect config.frame.enabled true
+
+# What Activate read, and what the page shows: the eight class buttons, Quad down, Plus checked.
+expect config.frame.classes Undefined,Quad,Hexa,Octa,OctaQuad,Y6,Heli,Tri
+expect config.frame.class 1
+expect config.frame.class.button Quad
+expect config.frame.type 0
+expect config.frame.type.radio Plus
+# A quad takes Plus, X, V, H, V Tail and A-Tail (Common.cs:19-30); A-Tail has no radio button and
+# Y6B is not a quad's, so these five are enabled, and Plus's picture alone is at full opacity.
+expect config.frame.types.enabled true
+expect config.frame.types 0,1,2,3,4
+expect config.frame.bright 0
+# Activate's DoClass and DoType each wrote the vehicle's own values back; setParam's "not
+# modified as same" means none of them went out (MAVLinkInterface.cs:1647-1651).
+expect config.frame.pending 0
+expect config.frame.write FRAME_TYPE 0 unchanged
+expect config.frame.message none
+
+# X: FRAME_CLASS 1 (unchanged, not sent) then FRAME_TYPE 1, and the vehicle holds it.
+click frame-type-1
+settle 3
+expect config.frame.type 1
+expect config.frame.type.radio X
+expect config.frame.bright 1
+expect config.frame.pending 0
+expect config.frame.write FRAME_TYPE 1 accepted
+expect config.frame.message none
+expect params.value.FRAME_TYPE 1
+expect params.value.FRAME_CLASS 1
+
+# And back to Plus.
+click frame-type-0
+settle 3
+expect config.frame.type 0
+expect config.frame.type.radio Plus
+expect config.frame.write FRAME_TYPE 0 accepted
+expect params.value.FRAME_TYPE 0
+expect params.value.FRAME_CLASS 1
+
+# Choosing another page deactivates this one, as BackstageView does on every change.
+click setup-page-ConfigMandatory
+settle 1
+expect config.frame.active false
