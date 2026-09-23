@@ -641,7 +641,7 @@ fn throttle_step(
 
 /// The vehicle's dataflash logs, and downloading one.
 pub fn logs_panel(
-    listings: &[mp_link::logs::LogListing],
+    listings: &[mp_ftp::logs::LogListing],
     progress: Option<(u16, u32, u32)>,
     view: &TelemetryView,
     cx: &mut Context<MissionPlanner>,

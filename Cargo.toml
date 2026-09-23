@@ -21,6 +21,7 @@ mp-link = { path = "crates/mp-link" }
 mp-mission = { path = "crates/mp-mission" }
 mp-params = { path = "crates/mp-params" }
 mp-calibration = { path = "crates/mp-calibration" }
+mp-ftp = { path = "crates/mp-ftp" }
 mp-log = { path = "crates/mp-log" }
 mp-mavlink = { path = "crates/mp-mavlink" }
 mp-mavlink-dialects = { path = "crates/mp-mavlink-dialects" }

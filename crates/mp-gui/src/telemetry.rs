@@ -547,7 +547,7 @@ impl Telemetry {
 
     /// The logs the vehicle has listed.
     #[must_use]
-    pub fn log_listings(&self) -> Vec<mp_link::logs::LogListing> {
+    pub fn log_listings(&self) -> Vec<mp_ftp::logs::LogListing> {
         self.link
             .as_ref()
             .map(Link::log_listings)

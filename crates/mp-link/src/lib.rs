@@ -18,7 +18,6 @@
 #![forbid(unsafe_code)]
 
 pub mod commands;
-pub mod logs;
 pub mod messages;
 pub mod mission_transfer;
 pub mod traffic;
@@ -158,9 +157,9 @@ struct Shared {
     /// Other aircraft, from ADS-B.
     traffic: Mutex<traffic::TrafficReport>,
     /// Dataflash logs the vehicle has listed.
-    log_listings: Mutex<BTreeMap<u16, logs::LogListing>>,
+    log_listings: Mutex<BTreeMap<u16, mp_ftp::logs::LogListing>>,
     /// A log download in progress.
-    log_download: Mutex<Option<logs::LogDownload>>,
+    log_download: Mutex<Option<mp_ftp::logs::LogDownload>>,
     stats: Mutex<LinkStats>,
     running: AtomicBool,
     frames_received: AtomicU64,
@@ -435,7 +434,7 @@ impl Link {
 
     /// The logs the vehicle has listed, smallest id first.
     #[must_use]
-    pub fn log_listings(&self) -> Vec<logs::LogListing> {
+    pub fn log_listings(&self) -> Vec<mp_ftp::logs::LogListing> {
         self.shared
             .log_listings
             .lock()
@@ -446,14 +445,14 @@ impl Link {
     /// Starts downloading one log.
     pub fn download_log(&self, target: VehicleId, id: u16, size: u32) -> bool {
         if let Ok(mut held) = self.shared.log_download.lock() {
-            *held = Some(logs::LogDownload::new(target, id, size));
+            *held = Some(mp_ftp::logs::LogDownload::new(target, id, size));
         }
         self.last_log_progress.store(0, Ordering::Release);
         self.send(&commands::request_log_data(
             target,
             id,
             0,
-            logs::WINDOW_BYTES.min(size),
+            mp_ftp::logs::WINDOW_BYTES.min(size),
         ))
     }
 
@@ -497,7 +496,7 @@ impl Link {
                     target,
                     id,
                     offset,
-                    logs::WINDOW_BYTES.min(remaining),
+                    mp_ftp::logs::WINDOW_BYTES.min(remaining),
                 ))
             }
             None => self.send(&commands::log_request_end(target)),
@@ -809,7 +808,7 @@ fn run_link(
                                         if entry.num_logs > 0 {
                                             held.insert(
                                                 entry.id,
-                                                logs::LogListing {
+                                                mp_ftp::logs::LogListing {
                                                     id: entry.id,
                                                     size: entry.size,
                                                     time_utc: entry.time_utc,
