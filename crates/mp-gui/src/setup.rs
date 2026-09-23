@@ -639,6 +639,150 @@ fn throttle_step(
         }))
 }
 
+/// The vehicle's dataflash logs, and downloading one.
+pub fn logs_panel(
+    listings: &[mp_link::logs::LogListing],
+    progress: Option<(u16, u32, u32)>,
+    view: &TelemetryView,
+    cx: &mut Context<MissionPlanner>,
+) -> impl IntoElement {
+    let has_vehicle = view.vehicle.is_some();
+    let downloading = progress.is_some();
+
+    let mut rows = div().flex().flex_col().gap_1();
+    for listing in listings {
+        let id = listing.id;
+        let size = listing.size;
+        let megabytes = f64::from(size) / (1024.0 * 1024.0);
+        let active = progress.is_some_and(|(running, _, _)| running == id);
+        rows = rows.child(
+            div()
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(
+                    div()
+                        .w(px(40.0))
+                        .text_xs()
+                        .text_color(rgb(theme::DIM))
+                        .child(id.to_string()),
+                )
+                .child(
+                    div()
+                        .w(px(80.0))
+                        .text_xs()
+                        .text_color(rgb(theme::TEXT))
+                        .child(format!("{megabytes:.1} MiB")),
+                )
+                .child(
+                    div()
+                        .w(px(96.0))
+                        .text_xs()
+                        .text_color(rgb(theme::DIM))
+                        // A flight controller with no GPS fix and no clock reports zero. Showing
+                        // a date in 1970 for every log is less useful than saying we do not know.
+                        .child(if listing.has_timestamp() {
+                            format!("utc {}", listing.time_utc)
+                        } else {
+                            "no clock".to_owned()
+                        }),
+                )
+                .child(action_for_log(
+                    id,
+                    size,
+                    has_vehicle && !downloading,
+                    active,
+                    cx,
+                )),
+        );
+    }
+
+    if listings.is_empty() {
+        rows = rows.child(
+            div()
+                .text_xs()
+                .text_color(rgb(theme::DIM))
+                .child("no logs listed yet"),
+        );
+    }
+
+    panel(
+        "logs",
+        div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(action(
+                "logs-list",
+                "list logs",
+                theme::ACCENT,
+                has_vehicle && !downloading,
+                cx.listener(|this, _event: &(), _window, cx| {
+                    this.telemetry.request_log_list();
+                    cx.notify();
+                }),
+            ))
+            .child(rows)
+            .children(progress.map(|(id, filled, size)| {
+                #[allow(clippy::cast_precision_loss)] // log sizes are megabytes
+                let fraction = if size > 0 {
+                    (filled as f32 / size as f32).clamp(0.0, 1.0)
+                } else {
+                    1.0
+                };
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(theme::ACCENT))
+                            .child(format!(
+                                "log {id}: {:.1} of {:.1} MiB",
+                                f64::from(filled) / (1024.0 * 1024.0),
+                                f64::from(size) / (1024.0 * 1024.0)
+                            )),
+                    )
+                    .child(progress_bar(fraction, theme::ACCENT))
+            })),
+    )
+}
+
+/// The download button for one log.
+fn action_for_log(
+    id: u16,
+    size: u32,
+    enabled: bool,
+    active: bool,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    crate::probe::measured(format!("log-{id}"), div())
+        .id(gpui::SharedString::from(format!("log-{id}")))
+        .px_2()
+        .py(px(1.0))
+        .rounded_sm()
+        .border_1()
+        .border_color(rgb(if active { theme::ACCENT } else { theme::BORDER }))
+        .text_xs()
+        .text_color(rgb(if enabled || active {
+            theme::TEXT
+        } else {
+            theme::DIM
+        }))
+        .cursor_pointer()
+        .child(if active { "downloading" } else { "download" })
+        .on_click(cx.listener(move |this, _event, _window, cx| {
+            if !enabled {
+                return;
+            }
+            this.telemetry.download_log(id, size);
+            this.file_status = Some(format!("downloading log {id}"));
+            cx.notify();
+        }))
+        .into_any_element()
+}
+
 /// The calibrations that are a single command.
 pub fn calibration_panel(
     view: &TelemetryView,

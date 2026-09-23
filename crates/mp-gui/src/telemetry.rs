@@ -415,6 +415,55 @@ impl Telemetry {
         }
     }
 
+    /// Asks the vehicle to list its dataflash logs.
+    pub fn request_log_list(&self) {
+        if let Some((link, id)) = self.target() {
+            link.request_log_list(id);
+        }
+    }
+
+    /// The logs the vehicle has listed.
+    #[must_use]
+    pub fn log_listings(&self) -> Vec<mp_link::logs::LogListing> {
+        self.link
+            .as_ref()
+            .map(Link::log_listings)
+            .unwrap_or_default()
+    }
+
+    /// Starts downloading one log.
+    pub fn download_log(&self, id: u16, size: u32) {
+        if let Some((link, target)) = self.target() {
+            link.download_log(target, id, size);
+        }
+    }
+
+    /// How far a log download has got: the log, bytes received, and its size.
+    #[must_use]
+    pub fn log_progress(&self) -> Option<(u16, u32, u32)> {
+        self.link.as_ref().and_then(Link::log_download_progress)
+    }
+
+    /// Keeps a download moving, re-requesting only when it has stalled.
+    pub fn nudge_log_download(&self) {
+        if let Some((link, id)) = self.target() {
+            link.nudge_log_download(id);
+        }
+    }
+
+    /// The finished log, once every byte has arrived.
+    #[must_use]
+    pub fn finished_log(&self) -> Option<(u16, Vec<u8>)> {
+        self.link.as_ref().and_then(Link::finished_log)
+    }
+
+    /// Forgets a download.
+    pub fn clear_log_download(&self) {
+        if let Some(link) = &self.link {
+            link.clear_log_download();
+        }
+    }
+
     /// Starts a parameter download.
     pub fn download_parameters(&self) {
         if let Some((link, id)) = self.target() {

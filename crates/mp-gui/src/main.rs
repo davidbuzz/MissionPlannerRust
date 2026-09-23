@@ -555,6 +555,8 @@ impl MissionPlanner {
     fn setup_body(&self, view: &TelemetryView, cx: &mut Context<Self>) -> impl IntoElement {
         let calibration = self.telemetry.accel_calibration();
         let compass = self.telemetry.compass_calibration();
+        let listings = self.telemetry.log_listings();
+        let log_progress = self.telemetry.log_progress();
         div()
             .flex()
             .flex_col()
@@ -571,6 +573,7 @@ impl MissionPlanner {
                 cx,
             ))
             .child(setup::motor_panel(view, self.motor_throttle, cx))
+            .child(setup::logs_panel(&listings, log_progress, view, cx))
             .child(setup::calibration_panel(view, cx))
     }
 
@@ -841,6 +844,25 @@ impl Render for MissionPlanner {
             }
         } else {
             self.map.borrow_mut().set_mission(self.plan.items());
+        }
+
+        // Keep a log download moving, and write it out when it finishes. Driven from the render
+        // pass because that is the only thing ticking; the link cannot write files and should not
+        // decide where they go.
+        if self.telemetry.log_progress().is_some() {
+            if let Some((id, bytes)) = self.telemetry.finished_log() {
+                self.telemetry.clear_log_download();
+                let path = Self::plan_path()
+                    .parent()
+                    .unwrap_or(std::path::Path::new("."))
+                    .join(format!("log_{id}.bin"));
+                self.file_status = Some(match std::fs::write(&path, &bytes) {
+                    Ok(()) => format!("wrote {} ({} bytes)", path.display(), bytes.len()),
+                    Err(err) => format!("could not write {}: {err}", path.display()),
+                });
+            } else {
+                self.telemetry.nudge_log_download();
+            }
         }
 
         // Fold live channel values into the recorded limits while a radio calibration runs.
