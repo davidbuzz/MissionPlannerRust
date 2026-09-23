@@ -32,9 +32,37 @@ table of measured numbers rather than an adjective.
 |---|---|---|
 | Android and iOS | No gpui Cargo.toml mentions `android`; `gpui_apple` is `cfg(target_os = "macos")` | The shipping Play Store app (`com.michaeloborne.MissionPlanner`, built by `.github/workflows/android.yml`) is **lost**. 39,234 LOC of real mobile app. Needs owner sign-off — see §12 D1 |
 | Browser GCS | Serial, raw TCP and UDP cannot exist in a browser | `gpui_web` exists; we keep the pure-compute crates wasm-clean in CI but promise nothing |
-| Bug-for-bug WinForms pixel fidelity | 2,766 resx + 805 designer `Location` entries vs 284 `Dock`; MP ships `<dpiAware>false</dpiAware>` | Screens are re-laid out, not traced. Layout debt tracked per screen |
+| Bug-for-bug WinForms **pixel** fidelity | MP ships `<dpiAware>false</dpiAware>`, so its own pixels are not stable across machines | **Layout fidelity is not dropped with it — see below.** Pixel-exact tracing is out; matching the arrangement is the default |
 | ~~In-process arbitrary-code plugins~~ | **Overruled by the owner, 2026-09-23: "when I said 100% of MissionPlanner, I didn't mean 99%."** Moved to Phase 12, after everything else | See §10.4 |
 | Reproducing MP's unsigned MD5 updater | `Utilities/Update.cs` trusts an MD5 list fetched over the network | Replaced by ed25519-signed artifacts |
+
+> **Corrected by the owner, 2026-09-23.** An earlier version of this row said "screens are
+> re-laid out, not traced", and that went too far. The ruling: *"i, the human am the final oracle
+> on look/feel/style/implementation, but for most things, the closer it feels to an original MP
+> layout, the better. where i choose to vary it, i say so here."*
+>
+> So the default is to match Mission Planner's arrangement — which panel holds what, what is on by
+> default, what order things appear in — and a divergence is the owner's call rather than an
+> implementer's convenience. What stays out of scope is *pixel* tracing, for the reason in the row
+> above.
+>
+> This costs less than it sounds, because **the layout is not in the C# and does not need to be
+> inferred from screenshots**: `FlightData.resx` alone carries 845 geometry entries and 834
+> control-tree entries (`>>ctrl.Parent`, `>>ctrl.ZOrder`, `Location`, `Size`, `Anchor`, `Dock`).
+> §4.3 and §6.1's `screenspec` generator already read it. Reading the resx is both more faithful
+> and cheaper than guessing.
+>
+> Worked example, from this session: the live tuning graph was placed at the bottom of a sidebar
+> because that was convenient. `GCSViews/FlightData.cs:1902` has it in `splitContainer1.Panel1`,
+> collapsed until `CB_tuning` uncollapses it, above everything else. The faithful placement was
+> also the better one — at the bottom of a column that already scrolls, a plot nobody can see
+> without scrolling to it is a plot nobody watches.
+>
+> **Ratified divergences** live in `.claude/memory/match-the-original-layout.md` and are settled,
+> not open questions. The first: **the colour palette stays dark and does not become Mission
+> Planner's.** The owner's words — *"those colors in the original are nasty. do NOT implement the
+> original color scheme (burnt frog)"*. Chrome only; the artificial horizon keeps blue over brown,
+> which is the universal convention for an attitude indicator rather than an MP style choice.
 
 ### 1.3 The fidelity ↔ performance tension, resolved
 

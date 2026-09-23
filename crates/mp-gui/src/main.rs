@@ -10,6 +10,7 @@
 mod fly;
 mod hud;
 mod joystick;
+mod logbrowse;
 mod mapview;
 mod params;
 mod plan;
@@ -83,11 +84,18 @@ enum Screen {
     Setup,
     /// The vehicle's parameters.
     Params,
+    /// Reviewing a dataflash log.
+    ///
+    /// Mission Planner opens `Log/LogBrowse.cs` as a separate window from a button on the flight
+    /// screen (`BUT_logbrowse_Click`, `GCSViews/FlightData.cs:1380`). A single-window application
+    /// makes it a tab; what it holds is the same - the list of fields the log declares, and a
+    /// chart of the chosen one.
+    Logs,
 }
 
 impl Screen {
     /// The tabs, in order.
-    const ALL: [Self; 4] = [Self::Fly, Self::Plan, Self::Setup, Self::Params];
+    const ALL: [Self; 5] = [Self::Fly, Self::Plan, Self::Setup, Self::Params, Self::Logs];
 
     /// The screen to open on, from `MP_SCREEN`.
     ///
@@ -105,6 +113,7 @@ impl Screen {
             "plan" => Self::Plan,
             "setup" => Self::Setup,
             "params" => Self::Params,
+            "logs" => Self::Logs,
             // Anything else, including nothing and a typo, opens on the flight screen. An operator
             // who mistypes a screen name should still get the one the application is for.
             _ => Self::Fly,
@@ -117,6 +126,7 @@ impl Screen {
             Self::Plan => "plan",
             Self::Setup => "setup",
             Self::Params => "params",
+            Self::Logs => "logs",
         }
     }
 
@@ -126,6 +136,7 @@ impl Screen {
             Self::Plan => "tab-plan",
             Self::Setup => "tab-setup",
             Self::Params => "tab-params",
+            Self::Logs => "tab-logs",
         }
     }
 }
@@ -180,6 +191,14 @@ struct MissionPlanner {
     sticks: joystick::Sticks,
     /// The live tuning graph.
     tuning: tuning::Tuning,
+    /// The log being reviewed.
+    log_browse: logbrowse::LogBrowse,
+    /// The log file name to open.
+    log_name: textfield::TextField,
+    /// Focus for that field.
+    log_name_focus: gpui::FocusHandle,
+    /// What has been typed into the log field search.
+    log_search: textfield::TextField,
     /// The result of the last comparison against a file, newest first.
     ///
     /// Held rather than applied. A comparison is something an operator reads before deciding, and
@@ -329,6 +348,10 @@ impl MissionPlanner {
             param_file_focus: cx.focus_handle(),
             sticks: joystick::Sticks::new(),
             tuning: tuning::Tuning::new(),
+            log_browse: logbrowse::LogBrowse::new(),
+            log_name: textfield::TextField::new("a .BIN or .log in the plan directory"),
+            log_name_focus: cx.focus_handle(),
+            log_search: textfield::TextField::new("filter fields"),
             param_differences: Vec::new(),
             motor_throttle: 5.0,
             capturing_radio: false,
@@ -546,6 +569,24 @@ impl MissionPlanner {
                 "wrote {written} parameters, skipped {skipped} this firmware does not have - refresh to confirm"
             )
         });
+    }
+
+    /// Opens the log named in the log field.
+    ///
+    /// The same rule the mission file field follows: a name, not a path, resolved inside the plan
+    /// directory, so a typed separator cannot read from anywhere else.
+    fn open_log(&mut self) {
+        let name = self.log_name.value().trim();
+        let leaf = name
+            .rsplit(['/', '\\'])
+            .next()
+            .filter(|part| !part.is_empty() && *part != "." && *part != "..");
+        let Some(leaf) = leaf else {
+            self.file_status = Some("type the name of a log to open".to_owned());
+            return;
+        };
+        let path = Self::plan_directory().join(leaf);
+        self.log_browse.open(&path);
     }
 
     /// Commands a guided move to a position, holding the current height.
@@ -1407,6 +1448,20 @@ impl Render for MissionPlanner {
             // Measured so UI tests can address the body itself rather than only the controls in
             // it. The setup screen runs to nine panels and is taller than most windows, so a test
             // that wants the screen rather than a button needs a handle on the container.
+            Screen::Logs => div()
+                .id("logs-body")
+                .flex()
+                .flex_1()
+                .min_h(px(0.0))
+                .child(logbrowse::screen(
+                    &self.log_browse,
+                    &self.log_name,
+                    &self.log_name_focus,
+                    self.log_name_focus.is_focused(window),
+                    self.log_search.value(),
+                    cx,
+                ))
+                .into_any_element(),
             Screen::Setup => probe::measured("setup-body", div())
                 .id("setup-body")
                 .flex()

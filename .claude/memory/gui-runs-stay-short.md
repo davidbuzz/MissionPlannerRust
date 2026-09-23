@@ -47,6 +47,15 @@ binary**, so the window is created in the right place rather than created elsewh
 and record the pointer's position up front and restore it in the `trap`, so a run does not leave
 somebody's cursor on another screen. `windowmove` afterwards is the backstop, not the mechanism.
 
+**Never target a window this script did not launch.** `tools/screenshot.sh` had a fallback that
+matched `--name "Mission Planner"` by title alone, for a window manager that does not set
+`_NET_WM_PID`. Buzz runs the **real Mission Planner**, which has exactly that title. The fallback
+found it, and the script screenshotted it, clicked at (378,132) inside it and typed "flight.bin"
+into it — while it was on SETUP > Install Firmware with a flight controller plugged in. Synthetic
+input into somebody else's ground station is not a screenshot bug; it is a way to flash a board by
+accident. The window must be owned by the pid the script started, verified, and a run that cannot
+find one **fails** rather than reaching for whatever else answers to the name.
+
 Two related traps in the same file, both of which produced a screenshot of the wrong thing while
 reporting success: the capture is an `x11grab` of the *screen* at the window's coordinates, so the
 window must be fully on one monitor and on top — check it, do not assume it; and

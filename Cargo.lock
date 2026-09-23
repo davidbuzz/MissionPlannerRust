@@ -3349,6 +3349,7 @@ dependencies = [
  "mp-chart",
  "mp-input",
  "mp-link",
+ "mp-log",
  "mp-mavlink-dialects",
  "mp-mission",
  "mp-tiles",

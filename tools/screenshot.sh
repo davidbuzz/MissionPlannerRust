@@ -105,24 +105,39 @@ trap cleanup EXIT INT TERM HUP
 # frame, and the frame inherits the title. Matching on the title therefore returns two ids - the
 # frame and the client - and picking either at random makes captures inconsistent in size and
 # position. Only the client window belongs to our process.
-# `--onlyvisible` and a name, not the first id the process owns. A bare `search --pid` returns
-# every window the client has created including unmapped and transient ones, and `head -1` picked
-# one of those: a run failed with "No such window with id 0x3c00001" because the id had been
-# valid for a moment and was gone by the time it was used. A window that is both visible and
-# titled is the one somebody can see.
+# The window must belong to the process this script started. Nothing else will do.
+#
+# There was a fallback here that matched by title alone, for a window manager that does not set
+# _NET_WM_PID. It found the owner's **real Mission Planner**, which has that title, and this
+# script screenshotted it, clicked in it and typed into it - while it sat on SETUP > Install
+# Firmware with a flight controller plugged in. Synthetic input into somebody else's ground
+# station is not a screenshot bug; it is a way to flash a board by accident.
+#
+# So: match on our pid, and if _NET_WM_PID is genuinely unavailable, fail and say so rather than
+# reaching for whatever else answers to the name. A missing screenshot is a nuisance.
+#
+# `--onlyvisible` because a bare `search --pid` returns every window a client owns including
+# unmapped transients - one run died with "No such window with id 0x3c00001" after picking one.
 WIN_ID=""
 for _ in $(seq 1 60); do
-    WIN_ID=$(xdotool search --pid "$APP_PID" --onlyvisible --name "$WINDOW_TITLE" 2>/dev/null | tail -1)
-    # A fallback by title alone, for a window manager that does not set _NET_WM_PID. Still
-    # requires the window to be visible.
-    [ -z "$WIN_ID" ] && WIN_ID=$(xdotool search --onlyvisible --name "$WINDOW_TITLE" 2>/dev/null | tail -1)
-    # And it has to still be there a moment later, or it was transient.
-    [ -n "$WIN_ID" ] && xwininfo -id "$WIN_ID" >/dev/null 2>&1 && break
-    WIN_ID=""
+    for CANDIDATE in $(xdotool search --pid "$APP_PID" --onlyvisible --name "$WINDOW_TITLE" 2>/dev/null); do
+        # Checked a second way rather than trusted once: `--pid` filters on _NET_WM_PID and so
+        # does `getwindowpid`, but asserting it here means the id in hand is the one verified.
+        OWNER=$(xdotool getwindowpid "$CANDIDATE" 2>/dev/null)
+        if [ "$OWNER" = "$APP_PID" ] && xwininfo -id "$CANDIDATE" >/dev/null 2>&1; then
+            WIN_ID="$CANDIDATE"
+        fi
+    done
+    [ -n "$WIN_ID" ] && break
     kill -0 $APP_PID 2>/dev/null || { echo "app exited before showing a window" >&2; wait $APP_PID; exit 1; }
     sleep 0.5
 done
-[ -n "$WIN_ID" ] || { echo "no visible window titled '$WINDOW_TITLE' appeared" >&2; exit 1; }
+if [ -z "$WIN_ID" ]; then
+    echo "no visible window owned by pid $APP_PID appeared" >&2
+    echo "refusing to match '$WINDOW_TITLE' by title alone: the real Mission Planner uses that" >&2
+    echo "title, and this script has already clicked into it once by doing so" >&2
+    exit 1
+fi
 
 # Let the window settle before capturing. Telemetry screenshots need longer than a static
 # window: a simulated GPS takes tens of seconds to acquire, and a shot taken too early shows
