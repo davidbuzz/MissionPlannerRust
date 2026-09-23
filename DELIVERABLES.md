@@ -142,7 +142,11 @@ snapshots so the renderer never blocks on the I/O thread.
   frames through the real link thread with recording on. `PARAM_VALUE`, `STATUSTEXT` and
   `COMMAND_ACK` allocate by design and are listed with a bound each. Still owed:
   `Transport::description()` allocates twice per snapshot publish, which needs the trait to
-  change; the field-coverage report against `CurrentState` does not exist.
+  change. The field-coverage report exists: `crates/mp-vehicle/src/coverage.rs` accounts for all
+  550 public members of `CurrentState` (416 done, 48 derived, 55 missing, 30 plumbing, 1 dropped),
+  matched to the C# file by a test, rendered to `docs/coverage/currentstate.md`; the porting that
+  took it from 219 done added SYS_STATUS, GPS, battery, radio, wind, terrain, rangefinder, servo,
+  high-latency and the onboard subsystems with the C#'s rules and quirks kept.
 - **Tests:** `tests/field_coverage.rs` reads the D18 ledger and fails if any C# `CurrentState` field lacks a Rust counterpart; `tests/decode_to_state.rs` replays golden tlogs and diffs the resulting state timeline against C# output; `tests/concurrency.rs` stress-tests the snapshot bus (writer at 1 kHz, 8 readers) asserting no torn reads and no reader stall, with a `loom` model of the publish path; `tests/no_alloc_ingest.rs` allocation counter over the ingest→state path; `benches/snapshot.rs` gates publish and read latency.
 
 ---
@@ -187,13 +191,17 @@ markers, tracks, polygons, geofences, survey grids, and full editing interaction
   the C# app; projection round-trips verified against ProjNet/GDAL to **< 1 mm**.
 - **Replaces:** `ExtLibs/GMap.NET.*` (33,899), `ExtLibs/Maps` (7,992), `ExtLibs/ProjNet` (10,212),
   `ExtLibs/GeoUtility` (8,006), `ExtLibs/GDAL`, `ExtLibs/GeoidHeightsDotNet`.
-- **Today:** GPU tile rendering with three providers, and the on-disk cache in Mission Planner's
-  own layout — `gmapcache/TileDBv3/en/<Name>/<z>/<y>/<x>.jpg`, ported from
+- **Today:** GPU tile rendering with Mission Planner's default provider (`GoogleSatelliteMap`) and
+  six of its providers in its order and names - Google road/satellite/terrain, Bing road/satellite/
+  hybrid, OpenStreetMap - with the C#'s URL schemes, version checks and `Referer`s, proved against
+  the shipped `GMap.NET.Core.dll` under mono (`crates/mp-tiles/tests/providers.rs`); and the on-disk
+  cache in Mission Planner's own layout — `gmapcache/TileDBv3/en/<Name>/<z>/<y>/<x>.jpg`, ported from
   `ExtLibs/Maps/MyImageCache.cs` and proved against a tile the C# application wrote
   (`crates/mp-tiles/tests/tilecache.rs`); offline mode serves the cache. **Not yet:** the `redb`
-  index; provider parity — two of the three providers (OpenTopoMap, Esri World Imagery) are not
-  Mission Planner's, and its default satellite provider `GoogleSatelliteMap` is not ported, which
-  is the owner's call; editing beyond click-to-add and drag. **Projection proved:**
+  index; the other 60 of the C#'s 66 providers (hybrids need a two-layer map, some need keys or
+  other projections); two providers that are not Mission Planner's (OpenTopoMap, Esri World
+  Imagery) remain, last in the list, pending the owner's call; editing beyond click-to-add and
+  drag. **Projection proved:**
   `crates/mp-units/tests/projection.rs` holds Web Mercator, `GetDistance`, `GetBearing`, `newpos`
   and (in `mp_mission::utm`) `utmpos` to what the C# itself returns under mono over 676 points
   (`testdata/projection/`), bit for bit where GMap exposes the value and to the identical whole
@@ -208,7 +216,9 @@ GPU artificial horizon, tapes, compass, gauges, warnings, with live video underl
 - **DoD:** pixel-comparable to the C# HUD (side-by-side review signed off), **< 16 ms packet-to-pixel**
   at the 99th percentile, runs at 120 fps while using < 3 % CPU; video underlay with hardware decode.
 - **Replaces:** `Controls/HUD*.cs`, `Controls/` PFD widgets.
-- **Today:** `crates/mp-gui/src/hud.rs` builds a pure scene from the vehicle state - the
+- **Today:** all 24 elements of `doPaint()` are ported, 22 drawing live and two (flight-path
+  vector, AOA scale) waiting only for `mp_vehicle`'s new `AOA_SSA` fields to be wired.
+  `crates/mp-gui/src/hud.rs` builds a pure scene from the vehicle state - the
   geometry of `HUD.cs doPaint()` with its constants (`Height / 30` font, `Height / 65` per
   degree of pitch, a `Height / 14` heading tape, `Width / 10` scrollers) - and paints it on a gpui
   canvas. 18 of the 24 elements are drawn and 6 are listed as missing in a coverage table a test
@@ -248,8 +258,9 @@ KML/DXF/shapefile import-export, geotagging hand-off.
   `Grid.CreateGrid` under mono, `regen-grid.sh` regenerates 180 golden cases over 40 polygons
   (rectangles, L/T/U/comb, concave fields, slivers, zone and equator crossings, the antimeridian,
   every start position, lead-in, overshoot, trigger spacing), and `tests/grid_vectors.rs` matches
-  every case **bit for bit**. Corridor, rotary and Gridv2 are not ported; a Windows .NET 4.7.2
-  oracle run (PLAN.md R5) is still owed. The screen's actions are counted:
+  every case **bit for bit**. The corridor and rotary generators are ported the same way, with the
+  C#'s Clipper inside the rotary (`clipper.rs`), and match on 41 + 63 cases; Gridv2 is not ported;
+  a Windows .NET 4.7.2 oracle run (PLAN.md R5) is still owed. The screen's actions are counted:
   `crates/mp-gui/src/planner_coverage.rs` lists all 121 event wirings of `FlightPlanner.Designer.cs`
   (40 done, 69 missing, 12 plumbing; `docs/coverage/flightplanner.md`), and the map's right-click
   menu is the C#'s in its order, with 22 entries ported from their handlers and proved by one

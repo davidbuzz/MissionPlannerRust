@@ -22,12 +22,12 @@ Measured on this tree: **21 crates, 55,520 hand-written Rust LOC** (plus 93,834 
 | Generated dialect | 349 messages, 206 enums, generated from the upstream XML |
 | Transports | serial, TCP, UDP, file replay, in-memory test doubles; port enumeration by `CommsSerialPort.GetPortNames`'s rules, held to per-OS fixtures; faults and a real pty unplug rehearsed in tests |
 | Link engine | I/O thread, multi-vehicle routing (50 systems in one test), stream requests; parameter sets, reads, commands, set-current and mission transfer with Mission Planner's own retry counts and waits, proved by counting sends under dropped, delayed and duplicated frames |
-| Vehicle state | lock-free snapshot bus, packet-loss tracking |
+| Vehicle state | lock-free snapshot bus, packet-loss tracking; 416 of `CurrentState`'s 550 fields held with the C#'s rules, the rest listed in `docs/coverage/currentstate.md` by a test that reads the C# |
 | Parameters | full download with gap recovery, typed values, 1,408 from SITL |
 | `.param` files | save, load and compare against a vehicle, honouring the C# skip-list |
 | Parameter docs | fetched for the connected firmware as Mission Planner fetches them (`apm.pdef.xml`, versioned or weekly), read before the bundled table: 1,407 of a SITL's 1,408 documented instead of 827 |
 | Missions | upload and download, `.waypoints` files, 129-file corpus |
-| Survey grids | `Grid.CreateGrid` transliterated over a port of ProjNet's UTM, bit-identical to the C# on 180 golden cases the real code generated under mono |
+| Survey grids | `Grid.CreateGrid`, `CreateCorridor` and `CreateRotary` transliterated over a port of ProjNet's UTM and the C#'s Clipper, bit-identical to the C# on 284 golden cases the real code generated under mono |
 | Logs | `.tlog` read and write; ArduPilot `.BIN` dataflash parsing |
 | Flight recording | every connection recorded to a `.tlog`, both directions, into Mission Planner's own logs directory |
 | Data directory | `Settings.cs`'s rules ported, mono quirks included, so files land where the C# application looks; its `config.xml` is read for the last link, map type and log directory, and rendered back byte for byte |
@@ -39,8 +39,8 @@ Measured on this tree: **21 crates, 55,520 hand-written Rust LOC** (plus 93,834 
 | KML export | a flown path coloured by flight mode, and a mission, for Google Earth |
 | Tuning graph | eleven telemetry fields plotted live, min/max reduced so a spike cannot hide |
 | Geodesy | typed units, Web Mercator, slippy-map tile arithmetic; pixel, inverse, distance, bearing, `newpos` and UTM match the C# under mono bit for bit over 676 points |
-| HUD | 18 of the 24 elements `HUD.cs` paints, from a pure scene builder with a coverage table: horizon and ladder, heading tape with target and course marks, cross-track and turn rate, speed and altitude scrollers, VSI, mode and waypoint, link, battery, GPS, ARMED/DISARMED/SAFE/FAILSAFE, the message line |
-| Maps | GPU tile rendering, three providers including Esri satellite imagery, overlays; the on-disk cache is Mission Planner's own, so a cache filled by either application is read by both |
+| HUD | all 24 elements `HUD.cs` paints, from a pure scene builder with a coverage table: horizon and ladder, heading tape with target and course marks, cross-track and turn rate, speed and altitude scrollers, VSI, mode and waypoint, link, battery, GPS, ARMED/DISARMED/SAFE/FAILSAFE, the message line, Vibe and EKF with the C#'s thresholds, Ready/Not Ready to Arm, custom items, flight-path vector and AOA scale (the last two await their vehicle values) |
+| Maps | GPU tile rendering; Mission Planner's default `GoogleSatelliteMap` and six of its providers with its URL schemes and version checks, proved against its own `GMap.NET.Core.dll`; overlays; the on-disk cache is Mission Planner's own, so a cache filled by either application is read by both |
 | CLI | `mpr watch \| record \| fly \| params \| param \| mission \| survey \| log \| logs \| kml \| firmware \| ports` |
 | GUI | fly, plan, setup, params and log screens on gpui |
 | Porting ledger | `ledger/ledger.csv`, one row per C# file with its tier and state; `cargo xtask ledger check` fails on anything unaccounted for |

@@ -15,3 +15,4 @@ controlled; the per-project memory directory holds symlinks to them.
 - [Verify before committing](verify-before-committing.md) — clippy is its own command, read it, then commit
 - [Autotests mandatory](autotests-mandatory.md) — every change ships with a test that fails if it stops working; test the path the product takes
 - [Delegate to Opus subagents](delegate-to-opus-subagents.md) — up to six at once, disjoint files, never a window, never a commit
+- [Worktree agents share the target dir](worktree-agents-share-the-target-dir.md) — touch a crate's lib.rs before an integration build while agents run
