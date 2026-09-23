@@ -2,9 +2,11 @@
 //!
 //! Mission Planner's own settings: every control sits at its `.resx` `Location` and `Size` on a
 //! 949 x 693 page (`ConfigPlanner.resx` `$this.Size`), bound to the `Settings.Instance` key its
-//! handler writes. The keys are kept under the C#'s own names in this application's settings
-//! (`settings.rs`, the `ConfigPlanner keys` block), falling back to what Mission Planner's
-//! `config.xml` holds, and every change is saved as it is made - the C# has no save button either.
+//! handler writes. `Settings.Instance` is Mission Planner's `config.xml` (`settings::Persisted`):
+//! each handler puts its key in that dictionary as its control changes, under the C#'s own name,
+//! and the file is written at the next `SaveConfig` - on the FLIGHT DATA and FLIGHT PLAN buttons,
+//! after Connect and on closing - with every other key in it. The page saves nothing itself; the
+//! C# has no save button either (`MainV2.cs:1107, 1309-1323, 1846, 2171`).
 //!
 //! What acts at once, as it does in the C#:
 //!
@@ -59,7 +61,7 @@ use mp_mavlink_dialects::all::{MavDataStream, MavMessage, RequestDataStream};
 use mp_vehicle::units::DisplayUnits;
 
 use crate::MissionPlanner;
-use crate::settings::Settings;
+use crate::settings::Persisted;
 use crate::telemetry::{Telemetry, TelemetryView};
 use crate::textfield::{KeyOutcome, TextField};
 use crate::ui::theme;
@@ -76,9 +78,9 @@ const fn bool_text(value: bool) -> &'static str {
 /// `Settings.GetBoolean`: `bool.TryParse` of the value - which trims white space and nulls - else
 /// the default.
 /// `// C#: ExtLibs/Utilities/Settings.cs:223-232`
-fn get_bool(settings: &Settings, key: &str, default: bool) -> bool {
+fn get_bool(settings: &Persisted, key: &str, default: bool) -> bool {
     let value = settings
-        .planner_get(key)
+        .get(key)
         .map(|value| value.trim_matches(|c: char| c.is_whitespace() || c == '\0'));
     match value {
         Some(value) if value.eq_ignore_ascii_case("true") => true,
@@ -89,12 +91,98 @@ fn get_bool(settings: &Settings, key: &str, default: bool) -> bool {
 
 /// `Settings.GetInt32`: `int.TryParse` of the value, else the default.
 /// `// C#: ExtLibs/Utilities/Settings.cs:201-210`
-fn get_int(settings: &Settings, key: &str, default: i32) -> i32 {
+fn get_int(settings: &Persisted, key: &str, default: i32) -> i32 {
     settings
-        .planner_get(key)
+        .get(key)
         .and_then(|value| value.trim().parse().ok())
         .unwrap_or(default)
 }
+
+/// Every `Settings.Instance` key `ConfigPlanner` reads or writes, by the C#'s name, each published
+/// as `config.planner.<key>`. Keys the C# spells two ways (`GMapMarkerBase_Length` read,
+/// `GMapMarkerBase_length` written) are both here, as the C# has both.
+/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:47-1166`
+const KEYS: &[&str] = &[
+    // C#: ConfigPlanner.cs:95-102, 413
+    "severity",
+    // C#: ConfigPlanner.cs:148-166
+    "speechenable",
+    "speechwaypointenabled",
+    "speechmodeenabled",
+    "speechcustomenabled",
+    "speechbatteryenabled",
+    "speechaltenabled",
+    "speecharmenabled",
+    "speechlowspeedenabled",
+    "beta_updates",
+    "password_protect",
+    "showairports",
+    "enableadsb",
+    "norcreceiver",
+    "showtfr",
+    "autoParamCommit",
+    "ShowNoFly",
+    "Params_BG",
+    "SlowMachine",
+    "speech_armed_only",
+    // C#: ConfigPlanner.cs:169, 690
+    "NUM_tracklength",
+    // C#: ConfigPlanner.cs:172-176
+    "loadwpsonconnect",
+    "CHK_resetapmonconnect",
+    "CHK_rtsresetesp32",
+    // C#: ConfigPlanner.cs:573-640, by each combo's `Name`
+    "CMB_rateattitude",
+    "CMB_rateposition",
+    "CMB_ratestatus",
+    "CMB_raterc",
+    "CMB_ratesensors",
+    // C#: ConfigPlanner.cs:184-189
+    "analyticsoptout",
+    "CHK_GDIPlus",
+    "CHK_maprotation",
+    "CHK_disttohomeflightdata",
+    // C#: ConfigPlanner.cs:194
+    "hudcolor",
+    // C#: ConfigPlanner.cs:208-213
+    "distunits",
+    "speedunits",
+    "altunits",
+    // `Settings.LogDir`. C#: ConfigPlanner.cs:235, 792; ExtLibs/Utilities/Settings.cs:127-140
+    "logdirectory",
+    // C#: ConfigPlanner.cs:238-244, 1079-1159
+    "GMapMarkerBase_DisplayCOG",
+    "GMapMarkerBase_DisplayHeading",
+    "GMapMarkerBase_DisplayNavBearing",
+    "GMapMarkerBase_DisplayRadius",
+    "GMapMarkerBase_DisplayTarget",
+    "mapicondesc",
+    "mapicondesc_default",
+    "GMapMarkerBase_Length",
+    "GMapMarkerBase_length",
+    "GMapMarkerBase_InactiveDisplayStyle",
+    // C#: ConfigPlanner.cs:249, 1165
+    "mapCache",
+    // The speech templates and levels. C#: ConfigPlanner.cs:442-549, 660-686, 811-916
+    "speechwaypoint",
+    "speechmode",
+    "speechcustom",
+    "speechbattery",
+    "speechbatteryvolt",
+    "speechbatterypercent",
+    "speechalt",
+    "speechaltheight",
+    "speecharm",
+    "speechdisarm",
+    "speechlowgroundspeed",
+    "speechlowgroundspeedtrigger",
+    "speechlowairspeed",
+    "speechlowairspeedtrigger",
+    // C#: ConfigPlanner.cs:1060; MainV2.cs:683
+    "gcsid",
+    // `ThemeManager.thmColor.strThemeName`, which CMB_theme shows. C#: Utilities/ThemeManager.cs:287
+    "theme",
+];
 
 // -------------------------------------------------------------------------------------------------
 // The Designer's controls.
@@ -1078,8 +1166,6 @@ pub struct Planner {
     effects: Vec<Effect>,
     /// The requests put on the link, as `stream@hz`, oldest first.
     sent: Vec<(u8, i32)>,
-    /// Why the settings could not be saved, if the last save failed.
-    save_error: Option<String>,
 }
 
 impl Planner {
@@ -1087,10 +1173,10 @@ impl Planner {
     /// backups (`ResetInternals` copies them into `cs`), and `gcssysid`.
     /// `// C#: MainV2.cs:683, 836, 981-1002; ExtLibs/ArduPilot/CurrentState.cs:199-206, 4385-4397`
     #[must_use]
-    pub fn new(settings: &Settings) -> Self {
+    pub fn new(settings: &Persisted) -> Self {
         let mut rates = [0; 5];
         for (rate, held) in RATES.iter().zip(rates.iter_mut()) {
-            *held = if settings.planner_get(rate.combo).is_some() {
+            *held = if settings.get(rate.combo).is_some() {
                 get_int(settings, rate.combo, 0)
             } else {
                 rate.default
@@ -1114,13 +1200,12 @@ impl Planner {
             units: DisplayUnits::default(),
             rates,
             gcssysid: settings
-                .planner_get("gcsid")
+                .get("gcsid")
                 .and_then(|value| value.trim().parse().ok())
                 .unwrap_or(255),
             focused: None,
             effects: Vec::new(),
             sent: Vec::new(),
-            save_error: None,
         };
         planner.change_units(settings);
         planner
@@ -1231,18 +1316,13 @@ impl Planner {
         self.sent.push((stream, hz));
     }
 
-    /// Notes how the last save went.
-    pub fn saved(&mut self, result: std::io::Result<()>) {
-        self.save_error = result.err().map(|err| err.to_string());
-    }
-
     /// `MainV2.ChangeUnits`, from the settings as they are now.
     /// `// C#: MainV2.cs:4247-4330`
-    fn change_units(&mut self, settings: &Settings) {
+    fn change_units(&mut self, settings: &Persisted) {
         self.units = self.units.change_units(
-            settings.planner_get("distunits"),
-            settings.planner_get("altunits"),
-            settings.planner_get("speedunits"),
+            settings.get("distunits"),
+            settings.get("altunits"),
+            settings.get("speedunits"),
         );
     }
 
@@ -1259,7 +1339,7 @@ impl Planner {
 
     /// `SetCheckboxFromConfig`: the key's value, when it is set.
     /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:767-771`
-    fn set_from_config(&mut self, name: &'static str, settings: &Settings) {
+    fn set_from_config(&mut self, name: &'static str, settings: &Persisted) {
         let Some(key) = CHECKS
             .iter()
             .find(|spec| spec.name == name)
@@ -1267,7 +1347,7 @@ impl Planner {
         else {
             return;
         };
-        if settings.planner_get(key).is_some() {
+        if settings.get(key).is_some() {
             self.checks.insert(name, get_bool(settings, key, false));
         }
     }
@@ -1280,7 +1360,7 @@ impl Planner {
     /// and is written as 500 on every activation. The Log Path box's text is set to `LogDir`,
     /// and its `TextChanged` writes the directory back when it exists.
     /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:26-51, 55-256, 787-794, 1079-1140`
-    pub fn activate(&mut self, settings: &mut Settings, default_log_dir: Option<&Path>) {
+    pub fn activate(&mut self, settings: &mut Persisted, default_log_dir: Option<&Path>) {
         self.active = true;
         self.open = None;
         self.dim_text.clear();
@@ -1291,7 +1371,7 @@ impl Planner {
         // C#: ConfigPlanner.cs:194-205
         self.dim_text.insert(
             "CMB_osdcolor",
-            settings.planner_get("hudcolor").unwrap_or("").to_owned(),
+            settings.get("hudcolor").unwrap_or("").to_owned(),
         );
         // C#: ConfigPlanner.cs:84-86 - binding a list selects its first item.
         for name in ["CMB_distunits", "CMB_speedunits", "CMB_altunits"] {
@@ -1301,7 +1381,7 @@ impl Planner {
         self.dim_text.insert(
             "CMB_theme",
             settings
-                .planner_get("theme")
+                .get("theme")
                 .unwrap_or("BurntKermit.mpsystheme")
                 .to_owned(),
         );
@@ -1311,7 +1391,7 @@ impl Planner {
             self.number_changed(1, settings);
         }
         // C#: ConfigPlanner.cs:95-103
-        if settings.planner_get("severity").is_some() {
+        if settings.get("severity").is_some() {
             let index = usize::try_from(get_int(settings, "severity", 0)).ok();
             self.selected.insert(
                 "CMB_severity",
@@ -1319,7 +1399,7 @@ impl Planner {
             );
         } else {
             self.selected.insert("CMB_severity", Some(4));
-            settings.planner_set("severity", "4");
+            settings.set("severity", "4");
         }
         // C#: ConfigPlanner.cs:106-134 - the UI culture's language; English only here.
         self.dim_text.insert("CMB_language", String::new());
@@ -1379,7 +1459,7 @@ impl Planner {
             ("CMB_speedunits", "speedunits"),
             ("CMB_altunits", "altunits"),
         ] {
-            if let Some(value) = settings.planner_get(key).map(str::to_owned) {
+            if let Some(value) = settings.get(key).map(str::to_owned) {
                 self.select_text(name, &value);
             }
         }
@@ -1388,7 +1468,7 @@ impl Planner {
         self.dim_text.insert("CMB_videoresolutions", String::new());
         // C#: ConfigPlanner.cs:235, 787-794; ExtLibs/Utilities/Settings.cs:127-140
         let log_dir = settings
-            .planner_get("logdirectory")
+            .get("logdirectory")
             .filter(|dir| !dir.is_empty())
             .map(PathBuf::from)
             .or_else(|| default_log_dir.map(Path::to_path_buf))
@@ -1408,12 +1488,12 @@ impl Planner {
         ] {
             let value = get_bool(settings, key, true);
             if self.checks.insert(name, value) != Some(value) {
-                settings.planner_set(key, bool_text(value));
+                settings.set(key, bool_text(value));
             }
         }
         // C#: ConfigPlanner.cs:243
         let tooltip = settings
-            .planner_get("mapicondesc")
+            .get("mapicondesc")
             .is_some_and(|text| !text.is_empty());
         self.checks.insert("chk_displaytooltip", tooltip);
         // C#: ConfigPlanner.cs:244, 1136-1140
@@ -1423,7 +1503,7 @@ impl Planner {
         }
         // C#: ConfigPlanner.cs:47-50 (the constructor)
         let style = settings
-            .planner_get("GMapMarkerBase_InactiveDisplayStyle")
+            .get("GMapMarkerBase_InactiveDisplayStyle")
             .unwrap_or("Normal")
             .to_owned();
         self.selected.insert("cmb_secondarydisplaystyle", Some(0));
@@ -1431,7 +1511,7 @@ impl Planner {
         // C#: ConfigPlanner.cs:246-253; Program.cs:321-325 - the mode is the setting's, or
         // GMap's default.
         let mode = settings
-            .planner_get("mapCache")
+            .get("mapCache")
             .unwrap_or("ServerAndCache")
             .to_owned();
         self.selected.insert(
@@ -1454,7 +1534,7 @@ impl Planner {
 
     /// A click on a check box: the box toggled and its `CheckedChanged` handler run. A dimmed box
     /// does nothing.
-    pub fn click(&mut self, name: &'static str, settings: &mut Settings) {
+    pub fn click(&mut self, name: &'static str, settings: &mut Persisted) {
         let Some(spec) = CHECKS.iter().find(|spec| spec.name == name) else {
             return;
         };
@@ -1473,7 +1553,7 @@ impl Planner {
 
     /// A box's `CheckedChanged`.
     /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:380-1134`
-    fn checked_changed(&mut self, name: &'static str, checked: bool, settings: &mut Settings) {
+    fn checked_changed(&mut self, name: &'static str, checked: bool, settings: &mut Persisted) {
         let key = CHECKS
             .iter()
             .find(|spec| spec.name == name)
@@ -1498,12 +1578,12 @@ impl Planner {
             | "chk_displayradius"
             | "chk_displaytarget" => {
                 if let Some(key) = key {
-                    settings.planner_set(key, bool_text(checked));
+                    settings.set(key, bool_text(checked));
                 }
             }
             // C#: ConfigPlanner.cs:693-696; MainV2.cs:1750-1759
             "CHK_loadwponconnect" => {
-                settings.planner_set("loadwpsonconnect", bool_text(checked));
+                settings.set("loadwpsonconnect", bool_text(checked));
                 self.effects.push(Effect::ReadMissionOnConnect(checked));
             }
             // C#: ConfigPlanner.cs:442-458, 460-476, 478-494, 518-550, 660-686, 811-833, 877-916
@@ -1515,7 +1595,7 @@ impl Planner {
             | "CHK_speecharmdisarm"
             | "CHK_speechlowspeed" => {
                 if let Some(key) = key {
-                    settings.planner_set(key, bool_text(checked));
+                    settings.set(key, bool_text(checked));
                 }
                 if checked {
                     self.ask(steps(name), settings);
@@ -1526,13 +1606,13 @@ impl Planner {
                 if checked {
                     self.ask(steps(name), settings);
                 } else {
-                    settings.planner_set("mapicondesc", "");
+                    settings.set("mapicondesc", "");
                 }
             }
             // C#: ConfigPlanner.cs:755-765 - and the map's bearing put back to 0, which a map
             // that does not rotate is already at.
             "CHK_maprotation" => {
-                settings.planner_set("CHK_maprotation", bool_text(checked));
+                settings.set("CHK_maprotation", bool_text(checked));
                 if checked && self.checked("chk_shownofly") {
                     self.checks.insert("chk_shownofly", false);
                     self.checked_changed("chk_shownofly", false, settings);
@@ -1540,7 +1620,7 @@ impl Planner {
             }
             // C#: ConfigPlanner.cs:1040-1047
             "chk_shownofly" => {
-                settings.planner_set("ShowNoFly", bool_text(checked));
+                settings.set("ShowNoFly", bool_text(checked));
                 if checked && self.checked("CHK_maprotation") {
                     self.checks.insert("CHK_maprotation", false);
                     self.checked_changed("CHK_maprotation", false, settings);
@@ -1551,28 +1631,28 @@ impl Planner {
     }
 
     /// Starts a handler's `InputBox`es.
-    fn ask(&mut self, steps: &[Step], settings: &Settings) {
+    fn ask(&mut self, steps: &[Step], settings: &Persisted) {
         self.queued = steps.iter().copied().collect();
         self.next_prompt(settings);
     }
 
     /// Shows the next `InputBox`, its box holding the key's value or the handler's literal.
-    fn next_prompt(&mut self, settings: &Settings) {
+    fn next_prompt(&mut self, settings: &Persisted) {
         self.prompt = self.queued.pop_front().map(|step| {
             let mut field = TextField::new("");
-            field.set(settings.planner_get(step.key).unwrap_or(step.default));
+            field.set(settings.get(step.key).unwrap_or(step.default));
             Prompt { step, field }
         });
     }
 
     /// OK on the `InputBox`: the answer written, and the handler's next box shown.
-    pub fn answer(&mut self, settings: &mut Settings) {
+    pub fn answer(&mut self, settings: &mut Persisted) {
         let Some(prompt) = self.prompt.take() else {
             return;
         };
         let answer = prompt.field.value().to_owned();
         match prompt.step.store {
-            Store::Text => settings.planner_set(prompt.step.key, answer),
+            Store::Text => settings.set(prompt.step.key, answer),
             // C#: ConfigPlanner.cs:683 - saved in metres.
             Store::AltHeight => {
                 let Ok(value) = answer.trim().parse::<f64>() else {
@@ -1587,12 +1667,12 @@ impl Planner {
                     return;
                 };
                 let metres = value / f64::from(self.units.alt);
-                settings.planner_set(prompt.step.key, mp_log::netfmt::double(metres));
+                settings.set(prompt.step.key, mp_log::netfmt::double(metres));
             }
             // C#: ConfigPlanner.cs:1126-1127
             Store::IconDescription => {
-                settings.planner_set("mapicondesc", answer.clone());
-                settings.planner_set("mapicondesc_default", answer);
+                settings.set("mapicondesc", answer.clone());
+                settings.set("mapicondesc_default", answer);
             }
         }
         self.next_prompt(settings);
@@ -1605,7 +1685,7 @@ impl Planner {
     }
 
     /// A key in the `InputBox`: Enter is OK, Escape is Cancel.
-    pub fn prompt_key(&mut self, event: &KeyDownEvent, settings: &mut Settings) -> bool {
+    pub fn prompt_key(&mut self, event: &KeyDownEvent, settings: &mut Persisted) -> bool {
         let Some(prompt) = self.prompt.as_mut() else {
             return false;
         };
@@ -1639,7 +1719,7 @@ impl Planner {
     }
 
     /// An item chosen from a combo's list: its `SelectedIndexChanged`, when the selection changed.
-    pub fn choose(&mut self, name: &'static str, index: usize, settings: &mut Settings) {
+    pub fn choose(&mut self, name: &'static str, index: usize, settings: &mut Persisted) {
         self.open = None;
         let Some(spec) = COMBOS
             .iter()
@@ -1655,7 +1735,7 @@ impl Planner {
         }
         match name {
             // C#: ConfigPlanner.cs:411-414
-            "CMB_severity" => settings.planner_set("severity", index.to_string()),
+            "CMB_severity" => settings.set("severity", index.to_string()),
             // C#: ConfigPlanner.cs:557-571, 1049-1055
             "CMB_distunits" | "CMB_speedunits" | "CMB_altunits" => {
                 let key = match name {
@@ -1663,16 +1743,16 @@ impl Planner {
                     "CMB_speedunits" => "speedunits",
                     _ => "altunits",
                 };
-                settings.planner_set(key, text);
+                settings.set(key, text);
                 self.change_units(settings);
             }
             // C#: ConfigPlanner.cs:1142-1159
             "cmb_secondarydisplaystyle" => {
-                settings.planner_set("GMapMarkerBase_InactiveDisplayStyle", text);
+                settings.set("GMapMarkerBase_InactiveDisplayStyle", text);
             }
             // C#: ConfigPlanner.cs:1161-1167
             "CMB_mapCache" => {
-                settings.planner_set("mapCache", text);
+                settings.set("mapCache", text);
                 self.effects.push(Effect::MapAccess);
             }
             // C#: ConfigPlanner.cs:573-640
@@ -1684,7 +1764,7 @@ impl Planner {
                 else {
                     return;
                 };
-                settings.planner_set(name, text);
+                settings.set(name, text);
                 let Ok(hz) = text.parse::<i32>() else {
                     return;
                 };
@@ -1697,7 +1777,7 @@ impl Planner {
     }
 
     /// A number box's arrow.
-    pub fn step(&mut self, index: usize, up: bool, settings: &mut Settings) {
+    pub fn step(&mut self, index: usize, up: bool, settings: &mut Persisted) {
         if self.blocked() {
             return;
         }
@@ -1713,7 +1793,7 @@ impl Planner {
         &mut self,
         index: usize,
         event: &KeyDownEvent,
-        settings: &mut Settings,
+        settings: &mut Persisted,
     ) -> bool {
         match event.keystroke.key.as_str() {
             "up" | "down" => {
@@ -1741,7 +1821,7 @@ impl Planner {
     }
 
     /// Once a frame: a number box the focus has left is validated.
-    pub fn tick(&mut self, focused: Option<usize>, settings: &mut Settings) {
+    pub fn tick(&mut self, focused: Option<usize>, settings: &mut Persisted) {
         if let Some(left) = self.focused.filter(|left| Some(*left) != focused)
             && self.numbers.get_mut(left).is_some_and(Number::commit)
         {
@@ -1752,25 +1832,25 @@ impl Planner {
 
     /// A number box's `ValueChanged`.
     /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:688-691, 1057-1061, 1136-1140`
-    fn number_changed(&mut self, index: usize, settings: &mut Settings) {
+    fn number_changed(&mut self, index: usize, settings: &mut Persisted) {
         let Some(value) = self.numbers.get(index).map(Number::value) else {
             return;
         };
         match index {
-            0 => settings.planner_set("NUM_tracklength", decimal_text(value)),
+            0 => settings.set("NUM_tracklength", decimal_text(value)),
             1 => {
                 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                 // `(byte)num_gcsid.Value`, within 1..255
                 let id = value as u8;
                 self.gcssysid = id;
-                settings.planner_set("gcsid", decimal_text(value));
+                settings.set("gcsid", decimal_text(value));
             }
-            _ => settings.planner_set("GMapMarkerBase_length", decimal_text(value)),
+            _ => settings.set("GMapMarkerBase_length", decimal_text(value)),
         }
     }
 
     /// A key in the Log Path box: its `TextChanged` on every change.
-    pub fn log_dir_key(&mut self, event: &KeyDownEvent, settings: &mut Settings) -> bool {
+    pub fn log_dir_key(&mut self, event: &KeyDownEvent, settings: &mut Persisted) -> bool {
         match self.log_dir.key(event) {
             KeyOutcome::Changed => {
                 self.log_dir_changed(settings);
@@ -1782,17 +1862,17 @@ impl Planner {
 
     /// The folder the Browse dialog returned, put in the box.
     /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:778-785`
-    pub fn browsed(&mut self, folder: &Path, settings: &mut Settings) {
+    pub fn browsed(&mut self, folder: &Path, settings: &mut Persisted) {
         self.log_dir.set(folder.display().to_string());
         self.log_dir_changed(settings);
     }
 
     /// `OnLogDirTextChanged`: `LogDir` set to the text when it names a directory that exists.
     /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:787-794`
-    fn log_dir_changed(&self, settings: &mut Settings) {
+    fn log_dir_changed(&self, settings: &mut Persisted) {
         let path = self.log_dir.value();
         if !path.is_empty() && Path::new(path).is_dir() {
-            settings.planner_set("logdirectory", path);
+            settings.set("logdirectory", path);
         }
     }
 
@@ -1833,14 +1913,14 @@ impl Planner {
 /// store has no mode that fetches without caching, so `ServerOnly` is `ServerAndCache` here.
 /// `// C#: Program.cs:321-325; ConfigPlanner.cs:1161-1167`
 #[must_use]
-pub fn cache_only(settings: &Settings) -> bool {
-    settings.planner_get("mapCache") == Some("CacheOnly")
+pub fn cache_only(settings: &Persisted) -> bool {
+    settings.get("mapCache") == Some("CacheOnly")
 }
 
 /// Whether the mission is read when a vehicle connects: `loadwpsonconnect`.
 /// `// C#: MainV2.cs:1750-1759`
 #[must_use]
-pub fn load_wps_on_connect(settings: &Settings) -> bool {
+pub fn load_wps_on_connect(settings: &Persisted) -> bool {
     get_bool(settings, "loadwpsonconnect", false)
 }
 
@@ -1875,15 +1955,12 @@ impl Focus {
 // -------------------------------------------------------------------------------------------------
 
 impl MissionPlanner {
-    /// Runs one of the page's handlers, saves the settings if it changed them, and does what it
-    /// asked for that needs no window; returns the rest.
-    fn planner_apply(&mut self, handler: impl FnOnce(&mut Planner, &mut Settings)) -> Vec<Effect> {
-        let before = self.settings.clone();
-        handler(&mut self.planner, &mut self.settings);
-        if self.settings != before {
-            let saved = self.settings.save();
-            self.planner.saved(saved);
-        }
+    /// Runs one of the page's handlers over `Settings.Instance` and does what it asked for that
+    /// needs no window; returns the rest. What the handler writes is in the dictionary at once and
+    /// in `config.xml` at the next `SaveConfig`, as the C#'s handlers leave it.
+    /// `// C#: ExtLibs/Utilities/Settings.cs:58-61; MainV2.cs:2219-2237`
+    fn planner_apply(&mut self, handler: impl FnOnce(&mut Planner, &mut Persisted)) -> Vec<Effect> {
+        handler(&mut self.planner, &mut self.persisted);
         let mut rest = Vec::new();
         for effect in self.planner.take_effects() {
             match effect {
@@ -1917,7 +1994,7 @@ impl MissionPlanner {
     fn planner_run(
         &mut self,
         cx: &mut Context<Self>,
-        handler: impl FnOnce(&mut Planner, &mut Settings),
+        handler: impl FnOnce(&mut Planner, &mut Persisted),
     ) {
         let rest = self.planner_apply(handler);
         self.planner_window_effects(rest, cx);
@@ -1969,7 +2046,7 @@ impl MissionPlanner {
     /// Once a frame: the number box the focus left is validated.
     pub(crate) fn planner_tick(&mut self, window: &Window) {
         let focused = self.planner_focus.number(window);
-        // Only when the focus has moved: the settings are compared on every handler run.
+        // Only when the focus has moved: otherwise `tick` has nothing to do.
         if !self.planner.is_active() || self.planner.focused == focused {
             return;
         }
@@ -2519,17 +2596,36 @@ fn joystick_window(
 // Facts.
 // -------------------------------------------------------------------------------------------------
 
-/// Facts a UI test asserts on: each settings key the page reads or writes (`config.planner.<key>`,
-/// `none` when unset), each control as it shows (`.check.<Name>` - `hidden` for a box not drawn -,
-/// `.combo.<Name>`, `.number.<Name>`, `.logdir`), what the handlers changed at once (`.units.*`,
-/// `.rates`, `.streams`, `.cacheonly`, `.readmissiononconnect`), and the box or window showing.
-pub fn record_facts(planner: &Planner, settings: &Settings, read_mission_on_connect: bool) {
-    use crate::facts::record;
-    record("config.planner.active", planner.is_active());
-    for key in crate::settings::PLANNER_KEYS {
-        record(
+/// Facts a UI test asserts on: each `Settings.Instance` key the page reads or writes, as the
+/// dictionary holds it (`config.planner.<key>`, `none` when unset), each control as it shows
+/// (`.check.<Name>` - `hidden` for a box not drawn -, `.combo.<Name>`, `.number.<Name>`,
+/// `.logdir`), what the handlers changed at once (`.units.*`, `.rates`, `.streams`, `.cacheonly`,
+/// `.readmissiononconnect`), and the box or window showing. Whether and when the dictionary was
+/// saved is `settings::Persisted`'s to say (`config.saved`, `config.saves`, `config.error`).
+pub fn record_facts(planner: &Planner, settings: &Persisted, read_mission_on_connect: bool) {
+    for (key, value) in facts(planner, settings, read_mission_on_connect).0 {
+        crate::facts::record(key, value);
+    }
+}
+
+/// The facts gathered for [`record_facts`], key and value, in the order they are recorded.
+#[derive(Default)]
+struct Facts(Vec<(String, String)>);
+
+impl Facts {
+    fn record(&mut self, key: impl Into<String>, value: impl std::fmt::Display) {
+        self.0.push((key.into(), value.to_string()));
+    }
+}
+
+/// What [`record_facts`] publishes.
+fn facts(planner: &Planner, settings: &Persisted, read_mission_on_connect: bool) -> Facts {
+    let mut facts = Facts::default();
+    facts.record("config.planner.active", planner.is_active());
+    for key in KEYS {
+        facts.record(
             format!("config.planner.{key}"),
-            settings.planner_get(key).unwrap_or("none"),
+            settings.get(key).unwrap_or("none"),
         );
     }
     for spec in CHECKS {
@@ -2540,38 +2636,38 @@ pub fn record_facts(planner: &Planner, settings: &Settings, read_mission_on_conn
         } else {
             "false"
         };
-        record(format!("config.planner.check.{}", spec.name), state);
+        facts.record(format!("config.planner.check.{}", spec.name), state);
     }
     for spec in COMBOS {
-        record(
+        facts.record(
             format!("config.planner.combo.{}", spec.name),
             planner.combo_text(spec.name),
         );
-        record(
+        facts.record(
             format!("config.planner.combo.{}.items", spec.name),
             spec.items.join(","),
         );
     }
     for (name, ..) in NUMBERS {
-        record(
+        facts.record(
             format!("config.planner.number.{name}"),
             planner.number(name).map_or_else(String::new, decimal_text),
         );
     }
-    record("config.planner.logdir", planner.log_dir());
-    record("config.planner.dimmed", dimmed().join(","));
-    record(
+    facts.record("config.planner.logdir", planner.log_dir());
+    facts.record("config.planner.dimmed", dimmed().join(","));
+    facts.record(
         "config.planner.dropdown",
         planner.dropdown().unwrap_or("none"),
     );
     let units = planner.units();
-    record("config.planner.units.dist", units.dist_unit);
-    record("config.planner.units.alt", units.alt_unit);
-    record("config.planner.units.speed", units.speed_unit);
-    record("config.planner.units.dist.multiplier", units.dist);
-    record("config.planner.units.alt.multiplier", units.alt);
-    record("config.planner.units.speed.multiplier", units.speed);
-    record(
+    facts.record("config.planner.units.dist", units.dist_unit);
+    facts.record("config.planner.units.alt", units.alt_unit);
+    facts.record("config.planner.units.speed", units.speed_unit);
+    facts.record("config.planner.units.dist.multiplier", units.dist);
+    facts.record("config.planner.units.alt.multiplier", units.alt);
+    facts.record("config.planner.units.speed.multiplier", units.speed);
+    facts.record(
         "config.planner.rates",
         planner
             .rates()
@@ -2580,7 +2676,7 @@ pub fn record_facts(planner: &Planner, settings: &Settings, read_mission_on_conn
             .collect::<Vec<_>>()
             .join(","),
     );
-    record(
+    facts.record(
         "config.planner.streams",
         if planner.sent.is_empty() {
             "none".to_owned()
@@ -2593,43 +2689,77 @@ pub fn record_facts(planner: &Planner, settings: &Settings, read_mission_on_conn
                 .join(",")
         },
     );
-    record("config.planner.gcssysid", planner.gcssysid());
-    record("config.planner.cacheonly", cache_only(settings));
-    record(
+    facts.record("config.planner.gcssysid", planner.gcssysid());
+    facts.record("config.planner.cacheonly", cache_only(settings));
+    facts.record(
         "config.planner.readmissiononconnect",
         read_mission_on_connect,
     );
-    record(
+    facts.record(
         "config.planner.prompt",
         planner.prompt().map_or_else(
             || "none".to_owned(),
             |prompt| format!("{}: {}", prompt.step.title, prompt.step.question),
         ),
     );
-    record(
+    facts.record(
         "config.planner.prompt.text",
         planner
             .prompt()
             .map_or_else(String::new, |prompt| prompt.field.value().to_owned()),
     );
-    record(
+    facts.record(
         "config.planner.message",
         planner
             .message()
             .map_or_else(|| "none".to_owned(), |message| message.text.clone()),
     );
-    record("config.planner.joystick", planner.joystick_open());
-    record(
-        "config.planner.saved",
-        planner.save_error.as_deref().unwrap_or("ok"),
-    );
+    facts.record("config.planner.joystick", planner.joystick_open());
+    facts
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings::SaveEvent;
     use crate::telemetry::scripted::{VEHICLE, Vehicle, until};
     use mp_link::ProtocolTimeouts;
+
+    /// A file Mission Planner's `XmlTextWriter` wrote, from `mp-settings`'s fixtures.
+    const CSHARP_FILE: &str = include_str!("../../../mp-settings/tests/fixtures/config.xml");
+
+    /// A directory of its own for one test, removed afterwards.
+    struct Scratch(PathBuf);
+
+    impl Scratch {
+        fn new(name: &str) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "mp-gui-config-planner-{name}-{}",
+                std::process::id()
+            ));
+            let _ = std::fs::remove_dir_all(&path);
+            std::fs::create_dir_all(&path).expect("scratch directory");
+            Self(path)
+        }
+
+        /// Where `config.xml` goes, under a data directory that does not exist yet.
+        fn config(&self) -> PathBuf {
+            self.0.join("Mission Planner").join("config.xml")
+        }
+
+        fn seed(&self, text: &str) -> PathBuf {
+            let path = self.config();
+            std::fs::create_dir_all(path.parent().expect("parent")).expect("data directory");
+            std::fs::write(&path, text).expect("seed config.xml");
+            path
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
 
     fn key(name: &str, character: Option<&str>) -> KeyDownEvent {
         KeyDownEvent {
@@ -2644,7 +2774,7 @@ mod tests {
     }
 
     /// A page activated over these settings, with no log directory on disk.
-    fn activated(settings: &mut Settings) -> Planner {
+    fn activated(settings: &mut Persisted) -> Planner {
         let mut planner = Planner::new(settings);
         planner.activate(settings, None);
         planner
@@ -2658,13 +2788,18 @@ mod tests {
             .expect("an item of the combo")
     }
 
+    /// `Settings.Instance` as the next start reads it: the file, reloaded.
+    fn reload(path: &Path) -> mp_settings::Config {
+        mp_settings::Config::load(path).expect("the saved file reads back")
+    }
+
     #[test]
     fn activating_with_nothing_set_writes_the_severity_and_the_icon_defaults() {
-        let mut settings = Settings::default();
+        let mut settings = Persisted::at(None);
         let planner = activated(&mut settings);
         assert!(planner.is_active());
         // C#: ConfigPlanner.cs:99-103 - Warning, and written.
-        assert_eq!(settings.planner_get("severity"), Some("4"));
+        assert_eq!(settings.get("severity"), Some("4"));
         assert_eq!(planner.combo_text("CMB_severity"), "Warning");
         // C#: ConfigPlanner.cs:238-242 - read with a default of true, ticked from the Designer's
         // unticked, so each handler writes True.
@@ -2675,11 +2810,11 @@ mod tests {
             "GMapMarkerBase_DisplayRadius",
             "GMapMarkerBase_DisplayTarget",
         ] {
-            assert_eq!(settings.planner_get(key), Some("True"), "{key}");
+            assert_eq!(settings.get(key), Some("True"), "{key}");
         }
         // C#: ConfigPlanner.cs:244, 1138 - read under one spelling, written under another.
-        assert_eq!(settings.planner_get("GMapMarkerBase_length"), Some("500"));
-        assert_eq!(settings.planner_get("GMapMarkerBase_Length"), None);
+        assert_eq!(settings.get("GMapMarkerBase_length"), Some("500"));
+        assert_eq!(settings.get("GMapMarkerBase_Length"), None);
         assert_eq!(planner.number("num_linelength"), Some(500.0));
         // The Designer's values for the rest.
         assert_eq!(planner.number("NUM_tracklength"), Some(200.0));
@@ -2707,7 +2842,7 @@ mod tests {
 
     #[test]
     fn activating_reads_every_key_the_csharp_reads() {
-        let mut settings = Settings::default();
+        let mut settings = Persisted::at(None);
         for (key, value) in [
             ("speechenable", "True"),
             ("speechwaypointenabled", "True"),
@@ -2727,7 +2862,7 @@ mod tests {
             ("mapCache", "CacheOnly"),
             ("gcsid", "250"),
         ] {
-            settings.planner_set(key, value);
+            settings.set(key, value);
         }
         let planner = activated(&mut settings);
         assert!(planner.checked("CHK_enablespeech"));
@@ -2752,10 +2887,7 @@ mod tests {
         assert_eq!(planner.combo_text("CMB_rateattitude"), "10");
         assert_eq!(planner.combo_text("CMB_raterc"), "7");
         assert!(!planner.checked("chk_displaycog"));
-        assert_eq!(
-            settings.planner_get("GMapMarkerBase_DisplayCOG"),
-            Some("False")
-        );
+        assert_eq!(settings.get("GMapMarkerBase_DisplayCOG"), Some("False"));
         assert!(planner.checked("chk_displaytooltip"));
         assert_eq!(planner.combo_text("cmb_secondarydisplaystyle"), "Hidden");
         assert_eq!(planner.combo_text("CMB_mapCache"), "CacheOnly");
@@ -2767,8 +2899,8 @@ mod tests {
 
     #[test]
     fn a_rate_not_in_its_list_shows_nothing() {
-        let mut settings = Settings::default();
-        settings.planner_set("CMB_rateposition", "3000");
+        let mut settings = Persisted::at(None);
+        settings.set("CMB_rateposition", "3000");
         let planner = activated(&mut settings);
         assert_eq!(planner.rates()[1], 3000);
         assert_eq!(planner.combo_text("CMB_rateposition"), "");
@@ -2776,7 +2908,8 @@ mod tests {
 
     #[test]
     fn a_unit_combo_writes_its_key_and_changes_the_units_at_once() {
-        let mut settings = Settings::default();
+        let scratch = Scratch::new("units");
+        let mut settings = Persisted::at(Some(scratch.config()));
         let mut planner = activated(&mut settings);
         planner.toggle_dropdown("CMB_altunits");
         assert_eq!(planner.dropdown(), Some("CMB_altunits"));
@@ -2786,7 +2919,7 @@ mod tests {
             &mut settings,
         );
         assert_eq!(planner.dropdown(), None);
-        assert_eq!(settings.planner_get("altunits"), Some("Feet"));
+        assert_eq!(settings.get("altunits"), Some("Feet"));
         assert_eq!(planner.combo_text("CMB_altunits"), "Feet");
         // C#: MainV2.cs:4273-4292 - 3.2808399f and "ft".
         assert_eq!(planner.units().alt_unit, "ft");
@@ -2803,25 +2936,26 @@ mod tests {
             index_of("CMB_speedunits", "kph"),
             &mut settings,
         );
-        assert_eq!(settings.planner_get("distunits"), Some("Feet"));
-        assert_eq!(settings.planner_get("speedunits"), Some("kph"));
+        assert_eq!(settings.get("distunits"), Some("Feet"));
+        assert_eq!(settings.get("speedunits"), Some("kph"));
         assert_eq!(planner.units().dist_unit, "ft");
         assert_eq!(planner.units().speed_unit, "kph");
-        // And the units are what the next start-up sets from the saved settings.
-        let restarted = Planner::new(&Settings::parse(&settings.render()));
+        // And the units are what the next start-up sets, from the file the next save writes.
+        settings.save_config(SaveEvent::FlightData).expect("saved");
+        let restarted = Planner::new(&Persisted::at(Some(scratch.config())));
         assert_eq!(restarted.units(), planner.units());
     }
 
     #[test]
     fn a_rate_writes_its_combos_name_and_asks_for_its_streams() {
-        let mut settings = Settings::default();
+        let mut settings = Persisted::at(None);
         let mut planner = activated(&mut settings);
         planner.choose(
             "CMB_rateattitude",
             index_of("CMB_rateattitude", "10"),
             &mut settings,
         );
-        assert_eq!(settings.planner_get("CMB_rateattitude"), Some("10"));
+        assert_eq!(settings.get("CMB_rateattitude"), Some("10"));
         assert_eq!(planner.rates()[0], 10);
         // C#: ConfigPlanner.cs:582-584 - EXTRA1 then EXTRA2.
         assert_eq!(
@@ -2845,7 +2979,7 @@ mod tests {
         ] {
             planner.choose(combo, index_of(combo, "5"), &mut settings);
             assert_eq!(planner.take_effects(), [Effect::Stream(stream, 5)]);
-            assert_eq!(settings.planner_get(combo), Some("5"));
+            assert_eq!(settings.get(combo), Some("5"));
         }
         assert_eq!(planner.rates(), [10, 5, 5, 5, 25]);
         // The same item again is no change, and no handler.
@@ -2858,7 +2992,7 @@ mod tests {
     #[test]
     fn the_rate_requests_reach_the_vehicle_twice_each() {
         let (telemetry, mut vehicle) = Vehicle::connect(ProtocolTimeouts::default());
-        let mut settings = Settings::default();
+        let mut settings = Persisted::at(None);
         let mut planner = activated(&mut settings);
         planner.choose(
             "CMB_rateattitude",
@@ -2915,31 +3049,31 @@ mod tests {
 
     #[test]
     fn enable_speech_writes_and_shows_the_speech_boxes() {
-        let mut settings = Settings::default();
+        let mut settings = Persisted::at(None);
         let mut planner = activated(&mut settings);
         // Hidden boxes take no clicks.
         planner.click("CHK_speechwaypoint", &mut settings);
         assert!(planner.prompt().is_none());
         planner.click("CHK_enablespeech", &mut settings);
-        assert_eq!(settings.planner_get("speechenable"), Some("True"));
+        assert_eq!(settings.get("speechenable"), Some("True"));
         for name in SPEECH_BOXES {
             assert!(planner.shown(name), "{name}");
         }
         planner.click("CHK_speechArmedOnly", &mut settings);
-        assert_eq!(settings.planner_get("speech_armed_only"), Some("True"));
+        assert_eq!(settings.get("speech_armed_only"), Some("True"));
         planner.click("CHK_enablespeech", &mut settings);
-        assert_eq!(settings.planner_get("speechenable"), Some("False"));
+        assert_eq!(settings.get("speechenable"), Some("False"));
         assert!(!planner.shown("CHK_speechbattery"));
     }
 
     #[test]
     fn a_speech_box_asks_for_its_template_and_writes_the_answer() {
-        let mut settings = Settings::default();
+        let mut settings = Persisted::at(None);
         let mut planner = activated(&mut settings);
         planner.click("CHK_enablespeech", &mut settings);
         planner.click("CHK_speechwaypoint", &mut settings);
         // The enabled key is written before the box asks.
-        assert_eq!(settings.planner_get("speechwaypointenabled"), Some("True"));
+        assert_eq!(settings.get("speechwaypointenabled"), Some("True"));
         let prompt = planner.prompt().expect("the InputBox");
         assert_eq!(prompt.step.title, "Notification");
         assert_eq!(prompt.step.question, "What do you want it to say?");
@@ -2950,12 +3084,12 @@ mod tests {
         assert!(planner.prompt_key(&key("enter", None), &mut settings));
         assert!(planner.prompt().is_none());
         assert_eq!(
-            settings.planner_get("speechwaypoint"),
+            settings.get("speechwaypoint"),
             Some("Heading to Waypoint {wpnx")
         );
         // Unticking writes False and asks nothing.
         planner.click("CHK_speechwaypoint", &mut settings);
-        assert_eq!(settings.planner_get("speechwaypointenabled"), Some("False"));
+        assert_eq!(settings.get("speechwaypointenabled"), Some("False"));
         assert!(planner.prompt().is_none());
         // Ticked again, the box starts from what was saved.
         planner.click("CHK_speechwaypoint", &mut settings);
@@ -2967,13 +3101,13 @@ mod tests {
 
     #[test]
     fn the_battery_warning_asks_three_times_and_a_cancel_ends_it() {
-        let mut settings = Settings::default();
+        let mut settings = Persisted::at(None);
         let mut planner = activated(&mut settings);
         planner.click("CHK_enablespeech", &mut settings);
         planner.click("CHK_speechbattery", &mut settings);
         planner.answer(&mut settings);
         assert_eq!(
-            settings.planner_get("speechbattery"),
+            settings.get("speechbattery"),
             Some("WARNING, Battery at {batv} Volt, {batp} percent")
         );
         let prompt = planner.prompt().expect("the voltage");
@@ -2981,11 +3115,11 @@ mod tests {
         assert_eq!(prompt.field.value(), "9.6");
         planner.cancel();
         assert!(planner.prompt().is_none());
-        assert_eq!(settings.planner_get("speechbatteryvolt"), None);
-        assert_eq!(settings.planner_get("speechbatterypercent"), None);
+        assert_eq!(settings.get("speechbatteryvolt"), None);
+        assert_eq!(settings.get("speechbatterypercent"), None);
         // The box stays ticked and its key True, as the handler wrote it first.
         assert!(planner.checked("CHK_speechbattery"));
-        assert_eq!(settings.planner_get("speechbatteryenabled"), Some("True"));
+        assert_eq!(settings.get("speechbatteryenabled"), Some("True"));
         // All the way through.
         planner.click("CHK_speechbattery", &mut settings);
         planner.click("CHK_speechbattery", &mut settings);
@@ -2993,8 +3127,8 @@ mod tests {
             planner.answer(&mut settings);
         }
         assert!(planner.prompt().is_none());
-        assert_eq!(settings.planner_get("speechbatteryvolt"), Some("9.6"));
-        assert_eq!(settings.planner_get("speechbatterypercent"), Some("20"));
+        assert_eq!(settings.get("speechbatteryvolt"), Some("9.6"));
+        assert_eq!(settings.get("speechbatterypercent"), Some("20"));
     }
 
     #[test]
@@ -3033,7 +3167,7 @@ mod tests {
             ),
         ];
         for (name, answers) in expected {
-            let mut settings = Settings::default();
+            let mut settings = Persisted::at(None);
             let mut planner = activated(&mut settings);
             planner.click("CHK_enablespeech", &mut settings);
             planner.click(name, &mut settings);
@@ -3042,7 +3176,7 @@ mod tests {
                 assert_eq!(prompt.step.key, *key, "{name}");
                 assert_eq!(prompt.field.value(), *default, "{name}");
                 planner.answer(&mut settings);
-                assert_eq!(settings.planner_get(key), Some(*default), "{name}");
+                assert_eq!(settings.get(key), Some(*default), "{name}");
             }
             assert!(planner.prompt().is_none(), "{name}");
         }
@@ -3050,8 +3184,8 @@ mod tests {
 
     #[test]
     fn the_warning_altitude_is_saved_in_metres() {
-        let mut settings = Settings::default();
-        settings.planner_set("altunits", "Feet");
+        let mut settings = Persisted::at(None);
+        settings.set("altunits", "Feet");
         let mut planner = activated(&mut settings);
         planner.click("CHK_enablespeech", &mut settings);
         planner.click("CHK_speechaltwarning", &mut settings);
@@ -3061,10 +3195,7 @@ mod tests {
         planner.answer(&mut settings);
         // C#: ConfigPlanner.cs:683 - 10 / 3.2808399f, as `double.ToString()` writes it.
         let expected = mp_log::netfmt::double(10.0 / f64::from(3.280_84_f32));
-        assert_eq!(
-            settings.planner_get("speechaltheight"),
-            Some(expected.as_str())
-        );
+        assert_eq!(settings.get("speechaltheight"), Some(expected.as_str()));
         assert!(expected.starts_with("3.0479999"), "{expected}");
         // Text that is not a number is `double.Parse`'s FormatException.
         planner.click("CHK_speechaltwarning", &mut settings);
@@ -3080,27 +3211,24 @@ mod tests {
         let message = planner.message().expect("the unhandled exception's box");
         assert_eq!(message.title, "Send Error");
         assert!(message.text.contains("FormatException"), "{}", message.text);
-        assert_eq!(
-            settings.planner_get("speechaltheight"),
-            Some(expected.as_str())
-        );
+        assert_eq!(settings.get("speechaltheight"), Some(expected.as_str()));
         planner.dismiss_message();
         assert!(planner.message().is_none());
     }
 
     #[test]
     fn map_rotation_and_no_fly_untick_each_other() {
-        let mut settings = Settings::default();
+        let mut settings = Persisted::at(None);
         let mut planner = activated(&mut settings);
         assert!(planner.checked("chk_shownofly"));
         planner.click("CHK_maprotation", &mut settings);
-        assert_eq!(settings.planner_get("CHK_maprotation"), Some("True"));
+        assert_eq!(settings.get("CHK_maprotation"), Some("True"));
         assert!(!planner.checked("chk_shownofly"));
-        assert_eq!(settings.planner_get("ShowNoFly"), Some("False"));
+        assert_eq!(settings.get("ShowNoFly"), Some("False"));
         planner.click("chk_shownofly", &mut settings);
-        assert_eq!(settings.planner_get("ShowNoFly"), Some("True"));
+        assert_eq!(settings.get("ShowNoFly"), Some("True"));
         assert!(!planner.checked("CHK_maprotation"));
-        assert_eq!(settings.planner_get("CHK_maprotation"), Some("False"));
+        assert_eq!(settings.get("CHK_maprotation"), Some("False"));
     }
 
     #[test]
@@ -3116,31 +3244,27 @@ mod tests {
             ("chk_slowMachine", "SlowMachine", false),
             ("chk_displayheading", "GMapMarkerBase_DisplayHeading", true),
         ] {
-            let mut settings = Settings::default();
+            let mut settings = Persisted::at(None);
             let mut planner = activated(&mut settings);
             assert_eq!(planner.checked(name), designer, "{name}");
             planner.click(name, &mut settings);
-            assert_eq!(
-                settings.planner_get(key),
-                Some(bool_text(!designer)),
-                "{name}"
-            );
+            assert_eq!(settings.get(key), Some(bool_text(!designer)), "{name}");
         }
     }
 
     #[test]
     fn load_waypoints_on_connect_sets_the_read_on_connect() {
-        let mut settings = Settings::default();
+        let mut settings = Persisted::at(None);
         let mut planner = activated(&mut settings);
         planner.click("CHK_loadwponconnect", &mut settings);
-        assert_eq!(settings.planner_get("loadwpsonconnect"), Some("True"));
+        assert_eq!(settings.get("loadwpsonconnect"), Some("True"));
         assert!(load_wps_on_connect(&settings));
         assert_eq!(planner.take_effects(), [Effect::ReadMissionOnConnect(true)]);
     }
 
     #[test]
     fn the_tooltip_box_asks_for_the_description_or_clears_it() {
-        let mut settings = Settings::default();
+        let mut settings = Persisted::at(None);
         let mut planner = activated(&mut settings);
         planner.click("chk_displaytooltip", &mut settings);
         let prompt = planner.prompt().expect("the description");
@@ -3152,35 +3276,35 @@ mod tests {
         );
         planner.prompt.as_mut().expect("open").field.set("{alt}");
         planner.answer(&mut settings);
-        assert_eq!(settings.planner_get("mapicondesc"), Some("{alt}"));
-        assert_eq!(settings.planner_get("mapicondesc_default"), Some("{alt}"));
+        assert_eq!(settings.get("mapicondesc"), Some("{alt}"));
+        assert_eq!(settings.get("mapicondesc_default"), Some("{alt}"));
         planner.click("chk_displaytooltip", &mut settings);
-        assert_eq!(settings.planner_get("mapicondesc"), Some(""));
-        assert_eq!(settings.planner_get("mapicondesc_default"), Some("{alt}"));
+        assert_eq!(settings.get("mapicondesc"), Some(""));
+        assert_eq!(settings.get("mapicondesc_default"), Some("{alt}"));
     }
 
     #[test]
     fn the_number_boxes_write_on_every_change() {
-        let mut settings = Settings::default();
+        let mut settings = Persisted::at(None);
         let mut planner = activated(&mut settings);
         planner.step(0, true, &mut settings);
-        assert_eq!(settings.planner_get("NUM_tracklength"), Some("300"));
+        assert_eq!(settings.get("NUM_tracklength"), Some("300"));
         // Bounded below at 100.
         for _ in 0..5 {
             planner.step(0, false, &mut settings);
         }
-        assert_eq!(settings.planner_get("NUM_tracklength"), Some("100"));
+        assert_eq!(settings.get("NUM_tracklength"), Some("100"));
         // Typed, and read on Enter.
         planner.numbers[0].field.set("");
         for character in ["1", "2", "3", "4"] {
             planner.number_key(0, &key(character, Some(character)), &mut settings);
         }
-        assert_eq!(settings.planner_get("NUM_tracklength"), Some("100"));
+        assert_eq!(settings.get("NUM_tracklength"), Some("100"));
         planner.number_key(0, &key("enter", None), &mut settings);
-        assert_eq!(settings.planner_get("NUM_tracklength"), Some("1234"));
+        assert_eq!(settings.get("NUM_tracklength"), Some("1234"));
         // The GCS id, and the byte it sets.
         planner.step(1, false, &mut settings);
-        assert_eq!(settings.planner_get("gcsid"), Some("254"));
+        assert_eq!(settings.get("gcsid"), Some("254"));
         assert_eq!(planner.gcssysid(), 254);
         // Typed and left: read as the focus leaves.
         planner.tick(Some(2), &mut settings);
@@ -3189,26 +3313,26 @@ mod tests {
             planner.number_key(2, &key(character, Some(character)), &mut settings);
         }
         planner.tick(None, &mut settings);
-        assert_eq!(settings.planner_get("GMapMarkerBase_length"), Some("70"));
+        assert_eq!(settings.get("GMapMarkerBase_length"), Some("70"));
     }
 
     #[test]
     fn the_severity_and_the_inactive_style_and_access_mode_write_their_keys() {
-        let mut settings = Settings::default();
+        let mut settings = Persisted::at(None);
         let mut planner = activated(&mut settings);
         planner.choose(
             "CMB_severity",
             index_of("CMB_severity", "Debug"),
             &mut settings,
         );
-        assert_eq!(settings.planner_get("severity"), Some("7"));
+        assert_eq!(settings.get("severity"), Some("7"));
         planner.choose(
             "cmb_secondarydisplaystyle",
             index_of("cmb_secondarydisplaystyle", "Transparent"),
             &mut settings,
         );
         assert_eq!(
-            settings.planner_get("GMapMarkerBase_InactiveDisplayStyle"),
+            settings.get("GMapMarkerBase_InactiveDisplayStyle"),
             Some("Transparent")
         );
         planner.choose(
@@ -3216,16 +3340,16 @@ mod tests {
             index_of("CMB_mapCache", "CacheOnly"),
             &mut settings,
         );
-        assert_eq!(settings.planner_get("mapCache"), Some("CacheOnly"));
+        assert_eq!(settings.get("mapCache"), Some("CacheOnly"));
         assert!(cache_only(&settings));
         assert_eq!(planner.take_effects(), [Effect::MapAccess]);
     }
 
     #[test]
     fn a_dimmed_control_does_nothing() {
-        let mut settings = Settings::default();
+        let mut settings = Persisted::at(None);
         let mut planner = activated(&mut settings);
-        let before = settings.clone();
+        let before = settings.config().clone();
         for name in [
             "CHK_GDIPlus",
             "CHK_hudshow",
@@ -3250,7 +3374,7 @@ mod tests {
         for (name, ..) in BUTTONS.iter().filter(|(_, _, _, dim)| dim.is_some()) {
             planner.press(name, Path::new("/"));
         }
-        assert_eq!(settings, before);
+        assert_eq!(settings.config(), &before);
         assert!(planner.take_effects().is_empty());
         assert!(planner.message().is_none());
         assert_eq!(
@@ -3280,10 +3404,10 @@ mod tests {
 
     #[test]
     fn a_dimmed_box_still_shows_its_setting() {
-        let mut settings = Settings::default();
-        settings.planner_set("CHK_GDIPlus", "True");
-        settings.planner_set("hudcolor", "Red");
-        settings.planner_set("theme", "custom.mpsystheme");
+        let mut settings = Persisted::at(None);
+        settings.set("CHK_GDIPlus", "True");
+        settings.set("hudcolor", "Red");
+        settings.set("theme", "custom.mpsystheme");
         let planner = activated(&mut settings);
         assert!(planner.checked("CHK_GDIPlus"));
         assert_eq!(planner.combo_text("CMB_osdcolor"), "Red");
@@ -3294,7 +3418,7 @@ mod tests {
 
     #[test]
     fn the_buttons_open_the_joystick_the_folder_dialog_and_the_cache() {
-        let mut settings = Settings::default();
+        let mut settings = Persisted::at(None);
         let mut planner = activated(&mut settings);
         planner.press("BUT_Joystick", Path::new("/"));
         assert!(planner.joystick_open());
@@ -3318,40 +3442,40 @@ mod tests {
 
     #[test]
     fn the_log_path_is_written_when_it_names_a_directory() {
-        let mut settings = Settings::default();
+        let mut settings = Persisted::at(None);
         let existing = std::env::temp_dir();
         let mut planner = Planner::new(&settings);
         planner.activate(&mut settings, Some(&existing));
         // `TextChanged` from `Activate`'s own assignment.
         assert_eq!(planner.log_dir(), existing.display().to_string());
         assert_eq!(
-            settings.planner_get("logdirectory"),
+            settings.get("logdirectory"),
             Some(existing.display().to_string().as_str())
         );
         // A path that does not exist is not taken.
         planner.browsed(Path::new("/no/such/logs"), &mut settings);
         assert_eq!(planner.log_dir(), "/no/such/logs");
         assert_eq!(
-            settings.planner_get("logdirectory"),
+            settings.get("logdirectory"),
             Some(existing.display().to_string().as_str())
         );
         // Typed back to one that does: taken on the keystroke that makes it.
-        let mut settings = Settings::default();
+        let mut settings = Persisted::at(None);
         let mut planner = Planner::new(&settings);
         planner.activate(&mut settings, None);
         assert_eq!(planner.log_dir(), "");
-        assert_eq!(settings.planner_get("logdirectory"), None);
+        assert_eq!(settings.get("logdirectory"), None);
         for character in ["/", "t", "m", "p"] {
             planner.log_dir_key(&key(character, Some(character)), &mut settings);
         }
         if Path::new("/tmp").is_dir() {
-            assert_eq!(settings.planner_get("logdirectory"), Some("/tmp"));
+            assert_eq!(settings.get("logdirectory"), Some("/tmp"));
         }
     }
 
     #[test]
     fn leaving_the_page_cancels_what_is_open() {
-        let mut settings = Settings::default();
+        let mut settings = Persisted::at(None);
         let mut planner = activated(&mut settings);
         planner.click("chk_displaytooltip", &mut settings);
         assert!(planner.prompt().is_some());
@@ -3361,10 +3485,11 @@ mod tests {
         assert!(!planner.joystick_open());
     }
 
-    /// Every key the page writes is one the settings keep, so none is lost on saving.
+    /// Every key the page writes is one it publishes as `config.planner.<key>`, so a script can
+    /// assert on each - and the dictionary holds nothing else the page did not put there.
     #[test]
-    fn every_key_written_is_a_planner_key() {
-        let mut settings = Settings::default();
+    fn every_key_written_is_one_the_page_publishes() {
+        let mut settings = Persisted::at(None);
         let mut planner = activated(&mut settings);
         for spec in CHECKS {
             planner.click(spec.name, &mut settings);
@@ -3387,13 +3512,312 @@ mod tests {
         for index in 0..NUMBERS.len() {
             planner.step(index, true, &mut settings);
         }
-        for key in settings.planner.keys() {
-            assert!(
-                crate::settings::PLANNER_KEYS.contains(&key.as_str()),
-                "{key} is written but not kept"
-            );
+        for key in settings.config().keys() {
+            assert!(KEYS.contains(&key), "{key} is written but not published");
         }
-        assert!(settings.planner.len() > 50, "{}", settings.planner.len());
+        assert!(settings.config().len() > 50, "{}", settings.config().len());
+    }
+
+    /// `Settings.Instance[key] = ...` puts the key in the dictionary and nothing on disk; the
+    /// next `SaveConfig` writes it with every key the page does not have, as the C# wrote them;
+    /// and the next start reads it back - `MainV2`'s `ChangeUnits`, then `Activate`.
+    /// `// C#: ExtLibs/Utilities/Settings.cs:58-61, 507-550; MainV2.cs:836, 1309-1315`
+    #[test]
+    fn a_change_is_in_the_dictionary_at_once_and_in_config_xml_after_the_next_save() {
+        let scratch = Scratch::new("save");
+        let path = scratch.seed(CSHARP_FILE);
+        let mut settings = Persisted::at(Some(path.clone()));
+        let mut planner = activated(&mut settings);
+        planner.choose(
+            "CMB_distunits",
+            index_of("CMB_distunits", "Feet"),
+            &mut settings,
+        );
+        planner.click("CHK_enablespeech", &mut settings);
+        // `speechcustom`'s default ends in a space. C#: ConfigPlanner.cs:486
+        planner.click("CHK_speechcustom", &mut settings);
+        planner.answer(&mut settings);
+        let custom = "Heading to Waypoint {wpn}, altitude is {alt}, Ground speed is {gsp} ";
+
+        // In the dictionary at once, Activate's own writes with them ...
+        assert_eq!(settings.get("distunits"), Some("Feet"));
+        assert_eq!(settings.get("speechenable"), Some("True"));
+        assert_eq!(settings.get("speechcustom"), Some(custom));
+        assert_eq!(settings.get("severity"), Some("4"));
+        // ... and not on disk: a handler saves nothing.
+        assert_eq!(std::fs::read_to_string(&path).expect("read"), CSHARP_FILE);
+
+        // FLIGHT DATA's SaveConfig writes the whole dictionary.
+        settings.save_config(SaveEvent::FlightData).expect("saved");
+        let saved = reload(&path);
+        for key in KEYS {
+            assert_eq!(saved.get(key), settings.get(key), "{key}");
+        }
+        assert_eq!(saved.get("distunits"), Some("Feet"));
+        assert_eq!(saved.get("speechcustom"), Some(custom));
+        assert_eq!(saved.get("GMapMarkerBase_length"), Some("500"));
+        // Every key of the C#'s file is still there, as it was: none is the page's to change but
+        // `logdirectory`, which names no directory here and so is not written.
+        let before = mp_settings::Config::parse(CSHARP_FILE).expect("parses");
+        for key in before.keys() {
+            assert_eq!(saved.get(key), before.get(key), "{key}");
+        }
+        assert!(saved.len() > before.len());
+
+        // The next start.
+        let mut restarted = Persisted::at(Some(path));
+        let mut planner = Planner::new(&restarted);
+        assert_eq!(planner.units().dist_unit, "ft");
+        planner.activate(&mut restarted, None);
+        assert_eq!(planner.combo_text("CMB_distunits"), "Feet");
+        assert!(planner.checked("CHK_enablespeech"));
+        assert!(planner.checked("CHK_speechcustom"));
+        assert_eq!(restarted.get("speechcustom"), Some(custom));
+    }
+
+    /// The real `config.xml` on this machine, copied: the page activated over it, a unit changed,
+    /// and a save - every key the page does not have is written back as it was read.
+    #[test]
+    fn the_real_config_keeps_every_key_the_page_does_not_have() {
+        let Some(real) = mp_settings::Config::default_path() else {
+            eprintln!("skipped: no home directory");
+            return;
+        };
+        let Ok(text) = std::fs::read_to_string(&real) else {
+            eprintln!("skipped: no Mission Planner config at {}", real.display());
+            return;
+        };
+        let scratch = Scratch::new("real");
+        let path = scratch.seed(&text);
+        let mut settings = Persisted::at(Some(path.clone()));
+        let before = settings.config().clone();
+        let mut planner = activated(&mut settings);
+        planner.choose(
+            "CMB_altunits",
+            index_of("CMB_altunits", "Feet"),
+            &mut settings,
+        );
+        settings.save_config(SaveEvent::FlightData).expect("saved");
+        let after = reload(&path);
+        let mut kept = 0;
+        for key in before.keys().into_iter().filter(|key| !KEYS.contains(key)) {
+            assert_eq!(after.get(key), before.get(key), "{key}");
+            kept += 1;
+        }
+        assert_eq!(after.get("altunits"), Some("Feet"));
+        eprintln!("{kept} keys the page does not have, kept");
+    }
+
+    /// A key with Ctrl held, as `xdotool key ctrl+<key>` sends it.
+    fn chord(name: &str) -> KeyDownEvent {
+        let mut event = key(name, None);
+        event.keystroke.modifiers.control = true;
+        event
+    }
+
+    /// One run of the application under `tests/gui/config-planner.gui`, as the model holds it.
+    struct Run {
+        settings: Persisted,
+        planner: Planner,
+        /// `MissionPlanner::auto_read_mission`.
+        read_mission: bool,
+    }
+
+    impl Run {
+        /// `MissionPlanner::new` on the CONFIG screen with no link: `Settings.Instance` read, what
+        /// `MainV2` takes from it, the start-up save - then the page's `Activate`, which the
+        /// first frame of the CONFIG screen runs.
+        fn start(path: &Path, logs: &Path) -> Self {
+            let mut settings = Persisted::at(Some(path.to_path_buf()));
+            let planner = Planner::new(&settings);
+            let read_mission = load_wps_on_connect(&settings);
+            settings.save_config(SaveEvent::Startup).expect("saved");
+            let mut run = Self {
+                settings,
+                planner,
+                read_mission,
+            };
+            run.planner.activate(&mut run.settings, Some(logs));
+            run
+        }
+
+        /// What `planner_apply` does with a handler's effects, with no vehicle and no map.
+        fn effects(&mut self) {
+            for effect in self.planner.take_effects() {
+                match effect {
+                    Effect::Stream(stream, hz)
+                        if request_datastream(&Telemetry::idle(), stream, hz) > 0 =>
+                    {
+                        self.planner.sent(stream, hz);
+                    }
+                    Effect::ReadMissionOnConnect(on) => self.read_mission = on,
+                    _ => {}
+                }
+            }
+        }
+
+        /// A click on one of the page's controls, by its probe id.
+        fn click(&mut self, id: &str, cache: &Path) {
+            let settings = &mut self.settings;
+            let planner = &mut self.planner;
+            match id {
+                "planner-prompt-ok" => return planner.answer(settings),
+                "planner-prompt-cancel" => return planner.cancel(),
+                "planner-joystick-close" => return planner.close_joystick(),
+                _ => {}
+            }
+            let name = id
+                .strip_prefix("planner-")
+                .unwrap_or_else(|| panic!("{id} is not the page's"));
+            if let Some(spec) = COMBOS.iter().find(|spec| spec.name == name) {
+                planner.toggle_dropdown(spec.name);
+            } else if let Some((spec, index)) = COMBOS.iter().find_map(|spec| {
+                let item = name.strip_prefix(spec.name)?.strip_prefix('-')?;
+                Some((spec, spec.items.iter().position(|text| *text == item)?))
+            }) {
+                planner.choose(spec.name, index, settings);
+            } else if let Some((index, up)) =
+                NUMBERS
+                    .iter()
+                    .enumerate()
+                    .find_map(|(index, (number, ..))| {
+                        let arrow = name.strip_prefix(*number)?.strip_prefix('-')?;
+                        Some((index, arrow == "up"))
+                    })
+            {
+                planner.step(index, up, settings);
+            } else if let Some(spec) = CHECKS.iter().find(|spec| spec.name == name) {
+                planner.click(spec.name, settings);
+            } else if let Some((button, ..)) = BUTTONS.iter().find(|(button, ..)| *button == name) {
+                planner.press(button, cache);
+            } else {
+                panic!("{id} is not a control of the page");
+            }
+        }
+
+        /// What the facts say of `fact`, or `None` for one that is not the page's or the
+        /// dictionary's (the CONFIG screen's own).
+        fn fact(&self, fact: &str) -> Option<String> {
+            if fact.starts_with("config.planner.") {
+                let (_, value) = facts(&self.planner, &self.settings, self.read_mission)
+                    .0
+                    .into_iter()
+                    .find(|(key, _)| key == fact)
+                    .unwrap_or_else(|| panic!("{fact} is not recorded"));
+                return Some(value);
+            }
+            let (saves, saved) = self.settings.saves();
+            match fact {
+                "config.saves" => Some(saves.to_string()),
+                "config.saved" => Some(saved.map_or("none", SaveEvent::label).to_owned()),
+                // Every save the model made was `expect`ed to succeed.
+                "config.error" => Some("none".to_owned()),
+                "config.page" | "config.title" => None,
+                fact => {
+                    let key = fact
+                        .strip_prefix("config.")
+                        .filter(|key| crate::settings::PUBLISHED.contains(key))
+                        .unwrap_or_else(|| panic!("{fact} is not published"));
+                    Some(self.settings.get(key).unwrap_or("none").to_owned())
+                }
+            }
+        }
+    }
+
+    /// `tests/gui/config-planner.gui`, step for step, against the model: the page's handlers over
+    /// a `config.xml` of the script's own, the saves `main.rs` makes - at start-up, on the FLIGHT
+    /// DATA button and on the close box - and the restart. Every fact the script expects of the
+    /// page, of the dictionary and of its saves is what the model publishes at that step, so
+    /// what the script expects after the restart is what the model read back from the file. The
+    /// script runs with a window; this does not.
+    #[test]
+    fn the_gui_script_expects_what_the_model_does() {
+        let script = include_str!("../../../../tests/gui/config-planner.gui");
+        assert!(
+            script
+                .lines()
+                .any(|line| line == "env MP_CONFIG_XML $WORK/config.xml"),
+            "the script has a config.xml of its own"
+        );
+        let scratch = Scratch::new("script");
+        let path = scratch.config();
+        // `env XDG_DATA_HOME $WORK`: a data directory, and so a log directory, that do not exist.
+        let logs = scratch.0.join("Mission Planner").join("logs");
+        let cache = scratch.0.join("gmapcache");
+        let mut run = Run::start(&path, &logs);
+        let (mut checked, mut restarts) = (0, 0);
+        for (number, line) in script.lines().enumerate() {
+            let line = line.split('#').next().unwrap_or("").trim();
+            let at = number + 1;
+            if line == "restart" {
+                // `MainV2_FormClosing` on the CONFIG screen: `SaveConfig`, then a new process.
+                run.settings.save_config(SaveEvent::Close).expect("saved");
+                run = Run::start(&path, &logs);
+                restarts += 1;
+                continue;
+            }
+            let Some((verb, rest)) = line.split_once(' ') else {
+                assert!(line.is_empty(), "line {at}: {line}");
+                continue;
+            };
+            match (verb, rest) {
+                ("screen" | "window" | "env" | "settle", _) => {}
+                // FLIGHT DATA: the page is hidden with its screen, then `SaveConfig`.
+                ("click", "tab-fly") => {
+                    run.planner.deactivate();
+                    run.settings
+                        .save_config(SaveEvent::FlightData)
+                        .expect("saved");
+                }
+                // CONFIG again: the list opens its first page, and `ActivatePage` activates it.
+                ("click", "tab-config") => {
+                    run.planner
+                        .activate(&mut run.settings, Some(logs.as_path()));
+                }
+                ("click", id) => {
+                    run.click(id, &cache);
+                    run.effects();
+                }
+                ("key", key_name) => {
+                    let event = match key_name {
+                        "Return" => key("enter", None),
+                        chorded => chord(
+                            chorded
+                                .strip_prefix("ctrl+")
+                                .unwrap_or_else(|| panic!("line {at}: key {chorded}")),
+                        ),
+                    };
+                    assert!(
+                        run.planner.prompt_key(&event, &mut run.settings),
+                        "line {at}: no box took {key_name}"
+                    );
+                }
+                ("type", text) => {
+                    for character in text.chars() {
+                        let character = character.to_string();
+                        assert!(
+                            run.planner
+                                .prompt_key(&key(&character, Some(&character)), &mut run.settings),
+                            "line {at}: no box took {text}"
+                        );
+                    }
+                }
+                ("expect", rest) => {
+                    let (fact, want) = rest.split_once(' ').expect("expect key value");
+                    let Some(got) = run.fact(fact) else {
+                        continue;
+                    };
+                    match want.strip_prefix("~ ") {
+                        Some(part) => assert!(got.contains(part), "line {at}: {fact} is {got}"),
+                        None => assert_eq!(got, want, "line {at}: {fact}"),
+                    }
+                    checked += 1;
+                }
+                _ => panic!("line {at}: {line} is not modelled"),
+            }
+        }
+        assert_eq!(restarts, 1);
+        assert!(checked > 80, "{checked} facts checked");
     }
 
     /// The layout is the `.resx`'s: every control this page draws is one the C# page has, at
@@ -3523,7 +3947,7 @@ mod tests {
                 (Some("expect"), Some(key)) if key.starts_with("config.planner.") => {
                     let name = &key["config.planner.".len()..];
                     let recorded = source.contains(&format!("\"{key}\""))
-                        || crate::settings::PLANNER_KEYS.contains(&name)
+                        || KEYS.contains(&name)
                         || ["check.", "combo.", "number."].iter().any(|kind| {
                             name.strip_prefix(kind)
                                 .is_some_and(|control| source.contains(&format!("\"{control}\"")))

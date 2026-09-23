@@ -374,6 +374,10 @@ impl MissionPlanner {
             .and_then(|v| v.parse().ok())
             .unwrap_or(0);
 
+        // Mission Planner's config.xml, read once as `Settings.Instance` is, before anything
+        // below reads it: the map's access mode is one of its keys.
+        let mut persisted = settings::Persisted::load();
+
         // Map imagery. Off with MP_NO_TILES, which is how the offline behaviour gets exercised
         // and how a screenshot avoids depending on a tile server being up.
         let mut map = MapViewport::new(track_points, markers);
@@ -389,21 +393,19 @@ impl MissionPlanner {
                 .and_then(|id| mp_tiles::source::source_by_id(&id))
                 .unwrap_or_else(mp_tiles::source::default_source);
             // `mapCache`, the Planner page's Map Access Mode. `// C#: Program.cs:321-325`
-            let store = if std::env::var("MP_OFFLINE").is_ok()
-                || config::planner::cache_only(&settings::Settings::load())
-            {
-                TileStore::offline(source, cache)
-            } else {
-                TileStore::new(source, cache)
-            };
+            let store =
+                if std::env::var("MP_OFFLINE").is_ok() || config::planner::cache_only(&persisted) {
+                    TileStore::offline(source, cache)
+                } else {
+                    TileStore::new(source, cache)
+                };
             map.set_tiles(std::sync::Arc::new(store));
         }
 
-        // Mission Planner's config.xml, read once as `Settings.Instance` is: the home the planning
-        // screen remembers, which `MainV2` reads at start-up, the panel boxes it saved, which
-        // `FlightPlanner_Load` reads, and the quick views `FlightData.Activate` binds. Then the
-        // link opened above, as Connect's `Open` puts its port and host in the dictionary.
-        let mut persisted = settings::Persisted::load();
+        // From Mission Planner's config.xml: the home the planning screen remembers, which
+        // `MainV2` reads at start-up, the panel boxes it saved, which `FlightPlanner_Load` reads,
+        // and the quick views `FlightData.Activate` binds. Then the link opened above, as
+        // Connect's `Open` puts its port and host in the dictionary.
         let mut plan = Plan::default();
         plan.set_planned_home(plan::planned_home_from_config(Some(persisted.config())));
         plan.apply_panel_config(Some(persisted.config()));
@@ -411,14 +413,16 @@ impl MissionPlanner {
         if let Some(url) = &opened {
             persisted.link_opened(url);
         }
+        // The Planner page's keys `MainV2` sets up from before any page shows: the units, the
+        // telemetry rates and the GCS id. `// C#: MainV2.cs:683, 836, 981-1002`
+        let planner = config::planner::Planner::new(&persisted);
 
         let mut this = Self {
             telemetry,
             map: std::rc::Rc::new(std::cell::RefCell::new(map)),
             // `loadwpsonconnect`, the Planner page's Load Waypoints on connect.
             // `// C#: MainV2.cs:1750-1759`
-            auto_read_mission: read_mission
-                || config::planner::load_wps_on_connect(&settings::Settings::load()),
+            auto_read_mission: read_mission || config::planner::load_wps_on_connect(&persisted),
             mission_requested: false,
             screen,
             plan,
@@ -501,7 +505,7 @@ impl MissionPlanner {
             serial_ports: config::serial_ports::SerialPorts::default(),
             esc_calibration: config::esc_calibration::EscCalibration::default(),
             esc_focus: cx.focus_handle(),
-            planner: config::planner::Planner::new(&settings::Settings::load()),
+            planner,
             planner_focus: config::planner::Focus::new(cx),
         };
         // Opening on the planning screen activates it, as switching to it does.
@@ -761,12 +765,13 @@ impl MissionPlanner {
             return;
         }
         let cache = TileCache::new(TileCache::default_root());
-        let store =
-            if std::env::var("MP_OFFLINE").is_ok() || config::planner::cache_only(&self.settings) {
-                TileStore::offline(source, cache)
-            } else {
-                TileStore::new(source, cache)
-            };
+        let store = if std::env::var("MP_OFFLINE").is_ok()
+            || config::planner::cache_only(&self.persisted)
+        {
+            TileStore::offline(source, cache)
+        } else {
+            TileStore::new(source, cache)
+        };
         self.map.borrow_mut().set_tiles(std::sync::Arc::new(store));
         // `Settings.Instance["MapType"] = comboBoxMapType.Text`, saved with the rest later.
         self.persisted.map_type_changed(source);
@@ -1956,7 +1961,7 @@ impl Render for MissionPlanner {
             config::servo_output::record_facts(&self.servo_output, &view);
             config::serial_ports::record_facts(&self.serial_ports, &view);
             config::esc_calibration::record_facts(&self.esc_calibration, &view);
-            config::planner::record_facts(&self.planner, &self.settings, self.auto_read_mission);
+            config::planner::record_facts(&self.planner, &self.persisted, self.auto_read_mission);
             facts::publish();
             // The harness's work, which a normal run does not do, is not the frame's.
             storm::exclude(harness.elapsed());

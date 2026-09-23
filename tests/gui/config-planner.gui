@@ -11,22 +11,38 @@
 # sets the read on connect (MainV2.cs:1750-1759), and Joystick Setup opens the joystick page
 # (:552-555). The dimmed controls - video, theme, language, GDI+ and the rest - do nothing.
 #
+# Settings.Instance is Mission Planner's config.xml, one dictionary: a handler puts its key in it
+# as its control changes, and the file is written whole at the next SaveConfig - never by this
+# page, which saves nothing, but at start-up, on the FLIGHT DATA button and on the close box
+# (MainV2.cs:1107, 1309-1315, 2171). So config.saves stays at the start-up save while the page is
+# used, and the dictionary holds each change at once (config.distunits is the dictionary's own
+# fact, settings.rs's, for the key config.planner.distunits shows); FLIGHT DATA saves; and after
+# `restart` - which closes through the close box, which saves again - the page, and what MainV2
+# sets up from the file before any page shows, are what was read back from it.
+#
 # No link is needed: the rates' stream requests are proved against a scripted vehicle by the unit
 # tests in crates/mp-gui/src/config/planner.rs; here, with no vehicle, none is sent. Mission
-# Planner's own config.xml is kept out of it by pointing the user data directory at a scratch one,
-# so every key starts unset. Run as
+# Planner's own config.xml is kept out of it: the test has a file of its own, which the start-up
+# save creates, and a scratch user data directory, so every key starts unset and there is no log
+# directory. The same unit tests run this script step for step against the model. Run as
 #
 #   tools/gui-test.sh tests/gui/config-planner.gui
 
 screen config
 window 1600x1200
 env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
 settle 4
 
 expect config.page ConfigPlanner
 expect config.title Planner
 expect config.planner.active true
 expect config.planner.dimmed CHK_hudshow,CHK_GDIPlus,CHK_Password,chk_ADSB,chk_analytics,CHK_beta,CHK_mavdebug,chk_temp,CMB_videosources,CMB_videoresolutions,CMB_osdcolor,CMB_language,CMB_theme,CMB_Layout,BUT_videostart,BUT_videostop,BUT_themecustom,BUT_Vario
+
+# SaveConfig ran once, at start-up, before the page was activated.
+expect config.saved startup
+expect config.saves 1
+expect config.error none
 
 # What Activate did with nothing set: Warning chosen and written, the icon's five boxes ticked and
 # written True, the line length read as GMapMarkerBase_Length and written as GMapMarkerBase_length.
@@ -41,10 +57,10 @@ expect config.planner.number.num_gcsid 255
 expect config.planner.combo.CMB_Layout Advanced
 expect config.planner.combo.CMB_mapCache ServerAndCache
 expect config.planner.cacheonly false
-expect config.planner.saved ok
 
 # The units: none set, so the combos show their first items and ChangeUnits gives metres.
 expect config.planner.distunits none
+expect config.distunits none
 expect config.planner.combo.CMB_distunits Meters
 expect config.planner.units.dist m
 expect config.planner.units.alt m
@@ -54,6 +70,7 @@ expect config.planner.dropdown CMB_distunits
 click planner-CMB_distunits-Feet
 expect config.planner.dropdown none
 expect config.planner.distunits Feet
+expect config.distunits Feet
 expect config.planner.combo.CMB_distunits Feet
 expect config.planner.units.dist ft
 expect config.planner.units.alt m
@@ -145,11 +162,19 @@ click planner-BUT_Joystick
 expect config.planner.joystick true
 click planner-joystick-close
 expect config.planner.joystick false
-expect config.planner.saved ok
 
-# Leaving CONFIG and coming back opens the page again, as it was left.
+# Every change is in the dictionary, and none is on disk: the page saved nothing.
+expect config.saves 1
+
+# FLIGHT DATA: the page is hidden with CONFIG, the flight screen shown, and SaveConfig writes
+# config.xml - every change above with it.
 click tab-fly
 expect config.planner.active false
+expect config.saved fly
+expect config.saves 2
+expect config.error none
+
+# Coming back opens the page again, as it was left; CONFIG saves nothing.
 click tab-config
 settle 1
 expect config.page ConfigPlanner
@@ -159,3 +184,65 @@ expect config.planner.combo.CMB_speedunits knots
 expect config.planner.units.alt ft
 expect config.planner.check.CHK_speechwaypoint true
 expect config.planner.check.CHK_maprotation true
+expect config.saves 2
+
+# The close box, and the next start: its start-up save of what it read, then the page.
+restart
+settle 4
+expect config.saved startup
+expect config.saves 1
+expect config.error none
+expect config.page ConfigPlanner
+expect config.planner.active true
+
+# The units, the rates and the read on connect, which MainV2 sets up from the file before any
+# page shows (MainV2.cs:836, 981-1002, 1750-1759), and the combos Activate sets.
+expect config.distunits Feet
+expect config.altunits Feet
+expect config.speedunits knots
+expect config.planner.distunits Feet
+expect config.planner.combo.CMB_distunits Feet
+expect config.planner.combo.CMB_altunits Feet
+expect config.planner.combo.CMB_speedunits knots
+expect config.planner.units.dist ft
+expect config.planner.units.alt ft
+expect config.planner.units.speed kts
+expect config.planner.CMB_rateattitude 10
+expect config.planner.rates 10,2,2,2,2
+expect config.planner.combo.CMB_rateattitude 10
+expect config.planner.loadwpsonconnect True
+expect config.planner.readmissiononconnect true
+expect config.planner.check.CHK_loadwponconnect true
+
+# What Activate wrote the first time is still there.
+expect config.planner.severity 4
+expect config.planner.combo.CMB_severity Warning
+expect config.planner.GMapMarkerBase_length 500
+
+# Speech, with the templates answered and the battery warning's cancelled question.
+expect config.planner.speechenable True
+expect config.planner.check.CHK_enablespeech true
+expect config.planner.speechwaypointenabled True
+expect config.planner.check.CHK_speechwaypoint true
+expect config.planner.speechwaypoint Heading to Waypoint {wpn}
+expect config.planner.speechmode Now in {mode}
+expect config.planner.speechbatteryenabled True
+expect config.planner.check.CHK_speechbattery true
+expect config.planner.speechbattery WARNING, Battery at {batv} Volt, {batp} percent
+expect config.planner.speechbatteryvolt none
+
+# The map boxes, the track length, the inactive style and the access mode.
+expect config.planner.CHK_maprotation True
+expect config.planner.check.CHK_maprotation true
+expect config.planner.ShowNoFly False
+expect config.planner.check.chk_shownofly false
+expect config.planner.NUM_tracklength 300
+expect config.planner.number.NUM_tracklength 300
+expect config.planner.GMapMarkerBase_InactiveDisplayStyle Transparent
+expect config.planner.combo.cmb_secondarydisplaystyle Transparent
+expect config.planner.mapCache CacheOnly
+expect config.planner.combo.CMB_mapCache CacheOnly
+expect config.planner.cacheonly true
+
+# A dimmed box's key was never written.
+expect config.planner.CHK_GDIPlus none
