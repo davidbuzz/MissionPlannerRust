@@ -18,4 +18,4 @@ type 1
 key Return
 expect mission.items 3
 expect mission.commands 16,82,16
-expect mission.selected 1
+expect mission.selected 2

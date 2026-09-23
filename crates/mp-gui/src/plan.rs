@@ -11,6 +11,7 @@
 use gpui::{AnyElement, Context, div, prelude::*, px, rgb};
 use mp_mavlink_dialects::all::MavCmd;
 use mp_mission::fence::{FenceItem, RallyPoint};
+use mp_mission::rows::Home;
 use mp_mission::validate::{Context as ValidationContext, validate_with};
 use mp_mission::{GridOptions, MissionItem, Severity, grid};
 use mp_units::LatLon;
@@ -252,10 +253,15 @@ impl DrawMode {
 /// The mission being edited, separate from the vehicle's.
 #[derive(Debug, Default)]
 pub struct Plan {
+    /// The rows of the `Commands` grid: waypoint 1 onwards, numbered from 1.
+    ///
+    /// Home is not one of them. Mission Planner keeps home in the Home Location boxes and puts it
+    /// back at item 0 only when a mission is written, so the first thing clicked on an empty map
+    /// is waypoint 1 and never home. See `mp_mission::rows`.
     items: Vec<MissionItem>,
     /// Where the current contents came from, for the header line.
     origin: Origin,
-    /// The item the operator has selected, if any.
+    /// The row the operator has selected, by its number, if any.
     selected: Option<u16>,
     /// What a click on the map does.
     draw_mode: DrawMode,
@@ -273,14 +279,113 @@ pub struct Plan {
     fence_error: Option<String>,
     /// Why the last survey could not be generated, if it could not.
     survey_error: Option<String>,
-    /// Whether item 0 is the home record, as it is in a mission read from a vehicle or a file.
-    ///
-    /// Mission Planner keeps home out of its `Commands` grid, so every map-menu edit that counts
-    /// rows - insert after waypoint n, reverse, clear - counts from the item after it. A plan
-    /// drawn here from nothing has no home record: its first item is the first click, and so the
-    /// first row. See `mp_mission::rows`.
-    home_first: bool,
+    /// The Home Location boxes, `TXT_homelat`, `TXT_homelng` and `TXT_homealt`: home, as the
+    /// planning screen holds it and every write takes it.
+    home: HomeBoxes,
+    /// `cs.PlannedHomeLocation`: the home the operator set, which the boxes show when the vehicle
+    /// has not sent one. Every edit of a box that parses writes through to it.
+    planned_home: Home,
 }
+
+/// Which of the three Home Location boxes.
+///
+/// `// C#: GCSViews/FlightPlanner.Designer.cs:320-372; GCSViews/FlightPlanner.resx (panel1)`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HomeBox {
+    /// `TXT_homelat`, labelled "Lat".
+    Lat,
+    /// `TXT_homelng`, labelled "Long".
+    Lng,
+    /// `TXT_homealt`, labelled "ASL".
+    Alt,
+}
+
+impl HomeBox {
+    /// The three, top to bottom as `panel1` stacks them.
+    pub const ALL: [Self; 3] = [Self::Lat, Self::Lng, Self::Alt];
+
+    /// The label beside the box: `Label1`, `label2` and `label3` in the `.resx`.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Lat => "Lat",
+            Self::Lng => "Long",
+            Self::Alt => "ASL",
+        }
+    }
+
+    /// The id a test script clicks it by.
+    #[must_use]
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Lat => "plan-home-lat",
+            Self::Lng => "plan-home-lng",
+            Self::Alt => "plan-home-alt",
+        }
+    }
+}
+
+/// The three boxes' text, which is what home is on this screen until something parses it.
+#[derive(Debug)]
+pub struct HomeBoxes {
+    lat: TextField,
+    lng: TextField,
+    alt: TextField,
+}
+
+impl HomeBoxes {
+    const fn get(&self, which: HomeBox) -> &TextField {
+        match which {
+            HomeBox::Lat => &self.lat,
+            HomeBox::Lng => &self.lng,
+            HomeBox::Alt => &self.alt,
+        }
+    }
+
+    const fn get_mut(&mut self, which: HomeBox) -> &mut TextField {
+        match which {
+            HomeBox::Lat => &mut self.lat,
+            HomeBox::Lng => &mut self.lng,
+            HomeBox::Alt => &mut self.alt,
+        }
+    }
+}
+
+impl Default for HomeBoxes {
+    /// Empty, as the `.resx` leaves them: no home until one is typed, set or sent.
+    fn default() -> Self {
+        Self {
+            lat: TextField::new(""),
+            lng: TextField::new(""),
+            alt: TextField::new(""),
+        }
+    }
+}
+
+/// `double.ToString()`: the shortest text that reads back as the same number, which is what the
+/// C# puts in a box when it sets one from a number.
+#[must_use]
+pub fn double_text(value: f64) -> String {
+    format!("{value}")
+}
+
+/// `ToString("0.00")`: two decimals, the half rounded away from zero as .NET's custom formats do.
+#[must_use]
+pub fn two_decimals(value: f64) -> String {
+    let rounded = (value * 100.0).round() / 100.0;
+    format!("{rounded:.2}")
+}
+
+/// `Strings.ERROR`.
+pub const ERROR: &str = "Error";
+/// What `BUT_write_Click` says when the Home Location boxes do not parse.
+/// `// C#: GCSViews/FlightPlanner.cs:670`
+pub const HOME_INVALID: &str = "Your home location is invalid";
+/// What the Home Location link says without a GPS position to take.
+/// `// C#: GCSViews/FlightPlanner.cs:4297-4298`
+pub const HOME_NEEDS_A_FIX: &str = "If you're at the field, connect to your APM and wait for GPS lock. Then click 'Home Location' link to set home to your location";
+/// `MAV_AUTOPILOT_ARDUPILOTMEGA`: the one autopilot `saveWPs` puts home in front for.
+pub const MAV_AUTOPILOT_ARDUPILOTMEGA: u8 = 3;
 
 /// Where the plan on screen came from.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -308,13 +413,13 @@ impl Origin {
 }
 
 impl Plan {
-    /// The items, in sequence order.
+    /// The rows of the grid, in order: waypoint 1 onwards. Home is not among them.
     #[must_use]
     pub fn items(&self) -> &[MissionItem] {
         &self.items
     }
 
-    /// Whether anything is planned.
+    /// Whether the grid has no rows. Home may still be set.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
@@ -326,7 +431,7 @@ impl Plan {
         &self.origin
     }
 
-    /// The selected item's sequence number.
+    /// The selected row's number.
     #[must_use]
     pub const fn selected(&self) -> Option<u16> {
         self.selected
@@ -337,22 +442,200 @@ impl Plan {
         self.selected = seq;
     }
 
-    /// Replaces the plan with what the vehicle reported.
-    pub fn adopt_from_vehicle(&mut self, items: Vec<MissionItem>) {
-        // A vehicle's list starts with home: `getHomePosition` is item 0 in every download.
-        self.home_first = !items.is_empty();
-        self.items = items;
+    /// Replaces the rows with what the vehicle reported, and returns its home if the operator is
+    /// to be asked whether to take it (see [`Plan::home_offer`]).
+    ///
+    /// `getWPs` hands the download to `processToScreen` whole, home and all, and item 0 leaves the
+    /// grid there as it does for a file.
+    /// `// C#: GCSViews/FlightPlanner.cs:1351-1373, 3978-4032`
+    pub fn adopt_from_vehicle(&mut self, items: &[MissionItem]) -> Option<Home> {
         self.origin = Origin::Vehicle;
-        self.selected = None;
+        self.adopt(items)
     }
 
-    /// Replaces the plan with the contents of a file.
-    pub fn adopt_from_file(&mut self, name: impl Into<String>, items: Vec<MissionItem>) {
-        // `read_waypoints` inserts a blank home when a file lacks one, so a file always has it.
-        self.home_first = !items.is_empty();
-        self.items = items;
+    /// Replaces the rows with the contents of a file, and returns its home if the operator is to
+    /// be asked whether to take it.
+    ///
+    /// `ReadWaypointFile` inserts a blank home when a file does not start at 0, so item 0 is
+    /// always home by the time `processToScreen` sees the list.
+    /// `// C#: GCSViews/FlightPlanner.cs:990-1010; ExtLibs/Utilities/MissionFile.cs:47-52`
+    pub fn adopt_from_file(
+        &mut self,
+        name: impl Into<String>,
+        items: &[MissionItem],
+    ) -> Option<Home> {
         self.origin = Origin::File(name.into());
+        self.adopt(items)
+    }
+
+    /// `processToScreen` for a mission, not appended: the grid replaced by everything after item
+    /// 0, and item 0 offered to the Home Location boxes.
+    /// `// C#: GCSViews/FlightPlanner.cs:5496-5676`
+    fn adopt(&mut self, items: &[MissionItem]) -> Option<Home> {
+        let (home, rows) = mp_mission::rows::split_home(items);
+        self.items = rows;
         self.selected = None;
+        home.and_then(|home| self.home_offer(&home))
+    }
+
+    /// Whether a mission's item 0 is to be offered as home, and if so the home it offers:
+    /// "Reset Home to loaded coords", asked when its latitude, as the grid cell shows it, is
+    /// neither what `TXT_homelat` holds nor `"0"`.
+    ///
+    /// Only the latitude is compared, as the C# compares it. The altitude the offer carries is
+    /// the grid cell's, which holds `Locationwp.alt` - a `float`.
+    /// `// C#: GCSViews/FlightPlanner.cs:5640-5660`
+    #[must_use]
+    pub fn home_offer(&self, item: &MissionItem) -> Option<Home> {
+        let lat = double_text(item.x);
+        if lat == self.home_text(HomeBox::Lat) || lat == "0" {
+            return None;
+        }
+        #[allow(clippy::cast_possible_truncation)] // `Locationwp.alt` is a float
+        let alt = f64::from(item.z as f32);
+        Some(Home {
+            lat: item.x,
+            lng: item.y,
+            alt,
+        })
+    }
+
+    /// Yes to "Reset Home to loaded coords": the boxes take the loaded home, each through its
+    /// `TextChanged`.
+    /// `// C#: GCSViews/FlightPlanner.cs:5650-5657`
+    pub fn reset_home_to(&mut self, loaded: Home) {
+        self.set_home_text(HomeBox::Lat, double_text(loaded.lat));
+        self.set_home_text(HomeBox::Lng, double_text(loaded.lng));
+        self.set_home_text(HomeBox::Alt, two_decimals(loaded.alt));
+    }
+
+    /// One of the Home Location boxes.
+    #[must_use]
+    pub fn home_field(&self, which: HomeBox) -> &TextField {
+        self.home.get(which)
+    }
+
+    /// What one of the Home Location boxes holds.
+    #[must_use]
+    pub fn home_text(&self, which: HomeBox) -> &str {
+        self.home_field(which).value()
+    }
+
+    /// Sets a box as `TXT_home*.Text = ...` does, which raises its `TextChanged` when the text is
+    /// different.
+    pub fn set_home_text(&mut self, which: HomeBox, text: String) {
+        if self.home_text(which) == text {
+            return;
+        }
+        self.home.get_mut(which).set(text);
+        self.home_text_changed(which);
+    }
+
+    /// A key pressed in one of the boxes, and its `TextChanged` when it changed the text.
+    pub fn home_key(
+        &mut self,
+        which: HomeBox,
+        event: &gpui::KeyDownEvent,
+    ) -> crate::textfield::KeyOutcome {
+        let outcome = self.home.get_mut(which).key(event);
+        if outcome == crate::textfield::KeyOutcome::Changed {
+            self.home_text_changed(which);
+        }
+        outcome
+    }
+
+    /// `TXT_homelat_TextChanged` and its two siblings: the planned home takes the box's number,
+    /// or keeps what it had when the text does not parse. (Each also clears `sethome`, which
+    /// belongs to `TXT_homelat_Enter` and is not ported, and redraws the map, which the caller
+    /// does.)
+    /// `// C#: GCSViews/FlightPlanner.cs:7001-7050`
+    fn home_text_changed(&mut self, which: HomeBox) {
+        let Some(value) = mp_mission::rows::parse_number(self.home_text(which)) else {
+            return;
+        };
+        match which {
+            HomeBox::Lat => self.planned_home.lat = value,
+            HomeBox::Lng => self.planned_home.lng = value,
+            HomeBox::Alt => self.planned_home.alt = value,
+        }
+    }
+
+    /// Home as a write takes it: the three boxes parsed, or `None` - "Your home location is
+    /// invalid" - when any one does not.
+    /// `// C#: GCSViews/FlightPlanner.cs:658-671`
+    #[must_use]
+    pub fn home(&self) -> Option<Home> {
+        Home::parse(
+            self.home_text(HomeBox::Lat),
+            self.home_text(HomeBox::Lng),
+            self.home_text(HomeBox::Alt),
+        )
+    }
+
+    /// `cs.PlannedHomeLocation`.
+    #[cfg(test)]
+    #[must_use]
+    pub const fn planned_home(&self) -> Home {
+        self.planned_home
+    }
+
+    /// Sets the planned home without touching the boxes, as `MainV2` does at start-up from the
+    /// saved settings; the boxes show it when the planning screen is next activated.
+    pub fn set_planned_home(&mut self, home: Home) {
+        self.planned_home = home;
+    }
+
+    /// `updateHomeText`, which `Activate` runs each time the planning screen is shown: the boxes
+    /// take the vehicle's home if it has sent one, else the planned home if there is one, and
+    /// are left as they are otherwise. Setting them runs their `TextChanged`, so a vehicle's home
+    /// becomes the planned home too.
+    /// `// C#: GCSViews/FlightPlanner.cs:1344-1349, 7195-7218`
+    pub fn update_home_text(&mut self, vehicle: Option<Home>) {
+        let chosen = match vehicle {
+            Some(home) if home.is_set() => home,
+            _ if self.planned_home.is_set() => self.planned_home,
+            _ => return,
+        };
+        self.set_home_text(HomeBox::Lat, double_text(chosen.lat));
+        self.set_home_text(HomeBox::Lng, double_text(chosen.lng));
+        self.set_home_text(HomeBox::Alt, two_decimals(chosen.alt));
+    }
+
+    /// The Home Location link, `label4_LinkClicked`: home is where the vehicle is, at its
+    /// altitude above sea level - or, with no position, the C#'s advice about getting one. (It
+    /// then zooms to home, which is `zoomToHomeToolStripMenuItem`'s and not ported.)
+    /// `// C#: GCSViews/FlightPlanner.cs:4283-4300`
+    pub fn home_from_vehicle(
+        &mut self,
+        vehicle: Option<(LatLon, f64)>,
+    ) -> Result<(), &'static str> {
+        let Some((position, altasl)) = vehicle.filter(|(position, _)| position.latitude() != 0.0)
+        else {
+            return Err(HOME_NEEDS_A_FIX);
+        };
+        self.set_home_text(HomeBox::Alt, two_decimals(altasl));
+        self.set_home_text(HomeBox::Lat, double_text(position.latitude()));
+        self.set_home_text(HomeBox::Lng, double_text(position.longitude()));
+        Ok(())
+    }
+
+    /// What Write sends the vehicle: home from the boxes at item 0 on an ArduPilot, then the rows;
+    /// or "Your home location is invalid", and nothing sent, when the boxes do not parse. That is
+    /// checked first, whatever the autopilot.
+    /// `// C#: GCSViews/FlightPlanner.cs:646-671, 6196-6227`
+    pub fn vehicle_mission(&self, ardupilot: bool) -> Result<Vec<MissionItem>, &'static str> {
+        let home = self.home().ok_or(HOME_INVALID)?;
+        Ok(mp_mission::rows::upload_list(
+            ardupilot.then_some(home),
+            &self.items,
+        ))
+    }
+
+    /// What Save File writes: the `.waypoints` text with home at record 0 and the rows after it.
+    /// `// C#: GCSViews/FlightPlanner.cs:6108-6160`
+    #[must_use]
+    pub fn waypoints_file(&self) -> String {
+        mp_mission::waypoints::write_planned(self.home(), &self.items)
     }
 
     /// Appends a waypoint at a position.
@@ -408,9 +691,6 @@ impl Plan {
 
     /// Removes an item.
     pub fn remove(&mut self, seq: u16) {
-        if seq == 0 {
-            self.home_first = false;
-        }
         self.items.retain(|item| item.seq != seq);
         self.renumber();
         self.origin = Origin::Edited;
@@ -437,13 +717,10 @@ impl Plan {
         if target >= self.items.len() {
             return;
         }
-        if index == 0 || target == 0 {
-            self.home_first = false;
-        }
         self.items.swap(index, target);
         self.renumber();
         self.origin = Origin::Edited;
-        self.selected = u16::try_from(target).ok();
+        self.selected = self.items.get(target).map(|item| item.seq);
     }
 
     /// Changes an item's altitude by a step, clamped so a held button cannot run away.
@@ -508,10 +785,10 @@ impl Plan {
         self.origin = Origin::Edited;
     }
 
-    /// Discards everything, including the survey area and the fence.
+    /// Discards everything, including the survey area and the fence - but not home, which is the
+    /// Home Location boxes' and not the mission's.
     pub fn clear(&mut self) {
         self.items.clear();
-        self.home_first = false;
         self.origin = Origin::Empty;
         self.selected = None;
         self.polygon.clear();
@@ -765,7 +1042,6 @@ impl Plan {
                     })
                     .collect();
                 self.renumber();
-                self.home_first = false;
                 self.origin = Origin::Edited;
                 self.selected = None;
                 self.survey_error = None;
@@ -774,21 +1050,9 @@ impl Plan {
         }
     }
 
-    /// Renumbers items 0..n so the sequence has no gaps.
+    /// Numbers the rows 1..n, as the grid's headers read, so the sequence has no gaps.
     fn renumber(&mut self) {
-        mp_mission::rows::renumber(&mut self.items);
-    }
-
-    /// Whether item 0 is the home record rather than the first row.
-    #[must_use]
-    pub const fn home_first(&self) -> bool {
-        self.home_first
-    }
-
-    /// Where the C#'s `Commands` rows start in the list: after home, when there is one.
-    #[must_use]
-    pub fn first_row(&self) -> usize {
-        usize::from(self.home_first && !self.items.is_empty())
+        mp_mission::rows::number_rows(&mut self.items);
     }
 
     /// The altitude a new item gets: the stand-in for `TXT_DefaultAlt`.
@@ -820,33 +1084,28 @@ impl Plan {
     /// `selectedrow = int.Parse(wpno)` makes it.
     /// `// C#: GCSViews/FlightPlanner.cs:4070-4091`
     pub fn insert_after(&mut self, wpno: &str, item: MissionItem) -> Result<u16, ()> {
-        let index =
-            mp_mission::rows::insert_index(self.items.len(), self.first_row(), wpno).ok_or(())?;
+        let index = mp_mission::rows::insert_index(self.items.len(), wpno).ok_or(())?;
         self.items.insert(index, item);
         self.renumber();
         self.origin = Origin::Edited;
-        let seq = u16::try_from(index).unwrap_or(u16::MAX);
+        let seq = self.items.get(index).map_or(u16::MAX, |item| item.seq);
         self.selected = Some(seq);
         Ok(seq)
     }
 
-    /// The number Insert Wp offers, `(selectedrow + 1)`: straight after the selected item.
+    /// The number Insert Wp offers, `(selectedrow + 1)`: straight after the selected row.
     #[must_use]
     pub fn insert_offer(&self) -> usize {
-        mp_mission::rows::insert_offer(
-            self.items.len(),
-            self.first_row(),
-            self.selected.map(usize::from),
-        )
+        let selected_row = self
+            .selected
+            .and_then(|seq| self.items.iter().position(|item| item.seq == seq));
+        mp_mission::rows::insert_offer(self.items.len(), selected_row)
     }
 
-    /// Delete WP on the marker under the cursor. Home is not a row, so `Commands.Rows.RemoveAt`
-    /// is never reached for it, and it stays.
+    /// Delete WP on the marker under the cursor: `Commands.Rows.RemoveAt(no - 1); // home is 0`.
+    /// Only rows have markers here, so home is never the one under it.
     /// `// C#: GCSViews/FlightPlanner.cs:3118-3135`
     pub fn delete_marker(&mut self, seq: u16) -> bool {
-        if self.home_first && seq == 0 {
-            return false;
-        }
         if !self.items.iter().any(|item| item.seq == seq) {
             return false;
         }
@@ -854,20 +1113,18 @@ impl Plan {
         true
     }
 
-    /// Clear Mission: every row, and home stays.
+    /// Clear Mission: `Commands.Rows.Clear()`. Every row goes; home, not being one, stays.
     /// `// C#: GCSViews/FlightPlanner.cs:2064-2082`
     pub fn clear_mission(&mut self) {
-        let first_row = self.first_row();
-        mp_mission::rows::clear(&mut self.items, first_row);
+        self.items.clear();
         self.selected = None;
         self.origin = Origin::Edited;
     }
 
-    /// Reverse WPs: the rows turned round, home first still.
+    /// Reverse WPs: every row taken from the end and added again, so the grid is reversed.
     /// `// C#: GCSViews/FlightPlanner.cs:5840-5858`
     pub fn reverse_waypoints(&mut self) {
-        let first_row = self.first_row();
-        mp_mission::rows::reverse(&mut self.items, first_row);
+        self.items.reverse();
         self.renumber();
         self.selected = None;
         self.origin = Origin::Edited;
@@ -889,8 +1146,7 @@ impl Plan {
         } else {
             (1.0, altdif.trim().parse::<f32>().map_err(|_| ())?)
         };
-        let first_row = self.first_row();
-        for item in self.items.iter_mut().skip(first_row) {
+        for item in &mut self.items {
             // The C# does this in float: `float.Parse(cell) * multiplyer + altchange`.
             #[allow(clippy::cast_possible_truncation)] // the C#'s float arithmetic, on purpose
             let altitude = item.z as f32;
@@ -925,11 +1181,10 @@ impl Plan {
     /// question to answer - the caller asks it.
     /// `// C#: GCSViews/FlightPlanner.cs:3619-3637`
     pub fn polygon_from_waypoints(&mut self) -> bool {
-        let first_row = self.first_row();
-        if self.items.len() <= first_row {
+        if self.items.is_empty() {
             return false;
         }
-        self.polygon = mp_mission::rows::waypoint_positions(&self.items, first_row);
+        self.polygon = mp_mission::rows::waypoint_positions(&self.items);
         self.survey_error = None;
         true
     }
@@ -1995,9 +2250,8 @@ pub fn actions_panel(
                         "write to vehicle",
                         theme::WARN,
                         has_vehicle && has_items,
-                        cx.listener(|this, _event: &(), _window, cx| {
-                            this.telemetry.upload_mission(this.plan.items().to_vec());
-                            cx.notify();
+                        cx.listener(|this, _event: &(), window, cx| {
+                            write_to_vehicle(this, window, cx);
                         }),
                     ))
                     .child(action(
@@ -2015,8 +2269,12 @@ pub fn actions_panel(
                         "load file",
                         theme::TEXT,
                         true,
-                        cx.listener(|this, _event: &(), _window, cx| {
+                        cx.listener(|this, _event: &(), window, cx| {
                             this.load_plan();
+                            // Reading a file whose home differs from the boxes asks about it.
+                            if this.plan_menus.prompt.is_some() {
+                                this.plan_prompt_focus.focus(window, cx);
+                            }
                             cx.notify();
                         }),
                     ))
@@ -2073,6 +2331,184 @@ pub fn actions_panel(
                 progress(status.fraction, colour)
             })),
     )
+}
+
+// ---------------------------------------------------------------------------------------------
+// Home: the Home Location panel, and what the rest of the application tells it.
+// ---------------------------------------------------------------------------------------------
+
+/// The vehicle's home, `cs.HomeLocation`, once it has sent `HOME_POSITION`.
+///
+/// **The altitude is a stand-in.** The C# takes `home.altitude / 1000.0` from `HOME_POSITION`
+/// (`MAVLinkInterface.cs:5703-5707`), and `VehicleState` in this tree keeps only the message's
+/// position. Until it keeps the altitude too, this takes the one ArduPilot's own
+/// `GLOBAL_POSITION_INT` implies - `alt` above sea level less `relative_alt` above home - which is
+/// the same number on an ArduPilot that has a home. Swap it for the state's home altitude when
+/// there is one.
+#[must_use]
+pub fn vehicle_home(view: &TelemetryView) -> Option<Home> {
+    let state = view.state.as_ref()?;
+    let home = state.home?;
+    Some(Home {
+        lat: home.latitude(),
+        lng: home.longitude(),
+        alt: state.altitude_msl.0 - state.altitude_relative.0,
+    })
+}
+
+/// The planned home `MainV2` starts with: `TXT_homelat`, `TXT_homelng` and `TXT_homealt` from
+/// Mission Planner's `config.xml`, where the planning screen saves its boxes, each `GetDouble` -
+/// 0 when absent or unreadable - and no home at all if the position is off the globe.
+/// `// C#: MainV2.cs:1012-1025; ExtLibs/Utilities/Settings.cs:245-254; GCSViews/FlightPlanner.cs:2576-2578`
+#[must_use]
+pub fn planned_home_from_config(config: Option<&mp_settings::Config>) -> Home {
+    let Some(config) = config else {
+        return Home::default();
+    };
+    let get = |key: &str| {
+        config
+            .get(key)
+            .and_then(mp_mission::rows::parse_number)
+            .unwrap_or(0.0)
+    };
+    let home = Home {
+        lat: get("TXT_homelat"),
+        lng: get("TXT_homelng"),
+        alt: get("TXT_homealt"),
+    };
+    // "remove invalid entrys"
+    if home.lat.abs() > 90.0 || home.lng.abs() > 180.0 {
+        return Home::default();
+    }
+    home
+}
+
+/// `FlightPlanner.Activate`'s `updateHome()`, run each time the planning screen is shown.
+/// `// C#: GCSViews/FlightPlanner.cs:321, 1344-1349`
+pub fn activate(this: &mut MissionPlanner) {
+    let vehicle = vehicle_home(&this.telemetry.view());
+    this.plan.update_home_text(vehicle);
+}
+
+/// Write: `BUT_write_Click`'s home check, then `saveWPs`' list - home from the boxes at item 0
+/// when the vehicle is an ArduPilot - or "Your home location is invalid" and nothing sent.
+/// `// C#: GCSViews/FlightPlanner.cs:646-671, 6196-6227`
+fn write_to_vehicle(
+    this: &mut MissionPlanner,
+    window: &mut gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) {
+    let ardupilot = this
+        .telemetry
+        .view()
+        .state
+        .as_ref()
+        .is_some_and(|state| state.autopilot == MAV_AUTOPILOT_ARDUPILOTMEGA);
+    match this.plan.vehicle_mission(ardupilot) {
+        Ok(items) => this.telemetry.upload_mission(items),
+        Err(why) => {
+            this.plan_menus.say(ERROR, why);
+            this.plan_prompt_focus.focus(window, cx);
+        }
+    }
+    cx.notify();
+}
+
+/// The Home Location link, `label4_LinkClicked`.
+/// `// C#: GCSViews/FlightPlanner.cs:4283-4300`
+fn home_link_clicked(
+    this: &mut MissionPlanner,
+    window: &mut gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) {
+    let view = this.telemetry.view();
+    let vehicle = view.state.as_ref().and_then(|state| {
+        state
+            .position
+            .map(|position| (position, state.altitude_msl.0))
+    });
+    if let Err(why) = this.plan.home_from_vehicle(vehicle) {
+        this.plan_menus.say("", why);
+        this.plan_prompt_focus.focus(window, cx);
+    }
+    cx.notify();
+}
+
+/// The Home Location boxes' focus handles, top to bottom, and which one has the keyboard.
+pub struct HomeFocus<'a> {
+    /// One per box, in [`HomeBox::ALL`] order.
+    pub handles: &'a [gpui::FocusHandle; 3],
+    /// Whether each has focus.
+    pub focused: [bool; 3],
+}
+
+/// The Home Location panel, `panel1`: the link that takes the vehicle's position, and the three
+/// boxes home is typed into, Lat, Long and ASL, one under the other with their labels to the
+/// left - as the `.resx` places them, below the Read and Write buttons.
+/// `// C#: GCSViews/FlightPlanner.resx (panel1, label4, Label1-3, TXT_homelat/lng/alt)`
+pub fn home_panel(
+    plan: &Plan,
+    focus: &HomeFocus<'_>,
+    cx: &mut Context<MissionPlanner>,
+) -> impl IntoElement {
+    let link = crate::probe::measured("plan-home-link", div())
+        .id("plan-home-link")
+        .text_xs()
+        .text_color(rgb(theme::ACCENT))
+        .underline()
+        .cursor_pointer()
+        .child("Home Location")
+        .on_click(cx.listener(|this, _event, window, cx| {
+            home_link_clicked(this, window, cx);
+        }));
+
+    let mut boxes = div().flex().flex_col().gap_1();
+    for (index, which) in HomeBox::ALL.into_iter().enumerate() {
+        let (Some(handle), Some(focused)) =
+            (focus.handles.get(index), focus.focused.get(index).copied())
+        else {
+            continue;
+        };
+        boxes = boxes.child(
+            div()
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(
+                    div()
+                        .w(px(36.0))
+                        .text_xs()
+                        .text_color(rgb(theme::DIM))
+                        .child(which.label()),
+                )
+                .child(crate::textfield::text_field(
+                    which.id(),
+                    plan.home_field(which),
+                    handle,
+                    focused,
+                    px(160.0),
+                    cx.listener(move |this, event: &gpui::KeyDownEvent, _window, cx| {
+                        if this.plan.home_key(which, event) == crate::textfield::KeyOutcome::Ignored
+                        {
+                            return;
+                        }
+                        cx.notify();
+                    }),
+                )),
+        );
+    }
+
+    crate::probe::measured("panel:Home Location", div())
+        .flex()
+        .flex_col()
+        .gap_2()
+        .p_3()
+        .bg(rgb(theme::PANEL))
+        .border_1()
+        .border_color(rgb(theme::BORDER))
+        .rounded_md()
+        .child(link)
+        .child(boxes)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -2684,6 +3120,9 @@ pub enum PromptKind {
     ModifyAlt,
     /// From Current Waypoints' "Clear current waypoints?", Yes or No.
     ClearWaypoints,
+    /// `processToScreen`'s "Reset Home to loaded coords", Yes or No, with the home a mission
+    /// just read carries at item 0.
+    ResetHome(Home),
     /// A message with an OK.
     Message,
 }
@@ -2736,12 +3175,13 @@ impl Prompt {
     /// Whether this asks Yes or No.
     #[must_use]
     pub const fn is_question(&self) -> bool {
-        matches!(self.kind, PromptKind::ClearWaypoints)
+        matches!(
+            self.kind,
+            PromptKind::ClearWaypoints | PromptKind::ResetHome(_)
+        )
     }
 }
 
-/// `Strings.ERROR`.
-const ERROR: &str = "Error";
 /// `Strings.InvalidNumberEntered`, without the resource's trailing newline.
 const INVALID_NUMBER: &str = "Invalid number entered";
 
@@ -2857,6 +3297,25 @@ impl PlanMenus {
 
     fn tell(&mut self, title: &'static str, text: impl Into<String>) {
         self.prompt = Some(Prompt::message(title, text));
+    }
+
+    /// A `CustomMessageBox.Show(text, title)` from the screen rather than the menu: a write the
+    /// Home Location boxes refused, the Home Location link without a position.
+    pub fn say(&mut self, title: &'static str, text: impl Into<String>) {
+        self.tell(title, text);
+    }
+
+    /// Asks "Reset Home to loaded coords", as `processToScreen` does when a mission it has just
+    /// read carries a home at item 0 that the boxes do not hold. Yes puts it in the boxes; No
+    /// leaves them.
+    /// `// C#: GCSViews/FlightPlanner.cs:5645-5658`
+    pub fn offer_home_reset(&mut self, loaded: Home) {
+        self.ask(Prompt {
+            title: "Reset Home Coords",
+            text: "Reset Home to loaded coords".to_owned(),
+            field: None,
+            kind: PromptKind::ResetHome(loaded),
+        });
     }
 
     /// Chooses an entry: what its handler does, up to the first `InputBox` it shows.
@@ -3083,6 +3542,7 @@ impl PlanMenus {
                 }
             }
             PromptKind::ClearWaypoints => plan.clear_mission(),
+            PromptKind::ResetHome(loaded) => plan.reset_home_to(loaded),
             PromptKind::Message => {}
         }
     }
@@ -3557,6 +4017,37 @@ pub fn overlays(
         .collect()
 }
 
+/// What a `.waypoints` text holds, for the facts: every record's `seq:frame:command`, and record
+/// 0's latitude, longitude and altitude as the file has them.
+#[must_use]
+pub fn written_facts(file: &str) -> (String, String) {
+    let records: Vec<Vec<&str>> = file
+        .lines()
+        .skip(1)
+        .map(|line| line.split('\t').collect())
+        .collect();
+    fn field<'a>(fields: &[&'a str], index: usize) -> &'a str {
+        fields.get(index).copied().unwrap_or("")
+    }
+    let summary = records
+        .iter()
+        .map(|fields| {
+            format!(
+                "{}:{}:{}",
+                field(fields, 0),
+                field(fields, 2),
+                field(fields, 3)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    let home = records
+        .first()
+        .and_then(|fields| fields.get(8..11))
+        .map_or_else(String::new, |position| position.join(","));
+    (summary, home)
+}
+
 /// Facts a UI test asserts on for this screen: what the mission holds, item by item, and what the
 /// menu and its dialogs are doing.
 pub fn record_facts(plan: &Plan, menus: &PlanMenus) {
@@ -3570,7 +4061,21 @@ pub fn record_facts(plan: &Plan, menus: &PlanMenus) {
             .collect::<Vec<_>>()
             .join(","),
     );
-    record("mission.home", plan.home_first());
+    // Home: whether the Home Location boxes hold one a write would take, and what they hold.
+    record("mission.home", plan.home().is_some());
+    record(
+        "plan.home",
+        HomeBox::ALL
+            .iter()
+            .map(|which| plan.home_text(*which))
+            .collect::<Vec<_>>()
+            .join(","),
+    );
+    // What Save File would write, read from the text it would write, so a test proves home is
+    // item 0 and the first row item 1 on the path the product takes.
+    let (written, written_home) = written_facts(&plan.waypoints_file());
+    record("mission.written", written);
+    record("mission.written.home", written_home);
     record(
         "mission.selected",
         plan.selected()
@@ -3712,18 +4217,19 @@ mod tests {
             );
         }
 
-        let text = mp_mission::write_waypoints(plan.items());
+        let text = plan.waypoints_file();
         assert!(
             text.lines()
-                .skip(1)
+                .skip(2)
                 .all(|line| line.split('\t').nth(2) == Some("10")),
-            "the terrain frame should be column three of every row:\n{text}"
+            "the terrain frame should be column three of every row after home:\n{text}"
         );
 
         let read = mp_mission::read_waypoints(&text).expect("our own output must parse");
-        assert_eq!(read.len(), plan.items().len());
+        let (_, rows) = mp_mission::rows::split_home(&read);
+        assert_eq!(rows.len(), plan.items().len());
         assert!(
-            read.iter().all(|item| item.frame == FRAME_TERRAIN),
+            rows.iter().all(|item| item.frame == FRAME_TERRAIN),
             "the frame did not survive the round trip"
         );
     }
@@ -3851,7 +4357,8 @@ mod tests {
         assert_eq!(plan.items().len(), 3);
         for (index, (latitude, longitude)) in points.iter().enumerate() {
             let item = &plan.items()[index];
-            assert_eq!(u16::try_from(index).unwrap_or(0), item.seq, "sequence");
+            // Waypoint 1 is the first click: the grid numbers from 1, because home is 0.
+            assert_eq!(u16::try_from(index + 1).unwrap_or(0), item.seq, "sequence");
             assert!((item.x - latitude).abs() < 1e-9, "latitude of item {index}");
             assert!(
                 (item.y - longitude).abs() < 1e-9,
@@ -3874,14 +4381,15 @@ mod tests {
         assert_eq!(plan.origin().label(), "empty");
     }
 
+    /// The rows are numbered as the grid's headers read, from 1: home is 0 and is not a row.
     #[test]
-    fn waypoints_are_numbered_from_zero_without_gaps() {
+    fn waypoints_are_numbered_from_one_without_gaps() {
         let mut plan = Plan::default();
         for n in 0..4 {
             plan.add_waypoint(at(-35.36 + f64::from(n) * 0.001, 149.16), 50.0);
         }
         let seqs: Vec<u16> = plan.items().iter().map(|i| i.seq).collect();
-        assert_eq!(seqs, vec![0, 1, 2, 3]);
+        assert_eq!(seqs, vec![1, 2, 3, 4]);
     }
 
     #[test]
@@ -3892,9 +4400,9 @@ mod tests {
         for n in 0..4 {
             plan.add_waypoint(at(-35.36 + f64::from(n) * 0.001, 149.16), 50.0);
         }
-        plan.remove(1);
+        plan.remove(2);
         let seqs: Vec<u16> = plan.items().iter().map(|i| i.seq).collect();
-        assert_eq!(seqs, vec![0, 1, 2]);
+        assert_eq!(seqs, vec![1, 2, 3]);
         assert_eq!(plan.items().len(), 3);
     }
 
@@ -3915,13 +4423,14 @@ mod tests {
         plan.add_waypoint(at(-35.361, 149.16), 50.0);
         plan.add_waypoint(at(-35.362, 149.16), 50.0);
 
-        plan.move_item(2, -1);
+        plan.move_item(3, -1);
 
         let latitudes: Vec<f64> = plan.items().iter().map(|i| i.x).collect();
         assert!((latitudes[1] - -35.362).abs() < 1e-9, "{latitudes:?}");
         assert!((latitudes[2] - -35.361).abs() < 1e-9, "{latitudes:?}");
         let seqs: Vec<u16> = plan.items().iter().map(|i| i.seq).collect();
-        assert_eq!(seqs, vec![0, 1, 2]);
+        assert_eq!(seqs, vec![1, 2, 3]);
+        assert_eq!(plan.selected(), Some(2), "the moved row stays selected");
     }
 
     #[test]
@@ -3930,8 +4439,8 @@ mod tests {
         plan.add_waypoint(at(-35.36, 149.16), 50.0);
         plan.add_waypoint(at(-35.37, 149.16), 50.0);
 
-        plan.move_item(0, -1);
-        plan.move_item(1, 1);
+        plan.move_item(1, -1);
+        plan.move_item(2, 1);
 
         let latitudes: Vec<f64> = plan.items().iter().map(|i| i.x).collect();
         assert!((latitudes[0] - -35.36).abs() < 1e-9, "{latitudes:?}");
@@ -3951,7 +4460,7 @@ mod tests {
         // The header line is the only thing telling the operator that what they see is not what
         // the aircraft holds, so it has to change the instant an edit happens.
         let mut plan = Plan::default();
-        plan.adopt_from_vehicle(vec![]);
+        let _ = plan.adopt_from_vehicle(&[]);
         assert_eq!(*plan.origin(), Origin::Vehicle);
         plan.add_waypoint(at(-35.36, 149.16), 50.0);
         assert_eq!(*plan.origin(), Origin::Edited);
@@ -3960,7 +4469,7 @@ mod tests {
     #[test]
     fn a_loaded_plan_names_its_file() {
         let mut plan = Plan::default();
-        plan.adopt_from_file("survey.waypoints", vec![]);
+        let _ = plan.adopt_from_file("survey.waypoints", &[]);
         assert_eq!(plan.origin().label(), "loaded from survey.waypoints");
     }
 
@@ -3968,8 +4477,8 @@ mod tests {
     fn adopting_clears_a_stale_selection() {
         let mut plan = Plan::default();
         plan.add_waypoint(at(-35.36, 149.16), 50.0);
-        plan.select(Some(0));
-        plan.adopt_from_vehicle(vec![]);
+        plan.select(Some(1));
+        let _ = plan.adopt_from_vehicle(&[]);
         assert_eq!(plan.selected(), None);
     }
 
@@ -4001,7 +4510,7 @@ mod tests {
         plan.add_waypoint(at(-35.36, 149.16), 50.0);
         plan.add_waypoint(at(-35.37, 149.16), 50.0);
 
-        plan.nudge_altitude(1, 10.0);
+        plan.nudge_altitude(2, 10.0);
 
         assert!((plan.items()[0].z - 50.0).abs() < 1e-9);
         assert!((plan.items()[1].z - 60.0).abs() < 1e-9);
@@ -4012,7 +4521,7 @@ mod tests {
         let mut plan = Plan::default();
         plan.add_waypoint(at(-35.36, 149.16), 50.0);
         for _ in 0..500 {
-            plan.nudge_altitude(0, 10.0);
+            plan.nudge_altitude(1, 10.0);
         }
         assert!((plan.items()[0].z - MAX_STEPPED_ALTITUDE).abs() < 1e-9);
     }
@@ -4023,7 +4532,7 @@ mod tests {
         // ground station deciding it knows the terrain better than the operator.
         let mut plan = Plan::default();
         plan.add_waypoint(at(-35.36, 149.16), 5.0);
-        plan.nudge_altitude(0, -10.0);
+        plan.nudge_altitude(1, -10.0);
         assert!(plan.items()[0].z < 0.0);
     }
 
@@ -4034,7 +4543,7 @@ mod tests {
         // has no intention of visiting.
         let mut plan = Plan::default();
         plan.add_waypoint(at(-35.36, 149.16), 50.0);
-        plan.set_command(0, CMD_RTL);
+        plan.set_command(1, CMD_RTL);
         assert!((plan.items()[0].x).abs() < f64::EPSILON);
         assert!((plan.items()[0].y).abs() < f64::EPSILON);
         assert_eq!(plan.items()[0].command, CMD_RTL);
@@ -4044,7 +4553,7 @@ mod tests {
     fn changing_to_a_positioned_command_keeps_the_coordinates() {
         let mut plan = Plan::default();
         plan.add_waypoint(at(-35.36, 149.16), 50.0);
-        plan.set_command(0, 22);
+        plan.set_command(1, 22);
         assert!((plan.items()[0].x - -35.36).abs() < 1e-9);
         assert_eq!(plan.items()[0].command, 22);
     }
@@ -4052,8 +4561,8 @@ mod tests {
     #[test]
     fn editing_an_item_marks_the_plan_as_no_longer_the_vehicles() {
         let mut plan = Plan::default();
-        plan.adopt_from_vehicle(vec![MissionItem {
-            seq: 0,
+        let _ = plan.adopt_from_vehicle(&downloaded(&[MissionItem {
+            seq: 1,
             current: 0,
             frame: FRAME_RELATIVE,
             command: CMD_WAYPOINT,
@@ -4065,8 +4574,9 @@ mod tests {
             y: 149.16,
             z: 50.0,
             autocontinue: 1,
-        }]);
-        plan.nudge_altitude(0, 10.0);
+        }]));
+        assert_eq!(*plan.origin(), Origin::Vehicle);
+        plan.nudge_altitude(1, 10.0);
         assert_eq!(*plan.origin(), Origin::Edited);
     }
 
@@ -4283,7 +4793,7 @@ mod tests {
     fn dragging_a_waypoint_moves_only_its_position() {
         let mut plan = Plan::default();
         plan.add_waypoint(at(-35.36, 149.16), 75.0);
-        plan.move_to(0, at(-35.37, 149.17));
+        plan.move_to(1, at(-35.37, 149.17));
 
         let item = &plan.items()[0];
         assert!((item.x - -35.37).abs() < 1e-9);
@@ -4300,8 +4810,8 @@ mod tests {
         // vehicle has no intention of visiting.
         let mut plan = Plan::default();
         plan.add_waypoint(at(-35.36, 149.16), 50.0);
-        plan.set_command(0, CMD_RTL);
-        plan.move_to(0, at(-35.37, 149.17));
+        plan.set_command(1, CMD_RTL);
+        plan.move_to(1, at(-35.37, 149.17));
 
         assert!((plan.items()[0].x).abs() < f64::EPSILON);
         assert!((plan.items()[0].y).abs() < f64::EPSILON);
@@ -4311,9 +4821,9 @@ mod tests {
     fn dragging_marks_the_plan_as_no_longer_the_vehicles() {
         let mut plan = Plan::default();
         plan.add_waypoint(at(-35.36, 149.16), 50.0);
-        plan.adopt_from_vehicle(plan.items().to_vec());
+        let _ = plan.adopt_from_vehicle(&downloaded(plan.items()));
         assert_eq!(*plan.origin(), Origin::Vehicle);
-        plan.move_to(0, at(-35.37, 149.17));
+        plan.move_to(1, at(-35.37, 149.17));
         assert_eq!(*plan.origin(), Origin::Edited);
     }
 
@@ -4529,7 +5039,7 @@ mod tests {
     fn setting_a_parameter_changes_only_that_one() {
         let mut plan = Plan::default();
         plan.add_waypoint(at(-35.36, 149.16), 50.0);
-        plan.set_param(0, 0, 12.0);
+        plan.set_param(1, 0, 12.0);
 
         assert!((plan.items()[0].param1 - 12.0).abs() < f64::EPSILON);
         assert!(plan.items()[0].param2.abs() < f64::EPSILON);
@@ -4547,20 +5057,20 @@ mod tests {
         for index in 0..4 {
             #[allow(clippy::cast_precision_loss)]
             let value = (index + 1) as f64;
-            plan.set_param(0, index, value);
-            assert!((plan.param(0, index).expect("a value") - value).abs() < f64::EPSILON);
+            plan.set_param(1, index, value);
+            assert!((plan.param(1, index).expect("a value") - value).abs() < f64::EPSILON);
         }
         // Out of range is ignored rather than wrapping onto another parameter.
-        plan.set_param(0, 9, 99.0);
-        assert!(plan.param(0, 9).is_none());
+        plan.set_param(1, 9, 99.0);
+        assert!(plan.param(1, 9).is_none());
     }
 
     #[test]
     fn editing_a_parameter_marks_the_plan_as_no_longer_the_vehicles() {
         let mut plan = Plan::default();
         plan.add_waypoint(at(-35.36, 149.16), 50.0);
-        plan.adopt_from_vehicle(plan.items().to_vec());
-        plan.set_param(0, 0, 5.0);
+        let _ = plan.adopt_from_vehicle(&downloaded(plan.items()));
+        plan.set_param(1, 0, 5.0);
         assert_eq!(*plan.origin(), Origin::Edited);
     }
 
@@ -4568,11 +5078,17 @@ mod tests {
     fn clearing_resets_everything() {
         let mut plan = Plan::default();
         plan.add_waypoint(at(-35.36, 149.16), 50.0);
-        plan.select(Some(0));
+        plan.select(Some(1));
+        plan.set_home_text(HomeBox::Lat, "-35.36".to_owned());
         plan.clear();
         assert!(plan.is_empty());
         assert_eq!(plan.selected(), None);
         assert_eq!(*plan.origin(), Origin::Empty);
+        assert_eq!(
+            plan.home_text(HomeBox::Lat),
+            "-35.36",
+            "home is the boxes', not the mission's"
+        );
     }
 
     // ---- The map menu: each entry against its C# handler ----
@@ -4593,19 +5109,27 @@ mod tests {
         }
     }
 
-    /// A plan as it arrives from a vehicle: home at 580 m absolute, then two waypoints at 100.
+    /// The home the vehicle in these tests has: 580 m above sea level.
+    const VEHICLE_HOME: Home = Home {
+        lat: -35.36,
+        lng: 149.16,
+        alt: 580.0,
+    };
+
+    /// Rows as a vehicle sends them back: its home at item 0, then the rows from 1.
+    fn downloaded(rows: &[MissionItem]) -> Vec<MissionItem> {
+        mp_mission::rows::upload_list(Some(VEHICLE_HOME), rows)
+    }
+
+    /// A plan as it arrives from a vehicle, the operator having said Yes to its home: home at
+    /// 580 m in the boxes, and two waypoints at 100 in the grid.
     fn from_vehicle() -> Plan {
-        let mut items = vec![
-            MissionItem {
-                frame: FRAME_ABSOLUTE,
-                ..cmd::waypoint(at(-35.36, 149.16), 580.0, FRAME_ABSOLUTE)
-            },
+        let mut plan = Plan::default();
+        let offer = plan.adopt_from_vehicle(&downloaded(&[
             cmd::waypoint(at(-35.361, 149.161), 100.0, FRAME_RELATIVE),
             cmd::waypoint(at(-35.362, 149.162), 100.0, FRAME_RELATIVE),
-        ];
-        mp_mission::rows::renumber(&mut items);
-        let mut plan = Plan::default();
-        plan.adopt_from_vehicle(items);
+        ]));
+        plan.reset_home_to(offer.expect("empty boxes are offered the vehicle's home"));
         plan
     }
 
@@ -4670,23 +5194,24 @@ mod tests {
         let mut plan = from_vehicle();
         let mut menus = PlanMenus::default();
         choose(&mut plan, &mut menus, MenuAction::DeleteWp, Some(1));
-        assert_eq!(plan.items().len(), 2);
+        assert_eq!(plan.items().len(), 1);
         assert!(
-            (plan.items()[1].x - -35.362).abs() < 1e-9,
+            (plan.items()[0].x - -35.362).abs() < 1e-9,
             "the second waypoint moved up"
         );
-        assert_eq!(plan.items()[1].seq, 1);
+        assert_eq!(plan.items()[0].seq, 1, "and is waypoint 1 now");
         assert!(menus.open.is_none(), "choosing closes the menu");
     }
 
-    /// Home is not a row, so Delete WP over it does nothing.
+    /// Home is not a row, so Delete WP never reaches it: nothing is numbered 0, and the boxes
+    /// keep home.
     #[test]
-    fn delete_wp_over_home_leaves_it() {
+    fn delete_wp_never_reaches_home() {
         let mut plan = from_vehicle();
         let mut menus = PlanMenus::default();
         choose(&mut plan, &mut menus, MenuAction::DeleteWp, Some(0));
-        assert_eq!(plan.items().len(), 3);
-        assert!(plan.home_first());
+        assert_eq!(plan.items().len(), 2);
+        assert_eq!(plan.home(), Some(VEHICLE_HOME));
     }
 
     /// Insert Wp offers the number after the selected waypoint, and accepting it puts a WAYPOINT
@@ -4702,8 +5227,8 @@ mod tests {
         assert_eq!(prompt.text, "Insert WP after wp#");
         assert_eq!(prompt.value(), "1", "(selectedrow + 1): after waypoint 1");
         menus.submit(&mut plan, &context());
-        assert_eq!(commands(&plan), vec![16, 16, 16, 16]);
-        let inserted = plan.items()[2];
+        assert_eq!(commands(&plan), vec![16, 16, 16]);
+        let inserted = plan.items()[1];
         assert_eq!(inserted.position(), Ok(Some(canberra())));
         assert!((inserted.z - 100.0).abs() < 1e-9, "the default altitude");
         assert_eq!(inserted.frame, FRAME_RELATIVE);
@@ -4718,12 +5243,13 @@ mod tests {
         choose(&mut plan, &mut menus, MenuAction::InsertWp, None);
         assert_eq!(menus.prompt.as_ref().map(Prompt::value), Some("2"));
         answer(&mut plan, &mut menus, "0");
-        assert_eq!(plan.items().len(), 4);
+        assert_eq!(plan.items().len(), 3);
         assert_eq!(
-            plan.items()[1].position(),
+            plan.items()[0].position(),
             Ok(Some(canberra())),
-            "0 is after home"
+            "0 is after home: waypoint 1"
         );
+        assert_eq!(plan.items()[0].seq, 1);
     }
 
     /// A number `Rows.Insert` would throw on is refused in the C#'s words, and nothing changes.
@@ -4733,7 +5259,7 @@ mod tests {
         let mut menus = PlanMenus::default();
         choose(&mut plan, &mut menus, MenuAction::InsertWp, None);
         answer(&mut plan, &mut menus, "9");
-        assert_eq!(plan.items().len(), 3);
+        assert_eq!(plan.items().len(), 2);
         let message = menus.prompt.as_ref().expect("a message");
         assert_eq!(message.title, "Error");
         assert_eq!(message.text, "Invalid insert position");
@@ -4747,11 +5273,11 @@ mod tests {
         let mut menus = PlanMenus::default();
         choose(&mut plan, &mut menus, MenuAction::InsertSplineWp, None);
         answer(&mut plan, &mut menus, "1");
-        assert_eq!(commands(&plan), vec![16, 16, 82, 16]);
+        assert_eq!(commands(&plan), vec![16, 82, 16]);
 
         choose(&mut plan, &mut menus, MenuAction::InsertSplineWp, None);
         answer(&mut plan, &mut menus, "x");
-        assert_eq!(plan.items().len(), 4);
+        assert_eq!(plan.items().len(), 3);
         assert_eq!(
             menus.prompt.as_ref().map(|prompt| prompt.text.as_str()),
             Some("Invalid number entered")
@@ -4812,7 +5338,7 @@ mod tests {
         choose(&mut plan, &mut menus, MenuAction::LoiterTime, None);
         menus.cancel();
         assert!(menus.prompt.is_none());
-        assert_eq!(plan.items().len(), 3);
+        assert_eq!(plan.items().len(), 2);
     }
 
     /// Jump > Start jumps to item 1 the number of times asked, offering 5.
@@ -4861,7 +5387,7 @@ mod tests {
         let mut menus = PlanMenus::default();
         choose(&mut plan, &mut menus, MenuAction::JumpStart, None);
         answer(&mut plan, &mut menus, "lots");
-        assert_eq!(plan.items().len(), 3);
+        assert_eq!(plan.items().len(), 2);
         assert_eq!(
             menus.prompt.as_ref().map(|prompt| prompt.text.as_str()),
             Some("Invalid number entered")
@@ -4943,7 +5469,7 @@ mod tests {
         let mut menus = PlanMenus::default();
         choose(&mut plan, &mut menus, MenuAction::Takeoff, None);
         answer(&mut plan, &mut menus, "10.5");
-        assert_eq!(plan.items().len(), 3);
+        assert_eq!(plan.items().len(), 2);
         assert_eq!(
             menus.prompt.as_ref().map(|prompt| prompt.text.as_str()),
             Some("Bad Alt")
@@ -4990,15 +5516,15 @@ mod tests {
         assert!((item.z - 100.0).abs() < 1e-9);
     }
 
-    /// Clear Mission empties the rows and keeps home.
+    /// Clear Mission empties the rows and keeps home, which is not one of them.
     #[test]
     fn clear_mission_keeps_home() {
         let mut plan = from_vehicle();
         let mut menus = PlanMenus::default();
         choose(&mut plan, &mut menus, MenuAction::ClearMission, None);
-        assert_eq!(plan.items().len(), 1);
-        assert!((plan.items()[0].z - 580.0).abs() < 1e-9);
-        // A plan drawn here has no home record, so everything goes.
+        assert!(plan.is_empty());
+        assert_eq!(plan.home(), Some(VEHICLE_HOME));
+        // A plan drawn here has rows only, and they all go.
         let mut drawn = Plan::default();
         drawn.add_waypoint(canberra(), 50.0);
         drawn.add_waypoint(canberra(), 50.0);
@@ -5006,16 +5532,19 @@ mod tests {
         assert!(drawn.is_empty());
     }
 
-    /// Reverse WPs turns the rows round and keeps home first.
+    /// Reverse WPs turns the rows round; home is still what is written first.
     #[test]
-    fn reverse_wps_keeps_home_first() {
+    fn reverse_wps_turns_the_rows_round_and_home_stays_first() {
         let mut plan = from_vehicle();
         let mut menus = PlanMenus::default();
         choose(&mut plan, &mut menus, MenuAction::ReverseWps, None);
         let latitudes: Vec<f64> = plan.items().iter().map(|item| item.x).collect();
-        assert_eq!(latitudes, vec![-35.36, -35.362, -35.361]);
+        assert_eq!(latitudes, vec![-35.362, -35.361]);
         let seqs: Vec<u16> = plan.items().iter().map(|item| item.seq).collect();
-        assert_eq!(seqs, vec![0, 1, 2]);
+        assert_eq!(seqs, vec![1, 2]);
+        let written = plan.vehicle_mission(true).expect("a home");
+        let latitudes: Vec<f64> = written.iter().map(|item| item.x).collect();
+        assert_eq!(latitudes, vec![-35.36, -35.362, -35.361]);
     }
 
     /// Draw a Polygon starts drawing the first time and adds the corner under the menu after.
@@ -5079,8 +5608,8 @@ mod tests {
         assert!(question.is_question());
         // No keeps the mission.
         menus.cancel();
-        assert_eq!(plan.items().len(), 4);
-        // Yes clears it, home aside.
+        assert_eq!(plan.items().len(), 3);
+        // Yes clears it; home, not a row, stays.
         choose(
             &mut plan,
             &mut menus,
@@ -5088,7 +5617,8 @@ mod tests {
             None,
         );
         menus.submit(&mut plan, &context());
-        assert_eq!(plan.items().len(), 1);
+        assert!(plan.is_empty());
+        assert_eq!(plan.home(), Some(VEHICLE_HOME));
     }
 
     /// With no rows it does nothing and asks nothing.
@@ -5136,11 +5666,12 @@ mod tests {
         assert_eq!(menus.prompt.as_ref().map(Prompt::value), Some("0"));
         answer(&mut plan, &mut menus, "20");
         let altitudes: Vec<f64> = plan.items().iter().map(|item| item.z).collect();
-        assert_eq!(altitudes, vec![580.0, 120.0, 120.0]);
+        assert_eq!(altitudes, vec![120.0, 120.0]);
         choose(&mut plan, &mut menus, MenuAction::ModifyAlt, None);
         answer(&mut plan, &mut menus, "*2");
         let altitudes: Vec<f64> = plan.items().iter().map(|item| item.z).collect();
-        assert_eq!(altitudes, vec![580.0, 240.0, 240.0]);
+        assert_eq!(altitudes, vec![240.0, 240.0]);
+        assert_eq!(plan.home_text(HomeBox::Alt), "580.00", "home is left alone");
     }
 
     /// Insert Wp > At Current Position adds a waypoint where the vehicle is, at its altitude.
@@ -5165,7 +5696,7 @@ mod tests {
             MenuAction::InsertAtCurrentPosition,
             None,
         );
-        assert_eq!(plan.items().len(), 4);
+        assert_eq!(plan.items().len(), 3);
         assert_eq!(
             menus.prompt.as_ref().map(|p| p.text.as_str()),
             Some("Invalid Location")
@@ -5198,27 +5729,278 @@ mod tests {
         assert!((plan.default_altitude() - 75.0).abs() < 1e-9);
     }
 
-    /// A vehicle's or a file's list starts with home; clearing, surveying or deleting it ends that.
+    // ---- Home is item 0: the Home Location boxes against BUT_write_Click, saveWPs,
+    // ---- savewaypoints, processToScreen and updateHomeText ----
+
+    /// Types a home into the three boxes, as an operator does.
+    fn type_home(plan: &mut Plan, lat: &str, lng: &str, alt: &str) {
+        plan.set_home_text(HomeBox::Lat, lat.to_owned());
+        plan.set_home_text(HomeBox::Lng, lng.to_owned());
+        plan.set_home_text(HomeBox::Alt, alt.to_owned());
+    }
+
+    /// The defect this rule exists for: a mission drawn on an empty map, with no home anywhere,
+    /// starts at waypoint 1. The first click is never item 0.
     #[test]
-    fn home_is_first_only_while_item_zero_is_the_home_record() {
-        let mut plan = from_vehicle();
-        assert!(plan.home_first());
-        plan.remove(0);
-        assert!(!plan.home_first());
-
+    fn the_first_click_on_an_empty_map_is_waypoint_one_not_home() {
         let mut plan = Plan::default();
-        plan.adopt_from_file("x.waypoints", from_vehicle().items().to_vec());
-        assert!(plan.home_first());
-        plan.clear();
-        assert!(!plan.home_first());
+        plan.add_wp_to_map(canberra(), 50.0, AltitudeFrame::Relative);
+        plan.add_wp_to_map(at(-35.364, 149.166), 50.0, AltitudeFrame::Relative);
+        assert_eq!(plan.items()[0].seq, 1);
+        assert!(plan.items().iter().all(|item| !item.is_home()));
+        assert_eq!(plan.home(), None, "nothing has set a home");
 
-        let mut plan = from_vehicle();
-        plan.move_item(1, -1);
-        assert!(!plan.home_first(), "home moved off item 0");
+        // The file still starts with a home record - savewaypoints' blank one - so reading it
+        // back gives both clicks back as rows.
+        let file = plan.waypoints_file();
+        let mut lines = file.lines();
+        assert_eq!(lines.next(), Some("QGC WPL 110"));
+        assert_eq!(lines.next(), Some(mp_mission::waypoints::BLANK_HOME_RECORD));
+        assert!(
+            lines
+                .next()
+                .is_some_and(|line| line.starts_with("1\t0\t3\t16\t")),
+            "{file}"
+        );
+        let read = mp_mission::read_waypoints(&file).expect("parses");
+        let mut again = Plan::default();
+        assert_eq!(again.adopt_from_file("drawn.waypoints", &read), None);
+        assert_eq!(again.items(), plan.items());
+    }
 
+    /// Write refuses without a home, in the C#'s words, whatever the autopilot.
+    #[test]
+    fn writing_without_a_home_is_refused() {
         let mut plan = Plan::default();
-        plan.adopt_from_vehicle(Vec::new());
-        assert!(!plan.home_first(), "an empty download has no home");
+        plan.add_waypoint(canberra(), 50.0);
+        assert_eq!(plan.vehicle_mission(true), Err(HOME_INVALID));
+        assert_eq!(plan.vehicle_mission(false), Err(HOME_INVALID));
+        assert_eq!(HOME_INVALID, "Your home location is invalid");
+        // Any one box that does not parse is no home.
+        type_home(&mut plan, "-35.363262", "149.165237", "high");
+        assert_eq!(plan.vehicle_mission(true), Err(HOME_INVALID));
+    }
+
+    /// With a home in the boxes, what an ArduPilot is sent has it at item 0 - a GLOBAL waypoint
+    /// at the boxes' position and altitude - and the rows after it from 1.
+    #[test]
+    fn a_written_mission_has_the_boxes_home_at_zero() {
+        let mut plan = Plan::default();
+        plan.add_waypoint(at(-35.361, 149.161), 50.0);
+        plan.add_waypoint(at(-35.362, 149.162), 60.0);
+        type_home(&mut plan, "-35.363262", "149.165237", "584.00");
+
+        let sent = plan.vehicle_mission(true).expect("a home");
+        assert_eq!(sent.len(), 3);
+        let home = sent[0];
+        assert_eq!((home.seq, home.frame, home.command), (0, 0, 16));
+        assert_eq!((home.x, home.y, home.z), (-35.363_262, 149.165_237, 584.0));
+        assert!(
+            (sent[1].x - -35.361).abs() < 1e-12,
+            "the first row is item 1"
+        );
+        assert_eq!(
+            sent.iter().map(|item| item.seq).collect::<Vec<_>>(),
+            vec![0, 1, 2]
+        );
+
+        // Any other autopilot is sent the rows alone.
+        let sent = plan.vehicle_mission(false).expect("a home");
+        assert_eq!(sent.len(), 2);
+        assert!((sent[0].x - -35.361).abs() < 1e-12);
+
+        // And the file has it as record 0, in savewaypoints' format.
+        let file = plan.waypoints_file();
+        assert_eq!(
+            file.lines().nth(1),
+            Some("0\t1\t0\t16\t0\t0\t0\t0\t-35.3632620\t149.1652370\t584.000000\t1")
+        );
+        assert_eq!(
+            written_facts(&file),
+            (
+                "0:0:16,1:3:16,2:3:16".to_owned(),
+                "-35.3632620,149.1652370,584.000000".to_owned()
+            )
+        );
+    }
+
+    /// What the facts say is written comes from the text Save File writes: with nothing planned,
+    /// that is still a home record, the blank one.
+    #[test]
+    fn the_written_facts_read_the_file() {
+        let plan = Plan::default();
+        assert_eq!(
+            written_facts(&plan.waypoints_file()),
+            ("0:0:0".to_owned(), "0,0,0".to_owned())
+        );
+    }
+
+    /// The boxes show the vehicle's home when it has sent one, else the planned home, else stay
+    /// as they are - and whatever they are set to becomes the planned home.
+    #[test]
+    fn activating_shows_the_vehicles_home_else_the_planned_one() {
+        let mut plan = Plan::default();
+        plan.update_home_text(None);
+        assert_eq!(plan.home(), None, "neither: the boxes stay empty");
+
+        let planned = Home {
+            lat: -27.509_708_302_151_7,
+            lng: 153.015_389_442_444,
+            alt: 8.1,
+        };
+        plan.set_planned_home(planned);
+        plan.update_home_text(None);
+        assert_eq!(plan.home_text(HomeBox::Lat), "-27.5097083021517");
+        assert_eq!(plan.home_text(HomeBox::Lng), "153.015389442444");
+        assert_eq!(plan.home_text(HomeBox::Alt), "8.10");
+
+        // A vehicle's home at 0,0 is no home.
+        plan.update_home_text(Some(Home::default()));
+        assert_eq!(plan.home_text(HomeBox::Lat), "-27.5097083021517");
+
+        plan.update_home_text(Some(VEHICLE_HOME));
+        assert_eq!(plan.home(), Some(VEHICLE_HOME));
+        assert_eq!(plan.home_text(HomeBox::Alt), "580.00");
+        assert_eq!(
+            plan.planned_home(),
+            VEHICLE_HOME,
+            "TextChanged made it the planned home"
+        );
+    }
+
+    /// Typing moves the planned home when the text parses and leaves it when it does not.
+    #[test]
+    fn a_box_that_parses_sets_the_planned_home() {
+        let mut plan = Plan::default();
+        type_home(&mut plan, "-35.5", "149.5", "600");
+        assert_eq!(
+            plan.planned_home(),
+            Home {
+                lat: -35.5,
+                lng: 149.5,
+                alt: 600.0
+            }
+        );
+        plan.set_home_text(HomeBox::Lat, "-35.5x".to_owned());
+        assert!((plan.planned_home().lat - -35.5).abs() < f64::EPSILON);
+        assert_eq!(
+            plan.home(),
+            None,
+            "but the write takes the box, which does not parse"
+        );
+    }
+
+    /// Reading takes item 0 as home and never as a row, and offers it when the boxes differ.
+    #[test]
+    fn reading_a_mission_takes_item_zero_as_home() {
+        let rows = [
+            cmd::waypoint(at(-35.361, 149.161), 100.0, FRAME_RELATIVE),
+            cmd::waypoint(at(-35.362, 149.162), 100.0, FRAME_RELATIVE),
+        ];
+        let mut plan = Plan::default();
+        let offer = plan.adopt_from_file("x.waypoints", &downloaded(&rows));
+        assert_eq!(offer, Some(VEHICLE_HOME), "empty boxes: asked");
+        assert_eq!(plan.items().len(), 2);
+        assert_eq!(plan.items()[0].seq, 1);
+        assert_eq!(plan.home(), None, "not taken until the operator says Yes");
+
+        // The boxes already say that latitude: not asked.
+        plan.reset_home_to(VEHICLE_HOME);
+        assert_eq!(plan.adopt_from_vehicle(&downloaded(&rows)), None);
+
+        // A blank home - latitude 0 - is never offered.
+        let mut blank = downloaded(&rows);
+        blank[0] = MissionItem::default();
+        assert_eq!(Plan::default().adopt_from_file("x", &blank), None);
+    }
+
+    /// Yes to "Reset Home to loaded coords" puts the loaded home in the boxes; No leaves them.
+    #[test]
+    fn yes_to_reset_home_takes_the_loaded_home() {
+        let mut plan = Plan::default();
+        type_home(&mut plan, "-35.5", "149.5", "600");
+        let mut menus = PlanMenus::default();
+        let offer = plan
+            .adopt_from_vehicle(&downloaded(&[cmd::waypoint(canberra(), 50.0, 3)]))
+            .expect("the boxes say otherwise");
+        menus.offer_home_reset(offer);
+        let question = menus.prompt.as_ref().expect("asked");
+        assert_eq!(
+            (question.title, question.text.as_str()),
+            ("Reset Home Coords", "Reset Home to loaded coords")
+        );
+        assert!(question.is_question());
+        menus.cancel();
+        assert_eq!(plan.home_text(HomeBox::Lat), "-35.5", "No");
+
+        menus.offer_home_reset(offer);
+        menus.submit(&mut plan, &context());
+        assert_eq!(plan.home_text(HomeBox::Lat), "-35.36");
+        assert_eq!(plan.home_text(HomeBox::Lng), "149.16");
+        assert_eq!(plan.home_text(HomeBox::Alt), "580.00");
+    }
+
+    /// Saving and reading back gives the same rows and the same home, and asks nothing.
+    #[test]
+    fn a_saved_mission_reads_back_whole() {
+        let mut plan = Plan::default();
+        plan.add_waypoint_in(at(-35.361, 149.161), 50.0, AltitudeFrame::Terrain);
+        plan.append(cmd::return_to_launch(FRAME_RELATIVE));
+        type_home(&mut plan, "-35.363262", "149.165237", "584.25");
+        let read = mp_mission::read_waypoints(&plan.waypoints_file()).expect("parses");
+        let mut again = Plan::default();
+        type_home(&mut again, "-35.363262", "149.165237", "584.25");
+        assert_eq!(again.adopt_from_file("x", &read), None);
+        assert_eq!(again.items(), plan.items());
+        assert_eq!(again.home(), plan.home());
+    }
+
+    /// The Home Location link takes the vehicle's position and altitude above sea level, or says
+    /// how to get one.
+    #[test]
+    fn the_home_location_link_takes_the_vehicles_position() {
+        let mut plan = Plan::default();
+        assert_eq!(plan.home_from_vehicle(None), Err(HOME_NEEDS_A_FIX));
+        assert_eq!(plan.home(), None);
+        plan.home_from_vehicle(Some((canberra(), 612.3)))
+            .expect("a position");
+        assert_eq!(plan.home_text(HomeBox::Lat), "-35.363262");
+        assert_eq!(plan.home_text(HomeBox::Lng), "149.165237");
+        assert_eq!(plan.home_text(HomeBox::Alt), "612.30");
+    }
+
+    /// The planned home `MainV2` starts with comes from the saved boxes, and none off the globe.
+    #[test]
+    fn the_planned_home_comes_from_the_saved_boxes() {
+        assert_eq!(planned_home_from_config(None), Home::default());
+        let mut config = mp_settings::Config::default();
+        config.set("TXT_homelat", "-27.5097083021517");
+        config.set("TXT_homelng", "153.015389442444");
+        config.set("TXT_homealt", "8.10");
+        assert_eq!(
+            planned_home_from_config(Some(&config)),
+            Home {
+                lat: -27.509_708_302_151_7,
+                lng: 153.015_389_442_444,
+                alt: 8.1
+            }
+        );
+        config.set("TXT_homealt", "");
+        assert!(
+            planned_home_from_config(Some(&config)).alt.abs() < f64::EPSILON,
+            "GetDouble's default"
+        );
+        config.set("TXT_homelng", "200");
+        assert_eq!(planned_home_from_config(Some(&config)), Home::default());
+    }
+
+    /// The boxes carry the resx labels and distinct ids.
+    #[test]
+    fn the_home_boxes_are_lat_long_and_asl() {
+        let labels: Vec<&str> = HomeBox::ALL.iter().map(|which| which.label()).collect();
+        assert_eq!(labels, vec!["Lat", "Long", "ASL"]);
+        let ids: Vec<&str> = HomeBox::ALL.iter().map(|which| which.id()).collect();
+        assert_eq!(ids, vec!["plan-home-lat", "plan-home-lng", "plan-home-alt"]);
     }
 
     /// A press that closed the menu is swallowed once, at that point only.
@@ -5244,7 +6026,7 @@ mod tests {
         let mut plan = from_vehicle();
         let mut menus = PlanMenus::default();
         menus.choose(&mut plan, MenuAction::Rtl, &context());
-        assert_eq!(plan.items().len(), 3);
+        assert_eq!(plan.items().len(), 2);
     }
 
     /// Every id is distinct, so a script never clicks the wrong entry, and every drop-down lines

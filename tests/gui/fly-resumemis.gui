@@ -34,8 +34,10 @@ expect vehicle.armed false
 expect fly.resume idle
 
 click fly-resumemis
+settle 1
 expect fly.prompt ~ Warning this will reprogram your mission, arm and issue a takeoff command
 click fly-prompt-ok
+settle 1
 # lastautowp is -1 until the vehicle has flown in Auto, so the box offers 1.
 expect fly.prompt ~ Resume mission at waypoint
 key ctrl+u
@@ -46,7 +48,8 @@ settle 1
 click fly-prompt-ok
 settle 12
 
-expect mission.items 4
+# Home is not a row: resuming at 4 keeps the takeoff, the speed change and waypoint 4.
+expect mission.items 3
 expect vehicle.armed true
 
 # Down again.

@@ -264,3 +264,134 @@ fn validation_over_the_real_corpus_is_sane() {
         "{with_danger} of {total} real missions raise a danger; the rules are too aggressive"
     );
 }
+
+// ---- The planning screen's file: home at record 0, the grid after it ----
+
+use mp_mission::rows::{Home, split_home};
+use mp_mission::waypoints::{BLANK_HOME_RECORD, write_planned};
+
+/// `savewaypoints` byte for byte: home as record 0 - `0 1 0 16`, seven decimals, bare-integer
+/// parameters - from the boxes, then each grid row as `(a + 1)`, current 0, autocontinue 1,
+/// whatever the row held.
+#[test]
+fn the_planners_file_has_home_at_record_zero() {
+    let home = Home {
+        lat: -35.362_938,
+        lng: 149.165_085,
+        alt: 584.409_973,
+    };
+    let rows = vec![
+        MissionItem {
+            seq: 7,
+            current: 1,
+            frame: 3,
+            command: 22,
+            param1: 15.0,
+            x: -35.361_164,
+            y: 149.163_986,
+            z: 28.110_001,
+            autocontinue: 0,
+            ..MissionItem::default()
+        },
+        MissionItem {
+            seq: 9,
+            frame: 10,
+            command: 16,
+            x: -35.360_1,
+            y: 149.162_2,
+            z: 40.0,
+            ..MissionItem::default()
+        },
+    ];
+
+    let expected = "QGC WPL 110\n\
+        0\t1\t0\t16\t0\t0\t0\t0\t-35.3629380\t149.1650850\t584.409973\t1\n\
+        1\t0\t3\t22\t15.00000000\t0.00000000\t0.00000000\t0.00000000\t-35.36116400\t149.16398600\t28.110001\t1\n\
+        2\t0\t10\t16\t0.00000000\t0.00000000\t0.00000000\t0.00000000\t-35.36010000\t149.16220000\t40.000000\t1\n";
+    assert_eq!(write_planned(Some(home), &rows), expected);
+}
+
+/// With no home in the boxes the file still starts with a home record - the blank one the C#
+/// writes when `double.Parse` throws - so the first row is never read back as home.
+#[test]
+fn without_a_home_the_blank_record_holds_its_place() {
+    let rows = vec![MissionItem {
+        command: 16,
+        x: -35.1,
+        y: 149.1,
+        z: 50.0,
+        ..MissionItem::default()
+    }];
+    let text = write_planned(None, &rows);
+    let mut lines = text.lines();
+    assert_eq!(lines.next(), Some("QGC WPL 110"));
+    assert_eq!(lines.next(), Some("0\t1\t0\t0\t0\t0\t0\t0\t0\t0\t0\t1"));
+    assert!(lines.next().is_some_and(|line| line.starts_with("1\t")));
+    assert_eq!(BLANK_HOME_RECORD, "0\t1\t0\t0\t0\t0\t0\t0\t0\t0\t0\t1");
+
+    let read = read_waypoints(&text).expect("parses");
+    let (home, grid) = split_home(&read);
+    assert_eq!(home.map(|item| item.command), Some(0), "the blank home");
+    assert_eq!(grid.len(), 1);
+    assert_eq!(grid[0].seq, 1);
+    assert!((grid[0].x - -35.1).abs() < 1e-12);
+}
+
+/// Every corpus mission, taken apart as the planning screen reads it and written as it saves,
+/// reads back to the same home and the same grid. Where the corpus file is one Mission Planner
+/// wrote - it starts `0 1 0 16` and every record is as our record writer makes it - the planning
+/// screen's file is that file, byte for byte.
+#[test]
+fn the_corpus_survives_the_planning_screen() {
+    let mut identical = 0usize;
+    for (name, text) in corpus() {
+        let read = read_waypoints(&text).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let (home_item, grid) = split_home(&read);
+        let home = home_item.map(|item| Home {
+            lat: item.x,
+            lng: item.y,
+            alt: item.z,
+        });
+        let written = write_planned(home, &grid);
+        let reread = read_waypoints(&written).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let (home_again, grid_again) = split_home(&reread);
+        assert_eq!(grid_again.len(), grid.len(), "{name}: rows");
+        for (a, b) in grid.iter().zip(&grid_again) {
+            assert_eq!(
+                (a.seq, a.frame, a.command),
+                (b.seq, b.frame, b.command),
+                "{name}"
+            );
+            assert!(
+                (a.x - b.x).abs() < 1e-7 && (a.y - b.y).abs() < 1e-7,
+                "{name}"
+            );
+        }
+        let (Some(first), Some(again)) = (home_item, home_again) else {
+            panic!("{name}: no home");
+        };
+        assert!(
+            (first.x - again.x).abs() < 1e-6 && (first.y - again.y).abs() < 1e-6,
+            "{name}: home moved"
+        );
+
+        let unix = text.replace("\r\n", "\n");
+        let as_the_c_sharp_writes = unix
+            .lines()
+            .nth(1)
+            .is_some_and(|line| line.starts_with("0\t1\t0\t16\t"))
+            && grid.len() + 1 == read.len()
+            && write_waypoints(&read) == unix;
+        if as_the_c_sharp_writes {
+            assert_eq!(written, unix, "{name}: not what Mission Planner wrote");
+            identical += 1;
+        }
+    }
+    println!("{identical} corpus files are Mission Planner's own and came back byte for byte");
+    // Five of the corpus files were written by Mission Planner's savewaypoints; the byte-for-byte
+    // half of this test is only a test while it has them to compare against.
+    assert!(
+        identical >= 5,
+        "only {identical} Mission Planner files compared"
+    );
+}

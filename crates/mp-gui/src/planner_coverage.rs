@@ -141,28 +141,28 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "LinkClicked",
         "label4_LinkClicked",
         "Home Location",
-        Missing,
+        Done("plan-home-link"),
     ),
     row(
         "TXT_homealt",
         "TextChanged",
         "TXT_homealt_TextChanged",
         "Home Location: ASL",
-        Missing,
+        Done("plan-home-alt"),
     ),
     row(
         "TXT_homelng",
         "TextChanged",
         "TXT_homelng_TextChanged",
         "Home Location: Long",
-        Missing,
+        Done("plan-home-lng"),
     ),
     row(
         "TXT_homelat",
         "TextChanged",
         "TXT_homelat_TextChanged",
         "Home Location: Lat",
-        Missing,
+        Done("plan-home-lat"),
     ),
     row(
         "TXT_homelat",
@@ -1304,7 +1304,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (40, 0, 69, 12, 0)
+            (44, 0, 65, 12, 0)
         );
     }
 }

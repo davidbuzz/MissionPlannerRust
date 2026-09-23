@@ -172,6 +172,8 @@ struct MissionPlanner {
     plan_menus: plan::PlanMenus,
     /// Focus for those dialogs, which take the keyboard while they show.
     plan_prompt_focus: gpui::FocusHandle,
+    /// Focus for the Home Location boxes: Lat, Long and ASL.
+    plan_home_focus: [gpui::FocusHandle; 3],
     /// The mission file name to save to or load from.
     plan_name: textfield::TextField,
     /// Focus for that field.
@@ -315,13 +317,21 @@ impl MissionPlanner {
             map.set_tiles(std::sync::Arc::new(store));
         }
 
-        Self {
+        // The home the planning screen remembers, which `MainV2` reads at start-up.
+        let mut plan = Plan::default();
+        plan.set_planned_home(plan::planned_home_from_config(
+            mp_settings::Config::default_path()
+                .and_then(|path| mp_settings::Config::load(&path).ok())
+                .as_ref(),
+        ));
+
+        let mut this = Self {
             telemetry,
             map: std::rc::Rc::new(std::cell::RefCell::new(map)),
             auto_read_mission: read_mission,
             mission_requested: false,
             screen,
-            plan: Plan::default(),
+            plan,
             adopt_vehicle_mission: false,
             adopt_vehicle_fence: false,
             adopt_vehicle_rally: false,
@@ -343,6 +353,7 @@ impl MissionPlanner {
             plan_name_focus: cx.focus_handle(),
             plan_menus: plan::PlanMenus::default(),
             plan_prompt_focus: cx.focus_handle(),
+            plan_home_focus: [cx.focus_handle(), cx.focus_handle(), cx.focus_handle()],
             param_search: textfield::TextField::new("search parameters"),
             param_search_focus: cx.focus_handle(),
             selected_param_group: None,
@@ -374,7 +385,12 @@ impl MissionPlanner {
             fly_actions: fly::Actions::default(),
             fly_focus: fly::ActionsFocus::new(cx),
             fly_pages: fly::Pages::default(),
+        };
+        // Opening on the planning screen activates it, as switching to it does.
+        if this.screen == Screen::Plan {
+            plan::activate(&mut this);
         }
+        this
     }
 
     /// The directory missions are read from and written to.
@@ -419,7 +435,8 @@ impl MissionPlanner {
     /// Writes the plan in QGC WPL 110 format, the one every ground station reads.
     fn save_plan(&mut self) {
         let path = self.plan_path();
-        let text = mp_mission::write_waypoints(self.plan.items());
+        // Home at record 0 from the Home Location boxes, then the rows: `savewaypoints`.
+        let text = self.plan.waypoints_file();
         self.file_status = match std::fs::write(&path, text) {
             Ok(()) => Some(format!(
                 "saved {} items to {}",
@@ -442,12 +459,16 @@ impl MissionPlanner {
         };
         match mp_mission::read_waypoints(&text) {
             Ok(items) => {
-                let count = items.len();
                 let name = path.file_name().map_or_else(
                     || path.display().to_string(),
                     |n| n.to_string_lossy().into_owned(),
                 );
-                self.plan.adopt_from_file(name, items);
+                // Item 0 is home and leaves the rows; if it is not the boxes' home, the
+                // operator is asked whether to take it.
+                if let Some(home) = self.plan.adopt_from_file(name, &items) {
+                    self.plan_menus.offer_home_reset(home);
+                }
+                let count = self.plan.items().len();
                 self.file_status = Some(format!("loaded {count} items from {}", path.display()));
             }
             Err(err) => {
@@ -880,6 +901,9 @@ impl MissionPlanner {
                     .child(screen.label())
                     .on_click(cx.listener(move |this, _event, _window, cx| {
                         this.screen = screen;
+                        if screen == Screen::Plan {
+                            plan::activate(this);
+                        }
                         // Remembered here rather than at exit: gpui gives no reliable hook for a
                         // window closing, and a ground station is as likely to be killed as
                         // closed.
@@ -1049,6 +1073,17 @@ impl MissionPlanner {
                         },
                         self.altitude_frame,
                         self.tile_source_id(),
+                        cx,
+                    ))
+                    .child(plan::home_panel(
+                        &self.plan,
+                        &plan::HomeFocus {
+                            handles: &self.plan_home_focus,
+                            focused: self
+                                .plan_home_focus
+                                .each_ref()
+                                .map(|handle| handle.is_focused(window)),
+                        },
                         cx,
                     ))
                     .child(plan::draw_panel(&draw, view, cx))
@@ -1499,9 +1534,12 @@ impl Render for MissionPlanner {
 
         // A completed download replaces the plan only if the operator asked for one. Otherwise it
         // just goes to the map, so a read started for display cannot overwrite an edit.
-        if !view.mission.is_empty() && self.adopt_vehicle_mission {
+        if !view.mission.is_empty() && view.mission_complete && self.adopt_vehicle_mission {
             self.adopt_vehicle_mission = false;
-            self.plan.adopt_from_vehicle(view.mission.clone());
+            if let Some(home) = self.plan.adopt_from_vehicle(&view.mission) {
+                self.plan_menus.offer_home_reset(home);
+                self.plan_prompt_focus.focus(window, cx);
+            }
             self.file_status = Some(format!(
                 "read {} items from the vehicle",
                 view.mission.len()

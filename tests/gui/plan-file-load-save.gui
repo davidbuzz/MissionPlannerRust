@@ -1,17 +1,28 @@
 # File Load/Save > Save WP File and Load WP File: saveWPFileToolStripMenuItem_Click and
 # loadWPFileToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:6181, 4738), which are the
-# planning screen's own Save File and Load File. The file read back starts with a home record,
-# so the mission it loads says so.
+# planning screen's own Save File and Load File.
+#
+# The file written starts with a home record whatever the boxes hold - here nothing, so it is the
+# blank one savewaypoints writes (FlightPlanner.cs:6119) - and reading it back takes record 0 as
+# home and leaves it out of the rows (processToScreen, :5667). So the two waypoints come back as
+# waypoints 1 and 2, not as home and waypoint 1. A blank home is latitude 0, which is never
+# offered to the boxes, so nothing is asked.
+#
+# Its own Mission Planner data directory, empty, so no home saved on this machine is in the boxes.
 
+env XDG_DATA_HOME $WORK
 env MP_PLAN_DIR $WORK
 
 screen plan
 window 1600x1200
 settle 4
 
+expect mission.home false
+
 click map@0.45x0.40
 click map@0.60x0.55
 expect mission.items 2
+expect mission.written 0:0:0,1:3:16,2:3:16
 
 click map@0.30x0.70:right
 click menu-fileLoadSave
@@ -28,4 +39,7 @@ click menu-fileLoadSave
 click menu-loadWPFile
 expect status ~ loaded 2 items
 expect mission.items 2
-expect mission.home true
+expect mission.commands 16,16
+expect plan.prompt none
+expect mission.home false
+expect mission.written 0:0:0,1:3:16,2:3:16

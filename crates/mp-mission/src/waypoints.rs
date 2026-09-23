@@ -29,6 +29,7 @@
 //!   a diff against a file the C# app wrote should be empty.
 
 use crate::item::MissionItem;
+use crate::rows::Home;
 
 /// The only header this format has ever had.
 pub const HEADER: &str = "QGC WPL 110";
@@ -193,28 +194,90 @@ pub fn write_waypoints(items: &[MissionItem]) -> String {
     out.push('\n');
 
     for item in items {
-        // The home item is written with seven decimal places of latitude and longitude, every
-        // other item with eight. That is not a typo: the two are written by different code paths
-        // in FlightPlanner.cs, and reproducing it keeps a diff against a C#-written file empty.
-        let (coord_decimals, param_decimals) = if item.is_home() { (7, 0) } else { (8, 8) };
-
-        out.push_str(&format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.6}\t{}\n",
-            item.seq,
-            item.current,
-            item.frame,
-            item.command,
-            decimals(item.param1, param_decimals),
-            decimals(item.param2, param_decimals),
-            decimals(item.param3, param_decimals),
-            decimals(item.param4, param_decimals),
-            decimals(item.x, coord_decimals),
-            decimals(item.y, coord_decimals),
-            item.z,
-            item.autocontinue,
-        ));
+        push_record(&mut out, item);
     }
     out
+}
+
+/// The home record `savewaypoints` writes when the Home Location boxes do not parse: command 0
+/// and nothing else, where `double.Parse(TXT_homelat.Text)` threw.
+/// `// C#: GCSViews/FlightPlanner.cs:6119-6123`
+pub const BLANK_HOME_RECORD: &str = "0\t1\t0\t0\t0\t0\t0\t0\t0\t0\t0\t1";
+
+/// Writes the planning screen's mission as its Save File does: home as record 0, from the Home
+/// Location boxes, then the `Commands` grid as records 1 onwards.
+///
+/// Home is `0 1 0 16` - item 0, current, the `GLOBAL` frame, a `WAYPOINT` - at the boxes'
+/// position and altitude, or [`BLANK_HOME_RECORD`] when there is no home to write: the file still
+/// starts with a home record, so the first row is never read back as home. Each row is written
+/// as `(a + 1)`, current 0, its own frame and command, and autocontinue 1, which is all the grid
+/// holds of it.
+/// `// C#: GCSViews/FlightPlanner.cs:6108-6160`
+#[must_use]
+pub fn write_planned(home: Option<Home>, rows: &[MissionItem]) -> String {
+    let mut out = String::with_capacity((rows.len() + 1) * 96 + HEADER.len() + 1);
+    out.push_str(HEADER);
+    out.push('\n');
+
+    match home {
+        Some(home) => push_record(
+            &mut out,
+            &MissionItem {
+                seq: 0,
+                current: 1,
+                frame: crate::item::MAV_FRAME_GLOBAL,
+                command: crate::item::MAV_CMD_NAV_WAYPOINT,
+                param1: 0.0,
+                param2: 0.0,
+                param3: 0.0,
+                param4: 0.0,
+                x: home.lat,
+                y: home.lng,
+                z: home.alt,
+                autocontinue: 1,
+            },
+        ),
+        None => {
+            out.push_str(BLANK_HOME_RECORD);
+            out.push('\n');
+        }
+    }
+    for (index, row) in rows.iter().enumerate() {
+        push_record(
+            &mut out,
+            &MissionItem {
+                seq: u16::try_from(index + 1).unwrap_or(u16::MAX),
+                current: 0,
+                autocontinue: 1,
+                ..*row
+            },
+        );
+    }
+    out
+}
+
+/// One record, in the format of the line `FlightPlanner.cs` writes for it.
+fn push_record(out: &mut String, item: &MissionItem) {
+    // The home item is written with seven decimal places of latitude and longitude, every
+    // other item with eight. That is not a typo: the two are written by different code paths
+    // in FlightPlanner.cs, and reproducing it keeps a diff against a C#-written file empty.
+    let (coord_decimals, param_decimals) = if item.is_home() { (7, 0) } else { (8, 8) };
+
+    out.push_str(&format!(
+        "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.6}\t{}\n",
+        item.seq,
+        item.current,
+        item.frame,
+        item.command,
+        decimals(item.param1, param_decimals),
+        decimals(item.param2, param_decimals),
+        decimals(item.param3, param_decimals),
+        decimals(item.param4, param_decimals),
+        decimals(item.x, coord_decimals),
+        decimals(item.y, coord_decimals),
+        item.z,
+        item.autocontinue,
+    ));
 }
 
 /// Formats a number with a fixed number of decimals, or as a bare integer when asked for none.

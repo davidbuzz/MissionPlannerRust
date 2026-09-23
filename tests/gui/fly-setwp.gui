@@ -25,11 +25,18 @@ expect fly.tab tabActions
 expect fly.setwp.items 1
 expect fly.setwp.selected 0 (Home)
 
-# Read the vehicle's mission so the list has something to count.
+# Read the vehicle's mission so the list has something to count. Item 0 is home and goes to
+# the Home Location boxes, not the rows: with the boxes empty, processToScreen asks "Reset Home
+# to loaded coords" (GCSViews/FlightPlanner.cs:5640-5660), and the four rows after home are the
+# mission. Yes takes the home, as an operator would.
 click tab-plan
 click plan-read
 settle 4
-expect mission.items 5
+expect mission.items 4
+expect plan.prompt Reset Home Coords
+click plan-prompt-ok
+settle 1
+expect plan.prompt none
 click tab-fly
 settle 1
 

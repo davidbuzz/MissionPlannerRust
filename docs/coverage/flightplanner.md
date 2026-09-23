@@ -4,13 +4,13 @@ Generated from `crates/mp-gui/src/planner_coverage.rs` by `cargo test -p mp-gui 
 
 | total | done | elsewhere | missing | plumbing | dropped |
 |---:|---:|---:|---:|---:|---:|
-| 121 | 40 | 0 | 69 | 12 | 0 |
+| 121 | 44 | 0 | 65 | 12 | 0 |
 
 Missing, by where the control sits:
 
 | group | missing |
 |---|---:|
-| planning panel | 20 |
+| planning panel | 16 |
 | Map Tool | 7 |
 | polygon icon menu | 7 |
 | Geo-Fence | 6 |
@@ -33,10 +33,10 @@ Missing, by where the control sits:
 | `but_writewpfast` | Click | `but_writewpfast_Click` | Write Fast | **missing** |
 | `BUT_write` | Click | `BUT_write_Click` | Write | done: `plan-write` |
 | `BUT_read` | Click | `BUT_read_Click` | Read | done: `plan-read` |
-| `label4` | LinkClicked | `label4_LinkClicked` | Home Location | **missing** |
-| `TXT_homealt` | TextChanged | `TXT_homealt_TextChanged` | Home Location: ASL | **missing** |
-| `TXT_homelng` | TextChanged | `TXT_homelng_TextChanged` | Home Location: Long | **missing** |
-| `TXT_homelat` | TextChanged | `TXT_homelat_TextChanged` | Home Location: Lat | **missing** |
+| `label4` | LinkClicked | `label4_LinkClicked` | Home Location | done: `plan-home-link` |
+| `TXT_homealt` | TextChanged | `TXT_homealt_TextChanged` | Home Location: ASL | done: `plan-home-alt` |
+| `TXT_homelng` | TextChanged | `TXT_homelng_TextChanged` | Home Location: Long | done: `plan-home-lng` |
+| `TXT_homelat` | TextChanged | `TXT_homelat_TextChanged` | Home Location: Lat | done: `plan-home-lat` |
 | `TXT_homelat` | Enter | `TXT_homelat_Enter` | Home Location: Lat | **missing** |
 | `coords1` | SystemChanged | `coords1_SystemChanged` | the pointer coordinates: system | **missing** |
 | `chk_usemavftp` | CheckedChanged | `chk_usemavftp_CheckedChanged` | MAVFTP | **missing** |

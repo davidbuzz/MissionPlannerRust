@@ -1,5 +1,6 @@
 # Clear Mission: clearMissionToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:2064). Every row
-# goes. A plan drawn here has no home record, so that is every item; the survey polygon stays.
+# goes; home is not a row - it is the Home Location boxes' - so it stays, and so does the survey
+# polygon.
 
 screen plan
 window 1600x1200

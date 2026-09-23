@@ -69,6 +69,11 @@ pub struct TelemetryView {
     pub vehicle_count: usize,
     /// The mission read back from the vehicle, once a download has completed.
     pub mission: Vec<MissionItem>,
+    /// Whether `mission` is a finished download rather than one still arriving. The transfer's
+    /// item list grows as items come in, and a plan that adopts it on the first item keeps a
+    /// mission of one. `tests/gui/fly-setwp.gui` found it: a five-item mission read back as one
+    /// row once the download published its progress.
+    pub mission_complete: bool,
     /// Recent `STATUSTEXT` and `COMMAND_ACK` lines, newest last.
     pub messages: Vec<LogMessage>,
     /// How many messages the link had to discard to stay bounded.
@@ -110,6 +115,7 @@ impl TelemetryView {
             crc_errors: 0,
             vehicle_count: 0,
             mission: Vec::new(),
+            mission_complete: false,
             messages: Vec::new(),
             messages_dropped: 0,
             transfer: None,
@@ -306,6 +312,9 @@ impl Telemetry {
             .as_ref()
             .map(|transfer| transfer.items().to_vec())
             .unwrap_or_default();
+        let mission_complete = transfer
+            .as_ref()
+            .is_some_and(|transfer| matches!(transfer.state(), TransferState::Complete));
         let transfer = transfer.as_ref().map(|transfer| {
             let label = match transfer.state() {
                 TransferState::Idle => "idle".to_owned(),
@@ -337,6 +346,7 @@ impl Telemetry {
             crc_errors: stats.decode.crc_errors,
             vehicle_count: vehicles.len(),
             mission,
+            mission_complete,
             messages: link.recent_messages(MESSAGE_LINES),
             messages_dropped: link.messages_dropped(),
             transfer,
