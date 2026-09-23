@@ -991,6 +991,19 @@ impl Render for MissionPlanner {
             self.map.borrow_mut().set_mission(self.plan.items());
         }
 
+        // Other aircraft. Read every frame because the link forgets stale ones on read, and a
+        // display that only updated on an event would keep a symbol after its aircraft had gone.
+        {
+            let now = std::time::Instant::now();
+            let traffic: Vec<(mp_units::LatLon, bool)> = self
+                .telemetry
+                .traffic()
+                .into_iter()
+                .map(|aircraft| (aircraft.position, aircraft.is_stale(now)))
+                .collect();
+            self.map.borrow_mut().set_traffic(&traffic);
+        }
+
         // Keep a log download moving, and write it out when it finishes. Driven from the render
         // pass because that is the only thing ticking; the link cannot write files and should not
         // decide where they go.

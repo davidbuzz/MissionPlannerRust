@@ -23,6 +23,7 @@ pub mod logs;
 pub mod messages;
 pub mod mission_transfer;
 pub mod params;
+pub mod traffic;
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
@@ -43,6 +44,11 @@ pub const MAV_COMP_ID_MISSIONPLANNER: u8 = 190;
 const MAV_TYPE_GCS: u8 = 6;
 /// `MAV_AUTOPILOT_INVALID`, which is what a GCS reports.
 const MAV_AUTOPILOT_INVALID: u8 = 8;
+
+/// `ADSB_FLAGS_VALID_HEADING`. Zero is a legitimate heading, so absence needs its own signal.
+const ADSB_VALID_HEADING: u16 = 0x0004;
+/// `ADSB_FLAGS_VALID_VELOCITY`.
+const ADSB_VALID_VELOCITY: u16 = 0x0008;
 
 /// `MAV_AUTOPILOT_ARDUPILOTMEGA`. ArduPilot encodes parameters differently from the
 /// specification, so which autopilot is on the other end is not a cosmetic detail.
@@ -151,6 +157,8 @@ struct Shared {
     accel_calibration: Mutex<calibration::AccelCalibration>,
     /// Compass calibration progress, one entry per compass being calibrated.
     compass_calibration: Mutex<BTreeMap<u8, calibration::CompassProgress>>,
+    /// Other aircraft, from ADS-B.
+    traffic: Mutex<traffic::TrafficReport>,
     /// Dataflash logs the vehicle has listed.
     log_listings: Mutex<BTreeMap<u16, logs::LogListing>>,
     /// A log download in progress.
@@ -463,6 +471,19 @@ impl Link {
         }
     }
 
+    /// Other aircraft currently known about, oldest sightings already dropped.
+    ///
+    /// Forgetting happens on read rather than on a timer: there is no other thread to run it on,
+    /// and a caller that has stopped looking does not need the list pruned.
+    #[must_use]
+    pub fn traffic(&self) -> Vec<traffic::Traffic> {
+        let Ok(mut held) = self.shared.traffic.lock() else {
+            return Vec::new();
+        };
+        held.forget_old(Instant::now());
+        held.all()
+    }
+
     /// Link counters.
     #[must_use]
     pub fn stats(&self) -> LinkStats {
@@ -680,6 +701,32 @@ fn run_link(
                                     }
                                 }
                                 // The vehicle listing what it holds. One message per log.
+                                // Other aircraft. ArduPilot forwards what its ADS-B receiver
+                                // hears, one message per aircraft per update.
+                                MavMessage::AdsbVehicle(adsb) => {
+                                    if let Ok(position) =
+                                        mp_units::LatLon::from_mavlink_e7(adsb.lat, adsb.lon)
+                                        && let Ok(mut held) = shared.traffic.lock()
+                                    {
+                                        held.observe(traffic::Traffic {
+                                            icao: adsb.icao_address,
+                                            callsign: traffic::decode_callsign(&adsb.callsign),
+                                            position,
+                                            // Millimetres on the wire, which is the same unit
+                                            // GLOBAL_POSITION_INT uses and is easy to read as
+                                            // metres by mistake.
+                                            altitude: f64::from(adsb.altitude) / 1000.0,
+                                            // Centi-degrees, and 0 is a legitimate heading, so
+                                            // absence is signalled by the flags rather than by
+                                            // the value.
+                                            heading: (adsb.flags & ADSB_VALID_HEADING != 0)
+                                                .then(|| f64::from(adsb.heading) / 100.0),
+                                            speed: (adsb.flags & ADSB_VALID_VELOCITY != 0)
+                                                .then(|| f64::from(adsb.hor_velocity) / 100.0),
+                                            last_seen: Instant::now(),
+                                        });
+                                    }
+                                }
                                 MavMessage::LogEntry(entry) => {
                                     if let Ok(mut held) = shared.log_listings.lock() {
                                         // num_logs of zero means the vehicle holds none, and it

@@ -69,6 +69,8 @@ pub struct MapViewport {
     fence: Vec<WebMercator>,
     /// Rally points, where the vehicle goes on a failsafe.
     rally: Vec<WebMercator>,
+    /// Other aircraft, with whether their report is recent enough to be trusted.
+    traffic: Vec<(WebMercator, bool)>,
     /// Where map imagery comes from, if any has been configured.
     tiles: Option<Arc<TileStore>>,
     /// Tiles already uploaded to the GPU, keyed so the `ImageId` stays stable.
@@ -199,6 +201,7 @@ impl MapViewport {
             polygon: Vec::new(),
             fence: Vec::new(),
             rally: Vec::new(),
+            traffic: Vec::new(),
             tiles: None,
             images: HashMap::new(),
             tiles_drawn: 0,
@@ -342,6 +345,14 @@ impl MapViewport {
         self.rally = positions
             .iter()
             .map(|position| position.to_web_mercator())
+            .collect();
+    }
+
+    /// Replaces the other aircraft shown on the map.
+    pub fn set_traffic(&mut self, traffic: &[(LatLon, bool)]) {
+        self.traffic = traffic
+            .iter()
+            .map(|(position, stale)| (position.to_web_mercator(), *stale))
             .collect();
     }
 
@@ -973,6 +984,27 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
                 gpui::BorderStyle::default(),
             ));
         }
+    }
+
+    // Other aircraft. Drawn last, over everything else, because a symbol that says where not to
+    // fly is worth more than the plan underneath it. A stale report is hollow rather than solid:
+    // it was there, and we no longer know that it still is.
+    for (position, stale) in &map.traffic {
+        let at = to_screen(*position);
+        let size = px(10.0);
+        let colour = if *stale { 0x8b_94_9e } else { 0xf8_51_49 };
+        window.paint_quad(quad(
+            Bounds {
+                origin: point(at.x - size / 2.0, at.y - size / 2.0),
+                size: gpui::size(size, size),
+            },
+            gpui::Corners::all(size / 2.0),
+            // A hollow symbol for a stale one, which is a border with no fill.
+            if *stale { rgb(0x00_00_00) } else { rgb(colour) },
+            gpui::Edges::all(px(2.0)),
+            rgb(colour),
+            gpui::BorderStyle::default(),
+        ));
     }
 
     // Home.

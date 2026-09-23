@@ -497,6 +497,12 @@ impl Telemetry {
         }
     }
 
+    /// Other aircraft currently known about.
+    #[must_use]
+    pub fn traffic(&self) -> Vec<mp_link::traffic::Traffic> {
+        self.link.as_ref().map(Link::traffic).unwrap_or_default()
+    }
+
     /// Starts a parameter download.
     pub fn download_parameters(&self) {
         if let Some((link, id)) = self.target() {
