@@ -51,6 +51,9 @@ expect config.saves 2
 # The planning screen's boxes, the frame and the map, changed and not saved: the screen is still
 # showing, so config(true) has not run.
 click plan-home-lat
+# Entering the Lat box shows "Click on the Map to set Home " (TXT_homelat_Enter,
+# FlightPlanner.cs:7016-7022); OK gives the box the keyboard back.
+click plan-prompt-ok
 key ctrl+u
 type 51.25
 click plan-home-lng

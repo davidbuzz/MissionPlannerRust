@@ -1091,9 +1091,25 @@ mod cmd {
     pub const GUIDED_ENABLE: u16 = 92;
     pub const DELAY: u16 = 93;
     pub const LAST: u16 = 95;
+    pub const DO_JUMP: u16 = 177;
     pub const DO_RETURN_PATH_START: u16 = 188;
     pub const DO_LAND_START: u16 = 189;
     pub const DO_SET_ROI: u16 = 201;
+    pub const FENCE_RETURN_POINT: u16 = 5000;
+    pub const FENCE_POLYGON_VERTEX_INCLUSION: u16 = 5001;
+    pub const FENCE_POLYGON_VERTEX_EXCLUSION: u16 = 5002;
+    pub const FENCE_CIRCLE_INCLUSION: u16 = 5003;
+    pub const FENCE_CIRCLE_EXCLUSION: u16 = 5004;
+    pub const RALLY_POINT: u16 = 5100;
+}
+
+/// `MAV_FRAME` values `GetHomeAlt` tests for.
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs (MAV_FRAME)`
+mod frame {
+    pub const GLOBAL: u8 = 0;
+    pub const GLOBAL_INT: u8 = 5;
+    pub const GLOBAL_TERRAIN_ALT: u8 = 10;
+    pub const GLOBAL_TERRAIN_ALT_INT: u8 = 11;
 }
 
 /// `Color.White`: a `GMapMarkerRect`'s pen until it is given another.
@@ -1266,6 +1282,151 @@ pub fn overlay_markers(items: &[MissionItem]) -> Vec<OverlayMarker> {
         });
     }
     markers
+}
+
+/// One entry of `WPOverlay.pointlist`: a `PointLatLngAlt` with the altitude `CreateOverlay` gives
+/// it - above sea level, as far as `GetHomeAlt` can make it so - and its tag.
+/// `// C#: ExtLibs/Maps/WPOverlay.cs:22; ExtLibs/Utilities/PointLatLngAlt.cs:22-28`
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlanPoint {
+    /// `Lat`.
+    pub lat: f64,
+    /// `Lng`.
+    pub lng: f64,
+    /// `Alt`, metres.
+    pub alt: f64,
+    /// `Tag`: "H" for home, the row's number for an item, "ROI" and the number for a DO_SET_ROI.
+    pub tag: String,
+}
+
+/// `GetHomeAlt`: what `CreateOverlay` adds to an item's altitude to put it above sea level - 0
+/// for an absolute frame, the ground there for a terrain frame (-999 when `srtm` has no height
+/// for it), and home's altitude for anything else.
+/// `// C#: ExtLibs/Maps/WPOverlay.cs:359-375`
+fn get_home_alt(
+    altmode: u8,
+    homealt: f64,
+    lat: f64,
+    lng: f64,
+    terrain: &dyn Fn(f64, f64) -> crate::srtm::AltResponse,
+) -> f64 {
+    if altmode == frame::GLOBAL_INT || altmode == frame::GLOBAL {
+        return 0.0; // for absolute we dont need to add homealt
+    }
+    if altmode == frame::GLOBAL_TERRAIN_ALT_INT || altmode == frame::GLOBAL_TERRAIN_ALT {
+        let sralt = terrain(lat, lng);
+        if sralt.current_type == crate::srtm::TileType::Invalid {
+            return -999.0;
+        }
+        return sralt.alt;
+    }
+    homealt
+}
+
+/// `WPOverlay.CreateOverlay`'s `pointlist` for the planning screen's mission: home first when the
+/// Home Location boxes hold one (`writeKML`'s `home`, tagged "H", which is never
+/// `PointLatLngAlt.Zero`), then one entry per row - a point where `CreateOverlay` adds one, `None`
+/// where it adds `null`, and nothing at all for a LAND or VTOL_LAND at 0,0, which it skips.
+///
+/// A navigable row's altitude is `item.alt + GetHomeAlt(frame)`, `item.alt` being the grid's
+/// `float`; a DO_SET_ROI is tagged "ROI" and its number, wherever it is; a loiter or a waypoint at
+/// 0,0 and a DO_JUMP are `null`; the fence and rally commands are points at altitude 0.
+/// `// C#: GCSViews/FlightPlanner.cs:1400-1434, 1473; ExtLibs/Maps/WPOverlay.cs:28-356`
+#[must_use]
+pub fn point_list(
+    home: Option<mp_mission::rows::Home>,
+    items: &[MissionItem],
+    terrain: &dyn Fn(f64, f64) -> crate::srtm::AltResponse,
+) -> Vec<Option<PlanPoint>> {
+    use cmd::{
+        CONTINUE_AND_CHANGE_ALT, DELAY, DO_JUMP, DO_LAND_START, DO_RETURN_PATH_START, DO_SET_ROI,
+        FENCE_CIRCLE_EXCLUSION, FENCE_CIRCLE_INCLUSION, FENCE_POLYGON_VERTEX_EXCLUSION,
+        FENCE_POLYGON_VERTEX_INCLUSION, FENCE_RETURN_POINT, GUIDED_ENABLE, LAND, LAST, LOITER_TIME,
+        LOITER_TO_ALT, LOITER_TURNS, LOITER_UNLIM, RALLY_POINT, RETURN_TO_LAUNCH, SPLINE_WAYPOINT,
+        VTOL_LAND, WAYPOINT,
+    };
+    let mut pointlist = Vec::new();
+    // `new PointLatLngAlt()` when a box does not parse: its `Alt` of 0 is still what a relative
+    // row adds.
+    let homealt = home.map_or(0.0, |home| home.alt);
+    if let Some(home) = home {
+        pointlist.push(Some(PlanPoint {
+            lat: home.lat,
+            lng: home.lng,
+            alt: home.alt,
+            tag: "H".to_owned(),
+        }));
+    }
+    for (a, item) in items.iter().enumerate() {
+        let command = item.command;
+        let number = (a + 1).to_string();
+        // `Locationwp.alt` is a float, and `item.alt + gethomealt(...)` a double.
+        #[allow(clippy::cast_possible_truncation)] // the grid's float, on purpose
+        let alt = f64::from(item.z as f32);
+        let point = |tag: String| {
+            Some(PlanPoint {
+                lat: item.x,
+                lng: item.y,
+                alt: alt + get_home_alt(item.frame, homealt, item.x, item.y, terrain),
+                tag,
+            })
+        };
+        let zero = item.x == 0.0 && item.y == 0.0;
+        let located = item.x != 0.0 && item.y != 0.0;
+        // invalid locationwp
+        if command == 0 {
+            pointlist.push(None);
+            continue;
+        }
+        let navigable = (command < LAST
+            && !matches!(
+                command,
+                RETURN_TO_LAUNCH | CONTINUE_AND_CHANGE_ALT | DELAY | GUIDED_ENABLE
+            ))
+            || matches!(command, DO_SET_ROI | DO_LAND_START | DO_RETURN_PATH_START);
+        if navigable {
+            // land can be 0,0 or a lat,lng
+            if matches!(command, LAND | VTOL_LAND) && zero {
+                continue;
+            }
+            let entry = match command {
+                DO_LAND_START if located => point(number),
+                LAND | VTOL_LAND if located => point(number),
+                DO_SET_ROI => point(format!("ROI{number}")),
+                LOITER_TIME | LOITER_TURNS | LOITER_TO_ALT | LOITER_UNLIM => {
+                    if zero {
+                        None
+                    } else {
+                        point(number)
+                    }
+                }
+                SPLINE_WAYPOINT => point(number),
+                WAYPOINT if zero => None,
+                _ if located => point(number),
+                _ => None,
+            };
+            pointlist.push(entry);
+            continue;
+        }
+        let entry = match command {
+            // "fix do jumps into the future": the jump's repeats go into the route, not here.
+            DO_JUMP => None,
+            FENCE_POLYGON_VERTEX_INCLUSION
+            | FENCE_POLYGON_VERTEX_EXCLUSION
+            | FENCE_CIRCLE_EXCLUSION
+            | FENCE_CIRCLE_INCLUSION
+            | FENCE_RETURN_POINT
+            | RALLY_POINT => Some(PlanPoint {
+                lat: item.x,
+                lng: item.y,
+                alt: 0.0,
+                tag: number,
+            }),
+            _ => None,
+        };
+        pointlist.push(entry);
+    }
+    pointlist
 }
 
 /// What the screen showing the map hands `WPOverlay.CreateOverlay`, and whether its
@@ -3957,5 +4118,138 @@ mod tests {
         assert!(facts.contains(&("map.zoom", "none".to_owned())));
         assert!(facts.contains(&("map.circles", "0".to_owned())));
         assert!(facts.contains(&("map.hover", "none".to_owned())));
+    }
+}
+
+/// `WPOverlay.pointlist` (PLAN.md §13.4 row 35): what `CreateOverlay` lists for the Elevation
+/// Graph, entry by entry, and the altitude `GetHomeAlt` puts each at.
+#[cfg(test)]
+mod point_list_tests {
+    use super::*;
+    use crate::srtm::{AltResponse, TileType};
+    use mp_mission::rows::Home;
+
+    fn flat(_: f64, _: f64) -> AltResponse {
+        AltResponse {
+            current_type: TileType::Valid,
+            alt: 584.0,
+        }
+    }
+
+    fn nothing(_: f64, _: f64) -> AltResponse {
+        AltResponse::INVALID
+    }
+
+    fn row(command: u16, frame: u8, x: f64, y: f64, z: f64) -> MissionItem {
+        MissionItem {
+            seq: 0,
+            current: 0,
+            frame,
+            command,
+            param1: 0.0,
+            param2: 0.0,
+            param3: 0.0,
+            param4: 0.0,
+            x,
+            y,
+            z,
+            autocontinue: 1,
+        }
+    }
+
+    const HOME: Home = Home {
+        lat: -35.36,
+        lng: 149.16,
+        alt: 584.1,
+    };
+
+    /// Home first, tagged "H"; then a relative row at its altitude plus home's, an absolute one
+    /// at its own, a terrain one at its own plus the ground - and -999 where there is none - each
+    /// row's altitude the grid's float.
+    #[test]
+    fn each_frame_puts_a_row_above_sea_level_as_get_home_alt_does() {
+        let rows = [
+            row(16, 3, -35.361, 149.161, 100.3),
+            row(16, 0, -35.362, 149.162, 700.0),
+            row(16, 10, -35.363, 149.163, 50.0),
+            row(16, 11, -35.364, 149.164, 50.0),
+            row(16, 5, -35.365, 149.165, 650.0),
+        ];
+        let points = point_list(Some(HOME), &rows, &flat);
+        let alts: Vec<f64> = points.iter().flatten().map(|point| point.alt).collect();
+        assert_eq!(
+            alts,
+            [
+                584.1,
+                f64::from(100.3_f32) + 584.1,
+                700.0,
+                634.0,
+                634.0,
+                650.0
+            ]
+        );
+        let tags: Vec<&str> = points
+            .iter()
+            .flatten()
+            .map(|point| point.tag.as_str())
+            .collect();
+        assert_eq!(tags, ["H", "1", "2", "3", "4", "5"]);
+        let unknown = point_list(Some(HOME), &rows[2..3], &nothing);
+        assert_eq!(
+            unknown
+                .last()
+                .and_then(|point| point.as_ref())
+                .map(|point| point.alt),
+            Some(-949.0)
+        );
+    }
+
+    /// No home in the boxes: no "H", and a relative row gets the empty home's 0.
+    #[test]
+    fn without_a_home_the_list_starts_at_row_one() {
+        let points = point_list(None, &[row(16, 3, -35.361, 149.161, 100.0)], &flat);
+        assert_eq!(points.len(), 1);
+        let first = points.first().and_then(Option::as_ref).expect("a point");
+        assert_eq!((first.tag.as_str(), first.alt), ("1", 100.0));
+    }
+
+    /// A land at 0,0 is skipped outright; a waypoint or a loiter at 0,0, a DO_JUMP, an RTL and a
+    /// command it does not know are `null`; a DO_SET_ROI is "ROI" and its number wherever it is;
+    /// a spline at 0,0 is a point; a fence or rally point is a point at 0.
+    #[test]
+    fn create_overlay_lists_each_command_as_the_c_sharp_does() {
+        let rows = [
+            row(21, 3, 0.0, 0.0, 0.0),
+            row(16, 3, 0.0, 0.0, 100.0),
+            row(17, 3, 0.0, 0.0, 100.0),
+            row(177, 3, 1.0, 1.0, 0.0),
+            row(20, 3, 0.0, 0.0, 0.0),
+            row(201, 3, -35.37, 149.17, 20.0),
+            row(82, 3, 0.0, 0.0, 30.0),
+            row(5100, 3, -35.38, 149.18, 40.0),
+            row(183, 3, -35.39, 149.19, 0.0),
+            row(189, 3, 0.0, 0.0, 0.0),
+            row(189, 3, -35.4, 149.2, 10.0),
+        ];
+        let points = point_list(None, &rows, &flat);
+        let listed: Vec<Option<(&str, f64)>> = points
+            .iter()
+            .map(|point| point.as_ref().map(|point| (point.tag.as_str(), point.alt)))
+            .collect();
+        assert_eq!(
+            listed,
+            [
+                None,
+                None,
+                None,
+                None,
+                Some(("ROI6", 20.0)),
+                Some(("7", 30.0)),
+                Some(("8", 0.0)),
+                None,
+                None,
+                Some(("11", 10.0)),
+            ]
+        );
     }
 }

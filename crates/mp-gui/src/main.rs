@@ -1504,6 +1504,7 @@ impl MissionPlanner {
                                 Some(seq) => {
                                     this.dragging_waypoint = Some(seq);
                                     this.plan.select(Some(seq));
+                                    plan::waypoint_grabbed(this, seq);
                                     // The same reason as placing one: a refit mid-drag would move
                                     // the waypoint away from the cursor holding it.
                                     this.map.borrow_mut().freeze_view();
@@ -1552,6 +1553,9 @@ impl MissionPlanner {
                             let grabbed = this.dragging_waypoint.take();
                             let press = this.map_press.take();
                             this.map.borrow_mut().end_drag();
+                            if let Some(seq) = grabbed {
+                                plan::waypoint_dropped(this, seq);
+                            }
 
                             // A press that did not move, on empty map, while planning, adds a
                             // waypoint where it landed. `MainMap_MouseUp` does the same:
@@ -1941,7 +1945,16 @@ impl Render for MissionPlanner {
         // parameter sets moves on.
         if self.screen == Screen::Plan {
             plan::track_panel_focus(self, window);
+            // The Lat box entered since the last frame: `TXT_homelat_Enter`.
+            plan::track_home_focus(self, window, cx);
         }
+        // `GMaps.Instance.Mode`, as `srtm.getAltitude` reads it: the Planner page's Map Access
+        // Mode (MP_OFFLINE standing in for CacheOnly, as it does for the map's tiles).
+        // `// C#: Program.cs:321-325; ExtLibs/Utilities/srtm.cs:385`
+        srtm::set_cache_only(
+            std::env::var_os("MP_OFFLINE").is_some()
+                || config::planner::cache_only(&self.persisted),
+        );
         plan::drive_writes(self, &view, window, cx);
         // A quick view chosen since the last frame goes into Mission Planner's config.xml, as the
         // chooser's check box puts it there.

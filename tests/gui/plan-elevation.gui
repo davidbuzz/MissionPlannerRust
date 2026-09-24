@@ -1,0 +1,69 @@
+# Map Tool > Elevation Graph (PLAN.md 13.4 row 35): elevationGraphToolStripMenuItem_Click hands
+# ElevationProfile the planner's pointlist and CMB_altmode (GCSViews/FlightPlanner.cs:3248-3256).
+# The form samples the ground every 10 m or so along each leg (getSRTMAltPath,
+# Controls/ElevationProfile.cs:141-206) and plots the "Planned Path" in red over the "DEM" in blue,
+# under "Elevation above ground", Distance (m) across and Elevation (m) up (:278-340); with one
+# point or none it says "Please plan something first" and does not open (:44-48, 80-84).
+#
+# Self-contained, no link: a flat tile at 584 m for SITL's field, S36E149.hgt, a home at 584.1 in
+# config.xml, and the Map Access Mode at CacheOnly so the terrain lookup fetches nothing.
+
+env XDG_DATA_HOME $WORK
+env MP_PLAN_DIR $WORK
+setup mkdir -p "$WORK/Mission Planner/srtm" && python3 -c 'import sys; open(sys.argv[1], "wb").write(bytes([2, 72]) * (1201 * 1201))' "$WORK/Mission Planner/srtm/S36E149.hgt"
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt><mapCache>CacheOnly</mapCache></Config>' > "$WORK/Mission Planner/config.xml"
+
+screen plan
+window 1600x1200
+settle 4
+
+expect plan.elevation closed
+
+# Home alone is one point.
+click map@0.50x0.70:right
+click menu-mapTool
+click menu-elevationGraph
+expect plan.prompt Error
+expect plan.prompt.text Please plan something first
+expect plan.elevation closed
+click plan-prompt-ok
+expect plan.prompt none
+
+# Two waypoints at Default Alt 100, relative: home at 584.1 and the rows at 100 above it, tagged
+# H, 1 and 2 over a flat 584 of ground; Y from 584..684.1 with a tenth either side, out to whole
+# steps of 20.
+click map@0.35x0.50
+click map@0.65x0.50
+expect mission.items 2
+click map@0.50x0.70:right
+click menu-mapTool
+click menu-elevationGraph
+expect plan.prompt none
+expect plan.elevation open
+expect plan.elevation.titles Elevation above ground|Distance (m)|Elevation (m)
+expect plan.elevation.legend Planned Path,DEM
+expect plan.elevation.planned 3
+expect plan.elevation.planned.tags H,1,2
+expect plan.elevation.planned.y 584.1,684.1,684.1
+expect plan.elevation.dem > 3
+expect plan.elevation.dem.range 584..584
+expect plan.elevation.distance > 10
+expect plan.elevation.ylabels 560,580,600,620,640,660,680,700
+expect plan.elevation.xlabels ~ 0,
+click plan-elevation-close
+expect plan.elevation closed
+
+# CMB_altmode on Terrain: the ground comes off every point - home 0.1 above it, the rows 100.1 -
+# and the planned path is the ground plus that at each sample, untagged: 584 to 684.
+click plan-frame-terrain
+click map@0.50x0.70:right
+click menu-mapTool
+click menu-elevationGraph
+expect plan.elevation open
+expect plan.elevation.planned > 3
+expect plan.elevation.planned.y ~ 584,
+expect plan.elevation.planned.y ~ ,684
+expect plan.elevation.dem.range 584..584
+click plan-elevation-close
+expect plan.elevation closed
+expect mission.items 2

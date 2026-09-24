@@ -4,17 +4,17 @@ Generated from `crates/mp-gui/src/planner_coverage.rs` by `cargo test -p mp-gui 
 
 | total | done | elsewhere | missing | plumbing | dropped |
 |---:|---:|---:|---:|---:|---:|
-| 121 | 79 | 0 | 30 | 12 | 0 |
+| 121 | 82 | 0 | 27 | 12 | 0 |
 
 Missing, by where the control sits:
 
 | group | missing |
 |---|---:|
-| planning panel | 8 |
-| Map Tool | 6 |
-| map menu | 4 |
+| planning panel | 7 |
+| Map Tool | 5 |
 | File Load/Save | 3 |
 | POI | 3 |
+| map menu | 3 |
 | Auto WP | 2 |
 | Geo-Fence | 2 |
 | polygon icon menu | 2 |
@@ -34,7 +34,7 @@ Missing, by where the control sits:
 | `TXT_homealt` | TextChanged | `TXT_homealt_TextChanged` | Home Location: ASL | done: `plan-home-alt` |
 | `TXT_homelng` | TextChanged | `TXT_homelng_TextChanged` | Home Location: Long | done: `plan-home-lng` |
 | `TXT_homelat` | TextChanged | `TXT_homelat_TextChanged` | Home Location: Lat | done: `plan-home-lat` |
-| `TXT_homelat` | Enter | `TXT_homelat_Enter` | Home Location: Lat | **missing** |
+| `TXT_homelat` | Enter | `TXT_homelat_Enter` | Home Location: Lat | done: `fn track_home_focus` |
 | `coords1` | SystemChanged | `coords1_SystemChanged` | the pointer coordinates: system | **missing** |
 | `chk_usemavftp` | CheckedChanged | `chk_usemavftp_CheckedChanged` | MAVFTP | **missing** |
 | `but_mincommands` | Click | `but_mincommands_Click` | ˅ | **missing** |
@@ -108,7 +108,7 @@ Missing, by where the control sits:
 | `prefetchToolStripMenuItem` | Click | `prefetchToolStripMenuItem_Click` | Prefetch | **missing** |
 | `prefetchWPPathToolStripMenuItem` | Click | `prefetchWPPathToolStripMenuItem_Click` | Prefetch WP Path | **missing** |
 | `kMLOverlayToolStripMenuItem` | Click | `kMLOverlayToolStripMenuItem_Click` | KML Overlay | **missing** |
-| `elevationGraphToolStripMenuItem` | Click | `elevationGraphToolStripMenuItem_Click` | Elevation Graph | **missing** |
+| `elevationGraphToolStripMenuItem` | Click | `elevationGraphToolStripMenuItem_Click` | Elevation Graph | done: `menu-elevationGraph` |
 | `reverseWPsToolStripMenuItem` | Click | `reverseWPsToolStripMenuItem_Click` | Reverse WPs | done: `menu-reverseWPs` |
 | `loadWPFileToolStripMenuItem` | Click | `loadWPFileToolStripMenuItem_Click` | Load WP File | done: `menu-loadWPFile` |
 | `loadAndAppendToolStripMenuItem` | Click | `loadAndAppendToolStripMenuItem_Click` | Load and Append | **missing** |
@@ -122,7 +122,7 @@ Missing, by where the control sits:
 | `modifyAltToolStripMenuItem` | Click | `modifyAltToolStripMenuItem_Click` | Modify Alt | done: `menu-modifyAlt` |
 | `enterUTMCoordToolStripMenuItem` | Click | `enterUTMCoordToolStripMenuItem_Click` | Enter UTM Coord | **missing** |
 | `switchDockingToolStripMenuItem` | Click | `switchDockingToolStripMenuItem_Click` | Switch Docking | **missing** |
-| `setHomeHereToolStripMenuItem` | Click | `setHomeHereToolStripMenuItem_Click` | Set Home Here | **missing** |
+| `setHomeHereToolStripMenuItem` | Click | `setHomeHereToolStripMenuItem_Click` | Set Home Here | done: `menu-setHomeHere` |
 | `addPolygonPointToolStripMenuItem` | Click | `addPolygonPointToolStripMenuItem_Click` | Draw a Polygon | done: `menu-addPolygonPoint2` |
 | `clearPolygonToolStripMenuItem` | Click | `clearPolygonToolStripMenuItem_Click` | Clear Polygon | done: `menu-clearPolygon2` |
 | `savePolygonToolStripMenuItem` | Click | `savePolygonToolStripMenuItem_Click` | Save Polygon | done: `menu-savePolygon2` |

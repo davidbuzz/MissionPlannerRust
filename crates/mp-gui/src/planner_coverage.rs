@@ -169,7 +169,7 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "Enter",
         "TXT_homelat_Enter",
         "Home Location: Lat",
-        Missing,
+        Done("fn track_home_focus"),
     ),
     row(
         "coords1",
@@ -681,7 +681,7 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "Click",
         "elevationGraphToolStripMenuItem_Click",
         "Elevation Graph",
-        Missing,
+        Done("menu-elevationGraph"),
     ),
     row(
         "reverseWPsToolStripMenuItem",
@@ -779,7 +779,7 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "Click",
         "setHomeHereToolStripMenuItem_Click",
         "Set Home Here",
-        Missing,
+        Done("menu-setHomeHere"),
     ),
     row(
         "addPolygonPointToolStripMenuItem",
@@ -1347,7 +1347,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (79, 0, 30, 12, 0)
+            (82, 0, 27, 12, 0)
         );
     }
 }

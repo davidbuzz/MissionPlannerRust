@@ -316,6 +316,84 @@ pub struct Plan {
     /// `MainV2.comPort.MAV.rallypoints`: the rally list the vehicle last sent, which Download
     /// fills and Clear Rally Points empties. The planner's markers are [`Plan::rally`].
     vehicle_rally: Vec<MissionItem>,
+    /// `CHK_verifyheight.Checked`: whether `setfromMap` takes a new row's altitude, and a dragged
+    /// one's, against the terrain. Clear, as the Designer leaves it.
+    /// `// C#: GCSViews/FlightPlanner.Designer.cs:246-250`
+    verify_height: bool,
+    /// `sethome`: set when the Lat box is entered, cleared by any change to the three boxes; while
+    /// it is set, the next click on the map moves home there instead of adding a row.
+    /// `// C#: GCSViews/FlightPlanner.cs:136, 566-571, 7003, 7016-7041`
+    sethome: bool,
+    /// The row being dragged on the map and where it was when the drag began: what the grid's Lat
+    /// and Long cells hold until `setfromMap` writes the new position, and what Verify Height
+    /// reads the old ground height at.
+    drag_origin: Option<(u16, LatLon)>,
+    /// `srtm.getAltitude`.
+    terrain: Terrain,
+}
+
+/// `srtm.getAltitude(lat, lng)` as the planning screen asks it: the process's lookup over Mission
+/// Planner's `srtm` folder, or a test's own.
+#[derive(Clone, Copy)]
+pub struct Terrain(pub fn(f64, f64) -> crate::srtm::AltResponse);
+
+impl Default for Terrain {
+    /// The process's lookup. Under `cargo test` a plan a test has not given terrain of its own
+    /// knows none, so no test reads this machine's `srtm` folder or queues a download from it.
+    fn default() -> Self {
+        #[cfg(not(test))]
+        let terrain = Self(crate::srtm::altitude);
+        #[cfg(test)]
+        let terrain = Self(|_, _| crate::srtm::AltResponse::INVALID);
+        terrain
+    }
+}
+
+impl std::fmt::Debug for Terrain {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Terrain")
+    }
+}
+
+impl Terrain {
+    /// The ground at a point.
+    #[must_use]
+    pub fn at(self, lat: f64, lng: f64) -> crate::srtm::AltResponse {
+        (self.0)(lat, lng)
+    }
+}
+
+/// `CurrentState.multiplieralt`: 1, this application being metric throughout.
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:37`
+const MULTIPLIER_ALT: f32 = crate::fly::MULTIPLIER_ALT;
+
+/// `(int)` of a `double` or a `float` in C#: toward zero. (An out-of-range value, unspecified in
+/// C#, saturates here.)
+#[allow(clippy::cast_possible_truncation)] // the C#'s cast, on purpose
+fn c_sharp_int(value: f64) -> i32 {
+    value as i32
+}
+
+/// What entering the Lat box says, the trailing space the C#'s own.
+/// `// C#: GCSViews/FlightPlanner.cs:7016-7022`
+pub const CLICK_TO_SET_HOME: &str = "Click on the Map to set Home ";
+
+/// The command set `readCMDXML` reads from `mavcmd.xml` for the firmware: `APM` for a plane,
+/// `APRover` for a rover, `AC2` for anything else. Which commands' `Z` column is headed "Alt"
+/// there - what `setfromMap` asks of the row before it touches its altitude.
+/// `// C#: GCSViews/FlightPlanner.cs:1119, 1170, 2036-2051, 5680-5720; mavcmd.xml`
+#[must_use]
+pub fn alt_column(command: u16, family: Option<mp_vehicle::VehicleFamily>) -> bool {
+    // The `Z` heading of each section, by the `MAV_CMD` it names.
+    const AC2: &[u16] = &[36, 179, 201, 195, 21, 19, 18, 17, 94, 82, 22, 16];
+    const APM: &[u16] = &[30, 179, 201, 195, 21, 19, 31, 18, 17, 94, 22, 85, 84, 16];
+    const AP_ROVER: &[u16] = &[179, 201, 195, 19, 18, 17, 16];
+    let section = match family {
+        Some(mp_vehicle::VehicleFamily::Plane) => APM,
+        Some(mp_vehicle::VehicleFamily::Rover) => AP_ROVER,
+        _ => AC2,
+    };
+    section.contains(&command)
 }
 
 /// Which of the three Home Location boxes.
@@ -1193,12 +1271,12 @@ impl Plan {
         outcome
     }
 
-    /// `TXT_homelat_TextChanged` and its two siblings: the planned home takes the box's number,
-    /// or keeps what it had when the text does not parse. (Each also clears `sethome`, which
-    /// belongs to `TXT_homelat_Enter` and is not ported, and redraws the map, which the caller
-    /// does.)
+    /// `TXT_homelat_TextChanged` and its two siblings: `sethome` cleared, then the planned home
+    /// takes the box's number, or keeps what it had when the text does not parse. (Each also
+    /// redraws the map, which the caller does.)
     /// `// C#: GCSViews/FlightPlanner.cs:7001-7050`
     fn home_text_changed(&mut self, which: HomeBox) {
+        self.sethome = false;
         let Some(value) = mp_mission::rows::parse_number(self.home_text(which)) else {
             return;
         };
@@ -1466,6 +1544,180 @@ impl Plan {
         } else {
             passed
         })
+    }
+
+    // ---- Terrain: Verify Height, and home taken from the map ----
+
+    /// `CHK_verifyheight.Checked`.
+    #[must_use]
+    pub const fn verify_height(&self) -> bool {
+        self.verify_height
+    }
+
+    /// Ticks or clears Verify Height. The box has no handler of its own: `setfromMap` reads it.
+    /// `// C#: GCSViews/FlightPlanner.Designer.cs:246-250; GCSViews/FlightPlanner.cs:1123, 1211`
+    pub fn set_verify_height(&mut self, on: bool) {
+        self.verify_height = on;
+    }
+
+    /// The terrain lookup this screen asks.
+    #[must_use]
+    pub const fn terrain(&self) -> Terrain {
+        self.terrain
+    }
+
+    /// Puts a test's terrain in the process's place.
+    #[cfg(test)]
+    pub fn set_terrain(&mut self, terrain: Terrain) {
+        self.terrain = terrain;
+    }
+
+    /// `setfromMap`'s Verify Height, for a new row at `lat`, `lng` that the lines before it have
+    /// given `altitude` ([`Plan::new_row_altitude`]): with the box ticked the altitude is taken
+    /// again from Default Alt and the ground, by the screen's frame -
+    ///
+    /// - Absolute: the ground at the row plus Default Alt, in `double`;
+    /// - Terrain: Default Alt alone;
+    /// - Relative: the ground at the row, less the ground at the planned home, plus Default Alt -
+    ///   each ground height cut to a whole number first, and the sum made in `float`.
+    ///
+    /// Whatever altitude the handler passed is not used - Default Alt is, even where it is 0 and
+    /// the lines before gave 50. A point with no terrain counts as 0, the `alt` of `srtm`'s
+    /// Invalid answer: the C# does not look at the kind of answer. Box clear, `altitude` stands.
+    /// `// C#: GCSViews/FlightPlanner.cs:1209-1236`
+    #[must_use]
+    pub fn verified_altitude(
+        &self,
+        lat: f64,
+        lng: f64,
+        altitude: f64,
+        frame: AltitudeFrame,
+    ) -> f64 {
+        if !self.verify_height {
+            return altitude;
+        }
+        // `int.Parse(TXT_DefaultAlt.Text)`, which the `int.TryParse` before it has passed.
+        let Ok(default) = self.panel_text(PanelBox::DefaultAlt).trim().parse::<i32>() else {
+            return altitude;
+        };
+        let ground = |lat: f64, lng: f64| self.terrain.at(lat, lng).alt;
+        match frame {
+            // `(srtm.getAltitude(lat, lng).alt) * multiplieralt + int.Parse(...)`: a double.
+            AltitudeFrame::Absolute => {
+                ground(lat, lng) * f64::from(MULTIPLIER_ALT) + f64::from(default)
+            }
+            AltitudeFrame::Terrain => f64::from(default),
+            // `(int) (srtm...alt) * multiplieralt + int.Parse(...) - (int) srtm(home).alt *
+            // multiplieralt`: int times float is float, and the sum stays float.
+            AltitudeFrame::Relative => {
+                let here = c_sharp_int(ground(lat, lng));
+                let home = c_sharp_int(ground(self.planned_home.lat, self.planned_home.lng));
+                #[allow(clippy::cast_precision_loss)] // the C#'s int-to-float conversions
+                let sum =
+                    here as f32 * MULTIPLIER_ALT + default as f32 - home as f32 * MULTIPLIER_ALT;
+                f64::from(sum)
+            }
+        }
+    }
+
+    /// A row grabbed on the map: where it is, which is what the grid's Lat and Long cells hold
+    /// until the drop writes the new position.
+    pub fn begin_drag(&mut self, seq: u16) {
+        self.drag_origin = self
+            .items
+            .iter()
+            .find(|item| item.seq == seq)
+            .and_then(|item| LatLon::new(item.x, item.y).ok())
+            .map(|origin| (seq, origin));
+    }
+
+    /// A grabbed row let go: `callMeDrag(tag, lat, lng, -2)`, which runs `setfromMap(lat, lng,
+    /// -2)` - and there, with Verify Height ticked and the screen's frame not Terrain, a row whose
+    /// Alt column is headed "Alt" keeps its height above the ground: its altitude, cut to a whole
+    /// number, plus the ground where it now is, less the ground where it was, each ground height
+    /// cut to whole metres, the sum cut again. A row let go where it was grabbed was never dragged
+    /// (`isMouseDraging`), and nothing happens to it.
+    /// `// C#: GCSViews/FlightPlanner.cs:1119-1146, 7803-7810`
+    pub fn end_drag(
+        &mut self,
+        seq: u16,
+        frame: AltitudeFrame,
+        family: Option<mp_vehicle::VehicleFamily>,
+    ) {
+        let Some((grabbed, origin)) = self.drag_origin.take() else {
+            return;
+        };
+        if grabbed != seq || !self.verify_height || frame == AltitudeFrame::Terrain {
+            return;
+        }
+        let terrain = self.terrain;
+        let Some(item) = self.items.iter_mut().find(|item| item.seq == seq) else {
+            return;
+        };
+        if (item.x, item.y) == (origin.latitude(), origin.longitude())
+            || !alt_column(item.command, family)
+        {
+            return;
+        }
+        let ground =
+            |lat: f64, lng: f64| c_sharp_int(terrain.at(lat, lng).alt * f64::from(MULTIPLIER_ALT));
+        let oldsrtm = ground(origin.latitude(), origin.longitude());
+        let newsrtm = ground(item.x, item.y);
+        // `float ans; ans = (int) ans;` then `(int) (ans + newsrtm - oldsrtm)`, in float.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)] // the C#'s casts
+        let newh = {
+            let ans = (item.z as f32).trunc();
+            (ans + newsrtm as f32 - oldsrtm as f32) as i32
+        };
+        item.z = f64::from(newh);
+        self.origin = Origin::Edited;
+    }
+
+    /// `callMeDrag("H", lat, lng, ...)` and Set Home Here: home moved to a point at the ground's
+    /// height there - the ASL box first, `ToString("0.00")`, then Lat and Long, each through its
+    /// `TextChanged`. A point with no terrain puts 0 in the box, the `alt` of `srtm`'s Invalid
+    /// answer: neither handler looks at the kind of answer.
+    /// `// C#: GCSViews/FlightPlanner.cs:745-755, 6625-6632`
+    pub fn set_home_at(&mut self, position: LatLon) {
+        let ground = self
+            .terrain
+            .at(position.latitude(), position.longitude())
+            .alt;
+        self.set_home_text(
+            HomeBox::Alt,
+            two_decimals(ground * f64::from(MULTIPLIER_ALT)),
+        );
+        self.set_home_text(HomeBox::Lat, double_text(position.latitude()));
+        self.set_home_text(HomeBox::Lng, double_text(position.longitude()));
+    }
+
+    /// `TXT_homelat_Enter`: the Lat box entered says "Click on the Map to set Home " unless it
+    /// has already, and the next click on the map sets home.
+    /// `// C#: GCSViews/FlightPlanner.cs:7016-7022`
+    pub fn home_lat_enter(&mut self) -> Option<&'static str> {
+        let said = (!self.sethome).then_some(CLICK_TO_SET_HOME);
+        self.sethome = true;
+        said
+    }
+
+    /// `sethome`.
+    #[must_use]
+    pub const fn sethome(&self) -> bool {
+        self.sethome
+    }
+
+    /// `AddWPToMap`'s first two branches, for a click that would add something at `position`.
+    /// Drawing a polygon, the click is a corner, which the caller adds: `false`. Otherwise, with
+    /// `sethome` set, it is cleared and home moved there (`callMeDrag("H", ...)`), and the click
+    /// has done its work: `true`.
+    /// `// C#: GCSViews/FlightPlanner.cs:558-572`
+    pub fn click_sets_home(&mut self, position: LatLon) -> bool {
+        if self.draw_mode == DrawMode::Area || !self.sethome {
+            return false;
+        }
+        self.sethome = false;
+        self.set_home_at(position);
+        true
     }
 
     /// What `saveWPs` sets once the mission is written, "Setting params": the radius into all
@@ -1937,6 +2189,8 @@ impl Plan {
             direction,
             start_angle,
         ) {
+            // Each point through `setfromMap`, Verify Height with it.
+            let altitude = self.verified_altitude(lat, lng, altitude, context.frame);
             self.items.push(circle_row(
                 mp_mission::commands::WAYPOINT,
                 frame,
@@ -1977,10 +2231,14 @@ impl Plan {
         .map_err(|_| "Bad alt step")?;
         let mut rows = Vec::with_capacity(points.len());
         for (lat, lng, step_alt) in points {
+            // (A Min Alt of -2 is `setfromMap`'s drag sentinel, and with Verify Height ticked the
+            // C# would move a 0 by the ground under the row's "0","0" cells. Not ported: the row
+            // keeps its 0, as it does with the box clear.)
             let altitude = if matches!(step_alt, -1 | -2) {
                 0.0
             } else {
-                self.new_row_altitude(f64::from(step_alt), context.copter)?
+                let altitude = self.new_row_altitude(f64::from(step_alt), context.copter)?;
+                self.verified_altitude(lat, lng, altitude, context.frame)
             };
             rows.push(circle_row(
                 mp_mission::commands::SPLINE_WAYPOINT,
@@ -2484,9 +2742,8 @@ fn check_box(
 }
 
 /// The head of `panelWaypoints`, left to right as the `.resx` places it over the `Commands`
-/// grid: WP Radius, Loiter Radius and Default Alt with their labels above them, the altitude
-/// frame (`CMB_altmode`), and the Spline and MAVFTP check boxes. Verify Height and Add Below sit
-/// between them in the C# and are not here.
+/// grid: WP Radius, Loiter Radius and Default Alt with their labels above them, Add Below, then
+/// the altitude frame (`CMB_altmode`), Verify Height, and the Spline and MAVFTP check boxes.
 ///
 /// `CMB_altmode` is a combo box there and three buttons here, because gpui has no combo and three
 /// values do not need one; its handler keeps the choice for the next session as `FPaltmode` does.
@@ -2578,14 +2835,24 @@ pub fn waypoint_strip(
                 })),
         );
     }
-    // Said in words, because "Terrain" on a button is not a warning and this one needs to be: a
-    // vehicle without terrain data refuses the mission at upload, long after it was planned.
-    let frame_note = (state.frame == AltitudeFrame::Terrain).then(|| {
-        div()
-            .text_xs()
-            .text_color(rgb(theme::WARN))
-            .child("terrain frame needs TERRAIN_ENABLE and terrain data on the vehicle")
-    });
+    // Choosing Terrain says nothing and touches no row: `CMB_altmode_SelectedIndexChanged` only
+    // keeps the choice (`currentaltmode`, `FPaltmode`). (A note about TERRAIN_ENABLE shown here
+    // under Terrain was this application's own, not the C#'s, and is gone.)
+    // `// C#: GCSViews/FlightPlanner.cs:2157-2168`
+
+    // `CHK_verifyheight`, "Verify Height", right of `CMB_altmode` at (298, 13), shown as
+    // `DisplayConfiguration.displayCheckHeightBox` has it - true in every view. Its only handler
+    // is `setfromMap` reading it.
+    // `// C#: GCSViews/FlightPlanner.resx (CHK_verifyheight); GCSViews/FlightPlanner.cs:1332; ExtLibs/Utilities/DisplayView.cs:169`
+    let verify = {
+        let checked = plan.verify_height();
+        check_box("plan-verifyheight", "Verify Height", checked, true)
+            .cursor_pointer()
+            .on_click(cx.listener(move |this, _event, _window, cx| {
+                this.plan.set_verify_height(!checked);
+                cx.notify();
+            }))
+    };
 
     let spline = state.spline_visible.then(|| {
         let checked = plan.spline();
@@ -2615,9 +2882,9 @@ pub fn waypoint_strip(
                 .items_center()
                 .gap_3()
                 .child(frames)
+                .child(verify)
                 .child(checks),
         )
-        .children(frame_note)
         .into_any_element()
 }
 
@@ -3614,6 +3881,8 @@ pub struct PanelFocus {
     /// One per box, in [`PanelBox::ALL`] order.
     pub handles: [gpui::FocusHandle; 3],
     was: [bool; 3],
+    /// Whether the Home Location Lat box had the keyboard at the last frame, for its `Enter`.
+    home_lat_was: bool,
 }
 
 impl PanelFocus {
@@ -3622,6 +3891,7 @@ impl PanelFocus {
         Self {
             handles: [cx.focus_handle(), cx.focus_handle(), cx.focus_handle()],
             was: [false; 3],
+            home_lat_was: false,
         }
     }
 }
@@ -3651,6 +3921,30 @@ pub fn leave_panel_boxes(
     }
 }
 
+/// `TXT_homelat_Enter` for the Lat box having taken the keyboard since the last frame: the first
+/// time, "Click on the Map to set Home ", and the next click on the map moves home.
+/// `// C#: GCSViews/FlightPlanner.Designer.cs (TXT_homelat.Enter); GCSViews/FlightPlanner.cs:7016-7022`
+pub fn track_home_focus(
+    this: &mut MissionPlanner,
+    window: &mut gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) {
+    let now = this
+        .plan_home_focus
+        .first()
+        .is_some_and(|handle| handle.is_focused(window));
+    let entered = now && !this.plan_panel_focus.home_lat_was;
+    this.plan_panel_focus.home_lat_was = now;
+    if !entered {
+        return;
+    }
+    if let Some(text) = this.plan.home_lat_enter() {
+        this.plan_menus.say_home_hint(text);
+        this.plan_prompt_focus.focus(window, cx);
+        cx.notify();
+    }
+}
+
 /// `Leave` for a panel box that has lost the keyboard some other way since the last frame - to
 /// another box, say.
 pub fn track_panel_focus(this: &mut MissionPlanner, window: &gpui::Window) {
@@ -3671,19 +3965,52 @@ pub fn track_panel_focus(this: &mut MissionPlanner, window: &gpui::Window) {
     }
 }
 
-/// A click on the map that adds something: `AddWPToMap(lat, lng, 0)`, the altitude from Default
-/// Alt as `setfromMap` takes it for a waypoint - or "Your default alt is not valid", and nothing.
-/// `// C#: GCSViews/FlightPlanner.cs:558-600, 7743`
+/// The vehicle family `cs.firmware` names, which picks `mavcmd.xml`'s command set: none until a
+/// vehicle says, which reads as a copter's (`AC2`).
+/// `// C#: GCSViews/FlightPlanner.cs:5700-5716`
+#[must_use]
+pub fn firmware_family(view: &TelemetryView) -> Option<mp_vehicle::VehicleFamily> {
+    view.state
+        .as_ref()
+        .and_then(|state| mp_vehicle::VehicleFamily::from_mav_type(state.vehicle_type))
+}
+
+/// A row grabbed on the map: where it is now is what its drop measures the ground from.
+pub fn waypoint_grabbed(this: &mut MissionPlanner, seq: u16) {
+    this.plan.begin_drag(seq);
+}
+
+/// A grabbed row let go on the map: `callMeDrag(tag, lat, lng, -2)`, which with Verify Height
+/// keeps the row's height above the ground ([`Plan::end_drag`]).
+/// `// C#: GCSViews/FlightPlanner.cs:7803-7810, 739-777`
+pub fn waypoint_dropped(this: &mut MissionPlanner, seq: u16) {
+    let family = firmware_family(&this.telemetry.view());
+    this.plan.end_drag(seq, this.altitude_frame, family);
+    this.sync_map_mission();
+}
+
+/// A click on the map that adds something: `AddWPToMap(lat, lng, 0)` - home moved there when the
+/// Lat box has asked for it, otherwise the altitude from Default Alt as `setfromMap` takes it for
+/// a waypoint, Verify Height and all, or "Your default alt is not valid", and nothing.
+/// `// C#: GCSViews/FlightPlanner.cs:558-600, 1164-1236, 7743`
 pub fn map_click(
     this: &mut MissionPlanner,
     position: LatLon,
     window: &mut gpui::Window,
     cx: &mut Context<MissionPlanner>,
 ) {
+    if this.plan.click_sets_home(position) {
+        return;
+    }
     let altitude = if this.plan.draw_mode() == DrawMode::Waypoints {
         let copter = firmware_is_copter(&this.telemetry.view());
         match this.plan.new_row_altitude(0.0, copter) {
-            Ok(altitude) => altitude,
+            Ok(altitude) => this.plan.verified_altitude(
+                position.latitude(),
+                position.longitude(),
+                altitude,
+                this.altitude_frame,
+            ),
             Err(why) => {
                 this.plan_menus.say("", why);
                 this.plan_prompt_focus.focus(window, cx);
@@ -4345,6 +4672,10 @@ pub enum MenuAction {
     CreateWpCircle,
     /// `createSplineCircleToolStripMenuItem_Click`.
     CreateSplineCircle,
+    /// `elevationGraphToolStripMenuItem_Click`: Map Tool > Elevation Graph.
+    ElevationGraph,
+    /// `setHomeHereToolStripMenuItem_Click`.
+    SetHomeHere,
 }
 
 /// One entry of `contextMenuStrip1` or of one of its drop-downs.
@@ -4418,11 +4749,11 @@ const fn drop_down(
 pub const MAP_MENU: &[MenuEntry] = {
     use MenuAction::{
         Area, ClearMission, ClearPolygon, ClearRallyPoints, CreateSplineCircle, CreateWpCircle,
-        DeleteWp, DrawPolygon, FenceClear, FenceLoadFromFile, FenceSaveToFile, FromShp,
-        GetRallyPoints, InsertAtCurrentPosition, InsertSplineWp, InsertWp, JumpStart, JumpWp, Land,
-        LoadPolygon, LoadRallyFromFile, LoadWpFile, LoiterCircles, LoiterForever, LoiterTime,
-        MeasureDistance, ModifyAlt, OffsetPolygon, PolygonFromWaypoints, ReverseWps, Rtl,
-        SavePolygon, SaveRallyPoints, SaveRallyToFile, SaveWpFile, SetRallyPoint,
+        DeleteWp, DrawPolygon, ElevationGraph, FenceClear, FenceLoadFromFile, FenceSaveToFile,
+        FromShp, GetRallyPoints, InsertAtCurrentPosition, InsertSplineWp, InsertWp, JumpStart,
+        JumpWp, Land, LoadPolygon, LoadRallyFromFile, LoadWpFile, LoiterCircles, LoiterForever,
+        LoiterTime, MeasureDistance, ModifyAlt, OffsetPolygon, PolygonFromWaypoints, ReverseWps,
+        Rtl, SavePolygon, SaveRallyPoints, SaveRallyToFile, SaveWpFile, SetHomeHere, SetRallyPoint,
         SetReturnLocation, SetRoi, SurveyGrid, Takeoff, ZoomTo,
     };
     &[
@@ -4766,11 +5097,12 @@ pub const MAP_MENU: &[MenuEntry] = {
                     "KML Overlay",
                     None,
                 ),
+                // `// C#: GCSViews/FlightPlanner.cs:3248-3256; Controls/ElevationProfile.cs`
                 item(
                     "menu-elevationGraph",
                     "elevationGraphToolStripMenuItem",
                     "Elevation Graph",
-                    None,
+                    Some(ElevationGraph),
                 ),
                 item(
                     "menu-reverseWPs",
@@ -4866,11 +5198,12 @@ pub const MAP_MENU: &[MenuEntry] = {
             "Switch Docking",
             None,
         ),
+        // `// C#: GCSViews/FlightPlanner.cs:6625-6632`
         item(
             "menu-setHomeHere",
             "setHomeHereToolStripMenuItem",
             "Set Home Here",
-            None,
+            Some(SetHomeHere),
         ),
     ]
 };
@@ -5007,6 +5340,9 @@ pub enum PromptKind {
     },
     /// A message with an OK.
     Message,
+    /// `TXT_homelat_Enter`'s "Click on the Map to set Home ": a message, after which the Lat box
+    /// has the keyboard again, as it does when the C#'s modal box closes.
+    HomeLatEnter,
 }
 
 /// A file a dialog has named, for the screen to read or write.
@@ -5120,6 +5456,25 @@ impl Prompt {
 
 /// `Strings.InvalidNumberEntered`, without the resource's trailing newline.
 const INVALID_NUMBER: &str = "Invalid number entered";
+
+/// The altitude `setfromMap(lat, lng, passed)` gives a new row at `position`: Default Alt and the
+/// altitude passed ([`Plan::new_row_altitude`]), then Verify Height ([`Plan::verified_altitude`])
+/// in the screen's frame.
+/// `// C#: GCSViews/FlightPlanner.cs:1164-1236`
+fn row_altitude(
+    plan: &Plan,
+    position: LatLon,
+    passed: f64,
+    context: &MenuContext,
+) -> Result<f64, &'static str> {
+    let altitude = plan.new_row_altitude(passed, context.copter)?;
+    Ok(plan.verified_altitude(
+        position.latitude(),
+        position.longitude(),
+        altitude,
+        context.frame,
+    ))
+}
 
 /// A circle's row: `command` at a latitude and longitude as the C# computed them - nothing wraps
 /// a longitude past 180, as nothing in the C# does - and `altitude`, the rest as
@@ -5238,6 +5593,8 @@ pub struct PlanMenus {
     /// The answers Create Wp Circle or Create Spline Circle has had so far: each `InputBox` is
     /// asked before any answer is read.
     circle_answers: Vec<String>,
+    /// Map Tool > Elevation Graph's form, `ElevationProfile`, while it is showing.
+    pub elevation: Option<elevation::ElevationProfile>,
     /// What a test puts in the geocoder's place, so Zoom To runs its whole course offline.
     #[cfg(test)]
     fake_geocoder: Option<GeocoderFetch>,
@@ -5317,6 +5674,18 @@ impl PlanMenus {
     /// Home Location boxes refused, the Home Location link without a position.
     pub fn say(&mut self, title: &'static str, text: impl Into<String>) {
         self.tell(title, text);
+    }
+
+    /// `TXT_homelat_Enter`'s `CustomMessageBox.Show(text)`, which gives the Lat box the keyboard
+    /// back when it closes.
+    /// `// C#: GCSViews/FlightPlanner.cs:7016-7022`
+    pub fn say_home_hint(&mut self, text: &'static str) {
+        self.prompt = Some(Prompt {
+            title: "",
+            text: text.to_owned(),
+            field: None,
+            kind: PromptKind::HomeLatEnter,
+        });
     }
 
     /// Asks "Reset Home to loaded coords", as `processToScreen` does when a mission it has just
@@ -5401,9 +5770,6 @@ impl PlanMenus {
         };
         let position = menu.position;
         let frame = context.frame.mav_frame();
-        // Default Alt as `setfromMap` takes it; the handlers that add a row at it refuse here
-        // when it is not a whole number.
-        let altitude = plan.new_row_altitude(0.0, context.copter);
         match action {
             MenuAction::DeleteWp => {
                 if let Some(seq) = menu.marker {
@@ -5429,17 +5795,20 @@ impl PlanMenus {
                     return;
                 };
                 // Drawing a polygon, AddWPToMap adds a corner at MouseDownStart, the menu's
-                // position, not the vehicle's.
+                // position, not the vehicle's; with `sethome` set, home goes to the vehicle.
                 if plan.draw_mode() == DrawMode::Area {
                     plan.add_area_vertex(position);
                     return;
                 }
-                match plan.new_row_altitude(vehicle_altitude.trunc(), context.copter) {
+                if plan.click_sets_home(at) {
+                    return;
+                }
+                match row_altitude(plan, at, vehicle_altitude.trunc(), context) {
                     Ok(altitude) => plan.add_wp_to_map(at, altitude, context.frame),
                     Err(why) => self.tell("", why),
                 }
             }
-            MenuAction::LoiterForever => match altitude {
+            MenuAction::LoiterForever => match row_altitude(plan, position, 0.0, context) {
                 Ok(altitude) => plan.append(mp_mission::commands::loiter_unlimited(
                     position, altitude, frame,
                 )),
@@ -5470,7 +5839,19 @@ impl PlanMenus {
                 PromptKind::JumpWpNumber,
             )),
             MenuAction::Rtl => plan.append(mp_mission::commands::return_to_launch(frame)),
-            MenuAction::Land => plan.append(mp_mission::commands::land(position, frame)),
+            // `setfromMap(MouseDownEnd.Lat, MouseDownEnd.Lng, 1)`: 1, unless Default Alt says
+            // otherwise or Verify Height takes it from the ground.
+            // `// C#: GCSViews/FlightPlanner.cs:4302-4316`
+            MenuAction::Land => {
+                match row_altitude(plan, position, mp_mission::commands::LAND_ALTITUDE, context) {
+                    Ok(altitude) => {
+                        let mut land = mp_mission::commands::land(position, frame);
+                        land.z = altitude;
+                        plan.append(land);
+                    }
+                    Err(why) => self.tell("", why),
+                }
+            }
             // `CurrentState.AltUnit == "m" ? "10" : "30"`; this application is metric.
             MenuAction::Takeoff => self.ask(Prompt::input(
                 "Altitude",
@@ -5482,7 +5863,7 @@ impl PlanMenus {
             )),
             // `cmdParamNames.ContainsKey("DO_SET_ROI")` is true in all three of mavcmd.xml's
             // vehicle sections, so the C#'s "not enabled in your firmware" never shows.
-            MenuAction::SetRoi => match altitude {
+            MenuAction::SetRoi => match row_altitude(plan, position, 0.0, context) {
                 Ok(altitude) => {
                     plan.append(mp_mission::commands::set_roi(position, altitude, frame))
                 }
@@ -5633,6 +6014,22 @@ impl PlanMenus {
                 let spline = action == MenuAction::CreateSplineCircle;
                 self.ask_circle(spline, position);
             }
+            // `writeKML()` for a fresh `pointlist`, then `new ElevationProfile(pointlist,
+            // cs.HomeAlt, CMB_altmode)` shown as a dialog - or, planned too little, its "Please
+            // plan something first" and no form. (`cs.HomeAlt` is kept by the form and never
+            // read, so it is not passed here.)
+            // `// C#: GCSViews/FlightPlanner.cs:3248-3256; Controls/ElevationProfile.cs:27-48, 78-84`
+            MenuAction::ElevationGraph => {
+                let terrain = plan.terrain();
+                let pointlist = mapview::point_list(plan.home(), plan.items(), &|lat, lng| {
+                    terrain.at(lat, lng)
+                });
+                match elevation::ElevationProfile::new(pointlist, context.frame, terrain) {
+                    Ok(profile) => self.elevation = Some(profile),
+                    Err(text) => self.tell(ERROR, text),
+                }
+            }
+            MenuAction::SetHomeHere => plan.set_home_at(position),
             MenuAction::LoadWpFile
             | MenuAction::SaveWpFile
             | MenuAction::FenceClear
@@ -5730,15 +6127,17 @@ impl PlanMenus {
         let frame = context.frame.mav_frame();
         // Default Alt, read once the answer is in, as the handlers read it after `InputBox`.
         let altitude = match prompt.kind {
-            PromptKind::InsertWp { .. }
-            | PromptKind::LoiterTime { .. }
-            | PromptKind::LoiterTurns { .. } => match plan.new_row_altitude(0.0, context.copter) {
-                Ok(altitude) => altitude,
-                Err(why) => {
-                    self.tell("", why);
-                    return None;
+            PromptKind::InsertWp { position, .. }
+            | PromptKind::LoiterTime { position }
+            | PromptKind::LoiterTurns { position } => {
+                match row_altitude(plan, position, 0.0, context) {
+                    Ok(altitude) => altitude,
+                    Err(why) => {
+                        self.tell("", why);
+                        return None;
+                    }
                 }
-            },
+            }
             _ => 0.0,
         };
         let number = || {
@@ -5859,7 +6258,7 @@ impl PlanMenus {
                     self.make_circle(plan, context, spline, position);
                 }
             }
-            PromptKind::Message => {}
+            PromptKind::Message | PromptKind::HomeLatEnter => {}
         }
         None
     }
@@ -6576,14 +6975,36 @@ fn submit_prompt(
     cx: &mut Context<MissionPlanner>,
 ) {
     let context = menu_context(this);
+    let home_hint = home_hint_showing(this);
     if let Some(request) = this.plan_menus.submit(&mut this.plan, &context) {
         file_request(this, request, window, cx);
     }
     sync_everything(this);
     if this.plan_menus.prompt.is_some() {
         this.plan_prompt_focus.focus(window, cx);
+    } else if home_hint {
+        focus_home_lat(this, window, cx);
     }
     cx.notify();
+}
+
+/// Whether the dialog showing is `TXT_homelat_Enter`'s.
+fn home_hint_showing(this: &MissionPlanner) -> bool {
+    this.plan_menus
+        .prompt
+        .as_ref()
+        .is_some_and(|prompt| prompt.kind == PromptKind::HomeLatEnter)
+}
+
+/// The keyboard back to the Lat box, where it was when its message box opened.
+fn focus_home_lat(
+    this: &mut MissionPlanner,
+    window: &mut gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) {
+    if let Some(handle) = this.plan_home_focus.first() {
+        handle.focus(window, cx);
+    }
 }
 
 /// Cancel, No, or Escape in a dialog: what the handler does when its dialog says Cancel.
@@ -6592,12 +7013,15 @@ fn cancel_prompt(
     window: &mut gpui::Window,
     cx: &mut Context<MissionPlanner>,
 ) {
+    let home_hint = home_hint_showing(this);
     if let Some(request) = this.plan_menus.cancel(&mut this.plan) {
         file_request(this, request, window, cx);
     }
     sync_everything(this);
     if this.plan_menus.prompt.is_some() {
         this.plan_prompt_focus.focus(window, cx);
+    } else if home_hint {
+        focus_home_lat(this, window, cx);
     }
     cx.notify();
 }
@@ -6971,8 +7395,327 @@ pub fn overlays(
     map_menu(menus, window, cx)
         .into_iter()
         .chain(zoom_menu(menus, cx))
+        .chain(elevation_form(menus, window, cx))
         .chain(prompt_dialog(menus, focus, window, cx))
         .collect()
+}
+
+/// The chart's box inside `zg1`, left, top, right and bottom margins: room for the pane title and
+/// legend above it, the Y axis's labels and title left of it, the X axis's below it.
+const CHART_MARGINS: (f32, f32, f32, f32) = (70.0, 58.0, 24.0, 48.0);
+/// `zg1`'s size, and where it sits in the form: `(12, 23)`, 810 by 427.
+/// `// C#: Controls/ElevationProfile.Designer.cs:36-49`
+const ZG1: (f32, f32, f32, f32) = (12.0, 23.0, 810.0, 427.0);
+/// The form's `ClientSize`, 834 by 462.
+/// `// C#: Controls/ElevationProfile.Designer.cs:66`
+const ELEVATION_CLIENT: (f32, f32) = (834.0, 462.0);
+
+/// Map Tool > Elevation Graph's form, `ElevationProfile`, drawn over the planning screen as the
+/// C#'s `ShowDialog` holds it over the planner: its caption and close box, `label1`'s note, and
+/// `zg1` - the pane's title and legend, the X axis's major grid and the Y axis's zero line, the
+/// "Planned Path" in red over the "DEM" in blue, each planned point's tag in white, and the axes
+/// with their titles, the Y axis's in red as `CreateChart` colours it.
+///
+/// Two differences, both gpui's: a tag is written level rather than turned 90 degrees, and so is
+/// the Y axis title, above the axis, as gpui draws no turned text.
+/// `// C#: Controls/ElevationProfile.Designer.cs; Controls/ElevationProfile.cs:278-340`
+fn elevation_form(
+    menus: &PlanMenus,
+    window: &gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) -> Option<AnyElement> {
+    use elevation::{BLUE, RED};
+    let profile = menus.elevation.clone()?;
+    let size = window.viewport_size();
+    let (left, top, right, bottom) = CHART_MARGINS;
+    let (zg_left, zg_top, zg_width, zg_height) = ZG1;
+    let chart_width = zg_width - left - right;
+    let chart_height = zg_height - top - bottom;
+    // Fractions of the chart box, narrowed once for the layout.
+    #[allow(clippy::cast_possible_truncation)]
+    let across = |value: f64| profile.x_axis.fraction(value) as f32;
+    #[allow(clippy::cast_possible_truncation)]
+    let up = |value: f64| profile.y_axis.fraction(value) as f32;
+
+    let text = |content: String, colour: u32| {
+        div()
+            .absolute()
+            .text_xs()
+            .text_color(rgb(colour))
+            .child(content)
+    };
+    let mut zg1 = crate::probe::measured("plan-elevation-chart", div())
+        .absolute()
+        .left(px(zg_left))
+        .top(px(zg_top))
+        .w(px(zg_width))
+        .h(px(zg_height))
+        .bg(rgb(theme::BG))
+        .border_1()
+        .border_color(rgb(theme::BORDER))
+        // The pane's title, centred at the top.
+        .child(
+            div()
+                .absolute()
+                .top(px(4.0))
+                .left_0()
+                .right_0()
+                .flex()
+                .justify_center()
+                .text_base()
+                .font_weight(gpui::FontWeight::BOLD)
+                .text_color(rgb(theme::TEXT))
+                .child(elevation::TITLE),
+        )
+        // The legend, under the title: each curve's line and its label.
+        .child(
+            div()
+                .absolute()
+                .top(px(28.0))
+                .left_0()
+                .right_0()
+                .flex()
+                .justify_center()
+                .gap_4()
+                .children(
+                    [(elevation::PLANNED_PATH, RED), (elevation::DEM, BLUE)].map(
+                        |(label, colour)| {
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_1()
+                                .child(div().w(px(24.0)).h(px(2.0)).bg(rgb(colour)))
+                                .child(div().text_xs().text_color(rgb(theme::TEXT)).child(label))
+                        },
+                    ),
+                ),
+        );
+
+    // The Y axis title, red, above the axis; the X axis title under its labels.
+    zg1 = zg1
+        .child(
+            text(profile.y_axis.title(elevation::Y_TITLE), RED)
+                .left(px(4.0))
+                .top(px(top - 16.0)),
+        )
+        .child(
+            div()
+                .absolute()
+                .left(px(left))
+                .w(px(chart_width))
+                .top(px(top + chart_height + 22.0))
+                .flex()
+                .justify_center()
+                .text_xs()
+                .text_color(rgb(theme::TEXT))
+                .child(profile.x_axis.title(elevation::X_TITLE)),
+        );
+    // The scales' labels: the X axis's centred under each tic, the Y axis's in red, flush to the
+    // axis (`AlignP.Inside`).
+    for tic in profile.x_axis.tics() {
+        zg1 = zg1.child(
+            div()
+                .absolute()
+                .left(px(left + across(tic) * chart_width - 30.0))
+                .w(px(60.0))
+                .top(px(top + chart_height + 4.0))
+                .flex()
+                .justify_center()
+                .text_xs()
+                .text_color(rgb(theme::TEXT))
+                .child(profile.x_axis.label(tic)),
+        );
+    }
+    for tic in profile.y_axis.tics() {
+        zg1 = zg1.child(
+            div()
+                .absolute()
+                .left_0()
+                .w(px(left - 6.0))
+                .top(px(top + (1.0 - up(tic)) * chart_height - 7.0))
+                .flex()
+                .justify_end()
+                .text_xs()
+                .text_color(rgb(RED))
+                .child(profile.y_axis.label(tic)),
+        );
+    }
+
+    // The lines: grid, zero line, border, then the curves - the DEM first, as ZedGraph draws the
+    // last curve added first - clipped to the chart.
+    let lines = profile.clone();
+    zg1 = zg1.child(
+        gpui::canvas(
+            |_bounds, _window, _cx| (),
+            move |bounds, (), window, _cx| {
+                paint_elevation(&lines, bounds, window);
+            },
+        )
+        .absolute()
+        .left(px(left))
+        .top(px(top))
+        .w(px(chart_width))
+        .h(px(chart_height)),
+    );
+    // Each planned point's tag, white, its end at the point (`AlignH.Right`, `AlignV.Center`,
+    // turned 90 degrees in the C#: the text runs down from the point).
+    for point in &profile.planned {
+        let Some(tag) = &point.tag else {
+            continue;
+        };
+        zg1 = zg1.child(
+            div()
+                .absolute()
+                .left(px(left + across(point.x) * chart_width - 20.0))
+                .w(px(40.0))
+                .top(px(top + (1.0 - up(point.y)) * chart_height + 2.0))
+                .flex()
+                .justify_center()
+                .text_xs()
+                .text_color(rgb(0xff_ff_ff))
+                .child(tag.clone()),
+        );
+    }
+
+    let (client_width, client_height) = ELEVATION_CLIENT;
+    let caption = div()
+        .flex()
+        .items_center()
+        .justify_between()
+        .px_2()
+        .py_1()
+        .border_b_1()
+        .border_color(rgb(theme::BORDER))
+        .child(
+            div()
+                .text_xs()
+                .text_color(rgb(theme::DIM))
+                .child(elevation::FORM_TEXT),
+        )
+        .child(action(
+            "plan-elevation-close",
+            "X",
+            theme::TEXT,
+            true,
+            cx.listener(|this, _event: &(), _window, cx| {
+                this.plan_menus.elevation = None;
+                cx.notify();
+            }),
+        ));
+    let client = div()
+        .relative()
+        .w(px(client_width))
+        .h(px(client_height))
+        .child(
+            text(elevation::NOTE.to_owned(), theme::TEXT)
+                .left(px(162.0))
+                .top(px(7.0)),
+        )
+        .child(zg1);
+    let form = crate::probe::measured("plan-elevation", div())
+        .flex()
+        .flex_col()
+        .bg(rgb(theme::PANEL))
+        .border_1()
+        .border_color(rgb(theme::ACCENT))
+        .rounded_md()
+        .child(caption)
+        .child(client);
+
+    Some(
+        gpui::deferred(
+            gpui::anchored()
+                .position(gpui::point(px(0.0), px(0.0)))
+                .child(
+                    div()
+                        .id("plan-elevation-backdrop")
+                        .w(size.width)
+                        .h(size.height)
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .occlude()
+                        .child(form),
+                ),
+        )
+        .with_priority(1)
+        .into_any_element(),
+    )
+}
+
+/// The Elevation Graph's lines, in the chart's box: the X axis's major grid (ZedGraph's dotted
+/// grey), the Y axis's zero line when 0 is inside it, the chart's border, and the two curves,
+/// clipped to the box as ZedGraph clips them.
+/// `// C#: Controls/ElevationProfile.cs:289-322; ExtLibs/ZedGraph/ZedGraph/Scale.cs:2262-2270`
+fn paint_elevation(
+    profile: &elevation::ElevationProfile,
+    bounds: gpui::Bounds<gpui::Pixels>,
+    window: &mut gpui::Window,
+) {
+    let width = f32::from(bounds.size.width);
+    let height = f32::from(bounds.size.height);
+    #[allow(clippy::cast_possible_truncation)]
+    let at = |x: f64, y: f64| {
+        gpui::point(
+            bounds.origin.x + px(profile.x_axis.fraction(x) as f32 * width),
+            bounds.origin.y + px((1.0 - profile.y_axis.fraction(y) as f32) * height),
+        )
+    };
+    let stroke = |window: &mut gpui::Window,
+                  points: &[gpui::Point<gpui::Pixels>],
+                  colour: u32,
+                  dashed: bool| {
+        let mut builder = gpui::PathBuilder::stroke(px(1.0));
+        if dashed {
+            builder = builder.dash_array(&[px(1.0), px(5.0)]);
+        }
+        let mut points = points.iter();
+        let Some(first) = points.next() else {
+            return;
+        };
+        builder.move_to(*first);
+        for point in points {
+            builder.line_to(*point);
+        }
+        if let Ok(path) = builder.build() {
+            window.paint_path(path, gpui::Hsla::from(rgb(colour)));
+        }
+    };
+    let (y_min, y_max) = (profile.y_axis.min, profile.y_axis.max);
+    for tic in profile.x_axis.tics() {
+        stroke(window, &[at(tic, y_min), at(tic, y_max)], theme::DIM, true);
+    }
+    if y_min < 0.0 && y_max > 0.0 {
+        let (x_min, x_max) = (profile.x_axis.min, profile.x_axis.max);
+        stroke(window, &[at(x_min, 0.0), at(x_max, 0.0)], theme::DIM, false);
+    }
+    let corner = |x: f32, y: f32| {
+        gpui::point(
+            bounds.origin.x + px(x * width),
+            bounds.origin.y + px(y * height),
+        )
+    };
+    stroke(
+        window,
+        &[
+            corner(0.0, 0.0),
+            corner(1.0, 0.0),
+            corner(1.0, 1.0),
+            corner(0.0, 1.0),
+            corner(0.0, 0.0),
+        ],
+        theme::BORDER,
+        false,
+    );
+    window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
+        for (curve, colour) in [
+            (&profile.dem, elevation::BLUE),
+            (&profile.planned, elevation::RED),
+        ] {
+            let points: Vec<_> = curve.iter().map(|point| at(point.x, point.y)).collect();
+            stroke(window, &points, colour, false);
+        }
+    });
 }
 
 /// What a `.waypoints` text holds, for the facts: every record's `seq:frame:command`, and record
@@ -7155,6 +7898,521 @@ pub fn record_facts(plan: &Plan, menus: &PlanMenus) {
         menus.prompt.as_ref().map_or("", Prompt::value),
     );
     record("plan.measure", menus.measure_from.is_some());
+    // Terrain: the lookup's access mode, Verify Height, `sethome`, every row's altitude, and the
+    // Elevation Graph's form.
+    record("plan.srtm.cacheonly", crate::srtm::cache_only());
+    record("plan.verifyheight", plan.verify_height());
+    record("plan.sethome", plan.sethome());
+    record(
+        "mission.alts",
+        items
+            .iter()
+            .map(|item| item.z.to_string())
+            .collect::<Vec<_>>()
+            .join(","),
+    );
+    for (key, value) in elevation::facts(menus.elevation.as_ref()) {
+        record(key, value);
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Map Tool > Elevation Graph: `Controls/ElevationProfile.cs`, the form the C# shows as a dialog,
+// drawn here over the planning screen, with the part of ZedGraph its chart uses.
+// ---------------------------------------------------------------------------------------------
+
+/// The Elevation Graph: `ElevationProfile`'s sampling of the terrain along the planned route, its
+/// two curves, and the axes ZedGraph's `AxisChange` picks for them.
+pub mod elevation {
+    use super::{AltitudeFrame, MULTIPLIER_ALT, Terrain, c_sharp_int};
+    use crate::mapview::PlanPoint;
+
+    /// `CurrentState.multiplierdist`: 1, metres.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:27`
+    const MULTIPLIER_DIST: f32 = crate::fly::MULTIPLIER_DIST;
+
+    /// What the form says with one point or none, and does not open.
+    /// `// C#: Controls/ElevationProfile.cs:44-48, 80-84`
+    pub const PLAN_SOMETHING: &str = "Please plan something first";
+    /// The form's `Text`, its caption.
+    /// `// C#: Controls/ElevationProfile.Designer.cs:69`
+    pub const FORM_TEXT: &str = "ElevationProfile";
+    /// `label1`, above the chart.
+    /// `// C#: Controls/ElevationProfile.Designer.cs:55-58`
+    pub const NOTE: &str = "NOTE: The ground height data is pulled from Google Earth at 100m intervals. You use this at your own risk";
+    /// The pane's title.
+    /// `// C#: Controls/ElevationProfile.cs:283`
+    pub const TITLE: &str = "Elevation above ground";
+    /// The X axis title, `"Distance (" + CurrentState.DistanceUnit + ")"`, in metres.
+    /// `// C#: Controls/ElevationProfile.cs:284`
+    pub const X_TITLE: &str = "Distance (m)";
+    /// The Y axis title, `"Elevation (" + CurrentState.AltUnit + ")"`, in metres.
+    /// `// C#: Controls/ElevationProfile.cs:285`
+    pub const Y_TITLE: &str = "Elevation (m)";
+    /// `list1`'s curve.
+    pub const PLANNED_PATH: &str = "Planned Path";
+    /// `list3`'s curve.
+    pub const DEM: &str = "DEM";
+    /// `Color.Red`: the planned path, the Y axis's scale and title.
+    pub const RED: u32 = 0xff_00_00;
+    /// `Color.Blue`: the DEM.
+    pub const BLUE: u32 = 0x00_00_ff;
+
+    /// One `PointPair`: where it is on the chart, and the `Tag` a planned point is labelled with.
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct ChartPoint {
+        /// Distance along the route, metres.
+        pub x: f64,
+        /// Height, metres.
+        pub y: f64,
+        /// The waypoint's tag - "H", "1", ... - on the planned path in the Relative and Absolute
+        /// frames; none on the terrain-following curve or the DEM.
+        pub tag: Option<String>,
+    }
+
+    /// The form's content once it has loaded.
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct ElevationProfile {
+        /// `list1`, "Planned Path", red.
+        pub planned: Vec<ChartPoint>,
+        /// `list3`, "DEM", blue: the ground every 10 m or so along the route.
+        pub dem: Vec<ChartPoint>,
+        /// `distance`: the route's length, each leg cut to whole metres before it is added -
+        /// the X axis's maximum.
+        pub distance: i32,
+        /// The X axis after `AxisChange`.
+        pub x_axis: Scale,
+        /// The Y axis after `AxisChange`.
+        pub y_axis: Scale,
+    }
+
+    /// `PointLatLngAlt.GetDistance`: a haversine on a 6371 km sphere, in the C#'s order.
+    /// `// C#: ExtLibs/Utilities/PointLatLngAlt.cs:382-393`
+    fn get_distance(from: (f64, f64), to: (f64, f64)) -> f64 {
+        let d = from.0 * 0.017_453_292_519_943_295;
+        let num2 = from.1 * 0.017_453_292_519_943_295;
+        let num3 = to.0 * 0.017_453_292_519_943_295;
+        let num4 = to.1 * 0.017_453_292_519_943_295;
+        let num5 = num4 - num2;
+        let num6 = num3 - d;
+        let num7 =
+            (num6 / 2.0).sin().powi(2) + ((d.cos() * num3.cos()) * (num5 / 2.0).sin().powi(2));
+        let num8 = 2.0 * num7.sqrt().atan2((1.0 - num7).sqrt());
+        (6371.0 * num8) * 1000.0
+    }
+
+    /// `Convert.ToInt32(double)`: the nearest whole number, a half to the even one. (A value past
+    /// an `int`, which throws in the C#, saturates here; no ground is that high.)
+    #[must_use]
+    pub fn convert_to_int32(value: f64) -> f64 {
+        value
+            .round_ties_even()
+            .clamp(f64::from(i32::MIN), f64::from(i32::MAX))
+    }
+
+    impl ElevationProfile {
+        /// `new ElevationProfile(pointlist, homealt, altmode)` and its `Load`: the planned points
+        /// with the nulls and the ROIs taken out - "Please plan something first" unless two are
+        /// left - then the terrain sampled along each leg as `getSRTMAltPath` samples it, the
+        /// planned path, and the chart's axes.
+        ///
+        /// `getSRTMAltPath` cuts each leg into `(int)(dist / 10) + 1` steps, straight in latitude
+        /// and longitude, and asks `srtm` at every step, both ends included, so each leg's first
+        /// sample is the last leg's last again. Each sample's distance is added up from the one
+        /// before, `disttotal`; "DEM" is the ground there and the terrain-following curve the
+        /// ground plus the leg's altitude at that step, each `Convert.ToInt32`. In the Terrain
+        /// frame every point's altitude first has the ground under it taken off - the planned
+        /// altitudes above sea level made heights above the ground again - and the planned path
+        /// is that terrain-following curve, untagged; otherwise it is the points themselves at
+        /// their altitudes, which "already include the home alt", each tagged.
+        ///
+        /// (The C# takes the points off `FlightPlanner.pointlist` itself, and `writeKML` makes a
+        /// new one on the next redraw; here the form has its own copy. Its `LoadingBox`, shown and
+        /// closed while it samples, is not drawn: the sampling is done within the frame that
+        /// chose the entry.)
+        /// `// C#: Controls/ElevationProfile.cs:27-76, 78-139, 141-206`
+        pub fn new(
+            locs: Vec<Option<PlanPoint>>,
+            altmode: AltitudeFrame,
+            terrain: Terrain,
+        ) -> Result<Self, &'static str> {
+            let mut planlocs: Vec<PlanPoint> = locs
+                .into_iter()
+                .flatten()
+                .filter(|loc| !loc.tag.contains("ROI"))
+                .collect();
+            if planlocs.len() <= 1 {
+                return Err(PLAN_SOMETHING);
+            }
+
+            // get total distance
+            let mut distance: i32 = 0;
+            for (lastloc, loc) in planlocs.iter().zip(planlocs.iter().skip(1)) {
+                distance = distance.saturating_add(c_sharp_int(get_distance(
+                    (loc.lat, loc.lng),
+                    (lastloc.lat, lastloc.lng),
+                )));
+            }
+
+            // getSRTMAltPath
+            let multiplierdist = f64::from(MULTIPLIER_DIST);
+            let multiplieralt = f64::from(MULTIPLIER_ALT);
+            let mut dem = Vec::new();
+            let mut list4terrain = Vec::new();
+            let mut disttotal = 0.0;
+            let mut last: Option<PlanPoint> = None;
+            for loc in &mut planlocs {
+                let Some(prev) = last.take() else {
+                    if altmode == AltitudeFrame::Terrain {
+                        loc.alt -= terrain.at(loc.lat, loc.lng).alt;
+                    }
+                    last = Some(loc.clone());
+                    continue;
+                };
+                let dist = get_distance((prev.lat, prev.lng), (loc.lat, loc.lng));
+                if altmode == AltitudeFrame::Terrain {
+                    loc.alt -= terrain.at(loc.lat, loc.lng).alt;
+                }
+                let points = c_sharp_int(dist / 10.0).saturating_add(1);
+                let steplat = (prev.lat - loc.lat) / f64::from(points);
+                let steplng = (prev.lng - loc.lng) / f64::from(points);
+                let stepalt = (prev.alt - loc.alt) / f64::from(points);
+                let mut lastpnt = (prev.lat, prev.lng);
+                for a in 0..=points {
+                    let a = f64::from(a);
+                    let lat = prev.lat - steplat * a;
+                    let lng = prev.lng - steplng * a;
+                    let alt = prev.alt - stepalt * a;
+                    let ground = terrain.at(lat, lng).alt;
+                    disttotal += get_distance(lastpnt, (lat, lng));
+                    // srtm alts
+                    dem.push(ChartPoint {
+                        x: disttotal * multiplierdist,
+                        y: convert_to_int32(ground * multiplieralt),
+                        tag: None,
+                    });
+                    // terrain alt
+                    list4terrain.push(ChartPoint {
+                        x: disttotal * multiplierdist,
+                        y: convert_to_int32((ground + alt) * multiplieralt),
+                        tag: None,
+                    });
+                    lastpnt = (lat, lng);
+                }
+                // `answer.Add(... srtm.getAltitude(loc) ...)`: the form keeps it as `srtmlocs`
+                // and never reads it, but the lookup is made.
+                let _ = terrain.at(loc.lat, loc.lng);
+                last = Some(loc.clone());
+            }
+
+            // Load: the planner plot.
+            let planned = if altmode == AltitudeFrame::Terrain {
+                list4terrain
+            } else {
+                let mut a = 0.0;
+                let mut lastloc: Option<&PlanPoint> = None;
+                let mut planned = Vec::with_capacity(planlocs.len());
+                for planloc in &planlocs {
+                    if let Some(lastloc) = lastloc {
+                        a += get_distance((planloc.lat, planloc.lng), (lastloc.lat, lastloc.lng));
+                    }
+                    planned.push(ChartPoint {
+                        x: a * multiplierdist,
+                        y: planloc.alt * multiplieralt,
+                        tag: Some(planloc.tag.clone()),
+                    });
+                    lastloc = Some(planloc);
+                }
+                planned
+            };
+
+            // CreateChart: X from 0 to the distance; Y from the two curves.
+            let x_axis = Scale::pick(0.0, 0.0, Some((0.0, f64::from(distance) * multiplierdist)));
+            let (range_min, range_max) = planned
+                .iter()
+                .chain(dem.iter())
+                .fold((f64::MAX, f64::MIN), |(low, high), point| {
+                    (low.min(point.y), high.max(point.y))
+                });
+            let y_axis = Scale::pick(range_min, range_max, None);
+            Ok(Self {
+                planned,
+                dem,
+                distance,
+                x_axis,
+                y_axis,
+            })
+        }
+    }
+
+    /// A ZedGraph `LinearScale` after `AxisChange`: its range, its steps, and the power of ten
+    /// and the decimals its labels are written with.
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    pub struct Scale {
+        /// `_min`.
+        pub min: f64,
+        /// `_max`.
+        pub max: f64,
+        /// `_majorStep`.
+        pub major_step: f64,
+        /// `_minorStep`.
+        pub minor_step: f64,
+        /// `_mag`: labels are the value over ten to this.
+        pub mag: i32,
+        /// The `"f"` format's decimals.
+        pub decimals: usize,
+    }
+
+    /// `Scale.Default.MinGrace` and `MaxGrace`.
+    const GRACE: f64 = 0.1;
+    /// `Scale.Default.ZeroLever`.
+    const ZERO_LEVER: f64 = 0.25;
+    /// `Scale.Default.TargetXSteps` and `TargetYSteps`.
+    const TARGET_STEPS: f64 = 7.0;
+    /// `Scale.Default.TargetMinorXSteps` and `TargetMinorYSteps`.
+    const TARGET_MINOR_STEPS: f64 = 5.0;
+
+    /// `Scale.CalcStepSize`: the range over the target steps, rounded to 1, 2 or 5 times a power
+    /// of ten.
+    /// `// C#: ExtLibs/ZedGraph/ZedGraph/Scale.cs:2577-2598`
+    fn calc_step_size(range: f64, target_steps: f64) -> f64 {
+        let temp_step = range / target_steps;
+        let mag = temp_step.log10().floor();
+        let mag_pow = 10f64.powf(mag);
+        let mut mag_msd = f64::from(c_sharp_int(temp_step / mag_pow + 0.5));
+        if mag_msd > 5.0 {
+            mag_msd = 10.0;
+        } else if mag_msd > 2.0 {
+            mag_msd = 5.0;
+        } else if mag_msd > 1.0 {
+            mag_msd = 2.0;
+        }
+        mag_msd * mag_pow
+    }
+
+    /// `Scale.MyMod`: the remainder, 0 for a divisor of 0.
+    /// `// C#: ExtLibs/ZedGraph/ZedGraph/Scale.cs:2667-2676`
+    fn my_mod(x: f64, y: f64) -> f64 {
+        if y == 0.0 {
+            return 0.0;
+        }
+        let temp = x / y;
+        y * (temp - temp.floor())
+    }
+
+    impl Scale {
+        /// `Scale.PickScale` then `LinearScale.PickScale` for an axis whose data run from
+        /// `range_min` to `range_max`, or whose `Min` and `Max` were set (`fixed`), as
+        /// `CreateChart` sets the X axis's: the grace either side, the zero lever, a major step
+        /// of about seven to the range and a minor step of about five to that, the ends taken
+        /// out to whole steps, and the magnitude and decimals of the labels.
+        ///
+        /// (`IsPreventLabelOverlap` would then widen the step until the labels' measured widths
+        /// fit the chart. Not ported: it needs GDI+'s font metrics, and the chart here is wide
+        /// enough for seven labels either way.)
+        /// `// C#: ExtLibs/ZedGraph/ZedGraph/Scale.cs:2394-2449, 2527-2560; ExtLibs/ZedGraph/ZedGraph/LinearScale.cs:133-188`
+        #[must_use]
+        pub fn pick(range_min: f64, range_max: f64, fixed: Option<(f64, f64)>) -> Self {
+            let auto = fixed.is_none();
+            let (mut min, mut max) = fixed.unwrap_or((0.0, 0.0));
+            // Scale.PickScale
+            let legitimate = |value: f64| {
+                if value.is_infinite() || value.is_nan() || value == f64::MAX {
+                    0.0
+                } else {
+                    value
+                }
+            };
+            let min_val = legitimate(range_min);
+            let max_val = legitimate(range_max);
+            let range = max_val - min_val;
+            if auto {
+                min = min_val;
+                if min < 0.0 || min_val - GRACE * range >= 0.0 {
+                    min = min_val - GRACE * range;
+                }
+                max = max_val;
+                if max > 0.0 || max_val + GRACE * range <= 0.0 {
+                    max = max_val + GRACE * range;
+                }
+                if max == min {
+                    if max.abs() > 1e-100 {
+                        max *= if min < 0.0 { 0.95 } else { 1.05 };
+                        min *= if min < 0.0 { 1.05 } else { 0.95 };
+                    } else {
+                        max = 1.0;
+                        min = -1.0;
+                    }
+                }
+                if max <= min {
+                    max = min + 1.0;
+                }
+            }
+            // LinearScale.PickScale
+            if auto && max - min < 1.0e-30 {
+                max += 0.2 * if max == 0.0 { 1.0 } else { max.abs() };
+                min -= 0.2 * if min == 0.0 { 1.0 } else { min.abs() };
+            }
+            if auto && min > 0.0 && min / (max - min) < ZERO_LEVER {
+                min = 0.0;
+            }
+            if auto && max < 0.0 && (max / (max - min)).abs() < ZERO_LEVER {
+                max = 0.0;
+            }
+            let major_step = calc_step_size(max - min, TARGET_STEPS);
+            let minor_step = calc_step_size(major_step, TARGET_MINOR_STEPS);
+            if auto {
+                min -= my_mod(min, major_step);
+                let rest = my_mod(max, major_step);
+                if rest != 0.0 {
+                    max = max + major_step - rest;
+                }
+            }
+            // SetScaleMag
+            let mut mag = -100.0_f64;
+            let mut mag2 = -100.0_f64;
+            if min.abs() > 1.0e-30 {
+                mag = min.abs().log10().floor();
+            }
+            if max.abs() > 1.0e-30 {
+                mag2 = max.abs().log10().floor();
+            }
+            let mut mag = mag2.max(mag);
+            if mag == -100.0 || mag.abs() <= 3.0 {
+                mag = 0.0;
+            }
+            let mag = c_sharp_int((mag / 3.0).floor() * 3.0);
+            let num_dec = 0 - c_sharp_int(major_step.log10().floor() - f64::from(mag));
+            Self {
+                min,
+                max,
+                major_step,
+                minor_step,
+                mag,
+                decimals: usize::try_from(num_dec.max(0)).unwrap_or(0),
+            }
+        }
+
+        /// The major tics `DrawLabels` draws: from the first whole step at or above the
+        /// minimum (`CalcBaseTic`) to the maximum, allowing a thousandth of the range past it.
+        /// `// C#: ExtLibs/ZedGraph/ZedGraph/Scale.cs:1941-1957, 2006-2040, 2629-2642`
+        #[must_use]
+        pub fn tics(&self) -> Vec<f64> {
+            let step = self.major_step;
+            if !step.is_finite() || step <= 0.0 || self.min >= self.max {
+                return Vec::new();
+            }
+            let base = (self.min / step - 0.000_000_01).ceil() * step;
+            let n_tics = c_sharp_int((self.max - self.min) / step + 0.01)
+                .saturating_add(1)
+                .clamp(1, 1000);
+            let range_tol = (self.max - self.min) * 0.001;
+            let first = c_sharp_int((self.min - base) / step + 0.99).max(0);
+            let mut tics = Vec::new();
+            for i in first..n_tics.saturating_add(first) {
+                let value = base + step * f64::from(i);
+                if value < self.min {
+                    continue;
+                }
+                if value > self.max + range_tol {
+                    break;
+                }
+                tics.push(value);
+            }
+            tics
+        }
+
+        /// A tic's label: `(dVal / Math.Pow(10, _mag)).ToString("f" + decimals)`.
+        /// `// C#: ExtLibs/ZedGraph/ZedGraph/Scale.cs:1779-1789`
+        #[must_use]
+        pub fn label(&self, value: f64) -> String {
+            // `+ 0.0` so that a tic at -0 is written "0", as .NET writes it.
+            let shown = value / 10f64.powi(self.mag) + 0.0;
+            format!("{shown:.*}", self.decimals)
+        }
+
+        /// The axis title with ZedGraph's magnitude, `" (10^3)"`, when the labels are scaled.
+        /// `// C#: ExtLibs/ZedGraph/ZedGraph/Axis.cs:1371-1393`
+        #[must_use]
+        pub fn title(&self, text: &str) -> String {
+            if self.mag == 0 {
+                text.to_owned()
+            } else {
+                format!("{text} (10^{})", self.mag)
+            }
+        }
+
+        /// Where a value sits across the axis, 0 at `min` and 1 at `max`.
+        #[must_use]
+        pub fn fraction(&self, value: f64) -> f64 {
+            let span = self.max - self.min;
+            if span <= 0.0 || !span.is_finite() {
+                return 0.0;
+            }
+            (value - self.min) / span
+        }
+    }
+
+    /// The facts a UI test reads of the form: whether it is showing, its curves, and its axes.
+    #[must_use]
+    pub fn facts(profile: Option<&ElevationProfile>) -> Vec<(&'static str, String)> {
+        let Some(profile) = profile else {
+            return vec![("plan.elevation", "closed".to_owned())];
+        };
+        let ys = |points: &[ChartPoint]| {
+            points
+                .iter()
+                .map(|point| point.y.to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+        let low = profile
+            .dem
+            .iter()
+            .map(|point| point.y)
+            .fold(f64::MAX, f64::min);
+        let high = profile
+            .dem
+            .iter()
+            .map(|point| point.y)
+            .fold(f64::MIN, f64::max);
+        let labels = |scale: &Scale| {
+            scale
+                .tics()
+                .iter()
+                .map(|tic| scale.label(*tic))
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+        vec![
+            ("plan.elevation", "open".to_owned()),
+            (
+                "plan.elevation.titles",
+                format!(
+                    "{TITLE}|{}|{}",
+                    profile.x_axis.title(X_TITLE),
+                    profile.y_axis.title(Y_TITLE)
+                ),
+            ),
+            ("plan.elevation.legend", format!("{PLANNED_PATH},{DEM}")),
+            ("plan.elevation.distance", profile.distance.to_string()),
+            ("plan.elevation.planned", profile.planned.len().to_string()),
+            ("plan.elevation.planned.y", ys(&profile.planned)),
+            (
+                "plan.elevation.planned.tags",
+                profile
+                    .planned
+                    .iter()
+                    .filter_map(|point| point.tag.clone())
+                    .collect::<Vec<_>>()
+                    .join(","),
+            ),
+            ("plan.elevation.dem", profile.dem.len().to_string()),
+            ("plan.elevation.dem.range", format!("{low}..{high}")),
+            ("plan.elevation.xlabels", labels(&profile.x_axis)),
+            ("plan.elevation.ylabels", labels(&profile.y_axis)),
+        ]
+    }
 }
 
 #[cfg(test)]
@@ -9717,10 +10975,12 @@ mod tests {
                 "menu-surveyGrid",
                 "menu-ContextMeasure",
                 "menu-zoomTo",
+                "menu-elevationGraph",
                 "menu-reverseWPs",
                 "menu-loadWPFile",
                 "menu-saveWPFile",
                 "menu-modifyAlt",
+                "menu-setHomeHere",
                 "menu-zoomToVehicle",
                 "menu-zoomToMission",
                 "menu-zoomToHome",
@@ -10820,5 +12080,657 @@ mod menu_batch_tests {
         }
         // Over the top: the arc reaches the head's highest point.
         assert!(outline.iter().any(|(_, y)| *y < -37.0));
+    }
+}
+
+/// Terrain on the planning screen (PLAN.md §13.4 row 35): Verify Height's altitudes, a drag's,
+/// home from the map, and the Elevation Graph - each held to the C#'s arithmetic, worked by hand
+/// over terrain whose heights are known.
+#[cfg(test)]
+mod terrain_tests {
+    use super::*;
+    use crate::srtm::{AltResponse, TileType};
+    use elevation::{ElevationProfile, Scale};
+    use mp_mission::commands as cmd;
+
+    fn at(lat: f64, lng: f64) -> LatLon {
+        LatLon::new(lat, lng).expect("a valid position")
+    }
+
+    const fn valid(alt: f64) -> AltResponse {
+        AltResponse {
+            current_type: TileType::Valid,
+            alt,
+        }
+    }
+
+    /// The synthetic tile's flat 584 m.
+    fn flat(_: f64, _: f64) -> AltResponse {
+        valid(584.0)
+    }
+
+    /// Two plateaus: 584.7 m at home's latitude and north of -35.37, 612.9 m south of it.
+    fn plateaus(lat: f64, _: f64) -> AltResponse {
+        if lat < -35.37 {
+            valid(612.9)
+        } else {
+            valid(584.7)
+        }
+    }
+
+    /// Below the sea south of -35.37, 584.7 m north of it.
+    fn sea(lat: f64, _: f64) -> AltResponse {
+        if lat < -35.37 {
+            valid(-3.7)
+        } else {
+            valid(584.7)
+        }
+    }
+
+    /// No tile anywhere.
+    fn nothing(_: f64, _: f64) -> AltResponse {
+        AltResponse::INVALID
+    }
+
+    /// Home in the boxes at -35.36, 149.16 (584.7 m of ground under it), Default Alt 100, Verify
+    /// Height ticked, over `terrain`.
+    fn plan_over(terrain: fn(f64, f64) -> AltResponse) -> Plan {
+        let mut plan = Plan::default();
+        plan.set_terrain(Terrain(terrain));
+        plan.set_home_text(HomeBox::Lat, "-35.36".to_owned());
+        plan.set_home_text(HomeBox::Lng, "149.16".to_owned());
+        plan.set_home_text(HomeBox::Alt, "584.70".to_owned());
+        plan.set_verify_height(true);
+        plan
+    }
+
+    // ---- Verify Height, `setfromMap` ----
+
+    /// The box is clear as the Designer leaves it, and while clear the altitude stands.
+    #[test]
+    fn verify_height_starts_clear_and_clear_changes_nothing() {
+        let mut plan = plan_over(plateaus);
+        assert!(!Plan::default().verify_height());
+        plan.set_verify_height(false);
+        for frame in AltitudeFrame::all() {
+            assert_eq!(plan.verified_altitude(-35.38, 149.16, 37.0, frame), 37.0);
+        }
+    }
+
+    /// Absolute: the ground at the row, 612.9, plus Default Alt, 100, in double - 712.9.
+    #[test]
+    fn verify_height_in_absolute_is_the_ground_plus_default_alt() {
+        let plan = plan_over(plateaus);
+        let altitude = plan.verified_altitude(-35.38, 149.16, 100.0, AltitudeFrame::Absolute);
+        assert!((altitude - (612.9 + 100.0)).abs() < 1e-9, "{altitude}");
+        // No tile: `alt` 0, which the C# does not look past - Default Alt alone.
+        let plan = plan_over(nothing);
+        assert_eq!(
+            plan.verified_altitude(-35.38, 149.16, 100.0, AltitudeFrame::Absolute),
+            100.0
+        );
+    }
+
+    /// Terrain: Default Alt, whatever was passed.
+    #[test]
+    fn verify_height_in_terrain_is_default_alt() {
+        let plan = plan_over(plateaus);
+        assert_eq!(
+            plan.verified_altitude(-35.38, 149.16, 37.0, AltitudeFrame::Terrain),
+            100.0
+        );
+    }
+
+    /// Relative: `(int)612.9 + 100 - (int)584.7` = 612 + 100 - 584 = 128, the planned home's
+    /// ground subtracted; a row on home's plateau gets Default Alt.
+    #[test]
+    fn verify_height_in_relative_keeps_the_row_default_alt_above_the_ground_under_it() {
+        let plan = plan_over(plateaus);
+        assert_eq!(
+            plan.verified_altitude(-35.38, 149.16, 100.0, AltitudeFrame::Relative),
+            128.0
+        );
+        assert_eq!(
+            plan.verified_altitude(-35.365, 149.16, 100.0, AltitudeFrame::Relative),
+            100.0
+        );
+        // `(int)` cuts toward zero: -3.7 is -3, so -3 + 100 - 584 = -487.
+        let plan = plan_over(sea);
+        assert_eq!(
+            plan.verified_altitude(-35.38, 149.16, 100.0, AltitudeFrame::Relative),
+            -487.0
+        );
+    }
+
+    /// The altitude passed is not what Verify Height uses: Default Alt is, even 0, where the lines
+    /// before it gave 50.
+    #[test]
+    fn verify_height_takes_default_alt_not_the_altitude_handed_in() {
+        let mut plan = plan_over(plateaus);
+        plan.set_panel_text(PanelBox::DefaultAlt, "0");
+        let given = plan.new_row_altitude(0.0, false).expect("0 is a number");
+        assert_eq!(given, 50.0);
+        assert_eq!(
+            plan.verified_altitude(-35.365, 149.16, given, AltitudeFrame::Relative),
+            0.0
+        );
+    }
+
+    /// The menu's rows go through `setfromMap` too: Loiter > Forever in Absolute over the high
+    /// plateau is at 712.9, and Land - handed 1 - at the ground plus Default Alt as well.
+    #[test]
+    fn the_menu_rows_are_verified_where_the_menu_was_opened() {
+        let mut plan = plan_over(plateaus);
+        let mut menus = PlanMenus::default();
+        let context = MenuContext {
+            frame: AltitudeFrame::Absolute,
+            vehicle: None,
+            takeoff_pitch: false,
+            copter: false,
+        };
+        let south = at(-35.38, 149.16);
+        menus.open_at((10.0, 10.0), south, None);
+        menus.choose(&mut plan, MenuAction::LoiterForever, &context);
+        menus.open_at((10.0, 10.0), south, None);
+        menus.choose(&mut plan, MenuAction::Land, &context);
+        let alts: Vec<f64> = plan.items().iter().map(|item| item.z).collect();
+        assert_eq!(alts.len(), 2);
+        assert!(
+            alts.iter().all(|alt| (alt - 712.9).abs() < 1e-9),
+            "{alts:?}"
+        );
+        // Box clear: the land keeps the 1 it was handed.
+        plan.set_verify_height(false);
+        menus.open_at((10.0, 10.0), south, None);
+        menus.choose(&mut plan, MenuAction::Land, &context);
+        assert_eq!(plan.items().last().map(|item| item.z), Some(1.0));
+    }
+
+    /// Insert Wp's row, placed once its number is answered, is verified at the menu's position.
+    #[test]
+    fn an_inserted_waypoint_is_verified_at_the_menu_position() {
+        let mut plan = plan_over(plateaus);
+        let mut menus = PlanMenus::default();
+        let context = MenuContext {
+            frame: AltitudeFrame::Relative,
+            vehicle: None,
+            takeoff_pitch: false,
+            copter: false,
+        };
+        menus.open_at((10.0, 10.0), at(-35.38, 149.16), None);
+        menus.choose(&mut plan, MenuAction::InsertWp, &context);
+        menus.submit(&mut plan, &context);
+        assert_eq!(plan.items().first().map(|item| item.z), Some(128.0));
+    }
+
+    // ---- A drag, `callMeDrag(..., -2)` ----
+
+    /// A waypoint dragged from home's plateau (584.7, cut to 584) to the high one (612.9, cut to
+    /// 612) climbs by the difference, its own 100.9 cut to 100 first: 128.
+    #[test]
+    fn a_dragged_waypoint_keeps_its_height_above_the_ground() {
+        let mut plan = plan_over(plateaus);
+        plan.append(cmd::waypoint(at(-35.365, 149.16), 100.9, FRAME_RELATIVE));
+        plan.begin_drag(1);
+        plan.move_to(1, at(-35.38, 149.16));
+        plan.end_drag(1, AltitudeFrame::Relative, None);
+        assert_eq!(plan.items().first().map(|item| item.z), Some(128.0));
+        // And back down again: 128 + 584 - 612.
+        plan.begin_drag(1);
+        plan.move_to(1, at(-35.365, 149.16));
+        plan.end_drag(1, AltitudeFrame::Absolute, None);
+        assert_eq!(plan.items().first().map(|item| item.z), Some(100.0));
+    }
+
+    /// Nothing changes with the box clear, in the Terrain frame, for a row not moved, or for a
+    /// command whose Z column is not headed "Alt" in the vehicle's `mavcmd.xml` section.
+    #[test]
+    fn a_drag_leaves_the_altitude_where_the_c_sharp_does() {
+        let dragged = |plan: &mut Plan, command: u16, frame, family| {
+            plan.clear_mission();
+            let mut row = cmd::waypoint(at(-35.365, 149.16), 100.9, FRAME_RELATIVE);
+            row.command = command;
+            plan.append(row);
+            plan.begin_drag(1);
+            plan.move_to(1, at(-35.38, 149.16));
+            plan.end_drag(1, frame, family);
+            plan.items().first().map(|item| item.z)
+        };
+        let mut plan = plan_over(plateaus);
+        assert_eq!(
+            dragged(&mut plan, 16, AltitudeFrame::Terrain, None),
+            Some(100.9)
+        );
+        // VTOL_LAND's Z is "Alt" for a plane (APM) and not in the copter's section (AC2).
+        let plane = Some(mp_vehicle::VehicleFamily::Plane);
+        assert_eq!(
+            dragged(&mut plan, 85, AltitudeFrame::Relative, None),
+            Some(100.9)
+        );
+        assert_eq!(
+            dragged(&mut plan, 85, AltitudeFrame::Relative, plane),
+            Some(128.0)
+        );
+        plan.set_verify_height(false);
+        assert_eq!(
+            dragged(&mut plan, 16, AltitudeFrame::Relative, None),
+            Some(100.9)
+        );
+        // Grabbed and let go where it was: never dragged, and its 100.9 is not cut to 100.
+        plan.set_verify_height(true);
+        plan.begin_drag(1);
+        plan.end_drag(1, AltitudeFrame::Relative, None);
+        assert_eq!(plan.items().first().map(|item| item.z), Some(100.9));
+    }
+
+    /// `alt_column` is `mavcmd.xml`'s: every command whose `Z` heading starts "Alt", section by
+    /// section, read from the C# tree when it is present.
+    #[test]
+    fn the_alt_column_is_the_one_mavcmd_xml_heads_alt() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../referneces/missionplanner/mavcmd.xml");
+        let Ok(xml) = std::fs::read_to_string(&path) else {
+            println!("skipped: {} is not here", path.display());
+            return;
+        };
+        let number = |name: &str| -> u16 {
+            match name {
+                "WAYPOINT" => 16,
+                "LOITER_UNLIM" => 17,
+                "LOITER_TURNS" => 18,
+                "LOITER_TIME" => 19,
+                "LAND" => 21,
+                "TAKEOFF" => 22,
+                "CONTINUE_AND_CHANGE_ALT" => 30,
+                "LOITER_TO_ALT" => 31,
+                "ARC_WAYPOINT" => 36,
+                "SPLINE_WAYPOINT" => 82,
+                "VTOL_TAKEOFF" => 84,
+                "VTOL_LAND" => 85,
+                "PAYLOAD_PLACE" => 94,
+                "DO_SET_HOME" => 179,
+                "DO_SET_ROI_LOCATION" => 195,
+                "DO_SET_ROI" => 201,
+                other => panic!("{other} is headed Alt and has no number here"),
+            }
+        };
+        for (section, family) in [
+            ("AC2", None),
+            ("APM", Some(mp_vehicle::VehicleFamily::Plane)),
+            ("APRover", Some(mp_vehicle::VehicleFamily::Rover)),
+        ] {
+            let open = format!("<{section}>");
+            let close = format!("</{section}>");
+            let body = xml
+                .split_once(open.as_str())
+                .and_then(|(_, rest)| rest.split_once(close.as_str()))
+                .map(|(body, _)| body)
+                .expect("the section");
+            let mut headed_alt = Vec::new();
+            let mut command = "";
+            for line in body.lines().map(str::trim) {
+                // A command opens on a line of its own; its seven cells close on theirs.
+                if line.starts_with('<') && !line.contains("</") && !line.starts_with("<!--") {
+                    command = line.trim_start_matches('<').trim_end_matches('>');
+                }
+                if line.starts_with("<Z")
+                    && line
+                        .split_once('>')
+                        .is_some_and(|(_, text)| text.starts_with("Alt"))
+                {
+                    headed_alt.push(number(command));
+                }
+            }
+            assert!(!headed_alt.is_empty(), "{section}");
+            for command in 0..=u16::MAX {
+                assert_eq!(
+                    alt_column(command, family),
+                    headed_alt.contains(&command),
+                    "{section} {command}"
+                );
+            }
+        }
+    }
+
+    // ---- Home from the map ----
+
+    /// Set Home Here: the ASL box takes the ground there `ToString("0.00")`, then Lat and Long,
+    /// and the planned home follows.
+    #[test]
+    fn set_home_here_puts_home_at_the_ground_there() {
+        let mut plan = plan_over(plateaus);
+        let mut menus = PlanMenus::default();
+        menus.open_at((10.0, 10.0), at(-35.38, 149.17), None);
+        menus.choose(
+            &mut plan,
+            MenuAction::SetHomeHere,
+            &MenuContext {
+                frame: AltitudeFrame::Relative,
+                vehicle: None,
+                takeoff_pitch: false,
+                copter: false,
+            },
+        );
+        assert_eq!(plan.home_text(HomeBox::Alt), "612.90");
+        assert_eq!(plan.home_text(HomeBox::Lat), "-35.38");
+        assert_eq!(plan.home_text(HomeBox::Lng), "149.17");
+        assert!((plan.planned_home().alt - 612.9).abs() < 1e-9);
+        assert!(plan.items().is_empty());
+        // No tile: 0, as the C# writes `alt` whatever kind of answer it is.
+        let mut plan = plan_over(nothing);
+        plan.set_home_at(at(-35.38, 149.17));
+        assert_eq!(plan.home_text(HomeBox::Alt), "0.00");
+    }
+
+    /// Entering the Lat box says "Click on the Map to set Home " once; the next click on the map
+    /// moves home there instead of adding a row; any change to a box forgets the request.
+    #[test]
+    fn entering_the_lat_box_makes_the_next_click_set_home() {
+        let mut plan = plan_over(flat);
+        assert_eq!(plan.home_lat_enter(), Some(CLICK_TO_SET_HOME));
+        assert!(plan.sethome());
+        assert_eq!(plan.home_lat_enter(), None);
+        assert!(plan.click_sets_home(at(-35.37, 149.18)));
+        assert!(!plan.sethome());
+        assert_eq!(plan.home_text(HomeBox::Alt), "584.00");
+        assert_eq!(plan.home_text(HomeBox::Lat), "-35.37");
+        assert!(plan.items().is_empty());
+        // Once done, a click adds rows again.
+        assert!(!plan.click_sets_home(at(-35.37, 149.18)));
+
+        // A typed change clears it.
+        assert_eq!(plan.home_lat_enter(), Some(CLICK_TO_SET_HOME));
+        plan.set_home_text(HomeBox::Lng, "149.2".to_owned());
+        assert!(!plan.sethome());
+        assert!(!plan.click_sets_home(at(-35.37, 149.18)));
+
+        // Drawing a polygon, the click is a corner first.
+        plan.home_lat_enter();
+        plan.set_draw_mode(DrawMode::Area);
+        assert!(!plan.click_sets_home(at(-35.37, 149.18)));
+        assert!(plan.sethome());
+    }
+
+    /// Insert Wp > At Current Position with `sethome` set moves home to the vehicle.
+    #[test]
+    fn at_current_position_moves_home_to_the_vehicle_when_asked_to() {
+        let mut plan = plan_over(flat);
+        let mut menus = PlanMenus::default();
+        plan.home_lat_enter();
+        menus.open_at((10.0, 10.0), at(-35.36, 149.16), None);
+        menus.choose(
+            &mut plan,
+            MenuAction::InsertAtCurrentPosition,
+            &MenuContext {
+                frame: AltitudeFrame::Relative,
+                vehicle: Some((at(-35.35, 149.15), 30.0)),
+                takeoff_pitch: false,
+                copter: false,
+            },
+        );
+        assert!(plan.items().is_empty());
+        assert_eq!(plan.home_text(HomeBox::Lat), "-35.35");
+        assert_eq!(plan.home_text(HomeBox::Alt), "584.00");
+    }
+
+    // ---- The Elevation Graph ----
+
+    /// Home at 584.1 and two waypoints 0.0005 degrees apart due south, 100 m in `frame`.
+    fn route(frame: u8) -> (Option<Home>, Vec<MissionItem>) {
+        let home = Home {
+            lat: -35.0,
+            lng: 149.0,
+            alt: 584.1,
+        };
+        let mut plan = Plan::default();
+        plan.append(cmd::waypoint(at(-35.0005, 149.0), 100.0, frame));
+        plan.append(cmd::waypoint(at(-35.001, 149.0), 100.0, frame));
+        (Some(home), plan.items().to_vec())
+    }
+
+    /// Each leg is 55.597463 m (`GetDistance` on its 6371 km sphere), so 6 steps, 7 samples each
+    /// end included: 14 DEM points, the flat 584; the distance 55 + 55 = 110. In the Relative
+    /// frame the planned path is the points themselves - home at 584.1, the rows at 100 + 584.1 -
+    /// tagged H, 1, 2, at 0, 55.597 and 111.195 m along.
+    #[test]
+    fn the_relative_graph_plots_the_points_over_the_ground() {
+        let (home, items) = route(FRAME_RELATIVE);
+        let points = mapview::point_list(home, &items, &flat);
+        let profile = ElevationProfile::new(points, AltitudeFrame::Relative, Terrain(flat))
+            .expect("three points");
+        assert_eq!(profile.distance, 110);
+        assert_eq!(profile.dem.len(), 14);
+        assert!(profile.dem.iter().all(|point| point.y == 584.0));
+        let xs = [
+            0.0,
+            9.266_243_887_376_07,
+            18.532_487_774_044_817,
+            27.798_731_661_420_888,
+            37.064_975_548_796_96,
+            46.331_219_435_465_705,
+            55.597_463_322_841_776,
+            55.597_463_322_841_776,
+            64.863_707_210_217_85,
+            74.129_951_096_886_6,
+            83.396_194_983_555_35,
+            92.662_438_870_931_42,
+            101.928_682_758_307_5,
+            111.194_926_644_268_93,
+        ];
+        for (point, x) in profile.dem.iter().zip(xs) {
+            assert!((point.x - x).abs() < 1e-9, "{} against {x}", point.x);
+        }
+        let planned: Vec<(f64, f64, Option<&str>)> = profile
+            .planned
+            .iter()
+            .map(|point| (point.x, point.y, point.tag.as_deref()))
+            .collect();
+        assert_eq!(planned.len(), 3);
+        for ((x, y, tag), (want_x, want_y, want_tag)) in planned.iter().zip([
+            (0.0, 584.1, "H"),
+            (55.597_463_322_841_755, 684.1, "1"),
+            (111.194_926_644_268_86, 684.1, "2"),
+        ]) {
+            assert!((x - want_x).abs() < 1e-9, "{x}");
+            assert!((y - want_y).abs() < 1e-9, "{y}");
+            assert_eq!(*tag, Some(want_tag));
+        }
+        // X from 0 to 110 in steps of 20 (110 / 7 = 15.7, promoted to 2 x 10); Y from the data's
+        // 584..684.1 with a tenth either side, 573.99..694.11, out to whole steps of 20.
+        assert_eq!(
+            (
+                profile.x_axis.min,
+                profile.x_axis.max,
+                profile.x_axis.major_step
+            ),
+            (0.0, 110.0, 20.0)
+        );
+        let labels = |scale: &Scale| -> Vec<String> {
+            scale.tics().iter().map(|tic| scale.label(*tic)).collect()
+        };
+        assert_eq!(
+            labels(&profile.x_axis),
+            ["0", "20", "40", "60", "80", "100"]
+        );
+        assert_eq!(profile.y_axis.major_step, 20.0);
+        assert!((profile.y_axis.min - 560.0).abs() < 1e-9);
+        assert!((profile.y_axis.max - 700.0).abs() < 1e-9);
+        assert_eq!(
+            labels(&profile.y_axis),
+            ["560", "580", "600", "620", "640", "660", "680", "700"]
+        );
+    }
+
+    /// In the Terrain frame the rows sit 100 above the ground (584 + 100 = 684 on the list), and
+    /// the ground under each point comes off again: home 0.1 above it, the rows 100. The planned
+    /// path is the ground plus the leg's altitude at each sample, `Convert.ToInt32`: 584.1 is
+    /// 584, 600.75 is 601, 617.4 617, 634.05 634, 650.7 651, 667.35 667, then 684 - untagged.
+    #[test]
+    fn the_terrain_graph_follows_the_ground() {
+        let (home, items) = route(FRAME_TERRAIN);
+        let points = mapview::point_list(home, &items, &flat);
+        let alts: Vec<f64> = points.iter().flatten().map(|point| point.alt).collect();
+        assert_eq!(alts, [584.1, 684.0, 684.0]);
+        let profile = ElevationProfile::new(points, AltitudeFrame::Terrain, Terrain(flat))
+            .expect("three points");
+        let ys: Vec<f64> = profile.planned.iter().map(|point| point.y).collect();
+        assert_eq!(
+            ys,
+            [
+                584.0, 601.0, 617.0, 634.0, 651.0, 667.0, 684.0, 684.0, 684.0, 684.0, 684.0, 684.0,
+                684.0, 684.0
+            ]
+        );
+        assert!(profile.planned.iter().all(|point| point.tag.is_none()));
+        assert_eq!(profile.dem.len(), 14);
+        // 584..684 and a tenth of 100 either side: 574..694, out to 560..700 in 20s.
+        let labels: Vec<String> = profile
+            .y_axis
+            .tics()
+            .iter()
+            .map(|tic| profile.y_axis.label(*tic))
+            .collect();
+        assert_eq!(
+            labels,
+            ["560", "580", "600", "620", "640", "660", "680", "700"]
+        );
+    }
+
+    /// One point, or none, is "Please plan something first"; a DO_SET_ROI and a DO_JUMP do not
+    /// count.
+    #[test]
+    fn too_little_planned_is_refused() {
+        let empty = ElevationProfile::new(Vec::new(), AltitudeFrame::Relative, Terrain(flat));
+        assert_eq!(empty, Err(elevation::PLAN_SOMETHING));
+        let (home, _) = route(FRAME_RELATIVE);
+        let rows = [
+            cmd::set_roi(at(-35.001, 149.0), 0.0, FRAME_RELATIVE),
+            cmd::do_jump(1.0, 2.0, FRAME_RELATIVE),
+        ];
+        let points = mapview::point_list(home, &rows, &flat);
+        assert_eq!(points.len(), 3);
+        assert_eq!(
+            ElevationProfile::new(points, AltitudeFrame::Relative, Terrain(flat)),
+            Err(elevation::PLAN_SOMETHING)
+        );
+    }
+
+    /// Map Tool > Elevation Graph opens the form from the plan as it stands, or says why not.
+    #[test]
+    fn the_menu_opens_the_form_or_says_plan_something_first() {
+        let mut plan = Plan::default();
+        plan.set_terrain(Terrain(flat));
+        let mut menus = PlanMenus::default();
+        let context = MenuContext {
+            frame: AltitudeFrame::Relative,
+            vehicle: None,
+            takeoff_pitch: false,
+            copter: false,
+        };
+        menus.open_at((10.0, 10.0), at(-35.0, 149.0), None);
+        menus.choose(&mut plan, MenuAction::ElevationGraph, &context);
+        assert!(menus.elevation.is_none());
+        let prompt = menus.prompt.take().expect("a message");
+        assert_eq!(
+            (prompt.title, prompt.text.as_str()),
+            (ERROR, elevation::PLAN_SOMETHING)
+        );
+
+        let (home, items) = route(FRAME_RELATIVE);
+        let home = home.expect("a home");
+        plan.set_home_text(HomeBox::Lat, double_text(home.lat));
+        plan.set_home_text(HomeBox::Lng, double_text(home.lng));
+        plan.set_home_text(HomeBox::Alt, double_text(home.alt));
+        for item in items {
+            plan.append(item);
+        }
+        menus.open_at((10.0, 10.0), at(-35.0, 149.0), None);
+        menus.choose(&mut plan, MenuAction::ElevationGraph, &context);
+        assert!(menus.prompt.is_none());
+        let facts = elevation::facts(menus.elevation.as_ref());
+        let fact = |key: &str| {
+            facts
+                .iter()
+                .find(|(name, _)| *name == key)
+                .map(|(_, value)| value.clone())
+        };
+        assert_eq!(fact("plan.elevation").as_deref(), Some("open"));
+        assert_eq!(
+            fact("plan.elevation.planned.tags").as_deref(),
+            Some("H,1,2")
+        );
+        assert_eq!(
+            fact("plan.elevation.planned.y").as_deref(),
+            Some("584.1,684.1,684.1")
+        );
+        assert_eq!(fact("plan.elevation.dem").as_deref(), Some("14"));
+        assert_eq!(
+            fact("plan.elevation.dem.range").as_deref(),
+            Some("584..584")
+        );
+        assert_eq!(fact("plan.elevation.distance").as_deref(), Some("110"));
+        assert_eq!(
+            fact("plan.elevation.titles").as_deref(),
+            Some("Elevation above ground|Distance (m)|Elevation (m)")
+        );
+        assert_eq!(
+            fact("plan.elevation.legend").as_deref(),
+            Some("Planned Path,DEM")
+        );
+        assert_eq!(
+            fact("plan.elevation.xlabels").as_deref(),
+            Some("0,20,40,60,80,100")
+        );
+    }
+
+    /// ZedGraph's scale by hand: the zero lever pulls a minimum within a quarter of the range to
+    /// 0; a flat range is widened by a fifth; a range past 10^3 is labelled in thousands with
+    /// the magnitude on the title.
+    #[test]
+    fn the_scale_is_zedgraphs() {
+        // 10..100: grace 9 either side, -> 1..109; 1 / 108 < 0.25, so 0; step 109 / 7 = 15.6
+        // -> 20; max out to 120.
+        let scale = Scale::pick(10.0, 100.0, None);
+        assert_eq!((scale.min, scale.major_step), (0.0, 20.0));
+        assert!((scale.max - 120.0).abs() < 1e-9, "{}", scale.max);
+        assert_eq!(scale.minor_step, 5.0);
+        // 584..584: range 0, grace nothing; equal ends, so 584 * 0.95 .. 584 * 1.05 = 554.8..613.2;
+        // step 58.4 / 7 = 8.3 -> 10; out to 550..620.
+        let scale = Scale::pick(584.0, 584.0, None);
+        assert!((scale.min - 550.0).abs() < 1e-9 && (scale.max - 620.0).abs() < 1e-9);
+        assert_eq!(scale.major_step, 10.0);
+        // A fixed 0..12345: step 1763.6 -> 2000; magnitude 4, a multiple of 3 -> 3; labels in
+        // thousands, no decimals.
+        let scale = Scale::pick(0.0, 0.0, Some((0.0, 12345.0)));
+        assert_eq!(
+            (scale.min, scale.max, scale.major_step),
+            (0.0, 12345.0, 2000.0)
+        );
+        assert_eq!(scale.mag, 3);
+        let labels: Vec<String> = scale.tics().iter().map(|tic| scale.label(*tic)).collect();
+        assert_eq!(labels, ["0", "2", "4", "6", "8", "10", "12"]);
+        assert_eq!(scale.title("Distance (m)"), "Distance (m) (10^3)");
+        // A step of 0.5 is written to one decimal.
+        let scale = Scale::pick(0.0, 0.0, Some((0.0, 3.0)));
+        assert_eq!(scale.major_step, 0.5);
+        assert_eq!(scale.label(1.5), "1.5");
+    }
+
+    /// `Convert.ToInt32`: a half goes to the even neighbour.
+    #[test]
+    fn convert_to_int32_rounds_a_half_to_even() {
+        assert_eq!(elevation::convert_to_int32(600.5), 600.0);
+        assert_eq!(elevation::convert_to_int32(601.5), 602.0);
+        assert_eq!(elevation::convert_to_int32(-2.5), -2.0);
+        assert_eq!(elevation::convert_to_int32(634.05), 634.0);
+    }
+
+    /// The facts say closed while no form shows.
+    #[test]
+    fn with_no_form_the_facts_say_closed() {
+        assert_eq!(
+            elevation::facts(None),
+            vec![("plan.elevation", "closed".to_owned())]
+        );
     }
 }

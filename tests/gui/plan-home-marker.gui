@@ -30,6 +30,9 @@ expect map.home.label true
 
 # A home typed into the boxes moves the marker with each box (TXT_home*_TextChanged -> writeKML).
 click plan-home-lat
+# Entering the Lat box shows "Click on the Map to set Home " (TXT_homelat_Enter,
+# FlightPlanner.cs:7016-7022); OK gives the box the keyboard back.
+click plan-prompt-ok
 key ctrl+u
 type 51.5
 settle 1
