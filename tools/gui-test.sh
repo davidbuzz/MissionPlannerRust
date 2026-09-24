@@ -224,14 +224,12 @@ xdotool mousemove "${SHOT_AT%%,*}" "${SHOT_AT##*,}" 2>/dev/null
 
 # Starts the application and waits for its window, then activates it and moves it where the
 # pointer waits. Once before the steps, and again for each `restart`.
-start_app() {
-    "$BIN" "${APP_ARGS[@]}" </dev/null &
-    APP_PID=$!
-
-    # The window must belong to the process this script started. The real Mission Planner shares
-    # our title, and a test that drives it instead of us is worse than a test that does not run.
+# Finds the application's window: the one owned by the process this script started. The real
+# Mission Planner shares our title, and a test that drives it instead of us is worse than a test
+# that does not run. Tries for up to `$1` half-seconds.
+find_window() {
     WIN_ID=""
-    for _ in $(seq 1 60); do
+    for _ in $(seq 1 "${1:-60}"); do
         for CANDIDATE in $(xdotool search --pid "$APP_PID" --onlyvisible --name "$WINDOW_TITLE" 2>/dev/null); do
             OWNER=$(xdotool getwindowpid "$CANDIDATE" 2>/dev/null)
             [ "$OWNER" = "$APP_PID" ] && xwininfo -id "$CANDIDATE" >/dev/null 2>&1 && WIN_ID="$CANDIDATE"
@@ -240,6 +238,23 @@ start_app() {
         kill -0 $APP_PID 2>/dev/null || { echo "app exited before showing a window" >&2; exit 1; }
         sleep 0.5
     done
+}
+
+# Before a step drives the window: the id it holds must still be a window. Once in sixty runs an
+# id went stale between steps (xdotool answered BadWindow and the click landed nowhere, so a
+# script clicked into the wrong screen); the window is found again by the application's pid.
+ensure_window() {
+    if ! xwininfo -id "$WIN_ID" >/dev/null 2>&1; then
+        echo "window $WIN_ID is gone; finding the application's window again" >&2
+        find_window 20
+        [ -n "$WIN_ID" ] || { echo "line $LINE_NO: the application has no window" >&2; exit 1; }
+    fi
+}
+
+start_app() {
+    "$BIN" "${APP_ARGS[@]}" </dev/null &
+    APP_PID=$!
+    find_window 60
     [ -n "$WIN_ID" ] || { echo "no window owned by pid $APP_PID appeared" >&2; exit 1; }
 
     sleep 1
@@ -311,6 +326,9 @@ while IFS= read -r RAW; do
     set -- $LINE
     [ $# -eq 0 ] && continue
 
+    case "$1" in
+        click|doubleclick|hover|scroll|reveal|type|key) ensure_window ;;
+    esac
     case "$1" in
         screen|window|tiles|env|setup) ;;  # already applied before launch
         settle)
