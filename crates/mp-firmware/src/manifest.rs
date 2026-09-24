@@ -1030,6 +1030,34 @@ pub trait Fetch {
     /// # Errors
     /// Any failure, as text: the C# logs it and carries on.
     fn get(&self, url: &str) -> Result<Vec<u8>, String>;
+
+    /// `Download.CheckHTTPFileExists`: whether a HEAD of the URL succeeds. `Ok(false)` for a
+    /// status that is not a success; an error where the request itself failed, which the C#
+    /// lets escape (`.Result` on the request) to whatever `catch` is around the caller.
+    /// `// C#: ExtLibs/Utilities/Download.cs:563-577`
+    ///
+    /// # Errors
+    /// The request could not be made.
+    fn exists(&self, url: &str) -> Result<bool, String> {
+        Ok(self.get(url).is_ok())
+    }
+
+    /// A GET that says how far it has got as it reads: the bytes so far and, when the server
+    /// said, the `Content-Length`. What the download loops of `Download.getFilefromNet` and
+    /// `LookForPort` report their progress from.
+    ///
+    /// # Errors
+    /// As [`Fetch::get`].
+    fn get_progress(
+        &self,
+        url: &str,
+        progress: &mut dyn FnMut(u64, Option<u64>),
+    ) -> Result<Vec<u8>, String> {
+        let bytes = self.get(url)?;
+        let length = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
+        progress(length, Some(length));
+        Ok(bytes)
+    }
 }
 
 /// The network, as `HttpClient.GetByteArrayAsync`: a GET that fails on a non-success status.
@@ -1052,6 +1080,148 @@ impl Fetch for Http {
             .read_to_vec()
             .map_err(|err| err.to_string())
     }
+
+    /// A HEAD with the thirty-second timeout `CheckHTTPFileExists` gives its client. A URL that
+    /// is not absolute is `false` without a request, as `Uri.TryCreate` makes it.
+    /// `// C#: ExtLibs/Utilities/Download.cs:563-577`
+    fn exists(&self, url: &str) -> Result<bool, String> {
+        if !is_absolute_url(url) {
+            return Ok(false);
+        }
+        match ureq::head(url)
+            .header("User-Agent", USER_AGENT)
+            .config()
+            .timeout_global(Some(Duration::from_secs(30)))
+            .build()
+            .call()
+        {
+            Ok(_) => Ok(true),
+            Err(ureq::Error::StatusCode(_)) => Ok(false),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+
+    /// Read a kilobyte at a time, as the C#'s loops read, with the thirty-second timeout both
+    /// give their clients.
+    /// `// C#: ExtLibs/Utilities/Download.cs:450-520; GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:270-313`
+    fn get_progress(
+        &self,
+        url: &str,
+        progress: &mut dyn FnMut(u64, Option<u64>),
+    ) -> Result<Vec<u8>, String> {
+        let mut response = ureq::get(url)
+            .header("User-Agent", USER_AGENT)
+            .config()
+            .timeout_global(Some(Duration::from_secs(30)))
+            .build()
+            .call()
+            .map_err(|err| err.to_string())?;
+        let length = response.body().content_length();
+        let mut reader = response.body_mut().as_reader();
+        let mut bytes = Vec::new();
+        let mut buffer = [0u8; 1024];
+        loop {
+            let read = reader.read(&mut buffer).map_err(|err| err.to_string())?;
+            if read == 0 {
+                break;
+            }
+            bytes.extend_from_slice(buffer.get(..read).unwrap_or_default());
+            if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MAX_DOWNLOAD {
+                return Err(format!("more than {MAX_DOWNLOAD} bytes"));
+            }
+            progress(u64::try_from(bytes.len()).unwrap_or(u64::MAX), length);
+        }
+        Ok(bytes)
+    }
+}
+
+/// `Uri.TryCreate(url, UriKind.Absolute, ...)` for the URLs these pages hold: a scheme, a colon
+/// and something after it.
+#[must_use]
+pub fn is_absolute_url(url: &str) -> bool {
+    url.split_once(':').is_some_and(|(scheme, rest)| {
+        !rest.is_empty()
+            && scheme
+                .chars()
+                .next()
+                .is_some_and(|first| first.is_ascii_alphabetic())
+            && scheme
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+    })
+}
+
+/// Test scaffolding: a directory standing in for every web server - `<dir>/<host>/<path>` is
+/// what `http://<host>/<path>` and `https://<host>/<path>` serve - so the firmware pages' lists,
+/// version files and downloads run offline against fixtures. Not a Mission Planner setting, as
+/// [`OVERRIDE_ENV`] is not.
+pub const MIRROR_ENV: &str = "MP_FIRMWARE_MIRROR";
+
+/// A directory standing in for the web ([`MIRROR_ENV`]).
+#[derive(Debug, Clone)]
+pub struct Mirror {
+    /// The directory, one folder per host.
+    pub root: PathBuf,
+}
+
+impl Mirror {
+    /// Where a URL is kept: `None` for one that is not `http` or `https`, or that climbs out.
+    #[must_use]
+    pub fn path_of(&self, url: &str) -> Option<PathBuf> {
+        let rest = url
+            .strip_prefix("https://")
+            .or_else(|| url.strip_prefix("http://"))?;
+        let rest = rest.split(['?', '#']).next().unwrap_or_default();
+        let mut path = self.root.clone();
+        for part in rest.split('/').filter(|part| !part.is_empty()) {
+            if part == ".." || part == "." {
+                return None;
+            }
+            path.push(part);
+        }
+        Some(path)
+    }
+}
+
+impl Fetch for Mirror {
+    fn get(&self, url: &str) -> Result<Vec<u8>, String> {
+        let path = self
+            .path_of(url)
+            .ok_or_else(|| format!("not fetched: {url} is not in {MIRROR_ENV}"))?;
+        std::fs::read(&path).map_err(|err| format!("{}: {err}", path.display()))
+    }
+
+    fn exists(&self, url: &str) -> Result<bool, String> {
+        Ok(self.path_of(url).is_some_and(|path| path.is_file()))
+    }
+}
+
+/// [`FromFile`] for the manifest and [`Mirror`] for everything else, as the two variables ask.
+#[derive(Debug, Clone)]
+pub struct Offline {
+    /// [`OVERRIDE_ENV`]'s file.
+    pub manifest: Option<FromFile>,
+    /// [`MIRROR_ENV`]'s directory.
+    pub mirror: Option<Mirror>,
+}
+
+impl Fetch for Offline {
+    fn get(&self, url: &str) -> Result<Vec<u8>, String> {
+        match (&self.manifest, &self.mirror) {
+            (Some(manifest), _) if PAGE_SOURCES.contains(&url) => manifest.get(url),
+            (_, Some(mirror)) => mirror.get(url),
+            (Some(manifest), None) => manifest.get(url),
+            (None, None) => Err(format!("not fetched: {url}")),
+        }
+    }
+
+    fn exists(&self, url: &str) -> Result<bool, String> {
+        match (&self.manifest, &self.mirror) {
+            (Some(_), _) if PAGE_SOURCES.contains(&url) => Ok(true),
+            (_, Some(mirror)) => mirror.exists(url),
+            _ => Ok(false),
+        }
+    }
 }
 
 /// A manifest file standing in for the network ([`OVERRIDE_ENV`]).
@@ -1071,12 +1241,15 @@ impl Fetch for FromFile {
     }
 }
 
-/// The network, or the file [`OVERRIDE_ENV`] names.
+/// The network, or the file [`OVERRIDE_ENV`] names and the directory [`MIRROR_ENV`] names.
 #[must_use]
 pub fn fetcher() -> Box<dyn Fetch + Send + Sync> {
-    match std::env::var_os(OVERRIDE_ENV) {
-        Some(path) => Box::new(FromFile { path: path.into() }),
-        None => Box::new(Http),
+    let manifest = std::env::var_os(OVERRIDE_ENV).map(|path| FromFile { path: path.into() });
+    let mirror = std::env::var_os(MIRROR_ENV).map(|root| Mirror { root: root.into() });
+    match (manifest, mirror) {
+        (None, None) => Box::new(Http),
+        (Some(manifest), None) => Box::new(manifest),
+        (manifest, mirror) => Box::new(Offline { manifest, mirror }),
     }
 }
 

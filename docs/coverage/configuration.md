@@ -4,12 +4,12 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui c
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 10 | 19 | 26 | 2 | 4 | 569 |
+| 61 | 11 | 20 | 24 | 2 | 4 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 8 | 17 | 17 | 2 | 0 | 258 | 69 |
-| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 2 | 2 | 9 | 0 | 0 | 277 | 16 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 8 | 18 | 16 | 2 | 0 | 258 | 49 |
+| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 3 | 2 | 8 | 0 | 0 | 277 | 8 |
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 | 0 |
 
 The lists also add 4 pages that are not in `ConfigurationView/` (`Sikradio`, `JoystickSetup`, `TrackerUI`, `MavFTPUI`): 0 done, 1 partial, 3 missing, 0 plumbing, 0 dropped. They are in the lists below and not in the counts above.
@@ -18,10 +18,8 @@ The largest missing panels, by wirings:
 
 | panel | title | wirings |
 |---|---|---:|
-| `ConfigFirmware` | Install Firmware Legacy | 20 |
 | `ConfigDroneCAN` | DroneCAN/UAVCAN | 15 |
 | `ConfigTerminal` | Terminal | 12 |
-| `ConfigAteryx` | Ateryx Pids | 8 |
 | `ConfigREPL` | Script REPL | 4 |
 | `ConfigAntennaTracker` | Antenna tracker | 3 |
 | `ConfigArdurover` | Basic Tuning | 3 |
@@ -30,6 +28,8 @@ The largest missing panels, by wirings:
 | `ConfigInitialParams` | Initial Tune Parameter | 3 |
 | `ConfigCompassMot` | Compass/Motor Calib | 2 |
 | `ConfigCubeID` | CubeID Update | 2 |
+| `ConfigFriendlyParams` | Standard Params | 1 |
+| `ConfigGPSOrder` | CAN GPS Order | 1 |
 
 Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConnected && gotAllParams`); **always** is connected or not; **connected** and **disconnected** are the link alone; a named vehicle, parameter or view is what the call, or the `if` around it, checks. **Advanced view** is `DisplayView.isAdvancedMode`. A page with a `DisplayView` switch also needs it on, which it is by default unless the vehicles say otherwise. The list shows a heading as `>> title` and indents what is under it (`ExtLibs/Controls/BackstageView/BackstageView.cs:227`, `:232`).
 
@@ -38,9 +38,9 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConne
 | line | page | title | under | vehicles | wirings | ours |
 |---:|---|---|---|---|---:|---|
 | 162 | `ConfigParamLoading` | Loading |  | connected, parameters still arriving | 2 | done: `crates/mp-gui/src/setup.rs` `fn param_loading_page` |
-| 169 | `ConfigFirmwareDisabled` | Install Firmware |  | connected | 1 | partial: `crates/mp-gui/src/config/firmware.rs` `fn page` - the connected page's text, with Bootloader Update disabled |
-| 171 | `ConfigFirmwareManifest` | Install Firmware |  | disconnected | 16 | partial: `crates/mp-gui/src/config/firmware.rs` `fn page` - the catalogue fetched as APFirmware.GetList fetches it, each vehicle labelled with the newest firmware of the release, Beta, a vehicle's click running LookForPort to the chosen file; Upload disabled - nothing flashes in this build; the vehicle pictures are named boxes |
-| 173 | `ConfigFirmware` | Install Firmware Legacy |  | disconnected | 20 | **missing** |
+| 169 | `ConfigFirmwareDisabled` | Install Firmware |  | connected | 1 | partial: `crates/mp-gui/src/config/firmware.rs` `fn page` - the connected page's text; Bootloader Update asks its two questions and stops before MAV_CMD_FLASH_BOOTLOADER, which rewrites the board's bootloader - nothing flashes in this build |
+| 171 | `ConfigFirmwareManifest` | Install Firmware |  | disconnected | 16 | partial: `crates/mp-gui/src/config/firmware.rs` `fn page` - the catalogue fetched as APFirmware.GetList fetches it, each vehicle labelled with the newest firmware of the release, Beta; a vehicle's click asks, runs LookForPort, opens FirmwareSelection on the board's platform and downloads the file chosen with the progress bar and status line, and UploadFlash reads it; All Options over the whole catalogue; Load custom firmware by extension; each stops where it would write to a board - the upload, DFU, Force Bootloader and Bootloader Update are disabled, as nothing flashes in this build; not Ctrl+Q, the bootloader probe on a device's arrival, nor FirmwareSelection's filter pickers; the vehicle pictures are named boxes |
+| 173 | `ConfigFirmware` | Install Firmware Legacy |  | disconnected | 20 | partial: `crates/mp-gui/src/config/firmware_legacy.rs` `fn page` - every control at its .resx place; the firmware2.xml list loaded behind its progress dialog with each entry's git-version.txt, and each picture labelled and tagged as updateDisplayName does; a vehicle's click asks, detects the board from the device list, chooses the entry's URL for it (CubeBlack, ChibiOS), downloads firmware.hex and reads it; Pick previous firmware from FirmwareHistory.txt, Beta firmwares, Load custom firmware, and the three links; each stops where it would write to a board - the upload and Force Bootloader are disabled, as nothing flashes in this build; not Ctrl+Q or Ctrl+P, nor the bootloader probe on a device's arrival; the pictures are named boxes |
 | 178 | `ConfigSecureAP` | Secure |  | disconnected | 4 | partial: `crates/mp-gui/src/config/secure.rs` `fn page` - the two groups, four buttons and three text boxes at the Designer's places; every button disabled - Generate Key, Private Key, BootLoader and Firmware are Ed25519 key generation, key reading and signing (BouncyCastle, SignedFW.cs), which this application has no implementation of |
 | 182 | `ConfigMandatory` | Mandatory Hardware |  | any | 0 | plumbing: the Mandatory Hardware heading of the list: one sentence, no controls |
 | 187 | `ConfigTradHeli4` | Heli Setup | Mandatory Hardware | heli | 0 | **missing** |
@@ -104,7 +104,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConne
 | 229 | `ConfigRawParams` | Full Parameter List |  | any, or disconnected | 22 | partial: `crates/mp-gui/src/params.rs` `fn list_panel` - the parameter screen has Refresh Params, Search, the group tree, editing a value, Save to file, Compare Params, and Load from file as compare then apply; missing Reset to Default, Load Presaved and its file list, Commit Params, the Modified and None Default filters, Refresh Table and the tree's collapse |
 | 235 | `ConfigFlightModes` | Flight Modes |  | Ateryx | 8 | as at `GCSViews/InitialSetup.cs:228` |
 | 236 | `ConfigAteryxSensors` | Ateryx Zero Sensors |  | Ateryx | 3 | **missing** |
-| 237 | `ConfigAteryx` | Ateryx Pids |  | Ateryx | 8 | **missing** |
+| 237 | `ConfigAteryx` | Ateryx Pids |  | Ateryx | 8 | done: `crates/mp-gui/src/config/ateryx.rs` `fn page` |
 | 243 | `ConfigParamLoading` | Loading |  | connected, parameters still arriving | 2 | as at `GCSViews/InitialSetup.cs:162` |
 | 245 | `ConfigParamLoading` | Loading |  | connected, parameters still arriving | 2 | as at `GCSViews/InitialSetup.cs:162` |
 | 250 | `ConfigPlanner` | Planner |  | connected | 64 | partial: `crates/mp-gui/src/config/planner.rs` `fn planner_page` - every control at its place, each bound to the Settings key its handler writes; the units (ChangeUnits), the telemetry rates and their stream requests, the speech boxes and their InputBox templates, Load Waypoints on connect, the map access mode, Joystick Setup, Browse and Open Map Cache act at once; dimmed for want of what they drive: video, the HUD overlay, GDI+, language, theme, Layout, OSD colour, Vario, password, the ADSB server, analytics, beta updates, MAVLink debug and the testing screen; the flight screen does not yet read the units, the track length, the map's rotation or the icon settings, nor the link the GCS id or the rates on connecting |

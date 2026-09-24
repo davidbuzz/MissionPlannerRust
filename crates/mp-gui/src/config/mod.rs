@@ -30,3 +30,7 @@ pub mod extended_tuning;
 // ---- RTK/GPS Inject ----
 pub mod rtk_inject;
 // ---- end RTK/GPS Inject ----
+// ---- Firmware Legacy / Ateryx ----
+pub mod ateryx;
+pub mod firmware_legacy;
+// ---- end Firmware Legacy / Ateryx ----

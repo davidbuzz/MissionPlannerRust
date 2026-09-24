@@ -1,0 +1,11 @@
+{
+    "board_id": 140,
+    "magic": "APJFWv1",
+    "description": "Synthetic test image, not a firmware",
+    "image": "eNpjYOcTlVHWMrSwd/MNiU7KLCiva+2ZPGvhivXb9h45fenmg+fvvjJy8IvJqmgbWTq4+4XGJGcVVtS39U6ZvWjlhu37jp65fOvhi/ffmDgFxOVUdYytHD38w2JTsosqG9r7ps5ZvGrjjv3Hzl65/ejlh+/MXIIS8mq6JtZOngHhcak5xVWNHf3T5i5ZvWnngePnrt55/OrjDxZuIUkFdT1TG2evwIj4tNyS6qbOCdPnLV2zedfBE+ev3X3y+tNPVh5hKUUNfTNbF++gyIT0vNKa5q6JM+YvW7tl96GTF67fe/rm8y82XhFpJU0DcztXn+CoxIz8stqW7kkzFyxft3XP4VMXb9x/9vYLw6jXR70+6vVRr496fdTro14f9fqo10e9PlS8DgBsObVe",
+    "summary": "CubeOrange",
+    "version": "0.1",
+    "image_size": 3000,
+    "board_revision": 0,
+    "git_identity": "0000000"
+}

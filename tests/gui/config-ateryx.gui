@@ -1,0 +1,41 @@
+# CONFIG's Ateryx Pids, ported from GCSViews/ConfigurationView/ConfigAteryx.cs.
+#
+# SoftwareConfig adds ConfigAteryx as "Ateryx Pids" - with Flight Modes and Ateryx Zero Sensors -
+# only when the link is open and the firmware is Ateryx (SoftwareConfig.cs:231-237), which is what
+# a heartbeat from a MAV_AUTOPILOT_GENERIC fixed wing makes it (MAVLinkInterface.cs:6797-6805). The
+# SITL these scripts run against is an ArduPilot copter, so the page cannot be opened here: the
+# claim this script checks is the list's condition - connected, with every parameter in, CONFIG
+# lists the copter's tuning pages and not ConfigAteryx, and the page is not shown.
+#
+# The page itself is proved by the unit tests in crates/mp-gui/src/config/ateryx.rs: every
+# Designer control at its .resx place, the eight wirings (four buttons, four empty handlers),
+# processToScreen's binding of each box the vehicle names, Validated into changes and green,
+# Write Params through the retrying set - each set in its own try, "Set NAME Failed", changes
+# kept - the flash buttons' airborne checks and Read Flash's question, and, against a scripted
+# MAV_AUTOPILOT_GENERIC fixed wing over the real link, the list adding the page and Write Flash's
+# PREFLIGHT_STORAGE reaching the vehicle.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run as
+#
+#   tools/gui-test.sh tests/gui/config-ateryx.gui -- tcp:127.0.0.1:5760
+
+screen params
+window 1600x1200
+settle 6
+
+# Disconnected or connected, only an Ateryx lists the page.
+expect config.ateryx.listed false
+
+# CONFIG lists the tuning pages once every parameter is in (SoftwareConfig.cs:148-150), and here
+# parameters are downloaded when asked for.
+click param-download
+settle 15
+expect params.held > 1000
+
+click tab-config
+settle 1
+expect screen config
+expect config.page ConfigSimplePids
+expect config.pages ~ ConfigSimplePids
+expect config.ateryx.listed false
+expect config.ateryx.active false

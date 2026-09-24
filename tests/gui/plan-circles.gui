@@ -23,9 +23,13 @@ expect plan.prompt Radius
 key ctrl+u
 type wide
 key Return
+settle 1
 key Return
+settle 1
 key Return
+settle 1
 key Return
+settle 1
 expect plan.prompt message
 expect plan.prompt.text Bad Radius
 key Return

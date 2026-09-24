@@ -12,6 +12,9 @@
 # reads it: -35.3632621.
 
 env XDG_DATA_HOME $WORK
+# A planned home, so the map has a view to project clicks through: without one a right-click
+# opens no menu and a click adds no waypoint.
+setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
 env MP_PLAN_DIR $WORK
 setup cp testdata/planner/golden/rally.ral "$WORK/oracle.ral"
 
@@ -102,8 +105,11 @@ expect plan.rally.markers ~ ,60;
 click map@0.30x0.70:right
 click menu-rallyPoints
 click menu-loadFromFile1
+settle 1
+expect plan.prompt Open
 type oracle
 key Return
+settle 1
 expect rally.points 3
 expect map.rally 3
 expect plan.rally.markers ~ -35.3632621,149.1652374,100;-35.3632621,149.1652374,60;

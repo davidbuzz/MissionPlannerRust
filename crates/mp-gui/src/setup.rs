@@ -880,11 +880,18 @@ impl MissionPlanner {
         match entries(list).get(index).map(|entry| entry.class) {
             // C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs (Activate), and the
             // connected page's text: ConfigFirmwareDisabled.cs
-            Some("ConfigFirmwareManifest" | "ConfigFirmwareDisabled" | "ConfigFirmware")
+            Some("ConfigFirmwareManifest" | "ConfigFirmwareDisabled")
                 if !self.install_firmware.is_open() =>
             {
                 self.install_firmware.toggle(&self.telemetry.view());
             }
+            // ---- Firmware Legacy / Ateryx ----
+            // C#: GCSViews/ConfigurationView/ConfigFirmware.cs:34-64
+            Some("ConfigFirmware") => self.firmware_legacy_activate(),
+            // Every time, as `ActivatePage` calls it.
+            // C#: GCSViews/ConfigurationView/ConfigAteryx.cs:32-56
+            Some("ConfigAteryx") => self.ateryx_activate(),
+            // ---- end Firmware Legacy / Ateryx ----
             // C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:86-145; ConfigHWCompass.cs:31-243
             Some(class @ ("ConfigHWCompass2" | "ConfigHWCompass")) if !self.compass.is_active() => {
                 let view = self.telemetry.view();
@@ -1014,11 +1021,17 @@ impl MissionPlanner {
     fn deactivate_page(&mut self, list: List, index: usize) {
         match entries(list).get(index).map(|entry| entry.class) {
             // C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs (Deactivate): OFFICIAL again
-            Some("ConfigFirmwareManifest" | "ConfigFirmwareDisabled" | "ConfigFirmware")
+            Some("ConfigFirmwareManifest" | "ConfigFirmwareDisabled")
                 if self.install_firmware.is_open() =>
             {
                 self.install_firmware.close();
             }
+            // ---- Firmware Legacy / Ateryx ----
+            // C#: GCSViews/ConfigurationView/ConfigFirmware.cs:665-673
+            Some("ConfigFirmware") => self.firmware_legacy.deactivate(),
+            // `ConfigAteryx` is `IActivate` only: hidden, the box with the focus validated.
+            Some("ConfigAteryx") => self.ateryx.hide(),
+            // ---- end Firmware Legacy / Ateryx ----
             // C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:147-152; ConfigHWCompass.cs:252-255
             Some("ConfigHWCompass2" | "ConfigHWCompass") if self.compass.is_active() => {
                 let open = self.telemetry.view().connected;
@@ -1206,9 +1219,25 @@ impl MissionPlanner {
             "ConfigRadioInput" => column()
                 .children(crate::config::radio::page(&self.radio_input, cx))
                 .into_any_element(),
-            "ConfigFirmwareManifest" | "ConfigFirmwareDisabled" | "ConfigFirmware" => column()
+            "ConfigFirmwareManifest" | "ConfigFirmwareDisabled" => column()
                 .child(crate::config::firmware::page(&self.install_firmware, cx))
                 .into_any_element(),
+            // ---- Firmware Legacy / Ateryx ----
+            // Wider than the column: the Designer's page is 986 pixels.
+            // C#: GCSViews/ConfigurationView/ConfigFirmware.Designer.cs:52-307; ConfigFirmware.resx
+            "ConfigFirmware" => div()
+                .flex()
+                .flex_col()
+                .child(crate::config::firmware_legacy::page(
+                    &self.firmware_legacy,
+                    cx,
+                ))
+                .into_any_element(),
+            // C#: GCSViews/ConfigurationView/ConfigAteryx.Designer.cs:29-906; ConfigAteryx.resx
+            "ConfigAteryx" => {
+                crate::config::ateryx::page(&self.ateryx, &self.ateryx_focus, window, cx)
+            }
+            // ---- end Firmware Legacy / Ateryx ----
             "ConfigFrameClassType" => column()
                 .children(crate::config::frame_type::page(&self.frame_type, cx))
                 .into_any_element(),

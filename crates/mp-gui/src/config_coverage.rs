@@ -232,9 +232,13 @@ pub const PANELS: &[Panel] = &[
         Some(1),
         &[setup(169, "Install Firmware", TOP, CONNECTED)],
         // C#: GCSViews/ConfigurationView/ConfigFirmwareDisabled.cs, on the Install Firmware page.
+        // ---- Firmware Legacy / Ateryx ----: Bootloader Update asks its two questions and stops
+        // at MAV_CMD_FLASH_BOOTLOADER (ConfigFirmwareDisabled.cs:18-45).
         Partial(
             at("crates/mp-gui/src/config/firmware.rs", "fn page"),
-            "the connected page's text, with Bootloader Update disabled",
+            "the connected page's text; Bootloader Update asks its two questions and stops \
+             before MAV_CMD_FLASH_BOOTLOADER, which rewrites the board's bootloader - nothing \
+             flashes in this build",
         ),
     ),
     panel(
@@ -243,9 +247,18 @@ pub const PANELS: &[Panel] = &[
         Some(16),
         &[setup(171, "Install Firmware", TOP, DISCONNECTED)],
         // C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs, on the Install Firmware page.
+        // ---- Firmware Legacy / Ateryx ----: all 16 wirings; the flows stop at the board
+        // (mp_firmware::flow::Stop).
         Partial(
             at("crates/mp-gui/src/config/firmware.rs", "fn page"),
-            "the catalogue fetched as APFirmware.GetList fetches it, each vehicle labelled with the newest firmware of the release, Beta, a vehicle's click running LookForPort to the chosen file; Upload disabled - nothing flashes in this build; the vehicle pictures are named boxes",
+            "the catalogue fetched as APFirmware.GetList fetches it, each vehicle labelled with \
+             the newest firmware of the release, Beta; a vehicle's click asks, runs LookForPort, \
+             opens FirmwareSelection on the board's platform and downloads the file chosen with \
+             the progress bar and status line, and UploadFlash reads it; All Options over the \
+             whole catalogue; Load custom firmware by extension; each stops where it would write \
+             to a board - the upload, DFU, Force Bootloader and Bootloader Update are disabled, as \
+             nothing flashes in this build; not Ctrl+Q, the bootloader probe on a device's \
+             arrival, nor FirmwareSelection's filter pickers; the vehicle pictures are named boxes",
         ),
     ),
     panel(
@@ -253,7 +266,22 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigFirmware"),
         Some(20),
         &[setup(173, "Install Firmware Legacy", TOP, DISCONNECTED)],
-        Missing,
+        // ---- Firmware Legacy / Ateryx ----
+        // C#: GCSViews/ConfigurationView/ConfigFirmware.cs:34-673 - all 20 wirings, over
+        // Utilities/Firmware.cs's firmware2.xml catalogue (mp_firmware::legacy) and flows
+        // (mp_firmware::flow), which stop at the board.
+        Partial(
+            at("crates/mp-gui/src/config/firmware_legacy.rs", "fn page"),
+            "every control at its .resx place; the firmware2.xml list loaded behind its progress \
+             dialog with each entry's git-version.txt, and each picture labelled and tagged as \
+             updateDisplayName does; a vehicle's click asks, detects the board from the device \
+             list, chooses the entry's URL for it (CubeBlack, ChibiOS), downloads firmware.hex \
+             and reads it; Pick previous firmware from FirmwareHistory.txt, Beta firmwares, Load \
+             custom firmware, and the three links; each stops where it would write to a board - \
+             the upload and Force Bootloader are disabled, as nothing flashes in this build; not \
+             Ctrl+Q or Ctrl+P, nor the bootloader probe on a device's arrival; the pictures are \
+             named boxes",
+        ),
     ),
     panel(
         "ConfigSecureAP",
@@ -883,7 +911,12 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigAteryx"),
         Some(8),
         &[config(237, "Ateryx Pids", "Ateryx")],
-        Missing,
+        // ---- Firmware Legacy / Ateryx ----
+        // C#: GCSViews/ConfigurationView/ConfigAteryx.cs:32-335 - processToScreen's binding of
+        // the 48 boxes, Validated into changes, Write Params, Refresh Params, Write Flash and Read
+        // Flash's PREFLIGHT_STORAGE, and the four empty handlers; the divergences are at the
+        // sites in ateryx.rs.
+        Ours::Done(at("crates/mp-gui/src/config/ateryx.rs", "fn page")),
     ),
     panel(
         "ConfigPlanner",
@@ -1715,7 +1748,7 @@ mod tests {
             );
             checked += 1;
         }
-        assert_eq!(checked, 30);
+        assert_eq!(checked, 32);
     }
 
     /// The committed report matches the table.
@@ -1747,7 +1780,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (10, 19, 26, 2, 4)
+            (11, 20, 24, 2, 4)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

@@ -26,6 +26,8 @@ mp-transport.workspace = true
 ureq.workspace = true
 regex.workspace = true
 serde = "1"
+# The legacy catalogue, firmware2.xml (legacy.rs), read as mp-params reads apm.pdef.xml.
+roxmltree.workspace = true
 
 [dev-dependencies]
 # For TTYPort::pair(): the bootloader probe is run over a real serial port on a pseudo-terminal.

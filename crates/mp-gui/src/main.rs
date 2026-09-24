@@ -349,6 +349,15 @@ struct MissionPlanner {
     /// Its boxes' focus.
     rtk_focus: config::rtk_inject::Focus,
     // ---- end RTK/GPS Inject ----
+    // ---- Firmware Legacy / Ateryx ----
+    /// Initial Setup's Install Firmware Legacy page (`ConfigFirmware`).
+    firmware_legacy: config::firmware_legacy::FirmwareLegacy,
+    /// The focus of the firmware pages' file dialog, both pages' Load custom firmware.
+    firmware_focus: gpui::FocusHandle,
+    /// CONFIG's Ateryx Pids page (`ConfigAteryx`), and the focus of its box being typed into.
+    ateryx: config::ateryx::Ateryx,
+    ateryx_focus: gpui::FocusHandle,
+    // ---- end Firmware Legacy / Ateryx ----
 }
 
 impl MissionPlanner {
@@ -582,6 +591,12 @@ impl MissionPlanner {
             rtk_inject: config::rtk_inject::RtkInject::default(),
             rtk_focus: config::rtk_inject::Focus::new(cx),
             // ---- end RTK/GPS Inject ----
+            // ---- Firmware Legacy / Ateryx ----
+            firmware_legacy: config::firmware_legacy::FirmwareLegacy::default(),
+            firmware_focus: cx.focus_handle(),
+            ateryx: config::ateryx::Ateryx::default(),
+            ateryx_focus: cx.focus_handle(),
+            // ---- end Firmware Legacy / Ateryx ----
         };
         // Opening on the planning screen activates it, as switching to it does.
         if this.screen == Screen::Plan {
@@ -1839,6 +1854,13 @@ impl Render for MissionPlanner {
         // its thread sends.
         self.rtk_inject_tick(&view, window, cx);
         // ---- end RTK/GPS Inject ----
+        // ---- Firmware Legacy / Ateryx ----
+        // Install Firmware Legacy's list and flow threads and its page object, and the focus of
+        // the firmware pages' file dialog; Ateryx Pids' page object, box, refresh, flash command
+        // and Write Params' sets.
+        self.firmware_legacy_tick(window, cx);
+        self.ateryx_tick(&view, window);
+        // ---- end Firmware Legacy / Ateryx ----
         let banner = self.telemetry.firmware_banner().map(str::to_owned);
         let mav_type = view.state.as_ref().map_or(0, |state| state.vehicle_type);
         self.metadata.advance(banner.as_deref(), mav_type);
@@ -2107,7 +2129,7 @@ impl Render for MissionPlanner {
             setup::record_facts([&self.setup_list, &self.config_list]);
             config::frame_type::record_facts(&self.frame_type, &view);
             config::battery_monitor::record_facts(&self.battery_monitor, &view);
-            config::firmware::record_facts(&self.install_firmware);
+            config::firmware::record_facts(&self.install_firmware, &self.persisted);
             config::radio::record_facts(&self.radio_input, &view);
             config::motor_test::record_facts(&self.motor_test, &view);
             config::compass::record_facts(&self.compass, &view);
@@ -2146,6 +2168,23 @@ impl Render for MissionPlanner {
             // ---- Extended Tuning ----
             config::extended_tuning::record_facts(&self.extended_tuning, &view);
             // ---- end Extended Tuning ----
+            // ---- Firmware Legacy / Ateryx ----
+            config::firmware_legacy::record_facts(
+                &self.firmware_legacy,
+                &self.persisted,
+                self.setup_list
+                    .pages()
+                    .iter()
+                    .any(|row| row.class == config::firmware_legacy::CLASS),
+            );
+            config::ateryx::record_facts(
+                &self.ateryx,
+                self.config_list
+                    .pages()
+                    .iter()
+                    .any(|row| row.class == config::ateryx::CLASS),
+            );
+            // ---- end Firmware Legacy / Ateryx ----
             facts::publish();
             // The harness's work, which a normal run does not do, is not the frame's.
             storm::exclude(harness.elapsed());
@@ -2453,6 +2492,20 @@ impl Render for MissionPlanner {
                     cx,
                 ))
                 // ---- end RTK/GPS Inject ----
+                // ---- Firmware Legacy / Ateryx ----
+                .children(config::firmware::overlay(
+                    &self.install_firmware,
+                    &self.firmware_focus,
+                    window,
+                    cx,
+                ))
+                .children(config::firmware_legacy::overlay(
+                    &self.firmware_legacy,
+                    &self.firmware_focus,
+                    window,
+                    cx,
+                ))
+                // ---- end Firmware Legacy / Ateryx ----
                 .into_any_element(),
             Screen::Config => probe::measured("config-body", div())
                 .flex()
@@ -2469,6 +2522,9 @@ impl Render for MissionPlanner {
                 // ---- Extended Tuning ----
                 .children(self.extended_tuning_overlay(window, cx))
                 // ---- end Extended Tuning ----
+                // ---- Firmware Legacy / Ateryx ----
+                .children(config::ateryx::overlay(&self.ateryx, window, cx))
+                // ---- end Firmware Legacy / Ateryx ----
                 .into_any_element(),
         };
 

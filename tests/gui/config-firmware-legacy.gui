@@ -1,0 +1,144 @@
+# Initial Setup's Install Firmware Legacy page: GCSViews/ConfigurationView/ConfigFirmware.cs over
+# the firmware2.xml catalogue (Utilities/Firmware.cs) - which labels each vehicle picture and, on a
+# click, detects the board, downloads the build for it and reads it, stopping where it would write
+# to the board. It never writes to one.
+#
+# Activate loads the list behind its progress dialog (getFWList: the list from GitHub, each
+# entry's version from the git-version.txt beside its fmuv3 build) and updateDisplayName labels
+# and tags each picture. A picture's click is findfirmware: "Are you sure you want to upload ...?",
+# then updateLegacy - the board from the device list, the entry's URL for it, the file downloaded
+# to firmware.hex in the data directory - then UploadFlash, which reads the file and stops before
+# the reboot into the bootloader. Load custom firmware takes a typed path (this application has
+# no platform file dialog) in the folder config.xml's FirmwareFileDirectory names. Pick previous
+# firmware binds FirmwareHistory.txt to its drop-down, which selects - and loads - the newest
+# history at once. Beta firmwares warns, then loads the dev list.
+#
+# Self-contained and offline. MP_FIRMWARE_MIRROR is a directory standing in for the web, holding
+# crates/mp-firmware/testdata/legacy's fixtures at the paths their URLs name: ArduPilot's own
+# firmware2.xml at its GitHub source (and again where the newest history's list is), the Copter
+# fmuv3 build's git-version.txt, and a synthetic .apj - not a firmware - where the Copter builds
+# for fmuv3 and CubeOrange are; nothing is at the second history's URL or the dev list's, so those
+# fail as a dead link does. The one USB device is a CubeOrange in its bootloader, whatever is
+# plugged into this machine. The data and temporary directories are scratch ones.
+
+env XDG_DATA_HOME $WORK
+env TMPDIR $WORK
+env MP_FIRMWARE_MIRROR $WORK/web
+env MP_FIRMWARE_DEVICE CubeOrange-BL|USB\VID_2DAE&PID_1016
+setup mkdir -p "$WORK/web/github.com/ArduPilot/binary/raw/master/Firmware" "$WORK/web/github.com/diydrones/binary/raw/e94e833a5628f19137d297822343f6282af6d9cc/History" "$WORK/web/firmware.ardupilot.org/Copter/stable/fmuv3" "$WORK/web/firmware.ardupilot.org/Copter/stable/CubeOrange" "$WORK/fw" "$WORK/Mission Planner"
+setup cp crates/mp-firmware/testdata/legacy/firmware2.xml "$WORK/web/github.com/ArduPilot/binary/raw/master/Firmware/firmware2.xml"
+setup cp crates/mp-firmware/testdata/legacy/firmware2.xml "$WORK/web/github.com/diydrones/binary/raw/e94e833a5628f19137d297822343f6282af6d9cc/History/firmware2.xml"
+setup cp crates/mp-firmware/testdata/legacy/git-version.txt crates/mp-firmware/testdata/legacy/arducopter.apj "$WORK/web/firmware.ardupilot.org/Copter/stable/fmuv3/"
+setup cp crates/mp-firmware/testdata/legacy/arducopter.apj "$WORK/web/firmware.ardupilot.org/Copter/stable/CubeOrange/arducopter.apj"
+setup cp crates/mp-firmware/testdata/legacy/arducopter.apj "$WORK/fw/custom.apj"
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><FirmwareFileDirectory>%s</FirmwareFileDirectory></Config>' "$WORK/fw" > "$WORK/Mission Planner/config.xml"
+
+screen setup
+window 1600x1200
+settle 3
+
+expect config.firmware_legacy.active false
+# Disconnected, InitialSetup lists Install Firmware Legacy after Install Firmware
+# (InitialSetup.cs:169-173).
+click setup-page-ConfigFirmware
+settle 3
+expect config.firmware_legacy.active true
+expect config.firmware_legacy.listed true
+expect config.firmware_legacy.list loaded
+expect config.firmware_legacy.entries 12
+expect config.firmware_legacy.url default
+# The Copter entries read V4.7.1 from git-version.txt and are renamed for their frame; the rest
+# keep the list's names, their version files not being there.
+expect config.firmware_legacy.label.quad ArduCopter V4.7.1 Quad
+expect config.firmware_legacy.label.octaquad ArduCopter V4.7.1 Octa Quad
+expect config.firmware_legacy.label.y6 ArduCopter V4.7.1 Y6
+expect config.firmware_legacy.label.heli ArduCopter Heli Stable heli
+expect config.firmware_legacy.label.apm ArduPlane Stable
+expect config.firmware_legacy.label.rover ArduRover Stable
+expect config.firmware_legacy.label.sub ArduSub Stable
+expect config.firmware_legacy.label.tracker Antenna Tracker
+expect config.firmware_legacy.tag.quad ArduCopter V4.7.1 Quad
+expect config.firmware_legacy.history hidden
+expect config.firmware_legacy.history.label true
+expect config.firmware_legacy.upload disabled
+
+# The Quad: the question, then the flow on its thread. The device rules name a ChibiOS bootloader
+# called CubeOrange; its URL is the entry's fmuv2 one with the board put in; the file is
+# downloaded and read (board 140, a 3,000-byte image); and the flow stops before the reboot.
+click fwl-quad
+settle 1
+expect config.firmware_legacy.question Are you sure you want to upload ArduCopter V4.7.1 Quad?
+click fwl-question-yes
+settle 3
+expect config.firmware_legacy.question none
+expect config.firmware_legacy.message none
+expect config.firmware_legacy.flow done
+expect config.firmware_legacy.flow.board chbootloader CubeOrange
+expect config.firmware_legacy.download.url http://firmware.ardupilot.org/Copter/stable/CubeOrange/arducopter.apj
+expect config.firmware_legacy.download.file firmware.hex
+expect config.firmware_legacy.download.size 654
+expect config.firmware_legacy.apj.board_id 140
+expect config.firmware_legacy.apj.image 3000
+expect config.firmware_legacy.progress 100
+expect config.firmware_legacy.status Reading Hex File
+expect config.firmware_legacy.stopped the next step would reboot the board into its bootloader and upload the image: flashing is not enabled in this build
+
+# Load custom firmware: the box opens in the folder config.xml names; an .apj is a px4v3, read, and
+# stopped at the reboot; its folder is remembered.
+click fwl-custom
+settle 1
+expect config.firmware_legacy.path ~ /fw/
+type custom.apj
+key Return
+settle 2
+expect config.firmware_legacy.path closed
+expect config.firmware_legacy.flow.board px4v3
+expect config.firmware_legacy.download.url none
+expect config.firmware_legacy.download.file custom.apj
+expect config.firmware_legacy.apj.board_id 140
+expect config.firmware_legacy.stopped ~ reboot the board into its bootloader
+expect config.firmware_legacy.custom.dir ~ /fw
+
+# Pick previous firmware: the history in the drop-down, its first entry selected - which loads
+# that list at once.
+click fwl-history-label
+settle 3
+expect config.firmware_legacy.history visible
+expect config.firmware_legacy.history.label false
+expect config.firmware_legacy.history.items 70
+expect config.firmware_legacy.history.selected AC 4.0.3 AP 4.0.5 AS 4.0.0
+expect config.firmware_legacy.url https://github.com/diydrones/binary/raw/e94e833a5628f19137d297822343f6282af6d9cc/History/firmware2.xml
+expect config.firmware_legacy.list loaded
+expect config.firmware_legacy.entries 12
+
+# The second history: not in the mirror, so the progress dialog shows the error, and Close. The
+# list is cleared, but each picture keeps the entry it was given.
+click fwl-history
+settle 1
+click fwl-history-1
+settle 2
+expect config.firmware_legacy.history.selected AC 4.0.2 AP 4.0.4
+expect config.firmware_legacy.list failed
+expect config.firmware_legacy.list.error ~ There was an unexpected error
+click fwl-loading-close
+settle 1
+expect config.firmware_legacy.list none
+expect config.firmware_legacy.tag.quad ArduCopter V4.7.1 Quad
+
+# Beta firmwares: the warning, then the dev list - not in the mirror either - and the history
+# hidden.
+click fwl-beta
+settle 1
+expect config.firmware_legacy.message These are beta firmware, use at your own risk!!!
+click fwl-message-ok
+settle 2
+expect config.firmware_legacy.url https://github.com/ArduPilot/binary/raw/master/dev/firmware2.xml;https://firmware.ardupilot.org/Tools/MissionPlanner/dev/firmware2.xml
+expect config.firmware_legacy.list failed
+expect config.firmware_legacy.history hidden
+click fwl-loading-close
+settle 1
+
+# Choosing another entry deactivates the page.
+click setup-page-ConfigOptional
+settle 1
+expect config.firmware_legacy.active false
