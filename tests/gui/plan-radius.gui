@@ -46,13 +46,16 @@ click menu-loiterForever
 expect mission.items 3
 expect map.circles.radii 12,12,45
 
-# The pointer on waypoint 1: its circle red, its row selected, its altitude shown.
-click map@0.40x0.40:right
-expect plan.menu open
+# The pointer on waypoint 1's pin - the 32 px bitmap standing on its point, so a little above
+# it: its circle red, its row selected, its altitude shown. Then the right-click opens the menu
+# over it, which takes the pointer off the map, so the hover ends.
+hover map@0.40x0.39
 expect map.hover 1
 expect map.circles.red 1
 expect mission.selected 1
 expect map.tooltip Alt: 100
+click map@0.40x0.40:right
+expect plan.menu open
 
 # Off it again: nothing under the pointer, the circle white, the row still selected.
 click map@0.90x0.90

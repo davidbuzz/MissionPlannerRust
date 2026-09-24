@@ -17,21 +17,21 @@ Reference clone: [referneces/zed](referneces/zed).
 |---|---|---|---|---|---|---|---|
 | [D1](#d1-workspace-crate-graph-and-build-system) | 0 | Cargo workspace and crate graph | P0 | In progress (70% completed est) | Not started | Not started | Unit |
 | [D2](#d2-mavlink-protocol-crate) | 0 | MAVLink protocol codec crate | P0 | In progress (80% completed est) | Not started | Not started | Differential vs C# |
-| [D3](#d3-transport-layer) | 0 | Serial, TCP, UDP, BLE transports | P0 | In progress (55% completed est) | Not started | Not started | Unit |
-| [D4](#d4-link-engine-the-mavlinkinterface-equivalent) | 0 | Link engine, protocol machines | P0 | In progress (70% completed est) | Not started | Not started | Differential vs C# |
-| [D5](#d5-vehicle-state-model--telemetry-bus) | 0 | Vehicle state snapshot bus | P0 | In progress (75% completed est) | Not started | Not started | Differential vs C# |
+| [D3](#d3-transport-layer) | 0 | Serial, TCP, UDP, BLE transports | P0 | In progress (65% completed est) | Not started | Not started | Unit |
+| [D4](#d4-link-engine-the-mavlinkinterface-equivalent) | 0 | Link engine, protocol machines | P0 | In progress (80% completed est) | Not started | Not started | Differential vs C# |
+| [D5](#d5-vehicle-state-model--telemetry-bus) | 0 | Vehicle state snapshot bus | P0 | In progress (85% completed est) | Not started | Not started | Differential vs C# |
 | [D6](#d6-ui-kit-on-gpui) | 1 | gpui widget kit | P0 | In progress (35% completed est) | Not started | Not started | Unit + layout |
 | [D7](#d7-gpu-render-core) | 1 | Shared wgpu render core | P0 | In progress (40% completed est) | Not started | Not started | Unit + 3-OS paint smoke |
 | [D8](#d8-map-engine) | 2 | GPU slippy map engine | P0 | In progress (55% completed est) | Not started | Not started | Unit + offline |
-| [D9](#d9-hud--primary-flight-display) | 2 | GPU HUD with video | P0 | In progress (60% completed est) | Not started | Not started | Unit + SITL |
-| [D10](#d10-flight-data-screen) | 2 | Flight Data operations screen | P0 | In progress (60% completed est) | Not started | Not started | Unit + SITL + hardware |
-| [D11](#d11-flight-planner-screen) | 2 | Mission and survey planner | P0 | In progress (55% completed est) | Not started | Not started | Differential vs C# |
-| [D12](#d12-configuration--tuning-screens) | 2 | Parameter config and tuning | P1 | In progress (30% completed est) | Not started | Not started | Unit + SITL |
-| [D13](#d13-initial-setup-calibration-and-firmware) | 2 | Setup, calibration, firmware flashing | P1 | In progress (45% completed est) | Not started | Not started | Unit + SITL + hardware |
+| [D9](#d9-hud--primary-flight-display) | 2 | GPU HUD with video | P0 | In progress (75% completed est) | Not started | Not started | Unit + SITL |
+| [D10](#d10-flight-data-screen) | 2 | Flight Data operations screen | P0 | In progress (75% completed est) | Not started | Not started | Unit + SITL + hardware |
+| [D11](#d11-flight-planner-screen) | 2 | Mission and survey planner | P0 | In progress (65% completed est) | Not started | Not started | Differential vs C# |
+| [D12](#d12-configuration--tuning-screens) | 2 | Parameter config and tuning | P1 | In progress (40% completed est) | Not started | Not started | Unit + SITL |
+| [D13](#d13-initial-setup-calibration-and-firmware) | 2 | Setup, calibration, firmware flashing | P1 | In progress (55% completed est) | Not started | Not started | Unit + SITL + hardware |
 | [D14](#d14-log-engine-and-analysis) | 2 | Dataflash log parsing, plots | P1 | In progress (50% completed est) | Not started | Not started | Unit |
 | [D15](#d15-can-peripherals-and-outboard-features) | 2 | DroneCAN, peripherals, video, joystick | P2 | In progress (15% completed est) | Not started | Not started | Unit |
 | [D16](#d16-extension-and-scripting-system) | 2 | Python scripting, WASM extensions | P2 | In progress (15% completed est) | Not started | Not started | Unit |
-| [D17](#d17-localization-settings-and-data-compatibility) | 2 | i18n, settings, data compatibility | P1 | In progress (50% completed est) | Not started | Not started | Unit |
+| [D17](#d17-localization-settings-and-data-compatibility) | 2 | i18n, settings, data compatibility | P1 | In progress (55% completed est) | Not started | Not started | Unit |
 | [D18](#d18-translation-factory-and-porting-ledger) | 3 | Translation factory, file ledger | P0 | In progress (30% completed est) | Not started | Not started | Unit |
 | [D19](#d19-verification-suite) | 3 | Differential, SITL, fuzz verification | P0 | In progress (45% completed est) | Not started | Not started | Differential vs C# + fuzz |
 | [D20](#d20-release-packaging-and-operations) | 3 | Installers, updates, crash reporting | P1 | Spiked (5% completed est) | Not started | Not started | Not started |

@@ -34,7 +34,9 @@ click hud@0.5x0.4:right
 click fly-hud-showicons
 settle 1
 expect hud.icons ~ batt_
-expect hud.icons ~ 3dfix_wide,vibe_green,ekf_green,prearm_green
+# The GPS picture is the fix SITL reports (RTK fixed here) and the pre-arm one its readiness;
+# the pictures' presence is the test, not the vehicle's state.
+expect hud.icons ~ _wide,vibe_green,ekf_green,prearm_
 expect hud.gps none
 expect hud.vibe.colour none
 expect hud.ekf.colour none

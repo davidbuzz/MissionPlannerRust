@@ -13,9 +13,9 @@ projects — as a Rust application that is **fast**, **multi-platform** and **GP
 Early, but flyable behind SITL and a real autopilot. The protocol and telemetry spine is solid; the
 UI covers flying, planning and the first of the setup screens.
 
-Measured on this tree: **22 crates, 170,984 hand-written Rust LOC** (plus 91,634 generated; `.rs` files
-under `crates/`, tests included), **2,033 tests** green on `cargo test --workspace` (33 ignored:
-they need SITL, a window, or the network), **80 GUI scripts** under `tests/gui/`, across 171 commits.
+Measured on this tree: **22 crates, 194,867 hand-written Rust LOC** (plus 91,634 generated; `.rs` files
+under `crates/`, tests included), **2,248 tests** green on `cargo test --workspace` (33 ignored:
+they need SITL, a window, or the network), **102 GUI scripts** under `tests/gui/`, across 178 commits.
 
 | Working today | |
 |---|---|

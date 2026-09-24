@@ -2303,7 +2303,10 @@ fn grid_button(
         .id(id)
         .w_full()
         .px_1()
-        .py_1()
+        // Two pixels of padding a side, not four: the C#'s Actions tab is 290x175 with 30 px buttons
+        // at a 36 px pitch (FlightData.resx), and at four the five wrapped rows plus the map-menu
+        // row ran one pixel past the page at 1600x1200 (fly.page.overflow 1).
+        .py_0p5()
         .rounded_md()
         .border_1()
         .text_xs()

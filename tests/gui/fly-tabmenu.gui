@@ -56,10 +56,11 @@ click fly-customize-tabStatus
 click fly-customize-close
 expect fly.tabs tabQuick,tabActions,tabPagemessages,tabActionsSimple,tabPagePreFlight,tabGauges,tabTransponder,tabStatus,tabServo,tabAuxFunction,tabScripts,tabPayload,tabTLogs,tablogbrowse
 
-# On a page, the same menu; a press anywhere else closes it.
+# With a page showing, the same menu from the strip - the menu is the tab control's, not a
+# page's (FlightData.Designer.cs:594); a press anywhere else closes it.
 click fly-tab-actions
 expect fly.tab tabActions
-click fly-sidebar@0.5x0.98:right
+click fly-tabs:right
 expect fly.menu tabs
 click map@0.5x0.5
 expect fly.menu none

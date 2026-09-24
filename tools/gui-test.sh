@@ -22,6 +22,7 @@
 #   click tab-plan:right        a right-click
 #   doubleclick log-chart@0.5x0.5  a double click: two left presses at one point, 80 ms apart
 #   scroll servo-SERVO9_FUNCTION-list down 3 [ms]  the wheel over a control: up or down, N notches, a gap between them
+#   hover map@0.40x0.40          move the pointer onto a control and press nothing
 #   type flight.bin             type into whatever has focus
 #   key Return                  press a named key
 #   expect mission.items 3      assert a published fact equals a value
@@ -340,6 +341,19 @@ while IFS= read -r RAW; do
                 xdotool click --repeat 2 --delay 80 1
             else
                 echo "line $LINE_NO: could not double-click '$TARGET'" >&2
+                FAILURES=$((FAILURES + 1))
+            fi
+            sleep 0.6
+            ;;
+        hover)
+            # The pointer moved onto a control, no button: what a marker's hover shows.
+            TARGET="${2:?hover needs a target}"
+            if COORDS=$("$ROOT/tools/gui-click.sh" --resolve "$PROBE_FILE" "$WIN_ID" "$TARGET"); then
+                echo "hovering '$TARGET' at window-relative ${COORDS/ /,}"
+                # shellcheck disable=SC2086 # "x y", two words on purpose
+                xdotool mousemove --window "$WIN_ID" $COORDS
+            else
+                echo "line $LINE_NO: could not hover '$TARGET'" >&2
                 FAILURES=$((FAILURES + 1))
             fi
             sleep 0.6

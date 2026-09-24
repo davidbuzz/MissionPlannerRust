@@ -35,6 +35,7 @@ expect params.value.AVD_ENABLE 0
 expect params.value.ADSB_TYPE 0
 
 click tab-setup
+settle 1
 expect config.adsb.active false
 click setup-page-ConfigMandatory
 click setup-page-ConfigADSB
