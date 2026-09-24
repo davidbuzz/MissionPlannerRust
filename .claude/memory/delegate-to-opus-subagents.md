@@ -26,3 +26,8 @@ is the bottleneck; agents with disjoint files finish that many items in the time
   and cargo serialises on its lock, which is expected; nobody kills another cargo.
 - The coordinator keeps the integration work (wiring an API into the GUI, docs, memory,
   commits) and the verification; the agent's report is data, not a verdict.
+
+**Stopped by Buzz, 2026-09-24 ~03:20 UTC:** "pls dont start any more sub agents, i want to
+allow these to finish, but run no more." The four then running (log browser remainder, Install
+Firmware Legacy/Ateryx, the Geo Reference form, terrain in the planner) finish and are
+integrated; launch none after them until he says otherwise.
