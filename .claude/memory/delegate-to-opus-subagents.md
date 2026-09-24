@@ -6,7 +6,7 @@ metadata:
 ---
 
 **"pls delegate coding tasks to at most 3 Opus 5 subagents"** — Buzz, 2026-09-23 14:08 UTC (the transcript's time; the question "are you capable of delegating coding tasks to Opus 5.1 as a sub agent?" came a minute before). Standing
-authorisation, with a cap of three concurrent - **raised to six** on 2026-09-24 16:05 UTC: "pls delegate coding tasks to at most 6 Opus 5 subagents".
+authorisation, with a cap of three concurrent - **raised to six** on 2026-09-23 16:05 UTC (02:05 on the 24th, local; commit b8f5d57): "pls delegate coding tasks to at most 6 Opus 5 subagents". **The stop below came after the raise**, not before it: the order is three → six → none.
 
 **Why:** the queue in PLAN.md §13.2 has independent items, and one context working them in series
 is the bottleneck; agents with disjoint files finish that many items in the time of one.

@@ -4,9 +4,11 @@
 (C# / .NET Framework 4.7.2 / WinForms — 3,678 `.cs` files, 1,208,836 LOC, ~93 `.csproj`) in Rust, that is
 **extremely fast**, **multi-platform** (Windows / Linux / macOS), and **GPU-accelerated** end to end.
 
-**UI/runtime stack:** Zed's ecosystem — `gpui` 0.2.2 (Apache-2.0, published, wgpu-backed) + `wgpu` 29,
-with platform backends `gpui_linux` / `gpui_windows` / `gpui_macos` (and `gpui_web` as the wasm option).
-Reference clone: [referneces/zed](referneces/zed).
+**UI/runtime stack:** Zed's ecosystem — `gpui` from the zed tree, pinned at `62e5991` (Apache-2.0;
+wgpu on Linux and web, Direct3D 11 on Windows, Metal on macOS), with the platform crates `gpui_linux` /
+`gpui_windows` / `gpui_macos` selected in `crates/mp-gui/Cargo.toml` (and `gpui_web` as the wasm option).
+The crates.io 0.2.2 release was left on 2026-09-23 (commit `feaa408`): an older snapshot on the blade
+renderer with no web backend. Reference clone: [referneces/zed](referneces/zed).
 
 **Licence:** the port is a derivative of GPLv3 Mission Planner → the workspace ships **GPLv3**.
 `gpui` (Apache-2.0) is inbound-compatible. Per-crate licences from `zed` must be checked individually.
@@ -15,32 +17,47 @@ Reference clone: [referneces/zed](referneces/zed).
 
 | # | Layer | Deliverable | Priority | Linux | Windows | macOS | Testing |
 |---|---|---|---|---|---|---|---|
-| [D1](#d1-workspace-crate-graph-and-build-system) | 0 | Cargo workspace and crate graph | P0 | In progress (70% completed est) | Not started | Not started | Unit |
-| [D2](#d2-mavlink-protocol-crate) | 0 | MAVLink protocol codec crate | P0 | In progress (80% completed est) | Not started | Not started | Differential vs C# |
-| [D3](#d3-transport-layer) | 0 | Serial, TCP, UDP, BLE transports | P0 | In progress (65% completed est) | Not started | Not started | Unit |
+| [D1](#d1-workspace-crate-graph-and-build-system) | 0 | Cargo workspace and crate graph | P0 | In progress (55% completed est) | Not started | Not started | Unit |
+| [D2](#d2-mavlink-protocol-crate) | 0 | MAVLink protocol codec crate | P0 | In progress (85% completed est) | Not started | Not started | Differential vs C# |
+| [D3](#d3-transport-layer) | 0 | Serial, TCP, UDP, BLE transports | P0 | In progress (65% completed est) | Not started | Not started | Differential vs C# |
 | [D4](#d4-link-engine-the-mavlinkinterface-equivalent) | 0 | Link engine, protocol machines | P0 | In progress (80% completed est) | Not started | Not started | Differential vs C# |
 | [D5](#d5-vehicle-state-model--telemetry-bus) | 0 | Vehicle state snapshot bus | P0 | In progress (85% completed est) | Not started | Not started | Differential vs C# |
-| [D6](#d6-ui-kit-on-gpui) | 1 | gpui widget kit | P0 | In progress (35% completed est) | Not started | Not started | Unit + layout |
-| [D7](#d7-gpu-render-core) | 1 | Shared wgpu render core | P0 | In progress (40% completed est) | Not started | Not started | Unit + 3-OS paint smoke |
-| [D8](#d8-map-engine) | 2 | GPU slippy map engine | P0 | In progress (55% completed est) | Not started | Not started | Unit + offline |
+| [D6](#d6-ui-kit-on-gpui) | 1 | gpui widget kit | P0 | In progress (30% completed est) | Not started | Not started | Unit + layout |
+| [D7](#d7-gpu-render-core) | 1 | Shared wgpu render core | P0 | In progress (35% completed est) | Not started | Not started | Unit + Linux paint smoke |
+| [D8](#d8-map-engine) | 2 | GPU slippy map engine | P0 | In progress (60% completed est) | Not started | Not started | Differential vs C# |
 | [D9](#d9-hud--primary-flight-display) | 2 | GPU HUD with video | P0 | In progress (75% completed est) | Not started | Not started | Unit + SITL |
-| [D10](#d10-flight-data-screen) | 2 | Flight Data operations screen | P0 | In progress (75% completed est) | Not started | Not started | Unit + SITL + hardware |
-| [D11](#d11-flight-planner-screen) | 2 | Mission and survey planner | P0 | In progress (75% completed est) | Not started | Not started | Differential vs C# |
-| [D12](#d12-configuration--tuning-screens) | 2 | Parameter config and tuning | P1 | In progress (40% completed est) | Not started | Not started | Unit + SITL |
+| [D10](#d10-flight-data-screen) | 2 | Flight Data operations screen | P0 | In progress (80% completed est) | Not started | Not started | Unit + SITL + hardware |
+| [D11](#d11-flight-planner-screen) | 2 | Mission and survey planner | P0 | In progress (80% completed est) | Not started | Not started | Differential vs C# |
+| [D12](#d12-configuration--tuning-screens) | 2 | Parameter config and tuning | P1 | In progress (45% completed est) | Not started | Not started | Unit + SITL |
 | [D13](#d13-initial-setup-calibration-and-firmware) | 2 | Setup, calibration, firmware flashing | P1 | In progress (55% completed est) | Not started | Not started | Unit + SITL + hardware |
-| [D14](#d14-log-engine-and-analysis) | 2 | Dataflash log parsing, plots | P1 | In progress (60% completed est) | Not started | Not started | Unit |
-| [D15](#d15-can-peripherals-and-outboard-features) | 2 | DroneCAN, peripherals, video, joystick | P2 | In progress (15% completed est) | Not started | Not started | Unit |
+| [D14](#d14-log-engine-and-analysis) | 2 | Dataflash log parsing, plots | P1 | In progress (65% completed est) | Not started | Not started | Differential vs C# |
+| [D15](#d15-can-peripherals-and-outboard-features) | 2 | DroneCAN, peripherals, video, joystick | P2 | In progress (20% completed est) | Not started | Not started | Unit |
 | [D16](#d16-extension-and-scripting-system) | 2 | Python scripting, WASM extensions | P2 | In progress (15% completed est) | Not started | Not started | Unit |
-| [D17](#d17-localization-settings-and-data-compatibility) | 2 | i18n, settings, data compatibility | P1 | In progress (55% completed est) | Not started | Not started | Unit |
-| [D18](#d18-translation-factory-and-porting-ledger) | 3 | Translation factory, file ledger | P0 | In progress (30% completed est) | Not started | Not started | Unit |
-| [D19](#d19-verification-suite) | 3 | Differential, SITL, fuzz verification | P0 | In progress (45% completed est) | Not started | Not started | Differential vs C# + fuzz |
+| [D17](#d17-localization-settings-and-data-compatibility) | 2 | i18n, settings, data compatibility | P1 | In progress (50% completed est) | Not started | Not started | Differential vs C# |
+| [D18](#d18-translation-factory-and-porting-ledger) | 3 | Translation factory, file ledger | P0 (ledger) / P1 (factory) | In progress (30% completed est) | Not started | Not started | Unit |
+| [D19](#d19-verification-suite) | 3 | Differential, SITL, fuzz verification | P0 | In progress (50% completed est) | Not started | Not started | Differential vs C# + fuzz |
 | [D20](#d20-release-packaging-and-operations) | 3 | Installers, updates, crash reporting | P1 | Spiked (5% completed est) | Not started | Not started | Not started |
 | [D21](#d21-native-in-process-plugin-host) | 2 | Native in-process plugin host | P3 | Not started (0% completed est) | Not started | Not started | Not started |
 
 **Layer** 0 = foundation (protocol/transport/state) · 1 = rendering and UI foundation · 2 = the application · 3 = the machine that builds the machine.
 **Priority** P0 = nothing ships without it · P1 = required for feature parity · P2 = required for 100% completeness, sequenced last · P3 = the last thing of all, after P2.
 **Linux / Windows / macOS** the implementation status on each operating system, one column each: Not started → Spiked → In progress → Feature complete → Done. The Linux figure is an estimate of how much of the row's DoD is met, judged from its "Today" paragraph against its DoD and `Tests:` lines, revised at each documentation commit. A deliverable is brought up on Linux first and the other two columns say *Not started* until its `Tests:` artefacts have been run there; a CI matrix for all three exists in `.github/workflows/ci.yml` but has not run yet (no remote), so nothing is claimed for Windows or macOS.
-**Testing** Not started → Unit → Differential vs C# → Gated in CI → HIL signed off.
+**Testing** Not started → Unit → Differential vs C# → Gated in CI → HIL signed off. *Gated in CI* is claimed
+for nothing: the workflow exists and has never run.
+
+**Revised 2026-09-24**, an audit of every row against the tree. The Linux figures are re-scored clause by
+clause against each row's DoD and `Tests:` line, and the `Tests:` lines now name the artefacts that exist
+under the names they have, with *not yet* for the rest. Two things changed in the priorities:
+
+- **Windows and macOS have never run anything.** The repository has no remote, so the three-OS matrix in
+  `.github/workflows/ci.yml` has never executed, and the paint smoke it describes for Direct3D 11 and Metal
+  (`docs/adr/0002`) is a workflow, not a result. Creating the remote is the cheapest single act that moves
+  those two columns, and it is the owner's.
+- **D18 is split.** The ledger - its rows, states, `check`, and evidence - stays P0 as the definition of
+  done. The factory machinery around it - the dispatcher, the per-file agent contract, the DSDL, `.resx` and
+  screen-spec generators - is sequenced after D12's pages, at P1: the row queue in PLAN.md §13 with the C#
+  oracles and the coverage ledgers has been doing the factory's job, and 251,000 hand-written lines have
+  arrived that way. The order of everything else is PLAN.md §13.6.
 
 ## Test policy (applies to all 20 deliverables)
 
@@ -78,7 +95,13 @@ logs/geo → render → ui-kit → screens → app → extensions → tools), wi
   cold `cargo check` under 90 s and incremental under 5 s on the dev box; MSRV and edition pinned;
   GPLv3 + third-party attribution (`about.toml`/`cargo-deny`) generated automatically.
 - **Replaces:** `MissionPlanner.sln`, `MissionPlanner.csproj`, `MissionPlannerLib.csproj`, `build*.bat`.
-- **Tests:** `xtask/tests/graph.rs` parses `cargo metadata` and asserts the layer rules (no crate depends upward, no cycles, no UI crate in the telemetry path); `xtask/tests/licences.rs` wraps `cargo-deny` and fails on a non-GPLv3-compatible dependency; `xtask/tests/build_budget.rs` asserts cold `cargo check` and incremental rebuild stay under budget; `trybuild` UI tests for every proc-macro crate; CI matrix builds all three OSes on every PR.
+- **Today:** 23 crates and `xtask` build as one workspace; `xtask/tests/graph.rs` holds §5.1's layering
+  over `cargo metadata`; clippy, rustfmt and `deny.toml` are enforced; the release profile is LTO fat
+  with one codegen unit and the dev profile optimises dependencies; MSRV 1.95.0 and edition 2024 are
+  pinned; `cargo xtask` is an alias in `.cargo/config.toml`. **Not yet:** the three-OS CI matrix has
+  never run (no remote); no PGO hook; the cold and incremental build budgets are unmeasured; attribution
+  is not generated (no `about.toml`); `cargo-deny` runs from the workflow and no test wraps it.
+- **Tests:** `xtask/tests/graph.rs` (exists: the layer rules, no upward edge, no cycle, each rule proven able to fail); `xtask/tests/licences.rs` and `xtask/tests/build_budget.rs` not yet; no proc-macro crate exists, so no `trybuild`; the CI matrix builds all three OSes on every PR once there is a remote for it to run on.
 
 ### D2. MAVLink protocol crate
 Generated message set (common + ardupilotmega + all dialects Mission Planner ships), MAVLink v1/v2,
@@ -90,9 +113,12 @@ signing, zero-copy frame parse/serialize.
 - **Replaces:** `ExtLibs/Mavlink` (40,718 LOC, machine-generated).
 - **Today:** the allocation claim is tested. `crates/mp-mavlink/tests/no_alloc.rs` installs a
   counting allocator and replays every frame of every recorded flight through the framing and
-  the typed decoder: 211,638 decodes, zero allocations, the same in release. The 24-hour
-  `frame_parse` soak is still owed.
-- **Tests:** `crates/mavlink/tests/roundtrip.rs` proptest encode→decode identity over **every** generated message type; `tests/golden_decode.rs` diffs decoded fields against C#-produced golden JSON for a corpus of real tlogs; `tests/signing.rs` for MAVLink2 signature accept/reject vectors; `tests/truncation.rs` for v2 zero-trimming edge cases; `fuzz/fuzz_targets/frame_parse.rs` and `message_decode.rs` (24 h clean on `frame_parse` required before D2 is done); `crates/mp-fuzz-checks/tests/bounded.rs` runs every fuzz property on stable as part of `cargo test --workspace`, so a target cannot rot uncompiled between nightly runs; `tests/no_alloc.rs` uses a counting global allocator to assert zero allocations per packet; `benches/decode.rs` gates the >1 M msg/s target.
+  the typed decoder: 211,638 decodes, zero allocations, the same in release. The 24-hour soaks of
+  `frame_parse` and `message_decode` started 2026-09-23 16:01Z and end 2026-09-24 16:01Z, with no
+  artefact so far; their result goes into `fuzz/README.md`, which still shows only the short runs.
+  `benches/decode.rs` exists for the > 1 M messages/s gate and no figure from it is recorded anywhere,
+  so the throughput claim is unproven in this document.
+- **Tests:** `crates/mp-mavlink/tests/roundtrip.rs` (proptest encode→decode identity over every generated message type); the golden decode is `tests/differential_tlog.rs` (35,750 frames against `MAVLink.dll` under mono) with `crates/mp-mavlink-dialects/tests/differential_fields.rs` (24,626 field values by name) and `reference_table.rs` (349 `CRC_EXTRA`/`min_len`/`len` against the shipped assembly); `tests/signing.rs`; the truncation cases live in `tests/robustness.rs` and `tests/decoder.rs`; `fuzz/fuzz_targets/frame_parse.rs` and `message_decode.rs` (24 h soak in flight); `crates/mp-fuzz-checks/tests/bounded.rs` runs every fuzz property on stable in `cargo test --workspace`; `tests/no_alloc.rs`; `benches/decode.rs` (exists; its number is not recorded).
 
 ### D3. Transport layer
 `serial | TCP | UDP | BLE | NTRIP | websocket | file-replay`, device enumeration and hotplug on all three
@@ -117,7 +143,7 @@ OSes, plus bootloader/flashing transports (px4uploader, DFU, ADB).
   conversation, the UDP client's reads, writes and counts) - PLAN.md §13.4 row 43. **Not yet:**
   BLE, TLS (`wss://`, NTRIP over https), the flashing transports, Windows friendly names via WMI,
   and the ≤ 1 ms latency bench.
-- **Tests:** `crates/transport/tests/loopback.rs` per transport (serial via a PTY pair / com0com, TCP, UDP, websocket, file-replay); `tests/faults.rs` fault-injection over a mock transport (drop, duplicate, reorder, partial write, mid-frame disconnect); `tests/enumerate.rs` parses checked-in per-OS device fixtures (Windows registry dumps, Linux udev/sysfs trees, macOS IOKit dumps) and asserts the device list; `tests/hotplug.rs` simulated surprise-unplug and reconnect; `tests/ntrip.rs` against an in-process mock caster; `benches/latency.rs` gates the ≤1 ms overhead target.
+- **Tests:** the per-transport loopbacks are `crates/mp-transport/tests/transports.rs`, `integration_replay.rs`, `udp_client.rs` and `websocket.rs`, with `csharp_goldens.rs` holding the UDP client, websocket and NTRIP bytes to the C# classes run under mono; `tests/faults.rs` (drop, duplicate, reorder, partial write, mid-frame disconnect over real frames); `tests/enumerate.rs` over Linux, macOS and Windows fixtures; `tests/hotplug.rs` (a real pty unplugged and reopened); `tests/ntrip.rs` against an in-process caster; `tests/description.rs`; `benches/latency.rs` not yet, so the ≤ 1 ms claim is unmeasured.
 
 ### D4. Link engine (the `MAVLinkInterface` equivalent)
 Per-link packet pump, routing/forwarding, and the high-level protocol state machines: parameters,
@@ -136,8 +162,9 @@ mission/rally/fence up- and download, MAVFTP, log download, command_long/ack, re
   `tests/routing.rs` runs 50 systems and 56 components through one link. The GUI's and the CLI's
   sets and commands go through those requests, with the C#'s message texts on the status line
   (PLAN.md §13.4 row 11). MAVFTP is `MAVFtp.cs` whole (row 36): the burst read with its gap filling, list, upload, remove, rename, CRC32, the C#'s retry table, as a state machine in `mp-ftp` the link drives, with `mpr ftp`; the C#'s own `MAVFtp` under mono gives the same request bytes and the same `param.pck` from SITL. **Not yet:** the log-download machine as a request; `uploadPartial`,
-  `getHomePosition`, `doCommandInt` and `setWP` as requests.
-- **Tests:** one test module per protocol state machine — `tests/params.rs`, `tests/mission.rs`, `tests/fence_rally.rs`, `tests/ftp.rs`, `tests/log_download.rs` — each driven by recorded packet traces plus a scripted peer; `tests/retries.rs` injects timeouts, out-of-order acks and partial transfers and asserts convergence or a clean error; `tests/routing.rs` drives 50 simultaneous sysid/compid vehicles through one link; `tests/sitl_params.rs` (feature `sitl`) downloads the full param set from ArduPilot SITL and diffs it against the C# app's dump.
+  `getHomePosition`, `doCommandInt` and `setWP` as requests, which is why Change Alt, Format SD and
+  the `COMMAND_INT`s still go out once, raw.
+- **Tests:** the machines are exercised by `crates/mp-link/tests/retries.rs` (40 tests: every send counted under timeouts, reordering, duplicates and seeded bad links) and `tests/link.rs` against an in-memory vehicle, with the SITL halves behind `--ignored` in `params_sitl.rs`, `mission_sitl.rs`, `fence_sitl.rs`, `commands_sitl.rs` and `logs_sitl.rs`; MAVFTP is `crates/mp-ftp/tests/mavftp.rs` and `csharp.rs` (768 names, the CRC vectors and 13 payloads against `MAVFtp.cs` under mono); `tests/routing.rs` (50 systems, 56 components through one link); `tests/no_alloc_ingest.rs`, `replay_clock.rs`, `current_state.rs`, `telemetry_storm.rs`, `traffic.rs`. Not yet: a log-download machine as a request, and `params_sitl.rs` does not diff the downloaded set against the C# application's dump.
 
 ### D5. Vehicle state model + telemetry bus
 The `CurrentState` equivalent: decoded, UI-facing vehicle state, published as lock-free immutable
@@ -161,7 +188,7 @@ snapshots so the renderer never blocks on the I/O thread.
   `UpdateCurrentSettings` under mono over three tlogs (`tools/csharp-reference/MpState.cs`,
   PLAN.md §13.4 row 38) - the differential the `Tests:` line asks for, for those fields. Their
   callers in the link and the GUI are row 39.
-- **Tests:** `tests/field_coverage.rs` reads the D18 ledger and fails if any C# `CurrentState` field lacks a Rust counterpart; `tests/decode_to_state.rs` replays golden tlogs and diffs the resulting state timeline against C# output; `tests/concurrency.rs` stress-tests the snapshot bus (writer at 1 kHz, 8 readers) asserting no torn reads and no reader stall, with a `loom` model of the publish path; `tests/no_alloc_ingest.rs` allocation counter over the ingest→state path; `benches/snapshot.rs` gates publish and read latency.
+- **Tests:** the field coverage is `crates/mp-vehicle/src/coverage.rs`'s tests, matched to `CurrentState.cs` by name, type, display text, group and order, rendered to `docs/coverage/currentstate.md` and failing when stale; the state timeline against the C# is `tests/current_state_oracle.rs` (58 fields per packet over three tlogs from `MpState.cs` under mono) with `current_state_replay.rs`, `current_state_clock.rs`, `current_state_statics.rs`, `replay_state.rs`, `onboard.rs`, `modes.rs`, `nav.rs`; `tests/no_alloc_ingest.rs` in both `mp-vehicle` and `mp-link`. Not yet: a concurrency stress test or `loom` model of the publish path, and `benches/snapshot.rs`.
 
 ---
 
@@ -176,7 +203,16 @@ theming (`*.mpsystheme` import) and keymaps/actions.
   our own thin façade so a gpui API break is a one-crate fix.
 - **Replaces:** `ExtLibs/ObjectListView` (42,184), `ExtLibs/BSE.Windows.Forms` (10,323),
   `ExtLibs/CsAssortedWidgets` (10,742), `ExtLibs/Controls` (17,531), `Controls/` chrome, `ThemeManager.cs`.
-- **Tests:** `crates/ui/tests/snapshots/**` headless render snapshots for every widget in light and dark themes (perceptual diff with a tolerance, golden images in `testdata/ui/`); `tests/interaction.rs` keyboard navigation, focus order, tab stops and action dispatch via gpui's test executor; `tests/grid.rs` virtualised 100 k-row grid correctness (scroll, sort, select, resize) plus `benches/grid_scroll.rs` gating 120 fps; `tests/theme_import.rs` loads real `*.mpsystheme` fixtures and asserts the resolved palette; `tests/hidpi.rs` layout at 1x/1.5x/2x scale.
+- **Today:** the widgets exist inside `mp-gui`, made as the screens needed them: a single-line text
+  field, drop-down lists, check boxes, buttons, the fourteen-page tab control, the backstage list,
+  modal prompts and questions as the C#'s `InputBox` and `MessageBox` put them, a virtual grid over
+  the log's index (`logbrowse/grid.rs`), the status line and a scroll strip; `crates/mp-gui/tests/layout.rs`
+  holds every screen inside the window. **Not yet:** no `mp-ui` crate or facade - `mp-gui` is
+  131,000 lines in one crate and names gpui's platform crates directly, §5.1's one pinned exception;
+  no widget gallery or snapshot tests; no themes or `*.mpsystheme` import (the palette is the
+  owner's dark one, PLAN.md §1.2); no numeric up-down, so numbers step by arrows; HiDPI,
+  multi-monitor and IME unverified; the 100,000-row grid at 120 fps unmeasured.
+- **Tests:** `crates/mp-gui/tests/layout.rs` (every screen inside the window at 1600×1200 and at a small size; `--ignored`, they need a window) and the 133 `tests/gui/*.gui` scripts through `tools/gui-test.sh`, which assert the application's own facts; the widgets' unit tests are inline in `mp-gui`. Not yet: `tests/snapshots/**` with golden images, `tests/interaction.rs` on gpui's test executor, `tests/grid.rs` and `benches/grid_scroll.rs`, `tests/theme_import.rs`, `tests/hidpi.rs`.
 
 ### D7. GPU render core
 Shared `wgpu` layer under everything visual: device/queue sharing with gpui (or offscreen render-to-texture
@@ -187,11 +223,17 @@ tessellation, glyph atlas labels, offscreen targets, frame pacing, and a softwar
   RDP/VNC and on llvmpipe; headless rendering works in CI for snapshot tests.
 - **Replaces:** GDI+/`System.Drawing`, `OpenTK`/`GLControl`, `SkiaSharp`, `ExtLibs/MissionPlanner.Drawing`
   (17,602), `ExtLibs/SvgNet`, `ExtLibs/LibTessDotNet`.
-- **Today:** the backends are exercised at runtime, not merely compiled. `MP_SMOKE=1` makes the real
-  binary exit 0 once it has painted three frames, and CI runs it on Linux (xvfb + llvmpipe), Windows
-  (Direct3D 11, WARP on a runner) and macOS. See `docs/adr/0002-verifying-the-windows-build.md` for
-  what that does and does not prove — notably not what the window *looks* like on Windows.
-- **Tests:** `crates/render/tests/headless.rs` renders every primitive on lavapipe (Linux), WARP (Windows) and the macOS software path, diffing against golden PNGs; `tests/shaders.rs` compiles every WGSL shader for all backends and asserts pipeline creation; `tests/viewport_composite.rs` proves a custom wgpu viewport composites correctly inside a gpui window (this is the spike that gates the whole GPU goal — it becomes a permanent regression test); `benches/frame.rs` per-layer frame budget; `tests/fallback.rs` forces the software path and asserts correct output.
+- **Today:** `MP_SMOKE=1` makes the real binary exit 0 once it has painted three frames, and
+  `.github/workflows/ci.yml` runs it on Linux (xvfb + llvmpipe), Windows (Direct3D 11, WARP) and
+  macOS - a workflow that has never run, since the repository has no remote; on this machine the
+  Linux path paints every day. `docs/adr/0001` settled the gate the other way from the DoD's
+  wording: the map lives inside gpui through `canvas()` with no custom wgpu pass, at 2.7 ms for a
+  decimated 100,000-point track, so `mp-render` was never made and every visual - tiles, tracks,
+  markers, the HUD, the charts - is gpui primitives. See `docs/adr/0002` for what the Windows
+  smoke does and does not prove. **Not yet:** a profiler overlay and per-frame budget, headless
+  rendering for snapshot tests, the degraded-target (RDP/VNC) check, and any run at all on
+  Windows or macOS.
+- **Tests:** the paint smoke (`MP_SMOKE=1`, in the workflow for all three OSes, run on Linux here). Not yet: `tests/headless.rs` golden renders on lavapipe and WARP, `tests/shaders.rs` (no shader of ours exists; everything is gpui's), `tests/viewport_composite.rs` (the ADR's measurement was a one-off spike, not a regression test), `benches/frame.rs`, `tests/fallback.rs`.
 
 ---
 
@@ -222,16 +264,24 @@ markers, tracks, polygons, geofences, survey grids, and full editing interaction
   pixel at zooms 1-30 where it does not; the round trip is < 1 mm (worst 5.8 nm). Four geodesy
   divergences from the C# were found by it and fixed. `benches/pan_zoom.rs` measures the
   following frame at p99 5.42 ms with a 1 M-point track and 10 k markers, inside the 120 fps
-  budget on the CPU side, and gates it; the GPU half is not measured.
-- **Tests:** `tests/projection.rs` round-trips a fixture grid of coordinates against ProjNet/GDAL reference values asserting <1 mm error; `tests/tilecache.rs` cache hit/miss/evict/corrupt-entry recovery and compatibility with the existing Mission Planner cache layout; `tests/overlays.rs` golden-image renders of tracks, polygons, fences and marker clusters; `tests/editing.rs` drag/snap/rubber-band interaction via the test executor; `tests/offline.rs` asserts full function with the network disabled; `benches/pan_zoom.rs` gates 120 fps with a 1 M-point track + 10 k markers.
+  budget on the CPU side, and gates it; the GPU half is not measured. **Start-up from a cache:**
+  the store reads the disk on a thread that never waits on the network and hands what the cache
+  lacks to a pool of five fetch threads, GMap.NET's `GThreadPoolSize` (`Core.cs:62`); one thread
+  did both before, so one uncached tile at the first view held every cached tile behind it for
+  the fetch's timeout and a full cache took five to ten seconds to appear (owner's report,
+  2026-09-24). `crates/mp-tiles/tests/startup.rs` holds a cached tile to under 500 ms with every
+  fetch thread hung; `tests/gui/tiles-startup.gui` holds the screen to it with a hole in the cache
+  and a proxy that never answers.
+- **Tests:** `crates/mp-units/tests/projection.rs` (676 points against the C# under mono, < 1 mm round trip); `crates/mp-tiles/tests/tilecache.rs` (hit, miss, corrupt-entry recovery, and a tile the C# application wrote), `offline.rs`, `providers.rs` and `versions.rs` (against the shipped `GMap.NET.Core.dll`), `urlcache.rs`, `wire.rs` (what leaves the machine for a Bing map), `startup.rs` (a cached tile in under 500 ms with every fetch thread stuck); `crates/mp-units/benches/pan_zoom.rs` (the following frame at p99 5.42 ms with a 1 M-point track and 10 k markers, CPU side); the map's interaction through the `tests/gui/plan-*.gui` scripts, `cache-compat.gui`, `map-provider.gui` and `tiles-startup.gui`. Not yet: `tests/overlays.rs` golden images, `tests/editing.rs` on the test executor (rubber-band and snap are not ported), the GPU half of the frame budget.
 
 ### D9. HUD / primary flight display
 GPU artificial horizon, tapes, compass, gauges, warnings, with live video underlay and OSD-style overlays.
 - **DoD:** pixel-comparable to the C# HUD (side-by-side review signed off), **< 16 ms packet-to-pixel**
   at the 99th percentile, runs at 120 fps while using < 3 % CPU; video underlay with hardware decode.
 - **Replaces:** `Controls/HUD*.cs`, `Controls/` PFD widgets.
-- **Today:** all 24 elements of `doPaint()` are ported, 22 drawing live and two (flight-path
-  vector, AOA scale) waiting only for `mp_vehicle`'s new `AOA_SSA` fields to be wired.
+- **Today:** all 24 elements of `doPaint()` are ported and drawing, the flight-path vector and
+  AOA scale from `AOA_SSA` and `AOA_CRIT` since PLAN.md §13.4 row 41 (`hud::Status::Blocked` is
+  constructed by nothing now).
   `crates/mp-gui/src/hud.rs` builds a pure scene from the vehicle state - the
   geometry of `HUD.cs doPaint()` with its constants (`Height / 30` font, `Height / 65` per
   degree of pitch, a `Height / 14` heading tape, `Width / 10` scrollers) - and paints it on a gpui
@@ -240,7 +290,7 @@ GPU artificial horizon, tapes, compass, gauges, warnings, with live video underl
   (`HUD.cs:2861-2899, 3150-3301`) as drawn stand-ins, the cell-voltage, Bat2 and GPS2 lines, and
   every readout in the display units the C#'s `CurrentState` getters multiply by, with the unit
   names (PLAN.md §13.4 row 41). No video underlay, no golden frames, no latency measurement yet.
-- **Tests:** `tests/hud_golden.rs` renders recorded attitude/telemetry sequences and perceptually diffs every frame against golden images, including the degenerate cases (gimbal-lock attitudes, NaN/absent fields, GPS loss, failsafe banners); `tests/latency.rs` timestamps packet-in to frame-presented and gates the <16 ms p99 target; `tests/video_underlay.rs` decodes a fixture stream and asserts composition order and hardware-decode fallback.
+- **Tests:** the coverage table in `crates/mp-gui/src/hud.rs`, held to the code by its unit tests; `tests/gui/hud.gui`, `hud-health.gui`, `hud-units.gui`, `hud-icons.gui` and `hud-cells.gui` on SITL. Not yet: `tests/hud_golden.rs`, `tests/latency.rs` (the < 16 ms packet-to-pixel figure is unmeasured; the frame's own p99 is 4.9 ms under the 200 Hz storm), `tests/video_underlay.rs`.
 
 ### D10. Flight Data screen
 The live operations screen: HUD + map + quick view + tuning graph + actions + messages + status tabs,
@@ -260,9 +310,8 @@ servo/RC, and the vehicle action buttons.
   Since then the Actions tab is ported in its own 5×5 arrangement - Set WP, Restart and Resume
   Mission, Change Alt/Speed/Loiter Radius, Fly To Coords, Fly To Here Alt, Abort Landing, Set
   Home Alt, Do Action with the C#'s 19 entries - each sending what `FlightData.cs` sends and proved
-  by a `tests/gui/fly-*.gui` script, inside the C#'s fourteen-page tab control under the HUD; the Quick view with its field chooser, the Telemetry Logs page's paced playback, POIs, the DataFlash Logs page with the log downloader, and the EKF and Vibration windows behind the HUD's texts (rows 18, 22); then the DataFlash page's four conversions (Convert .Bin to .Log, Create KML + gpx, Create Matlab File, Auto Analysis: `FlightData.cs:1082-1098, 1135-1202, 1311-1378`) each on its own thread against the golden files, the HUD's right-click menu (`FlightData.Designer.cs:458-566`: Russian HUD, Ground Color, User Items with the "Hud Header" prompt, Swap With Map; Battery Cell Voltage, Show icons and the Video entries dimmed with their reasons), and Jump To Tag on the map menu (`FlightData.cs:6504-6531`, sent as `DO_JUMP_TAG`) (row 28); then Set Home Here and Set EKF Origin Here with the ground height from `mp-terrain`, Point Camera Here/Coords and Trigger Camera, Clear Track, Message, Set Mount, the POI files, Customize and MultiLine, Set View Count, Battery Cell Count, the speed dial and its double-click, the Transponder page whole and the gimbal's bars (row 42), and the Geo Reference Images form over `mp-georef` (row 54): **96 done, 1 elsewhere, 19 missing, 18 plumbing, 2 dropped** (undock and the HUD double-click's pop-out window, in a single window; the rest video, scripts and windows of their own). The storm number is measured on the frame: at 200 Hz through the real link, the release build's p99 is 4.9 ms with no frame over 8 ms in 590 (`tests/gui/storm.gui`; the debug build does not meet it).
-- **Tests:** `crates/mp-gui/src/coverage.rs` (in place of `tests/action_coverage.rs`: the crate is a
-  binary, so its tests are inline) enumerates every C# `FlightData` control and action from the D18 ledger and fails on anything unimplemented; `tests/sitl_ops.rs` drives arm/disarm/mode-change/RTL/guided-goto against SITL and asserts resulting vehicle state; per-tab UI snapshots; `tests/layout_persist.rs` save/restore of the screen layout; `benches/telemetry_storm.rs` pumps 200 Hz telemetry and asserts no frame exceeds 8 ms.
+  by a `tests/gui/fly-*.gui` script, inside the C#'s fourteen-page tab control under the HUD; the Quick view with its field chooser, the Telemetry Logs page's paced playback, POIs, the DataFlash Logs page with the log downloader, and the EKF and Vibration windows behind the HUD's texts (rows 18, 22); then the DataFlash page's four conversions (Convert .Bin to .Log, Create KML + gpx, Create Matlab File, Auto Analysis: `FlightData.cs:1082-1098, 1135-1202, 1311-1378`) each on its own thread against the golden files, the HUD's right-click menu (`FlightData.Designer.cs:458-566`: Russian HUD, Ground Color, User Items with the "Hud Header" prompt, Swap With Map; Battery Cell Voltage, Show icons and the Video entries dimmed with their reasons), and Jump To Tag on the map menu (`FlightData.cs:6504-6531`, sent as `DO_JUMP_TAG`) (row 28); then Set Home Here and Set EKF Origin Here with the ground height from `mp-terrain`, Point Camera Here/Coords and Trigger Camera, Clear Track, Message, Set Mount, the POI files, Customize and MultiLine, Set View Count, Battery Cell Count, the speed dial and its double-click, the Transponder page whole and the gimbal's bars (row 42), and the Geo Reference Images form over `mp-georef` (row 54): **96 done, 1 elsewhere, 19 missing, 18 plumbing, 2 dropped** (undock and the HUD double-click's pop-out window, in a single window; the rest video, scripts and windows of their own). The storm number is measured on the frame: at 200 Hz through the real link, the release build's p99 is 4.9 ms with no frame over 8 ms in 590 (`tests/gui/storm.gui`, on a quiet machine, 2026-09-24; the debug build does not meet it, and the two runs of 06:36Z that day, taken with two release builds compiling, gave p99 9 and 11 ms with 35 and 49 stalls - the gate holds on a quiet machine in release and must be re-run on one).
+- **Tests:** `crates/mp-gui/src/coverage.rs` (the crate is a binary, so its tests are inline) lists every `FlightData` wiring and fails when the report is stale or a claimed id leaves the source; the 31 `tests/gui/fly-*.gui` scripts and `crates/mp-link/tests/commands_sitl.rs` drive arm, disarm, modes, take-off, guided and the Actions page against SITL; `tests/gui/settings-persist.gui` for what survives a restart; `tests/gui/storm.gui` with `crates/mp-link/tests/telemetry_storm.rs` for the 200 Hz budget. Not yet: per-tab snapshots, a layout-persistence test beyond `config.xml`'s keys, and the storm as a criterion bench.
 
 ### D11. Flight Planner screen
 Waypoint/mission editing, survey grid generation, fences and rally points, terrain and altitude handling,
@@ -293,9 +342,10 @@ KML/DXF/shapefile import-export, geotagging hand-off.
   is ported whole into `mp-terrain` (tile names, `.hgt` 1"/3" reading, the interpolation and void
   rule, `.asc` grids, the download queue with the C#'s servers and ocean rule, the cache sweep) and
   held to `MissionPlanner.Utilities.dll`'s own `srtm.getAltitude` under mono over 1,259 lookups bit
-  for bit (`tools/csharp-reference/SrtmOracle.cs`, PLAN.md §13.4 row 34); the screens do not call
-  it yet (row 35).
-- **Tests:** `tests/mission_bytes.rs` loads a corpus of real `.waypoints`/`.mission` files, round-trips them and asserts **byte identity**; `tests/grid_vectors.rs` survey-grid generation against golden outputs from the C# `Grid`/`Gridv2` for a matrix of polygon/angle/overlap/terrain inputs; `tests/kml_dxf.rs` import→export round-trip against fixture files; `tests/terrain.rs` altitude-following maths against golden vectors; `tests/sitl_upload.rs` uploads missions, fences and rally points to SITL and reads them back.
+  for bit (`tools/csharp-reference/SrtmOracle.cs`, PLAN.md §13.4 row 34); the screens call it since
+  row 35: the planner's Verify Height, home at the ground's height and the Elevation Graph, and
+  the flight screen's Set Home Here and Set EKF Origin Here (row 42).
+- **Tests:** `crates/mp-mission/tests/waypoints.rs` (129 corpus files round-tripped, the five Mission Planner wrote byte for byte); `grid_vectors.rs`, `corridor_vectors.rs`, `rotary_vectors.rs` and `gridui_vectors.rs` bit for bit against the C# under mono, `survey.rs`, `robustness.rs`; KML in `crates/mp-kml/tests/` and the planner's KML and SHP loads in `mp-gui`'s tests; terrain is `crates/mp-terrain/tests/oracle.rs` (1,259 lookups against the C# DLL), `queue.rs`, `live.rs`; missions, fences and rally points to SITL and back are `crates/mp-link/tests/mission_sitl.rs` and `fence_sitl.rs` with `tests/gui/plan-rally-sitl.gui`; the 50 `tests/gui/plan-*.gui` scripts. Not yet: DXF (netDxf is not ported), `Gridv2`, the Windows .NET 4.7.2 oracle run.
 
 ### D12. Configuration & tuning screens
 The full parameter system — tree/list/advanced editors driven by parameter metadata — plus every
@@ -321,11 +371,14 @@ The full parameter system — tree/list/advanced editors driven by parameter met
   SITL through the retrying set and reads it back. The SETUP and CONFIG screens are the C#'s
   backstage views: every `AddBackstageViewPage` call of `InitialSetup.cs` and `SoftwareConfig.cs`
   is a list entry with its conditions, headings open and close, the last page is remembered, and
-  pages not yet ported say so under their C# title (row 17). Since then Frame Type, Battery Monitor, Install Firmware, Radio Calibration, Motor Test, both compass pages, and the next three Mandatory Hardware pages - Servo Output (`ConfigRadioOutput.cs`: 16 or 32 rows, the bar from `SERVO_OUTPUT_RAW`, reversed/function/min/trim/max written as the `Mavlink*` controls write them, the 300 ms timer started only when not already running, `:154-160`), ESC Calibration (`ConfigESCCalibration.cs:28-45`: `ESC_CALIBRATION` = 3, the button disabled on success, the `MOT_PWM_*`/`MOT_SPIN_*` boxes) and Serial Ports (`ConfigSerial.cs`: one row per `SERIALn_BAUD`, speed/protocol/options with the Set Bitmask window, `SerialOptionRules.json`'s rules applied on a protocol change, `:382-430`; port names from `@SYS/uarts.txt` await the MAVFTP client) - each proved by a script writing then restoring a parameter on SITL (rows 20-27, 32); Accel Calibration whole, the older Frame Type and Secure (row 44); ADSB, Camera Gimbal, Battery Monitor 2, Range Finder, Optical Flow and Airspeed (row 45); and the CONFIG list's Planner page (`ConfigPlanner.cs`, 63 controls and 64 wirings: the display units through `mp_vehicle::units`, the telemetry rate combos sending `REQUEST_DATA_STREAM`, the speech prompt chains, map follow/no-fly, load-on-connect, the map access mode, the joystick window; the video, theme, language and layout controls dimmed with their reasons; row 33, its keys in `config.xml` as `Settings.Instance` keys) (**11 done, 20 partial, 24 missing, 2 plumbing, 4 dropped**; Install Firmware Legacy and the manifest page up to the point of touching a board, and Ateryx Pids, row 52; RTK/GPS Inject with its RTCM3 parser and `GPS_RTCM_DATA` injection, row 48; the Serial Ports page names its rows from `@SYS/uarts.txt` over MAVFTP, row 37; Basic Tuning is `ConfigArduplane.cs` whole and Advanced drawn with its thirteen windows named, row 47; Extended Tuning is `ConfigArducopter.cs` whole with its 128 wirings, row 46).
-  **Still owed:** the fixture is
-  written from a reading of the C# source, not captured from a run of it; mono's float formatting
-  diverges from .NET 4.7.2 (PLAN.md R5), so settling it needs the Windows runner §7.1 budgets.
-- **Tests:** `tests/metadata_codegen.rs` asserts the generated parameter metadata matches the source XML and compiles; `tests/panel_coverage.rs` fails if any C# `Config*.cs` panel is missing from the Rust implementation (ledger-driven); `tests/param_roundtrip.rs` writes and re-reads every parameter type against SITL including bitmask/enum/float edge values; per-panel UI snapshots; `tests/param_file_compat.rs` reads and writes `.param` files produced by the C# app byte-for-byte.
+  pages not yet ported say so under their C# title (row 17). Since then Frame Type, Battery Monitor, Install Firmware, Radio Calibration, Motor Test, both compass pages, and the next three Mandatory Hardware pages - Servo Output (`ConfigRadioOutput.cs`: 16 or 32 rows, the bar from `SERVO_OUTPUT_RAW`, reversed/function/min/trim/max written as the `Mavlink*` controls write them, the 300 ms timer started only when not already running, `:154-160`), ESC Calibration (`ConfigESCCalibration.cs:28-45`: `ESC_CALIBRATION` = 3, the button disabled on success, the `MOT_PWM_*`/`MOT_SPIN_*` boxes) and Serial Ports (`ConfigSerial.cs`: one row per `SERIALn_BAUD`, speed/protocol/options with the Set Bitmask window, `SerialOptionRules.json`'s rules applied on a protocol change, `:382-430`; port names from `@SYS/uarts.txt` over MAVFTP since row 37) - each proved by a script writing then restoring a parameter on SITL (rows 20-27, 32); Accel Calibration whole, the older Frame Type and Secure (row 44); ADSB, Camera Gimbal, Battery Monitor 2, Range Finder, Optical Flow and Airspeed (row 45); and the CONFIG list's Planner page (`ConfigPlanner.cs`, 63 controls and 64 wirings: the display units through `mp_vehicle::units`, the telemetry rate combos sending `REQUEST_DATA_STREAM`, the speech prompt chains, map follow/no-fly, load-on-connect, the map access mode, the joystick window; the video, theme, language and layout controls dimmed with their reasons; row 33, its keys in `config.xml` as `Settings.Instance` keys) (**11 done, 20 partial, 24 missing, 2 plumbing, 4 dropped**; Install Firmware Legacy and the manifest page up to the point of touching a board, and Ateryx Pids, row 52; RTK/GPS Inject with its RTCM3 parser and `GPS_RTCM_DATA` injection, row 48; the Serial Ports page names its rows from `@SYS/uarts.txt` over MAVFTP, row 37; Basic Tuning is `ConfigArduplane.cs` whole and Advanced drawn with its thirteen windows named, row 47; Extended Tuning is `ConfigArducopter.cs` whole with its 128 wirings, row 46).
+  **Still owed:** 24 pages missing and 20 partial (PLAN.md §13.5 rows 59-65); the parameter
+  metadata is fetched at run time and bundled as generated Rust rather than generated at build
+  time from `ParameterMetaDataBackup.xml`; the `.param` fixture is written from a reading of the
+  C# source, not captured from a run of it, and mono's float formatting can diverge from .NET
+  4.7.2 (PLAN.md R5) - though §13.4 row 23 found mono formatting `BinaryLog`'s floats as .NET
+  does - so settling it needs the Windows runner.
+- **Tests:** `crates/mp-params/tests/param_meta.rs` (the bundled table and the fetched `apm.pdef.xml`) and `param_file_compat.rs` (`.param` files byte for byte); `crates/mp-gui/src/config_coverage.rs`'s tests hold the 61-panel ledger to `InitialSetup.cs` and `SoftwareConfig.cs`; the 27 `tests/gui/config-*.gui` scripts each change a parameter on SITL and put it back, and `params-retry.gui` proves a set survives a dropped send. Not yet: `tests/metadata_codegen.rs` (the metadata is not generated at build time), a `param_roundtrip.rs` over every parameter type and edge value, per-panel snapshots.
 
 ### D13. Initial setup, calibration and firmware
 Wizards and calibration routines (accel, compass/mag-cal, radio, ESC, frame, sensors) and the firmware
@@ -351,8 +404,13 @@ path: board detect, firmware catalogue, upload via px4/DFU/serial bootloaders.
   `APFirmware.cs` ported - the manifest, its mirror-then-ardupilot.org order, the board and
   release selection - proved on a 240-record excerpt of the real manifest, and the Install
   Firmware page shows what the C# would flash with its Upload button disabled (PLAN.md §13.4
-  row 21).
-- **Tests:** `tests/magcal_vectors.rs` and `tests/accelcal_vectors.rs` assert 1e-6 relative agreement with golden outputs captured from the C# `MagCalib`/calibration code over recorded sensor datasets, including ill-conditioned inputs; `tests/board_detect.rs` ports the existing `MissionPlannerTests` `DetectBoardTest` cases plus USB descriptor fixtures for every supported board; `tests/firmware_upload.rs` runs against an in-process mock px4/DFU bootloader asserting the exact byte protocol and checksum behaviour; `tests/firmware_catalogue.rs` parses real firmware manifests.
+  row 21). Install Firmware Legacy (`ConfigFirmware.cs` over `firmware2.xml`), the manifest page's
+  remainder and the Bootloader Update questions are ported up to the point of touching a board,
+  each stop named in `mp_firmware::flow::Stop` (row 52). **Not ported:** `MagCalib.cs` - the
+  offboard ellipsoid fit behind Live Calibration on the older compass page, the one calibration
+  whose maths the DoD's 1e-6 clause is about; every calibration here is the onboard one, driven
+  as the C# drives it.
+- **Tests:** `crates/mp-firmware/tests/board_detect.rs` (all 16 `DetectBoardTest` calls, the five that fail against the C# recorded), `firmware_upload.rs` (every byte against a strict px4 mock), `manifest.rs` and `legacy.rs` (the catalogues on fixtures); the calibration pages' unit tests inline in `mp-gui` and `mp-calibration`, and `tests/gui/config-accel.gui`, `config-compass.gui`, `config-radio.gui`, `config-motortest.gui`, `config-firmware.gui` and `config-firmware-legacy.gui` on SITL. Not yet: `tests/magcal_vectors.rs` and `tests/accelcal_vectors.rs` (`MagCalib.cs` is not ported), a DFU mock, and any flash of a real board.
 
 ### D14. Log engine and analysis
 Dataflash (`.bin`/`.log`) and tlog parsing, log download, graphing, LogAnalyzer rules, DSP/FFT, exports
@@ -390,9 +448,11 @@ Dataflash (`.bin`/`.log`) and tlog parsing, log download, graphing, LogAnalyzer 
   (`georefimage.cs` and `GeoRefImageBase.cs`: the three matching modes, every output file and the
   EXIF geotags byte for byte to the real classes under mono over a SITL flight with camera
   messages, `tools/csharp-reference/GeorefOracle.cs`, row 49) and its form is inside this window (row 54). Not yet: the
-  point-value tooltip (off by default in the C#), the strip's Show Params and preselect, GPS2/POS
-  routes, the memory-mapped parse (row 51, in flight).
-- **Tests:** `tests/parser_diff.rs` parses a corpus of real dataflash and tlog files and diffs every decoded field against the C# parser's output; `fuzz/fuzz_targets/dataflash.rs` and `tlog.rs` asserting no panic and no unbounded allocation on corrupt logs (truncated, bit-flipped, wrong-endian, fabricated FMT messages); `tests/fft.rs` compares against `Exocortex.DSP` golden spectra; `tests/exports.rs` `.mat`/CSV/KML round-trips; `benches/parse_1gb.rs` gates <2 s to first plot and `benches/scrub_10m.rs` gates 120 fps scrubbing.
+  field descriptions from `LogMessages.xml.xz` (the one missing designer wiring), the FFT
+  (`Exocortex.DSP`), the 10 M-point scrub at 120 fps (unmeasured), and a memory-mapped parse -
+  `LogFile` reads and indexes instead, `unsafe` being forbidden in `mp-log`, and meets the budget
+  without it, at a peak of 1.62 GB for the 1.07 GB log.
+- **Tests:** `crates/mp-log/tests/dataflash.rs`, `tlog.rs`, `logfile.rs`, `convert.rs` (`.BIN → .log` byte-identical to `BinaryLog` under mono), `matlab.rs`, `analysis.rs`, `robustness.rs`, with `crates/mp-kml/tests/dflog.rs` and `real_flight.rs` for KML+GPX, `crates/mp-cli/tests/log_verbs.rs`, and `crates/mp-georef/tests/oracle.rs` (14 cases against the C# classes), `photos.rs`, `roundtrip.rs`, `edge.rs`, `behaviour.rs`; `fuzz/fuzz_targets/tlog_reader.rs` with the bounded pass in `mp-fuzz-checks`; `benches/parse_1gb.rs` (0.6 s to first plot on a 1.07 GB log); the log browser's `logbrowse/coverage.rs` tests and the 8 `tests/gui/log-*.gui` scripts. Not yet: a dataflash fuzz target, `tests/fft.rs`, `benches/scrub_10m.rs`.
 
 ### D15. CAN, peripherals and outboard features
 DroneCAN/UAVCAN (node list, param edit, firmware update), OSD configurator, antenna tracker, SiK radio
@@ -413,8 +473,11 @@ config, joystick input, swarm control, warnings engine, web APIs, ADS-B / Altitu
   most 20 ms stale), and Mission Planner's 50 ms resend ceiling. The 5 ms target is therefore met
   for a movement, not for a continuous stir, which no floor could meet without flooding. **Still owed:** the histogram from a
   real device (`tests/real_device.rs`, ignored until one is attached); a deadzone; a per-link
-  send budget.
-- **Tests:** `tests/dsdl_roundtrip.rs` proptest over every generated DroneCAN type; `tests/node_sim.rs` drives a simulated CAN node through enumerate/param-edit/firmware-update; `tests/joystick.rs` uses a virtual HID device fixture to assert mapping, expo/deadzone maths and <5 ms end-to-end latency; `tests/tracker.rs` and `tests/swarm.rs` against SITL; `tests/video_pipeline.rs` smoke-tests each capture/decode backend per OS; `tests/feature_ledger.rs` fails if a feature in this bucket is neither implemented nor explicitly marked dropped.
+  send budget. Since then RTK/GPS Inject (`ConfigSerialInjectGPS.cs`, `rtcm3.cs`, the `GPS_RTCM_DATA`
+  injection; PLAN.md §13.4 row 48) and the NTRIP transport (row 43), the base-station half of this
+  bucket. Nothing of DroneCAN, the OSD configurator, the antenna tracker, SiK radio, swarm, the
+  warnings engine, the web APIs or video exists, and nothing is recorded as dropped.
+- **Tests:** `crates/mp-input/tests/latency.rs` (p99 0.152 ms on a fake device) and `real_device.rs` (`--ignored` until a joystick is attached); `crates/mp-link/tests/traffic.rs` for ADS-B; the RTCM parser's and injection's unit tests with `tests/gui/config-rtk.gui` against a caster the script starts. Not yet: everything DroneCAN (`dsdl_roundtrip.rs`, `node_sim.rs`), `tracker.rs`, `swarm.rs`, `video_pipeline.rs`, and `feature_ledger.rs`, which is the one that would make this bucket's omissions visible.
 
 ### D16. Extension and scripting system
 Three tiers, because Mission Planner already ships two mechanisms and users touch both:
@@ -438,11 +501,7 @@ one of them.
   and cannot run unmodified on any Rust engine; only 4 stay inside the scope bindings. 11 call into
   `MAV`, which is where a compatibility shim has to start. No interpreter is wired yet, and the
   scan says why that was the right order.
-- **Tests:** `tests/stock_scripts.rs` runs every `testdata/scripts/*.py` against a simulated
-  vehicle and asserts each either completes or fails with a recorded, reviewed reason - the file
-  count is asserted too, so a script silently disappearing from the corpus fails;
-  `tests/script_kill.rs` asserts an infinite loop is terminated by the kill switch within a bounded
-  time; `tests/sample_extension.rs` builds the sample extension to wasm in CI, loads it, and asserts it can add a panel, subscribe to telemetry and send a command; `tests/sandbox.rs` asserts a malicious or panicking extension cannot crash, block or read outside its sandbox (infinite loop, OOM, filesystem escape, host-call abuse); `tests/api_compat.rs` loads extensions built against older API versions; `tests/scripting.rs` runs a fixture script corpus including the reimplemented IronPython examples and asserts identical effects.
+- **Tests:** `crates/mp-script/tests/stock_scripts.rs` runs every `testdata/scripts/*.py` through the corpus scan and asserts the file count and each script's recorded verdict. Not yet, since no interpreter is wired: `script_kill.rs` (the kill switch), `sample_extension.rs` (a wasm extension built, loaded, adding a panel and sending a command), `sandbox.rs`, `api_compat.rs`, `scripting.rs` (the reimplemented IronPython examples with identical effects).
 
 ### D17. Localization, settings and data compatibility
 All UI strings through Fluent, every existing culture migrated, Crowdin flow preserved; settings storage;
@@ -469,7 +528,7 @@ and strict backward compatibility with the C# app's user data.
   (`tests/fixtures/config-saved.xml`, harness `SettingsOracle.cs`) is matched byte for byte,
   and `tests/gui/settings-persist.gui` restarts the application through the close box and
   finds every value back. Its own choices (window, recording, map) still live in its own file.
-- **Tests:** `tests/resx_conversion.rs` asserts zero string loss for every culture present in the C# repo and fails on any English key without a Rust counterpart; `tests/placeholders.rs` asserts argument arity and type agreement between every translation and its English source; `tests/pseudolocale.rs` renders screens in a pseudo-locale to catch truncation and hard-coded strings; `tests/data_compat.rs` reads real `config.xml`, `.waypoints`, `.param`, `.tlog` and map-cache fixtures produced by the C# app, writes them back, and asserts byte equality — the both-apps-same-data-directory guarantee.
+- **Tests:** `crates/mp-settings`'s unit tests over `tests/fixtures/` (this machine's real `config.xml` rendered back byte for byte, and `config-saved.xml` from `SettingsOracle.cs` under mono), `tests/gui/settings-persist.gui` (a restart through the close box) and `config-planner.gui` (forty keys read back); the data formats are proved in their own crates - `.waypoints` in `mp-mission`, `.param` in `mp-params`, `.tlog` in `mp-mavlink` and `mp-log`, the map cache in `mp-tiles`. Not yet: nothing of i18n exists - no Fluent dependency, no `.ftl`, no `resx_conversion.rs`, `placeholders.rs` or `pseudolocale.rs` - and no single `data_compat.rs` over every format at once.
 
 ---
 
@@ -486,11 +545,18 @@ per-file porting harness, and a machine-readable ledger tracking every one of th
   in retired C# lines; one full wave executed end to end to prove the throughput rate; the
   porting-agent contract (prompt + test + differential check + review gate) documented and versioned.
 - **Today:** the ledger exists and passes its own check: 3,678 rows, one per `.cs` file, tier from a
-  classifier that names its evidence per vendored root, sha256 for staleness, every row `ready` -
-  existing Rust work is not credited until it is re-entered under contract (PLAN.md §5.2). `init`
-  is deterministic and `refresh` keeps hand-edited columns. Empty: `target_crate`, `unit_id`,
-  `deps`, the class columns. Not started: the other generators, `xtask next`, the contract dry run.
-- **Tests:** `xtask/tests/codegen.rs` regenerates every generated artefact (MAVLink, DSDL, param metadata, `.resx`→`.ftl`, screen specs) and fails if the checked-in output differs or does not compile; `xtask/tests/ledger.rs` (22 tests) validates the schema on a fixture tree and the real ledger, asserts every one of the 3,678 C# files appears exactly once with a valid tier, disposition and state, that a `done` row names existing evidence and a hand-port carries its provenance header, that `init` is byte-deterministic and `refresh` preserves hand-edited columns while flagging upstream changes; a dry-run test of the porting-agent contract on a known file.
+  classifier that names its evidence per vendored root, sha256 for staleness; 3,655 rows `ready`,
+  18 `tested` and 5 `ported` - 32,951 of 1,208,836 C# lines retired: `CurrentState.cs`,
+  `MAVLinkInterface.cs`, `mav_mission.cs`, `Grid.cs`, `clipper.cs`, `utmpos.cs`, `BinaryLog.cs`,
+  `DFLogBuffer.cs`, `LogOutput.cs`, `MatLab.cs`, `LogAnalyzer.cs`, `BoardDetect.cs`, `HUD.cs`, the
+  map providers and projection, the serial port and the parameter metadata. Existing Rust work is
+  credited only when re-entered with evidence (PLAN.md §5.2), and most of what the coverage
+  ledgers and the eleven oracles prove is not re-entered yet - the biggest honest move D18 can
+  make. `init` is deterministic and `refresh` keeps hand-edited columns. Empty: `target_crate`,
+  `unit_id`, `deps`, the class columns. Generators: `mavlink`, `param_meta` and `modes` in
+  `xtask/src/codegen/`. Not started: DSDL, `.resx` → `.ftl`, screen specs, `xtask next`, the
+  contract dry run.
+- **Tests:** `xtask/tests/ledger.rs` (22 tests: the schema on a fixture tree and the real ledger, every one of the 3,678 files exactly once with a valid tier, disposition and state, evidence on a `done` row, `init` byte-deterministic, `refresh` preserving hand-edited columns) and `graph.rs`. Not yet: `xtask/tests/codegen.rs` (the three generators are regenerable by hand and nothing asserts the checked-in output matches), a dry run of the porting-agent contract.
 
 ### D19. Verification suite
 Proof that the Rust app behaves like the C# original before anyone flies behind it.
@@ -500,11 +566,19 @@ Proof that the Rust app behaves like the C# original before anyone flies behind 
   ArduPilot SITL integration tests in CI driving scripted missions; UI snapshot tests on headless GPU;
   criterion perf gates that **fail the build on regression**; a documented hardware-in-the-loop checklist
   signed off before each release.
-- **Today:** the differential corpus against `MAVLink.dll` runs in CI; five `cargo-fuzz` targets
-  build and run clean (34.3 M executions at the last pass) with committed seed corpora; the same
-  properties run bounded on stable in `cargo test --workspace`, so a target cannot rot uncompiled;
-  SITL integration tests run behind `--ignored`. The mutation self-test is not written.
-- **Tests:** this deliverable *is* the test infrastructure, so it is proven by **mutation testing**: `tests/harness_selftest.rs` injects known regressions (off-by-one in a parser, a swapped lat/lon, a wrong unit conversion, a dropped retry, a 2 ms frame-budget regression) and asserts the differential harness, the fuzzers, the SITL suite and the perf gates each **fail**. A harness that cannot detect a planted bug is not a harness. Also covers: golden-corpus integrity checks, C#-reference-harness reproducibility, and CI flake tracking with a zero-tolerance quarantine policy.
+- **Today:** the differential corpus against `MAVLink.dll` is a `cargo test` (the workflow that
+  would run it in CI has never run - no remote); eleven oracle harnesses under
+  `tools/csharp-reference/` run the C#'s own code under mono - the grids, GridUI, the log
+  conversions, projection, `CurrentState`, the three transports, MAVFTP, SRTM, geo-referencing, the
+  planner's handlers - each with a `regen-*.sh` and goldens under `testdata/`; five `cargo-fuzz`
+  targets build and run clean (34.3 M executions at the last short pass) with committed seed
+  corpora, and the 24-hour soaks of `frame_parse` and `message_decode` end 2026-09-24 16:01Z; the
+  same properties run bounded on stable in `cargo test --workspace`, so a target cannot rot
+  uncompiled; SITL integration tests run behind `--ignored`; 133 GUI scripts assert the
+  application's own facts through `tools/gui-test.sh`. The mutation self-test is not written, no
+  UI snapshot exists, and the perf gates are three benches whose thresholds hold in release on a
+  quiet machine, not in CI.
+- **Tests:** this deliverable *is* the test infrastructure, and today it is proven by the oracles' own regeneration (`tools/csharp-reference/regen*.sh` reproduce every golden byte for byte) and by `crates/mp-fuzz-checks/tests/bounded.rs`. Not yet: `tests/harness_selftest.rs`, the mutation test that plants a bug - an off-by-one in a parser, a swapped lat/lon, a wrong unit, a dropped retry, a 2 ms frame-budget regression - and asserts the differential harness, the fuzzers, the SITL suite and the perf gates each **fail**; a harness that cannot detect a planted bug is not a harness. Also not yet: golden-corpus integrity checks, C#-reference reproducibility in CI, flake tracking.
 
 ### D20. Release, packaging and operations
 Shipping the thing: signed installers per OS, auto-update, crash reporting, telemetry opt-in, docs and the
@@ -514,7 +588,9 @@ migration guide for existing Mission Planner users.
   imports existing Mission Planner settings and caches; user-facing docs and a "what changed" guide published;
   **cold start < 500 ms**, installer < 150 MB.
 - **Replaces:** `Updater/`, `ExtLibs/Installer`, `wix/`, `Msi/`, `MAC/`, `MissionPlanner.sh`, `build*.bat`.
-- **Tests:** `tests/package_smoke.rs` per OS installs the built artefact in a clean container/VM, launches it headless, connects to SITL, and uninstalls, asserting no leftover files; `tests/update.rs` exercises update and rollback between two signed builds; `tests/crash_report.rs` forces a crash and asserts a symbolicated report; `tests/migration.rs` runs first-run migration against a real Mission Planner data directory fixture and asserts settings, map cache and mission files are imported intact; `benches/cold_start.rs` gates the <500 ms target.
+- **Today:** `tools/package.sh` builds a stripped release binary and reports what a machine needs to
+  run it, and says itself it is not a package. Nothing else exists.
+- **Tests:** none exist. Planned: `tests/package_smoke.rs` per OS installs the built artefact in a clean container/VM, launches it headless, connects to SITL, and uninstalls, asserting no leftover files; `tests/update.rs` exercises update and rollback between two signed builds; `tests/crash_report.rs` forces a crash and asserts a symbolicated report; `tests/migration.rs` runs first-run migration against a real Mission Planner data directory fixture and asserts settings, map cache and mission files are imported intact; `benches/cold_start.rs` gates the <500 ms target.
 
 ---
 
@@ -534,7 +610,8 @@ sandboxed WASM extensions are the safe default and cover most needs; this covers
   and sends a command; an ABI-version mismatch is refused with a clear message rather than a crash;
   a panicking plugin is contained at the boundary and named in the resulting report; `--safe-mode`
   loads nothing; loading is per-plugin opt-in with consent recorded on disk.
-- **Tests:** `crates/mp-plugin-host/tests/load.rs` builds the sample plugin in CI and loads it;
+- **Today:** nothing: no `mp-plugin-host` crate exists.
+- **Tests:** none exist. Planned: `crates/mp-plugin-host/tests/load.rs` builds the sample plugin in CI and loads it;
   `tests/abi.rs` asserts a deliberately mismatched ABI version is refused; `tests/panic.rs` asserts
   a plugin that panics in each callback does not terminate the host and is reported by name;
   `tests/safe_mode.rs` asserts nothing loads; `tests/source_plugin.rs` compiles and loads a loose
@@ -557,18 +634,18 @@ Every deliverable above must also satisfy:
 
 ## Numeric targets (the "extreme performance" contract)
 
-| Metric | Target |
-|---|---|
-| Cold start to connected UI | < 500 ms |
-| Idle CPU (connected, 10 Hz telemetry) | < 1 % of one core |
-| Packet-to-pixel latency (p99) | < 16 ms |
-| Stick input to packet on the wire (p99) | < 5 ms |
-| MAVLink decode throughput | > 1 M msg/s/core, 0 allocations per packet |
-| 1 GB dataflash log open | < 2 s to first plot |
-| Log plot scrub, 10 M points | 120 fps |
-| Map pan/zoom, 1 M-point track + 10 k markers | 120 fps |
-| Resident memory, 1 vehicle + map + 1 GB log open | < 1 GB |
-| Concurrent vehicles | ≥ 50 without frame drops |
+| Metric | Target | Measured (2026-09-24) |
+|---|---|---|
+| Cold start to connected UI | < 500 ms | unmeasured |
+| Idle CPU (connected, 10 Hz telemetry) | < 1 % of one core | unmeasured |
+| Packet-to-pixel latency (p99) | < 16 ms | unmeasured; the frame alone is p99 4.9 ms under a 200 Hz storm, release, quiet machine |
+| Stick input to packet on the wire (p99) | < 5 ms | 0.152 ms on an in-process fake device; no real device attached |
+| MAVLink decode throughput | > 1 M msg/s/core, 0 allocations per packet | 0 allocations proven over 211,638 decodes; the throughput bench exists and its figure is not recorded |
+| 1 GB dataflash log open | < 2 s to first plot | 0.61-0.62 s to first plot on a 1.07 GB log (`benches/parse_1gb.rs`, quiet machine) |
+| Log plot scrub, 10 M points | 120 fps | unmeasured |
+| Map pan/zoom, 1 M-point track + 10 k markers | 120 fps | p99 5.42 ms for the following frame, CPU side (`benches/pan_zoom.rs`); GPU unmeasured |
+| Resident memory, 1 vehicle + map + 1 GB log open | < 1 GB | 1.62 GB peak while opening the 1.07 GB log - **over the target**; the rest unmeasured |
+| Concurrent vehicles | ≥ 50 without frame drops | 50 systems and 56 components through one link at 2.8 µs a frame (`tests/routing.rs`), without a frame drawn |
 
 ---
 
