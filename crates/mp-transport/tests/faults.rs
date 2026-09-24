@@ -11,11 +11,16 @@
 //! - a disconnect is an `Err` from `read` and `write_all`, which a caller can tell from the `Ok(0)`
 //!   of a timeout.
 //!
+//! The last four tests put the faults that can happen to them to the network transports - the UDP
+//! client, the websocket and NTRIP - over real sockets on 127.0.0.1.
+//!
 //! What the transport does *not* owe: it does not de-duplicate or reorder. A repeated frame is
 //! delivered twice and a late one late; MAVLink's sequence number is how the link notices, and
 //! doing it there is the link's job (D4), not the byte pipe's.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
+
+mod common;
 
 use std::io;
 use std::ops::Range;
@@ -438,5 +443,202 @@ fn a_storm_of_every_fault_at_once_never_panics_and_delivers_only_real_frames() {
         if fault.unplug_after > 0 {
             assert_eq!(got.error.map(|e| e.kind()), Some(io::ErrorKind::BrokenPipe));
         }
+    }
+}
+
+// ---------------------------------------------------------------- the network transports
+//
+// The same faults, where they can happen, to the UDP client, the websocket and NTRIP over real
+// sockets on 127.0.0.1: a datagram repeated or overtaken is delivered as the wire delivered it, a
+// websocket frame split anywhere is delivered once, and a connection cut mid-frame delivers what
+// came before the cut and then does what the C# does about it.
+
+/// Reads from a network transport until `want` bytes have come or it closes.
+fn read_network(link: &mut dyn Transport, want: usize) -> Vec<u8> {
+    let mut got = Vec::new();
+    let mut buf = [0u8; 4096];
+    while got.len() < want && link.is_open() {
+        let n = link.read(&mut buf).unwrap();
+        got.extend_from_slice(&buf[..n]);
+    }
+    got
+}
+
+fn decoded(bytes: &[u8]) -> Vec<Vec<u8>> {
+    let mut decoder = FrameDecoder::new();
+    let mut frames = Vec::new();
+    decoder.push_and_drain(bytes, &DIALECT, |frame| frames.push(frame.raw.to_vec()));
+    frames
+}
+
+#[test]
+fn udp_client_datagrams_repeated_and_overtaken_arrive_as_the_wire_delivered_them() {
+    use mp_transport::UdpClientTransport;
+    use std::net::UdpSocket;
+
+    let frames = real_frames(200);
+    let vehicle = UdpSocket::bind("127.0.0.1:0").unwrap();
+    vehicle.set_read_timeout(Some(common::GUARD)).unwrap();
+    let port = vehicle.local_addr().unwrap().port();
+    let mut client = UdpClientTransport::open("127.0.0.1", port).unwrap();
+    client.set_read_timeout(common::GUARD).unwrap();
+    client.write_all(b"hello").unwrap();
+    let (_, client_address) = vehicle.recv_from(&mut [0u8; 16]).unwrap();
+
+    // Every 11th datagram sent twice, and every 17th swapped with the one after it.
+    let mut wire: Vec<&Vec<u8>> = Vec::new();
+    let mut i = 0;
+    while i < frames.len() {
+        if (i + 1) % 17 == 0 && i + 1 < frames.len() {
+            wire.push(&frames[i + 1]);
+            wire.push(&frames[i]);
+            i += 2;
+            continue;
+        }
+        wire.push(&frames[i]);
+        if (i + 1) % 11 == 0 {
+            wire.push(&frames[i]);
+        }
+        i += 1;
+    }
+    // Read as they come: a socket's buffer holds only so many, and UDP drops the rest.
+    let mut got = Vec::new();
+    let mut buf = [0u8; 4096];
+    for datagram in &wire {
+        vehicle.send_to(datagram, client_address).unwrap();
+        let n = client.read(&mut buf).unwrap();
+        got.extend_from_slice(&buf[..n]);
+    }
+    let delivered = decoded(&got);
+    let expected: Vec<Vec<u8>> = wire.iter().map(|d| (*d).clone()).collect();
+    assert_eq!(delivered, expected, "no de-duplicating, no re-ordering");
+    assert_all_pass_checksum(&delivered);
+}
+
+#[test]
+fn a_websocket_frame_written_in_two_pieces_is_delivered_once_whatever_the_split() {
+    use mp_transport::WebSocketTransport;
+    use std::io::Write;
+
+    let frames = real_frames(3);
+    let (listener, port) = common::listen();
+    let server = common::ws_accept(&listener);
+    let mut ws = WebSocketTransport::open(&format!("ws://127.0.0.1:{port}/")).unwrap();
+    ws.set_read_timeout(common::GUARD).unwrap();
+    let (_, mut peer) = server.join().unwrap();
+    let _probe = common::read_client_frame(&mut peer).unwrap();
+
+    for frame in &frames {
+        let message = common::server_frame(true, 2, frame);
+        for split in 1..message.len() {
+            peer.write_all(&message[..split]).unwrap();
+            // Whatever has come of the payload so far, which may be nothing.
+            let mut buf = [0u8; 512];
+            let early = ws.read(&mut buf).unwrap();
+            let mut got = buf[..early].to_vec();
+            peer.write_all(&message[split..]).unwrap();
+            got.extend(read_network(&mut ws, frame.len() - early));
+            assert_eq!(&got, frame, "split at {split}");
+            assert_eq!(
+                decoded(&got),
+                std::slice::from_ref(frame),
+                "split at {split}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_websocket_cut_mid_frame_delivers_what_came_before_and_opens_again() {
+    use mp_transport::WebSocketTransport;
+    use std::io::Write;
+
+    let frames = real_frames(20);
+    let (listener, port) = common::listen();
+    let server = common::ws_accept(&listener);
+    let mut ws = WebSocketTransport::open(&format!("ws://127.0.0.1:{port}/")).unwrap();
+    ws.set_read_timeout(common::GUARD).unwrap();
+    let (_, mut peer) = server.join().unwrap();
+    let _probe = common::read_client_frame(&mut peer).unwrap();
+
+    // Ten whole messages, then half of the eleventh, then the connection goes.
+    let mut wire = Vec::new();
+    for frame in &frames[..10] {
+        wire.extend(common::server_frame(true, 2, frame));
+    }
+    let cut = common::server_frame(true, 2, &frames[10]);
+    wire.extend_from_slice(&cut[..cut.len() / 2]);
+    peer.write_all(&wire).unwrap();
+    let before = frames[..10].concat();
+    let mut got = read_network(&mut ws, before.len());
+    assert!(got.starts_with(&before));
+
+    // The reader reopens (C#: CommsWebSocket.cs:180-184), and the new connection carries on. A
+    // read gives what was left of the cut frame's payload, then meets the end of the stream,
+    // reopens, and gives nothing.
+    let reopen = common::ws_accept(&listener);
+    drop(peer);
+    let mut buf = [0u8; 512];
+    loop {
+        let n = ws.read(&mut buf).unwrap();
+        if n == 0 {
+            break;
+        }
+        got.extend_from_slice(&buf[..n]);
+    }
+    let (_, mut again) = reopen.join().unwrap();
+    assert!(ws.is_open());
+    let _probe = common::read_client_frame(&mut again).unwrap();
+    let mut rest = Vec::new();
+    for frame in &frames[11..] {
+        rest.extend(common::server_frame(true, 2, frame));
+    }
+    again.write_all(&rest).unwrap();
+    got.extend(read_network(&mut ws, frames[11..].concat().len()));
+
+    // The cut frame is never delivered whole; everything else is, in order.
+    let delivered = decoded(&got);
+    let expected: Vec<Vec<u8>> = frames[..10].iter().chain(&frames[11..]).cloned().collect();
+    assert_eq!(delivered, expected);
+    assert_all_pass_checksum(&delivered);
+}
+
+#[test]
+fn an_ntrip_caster_cut_mid_stream_delivers_what_came_before_and_is_tried_on_every_read() {
+    use mp_transport::ntrip::RECONNECTS;
+    use mp_transport::{NtripOptions, NtripTransport};
+    use std::io::Write;
+
+    let (listener, port) = common::listen();
+    let caster = common::caster(&listener, b"ICY 200 OK\r\n", false);
+    let mut ntrip = NtripTransport::open(
+        &format!("ntrip://127.0.0.1:{port}/MOUNT"),
+        NtripOptions::default(),
+    )
+    .unwrap();
+    ntrip.set_read_timeout(common::GUARD).unwrap();
+    let mut connection = caster.join().unwrap();
+
+    // RTCM, cut in the middle of a message.
+    let rtcm: Vec<u8> = [0xD3, 0x00, 0x40].into_iter().chain(0u8..0x40).collect();
+    connection.stream.write_all(&rtcm[..30]).unwrap();
+    connection
+        .stream
+        .shutdown(std::net::Shutdown::Both)
+        .unwrap();
+    let got = read_network(&mut ntrip, 30);
+    assert_eq!(got, rtcm[..30]);
+
+    // The end of the stream closes the link, rather than reading nothing for ever.
+    let mut buf = [0u8; 64];
+    assert_eq!(ntrip.read(&mut buf).unwrap(), 0);
+    assert!(!ntrip.is_open());
+
+    // The caster is gone: each read tries it again, and a failed try uses up no retry.
+    drop(listener);
+    for _ in 0..3 {
+        let error = ntrip.read(&mut buf).expect_err("nobody to reconnect to");
+        assert_eq!(error.kind(), io::ErrorKind::ConnectionRefused);
+        assert_eq!(ntrip.reconnects_left(), RECONNECTS);
     }
 }

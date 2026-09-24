@@ -21,7 +21,7 @@ they need SITL, a window, or the network), **80 GUI scripts** under `tests/gui/`
 |---|---|
 | MAVLink v1/v2 codec | zero-copy parse, allocation-free encode, v2 signing |
 | Generated dialect | 349 messages, 206 enums, generated from the upstream XML |
-| Transports | serial, TCP, UDP, file replay, in-memory test doubles; port enumeration by `CommsSerialPort.GetPortNames`'s rules, held to per-OS fixtures; faults and a real pty unplug rehearsed in tests |
+| Transports | serial, TCP, UDP, a UDP client, websocket and NTRIP (the last three held to the C# classes run under mono), file replay, in-memory test doubles; port enumeration by `CommsSerialPort.GetPortNames`'s rules, held to per-OS fixtures; faults and a real pty unplug rehearsed in tests |
 | Link engine | I/O thread, multi-vehicle routing (50 systems in one test), stream requests; parameter sets, reads, commands, set-current and mission transfer with Mission Planner's own retry counts and waits, proved by counting sends under dropped, delayed and duplicated frames; every set and command the screens and `mpr` send goes through them |
 | Vehicle state | lock-free snapshot bus, packet-loss tracking; all 550 of `CurrentState`'s members accounted for (471 held with the C#'s rules, 48 derived, 30 plumbing, 1 dropped), the last 55 matched per packet to the C#'s own `UpdateCurrentSettings` under mono |
 | Parameters | full download with gap recovery, typed values, 1,408 from SITL |
@@ -134,7 +134,7 @@ Requires a recent stable Rust (see `rust-toolchain.toml`).
 crates/
   mp-mavlink           wire format: framing, checksums, signing
   mp-mavlink-dialects  generated message types (do not edit)
-  mp-transport         serial, TCP, UDP, replay, test doubles
+  mp-transport         serial, TCP, UDP, UDP client, websocket, NTRIP, replay, test doubles
   mp-vehicle           decoded state, the snapshot bus, EKF and vibration health
   mp-link              the live link: I/O thread, routing, commands, mission transfer, recording
   mp-params            parameter values and metadata, the downloaded table, .param files

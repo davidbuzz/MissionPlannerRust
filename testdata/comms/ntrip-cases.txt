@@ -1,0 +1,33 @@
+# The NTRIP cases tools/csharp-reference/MpComms.cs runs through CommsNTRIP.Open, and
+# crates/mp-transport/tests/csharp_goldens.rs through NtripTransport. A line starting `#` is a
+# comment. `{port}` is the mock caster's port.
+#
+# request <v1|v2> <url>: the exact bytes of the request, the caster answering `ICY 200 OK`.
+request v2 ntrip://127.0.0.1:{port}/MOUNT
+request v1 ntrip://127.0.0.1:{port}/MOUNT
+request v2 ntrip://user:pass@127.0.0.1:{port}/MOUNT
+request v1 ntrip://user:pass@127.0.0.1:{port}/MOUNT
+request v2 http://user:pass@127.0.0.1:{port}/MOUNT
+request v2 ntrip://127.0.0.1:{port}
+request v2 ntrip://127.0.0.1:{port}/
+request v2 ntrip://me@example.com:pa55@127.0.0.1:{port}/RTK2GO
+request v2 ntrip://user:p@ss@127.0.0.1:{port}/MOUNT
+request v2 ntrip://user:p!s*s'(1)$&+,;=%@127.0.0.1:{port}/MOUNT
+request v2 ntrip://user:pass@LocalHost:{port}/Mount Point
+request v2 ntrip://127.0.0.1:{port}/a(b)*c'd!e?x=1&y=2#frag
+request v2 ntrip://127.0.0.1:{port}/one/./two/../three
+request v2 ntrip://127.0.0.1:{port}/café
+request v2 ntrip://:secret@127.0.0.1:{port}/MOUNT
+request v2 ntrip://mü:x@127.0.0.1:{port}/MOUNT
+request v2 NTRIP://127.0.0.1:{port}/MOUNT
+request v2 ntrip://justuser@127.0.0.1:{port}/MOUNT
+request v2 ntrip://a@b:c@d@127.0.0.1:{port}/MOUNT
+request v2 ntrip://127.0.0.1:99999/MOUNT
+#
+# response <status line>: what Open does with the caster's first line.
+response ICY 200 OK
+response HTTP/1.1 200 OK
+response SOURCETABLE 200 OK
+response HTTP/1.1 401 Unauthorized
+response ERROR - Bad Password
+response HTTP/1.1 404 Not Found

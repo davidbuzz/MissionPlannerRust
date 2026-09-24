@@ -1,0 +1,23 @@
+isinrange 224.0.0.0	True
+isinrange 224.0.0.1	True
+isinrange 239.255.255.255	True
+isinrange 240.0.0.0	False
+isinrange 223.255.255.255	False
+isinrange 10.0.0.1	False
+isinrange 127.0.0.1	False
+isinrange 255.255.255.255	False
+isinrange 0.0.0.0	False
+isinrange ::1	False
+isinrange fe80::e000:1	True
+isinrange ::ffff:224.0.0.1	True
+isinrange ff02::1	False
+open	isopen True portname UDPCl{port} bytestoread 0
+write 0102030405 offset 0 length 5	\x01\x02\x03\x04\x05 from another port
+write 0102030405 offset 2 length 3	\x01\x02\x03
+two datagrams 100 then 50	bytestoread 100
+read 10	got 10 first 0 last 9 bytestoread 140
+read 200	got 140 first 10 last 249 bytestoread 0
+read 10 of nothing	got 0 after the timeout
+close	isopen False
+join once	ok
+join twice	error SocketException AddressAlreadyInUse

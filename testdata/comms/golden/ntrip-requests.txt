@@ -1,0 +1,26 @@
+request v2 ntrip://127.0.0.1:{port}/MOUNT	GET /MOUNT HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nNtrip-Version: Ntrip/2.0\r\nUser-Agent: NTRIP MissionPlanner/1.0\r\nConnection: close\r\n\r\n
+request v1 ntrip://127.0.0.1:{port}/MOUNT	GET /MOUNT HTTP/1.0\r\nUser-Agent: NTRIP MissionPlanner/1.0\r\nConnection: close\r\n\r\n
+request v2 ntrip://user:pass@127.0.0.1:{port}/MOUNT	GET /MOUNT HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nNtrip-Version: Ntrip/2.0\r\nUser-Agent: NTRIP MissionPlanner/1.0\r\nAuthorization: Basic dXNlcjpwYXNz\r\nConnection: close\r\n\r\n
+request v1 ntrip://user:pass@127.0.0.1:{port}/MOUNT	GET /MOUNT HTTP/1.0\r\nUser-Agent: NTRIP MissionPlanner/1.0\r\nAuthorization: Basic dXNlcjpwYXNz\r\nConnection: close\r\n\r\n
+request v2 http://user:pass@127.0.0.1:{port}/MOUNT	GET /MOUNT HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nNtrip-Version: Ntrip/2.0\r\nUser-Agent: NTRIP MissionPlanner/1.0\r\nAuthorization: Basic dXNlcjpwYXNz\r\nConnection: close\r\n\r\n
+request v2 ntrip://127.0.0.1:{port}	GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nNtrip-Version: Ntrip/2.0\r\nUser-Agent: NTRIP MissionPlanner/1.0\r\nConnection: close\r\n\r\n
+request v2 ntrip://127.0.0.1:{port}/	GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nNtrip-Version: Ntrip/2.0\r\nUser-Agent: NTRIP MissionPlanner/1.0\r\nConnection: close\r\n\r\n
+request v2 ntrip://me@example.com:pa55@127.0.0.1:{port}/RTK2GO	GET /RTK2GO HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nNtrip-Version: Ntrip/2.0\r\nUser-Agent: NTRIP MissionPlanner/1.0\r\nAuthorization: Basic bWVAZXhhbXBsZS5jb206cGE1NQ==\r\nConnection: close\r\n\r\n
+request v2 ntrip://user:p@ss@127.0.0.1:{port}/MOUNT	GET /MOUNT HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nNtrip-Version: Ntrip/2.0\r\nUser-Agent: NTRIP MissionPlanner/1.0\r\nAuthorization: Basic dXNlcjpwQHNz\r\nConnection: close\r\n\r\n
+request v2 ntrip://user:p!s*s'(1)$&+,;=%@127.0.0.1:{port}/MOUNT	GET /MOUNT HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nNtrip-Version: Ntrip/2.0\r\nUser-Agent: NTRIP MissionPlanner/1.0\r\nAuthorization: Basic dXNlcjpwIXMqcycoMSkkJissOz0l\r\nConnection: close\r\n\r\n
+request v2 ntrip://user:pass@LocalHost:{port}/Mount Point	GET /Mount%20Point HTTP/1.1\r\nHost: localhost:{port}\r\nNtrip-Version: Ntrip/2.0\r\nUser-Agent: NTRIP MissionPlanner/1.0\r\nAuthorization: Basic dXNlcjpwYXNz\r\nConnection: close\r\n\r\n
+request v2 ntrip://127.0.0.1:{port}/a(b)*c'd!e?x=1&y=2#frag	GET /a%28b%29%2Ac%27d%21e%3Fx%3D1%26y%3D2%23frag HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nNtrip-Version: Ntrip/2.0\r\nUser-Agent: NTRIP MissionPlanner/1.0\r\nConnection: close\r\n\r\n
+request v2 ntrip://127.0.0.1:{port}/one/./two/../three	GET /one/three HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nNtrip-Version: Ntrip/2.0\r\nUser-Agent: NTRIP MissionPlanner/1.0\r\nConnection: close\r\n\r\n
+request v2 ntrip://127.0.0.1:{port}/café	GET /caf%E9 HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nNtrip-Version: Ntrip/2.0\r\nUser-Agent: NTRIP MissionPlanner/1.0\r\nConnection: close\r\n\r\n
+request v2 ntrip://:secret@127.0.0.1:{port}/MOUNT	GET /MOUNT HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nNtrip-Version: Ntrip/2.0\r\nUser-Agent: NTRIP MissionPlanner/1.0\r\nAuthorization: Basic OnNlY3JldA==\r\nConnection: close\r\n\r\n
+request v2 ntrip://mü:x@127.0.0.1:{port}/MOUNT	GET /MOUNT HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nNtrip-Version: Ntrip/2.0\r\nUser-Agent: NTRIP MissionPlanner/1.0\r\nAuthorization: Basic bSVGQzp4\r\nConnection: close\r\n\r\n
+request v2 NTRIP://127.0.0.1:{port}/MOUNT	GET /MOUNT HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nNtrip-Version: Ntrip/2.0\r\nUser-Agent: NTRIP MissionPlanner/1.0\r\nConnection: close\r\n\r\n
+request v2 ntrip://justuser@127.0.0.1:{port}/MOUNT	GET /MOUNT HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nNtrip-Version: Ntrip/2.0\r\nUser-Agent: NTRIP MissionPlanner/1.0\r\nAuthorization: Basic anVzdHVzZXI=\r\nConnection: close\r\n\r\n
+request v2 ntrip://a@b:c@d@127.0.0.1:{port}/MOUNT	error UriFormatException Invalid URI: The hostname could not be parsed.
+request v2 ntrip://127.0.0.1:99999/MOUNT	error UriFormatException Invalid URI: Invalid port specified.
+response ICY 200 OK	ok
+response HTTP/1.1 200 OK	ok
+response SOURCETABLE 200 OK	error Exception Got SOURCETABLE - Bad ntrip mount point\n\nSOURCETABLE 200 OK
+response HTTP/1.1 401 Unauthorized	error Exception Bad ntrip Response\n\nHTTP/1.1 401 Unauthorized
+response ERROR - Bad Password	error Exception Bad ntrip Response\n\nERROR - Bad Password
+response HTTP/1.1 404 Not Found	error Exception Bad ntrip Response\n\nHTTP/1.1 404 Not Found

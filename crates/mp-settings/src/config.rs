@@ -218,13 +218,15 @@ impl Config {
     /// `comport` is a device path or one of the words the connection box lists; an empty one is
     /// no link, as `MainV2` leaves the box alone for it. The baud rate is under `<comport>_BAUD`
     /// (which `Save` never writes for a device path with a `/` in it); TCP's host and port are
-    /// under `TCP_host` and `TCP_port`, UDP's port under `UDP_port`, with the C#'s defaults. The
-    /// words this application has no link for are not a link: `AUTO` scans the serial ports,
-    /// `UDPCl` sends to a host (under `UDP_host` and `UDP_port`, where this application's `udp:`
-    /// listens), and `WS` is a websocket.
-    /// `// C#: ExtLibs/Utilities/Settings.cs:88-125; MainV2.cs:782-808, 1295-1301;
+    /// under `TCP_host` and `TCP_port`, UDP's port under `UDP_port`, with the C#'s defaults.
+    /// `UDPCl` is `MainV2`'s `UdpSerialConnect`, which sends to `UDP_host` and `UDP_port`
+    /// (defaults 127.0.0.1 and 14550; an empty setting is its default, as `CommsBase.OnSettings`
+    /// takes an empty answer); `WS` is its `WebSocket`, whose URL is `WS_url` as typed, and with
+    /// none there is nothing to open. `AUTO`, a scan of the serial ports, is not a link.
+    /// `// C#: ExtLibs/Utilities/Settings.cs:88-125; MainV2.cs:782-808, 1295-1301, 1481-1488;
     /// ExtLibs/Comms/CommsTCPSerial.cs:35, 114-121; ExtLibs/Comms/CommsUdpSerial.cs:44, 110-112;
-    /// ExtLibs/Comms/CommsUDPSerialConnect.cs:133-138`
+    /// ExtLibs/Comms/CommsUDPSerialConnect.cs:31-35, 133-138; ExtLibs/Comms/CommsWebSocket.cs:103;
+    /// ExtLibs/Comms/CommsBase.cs:41-55; Program.cs:661-675`
     #[must_use]
     pub fn last_link(&self) -> Option<String> {
         let port = self.get("comport").filter(|port| !port.is_empty())?;
@@ -235,7 +237,23 @@ impl Config {
                 self.get("TCP_port").unwrap_or("5760")
             )),
             "UDP" => Some(format!("udp:{}", self.get("UDP_port").unwrap_or("14550"))),
-            "AUTO" | "UDPCl" | "WS" => None,
+            "UDPCl" => {
+                let setting = |name: &str, default: &'static str| {
+                    self.get(name)
+                        .filter(|value| !value.is_empty())
+                        .unwrap_or(default)
+                };
+                Some(format!(
+                    "udpcl:{}:{}",
+                    setting("UDP_host", "127.0.0.1"),
+                    setting("UDP_port", "14550")
+                ))
+            }
+            "WS" => self
+                .get("WS_url")
+                .filter(|url| !url.is_empty())
+                .map(ToOwned::to_owned),
+            "AUTO" => None,
             device => Some(match self.get(&format!("{device}_BAUD")) {
                 Some(baud) if !baud.is_empty() => format!("serial:{device}:{baud}"),
                 _ => format!("serial:{device}"),
@@ -569,14 +587,44 @@ mod tests {
 
     #[test]
     fn a_comport_this_application_cannot_open_is_no_link() {
-        // "" is what SaveConfig writes before anything was chosen, and MainV2 skips it; AUTO,
-        // UDPCl and WS are links this application does not have.
+        // "" is what SaveConfig writes before anything was chosen, and MainV2 skips it; AUTO is a
+        // scan of the serial ports, not a link; WS with no URL saved has nothing to open.
         let mut config = Config::default();
-        for port in ["", "AUTO", "UDPCl", "WS"] {
+        for port in ["", "AUTO", "WS"] {
             config.set("comport", port);
             config.set("UDP_host", "192.168.2.1");
             assert_eq!(config.last_link(), None, "{port:?}");
         }
+        config.set("WS_url", "");
+        assert_eq!(config.last_link(), None);
+    }
+
+    #[test]
+    fn the_udp_client_and_the_websocket_are_links_with_their_settings() {
+        // MainV2.cs:1481-1488: UDPCl is a UdpSerialConnect, WS a WebSocket.
+        let mut config = Config::default();
+        config.set("comport", "UDPCl");
+        // The C#'s defaults, with nothing saved (CommsUDPSerialConnect.cs:33, 134)...
+        assert_eq!(config.last_link().as_deref(), Some("udpcl:127.0.0.1:14550"));
+        // ...and with an empty value saved, which OnSettings takes as none (CommsBase.cs:50-51).
+        config.set("UDP_host", "");
+        config.set("UDP_port", "");
+        assert_eq!(config.last_link().as_deref(), Some("udpcl:127.0.0.1:14550"));
+        config.set("UDP_host", "192.168.4.1");
+        config.set("UDP_port", "14551");
+        assert_eq!(
+            config.last_link().as_deref(),
+            Some("udpcl:192.168.4.1:14551")
+        );
+
+        // WS_url as typed; it round-trips through the file.
+        config.set("comport", "WS");
+        config.set("WS_url", "ws://192.168.4.1:8080/mavlink");
+        let back = Config::parse(&config.render()).expect("parses");
+        assert_eq!(
+            back.last_link().as_deref(),
+            Some("ws://192.168.4.1:8080/mavlink")
+        );
     }
 
     #[test]

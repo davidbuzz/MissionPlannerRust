@@ -105,11 +105,132 @@ fn link_urls_round_trip_through_display() {
         "tcpin:5762",
         "udp:0.0.0.0:14550",
         "file:x.tlog",
+        "udpcl:192.168.4.1:14550",
+        "udpcl:vehicle.local:14551",
+        "ws://127.0.0.1:8080/mavlink",
+        "ws://LocalHost/mav/./link?x=1&y=2",
+        "wss://gcs.example/ws",
+        "ntrip://user:pass@caster.example:2101/MOUNT",
+        "ntrip://me@example.com:pa55@rtk2go.com:2101/RTK2GO",
+        "ntrip://caster.example:2101",
     ] {
         let parsed: LinkUrl = input.parse().unwrap();
         assert_eq!(parsed.to_string(), input);
         assert_eq!(parsed.to_string().parse::<LinkUrl>().unwrap(), parsed);
     }
+}
+
+#[test]
+fn the_udp_client_websocket_and_ntrip_urls_parse_to_what_the_csharp_takes() {
+    let cases = [
+        // UDPCl: a host and port, the C#'s UDP_host and UDP_port.
+        (
+            "udpcl:192.168.4.1:14550",
+            LinkUrl::UdpClient {
+                host: "192.168.4.1".into(),
+                port: 14_550,
+            },
+        ),
+        // A bare port is the C#'s default host (CommsUDPSerialConnect.cs:134).
+        (
+            "udpcl:14551",
+            LinkUrl::UdpClient {
+                host: "127.0.0.1".into(),
+                port: 14_551,
+            },
+        ),
+        // A bare host is the C#'s default port (CommsUDPSerialConnect.cs:33).
+        (
+            "UDPCL:vehicle.local",
+            LinkUrl::UdpClient {
+                host: "vehicle.local".into(),
+                port: 14_550,
+            },
+        ),
+        // WS: the URL as typed into WS_url, which `new Uri` reads.
+        (
+            "ws://192.168.4.1:8080/mavlink",
+            LinkUrl::WebSocket {
+                url: "ws://192.168.4.1:8080/mavlink".into(),
+            },
+        ),
+        (
+            "  WS://host/x  ",
+            LinkUrl::WebSocket {
+                url: "WS://host/x".into(),
+            },
+        ),
+        (
+            "wss://host/x",
+            LinkUrl::WebSocket {
+                url: "wss://host/x".into(),
+            },
+        ),
+        // NTRIP: the URL as typed into NTRIP_url, which CommsNTRIP.Open escapes itself - an `@` in
+        // the user name included.
+        (
+            "ntrip://user:pass@caster.example:2101/MOUNT",
+            LinkUrl::Ntrip {
+                url: "ntrip://user:pass@caster.example:2101/MOUNT".into(),
+            },
+        ),
+        (
+            "ntrip://me@example.com:pa55@rtk2go.com:2101/RTK2GO",
+            LinkUrl::Ntrip {
+                url: "ntrip://me@example.com:pa55@rtk2go.com:2101/RTK2GO".into(),
+            },
+        ),
+    ];
+    for (input, expected) in cases {
+        assert_eq!(
+            input.parse::<LinkUrl>().unwrap(),
+            expected,
+            "parsing {input:?}"
+        );
+    }
+}
+
+#[test]
+fn every_url_form_the_cli_usage_lists_parses() {
+    // crates/mp-cli/src/main.rs, `usage`: the examples a user copies.
+    for (example, scheme) in [
+        ("serial:/dev/ttyACM0:115200", "serial"),
+        ("tcp:127.0.0.1:5760", "tcp"),
+        ("udp:14550", "udp"),
+        ("udpcl:192.168.4.1:14550", "udpcl"),
+        ("ws://host:8080/path", "ws"),
+        ("ntrip://user:pass@caster:2101/MOUNT", "ntrip"),
+        ("file:flight.tlog", "file"),
+    ] {
+        let parsed: LinkUrl = example.parse().unwrap_or_else(|e| panic!("{example}: {e}"));
+        assert!(parsed.to_string().starts_with(scheme), "{example}");
+    }
+}
+
+#[test]
+fn bad_udp_client_websocket_and_ntrip_urls_explain_themselves() {
+    for (input, why) in [
+        ("udpcl:", "udpcl: needs a host"),
+        ("ws:host:8080/x", "format of the URI"),
+        ("ws://", "hostname"),
+        ("ws://host:70000/x", "port"),
+        ("ntrip:caster:2101/M", "ntrip://user:pass@host:port/mount"),
+        // Two `@` in the user info as well as the one before the host: the C# escapes only the
+        // first, and `new Uri` refuses the rest.
+        ("ntrip://a@b:c@d@caster:2101/M", "hostname"),
+        ("ntrip://caster:99999/M", "port"),
+    ] {
+        match input.parse::<LinkUrl>() {
+            Err(UrlError::Malformed(message)) => {
+                assert!(message.contains(why), "{input}: {message}");
+            }
+            other => panic!("{input}: {other:?}"),
+        }
+    }
+    assert!(matches!(
+        "udpcl:host:notaport".parse::<LinkUrl>(),
+        Err(UrlError::BadNumber(_))
+    ));
 }
 
 #[test]

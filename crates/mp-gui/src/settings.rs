@@ -444,7 +444,21 @@ impl Persisted {
                 self.select_port(&path);
                 self.baud = baud.to_string();
             }
-            mp_transport::LinkUrl::TcpListen { .. } | mp_transport::LinkUrl::File { .. } => {}
+            // `CommsUDPSerialConnect.Open` saves the host and port it was given, `CommsWebSocket.Open`
+            // its URL; NTRIP is not one of the connection box's ports.
+            // `// C#: ExtLibs/Comms/CommsUDPSerialConnect.cs:78-79; ExtLibs/Comms/CommsWebSocket.cs:109`
+            mp_transport::LinkUrl::UdpClient { host, port } => {
+                self.select_port("UDPCl");
+                self.config.set("UDP_port", port.to_string());
+                self.config.set("UDP_host", host);
+            }
+            mp_transport::LinkUrl::WebSocket { url } => {
+                self.select_port("WS");
+                self.config.set("WS_url", url);
+            }
+            mp_transport::LinkUrl::TcpListen { .. }
+            | mp_transport::LinkUrl::File { .. }
+            | mp_transport::LinkUrl::Ntrip { .. } => {}
         }
     }
 

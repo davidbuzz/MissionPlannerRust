@@ -1,0 +1,24 @@
+# The positions tools/csharp-reference/MpComms.cs gives CommsNTRIP to send as GGA, and
+# crates/mp-transport/tests/csharp_goldens.rs gives the Rust. `<lat> <lng> <alt>`; a line starting
+# `#` is a comment.
+#
+# ArduPilot SITL's home, Canberra: south and east.
+-35.363261 149.165230 584.0
+# North and west, with a negative altitude.
+51.477928 -0.001545 -45.5
+# Minutes and altitudes on a rounding tie in the second decimal, as far as .NET's 15 digits see.
+10.5000833333333 20.5000833333333 0.125
+10.5000083333333 20.5000083333333 2.675
+10.1234567 20.7654321 1.005
+# One axis zero is still a position.
+0 45.5 10
+45.5 0 10
+# Just either side of zero.
+-0.5 -0.25 -0.004
+0.0001 0.0001 0.005
+# The ends of the earth.
+89.999999 179.999999 8848.86
+-89.999999 -179.999999 -430.5
+# Whole degrees, and a degree less a hair.
+1 2 3
+0.99999999 1.99999999 3

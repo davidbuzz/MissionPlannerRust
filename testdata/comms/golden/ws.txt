@@ -1,0 +1,19 @@
+handshake	GET /mav/link?x=1 HTTP/1.1\r\nHost: localhost:{port}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: {key}\r\n\r\n
+open	isopen True
+client sends	fin 1 rsv 0 opcode 1 masked 1 payload 2probe
+server binary FD010203	read \xFD\x01\x02\x03
+server binary FD05 then continuation 0607	read \xFD\x05\x06\x07
+client write FD0908	fin 1 rsv 0 opcode 2 masked 1 payload \xFD\x09\x08
+server text 0{sid}	socketio True
+client write 010203	fin 1 rsv 0 opcode 2 masked 1 payload \x04\x01\x02\x03
+server text 3probe	fin 1 rsv 0 opcode 1 masked 1 payload 40/MAVControl,
+server text 3probe	fin 1 rsv 0 opcode 1 masked 1 payload 5
+server ping hi	fin 1 rsv 0 opcode 10 masked 1 payload hi
+server text 42	none bytestoread 0
+drop	reconnected True
+handshake again	GET /mav/link?x=1&sid=abc HTTP/1.1\r\nHost: localhost:{port}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: {key}\r\n\r\n
+client sends again	fin 1 rsv 0 opcode 1 masked 1 payload 2probe
+isopen again	True
+server close 1000	none
+after close	isopen False
+after close	reconnected False

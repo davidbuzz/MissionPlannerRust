@@ -1,0 +1,24 @@
+open	accepted 1 isopen True
+round 1 read after hangup	0 isopen True
+round 1 write 1	isopen True
+round 1 write 2	isopen False
+round 1 read	error The ntrip is closed
+round 1 reconnected	1 isopen True
+round 1 read again	\xD3\x00\x13
+round 2 read after hangup	0 isopen True
+round 2 write 1	isopen True
+round 2 write 2	isopen False
+round 2 read	error The ntrip is closed
+round 2 reconnected	1 isopen True
+round 2 read again	\xD3\x00\x13
+round 3 read after hangup	0 isopen True
+round 3 write 1	isopen True
+round 3 write 2	isopen False
+round 3 read	error The ntrip is closed
+round 3 reconnected	1 isopen True
+round 3 read again	\xD3\x00\x13
+round 4 read after hangup	0 isopen True
+round 4 write 1	isopen True
+round 4 write 2	isopen False
+round 4 read	error The ntrip is closed
+round 4 reconnected	0 isopen False

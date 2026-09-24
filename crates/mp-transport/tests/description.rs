@@ -11,9 +11,12 @@
 #![allow(unsafe_code)]
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
+mod common;
+
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 use std::hint::black_box;
+use std::io::Write as _;
 use std::net::{SocketAddr, TcpListener, TcpStream, UdpSocket};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -276,5 +279,77 @@ fn asking_for_a_description_allocates_nothing_even_as_a_udp_link_changes_peer() 
     assert_eq!(
         allocations, 0,
         "asking for descriptions, and a UDP link learning a new peer, allocated {allocations} times"
+    );
+}
+
+#[test]
+fn the_udp_client_websocket_and_ntrip_are_named_by_where_they_reach_and_read_without_allocating() {
+    // The UDP client: the host it sends to.
+    let vehicle = UdpSocket::bind("127.0.0.1:0").unwrap();
+    vehicle.set_read_timeout(Some(common::GUARD)).unwrap();
+    let port = vehicle.local_addr().unwrap().port();
+    let mut udpcl = mp_transport::open(&format!("udpcl:127.0.0.1:{port}")).unwrap();
+    udpcl.set_read_timeout(common::GUARD).unwrap();
+    assert_eq!(udpcl.description(), format!("udpcl:127.0.0.1:{port}"));
+    udpcl.write_all(b"hello").unwrap();
+    let (_, client) = vehicle.recv_from(&mut [0u8; 16]).unwrap();
+
+    // The websocket: the URL as `System.Uri` makes it canonical, its port always written.
+    let (listener, ws_port) = common::listen();
+    let server = common::ws_accept(&listener);
+    let mut ws = mp_transport::open(&format!("ws://LocalHost:{ws_port}/mav/./link")).unwrap();
+    ws.set_read_timeout(common::GUARD).unwrap();
+    let (_, mut peer) = server.join().unwrap();
+    let _probe = common::read_client_frame(&mut peer).unwrap();
+    assert_eq!(
+        ws.description(),
+        format!("ws://localhost:{ws_port}/mav/link")
+    );
+
+    // NTRIP: the caster and mount point, and never the password.
+    let (listener, caster_port) = common::listen();
+    let caster = common::caster(&listener, b"ICY 200 OK\r\n", false);
+    let mut ntrip = mp_transport::open(&format!(
+        "ntrip://pilot:s3cret@127.0.0.1:{caster_port}/MOUNT"
+    ))
+    .unwrap();
+    ntrip.set_read_timeout(common::GUARD).unwrap();
+    let mut caster = caster.join().unwrap().stream;
+    assert_eq!(
+        ntrip.description(),
+        format!("ntrip:127.0.0.1:{caster_port}/MOUNT")
+    );
+
+    // Eight frames' worth down each, once to size the buffers and once counted.
+    let frame = [0xFDu8; 40];
+    let messages: Vec<u8> = (0..8)
+        .flat_map(|_| common::server_frame(true, 2, &frame))
+        .collect();
+    let mut buf = [0u8; 4096];
+    let mut send_eight = || {
+        for _ in 0..8 {
+            vehicle.send_to(&frame, client).unwrap();
+        }
+        peer.write_all(&messages).unwrap();
+        caster.write_all(&[0xD3; 320]).unwrap();
+    };
+    let mut read_eight = |udpcl: &mut Box<dyn Transport>,
+                          ws: &mut Box<dyn Transport>,
+                          ntrip: &mut Box<dyn Transport>| {
+        for link in [udpcl, ws, ntrip] {
+            let mut got = 0;
+            while got < 320 {
+                got += link.read(&mut buf).unwrap();
+            }
+            black_box(link.description());
+        }
+    };
+    send_eight();
+    read_eight(&mut udpcl, &mut ws, &mut ntrip);
+    send_eight();
+    let allocations = allocations_in(|| read_eight(&mut udpcl, &mut ws, &mut ntrip));
+    assert_eq!(
+        allocations, 0,
+        "reading and naming the network transports allocated {allocations} times"
     );
 }

@@ -205,6 +205,9 @@ fn usage() {
          serial:/dev/ttyACM0:115200\n  \
          tcp:127.0.0.1:5760          (ArduPilot SITL)\n  \
          udp:14550                   (bind and wait for the vehicle)\n  \
+         udpcl:192.168.4.1:14550     (send to the vehicle, and hear it back)\n  \
+         ws://host:8080/path         (websocket)\n  \
+         ntrip://user:pass@caster:2101/MOUNT (RTCM from an NTRIP caster)\n  \
          file:flight.tlog            (replay a recording)"
     );
 }

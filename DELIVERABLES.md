@@ -107,8 +107,16 @@ OSes, plus bootloader/flashing transports (px4uploader, DFU, ADB).
   enumeration is `CommsSerialPort.GetPortNames` ported rule for rule (`crates/mp-transport/src/enumerate.rs`)
   and held to Linux, macOS and Windows fixtures in `tests/enumerate.rs`; `tests/faults.rs` runs real
   frames through every fault the DoD names and re-checks each delivered checksum; `tests/hotplug.rs`
-  unplugs a real `SerialTransport` over a pty and reopens it. **Not yet:** BLE, NTRIP, websocket,
-  the flashing transports, Windows friendly names via WMI, and the ≤ 1 ms latency bench.
+  unplugs a real `SerialTransport` over a pty and reopens it. The UDP client
+  (`CommsUDPSerialConnect.cs`), the websocket client (`CommsWebSocket.cs`: RFC 6455 framing and
+  the socket.io conversation, in-crate) and NTRIP (`CommsNTRIP.cs`: the v1/v2 requests, Basic
+  auth, the SOURCETABLE checks, the GGA sentence sent every 30 s, the reconnect limit) are ported
+  as `udpcl:`, `ws://` and `ntrip://` links and held to the three C# classes compiled straight from
+  the reference tree and run against peers on 127.0.0.1 (`tools/csharp-reference/MpComms.cs`,
+  `testdata/comms/golden/`: the exact request bytes, 13 GGA sentences, the whole websocket
+  conversation, the UDP client's reads, writes and counts) - PLAN.md §13.4 row 43. **Not yet:**
+  BLE, TLS (`wss://`, NTRIP over https), the flashing transports, Windows friendly names via WMI,
+  and the ≤ 1 ms latency bench.
 - **Tests:** `crates/transport/tests/loopback.rs` per transport (serial via a PTY pair / com0com, TCP, UDP, websocket, file-replay); `tests/faults.rs` fault-injection over a mock transport (drop, duplicate, reorder, partial write, mid-frame disconnect); `tests/enumerate.rs` parses checked-in per-OS device fixtures (Windows registry dumps, Linux udev/sysfs trees, macOS IOKit dumps) and asserts the device list; `tests/hotplug.rs` simulated surprise-unplug and reconnect; `tests/ntrip.rs` against an in-process mock caster; `benches/latency.rs` gates the ≤1 ms overhead target.
 
 ### D4. Link engine (the `MAVLinkInterface` equivalent)

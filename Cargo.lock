@@ -3385,6 +3385,7 @@ dependencies = [
  "mp-mission",
  "mp-params",
  "mp-settings",
+ "mp-terrain",
  "mp-tiles",
  "mp-transport",
  "mp-units",

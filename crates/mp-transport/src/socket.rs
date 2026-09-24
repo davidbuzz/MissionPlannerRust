@@ -224,7 +224,7 @@ impl Transport for UdpTransport {
 ///
 /// Platforms disagree here: Unix reports `WouldBlock`, Windows reports `TimedOut`. Treating one
 /// as fatal is a classic "works on my machine" transport bug.
-fn is_timeout(e: &io::Error) -> bool {
+pub(crate) fn is_timeout(e: &io::Error) -> bool {
     matches!(
         e.kind(),
         io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut

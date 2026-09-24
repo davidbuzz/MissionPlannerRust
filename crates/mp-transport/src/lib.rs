@@ -1,6 +1,7 @@
 //! Link transports for MAVLink connections.
 //!
-//! Replaces `ExtLibs/Comms` (`ICommsSerial`, `CommsSerialPort`, `CommsTCP`, `CommsUDP`, ...).
+//! Replaces `ExtLibs/Comms` (`ICommsSerial`, `CommsSerialPort`, `CommsTCP`, `CommsUDP`,
+//! `CommsUDPSerialConnect`, `CommsWebSocket`, `CommsNTRIP`, ...).
 //!
 //! # Why blocking, not async
 //!
@@ -16,23 +17,31 @@
 //! [`ReplayTransport`] makes a recorded flight a first-class input. Tests, benchmarks and the
 //! differential harness all drive the real code path with real data instead of synthetic frames.
 
+mod codec;
+mod dotnet;
 pub mod enumerate;
+pub mod ntrip;
 pub mod replay;
 #[cfg(feature = "serial")]
 pub mod serial;
 pub mod socket;
 pub mod testing;
+pub mod udp_client;
 pub mod url;
+pub mod websocket;
 
 use std::io;
 use std::time::Duration;
 
 pub use enumerate::PortInfo;
+pub use ntrip::{NtripOptions, NtripTransport};
 pub use replay::ReplayTransport;
 #[cfg(feature = "serial")]
 pub use serial::{SerialTransport, list_ports};
 pub use socket::{TcpTransport, UdpTransport};
+pub use udp_client::UdpClientTransport;
 pub use url::{LinkUrl, UrlError};
+pub use websocket::WebSocketTransport;
 
 /// A bidirectional byte link.
 ///
@@ -98,7 +107,8 @@ impl OpenError {
 }
 
 /// Opens a transport from a link URL such as `serial:/dev/ttyACM0:115200`, `tcp:host:5760`,
-/// `udp:0.0.0.0:14550` or `file:flight.tlog`.
+/// `udp:0.0.0.0:14550`, `udpcl:192.168.4.1:14550`, `ws://host:8080/path`,
+/// `ntrip://user:pass@caster:2101/MOUNT` or `file:flight.tlog`.
 pub fn open(url: &str) -> Result<Box<dyn Transport>, OpenError> {
     let parsed: LinkUrl = url.parse()?;
     open_url(&parsed)
@@ -122,5 +132,13 @@ pub fn open_url(url: &LinkUrl) -> Result<Box<dyn Transport>, OpenError> {
         LinkUrl::TcpListen { port } => Ok(Box::new(TcpTransport::listen(*port)?)),
         LinkUrl::Udp { bind, port } => Ok(Box::new(UdpTransport::bind(bind, *port)?)),
         LinkUrl::File { path } => Ok(Box::new(ReplayTransport::open(path)?)),
+        LinkUrl::UdpClient { host, port } => Ok(Box::new(UdpClientTransport::open(host, *port)?)),
+        LinkUrl::WebSocket { url } => Ok(Box::new(WebSocketTransport::open(url)?)),
+        // No position yet, so no GGA until one is set: what the RTK page does with "send GGA"
+        // unticked.
+        LinkUrl::Ntrip { url } => Ok(Box::new(NtripTransport::open(
+            url,
+            NtripOptions::default(),
+        )?)),
     }
 }

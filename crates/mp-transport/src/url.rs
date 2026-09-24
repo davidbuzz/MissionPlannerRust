@@ -41,6 +41,28 @@ pub enum LinkUrl {
         /// Path to the log.
         path: String,
     },
+    /// `udpcl:192.168.4.1:14550` - send to a host from a port of our own, and read what comes
+    /// back: Mission Planner's "UDPCl" (`UdpSerialConnect`). `udpcl:14550` is the C#'s default
+    /// host, 127.0.0.1.
+    UdpClient {
+        /// Remote host.
+        host: String,
+        /// Remote port.
+        port: u16,
+    },
+    /// `ws://host:port/path` - a websocket: Mission Planner's "WS", whose URL is `WS_url`. Kept as
+    /// written, since that is what the C# hands `System.Uri`; `wss://` parses but needs TLS to
+    /// open.
+    WebSocket {
+        /// The whole URL, `ws://` or `wss://` included.
+        url: String,
+    },
+    /// `ntrip://user:pass@host:port/mount` - RTK corrections from an NTRIP caster. Kept as written,
+    /// since `CommsNTRIP.Open` escapes the text itself.
+    Ntrip {
+        /// The whole URL, `ntrip://` included.
+        url: String,
+    },
 }
 
 /// Default serial baud rate: what ArduPilot uses on USB and what Mission Planner defaults to.
@@ -54,7 +76,9 @@ pub const DEFAULT_TCP_PORT: u16 = 5760;
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum UrlError {
     /// No `scheme:` prefix.
-    #[error("missing scheme in {0:?}; expected serial:, tcp:, tcpin:, udp: or file:")]
+    #[error(
+        "missing scheme in {0:?}; expected serial:, tcp:, tcpin:, udp:, udpcl:, ws://, ntrip:// or file:"
+    )]
     MissingScheme(String),
     /// Scheme is not one we support.
     #[error("unknown scheme {0:?}")]
@@ -147,6 +171,41 @@ impl FromStr for LinkUrl {
                 };
                 Ok(Self::Udp { bind, port })
             }
+            "udpcl" => {
+                // C#: ExtLibs/Comms/CommsUDPSerialConnect.cs:31-35, 133-134 - host 127.0.0.1 and
+                // port 14550 unless told otherwise.
+                if !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()) {
+                    let port = rest
+                        .parse()
+                        .map_err(|_| UrlError::BadNumber(rest.to_owned()))?;
+                    return Ok(Self::UdpClient {
+                        host: "127.0.0.1".to_owned(),
+                        port,
+                    });
+                }
+                let (host, port) = split_host_port(rest, DEFAULT_UDP_PORT)?;
+                if host.is_empty() {
+                    return Err(UrlError::Malformed("udpcl: needs a host".to_owned()));
+                }
+                Ok(Self::UdpClient { host, port })
+            }
+            "ws" | "wss" => {
+                // C#: ExtLibs/Comms/CommsWebSocket.cs:103-111, 196 - the URL goes to `new Uri` and
+                // `ClientWebSocket.ConnectAsync` as typed.
+                crate::dotnet::Uri::parse(s)
+                    .map_err(|e| UrlError::Malformed(format!("{s}: {e}")))?;
+                Ok(Self::WebSocket { url: s.to_owned() })
+            }
+            "ntrip" => {
+                // C#: ExtLibs/Comms/CommsNTRIP.cs:137-155 - checked as `Open` will read it.
+                if !rest.starts_with("//") {
+                    return Err(UrlError::Malformed(format!(
+                        "{s}: an NTRIP URL is ntrip://user:pass@host:port/mount"
+                    )));
+                }
+                crate::ntrip::check_url(s).map_err(|e| UrlError::Malformed(format!("{s}: {e}")))?;
+                Ok(Self::Ntrip { url: s.to_owned() })
+            }
             "file" | "replay" => {
                 if rest.is_empty() {
                     return Err(UrlError::Malformed("file: needs a path".to_owned()));
@@ -237,6 +296,8 @@ impl fmt::Display for LinkUrl {
             Self::TcpListen { port } => write!(f, "tcpin:{port}"),
             Self::Udp { bind, port } => write!(f, "udp:{bind}:{port}"),
             Self::File { path } => write!(f, "file:{path}"),
+            Self::UdpClient { host, port } => write!(f, "udpcl:{host}:{port}"),
+            Self::WebSocket { url } | Self::Ntrip { url } => f.write_str(url),
         }
     }
 }
