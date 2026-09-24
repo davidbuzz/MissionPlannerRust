@@ -140,7 +140,9 @@ OSes, plus bootloader/flashing transports (px4uploader, DFU, ADB).
   as `udpcl:`, `ws://` and `ntrip://` links and held to the three C# classes compiled straight from
   the reference tree and run against peers on 127.0.0.1 (`tools/csharp-reference/MpComms.cs`,
   `testdata/comms/golden/`: the exact request bytes, 13 GGA sentences, the whole websocket
-  conversation, the UDP client's reads, writes and counts) - PLAN.md §13.4 row 43. **Not yet:**
+  conversation, the UDP client's reads, writes and counts) - PLAN.md §13.4 row 43. Serial on real hardware:
+  a Cube Orange on `/dev/ttyACM0` (`27B1:0004`, listed by `mpr ports` under its by-id name) gave
+  341 frames in 8 s with no CRC error on 2026-09-24. **Not yet:**
   BLE, TLS (`wss://`, NTRIP over https), the flashing transports, Windows friendly names via WMI,
   and the ≤ 1 ms latency bench.
 - **Tests:** the per-transport loopbacks are `crates/mp-transport/tests/transports.rs`, `integration_replay.rs`, `udp_client.rs` and `websocket.rs`, with `csharp_goldens.rs` holding the UDP client, websocket and NTRIP bytes to the C# classes run under mono; `tests/faults.rs` (drop, duplicate, reorder, partial write, mid-frame disconnect over real frames); `tests/enumerate.rs` over Linux, macOS and Windows fixtures; `tests/hotplug.rs` (a real pty unplugged and reopened); `tests/ntrip.rs` against an in-process caster; `tests/description.rs`; `benches/latency.rs` not yet, so the ≤ 1 ms claim is unmeasured.
@@ -161,7 +163,9 @@ mission/rally/fence up- and download, MAVFTP, log download, command_long/ack, re
   counts every send on the wire under timeouts, reordering, duplicates and seeded bad links (40 tests);
   `tests/routing.rs` runs 50 systems and 56 components through one link. The GUI's and the CLI's
   sets and commands go through those requests, with the C#'s message texts on the status line
-  (PLAN.md §13.4 row 11). MAVFTP is `MAVFtp.cs` whole (row 36): the burst read with its gap filling, list, upload, remove, rename, CRC32, the C#'s retry table, as a state machine in `mp-ftp` the link drives, with `mpr ftp`; the C#'s own `MAVFtp` under mono gives the same request bytes and the same `param.pck` from SITL. **Not yet:** the log-download machine as a request; `uploadPartial`,
+  (PLAN.md §13.4 row 11). MAVFTP is `MAVFtp.cs` whole (row 36): the burst read with its gap filling, list, upload, remove, rename, CRC32, the C#'s retry table, as a state machine in `mp-ftp` the link drives, with `mpr ftp`; the C#'s own `MAVFtp` under mono gives the same request bytes and the same `param.pck` from SITL. On a real Cube Orange over USB
+  (2026-09-24): 929 parameters downloaded and reported complete, `@SYS` listed over MAVFTP, six
+  logs listed. **Not yet:** the log-download machine as a request; `uploadPartial`,
   `getHomePosition`, `doCommandInt` and `setWP` as requests, which is why Change Alt, Format SD and
   the `COMMAND_INT`s still go out once, raw.
 - **Tests:** the machines are exercised by `crates/mp-link/tests/retries.rs` (40 tests: every send counted under timeouts, reordering, duplicates and seeded bad links) and `tests/link.rs` against an in-memory vehicle, with the SITL halves behind `--ignored` in `params_sitl.rs`, `mission_sitl.rs`, `fence_sitl.rs`, `commands_sitl.rs` and `logs_sitl.rs`; MAVFTP is `crates/mp-ftp/tests/mavftp.rs` and `csharp.rs` (768 names, the CRC vectors and 13 payloads against `MAVFtp.cs` under mono); `tests/routing.rs` (50 systems, 56 components through one link); `tests/no_alloc_ingest.rs`, `replay_clock.rs`, `current_state.rs`, `telemetry_storm.rs`, `traffic.rs`. Not yet: a log-download machine as a request, and `params_sitl.rs` does not diff the downloaded set against the C# application's dump.
@@ -400,7 +404,11 @@ path: board detect, firmware catalogue, upload via px4/DFU/serial bootloaders.
   offers `mpr firmware info` and `mpr firmware detect` and nothing that writes. Board detection is
   `Utilities/BoardDetect.cs` ported rule for rule (`crates/mp-firmware/src/detect.rs`), its probes
   proved against the px4 mock over a pty; all 16 `DetectBoardTest` calls are fixtures, and five of
-  them fail against the C# itself, which the fixture records. The firmware catalogue is
+  them fail against the C# itself, which the fixture records. A real Cube Orange running ArduPilot
+  (2026-09-24) presents `27B1:0004`, ArduPilot's application-mode id, which `BoardDetect.cs` does
+  not know either - the C# identifies a Cube by its bootloader id after a reboot, or by a WMI
+  name on Windows - so `mpr firmware detect` says what the C# would do next: ask, then probe for
+  an STK500 bootloader. The firmware catalogue is
   `APFirmware.cs` ported - the manifest, its mirror-then-ardupilot.org order, the board and
   release selection - proved on a 240-record excerpt of the real manifest, and the Install
   Firmware page shows what the C# would flash with its Upload button disabled (PLAN.md §13.4
@@ -545,14 +553,14 @@ per-file porting harness, and a machine-readable ledger tracking every one of th
   in retired C# lines; one full wave executed end to end to prove the throughput rate; the
   porting-agent contract (prompt + test + differential check + review gate) documented and versioned.
 - **Today:** the ledger exists and passes its own check: 3,678 rows, one per `.cs` file, tier from a
-  classifier that names its evidence per vendored root, sha256 for staleness; 3,655 rows `ready`,
-  18 `tested` and 5 `ported` - 32,951 of 1,208,836 C# lines retired: `CurrentState.cs`,
-  `MAVLinkInterface.cs`, `mav_mission.cs`, `Grid.cs`, `clipper.cs`, `utmpos.cs`, `BinaryLog.cs`,
-  `DFLogBuffer.cs`, `LogOutput.cs`, `MatLab.cs`, `LogAnalyzer.cs`, `BoardDetect.cs`, `HUD.cs`, the
-  map providers and projection, the serial port and the parameter metadata. Existing Rust work is
-  credited only when re-entered with evidence (PLAN.md §5.2), and most of what the coverage
-  ledgers and the eleven oracles prove is not re-entered yet - the biggest honest move D18 can
-  make. `init` is deterministic and `refresh` keeps hand-edited columns. Empty: `target_crate`,
+  classifier that names its evidence per vendored root, sha256 for staleness; 3,615 rows `ready`,
+  54 `tested` and 9 `ported` - 76,375 of 1,208,836 C# lines past `ready`: `CurrentState.cs`,
+  `MAVLinkInterface.cs`, `FlightData.cs`, `FlightPlanner.cs`, `LogBrowse.cs`, `HUD.cs`, `Grid.cs`
+  and `GridUI.cs`, `clipper.cs`, the log conversions, `srtm.cs`, `MAVFtp.cs`, the Comms classes,
+  `Settings.cs`, `georefimage.cs`, `BoardDetect.cs`, the manifests, the map providers and
+  projection, and every `Config*.cs` page ported whole (PLAN.md §13.6 row 72). Existing Rust work
+  is credited only when re-entered with evidence (PLAN.md §5.2); `done` needs the review gate,
+  which nothing has passed. `init` is deterministic and `refresh` keeps hand-edited columns. Empty: `target_crate`,
   `unit_id`, `deps`, the class columns. Generators: `mavlink`, `param_meta` and `modes` in
   `xtask/src/codegen/`. Not started: DSDL, `.resx` → `.ftl`, screen specs, `xtask next`, the
   contract dry run.
