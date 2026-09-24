@@ -4,12 +4,12 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui c
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 9 | 18 | 28 | 2 | 4 | 569 |
+| 61 | 10 | 18 | 27 | 2 | 4 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 8 | 16 | 18 | 2 | 0 | 258 | 93 |
-| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 1 | 2 | 10 | 0 | 0 | 277 | 144 |
+| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 2 | 2 | 9 | 0 | 0 | 277 | 16 |
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 | 0 |
 
 The lists also add 4 pages that are not in `ConfigurationView/` (`Sikradio`, `JoystickSetup`, `TrackerUI`, `MavFTPUI`): 0 done, 1 partial, 3 missing, 0 plumbing, 0 dropped. They are in the lists below and not in the counts above.
@@ -18,7 +18,6 @@ The largest missing panels, by wirings:
 
 | panel | title | wirings |
 |---|---|---:|
-| `ConfigArducopter` | Extended Tuning | 128 |
 | `ConfigSerialInjectGPS` | RTK/GPS Inject | 24 |
 | `ConfigFirmware` | Install Firmware Legacy | 20 |
 | `ConfigDroneCAN` | DroneCAN/UAVCAN | 15 |
@@ -30,6 +29,7 @@ The largest missing panels, by wirings:
 | `ConfigAteryxSensors` | Ateryx Zero Sensors | 3 |
 | `ConfigHWESP8266` (`ConfigHWesp8266.cs`) | ESP8266 Setup | 3 |
 | `ConfigInitialParams` | Initial Tune Parameter | 3 |
+| `ConfigCompassMot` | Compass/Motor Calib | 2 |
 
 Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConnected && gotAllParams`); **always** is connected or not; **connected** and **disconnected** are the link alone; a named vehicle, parameter or view is what the call, or the `if` around it, checks. **Advanced view** is `DisplayView.isAdvancedMode`. A page with a `DisplayView` switch also needs it on, which it is by default unless the vehicles say otherwise. The list shows a heading as `>> title` and indents what is under it (`ExtLibs/Controls/BackstageView/BackstageView.cs:227`, `:232`).
 
@@ -91,7 +91,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConne
 |---:|---|---|---|---|---:|---|
 | 156 | `ConfigAC_Fence` | GeoFence |  | copter | 0 | **missing** |
 | 164 | `ConfigSimplePids` | Basic Tuning |  | copter | 1 | **missing** |
-| 169 | `ConfigArducopter` | Extended Tuning |  | copter | 128 | **missing** |
+| 169 | `ConfigArducopter` | Extended Tuning |  | copter | 128 | done: `crates/mp-gui/src/config/extended_tuning.rs` `fn page` |
 | 177 | `ConfigArduplane` | Basic Tuning |  | plane | 47 | done: `crates/mp-gui/src/config/basic_tuning.rs` `fn page` |
 | 182 | `ConfigArducopter` | QP Extended Tuning |  | plane (enabled for a quadplane) | 128 | as at `GCSViews/SoftwareConfig.cs:169` |
 | 188 | `ConfigArdurover` | Basic Tuning |  | rover | 3 | **missing** |

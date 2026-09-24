@@ -997,6 +997,11 @@ impl MissionPlanner {
             // C#: GCSViews/ConfigurationView/ConfigArduplane.cs:26-126
             Some("ConfigArduplane") => self.basic_tuning_activate(),
             // ---- end Basic Tuning / Advanced ----
+            // ---- Extended Tuning ----
+            // Every time, as `ActivatePage` calls it.
+            // C#: GCSViews/ConfigurationView/ConfigArducopter.cs:26-204
+            Some("ConfigArducopter") => self.extended_tuning_activate(),
+            // ---- end Extended Tuning ----
             _ => {}
         }
     }
@@ -1074,6 +1079,10 @@ impl MissionPlanner {
             // `ConfigArduplane` is `IActivate` only: hidden, a number being typed into read.
             Some("ConfigArduplane") => self.basic_tuning.hide(std::time::Instant::now()),
             // ---- end Basic Tuning / Advanced ----
+            // ---- Extended Tuning ----
+            // `ConfigArducopter` is `IActivate` only: hidden, a number being typed into read.
+            Some("ConfigArducopter") => self.extended_tuning_hide(),
+            // ---- end Extended Tuning ----
             _ => {}
         }
     }
@@ -1277,6 +1286,10 @@ impl MissionPlanner {
             // C#: GCSViews/ConfigurationView/ConfigAdvanced.Designer.cs:29-266; ConfigAdvanced.resx
             "ConfigAdvanced" => crate::config::advanced::page(),
             // ---- end Basic Tuning / Advanced ----
+            // ---- Extended Tuning ----
+            // C#: GCSViews/ConfigurationView/ConfigArducopter.Designer.cs; ConfigArducopter.resx
+            "ConfigArducopter" => self.extended_tuning_page(window, cx),
+            // ---- end Extended Tuning ----
             _ => return None,
         })
     }

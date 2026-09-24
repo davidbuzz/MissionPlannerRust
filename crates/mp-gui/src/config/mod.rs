@@ -25,3 +25,5 @@ pub mod rangefinder;
 pub mod advanced;
 pub mod basic_tuning;
 // ---- end Basic Tuning / Advanced ----
+// ---- Extended Tuning ----
+pub mod extended_tuning;

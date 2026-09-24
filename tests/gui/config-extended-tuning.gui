@@ -1,0 +1,200 @@
+# CONFIG's Extended Tuning page, ported from GCSViews/ConfigurationView/ConfigArducopter.cs.
+#
+# The claim: SoftwareConfig lists the page for a copter once every parameter is in
+# (SoftwareConfig.cs:169), and Activate binds each box and combo to the first of the names the C#
+# tries for it that the vehicle has - a box with none stays disabled, named for the first
+# (ConfigArducopter.cs:26-204, Controls/MavlinkNumericUpDown.cs:49-122). A box's or a combo's
+# change is not written by the control: its ValueUpdated puts it in the page's changes and marks
+# it green (ConfigArducopter.cs:260-351), and Write Params - or ctrl+S - writes changes, asking
+# first about a value more than double the vehicle's (:353-411). CH9_OPTION has no ValueUpdated
+# and writes the moment it changes (Controls/MavlinkComboBox.cs:169-199). The lock is a plain
+# check box; it pairs roll and pitch only for names starting RATE_, STB_ or ACRO_, so on this
+# vehicle's ATC_RAT_* names a roll change leaves pitch alone, as the C#'s does. Entering a box
+# whose parameter 4.7 renamed shows the change under the buttons (:484-501). Refresh Screen reads
+# every box's parameter again and runs Activate (:441-477). Each write is proved by the vehicle's
+# echo, and put back.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm (the bundled
+# 4.8.0-dev copter: RC8_OPTION and RC9_OPTION 0, the roll and pitch rate P gains the firmware's
+# 0.135). Run as
+#
+#   tools/gui-test.sh tests/gui/config-extended-tuning.gui -- tcp:127.0.0.1:5760
+#
+# A run that stops half way can leave ATC_RAT_RLL_P at 0.14, or RC8_OPTION or RC9_OPTION at 9;
+# the first expectations below then fail until a fresh SITL.
+
+screen params
+window 1600x1200
+settle 6
+
+# SoftwareConfig adds the page inside `if (gotAllParams)` (SoftwareConfig.cs:148-169), and here
+# parameters are downloaded when asked for.
+click param-download
+settle 15
+expect params.held > 1000
+expect params.value.ATC_RAT_RLL_P 0.135
+expect params.value.ATC_RAT_PIT_P 0.135
+expect params.value.RC8_OPTION 0
+expect params.value.RC9_OPTION 0
+
+click tab-config
+expect config.extended.active false
+click config-page-ConfigArducopter
+settle 1
+expect config.page ConfigArducopter
+expect config.title Extended Tuning
+expect config.extended.active true
+expect config.extended.enabled true
+
+# What Activate bound: the first name of each list the vehicle has.
+expect config.extended.number.RATE_RLL_P.param ATC_RAT_RLL_P
+expect config.extended.number.RATE_RLL_P.enabled true
+expect config.extended.number.RATE_RLL_P 0.135
+expect config.extended.number.RATE_PIT_P 0.135
+expect config.extended.number.RATE_RLL_IMAX.param ATC_RAT_RLL_IMAX
+expect config.extended.number.RATE_RLL_FILT.param ATC_RAT_RLL_FLTE
+expect config.extended.number.STB_RLL_P.param ATC_ANG_RLL_P
+expect config.extended.number.LOITER_LAT_P.param PSC_NE_VEL_P
+expect config.extended.number.THR_ALT_P.param PSC_D_POS_P
+expect config.extended.number.THR_RATE_P.param PSC_D_VEL_P
+expect config.extended.number.WPNAV_SPEED.param WP_SPD
+expect config.extended.number.WPNAV_LOIT_SPEED.param LOIT_SPEED_MS
+expect config.extended.number.mavlinkNumericUpDownatc_accel_r_max.param ATC_ACC_R_MAX
+# A box whose names the vehicle has none of stays disabled, named for the first.
+expect config.extended.number.HLD_LAT_P.param HLD_LAT_P
+expect config.extended.number.HLD_LAT_P.enabled false
+expect config.extended.number.INS_NOTCH_FREQ.enabled false
+expect config.extended.combo.TUNE.param TUNE
+expect config.extended.combo.CH7_OPTION.param RC7_OPTION
+expect config.extended.combo.CH7_OPTION 7
+expect config.extended.combo.CH8_OPTION 0
+expect config.extended.combo.CH9_OPTION.param RC9_OPTION
+expect config.extended.combo.CH9_OPTION.enabled true
+# The tool tips: the controls inside the group boxes only, each its parameter and its
+# documentation.
+expect config.extended.tip.RATE_RLL_P ~ ATC_RAT_RLL_P:
+expect config.extended.tip.TUNE none
+# Roll and pitch agree and a quad has no H_SWASH_TYPE: the lock stays as the Designer leaves it.
+expect config.extended.lock checked
+expect config.extended.changes none
+expect config.extended.warning none
+
+# Entering a box whose parameter 4.7 renamed shows the change; this SITL is 4.8.
+click extended-mavlinkNumericUpDownatc_accel_r_max
+expect config.extended.editing mavlinkNumericUpDownatc_accel_r_max
+expect config.extended.warning ~ Change in 4.7:
+expect config.extended.warning ~ ATC_ACC_R_MAX: units changed from cm/s/s to m/s/s
+
+# A roll gain typed goes into changes and the box turns green; the other box entered hides the
+# warning. The lock is checked, but ATC_RAT_RLL_P does not start RATE_: pitch keeps its value.
+click extended-RATE_RLL_P
+expect config.extended.editing RATE_RLL_P
+expect config.extended.warning none
+key ctrl+u
+type 0.14
+key Return
+expect config.extended.number.RATE_RLL_P 0.140
+expect config.extended.changes ATC_RAT_RLL_P=0.14
+expect config.extended.number.RATE_RLL_P.marked true
+expect config.extended.number.RATE_PIT_P 0.135
+expect config.extended.number.RATE_PIT_P.marked false
+# Nothing is written until Write Params, whose key is ctrl+S.
+expect params.value.ATC_RAT_RLL_P 0.135
+key ctrl+s
+settle 2
+expect config.extended.write ATC_RAT_RLL_P 0.14 accepted
+expect params.value.ATC_RAT_RLL_P 0.14
+expect config.extended.changes none
+expect config.extended.number.RATE_RLL_P.marked false
+expect params.value.ATC_RAT_PIT_P 0.135
+
+# And back, through the button.
+click extended-RATE_RLL_P
+key ctrl+u
+type 0.135
+key Return
+expect config.extended.changes ATC_RAT_RLL_P=0.135
+click extended-BUT_writePIDS
+settle 2
+expect config.extended.write ATC_RAT_RLL_P 0.135 accepted
+expect params.value.ATC_RAT_RLL_P 0.135
+expect config.extended.changes none
+
+# The lock is a plain check box.
+click extended-CHK_lockrollpitch
+expect config.extended.lock unchecked
+click extended-CHK_lockrollpitch
+expect config.extended.lock checked
+
+# RC8's option goes into changes. Camera Trigger is in the first thirty rows of either
+# documentation's list, and the list opens at the top for Do Nothing.
+click extended-CH8_OPTION
+expect config.extended.list.top 0
+click extended-CH8_OPTION-9
+expect config.extended.combo.CH8_OPTION 9
+expect config.extended.combo.CH8_OPTION.text Camera Trigger
+expect config.extended.combo.CH8_OPTION.marked true
+expect config.extended.changes RC8_OPTION=9
+expect params.value.RC8_OPTION 0
+# From 0 any option is more than double: Write Params asks first.
+click extended-BUT_writePIDS
+settle 1
+expect config.extended.large RC8_OPTION has more than doubled the last input. Are you sure?
+# No puts the vehicle's value back as text, which no row of the list is: the combo keeps its
+# choice and changes its value, the colour clears, and nothing is written.
+click extended-large-no
+settle 1
+expect config.extended.large none
+expect config.extended.writing false
+expect config.extended.combo.CH8_OPTION 9
+expect config.extended.combo.CH8_OPTION.marked false
+expect config.extended.changes RC8_OPTION=9
+expect params.value.RC8_OPTION 0
+# Asked again, Yes writes it.
+click extended-BUT_writePIDS
+settle 1
+expect config.extended.large RC8_OPTION has more than doubled the last input. Are you sure?
+click extended-large-yes
+settle 2
+expect config.extended.write RC8_OPTION 9 accepted
+expect params.value.RC8_OPTION 9
+expect config.extended.changes none
+# And back: 0 is not more than double 9, so nothing is asked.
+click extended-CH8_OPTION
+click extended-CH8_OPTION-0
+expect config.extended.changes RC8_OPTION=0
+click extended-BUT_writePIDS
+settle 2
+expect config.extended.large none
+expect config.extended.write RC8_OPTION 0 accepted
+expect params.value.RC8_OPTION 0
+
+# RC9's option has no ValueUpdated: it writes the moment it changes, and changes stays empty.
+click extended-CH9_OPTION
+click extended-CH9_OPTION-9
+settle 2
+expect config.extended.changes none
+expect config.extended.write RC9_OPTION 9 accepted
+expect params.value.RC9_OPTION 9
+click extended-CH9_OPTION
+click extended-CH9_OPTION-0
+settle 2
+expect config.extended.write RC9_OPTION 0 accepted
+expect params.value.RC9_OPTION 0
+expect config.extended.message none
+expect config.extended.writes.pending 0
+
+# Refresh Screen reads each box's parameter again, one at a time - the eleven this vehicle lacks
+# each wait out GetParam's retries - then runs Activate.
+click extended-BUT_refreshpart
+expect config.extended.refreshing true
+settle 45
+expect config.extended.refreshing false
+expect config.extended.number.RATE_RLL_P 0.135
+expect config.extended.number.HLD_LAT_P.enabled false
+expect config.extended.message none
+
+# Choosing another page hides this one (BackstageView.cs:453-464).
+click config-page-ConfigPlanner
+expect config.page ConfigPlanner
+expect config.extended.active false

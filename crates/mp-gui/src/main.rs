@@ -337,6 +337,12 @@ struct MissionPlanner {
     /// The focus of its box being typed into.
     basic_tuning_focus: gpui::FocusHandle,
     // ---- end Basic Tuning / Advanced ----
+    // ---- Extended Tuning ----
+    /// CONFIG's Extended Tuning page (`ConfigArducopter`), and the focus of the box being typed
+    /// into.
+    extended_tuning: config::extended_tuning::ExtendedTuning,
+    extended_focus: config::extended_tuning::Focus,
+    // ---- end Extended Tuning ----
 }
 
 impl MissionPlanner {
@@ -562,6 +568,10 @@ impl MissionPlanner {
             basic_tuning: config::basic_tuning::BasicTuning::default(),
             basic_tuning_focus: cx.focus_handle(),
             // ---- end Basic Tuning / Advanced ----
+            // ---- Extended Tuning ----
+            extended_tuning: config::extended_tuning::ExtendedTuning::default(),
+            extended_focus: config::extended_tuning::Focus::new(cx),
+            // ---- end Extended Tuning ----
         };
         // Opening on the planning screen activates it, as switching to it does.
         if this.screen == Screen::Plan {
@@ -1809,6 +1819,11 @@ impl Render for MissionPlanner {
         // Basic Tuning's page object, the box the focus left, Refresh Params and Write Params.
         self.basic_tuning_tick(&view, window);
         // ---- end Basic Tuning / Advanced ----
+        // ---- Extended Tuning ----
+        // CONFIG's Extended Tuning page: its page object, the box the focus left, Write Params'
+        // and Refresh Screen's calls.
+        self.extended_tuning_tick(&view, window);
+        // ---- end Extended Tuning ----
         let banner = self.telemetry.firmware_banner().map(str::to_owned);
         let mav_type = view.state.as_ref().map_or(0, |state| state.vehicle_type);
         self.metadata.advance(banner.as_deref(), mav_type);
@@ -2108,6 +2123,9 @@ impl Render for MissionPlanner {
             );
             // ---- end Basic Tuning / Advanced ----
             config::planner::record_facts(&self.planner, &self.persisted, self.auto_read_mission);
+            // ---- Extended Tuning ----
+            config::extended_tuning::record_facts(&self.extended_tuning, &view);
+            // ---- end Extended Tuning ----
             facts::publish();
             // The harness's work, which a normal run does not do, is not the frame's.
             storm::exclude(harness.elapsed());
@@ -2420,6 +2438,9 @@ impl Render for MissionPlanner {
                     cx,
                 ))
                 // ---- end Basic Tuning / Advanced ----
+                // ---- Extended Tuning ----
+                .children(self.extended_tuning_overlay(window, cx))
+                // ---- end Extended Tuning ----
                 .into_any_element(),
         };
 

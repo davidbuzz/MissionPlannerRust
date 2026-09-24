@@ -762,7 +762,19 @@ pub const PANELS: &[Panel] = &[
             // with Q_ENABLE set.
             config(182, "QP Extended Tuning", "plane (enabled for a quadplane)"),
         ],
-        Missing,
+        // ---- Extended Tuning ----
+        // C#: GCSViews/ConfigurationView/ConfigArducopter.cs:26-501, ported whole: the 59
+        // MavlinkNumericUpDowns bound to the first of the names Activate tries for each (the rate
+        // IMAXes by the 3.4 names, a tenth or not), disabled when the vehicle has none; TUNE and
+        // the RC6-RC10 options; every change through ValueUpdated into changes, marked green,
+        // with the lock's roll/pitch pairing for RATE_/STB_/ACRO_ names and LOITER_LAT_ to
+        // LOITER_LON_; Write Params and ctrl+S with the more-than-double question; CH9/CH10
+        // writing at once; Refresh Screen's GetParams and Activate; the 4.7 unit warning on
+        // Enter; the tool tips. Refresh Params is invisible in the .resx and not drawn.
+        // Divergences at their sites in extended_tuning.rs: changes kept in the order changed
+        // where the Hashtable's is its buckets'; the writes do not hold the window.
+        Ours::Done(at("crates/mp-gui/src/config/extended_tuning.rs", "fn page")),
+        // ---- end Extended Tuning ----
     ),
     panel(
         "ConfigArduplane",
@@ -1684,7 +1696,7 @@ mod tests {
             );
             checked += 1;
         }
-        assert_eq!(checked, 28);
+        assert_eq!(checked, 29);
     }
 
     /// The committed report matches the table.
@@ -1716,7 +1728,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (9, 18, 28, 2, 4)
+            (10, 18, 27, 2, 4)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()
