@@ -539,6 +539,61 @@ impl Link {
         self.queue_request(target, RequestKind::SetCurrent { seq })
     }
 
+    /// Sends a `COMMAND_INT` and waits for its `COMMAND_ACK`: `doCommandInt`, three more times
+    /// two seconds apart, anything but `ACCEPTED` a refusal.
+    ///
+    /// `require_ack` false sends once and does not wait, as the C#'s `requireack` does.
+    #[allow(clippy::too_many_arguments)] // the C#'s seven, plus the frame and the wait
+    pub fn command_int(
+        &self,
+        target: VehicleId,
+        command: u16,
+        frame: u8,
+        params: [f32; 4],
+        x: i32,
+        y: i32,
+        z: f32,
+        require_ack: bool,
+    ) -> RequestId {
+        self.queue_request(
+            target,
+            RequestKind::CommandInt {
+                command,
+                frame,
+                params,
+                x,
+                y,
+                z,
+                require_ack,
+            },
+        )
+    }
+
+    /// Sends one mission item and waits for the vehicle to acknowledge it or ask for the next:
+    /// `setWP`, ten more times 450 ms apart. `item` must be a `MISSION_ITEM` or a
+    /// `MISSION_ITEM_INT`; anything else is refused with `None` and nothing is sent.
+    pub fn set_wp(&self, target: VehicleId, item: MavMessage) -> Option<RequestId> {
+        let seq = match &item {
+            MavMessage::MissionItem(m) => m.seq,
+            MavMessage::MissionItemInt(m) => m.seq,
+            _ => return None,
+        };
+        Some(self.queue_request(
+            target,
+            RequestKind::SetWp {
+                item: Box::new(item),
+                seq,
+            },
+        ))
+    }
+
+    /// Asks for the home position and waits for `HOME_POSITION`: `getHomePosition`, three more
+    /// asks 700 ms apart. The position itself lands in the vehicle's state as every
+    /// `HOME_POSITION` does; the request says when.
+    pub fn get_home_position(&self, target: VehicleId) -> RequestId {
+        self.queue_request(target, RequestKind::GetHomePosition)
+    }
+
     /// Sets one rally point with the legacy `RALLY_POINT` message and reads it back with
     /// `RALLY_FETCH_POINT`: `setRallyPoint`. See [`requests::RallyPointSet`].
     pub fn set_rally_point(&self, target: VehicleId, point: requests::RallyPointSet) -> RequestId {
@@ -1107,6 +1162,71 @@ fn run_link(
                             {
                                 held.observe(frame.sysid, frame.compid, config.sysid, &msg);
                             }
+                            // A set-WP of one item (setWPAsync) waits for the vehicle's ack or
+                            // its request for the item after; the C# holds the port for that
+                            // loop, so no transfer runs meanwhile, and one that takes the
+                            // message keeps it from the transfer machines. A HOME_POSITION
+                            // answers a getHomePosition.
+                            let mut taken = false;
+                            {
+                                let to_us = |system: u8, component: u8| {
+                                    system == gcs.sysid && component == gcs.compid
+                                };
+                                let now = Instant::now();
+                                match &msg {
+                                    MavMessage::MissionAck(m) => {
+                                        if let Ok(mut held) = shared.requests.lock() {
+                                            let addressed =
+                                                to_us(m.target_system, m.target_component);
+                                            taken = held.values_mut().any(|request| {
+                                                request.on_mission_ack(id, addressed, m.r#type)
+                                            });
+                                        }
+                                    }
+                                    MavMessage::MissionRequest(m) => {
+                                        if let Ok(mut held) = shared.requests.lock() {
+                                            let addressed =
+                                                to_us(m.target_system, m.target_component);
+                                            for request in held.values_mut() {
+                                                let (took, send) = request
+                                                    .on_mission_request(id, addressed, m.seq, now);
+                                                if took {
+                                                    taken = true;
+                                                    if send != requests::Outgoing::Nothing {
+                                                        request_sends.push(send);
+                                                    }
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    MavMessage::MissionRequestInt(m) => {
+                                        if let Ok(mut held) = shared.requests.lock() {
+                                            let addressed =
+                                                to_us(m.target_system, m.target_component);
+                                            for request in held.values_mut() {
+                                                let (took, send) = request
+                                                    .on_mission_request(id, addressed, m.seq, now);
+                                                if took {
+                                                    taken = true;
+                                                    if send != requests::Outgoing::Nothing {
+                                                        request_sends.push(send);
+                                                    }
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    MavMessage::HomePosition(_) => {
+                                        if let Ok(mut held) = shared.requests.lock() {
+                                            for request in held.values_mut() {
+                                                request.on_home_position(id);
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
                             // Mission transfer is lock-step, so every relevant message may
                             // produce exactly one reply. The state machine decides which.
                             //
@@ -1115,7 +1235,8 @@ fn run_link(
                             // so routing by vehicle alone would let a fence's MISSION_COUNT be
                             // answered as if it were the mission's - and write a geofence into
                             // the flight plan.
-                            if let Some((kind, action)) = route_transfer(shared, id, &msg)
+                            if !taken
+                                && let Some((kind, action)) = route_transfer(shared, id, &msg)
                                 && action != Action::Nothing
                             {
                                 pending_actions.push((id, kind, action));

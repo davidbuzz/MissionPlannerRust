@@ -13,9 +13,9 @@ projects — as a Rust application that is **fast**, **multi-platform** and **GP
 Early, but flyable behind SITL and a real autopilot. The protocol and telemetry spine is solid; the
 UI covers flying, planning and the first of the setup screens.
 
-Measured on this tree: **23 crates, 251,462 hand-written Rust LOC** (plus 91,634 generated; `.rs` files
-under `crates/`, tests included), **2,691 tests** green on `cargo test --workspace` (35 ignored:
-they need SITL, a window, or the network), **133 GUI scripts** under `tests/gui/`, across 203 commits.
+Measured on this tree: **23 crates, 252,700 hand-written Rust LOC** (plus 91,634 generated; `.rs` files
+under `crates/`, tests included), **2,708 tests** green on `cargo test --workspace` (40 ignored:
+they need SITL, a window, or the network), **133 GUI scripts** under `tests/gui/`, across 211 commits.
 Linux only, so far: the repository has no remote, and the three-OS CI matrix has never run.
 
 | Working today | |
@@ -23,7 +23,7 @@ Linux only, so far: the repository has no remote, and the three-OS CI matrix has
 | MAVLink v1/v2 codec | zero-copy parse, allocation-free encode, v2 signing |
 | Generated dialect | 349 messages, 206 enums, generated from the upstream XML |
 | Transports | serial, TCP, UDP, a UDP client, websocket and NTRIP (the last three held to the C# classes run under mono), file replay, in-memory test doubles; port enumeration by `CommsSerialPort.GetPortNames`'s rules, held to per-OS fixtures; faults and a real pty unplug rehearsed in tests |
-| Link engine | I/O thread, multi-vehicle routing (50 systems in one test), stream requests; parameter sets, reads, commands, set-current and mission transfer with Mission Planner's own retry counts and waits, proved by counting sends under dropped, delayed and duplicated frames; every set and command the screens and `mpr` send goes through them |
+| Link engine | I/O thread, multi-vehicle routing (50 systems in one test), stream requests; parameter sets, reads, commands and `COMMAND_INT`s, set-current, single mission items, the home-position ask and mission transfer with Mission Planner's own retry counts and waits, proved by counting sends under dropped, delayed and duplicated frames; every set and command the screens and `mpr` send goes through them |
 | Vehicle state | lock-free snapshot bus, packet-loss tracking; all 550 of `CurrentState`'s members accounted for (471 held with the C#'s rules, 48 derived, 30 plumbing, 1 dropped), the last 55 matched per packet to the C#'s own `UpdateCurrentSettings` under mono |
 | Parameters | full download with gap recovery, typed values, 1,408 from SITL |
 | `.param` files | save, load and compare against a vehicle, honouring the C# skip-list |

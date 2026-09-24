@@ -165,9 +165,14 @@ mission/rally/fence up- and download, MAVFTP, log download, command_long/ack, re
   sets and commands go through those requests, with the C#'s message texts on the status line
   (PLAN.md §13.4 row 11). MAVFTP is `MAVFtp.cs` whole (row 36): the burst read with its gap filling, list, upload, remove, rename, CRC32, the C#'s retry table, as a state machine in `mp-ftp` the link drives, with `mpr ftp`; the C#'s own `MAVFtp` under mono gives the same request bytes and the same `param.pck` from SITL. On a real Cube Orange over USB
   (2026-09-24): 929 parameters downloaded and reported complete, `@SYS` listed over MAVFTP, six
-  logs listed. **Not yet:** the log-download machine as a request; `uploadPartial`,
-  `getHomePosition`, `doCommandInt` and `setWP` as requests, which is why Change Alt, Format SD and
-  the `COMMAND_INT`s still go out once, raw.
+  logs listed. `doCommandInt`, `setWP` for one item and `getHomePosition` are requests too
+  (PLAN.md §13.6 row 74): a `COMMAND_INT` waits for its ack with `doCommandAsync`'s three retries
+  and none of its `IN_PROGRESS` patience, a press's `MISSION_ITEM` waits 450 ms ten more times
+  for the ack or the request for the next item, and `GET_HOME_POSITION` asks again three times
+  700 ms apart for a `HOME_POSITION` - so Change Alt, ArduPlane's guided target, Format SD, the
+  scripting commands, Set Home Here and the camera's `COMMAND_INT`s no longer go out once and
+  raw. **Not yet:** the log-download machine as a request; `uploadPartial`, which only the
+  Dowding plugin calls in the C#.
 - **Tests:** the machines are exercised by `crates/mp-link/tests/retries.rs` (40 tests: every send counted under timeouts, reordering, duplicates and seeded bad links) and `tests/link.rs` against an in-memory vehicle, with the SITL halves behind `--ignored` in `params_sitl.rs`, `mission_sitl.rs`, `fence_sitl.rs`, `commands_sitl.rs` and `logs_sitl.rs`; MAVFTP is `crates/mp-ftp/tests/mavftp.rs` and `csharp.rs` (768 names, the CRC vectors and 13 payloads against `MAVFtp.cs` under mono); `tests/routing.rs` (50 systems, 56 components through one link); `tests/no_alloc_ingest.rs`, `replay_clock.rs`, `current_state.rs`, `telemetry_storm.rs`, `traffic.rs`. Not yet: a log-download machine as a request, and `params_sitl.rs` does not diff the downloaded set against the C# application's dump.
 
 ### D5. Vehicle state model + telemetry bus

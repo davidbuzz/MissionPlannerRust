@@ -110,6 +110,9 @@ pub struct ProtocolTimeouts {
     ///
     /// C#: MAVLinkInterface.cs:6363 (`retrys = 3`), :6367 (700 ms).
     pub rally_fetch: Retry,
+    /// `getHomePositionAsync`: `GET_HOME_POSITION` until a `HOME_POSITION` arrives.
+    /// C#: MAVLinkInterface.cs:3362 (`retrys = 3`), :3366 (700 ms).
+    pub home_position: Retry,
 }
 
 impl Default for ProtocolTimeouts {
@@ -132,6 +135,7 @@ impl Default for ProtocolTimeouts {
             ftp: mp_ftp::mavftp::FtpTimeouts::default(),
             stream_rerequest: Duration::from_secs(30 + 8),
             rally_fetch: Retry::new(700, 3),
+            home_position: Retry::new(700, 3),
         }
     }
 }
@@ -167,6 +171,7 @@ impl ProtocolTimeouts {
             ftp: self.ftp.faster(divisor),
             stream_rerequest: self.stream_rerequest / divisor,
             rally_fetch: scale(self.rally_fetch),
+            home_position: scale(self.home_position),
         }
     }
 }

@@ -1,7 +1,8 @@
 //! Send one message, wait for its answer, send again: Mission Planner's request loops.
 //!
-//! `setParamAsync`, `GetParamAsync`, `doCommandAsync` and `setWPCurrentAsync` in
-//! `ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs` are four copies of one loop: send, wait a fixed
+//! `setParamAsync`, `GetParamAsync`, `doCommandAsync`, `doCommandIntAsync`, `setWPCurrentAsync`,
+//! `setWPAsync` and `getHomePositionAsync` in `ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs` are
+//! copies of one loop: send, wait a fixed
 //! time for a message that matches, send again while retries remain, then throw
 //! `TimeoutException`. They differ only in what they send, what answer they wait for, and their
 //! numbers. So here they are one machine, [`Request`], with the differences in [`RequestKind`] and
@@ -79,6 +80,40 @@ pub enum RequestKind {
     /// vehicle sends that point back - and the point again if what came back is not what was
     /// sent, three times in all. See [`RallyPointSet`].
     SetRallyPoint(RallyPointSet),
+    /// `doCommandIntAsync`: `COMMAND_INT` until a `COMMAND_ACK` for this command, three more
+    /// times two seconds apart as `doCommandAsync` sends, with none of its special cases - and
+    /// none of its `IN_PROGRESS` patience: anything but `ACCEPTED` is `false` (`:2940-2949`).
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2847-2951`
+    CommandInt {
+        /// `MAV_CMD`.
+        command: u16,
+        /// `MAV_FRAME`, which the C# defaults to `GLOBAL`.
+        frame: u8,
+        /// param1 to param4.
+        params: [f32; 4],
+        /// `x`, param5 as an integer.
+        x: i32,
+        /// `y`, param6 as an integer.
+        y: i32,
+        /// `z`, param7.
+        z: f32,
+        /// Whether to wait for the ack at all (the C#'s `requireack`).
+        require_ack: bool,
+    },
+    /// `setWPAsync` for one item: a `MISSION_ITEM` or `MISSION_ITEM_INT` until the vehicle
+    /// acknowledges it or asks for the item after it, ten more times 450 ms apart - Change Alt,
+    /// and ArduPlane's guided target.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4061-4235, 4236-4380`
+    SetWp {
+        /// The item as built, sent as it is. Boxed: a message is the largest thing a kind holds.
+        item: Box<MavMessage>,
+        /// Its sequence number: the vehicle asking for `seq + 1` is an acceptance.
+        seq: u16,
+    },
+    /// `getHomePositionAsync`: `GET_HOME_POSITION` - `doCommand` with `requireack` false each
+    /// time - until a `HOME_POSITION` arrives, three more times 700 ms apart.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3343-3387`
+    GetHomePosition,
 }
 
 /// One rally point as `setRallyPoint` puts it in a `mavlink_rally_point_t`: the position as
@@ -383,6 +418,34 @@ impl Request {
                 self.attempts_left = RALLY_POINT_SENDS - 1;
                 Outgoing::Pair(point, fetch)
             }
+            RequestKind::CommandInt {
+                command,
+                frame,
+                params,
+                x,
+                y,
+                z,
+                require_ack,
+            } => {
+                let message = commands::command_int(target, *command, *frame, *params, *x, *y, *z);
+                if *require_ack {
+                    // `retrys = 3; timeout = 2000` (:2884-2885), the same as doCommandAsync's.
+                    self.arm(message, timeouts.command, now);
+                } else {
+                    self.finish(RequestOutcome::Sent);
+                }
+                Outgoing::Once(message)
+            }
+            RequestKind::SetWp { item, .. } => {
+                let item = **item;
+                self.arm(item, timeouts.mission_item_send, now);
+                Outgoing::Once(item)
+            }
+            RequestKind::GetHomePosition => {
+                let message = commands::command(target, CMD_GET_HOME_POSITION, [0.0; 7]);
+                self.arm(message, timeouts.home_position, now);
+                Outgoing::Once(message)
+            }
         };
         self.count(send)
     }
@@ -405,7 +468,10 @@ impl Request {
             RequestKind::ReadParam(ParamKey::Index(wanted)) => *wanted == index,
             RequestKind::Command { .. }
             | RequestKind::SetCurrent { .. }
-            | RequestKind::SetRallyPoint(_) => false,
+            | RequestKind::SetRallyPoint(_)
+            | RequestKind::CommandInt { .. }
+            | RequestKind::SetWp { .. }
+            | RequestKind::GetHomePosition => false,
         };
         if matches {
             self.finish(RequestOutcome::Accepted { value: Some(value) });
@@ -425,20 +491,20 @@ impl Request {
         if self.state != RequestState::Waiting || from != self.target {
             return false;
         }
-        let RequestKind::Command {
-            command: wanted, ..
-        } = self.kind
-        else {
-            return false;
+        let (wanted, int) = match self.kind {
+            RequestKind::Command { command, .. } => (command, false),
+            RequestKind::CommandInt { command, .. } => (command, true),
+            _ => return false,
         };
         if wanted != command {
-            // "Commands dont match", and keep waiting (:2808-2813).
+            // "Commands dont match", and keep waiting (:2808-2813; :2927-2934).
             return false;
         }
         match result {
             // Wait a whole timeout again, with no retries left: the vehicle has the command, and
-            // sending it again would start it again (:2818-2823).
-            MAV_RESULT_IN_PROGRESS => {
+            // sending it again would start it again (:2818-2823). doCommandIntAsync has no such
+            // branch - anything but ACCEPTED is its `false` (:2940-2949).
+            MAV_RESULT_IN_PROGRESS if !int => {
                 self.deadline = now + self.policy.timeout;
                 self.retries_left = 0;
             }
@@ -446,6 +512,71 @@ impl Request {
             other => self.finish(RequestOutcome::Rejected(other)),
         }
         true
+    }
+
+    /// A `MISSION_ACK` arrived from `from`, addressed to this ground station or not. `setWPAsync`
+    /// takes only one addressed to it ("check this gcs sent it", :4084-4087) and ends with its
+    /// result: accepted, or the `MAV_MISSION_RESULT` the vehicle refused with (:4108-4112).
+    ///
+    /// Returns whether a set-WP took it, so the transfer machines do not read it as theirs.
+    pub fn on_mission_ack(&mut self, from: VehicleId, to_us: bool, result: u8) -> bool {
+        if self.state != RequestState::Waiting
+            || from != self.target
+            || !matches!(self.kind, RequestKind::SetWp { .. })
+            || !to_us
+        {
+            return false;
+        }
+        if result == crate::mission_transfer::MISSION_ACCEPTED {
+            self.finish(RequestOutcome::Accepted { value: None });
+        } else {
+            self.finish(RequestOutcome::Rejected(result));
+        }
+        true
+    }
+
+    /// A `MISSION_REQUEST` or `MISSION_REQUEST_INT` for `seq` arrived from `from`. For a set-WP,
+    /// one addressed to this ground station asking for the item after the one sent is an
+    /// acceptance (:4115-4143); any other says the vehicle is on another item, and the point goes
+    /// again at once, spending a retry - `start = DateTime.MinValue` (:4177-4182) and the loop's
+    /// top resends or throws.
+    ///
+    /// Returns whether a set-WP took it, and what to send.
+    pub fn on_mission_request(
+        &mut self,
+        from: VehicleId,
+        to_us: bool,
+        seq: u16,
+        now: Instant,
+    ) -> (bool, Outgoing) {
+        if self.state != RequestState::Waiting || from != self.target || !to_us {
+            return (false, Outgoing::Nothing);
+        }
+        let RequestKind::SetWp { item, seq: sent } = &self.kind else {
+            return (false, Outgoing::Nothing);
+        };
+        let (item, sent) = (**item, *sent);
+        if seq == sent.wrapping_add(1) {
+            self.finish(RequestOutcome::Accepted { value: None });
+            return (true, Outgoing::Nothing);
+        }
+        if self.retries_left == 0 {
+            self.finish(RequestOutcome::TimedOut);
+            return (true, Outgoing::Nothing);
+        }
+        self.retries_left -= 1;
+        self.deadline = now + self.policy.timeout;
+        (true, self.count(Outgoing::Once(item)))
+    }
+
+    /// A `HOME_POSITION` arrived from `from`: it answers a `getHomePosition` (:3346-3355).
+    pub fn on_home_position(&mut self, from: VehicleId) {
+        if self.state == RequestState::Waiting
+            && from == self.target
+            && matches!(self.kind, RequestKind::GetHomePosition)
+        {
+            self.finish(RequestOutcome::Accepted { value: None });
+        }
     }
 
     /// A `MISSION_CURRENT` arrived from `from`: any one ends a set-current (:2482-2487).
@@ -513,7 +644,11 @@ impl Request {
         }
         self.retries_left -= 1;
         self.deadline = now + self.policy.timeout;
-        if let MavMessage::CommandLong(long) = &mut message {
+        // doCommandAsync's retries send `req` again with its confirmation counted up; a
+        // getHomePosition retry is a fresh `doCommand`, at zero (:3369).
+        if let MavMessage::CommandLong(long) = &mut message
+            && !matches!(self.kind, RequestKind::GetHomePosition)
+        {
             long.confirmation = long.confirmation.wrapping_add(1);
             self.message = Some(message);
         }
@@ -815,5 +950,244 @@ mod tests {
         );
         assert_eq!(request.outcome(), Some(RequestOutcome::TimedOut));
         assert_eq!(request.sends(), 1);
+    }
+
+    fn command_int() -> RequestKind {
+        RequestKind::CommandInt {
+            command: commands::CMD_DO_SET_HOME,
+            frame: commands::FRAME_GLOBAL,
+            params: [0.0; 4],
+            x: -353_632_620,
+            y: 1_491_652_370,
+            z: 584.0,
+            require_ack: true,
+        }
+    }
+
+    /// `doCommandIntAsync`: `retrys = 3; timeout = 2000` (:2884-2885), the `COMMAND_INT` sent
+    /// again as it was - it has no confirmation field - then "Timeout on read - doCommand".
+    #[test]
+    fn a_command_int_is_sent_four_times_then_times_out() {
+        let t = ProtocolTimeouts::default();
+        let t0 = Instant::now();
+        let mut request = Request::new(target(), command_int());
+        let mut sent = 0;
+        let mut record = |send: Outgoing| {
+            if let Outgoing::Once(MavMessage::CommandInt(int)) = send {
+                assert_eq!(int.command, commands::CMD_DO_SET_HOME);
+                assert_eq!((int.x, int.y), (-353_632_620, 1_491_652_370));
+                sent += 1;
+            }
+        };
+        record(request.begin(&t, None, true, t0));
+        for step in 1..=4u32 {
+            record(request.on_tick(t0 + t.command.timeout * step));
+        }
+        assert_eq!(sent, 4);
+        assert_eq!(request.outcome(), Some(RequestOutcome::TimedOut));
+        assert_eq!(request.sends(), t.command.sends());
+    }
+
+    /// Anything but ACCEPTED is `false` for doCommandIntAsync (:2940-2949): IN_PROGRESS, which
+    /// doCommandAsync waits on, ends a command-int as a refusal.
+    #[test]
+    fn a_command_int_takes_only_its_own_ack_and_in_progress_is_a_refusal() {
+        let t = ProtocolTimeouts::default();
+        let t0 = Instant::now();
+        let mut request = Request::new(target(), command_int());
+        let _ = request.begin(&t, None, true, t0);
+        assert!(!request.on_command_ack(target(), 22, MAV_RESULT_ACCEPTED, t0));
+        assert!(!request.on_command_ack(
+            VehicleId::new(2, 1),
+            commands::CMD_DO_SET_HOME,
+            MAV_RESULT_ACCEPTED,
+            t0
+        ));
+        assert_eq!(request.outcome(), None);
+        assert!(request.on_command_ack(
+            target(),
+            commands::CMD_DO_SET_HOME,
+            MAV_RESULT_IN_PROGRESS,
+            t0
+        ));
+        assert_eq!(
+            request.outcome(),
+            Some(RequestOutcome::Rejected(MAV_RESULT_IN_PROGRESS))
+        );
+
+        let mut accepted = Request::new(target(), command_int());
+        let _ = accepted.begin(&t, None, true, t0);
+        assert!(accepted.on_command_ack(
+            target(),
+            commands::CMD_DO_SET_HOME,
+            MAV_RESULT_ACCEPTED,
+            t0
+        ));
+        assert_eq!(
+            accepted.outcome(),
+            Some(RequestOutcome::Accepted { value: None })
+        );
+    }
+
+    /// `requireack` false: sent once, not waited for (:2874-2878).
+    #[test]
+    fn a_command_int_without_an_ack_wanted_is_sent_once_and_done() {
+        let t = ProtocolTimeouts::default();
+        let RequestKind::CommandInt {
+            command,
+            frame,
+            params,
+            x,
+            y,
+            z,
+            ..
+        } = command_int()
+        else {
+            unreachable!()
+        };
+        let mut request = Request::new(
+            target(),
+            RequestKind::CommandInt {
+                command,
+                frame,
+                params,
+                x,
+                y,
+                z,
+                require_ack: false,
+            },
+        );
+        assert!(matches!(
+            request.begin(&t, None, true, Instant::now()),
+            Outgoing::Once(MavMessage::CommandInt(_))
+        ));
+        assert_eq!(request.outcome(), Some(RequestOutcome::Sent));
+    }
+
+    fn set_wp() -> RequestKind {
+        RequestKind::SetWp {
+            item: Box::new(commands::change_alt(target(), 25.0)),
+            seq: 0,
+        }
+    }
+
+    /// `setWPAsync`: `retrys = 10`, 450 ms (:4250-4254), eleven sends, then "Timeout on read -
+    /// setWP" (:4258).
+    #[test]
+    fn a_set_wp_is_sent_eleven_times_then_times_out() {
+        let t = ProtocolTimeouts::default();
+        let t0 = Instant::now();
+        let mut request = Request::new(target(), set_wp());
+        let mut sent = 0;
+        let mut record = |send: Outgoing| {
+            if let Outgoing::Once(MavMessage::MissionItem(item)) = send {
+                assert_eq!(item.current, 3);
+                sent += 1;
+            }
+        };
+        record(request.begin(&t, None, true, t0));
+        for step in 1..=11u32 {
+            record(request.on_tick(t0 + t.mission_item_send.timeout * step));
+        }
+        assert_eq!(sent, 11);
+        assert_eq!(request.outcome(), Some(RequestOutcome::TimedOut));
+        assert_eq!(request.sends(), t.mission_item_send.sends());
+    }
+
+    /// A `MISSION_ACK` to another ground station is somebody else's (:4084-4087); one to this
+    /// one ends the set with its result (:4108-4112).
+    #[test]
+    fn a_set_wp_takes_only_an_ack_addressed_to_us() {
+        let t = ProtocolTimeouts::default();
+        let t0 = Instant::now();
+        let mut request = Request::new(target(), set_wp());
+        let _ = request.begin(&t, None, true, t0);
+        assert!(!request.on_mission_ack(target(), false, 0));
+        assert!(!request.on_mission_ack(VehicleId::new(2, 1), true, 0));
+        assert_eq!(request.outcome(), None);
+        assert!(request.on_mission_ack(target(), true, 13));
+        assert_eq!(request.outcome(), Some(RequestOutcome::Rejected(13)));
+
+        let mut accepted = Request::new(target(), set_wp());
+        let _ = accepted.begin(&t, None, true, t0);
+        assert!(accepted.on_mission_ack(target(), true, 0));
+        assert_eq!(
+            accepted.outcome(),
+            Some(RequestOutcome::Accepted { value: None })
+        );
+    }
+
+    /// The vehicle asking for the item after the one sent is an acceptance (:4115-4143); asking
+    /// for any other sends the item again at once, spending a retry (:4177-4182), and with none
+    /// left the loop's top throws.
+    #[test]
+    fn a_set_wp_is_accepted_by_a_request_for_the_next_item_and_resent_at_once_for_any_other() {
+        let t = ProtocolTimeouts::default();
+        let t0 = Instant::now();
+        let mut request = Request::new(target(), set_wp());
+        let _ = request.begin(&t, None, true, t0);
+        assert_eq!(
+            request.on_mission_request(target(), false, 1, t0),
+            (false, Outgoing::Nothing)
+        );
+        let (took, send) = request.on_mission_request(target(), true, 7, t0);
+        assert!(took);
+        assert!(matches!(send, Outgoing::Once(MavMessage::MissionItem(_))));
+        assert_eq!(request.sends(), 2);
+        assert_eq!(request.outcome(), None);
+        assert_eq!(
+            request.on_mission_request(target(), true, 1, t0),
+            (true, Outgoing::Nothing)
+        );
+        assert_eq!(
+            request.outcome(),
+            Some(RequestOutcome::Accepted { value: None })
+        );
+
+        let mut worn = Request::new(target(), set_wp());
+        let _ = worn.begin(&t, None, true, t0);
+        for _ in 0..10 {
+            let (took, send) = worn.on_mission_request(target(), true, 7, t0);
+            assert!(took && send != Outgoing::Nothing);
+        }
+        assert_eq!(worn.sends(), 11);
+        assert_eq!(
+            worn.on_mission_request(target(), true, 7, t0),
+            (true, Outgoing::Nothing)
+        );
+        assert_eq!(worn.outcome(), Some(RequestOutcome::TimedOut));
+    }
+
+    /// `getHomePositionAsync`: `doCommand(GET_HOME_POSITION, ..., false)` then again three
+    /// times 700 ms apart (:3357-3372), each a fresh command at confirmation zero, then
+    /// "Timeout on read - getHomePosition"; any `HOME_POSITION` from the vehicle ends it.
+    #[test]
+    fn get_home_position_asks_four_times_at_confirmation_zero_then_times_out() {
+        let t = ProtocolTimeouts::default();
+        let t0 = Instant::now();
+        let mut request = Request::new(target(), RequestKind::GetHomePosition);
+        let mut confirmations = Vec::new();
+        let mut record = |send: Outgoing| {
+            if let Outgoing::Once(MavMessage::CommandLong(long)) = send {
+                assert_eq!(long.command, CMD_GET_HOME_POSITION);
+                confirmations.push(long.confirmation);
+            }
+        };
+        record(request.begin(&t, None, true, t0));
+        for step in 1..=4u32 {
+            record(request.on_tick(t0 + t.home_position.timeout * step));
+        }
+        assert_eq!(confirmations, vec![0, 0, 0, 0]);
+        assert_eq!(request.outcome(), Some(RequestOutcome::TimedOut));
+
+        let mut answered = Request::new(target(), RequestKind::GetHomePosition);
+        let _ = answered.begin(&t, None, true, t0);
+        answered.on_home_position(VehicleId::new(2, 1));
+        assert_eq!(answered.outcome(), None);
+        answered.on_home_position(target());
+        assert_eq!(
+            answered.outcome(),
+            Some(RequestOutcome::Accepted { value: None })
+        );
     }
 }

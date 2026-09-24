@@ -22,6 +22,8 @@
 //! | `getWPAsync` | 5 | 2500 ms | 3459, 3463 |
 //! | `setWPTotalAsync` | 3 | 700 ms | 3779, 3783 |
 //! | `setWPAsync` | 10 | 450 ms | 4250, 4254 |
+//! | `doCommandIntAsync` | 3 | 2000 ms | 2884, 2885 |
+//! | `getHomePositionAsync` | 3 | 700 ms | 3362, 3366 |
 //! | `getParamListAsync` | 2 whole-list | 4000 ms quiet, 1000 ms rounds of 10 | 2114, 2117, 2135, 2187 |
 //!
 //! Where this port differs from the C# on purpose, the test that shows it says so, with the C#
@@ -44,7 +46,8 @@ use mp_link::requests::{
 use mp_link::{Link, LinkConfig, ProtocolTimeouts, RequestId, commands};
 use mp_mavlink::{FrameDecoder, encode_v2};
 use mp_mavlink_dialects::all::{
-    CommandAck, DIALECT, Heartbeat, MavMessage, MissionCurrent, MissionRequest, ParamValue,
+    CommandAck, DIALECT, Heartbeat, HomePosition, MavMessage, MissionAck, MissionCurrent,
+    MissionRequest, ParamValue,
 };
 use mp_mission::{MISSION_TYPE_MISSION, MissionItem};
 use mp_transport::Transport;
@@ -2194,4 +2197,243 @@ fn a_parameter_download_over_a_bad_link_completes() {
         }
     }
     assert_every_fault_injected("parameters", totals);
+}
+
+/// `doCommandIntAsync`: four `COMMAND_INT` two seconds apart (`retrys = 3`, :2884-2885), then
+/// "Timeout on read - doCommand"; and its ack ends it, anything but ACCEPTED as a refusal.
+#[test]
+fn command_int_is_sent_four_times_then_times_out_and_its_ack_ends_it() {
+    let t = ProtocolTimeouts::default().faster(40);
+    let (link, mut peer) = link(t);
+    let is_int = |m: &MavMessage| matches!(m, MavMessage::CommandInt(_));
+    let set_home = |link: &Link| {
+        link.command_int(
+            VEHICLE,
+            commands::CMD_DO_SET_HOME,
+            commands::FRAME_GLOBAL,
+            [0.0; 4],
+            -353_632_620,
+            1_491_652_370,
+            584.0,
+            true,
+        )
+    };
+
+    let started = Instant::now();
+    let id = set_home(&link);
+    drive(&mut peer, silent, || outcome(&link, id).is_some());
+    let took = started.elapsed();
+    assert_eq!(outcome(&link, id), Some(RequestOutcome::TimedOut));
+    assert_eq!(peer.count(is_int), usize::from(t.command.sends()));
+    assert_eq!(peer.count(is_int), 4);
+    assert!(took >= t.command.timeout * 4, "took {took:?}");
+
+    let before = peer.count(is_int);
+    let answered = set_home(&link);
+    let mut seen = 0;
+    drive(
+        &mut peer,
+        |peer, message| {
+            if is_int(&message) {
+                seen += 1;
+                if seen == 3 {
+                    peer.send(&MavMessage::CommandAck(CommandAck {
+                        command: commands::CMD_DO_SET_HOME,
+                        result: MAV_RESULT_ACCEPTED,
+                        progress: 0,
+                        result_param2: 0,
+                        target_system: GCS.sysid,
+                        target_component: GCS.compid,
+                    }));
+                }
+            }
+        },
+        || outcome(&link, answered).is_some(),
+    );
+    assert_eq!(
+        outcome(&link, answered),
+        Some(RequestOutcome::Accepted { value: None })
+    );
+    assert_eq!(peer.count(is_int) - before, 3);
+
+    let refused = set_home(&link);
+    drive(
+        &mut peer,
+        |peer, message| {
+            if is_int(&message) {
+                peer.send(&MavMessage::CommandAck(CommandAck {
+                    command: commands::CMD_DO_SET_HOME,
+                    result: MAV_RESULT_IN_PROGRESS,
+                    progress: 0,
+                    result_param2: 0,
+                    target_system: GCS.sysid,
+                    target_component: GCS.compid,
+                }));
+            }
+        },
+        || outcome(&link, refused).is_some(),
+    );
+    assert_eq!(
+        outcome(&link, refused),
+        Some(RequestOutcome::Rejected(MAV_RESULT_IN_PROGRESS))
+    );
+}
+
+/// `setWPAsync` for one item: eleven `MISSION_ITEM` 450 ms apart (`retrys = 10`, :4250-4254),
+/// then "Timeout on read - setWP"; a `MISSION_ACK` to this ground station ends it with its
+/// result, one to another is ignored (:4084-4087), and the vehicle asking for the next item is
+/// an acceptance (:4115-4143).
+#[test]
+fn set_wp_is_sent_eleven_times_then_times_out_and_an_ack_or_the_next_request_ends_it() {
+    let t = ProtocolTimeouts::default().faster(40);
+    let (link, mut peer) = link(t);
+    let is_item = |m: &MavMessage| matches!(m, MavMessage::MissionItem(_));
+    let change_alt = |link: &Link| {
+        link.set_wp(VEHICLE, commands::change_alt(VEHICLE, 25.0))
+            .expect("an item")
+    };
+
+    let started = Instant::now();
+    let id = change_alt(&link);
+    drive(&mut peer, silent, || outcome(&link, id).is_some());
+    let took = started.elapsed();
+    assert_eq!(outcome(&link, id), Some(RequestOutcome::TimedOut));
+    assert_eq!(
+        peer.count(is_item),
+        usize::from(t.mission_item_send.sends())
+    );
+    assert_eq!(peer.count(is_item), 11);
+    assert!(took >= t.mission_item_send.timeout * 11, "took {took:?}");
+
+    // An ack to somebody else changes nothing; ours ends it.
+    let before = peer.count(is_item);
+    let acked = change_alt(&link);
+    let mut seen = 0;
+    drive(
+        &mut peer,
+        |peer, message| {
+            if is_item(&message) {
+                seen += 1;
+                let (target_system, target_component) = if seen == 1 {
+                    (7, 7)
+                } else {
+                    (GCS.sysid, GCS.compid)
+                };
+                peer.send(&MavMessage::MissionAck(MissionAck {
+                    target_system,
+                    target_component,
+                    r#type: MISSION_ACCEPTED,
+                    mission_type: MISSION_TYPE_MISSION,
+                }));
+            }
+        },
+        || outcome(&link, acked).is_some(),
+    );
+    assert_eq!(
+        outcome(&link, acked),
+        Some(RequestOutcome::Accepted { value: None })
+    );
+    assert_eq!(peer.count(is_item) - before, 2);
+
+    let before = peer.count(is_item);
+    let requested = change_alt(&link);
+    drive(
+        &mut peer,
+        |peer, message| {
+            if is_item(&message) {
+                peer.send(&MavMessage::MissionRequest(MissionRequest {
+                    seq: 1,
+                    target_system: GCS.sysid,
+                    target_component: GCS.compid,
+                    mission_type: MISSION_TYPE_MISSION,
+                }));
+            }
+        },
+        || outcome(&link, requested).is_some(),
+    );
+    assert_eq!(
+        outcome(&link, requested),
+        Some(RequestOutcome::Accepted { value: None })
+    );
+    assert_eq!(peer.count(is_item) - before, 1);
+
+    let refused = change_alt(&link);
+    drive(
+        &mut peer,
+        |peer, message| {
+            if is_item(&message) {
+                peer.send(&MavMessage::MissionAck(MissionAck {
+                    target_system: GCS.sysid,
+                    target_component: GCS.compid,
+                    r#type: MISSION_NO_SPACE,
+                    mission_type: MISSION_TYPE_MISSION,
+                }));
+            }
+        },
+        || outcome(&link, refused).is_some(),
+    );
+    assert_eq!(
+        outcome(&link, refused),
+        Some(RequestOutcome::Rejected(MISSION_NO_SPACE))
+    );
+}
+
+/// `getHomePositionAsync`: `GET_HOME_POSITION` four times 700 ms apart (`retrys = 3`,
+/// :3362-3366), each a fresh `doCommand` at confirmation zero, then "Timeout on read -
+/// getHomePosition"; any `HOME_POSITION` from the vehicle ends it.
+#[test]
+fn get_home_position_asks_four_times_then_times_out_and_a_home_position_ends_it() {
+    let t = ProtocolTimeouts::default().faster(40);
+    let (link, mut peer) = link(t);
+    let is_ask = |m: &MavMessage| matches!(m, MavMessage::CommandLong(long) if long.command == CMD_GET_HOME_POSITION);
+
+    let started = Instant::now();
+    let id = link.get_home_position(VEHICLE);
+    drive(&mut peer, silent, || outcome(&link, id).is_some());
+    let took = started.elapsed();
+    assert_eq!(outcome(&link, id), Some(RequestOutcome::TimedOut));
+    assert_eq!(peer.count(is_ask), usize::from(t.home_position.sends()));
+    assert_eq!(peer.count(is_ask), 4);
+    assert!(took >= t.home_position.timeout * 4, "took {took:?}");
+    assert_eq!(
+        peer.sent(|m| match m {
+            MavMessage::CommandLong(long) if long.command == CMD_GET_HOME_POSITION =>
+                Some(long.confirmation),
+            _ => None,
+        }),
+        vec![0, 0, 0, 0]
+    );
+
+    let before = peer.count(is_ask);
+    let answered = link.get_home_position(VEHICLE);
+    let mut seen = 0;
+    drive(
+        &mut peer,
+        |peer, message| {
+            if is_ask(&message) {
+                seen += 1;
+                if seen == 2 {
+                    peer.send(&MavMessage::HomePosition(HomePosition {
+                        latitude: -353_632_620,
+                        longitude: 1_491_652_370,
+                        altitude: 584_090,
+                        x: 0.0,
+                        y: 0.0,
+                        z: 0.0,
+                        q: [1.0, 0.0, 0.0, 0.0],
+                        approach_x: 0.0,
+                        approach_y: 0.0,
+                        approach_z: 0.0,
+                        time_usec: 0,
+                    }));
+                }
+            }
+        },
+        || outcome(&link, answered).is_some(),
+    );
+    assert_eq!(
+        outcome(&link, answered),
+        Some(RequestOutcome::Accepted { value: None })
+    );
+    assert_eq!(peer.count(is_ask) - before, 2);
 }

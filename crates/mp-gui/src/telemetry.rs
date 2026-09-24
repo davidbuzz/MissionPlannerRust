@@ -744,6 +744,52 @@ impl Telemetry {
         Some(self.awaiting(id, report))
     }
 
+    /// `doCommandInt` with its acknowledgement waited for: `COMMAND_INT` to `target` until a
+    /// `COMMAND_ACK` for it, sent again three more times two seconds apart, anything but
+    /// accepted a refusal, and `report` said when it ends.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2847-2951`
+    #[allow(clippy::too_many_arguments)] // the C#'s seven, plus the frame and the report
+    pub fn command_int(
+        &mut self,
+        target: VehicleId,
+        command: u16,
+        frame: u8,
+        params: [f32; 4],
+        x: i32,
+        y: i32,
+        z: f32,
+        report: Report,
+    ) -> Option<RequestId> {
+        let id = self
+            .link
+            .as_ref()?
+            .command_int(target, command, frame, params, x, y, z, true);
+        Some(self.awaiting(id, report))
+    }
+
+    /// `setWP` for one item: the `MISSION_ITEM` or `MISSION_ITEM_INT` given, until the vehicle
+    /// acknowledges it or asks for the next, sent again ten more times 450 ms apart, and
+    /// `report` said when it ends. `None` for a message that is not an item, or without a link.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3975-4380`
+    pub fn set_wp(
+        &mut self,
+        target: VehicleId,
+        item: MavMessage,
+        report: Report,
+    ) -> Option<RequestId> {
+        let id = self.link.as_ref()?.set_wp(target, item)?;
+        Some(self.awaiting(id, report))
+    }
+
+    /// `getHomePosition`: `GET_HOME_POSITION` until a `HOME_POSITION` arrives, asked again
+    /// three more times 700 ms apart, and `report` said when it ends. The position itself lands
+    /// in the vehicle's state, as every `HOME_POSITION` does.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3343-3387`
+    pub fn get_home_position(&mut self, target: VehicleId, report: Report) -> Option<RequestId> {
+        let id = self.link.as_ref()?.get_home_position(target);
+        Some(self.awaiting(id, report))
+    }
+
     /// `setParam` on `target`: `PARAM_SET` until the vehicle echoes the parameter, sent again every
     /// 700 ms up to three times, and `report` said when it ends. Refused without sending for a
     /// name the vehicle has not listed, and not sent for a value it already holds unless `force`.

@@ -710,6 +710,39 @@ pub enum Route {
         /// param1 to param7.
         params: [f32; 7],
     },
+    /// `doCommandInt`: `COMMAND_INT` until its `COMMAND_ACK`, anything but accepted a refusal.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2847-2951`
+    CommandInt {
+        /// The vehicle.
+        target: VehicleId,
+        /// `MAV_CMD`.
+        command: u16,
+        /// `MAV_FRAME`.
+        frame: u8,
+        /// param1 to param4.
+        params: [f32; 4],
+        /// param5, an integer.
+        x: i32,
+        /// param6, an integer.
+        y: i32,
+        /// param7.
+        z: f32,
+    },
+    /// `setWP` for one item: a `MISSION_ITEM` or `MISSION_ITEM_INT` until the vehicle
+    /// acknowledges it or asks for the next - Change Alt, ArduPlane's guided target.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3975-4380`
+    SetWp {
+        /// The vehicle.
+        target: VehicleId,
+        /// The item, as built. Boxed: a message is the largest thing a route holds.
+        item: Box<MavMessage>,
+    },
+    /// `getHomePosition`: `GET_HOME_POSITION` until a `HOME_POSITION` arrives.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3343-3387`
+    GetHome {
+        /// The vehicle.
+        target: VehicleId,
+    },
     /// `setParam`: `PARAM_SET` until the vehicle echoes the parameter.
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1628-1770`
     SetParam {
@@ -735,10 +768,12 @@ pub enum Route {
 ///   twice and does not wait for (:2758-2763); the press already holds both of those sends.
 /// * `PARAM_SET` is only ever `setParam`'s, which waits.
 /// * Everything else goes once. `SET_MODE`, `SET_POSITION_TARGET_GLOBAL_INT` and `SYSTEM_TIME`
-///   are `generatePacket` and `sendPacket` in the C#, not waited for. `COMMAND_INT` is
-///   `doCommandInt`'s, which does wait (:2847-2951), and a float `MISSION_ITEM` - Change Alt,
-///   and ArduPlane's guided target - is `setWP`'s, which waits for `MISSION_ACK`
-///   (:3975-4290); the link has no request for either, so both still go once.
+///   are `generatePacket` and `sendPacket` in the C#, not waited for.
+/// * `COMMAND_INT` is `doCommandInt`'s, which waits for its ack (:2847-2951); a `MISSION_ITEM`
+///   or `MISSION_ITEM_INT` from a press - Change Alt, ArduPlane's guided target - is `setWP`'s,
+///   which waits for `MISSION_ACK` or the request for the next item (:3975-4380); and
+///   `GET_HOME_POSITION` from a press is `getHomePosition`'s, which waits for `HOME_POSITION`
+///   (:3343-3387). Each has its request in the link since PLAN.md §13.6 row 74.
 ///
 /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs` for every line above.
 #[must_use]
@@ -754,6 +789,28 @@ pub fn route(message: &MavMessage) -> Route {
         {
             Route::Raw
         }
+        MavMessage::CommandLong(m) if m.command == requests::CMD_GET_HOME_POSITION => {
+            Route::GetHome {
+                target: VehicleId::new(m.target_system, m.target_component),
+            }
+        }
+        MavMessage::CommandInt(m) => Route::CommandInt {
+            target: VehicleId::new(m.target_system, m.target_component),
+            command: m.command,
+            frame: m.frame,
+            params: [m.param1, m.param2, m.param3, m.param4],
+            x: m.x,
+            y: m.y,
+            z: m.z,
+        },
+        MavMessage::MissionItem(m) => Route::SetWp {
+            target: VehicleId::new(m.target_system, m.target_component),
+            item: Box::new(*message),
+        },
+        MavMessage::MissionItemInt(m) => Route::SetWp {
+            target: VehicleId::new(m.target_system, m.target_component),
+            item: Box::new(*message),
+        },
         MavMessage::CommandLong(m) => Route::Command {
             target: VehicleId::new(m.target_system, m.target_component),
             command: m.command,
@@ -4383,6 +4440,17 @@ pub fn send_routed(
                 name,
                 value,
             } => telemetry.set_parameter_on(target, &name, value, false, report.clone()),
+            Route::CommandInt {
+                target,
+                command,
+                frame,
+                params,
+                x,
+                y,
+                z,
+            } => telemetry.command_int(target, command, frame, params, x, y, z, report.clone()),
+            Route::SetWp { target, item } => telemetry.set_wp(target, *item, report.clone()),
+            Route::GetHome { target } => telemetry.get_home_position(target, report.clone()),
         };
         // A request is queued for the link thread, which is only there while the link is.
         queued &= request.is_some() && connected;
@@ -6840,10 +6908,9 @@ pub fn set_home_height(answer: crate::srtm::AltResponse) -> Result<f64, Refusal>
 /// height if the answer was OK, and then - whatever the answer - the home position asked for,
 /// as the C#'s `getHomePositionAsync` is outside its `if`.
 ///
-/// Both go once: `doCommandInt` waits for its `COMMAND_ACK`, which the link has no request for
-/// (see [`route`]), and `getHomePositionAsync` waits for `HOME_POSITION`, sending
-/// `GET_HOME_POSITION` again three times 700 ms apart, which the link has no request for
-/// either. The home the vehicle then reports is what the map draws.
+/// Each waits as the C# waits, through [`route`]: `doCommandInt` for its `COMMAND_ACK`, three
+/// more sends two seconds apart, and `getHomePositionAsync` for `HOME_POSITION`, asking again
+/// three times 700 ms apart. The home the vehicle then reports is what the map draws.
 /// `// C#: GCSViews/FlightData.cs:4852-4885`
 #[must_use]
 pub fn set_home_messages(
@@ -8949,30 +9016,48 @@ mod tests {
                 value: 80.0,
             }
         );
-        // `setMode`, `doReboot`, `setGuidedModeWP`, `sendPacket`; `doCommandInt` and `setWP`,
-        // which the link has no request for.
+        // `setMode`, `doReboot`, `setGuidedModeWP`, `sendPacket`.
         let once = [
             set_mode_messages(t, Some(VehicleFamily::Copter), "GUIDED"),
             vec![
                 commands::reboot(t),
-                commands::change_alt(t, 25.0),
                 commands::system_time(1),
                 commands::guided_position_target(t, 3, -35.36, 149.16, 20.0),
-                commands::command_int(
-                    t,
-                    commands::CMD_STORAGE_FORMAT,
-                    commands::FRAME_GLOBAL,
-                    [1.0, 1.0, 0.0, 0.0],
-                    0,
-                    0,
-                    0.0,
-                ),
             ],
         ]
         .concat();
         for message in &once {
             assert_eq!(route(message), Route::Raw, "{}", describe(message));
         }
+        // `setWP` and `doCommandInt`, each with its request (PLAN.md §13.6 row 74).
+        let change_alt = commands::change_alt(t, 25.0);
+        assert_eq!(
+            route(&change_alt),
+            Route::SetWp {
+                target: t,
+                item: Box::new(change_alt)
+            }
+        );
+        assert_eq!(
+            route(&commands::command_int(
+                t,
+                commands::CMD_STORAGE_FORMAT,
+                commands::FRAME_GLOBAL,
+                [1.0, 1.0, 0.0, 0.0],
+                0,
+                0,
+                0.0,
+            )),
+            Route::CommandInt {
+                target: t,
+                command: commands::CMD_STORAGE_FORMAT,
+                frame: commands::FRAME_GLOBAL,
+                params: [1.0, 1.0, 0.0, 0.0],
+                x: 0,
+                y: 0,
+                z: 0.0,
+            }
+        );
     }
 
     /// Do Action's message boxes, per entry: the generic path's refusal names the command,
@@ -10293,15 +10378,14 @@ mod tests {
             ["COMMAND_LONG MAV_CMD_GET_HOME_POSITION 0,0,0,0,0,0,0"]
         );
         let home = set_home_messages(target(), point, true);
-        assert_eq!(route(&home[0]), Route::Raw);
-        assert_eq!(
-            route(&home[1]),
-            Route::Command {
-                target: target(),
-                command: requests::CMD_GET_HOME_POSITION,
-                params: [0.0; 7],
+        assert!(matches!(
+            route(&home[0]),
+            Route::CommandInt {
+                command: commands::CMD_DO_SET_HOME,
+                ..
             }
-        );
+        ));
+        assert_eq!(route(&home[1]), Route::GetHome { target: target() });
     }
 
     /// Set EKF Origin Here wants a tile's height - the sea will not do - and sends the whole
@@ -10369,7 +10453,7 @@ mod tests {
             describe(&sent[0]),
             "COMMAND_INT MAV_CMD_DO_SET_ROI 0,0,0,0 x=-355000000 y=1492500000 z=12.5 frame=3"
         );
-        assert_eq!(route(&sent[0]), Route::Raw);
+        assert!(matches!(route(&sent[0]), Route::CommandInt { .. }));
         assert_eq!(
             point_camera_here_sends(target(), at, "high"),
             Err(Refusal::error(strings::BAD_ALT))
