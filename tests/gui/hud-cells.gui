@@ -1,0 +1,41 @@
+# The HUD's cell voltage: Battery Cell Voltage on the HUD's menu asks "Cell Count", starting at 4,
+# and the HUD then draws "Cell" and the pack's voltage over the count on the lower text line, the
+# pack's own line moved up one; clicked again it turns the line off without asking. A count of 0
+# draws nothing. `GCSViews/FlightData.cs:6115-6140, ExtLibs/Controls/HUD.cs:2896-2923`
+#
+# Depends on fly.rs enabling the menu entry (fly-hud-batterycells) and porting its InputBox, which
+# another change carries; until then the menu entry is dimmed and this fails at the prompt. The
+# line's text and place for every count are proved by the unit tests in crates/mp-gui/src/hud.rs.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760, disarmed and at rest: SITL's pack reads 12.6 V with no
+# current drawn (SIM_BATT_VOLTAGE), so four cells are 3.15 V, and there is no second battery.
+# Run as
+#
+#   tools/gui-test.sh tests/gui/hud-cells.gui -- tcp:127.0.0.1:5760
+
+screen fly
+window 1600x1200
+settle 6
+
+# Off, as CheckBatteryShow leaves it with nothing saved: the pack alone on the lower line.
+expect hud.battery.upper none
+expect hud.battery.lower ~ Bat1 12.
+
+# On, with the count the prompt starts at.
+click hud@0.5x0.4:right
+click fly-hud-batterycells
+expect fly.prompt Cell Count
+expect fly.prompt.value 4
+click fly-prompt-ok
+expect fly.prompt none
+settle 1
+expect hud.battery.lower ~ Cell 3.1
+expect hud.battery.upper ~ Bat1 12.
+
+# Clicked again: off, without a question.
+click hud@0.5x0.4:right
+click fly-hud-batterycells
+expect fly.prompt none
+settle 1
+expect hud.battery.upper none
+expect hud.battery.lower ~ Bat1 12.

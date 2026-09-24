@@ -18,6 +18,7 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use gpui::Div;
@@ -56,22 +57,58 @@ pub fn enabled() -> bool {
     output_path().is_some()
 }
 
-/// The positions recorded so far this run.
-fn registry() -> &'static Mutex<BTreeMap<String, Rect>> {
-    static REGISTRY: OnceLock<Mutex<BTreeMap<String, Rect>>> = OnceLock::new();
+/// The positions recorded, each with the frame it was last measured in.
+fn registry() -> &'static Mutex<BTreeMap<String, (Rect, u64)>> {
+    static REGISTRY: OnceLock<Mutex<BTreeMap<String, (Rect, u64)>>> = OnceLock::new();
     REGISTRY.get_or_init(|| Mutex::new(BTreeMap::new()))
+}
+
+/// The frame being drawn, counted from the first.
+fn frame() -> &'static AtomicU64 {
+    static FRAME: AtomicU64 = AtomicU64::new(1);
+    &FRAME
+}
+
+/// The start of a frame, called from the window's `render`: a control that was not measured in
+/// the frame just finished is no longer on screen - a menu that closed, a page that was left -
+/// and leaves the file, so a script cannot click where it used to be.
+///
+/// Found by `plan-survey.gui`: with the map menu closed, its entries stayed in the file at their
+/// old places, the runner clicked them, and two waypoints went onto the map instead.
+pub fn begin_frame() {
+    if !enabled() {
+        return;
+    }
+    let finished = frame().fetch_add(1, Ordering::SeqCst);
+    let removed = registry()
+        .lock()
+        .is_ok_and(|mut registry| retire(&mut registry, finished));
+    if removed {
+        write();
+    }
+}
+
+/// Drops every control not measured in the frame `finished`; whether anything went.
+fn retire(registry: &mut BTreeMap<String, (Rect, u64)>, finished: u64) -> bool {
+    let before = registry.len();
+    registry.retain(|_, (_, seen)| *seen >= finished);
+    registry.len() != before
 }
 
 /// Records where a control was laid out.
 fn record(name: &str, rect: Rect) {
+    let now = frame().load(Ordering::SeqCst);
     if let Ok(mut registry) = registry().lock() {
         // Only rewrite the file when something moved. A UI that repaints ten times a second would
         // otherwise rewrite it ten times a second, and a script reading it could catch a partial
         // write.
-        if registry.get(name) == Some(&rect) {
+        if let Some(entry) = registry.get_mut(name)
+            && entry.0 == rect
+        {
+            entry.1 = now;
             return;
         }
-        registry.insert(name.to_owned(), rect);
+        registry.insert(name.to_owned(), (rect, now));
     }
     write();
 }
@@ -88,7 +125,7 @@ fn write() {
     };
 
     let mut out = String::from("{\n");
-    for (index, (name, rect)) in registry.iter().enumerate() {
+    for (index, (name, (rect, _))) in registry.iter().enumerate() {
         if index > 0 {
             out.push_str(",\n");
         }
@@ -157,7 +194,14 @@ pub fn measured(name: impl Into<String>, element: Div) -> Div {
 /// The positions recorded, for tests.
 #[cfg(test)]
 pub fn snapshot() -> BTreeMap<String, Rect> {
-    registry().lock().map(|r| r.clone()).unwrap_or_default()
+    registry()
+        .lock()
+        .map(|r| {
+            r.iter()
+                .map(|(name, (rect, _))| (name.clone(), *rect))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -193,6 +237,21 @@ mod tests {
         assert_eq!(rect.y, 20.0);
         assert_eq!(rect.width, 30.0);
         assert_eq!(rect.height, 40.0);
+    }
+
+    /// A control measured in the frame just finished stays; one last measured in an earlier
+    /// frame - a closed menu's entry - goes, so a script cannot click where it used to be.
+    #[test]
+    fn a_control_not_measured_in_the_last_frame_leaves_the_registry() {
+        let mut registry = BTreeMap::new();
+        registry.insert(
+            "closed-menu-entry".to_owned(),
+            (bounds(1.0, 1.0, 2.0, 2.0), 1),
+        );
+        registry.insert("still-drawn".to_owned(), (bounds(3.0, 3.0, 2.0, 2.0), 2));
+        assert!(retire(&mut registry, 2));
+        assert_eq!(registry.keys().collect::<Vec<_>>(), ["still-drawn"]);
+        assert!(!retire(&mut registry, 2), "nothing more to drop");
     }
 
     #[test]

@@ -1,0 +1,98 @@
+# The HUD and the quick views in the user's units, set on CONFIG's Planner page.
+#
+# CurrentState's getters multiply alt, airspeed, groundspeed, wp_dist, DistToHome and the rest by
+# multiplieralt, multiplierspeed or multiplierdist (ExtLibs/ArduPilot/CurrentState.cs:327, 354,
+# 496, 529, 1093, 1781), which MainV2.ChangeUnits sets from the Planner page's unit combos
+# (MainV2.cs:4247-4330, ConfigPlanner.cs:557-570, 1049-1054); FlightData.Activate names the units
+# on the HUD (GCSViews/FlightData.cs:442-444), and each quick view's description names its unit
+# through GetNameandUnit (CurrentState.cs:4526-4552). The HUD draws its speed and AS/GS lines with
+# speedunit, its altitude with altunit and the waypoint distance with distunit
+# (ExtLibs/Controls/HUD.cs:2552-2577, 2733, 2749-2769).
+#
+# The claim: with nothing set everything is in metres and metres per second; after Feet, Feet and
+# knots on the Planner page, the HUD's facts and the quick views' descriptions name ft and kts,
+# and a quick view bound to the altitude above sea level reads it in feet - SITL's default home,
+# CMAC, is 584 m up, so the number goes from 58x to 191x. The multipliers and every text are
+# proved exactly by the unit tests in crates/mp-gui/src/hud.rs and quick.rs; this proves the
+# Planner page's units reach the HUD and the quick views in the running application.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760, on the ground at its default home and past its
+# start-up (GPS locked, so the altitude above sea level is in). The Planner page's keys are in the
+# per-run settings file, so every run starts in metres; the quick views' choices go into a scratch
+# config.xml. Run as
+#
+#   tools/gui-test.sh tests/gui/hud-units.gui -- tcp:127.0.0.1:5760
+
+env MP_CONFIG_XML $WORK/config.xml
+
+screen fly
+window 1600x1200
+settle 6
+
+# Metres and metres per second, as ChangeUnits sets them with nothing configured.
+expect hud.speed ~ m/s
+expect hud.airspeed ~ m/s
+expect hud.groundspeed ~ m/s
+expect hud.wpdist ~ m>
+expect fly.quick.1.label Altitude (m)
+expect fly.quick.2.label GroundSpeed (m/s)
+expect fly.quick.3.label Dist to WP (m)
+expect fly.quick.4.label Yaw (deg)
+expect fly.quick.5.label Vertical Speed (m/s)
+expect fly.quick.6.label Dist to Home (m)
+
+# The first view on the altitude above sea level: CMAC's 584 m.
+doubleclick fly-quick-1
+expect fly.quick.chooser 1
+click fly-quick-choice-altasl
+expect fly.quick.1 altasl
+expect fly.quick.1.label Altitude (m)
+expect fly.quick.1.value ~ 58
+
+# CONFIG's Planner page: Feet for distance and altitude, knots for speed.
+click tab-config
+settle 1
+click config-page-ConfigPlanner
+expect config.page ConfigPlanner
+click planner-CMB_distunits
+click planner-CMB_distunits-Feet
+click planner-CMB_altunits
+click planner-CMB_altunits-Feet
+click planner-CMB_speedunits
+click planner-CMB_speedunits-knots
+expect config.planner.units.dist ft
+expect config.planner.units.alt ft
+expect config.planner.units.speed kts
+
+# Back on the flight screen, the HUD names the units and the views read in them.
+click tab-fly
+settle 1
+expect hud.speed ~ kts
+expect hud.airspeed ~ kts
+expect hud.groundspeed ~ kts
+expect hud.alt ~ ft
+expect hud.wpdist ~ ft>
+expect fly.quick.1 altasl
+expect fly.quick.1.label Altitude (ft)
+# 584 m is 1916 ft.
+expect fly.quick.1.value ~ 191
+expect fly.quick.2.label GroundSpeed (kts)
+expect fly.quick.3.label Dist to WP (ft)
+expect fly.quick.4.label Yaw (deg)
+expect fly.quick.5.label Vertical Speed (kts)
+expect fly.quick.6.label Dist to Home (ft)
+
+# And back to metres: the same view reads metres again.
+click tab-config
+settle 1
+click planner-CMB_altunits
+click planner-CMB_altunits-Meters
+expect config.planner.units.alt m
+click tab-fly
+settle 1
+expect hud.alt ~ m
+expect fly.quick.1.label Altitude (m)
+expect fly.quick.1.value ~ 58
+# Speed and distance stay as they were set.
+expect hud.speed ~ kts
+expect fly.quick.3.label Dist to WP (ft)

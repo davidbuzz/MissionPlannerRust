@@ -410,6 +410,7 @@ impl MissionPlanner {
         plan.set_planned_home(plan::planned_home_from_config(Some(persisted.config())));
         plan.apply_panel_config(Some(persisted.config()));
         persisted.restore_quick_views(&mut fly_data.quick);
+        fly_data.hud_settings.load_icons(&persisted);
         if let Some(url) = &opened {
             persisted.link_opened(url);
         }
@@ -1621,6 +1622,8 @@ impl Render for MissionPlanner {
         // initialise, and every earlier signal - a window handle, a running executor - survives
         // that.
         smoke::painted();
+        // Controls that were not measured in the frame just finished have left the screen.
+        probe::begin_frame();
         // Under MP_STORM, the frame's cost is timed from here to the marker at the end of the
         // root, less the facts' own work: storm.rs.
         storm::frame_started();
@@ -1634,6 +1637,12 @@ impl Render for MissionPlanner {
         self.fly_data
             .hud_settings
             .apply(&mut self.hud, view.state.as_deref());
+        // The units the Planner page set, which `CurrentState`'s getters apply to what the HUD
+        // and the quick views show and `FlightData.Activate` names on the HUD.
+        // `// C#: GCSViews/FlightData.cs:442-444, ExtLibs/ArduPilot/CurrentState.cs:23-38`
+        let units = self.planner.units();
+        self.hud.units = units;
+        self.fly_data.quick.set_units(units);
         // The vehicle's banner names its firmware; its parameter documentation follows from it.
         self.telemetry.tick();
         // SETUP's and CONFIG's lists: built when their screen shows, built again when MainV2
@@ -1881,6 +1890,10 @@ impl Render for MissionPlanner {
             facts::record("hud.missing", hud::missing().len());
             facts::record("hud.missing.list", hud::missing_report());
             for (key, value) in hud::health_facts(&hud_scene) {
+                facts::record(key, value);
+            }
+            // And the numbers with their units, the battery and GPS lines, and the pictures.
+            for (key, value) in hud::readout_facts(&hud_scene) {
                 facts::record(key, value);
             }
             // How much of FlightData this screen has, from the coverage table, so the number in

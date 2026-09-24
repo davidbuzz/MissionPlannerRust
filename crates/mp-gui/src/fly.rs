@@ -3985,6 +3985,7 @@ impl FlightData {
         crate::facts::record("fly.hud.menu", self.hud_menu.open.is_some());
         crate::facts::record("fly.hud.menu.video", self.hud_menu.video);
         crate::facts::record("fly.hud.russian", self.hud_settings.russian);
+        crate::facts::record("fly.hud.icons", self.hud_settings.icons);
         crate::facts::record(
             "fly.hud.ground",
             match self.hud_settings.ground {
@@ -4986,6 +4987,13 @@ pub fn hud_zone(scene: &crate::hud::Scene, window: HudWindow) -> Option<(f32, f3
             }
             _ => None,
         })
+        // With the pictures showing there is no label: the picture's own rectangle, padded as
+        // the C# pads its click zones. `// C#: ExtLibs/Controls/HUD.cs:3150-3301`
+        .or_else(|| {
+            scene
+                .zone(element)
+                .map(|(x, y, w, h)| (x - 5.0, y - 5.0, w + 5.0, h + 5.0))
+        })
 }
 
 /// The primary flight display, with the two places a click opens a window and its menu on the
@@ -5410,6 +5418,9 @@ pub enum HudAction {
     SwapWithMap,
     /// `groundColorToolStripMenuItem`: checked or unchecked by the click, the ground following.
     GroundColor,
+    /// `showIconsToolStripMenuItem`: `hud1.displayicons` turned over, saved as `HUD_showicons`,
+    /// the entry reading "Show text" while the pictures show.
+    ShowIcons,
 }
 
 /// A row of `contextMenuStripHud`, or of its Video drop-down.
@@ -5487,7 +5498,7 @@ pub const HUD_MENU: [HudRow; 8] = [
         text: "Show icons",
         id: "fly-hud-showicons",
         // `// C#: GCSViews/FlightData.cs:6484-6496, ExtLibs/Controls/HUD.cs:2867-3293`
-        does: Err("the HUD's icons, displayicons, are not ported"),
+        does: Ok(HudAction::ShowIcons),
     },
 ];
 
@@ -5574,9 +5585,39 @@ pub struct HudSettings {
     pub choosing: bool,
     /// The property whose header is being asked for.
     pub pending: Option<String>,
+    /// `hud1.displayicons`: pictures for the battery, GPS, vibration, EKF and pre-arm readouts
+    /// instead of text. Read from `HUD_showicons` when the flight screen loads.
+    /// `// C#: GCSViews/FlightData.cs:427`
+    pub icons: bool,
 }
 
 impl HudSettings {
+    /// Show icons: `myhud.displayicons = !myhud.displayicons`, and the flag saved as
+    /// `HUD_showicons` in Mission Planner's config.xml. `// C#: GCSViews/FlightData.cs:6484-6496`
+    pub fn toggle_icons(&mut self, persisted: &mut crate::settings::Persisted) {
+        self.icons = !self.icons;
+        persisted.set("HUD_showicons", if self.icons { "True" } else { "False" });
+    }
+
+    /// `Settings.Instance.GetBoolean("HUD_showicons", false)`, at the flight screen's load.
+    /// `// C#: GCSViews/FlightData.cs:427`
+    pub fn load_icons(&mut self, persisted: &crate::settings::Persisted) {
+        self.icons = persisted
+            .get("HUD_showicons")
+            .is_some_and(|value| value.eq_ignore_ascii_case("true"));
+    }
+
+    /// The Show icons entry's text: "Show text" while the pictures show.
+    /// `// C#: GCSViews/FlightData.cs:6488-6495`
+    #[must_use]
+    pub const fn icons_entry_text(&self) -> &'static str {
+        if self.icons {
+            "Show text"
+        } else {
+            "Show icons"
+        }
+    }
+
     /// Russian Hud: `hud1.Russian = !hud1.Russian`. `// C#: GCSViews/FlightData.cs:4735-4739`
     pub fn toggle_russian(&mut self) {
         self.russian = !self.russian;
@@ -5633,6 +5674,7 @@ impl HudSettings {
         state: Option<&mp_vehicle::VehicleState>,
     ) {
         inputs.russian = self.russian;
+        inputs.display_icons = self.icons;
         inputs.custom_items = self
             .items
             .iter()
@@ -5737,6 +5779,7 @@ const HUD_MENU_WIDTH: f32 = 190.0;
 /// is the same drawing for this menu.
 fn hud_menu_row(
     row: &'static HudRow,
+    text: &'static str,
     checked: bool,
     highlighted: bool,
     cx: &mut Context<MissionPlanner>,
@@ -5759,7 +5802,7 @@ fn hud_menu_row(
                         .w(px(10.0))
                         .child(if checked { "\u{2713}" } else { "" }),
                 )
-                .child(row.text),
+                .child(text),
         )
         .children((row.does == Ok(HudAction::Video)).then_some("\u{203a}"));
     match row.does {
@@ -5835,7 +5878,13 @@ fn hud_menu(
                 _ => false,
             };
             let highlighted = row.does == Ok(HudAction::Video) && menu.video;
-            hud_menu_row(row, checked, highlighted, cx)
+            // Show icons reads "Show text" while the pictures show.
+            let text = if row.does == Ok(HudAction::ShowIcons) {
+                settings.icons_entry_text()
+            } else {
+                row.text
+            };
+            hud_menu_row(row, text, checked, highlighted, cx)
         })
         .collect();
     let mut body = div()
@@ -5846,7 +5895,7 @@ fn hud_menu(
     if menu.video {
         let rows = HUD_VIDEO_MENU
             .iter()
-            .map(|row| hud_menu_row(row, false, false, cx))
+            .map(|row| hud_menu_row(row, row.text, false, false, cx))
             .collect();
         // Beside the Video row, the menu's first: on its right, or on its left where the window
         // ends first, as a `ToolStripDropDown` opens.
@@ -6131,6 +6180,7 @@ impl MissionPlanner {
             HudAction::Russian => self.fly_data.hud_settings.toggle_russian(),
             HudAction::SwapWithMap => self.fly_data.swapped = !self.fly_data.swapped,
             HudAction::GroundColor => self.fly_data.hud_settings.toggle_ground(),
+            HudAction::ShowIcons => self.fly_data.hud_settings.toggle_icons(&mut self.persisted),
         }
         self.fly_data.hud_menu = HudMenu::default();
     }
@@ -8096,7 +8146,8 @@ mod tests {
                 "User Items",
                 "Russian Hud",
                 "Swap With Map",
-                "Ground Color"
+                "Ground Color",
+                "Show icons"
             ]
         );
         assert!(HUD_VIDEO_MENU.iter().all(|row| row.does.is_err()));

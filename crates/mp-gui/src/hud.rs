@@ -32,6 +32,19 @@
 //! * Sizes follow the C#'s: the font is `height / 30`, the pitch scale `height / 65` pixels per
 //!   degree, the heading tape `height / 14` tall, the scrollers `width / 10` wide. The display
 //!   scales with its box rather than with a constant, as the original does.
+//! * [`HudInputs`] holds the vehicle's values in SI, as `mp_vehicle` keeps them, and the user's
+//!   [`DisplayUnits`] beside them; [`scene`] multiplies each by its multiplier where the C#'s
+//!   `CurrentState` getter does before the binding hands it to the HUD, and writes the unit
+//!   names `FlightData.Activate` gives the HUD (`altunit`, `speedunit`, `distunit`).
+//!
+//! # The pictures
+//!
+//! With `displayicons` on, the battery, the GPS fix, Vibe, EKF and the pre-arm line are drawn
+//! as `HUDT`'s bitmaps (`ExtLibs/Controls/Resources/*.png`) at the rectangles `doPaint()` gives
+//! `DrawImage`. The scene records which picture goes where ([`Item::Icon`]); the bitmaps are
+//! Mission Planner's artwork and not files this application ships (as `config/frame_type.rs`
+//! does not ship its frame pictures), so [`paint`] draws each as what it shows - a coloured
+//! badge with its words, or a battery with its bars - in the bitmap's colours, in its rectangle.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -43,6 +56,7 @@ use gpui::{
     rgb,
 };
 use mp_vehicle::VehicleState;
+use mp_vehicle::units::DisplayUnits;
 
 mod colour {
     /// Sky above the horizon.
@@ -67,6 +81,163 @@ mod colour {
     pub const BLACK: u32 = 0x00_00_00;
     /// The heading tape's centre box: `SlightlyTransparentWhiteBrush`.
     pub const READOUT: u32 = 0xff_ff_ff;
+    // The pictures' colours, read from the bitmaps' pixels.
+    // `// C#: ExtLibs/Controls/Resources/*.png`
+    /// The green badges - 3D FIX, 3D DGPS, Unknown, VIBE, EKF, Ready to Arm - at alpha 179.
+    pub const ICON_GREEN: u32 = 0x04_a2_13;
+    /// The amber badges: 2D FIX, VIBE, EKF.
+    pub const ICON_AMBER: u32 = 0xff_b3_21;
+    /// The red badges: NO GPS, NO FIX, VIBE, EKF, Not Ready to Arm.
+    pub const ICON_RED: u32 = 0xc2_05_05;
+    /// The violet badges: RTKFloat, RTKFixed.
+    pub const ICON_VIOLET: u32 = 0x53_3c_ff;
+    /// The battery's outline.
+    pub const BATTERY_OUTLINE: u32 = 0xff_ff_ff;
+    /// `batt_red`'s outline.
+    pub const BATTERY_RED: u32 = 0xff_00_2a;
+    /// The battery's green bars.
+    pub const BATTERY_GREEN: u32 = 0x0b_ff_05;
+    /// `batt_yellow`'s bar.
+    pub const BATTERY_YELLOW: u32 = 0xff_cc_00;
+}
+
+/// One of `HUDT`'s pictures, named as its file in `ExtLibs/Controls/Resources`.
+/// `// C#: ExtLibs/Controls/HUDT.resx batt_1 .. _3dfix_wide`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Icon {
+    /// `batt_1`: one green bar.
+    Batt1,
+    /// `batt_2`.
+    Batt2,
+    /// `batt_3`.
+    Batt3,
+    /// `batt_4`: four green bars.
+    Batt4,
+    /// `batt_red`: a red outline, empty.
+    BattRed,
+    /// `batt_yellow`: one yellow bar.
+    BattYellow,
+    /// `nogps_wide`.
+    NoGps,
+    /// `nofix_wide`.
+    NoFix,
+    /// `_2dfix_wide`.
+    Fix2d,
+    /// `_3dfix_wide`.
+    Fix3d,
+    /// `_3ddgps_wide`.
+    Dgps3d,
+    /// `rtkfloat_wide`.
+    RtkFloat,
+    /// `rtkfixed_wide`.
+    RtkFixed,
+    /// `unknown`: a fix type past 6.
+    Unknown,
+    /// `vibe_green`.
+    VibeGreen,
+    /// `vibe_yellow`.
+    VibeYellow,
+    /// `vibe_red`.
+    VibeRed,
+    /// `ekf_green`.
+    EkfGreen,
+    /// `ekf_yellow`.
+    EkfYellow,
+    /// `ekf_red`.
+    EkfRed,
+    /// `prearm_green`.
+    PrearmGreen,
+    /// `prearm_red`.
+    PrearmRed,
+}
+
+/// What a picture shows, for the stand-in [`paint`] draws.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Look {
+    /// A badge of one colour at alpha 179 with white words across it.
+    Badge { colour: u32, text: &'static str },
+    /// A battery: an outline with a cap, and `bars` bars filled from the bottom.
+    Battery { outline: u32, bars: u8, bar: u32 },
+}
+
+impl Icon {
+    /// The file's name, for the facts.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Batt1 => "batt_1",
+            Self::Batt2 => "batt_2",
+            Self::Batt3 => "batt_3",
+            Self::Batt4 => "batt_4",
+            Self::BattRed => "batt_red",
+            Self::BattYellow => "batt_yellow",
+            Self::NoGps => "nogps_wide",
+            Self::NoFix => "nofix_wide",
+            Self::Fix2d => "2dfix_wide",
+            Self::Fix3d => "3dfix_wide",
+            Self::Dgps3d => "3ddgps_wide",
+            Self::RtkFloat => "rtkfloat_wide",
+            Self::RtkFixed => "rtkfixed_wide",
+            Self::Unknown => "unknown",
+            Self::VibeGreen => "vibe_green",
+            Self::VibeYellow => "vibe_yellow",
+            Self::VibeRed => "vibe_red",
+            Self::EkfGreen => "ekf_green",
+            Self::EkfYellow => "ekf_yellow",
+            Self::EkfRed => "ekf_red",
+            Self::PrearmGreen => "prearm_green",
+            Self::PrearmRed => "prearm_red",
+        }
+    }
+
+    /// What the bitmap shows: its colour and its words, or its battery. Read from the files.
+    fn look(self) -> Look {
+        use colour::{
+            BATTERY_GREEN, BATTERY_OUTLINE, BATTERY_RED, BATTERY_YELLOW, ICON_AMBER, ICON_GREEN,
+            ICON_RED, ICON_VIOLET,
+        };
+        let badge = |colour, text| Look::Badge { colour, text };
+        let battery = |outline, bars, bar| Look::Battery { outline, bars, bar };
+        match self {
+            Self::Batt1 => battery(BATTERY_OUTLINE, 1, BATTERY_GREEN),
+            Self::Batt2 => battery(BATTERY_OUTLINE, 2, BATTERY_GREEN),
+            Self::Batt3 => battery(BATTERY_OUTLINE, 3, BATTERY_GREEN),
+            Self::Batt4 => battery(BATTERY_OUTLINE, 4, BATTERY_GREEN),
+            Self::BattRed => battery(BATTERY_RED, 0, BATTERY_RED),
+            Self::BattYellow => battery(BATTERY_OUTLINE, 1, BATTERY_YELLOW),
+            Self::NoGps => badge(ICON_RED, "NO GPS"),
+            Self::NoFix => badge(ICON_RED, "NO FIX"),
+            Self::Fix2d => badge(ICON_AMBER, "2D FIX"),
+            Self::Fix3d => badge(ICON_GREEN, "3D FIX"),
+            Self::Dgps3d => badge(ICON_GREEN, "3D DGPS"),
+            Self::RtkFloat => badge(ICON_VIOLET, "RTKFloat"),
+            Self::RtkFixed => badge(ICON_VIOLET, "RTKFixed"),
+            Self::Unknown => badge(ICON_GREEN, "Unknown"),
+            Self::VibeGreen => badge(ICON_GREEN, "VIBE"),
+            Self::VibeYellow => badge(ICON_AMBER, "VIBE"),
+            Self::VibeRed => badge(ICON_RED, "VIBE"),
+            Self::EkfGreen => badge(ICON_GREEN, "EKF"),
+            Self::EkfYellow => badge(ICON_AMBER, "EKF"),
+            Self::EkfRed => badge(ICON_RED, "EKF"),
+            Self::PrearmGreen => badge(ICON_GREEN, "Ready to Arm"),
+            Self::PrearmRed => badge(ICON_RED, "Not Ready to Arm"),
+        }
+    }
+
+    /// The GPS fix's picture. `// C#: ExtLibs/Controls/HUD.cs:2936-2986`
+    #[must_use]
+    pub const fn gps(fix_type: u8) -> Self {
+        match fix_type {
+            0 => Self::NoGps,
+            1 => Self::NoFix,
+            2 => Self::Fix2d,
+            3 => Self::Fix3d,
+            4 => Self::Dgps3d,
+            5 => Self::RtkFloat,
+            6 => Self::RtkFixed,
+            _ => Self::Unknown,
+        }
+    }
 }
 
 /// One thing `doPaint()` draws.
@@ -360,6 +531,34 @@ pub fn gps_fix_text(fix_type: u8) -> String {
     }
 }
 
+/// The distance to the waypoint as the HUD writes it, given in the user's distance unit: whole
+/// units under 1000, cut toward zero; from 1000, kilometres to one place ("k") where the unit
+/// is "m", and otherwise - feet, or no unit set - miles of 5280 ("mi"). The place is
+/// `Math.Round(double, 1)`'s, halves to even, and the number is written as a `float` writes.
+/// `// C#: ExtLibs/Controls/HUD.cs:2749-2769`
+#[must_use]
+pub fn wp_distance_text(distance: f32, unit: &str) -> String {
+    if distance >= 1000.0 {
+        let (per, shown) = if unit == "m" {
+            (1000.0, "k")
+        } else {
+            (5280.0, "mi")
+        };
+        // C#'s `(float)Math.Round(newdist / 1000.0, 1)`: the double scaled, rounded, unscaled;
+        // then `newdist + newdistunit`, the float's own `ToString()`.
+        #[allow(clippy::cast_possible_truncation)] // the C#'s (float)
+        let rounded = ((f64::from(distance) / per * 10.0).round_ties_even() / 10.0) as f32;
+        format!(
+            "{}{shown}",
+            crate::config::battery_monitor::float_text(rounded)
+        )
+    } else {
+        #[allow(clippy::cast_possible_truncation)] // the C#'s (int)
+        let whole = distance as i32;
+        format!("{whole}{unit}")
+    }
+}
+
 /// The angles the flight path vector and the AOA scale are drawn from.
 /// `// C#: ExtLibs/Controls/HUD.cs:352-358, 889-945`
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -408,7 +607,8 @@ pub struct CustomItem {
     pub value: Option<f64>,
 }
 
-/// Everything the display draws from, in the units the C# draws in.
+/// Everything the display draws from: the vehicle's values in SI, and [`HudInputs::units`] to
+/// show them in, which [`scene`] applies where the C#'s `CurrentState` getters apply them.
 #[derive(Debug, Clone, PartialEq)]
 pub struct HudInputs {
     /// Whether there is a vehicle at all. Without one the display shows the horizon at rest and
@@ -497,6 +697,37 @@ pub struct HudInputs {
     /// roll pointer reads the other way. `false` in the Designer.
     /// `// C#: ExtLibs/Controls/HUD.cs:163, 2029-2036, GCSViews/FlightData.Designer.cs:421`
     pub russian: bool,
+    /// `CurrentState`'s multipliers, which its getters apply to `alt`, `airspeed`,
+    /// `groundspeed`, `wp_dist` and the rest before the bindings hand them over, and the unit
+    /// names `FlightData.Activate` sets on the HUD. Metres and metres per second until the
+    /// caller says otherwise: `MainV2` runs `ChangeUnits` before the flight screen first shows.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:23-38, GCSViews/FlightData.cs:442-444, MainV2.cs:836`
+    pub units: DisplayUnits,
+    /// `displayCellVoltage`, which Battery Cell Voltage turns on: the HUD then shows the pack's
+    /// voltage over `batterycellcount`. Off in the Designer and in `CheckBatteryShow`'s default.
+    /// `// C#: ExtLibs/Controls/HUD.cs:245, GCSViews/FlightData.cs:597-602, 6115-6140`
+    pub display_cell_voltage: bool,
+    /// `batterycellcount`: the count Battery Cell Voltage's "Cell Count" prompt sets. The
+    /// Designer's 4 is replaced at load by `CheckBatteryShow`, whose default is 0 - and at 0 no
+    /// cell voltage is drawn, whatever `display_cell_voltage` says. The prompt takes any `int`.
+    /// `// C#: GCSViews/FlightData.Designer.cs:338, GCSViews/FlightData.cs:517, 601, 6130-6139`
+    pub battery_cell_count: i32,
+    /// `displayicons`, which Show icons turns over: pictures in place of the battery, GPS, Vibe,
+    /// EKF and pre-arm text. Off in the Designer and in `HUD_showicons`'s default.
+    /// `// C#: GCSViews/FlightData.Designer.cs:402, GCSViews/FlightData.cs:427, 6484-6496`
+    pub display_icons: bool,
+    /// The second battery's voltage, current and remaining: `battery_voltage2`, `current2`,
+    /// `battery_remaining2`. Drawn on the lower line while the voltage is above 0 and no cell
+    /// voltage is shown (`batteryon2` is true from the constructor and nothing turns it off).
+    /// `// C#: GCSViews/FlightData.Designer.cs:341, 359-361, ExtLibs/Controls/HUD.cs:2906-2912`
+    pub battery_voltage2: f32,
+    /// See [`HudInputs::battery_voltage2`].
+    pub battery_current2: f32,
+    /// See [`HudInputs::battery_voltage2`].
+    pub battery_remaining2: i8,
+    /// The second GPS's fix: `gpsstatus2`. 0 draws nothing for it.
+    /// `// C#: GCSViews/FlightData.Designer.cs:367, ExtLibs/Controls/HUD.cs:2935-3027`
+    pub gps_fix2: u8,
 }
 
 impl Default for HudInputs {
@@ -541,6 +772,14 @@ impl Default for HudInputs {
             ekf_status: 0.0,
             prearm_ready: false,
             russian: false,
+            units: DisplayUnits::default().change_units(None, None, None),
+            display_cell_voltage: false,
+            battery_cell_count: 0,
+            display_icons: false,
+            battery_voltage2: 0.0,
+            battery_current2: 0.0,
+            battery_remaining2: 0,
+            gps_fix2: 0,
         }
     }
 }
@@ -621,6 +860,17 @@ impl HudInputs {
             prearm_ready: prearm_ready(state),
             // The HUD's own setting, not the vehicle's: the flight screen sets it.
             russian: false,
+            // The user's, not the vehicle's: the flight screen hands over the Planner page's.
+            units: DisplayUnits::default().change_units(None, None, None),
+            // The HUD menu's settings, which the flight screen sets.
+            display_cell_voltage: false,
+            battery_cell_count: 0,
+            display_icons: false,
+            // C#: GCSViews/FlightData.Designer.cs:359-361, 367
+            battery_voltage2: state.batteries[0].voltage,
+            battery_current2: state.batteries[0].current,
+            battery_remaining2: state.batteries[0].remaining_percent,
+            gps_fix2: state.gps2.fix_type,
         }
     }
 }
@@ -743,14 +993,45 @@ fn two_digits(value: i64) -> String {
 /// a value that rounds to zero loses its sign.
 #[must_use]
 pub fn format_hash(value: f64, decimals: u8) -> String {
+    format_digits(value, decimals, 15)
+}
+
+/// A `float`'s `ToString("0.##…")`: as [`format_hash`], but taken first to seven significant
+/// digits, which is what .NET Framework's `Number.FormatSingle` takes a `float` to for a custom
+/// format - so 2.675f, stored as 2.67499995, writes "2.68" where the same double writes "2.67".
+#[must_use]
+pub fn format_single_hash(value: f32, decimals: u8) -> String {
+    format_digits(f64::from(value), decimals, 7)
+}
+
+/// A `float`'s `ToString("0.00")`: [`format_single_hash`] with every place written, so 12.6
+/// is "12.60" and 3 is "3.0" at one place. NaN and the infinities are written as they are.
+#[must_use]
+pub fn format_single_fixed(value: f32, decimals: u8) -> String {
+    let mut text = format_single_hash(value, decimals);
+    if decimals == 0 || !value.is_finite() {
+        return text;
+    }
+    let written = text
+        .split_once('.')
+        .map_or(0, |(_, fraction)| fraction.len());
+    if written == 0 {
+        text.push('.');
+    }
+    text.push_str(&"0".repeat(usize::from(decimals).saturating_sub(written)));
+    text
+}
+
+/// [`format_hash`]'s rounding on `significant` significant digits.
+fn format_digits(value: f64, decimals: u8, significant: usize) -> String {
     if value.is_nan() {
         return "NaN".to_owned();
     }
     if value.is_infinite() {
         return if value > 0.0 { "Infinity" } else { "-Infinity" }.to_owned();
     }
-    // d.dddddddddddddde<x>: fifteen significant digits.
-    let scientific = format!("{:.14e}", value.abs());
+    // d.ddd…e<x>: `significant` significant digits.
+    let scientific = format!("{:.*e}", significant.saturating_sub(1), value.abs());
     let Some((mantissa, exponent)) = scientific.split_once('e') else {
         return "0".to_owned();
     };
@@ -873,6 +1154,83 @@ pub fn health_facts(scene: &Scene) -> Vec<(&'static str, String)> {
             "hud.aoa.shown",
             scene.drawn.contains(&Element::Aoa).to_string(),
         ),
+    ]
+}
+
+/// What the tapes, the waypoint line, the battery and GPS lines and the pictures drew, as facts
+/// a `.gui` test asserts on - read from the scene, so what is asserted is what was painted:
+///
+/// * `hud.speed`, `hud.airspeed`, `hud.groundspeed`: the speed tape's number and its AS and GS
+///   lines, in the user's speed unit;
+/// * `hud.alt`: the altitude tape's number, in the altitude unit;
+/// * `hud.wpdist`: the distance and number of the waypoint, in the distance unit;
+/// * `hud.battery.upper`, `hud.battery.lower`: the battery text on each bottom line;
+/// * `hud.gps`: the GPS lines, top first, comma separated;
+/// * `hud.icons`: the pictures drawn, by file name, in the order drawn;
+/// * `hud.zone.vibe`, `hud.zone.ekf`: the click rectangles, `left,top,width,height` in whole
+///   pixels - at the text, or at the pictures with the icons on.
+///
+/// "none" for anything not drawn.
+#[must_use]
+pub fn readout_facts(scene: &Scene) -> Vec<(&'static str, String)> {
+    let none = || "none".to_owned();
+    let speed = scene.placed_labels_of(Element::SpeedTape);
+    let speed_line = |prefix: &str| {
+        speed
+            .iter()
+            .find(|(text, _)| text.starts_with(prefix))
+            .map_or_else(none, |(text, _)| (*text).to_owned())
+    };
+    let first = |element: Element| {
+        scene
+            .placed_labels_of(element)
+            .first()
+            .map_or_else(none, |(text, _)| (*text).to_owned())
+    };
+    // The battery's lines by height: the lower is the one furthest down.
+    let mut battery = scene.placed_labels_of(Element::Battery);
+    battery.sort_by(|a, b| a.1.1.total_cmp(&b.1.1));
+    let (upper, lower) = match battery.as_slice() {
+        [] => (none(), none()),
+        [only] => (none(), only.0.to_owned()),
+        [top, .., bottom] => (top.0.to_owned(), bottom.0.to_owned()),
+    };
+    let gps: Vec<&str> = {
+        let mut lines = scene.placed_labels_of(Element::Gps);
+        lines.sort_by(|a, b| a.1.1.total_cmp(&b.1.1));
+        lines.into_iter().map(|(text, _)| text).collect()
+    };
+    let icons: Vec<&str> = scene.icons().into_iter().map(Icon::name).collect();
+    let joined = |list: &[&str]| {
+        if list.is_empty() {
+            none()
+        } else {
+            list.join(",")
+        }
+    };
+    let zone = |element: Element| {
+        scene.zone(element).map_or_else(none, |(x, y, w, h)| {
+            format!("{},{},{},{}", x.round(), y.round(), w.round(), h.round())
+        })
+    };
+    vec![
+        (
+            "hud.speed",
+            speed
+                .iter()
+                .find(|(text, _)| !text.starts_with("AS ") && !text.starts_with("GS "))
+                .map_or_else(none, |(text, _)| (*text).to_owned()),
+        ),
+        ("hud.airspeed", speed_line("AS ")),
+        ("hud.groundspeed", speed_line("GS ")),
+        ("hud.alt", first(Element::AltitudeTape)),
+        ("hud.wpdist", first(Element::ModeAndWaypoint)),
+        ("hud.battery.upper", upper),
+        ("hud.battery.lower", lower),
+        ("hud.gps", joined(&gps)),
+        ("hud.icons", joined(&icons)),
+        ("hud.zone.vibe", zone(Element::Vibe)),
+        ("hud.zone.ekf", zone(Element::Ekf)),
     ]
 }
 
@@ -1023,6 +1381,13 @@ pub enum Item {
         /// Which edge the anchor is.
         align: Align,
     },
+    /// One of `HUDT`'s pictures, stretched into a rectangle as `DrawImage` stretches it.
+    Icon {
+        /// Which.
+        icon: Icon,
+        /// Where: left, top, width, height.
+        rect: (f32, f32, f32, f32),
+    },
 }
 
 /// A frame of the display, ready to paint.
@@ -1032,8 +1397,12 @@ pub struct Scene {
     pub items: Vec<Item>,
     /// Which elements were drawn.
     pub drawn: Vec<Element>,
-    /// Which element drew which label, as an index into `items`, for the labels a fact reports.
+    /// Which element drew which label or picture, as an index into `items`, for the facts.
     pub owners: Vec<(Element, usize)>,
+    /// The rectangles `doPaint()` keeps for a click - `vibehitzone`, `ekfhitzone` - where it
+    /// sets them: at the text, or at the picture with the icons on. Left, top, width, height.
+    /// `// C#: ExtLibs/Controls/HUD.cs:3150-3158, 3211-3219`
+    pub zones: Vec<(Element, (f32, f32, f32, f32))>,
 }
 
 impl Scene {
@@ -1089,10 +1458,50 @@ impl Scene {
         self.label(text, at, size, colour, align);
     }
 
+    /// A picture, remembered as its element's.
+    fn icon(&mut self, element: Element, icon: Icon, rect: (f32, f32, f32, f32)) {
+        self.owners.push((element, self.items.len()));
+        self.items.push(Item::Icon { icon, rect });
+    }
+
     fn drew(&mut self, element: Element) {
         if !self.drawn.contains(&element) {
             self.drawn.push(element);
         }
+    }
+
+    /// The click rectangle `doPaint()` set for an element this frame, if it set one.
+    #[must_use]
+    pub fn zone(&self, element: Element) -> Option<(f32, f32, f32, f32)> {
+        self.zones
+            .iter()
+            .find(|(owner, _)| *owner == element)
+            .map(|(_, rect)| *rect)
+    }
+
+    /// The labels an element drew through [`Scene::owned_label`], with where each is anchored.
+    #[must_use]
+    pub fn placed_labels_of(&self, element: Element) -> Vec<(&str, (f32, f32))> {
+        self.owners
+            .iter()
+            .filter(|(owner, _)| *owner == element)
+            .filter_map(|(_, index)| match self.items.get(*index) {
+                Some(Item::Label { text, at, .. }) => Some((text.as_str(), *at)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The pictures drawn, in order.
+    #[must_use]
+    pub fn icons(&self) -> Vec<Icon> {
+        self.items
+            .iter()
+            .filter_map(|item| match item {
+                Item::Icon { icon, .. } => Some(*icon),
+                _ => None,
+            })
+            .collect()
     }
 
     /// The labels an element drew through [`Scene::owned_label`], with their colours.
@@ -1506,17 +1915,24 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     };
     let viewrange = 26.0;
     let unit_space = left_box.height / viewrange;
-    let speed = if inputs.airspeed == 0.0 {
-        inputs.ground_speed
+    // In the user's speed unit: `airspeed` and `groundspeed` are `_airspeed * multiplierspeed`
+    // and `_groundspeed * multiplierspeed`, and `targetairspeed` is filtered from `airspeed` and
+    // `aspd_error`, both multiplied. The tape's 26 units and its ticks every 5 are then that
+    // many of the user's unit. C#: ExtLibs/ArduPilot/CurrentState.cs:496, 529, 1125-1130
+    let units = &inputs.units;
+    let airspeed = inputs.airspeed * units.speed;
+    let ground_speed = inputs.ground_speed * units.speed;
+    let speed = if airspeed == 0.0 {
+        ground_speed
     } else {
-        inputs.airspeed
+        airspeed
     };
     scroller(
         &mut scene,
         &left_box,
         Side::Left,
         speed,
-        inputs.target_speed,
+        inputs.target_speed * units.speed,
         None,
         unit_space,
         viewrange,
@@ -1524,22 +1940,35 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
         fontoffset,
         halfheight,
     );
-    scene.label(
-        format!("{speed:.0}m/s"),
+    // `speed.ToString("0") + speedunit`, then `HUDT.AS` ("AS ") and `HUDT.GS` ("GS ") with each
+    // to one place: .NET's rounding of a float, halves away from zero. C#: HUD.cs:2552-2577
+    scene.owned_label(
+        Element::SpeedTape,
+        format!("{}{}", format_single_hash(speed, 0), units.speed_unit),
         (0.0, halfheight - 9.0),
         10.0,
         colour::INK,
         Align::Left,
     );
-    scene.label(
-        format!("AS {:.1}m/s", inputs.airspeed),
+    scene.owned_label(
+        Element::SpeedTape,
+        format!(
+            "AS {}{}",
+            format_single_fixed(airspeed, 1),
+            units.speed_unit
+        ),
         (1.0, left_box.bottom() + 5.0),
         fontsize,
         colour::INK,
         Align::Left,
     );
-    scene.label(
-        format!("GS {:.1}m/s", inputs.ground_speed),
+    scene.owned_label(
+        Element::SpeedTape,
+        format!(
+            "GS {}{}",
+            format_single_fixed(ground_speed, 1),
+            units.speed_unit
+        ),
         (1.0, left_box.bottom() + fontsize + 2.0 + 10.0),
         fontsize,
         colour::INK,
@@ -1555,12 +1984,17 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
         width: w / 10.0,
         height: h / 2.0,
     };
+    // In the user's altitude unit: `alt` is `(_alt - altoffsethome) * multiplieralt`, and
+    // `targetalt` is filtered from `alt` and `alt_error`, both multiplied. `groundalt` is bound
+    // to `HomeAlt`, which no multiplier touches. C#: ExtLibs/ArduPilot/CurrentState.cs:327,
+    // 1102-1107
+    let altitude = inputs.altitude * units.alt;
     scroller(
         &mut scene,
         &right_box,
         Side::Right,
-        inputs.altitude,
-        inputs.target_altitude,
+        altitude,
+        inputs.target_altitude * units.alt,
         (inputs.ground_altitude != 0.0).then_some(inputs.ground_altitude),
         unit_space,
         viewrange,
@@ -1568,8 +2002,12 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
         fontoffset,
         halfheight,
     );
-    scene.label(
-        format!("{:.0} m", inputs.altitude),
+    // `((int) _alt).ToString("0 ") + altunit`: cut toward zero, not rounded. C#: HUD.cs:2733
+    #[allow(clippy::cast_possible_truncation)] // the C#'s (int)
+    let whole = altitude as i32;
+    scene.owned_label(
+        Element::AltitudeTape,
+        format!("{whole} {}", units.alt_unit),
         (right_box.left + 10.0, halfheight - 9.0),
         10.0,
         colour::INK,
@@ -1578,7 +2016,13 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     scene.drew(Element::AltitudeTape);
 
     // Vertical speed beside it: a tapered box, a blue bar from the middle for the climb rate,
-    // clamped at ±6 m/s. C#: HUD.cs:2660-2711
+    // clamped at ±6 of the user's speed unit. C#: HUD.cs:2660-2711
+    //
+    // The C# binds `verticalspeed`, its own derivative of `alt` - already in the altitude unit -
+    // multiplied again by `multiplierspeed`, so with feet and knots the bar reads feet per second
+    // times 1.94. This draws the climb rate in the speed unit alone, as `climbrate` is:
+    // `_climbrate * multiplierspeed`. C#: ExtLibs/ArduPilot/CurrentState.cs:340, 1043-1050, 1154
+    let vertical_speed = inputs.vertical_speed * units.speed;
     let quarter = right_box.width / 4.0;
     let vsi_left = right_box.left - quarter;
     scene.stroke(
@@ -1593,7 +2037,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
         colour::INK,
         1.0,
     );
-    let vs = inputs.vertical_speed.clamp(-6.0, 6.0);
+    let vs = vertical_speed.clamp(-6.0, 6.0);
     let mid = right_box.top + right_box.height / 2.0;
     let scaled = vs / -12.0 * right_box.height;
     let mut peak = 0.0;
@@ -1648,13 +2092,13 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
         mode_colour,
         Align::Left,
     );
-    let distance = if inputs.wp_distance >= 1000.0 {
-        format!("{:.1}k", inputs.wp_distance / 1000.0)
-    } else {
-        format!("{}m", inputs.wp_distance.trunc())
-    };
-    scene.label(
-        format!("{distance}>{}", inputs.wp_number),
+    scene.owned_label(
+        Element::ModeAndWaypoint,
+        format!(
+            "{}>{}",
+            wp_distance_text(inputs.wp_distance * units.dist, units.dist_unit),
+            inputs.wp_number
+        ),
         (
             right_box.left - 30.0,
             right_box.bottom() + fontsize + 2.0 + 10.0,
@@ -1765,7 +2209,13 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     let y_bot_offset = if fontsize >= 8.0 { fontsize / 3.0 } else { 2.0 };
     let y_text_offset = fontsize + y_bot_offset + 2.0;
     let x_pos = fontsize;
+    let y_upper = h - 2.0 * y_text_offset - y_bot_offset - 4.0;
     let y_lower = h - y_text_offset - y_bot_offset - 4.0;
+    // The pictures' strip: `(fontsize + 8) * 3` wide and `fontsize + 8` high, `fontsize + 13`
+    // up from the bottom. C#: HUD.cs:3002-3008, 3152-3153, 3213-3214, 3268-3269
+    let icons = inputs.display_icons;
+    let wide = (fontsize + 8.0) * 3.0;
+    let strip_top = h - (fontsize + 13.0);
 
     // Battery: voltage, current and remaining, coloured by the alert level. C#: HUD.cs:2855-2925
     let battery_colour = if inputs.battery_critical {
@@ -1775,31 +2225,145 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     } else {
         colour::INK
     };
-    scene.label(
-        format!(
-            "Bat1 {:.2}v {:.1} A {}%",
-            inputs.battery_voltage, inputs.battery_current, inputs.battery_remaining
-        ),
-        (x_pos, y_lower),
-        fontsize,
-        battery_colour,
-        Align::Left,
+    // `(_batterylevel / _batterycellcount).ToString("0.00v")`, when Battery Cell Voltage is on
+    // with a count that is not 0. C#: HUD.cs:2897-2898, 2904-2905
+    #[allow(clippy::cast_precision_loss)] // the C#'s float divided by an int
+    let cell = (inputs.display_cell_voltage && inputs.battery_cell_count != 0)
+        .then(|| format_single_fixed(inputs.battery_voltage / inputs.battery_cell_count as f32, 2));
+    // `ToString("0.00v")`, `ToString("0.0 A")` and the remaining as a float writes it.
+    let pack = format!(
+        "{}v {} A {}%",
+        format_single_fixed(inputs.battery_voltage, 2),
+        format_single_fixed(inputs.battery_current, 1),
+        inputs.battery_remaining
     );
+    if icons {
+        // The battery's picture at the left edge, half as wide as it is high, by the alert
+        // level and then by the charge left; the numbers beside it on the lower line, and the
+        // cell voltage alone above them. C#: HUD.cs:2861-2899
+        let icon = if inputs.battery_critical {
+            Icon::BattRed
+        } else if inputs.battery_low {
+            Icon::BattYellow
+        } else if inputs.battery_remaining > 75 {
+            Icon::Batt4
+        } else if inputs.battery_remaining > 50 {
+            Icon::Batt3
+        } else if inputs.battery_remaining > 25 {
+            Icon::Batt2
+        } else {
+            Icon::Batt1
+        };
+        let bottomsize = ((fontsize + 2.0) * 3.0) + fontoffset - 2.0;
+        scene.icon(
+            Element::Battery,
+            icon,
+            (3.0, h - bottomsize, bottomsize / 2.0, bottomsize),
+        );
+        let beside = bottomsize / 2.0 + 6.0;
+        scene.owned_label(
+            Element::Battery,
+            pack,
+            (beside, y_lower),
+            fontsize + 1.0,
+            battery_colour,
+            Align::Left,
+        );
+        if let Some(cell) = cell {
+            scene.owned_label(
+                Element::Battery,
+                format!("{cell}v"),
+                (beside, y_upper),
+                fontsize,
+                battery_colour,
+                Align::Left,
+            );
+        }
+    } else {
+        // The lower line is the cell voltage's, or failing it the second battery's while its
+        // voltage is above 0; either puts the first battery's a line up. C#: HUD.cs:2901-2923
+        let mut pack_line = y_upper;
+        if let Some(cell) = cell {
+            scene.owned_label(
+                Element::Battery,
+                format!("Cell {cell}v"),
+                (x_pos, y_lower),
+                fontsize + 2.0,
+                battery_colour,
+                Align::Left,
+            );
+        } else if inputs.battery_voltage2 > 0.0 {
+            scene.owned_label(
+                Element::Battery,
+                format!(
+                    "Bat2 {}v {} A {}%",
+                    format_single_fixed(inputs.battery_voltage2, 2),
+                    format_single_fixed(inputs.battery_current2, 1),
+                    inputs.battery_remaining2
+                ),
+                (x_pos, y_lower),
+                fontsize,
+                battery_colour,
+                Align::Left,
+            );
+        } else {
+            pack_line = y_lower;
+        }
+        scene.owned_label(
+            Element::Battery,
+            format!("Bat1 {pack}"),
+            (x_pos, pack_line),
+            fontsize,
+            battery_colour,
+            Align::Left,
+        );
+    }
     scene.drew(Element::Battery);
 
-    // GPS fix, in red when there is none. C#: HUD.cs:2926-2986
-    let gps_colour = if inputs.gps_fix <= 1 {
-        colour::ALERT
-    } else {
-        colour::INK
-    };
-    scene.label(
-        gps_fix_text(inputs.gps_fix),
-        (w - 13.0 * fontsize, y_lower),
-        fontsize,
-        gps_colour,
-        Align::Left,
-    );
+    // GPS fix, each receiver's: in red when there is none, and the second's - skipped while it
+    // has no GPS at all - under the first's, which then goes up a line. `col` is not reset
+    // between the two, so a second receiver after a red first is red whatever its fix; that is
+    // the C#'s and is kept. With the icons on, each fix's picture at the right of the strip.
+    // C#: HUD.cs:2926-3027
+    let mut gps_colour = colour::INK;
+    for (index, fix) in [inputs.gps_fix, inputs.gps_fix2].into_iter().enumerate() {
+        if fix <= 1 {
+            gps_colour = colour::ALERT;
+        }
+        let mut text = gps_fix_text(fix);
+        if index == 1 {
+            text = text.replace("GPS:", "GPS2:");
+        }
+        if index >= 1 && fix == 0 {
+            continue;
+        }
+        let line = if index == 0 && inputs.gps_fix2 > 0 {
+            y_upper
+        } else {
+            y_lower
+        };
+        if icons {
+            let x = if index == 0 && inputs.gps_fix2 > 0 {
+                w - wide * 2.0 - 5.0
+            } else {
+                w - wide - 3.0
+            };
+            scene.icon(
+                Element::Gps,
+                Icon::gps(fix),
+                (x, strip_top, wide, fontsize + 8.0),
+            );
+        } else {
+            scene.owned_label(
+                Element::Gps,
+                text,
+                (w - 13.0 * fontsize, line),
+                fontsize,
+                gps_colour,
+                Align::Left,
+            );
+        }
+    }
     scene.drew(Element::Gps);
 
     // The user's extra fields, header then value, from above the battery line upward, an
@@ -1807,7 +2371,15 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     // C#: HUD.cs:3029-3077
     let mut custom_y = h - (fontsize + 2.0) * 3.0 - fontoffset - fontsize - 8.0;
     for item in &inputs.custom_items {
-        let Some(text) = custom_item_text(item) else {
+        // `GetValue` reads the property at paint time, through its getter - so `alt`, `wp_dist`
+        // and the rest arrive multiplied, as the quick view shows them. C#: HUD.cs:949-968
+        let shown = CustomItem {
+            value: item
+                .value
+                .map(|value| crate::quick::to_display(&item.name, value, units)),
+            ..item.clone()
+        };
+        let Some(text) = custom_item_text(&shown) else {
             continue;
         };
         scene.owned_label(
@@ -1880,34 +2452,50 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     }
     scene.drew(Element::Message);
 
-    // "Vibe" on the lower text line: white, orange once any axis is past 30 m/s², red past 60.
-    // The text layout, because the icon one is off unless `HUD_showicons` is set
-    // (GCSViews/FlightData.cs:427). Clipping does not enter into it. C#: HUD.cs:3148-3204
-    let vibe_x = w - 18.0 * fontsize;
+    // "Vibe" on the lower text line: white, orange once any axis is past 30 m/s², red past 60;
+    // with the icons on, the green, amber or red VIBE picture in the strip, four pictures in
+    // from the right. `vibehitzone` is set to where either goes: a 40-pixel box at the text, or
+    // the picture's rectangle, which is drawn two pixels below it. Clipping does not enter into
+    // it. C#: HUD.cs:3148-3204
+    let vibe_zone = if icons {
+        (
+            w - wide * 4.0 + wide / 2.0 - 5.0,
+            strip_top,
+            wide,
+            fontsize + 8.0,
+        )
+    } else {
+        (w - 18.0 * fontsize, y_lower, 40.0, fontsize * 2.0)
+    };
+    scene.zones.push((Element::Vibe, vibe_zone));
     let [vibe_x_axis, vibe_y_axis, vibe_z_axis] = inputs.vibe;
     let over = |limit: f32| vibe_x_axis > limit || vibe_y_axis > limit || vibe_z_axis > limit;
-    let vibe_colour = if over(60.0) {
-        colour::ALERT
+    let (vibe_colour, vibe_icon) = if over(60.0) {
+        (colour::ALERT, Icon::VibeRed)
     } else if over(30.0) {
-        colour::WARN
+        (colour::WARN, Icon::VibeYellow)
     } else {
-        colour::INK
+        (colour::INK, Icon::VibeGreen)
     };
-    scene.owned_label(
-        Element::Vibe,
-        "Vibe",
-        (vibe_x, y_lower),
-        fontsize + 2.0,
-        vibe_colour,
-        Align::Left,
-    );
-    // "CPU" in red at the right edge of Vibe's 40-pixel box when the autopilot reports a full
-    // load - exactly 100, as the C# compares it. C#: HUD.cs:3206-3207
+    if icons {
+        scene.icon(Element::Vibe, vibe_icon, picture_at(vibe_zone));
+    } else {
+        scene.owned_label(
+            Element::Vibe,
+            "Vibe",
+            (vibe_zone.0, vibe_zone.1),
+            fontsize + 2.0,
+            vibe_colour,
+            Align::Left,
+        );
+    }
+    // "CPU" in red at the right edge of Vibe's box when the autopilot reports a full load -
+    // exactly 100, as the C# compares it. C#: HUD.cs:3206-3207
     if inputs.cpu_load == 100.0 {
         scene.owned_label(
             Element::Vibe,
             "CPU",
-            (vibe_x + 40.0, y_lower),
+            (vibe_zone.0 + vibe_zone.2, vibe_zone.1),
             fontsize + 2.0,
             colour::ALERT,
             Align::Left,
@@ -1915,42 +2503,73 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     }
     scene.drew(Element::Vibe);
 
-    // "EKF" left of it: white, orange past 0.5, red past 0.8. C#: HUD.cs:3209-3262
-    let ekf_colour = if inputs.ekf_status > 0.8 {
-        colour::ALERT
-    } else if inputs.ekf_status > 0.5 {
-        colour::WARN
+    // "EKF" left of it: white, orange past 0.5, red past 0.8; with the icons on, its picture
+    // five in from the right. `ekfhitzone` as Vibe's. C#: HUD.cs:3209-3262
+    let ekf_zone = if icons {
+        (
+            w - wide * 5.0 + wide / 2.0 - 10.0,
+            strip_top,
+            wide,
+            fontsize + 8.0,
+        )
     } else {
-        colour::INK
+        (w - 23.0 * fontsize, y_lower, 40.0, fontsize * 2.0)
     };
-    scene.owned_label(
-        Element::Ekf,
-        "EKF",
-        (w - 23.0 * fontsize, y_lower),
-        fontsize + 2.0,
-        ekf_colour,
-        Align::Left,
-    );
+    scene.zones.push((Element::Ekf, ekf_zone));
+    let (ekf_colour, ekf_icon) = if inputs.ekf_status > 0.8 {
+        (colour::ALERT, Icon::EkfRed)
+    } else if inputs.ekf_status > 0.5 {
+        (colour::WARN, Icon::EkfYellow)
+    } else {
+        (colour::INK, Icon::EkfGreen)
+    };
+    if icons {
+        scene.icon(Element::Ekf, ekf_icon, picture_at(ekf_zone));
+    } else {
+        scene.owned_label(
+            Element::Ekf,
+            "EKF",
+            (ekf_zone.0, ekf_zone.1),
+            fontsize + 2.0,
+            ekf_colour,
+            Align::Left,
+        );
+    }
     scene.drew(Element::Ekf);
 
     // While disarmed, the pre-arm state on the upper text line: "Ready to Arm" in white, or
-    // "Not Ready to Arm" in red starting two characters further left.
-    // C#: HUD.cs:3264-3301, HUDT.resx NotReadyToArm and ReadyToArm
+    // "Not Ready to Arm" in red starting two characters further left; with the icons on, the
+    // green or red picture, two wide, above EKF's. C#: HUD.cs:3264-3301, HUDT.resx
+    // NotReadyToArm and ReadyToArm
     if !inputs.armed {
-        let y_upper = h - 2.0 * y_text_offset - y_bot_offset - 4.0;
-        let (text, x, prearm_colour) = if inputs.prearm_ready {
-            ("Ready to Arm", w - 24.0 * fontsize, colour::INK)
+        if icons {
+            let zone = (
+                w - wide * 5.0 + wide / 2.0 - 7.0,
+                h - (fontsize * 2.0 + 25.0),
+                wide * 2.0,
+                fontsize + 8.0,
+            );
+            let icon = if inputs.prearm_ready {
+                Icon::PrearmGreen
+            } else {
+                Icon::PrearmRed
+            };
+            scene.icon(Element::Prearm, icon, picture_at(zone));
         } else {
-            ("Not Ready to Arm", w - 26.0 * fontsize, colour::ALERT)
-        };
-        scene.owned_label(
-            Element::Prearm,
-            text,
-            (x, y_upper - 4.0),
-            fontsize + 2.0,
-            prearm_colour,
-            Align::Left,
-        );
+            let (text, x, prearm_colour) = if inputs.prearm_ready {
+                ("Ready to Arm", w - 24.0 * fontsize, colour::INK)
+            } else {
+                ("Not Ready to Arm", w - 26.0 * fontsize, colour::ALERT)
+            };
+            scene.owned_label(
+                Element::Prearm,
+                text,
+                (x, y_upper - 4.0),
+                fontsize + 2.0,
+                prearm_colour,
+                Align::Left,
+            );
+        }
     }
     scene.drew(Element::Prearm);
 
@@ -2108,6 +2727,88 @@ impl Rect {
     }
 }
 
+/// Where `DrawImage` puts a picture for a click rectangle: the same box, two pixels lower.
+/// `// C#: ExtLibs/Controls/HUD.cs:3173, 3184, 3197, 3232, 3243, 3255, 3284, 3295`
+const fn picture_at(zone: (f32, f32, f32, f32)) -> (f32, f32, f32, f32) {
+    (zone.0, zone.1 + 2.0, zone.2, zone.3)
+}
+
+/// The stand-in [`paint`] draws for a picture in its rectangle.
+///
+/// A badge is its colour at the bitmaps' alpha of 179, with its words in white across the
+/// middle, as large as the box's height allows and small enough to fit its width. A battery is
+/// its outline and cap, and its bars from the bottom, at the places the bitmaps have them:
+/// measured from `batt_4.png`, 180 by 360 pixels, as fractions of the box.
+/// `// C#: ExtLibs/Controls/Resources/*.png`
+#[must_use]
+pub fn icon_items(icon: Icon, rect: (f32, f32, f32, f32)) -> Vec<Item> {
+    let (left, top, width, height) = rect;
+    let at = |fx: f32, fy: f32| (fx.mul_add(width, left), fy.mul_add(height, top));
+    let block =
+        |x0: f32, y0: f32, x1: f32, y1: f32| vec![at(x0, y0), at(x1, y0), at(x1, y1), at(x0, y1)];
+    match icon.look() {
+        Look::Badge { colour, text } => {
+            // Seven tenths of the height, or what fits the width at about six tenths of the
+            // size a character.
+            #[allow(clippy::cast_precision_loss)] // a few characters
+            let characters = text.chars().count().max(1) as f32;
+            let size = (height * 0.7).min(width * 0.9 / (characters * 0.6));
+            vec![
+                Item::Fill {
+                    points: block(0.0, 0.0, 1.0, 1.0),
+                    colour,
+                    alpha: 179.0 / 255.0,
+                },
+                Item::Label {
+                    text: text.to_owned(),
+                    at: (left + width / 2.0, top + (height - size * 1.2) / 2.0),
+                    size,
+                    colour: colour::INK,
+                    align: Align::Centre,
+                },
+            ]
+        }
+        Look::Battery { outline, bars, bar } => {
+            // The bars from the bottom: y from 264-313, 198-246, 131-180 and 65-114 of 360,
+            // x from 33 to 144 of 180.
+            const BARS: [(f32, f32); 4] = [
+                (264.0 / 360.0, 314.0 / 360.0),
+                (198.0 / 360.0, 247.0 / 360.0),
+                (131.0 / 360.0, 181.0 / 360.0),
+                (65.0 / 360.0, 115.0 / 360.0),
+            ];
+            let mut items = vec![
+                // The cap: x 57-120, y 16-33.
+                Item::Fill {
+                    points: block(57.0 / 180.0, 16.0 / 360.0, 121.0 / 180.0, 33.0 / 360.0),
+                    colour: outline,
+                    alpha: 1.0,
+                },
+                // The case, 13 pixels of 180 thick, its middle from x 10 to 167 and y 39 to 339.
+                Item::Stroke {
+                    points: {
+                        let mut points =
+                            block(10.0 / 180.0, 39.0 / 360.0, 167.0 / 180.0, 339.0 / 360.0);
+                        points.push(at(10.0 / 180.0, 39.0 / 360.0));
+                        points
+                    },
+                    width: width * 13.0 / 180.0,
+                    colour: outline,
+                    alpha: 1.0,
+                },
+            ];
+            for (from, to) in BARS.iter().take(usize::from(bars)) {
+                items.push(Item::Fill {
+                    points: block(33.0 / 180.0, *from, 145.0 / 180.0, *to),
+                    colour: bar,
+                    alpha: 1.0,
+                });
+            }
+            items
+        }
+    }
+}
+
 /// A half-plane bounded by a line through `origin` along `along`, extending `reach` toward
 /// `toward`.
 fn half_plane(
@@ -2177,25 +2878,35 @@ fn tinted(colour: u32, alpha: f32) -> Hsla {
 pub fn paint(scene: &Scene, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut gpui::App) {
     let origin = bounds.origin;
     for item in &scene.items {
-        match item {
-            Item::Fill {
-                points,
-                colour,
-                alpha,
-            } => fill(window, origin, points, tinted(*colour, *alpha)),
-            Item::Stroke {
-                points,
-                width,
-                colour,
-                alpha,
-            } => stroke(window, origin, points, *width, tinted(*colour, *alpha)),
-            Item::Label {
-                text,
-                at,
-                size,
-                colour,
-                align,
-            } => label(window, cx, origin, text, *at, *size, *colour, *align),
+        paint_item(item, origin, window, cx);
+    }
+}
+
+/// Paints one item: a picture as its stand-in, [`icon_items`].
+fn paint_item(item: &Item, origin: Point<Pixels>, window: &mut Window, cx: &mut gpui::App) {
+    match item {
+        Item::Fill {
+            points,
+            colour,
+            alpha,
+        } => fill(window, origin, points, tinted(*colour, *alpha)),
+        Item::Stroke {
+            points,
+            width,
+            colour,
+            alpha,
+        } => stroke(window, origin, points, *width, tinted(*colour, *alpha)),
+        Item::Label {
+            text,
+            at,
+            size,
+            colour,
+            align,
+        } => label(window, cx, origin, text, *at, *size, *colour, *align),
+        Item::Icon { icon, rect } => {
+            for part in icon_items(*icon, *rect) {
+                paint_item(&part, origin, window, cx);
+            }
         }
     }
 }
@@ -2436,7 +3147,32 @@ mod tests {
             ekf_status: 0.1,
             prearm_ready: true,
             russian: false,
+            units: DisplayUnits::default().change_units(None, None, None),
+            display_cell_voltage: false,
+            battery_cell_count: 0,
+            display_icons: false,
+            battery_voltage2: 0.0,
+            battery_current2: 0.0,
+            battery_remaining2: 0,
+            gps_fix2: 0,
         }
+    }
+
+    /// `flying()` in feet and knots, as the Planner page sets them.
+    fn in_feet_and_knots() -> HudInputs {
+        HudInputs {
+            units: DisplayUnits::default().change_units(Some("Feet"), Some("Feet"), Some("knots")),
+            ..flying()
+        }
+    }
+
+    /// A fact by its key.
+    fn fact(facts: &[(&'static str, String)], key: &str) -> String {
+        facts
+            .iter()
+            .find(|(name, _)| *name == key)
+            .map(|(_, value)| value.clone())
+            .unwrap_or_else(|| panic!("no {key} in {facts:?}"))
     }
 
     /// `flying()` with an angle of attack and sideslip, as a vehicle sending AOA_SSA would give.
@@ -3490,5 +4226,602 @@ mod tests {
         assert!(!HudInputs::default().russian);
         let inputs = live(&VehicleState::default(), &mut Timing::default(), &[]);
         assert!(!inputs.russian);
+    }
+
+    /// The Designer's and the settings' defaults: no cell voltage, a count of 0, no icons, and
+    /// metres and metres per second. A vehicle's inputs leave the menu's settings alone.
+    /// `// C#: GCSViews/FlightData.Designer.cs:401-402, GCSViews/FlightData.cs:427, 597-602`
+    #[test]
+    fn the_menus_settings_start_off() {
+        let inputs = HudInputs::default();
+        assert!(!inputs.display_cell_voltage);
+        assert_eq!(inputs.battery_cell_count, 0);
+        assert!(!inputs.display_icons);
+        assert_eq!(
+            (inputs.units.alt_unit, inputs.units.speed_unit),
+            ("m", "m/s")
+        );
+        let live = live(&VehicleState::default(), &mut Timing::default(), &[]);
+        assert!(!live.display_cell_voltage && !live.display_icons);
+        assert_eq!(live.battery_cell_count, 0);
+    }
+
+    /// The tapes and the waypoint line in the user's units: each number is the SI value times
+    /// the C#'s single-precision multiplier, written as .NET writes a float, with the unit's
+    /// name after it. `// C#: ExtLibs/Controls/HUD.cs:2552-2577, 2733, 2749-2769,
+    /// ExtLibs/ArduPilot/CurrentState.cs:327, 496, 529, 1093, MainV2.cs:4262, 4317`
+    #[test]
+    fn the_tapes_read_in_the_users_units() {
+        let metric = readout_facts(&scene(&flying(), W, H));
+        assert_eq!(fact(&metric, "hud.speed"), "18m/s");
+        assert_eq!(fact(&metric, "hud.airspeed"), "AS 18.0m/s");
+        assert_eq!(fact(&metric, "hud.groundspeed"), "GS 17.0m/s");
+        assert_eq!(fact(&metric, "hud.alt"), "100 m");
+        assert_eq!(fact(&metric, "hud.wpdist"), "250m>3");
+
+        let converted = in_feet_and_knots();
+        let drawn = scene(&converted, W, H);
+        let facts = readout_facts(&drawn);
+        // 18 m/s is 34.989 kts, 17 is 33.045; 100 m is 328.08 ft, 250 m is 820.21.
+        assert_eq!(fact(&facts, "hud.speed"), "35kts");
+        assert_eq!(fact(&facts, "hud.airspeed"), "AS 35.0kts");
+        assert_eq!(fact(&facts, "hud.groundspeed"), "GS 33.0kts");
+        assert_eq!(fact(&facts, "hud.alt"), "328 ft");
+        assert_eq!(fact(&facts, "hud.wpdist"), "820ft>3");
+        // The tapes are numbered in the unit: every five knots from 21 to 48 around 35, every
+        // five feet from 315 to 341 around 328.
+        let labels = drawn.labels();
+        for number in ["   25", "   45", "  315", "  340"] {
+            assert!(labels.contains(&number), "{number:?} not in {labels:?}");
+        }
+        assert!(!scene(&flying(), W, H).labels().contains(&"   45"));
+
+        // The climb rate in knots: 1.5 m/s is 2.916 kts of the bar's ±6.
+        let bar_end = |inputs: &HudInputs| {
+            scene(inputs, W, H)
+                .items
+                .iter()
+                .find_map(|item| match item {
+                    Item::Fill { points, colour, .. } if *colour == colour::VSI => {
+                        Some(points[3].1)
+                    }
+                    _ => None,
+                })
+                .expect("a vsi bar")
+        };
+        let knots: f32 = "1.94384449".parse().expect("a float");
+        let (mid, height) = (H / 2.0, H / 2.0);
+        assert!((bar_end(&flying()) - (mid - 1.5 / 12.0 * height)).abs() < 0.01);
+        assert!((bar_end(&converted) - (mid - 1.5 * knots / 12.0 * height)).abs() < 0.01);
+    }
+
+    /// From 1000 of the unit the distance is kilometres where the unit is metres, and miles of
+    /// 5280 otherwise, to a place rounded halves to even; under 1000, whole units cut toward
+    /// zero. `// C#: ExtLibs/Controls/HUD.cs:2749-2769`
+    #[test]
+    fn the_waypoint_distance_goes_to_kilometres_or_miles_past_1000() {
+        assert_eq!(wp_distance_text(999.9, "m"), "999m");
+        assert_eq!(wp_distance_text(250.7, "ft"), "250ft");
+        assert_eq!(wp_distance_text(1234.0, "m"), "1.2k");
+        // `Math.Round(12.5)` is 12: halves go to even.
+        assert_eq!(wp_distance_text(1250.0, "m"), "1.2k");
+        assert_eq!(wp_distance_text(1260.0, "m"), "1.3k");
+        assert_eq!(wp_distance_text(2000.0, "m"), "2k");
+        assert_eq!(wp_distance_text(3280.84, "ft"), "0.6mi");
+        assert_eq!(wp_distance_text(5280.0, "ft"), "1mi");
+        // No unit set is not "m": miles.
+        assert_eq!(wp_distance_text(1000.0, ""), "0.2mi");
+        let mut inputs = in_feet_and_knots();
+        inputs.wp_distance = 1609.344;
+        let facts = readout_facts(&scene(&inputs, W, H));
+        assert_eq!(fact(&facts, "hud.wpdist"), "1mi>3");
+    }
+
+    /// A float is written from seven significant digits, a double from fifteen; "0.00" keeps
+    /// its places. `// C#: ExtLibs/Controls/HUD.cs:2560, 2893, 2898, 2918`
+    #[test]
+    fn a_float_is_written_as_dotnet_writes_a_float() {
+        assert_eq!(format_single_fixed(12.6, 2), "12.60");
+        assert_eq!(format_single_fixed(3.0, 1), "3.0");
+        assert_eq!(format_single_fixed(1.25, 1), "1.3", "halves away from zero");
+        assert_eq!(format_single_fixed(-0.04, 1), "0.0");
+        assert_eq!(format_single_fixed(f32::NAN, 2), "NaN");
+        assert_eq!(format_single_hash(34.989_2, 0), "35");
+        assert_eq!(format_single_hash(2.5, 0), "3");
+        assert_eq!(format_single_hash(2.675, 2), "2.68");
+        assert_eq!(format_hash(f64::from(2.675_f32), 2), "2.67");
+    }
+
+    /// Battery Cell Voltage: with a count that is not 0, "Cell" and the pack's voltage over it
+    /// on the lower line at two sizes up, and the pack's line moved to the upper; a count of 0,
+    /// or the setting off, leaves the pack's line where it was. The count is any `int`.
+    /// `// C#: ExtLibs/Controls/HUD.cs:2896-2923, GCSViews/FlightData.cs:6115-6140`
+    #[test]
+    fn the_cell_voltage_takes_the_lower_line() {
+        let (fontsize, upper, lower) = text_lines(H);
+        let pack = "Bat1 12.60v 3.2 A 85%";
+        let with = |on: bool, count: i32| HudInputs {
+            display_cell_voltage: on,
+            battery_cell_count: count,
+            ..flying()
+        };
+        for (on, count) in [(false, 0), (false, 4), (true, 0)] {
+            let drawn = scene(&with(on, count), W, H);
+            let facts = readout_facts(&drawn);
+            assert_eq!(fact(&facts, "hud.battery.lower"), pack, "{on} {count}");
+            assert_eq!(fact(&facts, "hud.battery.upper"), "none");
+            let (at, size, _) = label_at(&drawn, pack).expect("drawn");
+            assert!(close(at, (fontsize, lower)) && size == fontsize, "{at:?}");
+        }
+        let drawn = scene(&with(true, 4), W, H);
+        let facts = readout_facts(&drawn);
+        assert_eq!(fact(&facts, "hud.battery.lower"), "Cell 3.15v");
+        assert_eq!(fact(&facts, "hud.battery.upper"), pack);
+        let (at, size, colour) = label_at(&drawn, "Cell 3.15v").expect("drawn");
+        assert!(close(at, (fontsize, lower)), "{at:?}");
+        assert_eq!((size, colour), (fontsize + 2.0, colour::INK));
+        let (at, _, _) = label_at(&drawn, pack).expect("drawn");
+        assert!(close(at, (fontsize, upper)), "{at:?}");
+        for (count, cell) in [(3, "Cell 4.20v"), (-3, "Cell -4.20v"), (6, "Cell 2.10v")] {
+            let facts = readout_facts(&scene(&with(true, count), W, H));
+            assert_eq!(fact(&facts, "hud.battery.lower"), cell);
+        }
+        // The alert colours it with the pack.
+        let critical = HudInputs {
+            battery_critical: true,
+            ..with(true, 4)
+        };
+        let (_, _, colour) = label_at(&scene(&critical, W, H), "Cell 3.15v").expect("drawn");
+        assert_eq!(colour, colour::ALERT);
+    }
+
+    /// The second battery: its line on the lower line while its voltage is above 0 and no cell
+    /// voltage is shown, the first battery's then up a line; its values from `BATTERY_STATUS`
+    /// for battery 2. `// C#: ExtLibs/Controls/HUD.cs:2906-2923, GCSViews/FlightData.Designer.cs:359-361`
+    #[test]
+    fn the_second_battery_takes_the_lower_line() {
+        let two = HudInputs {
+            battery_voltage2: 11.1,
+            battery_current2: 1.25,
+            battery_remaining2: 50,
+            ..flying()
+        };
+        let facts = readout_facts(&scene(&two, W, H));
+        // 1.25 A is "1.3 A": .NET rounds halves away from zero.
+        assert_eq!(fact(&facts, "hud.battery.lower"), "Bat2 11.10v 1.3 A 50%");
+        assert_eq!(fact(&facts, "hud.battery.upper"), "Bat1 12.60v 3.2 A 85%");
+        let cells = HudInputs {
+            display_cell_voltage: true,
+            battery_cell_count: 3,
+            ..two
+        };
+        let facts = readout_facts(&scene(&cells, W, H));
+        assert_eq!(fact(&facts, "hud.battery.lower"), "Cell 4.20v");
+        assert!(
+            !scene(&cells, W, H)
+                .labels()
+                .iter()
+                .any(|l| l.starts_with("Bat2"))
+        );
+
+        let mut state = VehicleState::default();
+        state.batteries[0].voltage = 11.1;
+        state.batteries[0].current = 2.0;
+        state.batteries[0].remaining_percent = 40;
+        let inputs = live(&state, &mut Timing::default(), &[]);
+        assert_eq!(
+            (
+                inputs.battery_voltage2,
+                inputs.battery_current2,
+                inputs.battery_remaining2
+            ),
+            (11.1, 2.0, 40)
+        );
+    }
+
+    /// The second GPS: nothing while it has no GPS; otherwise "GPS2:" on the lower line and the
+    /// first up a line. The colour carries from the first to the second, as the C#'s `col` does.
+    /// `// C#: ExtLibs/Controls/HUD.cs:2926-3027`
+    #[test]
+    fn the_second_gps_goes_under_the_first() {
+        let (fontsize, upper, lower) = text_lines(H);
+        let gps = |fix: u8, fix2: u8| {
+            let drawn = scene(
+                &HudInputs {
+                    gps_fix: fix,
+                    gps_fix2: fix2,
+                    ..flying()
+                },
+                W,
+                H,
+            );
+            (fact(&readout_facts(&drawn), "hud.gps"), drawn)
+        };
+        let (one, drawn) = gps(3, 0);
+        assert_eq!(one, "GPS: 3D Fix");
+        let (at, _, _) = label_at(&drawn, "GPS: 3D Fix").expect("drawn");
+        assert!(close(at, (W - 13.0 * fontsize, lower)), "{at:?}");
+
+        let (two, drawn) = gps(3, 6);
+        assert_eq!(two, "GPS: 3D Fix,GPS2: rtk Fixed");
+        let (at, _, colour) = label_at(&drawn, "GPS: 3D Fix").expect("drawn");
+        assert!(close(at, (W - 13.0 * fontsize, upper)), "{at:?}");
+        assert_eq!(colour, colour::INK);
+        let (at, _, colour) = label_at(&drawn, "GPS2: rtk Fixed").expect("drawn");
+        assert!(close(at, (W - 13.0 * fontsize, lower)), "{at:?}");
+        assert_eq!(colour, colour::INK);
+
+        let (_, drawn) = gps(1, 3);
+        let (_, _, colour) = label_at(&drawn, "GPS2: 3D Fix").expect("drawn");
+        assert_eq!(colour, colour::ALERT, "red carried from the first");
+        let (_, drawn) = gps(3, 1);
+        let (_, _, colour) = label_at(&drawn, "GPS: 3D Fix").expect("drawn");
+        assert_eq!(colour, colour::INK);
+        let (_, _, colour) = label_at(&drawn, "GPS2: No Fix").expect("drawn");
+        assert_eq!(colour, colour::ALERT);
+
+        let mut state = VehicleState::default();
+        state.gps2.fix_type = 5;
+        assert_eq!(live(&state, &mut Timing::default(), &[]).gps_fix2, 5);
+    }
+
+    /// Show icons: each readout's picture where `doPaint()` puts it - the battery at the left
+    /// edge with its numbers beside it, the GPS fixes at the right of the strip, Vibe four and
+    /// EKF five pictures in, the pre-arm picture above EKF's while disarmed - and no text for
+    /// them. The click rectangles follow the pictures. `// C#: ExtLibs/Controls/HUD.cs:2861-2899,
+    /// 2997-3009, 3150-3207, 3211-3301`
+    #[test]
+    fn show_icons_draws_the_pictures_where_the_csharp_puts_them() {
+        let (fontsize, upper, lower) = text_lines(H);
+        let fontoffset = (fontsize - 10.0).max(0.0);
+        let icons = HudInputs {
+            display_icons: true,
+            ..flying()
+        };
+        let drawn = scene(&icons, W, H);
+        let rect_of = |scene: &Scene, wanted: Icon| {
+            scene.items.iter().find_map(|item| match item {
+                Item::Icon { icon, rect } if *icon == wanted => Some(*rect),
+                _ => None,
+            })
+        };
+        let same = |a: (f32, f32, f32, f32), b: (f32, f32, f32, f32)| {
+            close((a.0, a.1), (b.0, b.1)) && close((a.2, a.3), (b.2, b.3))
+        };
+        assert_eq!(
+            fact(&readout_facts(&drawn), "hud.icons"),
+            "batt_4,3dfix_wide,vibe_green,ekf_green"
+        );
+        let bottomsize = (fontsize + 2.0) * 3.0 + fontoffset - 2.0;
+        let battery = rect_of(&drawn, Icon::Batt4).expect("the battery");
+        assert!(
+            same(battery, (3.0, H - bottomsize, bottomsize / 2.0, bottomsize)),
+            "{battery:?}"
+        );
+        let (at, size, _) = label_at(&drawn, "12.60v 3.2 A 85%").expect("the numbers");
+        assert!(close(at, (bottomsize / 2.0 + 6.0, lower)), "{at:?}");
+        assert_eq!(size, fontsize + 1.0);
+        let wide = (fontsize + 8.0) * 3.0;
+        let strip = H - (fontsize + 13.0);
+        let gps = rect_of(&drawn, Icon::Fix3d).expect("the fix");
+        assert!(
+            same(gps, (W - wide - 3.0, strip, wide, fontsize + 8.0)),
+            "{gps:?}"
+        );
+        let vibe = (
+            W - wide * 4.0 + wide / 2.0 - 5.0,
+            strip,
+            wide,
+            fontsize + 8.0,
+        );
+        let ekf = (
+            W - wide * 5.0 + wide / 2.0 - 10.0,
+            strip,
+            wide,
+            fontsize + 8.0,
+        );
+        let picture = |zone: (f32, f32, f32, f32)| (zone.0, zone.1 + 2.0, zone.2, zone.3);
+        assert!(same(
+            rect_of(&drawn, Icon::VibeGreen).expect("vibe"),
+            picture(vibe)
+        ));
+        assert!(same(
+            rect_of(&drawn, Icon::EkfGreen).expect("ekf"),
+            picture(ekf)
+        ));
+        assert!(same(drawn.zone(Element::Vibe).expect("a zone"), vibe));
+        assert!(same(drawn.zone(Element::Ekf).expect("a zone"), ekf));
+        // No text for what the pictures show.
+        for text in ["Vibe", "EKF", "GPS: 3D Fix", "Bat1 12.60v 3.2 A 85%"] {
+            assert!(label_at(&drawn, text).is_none(), "{text} drawn as text");
+        }
+        assert_eq!(fact(&health_facts(&drawn), "hud.vibe.colour"), "none");
+
+        // Disarmed: the pre-arm picture, two wide, above EKF's.
+        let disarmed = scene(
+            &HudInputs {
+                armed: false,
+                ..icons.clone()
+            },
+            W,
+            H,
+        );
+        let prearm = (
+            W - wide * 5.0 + wide / 2.0 - 7.0,
+            H - (fontsize * 2.0 + 25.0),
+            wide * 2.0,
+            fontsize + 8.0,
+        );
+        assert!(same(
+            rect_of(&disarmed, Icon::PrearmGreen).expect("ready"),
+            picture(prearm)
+        ));
+        assert!(label_at(&disarmed, "Ready to Arm").is_none());
+        let not_ready = scene(
+            &HudInputs {
+                armed: false,
+                prearm_ready: false,
+                ..icons.clone()
+            },
+            W,
+            H,
+        );
+        assert!(rect_of(&not_ready, Icon::PrearmRed).is_some());
+
+        // CPU at the right of Vibe's picture's rectangle.
+        let busy = scene(
+            &HudInputs {
+                cpu_load: 100.0,
+                ..icons.clone()
+            },
+            W,
+            H,
+        );
+        let (at, _, _) = label_at(&busy, "CPU").expect("CPU");
+        assert!(close(at, (vibe.0 + wide, vibe.1)), "{at:?}");
+
+        // The cell voltage alone above the numbers.
+        let cells = scene(
+            &HudInputs {
+                display_cell_voltage: true,
+                battery_cell_count: 4,
+                ..icons.clone()
+            },
+            W,
+            H,
+        );
+        let (at, size, _) = label_at(&cells, "3.15v").expect("the cell");
+        assert!(close(at, (bottomsize / 2.0 + 6.0, upper)), "{at:?}");
+        assert_eq!(size, fontsize);
+
+        // Two receivers: the first one picture further in.
+        let two = scene(
+            &HudInputs {
+                gps_fix2: 5,
+                ..icons.clone()
+            },
+            W,
+            H,
+        );
+        assert!(same(
+            rect_of(&two, Icon::Fix3d).expect("first"),
+            (W - wide * 2.0 - 5.0, strip, wide, fontsize + 8.0)
+        ));
+        assert!(same(
+            rect_of(&two, Icon::RtkFloat).expect("second"),
+            (W - wide - 3.0, strip, wide, fontsize + 8.0)
+        ));
+        // And with the icons off, the zones are at the text, 40 wide and two fonts high.
+        let text = scene(&flying(), W, H);
+        assert!(same(
+            text.zone(Element::Vibe).expect("a zone"),
+            (W - 18.0 * fontsize, lower, 40.0, fontsize * 2.0)
+        ));
+        assert!(same(
+            text.zone(Element::Ekf).expect("a zone"),
+            (W - 23.0 * fontsize, lower, 40.0, fontsize * 2.0)
+        ));
+        assert_eq!(fact(&readout_facts(&text), "hud.icons"), "none");
+    }
+
+    /// The click rectangles as facts, at the size the facts' scene is drawn (`main.rs`, 800 by
+    /// 260): what `tests/gui/hud-icons.gui` expects, text then pictures.
+    #[test]
+    fn the_zone_facts_are_the_ones_the_icon_script_expects() {
+        let text = readout_facts(&scene(&flying(), 800.0, 260.0));
+        assert_eq!(fact(&text, "hud.zone.vibe"), "638,239,40,18");
+        assert_eq!(fact(&text, "hud.zone.ekf"), "593,239,40,18");
+        let icons = HudInputs {
+            display_icons: true,
+            ..flying()
+        };
+        let pictures = readout_facts(&scene(&icons, 800.0, 260.0));
+        assert_eq!(fact(&pictures, "hud.zone.vibe"), "617,238,51,17");
+        assert_eq!(fact(&pictures, "hud.zone.ekf"), "561,238,51,17");
+    }
+
+    /// Each readout's picture follows its level as its text's colour does.
+    /// `// C#: ExtLibs/Controls/HUD.cs:2861-2885, 2936-2986, 3166-3200, 3226-3259, 3280-3300`
+    #[test]
+    fn the_pictures_follow_the_levels() {
+        let icons_of = |inputs: HudInputs| {
+            scene(
+                &HudInputs {
+                    display_icons: true,
+                    ..inputs
+                },
+                W,
+                H,
+            )
+            .icons()
+        };
+        for (remaining, low, critical, icon) in [
+            (76, false, false, Icon::Batt4),
+            (75, false, false, Icon::Batt3),
+            (51, false, false, Icon::Batt3),
+            (50, false, false, Icon::Batt2),
+            (26, false, false, Icon::Batt2),
+            (25, false, false, Icon::Batt1),
+            (0, false, false, Icon::Batt1),
+            (90, true, false, Icon::BattYellow),
+            (90, true, true, Icon::BattRed),
+        ] {
+            let drawn = icons_of(HudInputs {
+                battery_remaining: remaining,
+                battery_low: low,
+                battery_critical: critical,
+                ..flying()
+            });
+            assert_eq!(drawn.first(), Some(&icon), "{remaining} {low} {critical}");
+        }
+        for (fix, icon) in [
+            (0, Icon::NoGps),
+            (1, Icon::NoFix),
+            (2, Icon::Fix2d),
+            (3, Icon::Fix3d),
+            (4, Icon::Dgps3d),
+            (5, Icon::RtkFloat),
+            (6, Icon::RtkFixed),
+            (8, Icon::Unknown),
+        ] {
+            let drawn = icons_of(HudInputs {
+                gps_fix: fix,
+                ..flying()
+            });
+            assert_eq!(drawn.get(1), Some(&icon), "fix {fix}");
+        }
+        for (vibe, icon) in [
+            ([30.0, 0.0, 0.0], Icon::VibeGreen),
+            ([0.0, 31.0, 0.0], Icon::VibeYellow),
+            ([0.0, 0.0, 61.0], Icon::VibeRed),
+        ] {
+            assert!(icons_of(HudInputs { vibe, ..flying() }).contains(&icon));
+        }
+        for (ekf_status, icon) in [
+            (0.5, Icon::EkfGreen),
+            (0.6, Icon::EkfYellow),
+            (0.9, Icon::EkfRed),
+        ] {
+            assert!(
+                icons_of(HudInputs {
+                    ekf_status,
+                    ..flying()
+                })
+                .contains(&icon)
+            );
+        }
+    }
+
+    /// The stand-ins: a badge is its colour at the bitmaps' alpha with its words in white in
+    /// the middle, inside its rectangle; a battery is its outline and cap and as many bars as
+    /// its file has, from the bottom. `// C#: ExtLibs/Controls/Resources/*.png`
+    #[test]
+    fn a_picture_is_drawn_as_what_it_shows() {
+        let rect = (100.0, 200.0, 54.0, 18.0);
+        let inside = |points: &[(f32, f32)]| {
+            points.iter().all(|(x, y)| {
+                *x >= rect.0 - 0.01
+                    && *x <= rect.0 + rect.2 + 0.01
+                    && *y >= rect.1 - 0.01
+                    && *y <= rect.1 + rect.3 + 0.01
+            })
+        };
+        let badge = icon_items(Icon::EkfRed, rect);
+        match badge.as_slice() {
+            [
+                Item::Fill {
+                    points,
+                    colour,
+                    alpha,
+                },
+                Item::Label {
+                    text,
+                    at,
+                    colour: ink,
+                    align,
+                    size,
+                },
+            ] => {
+                assert!(inside(points) && points.len() == 4, "{points:?}");
+                assert_eq!(*colour, colour::ICON_RED);
+                assert!((alpha - 179.0 / 255.0).abs() < 1e-6);
+                assert_eq!(text, "EKF");
+                assert_eq!((*ink, *align), (colour::INK, Align::Centre));
+                assert!(close(*at, (127.0, 200.0 + (18.0 - size * 1.2) / 2.0)));
+                assert!(*size <= 18.0 * 0.7);
+            }
+            other => panic!("{other:?}"),
+        }
+        let bars = |icon: Icon| {
+            icon_items(icon, rect)
+                .iter()
+                .filter(|item| {
+                    matches!(item, Item::Fill { colour, .. }
+                        if *colour == colour::BATTERY_GREEN || *colour == colour::BATTERY_YELLOW)
+                })
+                .count()
+        };
+        assert_eq!(
+            [
+                Icon::Batt1,
+                Icon::Batt2,
+                Icon::Batt3,
+                Icon::Batt4,
+                Icon::BattYellow,
+                Icon::BattRed
+            ]
+            .map(bars),
+            [1, 2, 3, 4, 1, 0]
+        );
+        for icon in [Icon::Batt4, Icon::BattRed] {
+            for item in icon_items(icon, rect) {
+                match item {
+                    Item::Fill { points, .. } | Item::Stroke { points, .. } => {
+                        assert!(inside(&points), "{icon:?}: {points:?}");
+                    }
+                    other => panic!("{other:?}"),
+                }
+            }
+        }
+        let outline = |icon: Icon| {
+            icon_items(icon, rect).iter().find_map(|item| match item {
+                Item::Stroke { colour, .. } => Some(*colour),
+                _ => None,
+            })
+        };
+        assert_eq!(outline(Icon::BattRed), Some(colour::BATTERY_RED));
+        assert_eq!(outline(Icon::Batt2), Some(colour::BATTERY_OUTLINE));
+        // Every picture has words or bars, and a name that is its file's.
+        for icon in [Icon::Fix2d, Icon::RtkFixed, Icon::PrearmRed, Icon::Unknown] {
+            assert!(!icon_items(icon, rect).is_empty());
+        }
+        assert_eq!(Icon::Fix2d.name(), "2dfix_wide");
+        assert_eq!(Icon::PrearmRed.name(), "prearm_red");
+    }
+
+    /// The user's extra fields are read through the getters, so a distance is in feet where the
+    /// units say so and a heading is as it was. `// C#: ExtLibs/Controls/HUD.cs:949-968, 3029-3077`
+    #[test]
+    fn custom_items_are_shown_in_the_users_units() {
+        let mut inputs = in_feet_and_knots();
+        inputs.custom_items = vec![
+            CustomItem {
+                header: "Dist: ".to_owned(),
+                name: "wp_dist".to_owned(),
+                value: Some(250.0),
+            },
+            CustomItem {
+                header: "Yaw: ".to_owned(),
+                name: "yaw".to_owned(),
+                value: Some(90.5),
+            },
+        ];
+        let drawn = scene(&inputs, W, H);
+        let texts: Vec<&str> = drawn
+            .labels_of(Element::CustomItems)
+            .into_iter()
+            .map(|(text, _)| text)
+            .collect();
+        assert_eq!(texts, ["Dist: 820.21", "Yaw: 90.5"]);
     }
 }

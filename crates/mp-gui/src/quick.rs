@@ -15,6 +15,14 @@
 //!
 //! The C# keeps the choice in its settings, `Settings.Instance["quickView" + n]`. The settings
 //! file is not this module's to extend, so a choice lasts for the session.
+//!
+//! # Units
+//!
+//! The vehicle's state is SI. The C#'s `CurrentState` getters multiply a dozen properties by the
+//! user's `multiplierdist`, `multiplieralt` or `multiplierspeed` before a binding reads them, so
+//! a view shows those in feet or knots where the Planner page says so; [`IN_DISPLAY_UNITS`] is
+//! that list, held to the getters by a test that reads `CurrentState.cs`. The description names
+//! the unit through `GetNameandUnit`. [`QuickViews`] holds the units the flight screen hands it.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -23,6 +31,7 @@ use gpui::{AnyElement, Context, Window, div, prelude::*, px, rgb};
 use mp_units::{Metres, MetresPerSecond};
 use mp_vehicle::VehicleState;
 use mp_vehicle::coverage::{CURRENTSTATE, Ours};
+use mp_vehicle::units::DisplayUnits;
 
 use crate::MissionPlanner;
 use crate::ui::{action, theme};
@@ -611,26 +620,88 @@ pub fn value(name: &str, state: &VehicleState) -> Option<f64> {
         .map(|(_, read)| read(state))
 }
 
+/// Which of `CurrentState`'s multipliers a property's value is shown through.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Multiplier {
+    /// `multiplierdist`.
+    Dist,
+    /// `multiplieralt`.
+    Alt,
+    /// `multiplierspeed`.
+    Speed,
+}
+
+/// The held properties the C# shows in the user's units, with the multiplier each one's getter
+/// applies and the getter's line. The getter decides, not the text: `alt_error` says "(dist)"
+/// and is multiplied as an altitude, `altasl2` says "(dist)" and is not multiplied at all.
+///
+/// `wind_vel` is the one multiplied where it is set rather than where it is read: the `WIND`
+/// handler stores `wind.speed * multiplierspeed` (`CurrentState.cs:2858`). The C#'s other
+/// source, `HIGH_LATENCY`, stores its speed unmultiplied (`:2540`); the vehicle's state does not
+/// say which message set it, and this multiplies it as a vehicle sending `WIND` - ArduPilot on
+/// a normal link - has it.
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs`
+pub const IN_DISPLAY_UNITS: &[(&str, Multiplier, u32)] = &[
+    ("alt", Multiplier::Alt, 327),
+    ("altasl", Multiplier::Alt, 354),
+    ("airspeed", Multiplier::Speed, 496),
+    ("groundspeed", Multiplier::Speed, 529),
+    ("wp_dist", Multiplier::Dist, 1093),
+    ("alt_error", Multiplier::Alt, 1102),
+    ("climbrate", Multiplier::Speed, 1154),
+    ("verticalspeed", Multiplier::Speed, 1048),
+    ("DistFromMovingBase", Multiplier::Dist, 1781),
+    ("wind_vel", Multiplier::Speed, 2858),
+    ("DistToHome", Multiplier::Dist, 1781),
+    ("sonarrange", Multiplier::Alt, 1861),
+    ("ter_curalt", Multiplier::Alt, 2055),
+    ("ter_alt", Multiplier::Alt, 2063),
+];
+
+/// The multiplier a property is shown through, if any.
+#[must_use]
+pub fn multiplier(name: &str) -> Option<Multiplier> {
+    IN_DISPLAY_UNITS
+        .iter()
+        .find(|(field, _, _)| *field == name)
+        .map(|(_, multiplier, _)| *multiplier)
+}
+
+/// A property's SI value as its getter returns it: through `toDistDisplayUnit`,
+/// `toAltDisplayUnit` or `toSpeedDisplayUnit` where it has a multiplier, as it is otherwise.
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4360-4373`
+#[must_use]
+pub fn to_display(name: &str, value: f64, units: &DisplayUnits) -> f64 {
+    match multiplier(name) {
+        Some(Multiplier::Dist) => units.to_dist(value),
+        Some(Multiplier::Alt) => units.to_alt(value),
+        Some(Multiplier::Speed) => units.to_speed(value),
+        None => value,
+    }
+}
+
+/// What a view bound to `name` shows now, in the user's units: [`value`] through
+/// [`to_display`].
+#[must_use]
+pub fn display_value(name: &str, state: &VehicleState, units: &DisplayUnits) -> Option<f64> {
+    value(name, state).map(|value| to_display(name, value, units))
+}
+
 /// The view's description: `GetNameandUnit`. The property's `[DisplayText]`, or its name when
-/// it has none, with the first of `(dist)`, `(speed)` and `(alt)` it holds replaced by the unit -
-/// metres and metres per second, the units `ChangeUnits` sets when nothing is configured.
+/// it has none, with the first of `(dist)`, `(speed)` and `(alt)` it holds replaced by the unit.
+///
+/// **Divergence:** the C# works a view's description out when the flight screen loads and when
+/// the view is bound anew (`FlightData.cs:476, 507, 2488`), so after the units change on the
+/// Planner page its views show the old unit's name over a number in the new unit until the next
+/// start. Here the description follows the units, so the name always says what the number is in.
 /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4526-4552, MainV2.cs:4247-4330`
 #[must_use]
-pub fn label(name: &str) -> String {
+pub fn label(name: &str, units: &DisplayUnits) -> String {
     let desc = CURRENTSTATE
         .iter()
         .find(|field| field.name == name && !field.display.is_empty())
         .map_or(name, |field| field.display);
-    let units = mp_vehicle::units::DisplayUnits::default().change_units(None, None, None);
-    if desc.contains("(dist)") {
-        desc.replace("(dist)", &format!("({})", units.dist_unit))
-    } else if desc.contains("(speed)") {
-        desc.replace("(speed)", &format!("({})", units.speed_unit))
-    } else if desc.contains("(alt)") {
-        desc.replace("(alt)", &format!("({})", units.alt_unit))
-    } else {
-        desc.to_owned()
-    }
+    units.name_and_unit(desc)
 }
 
 /// Every property the chooser offers, in its order.
@@ -692,11 +763,15 @@ pub fn number_size(width: f32, height: f32, characters: usize, zero_width: f32) 
     size
 }
 
-/// The six views' properties, and the view whose chooser is open.
+/// The six views' properties, the view whose chooser is open, and the units they show in.
 #[derive(Debug, Clone)]
 pub struct QuickViews {
     fields: [String; 6],
     choosing: Option<usize>,
+    /// `CurrentState`'s multipliers and unit names, as the Planner page last set them. Metres
+    /// and metres per second until told otherwise: `MainV2` runs `ChangeUnits` before the
+    /// flight screen first shows. `// C#: MainV2.cs:836`
+    units: DisplayUnits,
 }
 
 impl Default for QuickViews {
@@ -704,11 +779,23 @@ impl Default for QuickViews {
         Self {
             fields: DEFAULTS.map(|(name, _)| name.to_owned()),
             choosing: None,
+            units: DisplayUnits::default().change_units(None, None, None),
         }
     }
 }
 
 impl QuickViews {
+    /// The user's units, handed over by the flight screen each frame.
+    pub const fn set_units(&mut self, units: DisplayUnits) {
+        self.units = units;
+    }
+
+    /// The units the views show in.
+    #[must_use]
+    pub const fn units(&self) -> &DisplayUnits {
+        &self.units
+    }
+
     /// The property view `index` (0 to 5) shows.
     #[must_use]
     pub fn field(&self, index: usize) -> &str {
@@ -750,26 +837,36 @@ impl QuickViews {
         self.choosing = None;
     }
 
-    /// Publishes what a UI test asserts on: each view's property, description and number, and
-    /// the chooser.
+    /// Publishes what a UI test asserts on: [`QuickViews::facts`].
     pub fn record_facts(&self, state: Option<&VehicleState>) {
+        for (key, value) in self.facts(state) {
+            crate::facts::record(key, value);
+        }
+    }
+
+    /// Each view's property, description and number - the description and the number as the
+    /// page paints them, in the user's units - and the chooser.
+    #[must_use]
+    pub fn facts(&self, state: Option<&VehicleState>) -> Vec<(String, String)> {
+        let mut facts = Vec::new();
         for (index, field) in self.fields.iter().enumerate() {
             let key = format!("fly.quick.{}", index + 1);
-            crate::facts::record(&key, field);
-            crate::facts::record(format!("{key}.label"), label(field));
-            crate::facts::record(
+            facts.push((format!("{key}.label"), label(field, &self.units)));
+            facts.push((
                 format!("{key}.value"),
                 state
-                    .and_then(|state| value(field, state))
+                    .and_then(|state| display_value(field, state, &self.units))
                     .map_or_else(|| "none".to_owned(), number_text),
-            );
+            ));
+            facts.push((key, field.clone()));
         }
-        crate::facts::record(
-            "fly.quick.chooser",
+        facts.push((
+            "fly.quick.chooser".to_owned(),
             self.choosing
                 .map_or_else(|| "none".to_owned(), |index| (index + 1).to_string()),
-        );
-        crate::facts::record("fly.quick.choices", choices().len());
+        ));
+        facts.push(("fly.quick.choices".to_owned(), choices().len().to_string()));
+        facts
     }
 }
 
@@ -793,9 +890,9 @@ pub fn page(
         let colour = DEFAULTS
             .get(index)
             .map_or(theme::TEXT, |(_, colour)| *colour);
-        let desc = label(&field);
+        let desc = label(&field, views.units());
         let number = state
-            .and_then(|state| value(&field, state))
+            .and_then(|state| display_value(&field, state, views.units()))
             .map_or_else(|| "--".to_owned(), number_text);
         let id = IDS.get(index).copied().unwrap_or("fly-quick");
         grid = grid.child(
@@ -882,8 +979,7 @@ fn paint_view(
                 align: Align::Centre,
             },
         ],
-        drawn: Vec::new(),
-        owners: Vec::new(),
+        ..Scene::default()
     };
     crate::hud::paint(&scene, bounds, window, cx);
 }
@@ -1097,21 +1193,195 @@ mod tests {
         assert_eq!(views.field(5), "DistToHome");
     }
 
+    /// Metres and metres per second, as `ChangeUnits` sets them with nothing configured.
+    fn metric() -> DisplayUnits {
+        DisplayUnits::default().change_units(None, None, None)
+    }
+
+    /// Feet for distance and altitude and knots for speed, as the Planner page sets them.
+    fn feet_and_knots() -> DisplayUnits {
+        DisplayUnits::default().change_units(Some("Feet"), Some("Feet"), Some("knots"))
+    }
+
     #[test]
     fn a_description_is_the_display_text_with_its_unit() {
-        assert_eq!(label("alt"), "Altitude (m)");
-        assert_eq!(label("groundspeed"), "GroundSpeed (m/s)");
-        assert_eq!(label("wp_dist"), "Dist to WP (m)");
-        assert_eq!(label("yaw"), "Yaw (deg)");
-        assert_eq!(label("verticalspeed"), "Vertical Speed (m/s)");
-        assert_eq!(label("DistToHome"), "Dist to Home (m)");
+        let metric = metric();
+        assert_eq!(label("alt", &metric), "Altitude (m)");
+        assert_eq!(label("groundspeed", &metric), "GroundSpeed (m/s)");
+        assert_eq!(label("wp_dist", &metric), "Dist to WP (m)");
+        assert_eq!(label("yaw", &metric), "Yaw (deg)");
+        assert_eq!(label("verticalspeed", &metric), "Vertical Speed (m/s)");
+        assert_eq!(label("DistToHome", &metric), "Dist to Home (m)");
         // No display text: the name.
         let bare = CURRENTSTATE
             .iter()
             .find(|field| field.display.is_empty() && matches!(field.ours, Ours::Done(_)))
             .map(|field| field.name)
             .expect("a done row without display text");
-        assert_eq!(label(bare), bare);
+        assert_eq!(label(bare, &metric), bare);
+    }
+
+    /// In feet and knots each default view names its unit, and the ones with none keep theirs.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4526-4552`
+    #[test]
+    fn a_description_names_the_users_unit() {
+        let units = feet_and_knots();
+        assert_eq!(label("alt", &units), "Altitude (ft)");
+        assert_eq!(label("groundspeed", &units), "GroundSpeed (kts)");
+        assert_eq!(label("wp_dist", &units), "Dist to WP (ft)");
+        assert_eq!(label("yaw", &units), "Yaw (deg)");
+        assert_eq!(label("verticalspeed", &units), "Vertical Speed (kts)");
+        assert_eq!(label("DistToHome", &units), "Dist to Home (ft)");
+        // "(dist)" is named by the distance unit even where the getter multiplies otherwise.
+        let mixed = DisplayUnits::default().change_units(Some("Feet"), Some("Meters"), Some("kph"));
+        assert_eq!(label("alt_error", &mixed), "Altitude Error (ft)");
+        assert_eq!(label("altasl", &mixed), "Altitude (m)");
+        assert_eq!(label("airspeed", &mixed), "AirSpeed (kph)");
+    }
+
+    /// Each held property whose getter multiplies is in the table with that multiplier, and no
+    /// other is: read from `CurrentState.cs`, the property's declaration to the end of its body.
+    /// `wind_vel`, multiplied where the `WIND` handler sets it, is checked there.
+    #[test]
+    fn the_units_table_is_the_csharps_getters() {
+        let Some(source) = csharp("ExtLibs/ArduPilot/CurrentState.cs") else {
+            eprintln!("skipped: the C# tree is not checked out here");
+            return;
+        };
+        let lines: Vec<&str> = source.lines().collect();
+        // The property's declaration and body, from `public <type> <name>` to where its braces
+        // close, or the one line of an auto-property or an expression body.
+        let body = |name: &str| -> Option<(usize, String)> {
+            let start = lines.iter().position(|line| {
+                let Some(at) = line.find("public ") else {
+                    return false;
+                };
+                let mut words = line[at + 7..].split_whitespace();
+                let first = words.next();
+                let first = if first == Some("static") {
+                    words.next()
+                } else {
+                    first
+                };
+                // The type, then the name: a method's name has its `(` attached and never
+                // matches.
+                first.is_some()
+                    && words
+                        .next()
+                        .is_some_and(|word| word.trim_end_matches(';') == name)
+            })?;
+            let mut text = String::new();
+            let mut depth = 0i32;
+            let mut opened = false;
+            for (offset, line) in lines.iter().enumerate().skip(start) {
+                text.push_str(line);
+                text.push('\n');
+                depth += i32::try_from(line.matches('{').count()).unwrap_or(0);
+                depth -= i32::try_from(line.matches('}').count()).unwrap_or(0);
+                opened |= line.contains('{');
+                let one_line = offset == start && (line.contains(';') || line.contains("=>"));
+                if (opened && depth <= 0) || (one_line && !opened) {
+                    break;
+                }
+            }
+            Some((start + 1, text))
+        };
+        let found = |text: &str| {
+            if text.contains("multiplierdist") || text.contains("toDistDisplayUnit") {
+                Some(Multiplier::Dist)
+            } else if text.contains("multiplieralt") || text.contains("toAltDisplayUnit") {
+                Some(Multiplier::Alt)
+            } else if text.contains("multiplierspeed") || text.contains("toSpeedDisplayUnit") {
+                Some(Multiplier::Speed)
+            } else {
+                None
+            }
+        };
+        for (name, _) in READERS.iter().chain(DERIVED) {
+            let (line, text) = body(name).unwrap_or_else(|| panic!("no property {name}"));
+            let wanted = if *name == "wind_vel" {
+                assert!(
+                    source.contains("wind_vel = wind.speed * multiplierspeed;"),
+                    "the WIND handler no longer multiplies wind_vel"
+                );
+                Some(Multiplier::Speed)
+            } else {
+                found(&text)
+            };
+            assert_eq!(
+                multiplier(name),
+                wanted,
+                "{name} at CurrentState.cs:{line}:\n{text}"
+            );
+        }
+        // Every row names a held property, and the line of its multiplier.
+        for (name, _, line) in IN_DISPLAY_UNITS {
+            assert!(
+                READERS.iter().chain(DERIVED).any(|(held, _)| held == name),
+                "{name} is not held"
+            );
+            let at = lines
+                .get(usize::try_from(*line).unwrap_or(0).saturating_sub(1))
+                .copied()
+                .unwrap_or("");
+            assert!(
+                at.contains("multiplier") || at.contains("DisplayUnit"),
+                "CurrentState.cs:{line} is {at:?}, not {name}'s multiplier"
+            );
+        }
+    }
+
+    /// The views read the vehicle through the getters' multipliers: metres to feet, metres per
+    /// second to knots, and a heading as it is. The facts are what the page paints.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:327, 529, 1093, 1781, MainV2.cs:4262, 4317`
+    #[test]
+    fn the_views_show_the_vehicle_in_the_users_units() {
+        let mut state = VehicleState::default();
+        state.altitude_relative = Metres(100.0);
+        state.ground_speed = MetresPerSecond(10.0);
+        state.nav.wp_distance = 250.0;
+        state.attitude.yaw = mp_units::Radians(std::f64::consts::FRAC_PI_2);
+        state.home = Some(mp_units::LatLon::new(-35.0, 149.0).unwrap());
+        state.position = Some(mp_units::LatLon::new(-35.001, 149.0).unwrap());
+        let units = feet_and_knots();
+        let feet = f64::from("3.2808399".parse::<f32>().unwrap());
+        let knots = f64::from("1.94384449".parse::<f32>().unwrap());
+        assert_eq!(display_value("alt", &state, &units), Some(100.0 * feet));
+        assert_eq!(
+            display_value("groundspeed", &state, &units),
+            Some(10.0 * knots)
+        );
+        assert_eq!(display_value("wp_dist", &state, &units), Some(250.0 * feet));
+        let yaw = display_value("yaw", &state, &units).unwrap();
+        assert!((yaw - 90.0).abs() < 1e-9, "{yaw}");
+        let home = display_value("DistToHome", &state, &units).unwrap();
+        assert!((home - 111.3195 * feet).abs() < 0.05, "{home}");
+
+        let mut views = QuickViews::default();
+        views.set_units(units);
+        let facts = views.facts(Some(&state));
+        let fact = |key: &str| {
+            facts
+                .iter()
+                .find(|(name, _)| name == key)
+                .map(|(_, value)| value.as_str())
+        };
+        assert_eq!(fact("fly.quick.1"), Some("alt"));
+        assert_eq!(fact("fly.quick.1.label"), Some("Altitude (ft)"));
+        assert_eq!(fact("fly.quick.1.value"), Some("328.08"));
+        assert_eq!(fact("fly.quick.2.label"), Some("GroundSpeed (kts)"));
+        assert_eq!(fact("fly.quick.2.value"), Some("19.44"));
+        assert_eq!(fact("fly.quick.3.label"), Some("Dist to WP (ft)"));
+        assert_eq!(fact("fly.quick.3.value"), Some("820.21"));
+        assert_eq!(fact("fly.quick.4.value"), Some("90.00"));
+        // Vertical speed is held now: 0 m/s is 0.00 in any unit.
+        assert_eq!(fact("fly.quick.5.value"), Some("0.00"));
+        assert_eq!(fact("fly.quick.6.label"), Some("Dist to Home (ft)"));
+        // Back to metres, the same views read metres again.
+        views.set_units(metric());
+        let facts = views.facts(Some(&state));
+        assert!(facts.contains(&("fly.quick.1.label".to_owned(), "Altitude (m)".to_owned())));
+        assert!(facts.contains(&("fly.quick.1.value".to_owned(), "100.00".to_owned())));
     }
 
     #[test]
@@ -1172,7 +1442,7 @@ mod tests {
         views.choose("battery_voltage");
         assert_eq!(views.choosing(), None);
         assert_eq!(views.field(2), "battery_voltage");
-        assert_eq!(label("battery_voltage"), "Bat Voltage (V)");
+        assert_eq!(label("battery_voltage", &metric()), "Bat Voltage (V)");
         views.open(9);
         assert_eq!(views.choosing(), None);
     }

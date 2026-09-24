@@ -1,0 +1,54 @@
+# The HUD's pictures: Show icons on the HUD's menu turns hud1.displayicons over, and the HUD then
+# draws the battery, the GPS fix, Vibe, EKF and - disarmed - the pre-arm state as HUDT's pictures
+# in place of their text: the battery at the left edge with its numbers beside it, the fix at the
+# right of the bottom strip, Vibe four and EKF five pictures in, the pre-arm picture above EKF's.
+# The click rectangles for Vibe and EKF move with them (vibehitzone, ekfhitzone). Clicked again,
+# the text is back. `GCSViews/FlightData.cs:6484-6496, ExtLibs/Controls/HUD.cs:2861-2899,
+# 2997-3009, 3150-3301`
+#
+# The pictures are Mission Planner's bitmaps, which this application does not ship; each is drawn
+# as what it shows, in its colours and its rectangle (crates/mp-gui/src/hud.rs, "The pictures").
+#
+# Depends on fly.rs enabling the menu entry (fly-hud-showicons); until then it is dimmed and this
+# fails at the first expectation after the click. Every rectangle and every level's picture is
+# proved by the unit tests in crates/mp-gui/src/hud.rs; the zones below are the facts' 800 by 260
+# scene's, whose font is 9.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760, disarmed, at rest and past its start-up: a full pack,
+# a 3D fix, vibration and EKF settled, the pre-arm checks passing. Run as
+#
+#   tools/gui-test.sh tests/gui/hud-icons.gui -- tcp:127.0.0.1:5760
+
+screen fly
+window 1600x1200
+settle 6
+
+# Text, as HUD_showicons leaves it with nothing saved.
+expect hud.icons none
+expect hud.gps ~ GPS:
+expect hud.vibe.colour white
+expect hud.zone.vibe 638,239,40,18
+expect hud.zone.ekf 593,239,40,18
+
+click hud@0.5x0.4:right
+click fly-hud-showicons
+settle 1
+expect hud.icons ~ batt_
+expect hud.icons ~ 3dfix_wide,vibe_green,ekf_green,prearm_green
+expect hud.gps none
+expect hud.vibe.colour none
+expect hud.ekf.colour none
+expect hud.prearm none
+# The numbers stay, beside the battery, without "Bat1".
+expect hud.battery.lower ~ v
+expect hud.zone.vibe 617,238,51,17
+expect hud.zone.ekf 561,238,51,17
+
+# Clicked again, the text is back.
+click hud@0.5x0.4:right
+click fly-hud-showicons
+settle 1
+expect hud.icons none
+expect hud.gps ~ GPS:
+expect hud.vibe.colour white
+expect hud.zone.vibe 638,239,40,18
