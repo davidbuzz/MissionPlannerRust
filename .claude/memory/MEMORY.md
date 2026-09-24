@@ -18,3 +18,4 @@ controlled; the per-project memory directory holds symlinks to them.
 - [Delegate to Opus subagents](delegate-to-opus-subagents.md) — up to six at once, disjoint files, never a window, never a commit
 - [Worktree agents share the target dir](worktree-agents-share-the-target-dir.md) — touch a crate's lib.rs before an integration build while agents run
 - [Drop-downs escape the page](dropdowns-escape-the-page.md) — deferred+anchored, thirty rows, wheel-scrolled; the page clips anything else
+- [Kill by PID, not pattern](kill-by-pid-not-pattern.md) — pkill -f matches the calling shell; pgrep -fa, then kill the PIDs
