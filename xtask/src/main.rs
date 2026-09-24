@@ -1,11 +1,6 @@
 //! Repository automation entry point: `cargo xtask <command>`.
 
-// xtask is a binary, so its module items are internal by construction; `pub` on them is a
-// readability choice, not an exported API.
-#![allow(unreachable_pub)]
-
-mod codegen;
-mod ledger;
+use xtask::{codegen, ledger};
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -26,6 +21,7 @@ fn run() -> Result<()> {
         Some("dump-tlog") => dump_tlog(args.get(1).map(String::as_str)),
         Some("codegen-modes") => codegen_modes(),
         Some("codegen-param-meta") => codegen_param_meta(),
+        Some("codegen-resx") => codegen_resx(args.iter().any(|a| a == "--check")),
         Some("ledger") => ledger::run(args.get(1..).unwrap_or_default(), &repo_root()),
         Some("codegen") => {
             let check = args.iter().any(|a| a == "--check");
@@ -55,6 +51,7 @@ fn usage() {
          dump-tlog <file>          decode a tlog and print the same CSV the C# reference emits\n  \
          codegen-modes             regenerate flight mode tables from the parameter metadata\n  \
          codegen-param-meta        regenerate parameter descriptions, ranges and enumerations\n  \
+         codegen-resx [--check]    regenerate assets/i18n from the .resx files: the .ftl per culture, the key map, the zero-loss report\n  \
          ledger <init|check|status> the porting ledger: one row per C# file (PLAN.md §6.2)\n  \
          verify-mavlink [dialect]  check generated MAVLink metadata against the C# reference\n  \
          help                      show this message"
@@ -337,5 +334,79 @@ fn codegen_param_meta() -> Result<()> {
         out_file.display(),
         source.len() / 1024
     );
+    Ok(())
+}
+
+/// `.resx` → `.ftl` under `assets/i18n/`, with `keymap.toml` and `report.md` (D17).
+///
+/// `--check` regenerates in memory and fails if any file differs from what is committed, or is
+/// missing, or is there and would not be generated.
+fn codegen_resx(check_only: bool) -> Result<()> {
+    let root = repo_root();
+    let tree = root.join("referneces/missionplanner");
+    if !tree.is_dir() {
+        bail!(
+            "{} is absent (it is gitignored): clone Mission Planner into referneces/missionplanner \
+             to regenerate.",
+            tree.display()
+        );
+    }
+    let out_dir = root.join("assets/i18n");
+    let keymap = match std::fs::read_to_string(out_dir.join("keymap.toml")) {
+        Ok(text) => codegen::resx::Keymap::parse(&text)?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => codegen::resx::Keymap::default(),
+        Err(e) => return Err(e).context("reading assets/i18n/keymap.toml"),
+    };
+    let output = codegen::resx::convert(&tree, keymap)?;
+
+    if check_only {
+        let mut stale = Vec::new();
+        for (relative, text) in &output.files {
+            if std::fs::read_to_string(out_dir.join(relative))
+                .ok()
+                .as_deref()
+                != Some(text)
+            {
+                stale.push(relative.display().to_string());
+            }
+        }
+        let mut walk = vec![out_dir.clone()];
+        while let Some(dir) = walk.pop() {
+            for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    walk.push(path);
+                } else if let Ok(relative) = path.strip_prefix(&out_dir)
+                    && !output.files.contains_key(relative)
+                {
+                    stale.push(format!("{} (would not be generated)", relative.display()));
+                }
+            }
+        }
+        if !stale.is_empty() {
+            bail!(
+                "assets/i18n is stale; run `cargo xtask codegen-resx`. Differs: {}",
+                stale.join(", ")
+            );
+        }
+        println!("assets/i18n is up to date ({} files)", output.files.len());
+        return Ok(());
+    }
+    for (relative, text) in &output.files {
+        let path = out_dir.join(relative);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&path, text).with_context(|| format!("writing {}", path.display()))?;
+    }
+    for base in &output.bases {
+        println!(
+            "{}: {} keys, {} cultures",
+            base.source,
+            base.keys,
+            base.cultures.len() - 1
+        );
+    }
+    println!("wrote {} files under assets/i18n", output.files.len());
     Ok(())
 }

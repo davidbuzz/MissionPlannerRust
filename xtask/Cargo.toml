@@ -16,8 +16,13 @@ mp-mavlink.workspace = true
 mp-mavlink-dialects.workspace = true
 roxmltree.workspace = true
 sha2.workspace = true
+# codegen-resx parses every .ftl it generates back before writing it.
+fluent-syntax = "0.12"
 
 [dev-dependencies]
+# tests/resx.rs formats the generated messages and compares them with the .NET strings.
+fluent-bundle = "0.16"
+unic-langid = "0.9"
 # tests/graph.rs reads `cargo metadata`'s JSON. Already in the tree through mp-firmware, so it
 # costs nothing to compile.
 serde_json.workspace = true

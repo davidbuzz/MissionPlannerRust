@@ -53,8 +53,9 @@ Linux only, so far: the repository has no remote, and the three-OS CI matrix has
 **Not yet**: any run on Windows or macOS - the repository has no remote, so the three-OS CI matrix has never
 executed, and the two columns in `DELIVERABLES.md` say so; the log browser's field descriptions
 (`LogMessages.xml.xz`); a joystick latency histogram from a real device (none is attached to this machine);
-i18n; packaging. `PLAN.md` §13.6 is the queue, re-prioritised on 2026-09-24, and says what *done* means for
-each.
+i18n on the screens (the `.ftl` files exist under `assets/i18n/`, generated from the `.resx` with a zero-loss report;
+no screen reads them yet); packaging. `PLAN.md` §13.6 is the queue, re-prioritised on 2026-09-24, and says what
+*done* means for each.
 
 ## Verification
 
@@ -165,6 +166,7 @@ crates/
   mp-cli               `mpr`
   mp-gui               `mpr-gui`, built on gpui
 xtask/                 codegen and repository invariants
+assets/i18n/           the .ftl per culture, generated from Mission Planner's .resx, with the key map and the zero-loss report
 fuzz/                  libfuzzer targets and their committed seed corpora
 tests/gui/              click-and-assert UI tests, run by tools/gui-test.sh
 tools/csharp-reference headless C# reference for differential testing

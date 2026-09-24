@@ -94,6 +94,12 @@ impl Message {
         self.fields.iter().map(Field::wire_size).sum()
     }
 
+    /// Whether the message carries no fields at all.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.fields.is_empty()
+    }
+
     /// Computes `CRC_EXTRA` the way mavgen does.
     #[must_use]
     pub fn crc_extra(&self) -> u8 {

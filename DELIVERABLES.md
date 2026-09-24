@@ -33,7 +33,7 @@ renderer with no web backend. Reference clone: [referneces/zed](referneces/zed).
 | [D14](#d14-log-engine-and-analysis) | 2 | Dataflash log parsing, plots | P1 | In progress (65% completed est) | Not started | Not started | Differential vs C# |
 | [D15](#d15-can-peripherals-and-outboard-features) | 2 | DroneCAN, peripherals, video, joystick | P2 | In progress (20% completed est) | Not started | Not started | Unit |
 | [D16](#d16-extension-and-scripting-system) | 2 | Python scripting, WASM extensions | P2 | In progress (15% completed est) | Not started | Not started | Unit |
-| [D17](#d17-localization-settings-and-data-compatibility) | 2 | i18n, settings, data compatibility | P1 | In progress (50% completed est) | Not started | Not started | Differential vs C# |
+| [D17](#d17-localization-settings-and-data-compatibility) | 2 | i18n, settings, data compatibility | P1 | In progress (55% completed est) | Not started | Not started | Differential vs C# |
 | [D18](#d18-translation-factory-and-porting-ledger) | 3 | Translation factory, file ledger | P0 (ledger) / P1 (factory) | In progress (30% completed est) | Not started | Not started | Unit |
 | [D19](#d19-verification-suite) | 3 | Differential, SITL, fuzz verification | P0 | In progress (50% completed est) | Not started | Not started | Differential vs C# + fuzz |
 | [D20](#d20-release-packaging-and-operations) | 3 | Installers, updates, crash reporting | P1 | Spiked (5% completed est) | Not started | Not started | Not started |
@@ -544,7 +544,17 @@ and strict backward compatibility with the C# app's user data.
   (`tests/fixtures/config-saved.xml`, harness `SettingsOracle.cs`) is matched byte for byte,
   and `tests/gui/settings-persist.gui` restarts the application through the close box and
   finds every value back. Its own choices (window, recording, map) still live in its own file.
-- **Tests:** `crates/mp-settings`'s unit tests over `tests/fixtures/` (this machine's real `config.xml` rendered back byte for byte, and `config-saved.xml` from `SettingsOracle.cs` under mono), `tests/gui/settings-persist.gui` (a restart through the close box) and `config-planner.gui` (forty keys read back); the data formats are proved in their own crates - `.waypoints` in `mp-mission`, `.param` in `mp-params`, `.tlog` in `mp-mavlink` and `mp-log`, the map cache in `mp-tiles`. Not yet: nothing of i18n exists - no Fluent dependency, no `.ftl`, no `resx_conversion.rs`, `placeholders.rs` or `pseudolocale.rs` - and no single `data_compat.rs` over every format at once.
+  **i18n's first half** (PLAN.md §13.6 row 76): `cargo xtask codegen-resx` turns `Strings.resx`
+  and `FlightData.resx` and their sibling cultures into `assets/i18n/<culture>/<stem>.ftl` - 185
+  and 135 language keys, ten and eighteen cultures - with `keymap.toml`, the `.resx` name → Fluent
+  id of every key ever generated, immutable so Crowdin's memory and the committed `.ftl` stay
+  keyed (R14), and `report.md`, the zero-loss report: every language entry of every culture file
+  is a translation or a listed orphan (two in Arabic), and four translations whose placeholders
+  differ from the English are named. Each message formats back through a real `FluentBundle` to
+  the exact .NET string, placeholders filled. **Not yet:** Fluent in `mp-gui` and a screen's
+  strings through `fl!()` - a change to what the screens show, for a run on the owner's word - and
+  the missing-translation lint beyond the report's *missing* column.
+- **Tests:** `crates/mp-settings`'s unit tests over `tests/fixtures/` (this machine's real `config.xml` rendered back byte for byte, and `config-saved.xml` from `SettingsOracle.cs` under mono), `tests/gui/settings-persist.gui` (a restart through the close box) and `config-planner.gui` (forty keys read back); the data formats are proved in their own crates - `.waypoints` in `mp-mission`, `.param` in `mp-params`, `.tlog` in `mp-mavlink` and `mp-log`, the map cache in `mp-tiles`. `xtask/tests/resx.rs` is `resx_conversion.rs` and `placeholders.rs` together: every message of every culture's `.ftl` formatted back through a `FluentBundle` to its `.resx` value (2,900-odd), nothing lost, the ids immutable, the committed assets current, and the placeholder mismatches counted in the report. Not yet: `pseudolocale.rs` (no screen reads a `.ftl` yet), and a single `data_compat.rs` over every format at once.
 
 ---
 
@@ -569,9 +579,9 @@ per-file porting harness, and a machine-readable ledger tracking every one of th
   projection, and every `Config*.cs` page ported whole (PLAN.md §13.6 row 72). Existing Rust work
   is credited only when re-entered with evidence (PLAN.md §5.2); `done` needs the review gate,
   which nothing has passed. `init` is deterministic and `refresh` keeps hand-edited columns. Empty: `target_crate`,
-  `unit_id`, `deps`, the class columns. Generators: `mavlink`, `param_meta` and `modes` in
-  `xtask/src/codegen/`. Not started: DSDL, `.resx` → `.ftl`, screen specs, `xtask next`, the
-  contract dry run.
+  `unit_id`, `deps`, the class columns. Generators: `mavlink`, `param_meta`, `modes` and `resx`
+  (`.resx` → `.ftl`, PLAN.md §13.6 row 76) in `xtask/src/codegen/`. Not started: DSDL, screen
+  specs, `xtask next`, the contract dry run.
 - **Tests:** `xtask/tests/ledger.rs` (22 tests: the schema on a fixture tree and the real ledger, every one of the 3,678 files exactly once with a valid tier, disposition and state, evidence on a `done` row, `init` byte-deterministic, `refresh` preserving hand-edited columns) and `graph.rs`. Not yet: `xtask/tests/codegen.rs` (the three generators are regenerable by hand and nothing asserts the checked-in output matches), a dry run of the porting-agent contract.
 
 ### D19. Verification suite
