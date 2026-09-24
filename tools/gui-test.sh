@@ -302,14 +302,16 @@ no_such_fact() {
     return 1
 }
 
-# Whether `$1 $2 $3` holds for the integer forms. A value that is not an integer never does: a
-# fact that reads "none" is not greater than zero, and must not pass because `[` gave up on it.
+# Whether `$1 $2 $3` holds for the numbers. A value that is not a number never does: a fact that
+# reads "none" is not greater than zero, and must not pass because the comparison gave up on it.
+# Decimals compare as numbers (a Quick view altitude reads "584.00"), so awk does the comparing.
 holds() {
-    [[ "$1" =~ ^-?[0-9]+$ ]] || return 1
+    [[ "$1" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] || return 1
+    [[ "$3" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] || return 1
     case "$2" in
-        ">") [ "$1" -gt "$3" ] ;;
-        ">=") [ "$1" -ge "$3" ] ;;
-        "<") [ "$1" -lt "$3" ] ;;
+        ">") awk -v a="$1" -v b="$3" 'BEGIN { exit !(a + 0 > b + 0) }' ;;
+        ">=") awk -v a="$1" -v b="$3" 'BEGIN { exit !(a + 0 >= b + 0) }' ;;
+        "<") awk -v a="$1" -v b="$3" 'BEGIN { exit !(a + 0 < b + 0) }' ;;
         *) return 1 ;;
     esac
 }
@@ -494,7 +496,7 @@ PY
             KEY="${2:?expect needs a key}"
             OP="${3:?expect needs a value}"
             # `expect key value` is equality; `expect key ~ value` is containment; `expect key > n`,
-            # `expect key >= n` and `expect key < n` compare integers.
+            # `expect key >= n` and `expect key < n` compare numbers, decimals included.
             if [ "$OP" = "~" ]; then
                 shift 3
                 WANT="$*"

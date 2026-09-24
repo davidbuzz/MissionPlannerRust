@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+  <name>route</name>
+  <Snippet/>
+  <Style id="line-red">
+    <LineStyle><color>ff0000ff</color><width>3.7</width></LineStyle>
+  </Style>
+  <StyleMap id="map-red">
+    <Pair><key>normal</key><styleUrl>#line-red</styleUrl></Pair>
+    <Pair><key>highlight</key><styleUrl>#line-red</styleUrl></Pair>
+  </StyleMap>
+  <Style id="plain"><LineStyle><color>ff00ff00</color></LineStyle></Style>
+  <Folder>
+    <name>shapes</name>
+    <Placemark>
+      <name>Field</name>
+      <styleUrl>#map-red</styleUrl>
+      <Polygon><outerBoundaryIs><LinearRing><coordinates>
+        149.160,-35.360,0 149.170,-35.360,0 149.170,-35.366,0 149.160,-35.366,0 149.160,-35.360,0
+      </coordinates></LinearRing></outerBoundaryIs></Polygon>
+    </Placemark>
+    <Placemark>
+      <name>Leg</name>
+      <styleUrl>#plain</styleUrl>
+      <LineString><coordinates>149.1600,-35.3600,50 149.1650,-35.3630,60.9 149.1700,-35.3660,70</coordinates></LineString>
+    </Placemark>
+    <Placemark>
+      <name>Gate</name>
+      <Point><coordinates>149.1620,-35.3620</coordinates></Point>
+    </Placemark>
+  </Folder>
+</Document>
+</kml>

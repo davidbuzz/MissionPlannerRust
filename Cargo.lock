@@ -3420,6 +3420,7 @@ dependencies = [
  "mp-mavlink-dialects",
  "mp-mission",
  "mp-units",
+ "roxmltree 0.20.0",
  "thiserror 2.0.20",
 ]
 

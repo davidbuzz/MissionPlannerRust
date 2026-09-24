@@ -674,7 +674,7 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "Click",
         "kMLOverlayToolStripMenuItem_Click",
         "KML Overlay",
-        Missing,
+        Done("menu-kMLOverlay"),
     ),
     row(
         "elevationGraphToolStripMenuItem",
@@ -702,7 +702,7 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "Click",
         "loadAndAppendToolStripMenuItem_Click",
         "Load and Append",
-        Missing,
+        Done("menu-loadAndAppend"),
     ),
     row(
         "saveWPFileToolStripMenuItem",
@@ -716,14 +716,14 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "Click",
         "loadKMLFileToolStripMenuItem_Click",
         "Load KML File",
-        Missing,
+        Done("menu-loadKMLFile"),
     ),
     row(
         "loadSHPFileToolStripMenuItem",
         "Click",
         "loadSHPFileToolStripMenuItem_Click",
         "Load SHP File",
-        Missing,
+        Done("menu-loadSHPFile"),
     ),
     row(
         "poiaddToolStripMenuItem",
@@ -1347,7 +1347,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (82, 0, 27, 12, 0)
+            (86, 0, 23, 12, 0)
         );
     }
 }

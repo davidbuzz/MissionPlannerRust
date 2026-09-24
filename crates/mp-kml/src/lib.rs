@@ -20,6 +20,7 @@ use mp_mission::MissionItem;
 use mp_units::LatLon;
 
 pub mod dflog;
+pub mod read;
 
 /// The colours Mission Planner cycles flight-path segments through.
 ///

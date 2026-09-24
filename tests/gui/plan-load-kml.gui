@@ -1,0 +1,62 @@
+# File Load/Save > Load KML File: `loadKMLFileToolStripMenuItem_Click` opens a "Google Earth KML "
+# dialog (the C#'s trailing space kept), reads the .kml - or the first .kml at the top of a .kmz -
+# and runs `processKMLMission` over every element the parser adds: a POI per Point placemark, with
+# its name, and a row per LineString coordinate through `setfromMap` with `(int)` of its altitude.
+# A polygon adds nothing. `GCSViews/FlightPlanner.cs:4470-4525, 4527-4577`
+#
+# testdata/planner/route.kml holds one polygon, one line string of three coordinates at 50, 60.9
+# and 70 m, and one point named Gate; route.kmz is the same file zipped under a folder entry.
+#
+# Needs no link: tools/gui-test.sh tests/gui/plan-load-kml.gui
+
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
+env MP_PLAN_DIR $WORK
+setup cp testdata/planner/route.kml "$WORK/route.kml" && cp testdata/planner/route.kmz "$WORK/zipped.kmz" && cp testdata/planner/append.waypoints "$WORK/more.waypoints"
+
+screen plan
+window 1600x1200
+settle 4
+expect mission.items 0
+
+click map@0.30x0.70:right
+click menu-fileLoadSave
+click menu-loadKMLFile
+expect plan.prompt Open
+expect plan.prompt.text ~ Google Earth KML
+type route
+key Return
+expect plan.prompt none
+expect status ~ loaded 3 rows
+expect mission.items 3
+expect mission.commands 16,16,16
+expect mission.last.alt 70
+
+# The .kmz appends three more rows; the point placemark is a POI again.
+click map@0.30x0.70:right
+click menu-fileLoadSave
+click menu-loadKMLFile
+type zipped.kmz
+key Return
+expect plan.prompt none
+expect mission.items 6
+
+# The POIs are the flight screen's: two Gates.
+click tab-fly
+settle 2
+expect fly.poi.count 2
+expect fly.poi.list ~ Gate -35.362;149.162
+click tab-plan
+settle 2
+
+# A file that is not KML: "Bad KML File :" and the exception.
+click map@0.30x0.70:right
+click menu-fileLoadSave
+click menu-loadKMLFile
+type more.waypoints
+key Return
+expect plan.prompt message
+expect plan.prompt.text ~ Bad KML File :
+key Return
+expect plan.prompt none
+expect mission.items 6

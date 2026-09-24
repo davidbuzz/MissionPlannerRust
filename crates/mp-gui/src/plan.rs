@@ -330,6 +330,11 @@ pub struct Plan {
     drag_origin: Option<(u16, LatLon)>,
     /// `srtm.getAltitude`.
     terrain: Terrain,
+    /// `kmlpolygonsoverlay`: what Map Tool > KML Overlay last read onto the map.
+    kml_overlay: Option<mp_kml::read::Overlay>,
+    /// Whether `FlightData.kmlpolygons` holds its polygons and routes too: Yes to "Do you want
+    /// to load this into the flight data screen?".
+    kml_on_flight: bool,
 }
 
 /// `srtm.getAltitude(lat, lng)` as the planning screen asks it: the process's lookup over Mission
@@ -4389,9 +4394,16 @@ fn file_request(
         FileRequest::LoadFence(_) | FileRequest::SaveFence(_) => {
             fence_file(this, request, window, cx);
         }
+        FileRequest::LoadAndAppend(name) => refused = load_and_append(this, &name),
+        FileRequest::LoadKml(name) => refused = load_kml_mission(this, &name),
+        FileRequest::LoadShpMission(name) => refused = load_shp_mission(this, &name),
+        FileRequest::KmlOverlay(name) => refused = load_kml_overlay(this, &name),
     }
     if let Some((title, text)) = refused {
         this.plan_menus.say(title, text);
+    }
+    // A refusal, or KML Overlay's first question.
+    if this.plan_menus.prompt.is_some() {
         this.plan_prompt_focus.focus(window, cx);
     }
 }
@@ -4445,7 +4457,11 @@ fn fence_file(
         | FileRequest::LoadPolygon(_)
         | FileRequest::LoadShp(_)
         | FileRequest::SaveRally(_)
-        | FileRequest::LoadRally(_) => {}
+        | FileRequest::LoadRally(_)
+        | FileRequest::LoadAndAppend(_)
+        | FileRequest::LoadKml(_)
+        | FileRequest::LoadShpMission(_)
+        | FileRequest::KmlOverlay(_) => {}
     }
 }
 
@@ -4676,6 +4692,14 @@ pub enum MenuAction {
     ElevationGraph,
     /// `setHomeHereToolStripMenuItem_Click`.
     SetHomeHere,
+    /// `loadAndAppendToolStripMenuItem_Click`: File Load/Save > Load and Append.
+    LoadAndAppend,
+    /// `loadKMLFileToolStripMenuItem_Click`: File Load/Save > Load KML File.
+    LoadKmlFile,
+    /// `loadSHPFileToolStripMenuItem_Click`: File Load/Save > Load SHP File.
+    LoadShpFile,
+    /// `kMLOverlayToolStripMenuItem_Click`: Map Tool > KML Overlay.
+    KmlOverlay,
 }
 
 /// One entry of `contextMenuStrip1` or of one of its drop-downs.
@@ -4751,9 +4775,10 @@ pub const MAP_MENU: &[MenuEntry] = {
         Area, ClearMission, ClearPolygon, ClearRallyPoints, CreateSplineCircle, CreateWpCircle,
         DeleteWp, DrawPolygon, ElevationGraph, FenceClear, FenceLoadFromFile, FenceSaveToFile,
         FromShp, GetRallyPoints, InsertAtCurrentPosition, InsertSplineWp, InsertWp, JumpStart,
-        JumpWp, Land, LoadPolygon, LoadRallyFromFile, LoadWpFile, LoiterCircles, LoiterForever,
-        LoiterTime, MeasureDistance, ModifyAlt, OffsetPolygon, PolygonFromWaypoints, ReverseWps,
-        Rtl, SavePolygon, SaveRallyPoints, SaveRallyToFile, SaveWpFile, SetHomeHere, SetRallyPoint,
+        JumpWp, KmlOverlay, Land, LoadAndAppend, LoadKmlFile, LoadPolygon, LoadRallyFromFile,
+        LoadShpFile, LoadWpFile, LoiterCircles, LoiterForever, LoiterTime, MeasureDistance,
+        ModifyAlt, OffsetPolygon, PolygonFromWaypoints, ReverseWps, Rtl, SavePolygon,
+        SaveRallyPoints, SaveRallyToFile, SaveWpFile, SetHomeHere, SetRallyPoint,
         SetReturnLocation, SetRoi, SurveyGrid, Takeoff, ZoomTo,
     };
     &[
@@ -5091,11 +5116,12 @@ pub const MAP_MENU: &[MenuEntry] = {
                     "Prefetch WP Path",
                     None,
                 ),
+                // `// C#: GCSViews/FlightPlanner.cs:4131-4290`
                 item(
                     "menu-kMLOverlay",
                     "kMLOverlayToolStripMenuItem",
                     "KML Overlay",
-                    None,
+                    Some(KmlOverlay),
                 ),
                 // `// C#: GCSViews/FlightPlanner.cs:3248-3256; Controls/ElevationProfile.cs`
                 item(
@@ -5135,7 +5161,7 @@ pub const MAP_MENU: &[MenuEntry] = {
                     "menu-loadAndAppend",
                     "loadAndAppendToolStripMenuItem",
                     "Load and Append",
-                    None,
+                    Some(LoadAndAppend),
                 ),
                 item(
                     "menu-saveWPFile",
@@ -5147,13 +5173,13 @@ pub const MAP_MENU: &[MenuEntry] = {
                     "menu-loadKMLFile",
                     "loadKMLFileToolStripMenuItem",
                     "Load KML File",
-                    None,
+                    Some(LoadKmlFile),
                 ),
                 item(
                     "menu-loadSHPFile",
                     "loadSHPFileToolStripMenuItem",
                     "Load SHP File",
-                    None,
+                    Some(LoadShpFile),
                 ),
             ],
         ),
@@ -5258,6 +5284,416 @@ pub struct OpenMenu {
     pub submenu: Option<usize>,
 }
 
+// ---------------------------------------------------------------------------------------------
+// File Load/Save's Load and Append, Load KML File and Load SHP File, and Map Tool's KML Overlay.
+// ---------------------------------------------------------------------------------------------
+
+impl Plan {
+    /// `processToScreen(cmds, append: true)`: the rows kept and the file's items added after
+    /// them, its first item - home - passed over ("we dont want to add home again"), stopping at
+    /// an item of command 0 or 255 that would not be the first row. Returns how many rows were
+    /// added. The C# also moves `CMB_altmode` to each navigation item's frame as it goes; as
+    /// with the load, the screen's frame box is left alone here.
+    /// `// C#: GCSViews/FlightPlanner.cs:5496-5530`
+    pub fn append_from_file(&mut self, items: &[MissionItem]) -> usize {
+        let before = self.items.len();
+        // `int i = Commands.Rows.Count - 1`, then `i++` per item: the row the item would take.
+        let mut row = i64::try_from(before).unwrap_or(i64::MAX).saturating_sub(1);
+        for (index, item) in items.iter().enumerate() {
+            row += 1;
+            // "0 and not home" and "bad record": the list ends here.
+            if (item.command == 0 || item.command == 255) && row != 0 {
+                break;
+            }
+            if index == 0 {
+                row -= 1;
+                continue;
+            }
+            self.items.push(*item);
+        }
+        self.renumber();
+        if self.items.len() != before {
+            self.origin = Origin::Edited;
+        }
+        self.items.len() - before
+    }
+
+    /// `Commands.Rows.Add()` then `setfromMap(lat, lng, alt)`: a WAYPOINT row in the screen's
+    /// frame at the position, its altitude by `setfromMap`'s rules - which write none for -1 or
+    /// -2, leaving the row's 0.
+    /// `// C#: GCSViews/FlightPlanner.cs:1164-1236`
+    pub fn add_row_from_map(
+        &mut self,
+        position: LatLon,
+        altitude: i32,
+        context: &MenuContext,
+    ) -> Result<(), &'static str> {
+        let altitude = self.set_from_map_altitude(position, altitude, context)?;
+        self.add_waypoint_in(position, altitude, context.frame);
+        Ok(())
+    }
+
+    /// `AddCommand(WAYPOINT, 0, 0, 0, 0, lng, lat, alt)`: `FillCommand` makes the row a
+    /// SPLINE_WAYPOINT when the Spline box is ticked, then hands it to `setfromMap` with `(int) z`.
+    /// `// C#: GCSViews/FlightPlanner.cs:540-547, 548-578`
+    pub fn add_command_waypoint(
+        &mut self,
+        position: LatLon,
+        altitude: i32,
+        context: &MenuContext,
+    ) -> Result<(), &'static str> {
+        let z = self.set_from_map_altitude(position, altitude, context)?;
+        let command = if self.spline() {
+            mp_mission::commands::SPLINE_WAYPOINT
+        } else {
+            mp_mission::commands::WAYPOINT
+        };
+        self.items.push(circle_row(
+            command,
+            context.frame.mav_frame(),
+            position.latitude(),
+            position.longitude(),
+            z,
+        ));
+        self.renumber();
+        self.origin = Origin::Edited;
+        Ok(())
+    }
+
+    /// The altitude `setfromMap(lat, lng, alt)` leaves a row: none written for -1 or -2 (the
+    /// row's 0), else Default Alt's rules over the passed value and Verify Height.
+    fn set_from_map_altitude(
+        &self,
+        position: LatLon,
+        altitude: i32,
+        context: &MenuContext,
+    ) -> Result<f64, &'static str> {
+        if matches!(altitude, -1 | -2) {
+            return Ok(0.0);
+        }
+        row_altitude(self, position, f64::from(altitude), context)
+    }
+
+    /// `kmlpolygonsoverlay` replaced - and `FlightData.kmlpolygons` cleared with it, as KML
+    /// Overlay clears both before it reads a file.
+    /// `// C#: GCSViews/FlightPlanner.cs:4141-4147`
+    pub fn set_kml_overlay(&mut self, overlay: Option<mp_kml::read::Overlay>) {
+        self.kml_overlay = overlay;
+        self.kml_on_flight = false;
+    }
+
+    /// Yes to "Do you want to load this into the flight data screen?": the overlay's polygons and
+    /// routes copied to `FlightData.kmlpolygons`; its labels stay on the planner.
+    /// `// C#: GCSViews/FlightPlanner.cs:4246-4262`
+    pub fn show_kml_on_flight_screen(&mut self) {
+        self.kml_on_flight = self.kml_overlay.is_some();
+    }
+
+    /// What KML Overlay last read, if anything.
+    #[must_use]
+    pub fn kml_overlay(&self) -> Option<&mp_kml::read::Overlay> {
+        self.kml_overlay.as_ref()
+    }
+
+    /// Whether the flight screen's map shows the overlay's polygons and routes too.
+    #[must_use]
+    pub const fn kml_on_flight(&self) -> bool {
+        self.kml_on_flight
+    }
+
+    /// `GetBoundingLayer(kmlpolygonsoverlay)`: every point of its polygons, routes and markers,
+    /// for the zoom to fit them.
+    /// `// C#: GCSViews/FlightPlanner.cs:423-460`
+    #[must_use]
+    pub fn kml_points(&self) -> Vec<LatLon> {
+        let Some(overlay) = &self.kml_overlay else {
+            return Vec::new();
+        };
+        overlay
+            .polygons
+            .iter()
+            .chain(&overlay.routes)
+            .flat_map(|shape| shape.points.iter())
+            .chain(overlay.labels.iter().map(|label| &label.at))
+            .filter_map(|coord| LatLon::new(coord.lat, coord.lon).ok())
+            .collect()
+    }
+}
+
+/// Load KML File once its dialog has returned: `processKMLMission` over every element the
+/// parser added - a POI per `Point` placemark (`POI.POIAdd(point, pm.Name)`, a missing name
+/// being `null + "\n"`, an empty ID) and a row per `LineString` coordinate through `setfromMap`
+/// with `(int) loc.Altitude`, which throws on a coordinate without one; the rows before it stay.
+/// Returns how many rows were added. An error is the exception's text, for "Bad KML File :".
+/// `// C#: GCSViews/FlightPlanner.cs:4470-4525, 4527-4577`
+pub(crate) fn kml_into_mission(
+    plan: &mut Plan,
+    pois: &mut crate::poi::Pois,
+    text: &str,
+    context: &MenuContext,
+) -> Result<usize, String> {
+    let events = mp_kml::read::mission_events(text).map_err(|why| why.to_string())?;
+    let mut rows = 0;
+    for event in events {
+        match event {
+            mp_kml::read::MissionEvent::Poi { at, name } => {
+                pois.add(at.lat, at.lon, 0.0, name.as_deref().unwrap_or(""));
+            }
+            mp_kml::read::MissionEvent::Path(coords) => {
+                for coord in coords {
+                    let altitude = coord
+                        .alt
+                        .ok_or_else(|| mp_kml::read::ReadError::NoAltitude.to_string())?;
+                    let position = LatLon::new(coord.lat, coord.lon)
+                        .map_err(|why| format!("System.ArgumentException: {why}"))?;
+                    #[allow(clippy::cast_possible_truncation)] // `(int) loc.Altitude`
+                    plan.add_row_from_map(position, altitude as i32, context)
+                        .map_err(str::to_owned)?;
+                    rows += 1;
+                }
+            }
+        }
+    }
+    Ok(rows)
+}
+
+/// `LoadSHPFile(file)`: the `.prj` beside the file parsed for a reprojection, then a row per
+/// record of the table - `fs.Vertex[row * 2]` and `[row * 2 + 1]`, the `row`th vertex of the
+/// whole file whatever feature it belongs to; its altitude from an `ELEVATION` column, else an
+/// `alt` column, else the shape's Z, else -1 (which `setfromMap` writes as nothing); a `wp`
+/// column sorts the rows by it, ascending (`PointLatLngAlt.CompareTo`); then `AddCommand(WAYPOINT,
+/// 0, 0, 0, 0, lat, lng, alt)` for each. Returns how many rows were added; an error is anything
+/// the handler's `catch` would take, after the rows already added.
+/// `// C#: GCSViews/FlightPlanner.cs:4569-4716, 4718-4737; ExtLibs/Utilities/PointLatLngAlt.cs:441-462`
+pub(crate) fn shp_into_mission(
+    plan: &mut Plan,
+    shp: &[u8],
+    dbf: &[u8],
+    prj: Option<&str>,
+    context: &MenuContext,
+) -> Result<usize, String> {
+    let projection = match prj {
+        Some(text) => Some(
+            mp_mission::shapefile::Projection::from_esri(text.lines().next().unwrap_or(""))
+                .map_err(|why| why.to_string())?,
+        ),
+        None => None,
+    };
+    let vertices = mp_mission::shapefile::vertices(shp).map_err(|why| why.to_string())?;
+    let table = mp_mission::dbf::read(dbf).map_err(|why| why.to_string())?;
+    let elevation = table.column("ELEVATION");
+    let alt = table.column("alt");
+    let wp = table.column("wp");
+    // `(float) Convert.ChangeType(value, TypeCode.Single)`; a value that will not convert throws,
+    // is logged, and leaves the altitude as it was.
+    let single = |row: usize, column: Option<usize>| -> Option<f64> {
+        column
+            .and_then(|column| table.value(row, column))
+            .and_then(|value| value.parse::<f32>().ok())
+            .map(f64::from)
+    };
+    let mut list: Vec<(LatLon, f64, f64)> = Vec::with_capacity(table.rows());
+    let mut sort = false;
+    for row in 0..table.rows() {
+        let &(x, y) = vertices.xy.get(row).ok_or_else(|| {
+            "System.IndexOutOfRangeException: Index was outside the bounds of the array.".to_owned()
+        })?;
+        let mut z = -1.0;
+        if let Some(value) = single(row, elevation) {
+            z = value;
+        }
+        if z == -1.0
+            && let Some(value) = single(row, alt)
+        {
+            z = value;
+        }
+        // `fs.Z[row]`: null for a file without Z, and the exception leaves -1.
+        if z == -1.0
+            && let Some(value) = vertices.z.as_ref().and_then(|zs| zs.get(row))
+        {
+            z = *value;
+        }
+        let mut order = 0.0;
+        if wp.is_some() {
+            sort = true;
+            if let Some(value) = single(row, wp) {
+                order = value;
+            }
+        }
+        // `new PointLatLngAlt(x, y, z, tag)` then `AddCommand(..., item.Lat, item.Lng, ...)` and
+        // `setfromMap(y, x, ...)`: swapped twice, the row's latitude is the vertex's Y.
+        let position = mp_mission::shapefile::position(projection, x, y)
+            .ok_or_else(|| "System.ArgumentException: the vertex is not a position".to_owned())?;
+        list.push((position, z, order));
+    }
+    if sort {
+        // `wplist.Sort()` on `Tag`, the wp number as text: ascending, equal tags left as they are.
+        list.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal));
+    }
+    let added = list.len();
+    for (position, z, _) in list {
+        #[allow(clippy::cast_possible_truncation)] // `setfromMap(y, x, (int) z, ...)`
+        plan.add_command_waypoint(position, z as i32, context)
+            .map_err(str::to_owned)?;
+    }
+    Ok(added)
+}
+
+/// A `.kml`'s text, or the first `.kml` at the top of a `.kmz` (`Directory.GetFiles(tempdir,
+/// "*.kml")`, its first), snippets dropped. `None` for a `.kmz` with no `.kml` in it, which the
+/// C# returns from without a word. An error is the exception's text.
+/// `// C#: GCSViews/FlightPlanner.cs:4152-4176, 4481-4513`
+pub(crate) fn kml_text(name: &str, bytes: &[u8]) -> Result<Option<String>, String> {
+    // `file.ToLower().EndsWith("kmz")`
+    let text = if name.to_lowercase().ends_with("kmz") {
+        let entries =
+            mp_log::zip::read(bytes).map_err(|why| format!("Ionic.Zip.ZipException: {why}"))?;
+        let Some(entry) = entries
+            .into_iter()
+            .find(|entry| !entry.name.contains('/') && entry.name.ends_with(".kml"))
+        else {
+            return Ok(None);
+        };
+        String::from_utf8_lossy(&entry.data).into_owned()
+    } else {
+        String::from_utf8_lossy(bytes).into_owned()
+    };
+    Ok(Some(mp_kml::read::without_snippets(&text)))
+}
+
+/// What one of the four loaders leaves for the screen to say and show.
+type Refusal = Option<(&'static str, String)>;
+
+/// Load and Append once its dialog has returned: `readQGC110wpfile(file, true)`.
+/// `// C#: GCSViews/FlightPlanner.cs:990-1010, 4330-4344`
+fn load_and_append(this: &mut MissionPlanner, name: &str) -> Refusal {
+    let name = dialog_file_name(name, "waypoints")?;
+    let path = MissionPlanner::plan_directory().join(name);
+    let read = std::fs::read_to_string(&path)
+        .map_err(|err| format!("System.IO.FileNotFoundException: {err}"))
+        .and_then(|text| {
+            mp_mission::read_waypoints(&text)
+                .map_err(|err| format!("System.FormatException: {err}"))
+        });
+    match read {
+        Ok(items) => {
+            let added = this.plan.append_from_file(&items);
+            // `processToScreen` ends with `setWPParams`; `readQGC110wpfile` with the map fitted
+            // to the mission. `// C#: GCSViews/FlightPlanner.cs:1004-1006, 5630`
+            this.plan.set_wp_params(&this.telemetry.view().parameters);
+            this.sync_map_mission();
+            this.map.borrow_mut().zoom_and_centre_markers();
+            this.file_status = Some(format!("appended {added} items from {}", path.display()));
+            None
+        }
+        // `CustomMessageBox.Show("Can't open file! " + ex)`
+        Err(why) => Some(("", format!("Can't open file! {why}"))),
+    }
+}
+
+/// Load KML File once its dialog has returned.
+/// `// C#: GCSViews/FlightPlanner.cs:4470-4525`
+fn load_kml_mission(this: &mut MissionPlanner, name: &str) -> Refusal {
+    let name = dialog_file_name(name, "kml")?;
+    let path = MissionPlanner::plan_directory().join(&name);
+    let context = menu_context(this);
+    let loaded = std::fs::read(&path)
+        .map_err(|err| format!("System.IO.FileNotFoundException: {err}"))
+        .and_then(|bytes| kml_text(&name, &bytes))
+        .and_then(|text| match text {
+            Some(text) => {
+                kml_into_mission(&mut this.plan, &mut this.fly_data.pois, &text, &context).map(Some)
+            }
+            None => Ok(None),
+        });
+    match loaded {
+        Ok(Some(rows)) => {
+            this.file_status = Some(format!("loaded {rows} rows from {}", path.display()));
+            None
+        }
+        Ok(None) => None,
+        Err(why) => Some(("", format!("{BAD_KML_FILE}{why}"))),
+    }
+}
+
+/// Load SHP File once its dialog has returned: `LoadSHPFile(file)` inside the handler's `catch`,
+/// which says "Error opening File". A name the dialog did not return (`File.Exists("")`) does
+/// nothing; so does a file that is not there.
+/// `// C#: GCSViews/FlightPlanner.cs:4718-4737`
+fn load_shp_mission(this: &mut MissionPlanner, name: &str) -> Refusal {
+    let name = dialog_file_name(name, "shp")?;
+    let path = MissionPlanner::plan_directory().join(name);
+    let Ok(shp) = std::fs::read(&path) else {
+        return None;
+    };
+    let context = menu_context(this);
+    // `FeatureSet.Open` wants the table beside the shapes; the `.prj` is optional.
+    let loaded = std::fs::read(path.with_extension("dbf"))
+        .map_err(|err| err.to_string())
+        .and_then(|dbf| {
+            let prj = std::fs::read_to_string(path.with_extension("prj")).ok();
+            shp_into_mission(&mut this.plan, &shp, &dbf, prj.as_deref(), &context)
+        });
+    match loaded {
+        Ok(rows) => {
+            // `writeKML(); MainMap.ZoomAndCenterMarkers("WPOverlay")`
+            this.sync_map_mission();
+            this.map.borrow_mut().zoom_and_centre_markers();
+            this.file_status = Some(format!("loaded {rows} rows from {}", path.display()));
+            None
+        }
+        Err(why) => {
+            this.file_status = Some(format!("{}: {why}", path.display()));
+            Some((ERROR, "Error opening File".to_owned()))
+        }
+    }
+}
+
+/// KML Overlay once its dialog has returned: both overlays cleared, then the file read by its
+/// extension - KML and KMZ here; DXF (netDxf) and GeoPackage (GDAL's OGR) are not ported, and
+/// say so on the status line - and the two questions asked.
+/// `// C#: GCSViews/FlightPlanner.cs:4131-4290`
+fn load_kml_overlay(this: &mut MissionPlanner, name: &str) -> Refusal {
+    let name = dialog_file_name(name, "kml")?;
+    let path = MissionPlanner::plan_directory().join(&name);
+    this.plan.set_kml_overlay(None);
+    let lower = name.to_lowercase();
+    if lower.ends_with("gpkg") {
+        this.file_status =
+            Some("GeoPackage overlays need GDAL's OGR, which is not ported".to_owned());
+        return None;
+    }
+    if lower.ends_with("dxf") {
+        this.file_status = Some("DXF overlays need netDxf, which is not ported".to_owned());
+        return None;
+    }
+    let loaded = std::fs::read(&path)
+        .map_err(|err| format!("System.IO.FileNotFoundException: {err}"))
+        .and_then(|bytes| kml_text(&name, &bytes))
+        .and_then(|text| match text {
+            Some(text) => mp_kml::read::overlay(&text)
+                .map(Some)
+                .map_err(|why| why.to_string()),
+            None => Ok(None),
+        });
+    match loaded {
+        Ok(Some(overlay)) => {
+            this.file_status = Some(format!(
+                "overlaid {} polygons, {} routes and {} labels from {}",
+                overlay.polygons.len(),
+                overlay.routes.len(),
+                overlay.labels.len(),
+                path.display()
+            ));
+            this.plan.set_kml_overlay(Some(overlay));
+            this.plan_menus.ask_kml_to_flight_screen();
+            None
+        }
+        Ok(None) => None,
+        Err(why) => Some(("", format!("{BAD_KML_FILE}{why}"))),
+    }
+}
+
 /// What an `InputBox` or `CustomMessageBox` the menu opened is for.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PromptKind {
@@ -5343,6 +5779,18 @@ pub enum PromptKind {
     /// `TXT_homelat_Enter`'s "Click on the Map to set Home ": a message, after which the Lat box
     /// has the keyboard again, as it does when the C#'s modal box closes.
     HomeLatEnter,
+    /// File Load/Save > Load and Append's `OpenFileDialog`, filtered to `Ardupilot Mission`.
+    AppendLoadFile,
+    /// File Load/Save > Load KML File's `OpenFileDialog`, filtered to `Google Earth KML `.
+    KmlLoadFile,
+    /// File Load/Save > Load SHP File's `OpenFileDialog`, filtered to `Shape file`.
+    ShpMissionLoadFile,
+    /// Map Tool > KML Overlay's `OpenFileDialog`, filtered to `All Supported`.
+    KmlOverlayFile,
+    /// KML Overlay's "Do you want to load this into the flight data screen?", Yes or No.
+    KmlToFlightScreen,
+    /// KML Overlay's "Zoom to the center or the loaded file?", Yes or No.
+    KmlZoomTo,
 }
 
 /// A file a dialog has named, for the screen to read or write.
@@ -5362,6 +5810,14 @@ pub enum FileRequest {
     SaveRally(String),
     /// Rally Points > Load Rally from File.
     LoadRally(String),
+    /// File Load/Save > Load and Append.
+    LoadAndAppend(String),
+    /// File Load/Save > Load KML File.
+    LoadKml(String),
+    /// File Load/Save > Load SHP File.
+    LoadShpMission(String),
+    /// Map Tool > KML Overlay.
+    KmlOverlay(String),
 }
 
 /// The caption of the dialog standing in for `OpenFileDialog`: its own default.
@@ -5380,6 +5836,25 @@ pub const SHP_FILTER: &str = "Shape file";
 /// The filter both rally dialogs are given.
 /// `// C#: GCSViews/FlightPlanner.cs:4419, 6038`
 pub const RALLY_FILTER: &str = "Rally (*.ral)";
+/// Load and Append's `Ardupilot Mission|*.waypoints;*.txt`.
+/// `// C#: GCSViews/FlightPlanner.cs:4334`
+pub const MISSION_FILTER: &str = "Ardupilot Mission";
+/// Load KML File's `Google Earth KML |*.kml;*.kmz`, the C#'s trailing space kept.
+/// `// C#: GCSViews/FlightPlanner.cs:4474`
+pub const KML_FILTER: &str = "Google Earth KML ";
+/// KML Overlay's `All Supported|*.kml;*.kmz;*.dxf;*.gpkg|...`.
+/// `// C#: GCSViews/FlightPlanner.cs:4135-4136`
+pub const KML_OVERLAY_FILTER: &str = "All Supported";
+/// `Strings.Load_data`, the title of KML Overlay's first question.
+pub const LOAD_DATA: &str = "Load data";
+/// `Strings.Do_you_want_to_load_this_into_the_flight_data_screen`.
+pub const LOAD_INTO_FLIGHT_SCREEN: &str = "Do you want to load this into the flight data screen?";
+/// `Strings.Zoom_To`, the title of KML Overlay's second question.
+pub const ZOOM_TO_TITLE: &str = "Zoom To";
+/// `Strings.Zoom_to_the_center_or_the_loaded_file`.
+pub const ZOOM_TO_LOADED: &str = "Zoom to the center or the loaded file?";
+/// `Strings.Bad_KML_File`, which both KML loaders put before the exception.
+pub const BAD_KML_FILE: &str = "Bad KML File :";
 /// `Strings.InvalidAlt`, what Set Rally Point says of an altitude `int.TryParse` refuses.
 /// `// C#: GCSViews/FlightPlanner.cs:6657; ExtLibs/Strings/Strings.resx:174-176`
 pub const INVALID_ALT: &str = "Invalid Alt";
@@ -5438,6 +5913,16 @@ impl Prompt {
         }
     }
 
+    /// A `CustomMessageBox.Show(text, title, MessageBoxButtons.YesNo)`.
+    fn question(title: &'static str, text: impl Into<String>, kind: PromptKind) -> Self {
+        Self {
+            title,
+            text: text.into(),
+            field: None,
+            kind,
+        }
+    }
+
     /// What has been typed, or nothing.
     #[must_use]
     pub fn value(&self) -> &str {
@@ -5449,7 +5934,10 @@ impl Prompt {
     pub const fn is_question(&self) -> bool {
         matches!(
             self.kind,
-            PromptKind::ClearWaypoints | PromptKind::ResetHome(_)
+            PromptKind::ClearWaypoints
+                | PromptKind::ResetHome(_)
+                | PromptKind::KmlToFlightScreen
+                | PromptKind::KmlZoomTo
         )
     }
 }
@@ -5598,6 +6086,8 @@ pub struct PlanMenus {
     /// What a test puts in the geocoder's place, so Zoom To runs its whole course offline.
     #[cfg(test)]
     fake_geocoder: Option<GeocoderFetch>,
+    /// Yes to KML Overlay's "Zoom to the center or the loaded file?", until the screen zooms.
+    zoom_to_kml: bool,
 }
 
 /// How a page is fetched from the geocoder: its URL in, its text or why not out.
@@ -5668,6 +6158,31 @@ impl PlanMenus {
 
     fn tell(&mut self, title: &'static str, text: impl Into<String>) {
         self.prompt = Some(Prompt::message(title, text));
+    }
+
+    /// KML Overlay's first question, once its file is on the map.
+    /// `// C#: GCSViews/FlightPlanner.cs:4246-4249`
+    pub fn ask_kml_to_flight_screen(&mut self) {
+        self.ask(Prompt::question(
+            LOAD_DATA,
+            LOAD_INTO_FLIGHT_SCREEN,
+            PromptKind::KmlToFlightScreen,
+        ));
+    }
+
+    /// KML Overlay's second question, whatever the first was answered.
+    /// `// C#: GCSViews/FlightPlanner.cs:4264-4267`
+    fn ask_kml_zoom(&mut self) {
+        self.ask(Prompt::question(
+            ZOOM_TO_TITLE,
+            ZOOM_TO_LOADED,
+            PromptKind::KmlZoomTo,
+        ));
+    }
+
+    /// Whether Yes was answered to the zoom question since the screen last looked.
+    pub fn take_zoom_to_kml(&mut self) -> bool {
+        std::mem::take(&mut self.zoom_to_kml)
     }
 
     /// A `CustomMessageBox.Show(text, title)` from the screen rather than the menu: a write the
@@ -5960,6 +6475,34 @@ impl PlanMenus {
                 "",
                 PromptKind::ShpLoadFile,
             )),
+            // `// C#: GCSViews/FlightPlanner.cs:4332-4336`
+            MenuAction::LoadAndAppend => self.ask(Prompt::input(
+                OPEN_FILE,
+                MISSION_FILTER,
+                "",
+                PromptKind::AppendLoadFile,
+            )),
+            // `// C#: GCSViews/FlightPlanner.cs:4472-4476`
+            MenuAction::LoadKmlFile => self.ask(Prompt::input(
+                OPEN_FILE,
+                KML_FILTER,
+                "",
+                PromptKind::KmlLoadFile,
+            )),
+            // `// C#: GCSViews/FlightPlanner.cs:4720-4724`
+            MenuAction::LoadShpFile => self.ask(Prompt::input(
+                OPEN_FILE,
+                SHP_FILTER,
+                "",
+                PromptKind::ShpMissionLoadFile,
+            )),
+            // `// C#: GCSViews/FlightPlanner.cs:4133-4138`
+            MenuAction::KmlOverlay => self.ask(Prompt::input(
+                OPEN_FILE,
+                KML_OVERLAY_FILTER,
+                "",
+                PromptKind::KmlOverlayFile,
+            )),
             // `// C#: GCSViews/FlightPlanner.cs:3641-3647`
             MenuAction::OffsetPolygon => {
                 if !plan.polygon().is_empty() {
@@ -6231,6 +6774,19 @@ impl PlanMenus {
             PromptKind::ShpLoadFile => return Some(FileRequest::LoadShp(value)),
             PromptKind::RallySaveFile => return Some(FileRequest::SaveRally(value)),
             PromptKind::RallyLoadFile => return Some(FileRequest::LoadRally(value)),
+            PromptKind::AppendLoadFile => return Some(FileRequest::LoadAndAppend(value)),
+            PromptKind::KmlLoadFile => return Some(FileRequest::LoadKml(value)),
+            PromptKind::ShpMissionLoadFile => return Some(FileRequest::LoadShpMission(value)),
+            PromptKind::KmlOverlayFile => return Some(FileRequest::KmlOverlay(value)),
+            // Yes: the polygons and routes go onto the flight screen's map as well, then the
+            // zoom question. `// C#: GCSViews/FlightPlanner.cs:4246-4262`
+            PromptKind::KmlToFlightScreen => {
+                plan.show_kml_on_flight_screen();
+                self.ask_kml_zoom();
+            }
+            // Yes: `MainMap.SetZoomToFitRect(GetBoundingLayer(kmlpolygonsoverlay))`, done by the
+            // screen once it sees the flag. `// C#: GCSViews/FlightPlanner.cs:4264-4271`
+            PromptKind::KmlZoomTo => self.zoom_to_kml = true,
             // `if (meter != "0") intmeter = double.Parse(meter);` - a FormatException past that,
             // which reaches the application's handler with its message.
             // `// C#: GCSViews/FlightPlanner.cs:3645-3651`
@@ -6273,6 +6829,8 @@ impl PlanMenus {
         match prompt.kind {
             PromptKind::OffsetPolygon => plan.offset_polygon(0.0),
             PromptKind::ShpLoadFile => return Some(FileRequest::LoadShp(String::new())),
+            // No to the flight screen still asks about the zoom.
+            PromptKind::KmlToFlightScreen => self.ask_kml_zoom(),
             PromptKind::DefinePolygon => self.tell("Area", area_text(0.0)),
             PromptKind::Circle { .. } => self.circle_answers.clear(),
             _ => {}
@@ -6306,9 +6864,9 @@ fn sync_everything(this: &MissionPlanner) {
     this.sync_map_polygon();
     this.sync_map_fence();
     this.sync_map_rally();
-    this.map
-        .borrow_mut()
-        .set_fence_return(this.plan.fence_return());
+    let mut map = this.map.borrow_mut();
+    map.set_fence_return(this.plan.fence_return());
+    map.set_kml(this.plan.kml_overlay(), this.plan.kml_on_flight());
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -6978,6 +7536,11 @@ fn submit_prompt(
     let home_hint = home_hint_showing(this);
     if let Some(request) = this.plan_menus.submit(&mut this.plan, &context) {
         file_request(this, request, window, cx);
+    }
+    // Yes to "Zoom to the center or the loaded file?".
+    // `// C#: GCSViews/FlightPlanner.cs:4264-4271`
+    if this.plan_menus.take_zoom_to_kml() {
+        this.map.borrow_mut().zoom_to_fit(&this.plan.kml_points());
     }
     sync_everything(this);
     if this.plan_menus.prompt.is_some() {
@@ -7796,6 +8359,13 @@ pub fn record_facts(plan: &Plan, menus: &PlanMenus) {
             .is_some(),
     );
     record("survey.points", plan.polygon().len());
+    // KML Overlay: what is on the planner's map, and whether the flight screen's has it too.
+    let kml = plan.kml_overlay();
+    record("plan.kml.polygons", kml.map_or(0, |kml| kml.polygons.len()));
+    record("plan.kml.routes", kml.map_or(0, |kml| kml.routes.len()));
+    record("plan.kml.labels", kml.map_or(0, |kml| kml.labels.len()));
+    record("plan.kml.ground", kml.map_or(0, |kml| kml.ground_overlays));
+    record("plan.kml.flight", plan.kml_on_flight());
     // The corners the map shows, which Geo-Fence > Clear takes off it while keeping them.
     record("survey.shown", plan.shown_polygon().len());
     // The drawn polygon's corners, `lat,lng` each and `;` between: what Offset Polygon, Load
@@ -10975,10 +11545,14 @@ mod tests {
                 "menu-surveyGrid",
                 "menu-ContextMeasure",
                 "menu-zoomTo",
+                "menu-kMLOverlay",
                 "menu-elevationGraph",
                 "menu-reverseWPs",
                 "menu-loadWPFile",
+                "menu-loadAndAppend",
                 "menu-saveWPFile",
+                "menu-loadKMLFile",
+                "menu-loadSHPFile",
                 "menu-modifyAlt",
                 "menu-setHomeHere",
                 "menu-zoomToVehicle",
@@ -11891,6 +12465,277 @@ mod menu_batch_tests {
         assert_eq!(plan.polygon().len(), 3 + 4);
         assert_eq!(plan.polygon()[0], at(-35.0, 149.0));
         assert_eq!(plan.polygon()[6], at(-35.0, 150.0));
+    }
+
+    // ---- File Load/Save's loads and Map Tool's KML Overlay ----
+
+    fn two_rows() -> Plan {
+        let mut plan = Plan::default();
+        plan.add_waypoint(at(-35.0, 149.0), 100.0);
+        plan.add_waypoint(at(-35.1, 149.1), 100.0);
+        plan
+    }
+
+    /// Load and Append keeps the rows, passes over the file's home, and adds the rest.
+    #[test]
+    fn load_and_append_keeps_the_rows_and_passes_over_the_files_home() {
+        let mut plan = two_rows();
+        let items =
+            mp_mission::read_waypoints(include_str!("../../../testdata/planner/append.waypoints"))
+                .expect("a mission file");
+        assert_eq!(plan.append_from_file(&items), 2);
+        assert_eq!(plan.items().len(), 4);
+        assert_eq!(plan.items()[2].z, 80.0);
+        assert_eq!(plan.items()[3].z, 90.0);
+        assert_eq!(plan.items()[3].seq, 4, "renumbered after the rows kept");
+        // An item of command 0 past the first row ends the list: the two after it are not added.
+        let mut plan = two_rows();
+        let mut items = items;
+        items[2].command = 0;
+        assert_eq!(plan.append_from_file(&items), 1);
+        assert_eq!(plan.items().len(), 3);
+        // With no rows the file's home is still passed over: `i` goes back to -1.
+        let mut plan = Plan::default();
+        let items =
+            mp_mission::read_waypoints(include_str!("../../../testdata/planner/append.waypoints"))
+                .expect("a mission file");
+        assert_eq!(plan.append_from_file(&items), 2);
+        assert_eq!(plan.items()[0].z, 80.0);
+    }
+
+    /// Load KML File: a row per line-string coordinate with `(int)` of its altitude, and a POI
+    /// per point placemark with its name; the polygon adds nothing.
+    #[test]
+    fn load_kml_file_adds_rows_for_line_strings_and_pois_for_points() {
+        let mut plan = Plan::default();
+        let mut pois = crate::poi::Pois::kept_in(None);
+        let text =
+            mp_kml::read::without_snippets(include_str!("../../../testdata/planner/route.kml"));
+        let rows = kml_into_mission(&mut plan, &mut pois, &text, &context()).expect("a KML file");
+        assert_eq!(rows, 3);
+        assert_eq!(plan.items().len(), 3);
+        assert_eq!(plan.items()[0].x, -35.36);
+        assert_eq!(plan.items()[0].y, 149.16);
+        assert_eq!(plan.items()[0].z, 50.0);
+        assert_eq!(plan.items()[1].z, 60.0, "(int) 60.9");
+        assert_eq!(plan.items()[2].z, 70.0);
+        assert!(plan.items().iter().all(|item| item.command == 16));
+        assert_eq!(pois.points().len(), 1);
+        assert_eq!(pois.points()[0].id(), "Gate");
+        assert_eq!(pois.points()[0].lat, -35.362);
+    }
+
+    /// A coordinate without an altitude is `(int) loc.Altitude` on nothing: "Bad KML File :" with
+    /// the exception, the rows before it kept.
+    #[test]
+    fn a_kml_path_without_altitudes_fails_after_the_rows_before_it() {
+        let mut plan = Plan::default();
+        let mut pois = crate::poi::Pois::kept_in(None);
+        let kml = "<kml><Placemark><LineString><coordinates>149.1,-35.3,40 149.2,-35.3</coordinates></LineString></Placemark></kml>";
+        let why = kml_into_mission(&mut plan, &mut pois, kml, &context()).expect_err("no altitude");
+        assert!(why.contains("Nullable object must have a value"), "{why}");
+        assert_eq!(plan.items().len(), 1);
+        assert_eq!(plan.items()[0].z, 40.0);
+        // Not XML at all.
+        let why = kml_into_mission(&mut plan, &mut pois, "<kml>", &context()).expect_err("not XML");
+        assert!(why.starts_with("System.Xml.XmlException"), "{why}");
+    }
+
+    /// A .kmz gives its first top-level .kml; one without any is nothing, without a word.
+    #[test]
+    fn a_kmz_gives_its_first_kml_at_the_top() {
+        let text = kml_text(
+            "route.kmz",
+            include_bytes!("../../../testdata/planner/route.kmz"),
+        )
+        .expect("a zip")
+        .expect("a kml inside");
+        assert!(text.contains("<name>route</name>"));
+        assert!(!text.contains("<Snippet/>"), "snippets dropped");
+        let entries = [mp_log::zip::Entry {
+            name: "inner/only.kml".to_owned(),
+            data: b"<kml/>".to_vec(),
+        }];
+        let stamp = mp_log::zip::DosTime {
+            year: 2026,
+            month: 9,
+            day: 24,
+            hour: 0,
+            minute: 0,
+            second: 0,
+        };
+        let zip = mp_log::zip::write(&entries, stamp).expect("a zip");
+        assert_eq!(
+            kml_text("x.KMZ", &zip),
+            Ok(None),
+            "a .kml in a folder is not at the top"
+        );
+        assert!(kml_text("x.kmz", b"not a zip").is_err());
+        assert_eq!(
+            kml_text("x.kml", b"<kml><Snippet/></kml>"),
+            Ok(Some("<kml></kml>".to_owned()))
+        );
+    }
+
+    /// Load SHP File on a point file: a row per record at the record's vertex, the altitude from
+    /// the ELEVATION column (or -1, which `setfromMap` leaves as 0), sorted by the wp column.
+    #[test]
+    fn load_shp_file_reads_points_with_their_elevation_sorted_by_wp() {
+        let mut plan = Plan::default();
+        let rows = shp_into_mission(
+            &mut plan,
+            include_bytes!("../../../testdata/planner/points.shp"),
+            include_bytes!("../../../testdata/planner/points.dbf"),
+            Some(include_str!("../../../testdata/planner/points.prj")),
+            &context(),
+        )
+        .expect("a point shapefile");
+        assert_eq!(rows, 3);
+        let items = plan.items();
+        // wp 1: (149.16, -35.36) at 610; wp 2: 620.50 -> 620; wp 3: no elevation -> -1 -> 0.
+        assert_eq!(
+            (items[0].x, items[0].y, items[0].z),
+            (-35.36, 149.16, 610.0)
+        );
+        assert_eq!(
+            (items[1].x, items[1].y, items[1].z),
+            (-35.363, 149.165, 620.0)
+        );
+        assert_eq!((items[2].x, items[2].y, items[2].z), (-35.366, 149.17, 0.0));
+        assert!(items.iter().all(|item| item.command == 16));
+    }
+
+    /// Without ELEVATION or alt columns the shape's own Z is the altitude, `(int)` of it, and
+    /// without a wp column the records keep their order.
+    #[test]
+    fn load_shp_file_takes_z_from_the_shape_when_the_table_has_no_column() {
+        let mut plan = Plan::default();
+        let rows = shp_into_mission(
+            &mut plan,
+            include_bytes!("../../../testdata/planner/pointz.shp"),
+            include_bytes!("../../../testdata/planner/pointz.dbf"),
+            None,
+            &context(),
+        )
+        .expect("a PointZ shapefile");
+        assert_eq!(rows, 2);
+        assert_eq!(plan.items()[0].z, 601.0);
+        assert_eq!(plan.items()[1].z, 602.0);
+        assert_eq!(plan.items()[0].x, -35.36);
+    }
+
+    /// `fs.Vertex[row * 2]` is the row-th vertex of the whole file: a one-record polygon gives one
+    /// row at its first corner, and a table with more rows than the file has vertices is the
+    /// handler's "Error opening File".
+    #[test]
+    fn load_shp_file_indexes_vertices_by_table_row() {
+        let mut plan = Plan::default();
+        let rows = shp_into_mission(
+            &mut plan,
+            include_bytes!("../../../testdata/planner/field.shp"),
+            include_bytes!("../../../testdata/planner/field.dbf"),
+            Some(include_str!("../../../testdata/planner/field.prj")),
+            &context(),
+        )
+        .expect("the field");
+        assert_eq!(rows, 1);
+        assert!((plan.items()[0].x - -35.367_300_938_561_82).abs() < 1e-9);
+        // Two records' worth of table over one point.
+        let mut plan = Plan::default();
+        let why = shp_into_mission(
+            &mut plan,
+            include_bytes!("../../../testdata/planner/pointz.shp"),
+            include_bytes!("../../../testdata/planner/points.dbf"),
+            None,
+            &context(),
+        )
+        .expect_err("three rows, two vertices");
+        assert!(why.contains("IndexOutOfRange"), "{why}");
+        assert_eq!(plan.items().len(), 0, "the rows are added after the loop");
+    }
+
+    /// Each of the four entries opens its dialog with the C#'s filter and returns its request.
+    #[test]
+    fn the_file_entries_ask_for_a_file_and_return_the_request() {
+        for (action, filter, make) in [
+            (
+                MenuAction::LoadAndAppend,
+                MISSION_FILTER,
+                FileRequest::LoadAndAppend as fn(String) -> FileRequest,
+            ),
+            (MenuAction::LoadKmlFile, KML_FILTER, FileRequest::LoadKml),
+            (
+                MenuAction::LoadShpFile,
+                SHP_FILTER,
+                FileRequest::LoadShpMission,
+            ),
+            (
+                MenuAction::KmlOverlay,
+                KML_OVERLAY_FILTER,
+                FileRequest::KmlOverlay,
+            ),
+        ] {
+            let mut plan = Plan::default();
+            let mut menus = PlanMenus::default();
+            choose(&mut plan, &mut menus, action);
+            let (title, text, value) = showing(&menus);
+            assert_eq!(
+                (title, text.as_str(), value.as_str()),
+                (OPEN_FILE, filter, "")
+            );
+            assert_eq!(
+                answer(&mut plan, &mut menus, "a-file"),
+                Some(make("a-file".to_owned()))
+            );
+            choose(&mut plan, &mut menus, action);
+            assert_eq!(menus.cancel(&mut plan), None, "cancelled: nothing");
+        }
+    }
+
+    /// KML Overlay's two questions: Yes to the first puts the shapes on the flight screen too, No
+    /// does not, and either is followed by the zoom question, whose Yes the screen picks up.
+    #[test]
+    fn kml_overlays_two_questions() {
+        let overlay = mp_kml::read::overlay(&mp_kml::read::without_snippets(include_str!(
+            "../../../testdata/planner/route.kml"
+        )))
+        .expect("an overlay");
+        let mut plan = Plan::default();
+        plan.set_kml_overlay(Some(overlay));
+        assert_eq!(plan.kml_points().len(), 5 + 3 + 1);
+        let mut menus = PlanMenus::default();
+        menus.ask_kml_to_flight_screen();
+        let question = menus.prompt.as_ref().expect("a question");
+        assert!(question.is_question());
+        assert_eq!(
+            (question.title, question.text.as_str()),
+            (LOAD_DATA, LOAD_INTO_FLIGHT_SCREEN)
+        );
+        // Yes.
+        assert_eq!(menus.submit(&mut plan, &context()), None);
+        assert!(plan.kml_on_flight());
+        let question = menus.prompt.as_ref().expect("the zoom question");
+        assert_eq!(
+            (question.title, question.text.as_str()),
+            (ZOOM_TO_TITLE, ZOOM_TO_LOADED)
+        );
+        assert!(!menus.take_zoom_to_kml());
+        assert_eq!(menus.submit(&mut plan, &context()), None);
+        assert!(menus.take_zoom_to_kml());
+        assert!(!menus.take_zoom_to_kml(), "taken once");
+        assert!(menus.prompt.is_none());
+        // No, then No.
+        plan.set_kml_overlay(plan.kml_overlay().cloned());
+        assert!(
+            !plan.kml_on_flight(),
+            "a new file clears the flight screen's copy"
+        );
+        menus.ask_kml_to_flight_screen();
+        assert_eq!(menus.cancel(&mut plan), None);
+        assert!(!plan.kml_on_flight());
+        assert_eq!(showing(&menus).0, ZOOM_TO_TITLE);
+        assert_eq!(menus.cancel(&mut plan), None);
+        assert!(!menus.take_zoom_to_kml());
     }
 
     // ---- Auto WP's circles ----

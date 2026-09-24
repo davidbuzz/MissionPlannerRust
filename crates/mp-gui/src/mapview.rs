@@ -94,6 +94,8 @@ pub struct MapViewport {
     guided: Option<GuidedMarker>,
     /// The survey area being drawn, if any.
     polygon: Vec<WebMercator>,
+    /// Map Tool > KML Overlay's shapes and labels.
+    kml: KmlLayer,
     /// The geofence, if one is being drawn or has been read back.
     fence: Vec<WebMercator>,
     /// Rally points, where the vehicle goes on a failsafe.
@@ -268,6 +270,7 @@ impl MapViewport {
             tooltips_drawn: Vec::new(),
             guided: None,
             polygon: Vec::new(),
+            kml: KmlLayer::default(),
             fence: Vec::new(),
             rally: Vec::new(),
             traffic: Vec::new(),
@@ -464,6 +467,47 @@ impl MapViewport {
             .iter()
             .map(|vertex| vertex.to_web_mercator())
             .collect();
+    }
+
+    /// Replaces KML Overlay's layer: `kmlpolygonsoverlay`'s polygons, routes and labels, projected,
+    /// and whether `FlightData.kmlpolygons` holds the polygons and routes too.
+    pub fn set_kml(&mut self, overlay: Option<&mp_kml::read::Overlay>, on_flight: bool) {
+        let shapes = |shapes: &[mp_kml::read::Shape]| -> Vec<KmlShape> {
+            shapes
+                .iter()
+                .map(|shape| KmlShape {
+                    points: shape
+                        .points
+                        .iter()
+                        .filter_map(|coord| LatLon::new(coord.lat, coord.lon).ok())
+                        .map(LatLon::to_web_mercator)
+                        .collect(),
+                    argb: shape.argb,
+                    #[allow(clippy::cast_precision_loss)] // a pen width
+                    width: shape.width as f32,
+                })
+                .collect()
+        };
+        self.kml = match overlay {
+            Some(overlay) => KmlLayer {
+                polygons: shapes(&overlay.polygons),
+                routes: shapes(&overlay.routes),
+                labels: overlay
+                    .labels
+                    .iter()
+                    .filter_map(|label| {
+                        LatLon::new(label.at.lat, label.at.lon)
+                            .ok()
+                            .map(|at| KmlLabel {
+                                at: at.to_web_mercator(),
+                                text: label.text.clone(),
+                            })
+                    })
+                    .collect(),
+                on_flight,
+            },
+            None => KmlLayer::default(),
+        };
     }
 
     /// Replaces the geofence shown on the map.
@@ -1192,6 +1236,36 @@ pub enum RectRadius {
     /// `CreateOverlay`'s `loiterradius`, drawn at its absolute value - the sign is the direction.
     Loiter(Option<f64>),
 }
+
+/// One of KML Overlay's `GMapPolygon`s or `GMapRoute`s: its points, projected, and its pen.
+#[derive(Debug, Clone, PartialEq)]
+struct KmlShape {
+    points: Vec<WebMercator>,
+    /// The pen's colour as .NET's ARGB.
+    argb: u32,
+    /// The pen's width, pixels.
+    width: f32,
+}
+
+/// A `GMapMarkerKMLLabel`: the placemark's name drawn at its point.
+#[derive(Debug, Clone, PartialEq)]
+struct KmlLabel {
+    at: WebMercator,
+    text: String,
+}
+
+/// `kmlpolygonsoverlay`, and whether `FlightData.kmlpolygons` shares its polygons and routes.
+/// `// C#: GCSViews/FlightPlanner.cs:4141-4147, 4246-4262`
+#[derive(Debug, Clone, Default, PartialEq)]
+struct KmlLayer {
+    polygons: Vec<KmlShape>,
+    routes: Vec<KmlShape>,
+    labels: Vec<KmlLabel>,
+    on_flight: bool,
+}
+
+/// `GMapMarkerKMLLabel`'s font: `SystemFonts.DefaultFont`, 8.25 pt, in pixels.
+const KML_LABEL_SIZE: f32 = 11.0;
 
 /// One item's marker and the `GMapMarkerRect` round it, as `addpolygonmarker` makes them.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -2605,6 +2679,82 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
             rgb(0x00_00_00),
             gpui::BorderStyle::default(),
         ));
+    }
+
+    // KML Overlay: `kmlpolygonsoverlay` on the planner, and on the flight screen - once Yes was
+    // said - `FlightData.kmlpolygons`, which took the polygons and routes and not the labels.
+    // Each shape in its own pen; a polygon closed, its fill transparent.
+    // `// C#: GCSViews/FlightPlanner.cs:4246-4262, 4318-4343`
+    let planner = map
+        .overlay_mode
+        .as_ref()
+        .is_some_and(|overlay| overlay.planner);
+    if planner || map.kml.on_flight {
+        let shapes = map
+            .kml
+            .polygons
+            .iter()
+            .map(|shape| (shape, true))
+            .chain(map.kml.routes.iter().map(|shape| (shape, false)));
+        let mut failures = 0;
+        for (shape, closed) in shapes {
+            if shape.points.len() < 2 {
+                continue;
+            }
+            let mut builder = PathBuilder::stroke(px(shape.width.max(1.0)));
+            let mut points = shape.points.iter();
+            if let Some(first) = points.next() {
+                builder.move_to(to_screen(*first));
+                for vertex in points {
+                    builder.line_to(to_screen(*vertex));
+                }
+                if closed {
+                    builder.line_to(to_screen(*first));
+                }
+            }
+            // .NET's ARGB to gpui's RGBA.
+            let rgba = shape.argb.rotate_left(8);
+            match builder.build() {
+                Ok(path) => window.paint_path(path, Hsla::from(gpui::rgba(rgba))),
+                Err(_) => failures += 1,
+            }
+        }
+        map.track_path_failures += failures;
+    }
+    if planner {
+        // `GMapMarkerKMLLabel.OnRender`: the name in white, ten right and three down of the point,
+        // four back when it is wider than fifteen pixels.
+        // `// C#: ExtLibs/Maps/GMapMarkerKMLLabel.cs:42-53`
+        for label in &map.kml.labels {
+            let at = to_screen(label.at);
+            let run = TextRun {
+                len: label.text.len(),
+                font: window.text_style().font(),
+                color: Hsla::from(rgb(0xff_ff_ff)),
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            };
+            let line = window.text_system().shape_line(
+                SharedString::from(label.text.clone()),
+                px(KML_LABEL_SIZE),
+                &[run],
+                None,
+            );
+            let left = if f32::from(line.width) > 15.0 {
+                6.0
+            } else {
+                10.0
+            };
+            let _ = line.paint(
+                point(at.x + px(left), at.y + px(3.0)),
+                px(KML_LABEL_SIZE * 1.2),
+                TextAlign::Left,
+                None,
+                window,
+                cx,
+            );
+        }
     }
 
     // The planned mission: a dashed-looking track plus a marker per waypoint, drawn beneath the

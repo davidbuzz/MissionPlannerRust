@@ -1,0 +1,66 @@
+# File Load/Save > Load SHP File: `loadSHPFileToolStripMenuItem_Click` opens a "Shape file" dialog
+# and runs `LoadSHPFile(file)` inside a catch that says "Error opening File": the .prj beside the
+# file for a reprojection, a row per record of the .dbf at `fs.Vertex[row * 2]`, the altitude from
+# an ELEVATION column (else alt, else the shape's Z, else -1 - which `setfromMap` leaves as the
+# row's 0), the rows sorted by a wp column, then `AddCommand(WAYPOINT, ...)` for each and the map
+# fitted to them. `GCSViews/FlightPlanner.cs:4569-4716, 4718-4737`
+#
+# testdata/planner/points.* is three WGS 84 points with ELEVATION 620.50, 610 and blank and wp 2,
+# 1 and 3, so the mission is wp 1 (610) then wp 2 (620) then wp 3 (0). pointz.* is two PointZ
+# records with no elevation column, so the altitudes are the shapes' own Z, 601.25 and 602.75.
+#
+# Needs no link: tools/gui-test.sh tests/gui/plan-load-shp.gui
+
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
+env MP_PLAN_DIR $WORK
+setup for e in shp shx dbf prj; do cp "testdata/planner/points.$e" "$WORK/points.$e"; done; for e in shp shx dbf; do cp "testdata/planner/pointz.$e" "$WORK/pointz.$e"; done; cp testdata/planner/route.kml "$WORK/broken.shp"
+
+screen plan
+window 1600x1200
+settle 4
+expect mission.items 0
+
+click map@0.30x0.70:right
+click menu-fileLoadSave
+click menu-loadSHPFile
+expect plan.prompt Open
+expect plan.prompt.text Shape file
+type points
+key Return
+expect plan.prompt none
+expect status ~ loaded 3 rows
+expect mission.items 3
+expect mission.commands 16,16,16
+expect mission.last.alt 0
+
+# PointZ: two more rows at the shapes' Z, truncated.
+click map@0.30x0.70:right
+click menu-fileLoadSave
+click menu-loadSHPFile
+type pointz.shp
+key Return
+expect plan.prompt none
+expect mission.items 5
+expect mission.last.alt 602
+
+# Not a shape file: "Error opening File" under the C#'s ERROR title, nothing added.
+click map@0.30x0.70:right
+click menu-fileLoadSave
+click menu-loadSHPFile
+type broken
+key Return
+expect plan.prompt Error
+expect plan.prompt.text Error opening File
+key Return
+expect plan.prompt none
+expect mission.items 5
+
+# A name the plan directory does not have: `File.Exists` is false and nothing is said.
+click map@0.30x0.70:right
+click menu-fileLoadSave
+click menu-loadSHPFile
+type nothing-here
+key Return
+expect plan.prompt none
+expect mission.items 5

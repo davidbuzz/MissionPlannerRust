@@ -14,8 +14,8 @@ Early, but flyable behind SITL and a real autopilot. The protocol and telemetry 
 UI covers flying, planning and the first of the setup screens.
 
 Measured on this tree: **23 crates, 237,444 hand-written Rust LOC** (plus 91,634 generated; `.rs` files
-under `crates/`, tests included), **2,574 tests** green on `cargo test --workspace` (34 ignored:
-they need SITL, a window, or the network), **117 GUI scripts** under `tests/gui/`, across 197 commits.
+under `crates/`, tests included), **2,594 tests** green on `cargo test --workspace` (34 ignored:
+they need SITL, a window, or the network), **121 GUI scripts** under `tests/gui/`, across 198 commits.
 
 | Working today | |
 |---|---|
@@ -47,7 +47,7 @@ they need SITL, a window, or the network), **117 GUI scripts** under `tests/gui/
 | Porting ledger | `ledger/ledger.csv`, one row per C# file with its tier and state; `cargo xtask ledger check` fails on anything unaccounted for |
 | Flight screen coverage | every one of `FlightData`'s 136 wired actions listed with what stands in for it here — 96 done, 19 missing — in `docs/coverage/flightdata.md`, kept current by a test; the lower-left is Mission Planner's own fourteen-page tab control with its Quick view, its tlog playback, its DataFlash Logs page and log downloader, and its Actions page (Set WP, Restart/Resume Mission, Change Alt/Speed/Loiter Radius, Fly To Coords, Abort Landing, Do Action, Jump To Tag) sends what the C# sends, proved against SITL by a script each; the DataFlash page's conversions run on a thread against the golden files; the HUD's right-click menu has Russian HUD, Ground Color, User Items, Swap With Map, Show icons and Battery Cell Voltage; Set Home/EKF Origin, the camera and gimbal commands, the Transponder page and the speed dial are there too |
 | Configuration coverage | every one of the 61 `Config*.cs` panels listed in Mission Planner's SETUP and CONFIG order with what stands in for it here — 11 done, 20 partial, 24 missing — in `docs/coverage/configuration.md`, held to the C# by tests; Flight Modes and FailSafe are ported from their `Config*.cs` and proved against SITL |
-| Planner coverage and menu | every one of `FlightPlanner`'s 121 wired actions listed the same way — 82 done, 27 missing — in `docs/coverage/flightplanner.md`; the map's right-click menu is Mission Planner's, in its order, with 22 entries working, home is its Home Location boxes written first and drawn as its green pin, the panel's radius and altitude boxes set the C#'s parameters after Write, all proved by a GUI script each |
+| Planner coverage and menu | every one of `FlightPlanner`'s 121 wired actions listed the same way — 86 done, 23 missing — in `docs/coverage/flightplanner.md`; the map's right-click menu is Mission Planner's, in its order, with 22 entries working, home is its Home Location boxes written first and drawn as its green pin, the panel's radius and altitude boxes set the C#'s parameters after Write, all proved by a GUI script each |
 
 **Not yet**: the log browser's chart cursor, a joystick latency histogram from a real device
 (none is attached to this machine), i18n, packaging. `PLAN.md` §13.2 is the queue, and says what *done* means for

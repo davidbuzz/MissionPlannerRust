@@ -4,15 +4,14 @@ Generated from `crates/mp-gui/src/planner_coverage.rs` by `cargo test -p mp-gui 
 
 | total | done | elsewhere | missing | plumbing | dropped |
 |---:|---:|---:|---:|---:|---:|
-| 121 | 82 | 0 | 27 | 12 | 0 |
+| 121 | 86 | 0 | 23 | 12 | 0 |
 
 Missing, by where the control sits:
 
 | group | missing |
 |---|---:|
 | planning panel | 7 |
-| Map Tool | 5 |
-| File Load/Save | 3 |
+| Map Tool | 4 |
 | POI | 3 |
 | map menu | 3 |
 | Auto WP | 2 |
@@ -107,14 +106,14 @@ Missing, by where the control sits:
 | `zoomToToolStripMenuItem` | Click | `zoomToToolStripMenuItem_Click` | Zoom To | done: `menu-zoomTo` |
 | `prefetchToolStripMenuItem` | Click | `prefetchToolStripMenuItem_Click` | Prefetch | **missing** |
 | `prefetchWPPathToolStripMenuItem` | Click | `prefetchWPPathToolStripMenuItem_Click` | Prefetch WP Path | **missing** |
-| `kMLOverlayToolStripMenuItem` | Click | `kMLOverlayToolStripMenuItem_Click` | KML Overlay | **missing** |
+| `kMLOverlayToolStripMenuItem` | Click | `kMLOverlayToolStripMenuItem_Click` | KML Overlay | done: `menu-kMLOverlay` |
 | `elevationGraphToolStripMenuItem` | Click | `elevationGraphToolStripMenuItem_Click` | Elevation Graph | done: `menu-elevationGraph` |
 | `reverseWPsToolStripMenuItem` | Click | `reverseWPsToolStripMenuItem_Click` | Reverse WPs | done: `menu-reverseWPs` |
 | `loadWPFileToolStripMenuItem` | Click | `loadWPFileToolStripMenuItem_Click` | Load WP File | done: `menu-loadWPFile` |
-| `loadAndAppendToolStripMenuItem` | Click | `loadAndAppendToolStripMenuItem_Click` | Load and Append | **missing** |
+| `loadAndAppendToolStripMenuItem` | Click | `loadAndAppendToolStripMenuItem_Click` | Load and Append | done: `menu-loadAndAppend` |
 | `saveWPFileToolStripMenuItem` | Click | `saveWPFileToolStripMenuItem_Click` | Save WP File | done: `menu-saveWPFile` |
-| `loadKMLFileToolStripMenuItem` | Click | `loadKMLFileToolStripMenuItem_Click` | Load KML File | **missing** |
-| `loadSHPFileToolStripMenuItem` | Click | `loadSHPFileToolStripMenuItem_Click` | Load SHP File | **missing** |
+| `loadKMLFileToolStripMenuItem` | Click | `loadKMLFileToolStripMenuItem_Click` | Load KML File | done: `menu-loadKMLFile` |
+| `loadSHPFileToolStripMenuItem` | Click | `loadSHPFileToolStripMenuItem_Click` | Load SHP File | done: `menu-loadSHPFile` |
 | `poiaddToolStripMenuItem` | Click | `poiaddToolStripMenuItem_Click` | Add | **missing** |
 | `poideleteToolStripMenuItem` | Click | `poideleteToolStripMenuItem_Click` | Delete | **missing** |
 | `poieditToolStripMenuItem` | Click | `poieditToolStripMenuItem_Click` | Edit | **missing** |

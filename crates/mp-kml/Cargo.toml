@@ -22,3 +22,5 @@ mp-log.workspace = true
 thiserror.workspace = true
 # The local time zone the .gpx times are written in.
 chrono.workspace = true
+# Load KML File and KML Overlay read the planner's KML through it.
+roxmltree.workspace = true

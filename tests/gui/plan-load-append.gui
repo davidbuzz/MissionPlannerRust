@@ -1,0 +1,57 @@
+# File Load/Save > Load and Append: `loadAndAppendToolStripMenuItem_Click` opens an "Ardupilot
+# Mission" dialog and hands the file to `readQGC110wpfile(file, true)`, whose `processToScreen`
+# keeps the rows already there, passes over the file's item 0 (home) and adds the rest after them.
+# `GCSViews/FlightPlanner.cs:4330-4344, 990-1010, 5496-5530`
+#
+# The dialog is a line typed in the window; the name is read from the plan directory. The seeded
+# home gives the map a view, so the two clicks make two rows to append after.
+#
+# Needs no link: tools/gui-test.sh tests/gui/plan-load-append.gui
+
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
+env MP_PLAN_DIR $WORK
+setup cp testdata/planner/append.waypoints "$WORK/more.waypoints"
+
+screen plan
+window 1600x1200
+settle 4
+
+click map@0.45x0.40
+click map@0.60x0.55
+expect mission.items 2
+
+# The dialog, with the C#'s filter as its text; a cancelled dialog changes nothing.
+click map@0.30x0.70:right
+click menu-fileLoadSave
+click menu-loadAndAppend
+expect plan.prompt Open
+expect plan.prompt.text Ardupilot Mission
+key Escape
+expect plan.prompt none
+expect mission.items 2
+
+# The file's home is not added again; its two waypoints follow the two rows.
+click map@0.30x0.70:right
+click menu-fileLoadSave
+click menu-loadAndAppend
+expect plan.prompt Open
+type more
+key Return
+expect plan.prompt none
+expect status ~ appended 2 items
+expect mission.items 4
+expect mission.commands 16,16,16,16
+expect mission.last.alt 90
+
+# A file that is not there: "Can't open file! " and the exception, the rows as they were.
+click map@0.30x0.70:right
+click menu-fileLoadSave
+click menu-loadAndAppend
+type nothing-here
+key Return
+expect plan.prompt message
+expect plan.prompt.text ~ Can't open file!
+key Return
+expect plan.prompt none
+expect mission.items 4

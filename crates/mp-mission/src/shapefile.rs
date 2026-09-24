@@ -136,6 +136,83 @@ pub fn features(shp: &[u8]) -> Result<Vec<Vec<(f64, f64)>>, ShapefileError> {
     Ok(out)
 }
 
+/// Every vertex of a `.shp` in one list, as DotSpatial's `FeatureSet.Vertex` holds them - X and Y
+/// pairs, record after record, part after part - with the Z of each where the file's shape type
+/// carries one (`FeatureSet.Z`, null for a file without Z).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Vertices {
+    /// `Vertex`: (X, Y) per vertex, so `Vertex[row * 2]` is the `row`th vertex's X.
+    pub xy: Vec<(f64, f64)>,
+    /// `Z`: one per vertex for PointZ, MultiPointZ, PolyLineZ and PolygonZ files; `None` otherwise.
+    pub z: Option<Vec<f64>>,
+}
+
+/// The Z values of one record's shape, `content` starting at its shape type; `None` for a shape
+/// type without them.
+fn shape_z(content: &[u8]) -> Result<Option<Vec<f64>>, ShapefileError> {
+    let kind = le_i32(content, 0)?;
+    let doubles = |at: usize, count: usize| -> Result<Vec<f64>, ShapefileError> {
+        (0..count)
+            .map(|index| le_f64(content, at + index * 8))
+            .collect()
+    };
+    match kind {
+        // PointZ: X, Y, Z, M.
+        11 => Ok(Some(doubles(20, 1)?)),
+        // MultiPointZ: box, count, points, Z range, Z array.
+        18 => {
+            let n = count(le_i32(content, 36)?)?;
+            Ok(Some(doubles(40 + n * 16 + 16, n)?))
+        }
+        // PolyLineZ and PolygonZ: box, parts, count, part starts, points, Z range, Z array.
+        13 | 15 => {
+            let parts = count(le_i32(content, 36)?)?;
+            let n = count(le_i32(content, 40)?)?;
+            Ok(Some(doubles(44 + parts * 4 + n * 16 + 16, n)?))
+        }
+        _ => Ok(None),
+    }
+}
+
+/// Every record's vertices in one list, with their Z where the file has one.
+/// `// C#: GCSViews/FlightPlanner.cs:4602-4604, 4628-4629` (`fs.Vertex[row * 2]`, `fs.Z[row]`)
+///
+/// # Errors
+///
+/// As [`features`].
+pub fn vertices(shp: &[u8]) -> Result<Vertices, ShapefileError> {
+    if shp.len() < 100 {
+        return Err(ShapefileError::Truncated);
+    }
+    let code = be_i32(shp, 0)?;
+    if code != 9994 {
+        return Err(ShapefileError::NotAShapefile(code));
+    }
+    // The header's shape type says whether the file carries Z at all.
+    let with_z = matches!(le_i32(shp, 32)?, 11 | 13 | 15 | 18);
+    let length = count(be_i32(shp, 24)?)?.saturating_mul(2).min(shp.len());
+    let mut xy = Vec::new();
+    let mut z = Vec::new();
+    let mut at = 100;
+    while at + 8 <= length {
+        let content_words = count(be_i32(shp, at + 4)?)?;
+        let start = at + 8;
+        let end = start + content_words * 2;
+        let content = shp.get(start..end).ok_or(ShapefileError::Truncated)?;
+        if let Some(coordinates) = shape(content)? {
+            xy.extend(coordinates);
+            if with_z {
+                z.extend(shape_z(content)?.unwrap_or_default());
+            }
+        }
+        at = end;
+    }
+    Ok(Vertices {
+        xy,
+        z: with_z.then_some(z),
+    })
+}
+
 /// A `.prj` this reader can reproject from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Projection {
@@ -475,6 +552,26 @@ mod tests {
                 north: false
             })
         );
+    }
+
+    #[test]
+    fn vertices_are_one_flat_list_with_z_only_where_the_file_has_it() {
+        // Three points in wp order 2, 1, 3; no Z in a Point file.
+        let points =
+            vertices(include_bytes!("../../../testdata/planner/points.shp")).expect("points");
+        assert_eq!(points.xy.len(), 3);
+        assert_eq!(points.xy[1], (149.16, -35.36));
+        assert_eq!(points.z, None);
+        // PointZ carries a Z per vertex.
+        let pointz =
+            vertices(include_bytes!("../../../testdata/planner/pointz.shp")).expect("pointz");
+        assert_eq!(pointz.xy.len(), 2);
+        assert_eq!(pointz.z, Some(vec![601.25, 602.75]));
+        // A polygon's ring is its vertices in order: `Vertex[row * 2]` of row 1 is its second corner.
+        let field = vertices(include_bytes!("../../../testdata/planner/field.shp")).expect("field");
+        assert_eq!(field.xy.len(), 5);
+        assert_eq!(field.z, None);
+        assert_eq!(vertices(&[0u8; 50]), Err(ShapefileError::Truncated));
     }
 
     #[test]

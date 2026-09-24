@@ -10,6 +10,7 @@ pub mod circle;
 mod clipper;
 pub mod commands;
 pub mod corridor;
+pub mod dbf;
 pub mod dotnet;
 pub mod fence;
 pub mod fence_file;

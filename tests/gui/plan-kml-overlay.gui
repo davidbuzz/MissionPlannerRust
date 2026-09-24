@@ -1,0 +1,84 @@
+# Map Tool > KML Overlay: `kMLOverlayToolStripMenuItem_Click` opens an "All Supported" dialog,
+# clears both KML overlays, reads the file by its extension (KML and KMZ here; DXF and GeoPackage
+# are not ported and say so on the status line), and puts each placemark on the planner's map:
+# polygons and line strings with the pen `GetKMLLineColor` finds - only through a StyleMap - and
+# point placemarks as labels. Then two Yes/No questions: "Do you want to load this into the flight
+# data screen?" (the polygons and routes, never the labels) and "Zoom to the center or the loaded
+# file?". A file that will not read is "Bad KML File :" and the exception.
+# `GCSViews/FlightPlanner.cs:4131-4290, 4290-4400, 4487-4525`
+#
+# testdata/planner/route.kml: one polygon (a StyleMap to a red 3.7-wide line), one line string
+# (a plain Style, so white and 2), one named point.
+#
+# Needs no link: tools/gui-test.sh tests/gui/plan-kml-overlay.gui
+
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
+env MP_PLAN_DIR $WORK
+setup cp testdata/planner/route.kml "$WORK/route.kml" && cp testdata/planner/route.kmz "$WORK/zipped.kmz" && printf 'not kml' > "$WORK/bad.kml" && printf '0\nSECTION\n' > "$WORK/plan.dxf"
+
+screen plan
+window 1600x1200
+settle 4
+expect plan.kml.polygons 0
+expect plan.kml.flight false
+
+# No to the flight screen, Yes to the zoom.
+click map@0.30x0.70:right
+click menu-mapTool
+click menu-kMLOverlay
+expect plan.prompt Open
+expect plan.prompt.text All Supported
+type route
+key Return
+expect plan.prompt Load data
+expect plan.prompt.text Do you want to load this into the flight data screen?
+expect status ~ overlaid 1 polygons, 1 routes and 1 labels
+expect plan.kml.polygons 1
+expect plan.kml.routes 1
+expect plan.kml.labels 1
+click plan-prompt-cancel
+expect plan.prompt Zoom To
+expect plan.prompt.text Zoom to the center or the loaded file?
+expect plan.kml.flight false
+click plan-prompt-ok
+expect plan.prompt none
+settle 1
+expect map.zoom > 14
+
+# The .kmz, and Yes to the flight screen this time; a new file had cleared the flight screen's copy.
+click map@0.30x0.70:right
+click menu-mapTool
+click menu-kMLOverlay
+type zipped.kmz
+key Return
+expect plan.prompt Load data
+click plan-prompt-ok
+expect plan.prompt Zoom To
+expect plan.kml.flight true
+click plan-prompt-cancel
+expect plan.prompt none
+expect plan.kml.polygons 1
+expect mission.items 0
+
+# Not KML: "Bad KML File :" and the exception; the overlays were cleared first.
+click map@0.30x0.70:right
+click menu-mapTool
+click menu-kMLOverlay
+type bad
+key Return
+expect plan.prompt message
+expect plan.prompt.text ~ Bad KML File :
+key Return
+expect plan.prompt none
+expect plan.kml.polygons 0
+expect plan.kml.flight false
+
+# DXF: not ported, said on the status line, no questions.
+click map@0.30x0.70:right
+click menu-mapTool
+click menu-kMLOverlay
+type plan.dxf
+key Return
+expect plan.prompt none
+expect status ~ netDxf

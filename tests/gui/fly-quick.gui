@@ -34,9 +34,10 @@ expect fly.quick.6.label Dist to Home (m)
 # A number from the recording, written to two places.
 expect fly.quick.1.value ~ .
 expect fly.quick.4.value ~ .
-# verticalspeed is CurrentState's own smoothed derivative of the altitude, which this application
-# does not hold (docs/coverage/currentstate.md): its view shows no number rather than a made-up one.
-expect fly.quick.5.value 0.00
+# verticalspeed is CurrentState's own smoothed derivative of the altitude (`CurrentState.cs:
+# 1043-1051`), held since the state wiring (PLAN.md §13.4 row 42): a number, near zero on a
+# recording that is not climbing, written to two places.
+expect fly.quick.5.value ~ .
 expect fly.quick.chooser none
 
 # A double click opens the chooser for that view; every numeric property held is offered.
