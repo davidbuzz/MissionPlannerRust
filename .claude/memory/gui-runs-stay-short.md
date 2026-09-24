@@ -97,3 +97,9 @@ passes it, waits for the load to fall below 20 first, and prints one PASS/FAIL l
 frame leaves the probe file, so a `click` on a closed menu's entry fails with "not found"
 instead of clicking where it used to be (which put two waypoints on the map in
 plan-survey.gui). A script that opens a menu must click its entries before anything closes it.
+
+**A planner script needs a home.** With an empty config.xml (`env MP_CONFIG_XML $WORK/config.xml`
+and nothing written to it) the planner has no home, the map has no view to project through, and
+`position_at` answers None: a left click adds no waypoint and a right-click opens no menu,
+silently. Seed the home as `plan-radius.gui`'s `setup` line does (a `config.xml` with
+`TXT_homelat/lng/alt`) before clicking the map (2026-09-24, an hour lost to it).
