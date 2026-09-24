@@ -7,6 +7,15 @@
 //! That is why tiles are decoded here rather than by the caller. Decoding a 256x256 PNG takes
 //! around a millisecond, which is most of a frame at 120 Hz; doing it in the painter would make
 //! the map stutter every time a tile arrived, which is exactly when it must not.
+//!
+//! The slow work is split the way GMap.NET splits it. One thread reads the disk: a cached tile is
+//! decoded and published from there, and only a tile the cache does not hold is handed on to a
+//! pool of fetch threads, five of them as `Core.cs`'s `GThreadPoolSize` has it, each of which
+//! goes to the network and waits there. An earlier version did both on one thread, so a single
+//! tile that was not cached - the first view after start-up is often somewhere the cache has
+//! never seen - held every cached tile behind it for the length of a request, up to the ten
+//! second timeout, and a full cache took five to ten seconds to appear.
+//! `// C#: ExtLibs/GMap.NET.Core/GMap.NET.Internals/Core.cs:62, 791-1030, 1150-1165`
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -22,6 +31,11 @@ use crate::source::TileSource;
 
 /// How long a fetch may be outstanding before its slot is reclaimed.
 const FETCH_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// How many threads fetch from the network at once: GMap.NET's `GThreadPoolSize`, the number
+/// of `ProcessLoadTask` threads its map core starts.
+/// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.Internals/Core.cs:62`
+pub const FETCH_THREADS: usize = 5;
 
 /// How many decoded tiles to keep in memory.
 ///
@@ -105,8 +119,23 @@ pub struct StoreStats {
 struct Shared {
     memory: Mutex<Memory>,
     policy: Mutex<FetchPolicy>,
+    /// What the map asked for and the reader has not looked at yet. Newest last, taken from the
+    /// end.
     queue: Mutex<Vec<TileId>>,
     wake: Condvar,
+    /// What the cache did not hold and the policy allows a fetch for, waiting for a fetch
+    /// thread. Newest last, taken from the end, like the C#'s `tileLoadQueue` stack.
+    /// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.Internals/Core.cs:59`
+    network: Mutex<Vec<TileId>>,
+    network_wake: Condvar,
+    /// Whether this store has run the provider's `OnInitialized` - the version check Google's
+    /// and Bing's providers make the first time they are shown. Here, the first time one is
+    /// about to fetch: a store that only ever reads the disk never goes to the network for a
+    /// version it has no use for, which is what "offline" has to mean. Held for the length of
+    /// the check, so the other fetch threads wait for it rather than fetching with the
+    /// hard-coded version while it runs.
+    /// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.Internals/Core.cs:204-208`
+    initialized: Mutex<bool>,
     running: AtomicBool,
     stats: Mutex<StoreStats>,
     /// Bumped whenever a tile arrives, so the UI knows to repaint without polling every tile.
@@ -159,7 +188,7 @@ pub struct TileStore {
     shared: Arc<Shared>,
     cache: TileCache,
     source: &'static TileSource,
-    thread: Option<std::thread::JoinHandle<()>>,
+    threads: Vec<std::thread::JoinHandle<()>>,
 }
 
 impl TileStore {
@@ -207,30 +236,49 @@ impl TileStore {
         fetcher: TileFetcher,
         spawn: bool,
     ) -> Self {
+        let offline = policy.is_offline();
         let shared = Arc::new(Shared {
             memory: Mutex::new(Memory::default()),
             policy: Mutex::new(policy),
             queue: Mutex::new(Vec::new()),
             wake: Condvar::new(),
+            network: Mutex::new(Vec::new()),
+            network_wake: Condvar::new(),
+            initialized: Mutex::new(false),
             running: AtomicBool::new(true),
             stats: Mutex::new(StoreStats::default()),
             generation: AtomicU64::new(0),
         });
 
-        let thread = spawn.then(|| {
+        let mut threads = Vec::new();
+        if spawn {
             let thread_shared = Arc::clone(&shared);
             let thread_cache = cache.clone();
-            std::thread::Builder::new()
+            let reader = std::thread::Builder::new()
                 .name("mp-tiles".to_owned())
-                .spawn(move || run_fetcher(source, &thread_cache, &thread_shared, &fetcher))
-                .ok()
-        });
+                .spawn(move || run_reader(source, &thread_cache, &thread_shared));
+            threads.extend(reader.ok());
+            // An offline store's policy never lets a tile reach the network queue, so its fetch
+            // threads would only ever wait; none are started.
+            let fetchers = if offline { 0 } else { FETCH_THREADS };
+            for index in 0..fetchers {
+                let thread_shared = Arc::clone(&shared);
+                let thread_cache = cache.clone();
+                let thread_fetcher = fetcher.clone();
+                let handle = std::thread::Builder::new()
+                    .name(format!("mp-tiles-fetch-{index}"))
+                    .spawn(move || {
+                        run_fetcher(source, &thread_cache, &thread_shared, &thread_fetcher);
+                    });
+                threads.extend(handle.ok());
+            }
+        }
 
         Self {
             shared,
             cache,
             source,
-            thread: thread.flatten(),
+            threads,
         }
     }
 
@@ -361,28 +409,20 @@ impl Drop for TileStore {
     fn drop(&mut self) {
         self.shared.running.store(false, Ordering::Release);
         self.shared.wake.notify_all();
-        if let Some(thread) = self.thread.take() {
+        self.shared.network_wake.notify_all();
+        for thread in self.threads.drain(..) {
             let _ = thread.join();
         }
     }
 }
 
-/// The fetch thread: cache first, then network, then decode.
-fn run_fetcher(
-    source: &'static TileSource,
-    cache: &TileCache,
-    shared: &Arc<Shared>,
-    fetcher: &TileFetcher,
-) {
-    // Whether this store has run the provider's `OnInitialized` - the version check Google's and
-    // Bing's providers make the first time they are shown. Here, the first time one is about to
-    // fetch: a store that only ever reads the disk never goes to the network for a version it has
-    // no use for, which is what "offline" has to mean.
-    // `// C#: ExtLibs/GMap.NET.Core/GMap.NET.Internals/Core.cs:204-208`
-    let mut initialized = false;
-
+/// The reader thread: the cache first, and what it does not hold to the fetch threads.
+///
+/// Nothing here waits on the network, so a cached tile is on screen a decode after it was asked
+/// for whatever the network is doing.
+fn run_reader(source: &'static TileSource, cache: &TileCache, shared: &Arc<Shared>) {
     while shared.running.load(Ordering::Acquire) {
-        let Some(tile) = next_tile(shared) else {
+        let Some(tile) = next_from(shared, &shared.queue, &shared.wake) else {
             continue;
         };
 
@@ -407,9 +447,42 @@ fn run_fetcher(
             policy.begin(tile, now);
         }
 
-        if !initialized {
-            initialized = true;
-            crate::versions::initialize(source, cache.root(), fetcher);
+        let Ok(mut network) = shared.network.lock() else {
+            continue;
+        };
+        if !network.contains(&tile) {
+            network.push(tile);
+            // Bounded like the request queue: a tile nobody is looking at any more is dropped
+            // from the front, and the policy reclaims its slot when it expires.
+            if network.len() > MEMORY_TILES {
+                network.remove(0);
+            }
+        }
+        drop(network);
+        shared.network_wake.notify_one();
+    }
+}
+
+/// A fetch thread: the network, then decode. One of [`FETCH_THREADS`].
+fn run_fetcher(
+    source: &'static TileSource,
+    cache: &TileCache,
+    shared: &Arc<Shared>,
+    fetcher: &TileFetcher,
+) {
+    while shared.running.load(Ordering::Acquire) {
+        let Some(tile) = next_from(shared, &shared.network, &shared.network_wake) else {
+            continue;
+        };
+
+        {
+            let Ok(mut initialized) = shared.initialized.lock() else {
+                continue;
+            };
+            if !*initialized {
+                *initialized = true;
+                crate::versions::initialize(source, cache.root(), fetcher);
+            }
         }
 
         match fetcher.fetch(source, tile) {
@@ -435,9 +508,9 @@ fn run_fetcher(
     }
 }
 
-/// Takes the next tile to work on, waiting if there is nothing to do.
-fn next_tile(shared: &Arc<Shared>) -> Option<TileId> {
-    let Ok(mut queue) = shared.queue.lock() else {
+/// Takes the next tile from a queue, newest first, waiting if there is nothing to do.
+fn next_from(shared: &Arc<Shared>, queue: &Mutex<Vec<TileId>>, wake: &Condvar) -> Option<TileId> {
+    let Ok(mut queue) = queue.lock() else {
         return None;
     };
     while queue.is_empty() {
@@ -445,7 +518,7 @@ fn next_tile(shared: &Arc<Shared>) -> Option<TileId> {
             return None;
         }
         // A timeout rather than a bare wait, so shutdown is never missed if the notify raced.
-        let Ok((held, _)) = shared.wake.wait_timeout(queue, Duration::from_millis(200)) else {
+        let Ok((held, _)) = wake.wait_timeout(queue, Duration::from_millis(200)) else {
             return None;
         };
         queue = held;

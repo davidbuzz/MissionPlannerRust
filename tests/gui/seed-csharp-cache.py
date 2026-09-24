@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Lays out a map tile cache exactly as the C# Mission Planner writes one.
 
-usage: tests/gui/seed-csharp-cache.py <gmapcache-dir> [lat] [lon]
+usage: tests/gui/seed-csharp-cache.py [--block N] [--hole] <gmapcache-dir> [lat] [lon]
 
 The latitude and longitude default to -35.363262 149.165237, ArduPilot SITL's default home, which
 is where a test with SITL on the link will be looking. Every zoom from 14 to 19 gets a 9x9 block
 of tiles centred on the tile holding that point: wide enough that the map framing the vehicle at
-any of those zooms lands inside it.
+any of those zooms lands inside it. `--block N` makes the block N x N instead, and `--hole` leaves
+the centre tile of each block unwritten - a cache with a gap in it, for a test of what the map
+does about the tiles it does not have while it shows the ones it does.
 
 The point is that nothing about the layout comes from this port. A test that seeded its cache
 through the Rust cache code would prove only that the code agrees with itself; this writes what
@@ -87,15 +89,28 @@ def tile_for(lat, lon, zoom):
 
 
 def main(argv):
-    if len(argv) not in (2, 4):
-        print('usage: seed-csharp-cache.py <gmapcache-dir> [lat] [lon]', file=sys.stderr)
+    args = argv[1:]
+    block, hole = BLOCK, False
+    while args and args[0].startswith('--'):
+        option = args.pop(0)
+        if option == '--block' and args:
+            block = int(args.pop(0))
+        elif option == '--hole':
+            hole = True
+        else:
+            print('usage: seed-csharp-cache.py [--block N] [--hole] <gmapcache-dir> [lat] [lon]',
+                  file=sys.stderr)
+            return 2
+    if len(args) not in (1, 3) or block < 1:
+        print('usage: seed-csharp-cache.py [--block N] [--hole] <gmapcache-dir> [lat] [lon]',
+              file=sys.stderr)
         return 2
-    root = argv[1]
-    lat, lon = (float(argv[2]), float(argv[3])) if len(argv) == 4 else (DEFAULT_LAT, DEFAULT_LON)
+    root = args[0]
+    lat, lon = (float(args[1]), float(args[2])) if len(args) == 3 else (DEFAULT_LAT, DEFAULT_LON)
 
     png = solid_png(TILE_PX, COLOUR)
     provider_dir = os.path.join(root, 'TileDBv3', 'en', PROVIDER)
-    half = BLOCK // 2
+    half = block // 2
     written = 0
     for zoom in ZOOMS:
         n = 2 ** zoom
@@ -104,6 +119,8 @@ def main(argv):
             row_dir = os.path.join(provider_dir, str(zoom), str(y))
             os.makedirs(row_dir, exist_ok=True)
             for x in range(max(cx - half, 0), min(cx + half, n - 1) + 1):
+                if hole and (x, y) == (cx, cy):
+                    continue
                 with open(os.path.join(row_dir, '%d.jpg' % x), 'wb') as tile:
                     tile.write(png)
                 written += 1

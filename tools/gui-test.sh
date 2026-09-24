@@ -15,6 +15,7 @@
 #   screen plan                 open on a screen (MP_SCREEN)
 #   window 1600x1200            window size (MP_WINDOW)
 #   tiles offline               configure a tile source but fetch nothing (default: no tiles)
+#   tiles on                    configure a tile source and fetch what the cache lacks
 #   env MP_TILE_CACHE $WORK/c   export a variable before launch; the rest of the line is the value
 #   setup tools/seed $WORK/c    run a command, from the repo root, before launch
 #   settle 6                    wait, for telemetry to arrive or a view to settle

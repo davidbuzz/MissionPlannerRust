@@ -1,0 +1,40 @@
+# Cached tiles are drawn at start-up whatever the network is doing.
+#
+# The claim: the map's cache is served by a thread that never waits on the network, and the tiles
+# the cache does not hold go to a pool of fetch threads - five, as GMap.NET's Core.cs:62 has it -
+# so a tile that is not cached costs one fetch thread its request, not the screen its cached
+# tiles. Before this, one thread did both, and a single uncached tile at the first view held every
+# cached tile behind it for the fetch's whole timeout: a full cache took five to ten seconds to
+# appear after start-up.
+#
+# The cache is laid out as the C# writes it (tests/gui/seed-csharp-cache.py), a 3x3 block around
+# SITL's home at every zoom with the centre tile left out, so the view the map frames round the
+# vehicle has cached tiles and one it must fetch. The fetch goes to tests/gui/silent-proxy.py,
+# which accepts and never answers; nothing leaves the machine, and the fetch hangs for its ten
+# second timeout. The cached tiles must be on screen regardless, from the disk, with nothing
+# fetched. The view at this window size holds six tiles, five cached and the hole;
+# `map.tiles.disk >= 5` is the number, because the one-thread store took the requests newest
+# first and served two or three before it reached the hole and hung.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760: the map frames the vehicle, and with nothing to frame
+# it draws a graticule and asks for no tiles. Run as
+#
+#   tools/gui-test.sh tests/gui/tiles-startup.gui -- tcp:127.0.0.1:5760
+
+tiles on
+env MP_TILE_CACHE $WORK/gmapcache
+env MP_TILE_SOURCE osm
+env HTTPS_PROXY http://127.0.0.1:38519
+env HTTP_PROXY http://127.0.0.1:38519
+setup python3 tests/gui/seed-csharp-cache.py --block 3 --hole $WORK/gmapcache
+setup python3 tests/gui/silent-proxy.py --port 38519 --work $WORK
+
+screen fly
+window 1600x1200
+settle 4
+
+expect map.source osm
+expect map.tiles.fetched 0
+expect map.tiles.disk >= 5
+expect map.tiles.drawn >= 5
+expect map.tiles.missing >= 1
