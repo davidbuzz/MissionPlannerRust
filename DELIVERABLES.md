@@ -19,9 +19,9 @@ renderer with no web backend. Reference clone: [referneces/zed](referneces/zed).
 |---|---|---|---|---|---|---|---|
 | [D1](#d1-workspace-crate-graph-and-build-system) | 0 | Cargo workspace and crate graph | P0 | In progress (55% completed est) | Not started | Not started | Unit |
 | [D2](#d2-mavlink-protocol-crate) | 0 | MAVLink protocol codec crate | P0 | In progress (85% completed est) | Not started | Not started | Differential vs C# |
-| [D3](#d3-transport-layer) | 0 | Serial, TCP, UDP, BLE transports | P0 | In progress (65% completed est) | Not started | Not started | Differential vs C# |
+| [D3](#d3-transport-layer) | 0 | Serial, TCP, UDP, BLE transports | P0 | In progress (70% completed est) | Not started | Not started | Differential vs C# |
 | [D4](#d4-link-engine-the-mavlinkinterface-equivalent) | 0 | Link engine, protocol machines | P0 | In progress (80% completed est) | Not started | Not started | Differential vs C# |
-| [D5](#d5-vehicle-state-model--telemetry-bus) | 0 | Vehicle state snapshot bus | P0 | In progress (85% completed est) | Not started | Not started | Differential vs C# |
+| [D5](#d5-vehicle-state-model--telemetry-bus) | 0 | Vehicle state snapshot bus | P0 | In progress (90% completed est) | Not started | Not started | Differential vs C# |
 | [D6](#d6-ui-kit-on-gpui) | 1 | gpui widget kit | P0 | In progress (30% completed est) | Not started | Not started | Unit + layout |
 | [D7](#d7-gpu-render-core) | 1 | Shared wgpu render core | P0 | In progress (35% completed est) | Not started | Not started | Unit + Linux paint smoke |
 | [D8](#d8-map-engine) | 2 | GPU slippy map engine | P0 | In progress (60% completed est) | Not started | Not started | Differential vs C# |
@@ -116,9 +116,12 @@ signing, zero-copy frame parse/serialize.
   the typed decoder: 211,638 decodes, zero allocations, the same in release. The 24-hour soaks of
   `frame_parse` and `message_decode` started 2026-09-23 16:01Z and end 2026-09-24 16:01Z, with no
   artefact so far; their result goes into `fuzz/README.md`, which still shows only the short runs.
-  `benches/decode.rs` exists for the > 1 M messages/s gate and no figure from it is recorded anywhere,
-  so the throughput claim is unproven in this document.
-- **Tests:** `crates/mp-mavlink/tests/roundtrip.rs` (proptest encode→decode identity over every generated message type); the golden decode is `tests/differential_tlog.rs` (35,750 frames against `MAVLink.dll` under mono) with `crates/mp-mavlink-dialects/tests/differential_fields.rs` (24,626 field values by name) and `reference_table.rs` (349 `CRC_EXTRA`/`min_len`/`len` against the shipped assembly); `tests/signing.rs`; the truncation cases live in `tests/robustness.rs` and `tests/decoder.rs`; `fuzz/fuzz_targets/frame_parse.rs` and `message_decode.rs` (24 h soak in flight); `crates/mp-fuzz-checks/tests/bounded.rs` runs every fuzz property on stable in `cargo test --workspace`; `tests/no_alloc.rs`; `benches/decode.rs` (exists; its number is not recorded).
+  `benches/decode.rs` measures the frame decoder over a five-message mix as ArduPilot sends it:
+  **9.5 M frames/s** whole-buffer and in 64- and 256-byte chunks, 10.2 M in 1,024-byte chunks
+  (criterion, release, 2026-09-24, with the fuzz soak on two other cores) - nine times the
+  target for the framing and CRC, on one core. The typed decode of every message is
+  `tests/no_alloc.rs`'s 211,638 and is not timed separately.
+- **Tests:** `crates/mp-mavlink/tests/roundtrip.rs` (proptest encode→decode identity over every generated message type); the golden decode is `tests/differential_tlog.rs` (35,750 frames against `MAVLink.dll` under mono) with `crates/mp-mavlink-dialects/tests/differential_fields.rs` (24,626 field values by name) and `reference_table.rs` (349 `CRC_EXTRA`/`min_len`/`len` against the shipped assembly); `tests/signing.rs`; the truncation cases live in `tests/robustness.rs` and `tests/decoder.rs`; `fuzz/fuzz_targets/frame_parse.rs` and `message_decode.rs` (24 h soak in flight); `crates/mp-fuzz-checks/tests/bounded.rs` runs every fuzz property on stable in `cargo test --workspace`; `tests/no_alloc.rs`; `benches/decode.rs` (9.5 M frames/s, recorded above).
 
 ### D3. Transport layer
 `serial | TCP | UDP | BLE | NTRIP | websocket | file-replay`, device enumeration and hotplug on all three
@@ -144,8 +147,8 @@ OSes, plus bootloader/flashing transports (px4uploader, DFU, ADB).
   a Cube Orange on `/dev/ttyACM0` (`27B1:0004`, listed by `mpr ports` under its by-id name) gave
   341 frames in 8 s with no CRC error on 2026-09-24. **Not yet:**
   BLE, TLS (`wss://`, NTRIP over https), the flashing transports, Windows friendly names via WMI,
-  and the ≤ 1 ms latency bench.
-- **Tests:** the per-transport loopbacks are `crates/mp-transport/tests/transports.rs`, `integration_replay.rs`, `udp_client.rs` and `websocket.rs`, with `csharp_goldens.rs` holding the UDP client, websocket and NTRIP bytes to the C# classes run under mono; `tests/faults.rs` (drop, duplicate, reorder, partial write, mid-frame disconnect over real frames); `tests/enumerate.rs` over Linux, macOS and Windows fixtures; `tests/hotplug.rs` (a real pty unplugged and reopened); `tests/ntrip.rs` against an in-process caster; `tests/description.rs`; `benches/latency.rs` not yet, so the ≤ 1 ms claim is unmeasured.
+  and TLS; the ≤ 1 ms latency is measured (below).
+- **Tests:** the per-transport loopbacks are `crates/mp-transport/tests/transports.rs`, `integration_replay.rs`, `udp_client.rs` and `websocket.rs`, with `csharp_goldens.rs` holding the UDP client, websocket and NTRIP bytes to the C# classes run under mono; `tests/faults.rs` (drop, duplicate, reorder, partial write, mid-frame disconnect over real frames); `tests/enumerate.rs` over Linux, macOS and Windows fixtures; `tests/hotplug.rs` (a real pty unplugged and reopened); `tests/ntrip.rs` against an in-process caster; `tests/description.rs`; `benches/latency.rs` (a one-byte poke answered by 64 bytes, two thousand round trips through the OS's own socket or port and then through the transport: over TCP on loopback the transport adds nothing measurable at p99 - raw p99 50.6 µs, transport 44.6 µs - and over a pseudo-terminal 116 ns - raw p99 52.4 µs, transport 52.5 µs - against D3's 1 ms; release, 2026-09-24, gated).
 
 ### D4. Link engine (the `MAVLinkInterface` equivalent)
 Per-link packet pump, routing/forwarding, and the high-level protocol state machines: parameters,
@@ -197,7 +200,7 @@ snapshots so the renderer never blocks on the I/O thread.
   `UpdateCurrentSettings` under mono over three tlogs (`tools/csharp-reference/MpState.cs`,
   PLAN.md §13.4 row 38) - the differential the `Tests:` line asks for, for those fields. Their
   callers in the link and the GUI are row 39.
-- **Tests:** the field coverage is `crates/mp-vehicle/src/coverage.rs`'s tests, matched to `CurrentState.cs` by name, type, display text, group and order, rendered to `docs/coverage/currentstate.md` and failing when stale; the state timeline against the C# is `tests/current_state_oracle.rs` (58 fields per packet over three tlogs from `MpState.cs` under mono) with `current_state_replay.rs`, `current_state_clock.rs`, `current_state_statics.rs`, `replay_state.rs`, `onboard.rs`, `modes.rs`, `nav.rs`; `tests/no_alloc_ingest.rs` in both `mp-vehicle` and `mp-link`. Not yet: a concurrency stress test or `loom` model of the publish path, and `benches/snapshot.rs`.
+- **Tests:** the field coverage is `crates/mp-vehicle/src/coverage.rs`'s tests, matched to `CurrentState.cs` by name, type, display text, group and order, rendered to `docs/coverage/currentstate.md` and failing when stale; the state timeline against the C# is `tests/current_state_oracle.rs` (58 fields per packet over three tlogs from `MpState.cs` under mono) with `current_state_replay.rs`, `current_state_clock.rs`, `current_state_statics.rs`, `replay_state.rs`, `onboard.rs`, `modes.rs`, `nav.rs`; `tests/no_alloc_ingest.rs` in both `mp-vehicle` and `mp-link`; `benches/snapshot.rs` (publish 153 ns and load 25 ns at steady state; the gate is a writer at 1 kHz under eight readers loading without pause for a second: publish p99 26.7 µs against §8.2's 200 µs, load p99 899 ns against 20 µs, 0 allocations in 1,000 publishes; release, 2026-09-24). Not yet: a `loom` model of the publish path.
 
 ---
 
@@ -653,7 +656,7 @@ Every deliverable above must also satisfy:
 | Idle CPU (connected, 10 Hz telemetry) | < 1 % of one core | unmeasured |
 | Packet-to-pixel latency (p99) | < 16 ms | unmeasured; the frame alone is p99 4.9 ms under a 200 Hz storm, release, quiet machine |
 | Stick input to packet on the wire (p99) | < 5 ms | 0.152 ms on an in-process fake device; no real device attached |
-| MAVLink decode throughput | > 1 M msg/s/core, 0 allocations per packet | 0 allocations proven over 211,638 decodes; the throughput bench exists and its figure is not recorded |
+| MAVLink decode throughput | > 1 M msg/s/core, 0 allocations per packet | 9.5 M frames/s framing and CRC on one core (`benches/decode.rs`, release, 2026-09-24); 0 allocations proven over 211,638 typed decodes |
 | 1 GB dataflash log open | < 2 s to first plot | 0.61-0.62 s to first plot on a 1.07 GB log (`benches/parse_1gb.rs`, quiet machine) |
 | Log plot scrub, 10 M points | 120 fps | unmeasured |
 | Map pan/zoom, 1 M-point track + 10 k markers | 120 fps | p99 5.42 ms for the following frame, CPU side (`benches/pan_zoom.rs`); GPU unmeasured |

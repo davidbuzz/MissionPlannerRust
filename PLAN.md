@@ -1378,9 +1378,9 @@ take the places given here; the numbers continue from 66.
 | 76 | i18n's first step | D17 is P1 and its localisation half is at zero: no Fluent, no `.ftl`, every string in the code; `L10N.cs`, `Strings.resx` and the per-screen `.resx` are the source | D17, D18 | `xtask resx2ftl` over `Strings.resx` and `FlightData.resx` with the zero-loss report the DoD asks for, Fluent in `mp-gui`, one screen's strings through `fl!()`, the missing-translation lint | queued |
 
 **Not in the ten, still owed and still listed:** row 65 (the partial pages), `MagCalib.cs` and the
-calibration golden vectors (D13), the 10 M-point scrub bench and the FFT (D14), the concurrency
-model and snapshot bench (D5), the ≤ 1 ms transport bench (D3), the mutation self-test (D19), the
-harness for `benches/decode.rs`'s figure (D2), and everything of D15, D16, D20 and D21.
+calibration golden vectors (D13), the 10 M-point scrub bench and the FFT (D14), the `loom`
+model of the publish path (D5; the snapshot bench and its eight-reader gate exist since 2026-09-24: publish p99 26.7 µs, load p99 899 ns, no allocation), the mutation self-test (D19), the
+figure from `benches/decode.rs` (D2; recorded 2026-09-24: 9.5 M frames/s framing and CRC on one core), the ≤ 1 ms transport bench (D3; `benches/latency.rs` since 2026-09-24: nothing measurable added over TCP, 116 ns over a pseudo-terminal, at p99), and everything of D15, D16, D20 and D21.
 
 ## Appendix A — claims this plan refutes
 

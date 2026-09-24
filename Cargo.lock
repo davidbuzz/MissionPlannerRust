@@ -3536,6 +3536,7 @@ dependencies = [
 name = "mp-transport"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "mp-mavlink",
  "mp-mavlink-dialects",
  "serialport",
@@ -3556,6 +3557,7 @@ name = "mp-vehicle"
 version = "0.1.0"
 dependencies = [
  "arc-swap",
+ "criterion",
  "mp-mavlink",
  "mp-mavlink-dialects",
  "mp-transport",

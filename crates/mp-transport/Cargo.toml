@@ -24,3 +24,9 @@ mp-mavlink.workspace = true
 mp-mavlink-dialects.workspace = true
 # For TTYPort::pair(): a pseudo-terminal is the one real serial port a test can unplug.
 serialport = { version = "4.10", default-features = false }
+criterion.workspace = true
+
+# D3: what a transport adds to a raw OS read, over TCP and a pseudo-terminal.
+[[bench]]
+name = "latency"
+harness = false
