@@ -10,6 +10,7 @@ controlled; the per-project memory directory holds symlinks to them.
 
 - [No foreground waiting](no-foreground-waiting.md) — background long operations, poll cheaply, never block the session
 - [GUI runs stay short](gui-runs-stay-short.md) — windows live ~5s, pinned to DP-1-3; never debug by re-running the GUI
+- [GUI tests take the mouse](gui-tests-take-the-mouse.md) — scripts drive the real pointer; run them only on Buzz's word, prefer headless checks, stop means now
 - [Verify edits applied](verify-edits-applied.md) — a replacement that matches nothing looks like success
 - [Never stop after a commit](never-stop-after-a-commit.md) — chain to the next task; a commit is not an exit condition
 - [Verify before committing](verify-before-committing.md) — clippy is its own command, read it, then commit

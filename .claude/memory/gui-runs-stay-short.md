@@ -113,6 +113,16 @@ test them in a second target directory (`CARGO_TARGET_DIR=$S/target-solo`, a col
 mp-gui takes about eight minutes and pushes the load past the suite's `MAX_LOAD` gate while it
 runs). Rebuild the main target only when no suite is running.
 
+**No cargo of any kind while a suite runs - not tests, not clippy, not xtask.** On 2026-09-24 the
+row-67 suite ran while the coordinator ran `cargo test -p mp-mission`, `cargo xtask ledger check`
+and `cargo clippy` in the main target, and five scripts failed in ways that had passed that
+morning: a menu not open when the probe looked (`menu-fileLoadSave`, `menu-poiadd` "not found"), a
+tab click that did not switch the screen, a list entry that did not open its page, a button that
+did not act. A compile spike is enough to make a click or a probe land before the frame that
+would have honoured it. Read logs, edit sources, write documents; run cargo only in the second
+target directory or after the suite's `all done`, and re-run anything that failed while it was
+loaded before calling it a defect.
+
 **`type` appends; `key ctrl+u` clears.** The runner's `type` is `xdotool type` into whatever the
 field holds, so a box that offers a value ("50s", "578994") gets the typed text appended unless
 `key ctrl+u` comes first (46 scripts do this). A script that types over an offered value without it
