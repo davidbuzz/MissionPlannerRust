@@ -20,11 +20,22 @@ use crate::{OpenError, Transport};
 /// frame. Those bytes are left in the stream: the frame decoder resynchronises past them, and
 /// keeping them means the replay is byte-exact with what was recorded. Callers that want the
 /// timestamps can use [`ReplayTransport::with_timestamps`].
+///
+/// A read never runs past the end of a record, as `readlogPacketMavlink` reads one record at a
+/// time, so every frame decoded from what one read returned was recorded at the time
+/// [`Transport::read_time`] then reports: the newest usable timestamp read so far, which the link
+/// stamps each packet's `datetime` with.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6511-6650`
 #[derive(Debug)]
 pub struct ReplayTransport {
     data: Vec<u8>,
     pos: usize,
     chunk: usize,
+    /// Where the record being read ends; a read at or past it starts the next record.
+    record_end: usize,
+    /// `lastlogread`: the newest usable timestamp read, in microseconds, `None` while the C#'s is
+    /// still `DateTime.MinValue`. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:482, 6553-6557`
+    last_log_read: Option<u64>,
     /// `file:<name> (<n> bytes)`, kept ready for [`Transport::description`]. The log is loaded
     /// whole and never changes, so neither does this.
     description: String,
@@ -52,6 +63,8 @@ impl ReplayTransport {
             data,
             pos: 0,
             chunk: Self::DEFAULT_CHUNK,
+            record_end: 0,
+            last_log_read: None,
             loop_forever: false,
             paced: None,
         })
@@ -65,6 +78,8 @@ impl ReplayTransport {
             data,
             pos: 0,
             chunk: Self::DEFAULT_CHUNK,
+            record_end: 0,
+            last_log_read: None,
             loop_forever: false,
             paced: None,
         }
@@ -172,11 +187,21 @@ impl Transport for ReplayTransport {
         if self.is_exhausted() {
             if self.loop_forever && !self.data.is_empty() {
                 self.pos = 0;
+                self.record_end = 0;
             } else {
                 return Ok(0);
             }
         }
-        let remaining = self.data.len() - self.pos;
+        // A new record: its timestamp, if usable, is the clock from here on.
+        // C#: MAVLinkInterface.cs:6535-6558
+        if self.pos >= self.record_end {
+            let record = record_at(&self.data, self.pos);
+            self.record_end = record.end;
+            if record.stamp.is_some() {
+                self.last_log_read = record.stamp;
+            }
+        }
+        let remaining = self.record_end.min(self.data.len()) - self.pos;
         let n = remaining.min(buf.len()).min(self.chunk);
         let (Some(dst), Some(src)) = (buf.get_mut(..n), self.data.get(self.pos..self.pos + n))
         else {
@@ -206,6 +231,13 @@ impl Transport for ReplayTransport {
             paced.timeout = timeout;
         }
         Ok(())
+    }
+
+    /// The recording's clock, `lastlogread`, which the link stamps each packet with as
+    /// `readlogPacketMavlink` stamps `cs.datetime`.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6649`
+    fn read_time(&self) -> crate::ReadTime {
+        crate::ReadTime::Recorded(self.last_log_read)
     }
 }
 
@@ -363,52 +395,58 @@ fn records(data: &[u8]) -> Vec<Record> {
     let mut out = Vec::new();
     let mut pos = 0;
     while pos < data.len() {
-        let start = pos;
-        let mut stamp = None;
-        if !matches!(data.get(pos), Some(&STX_V1 | &STX_V2)) {
-            let Some(bytes) = data.get(pos..pos + 8) else {
-                // A truncated timestamp: the C#'s read comes back short and it finds no frame.
-                out.push(Record {
-                    start,
-                    end: data.len(),
-                    stamp: None,
-                });
-                break;
-            };
-            let mut array = [0u8; 8];
-            array.copy_from_slice(bytes);
-            let micros = u64::from_be_bytes(array);
-            if micros / 1000 / 1000 / 60 / 60 < 9_999_999 {
-                stamp = Some(micros);
-            }
-            pos += 8;
-        }
-        // "lost sync byte": on to the next start byte.
-        while pos < data.len() && !matches!(data.get(pos), Some(&STX_V1 | &STX_V2)) {
-            pos += 1;
-        }
-        let (Some(&stx), Some(&payload)) = (data.get(pos), data.get(pos + 1)) else {
-            out.push(Record {
-                start,
-                end: data.len(),
-                stamp,
-            });
-            break;
-        };
-        let header = if stx == STX_V2 { 9 } else { 5 };
-        let mut length = usize::from(payload) + header + 1 + 2;
-        if stx == STX_V2
-            && data
-                .get(pos + 2)
-                .is_some_and(|flags| flags & IFLAG_SIGNED != 0)
-        {
-            length += SIGNATURE_LEN;
-        }
-        let end = (pos + length).min(data.len());
-        out.push(Record { start, end, stamp });
-        pos = end;
+        let record = record_at(data, pos);
+        out.push(record);
+        pos = record.end;
     }
     out
+}
+
+/// The record that starts at `start`, as [`records`] splits them: never empty, and running to
+/// the end of the data when its timestamp, start byte or length is cut off.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6511-6650`
+fn record_at(data: &[u8], start: usize) -> Record {
+    let mut pos = start;
+    let mut stamp = None;
+    if !matches!(data.get(pos), Some(&STX_V1 | &STX_V2)) {
+        let Some(bytes) = data.get(pos..pos + 8) else {
+            // A truncated timestamp: the C#'s read comes back short and it finds no frame.
+            return Record {
+                start,
+                end: data.len(),
+                stamp: None,
+            };
+        };
+        let mut array = [0u8; 8];
+        array.copy_from_slice(bytes);
+        let micros = u64::from_be_bytes(array);
+        if micros / 1000 / 1000 / 60 / 60 < 9_999_999 {
+            stamp = Some(micros);
+        }
+        pos += 8;
+    }
+    // "lost sync byte": on to the next start byte.
+    while pos < data.len() && !matches!(data.get(pos), Some(&STX_V1 | &STX_V2)) {
+        pos += 1;
+    }
+    let (Some(&stx), Some(&payload)) = (data.get(pos), data.get(pos + 1)) else {
+        return Record {
+            start,
+            end: data.len(),
+            stamp,
+        };
+    };
+    let header = if stx == STX_V2 { 9 } else { 5 };
+    let mut length = usize::from(payload) + header + 1 + 2;
+    if stx == STX_V2
+        && data
+            .get(pos + 2)
+            .is_some_and(|flags| flags & IFLAG_SIGNED != 0)
+    {
+        length += SIGNATURE_LEN;
+    }
+    let end = (pos + length).min(data.len());
+    Record { start, end, stamp }
 }
 
 /// How long to wait before a record stamped `stamp`, after one stamped `last`, at `speed`.
@@ -460,6 +498,8 @@ impl ReplayTransport {
                 .map_or(self.data.len(), |record| record.start);
             paced.last_stamp = None;
             paced.due = None;
+            // C#: GCSViews/FlightData.cs:5367
+            self.last_log_read = None;
             control.position.store(self.pos, Ordering::Release);
         }
         if control.is_paused() || self.pos >= self.data.len() {
@@ -496,6 +536,7 @@ impl ReplayTransport {
             paced.due = Some(due);
             if record.stamp.is_some() {
                 paced.last_stamp = record.stamp;
+                self.last_log_read = record.stamp;
             }
         }
         let n = (record.end - self.pos).min(buf.len()).min(self.chunk);
@@ -744,5 +785,95 @@ mod tests {
         assert_eq!(got, len);
         assert!(started.elapsed() < Duration::from_millis(500));
         assert!(!replay.is_open());
+    }
+
+    /// Reads one read's worth and returns its length with the clock the replay then reports.
+    fn read_with_time(replay: &mut ReplayTransport, buf: &mut [u8]) -> (usize, crate::ReadTime) {
+        let n = replay.read(buf).unwrap();
+        (n, replay.read_time())
+    }
+
+    #[test]
+    fn a_read_ends_with_its_record_and_the_clock_is_the_newest_usable_stamp() {
+        use crate::ReadTime::Recorded;
+        // Two records, then one without a timestamp - a frame straight after a frame - then one
+        // with an unbelievable timestamp: the last two leave the clock where the second set it,
+        // as `lastlogread` is set only by a usable stamp (MAVLinkInterface.cs:6545-6557).
+        let mut data = tlog(&[(1_000, v1(9)), (1_100, v2(20, false))]);
+        data.extend_from_slice(&v1(3));
+        data.extend_from_slice(&(u64::MAX / 2).to_be_bytes());
+        data.extend_from_slice(&v1(3));
+        let mut replay = ReplayTransport::from_bytes("clock", data);
+        // Before anything is read, `lastlogread` is still MinValue.
+        assert_eq!(replay.read_time(), Recorded(None));
+        let mut buf = [0u8; 4096];
+        assert_eq!(
+            read_with_time(&mut replay, &mut buf),
+            (8 + 17, Recorded(Some(1_000_000)))
+        );
+        assert_eq!(
+            read_with_time(&mut replay, &mut buf),
+            (8 + 32, Recorded(Some(1_100_000)))
+        );
+        assert_eq!(
+            read_with_time(&mut replay, &mut buf),
+            (11, Recorded(Some(1_100_000)))
+        );
+        assert_eq!(
+            read_with_time(&mut replay, &mut buf),
+            (8 + 11, Recorded(Some(1_100_000)))
+        );
+        assert_eq!(read_with_time(&mut replay, &mut buf).0, 0);
+
+        // A read smaller than a record keeps the record's time for every piece of it, and never
+        // takes bytes of the next record with the last piece.
+        let data = tlog(&[(5, v1(9)), (6, v1(9))]);
+        let mut replay = ReplayTransport::from_bytes("pieces", data).with_chunk_size(10);
+        let pieces: Vec<_> = (0..6)
+            .map(|_| read_with_time(&mut replay, &mut buf))
+            .collect();
+        assert_eq!(
+            pieces,
+            [
+                (10, Recorded(Some(5_000))),
+                (10, Recorded(Some(5_000))),
+                (5, Recorded(Some(5_000))),
+                (10, Recorded(Some(6_000))),
+                (10, Recorded(Some(6_000))),
+                (5, Recorded(Some(6_000))),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_paced_replay_reports_each_records_stamp_and_a_seek_forgets_it() {
+        use crate::ReadTime::Recorded;
+        let frames: Vec<(u64, Vec<u8>)> = (0..10).map(|i| (i, v1(4))).collect();
+        let (mut replay, control) = ReplayTransport::from_bytes("paced", tlog(&frames)).paced();
+        control.set_speed(1000.0);
+        let mut buf = [0u8; 4096];
+        assert_eq!(
+            read_with_time(&mut replay, &mut buf),
+            (20, Recorded(Some(0)))
+        );
+        assert_eq!(
+            read_with_time(&mut replay, &mut buf),
+            (20, Recorded(Some(1_000)))
+        );
+        // `tracklog_Scroll` sets `lastlogread` to MinValue (FlightData.cs:5367); the record
+        // landed on sets it again.
+        control.seek_fraction(0.5);
+        assert_eq!(
+            read_with_time(&mut replay, &mut buf),
+            (20, Recorded(Some(5_000)))
+        );
+    }
+
+    #[test]
+    fn a_live_transport_is_read_at_the_time_it_is_read() {
+        let (mut a, _b) = crate::testing::Loopback::pair();
+        let mut buf = [0u8; 16];
+        let _ = a.read(&mut buf);
+        assert_eq!(a.read_time(), crate::ReadTime::Live);
     }
 }

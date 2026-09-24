@@ -1462,6 +1462,16 @@ pub fn toggle_home_alt(offset: f32, home_altitude: f64) -> f32 {
     }
 }
 
+/// `cs.altoffsethome` of the vehicle shown: the state's field, which Set Home Alt writes through
+/// the link and every altitude shown reads; 0 with no vehicle.
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:381-383; GCSViews/FlightData.cs:1236-1247`
+#[must_use]
+pub fn alt_offset_home(view: &TelemetryView) -> f32 {
+    view.state
+        .as_deref()
+        .map_or(0.0, |state| state.alt_offset_home)
+}
+
 /// `cs.alt`: `(_alt - altoffsethome) * multiplieralt`.
 /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:325-328`
 #[must_use]
@@ -2071,8 +2081,6 @@ pub struct Actions {
     pub guided_alt_setting: Option<String>,
     /// See `guided_alt_setting`.
     pub guided_frame_setting: Option<u8>,
-    /// `cs.altoffsethome`.
-    pub alt_offset_home: f32,
     /// `cs.lastautowp`: the last waypoint flown to in Auto, -1 before there is one.
     /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:119, 3422`
     pub last_auto_wp: i32,
@@ -2107,7 +2115,6 @@ impl Default for Actions {
             guided: GuidedMode::default(),
             guided_alt_setting: None,
             guided_frame_setting: None,
-            alt_offset_home: 0.0,
             last_auto_wp: -1,
             resume: None,
             resume_request: None,
@@ -2201,7 +2208,7 @@ impl Actions {
         );
         crate::facts::record(
             "fly.home_alt",
-            if self.alt_offset_home == 0.0 {
+            if alt_offset_home(view) == 0.0 {
                 "off"
             } else {
                 "on"
@@ -2548,7 +2555,7 @@ fn actions_tab(
             grid_button(
                 "fly-homealt",
                 "Set Home Alt",
-                if tab.alt_offset_home == 0.0 {
+                if alt_offset_home(view) == 0.0 {
                     theme::TEXT
                 } else {
                     theme::OK
@@ -3686,7 +3693,7 @@ pub fn page_content(
                     let mut shown = *state;
                     shown.altitude_relative = mp_units::Metres(displayed_altitude(
                         state.altitude_relative.0,
-                        inputs.actions.alt_offset_home,
+                        state.alt_offset_home,
                     ));
                     shown
                 });
@@ -3923,8 +3930,11 @@ impl MissionPlanner {
         let home = view.state.as_ref().map_or(0.0, |state| {
             state.altitude_msl.0 - state.altitude_relative.0
         });
-        self.fly_actions.alt_offset_home = toggle_home_alt(self.fly_actions.alt_offset_home, home);
-        self.file_status = Some(if self.fly_actions.alt_offset_home == 0.0 {
+        // `MainV2.comPort.MAV.cs.altoffsethome`: the vehicle state's own field, which the link
+        // sets on its next pass.
+        let offset = toggle_home_alt(alt_offset_home(&view), home);
+        self.telemetry.set_alt_offset_home(offset);
+        self.file_status = Some(if offset == 0.0 {
             "altitudes are above home".to_owned()
         } else {
             format!("altitudes are above sea level (home is {home:.1} m)")
@@ -4309,7 +4319,7 @@ impl MissionPlanner {
             mode: state.and_then(mode_name),
             armed: state.is_some_and(|state| state.armed),
             altitude: state.map_or(0.0, |state| {
-                displayed_altitude(state.altitude_relative.0, self.fly_actions.alt_offset_home)
+                displayed_altitude(state.altitude_relative.0, state.alt_offset_home)
             }),
             family: family(view),
             target: self.telemetry.send_handle().map(|(_, id)| id),

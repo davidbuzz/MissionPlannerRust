@@ -63,6 +63,8 @@
 #![forbid(unsafe_code)]
 
 pub mod commands;
+pub mod current_settings;
+pub mod fence_points;
 pub mod ftp;
 pub mod messages;
 pub mod mission_transfer;
@@ -80,13 +82,11 @@ use std::time::{Duration, Instant};
 
 use mission_transfer::{Action, MissionTransfer};
 use mp_mavlink::{DecodeStats, FrameDecoder, Message as _, encode_v2};
-use mp_mavlink_dialects::all::{
-    DIALECT, Heartbeat, MavCmd, MavMessage, MissionWritePartialList, RequestDataStream,
-};
+use mp_mavlink_dialects::all::{DIALECT, Heartbeat, MavCmd, MavMessage, MissionWritePartialList};
 use mp_mission::{MISSION_TYPE_MISSION, MissionItem, WireItem};
 use mp_params::{ParamTable, ParamType, ParamValue, decode_param_id};
-use mp_transport::{OpenError, Transport};
-use mp_vehicle::{StateHandle, VehicleId, VehicleRegistry};
+use mp_transport::{OpenError, ReadTime, Transport};
+use mp_vehicle::{DateTime, FenceItem, StateHandle, StreamRates, VehicleId, VehicleRegistry};
 use param_download::{ParamAction, ParamDownload};
 use requests::{ParamKey, Request, RequestKind};
 pub use timeouts::{ProtocolTimeouts, Retry};
@@ -121,9 +121,9 @@ const FINISHED_REQUESTS_KEPT: usize = 256;
 /// Minimum time the I/O loop spends per iteration when there is nothing to read.
 const IDLE_POLL: Duration = Duration::from_millis(1);
 
-/// The `MAV_DATA_STREAM` ids Mission Planner turns on when it connects: raw sensors, extended
-/// status, RC channels, position and the three "extra" groups that carry attitude and VFR data.
-const STREAMS: &[u8] = &[1, 2, 3, 6, 10, 11, 12];
+/// The parameters the low-airspeed warning reads, `AIRSPEED_MIN` first.
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3863-3871`
+const AIRSPEED_MIN_PARAMS: [&str; 2] = ["AIRSPEED_MIN", "ARSPD_FBW_MIN"];
 
 /// How the link should behave.
 #[derive(Debug, Clone)]
@@ -141,11 +141,15 @@ pub struct LinkConfig {
     pub send_heartbeat: bool,
     /// Where to record every received frame, in Mission Planner's `.tlog` format.
     pub record_path: Option<std::path::PathBuf>,
-    /// Telemetry rate to request from each vehicle, in hertz. Zero disables the request.
+    /// Whether to ask each vehicle for its telemetry streams: zero never asks, and anything else
+    /// asks at the vehicle's own rates, [`mp_vehicle::VehicleState::rates`], as
+    /// `UpdateCurrentSettings` does - see [`current_settings`]. The number is not a rate: the
+    /// rates are the vehicle state's, which start from [`StreamRates::backups`] and which
+    /// [`Link::set_stream_rates`] changes, as the Planner page's combos change `cs.rateX`.
     ///
     /// ArduPilot streams almost nothing until a GCS asks: a fresh SITL sends only heartbeats.
-    /// Mission Planner sends `REQUEST_DATA_STREAM` on connect for exactly this reason, and a
-    /// port that omits it looks like a broken link rather than a quiet vehicle.
+    /// **Not the C#'s:** Mission Planner always asks. Zero is for a tool or a test that must
+    /// leave a vehicle's streams alone.
     pub stream_rate_hz: u16,
     /// How long each protocol step waits and how often it retries: Mission Planner's numbers by
     /// default, which is the only thing to fly with. Tests shorten the waits and keep the counts.
@@ -252,9 +256,22 @@ struct Shared {
     log_download: Mutex<Option<mp_ftp::logs::LogDownload>>,
     /// Each vehicle's MAVFTP client, made on its first request and kept (see [`ftp`]).
     ftp: Mutex<BTreeMap<VehicleId, mp_ftp::mavftp::MavFtp>>,
+    /// `MAVState.fencepoints` for every vehicle (see [`fence_points`]).
+    fence_points: Mutex<fence_points::FencePoints>,
+    /// What the screens write into a vehicle's state, for the link thread to apply.
+    state_writes: Mutex<Vec<(VehicleId, StateWrite)>>,
     stats: Mutex<LinkStats>,
     running: AtomicBool,
     frames_received: AtomicU64,
+}
+
+/// A field the C#'s screens write into `MainV2.comPort.MAV.cs` from outside it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum StateWrite {
+    /// `cs.rateattitude` to `cs.raterc`.
+    StreamRates(StreamRates),
+    /// `cs.altoffsethome`.
+    AltOffsetHome(f32),
 }
 
 /// A way to send on a link without holding the link.
@@ -551,6 +568,38 @@ impl Link {
             .ok()?
             .get(&(target, mission_type))
             .cloned()
+    }
+
+    /// A vehicle's geofence as the traffic on this link has shown it, in sequence order:
+    /// `MAVState.fencepoints`, which `GeoFenceDist` measures from (see [`fence_points`]).
+    #[must_use]
+    pub fn fence_points(&self, target: VehicleId) -> Vec<FenceItem> {
+        self.shared
+            .fence_points
+            .lock()
+            .map(|held| held.items(target))
+            .unwrap_or_default()
+    }
+
+    /// Sets a vehicle's stream rates, [`mp_vehicle::VehicleState::rates`], as the Planner page's
+    /// rate combos set `MainV2.comPort.MAV.cs.rateX`; the link's next stream requests ask for
+    /// them. Applied by the link thread on its next pass and carried by the next snapshot.
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:573-640`
+    pub fn set_stream_rates(&self, target: VehicleId, rates: StreamRates) {
+        self.write_state(target, StateWrite::StreamRates(rates));
+    }
+
+    /// Sets a vehicle's [`mp_vehicle::VehicleState::alt_offset_home`], as the flight screen's
+    /// Set Home Alt sets `MainV2.comPort.MAV.cs.altoffsethome`. Applied by the link thread on its
+    /// next pass and carried by the next snapshot. `// C#: GCSViews/FlightData.cs:1236-1247`
+    pub fn set_alt_offset_home(&self, target: VehicleId, offset: f32) {
+        self.write_state(target, StateWrite::AltOffsetHome(offset));
+    }
+
+    fn write_state(&self, target: VehicleId, write: StateWrite) {
+        if let Ok(mut writes) = self.shared.state_writes.lock() {
+            writes.push((target, write));
+        }
     }
 
     /// A snapshot of a vehicle's parameters.
@@ -913,7 +962,6 @@ fn run_link(
     let mut stats = LinkStats::default();
     let mut tx_seq: u8 = 0;
 
-    let mut newly_seen: Vec<VehicleId> = Vec::new();
     let mut pending_actions: Vec<(VehicleId, u8, Action)> = Vec::new();
     // Reused every pass, so a pass with nothing in flight allocates nothing.
     let mut param_actions: Vec<(VehicleId, ParamAction)> = Vec::new();
@@ -922,7 +970,9 @@ fn run_link(
     let mut ftp_sends: Vec<(VehicleId, mp_ftp::mavftp::wire::Header)> = Vec::new();
     let mut last_publish = Instant::now();
     let mut last_heartbeat = Instant::now() - config.heartbeat_interval;
-    let mut known: BTreeMap<VehicleId, ()> = BTreeMap::new();
+    // Every vehicle heard, with `UpdateCurrentSettings`' clocks for it (see `current_settings`).
+    let mut known: BTreeMap<VehicleId, current_settings::Clocks> = BTreeMap::new();
+    let gcs = VehicleId::new(config.sysid, config.compid);
 
     while shared.running.load(Ordering::Acquire) {
         // Inbound.
@@ -942,6 +992,16 @@ fn run_link(
             }
             Ok(n) => {
                 stats.bytes_read += n as u64;
+                // Each packet is stamped with when it was sent before it is applied: now on a
+                // live link, the recording's clock in a replay, whose reads never cross a record.
+                // C#: MAVLinkInterface.cs:4721, 6649
+                let sent_at = match transport.read_time() {
+                    ReadTime::Live => DateTime::now(),
+                    ReadTime::Recorded(stamp) => stamp
+                        .and_then(DateTime::from_tlog_micros)
+                        .unwrap_or(DateTime::MIN),
+                };
+                let arrived = Instant::now();
                 if let Some(chunk) = buf.get(..n) {
                     decoder.push_and_drain(chunk, &DIALECT, |frame| {
                         shared.frames_received.fetch_add(1, Ordering::Relaxed);
@@ -951,9 +1011,30 @@ fn run_link(
                             let _ = writer.write_frame(frame.raw);
                         }
                         if let Some(msg) = MavMessage::decode(frame.msgid, frame.payload) {
-                            let id = registry.apply(frame.sysid, frame.compid, frame.seq, &msg);
-                            if known.insert(id, ()).is_none() {
-                                newly_seen.push(id);
+                            let id = registry.apply_at(
+                                frame.sysid,
+                                frame.compid,
+                                frame.seq,
+                                &msg,
+                                sent_at,
+                            );
+                            known
+                                .entry(id)
+                                .or_insert_with(|| current_settings::Clocks::new(arrived))
+                                .heard(&msg);
+                            // The fence the vehicle holds, as MAVState.fencepoints has it: from
+                            // this link's own upload, before the transfer moves on, and from
+                            // whatever passes (see `fence_points`).
+                            file_fence_upload(shared, id, gcs, &msg);
+                            if matches!(
+                                msg,
+                                MavMessage::MissionCount(_)
+                                    | MavMessage::MissionItem(_)
+                                    | MavMessage::MissionItemInt(_)
+                                    | MavMessage::FencePoint(_)
+                            ) && let Ok(mut held) = shared.fence_points.lock()
+                            {
+                                held.observe(frame.sysid, frame.compid, config.sysid, &msg);
                             }
                             // Mission transfer is lock-step, so every relevant message may
                             // produce exactly one reply. The state machine decides which.
@@ -1141,6 +1222,7 @@ fn run_link(
                                     );
                                 }
                                 if let Some(kind) = ParamType::from_wire(param.param_type) {
+                                    let airspeed = AIRSPEED_MIN_PARAMS.contains(&name.as_str());
                                     let value = if is_ardupilot {
                                         ParamValue::from_ardupilot(param.param_value, kind)
                                     } else {
@@ -1163,12 +1245,24 @@ fn run_link(
                                         }
                                     }
                                     if let Ok(mut table) = shared.params.lock() {
-                                        table.entry(id).or_default().insert(
+                                        let table = table.entry(id).or_default();
+                                        table.insert(
                                             name,
                                             value,
                                             param.param_index,
                                             param.param_count,
                                         );
+                                        // The low-airspeed warning reads these from the
+                                        // vehicle's `MAV.param`, which every PARAM_VALUE
+                                        // updates as it passes.
+                                        // C#: MAVLinkInterface.cs:5766-5796;
+                                        // CurrentState.cs:3858-3880
+                                        if airspeed && let Some(state) = registry.working_mut(id) {
+                                            let [min, fbw_min] = AIRSPEED_MIN_PARAMS.map(|name| {
+                                                table.get(name).map(ParamValue::as_f64)
+                                            });
+                                            state.set_airspeed_min_params(min, fbw_min);
+                                        }
                                     }
                                     drop(held);
                                 }
@@ -1180,36 +1274,56 @@ fn run_link(
             Err(_) => break,
         }
 
-        // Ask a newly discovered vehicle to start streaming telemetry.
-        for id in newly_seen.drain(..) {
-            if config.stream_rate_hz == 0 || id.compid != 1 {
+        // What the screens wrote into a vehicle's state since the last pass.
+        if let Ok(mut writes) = shared.state_writes.lock() {
+            for (id, write) in writes.drain(..) {
+                let Some(state) = registry.working_mut(id) else {
+                    continue;
+                };
+                match write {
+                    StateWrite::StreamRates(rates) => state.rates = rates,
+                    StateWrite::AltOffsetHome(offset) => state.alt_offset_home = offset,
+                }
+            }
+        }
+
+        // `UpdateCurrentSettings` on every vehicle listed, after each read, at most every 50 ms
+        // each; and inside it, the telemetry streams asked for at each vehicle's own rates -
+        // never while a recording is played, which the C# plays with its port closed. See
+        // `current_settings`. C#: MainV2.cs:3058-3069; CurrentState.cs:4580-4663
+        let now = Instant::now();
+        let recording = matches!(transport.read_time(), ReadTime::Recorded(_));
+        let port_open = transport.is_open() && !recording;
+        for (id, clocks) in &mut known {
+            if !clocks.due(now) {
                 continue;
             }
-            for stream_id in STREAMS {
-                let req = RequestDataStream {
-                    req_message_rate: config.stream_rate_hz,
-                    target_system: id.sysid,
-                    target_component: id.compid,
-                    req_stream_id: *stream_id,
-                    start_stop: 1,
+            let Some(state) = registry.working_mut(*id) else {
+                continue;
+            };
+            // `BaseStream != null && !BaseStream.IsOpen && !logreadmode`.
+            state.update_current_settings(!transport.is_open() && !recording);
+            let rates = state.rates;
+            if config.stream_rate_hz == 0
+                || !port_open
+                || !clocks.streams_due(now, config.timeouts.stream_rerequest)
+            {
+                continue;
+            }
+            for (stream, hz) in current_settings::stream_requests(rates) {
+                let Some(request) = current_settings::request_datastream(*id, stream, hz) else {
+                    continue;
                 };
-                let mut payload = [0u8; RequestDataStream::LEN];
-                req.encode(&mut payload);
-                let mut frame = [0u8; mp_mavlink::MAX_FRAME_LEN];
-                if let Ok(n) = encode_v2(
-                    &mut frame,
-                    tx_seq,
-                    config.sysid,
-                    config.compid,
-                    RequestDataStream::ID,
-                    &payload,
-                    RequestDataStream::CRC_EXTRA,
-                    0,
-                ) {
-                    tx_seq = tx_seq.wrapping_add(1);
-                    if let Some(bytes) = frame.get(..n) {
-                        send_frame(transport.as_mut(), recorder.as_mut(), &mut stats, bytes);
-                    }
+                // `getDatastream` sends each one twice. C#: MAVLinkInterface.cs:3262-3263
+                for _ in 0..2 {
+                    send_message(
+                        transport.as_mut(),
+                        recorder.as_mut(),
+                        &mut stats,
+                        &config,
+                        &mut tx_seq,
+                        &request,
+                    );
                 }
             }
         }
@@ -1400,15 +1514,7 @@ fn run_link(
             last_publish = Instant::now();
 
             // Expose handles for any newly discovered vehicle.
-            if let Ok(mut handles) = shared.handles.lock() {
-                for id in known.keys() {
-                    if !handles.contains_key(id)
-                        && let Some(handle) = registry.handle(*id)
-                    {
-                        handles.insert(*id, handle);
-                    }
-                }
-            }
+            expose_handles(shared, &registry, known.keys());
         }
 
         // Heartbeat, so the vehicle does not declare GCS failsafe.
@@ -1474,6 +1580,9 @@ fn run_link(
     }
     decoder.flush(&DIALECT, |_| {});
     registry.publish_all();
+    // And every vehicle's handle, or a link that ended before its first publish - a short
+    // recording played unpaced - would leave the vehicles it heard unreachable.
+    expose_handles(shared, &registry, known.keys());
     stats.decode = *decoder.stats();
     if let Ok(mut shared_stats) = shared.stats.lock() {
         *shared_stats = stats;
@@ -1481,7 +1590,82 @@ fn run_link(
     shared.running.store(false, Ordering::Release);
 }
 
-/// Recomputes a v2 frame's checksum after its sequence byte was re-stamped.
+/// Makes a reader handle reachable through [`Link::vehicle`] for each of `ids` that has none yet.
+fn expose_handles<'a>(
+    shared: &Shared,
+    registry: &VehicleRegistry,
+    ids: impl Iterator<Item = &'a VehicleId>,
+) {
+    if let Ok(mut handles) = shared.handles.lock() {
+        for id in ids {
+            if !handles.contains_key(id)
+                && let Some(handle) = registry.handle(*id)
+            {
+                handles.insert(*id, handle);
+            }
+        }
+    }
+}
+
+/// What this link's own fence upload does to the vehicle's `fencepoints`, read before the transfer
+/// moves on: the vehicle's first request, for item 0 or 1, clears it (`setWPTotalAsync`, either
+/// request message), and a `MISSION_REQUEST` for the item after the one last sent - or any
+/// `MISSION_ACK` - files that one (`setWPAsync`). Only answers addressed to this ground station
+/// count, as the C# checks.
+///
+/// A `MISSION_REQUEST_INT` files nothing, as in the C#: its `setWPAsync` for an `_INT` item has
+/// no branch for that message, and the one for a float item files only mission items from it
+/// (`:4183-4215`). Against a vehicle that asks with it, only the last item - acknowledged - is
+/// filed, until the fence is read back.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3801-3830, 3832-3861, 4098-4133,
+/// 4134-4182, 4273-4309, 4310-4346`
+fn file_fence_upload(shared: &Arc<Shared>, id: VehicleId, gcs: VehicleId, msg: &MavMessage) {
+    const FENCE: u8 = mp_mission::fence::MISSION_TYPE_FENCE;
+    // (the item asked for, whether a request may file, to whom it is addressed)
+    let (asked, files, target) = match msg {
+        MavMessage::MissionRequestInt(m) if m.mission_type == FENCE => {
+            (Some(m.seq), false, (m.target_system, m.target_component))
+        }
+        MavMessage::MissionRequest(m) if m.mission_type == FENCE => {
+            (Some(m.seq), true, (m.target_system, m.target_component))
+        }
+        MavMessage::MissionAck(m) if m.mission_type == FENCE => {
+            (None, true, (m.target_system, m.target_component))
+        }
+        _ => return,
+    };
+    if target != (gcs.sysid, gcs.compid) {
+        return;
+    }
+    let Ok(transfers) = shared.missions.lock() else {
+        return;
+    };
+    let Some(transfer) = transfers.get(&(id, FENCE)) else {
+        return;
+    };
+    let mission_transfer::TransferState::Uploading { last_requested } = *transfer.state() else {
+        return;
+    };
+    let filed = match (last_requested, asked) {
+        // setWPTotalAsync: the first request answers the count.
+        (None, Some(0 | 1)) => {
+            if let Ok(mut held) = shared.fence_points.lock() {
+                held.clear(id);
+            }
+            return;
+        }
+        // setWPAsync: on to the next item, or the ack, files the one sent.
+        (Some(sent), Some(next)) if files && u32::from(next) == u32::from(sent) + 1 => sent,
+        (Some(sent), None) => sent,
+        _ => return,
+    };
+    if let Some(item) = transfer.items().get(usize::from(filed))
+        && let Ok(mut held) = shared.fence_points.lock()
+    {
+        held.store(id, item.seq, fence_points::uploaded(item));
+    }
+}
+
 /// Hands a message to the transfer it belongs to, and returns what that transfer wants to send.
 ///
 /// `MISSION_ITEM_INT` is the awkward one: it carries no `mission_type` of its own, so it belongs
@@ -1537,6 +1721,7 @@ fn route_transfer(shared: &Arc<Shared>, id: VehicleId, msg: &MavMessage) -> Opti
     Some((kind, action))
 }
 
+/// Recomputes a v2 frame's checksum after its sequence byte was re-stamped.
 fn restamp_checksum(frame: &[u8]) -> Option<Vec<u8>> {
     let payload_len = usize::from(*frame.get(1)?);
     let msgid = u32::from_le_bytes([*frame.get(7)?, *frame.get(8)?, *frame.get(9)?, 0]);

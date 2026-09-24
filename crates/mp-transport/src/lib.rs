@@ -70,6 +70,27 @@ pub trait Transport: Send {
 
     /// Closes the link. Idempotent.
     fn close(&mut self) {}
+
+    /// When the bytes the last [`Transport::read`] returned were sent: [`ReadTime::Live`] - just
+    /// now - for a link to a vehicle, and a recording's own clock for a replay. The C# stamps each
+    /// packet's `CurrentState.datetime` with one or the other (`MAVLinkInterface.cs:4721, 6649`),
+    /// and a link that holds only a `Box<dyn Transport>` learns which from here.
+    fn read_time(&self) -> ReadTime {
+        ReadTime::Live
+    }
+}
+
+/// When a transport's bytes were sent, as [`Transport::read_time`] reports it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReadTime {
+    /// Just now: a live link, whose packets are stamped with the time they are read.
+    Live,
+    /// A recording's clock: the newest usable timestamp read from it so far, microseconds since
+    /// the Unix epoch - `MAVLinkInterface.lastlogread` - or `None` before there is one, where the
+    /// C#'s `lastlogread` is still `DateTime.MinValue`. A record whose timestamp is not usable
+    /// leaves it where it was, as `readlogPacketMavlink` does.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:482, 6539-6558, 6649`
+    Recorded(Option<u64>),
 }
 
 /// Default read timeout: short enough that a link teardown is responsive, long enough that an

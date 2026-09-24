@@ -1,0 +1,93 @@
+# The vehicle state's clock, stream rates, K-index and fence as the link and the start-up set
+# them (PLAN.md 13.4 row 39).
+#
+# The link stamps each packet's cs.datetime as it reads it (ExtLibs/ArduPilot/Mavlink/
+# MAVLinkInterface.cs:4721), so on a live link the clock is never more than a packet behind the
+# wall clock. MainV2's start-up sets CurrentState.rate*backup from the CMB_rate* keys, which every
+# vehicle's rates start from, and KIndexstatic from `kindex` when `kindexdate` is today
+# (MainV2.cs:981-991, 3940-3962); the Planner page's rate combos set the shown vehicle's cs.rateX
+# (GCSViews/ConfigurationView/ConfigPlanner.cs:573-640), which the link's stream requests read
+# (ExtLibs/ArduPilot/CurrentState.cs:4632-4663). GeoFenceDist measures from MAV.fencepoints, the
+# fence as the traffic on the link has shown it (CurrentState.cs:1617-1753,
+# MAVLinkInterface.cs:5625-5698): 99999 until a fence has passed, then a distance. SITL cannot
+# fly, so time in air and the distance travelled are asserted where they are on the ground: 0.
+#
+# Its own config.xml with an attitude rate of 7 and today's K-index of 5. The fence is drawn in a
+# corner of the planning map, written to the vehicle and read back; it is left on the vehicle,
+# not enabled (FENCE_ENABLE is untouched). The link and quick-view halves are proved without a
+# vehicle by crates/mp-link/tests/current_state.rs and telemetry.rs's state_wiring tests, which
+# also hold this script's fact names and choices to what the application publishes.
+#
+# Needs SITL (a copter): tools/gui-test.sh tests/gui/state-wired.gui -- tcp:127.0.0.1:5760
+
+env XDG_DATA_HOME $WORK
+env MP_PLAN_DIR $WORK
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><CMB_rateattitude>7</CMB_rateattitude><kindexdate>%s</kindexdate><kindex>5</kindex></Config>' "$(date +%-m/%-d/%Y)" > "$WORK/config.xml"
+
+screen fly
+window 1600x1200
+settle 8
+
+expect vehicle.connected true
+# The clock: stamped with each packet as it is read, so it keeps up with the wall clock.
+expect vehicle.datetime.age >= 0
+expect vehicle.datetime.age < 2000
+# On the ground and disarmed, nothing has counted.
+expect vehicle.timeinair 0
+expect vehicle.disttraveled 0
+# The saved defaults from config.xml: attitude 7, the rest the static constructor's.
+expect vehicle.rates 7,2,2,2,2
+
+# Today's saved K-index, in a quick view.
+doubleclick fly-quick-1
+expect fly.quick.chooser 1
+click fly-quick-choice-KIndex
+expect fly.quick.1 KIndex
+expect fly.quick.1.value 5.00
+
+# The attitude rate the vehicle is asked for, in another.
+doubleclick fly-quick-2
+click fly-quick-choice-rateattitude
+expect fly.quick.2 rateattitude
+expect fly.quick.2.value 7.00
+
+# No fence has passed on the link: GeoFenceDist is 99999.
+doubleclick fly-quick-3
+click fly-quick-choice-GeoFenceDist
+expect fly.quick.3 GeoFenceDist
+expect fly.quick.3.value 99999.00
+expect vehicle.fence.points 0
+expect vehicle.geofencedist 99999
+
+# The Planner page's attitude rate to 10: the vehicle's rate follows.
+click tab-config
+settle 1
+click config-page-ConfigPlanner
+expect config.page ConfigPlanner
+click planner-CMB_rateattitude
+click planner-CMB_rateattitude-10
+expect config.planner.rates 10,2,2,2,2
+click tab-fly
+settle 1
+expect vehicle.rates 10,2,2,2,2
+expect fly.quick.2.value 10.00
+
+# A fence drawn in a corner of the planning map, written to the vehicle and read back.
+click tab-plan
+settle 1
+click draw-fence
+click map@0.10x0.10
+click map@0.20x0.10
+click map@0.15x0.20
+expect fence.points 3
+click fence-write
+settle 4
+click fence-read
+settle 4
+expect vehicle.fence.points 3
+expect vehicle.geofencedist < 99999
+click tab-fly
+settle 1
+expect fly.quick.3 GeoFenceDist
+expect vehicle.datetime.age < 2000

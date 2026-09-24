@@ -19,7 +19,7 @@ use mp_link::{Link, LinkConfig, RequestId, commands};
 use mp_mavlink_dialects::all::MavMessage;
 use mp_mission::MissionItem;
 use mp_units::LatLon;
-use mp_vehicle::{VehicleFamily, VehicleId, VehicleState};
+use mp_vehicle::{DateTime, FenceItem, StreamRates, VehicleFamily, VehicleId, VehicleState};
 
 use crate::fly::{error_box, strings};
 
@@ -267,6 +267,8 @@ pub struct Telemetry {
     awaited: Vec<Awaited>,
     /// What [`Telemetry::parameters_of`] built last, for the next frame to reuse.
     parameters: Mutex<Option<SharedParameters>>,
+    /// The Planner page's rates as last handed to [`Telemetry::hand_over_rates`].
+    rates_handed: Option<StreamRates>,
 }
 
 impl Telemetry {
@@ -383,6 +385,7 @@ impl Telemetry {
             recording: None,
             awaited: Vec::new(),
             parameters: Mutex::new(None),
+            rates_handed: None,
         }
     }
 
@@ -1254,6 +1257,99 @@ impl Telemetry {
         }
     }
 
+    /// The shown vehicle's geofence as the link has seen it, in sequence order:
+    /// `MAVState.fencepoints`, which the quick view's `GeoFenceDist` measures from. Empty with no
+    /// vehicle, which `GeoFenceDist` reads as no fence. `// C#: ExtLibs/ArduPilot/CurrentState.cs:1632`
+    #[must_use]
+    pub fn fence_points(&self) -> Vec<FenceItem> {
+        self.target()
+            .map(|(link, id)| link.fence_points(id))
+            .unwrap_or_default()
+    }
+
+    /// Set Home Alt's write: the shown vehicle's `cs.altoffsethome`, which the link applies on
+    /// its next pass. Nothing without a vehicle, where the C# writes the placeholder state no
+    /// screen shows. `// C#: GCSViews/FlightData.cs:1236-1247`
+    pub fn set_alt_offset_home(&self, offset: f32) {
+        if let Some((link, id)) = self.target() {
+            link.set_alt_offset_home(id, offset);
+        }
+    }
+
+    /// The Planner page's telemetry rates, handed over each frame: when they have changed since
+    /// the last frame, a rate combo has set them, and they go where its handler puts them - the
+    /// saved defaults, `CurrentState.rate*backup`, and the shown vehicle's `cs.rateX` - so the
+    /// link's stream requests ask for them from then on. The first hand-over only takes note:
+    /// the page starts from the saved defaults, which every vehicle starts from.
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:573-640`
+    pub fn hand_over_rates(&mut self, rates: StreamRates) {
+        let first = self.rates_handed.is_none();
+        if self.rates_handed.replace(rates) == Some(rates) || first {
+            return;
+        }
+        StreamRates::set_backups(rates);
+        if let Some((link, id)) = self.target() {
+            link.set_stream_rates(id, rates);
+        }
+    }
+
+    /// What the state's clock, its counts, its stream rates and the fence say, for a script:
+    /// `vehicle.datetime.age` is how many milliseconds `datetime` is behind the wall clock -
+    /// small on a live link, whose packets are stamped as they arrive; `vehicle.rates` is
+    /// attitude, position, status, sensors and RC; `vehicle.geofencedist` is what a quick view
+    /// bound to `GeoFenceDist` reads, to the metre, from the fence last handed to it.
+    #[must_use]
+    pub fn facts(&self, view: &TelemetryView) -> Vec<(&'static str, String)> {
+        let state = view.state.as_deref();
+        let datetime = state.map_or(DateTime::MIN, |state| state.datetime);
+        #[allow(clippy::cast_possible_truncation)] // milliseconds between two dates
+        let age = (DateTime::now().seconds_since(datetime) * 1000.0) as i64;
+        #[allow(clippy::cast_possible_truncation)] // at most 99999 metres
+        let fence_distance = state
+            .and_then(|state| crate::quick::value("GeoFenceDist", state))
+            .map_or_else(
+                || "none".to_owned(),
+                |metres| (metres.round() as i64).to_string(),
+            );
+        vec![
+            ("vehicle.datetime.age", age.to_string()),
+            ("vehicle.datetime.ticks", datetime.ticks().to_string()),
+            (
+                "vehicle.timeinair",
+                state.map_or(0.0, |state| state.time_in_air).to_string(),
+            ),
+            (
+                "vehicle.disttraveled",
+                state.map_or(0.0, |state| state.dist_traveled).to_string(),
+            ),
+            (
+                "vehicle.rates",
+                state.map_or_else(
+                    || "none".to_owned(),
+                    |state| {
+                        let rates = state.rates;
+                        format!(
+                            "{},{},{},{},{}",
+                            rates.attitude, rates.position, rates.status, rates.sensors, rates.rc
+                        )
+                    },
+                ),
+            ),
+            (
+                "vehicle.fence.points",
+                self.fence_points().len().to_string(),
+            ),
+            ("vehicle.geofencedist", fence_distance),
+        ]
+    }
+
+    /// Publishes [`Telemetry::facts`].
+    pub fn record_facts(&self, view: &TelemetryView) {
+        for (key, value) in self.facts(view) {
+            crate::facts::record(key, value);
+        }
+    }
+
     /// The firmware banner, if the vehicle has said it.
     #[must_use]
     pub fn firmware_banner(&self) -> Option<&str> {
@@ -1890,5 +1986,165 @@ mod tests {
         assert!(Telemetry::recording_path_in(&directory, "full").is_none());
 
         let _ = std::fs::remove_dir_all(&directory);
+    }
+}
+
+/// What the screens write into the vehicle's state, and the fence handed to the quick view, go
+/// through the real link (PLAN.md §13.4 row 39).
+#[cfg(test)]
+mod state_wiring {
+    use mp_link::ProtocolTimeouts;
+    use mp_mavlink_dialects::all::{GlobalPositionInt, MavMessage, MissionCount, MissionItemInt};
+    use mp_vehicle::StreamRates;
+
+    use super::scripted::{Vehicle, until};
+
+    /// `MAV_MISSION_TYPE_FENCE`.
+    const FENCE: u8 = 1;
+
+    /// Set Home Alt writes `cs.altoffsethome` on the vehicle's state, and every altitude shown
+    /// reads it from there. `// C#: GCSViews/FlightData.cs:1236-1247`
+    #[test]
+    fn set_home_alt_writes_the_vehicles_own_offset() {
+        let (telemetry, _vehicle) = Vehicle::connect(ProtocolTimeouts::default());
+        assert_eq!(crate::fly::alt_offset_home(&telemetry.view()), 0.0);
+        telemetry.set_alt_offset_home(-584.0);
+        until("the state to carry it", || {
+            crate::fly::alt_offset_home(&telemetry.view()) == -584.0
+        });
+        telemetry.set_alt_offset_home(0.0);
+        until("the state to drop it", || {
+            crate::fly::alt_offset_home(&telemetry.view()) == 0.0
+        });
+    }
+
+    /// The Planner page's rates reach the saved defaults and the shown vehicle's `cs.rateX` when
+    /// a combo changes them, and not before.
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:573-640`
+    #[test]
+    fn the_planner_rates_reach_the_vehicle_and_the_saved_defaults() {
+        let saved = StreamRates::backups();
+        let (mut telemetry, _vehicle) = Vehicle::connect(ProtocolTimeouts::default());
+        let rates = |telemetry: &super::Telemetry| telemetry.view().state.map(|state| state.rates);
+        assert_eq!(rates(&telemetry), Some(saved));
+        // The page as it starts: nothing to hand over.
+        let start = StreamRates {
+            attitude: 9,
+            ..saved
+        };
+        telemetry.hand_over_rates(start);
+        std::thread::sleep(std::time::Duration::from_millis(60));
+        assert_eq!(rates(&telemetry), Some(saved));
+        assert_eq!(StreamRates::backups(), saved);
+        // A combo changed.
+        let chosen = StreamRates {
+            attitude: 10,
+            rc: 5,
+            ..saved
+        };
+        telemetry.hand_over_rates(chosen);
+        assert_eq!(StreamRates::backups(), chosen);
+        until("the vehicle's rates", || rates(&telemetry) == Some(chosen));
+        StreamRates::set_backups(saved);
+    }
+
+    /// The fence a download shows the link is the one the quick view's `GeoFenceDist` measures
+    /// from once it is handed over, and no fence reads 99999.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1617-1753`
+    #[test]
+    fn the_fence_the_link_saw_is_the_one_the_quick_view_measures_from() {
+        let (telemetry, mut vehicle) = Vehicle::connect(ProtocolTimeouts::default());
+        vehicle.send(&MavMessage::GlobalPositionInt(GlobalPositionInt {
+            time_boot_ms: 0,
+            lat: -353_632_620,
+            lon: 1_491_652_370,
+            alt: 600_000,
+            relative_alt: 0,
+            vx: 0,
+            vy: 0,
+            vz: 0,
+            hdg: 0,
+        }));
+        until("a position", || {
+            telemetry
+                .view()
+                .state
+                .is_some_and(|state| state.position.is_some())
+        });
+        let state = *telemetry.view().state.unwrap();
+        crate::quick::set_fence(telemetry.fence_points());
+        assert_eq!(crate::quick::value("GeoFenceDist", &state), Some(99999.0));
+
+        vehicle.send(&MavMessage::MissionCount(MissionCount {
+            count: 3,
+            target_system: 255,
+            target_component: 190,
+            mission_type: FENCE,
+        }));
+        let corners = [
+            (-353_600_000, 1_491_600_000),
+            (-353_700_000, 1_491_600_000),
+            (-353_650_000, 1_491_700_000),
+        ];
+        for (seq, (x, y)) in (0u16..).zip(corners) {
+            vehicle.send(&MavMessage::MissionItemInt(MissionItemInt {
+                param1: 3.0,
+                param2: 0.0,
+                param3: 0.0,
+                param4: 0.0,
+                x,
+                y,
+                z: 0.0,
+                seq,
+                command: 5001,
+                target_system: 255,
+                target_component: 190,
+                frame: 3,
+                current: 0,
+                autocontinue: 1,
+                mission_type: FENCE,
+            }));
+        }
+        until("the fence", || telemetry.fence_points().len() == 3);
+        let fence = telemetry.fence_points();
+        crate::quick::set_fence(fence.clone());
+        let shown = crate::quick::value("GeoFenceDist", &state).unwrap();
+        assert_eq!(shown, f64::from(state.geo_fence_dist(&fence)));
+        assert!(shown > 0.0 && shown < 99999.0, "{shown}");
+        crate::quick::set_fence(Vec::new());
+    }
+
+    /// `tests/gui/state-wired.gui` asserts only facts [`super::Telemetry::facts`] publishes and
+    /// binds quick views only to properties the chooser offers.
+    #[test]
+    fn the_state_script_asks_for_what_is_published() {
+        let script = include_str!("../../../tests/gui/state-wired.gui");
+        let published: Vec<&str> = super::Telemetry::idle()
+            .facts(&super::TelemetryView::disconnected(""))
+            .into_iter()
+            .map(|(key, _)| key)
+            .collect();
+        let choices = crate::quick::choices();
+        let mut facts = 0;
+        let mut chosen = 0;
+        for line in script.lines() {
+            let words: Vec<&str> = line.split_whitespace().collect();
+            match words.as_slice() {
+                ["expect", key, ..]
+                    if key.starts_with("vehicle.") && *key != "vehicle.connected" =>
+                {
+                    assert!(published.contains(key), "{key} is not published");
+                    facts += 1;
+                }
+                ["click", id] => {
+                    if let Some(name) = id.strip_prefix("fly-quick-choice-") {
+                        assert!(choices.contains(&name), "{name} is not offered");
+                        chosen += 1;
+                    }
+                }
+                _ => {}
+            }
+        }
+        assert!(facts >= 8 && chosen == 3, "{facts} facts, {chosen} choices");
     }
 }

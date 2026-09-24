@@ -99,6 +99,13 @@ pub struct ProtocolTimeouts {
     pub param_list_full_retries: u8,
     /// Every MAVFTP command's `RetryTimeout`, from `MAVFtp.cs`; see [`mp_ftp::mavftp::retry`].
     pub ftp: mp_ftp::mavftp::FtpTimeouts,
+    /// How long after asking a vehicle for its telemetry streams `UpdateCurrentSettings` asks
+    /// again: it sets `lastdata` thirty seconds ahead "to prevent flooding" and asks once it is
+    /// eight seconds past that, whether or not the streams came.
+    ///
+    /// C#: ExtLibs/ArduPilot/CurrentState.cs:4633 (`lastdata.AddSeconds(8)`), :4662
+    /// (`DateTime.Now.AddSeconds(30)`).
+    pub stream_rerequest: Duration,
 }
 
 impl Default for ProtocolTimeouts {
@@ -119,6 +126,7 @@ impl Default for ProtocolTimeouts {
             param_list_round: Duration::from_millis(1000),
             param_list_full_retries: 2,
             ftp: mp_ftp::mavftp::FtpTimeouts::default(),
+            stream_rerequest: Duration::from_secs(30 + 8),
         }
     }
 }
@@ -152,6 +160,7 @@ impl ProtocolTimeouts {
             param_list_round: self.param_list_round / divisor,
             param_list_full_retries: self.param_list_full_retries,
             ftp: self.ftp.faster(divisor),
+            stream_rerequest: self.stream_rerequest / divisor,
         }
     }
 }

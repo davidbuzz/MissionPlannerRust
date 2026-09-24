@@ -365,7 +365,9 @@ fn the_link_announces_itself_with_heartbeats() {
 #[test]
 fn telemetry_streams_are_requested_when_a_vehicle_appears() {
     // ArduPilot sends almost nothing until asked. Forgetting this makes a working link look
-    // like a dead one, so it is worth a test of its own.
+    // like a dead one, so it is worth a test of its own. The rates are the vehicle's own, which
+    // start from the saved defaults; each request goes twice, in `UpdateCurrentSettings`' order
+    // (ExtLibs/ArduPilot/CurrentState.cs:4632-4663; MAVLinkInterface.cs:3262-3263).
     let (gcs_side, mut vehicle_side) = Loopback::pair();
     let config = LinkConfig {
         stream_rate_hz: 4,
@@ -380,7 +382,7 @@ fn telemetry_streams_are_requested_when_a_vehicle_appears() {
     let deadline = Instant::now() + Duration::from_secs(5);
     let mut buf = [0u8; 1024];
 
-    while Instant::now() < deadline && requested_streams.len() < 7 {
+    while Instant::now() < deadline && requested_streams.len() < 14 {
         let n = vehicle_side.read(&mut buf).unwrap();
         if n > 0 {
             decoder.push_and_drain(&buf[..n], &DIALECT, |frame| {
@@ -388,18 +390,30 @@ fn telemetry_streams_are_requested_when_a_vehicle_appears() {
                     MavMessage::decode(frame.msgid, frame.payload)
                 {
                     assert_eq!(req.target_system, 1);
-                    assert_eq!(req.req_message_rate, 4);
                     assert_eq!(req.start_stop, 1);
-                    requested_streams.push(req.req_stream_id);
+                    requested_streams.push((req.req_stream_id, req.req_message_rate));
                 }
             });
         }
         std::thread::sleep(Duration::from_millis(5));
     }
 
+    let rates = mp_vehicle::StreamRates::backups();
+    let rate = |hz: i32| u16::try_from(hz).unwrap();
+    let expected: Vec<(u8, u16)> = [
+        (2, rate(rates.status)),
+        (6, rate(rates.position)),
+        (10, rate(rates.attitude)),
+        (11, rate(rates.attitude)),
+        (12, rate(rates.sensors)),
+        (1, rate(rates.sensors)),
+        (3, rate(rates.rc)),
+    ]
+    .into_iter()
+    .flat_map(|request| [request, request])
+    .collect();
     assert_eq!(
-        requested_streams.len(),
-        7,
+        requested_streams, expected,
         "all standard streams must be requested"
     );
     drop(link);

@@ -442,6 +442,23 @@ impl MissionPlanner {
         // The Planner page's keys `MainV2` sets up from before any page shows: the units, the
         // telemetry rates and the GCS id. `// C#: MainV2.cs:683, 836, 981-1002`
         let planner = config::planner::Planner::new(&persisted);
+        // `CurrentState`'s statics, as `MainV2`'s start-up sets them from config.xml: the
+        // telemetry rates' saved defaults, the custom fields' names, the planned home put back to
+        // 0,0,0 when it is off the globe, and the K-index - today's saved one, or a download on a
+        // thread of its own. `// C#: MainV2.cs:981-1000, 1010-1028, 3306, 3940-3962`
+        mp_vehicle::StreamRates::set_backups(persisted.rate_backups());
+        for (index, name) in persisted.custom_field_names() {
+            mp_vehicle::VehicleState::add_custom_field_name(index, &name);
+        }
+        let planned = plan::planned_home_from_config(Some(persisted.config()));
+        mp_vehicle::VehicleState::set_planned_home(mp_vehicle::LatLngAlt {
+            lat: planned.lat,
+            lng: planned.lng,
+            alt: planned.alt,
+        });
+        if persisted.kindex_at_start(&settings::short_date_today()) {
+            settings::download_kindex(mp_firmware::manifest::Http);
+        }
 
         let mut this = Self {
             telemetry,
@@ -1137,7 +1154,7 @@ impl MissionPlanner {
         let mut shown = *state;
         shown.altitude_relative = mp_units::Metres(fly::displayed_altitude(
             state.altitude_relative.0,
-            self.fly_actions.alt_offset_home,
+            state.alt_offset_home,
         ));
         hud::HudInputs::from_vehicle(
             &shown,
@@ -1700,6 +1717,21 @@ impl Render for MissionPlanner {
         self.fly_data.quick.set_units(units);
         // The vehicle's banner names its firmware; its parameter documentation follows from it.
         self.telemetry.tick();
+        // Handed over once a frame: the shown vehicle's fence as the link has seen it, which the
+        // quick view's GeoFenceDist measures from (`CurrentState.cs:1632`); the Planner page's
+        // telemetry rates, which its combos set as `cs.rateX` and the saved defaults
+        // (`ConfigPlanner.cs:573-640`); and a K-index the start-up download has fetched, which
+        // `KIndex_KIndex` writes as `kindex` (`MainV2.cs:3977-3981`).
+        quick::set_fence(self.telemetry.fence_points());
+        let [attitude, position, status, rc, sensors] = self.planner.rates();
+        self.telemetry.hand_over_rates(mp_vehicle::StreamRates {
+            attitude,
+            position,
+            status,
+            sensors,
+            rc,
+        });
+        self.persisted.kindex_downloaded();
         // SETUP's and CONFIG's lists: built when their screen shows, built again when MainV2
         // would reload it, closed - deactivating the page showing - when it is left.
         self.backstage_tick(&view);
@@ -2031,8 +2063,10 @@ impl Render for MissionPlanner {
             self.fly_data.record_facts(
                 &view,
                 self.telemetry.log_listings().len(),
-                self.fly_actions.alt_offset_home,
+                fly::alt_offset_home(&view),
             );
+            // The state's clock, its counts, its rates and the fence handed to the quick view.
+            self.telemetry.record_facts(&view);
             self.fly_pages
                 .record_facts(f32::from(self.fly_scroll.max_offset().y));
             // The flown route's points, which Clear Track empties.

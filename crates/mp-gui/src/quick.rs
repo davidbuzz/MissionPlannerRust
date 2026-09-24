@@ -117,6 +117,29 @@ impl Number for MetresPerSecond {
 /// How a property is read from the vehicle's state.
 type Reader = fn(&VehicleState) -> f64;
 
+/// The fence `GeoFenceDist` measures from: `parent.fencepoints`, the shown vehicle's
+/// `MAVState.fencepoints` - its fence as the traffic on the link has shown it, which the link
+/// keeps (`mp_link::fence_points`) and not the vehicle state, so it is handed over here each frame
+/// ([`set_fence`]). Empty, and `GeoFenceDist` 99999, until a fence has passed on the link.
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1622-1636`
+static FENCE: std::sync::Mutex<Vec<mp_vehicle::FenceItem>> = std::sync::Mutex::new(Vec::new());
+
+/// Hands over the shown vehicle's fence for `GeoFenceDist`: [`crate::telemetry::Telemetry::fence_points`],
+/// once a frame.
+pub fn set_fence(fence: Vec<mp_vehicle::FenceItem>) {
+    *FENCE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = fence;
+}
+
+/// `GeoFenceDist` from the fence last handed over.
+fn geo_fence_dist(state: &VehicleState) -> f64 {
+    let fence = FENCE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    f64::from(state.geo_fence_dist(&fence))
+}
+
 /// A reader for every numeric `CurrentState` property this application holds in the C#'s units:
 /// the rows of `CURRENTSTATE` that are done, each through the path its row names. Generated from
 /// the table and held to it by a test, so a row that becomes done without a reader here fails.
@@ -419,8 +442,9 @@ const READERS: &[(&str, Reader)] = &[
     ("battery_usedmah9", |s| s.batteries[7].consumed_mah.number()),
     ("battery_voltage2", |s| s.batteries[0].voltage.number()),
     ("HomeAlt", |s| s.home_altitude.number()),
-    // The fence is the planning screen's, not the state's: 99999 until row 39 hands it over.
-    ("GeoFenceDist", |s| f64::from(s.geo_fence_dist(&[]))),
+    // Measured from the vehicle's fence as the link has seen it, which is not vehicle state:
+    // see `set_fence`.
+    ("GeoFenceDist", geo_fence_dist),
     ("DistFromMovingBase", |s| f64::from(s.dist_from_moving_base())),
     ("sonarrange", |s| s.rangefinder.range.number()),
     ("sonarvoltage", |s| s.rangefinder.voltage.number()),

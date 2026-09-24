@@ -207,6 +207,13 @@ impl VehicleState {
         true
     }
 
+    /// Forgets every custom field's name. Nothing in Mission Planner does this - the names live
+    /// for the process - so this is for tests that replay more than one flight in one process,
+    /// each of which names the fields as its own log does.
+    pub fn clear_custom_field_names() {
+        lock(&CUSTOM_FIELD_NAMES).clear();
+    }
+
     /// The custom field a `NAMED_VALUE_FLOAT` called `name` goes in: the first one named
     /// `"MAV_" + name.ToUpper()`, or else the lowest-numbered field without a name, which then
     /// takes it; `None` when all twenty have names.

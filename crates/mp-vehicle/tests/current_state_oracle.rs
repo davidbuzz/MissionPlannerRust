@@ -276,6 +276,8 @@ impl AirspeedParams {
 /// Plays `<path>.tlog` as the C#'s log playback does and holds vehicle 1:1 to the C#'s fields in
 /// `testdata/currentstate/<name>.csv` after every packet. Returns what the C# wrote.
 fn replay_against_the_csharp(name: &str, path: &str) -> Oracle {
+    // The custom fields' names are process-wide; each flight names them as its own log does.
+    VehicleState::clear_custom_field_names();
     let data = std::fs::read(testdata(path)).unwrap();
     let oracle = oracle(name);
     let (rows, packets) = (&oracle.rows, oracle.packets);

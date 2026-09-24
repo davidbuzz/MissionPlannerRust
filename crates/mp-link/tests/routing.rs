@@ -311,29 +311,32 @@ fn fifty_vehicles_through_one_link_are_routed_apart() {
     let (primary, _) = link.primary_vehicle().unwrap();
     assert_eq!(primary, VehicleId::new(1, 1));
 
-    // --- streams were asked of each autopilot, addressed to it alone ----------------------------
-    // Mission Planner asks each autopilot it discovers for its telemetry; a gimbal or companion
-    // asked the same would be flooding a component that has nothing to say.
-    let sent = swarm.collect(Duration::from_millis(50));
+    // --- streams were asked of every component listed, each addressed to it alone ------------
+    // `UpdateCurrentSettings` runs for every vehicle in `MAVlist` - every system and component
+    // that has sent a heartbeat, gimbals and companions included - and asks each for its seven
+    // streams, each request twice as `getDatastream` sends it (ExtLibs/ArduPilot/CurrentState.cs:
+    // 4632-4663; MainV2.cs:3058-3069; MAVLinkInterface.cs:3262-3263).
     let mut asked: BTreeMap<(u8, u8), usize> = BTreeMap::new();
-    for (sysid, compid, message) in &sent {
-        assert_eq!(
-            (*sysid, *compid),
-            (GCS.sysid, GCS.compid),
-            "framed as the GCS"
-        );
-        if let MavMessage::RequestDataStream(request) = message {
-            *asked
-                .entry((request.target_system, request.target_component))
-                .or_default() += 1;
+    wait_for("every component asked for its streams", || {
+        for (sysid, compid, message) in swarm.collect(Duration::from_millis(5)) {
+            assert_eq!(
+                (sysid, compid),
+                (GCS.sysid, GCS.compid),
+                "framed as the GCS"
+            );
+            if let MavMessage::RequestDataStream(request) = message {
+                *asked
+                    .entry((request.target_system, request.target_component))
+                    .or_default() += 1;
+            }
         }
-    }
-    assert_eq!(asked.len(), usize::from(AUTOPILOTS), "{asked:?}");
-    for sysid in 1..=AUTOPILOTS {
+        asked.len() == all.len() && asked.values().all(|count| *count >= 14)
+    });
+    for component in &all {
         assert_eq!(
-            asked.get(&(sysid, 1)),
-            Some(&7),
-            "streams asked of {sysid}:1"
+            asked.get(&(component.sysid, component.compid)),
+            Some(&14),
+            "streams asked of {component}"
         );
     }
 

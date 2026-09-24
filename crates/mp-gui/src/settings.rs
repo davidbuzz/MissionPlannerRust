@@ -24,6 +24,9 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, PoisonError};
+
+use mp_vehicle::{StreamRates, VehicleState};
 
 use crate::plan::{AltitudeFrame, HomeBox, PanelBox, Plan};
 use crate::quick::QuickViews;
@@ -532,6 +535,176 @@ impl Persisted {
             self.last_save.map_or("none", SaveEvent::label),
         );
         crate::facts::record("config.error", self.save_error.as_deref().unwrap_or("none"));
+    }
+}
+
+// --- CurrentState's statics, as MainV2 sets them at start-up ---------------------------------------
+
+/// `KIndex.kindexurl`: NOAA's WWV bulletin, whose K-index line the download reads.
+/// `// C#: ExtLibs/Utilities/KIndex.cs:16`
+const KINDEX_URL: &str = "http://services.swpc.noaa.gov/text/wwv.txt";
+
+/// A K-index the download has set and `KIndex_KIndex` has yet to write as `kindex`: the download
+/// runs on a thread of its own, and the dictionary is the application thread's.
+static KINDEX_DOWNLOADED: Mutex<Option<i32>> = Mutex::new(None);
+
+/// `Settings.GetInt32`: `int.TryParse` of the value, else 0.
+/// `// C#: ExtLibs/Utilities/Settings.cs:201-210`
+fn get_int32(value: Option<&str>) -> i32 {
+    value
+        .and_then(|value| value.trim().parse().ok())
+        .unwrap_or(0)
+}
+
+/// `string.ToUpper()`, a character at a time where there is a single upper-case form - .NET's
+/// simple case mapping - as `CurrentState` capitalises the names it gives the custom fields.
+fn to_upper(text: &str) -> String {
+    text.chars()
+        .map(|c| {
+            let mut upper = c.to_uppercase();
+            match (upper.next(), upper.next()) {
+                (Some(single), None) => single,
+                _ => c,
+            }
+        })
+        .collect()
+}
+
+/// `DateTime.Now.ToShortDateString()`, which `BGGetKIndex` compares `kindexdate` with and writes
+/// it as. **Divergence:** the C#'s is the current culture's short date; this is always en-US's,
+/// `M/d/yyyy`, what an English Mission Planner writes.
+/// `// C#: MainV2.cs:3945, 3955`
+#[must_use]
+pub fn short_date_today() -> String {
+    chrono::Local::now().format("%-m/%-d/%Y").to_string()
+}
+
+/// `KIndex.kregex`, `K-index at .+ was ([0-9]+)`, on the bulletin: the first line that says it -
+/// `.+` greedy, so the last "was" on that line - and the number after it; `None` when no line
+/// does or the number is not an `int`, where the C# raises its event with -1.
+/// `// C#: ExtLibs/Utilities/KIndex.cs:18-19, 45-66`
+#[must_use]
+pub fn parse_kindex(text: &str) -> Option<i32> {
+    const START: &str = "K-index at ";
+    const WAS: &str = " was ";
+    let mut from = 0;
+    while let Some(found) = text.get(from..).and_then(|rest| rest.find(START)) {
+        let after = from + found + START.len();
+        // `.` is any character but a newline.
+        let line = text
+            .get(after..)
+            .unwrap_or("")
+            .split('\n')
+            .next()
+            .unwrap_or("");
+        // `.+` takes at least one character and as many as it can.
+        let number = line
+            .char_indices()
+            .rev()
+            .filter(|(index, _)| *index > 0)
+            .filter_map(|(index, _)| line.get(index..)?.strip_prefix(WAS))
+            .map(|rest| {
+                let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
+                rest.get(..digits).unwrap_or("")
+            })
+            .find(|digits| !digits.is_empty());
+        if let Some(number) = number {
+            // `int.Parse`, whose overflow the C#'s `catch` turns into -1.
+            return number.parse().ok();
+        }
+        from = from + found + 1;
+    }
+    None
+}
+
+/// `KIndex.GetKIndex` and `kindexcallback`, on a thread of their own as the C#'s asynchronous
+/// request is: the bulletin fetched and read, and `KIndex_KIndex` given the K-index, or -1 when
+/// the fetch or the reading fails - which sets `CurrentState.KIndexstatic` at once and leaves
+/// `kindex` for [`Persisted::kindex_downloaded`] to write.
+/// `// C#: ExtLibs/Utilities/KIndex.cs:23-71; MainV2.cs:3952-3953, 3977-3981`
+pub fn download_kindex(fetch: impl mp_firmware::manifest::Fetch + Send + 'static) {
+    let spawned = std::thread::Builder::new()
+        .name("kindex".to_owned())
+        .spawn(move || {
+            let kindex = fetch
+                .get(KINDEX_URL)
+                .ok()
+                .and_then(|bytes| parse_kindex(&String::from_utf8_lossy(&bytes)))
+                .unwrap_or(-1);
+            VehicleState::set_kindex(kindex);
+            *KINDEX_DOWNLOADED
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner) = Some(kindex);
+        });
+    // A thread that cannot start is a download that failed: the C#'s event with -1.
+    if spawned.is_err() {
+        VehicleState::set_kindex(-1);
+    }
+}
+
+impl Persisted {
+    /// The telemetry rates' saved defaults as `MainV2`'s start-up sets `CurrentState.rate*backup`:
+    /// each `CMB_rate*` key the Planner page wrote, `GetInt32` of it, and the static's own value
+    /// for a key that is not there. `// C#: MainV2.cs:981-991`
+    #[must_use]
+    pub fn rate_backups(&self) -> StreamRates {
+        self.rate_backups_over(StreamRates::backups())
+    }
+
+    /// [`Persisted::rate_backups`] over the statics' values `base`.
+    fn rate_backups_over(&self, base: StreamRates) -> StreamRates {
+        let mut rates = base;
+        for (key, held) in [
+            ("CMB_rateattitude", &mut rates.attitude),
+            ("CMB_rateposition", &mut rates.position),
+            ("CMB_ratestatus", &mut rates.status),
+            ("CMB_raterc", &mut rates.rc),
+            ("CMB_ratesensors", &mut rates.sensors),
+        ] {
+            if let Some(value) = self.get(key) {
+                *held = get_int32(Some(value));
+            }
+        }
+        rates
+    }
+
+    /// The names `MainV2`'s start-up gives the custom fields: `customfield0` to `customfield19`,
+    /// each in capitals, in that order. `// C#: MainV2.cs:993-1000`
+    #[must_use]
+    pub fn custom_field_names(&self) -> Vec<(usize, String)> {
+        (0..mp_vehicle::statics::CUSTOM_FIELDS)
+            .filter_map(|index| {
+                let name = self.get(&format!("customfield{index}"))?;
+                Some((index, to_upper(name)))
+            })
+            .collect()
+    }
+
+    /// `BGGetKIndex`, which `MainV2`'s start-up queues: when `kindexdate` is `today`,
+    /// `KIndex_KIndex` of the saved `kindex` - set, and written back - and false; otherwise
+    /// `kindexdate` becomes `today` and true, for the caller to [`download_kindex`].
+    /// `// C#: MainV2.cs:3306, 3940-3962, 3977-3981`
+    pub fn kindex_at_start(&mut self, today: &str) -> bool {
+        if self.get("kindexdate") == Some(today) {
+            let kindex = get_int32(self.get("kindex"));
+            VehicleState::set_kindex(kindex);
+            self.set("kindex", kindex.to_string());
+            return false;
+        }
+        self.set("kindexdate", today);
+        true
+    }
+
+    /// `KIndex_KIndex`'s `Settings.Instance["kindex"] = ...` for a download that has finished
+    /// since the last frame. `// C#: MainV2.cs:3977-3981`
+    pub fn kindex_downloaded(&mut self) {
+        let downloaded = KINDEX_DOWNLOADED
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        if let Some(kindex) = downloaded {
+            self.set("kindex", kindex.to_string());
+        }
     }
 }
 
@@ -1159,5 +1332,136 @@ mod tests {
         let shown = path.display().to_string();
         assert!(shown.ends_with("settings.conf"), "{shown}");
         assert!(!shown.contains("tiles"), "{shown}");
+    }
+
+    // --- CurrentState's statics at start-up ----------------------------------------------------
+
+    #[test]
+    fn the_rate_defaults_are_the_planner_keys_that_are_there() {
+        // C#: MainV2.cs:981-991
+        let base = StreamRates {
+            attitude: 4,
+            position: 2,
+            status: 2,
+            sensors: 2,
+            rc: 2,
+        };
+        let mut persisted = Persisted::at(None);
+        assert_eq!(persisted.rate_backups_over(base), base);
+        persisted.set("CMB_rateattitude", "10");
+        persisted.set("CMB_raterc", " 7 ");
+        // `GetInt32` of something that is not a number is 0, not the default.
+        persisted.set("CMB_ratesensors", "fast");
+        assert_eq!(
+            persisted.rate_backups_over(base),
+            StreamRates {
+                attitude: 10,
+                rc: 7,
+                sensors: 0,
+                ..base
+            }
+        );
+    }
+
+    #[test]
+    fn the_custom_fields_are_named_in_capitals_from_their_keys() {
+        // C#: MainV2.cs:993-1000
+        let mut persisted = Persisted::at(None);
+        persisted.set("customfield0", "rpm1");
+        persisted.set("customfield19", "Stra\u{df}e");
+        persisted.set("customfield20", "none such");
+        assert_eq!(
+            persisted.custom_field_names(),
+            [(0, "RPM1".to_owned()), (19, "STRA\u{df}E".to_owned())]
+        );
+    }
+
+    #[test]
+    fn the_k_index_line_is_read_as_the_csharps_regex_reads_it() {
+        // NOAA's bulletin, as the download fetches it.
+        let bulletin = ":Product: Geophysical Alert Message wwv.txt\n\
+                        :Issued: 2026 Sep 24 1205 UTC\n\
+                        Solar-terrestrial indices for 23 September follow.\n\
+                        Solar flux 148 and estimated planetary A-index 7.\n\
+                        The estimated planetary K-index at 1200 UTC on 24 September was 2.\n\
+                        \n\
+                        No space weather storms were observed for the past 24 hours.\n";
+        assert_eq!(parse_kindex(bulletin), Some(2));
+        // KIndex.cs's own example.
+        assert_eq!(
+            parse_kindex("The estimated planetary K-index at 2100 UTC on 24 December was 3."),
+            Some(3)
+        );
+        // `.+` is greedy: the last "was" on the line.
+        assert_eq!(
+            parse_kindex("K-index at noon was 3 and at one was 45"),
+            Some(45)
+        );
+        // `.` stops at a newline, so a line without "was" does not borrow the next line's.
+        assert_eq!(parse_kindex("K-index at noon\nwas 5"), None);
+        assert_eq!(
+            parse_kindex("K-index at noon, unknown\nK-index at one was 6"),
+            Some(6)
+        );
+        // `.+` needs a character before " was".
+        assert_eq!(parse_kindex("K-index at  was 4"), None);
+        // `int.Parse` overflows, and the C#'s catch raises -1.
+        assert_eq!(parse_kindex("K-index at noon was 99999999999"), None);
+        assert_eq!(parse_kindex("no index today"), None);
+    }
+
+    /// The only test in this binary that touches the K-index.
+    #[test]
+    fn the_k_index_is_todays_saved_one_or_downloaded() {
+        // C#: MainV2.cs:3940-3962, 3977-3981
+        struct Bulletin(Result<Vec<u8>, String>);
+        impl mp_firmware::manifest::Fetch for Bulletin {
+            fn get(&self, url: &str) -> Result<Vec<u8>, String> {
+                assert_eq!(url, KINDEX_URL);
+                self.0.clone()
+            }
+        }
+        let wait_for = |persisted: &mut Persisted, value: &str| {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            while persisted.get("kindex") != Some(value) {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "kindex never became {value}"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(2));
+                persisted.kindex_downloaded();
+            }
+        };
+
+        // Saved today: taken, and written back as KIndex_KIndex writes it.
+        let mut persisted = Persisted::at(None);
+        persisted.set("kindexdate", "9/24/2026");
+        persisted.set("kindex", " 5");
+        assert!(!persisted.kindex_at_start("9/24/2026"));
+        assert_eq!(VehicleState::kindex(), 5);
+        assert_eq!(persisted.get("kindex"), Some("5"));
+
+        // Saved another day: the date is today's at once, and the download sets the rest.
+        let mut persisted = Persisted::at(None);
+        persisted.set("kindexdate", "9/23/2026");
+        persisted.set("kindex", "5");
+        assert!(persisted.kindex_at_start("9/24/2026"));
+        assert_eq!(persisted.get("kindexdate"), Some("9/24/2026"));
+        download_kindex(Bulletin(Ok(
+            b"The estimated planetary K-index at 1200 UTC on 24 September was 3.".to_vec(),
+        )));
+        wait_for(&mut persisted, "3");
+        assert_eq!(VehicleState::kindex(), 3);
+
+        // A download that fails is -1, as `kindexcallback` raises it.
+        download_kindex(Bulletin(Err("offline".to_owned())));
+        wait_for(&mut persisted, "-1");
+        assert_eq!(VehicleState::kindex(), -1);
+
+        // The date as `ToShortDateString` writes it in English: no leading zeros.
+        let today = short_date_today();
+        let parts: Vec<&str> = today.split('/').collect();
+        assert_eq!(parts.len(), 3, "{today}");
+        assert!(parts.iter().all(|part| !part.starts_with('0')), "{today}");
     }
 }
