@@ -4,7 +4,7 @@ Generated from `crates/mp-gui/src/planner_coverage.rs` by `cargo test -p mp-gui 
 
 | total | done | elsewhere | missing | plumbing | dropped |
 |---:|---:|---:|---:|---:|---:|
-| 121 | 86 | 0 | 23 | 12 | 0 |
+| 121 | 95 | 0 | 14 | 12 | 0 |
 
 Missing, by where the control sits:
 
@@ -12,11 +12,8 @@ Missing, by where the control sits:
 |---|---:|
 | planning panel | 7 |
 | Map Tool | 4 |
-| POI | 3 |
-| map menu | 3 |
-| Auto WP | 2 |
 | Geo-Fence | 2 |
-| polygon icon menu | 2 |
+| map menu | 1 |
 
 | control | event | handler | text | ours |
 |---|---|---|---|---|
@@ -98,8 +95,8 @@ Missing, by where the control sits:
 | `createWpCircleToolStripMenuItem` | Click | `createWpCircleToolStripMenuItem_Click` | Create Wp Circle | done: `menu-createWpCircle` |
 | `createSplineCircleToolStripMenuItem` | Click | `createSplineCircleToolStripMenuItem_Click` | Create Spline Circle | done: `menu-createSplineCircle` |
 | `areaToolStripMenuItem1` | Click | `areaToolStripMenuItem_Click` | Area | done: `menu-area1` |
-| `textToolStripMenuItem` | Click | `textToolStripMenuItem_Click` | Text | **missing** |
-| `createCircleSurveyToolStripMenuItem` | Click | `createCircleSurveyToolStripMenuItem_Click` | Create Circle Survey | **missing** |
+| `textToolStripMenuItem` | Click | `textToolStripMenuItem_Click` | Text | done: `menu-text` |
+| `createCircleSurveyToolStripMenuItem` | Click | `createCircleSurveyToolStripMenuItem_Click` | Create Circle Survey | done: `menu-createCircleSurvey` |
 | `surveyGridToolStripMenuItem` | Click | `surveyGridToolStripMenuItem_Click` | Survey (Grid) | done: `menu-surveyGrid` |
 | `ContextMeasure` | Click | `ContextMeasure_Click` | Measure Distance | done: `menu-ContextMeasure` |
 | `rotateMapToolStripMenuItem` | Click | `rotateMapToolStripMenuItem_Click` | Rotate Map | **missing** |
@@ -114,26 +111,26 @@ Missing, by where the control sits:
 | `saveWPFileToolStripMenuItem` | Click | `saveWPFileToolStripMenuItem_Click` | Save WP File | done: `menu-saveWPFile` |
 | `loadKMLFileToolStripMenuItem` | Click | `loadKMLFileToolStripMenuItem_Click` | Load KML File | done: `menu-loadKMLFile` |
 | `loadSHPFileToolStripMenuItem` | Click | `loadSHPFileToolStripMenuItem_Click` | Load SHP File | done: `menu-loadSHPFile` |
-| `poiaddToolStripMenuItem` | Click | `poiaddToolStripMenuItem_Click` | Add | **missing** |
-| `poideleteToolStripMenuItem` | Click | `poideleteToolStripMenuItem_Click` | Delete | **missing** |
-| `poieditToolStripMenuItem` | Click | `poieditToolStripMenuItem_Click` | Edit | **missing** |
-| `trackerHomeToolStripMenuItem` | Click | `trackerHomeToolStripMenuItem_Click` | Tracker Home | **missing** |
+| `poiaddToolStripMenuItem` | Click | `poiaddToolStripMenuItem_Click` | Add | done: `menu-poiadd` |
+| `poideleteToolStripMenuItem` | Click | `poideleteToolStripMenuItem_Click` | Delete | done: `menu-poidelete` |
+| `poieditToolStripMenuItem` | Click | `poieditToolStripMenuItem_Click` | Edit | done: `menu-poiedit` |
+| `trackerHomeToolStripMenuItem` | Click | `trackerHomeToolStripMenuItem_Click` | Tracker Home | done: `menu-trackerHome` |
 | `modifyAltToolStripMenuItem` | Click | `modifyAltToolStripMenuItem_Click` | Modify Alt | done: `menu-modifyAlt` |
-| `enterUTMCoordToolStripMenuItem` | Click | `enterUTMCoordToolStripMenuItem_Click` | Enter UTM Coord | **missing** |
+| `enterUTMCoordToolStripMenuItem` | Click | `enterUTMCoordToolStripMenuItem_Click` | Enter UTM Coord | done: `menu-enterUTMCoord` |
 | `switchDockingToolStripMenuItem` | Click | `switchDockingToolStripMenuItem_Click` | Switch Docking | **missing** |
 | `setHomeHereToolStripMenuItem` | Click | `setHomeHereToolStripMenuItem_Click` | Set Home Here | done: `menu-setHomeHere` |
-| `addPolygonPointToolStripMenuItem` | Click | `addPolygonPointToolStripMenuItem_Click` | Draw a Polygon | done: `menu-addPolygonPoint2` |
-| `clearPolygonToolStripMenuItem` | Click | `clearPolygonToolStripMenuItem_Click` | Clear Polygon | done: `menu-clearPolygon2` |
-| `savePolygonToolStripMenuItem` | Click | `savePolygonToolStripMenuItem_Click` | Save Polygon | done: `menu-savePolygon2` |
-| `loadPolygonToolStripMenuItem` | Click | `loadPolygonToolStripMenuItem_Click` | Load Polygon | done: `menu-loadPolygon2` |
-| `fromSHPToolStripMenuItem` | Click | `fromSHPToolStripMenuItem_Click` | From SHP | done: `menu-fromSHP2` |
-| `areaToolStripMenuItem` | Click | `areaToolStripMenuItem_Click` | Area | done: `menu-area2` |
-| `fenceInclusionToolStripMenuItem` | Click | `FenceInclusionToolStripMenuItem_Click` | Fence Inclusion | done: `draw-fence` |
-| `fenceExclusionToolStripMenuItem` | Click | `FenceExclusionToolStripMenuItem_Click` | Fence Exclusion | **missing** |
+| `addPolygonPointToolStripMenuItem` | Click | `addPolygonPointToolStripMenuItem_Click` | Draw a Polygon | done: `menu-poly-addPolygonPoint` |
+| `clearPolygonToolStripMenuItem` | Click | `clearPolygonToolStripMenuItem_Click` | Clear Polygon | done: `menu-poly-clearPolygon` |
+| `savePolygonToolStripMenuItem` | Click | `savePolygonToolStripMenuItem_Click` | Save Polygon | done: `menu-poly-savePolygon` |
+| `loadPolygonToolStripMenuItem` | Click | `loadPolygonToolStripMenuItem_Click` | Load Polygon | done: `menu-poly-loadPolygon` |
+| `fromSHPToolStripMenuItem` | Click | `fromSHPToolStripMenuItem_Click` | From SHP | done: `menu-poly-fromSHP` |
+| `areaToolStripMenuItem` | Click | `areaToolStripMenuItem_Click` | Area | done: `menu-poly-area` |
+| `fenceInclusionToolStripMenuItem` | Click | `FenceInclusionToolStripMenuItem_Click` | Fence Inclusion | done: `menu-fenceInclusion` |
+| `fenceExclusionToolStripMenuItem` | Click | `FenceExclusionToolStripMenuItem_Click` | Fence Exclusion | done: `menu-fenceExclusion` |
 | `timer1` | Tick | `timer1_Tick` | the map refresh timer | plumbing |
-| `contextMenuStripPoly` | Opening | `ContextMenuStripPoly_Opening` | the polygon icon's menu | **missing** |
-| `convertWPToPolygonToolStripMenuItem` | Click | `fromCurrentWaypointsMenuItem_Click` | From Current Waypoints | done: `menu-fromCurrentWaypoints` |
-| `offsetPolygonToolStripMenuItem` | Click | `offsetPolygonToolStripMenuItem_Click` | Offset Polygon | done: `menu-offsetPolygon2` |
+| `contextMenuStripPoly` | Opening | `ContextMenuStripPoly_Opening` | the polygon icon's menu | done: `plan-polyicon` |
+| `convertWPToPolygonToolStripMenuItem` | Click | `fromCurrentWaypointsMenuItem_Click` | From Current Waypoints | done: `menu-poly-convertWPToPolygon` |
+| `offsetPolygonToolStripMenuItem` | Click | `offsetPolygonToolStripMenuItem_Click` | Offset Polygon | done: `menu-poly-offsetPolygon` |
 | `zoomToVehicleToolStripMenuItem` | Click | `zoomToVehicleToolStripMenuItem_Click` | Zoom to Vehicle | done: `menu-zoomToVehicle` |
 | `zoomToMissionToolStripMenuItem` | Click | `zoomToMissionToolStripMenuItem_Click` | Zoom to Mission | done: `menu-zoomToMission` |
 | `zoomToHomeToolStripMenuItem` | Click | `zoomToHomeToolStripMenuItem_Click` | Zoom to Home | done: `menu-zoomToHome` |

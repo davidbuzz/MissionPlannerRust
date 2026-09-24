@@ -1,0 +1,74 @@
+# The polygon icon (`polyicon`, at 10,100 on the planning map) and its menu
+# (`contextMenuStripPoly`): the left button coming up over it opens the menu where it was; its
+# entries are the polygon ones, and - only while the geofence is being drawn, as
+# `ContextMenuStripPoly_Opening` shows them for the FENCE mission type - Fence Inclusion and Fence
+# Exclusion, which turn the drawn polygon into the fence, or into an exclusion polygon of it, and
+# clear the polygon. The right button over the icon clears the polygon and closes the map's menu.
+# `GCSViews/FlightPlanner.cs:2697-2715, 3287-3305, 4905-4906, 7607-7618; Controls/Icon/Polygon.cs`
+#
+# Needs no link: tools/gui-test.sh tests/gui/plan-polyicon.gui
+
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
+env MP_PLAN_DIR $WORK
+
+screen plan
+window 1600x1200
+settle 4
+expect plan.polymenu closed
+expect survey.points 0
+expect fence.points 0
+expect plan.fence.exclusions 0
+
+# The icon's menu, and Add Polygon Point from it: the polygon draw mode.
+click plan-polyicon
+expect plan.polymenu open
+click menu-poly-addPolygonPoint
+expect plan.polymenu closed
+click map@0.40x0.40
+click map@0.60x0.40
+click map@0.60x0.60
+click map@0.40x0.60
+expect survey.points 4
+
+# Not drawing the fence: no fence entries on the icon's menu, so clicking where one would be
+# lands on nothing. Drawing it: Fence Exclusion takes the polygon.
+click draw-fence
+click plan-polyicon
+expect plan.polymenu open
+click menu-fenceExclusion
+expect plan.polymenu closed
+expect plan.fence.exclusions 1
+expect plan.fence.exclusion.points 4
+expect survey.points 0
+
+# Another polygon, made the inclusion fence.
+click plan-polyicon
+click menu-poly-addPolygonPoint
+click map@0.30x0.30
+click map@0.70x0.30
+click map@0.50x0.70
+expect survey.points 3
+# Add Polygon Point put the map in the polygon draw mode; the fence entries want the fence's.
+click draw-fence
+click plan-polyicon
+click menu-fenceInclusion
+expect fence.points 3
+expect survey.points 0
+expect plan.fence.exclusions 1
+
+# The right button over the icon clears a drawn polygon.
+click plan-polyicon
+click menu-poly-addPolygonPoint
+click map@0.30x0.30
+click map@0.70x0.30
+expect survey.points 2
+click plan-polyicon:right
+expect survey.points 0
+expect plan.polymenu closed
+
+# A press elsewhere closes the icon's menu.
+click plan-polyicon
+expect plan.polymenu open
+click map@0.20x0.80
+expect plan.polymenu closed

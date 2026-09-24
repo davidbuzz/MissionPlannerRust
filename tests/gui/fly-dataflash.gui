@@ -9,9 +9,15 @@
 #
 # Needs no link: tools/gui-test.sh tests/gui/fly-dataflash.gui
 
+# A data directory of its own: the machine's config.xml remembers the last link, and the
+# application opens it when it is started without one.
+env XDG_DATA_HOME $WORK
+
 screen fly
 window 1600x1200
 settle 2
+# No link was given: nothing has arrived.
+expect link.frames 0
 
 # DataFlash Logs is the last header: bring it to the front of the row, then show its page.
 click fly-tabs-right

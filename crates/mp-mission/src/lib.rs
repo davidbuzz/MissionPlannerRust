@@ -7,6 +7,7 @@
 
 pub mod cameras;
 pub mod circle;
+pub mod circle_survey;
 mod clipper;
 pub mod commands;
 pub mod corridor;
@@ -14,6 +15,7 @@ pub mod dbf;
 pub mod dotnet;
 pub mod fence;
 pub mod fence_file;
+pub mod geoutility;
 pub mod grid;
 pub mod gridui;
 pub mod item;
@@ -22,6 +24,7 @@ pub mod rotary;
 pub mod rows;
 pub mod shapefile;
 pub mod survey;
+pub mod text_mission;
 mod utm;
 pub mod validate;
 pub mod waypoints;

@@ -1,0 +1,71 @@
+# Enter UTM Coord: three boxes - "Zone" offering the zone last typed ("50s" to begin with, a
+# static), "Easting" offering 578994, "Northing" offering 6126244 - then GeoUtility's UTM to WGS 84
+# and a WAYPOINT row there through setfromMap. The hemisphere is always the southern one: the C#
+# tests `zone.ToLower().Contains("N")`, which is never true. A zone that is not a number is
+# int.Parse's exception. `GCSViews/FlightPlanner.cs:96, 3258-3286;
+# ExtLibs/GeoUtility/Transformation/UTMWGS.cs:44-116`
+#
+# Zone 55, 695400 E, 6084100 N is the committed field's corner: -35.3673, 149.1508.
+#
+# Needs no link: tools/gui-test.sh tests/gui/plan-utm.gui
+
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
+env MP_PLAN_DIR $WORK
+
+screen plan
+window 1600x1200
+settle 4
+expect mission.items 0
+expect plan.utm.zone 50s
+
+click map@0.30x0.70:right
+click menu-enterUTMCoord
+expect plan.prompt Zone
+expect plan.prompt.text Enter Zone. (eg 50S, 11N)
+expect plan.prompt.value 50s
+key ctrl+u
+type 55S
+key Return
+expect plan.prompt Easting
+expect plan.prompt.value 578994
+key ctrl+u
+type 695400
+key Return
+expect plan.prompt Northing
+expect plan.prompt.value 6126244
+key ctrl+u
+type 6084100
+key Return
+expect plan.prompt none
+expect mission.items 1
+expect mission.commands 16
+expect mission.last.position true
+expect mission.last.alt 100
+# The zone typed is what the next box offers.
+expect plan.utm.zone 55S
+
+# Cancelling any box adds nothing.
+click map@0.30x0.70:right
+click menu-enterUTMCoord
+expect plan.prompt Zone
+expect plan.prompt.value 55S
+key Return
+expect plan.prompt Easting
+key Escape
+expect plan.prompt none
+expect mission.items 1
+
+# A zone that is not a number: the exception, after the three boxes.
+click map@0.30x0.70:right
+click menu-enterUTMCoord
+key ctrl+u
+type zone-x
+key Return
+key Return
+key Return
+expect plan.prompt Error
+expect plan.prompt.text ~ System.FormatException
+key Return
+expect plan.prompt none
+expect mission.items 1

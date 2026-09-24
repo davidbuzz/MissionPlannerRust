@@ -3404,6 +3404,7 @@ dependencies = [
  "mp-transport",
  "mp-units",
  "mp-vehicle",
+ "ttf-parser",
 ]
 
 [[package]]

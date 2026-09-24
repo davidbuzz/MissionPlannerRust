@@ -50,9 +50,19 @@ settle 12
 
 # Home is not a row: resuming at 4 keeps the takeoff, the speed change and waypoint 4.
 expect mission.items 3
+# Where the resume got to, for the record when it does not arm.
+expect fly.resume ~ Auto
+expect fly.sent x
+expect fly.ack x
 expect vehicle.armed true
 
 # Down again.
 click land
 settle 30
 expect vehicle.armed false
+
+# Landed, the vehicle is left in Stabilize, as the next test finds a fresh SITL: Land is not a
+# mode a copter arms in, and a vehicle left there fails every later arming check.
+click Stabilize
+settle 2
+expect vehicle.mode Stabilize

@@ -40,6 +40,8 @@ mp-chart.workspace = true
 mp-log.workspace = true
 # The DataFlash Logs page's Create KML + gpx: mp_kml::dflog.
 mp-kml.workspace = true
+# The planner's Text entry: glyph outlines, as GraphicsPath.AddString has them.
+ttf-parser.workspace = true
 # The DataFlash Logs page's Geo Reference Images: GeoRef/georefimage.cs's handlers over
 # GeoRefImageBase, which the form in georef_ui.rs calls.
 mp-georef.workspace = true

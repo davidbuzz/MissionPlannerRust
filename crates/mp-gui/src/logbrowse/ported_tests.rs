@@ -267,23 +267,31 @@ fn the_chart_zooms_pans_and_undoes() {
     assert_eq!(facts(&browse)["log.zoom.depth"], "0");
 }
 
-/// A notch is one wheel event and one step; a trackpad's pixels are carried until they make one.
+/// A wheel event is one step whatever its size, by its sign alone: `ZedGraphControl_MouseWheel`
+/// reads `e.Delta < 0` and nothing else of it, so a desktop that puts three lines in a notch still
+/// zooms once a notch, and a trackpad's small deltas each zoom too.
+/// `// C#: ExtLibs/ZedGraph/ZedGraph/ZedGraphControl.Events.cs:835-846`
 #[test]
-fn each_wheel_notch_is_one_step() {
+fn each_wheel_event_is_one_step() {
     let mut browse = opened(&damaged());
     let roll = field(&browse, "ATT", "Roll");
     browse.toggle(&roll);
     for _ in 0..3 {
-        assert!(browse.chart_wheel_pixels(WHEEL_NOTCH));
+        assert!(browse.chart_wheel_pixels(3.0 * WHEEL_NOTCH));
     }
-    assert_eq!(browse.zoom().depth(), 3);
-    assert!(!browse.chart_wheel_pixels(7.0));
-    assert!(!browse.chart_wheel_pixels(7.0));
-    assert!(browse.chart_wheel_pixels(7.0));
+    assert_eq!(
+        browse.zoom().depth(),
+        3,
+        "three notches of three lines each"
+    );
+    assert!(!browse.chart_wheel_pixels(0.0), "no delta, no zoom");
+    assert!(
+        browse.chart_wheel_pixels(7.0),
+        "a trackpad's small delta zooms once"
+    );
     assert_eq!(browse.zoom().depth(), 4);
     assert_eq!(browse.zoom().top(), Some(view::Kind::WheelZoom));
     let narrow = browse.x_range().expect("a range");
-    // A twentieth of a notch is still carried; two notches back make one whole one past it.
     assert!(browse.chart_wheel_pixels(-2.0 * WHEEL_NOTCH));
     assert_eq!(browse.zoom().depth(), 5);
     let wider = browse.x_range().expect("a range");

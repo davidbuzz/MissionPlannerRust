@@ -103,3 +103,17 @@ and nothing written to it) the planner has no home, the map has no view to proje
 `position_at` answers None: a left click adds no waypoint and a right-click opens no menu,
 silently. Seed the home as `plan-radius.gui`'s `setup` line does (a `config.xml` with
 `TXT_homelat/lng/alt`) before clicking the map (2026-09-24, an hour lost to it).
+
+**The suite reads the runner and the binary live.** `gui-suite.sh` starts `tools/gui-test.sh` afresh
+for every script and each script launches `target/debug/mpr-gui`, so while a suite runs: do not edit
+`tools/gui-test.sh` (a script that started mid-write died with a bash syntax error, 2026-09-24) and
+do not `cargo build` into the main target (a half-written binary fails to launch, and the suite
+would then test a mix). Edit sources freely - cargo is not invoked by the suite - but build and
+test them in a second target directory (`CARGO_TARGET_DIR=$S/target-solo`, a cold build of
+mp-gui takes about eight minutes and pushes the load past the suite's `MAX_LOAD` gate while it
+runs). Rebuild the main target only when no suite is running.
+
+**`type` appends; `key ctrl+u` clears.** The runner's `type` is `xdotool type` into whatever the
+field holds, so a box that offers a value ("50s", "578994") gets the typed text appended unless
+`key ctrl+u` comes first (46 scripts do this). A script that types over an offered value without it
+reads back "50s55S" and fails in a way that looks like a parsing bug in the application.

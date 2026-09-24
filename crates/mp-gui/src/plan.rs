@@ -335,6 +335,8 @@ pub struct Plan {
     /// Whether `FlightData.kmlpolygons` holds its polygons and routes too: Yes to "Do you want
     /// to load this into the flight data screen?".
     kml_on_flight: bool,
+    /// The exclusion polygons of the geofence: Fence Exclusion's, and the vehicle's on a read.
+    fence_exclusions: Vec<Vec<LatLon>>,
 }
 
 /// `srtm.getAltitude(lat, lng)` as the planning screen asks it: the process's lookup over Mission
@@ -2010,9 +2012,10 @@ impl Plan {
         self.fence_error = None;
     }
 
-    /// Discards the geofence, leaving the mission alone.
+    /// Discards the geofence, exclusions included, leaving the mission alone.
     pub fn clear_fence(&mut self) {
         self.fence.clear();
+        self.fence_exclusions.clear();
         self.fence_error = None;
     }
 
@@ -2317,20 +2320,33 @@ impl Plan {
     /// the protocol and are not offered here yet, because a fence drawn wrongly is worse than no
     /// fence - it either does nothing or triggers a return-to-launch in flight.
     pub fn fence_items(&mut self) -> Option<Vec<MissionItem>> {
-        let fence = FenceItem::Polygon {
-            inclusion: true,
-            vertices: self.fence.clone(),
-        };
-        match fence.validate() {
-            Ok(()) => {
-                self.fence_error = None;
-                Some(fence.to_items(0))
-            }
-            Err(why) => {
-                self.fence_error = Some(why.to_string());
-                None
-            }
+        let mut polygons = Vec::new();
+        // The inclusion polygon, when there is one; a fence of exclusions alone is a fence.
+        if !self.fence.is_empty() || self.fence_exclusions.is_empty() {
+            polygons.push(FenceItem::Polygon {
+                inclusion: true,
+                vertices: self.fence.clone(),
+            });
         }
+        polygons.extend(
+            self.fence_exclusions
+                .iter()
+                .map(|vertices| FenceItem::Polygon {
+                    inclusion: false,
+                    vertices: vertices.clone(),
+                }),
+        );
+        let mut items = Vec::new();
+        for polygon in &polygons {
+            if let Err(why) = polygon.validate() {
+                self.fence_error = Some(why.to_string());
+                return None;
+            }
+            let seq = u16::try_from(items.len()).unwrap_or(u16::MAX);
+            items.extend(polygon.to_items(seq));
+        }
+        self.fence_error = None;
+        Some(items)
     }
 
     /// Replaces the fence with what the vehicle reported.
@@ -2340,9 +2356,28 @@ impl Plan {
     pub fn adopt_fence(&mut self, items: &[MissionItem]) {
         match mp_mission::fences_from_items(items) {
             Ok(fences) => {
+                // The exclusion polygons are kept whole; the inclusions are the one shown.
+                self.fence_exclusions = fences
+                    .iter()
+                    .filter_map(|fence| match fence {
+                        FenceItem::Polygon {
+                            inclusion: false,
+                            vertices,
+                        } => Some(vertices.clone()),
+                        _ => None,
+                    })
+                    .collect();
                 let polygons: Vec<&FenceItem> = fences
                     .iter()
-                    .filter(|fence| matches!(fence, FenceItem::Polygon { .. }))
+                    .filter(|fence| {
+                        matches!(
+                            fence,
+                            FenceItem::Polygon {
+                                inclusion: true,
+                                ..
+                            }
+                        )
+                    })
                     .collect();
                 match polygons.first() {
                     Some(FenceItem::Polygon { vertices, .. }) => {
@@ -4700,6 +4735,24 @@ pub enum MenuAction {
     LoadShpFile,
     /// `kMLOverlayToolStripMenuItem_Click`: Map Tool > KML Overlay.
     KmlOverlay,
+    /// `createCircleSurveyToolStripMenuItem_Click`: Auto WP > Create Circle Survey.
+    CreateCircleSurvey,
+    /// `enterUTMCoordToolStripMenuItem_Click`: Enter UTM Coord.
+    EnterUtmCoord,
+    /// `trackerHomeToolStripMenuItem_Click`: Tracker Home.
+    TrackerHome,
+    /// `poiaddToolStripMenuItem_Click`: POI > Add.
+    PoiAdd,
+    /// `poideleteToolStripMenuItem_Click`: POI > Delete.
+    PoiDelete,
+    /// `poieditToolStripMenuItem_Click`: POI > Edit.
+    PoiEdit,
+    /// `FenceInclusionToolStripMenuItem_Click`, on the polygon icon's menu.
+    FenceInclusion,
+    /// `FenceExclusionToolStripMenuItem_Click`, on the polygon icon's menu.
+    FenceExclusion,
+    /// `textToolStripMenuItem_Click`: Auto WP > Text.
+    Text,
 }
 
 /// One entry of `contextMenuStrip1` or of one of its drop-downs.
@@ -4772,14 +4825,15 @@ const fn drop_down(
 /// `// C#: GCSViews/FlightPlanner.Designer.cs:899-922`
 pub const MAP_MENU: &[MenuEntry] = {
     use MenuAction::{
-        Area, ClearMission, ClearPolygon, ClearRallyPoints, CreateSplineCircle, CreateWpCircle,
-        DeleteWp, DrawPolygon, ElevationGraph, FenceClear, FenceLoadFromFile, FenceSaveToFile,
-        FromShp, GetRallyPoints, InsertAtCurrentPosition, InsertSplineWp, InsertWp, JumpStart,
-        JumpWp, KmlOverlay, Land, LoadAndAppend, LoadKmlFile, LoadPolygon, LoadRallyFromFile,
-        LoadShpFile, LoadWpFile, LoiterCircles, LoiterForever, LoiterTime, MeasureDistance,
-        ModifyAlt, OffsetPolygon, PolygonFromWaypoints, ReverseWps, Rtl, SavePolygon,
-        SaveRallyPoints, SaveRallyToFile, SaveWpFile, SetHomeHere, SetRallyPoint,
-        SetReturnLocation, SetRoi, SurveyGrid, Takeoff, ZoomTo,
+        Area, ClearMission, ClearPolygon, ClearRallyPoints, CreateCircleSurvey, CreateSplineCircle,
+        CreateWpCircle, DeleteWp, DrawPolygon, ElevationGraph, EnterUtmCoord, FenceClear,
+        FenceLoadFromFile, FenceSaveToFile, FromShp, GetRallyPoints, InsertAtCurrentPosition,
+        InsertSplineWp, InsertWp, JumpStart, JumpWp, KmlOverlay, Land, LoadAndAppend, LoadKmlFile,
+        LoadPolygon, LoadRallyFromFile, LoadShpFile, LoadWpFile, LoiterCircles, LoiterForever,
+        LoiterTime, MeasureDistance, ModifyAlt, OffsetPolygon, PoiAdd, PoiDelete, PoiEdit,
+        PolygonFromWaypoints, ReverseWps, Rtl, SavePolygon, SaveRallyPoints, SaveRallyToFile,
+        SaveWpFile, SetHomeHere, SetRallyPoint, SetReturnLocation, SetRoi, SurveyGrid, Takeoff,
+        Text, TrackerHome, ZoomTo,
     };
     &[
         item(
@@ -5059,12 +5113,13 @@ pub const MAP_MENU: &[MenuEntry] = {
                 // The Designer wires this Area to Polygon > Area's handler.
                 // `// C#: GCSViews/FlightPlanner.Designer.cs:1223`
                 item("menu-area1", "areaToolStripMenuItem1", "Area", Some(Area)),
-                item("menu-text", "textToolStripMenuItem", "Text", None),
+                // `// C#: GCSViews/FlightPlanner.cs:6839-6883`
+                item("menu-text", "textToolStripMenuItem", "Text", Some(Text)),
                 item(
                     "menu-createCircleSurvey",
                     "createCircleSurveyToolStripMenuItem",
                     "Create Circle Survey",
-                    None,
+                    Some(CreateCircleSurvey),
                 ),
                 item(
                     "menu-surveyGrid",
@@ -5190,21 +5245,32 @@ pub const MAP_MENU: &[MenuEntry] = {
             "POI",
             None,
             &[
-                item("menu-poiadd", "poiaddToolStripMenuItem", "Add", None),
+                // `// C#: GCSViews/FlightPlanner.cs:5009-5027`
+                item(
+                    "menu-poiadd",
+                    "poiaddToolStripMenuItem",
+                    "Add",
+                    Some(PoiAdd),
+                ),
                 item(
                     "menu-poidelete",
                     "poideleteToolStripMenuItem",
                     "Delete",
-                    None,
+                    Some(PoiDelete),
                 ),
-                item("menu-poiedit", "poieditToolStripMenuItem", "Edit", None),
+                item(
+                    "menu-poiedit",
+                    "poieditToolStripMenuItem",
+                    "Edit",
+                    Some(PoiEdit),
+                ),
             ],
         ),
         item(
             "menu-trackerHome",
             "trackerHomeToolStripMenuItem",
             "Tracker Home",
-            None,
+            Some(TrackerHome),
         ),
         item(
             "menu-modifyAlt",
@@ -5216,7 +5282,7 @@ pub const MAP_MENU: &[MenuEntry] = {
             "menu-enterUTMCoord",
             "enterUTMCoordToolStripMenuItem",
             "Enter UTM Coord",
-            None,
+            Some(EnterUtmCoord),
         ),
         item(
             "menu-switchDocking",
@@ -5259,13 +5325,85 @@ pub const ZOOM_MENU: &[MenuEntry] = &[
     ),
 ];
 
-/// Every entry, drop-downs included, in menu order, then the zoom icon's.
+/// `contextMenuStripPoly`, the polygon icon's menu, in the Designer's order: the polygon entries
+/// the map menu's Polygon drop-down also has, then Fence Inclusion and Fence Exclusion, which
+/// `ContextMenuStripPoly_Opening` shows only while `cmb_missiontype` is FENCE - here, while the
+/// geofence is being drawn.
+/// `// C#: GCSViews/FlightPlanner.Designer.cs:1469-1479; GCSViews/FlightPlanner.cs:2697-2715`
+pub const POLY_MENU: &[MenuEntry] = &[
+    item(
+        "menu-poly-addPolygonPoint",
+        "addPolygonPointToolStripMenuItem",
+        "Add Polygon Point",
+        Some(MenuAction::DrawPolygon),
+    ),
+    item(
+        "menu-poly-clearPolygon",
+        "clearPolygonToolStripMenuItem",
+        "Clear Polygon",
+        Some(MenuAction::ClearPolygon),
+    ),
+    item(
+        "menu-poly-savePolygon",
+        "savePolygonToolStripMenuItem",
+        "Save Polygon",
+        Some(MenuAction::SavePolygon),
+    ),
+    item(
+        "menu-poly-loadPolygon",
+        "loadPolygonToolStripMenuItem",
+        "Load Polygon",
+        Some(MenuAction::LoadPolygon),
+    ),
+    item(
+        "menu-poly-fromSHP",
+        "fromSHPToolStripMenuItem",
+        "From SHP",
+        Some(MenuAction::FromShp),
+    ),
+    item(
+        "menu-poly-convertWPToPolygon",
+        "convertWPToPolygonToolStripMenuItem",
+        "From Current Waypoints",
+        Some(MenuAction::PolygonFromWaypoints),
+    ),
+    item(
+        "menu-poly-offsetPolygon",
+        "offsetPolygonToolStripMenuItem",
+        "Offset Polygon",
+        Some(MenuAction::OffsetPolygon),
+    ),
+    item(
+        "menu-poly-area",
+        "areaToolStripMenuItem",
+        "Area",
+        Some(MenuAction::Area),
+    ),
+    item(
+        "menu-fenceInclusion",
+        "fenceInclusionToolStripMenuItem",
+        "Fence Inclusion",
+        Some(MenuAction::FenceInclusion),
+    ),
+    item(
+        "menu-fenceExclusion",
+        "fenceExclusionToolStripMenuItem",
+        "Fence Exclusion",
+        Some(MenuAction::FenceExclusion),
+    ),
+];
+
+/// The two fence entries of [`POLY_MENU`]: shown while the geofence is being drawn.
+pub const POLY_MENU_FENCE_ENTRIES: [&str; 2] = ["menu-fenceInclusion", "menu-fenceExclusion"];
+
+/// Every entry, drop-downs included, in menu order, then the zoom icon's and the polygon icon's.
 #[cfg(test)]
 pub fn menu_entries() -> impl Iterator<Item = &'static MenuEntry> {
     MAP_MENU
         .iter()
         .flat_map(|entry| std::iter::once(entry).chain(entry.children.iter()))
         .chain(ZOOM_MENU.iter())
+        .chain(POLY_MENU.iter())
 }
 
 /// The menu while it is open.
@@ -5417,6 +5555,87 @@ impl Plan {
             .chain(overlay.labels.iter().map(|label| &label.at))
             .filter_map(|coord| LatLon::new(coord.lat, coord.lon).ok())
             .collect()
+    }
+}
+
+impl Plan {
+    /// `FillCommand(row, cmd, p1, p2, p3, p4, x, y, z)` on a row `AddCommand` just added: a
+    /// WAYPOINT keeps `p1` and goes through `setfromMap(y, x, (int) z)` - as a SPLINE_WAYPOINT
+    /// when the Spline box is ticked; a LOITER_UNLIM goes through `setfromMap` with nothing else;
+    /// any other command has its cells written as given, latitude `y`, longitude `x`, altitude
+    /// `z`, in the screen's frame.
+    /// `// C#: GCSViews/FlightPlanner.cs:540-547, 548-578`
+    pub fn add_command(
+        &mut self,
+        command: u16,
+        params: [f64; 4],
+        x: f64,
+        y: f64,
+        z: f64,
+        context: &MenuContext,
+    ) -> Result<(), &'static str> {
+        let frame = context.frame.mav_frame();
+        // `setfromMap(y, x, ...)`: a row's position is its latitude and longitude cells, which
+        // a command without a position (DO_DIGICAM_CONTROL's 1, 0) still gets.
+        let position = LatLon::new(y, x).map_err(|_| "Invalid coord, How did you do this?")?;
+        #[allow(clippy::cast_possible_truncation)] // `(int) z`
+        let alt = z as i32;
+        let mut row = match command {
+            mp_mission::commands::WAYPOINT => {
+                let altitude = self.set_from_map_altitude(position, alt, context)?;
+                let command = if self.spline() {
+                    mp_mission::commands::SPLINE_WAYPOINT
+                } else {
+                    mp_mission::commands::WAYPOINT
+                };
+                let mut row = circle_row(command, frame, y, x, altitude);
+                row.param1 = params[0];
+                row
+            }
+            mp_mission::commands::LOITER_UNLIM => {
+                let altitude = self.set_from_map_altitude(position, alt, context)?;
+                circle_row(command, frame, y, x, altitude)
+            }
+            _ => {
+                let mut row = circle_row(command, frame, y, x, z);
+                row.param1 = params[0];
+                row.param2 = params[1];
+                row.param3 = params[2];
+                row.param4 = params[3];
+                row
+            }
+        };
+        row.autocontinue = 1;
+        self.items.push(row);
+        self.renumber();
+        self.origin = Origin::Edited;
+        Ok(())
+    }
+
+    /// The geofence's exclusion polygons.
+    #[must_use]
+    pub fn fence_exclusions(&self) -> &[Vec<LatLon>] {
+        &self.fence_exclusions
+    }
+
+    /// Fence Inclusion: the drawn polygon's corners become the inclusion fence - one polygon
+    /// here, where the C# adds a `FENCE_POLYGON_VERTEX_INCLUSION` row per corner to the fence
+    /// list and so can hold several - and the polygon is cleared.
+    /// `// C#: GCSViews/FlightPlanner.cs:3297-3305`
+    pub fn fence_inclusion_from_polygon(&mut self) {
+        self.fence = self.polygon.clone();
+        self.fence_error = None;
+        self.load_polygon(Vec::new());
+    }
+
+    /// Fence Exclusion: the drawn polygon's corners become an exclusion polygon of the fence,
+    /// and the polygon is cleared.
+    /// `// C#: GCSViews/FlightPlanner.cs:3287-3295`
+    pub fn fence_exclusion_from_polygon(&mut self) {
+        if !self.polygon.is_empty() {
+            self.fence_exclusions.push(self.polygon.clone());
+        }
+        self.load_polygon(Vec::new());
     }
 }
 
@@ -5791,6 +6010,70 @@ pub enum PromptKind {
     KmlToFlightScreen,
     /// KML Overlay's "Zoom to the center or the loaded file?", Yes or No.
     KmlZoomTo,
+    /// One of Create Circle Survey's six boxes, `step` 0 to 5, at the menu's position.
+    CircleSurvey {
+        /// Which of the six.
+        step: u8,
+        /// `MouseDownEnd`, the survey's centre.
+        position: LatLon,
+    },
+    /// Enter UTM Coord's "Zone".
+    UtmZone,
+    /// Enter UTM Coord's "Easting".
+    UtmEasting,
+    /// Enter UTM Coord's "Northing".
+    UtmNorthing,
+    /// Tracker Home's "Tracker Alt", at the menu's position.
+    TrackerAlt {
+        /// `MouseDownEnd`, where the tracker is.
+        position: LatLon,
+    },
+    /// POI > Add's "Enter ID", for a point at the menu's position.
+    PlanPoiId {
+        /// `MouseDownStart`.
+        position: LatLon,
+    },
+    /// POI > Edit's "Enter ID", for the point the menu opened over.
+    PlanPoiEdit {
+        /// Its index in the list.
+        index: usize,
+    },
+    /// Text's "Enter String", at the menu's position.
+    TextString {
+        /// `MouseDownStart`, where the text starts.
+        position: LatLon,
+    },
+    /// Text's "Enter size".
+    TextSize {
+        /// Where the text starts.
+        position: LatLon,
+    },
+    /// Text's "Enter rotation".
+    TextRotation {
+        /// Where the text starts.
+        position: LatLon,
+    },
+}
+
+/// What POI > Add or Edit asks the screen to do to the flight screen's list once its ID is typed.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PoiRequest {
+    /// `POI.POIAdd(point, id)`.
+    Add {
+        /// Latitude.
+        lat: f64,
+        /// Longitude.
+        lng: f64,
+        /// The ID typed.
+        id: String,
+    },
+    /// `POI.POIEdit`: the point's tag rewritten with the ID typed.
+    Rename {
+        /// Its index in the list.
+        index: usize,
+        /// The ID typed.
+        id: String,
+    },
 }
 
 /// A file a dialog has named, for the screen to read or write.
@@ -5945,6 +6228,14 @@ impl Prompt {
 /// `Strings.InvalidNumberEntered`, without the resource's trailing newline.
 const INVALID_NUMBER: &str = "Invalid number entered";
 
+/// What `int.Parse` or `double.Parse` throws on a word, as the application's handler shows it.
+fn format_exception(text: &str) -> String {
+    format!(
+        "System.FormatException: The input string '{}' was not in a correct format.",
+        text.trim()
+    )
+}
+
 /// The altitude `setfromMap(lat, lng, passed)` gives a new row at `position`: Default Alt and the
 /// altitude passed ([`Plan::new_row_altitude`]), then Verify Height ([`Plan::verified_altitude`])
 /// in the screen's frame.
@@ -6014,6 +6305,9 @@ pub struct MenuContext {
     pub takeoff_pitch: bool,
     /// `cs.firmware == Firmwares.ArduCopter2`, for a Default Alt of 0.
     pub copter: bool,
+    /// What Tracker Home offers: `cs.TrackerLocation.Alt` when it is not 0, else `cs.HomeAlt`.
+    /// `// C#: GCSViews/FlightPlanner.cs:6972-6974`
+    pub tracker_alt: f64,
 }
 
 impl MenuContext {
@@ -6088,6 +6382,23 @@ pub struct PlanMenus {
     fake_geocoder: Option<GeocoderFetch>,
     /// Yes to KML Overlay's "Zoom to the center or the loaded file?", until the screen zooms.
     zoom_to_kml: bool,
+    /// Create Circle Survey's answers so far, as typed (or as offered, when a box was cancelled).
+    survey_answers: Vec<String>,
+    /// Create Circle Survey's centre once its sixth box was cancelled: the screen finishes it,
+    /// having the menu context the cancel does not.
+    survey_pending: Option<LatLon>,
+    /// Enter UTM Coord's `zone`, a static the C# keeps from one use to the next: "50s" to start.
+    utm_zone: Option<String>,
+    /// Enter UTM Coord's easting, between its box and the northing's.
+    utm_easting: String,
+    /// What POI > Add or Edit wants done, until the screen takes it.
+    poi_request: Option<PoiRequest>,
+    /// The polygon icon's menu, where the button came up on the icon.
+    pub poly_menu: Option<(f32, f32)>,
+    /// Text's string and size, between their boxes and the rotation's.
+    text_answers: (String, String),
+    /// Text's start once its rotation box was cancelled: the screen finishes it.
+    text_pending: Option<LatLon>,
 }
 
 /// How a page is fetched from the geocoder: its URL in, its text or why not out.
@@ -6183,6 +6494,283 @@ impl PlanMenus {
     /// Whether Yes was answered to the zoom question since the screen last looked.
     pub fn take_zoom_to_kml(&mut self) -> bool {
         std::mem::take(&mut self.zoom_to_kml)
+    }
+
+    /// What POI > Add or Edit asked for, once.
+    pub fn take_poi_request(&mut self) -> Option<PoiRequest> {
+        self.poi_request.take()
+    }
+
+    /// POI > Edit's "Enter ID" for the point at `index`.
+    /// `// C#: Utilities/POI.cs:104-112`
+    pub fn ask_poi_edit(&mut self, index: usize) {
+        self.ask(Prompt::input(
+            crate::poi::ID_TITLE,
+            crate::poi::ID_TEXT,
+            "",
+            PromptKind::PlanPoiEdit { index },
+        ));
+    }
+
+    /// Enter UTM Coord's zone: what was last typed, "50s" until then.
+    /// `// C#: GCSViews/FlightPlanner.cs:96`
+    #[must_use]
+    pub fn utm_zone(&self) -> &str {
+        self.utm_zone.as_deref().unwrap_or("50s")
+    }
+
+    /// Opens the polygon icon's menu where the button came up over the icon; the map's menu
+    /// closes, as one `ContextMenuStrip` showing hides another.
+    /// `// C#: GCSViews/FlightPlanner.cs:7607-7618`
+    pub fn open_poly_menu(&mut self, at: (f32, f32)) {
+        self.open = None;
+        self.zoom_menu = None;
+        self.poly_menu = Some(at);
+        self.dismissed_at = None;
+    }
+
+    /// Closes the polygon icon's menu because a press landed somewhere else.
+    pub fn dismiss_poly_menu(&mut self, at: (f32, f32)) {
+        if self.poly_menu.take().is_some() {
+            self.dismissed_at = Some(at);
+        }
+    }
+
+    /// The answer Create Circle Survey's box `step` offers, as `InputBox` shows the `ref int`.
+    fn prompt_offered_survey(&self, step: u8) -> String {
+        let defaults = mp_mission::circle_survey::Answers::default();
+        let offered = match step {
+            0 => defaults.start_alt,
+            1 => defaults.end_alt,
+            2 => defaults.separation,
+            3 => defaults.radius,
+            4 => defaults.photos,
+            _ => defaults.start_heading,
+        };
+        offered.to_string()
+    }
+
+    /// Create Circle Survey's box `step`: title "", the prompt's word, the default offered.
+    /// `// C#: Utilities/CircleSurveyMission.cs:17-22`
+    fn ask_survey_step(&mut self, step: u8, position: LatLon) {
+        let offered = self.prompt_offered_survey(step);
+        let text = mp_mission::circle_survey::PROMPTS
+            .get(usize::from(step))
+            .copied()
+            .unwrap_or("");
+        self.ask(Prompt::input(
+            "",
+            text,
+            offered,
+            PromptKind::CircleSurvey { step, position },
+        ));
+    }
+
+    /// One of the six answers in: the next box, or - after the sixth - `int.Parse` of each and
+    /// the rows through `AddCommand`. A word that is not an integer is `int.Parse`'s
+    /// `FormatException`, which reaches the application's handler.
+    /// `// C#: Utilities/CircleSurveyMission.cs:17-45; ExtLibs/Controls/InputBox.cs:21-27`
+    fn survey_answer(
+        &mut self,
+        plan: &mut Plan,
+        step: u8,
+        position: LatLon,
+        value: String,
+        context: &MenuContext,
+    ) {
+        self.survey_answers.push(value);
+        if step < 5 {
+            self.ask_survey_step(step + 1, position);
+            return;
+        }
+        self.finish_circle_survey(plan, position, context);
+    }
+
+    /// The sixth box cancelled: the centre the screen is to finish the survey at, once.
+    pub fn take_survey_pending(&mut self) -> Option<LatLon> {
+        self.survey_pending.take()
+    }
+
+    /// Text's string or size in: the next box.
+    /// `// C#: GCSViews/FlightPlanner.cs:6843-6846`
+    fn text_answer(&mut self, step: u8, position: LatLon, value: String) {
+        if step == 0 {
+            self.text_answers.0 = value;
+            self.ask(Prompt::input(
+                "Enter size",
+                "Enter size",
+                "5",
+                PromptKind::TextSize { position },
+            ));
+        } else {
+            self.text_answers.1 = value;
+            self.ask(Prompt::input(
+                "Enter rotation",
+                "Enter rotation",
+                "0",
+                PromptKind::TextRotation { position },
+            ));
+        }
+    }
+
+    /// The rotation box cancelled: the start the screen is to finish the text at, once.
+    pub fn take_text_pending(&mut self) -> Option<LatLon> {
+        self.text_pending.take()
+    }
+
+    /// Text's three answers in: `float.Parse(size) * 1.35f` and `float.Parse(rotation)` - a word
+    /// is `FormatException`, which reaches the application's handler - then the string's outline
+    /// in the `1CamBam_Stick_3` font (or what fontconfig gives for it), rotated, every point of
+    /// the path a waypoint at Default Alt through `AddWPToMap`. A size the `Font` constructor
+    /// refuses (0 or less) is "Bad input options, please try again" with the exception.
+    /// `// C#: GCSViews/FlightPlanner.cs:6847-6882`
+    pub fn finish_text(
+        &mut self,
+        plan: &mut Plan,
+        position: LatLon,
+        rotation: &str,
+        context: &MenuContext,
+    ) {
+        let (text, size) = std::mem::take(&mut self.text_answers);
+        let Ok(size) = size.trim().parse::<f32>() else {
+            self.tell(ERROR, format_exception(&size));
+            return;
+        };
+        let Ok(rotation) = rotation.trim().parse::<f32>() else {
+            self.tell(ERROR, format_exception(rotation));
+            return;
+        };
+        let em_size = size * 1.35_f32;
+        if em_size <= 0.0 || !em_size.is_finite() {
+            self.tell(
+                ERROR,
+                format!(
+                    "Bad input options, please try again\nSystem.ArgumentException: '{em_size}' is not a valid value for 'emSize'. 'emSize' should be greater than 0 and less than or equal to System.Single.MaxValue.\nParameter name: emSize"
+                ),
+            );
+            return;
+        }
+        // `int.Parse(TXT_DefaultAlt.Text)`, outside the handler's own catch.
+        let default_alt = plan.panel_text(PanelBox::DefaultAlt).trim().to_owned();
+        let Ok(default_alt) = default_alt.parse::<i32>() else {
+            self.tell(ERROR, format_exception(&default_alt));
+            return;
+        };
+        let outline = crate::glyph_text::font_file()
+            .and_then(|path| {
+                std::fs::read(&path)
+                    .map_err(|err| crate::glyph_text::FontError::NoFont(err.to_string()))
+            })
+            .and_then(|bytes| crate::glyph_text::outline(&bytes, &text, f64::from(em_size)));
+        let segments = match outline {
+            Ok(segments) => segments,
+            Err(why) => {
+                self.tell(ERROR, why.to_string());
+                return;
+            }
+        };
+        let points = mp_mission::text_mission::path_points(&segments);
+        for (lat, lng) in mp_mission::text_mission::place(
+            &points,
+            f64::from(rotation),
+            position.latitude(),
+            position.longitude(),
+        ) {
+            let Ok(at) = LatLon::new(lat, lng) else {
+                continue;
+            };
+            // `AddWPToMap(lat, lng, int.Parse(TXT_DefaultAlt.Text))`, `quickadd` on.
+            match row_altitude(plan, at, f64::from(default_alt), context) {
+                Ok(altitude) => plan.add_wp_to_map(at, altitude, context.frame),
+                Err(why) => {
+                    self.tell("", why);
+                    return;
+                }
+            }
+        }
+    }
+
+    /// The six answers in: `int.Parse` of each and the rows through `AddCommand`. A word that is
+    /// not an integer is `int.Parse`'s `FormatException`, which reaches the application's handler.
+    /// `// C#: Utilities/CircleSurveyMission.cs:17-45; ExtLibs/Controls/InputBox.cs:21-27`
+    pub fn finish_circle_survey(
+        &mut self,
+        plan: &mut Plan,
+        position: LatLon,
+        context: &MenuContext,
+    ) {
+        let answers = std::mem::take(&mut self.survey_answers);
+        let mut parsed = [0_i32; 6];
+        for (slot, text) in parsed.iter_mut().zip(&answers) {
+            match text.trim().parse::<i32>() {
+                Ok(number) => *slot = number,
+                Err(_) => {
+                    self.tell(ERROR, format_exception(text));
+                    return;
+                }
+            }
+        }
+        let answers = mp_mission::circle_survey::Answers {
+            start_alt: parsed[0],
+            end_alt: parsed[1],
+            separation: parsed[2],
+            radius: parsed[3],
+            photos: parsed[4],
+            start_heading: parsed[5],
+        };
+        // `MouseDownEnd` is a `PointLatLng`: its `PointLatLngAlt` has altitude 0.
+        match mp_mission::circle_survey::create_grid(
+            position.latitude(),
+            position.longitude(),
+            0.0,
+            answers,
+        ) {
+            Ok(rows) => {
+                for row in rows {
+                    if let Err(why) =
+                        plan.add_command(row.command, row.params, row.x, row.y, row.z, context)
+                    {
+                        self.tell("", why);
+                        return;
+                    }
+                }
+            }
+            Err(why) => self.tell(ERROR, why.to_string()),
+        }
+    }
+
+    /// Enter UTM Coord's northing in: the zone's digits (`s` and `n` blanked, `int.Parse`), the
+    /// easting and northing (`double.Parse`), GeoUtility's UTM to WGS 84 - always the southern
+    /// hemisphere, as `zone.ToLower().Contains("N")` is never true - and a row through
+    /// `setfromMap(lat, lng, 0)`. A number that does not parse is the exception, which reaches
+    /// the application's handler.
+    /// `// C#: GCSViews/FlightPlanner.cs:3269-3285`
+    fn enter_utm(&mut self, plan: &mut Plan, northing: &str, context: &MenuContext) {
+        let zone_text = self.utm_zone().to_lowercase().replace(['s', 'n'], " ");
+        let Ok(zone) = zone_text.trim().parse::<i32>() else {
+            self.tell(ERROR, format_exception(&zone_text));
+            return;
+        };
+        let easting = std::mem::take(&mut self.utm_easting);
+        let Ok(east) = easting.trim().parse::<f64>() else {
+            self.tell(ERROR, format_exception(&easting));
+            return;
+        };
+        let Ok(north) = northing.trim().parse::<f64>() else {
+            self.tell(ERROR, format_exception(northing));
+            return;
+        };
+        let (lat, lng) = mp_mission::geoutility::utm_to_wgs84(zone, true, east, north);
+        let Ok(position) = LatLon::new(lat, lng) else {
+            self.tell(
+                ERROR,
+                "System.ArgumentOutOfRangeException: the UTM coordinate is not a position",
+            );
+            return;
+        };
+        if let Err(why) = plan.add_row_from_map(position, 0, context) {
+            self.tell("", why);
+        }
     }
 
     /// A `CustomMessageBox.Show(text, title)` from the screen rather than the menu: a write the
@@ -6503,6 +7091,45 @@ impl PlanMenus {
                 "",
                 PromptKind::KmlOverlayFile,
             )),
+            // `CircleSurveyMission.createGrid(MouseDownEnd)`: six boxes, then the rows.
+            // `// C#: GCSViews/FlightPlanner.cs:2852-2855; Utilities/CircleSurveyMission.cs:10-45`
+            MenuAction::CreateCircleSurvey => {
+                self.survey_answers.clear();
+                self.ask_survey_step(0, position);
+            }
+            // `// C#: GCSViews/FlightPlanner.cs:3258-3264`
+            MenuAction::EnterUtmCoord => {
+                let zone = self.utm_zone().to_owned();
+                self.ask(Prompt::input(
+                    "Zone",
+                    "Enter Zone. (eg 50S, 11N)",
+                    zone,
+                    PromptKind::UtmZone,
+                ));
+            }
+            // `// C#: GCSViews/FlightPlanner.cs:6970-6982`
+            MenuAction::TrackerHome => self.ask(Prompt::input(
+                "Tracker Alt",
+                "Enter tracker ASL alt",
+                double_text(context.tracker_alt),
+                PromptKind::TrackerAlt { position },
+            )),
+            // `InputBox.Show("Enter String", "Enter String (requires 1CamBam_Stick_3 font)", ...)`
+            // `// C#: GCSViews/FlightPlanner.cs:6839-6842`
+            MenuAction::Text => self.ask(Prompt::input(
+                "Enter String",
+                "Enter String (requires 1CamBam_Stick_3 font)",
+                "",
+                PromptKind::TextString { position },
+            )),
+            // `POI.POIAdd(MouseDownStart)`: "Enter ID", then the point.
+            // `// C#: GCSViews/FlightPlanner.cs:5009-5012; Utilities/POI.cs:72-85`
+            MenuAction::PoiAdd => self.ask(Prompt::input(
+                crate::poi::ID_TITLE,
+                crate::poi::ID_TEXT,
+                "",
+                PromptKind::PlanPoiId { position },
+            )),
             // `// C#: GCSViews/FlightPlanner.cs:3641-3647`
             MenuAction::OffsetPolygon => {
                 if !plan.polygon().is_empty() {
@@ -6573,7 +7200,11 @@ impl PlanMenus {
                 }
             }
             MenuAction::SetHomeHere => plan.set_home_at(position),
-            MenuAction::LoadWpFile
+            MenuAction::PoiDelete
+            | MenuAction::PoiEdit
+            | MenuAction::FenceInclusion
+            | MenuAction::FenceExclusion
+            | MenuAction::LoadWpFile
             | MenuAction::SaveWpFile
             | MenuAction::FenceClear
             | MenuAction::SurveyGrid
@@ -6787,6 +7418,58 @@ impl PlanMenus {
             // Yes: `MainMap.SetZoomToFitRect(GetBoundingLayer(kmlpolygonsoverlay))`, done by the
             // screen once it sees the flag. `// C#: GCSViews/FlightPlanner.cs:4264-4271`
             PromptKind::KmlZoomTo => self.zoom_to_kml = true,
+            PromptKind::CircleSurvey { step, position } => {
+                self.survey_answer(plan, step, position, value, context);
+            }
+            // `InputBox.Show("Zone", ..., ref zone)`: the static keeps what was typed.
+            PromptKind::UtmZone => {
+                self.utm_zone = Some(value);
+                self.ask(Prompt::input(
+                    "Easting",
+                    "Easting",
+                    "578994",
+                    PromptKind::UtmEasting,
+                ));
+            }
+            PromptKind::UtmEasting => {
+                self.utm_easting = value;
+                self.ask(Prompt::input(
+                    "Northing",
+                    "Northing",
+                    "6126244",
+                    PromptKind::UtmNorthing,
+                ));
+            }
+            PromptKind::UtmNorthing => self.enter_utm(plan, &value, context),
+            // `InputBox.Show("Tracker Alt", ..., ref alt)`: `double.Parse` of the answer, then
+            // `cs.TrackerLocation = new PointLatLngAlt(MouseDownEnd) { Alt = alt }`.
+            // `// C#: GCSViews/FlightPlanner.cs:6975-6981; ExtLibs/Controls/InputBox.cs:29-35`
+            PromptKind::TrackerAlt { position } => match value.trim().parse::<f64>() {
+                Ok(alt) => mp_vehicle::VehicleState::set_tracker_location(mp_vehicle::LatLngAlt {
+                    lat: position.latitude(),
+                    lng: position.longitude(),
+                    alt,
+                }),
+                Err(_) => self.tell(ERROR, format_exception(&value)),
+            },
+            PromptKind::PlanPoiId { position } => {
+                self.poi_request = Some(PoiRequest::Add {
+                    lat: position.latitude(),
+                    lng: position.longitude(),
+                    id: value,
+                });
+            }
+            PromptKind::PlanPoiEdit { index } => {
+                self.poi_request = Some(PoiRequest::Rename { index, id: value });
+            }
+            // The three boxes are read whatever their buttons said (`InputBox.Show(..., ref text)`
+            // with no result checked), so an answer and a cancel both go on to the next.
+            // `// C#: GCSViews/FlightPlanner.cs:6841-6846`
+            PromptKind::TextString { position } => self.text_answer(0, position, value),
+            PromptKind::TextSize { position } => self.text_answer(1, position, value),
+            PromptKind::TextRotation { position } => {
+                self.finish_text(plan, position, &value, context);
+            }
             // `if (meter != "0") intmeter = double.Parse(meter);` - a FormatException past that,
             // which reaches the application's handler with its message.
             // `// C#: GCSViews/FlightPlanner.cs:3645-3651`
@@ -6831,6 +7514,22 @@ impl PlanMenus {
             PromptKind::ShpLoadFile => return Some(FileRequest::LoadShp(String::new())),
             // No to the flight screen still asks about the zoom.
             PromptKind::KmlToFlightScreen => self.ask_kml_zoom(),
+            // `InputBox.Show("", "startalt", ref startalt)` reads the box whatever its button
+            // said: Cancel keeps what was offered and the next box opens.
+            // `// C#: ExtLibs/Controls/InputBox.cs:21-27; Utilities/CircleSurveyMission.cs:17-22`
+            PromptKind::CircleSurvey { step, position } => {
+                let offered = self.prompt_offered_survey(step);
+                self.survey_answers.push(offered);
+                if step < 5 {
+                    self.ask_survey_step(step + 1, position);
+                } else {
+                    self.survey_pending = Some(position);
+                }
+            }
+            // Text's boxes keep what they offered when cancelled: "", "5" and "0".
+            PromptKind::TextString { position } => self.text_answer(0, position, String::new()),
+            PromptKind::TextSize { position } => self.text_answer(1, position, "5".to_owned()),
+            PromptKind::TextRotation { position } => self.text_pending = Some(position),
             PromptKind::DefinePolygon => self.tell("Area", area_text(0.0)),
             PromptKind::Circle { .. } => self.circle_answers.clear(),
             _ => {}
@@ -6855,6 +7554,14 @@ fn menu_context(this: &MissionPlanner) -> MenuContext {
             &view.parameters,
         ),
         copter: firmware_is_copter(&view),
+        tracker_alt: state.map_or(0.0, |state| {
+            let tracker = state.tracker_location();
+            if tracker.alt == 0.0 {
+                state.home_altitude.0
+            } else {
+                tracker.alt
+            }
+        }),
     }
 }
 
@@ -6867,6 +7574,82 @@ fn sync_everything(this: &MissionPlanner) {
     let mut map = this.map.borrow_mut();
     map.set_fence_return(this.plan.fence_return());
     map.set_kml(this.plan.kml_overlay(), this.plan.kml_on_flight());
+    map.set_fence_exclusions(this.plan.fence_exclusions());
+    map.set_tracker(tracker_marker(this));
+}
+
+/// What POI > Delete or Edit found under the press, for a test to read: the index, the press,
+/// and where the markers were drawn.
+fn record_poi_hit(this: &MissionPlanner, at: Option<(f32, f32)>, hit: Option<usize>) {
+    crate::facts::record(
+        "plan.poi.hit",
+        hit.map_or_else(|| "none".to_owned(), |index| index.to_string()),
+    );
+    crate::facts::record(
+        "plan.poi.press",
+        at.map_or_else(|| "none".to_owned(), |(x, y)| format!("{x:.0},{y:.0}")),
+    );
+    let map = this.map.borrow();
+    crate::facts::record(
+        "plan.poi.spots",
+        this.fly_data
+            .pois
+            .points()
+            .iter()
+            .map(|poi| {
+                poi.position()
+                    .and_then(|at| map.screen_of(at))
+                    .map_or_else(|| "off".to_owned(), |(x, y)| format!("{x:.0},{y:.0}"))
+            })
+            .collect::<Vec<_>>()
+            .join("|"),
+    );
+}
+
+/// `CurrentPOIMarker`: the POI marker under a window point, by the flight screen's own hit test.
+/// `// C#: GCSViews/FlightPlanner.cs:8113-8116`
+fn poi_under(this: &MissionPlanner, at: (f32, f32)) -> Option<usize> {
+    let drawn: Vec<Option<(f32, f32)>> = {
+        let map = this.map.borrow();
+        this.fly_data
+            .pois
+            .points()
+            .iter()
+            .map(|poi| poi.position().and_then(|at| map.screen_of(at)))
+            .collect()
+    };
+    crate::poi::under(&drawn, at)
+}
+
+/// `timer1_Tick`'s "Tracker Home" marker: `addpolygonmarker("Tracker Home", TrackerLocation,
+/// Color.Blue)` while the tracker's position is not home's and its longitude is not 0.
+/// `// C#: GCSViews/FlightPlanner.cs:6910-6916`
+fn tracker_marker(this: &MissionPlanner) -> Option<mapview::GuidedMarker> {
+    let view = this.telemetry.view();
+    let state = view.state.as_ref()?;
+    let tracker = state.tracker_location();
+    if tracker.lng == 0.0 {
+        return None;
+    }
+    let home = state.home;
+    if home.is_some_and(|home| home.latitude() == tracker.lat && home.longitude() == tracker.lng) {
+        return None;
+    }
+    let position = LatLon::new(tracker.lat, tracker.lng).ok()?;
+    let wp_radius = this
+        .plan
+        .panel_text(PanelBox::WpRadius)
+        .trim()
+        .parse::<f32>()
+        .map_or(0.0, f64::from);
+    #[allow(clippy::cast_possible_truncation)] // `(int) TrackerLocation.Alt`
+    let alt = tracker.alt as i32;
+    Some(mapview::GuidedMarker {
+        tag: "Tracker Home",
+        position,
+        alt,
+        wp_radius,
+    })
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -7176,6 +7959,137 @@ fn zoom_menu(menus: &PlanMenus, cx: &mut Context<MissionPlanner>) -> Option<AnyE
     )
 }
 
+/// Where `polyicon` sits on the map, and its size: ten in from the left, a hundred down, thirty
+/// across. `// C#: GCSViews/FlightPlanner.cs:4905-4906; Controls/Icon/Icon.cs:12-13`
+pub const POLY_ICON: (f32, f32, f32) = (10.0, 100.0, 30.0);
+
+/// The polygon icon, `polyicon`, on the planning map: the left button coming up over it opens
+/// `contextMenuStripPoly` there; the right button clears the polygon and hides the map's menu.
+/// `// C#: GCSViews/FlightPlanner.cs:132, 4905-4906, 7607-7618`
+pub fn poly_icon(cx: &mut Context<MissionPlanner>) -> AnyElement {
+    crate::probe::measured("plan-polyicon", div())
+        .absolute()
+        .left(px(POLY_ICON.0))
+        .top(px(POLY_ICON.1))
+        .child(
+            div()
+                .id("plan-polyicon")
+                .size(px(POLY_ICON.2))
+                .rounded_full()
+                .bg(rgb(0x00_00_00))
+                .border_1()
+                .border_color(rgb(ZOOM_ICON_LINE))
+                .occlude()
+                .cursor_pointer()
+                .child(
+                    gpui::canvas(
+                        |_bounds, _window, _cx| (),
+                        |bounds, (), window, _cx| paint_poly_glyph(bounds, window),
+                    )
+                    .size_full(),
+                )
+                .on_mouse_down(gpui::MouseButton::Left, |_event, _window, cx| {
+                    cx.stop_propagation();
+                })
+                .on_mouse_down(gpui::MouseButton::Right, |_event, _window, cx| {
+                    cx.stop_propagation();
+                })
+                .on_mouse_up(
+                    gpui::MouseButton::Left,
+                    cx.listener(|this, event: &gpui::MouseUpEvent, _window, cx| {
+                        let at = (f32::from(event.position.x), f32::from(event.position.y));
+                        this.plan_menus.open_poly_menu(at);
+                        cx.stop_propagation();
+                        cx.notify();
+                    }),
+                )
+                .on_mouse_up(
+                    gpui::MouseButton::Right,
+                    cx.listener(|this, _event: &gpui::MouseUpEvent, _window, cx| {
+                        // `polyicon.IsSelected = false; clearPolygonToolStripMenuItem_Click(...);
+                        // contextMenuStrip1.Visible = false;`
+                        this.plan.load_polygon(Vec::new());
+                        this.plan_menus.open = None;
+                        this.plan_menus.poly_menu = None;
+                        sync_everything(this);
+                        cx.stop_propagation();
+                        cx.notify();
+                    }),
+                ),
+        )
+        .into_any_element()
+}
+
+/// `Polygon.doPaint`: five points of one-pixel white smoke over the icon's black disc, with
+/// `mid` half its thirty: (mid - 7, mid - 7), (mid + 7, mid - 10), (mid, mid + 12), (mid - 5,
+/// mid + 10) and back to the first.
+/// `// C#: Controls/Icon/Polygon.cs:7-20`
+fn paint_poly_glyph(bounds: gpui::Bounds<gpui::Pixels>, window: &mut gpui::Window) {
+    let mid = 15.0_f32;
+    let points = [
+        (mid - 7.0, mid - 7.0),
+        (mid + 7.0, mid - 10.0),
+        (mid, mid + 12.0),
+        (mid - 5.0, mid + 10.0),
+        (mid - 7.0, mid - 7.0),
+    ];
+    let mut builder = gpui::PathBuilder::stroke(px(1.0));
+    let mut iter = points.iter();
+    if let Some((x, y)) = iter.next() {
+        builder.move_to(gpui::point(
+            bounds.origin.x + px(*x),
+            bounds.origin.y + px(*y),
+        ));
+    }
+    for (x, y) in iter {
+        builder.line_to(gpui::point(
+            bounds.origin.x + px(*x),
+            bounds.origin.y + px(*y),
+        ));
+    }
+    if let Ok(path) = builder.build() {
+        window.paint_path(path, gpui::Hsla::from(rgb(ZOOM_ICON_LINE)));
+    }
+}
+
+/// `contextMenuStripPoly`, open where the polygon icon was clicked: its entries, the two fence
+/// ones only while the geofence is being drawn (`ContextMenuStripPoly_Opening`).
+/// `// C#: GCSViews/FlightPlanner.cs:2697-2715, 7618`
+fn poly_menu(
+    menus: &PlanMenus,
+    fence_mode: bool,
+    cx: &mut Context<MissionPlanner>,
+) -> Option<AnyElement> {
+    let at = menus.poly_menu?;
+    let rows = POLY_MENU
+        .iter()
+        .filter(|entry| fence_mode || !POLY_MENU_FENCE_ENTRIES.contains(&entry.id))
+        .map(|entry| menu_row(entry, None, true, false, cx))
+        .collect();
+    Some(
+        gpui::deferred(
+            gpui::anchored()
+                .position(gpui::point(px(at.0), px(at.1)))
+                .snap_to_window()
+                .child(
+                    div()
+                        .id("plan-poly-menu")
+                        .occlude()
+                        .on_mouse_down_out(cx.listener(
+                            |this, event: &gpui::MouseDownEvent, _window, cx| {
+                                let at = (f32::from(event.position.x), f32::from(event.position.y));
+                                this.plan_menus.dismiss_poly_menu(at);
+                                cx.notify();
+                            },
+                        ))
+                        .child(menu_column(rows)),
+                ),
+        )
+        .with_priority(1)
+        .into_any_element(),
+    )
+}
+
 /// `label11` "Zoom", `Zoomlevel` and `TRK_zoom`: the strip fifty pixels wide at the planning
 /// map's right. `panelMap_Resize` gives the map the panel's width less 50 and puts the bar in the
 /// rest, from 42 down to the bottom; the label is at 5 and the box at 25. Both show the map's
@@ -7394,7 +8308,7 @@ pub fn map_hover(this: &mut MissionPlanner, planning: bool, pointer: Option<(f32
 pub fn entered_row(entered: &[mapview::MarkerTag]) -> Option<u16> {
     entered.iter().rev().find_map(|tag| match tag {
         mapview::MarkerTag::Item(seq) => Some(*seq),
-        mapview::MarkerTag::Home | mapview::MarkerTag::Guided => None,
+        mapview::MarkerTag::Home | mapview::MarkerTag::Guided | mapview::MarkerTag::Tracker => None,
     })
 }
 
@@ -7425,6 +8339,7 @@ pub fn guided_marker(
     #[allow(clippy::cast_possible_truncation)] // `(int) GuidedMode.z`
     let alt = guided.z as i32;
     Some(mapview::GuidedMarker {
+        tag: "Guided Mode",
         position,
         alt,
         wp_radius,
@@ -7445,6 +8360,16 @@ pub fn zoom_facts(menus: &PlanMenus, zoom: Option<f64>) -> Vec<(&'static str, St
             }
             .to_owned(),
         ),
+        (
+            "plan.polymenu",
+            if menus.poly_menu.is_some() {
+                "open"
+            } else {
+                "closed"
+            }
+            .to_owned(),
+        ),
+        ("plan.utm.zone", menus.utm_zone().to_owned()),
         ("plan.geocoding", menus.geocoding().to_string()),
         (
             "plan.zoomlevel",
@@ -7480,10 +8405,47 @@ fn choose_entry(
     window: &mut gpui::Window,
     cx: &mut Context<MissionPlanner>,
 ) {
+    // An entry of the polygon icon's menu: the icon's press stands for the map's, as the C#'s
+    // handlers read `MouseDownStart`/`MouseDownEnd` from wherever the button last went down.
+    if let Some(at) = this.plan_menus.poly_menu.take() {
+        let position = this.map.borrow().position_at(at.0, at.1);
+        if let Some(position) = position {
+            this.plan_menus.open_at(at, position, None);
+        }
+    }
     match action {
         MenuAction::LoadWpFile => {
             this.plan_menus.open = None;
             this.load_plan();
+        }
+        // `if (CurrentPOIMarker == null) return; POI.POIDelete(CurrentPOIMarker)`: the marker the
+        // menu opened over, found where the button came up.
+        // `// C#: GCSViews/FlightPlanner.cs:5014-5019, 8113-8116; Utilities/POI.cs:87-102`
+        MenuAction::PoiDelete => {
+            let at = this.plan_menus.open.take().map(|menu| menu.at);
+            let hit = at.and_then(|at| poi_under(this, at));
+            record_poi_hit(this, at, hit);
+            if let Some(index) = hit {
+                this.fly_data.pois.delete(index);
+            }
+        }
+        // `POI.POIEdit(CurrentPOIMarker)`: "Enter ID" for the marker the menu opened over.
+        // `// C#: GCSViews/FlightPlanner.cs:5021-5027; Utilities/POI.cs:104-124`
+        MenuAction::PoiEdit => {
+            let at = this.plan_menus.open.take().map(|menu| menu.at);
+            let hit = at.and_then(|at| poi_under(this, at));
+            record_poi_hit(this, at, hit);
+            if let Some(index) = hit {
+                this.plan_menus.ask_poi_edit(index);
+            }
+        }
+        MenuAction::FenceInclusion => {
+            this.plan_menus.open = None;
+            this.plan.fence_inclusion_from_polygon();
+        }
+        MenuAction::FenceExclusion => {
+            this.plan_menus.open = None;
+            this.plan.fence_exclusion_from_polygon();
         }
         MenuAction::SaveWpFile => {
             this.plan_menus.open = None;
@@ -7542,6 +8504,15 @@ fn submit_prompt(
     if this.plan_menus.take_zoom_to_kml() {
         this.map.borrow_mut().zoom_to_fit(&this.plan.kml_points());
     }
+    // POI > Add or Edit, its ID typed: the flight screen's list, saved as it changes.
+    // `// C#: Utilities/POI.cs:59-70, 104-124`
+    match this.plan_menus.take_poi_request() {
+        Some(PoiRequest::Add { lat, lng, id }) => this.fly_data.pois.add(lat, lng, 0.0, &id),
+        Some(PoiRequest::Rename { index, id }) => {
+            this.fly_data.pois.rename(index, &id);
+        }
+        None => {}
+    }
     sync_everything(this);
     if this.plan_menus.prompt.is_some() {
         this.plan_prompt_focus.focus(window, cx);
@@ -7579,6 +8550,18 @@ fn cancel_prompt(
     let home_hint = home_hint_showing(this);
     if let Some(request) = this.plan_menus.cancel(&mut this.plan) {
         file_request(this, request, window, cx);
+    }
+    // Create Circle Survey's sixth box cancelled: the survey is made all the same.
+    if let Some(position) = this.plan_menus.take_survey_pending() {
+        let context = menu_context(this);
+        this.plan_menus
+            .finish_circle_survey(&mut this.plan, position, &context);
+    }
+    // Text's rotation box cancelled: the rotation is 0 and the text is made all the same.
+    if let Some(position) = this.plan_menus.take_text_pending() {
+        let context = menu_context(this);
+        this.plan_menus
+            .finish_text(&mut this.plan, position, "0", &context);
     }
     sync_everything(this);
     if this.plan_menus.prompt.is_some() {
@@ -7948,9 +8931,11 @@ fn prompt_dialog(
     )
 }
 
-/// The menu and the dialog, for the planning screen to draw over itself.
+/// The menu and the dialog, for the planning screen to draw over itself. `fence_mode` is
+/// whether the geofence is being drawn, which decides the polygon icon menu's two fence entries.
 pub fn overlays(
     menus: &PlanMenus,
+    fence_mode: bool,
     focus: &gpui::FocusHandle,
     window: &gpui::Window,
     cx: &mut Context<MissionPlanner>,
@@ -7958,6 +8943,7 @@ pub fn overlays(
     map_menu(menus, window, cx)
         .into_iter()
         .chain(zoom_menu(menus, cx))
+        .chain(poly_menu(menus, fence_mode, cx))
         .chain(elevation_form(menus, window, cx))
         .chain(prompt_dialog(menus, focus, window, cx))
         .collect()
@@ -8366,6 +9352,15 @@ pub fn record_facts(plan: &Plan, menus: &PlanMenus) {
     record("plan.kml.labels", kml.map_or(0, |kml| kml.labels.len()));
     record("plan.kml.ground", kml.map_or(0, |kml| kml.ground_overlays));
     record("plan.kml.flight", plan.kml_on_flight());
+    record("plan.fence.exclusions", plan.fence_exclusions().len());
+    record(
+        "plan.fence.exclusion.points",
+        plan.fence_exclusions()
+            .iter()
+            .map(|polygon| polygon.len().to_string())
+            .collect::<Vec<_>>()
+            .join(","),
+    );
     // The corners the map shows, which Geo-Fence > Clear takes off it while keeping them.
     record("survey.shown", plan.shown_polygon().len());
     // The drawn polygon's corners, `lat,lng` each and `;` between: what Offset Polygon, Load
@@ -9839,6 +10834,7 @@ mod tests {
             vehicle: None,
             takeoff_pitch: false,
             copter: false,
+            tracker_alt: 0.0,
         }
     }
 
@@ -11542,6 +12538,8 @@ mod tests {
                 "menu-createWpCircle",
                 "menu-createSplineCircle",
                 "menu-area1",
+                "menu-text",
+                "menu-createCircleSurvey",
                 "menu-surveyGrid",
                 "menu-ContextMeasure",
                 "menu-zoomTo",
@@ -11553,11 +12551,26 @@ mod tests {
                 "menu-saveWPFile",
                 "menu-loadKMLFile",
                 "menu-loadSHPFile",
+                "menu-poiadd",
+                "menu-poidelete",
+                "menu-poiedit",
+                "menu-trackerHome",
                 "menu-modifyAlt",
+                "menu-enterUTMCoord",
                 "menu-setHomeHere",
                 "menu-zoomToVehicle",
                 "menu-zoomToMission",
                 "menu-zoomToHome",
+                "menu-poly-addPolygonPoint",
+                "menu-poly-clearPolygon",
+                "menu-poly-savePolygon",
+                "menu-poly-loadPolygon",
+                "menu-poly-fromSHP",
+                "menu-poly-convertWPToPolygon",
+                "menu-poly-offsetPolygon",
+                "menu-poly-area",
+                "menu-fenceInclusion",
+                "menu-fenceExclusion",
             ]
         );
     }
@@ -11852,6 +12865,7 @@ mod menu_batch_tests {
             vehicle: None,
             takeoff_pitch: false,
             copter: false,
+            tracker_alt: 0.0,
         }
     }
 
@@ -12738,6 +13752,188 @@ mod menu_batch_tests {
         assert!(!menus.take_zoom_to_kml());
     }
 
+    /// Create Circle Survey: six boxes in the C#'s order with its defaults, a cancelled box keeping
+    /// what it offered, then the ROI and the rings through AddCommand.
+    #[test]
+    fn create_circle_survey_asks_six_boxes_and_adds_the_rows() {
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::CreateCircleSurvey);
+        let expected = [
+            ("startalt", "10"),
+            ("endalt", "20"),
+            ("seperation", "2"),
+            ("radius", "5"),
+            ("photos", "50"),
+            ("start heading", "0"),
+        ];
+        let typed = ["12", "14", "2", "5", "4", "0"];
+        for (step, ((text, offered), answer_text)) in expected.iter().zip(typed).enumerate() {
+            let (title, shown, value) = showing(&menus);
+            assert_eq!(
+                (title, shown.as_str(), value.as_str()),
+                ("", *text, *offered),
+                "box {step}"
+            );
+            assert_eq!(answer(&mut plan, &mut menus, answer_text), None);
+        }
+        assert!(menus.prompt.is_none());
+        // Two rings of five (90 degree steps, 0 to 360), each point a WAYPOINT then a DIGICAM.
+        assert_eq!(plan.items().len(), 1 + 2 * 5 * 2);
+        assert_eq!(plan.items()[0].command, 201);
+        assert_eq!(plan.items()[1].command, 16);
+        assert_eq!(plan.items()[1].param1, 2.0, "a two second delay");
+        assert_eq!(plan.items()[1].z, 12.0);
+        assert_eq!(plan.items()[2].command, 203);
+        assert_eq!(
+            (plan.items()[2].x, plan.items()[2].y),
+            (1.0, 0.0),
+            "lat 1, lng 0"
+        );
+        assert_eq!(plan.items()[20].z, 0.0);
+        assert_eq!(plan.items()[19].z, 14.0);
+
+        // Cancelling the sixth box keeps its 0 and leaves the survey to the screen.
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::CreateCircleSurvey);
+        for answer_text in ["12", "14", "2", "5", "4"] {
+            answer(&mut plan, &mut menus, answer_text);
+        }
+        assert_eq!(menus.cancel(&mut plan), None);
+        assert!(menus.prompt.is_none());
+        assert_eq!(plan.items().len(), 0, "not until the screen finishes it");
+        let centre = menus.take_survey_pending().expect("a centre to finish at");
+        menus.finish_circle_survey(&mut plan, centre, &context());
+        assert_eq!(plan.items().len(), 21);
+        assert!(menus.take_survey_pending().is_none());
+
+        // A word: int.Parse's FormatException, nothing added.
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::CreateCircleSurvey);
+        answer(&mut plan, &mut menus, "ten");
+        for _ in 0..5 {
+            answer(&mut plan, &mut menus, "");
+        }
+        assert_eq!(showing(&menus).0, ERROR);
+        assert!(showing(&menus).1.contains("System.FormatException"));
+        assert_eq!(plan.items().len(), 0);
+    }
+
+    /// Enter UTM Coord: the zone typed is kept for the next time, the hemisphere is always the
+    /// south, and the row lands where GeoUtility puts it.
+    #[test]
+    fn enter_utm_coord_adds_a_row_and_keeps_the_zone() {
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        assert_eq!(menus.utm_zone(), "50s");
+        choose(&mut plan, &mut menus, MenuAction::EnterUtmCoord);
+        assert_eq!(
+            showing(&menus),
+            (
+                "Zone",
+                "Enter Zone. (eg 50S, 11N)".to_owned(),
+                "50s".to_owned()
+            )
+        );
+        answer(&mut plan, &mut menus, "55S");
+        assert_eq!(
+            showing(&menus),
+            ("Easting", "Easting".to_owned(), "578994".to_owned())
+        );
+        answer(&mut plan, &mut menus, "695400");
+        assert_eq!(
+            showing(&menus),
+            ("Northing", "Northing".to_owned(), "6126244".to_owned())
+        );
+        answer(&mut plan, &mut menus, "6084100");
+        assert!(menus.prompt.is_none());
+        assert_eq!(plan.items().len(), 1);
+        assert!((plan.items()[0].x - -35.367_300_939_431_25).abs() < 1e-9);
+        assert!((plan.items()[0].y - 149.150_818_946_518_8).abs() < 1e-9);
+        assert_eq!(menus.utm_zone(), "55S");
+        // Cancel anywhere adds nothing.
+        choose(&mut plan, &mut menus, MenuAction::EnterUtmCoord);
+        assert_eq!(showing(&menus).2, "55S");
+        answer(&mut plan, &mut menus, "55S");
+        assert_eq!(menus.cancel(&mut plan), None);
+        assert_eq!(plan.items().len(), 1);
+        // A zone that is not a number is the exception, after all three boxes.
+        choose(&mut plan, &mut menus, MenuAction::EnterUtmCoord);
+        answer(&mut plan, &mut menus, "zone-x");
+        answer(&mut plan, &mut menus, "1");
+        answer(&mut plan, &mut menus, "2");
+        assert_eq!(showing(&menus).0, ERROR);
+        assert!(showing(&menus).1.contains("FormatException"));
+    }
+
+    /// POI > Add asks for the ID and hands the screen the point; Edit hands it the index.
+    #[test]
+    fn poi_add_and_edit_hand_the_screen_their_requests() {
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::PoiAdd);
+        assert_eq!(
+            showing(&menus),
+            ("POI", "Enter ID".to_owned(), String::new())
+        );
+        answer(&mut plan, &mut menus, "Gate");
+        assert_eq!(
+            menus.take_poi_request(),
+            Some(PoiRequest::Add {
+                lat: cmac().latitude(),
+                lng: cmac().longitude(),
+                id: "Gate".to_owned()
+            })
+        );
+        assert_eq!(menus.take_poi_request(), None);
+        menus.ask_poi_edit(3);
+        answer(&mut plan, &mut menus, "Tower");
+        assert_eq!(
+            menus.take_poi_request(),
+            Some(PoiRequest::Rename {
+                index: 3,
+                id: "Tower".to_owned()
+            })
+        );
+        choose(&mut plan, &mut menus, MenuAction::PoiAdd);
+        assert_eq!(menus.cancel(&mut plan), None);
+        assert_eq!(menus.take_poi_request(), None);
+    }
+
+    /// Fence Inclusion and Exclusion take the drawn polygon and clear it; the fence's items carry
+    /// the inclusion first, then each exclusion.
+    #[test]
+    fn fence_inclusion_and_exclusion_take_the_drawn_polygon() {
+        let mut plan = Plan::default();
+        plan.load_polygon(square());
+        plan.fence_exclusion_from_polygon();
+        assert_eq!(plan.polygon().len(), 0);
+        assert_eq!(plan.fence_exclusions().len(), 1);
+        assert_eq!(plan.fence_exclusions()[0].len(), 4);
+        // Exclusions alone are a fence.
+        let items = plan.fence_items().expect("a fence of one exclusion");
+        assert_eq!(items.len(), 4);
+        assert!(items.iter().all(|item| item.command == 5002));
+        let mut ring = square();
+        ring.truncate(3);
+        plan.load_polygon(ring);
+        plan.fence_inclusion_from_polygon();
+        assert_eq!(plan.fence().len(), 3);
+        assert_eq!(plan.polygon().len(), 0);
+        let items = plan.fence_items().expect("inclusion then exclusion");
+        assert_eq!(items.len(), 3 + 4);
+        assert!(items[..3].iter().all(|item| item.command == 5001));
+        assert!(items[3..].iter().all(|item| item.command == 5002));
+        assert_eq!(items[3].seq, 3, "numbered after the inclusion");
+        plan.clear_fence();
+        assert!(plan.fence_exclusions().is_empty());
+        // An empty polygon makes no exclusion.
+        plan.fence_exclusion_from_polygon();
+        assert!(plan.fence_exclusions().is_empty());
+    }
+
     // ---- Auto WP's circles ----
 
     /// Answers every question a circle asks, in turn, returning what each offered.
@@ -13072,6 +14268,7 @@ mod terrain_tests {
             vehicle: None,
             takeoff_pitch: false,
             copter: false,
+            tracker_alt: 0.0,
         };
         let south = at(-35.38, 149.16);
         menus.open_at((10.0, 10.0), south, None);
@@ -13101,6 +14298,7 @@ mod terrain_tests {
             vehicle: None,
             takeoff_pitch: false,
             copter: false,
+            tracker_alt: 0.0,
         };
         menus.open_at((10.0, 10.0), at(-35.38, 149.16), None);
         menus.choose(&mut plan, MenuAction::InsertWp, &context);
@@ -13254,6 +14452,7 @@ mod terrain_tests {
                 vehicle: None,
                 takeoff_pitch: false,
                 copter: false,
+                tracker_alt: 0.0,
             },
         );
         assert_eq!(plan.home_text(HomeBox::Alt), "612.90");
@@ -13311,6 +14510,7 @@ mod terrain_tests {
                 vehicle: Some((at(-35.35, 149.15), 30.0)),
                 takeoff_pitch: false,
                 copter: false,
+                tracker_alt: 0.0,
             },
         );
         assert!(plan.items().is_empty());
@@ -13471,6 +14671,7 @@ mod terrain_tests {
             vehicle: None,
             takeoff_pitch: false,
             copter: false,
+            tracker_alt: 0.0,
         };
         menus.open_at((10.0, 10.0), at(-35.0, 149.0), None);
         menus.choose(&mut plan, MenuAction::ElevationGraph, &context);

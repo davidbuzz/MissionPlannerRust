@@ -1,0 +1,89 @@
+# Auto WP > Text: three boxes read whatever their buttons said - "Enter String" (requires the
+# 1CamBam_Stick_3 font), "Enter size" offering 5, "Enter rotation" offering 0 - then the string's
+# outline in that font at size x 1.35 (or the font fontconfig gives in its place, as GDI+ falls
+# back to a default family), rotated, and every point of the path - the Bézier control points
+# too - added as a waypoint at Default Alt, laid at UTM(where the menu opened) + (x, -y) metres.
+# A size the Font constructor refuses is "Bad input options, please try again" with the
+# exception; a word for a number is float.Parse's. `GCSViews/FlightPlanner.cs:6839-6883`
+#
+# An "I" has one contour of at least four points in any sans font; "II" has twice as many.
+#
+# Needs no link: tools/gui-test.sh tests/gui/plan-text.gui
+
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
+env MP_PLAN_DIR $WORK
+
+screen plan
+window 1600x1200
+settle 4
+expect mission.items 0
+
+click map@0.45x0.40:right
+click menu-autoWP
+click menu-text
+expect plan.prompt Enter String
+expect plan.prompt.text Enter String (requires 1CamBam_Stick_3 font)
+type I
+key Return
+expect plan.prompt Enter size
+expect plan.prompt.value 5
+key ctrl+u
+type 20
+key Return
+expect plan.prompt Enter rotation
+expect plan.prompt.value 0
+key Return
+expect plan.prompt none
+expect mission.items >= 4
+expect mission.last.command 16
+expect mission.last.alt 100
+
+# A cancelled rotation box keeps its 0 and the text is made all the same: twice the points.
+click map@0.30x0.70:right
+click menu-clearMission
+expect mission.items 0
+click map@0.45x0.40:right
+click menu-autoWP
+click menu-text
+type II
+key Return
+key ctrl+u
+type 20
+key Return
+key Escape
+expect plan.prompt none
+expect mission.items >= 8
+
+# A size of 0: the Font constructor's ArgumentException, under the handler's own words.
+click map@0.30x0.70:right
+click menu-clearMission
+click map@0.45x0.40:right
+click menu-autoWP
+click menu-text
+type I
+key Return
+key ctrl+u
+type 0
+key Return
+key Return
+expect plan.prompt Error
+expect plan.prompt.text ~ Bad input options, please try again
+key Return
+expect plan.prompt none
+expect mission.items 0
+
+# A word for the size: float.Parse's exception.
+click map@0.45x0.40:right
+click menu-autoWP
+click menu-text
+type I
+key Return
+key ctrl+u
+type big
+key Return
+key Return
+expect plan.prompt Error
+expect plan.prompt.text ~ System.FormatException
+key Return
+expect mission.items 0

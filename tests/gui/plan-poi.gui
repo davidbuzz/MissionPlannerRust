@@ -1,0 +1,70 @@
+# The planner's POI entries: Add asks "Enter ID" and adds a point where the menu opened
+# (`POI.POIAdd(MouseDownStart)`); Delete removes the point the menu opened over
+# (`POI.POIDelete(CurrentPOIMarker)`); Edit asks "Enter ID" again for it (`POI.POIEdit`). The
+# points are the flight screen's, saved to its poi.txt as they change, and drawn on the planner's
+# map from its own poioverlay. `GCSViews/FlightPlanner.cs:85, 5009-5027, 8113-8116;
+# Utilities/POI.cs:59-124`
+#
+# Needs no link: tools/gui-test.sh tests/gui/plan-poi.gui
+
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
+env MP_PLAN_DIR $WORK
+
+screen plan
+window 1600x1200
+settle 4
+expect fly.poi.count 0
+
+# Add, at the menu's position.
+click map@0.45x0.40:right
+click menu-pOI
+settle 1
+click menu-poiadd
+expect plan.prompt POI
+expect plan.prompt.text Enter ID
+type Gate
+key Return
+expect plan.prompt none
+expect fly.poi.count 1
+expect fly.poi.list ~ Gate
+expect mission.items 0
+
+# Cancel adds nothing.
+click map@0.60x0.60:right
+click menu-pOI
+settle 1
+click menu-poiadd
+key Escape
+expect fly.poi.count 1
+
+# Edit and Delete act on the marker under the press: the same spot.
+click map@0.45x0.40:right
+click menu-pOI
+settle 1
+click menu-poiedit
+expect plan.poi.hit 0
+expect plan.prompt POI
+type Tower
+key Return
+expect plan.prompt none
+expect fly.poi.count 1
+expect fly.poi.list ~ Tower
+
+# Away from the marker, Edit and Delete do nothing.
+click map@0.60x0.60:right
+click menu-pOI
+settle 1
+click menu-poiedit
+expect plan.prompt none
+click map@0.60x0.60:right
+click menu-pOI
+settle 1
+click menu-poidelete
+expect fly.poi.count 1
+
+click map@0.45x0.40:right
+click menu-pOI
+settle 1
+click menu-poidelete
+expect fly.poi.count 0

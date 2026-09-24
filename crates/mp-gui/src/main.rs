@@ -15,6 +15,7 @@ mod fly;
 mod gauge;
 // ---- Geo Reference ----
 mod georef_ui;
+mod glyph_text;
 // ---- end Geo Reference ----
 mod hud;
 mod joystick;
@@ -1042,7 +1043,9 @@ impl MissionPlanner {
 
     /// Pushes the geofence to the map after an edit.
     fn sync_map_fence(&self) {
-        self.map.borrow_mut().set_fence(self.plan.fence());
+        let mut map = self.map.borrow_mut();
+        map.set_fence(self.plan.fence());
+        map.set_fence_exclusions(self.plan.fence_exclusions());
     }
 
     /// Pushes the rally points to the map after an edit.
@@ -1646,11 +1649,12 @@ impl MissionPlanner {
                     .child(mapview::map_element(self.map.clone()))
                     // The planning map's zoom icon, `zoomicon`, and its menu.
                     .children(planning.then(|| plan::zoom_icon(cx)))
+                    .children(planning.then(|| plan::poly_icon(cx)))
                     // The points of interest, over the flight map: `poioverlay`.
                     // `// C#: GCSViews/FlightData.cs:52, 410, 4473-4476`
-                    .children(
-                        (!planning).then(|| poi::layer(&self.fly_data.pois, self.map.clone())),
-                    )
+                    // The planner has its own `poioverlay` on `MainMap` (`FlightPlanner.cs:85,
+                    // 215`), so the points are drawn on both screens.
+                    .child(poi::layer(&self.fly_data.pois, self.map.clone()))
                     // Attribution. Required by both providers' licences, so it is drawn over the
                     // map rather than in a settings screen nobody opens - if the imagery is on
                     // screen, so is the credit for it.
@@ -2467,6 +2471,7 @@ impl Render for MissionPlanner {
                 .child(self.map_pane(cx))
                 .children(plan::overlays(
                     &self.plan_menus,
+                    self.plan.draw_mode() == plan::DrawMode::Fence,
                     &self.plan_prompt_focus,
                     window,
                     cx,

@@ -618,14 +618,14 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "Click",
         "textToolStripMenuItem_Click",
         "Text",
-        Missing,
+        Done("menu-text"),
     ),
     row(
         "createCircleSurveyToolStripMenuItem",
         "Click",
         "createCircleSurveyToolStripMenuItem_Click",
         "Create Circle Survey",
-        Missing,
+        Done("menu-createCircleSurvey"),
     ),
     row(
         "surveyGridToolStripMenuItem",
@@ -730,28 +730,28 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "Click",
         "poiaddToolStripMenuItem_Click",
         "Add",
-        Missing,
+        Done("menu-poiadd"),
     ),
     row(
         "poideleteToolStripMenuItem",
         "Click",
         "poideleteToolStripMenuItem_Click",
         "Delete",
-        Missing,
+        Done("menu-poidelete"),
     ),
     row(
         "poieditToolStripMenuItem",
         "Click",
         "poieditToolStripMenuItem_Click",
         "Edit",
-        Missing,
+        Done("menu-poiedit"),
     ),
     row(
         "trackerHomeToolStripMenuItem",
         "Click",
         "trackerHomeToolStripMenuItem_Click",
         "Tracker Home",
-        Missing,
+        Done("menu-trackerHome"),
     ),
     row(
         "modifyAltToolStripMenuItem",
@@ -765,7 +765,7 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "Click",
         "enterUTMCoordToolStripMenuItem_Click",
         "Enter UTM Coord",
-        Missing,
+        Done("menu-enterUTMCoord"),
     ),
     row(
         "switchDockingToolStripMenuItem",
@@ -786,56 +786,56 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "Click",
         "addPolygonPointToolStripMenuItem_Click",
         "Draw a Polygon",
-        Done("menu-addPolygonPoint2"),
+        Done("menu-poly-addPolygonPoint"),
     ),
     row(
         "clearPolygonToolStripMenuItem",
         "Click",
         "clearPolygonToolStripMenuItem_Click",
         "Clear Polygon",
-        Done("menu-clearPolygon2"),
+        Done("menu-poly-clearPolygon"),
     ),
     row(
         "savePolygonToolStripMenuItem",
         "Click",
         "savePolygonToolStripMenuItem_Click",
         "Save Polygon",
-        Done("menu-savePolygon2"),
+        Done("menu-poly-savePolygon"),
     ),
     row(
         "loadPolygonToolStripMenuItem",
         "Click",
         "loadPolygonToolStripMenuItem_Click",
         "Load Polygon",
-        Done("menu-loadPolygon2"),
+        Done("menu-poly-loadPolygon"),
     ),
     row(
         "fromSHPToolStripMenuItem",
         "Click",
         "fromSHPToolStripMenuItem_Click",
         "From SHP",
-        Done("menu-fromSHP2"),
+        Done("menu-poly-fromSHP"),
     ),
     row(
         "areaToolStripMenuItem",
         "Click",
         "areaToolStripMenuItem_Click",
         "Area",
-        Done("menu-area2"),
+        Done("menu-poly-area"),
     ),
     row(
         "fenceInclusionToolStripMenuItem",
         "Click",
         "FenceInclusionToolStripMenuItem_Click",
         "Fence Inclusion",
-        Done("draw-fence"),
+        Done("menu-fenceInclusion"),
     ),
     row(
         "fenceExclusionToolStripMenuItem",
         "Click",
         "FenceExclusionToolStripMenuItem_Click",
         "Fence Exclusion",
-        Missing,
+        Done("menu-fenceExclusion"),
     ),
     row(
         "timer1",
@@ -849,21 +849,21 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "Opening",
         "ContextMenuStripPoly_Opening",
         "the polygon icon's menu",
-        Missing,
+        Done("plan-polyicon"),
     ),
     row(
         "convertWPToPolygonToolStripMenuItem",
         "Click",
         "fromCurrentWaypointsMenuItem_Click",
         "From Current Waypoints",
-        Done("menu-fromCurrentWaypoints"),
+        Done("menu-poly-convertWPToPolygon"),
     ),
     row(
         "offsetPolygonToolStripMenuItem",
         "Click",
         "offsetPolygonToolStripMenuItem_Click",
         "Offset Polygon",
-        Done("menu-offsetPolygon2"),
+        Done("menu-poly-offsetPolygon"),
     ),
     row(
         "zoomToVehicleToolStripMenuItem",
@@ -1347,7 +1347,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (86, 0, 23, 12, 0)
+            (95, 0, 14, 12, 0)
         );
     }
 }

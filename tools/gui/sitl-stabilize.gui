@@ -1,0 +1,15 @@
+# Puts SITL back in Stabilize. Not a test: a script that flew and landed leaves the copter in
+# Land, which is not a mode it arms in, and every later script that expects "Ready to Arm" or an
+# arming then fails. Run this before such scripts when SITL has been left that way.
+#
+#   tools/gui-test.sh tools/gui/sitl-stabilize.gui -- tcp:127.0.0.1:5760
+
+env XDG_DATA_HOME $WORK
+screen fly
+window 1600x1200
+settle 6
+click fly-tab-actions
+expect fly.tab tabActions
+click Stabilize
+settle 2
+expect vehicle.mode Stabilize

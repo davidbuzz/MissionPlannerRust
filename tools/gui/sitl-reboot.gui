@@ -1,0 +1,16 @@
+# Reboots SITL from the flight screen's Actions tab. Not a test: a compass calibration leaves
+# SITL saying "PreArm: Compass calibrated requires reboot" until it is rebooted, and every later
+# script that expects "Ready to Arm" or an arming then fails. SITL re-executes itself on a
+# reboot and comes back on the same ports a few seconds later.
+#
+#   tools/gui-test.sh tools/gui/sitl-reboot.gui -- tcp:127.0.0.1:5760
+
+env XDG_DATA_HOME $WORK
+screen fly
+window 1600x1200
+settle 6
+click fly-tab-actions
+expect fly.tab tabActions
+click reboot
+settle 2
+expect status ~ reboot sent

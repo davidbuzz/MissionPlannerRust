@@ -92,6 +92,10 @@ pub struct MapViewport {
     tooltips_drawn: Vec<String>,
     /// The flight screen's Guided Mode marker, while it has one.
     guided: Option<GuidedMarker>,
+    /// The planner's "Tracker Home" marker, while the tracker's position is set and not home's.
+    tracker: Option<GuidedMarker>,
+    /// The geofence's exclusion polygons.
+    fence_exclusions: Vec<Vec<WebMercator>>,
     /// The survey area being drawn, if any.
     polygon: Vec<WebMercator>,
     /// Map Tool > KML Overlay's shapes and labels.
@@ -269,6 +273,8 @@ impl MapViewport {
             hovered: Hovered::default(),
             tooltips_drawn: Vec::new(),
             guided: None,
+            tracker: None,
+            fence_exclusions: Vec::new(),
             polygon: Vec::new(),
             kml: KmlLayer::default(),
             fence: Vec::new(),
@@ -886,7 +892,18 @@ impl MapViewport {
         const MIN_SPAN: f64 = 3.5e-6;
         let span = (max_x - min_x).max(max_y - min_y).max(MIN_SPAN) * 1.25;
         let (cx, cy) = ((min_x + max_x) / 2.0, (min_y + max_y) / 2.0);
-        Some((cx - span / 2.0, cy - span / 2.0, span, span))
+        // The rect keeps the viewport's shape, so a world unit is the same number of pixels
+        // across as down. A square rect into a wide viewport scaled the two axes differently,
+        // and a frozen view (which is made from this one with the viewport's shape) then drew
+        // everything a few pixels from where the fitted view had it - a marker placed by a
+        // click landed above the click once the menu froze the view.
+        let (w, h) = self.last_viewport;
+        let height = if w > 0.0 && h > 0.0 {
+            span * f64::from(h) / f64::from(w)
+        } else {
+            span
+        };
+        Some((cx - span / 2.0, cy - height / 2.0, span, height))
     }
 
     fn record(&mut self, elapsed: Duration) {
@@ -1177,6 +1194,9 @@ pub const RECT_BLUE: u32 = 0x00_00_ff;
 /// `// C#: GCSViews/FlightData.cs:4214-4221; GCSViews/FlightPlanner.cs:1635-1700`
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GuidedMarker {
+    /// The marker's tag: "Guided Mode", or "Tracker Home" for the planner's tracker marker,
+    /// which `addpolygonmarker` makes the same way.
+    pub tag: &'static str,
     /// `GuidedMode.x / 1e7`, `GuidedMode.y / 1e7`.
     pub position: LatLon,
     /// `(int) GuidedMode.z`.
@@ -1191,7 +1211,7 @@ impl GuidedMarker {
     /// `// C#: GCSViews/FlightPlanner.cs:1648, 1672`
     #[must_use]
     pub fn tooltip(&self) -> String {
-        format!("Guided Mode : {}", self.alt)
+        format!("{} : {}", self.tag, self.alt)
     }
 }
 
@@ -1211,6 +1231,8 @@ pub enum MarkerTag {
     Item(u16),
     /// The flight screen's "Guided Mode" marker.
     Guided,
+    /// The planner's "Tracker Home" marker.
+    Tracker,
 }
 
 impl MarkerTag {
@@ -1221,6 +1243,7 @@ impl MarkerTag {
             Self::Home => "H".to_owned(),
             Self::Item(seq) => seq.to_string(),
             Self::Guided => "Guided Mode".to_owned(),
+            Self::Tracker => "Tracker Home".to_owned(),
         }
     }
 }
@@ -1718,7 +1741,34 @@ impl MapViewport {
                 RECT_BLUE,
             ));
         }
+        // The planner's "Tracker Home", `addpolygonmarker(..., Color.Blue, routesoverlay)`.
+        if let Some(tracker) = self.tracker {
+            circles.extend(circle(
+                MarkerTag::Tracker,
+                tracker.position.to_web_mercator(),
+                tracker.wp_radius,
+                RECT_BLUE,
+            ));
+        }
         circles
+    }
+
+    /// Puts the planner's "Tracker Home" marker on the map, or takes it away.
+    pub fn set_tracker(&mut self, tracker: Option<GuidedMarker>) {
+        self.tracker = tracker;
+    }
+
+    /// Replaces the geofence's exclusion polygons.
+    pub fn set_fence_exclusions(&mut self, polygons: &[Vec<LatLon>]) {
+        self.fence_exclusions = polygons
+            .iter()
+            .map(|polygon| {
+                polygon
+                    .iter()
+                    .map(|vertex| vertex.to_web_mercator())
+                    .collect()
+            })
+            .collect();
     }
 
     /// Puts the flight screen's Guided Mode marker on the map, or takes it away.
@@ -2648,6 +2698,26 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
         }
     }
 
+    // The geofence's exclusion polygons, in the fence's pen.
+    for polygon in &map.fence_exclusions {
+        if polygon.len() < 2 {
+            continue;
+        }
+        let mut builder = PathBuilder::stroke(px(2.0));
+        let mut vertices = polygon.iter();
+        if let Some(first) = vertices.next() {
+            builder.move_to(to_screen(*first));
+            for vertex in vertices {
+                builder.line_to(to_screen(*vertex));
+            }
+            builder.line_to(to_screen(*first));
+        }
+        match builder.build() {
+            Ok(path) => window.paint_path(path, Hsla::from(rgb(0xf8_51_49))),
+            Err(_) => map.track_path_failures += 1,
+        }
+    }
+
     // The survey area, drawn first so the grid generated from it sits on top. Closed explicitly
     // rather than relying on the path builder: an area whose last edge is missing looks like an
     // open shape, and an operator would reasonably assume the survey will not cover it.
@@ -2855,6 +2925,20 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
         let at = to_screen(guided.position.to_web_mercator());
         paint_pin(window, cx, at, PIN_GREEN, None);
         let text = guided.tooltip();
+        paint_tooltip(window, cx, at, &text);
+        map.tooltips_drawn.push(text);
+    }
+    // The planner's "Tracker Home", the same `addpolygonmarker` on `routesoverlay`, planner only.
+    // `// C#: GCSViews/FlightPlanner.cs:6910-6916`
+    if let Some(tracker) = map.tracker
+        && map
+            .overlay_mode
+            .as_ref()
+            .is_some_and(|overlay| overlay.planner)
+    {
+        let at = to_screen(tracker.position.to_web_mercator());
+        paint_pin(window, cx, at, PIN_GREEN, None);
+        let text = tracker.tooltip();
         paint_tooltip(window, cx, at, &text);
         map.tooltips_drawn.push(text);
     }
@@ -3965,6 +4049,7 @@ mod tests {
         map.set_overlay(Some(Overlay::FLIGHT));
         map.set_mission(&[item(1, 16, -35.363, 149.165, 0.0, 0.0)]);
         let guided = GuidedMarker {
+            tag: "Guided Mode",
             position: at(-35.3625, 149.1657),
             alt: 20,
             wp_radius: 30.0,

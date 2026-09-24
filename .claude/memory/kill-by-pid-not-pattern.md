@@ -17,3 +17,12 @@ itself a process's command line.
 **How to apply:** `pgrep -fa <pattern>` first, read the list, then `kill <pid> <pid>`. If a
 pattern must be used, bracket a character (`frame_pars[e]`) *and* make sure no later command in
 the same shell, and no other job's name, contains the literal. See [[no-foreground-waiting]].
+
+**A worktree's lock names this session's own pid.** `git worktree remove` on a subagent's tree says
+"locked, lock reason: claude agent <id> (pid N)"; N is the Claude Code session process, which runs
+its subagents in-process, and every Bash tool shell (this one, the background chains, the soak
+watchers) is its child. Killing "the agent process and its children" by that pid killed this
+session's own background work on 2026-09-24 (a release build and a suite, exit 144) - the session
+itself ignored the signal. Remove a locked agent worktree with
+`git worktree remove --force --force <path>` and `git branch -D <branch>`; never signal the pid the
+lock names.

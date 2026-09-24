@@ -138,6 +138,18 @@ impl Pois {
         self.save();
     }
 
+    /// `POIEdit`: the point's tag rewritten with a new ID and the point written out again, then
+    /// the save `POIModified` makes. Returns whether there was a point at `index`.
+    /// `// C#: Utilities/POI.cs:104-124`
+    pub fn rename(&mut self, index: usize, id: &str) -> bool {
+        let Some(poi) = self.points.get_mut(index) else {
+            return false;
+        };
+        *poi = Poi::new(poi.lat, poi.lng, poi.alt, id);
+        self.save();
+        true
+    }
+
     /// `POIDelete`: the first point at the marker's position, removed and the list saved.
     /// Returns whether one was.
     pub fn delete(&mut self, index: usize) -> bool {

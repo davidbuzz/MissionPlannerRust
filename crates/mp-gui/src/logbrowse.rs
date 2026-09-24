@@ -447,8 +447,6 @@ pub struct LogBrowse {
     /// The time of the record the cursor was last put on from the grid, which need not be a
     /// position record.
     cursor_time: Option<f64>,
-    /// Wheel movement over the chart not yet worth a notch.
-    wheel_carry: f32,
 }
 
 /// Pixels a wheel notch is taken as, over the chart.
@@ -566,7 +564,6 @@ impl LogBrowse {
             modifiers: BTreeMap::new(),
             exported: None,
             cursor_time: None,
-            wheel_carry: 0.0,
         }
     }
 
@@ -960,21 +957,18 @@ impl LogBrowse {
         }
     }
 
-    /// The wheel over the chart, in pixels, positive away from the user: a notch is
-    /// [`WHEEL_NOTCH`] pixels, and a trackpad's few pixels at a time are carried until they make
-    /// one, so each notch is one `MouseWheel` - and one step on the zoom stack - as in Windows.
-    /// True when it zoomed.
+    /// A wheel event over the chart, by its pixel delta: one zoom step per event by the sign, as
+    /// `ZedGraphControl_MouseWheel` reads only `e.Delta < 0`. Returns whether it zoomed.
     pub fn chart_wheel_pixels(&mut self, pixels: f32) -> bool {
-        self.wheel_carry += pixels / WHEEL_NOTCH;
-        let mut zoomed = false;
-        while self.wheel_carry.abs() >= 1.0 {
-            // Towards the user is a negative `Delta` in Windows and a negative y here.
-            let towards_user = self.wheel_carry < 0.0;
-            self.wheel_carry -= self.wheel_carry.signum();
-            self.chart_wheel(towards_user);
-            zoomed = true;
+        // `ZedGraphControl_MouseWheel` zooms once per event by the sign of `e.Delta`, whatever
+        // its size - so one notch is one step, however many lines the desktop puts in a notch.
+        // `// C#: ExtLibs/ZedGraph/ZedGraph/ZedGraphControl.Events.cs:835-846`
+        if pixels == 0.0 {
+            return false;
         }
-        zoomed
+        // Towards the user is a negative `Delta` in Windows and a negative y here.
+        self.chart_wheel(pixels < 0.0);
+        true
     }
 
     /// `ZedGraphControl_MouseWheel`: a notch, towards the user or away.

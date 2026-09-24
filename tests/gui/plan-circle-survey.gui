@@ -1,0 +1,73 @@
+# Auto WP > Create Circle Survey: `CircleSurveyMission.createGrid(MouseDownEnd)` asks six boxes -
+# startalt 10, endalt 20, seperation 2, radius 5, photos 50, start heading 0, each read whatever
+# its button said - then adds a DO_SET_ROI at the centre and, ring by ring from the start altitude
+# to the end by the separation, a WAYPOINT with a two-second delay at every `360 / photos` degrees
+# from the start heading to the start plus 360, each followed by a DO_DIGICAM_CONTROL whose
+# latitude cell is 1 and longitude 0. `GCSViews/FlightPlanner.cs:2852-2855;
+# Utilities/CircleSurveyMission.cs:10-45; ExtLibs/Controls/InputBox.cs:21-27`
+#
+# Two rings (12 and 14 m) of four photos - 360 / 4 = 90, so headings 0, 90, 180, 270 and 360, five
+# a ring - make 1 + 2 x 5 x 2 = 21 rows. A word that is not a number is int.Parse's exception.
+#
+# Needs no link: tools/gui-test.sh tests/gui/plan-circle-survey.gui
+
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
+env MP_PLAN_DIR $WORK
+
+screen plan
+window 1600x1200
+settle 4
+expect mission.items 0
+
+click map@0.45x0.40:right
+click menu-autoWP
+click menu-createCircleSurvey
+expect plan.prompt.text startalt
+expect plan.prompt.value 10
+key ctrl+u
+type 12
+key Return
+expect plan.prompt.text endalt
+expect plan.prompt.value 20
+key ctrl+u
+type 14
+key Return
+expect plan.prompt.text seperation
+expect plan.prompt.value 2
+key Return
+expect plan.prompt.text radius
+expect plan.prompt.value 5
+key Return
+expect plan.prompt.text photos
+expect plan.prompt.value 50
+key ctrl+u
+type 4
+key Return
+expect plan.prompt.text start heading
+expect plan.prompt.value 0
+# Cancel keeps what the box offered, and the survey is made all the same.
+key Escape
+expect plan.prompt none
+expect mission.items 21
+expect mission.commands 201,16,203,16,203,16,203,16,203,16,203,16,203,16,203,16,203,16,203,16,203
+expect mission.last.command 203
+expect mission.last.alt 0
+
+# A word for a number: int.Parse's FormatException, nothing added.
+click map@0.30x0.70:right
+click menu-autoWP
+click menu-createCircleSurvey
+key ctrl+u
+type ten
+key Return
+key Return
+key Return
+key Return
+key Return
+key Return
+expect plan.prompt Error
+expect plan.prompt.text ~ System.FormatException
+key Return
+expect plan.prompt none
+expect mission.items 21
