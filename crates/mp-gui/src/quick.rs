@@ -576,6 +576,8 @@ const READERS: &[(&str, Reader)] = &[
     ("xpdr_gps_unavail", |s| s.transponder.gps_unavailable.number()),
     ("xpdr_gps_no_fix", |s| s.transponder.gps_no_fix.number()),
     ("xpdr_status_unavail", |s| s.transponder.status_unavailable.number()),
+    // The C# clears this flag each time the Transponder page looks (FlightData.cs:6481); the
+    // page's last look is not in the state, so this reads "a status has ever arrived".
     ("xpdr_status_pending", |s| s.transponder.status_pending.number()),
     ("ahrs2_roll", |s| s.ahrs2.roll.number()),
     ("ahrs2_pitch", |s| s.ahrs2.pitch.number()),

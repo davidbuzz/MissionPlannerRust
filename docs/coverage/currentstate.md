@@ -545,7 +545,7 @@ None: every field is held, derivable, plumbing or deliberately dropped.
 | `xpdr_gps_unavail` | `bool` | GPS Unavailable | Transponder Status | done: `transponder.gps_unavailable` |
 | `xpdr_gps_no_fix` | `bool` | GPS No Fix | Transponder Status | done: `transponder.gps_no_fix` |
 | `xpdr_status_unavail` | `bool` | Ping200X No Status Message Recieved | Transponder Status | done: `transponder.status_unavailable` |
-| `xpdr_status_pending` | `bool` | Status Update Pending | Transponder Status | done: `transponder.status_pending` (the C#'s display clears it once shown; a snapshot reader remembers what it has shown) |
+| `xpdr_status_pending` | `bool` | Status Update Pending | Transponder Status | done: `transponder.status_count` (one more for each status, where the C# sets the flag; the Transponder page, which clears it in the C#, keeps the count it last looked at, and a status is pending while the two differ - `transponder.status_pending` says only that one has ever arrived) |
 | `xpdr_flight_id` | `byte[]` | Callsign/Flight ID | Transponder Status | done: `transponder.flight_id` |
 | `ahrs2_roll` | `float` |  | AHRS2 | done: `ahrs2.roll` |
 | `ahrs2_pitch` | `float` |  | AHRS2 | done: `ahrs2.pitch` |

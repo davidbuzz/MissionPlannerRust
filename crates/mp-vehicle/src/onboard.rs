@@ -179,6 +179,14 @@ pub struct Transponder {
     /// A status has arrived. The C# clears this once its display has shown it
     /// (`GCSViews/FlightData.cs:6481`); a snapshot reader keeps that note itself.
     pub status_pending: bool,
+    /// How many statuses have arrived, wrapping: `xpdr_status_pending` as a snapshot reader can
+    /// clear it. The C# sets the flag on every status and the Transponder page clears it each
+    /// time it looks (`GCSViews/FlightData.cs:6373, 6481`), so a transponder still reporting is
+    /// told from one that has stopped even when its status repeats unchanged; a reader here, which
+    /// cannot write the flag back, keeps the count it last looked at, and a status is pending
+    /// while this differs from it.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:2267, 4053`
+    pub status_count: u32,
     /// Callsign or flight id, as sent.
     pub flight_id: [u8; 8],
 }
@@ -677,6 +685,9 @@ impl VehicleState {
             gps_no_fix: fault(16),
             status_unavailable: fault(8),
             status_pending: true,
+            // C#: ExtLibs/ArduPilot/CurrentState.cs:4053, `xpdr_status_pending = true;` on
+            // every status: one more.
+            status_count: self.transponder.status_count.wrapping_add(1),
             flight_id: m.flight_id,
         };
     }
@@ -785,4 +796,50 @@ fn hil_control(control: f32) -> i32 {
 #[allow(clippy::cast_possible_truncation)]
 const fn truncate_i32(value: f32) -> i32 {
     value as i32
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One `UAVIONIX_ADSB_OUT_STATUS`, the same each time.
+    fn status() -> MavMessage {
+        MavMessage::UavionixAdsbOutStatus(UavionixAdsbOutStatus {
+            squawk: 1200,
+            state: 16 | 64 | 128,
+            nic_nacp: 0x9A,
+            boardtemp: 30,
+            fault: 0,
+            flight_id: *b"QFA1\0\0\0\0",
+        })
+    }
+
+    /// Every status counts one, repeated or not, as each sets `xpdr_status_pending`; the count
+    /// is all that tells the second of two identical statuses from the first.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4027-4053`
+    #[test]
+    fn every_transponder_status_counts_one_even_when_it_repeats() {
+        let mut state = VehicleState::default();
+        assert_eq!(state.transponder.status_count, 0);
+        assert!(!state.transponder.status_pending);
+        state.apply(&status());
+        let first = state.transponder;
+        assert_eq!(first.status_count, 1);
+        assert!(first.status_pending);
+        state.apply(&status());
+        let second = state.transponder;
+        assert_eq!(second.status_count, 2);
+        assert_eq!(
+            Transponder {
+                status_count: 1,
+                ..second
+            },
+            first,
+            "the same status but for the count"
+        );
+        // Wrapping: a reader compares the count for a difference only.
+        state.transponder.status_count = u32::MAX;
+        state.apply(&status());
+        assert_eq!(state.transponder.status_count, 0);
+    }
 }

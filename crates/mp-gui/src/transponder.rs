@@ -10,12 +10,13 @@
 //! control but Connect is disabled, as the `.resx` starts them.
 //! `// C#: GCSViews/FlightData.cs:210-241, 4314-4318, 6182-6482, GCSViews/FlightData.Designer.cs:1609-1741`
 //!
-//! One divergence, and why. The C# clears `xpdr_status_pending` each time the page has shown a
-//! status, so the five-second check can tell a transponder that stopped reporting ("Transponder
-//! Status Lost") from one still reporting. `mp_vehicle` keeps the last status and a flag that one
-//! has ever arrived, with no count of how many, so a status that repeats unchanged cannot be
-//! told from none; the page keeps showing the last status it had rather than calling a
-//! transponder lost that may be reporting every second.
+//! `xpdr_status_pending`, which each status sets and each look at the page clears, is here the
+//! vehicle state's count of statuses (`Transponder::status_count`) and the count the page last
+//! looked at: a status is pending while the two differ. So a status repeating unchanged every
+//! second keeps the page connected, and one that stops is "Transponder Status Lost" at the next
+//! five-second look, as the C#'s is. The page cannot clear the vehicle's flag as the C# does, the
+//! state being a snapshot the link thread writes; the count is what the flag's set-and-clear
+//! amounts to for one reader.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -290,8 +291,9 @@ pub struct Transponder {
     never_connected: bool,
     /// `transponderUpdate`: when the page was last brought up to date.
     last_update: Option<Instant>,
-    /// The status the page last showed.
-    shown: Option<Status>,
+    /// The vehicle's status count when `updateTransponder` last ran with the port open, where the
+    /// C# clears `xpdr_status_pending`. `// C#: GCSViews/FlightData.cs:6481`
+    handled: u32,
     /// Connect's wait, while it lasts.
     pub connecting: Option<Connecting>,
 }
@@ -315,7 +317,7 @@ impl Default for Transponder {
             ident_bold: false,
             never_connected: true,
             last_update: None,
-            shown: None,
+            handled: 0,
             connecting: None,
         }
     }
@@ -414,7 +416,13 @@ impl Transponder {
         if !port_open {
             return false;
         }
-        let Some(status) = status.filter(|status| status.status_pending) else {
+        let pending = self.pending(status);
+        // C#: GCSViews/FlightData.cs:6481, `xpdr_status_pending = false;` once the page has
+        // looked, whichever way it went.
+        if let Some(status) = status {
+            self.handled = status.status_count;
+        }
+        let Some(status) = status.filter(|_| pending) else {
             self.enabled = false;
             if self.never_connected {
                 self.connect_text = CONNECT_AGAIN;
@@ -425,7 +433,6 @@ impl Transponder {
             self.connect_enabled = true;
             return false;
         };
-        self.shown = Some(*status);
         if status.status_unavailable {
             self.enabled = false;
             self.connect_text = OFFLINE;
@@ -474,14 +481,21 @@ impl Transponder {
         subscribe
     }
 
-    /// Whether the main loop would show the transponder again now: a status the page has not
-    /// shown, or five seconds since it last looked - the first five from the first time it is
-    /// asked, as `transponderUpdate` starts when the main loop does.
+    /// `cs.xpdr_status_pending`: a status has arrived since the page last looked - the vehicle's
+    /// count of them moved on from the one it looked at, repeated status or not.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4053; GCSViews/FlightData.cs:6373, 6481`
+    #[must_use]
+    pub fn pending(&self, status: Option<&Status>) -> bool {
+        status.is_some_and(|status| status.status_count != self.handled)
+    }
+
+    /// Whether the main loop would show the transponder again now: a status pending, or five
+    /// seconds since it last looked - the first five from the first time it is asked, as
+    /// `transponderUpdate` starts when the main loop does.
+    /// `// C#: GCSViews/FlightData.cs:4314-4318`
     pub fn due(&mut self, status: Option<&Status>, now: Instant) -> bool {
-        let fresh =
-            status.is_some_and(|status| status.status_pending && self.shown != Some(*status));
         let last = *self.last_update.get_or_insert(now);
-        fresh || now.duration_since(last) >= UPDATE_EVERY
+        self.pending(status) || now.duration_since(last) >= UPDATE_EVERY
     }
 
     /// Publishes what a UI test asserts on.
@@ -923,6 +937,7 @@ mod tests {
         assert!(xpdr.due(None, start + UPDATE_EVERY));
         let status = Status {
             status_pending: true,
+            status_count: 1,
             ..Status::default()
         };
         assert!(xpdr.due(Some(&status), start), "a new status");
@@ -963,6 +978,7 @@ mod tests {
             nic: 9,
             nacp: 10,
             status_pending: true,
+            status_count: 1,
             flight_id: *b"QFA1\0\0\0\0",
             ..Status::default()
         };
@@ -986,6 +1002,7 @@ mod tests {
         // A second status does not subscribe again, and a box being typed in is left alone.
         let typed = Status {
             squawk: 7000,
+            status_count: 2,
             ..status
         };
         xpdr.flight_id.set("MINE");
@@ -995,11 +1012,97 @@ mod tests {
 
         let offline = Status {
             status_unavailable: true,
+            status_count: 3,
             ..status
         };
         xpdr.update(Some(&offline), true, (false, false), now);
         assert_eq!(xpdr.connect_text, "Transponder Offline");
         assert!(!xpdr.enabled);
         assert!(!xpdr.connect_enabled);
+    }
+
+    /// A transponder on a scripted vehicle, through the real link: its status arrives and the
+    /// page connects and subscribes; the same status again is still a status, and the page stays
+    /// connected; then none comes, and the next five-second look finds nothing pending - lost -
+    /// and the one after that asks to connect again.
+    /// `// C#: GCSViews/FlightData.cs:4314-4318, 6368-6482; ExtLibs/ArduPilot/CurrentState.cs:4027-4053`
+    #[test]
+    fn a_status_that_repeats_stays_connected_and_one_that_stops_is_lost() {
+        use crate::telemetry::scripted::{Vehicle, until};
+        use mp_link::ProtocolTimeouts;
+        use mp_mavlink_dialects::all::UavionixAdsbOutStatus;
+
+        let (telemetry, mut vehicle) = Vehicle::connect(ProtocolTimeouts::default());
+        let status = MavMessage::UavionixAdsbOutStatus(UavionixAdsbOutStatus {
+            squawk: 1200,
+            state: 16 | 64 | 128,
+            nic_nacp: 0xA9,
+            boardtemp: 30,
+            fault: 0,
+            flight_id: *b"QFA1\0\0\0\0",
+        });
+        let seen = |telemetry: &crate::telemetry::Telemetry| {
+            telemetry.view().state.map(|state| state.transponder)
+        };
+        let count = |telemetry: &crate::telemetry::Telemetry| {
+            seen(telemetry).map_or(0, |status| status.status_count)
+        };
+        let focus = (false, false);
+        let start = Instant::now();
+        let mut xpdr = Transponder::default();
+        assert!(!xpdr.due(seen(&telemetry).as_ref(), start));
+
+        // Arriving.
+        vehicle.send(&status);
+        until("the first status", || count(&telemetry) == 1);
+        let now = start + Duration::from_secs(1);
+        let first = seen(&telemetry);
+        assert!(xpdr.pending(first.as_ref()));
+        assert!(xpdr.due(first.as_ref(), now));
+        assert!(xpdr.update(first.as_ref(), true, focus, now), "subscribes");
+        assert_eq!(xpdr.connect_text, CONNECTED);
+        assert!(xpdr.enabled);
+        assert_eq!(xpdr.bold, Some(Button::On));
+        assert!(!xpdr.pending(first.as_ref()), "looked at");
+
+        // Repeating, unchanged but for the count.
+        vehicle.send(&status);
+        until("the second status", || count(&telemetry) == 2);
+        let now = start + Duration::from_secs(2);
+        let second = seen(&telemetry);
+        assert_eq!(
+            second.map(|status| Status {
+                status_count: 1,
+                ..status
+            }),
+            first
+        );
+        assert!(xpdr.due(second.as_ref(), now), "a repeat is a status");
+        assert!(!xpdr.update(second.as_ref(), true, focus, now));
+        assert_eq!(xpdr.connect_text, CONNECTED);
+        assert!(xpdr.enabled);
+
+        // Stopping: nothing pending, so nothing until five seconds after the last look.
+        let later = start + Duration::from_secs(3);
+        assert!(!xpdr.due(second.as_ref(), later));
+        let now = now + UPDATE_EVERY;
+        assert!(xpdr.due(second.as_ref(), now));
+        assert!(!xpdr.update(second.as_ref(), true, focus, now));
+        assert_eq!(xpdr.connect_text, STATUS_LOST);
+        assert!(xpdr.connect_enabled);
+        assert!(!xpdr.enabled);
+        // `transponderNeverConnected` is set again, so the next look asks to connect.
+        let now = now + UPDATE_EVERY;
+        assert!(xpdr.due(second.as_ref(), now));
+        xpdr.update(second.as_ref(), true, focus, now);
+        assert_eq!(xpdr.connect_text, CONNECT_AGAIN);
+
+        // A status again: connected, and subscribed again as on a first connection.
+        vehicle.send(&status);
+        until("the third status", || count(&telemetry) == 3);
+        let third = seen(&telemetry);
+        assert!(xpdr.due(third.as_ref(), now));
+        assert!(xpdr.update(third.as_ref(), true, focus, now), "subscribes");
+        assert_eq!(xpdr.connect_text, CONNECTED);
     }
 }

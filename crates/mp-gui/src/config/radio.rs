@@ -28,11 +28,14 @@
 //! * `requestDatastream`'s `hzratecheck`, which skips the request when `RC_CHANNELS_RAW` already
 //!   arrives at the rate asked for: this application does not measure a message's rate, and
 //!   asking a vehicle for the rate it is already sending changes nothing;
-//! * the `cs.raterc`, `rateattitude`, `rateposition` and `ratestatus` the calibration zeroes and
-//!   restores: they are the rates `CurrentState` re-requests streams at after eight seconds of
-//!   silence, which this application's link does not do. The one request they feed, the
-//!   `RC_CHANNELS` stream at the old rate once the save is done, is sent - at the rate this link
-//!   asks every stream for on connecting, which is its `raterc`;
+//! * the calibration's writes of `cs.raterc` (10), `rateattitude`, `rateposition` and
+//!   `ratestatus` (0) and their restore: they are the rates the link re-requests every stream at,
+//!   38 seconds after it last did, and `Telemetry` sets a vehicle's rates only through the
+//!   Planner page's hand-over, which saves them as the defaults too. So a calibration that runs
+//!   past a re-request has `RC_CHANNELS` asked for at the vehicle's `raterc` and the others at
+//!   theirs, where the C# asks 10 and 0. What the old rates feed at the end - `RC_CHANNELS` asked
+//!   for at `oldrc` once the save is done - is sent, at the vehicle's `raterc` as it was when the
+//!   calibration started, which is `oldrc` since nothing here changes it in between;
 //! * the vertical bars' text, which WinForms draws rotated: gpui draws no rotated text, so each
 //!   word of it is a line of its own, centred in the bar;
 //! * a page made again when `MainV2` reloads Initial Setup on a connect, a disconnect or a change of
@@ -47,9 +50,11 @@ use std::time::Instant;
 
 use gpui::{AnyElement, Context, Div, SharedString, Window, div, prelude::*, px, rgb};
 use mp_calibration::radio::{
-    RadioCalibration, Spektrum, ch_in, request_rc_channels, start_rx_pair,
+    DATA_STREAM_RC_CHANNELS, RadioCalibration, Spektrum, ch_in, start_rx_pair,
 };
+use mp_link::current_settings::request_datastream;
 use mp_link::requests::RequestOutcome;
+use mp_vehicle::StreamRates;
 use mp_vehicle::rc::CHANNELS;
 
 use crate::MissionPlanner;
@@ -113,17 +118,20 @@ pub const SAVING: &str = "Saving";
 
 /// The `RC_CHANNELS` rate `Activate` asks for, "to force this screen to work".
 /// `// C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:115-122`
-pub const ACTIVATE_RATE: u8 = 2;
+pub const ACTIVATE_RATE: i32 = 2;
 /// The rate the calibration asks for while it runs.
 /// `// C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:214, 219-225`
-pub const CALIBRATION_RATE: u8 = 10;
+pub const CALIBRATION_RATE: i32 = 10;
 
-/// The rate the calibration puts `RC_CHANNELS` back to: `cs.raterc`, the rate the link asked for
-/// every stream at when it connected.
-/// `// C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:209, 388-399`
+/// `MainV2.comPort.MAV.cs`'s stream rates: the shown vehicle's own, which the calibration reads
+/// `oldrc` from and puts `RC_CHANNELS` back to once it is saved. With no vehicle, `MAV` is the
+/// placeholder state, made with the saved defaults as every `CurrentState` is.
+/// `// C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:209, 393-395; ExtLibs/ArduPilot/CurrentState.cs:4393-4397`
 #[must_use]
-pub fn restored_rate() -> u8 {
-    u8::try_from(mp_link::LinkConfig::default().stream_rate_hz).unwrap_or(u8::MAX)
+pub fn vehicle_rates(view: &TelemetryView) -> StreamRates {
+    view.state
+        .as_deref()
+        .map_or_else(StreamRates::backups, |state| state.rates)
 }
 
 /// Every bar's scale: `Minimum = 800`, `Maximum = 2200`.
@@ -580,7 +588,7 @@ enum Task {
     /// `doCommand(START_RX_PAIR)` and its message.
     Bind(Spektrum),
     /// `requestDatastream(RC_CHANNELS, hz)`.
-    Stream(u8),
+    Stream(i32),
     /// A message box, holding everything after it until dismissed.
     Say(Message, AfterOk),
 }
@@ -652,7 +660,10 @@ pub struct RadioInput {
     /// How the last bind ended.
     last_bind: Option<String>,
     /// The last `RC_CHANNELS` rate asked for.
-    stream: Option<u8>,
+    stream: Option<i32>,
+    /// `oldrc`: the vehicle's `cs.raterc` when the calibration started, which its end asks
+    /// `RC_CHANNELS` for at again. `// C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:209`
+    old_rc: Option<i32>,
 }
 
 impl Default for RadioInput {
@@ -688,6 +699,7 @@ impl Default for RadioInput {
             last_write: None,
             last_bind: None,
             stream: None,
+            old_rc: None,
         }
     }
 }
@@ -998,10 +1010,21 @@ impl RadioInput {
         }
     }
 
-    /// OK on the message box showing, and what the handler does after it, given the reading at
-    /// that moment.
+    /// The message box's OK clicked: [`RadioInput::dismiss`] with the shown vehicle's `ch1in` to
+    /// `ch16in` and its stream rates as they are now.
+    pub fn click_ok(&mut self, view: &TelemetryView) {
+        let rc = view
+            .state
+            .as_deref()
+            .map(|state| state.rc)
+            .unwrap_or_default();
+        self.dismiss(&ch_in(&rc), vehicle_rates(view));
+    }
+
+    /// OK on the message box showing, and what the handler does after it, given the reading and
+    /// the vehicle's stream rates ([`vehicle_rates`]) at that moment.
     /// `// C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:209-232, 331-351, 353-405`
-    pub fn dismiss(&mut self, inputs: &[f32; CHANNELS]) {
+    pub fn dismiss(&mut self, inputs: &[f32; CHANNELS], rates: StreamRates) {
         if self.message().is_none() {
             return;
         }
@@ -1011,6 +1034,9 @@ impl RadioInput {
         match after {
             AfterOk::Nothing => {}
             AfterOk::StartCapture => {
+                // C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:209, `var oldrc =
+                // MainV2.comPort.MAV.cs.raterc;` - read once the first message is dismissed.
+                self.old_rc = Some(rates.rc);
                 self.button = CLICK_WHEN_DONE;
                 self.next(vec![
                     Task::Stream(CALIBRATION_RATE),
@@ -1034,7 +1060,12 @@ impl RadioInput {
                         })
                     })
                     .collect();
-                tail.push(Task::Stream(restored_rate()));
+                // C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:388-395, `cs.raterc =
+                // oldrc;` then `requestDatastream(RC_CHANNELS, oldrc)`. The C# always has `oldrc`
+                // here, the loop being reachable only through the first message; without it the
+                // vehicle's `raterc` now is the same number, as nothing here changes it between.
+                let old_rc = self.old_rc.take().unwrap_or(rates.rc);
+                tail.push(Task::Stream(old_rc));
                 tail.push(Task::Say(
                     Message {
                         title: SUMMARY_TITLE,
@@ -1109,8 +1140,12 @@ impl RadioInput {
                     }
                 }
                 Task::Stream(hz) => {
-                    if let Some((sender, id)) = telemetry.send_handle() {
-                        sender.send(&request_rc_channels(id, hz));
+                    // Nothing for a rate of -1, and the rate as a byte otherwise.
+                    // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3061-3070, 3256
+                    if let Some((sender, id)) = telemetry.send_handle()
+                        && let Some(request) = request_datastream(id, DATA_STREAM_RC_CHANNELS, hz)
+                    {
+                        sender.send(&request);
                     }
                     self.stream = Some(hz);
                 }
@@ -1636,14 +1671,7 @@ pub fn overlay(
             theme::ACCENT,
             true,
             cx.listener(|this, _event: &(), _window, cx| {
-                let rc = this
-                    .telemetry
-                    .view()
-                    .state
-                    .as_deref()
-                    .map(|state| state.rc)
-                    .unwrap_or_default();
-                this.radio_input.dismiss(&ch_in(&rc));
+                this.radio_input.click_ok(&this.telemetry.view());
                 cx.notify();
             }),
         )));
@@ -1674,6 +1702,16 @@ mod tests {
     use crate::telemetry::scripted::{Vehicle, ack, param, until};
     use mp_link::ProtocolTimeouts;
     use mp_mavlink_dialects::all::MavMessage;
+
+    /// A vehicle's `cs.rateX`, its `raterc` told apart from every rate the page asks for itself
+    /// and from the link's.
+    const RATES: StreamRates = StreamRates {
+        attitude: 4,
+        position: 2,
+        status: 2,
+        sensors: 2,
+        rc: 7,
+    };
 
     /// `MAV_PARAM_TYPE_INT8`, as ArduPilot declares `RCn_REVERSED`.
     const INT8: u8 = 2;
@@ -1724,13 +1762,19 @@ mod tests {
         ProtocolTimeouts::default().faster(20)
     }
 
-    /// Dismisses the message showing, which must be `text`.
+    /// Dismisses the message showing, which must be `text`, on a vehicle whose rates are
+    /// [`RATES`].
     fn ok(radio: &mut RadioInput, text: &str, reading: &[f32; CHANNELS]) {
+        ok_at(radio, text, reading, RATES);
+    }
+
+    /// Dismisses the message showing, which must be `text`, on a vehicle whose rates are `rates`.
+    fn ok_at(radio: &mut RadioInput, text: &str, reading: &[f32; CHANNELS], rates: StreamRates) {
         assert_eq!(
             radio.message().map(|message| message.text.as_str()),
             Some(text)
         );
-        radio.dismiss(reading);
+        radio.dismiss(reading, rates);
     }
 
     /// Runs the queue against a scripted vehicle until nothing is under way, answering what the
@@ -2012,7 +2056,7 @@ mod tests {
         // Nothing after the map was done: no bindings, labels as designed, no stream.
         assert_eq!(radio.bindings, [None; CHANNELS]);
         assert_eq!(radio.bars[0].label, "Roll");
-        radio.dismiss(&sitl());
+        radio.dismiss(&sitl(), RATES);
         assert!(radio.tasks.is_empty());
         // And it takes no click.
         radio.click_calibrate();
@@ -2127,11 +2171,18 @@ mod tests {
         radio.click_calibrate();
         assert_eq!(radio.button, "Completed");
         assert!(!radio.running);
-        ok(&mut radio, CENTRE_STICKS, &sitl());
+        // The vehicle's `raterc` changed since the first message: the rate put back is still
+        // `oldrc`, the one read then.
+        ok_at(
+            &mut radio,
+            CENTRE_STICKS,
+            &sitl(),
+            StreamRates { rc: 9, ..RATES },
+        );
         assert_eq!(radio.calibration.trim, sitl());
         assert_eq!(radio.button, "Saving");
         radio.advance(&mut telemetry);
-        assert_eq!(radio.stream, Some(restored_rate()));
+        assert_eq!(radio.stream, Some(RATES.rc), "oldrc, the vehicle's raterc");
         assert_eq!(
             radio.message(),
             Some(&Message {
@@ -2143,7 +2194,7 @@ mod tests {
             })
         );
         assert_eq!(radio.last_write, None, "nothing written");
-        radio.dismiss(&sitl());
+        radio.dismiss(&sitl(), RATES);
         assert_eq!(radio.button, "Completed");
         assert!(radio.idle());
     }
@@ -2192,16 +2243,21 @@ mod tests {
         let mut radio = RadioInput::default();
         radio.activate(&copter(), Firmware::ArduCopter2);
         drive(&mut radio, &mut telemetry, &mut vehicle, |_, _| {});
+        // The vehicle's own `cs.raterc`, which the calibration reads as `oldrc`.
+        let raterc = vehicle_rates(&telemetry.view()).rc;
         radio.click_calibrate();
         drive(&mut radio, &mut telemetry, &mut vehicle, |_, _| {});
-        radio.dismiss(&sitl());
+        radio.click_ok(&telemetry.view());
         drive(&mut radio, &mut telemetry, &mut vehicle, |_, _| {});
-        radio.dismiss(&sitl());
+        radio.click_ok(&telemetry.view());
         for (roll, throttle) in [(1500.0, 1000.0), (1100.0, 1500.0), (1900.0, 2000.0)] {
             radio.observe(&inputs(&[roll, 1500.0, throttle]));
         }
         radio.click_calibrate();
-        radio.dismiss(&inputs(&[1500.0, 1500.0, 1000.0]));
+        radio.dismiss(
+            &inputs(&[1500.0, 1500.0, 1000.0]),
+            vehicle_rates(&telemetry.view()),
+        );
         drive(
             &mut radio,
             &mut telemetry,
@@ -2229,7 +2285,12 @@ mod tests {
             vehicle.read();
             streams(&vehicle).len() == 3
         });
-        assert_eq!(streams(&vehicle), [2, 10, u16::from(restored_rate())]);
+        // Put back at the vehicle's `raterc` - `CurrentState`'s 2 unless the saved defaults say
+        // otherwise - and not at anything of the link's own.
+        assert_eq!(
+            streams(&vehicle),
+            [2, 10, u16::try_from(raterc).expect("a rate")]
+        );
         assert_eq!(
             radio.message().map(|message| message.text.clone()),
             Some(format!(
@@ -2266,7 +2327,7 @@ mod tests {
             radio.observe(&inputs(&[value, value]));
         }
         radio.click_calibrate();
-        radio.dismiss(&inputs(&[1500.0, 1500.0]));
+        radio.dismiss(&inputs(&[1500.0, 1500.0]), RATES);
         let answer = |vehicle: &mut Vehicle, message: &MavMessage| {
             if let MavMessage::ParamSet(set) = message {
                 let name = mp_params::decode_param_id(&set.param_id);
@@ -2283,7 +2344,7 @@ mod tests {
         let names: Vec<String> = sets(&vehicle).into_iter().map(|(name, _)| name).collect();
         assert!(names.iter().all(|name| name == "RC1_MIN"), "{names:?}");
         assert_eq!(names.len(), 4, "the first send and three retries");
-        radio.dismiss(&sitl());
+        radio.dismiss(&sitl(), RATES);
         drive(&mut radio, &mut telemetry, &mut vehicle, answer);
         let names: Vec<String> = sets(&vehicle).into_iter().map(|(name, _)| name).collect();
         assert_eq!(
@@ -2374,7 +2435,7 @@ mod tests {
             Some(DIP_DISABLED)
         );
         assert_eq!(sets(&vehicle), [("SWITCH_ENABLE".to_owned(), 0.0)]);
-        radio.dismiss(&sitl());
+        radio.dismiss(&sitl(), RATES);
         drive(&mut radio, &mut telemetry, &mut vehicle, answer);
         assert_eq!(
             radio.message(),
@@ -2425,7 +2486,7 @@ mod tests {
                 Some(expected),
                 "{spektrum:?}"
             );
-            radio.dismiss(&sitl());
+            radio.dismiss(&sitl(), RATES);
         }
         assert_eq!(
             radio.last_bind.as_deref(),

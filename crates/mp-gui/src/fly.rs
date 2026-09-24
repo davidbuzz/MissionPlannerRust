@@ -1444,13 +1444,21 @@ pub fn fly_to_here_alt_default(copter: bool, remembered: Option<&str>) -> String
 
 // --- Set Home Alt ---------------------------------------------------------------------------------
 
-/// Set Home Alt: `cs.altoffsethome` goes to zero if it is set, and to minus the home altitude if
-/// it is not - which makes every altitude shown a height above sea level instead of above home.
-///
-/// `HomeAlt` is `HomeLocation.Alt`. This application's vehicle state keeps the home position but
-/// not its height, so it is taken as `GLOBAL_POSITION_INT.alt - relative_alt`, which ArduPilot
-/// computes as exactly that.
-/// `// C#: GCSViews/FlightData.cs:1236-1247, ExtLibs/ArduPilot/CurrentState.cs:1568-1572`
+/// `cs.HomeAlt`: `HomeLocation.Alt`, the vehicle state's home altitude - what `HOME_POSITION`
+/// last said, in metres above sea level. Until the vehicle has reported home it is 0, as
+/// `_homelocation` starts as an empty `PointLatLngAlt`; with no vehicle it is the placeholder
+/// state's, the same 0.
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:40, 1568-1582; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5701-5707`
+#[must_use]
+pub fn home_alt(state: Option<&mp_vehicle::VehicleState>) -> f64 {
+    state.map_or(0.0, |state| state.home_altitude.0)
+}
+
+/// Set Home Alt: `cs.altoffsethome` goes to zero if it is set, and to minus `cs.HomeAlt`
+/// ([`home_alt`]) if it is not - which makes every altitude shown a height above sea level
+/// instead of above home. With home not yet reported that is minus zero, which the next click
+/// reads as not set, as the C#'s `altoffsethome != 0` does: nothing changes until home is known.
+/// `// C#: GCSViews/FlightData.cs:1236-1247`
 #[must_use]
 pub fn toggle_home_alt(offset: f32, home_altitude: f64) -> f32 {
     if offset == 0.0 {
@@ -3927,9 +3935,8 @@ impl MissionPlanner {
     /// `// C#: GCSViews/FlightData.cs:1236-1247`
     fn fly_home_alt(&mut self) {
         let view = self.telemetry.view();
-        let home = view.state.as_ref().map_or(0.0, |state| {
-            state.altitude_msl.0 - state.altitude_relative.0
-        });
+        // C#: GCSViews/FlightData.cs:1245, `MainV2.comPort.MAV.cs.HomeAlt`.
+        let home = home_alt(view.state.as_deref());
         // `MainV2.comPort.MAV.cs.altoffsethome`: the vehicle state's own field, which the link
         // sets on its next pass.
         let offset = toggle_home_alt(alt_offset_home(&view), home);
@@ -7678,7 +7685,9 @@ impl MissionPlanner {
                 }
             }
             if let Some(since) = connecting.waiting_since {
-                let arrived = status.as_ref().is_some_and(|status| status.status_pending);
+                // A status since the page last looked, not "one has ever arrived": the count the
+                // C#'s xpdr_status_pending flag stands for. `// C#: GCSViews/FlightData.cs:6461-6481`
+                let arrived = self.fly_data.transponder.pending(status.as_ref());
                 if arrived {
                     self.fly_data.transponder.connecting = None;
                     self.fly_xpdr_update(status.as_ref(), open, focus, now);
@@ -8422,6 +8431,171 @@ mod tests {
         assert!((displayed_altitude(10.0, offset) - 594.25).abs() < 1e-9);
         assert_eq!(toggle_home_alt(offset, 584.25), 0.0);
         assert_eq!(displayed_altitude(10.0, 0.0), 10.0);
+    }
+
+    /// Set Home Alt on a scripted vehicle, through the real link: before `HOME_POSITION` the
+    /// offset is minus zero, which the next click reads as not set; after it, minus the home
+    /// altitude it reported - not the GPS's altitude less its height above home, which here says
+    /// otherwise - and every altitude shown is above sea level; again, and it is back to zero.
+    /// `// C#: GCSViews/FlightData.cs:1236-1247; ExtLibs/ArduPilot/CurrentState.cs:40, 1568-1582`
+    #[test]
+    fn set_home_alt_takes_the_home_the_vehicle_reported() {
+        use crate::telemetry::scripted::{Vehicle, until};
+        use mp_link::ProtocolTimeouts;
+        use mp_mavlink_dialects::all::{GlobalPositionInt, HomePosition, MavMessage};
+
+        let (telemetry, mut vehicle) = Vehicle::connect(ProtocolTimeouts::default());
+        // 600 m above sea level and 10 m above home: the GPS makes home 590 m.
+        vehicle.send(&MavMessage::GlobalPositionInt(GlobalPositionInt {
+            time_boot_ms: 0,
+            lat: -353_632_620,
+            lon: 1_491_652_370,
+            alt: 600_000,
+            relative_alt: 10_000,
+            vx: 0,
+            vy: 0,
+            vz: 0,
+            hdg: 0,
+        }));
+        until("a position", || {
+            telemetry
+                .view()
+                .state
+                .is_some_and(|state| state.position.is_some())
+        });
+        // A click with `HomeAlt` still `new PointLatLngAlt().Alt`: minus zero, not set.
+        let click = |telemetry: &crate::telemetry::Telemetry| {
+            let view = telemetry.view();
+            toggle_home_alt(alt_offset_home(&view), home_alt(view.state.as_deref()))
+        };
+        assert_eq!(home_alt(telemetry.view().state.as_deref()), 0.0);
+        let offset = click(&telemetry);
+        assert!(offset == 0.0 && offset.is_sign_negative(), "{offset}");
+        telemetry.set_alt_offset_home(offset);
+        assert_eq!(click(&telemetry), 0.0, "minus zero reads as not set");
+
+        vehicle.send(&MavMessage::HomePosition(HomePosition {
+            latitude: -353_632_620,
+            longitude: 1_491_652_370,
+            altitude: 584_090,
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            q: [1.0, 0.0, 0.0, 0.0],
+            approach_x: 0.0,
+            approach_y: 0.0,
+            approach_z: 0.0,
+            time_usec: 0,
+        }));
+        until("home", || {
+            telemetry
+                .view()
+                .state
+                .is_some_and(|state| state.home.is_some())
+        });
+        assert!((home_alt(telemetry.view().state.as_deref()) - 584.09).abs() < 1e-9);
+        let offset = click(&telemetry);
+        assert_eq!(offset, -584.09_f32);
+        telemetry.set_alt_offset_home(offset);
+        until("the offset on the state", || {
+            alt_offset_home(&telemetry.view()) == offset
+        });
+        let relative = telemetry
+            .view()
+            .state
+            .map_or(0.0, |state| state.altitude_relative.0);
+        assert!((displayed_altitude(relative, offset) - 594.09).abs() < 1e-3);
+
+        let offset = click(&telemetry);
+        assert_eq!(offset, 0.0);
+        telemetry.set_alt_offset_home(offset);
+        until("the offset back to zero", || {
+            alt_offset_home(&telemetry.view()) == 0.0
+        });
+    }
+
+    /// `tests/gui/fly-homealt.gui` asks the vehicle for home before it presses Set Home Alt - a
+    /// SITL whose home was set before the run sends none, and `HomeAlt` is 0 until it does - and
+    /// shows `HomeAlt` in a quick view the chooser offers.
+    #[test]
+    fn the_home_alt_script_asks_for_home_first() {
+        let script = include_str!("../../../tests/gui/fly-homealt.gui");
+        let lines: Vec<&str> = script
+            .lines()
+            .filter(|line| !line.starts_with('#'))
+            .collect();
+        let at = |wanted: &str| {
+            lines
+                .iter()
+                .position(|line| line.trim() == wanted)
+                .unwrap_or_else(|| panic!("the script has no `{wanted}`"))
+        };
+        let asked = at("expect fly.sent COMMAND_LONG MAV_CMD_GET_HOME_POSITION 0,0,0,0,0,0,0");
+        assert!(at("click fly-prompt-cancel") < asked);
+        assert!(asked < at("click fly-homealt"));
+        let choices = crate::quick::choices();
+        for line in &lines {
+            if let Some(name) = line.trim().strip_prefix("click fly-quick-choice-") {
+                assert!(choices.contains(&name), "{name} is not offered");
+            }
+        }
+        assert!(choices.contains(&"HomeAlt"));
+        at("click fly-quick-choice-HomeAlt");
+    }
+
+    /// SITL on 5763 answers `getHomePositionAsync`'s `GET_HOME_POSITION` with `HOME_POSITION`,
+    /// and Set Home Alt takes the altitude in it. SITL sends `HOME_POSITION` of its own accord
+    /// only when home is set - on its first fix, or on arming - so a link that joins a SITL whose
+    /// home is already set hears none until it asks, as Mission Planner's does: until then
+    /// `HomeAlt` is 0. Run with `--ignored` while SITL is up; it only asks.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3343-3386, 5701-5707`
+    #[test]
+    #[ignore = "needs SITL on tcp:127.0.0.1:5763"]
+    fn sitl_reports_the_home_set_home_alt_takes() {
+        use std::time::{Duration, Instant};
+        let link = mp_link::Link::connect("tcp:127.0.0.1:5763", mp_link::LinkConfig::default())
+            .expect("SITL on 5763");
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let (id, handle) = loop {
+            if let Some(vehicle) = link.primary_vehicle() {
+                break vehicle;
+            }
+            assert!(Instant::now() < deadline, "no vehicle on 5763");
+            std::thread::sleep(Duration::from_millis(50));
+        };
+        let unasked = handle.load();
+        eprintln!(
+            "before asking: home {:?}, HomeAlt {} m",
+            unasked.home,
+            home_alt(Some(&unasked))
+        );
+        // `getHomePositionAsync`: asked, and again every 700 ms, three more times.
+        let mut state = None;
+        for _ in 0..4 {
+            link.sender().send(&get_home_position(id));
+            let asked = Instant::now();
+            while asked.elapsed() < Duration::from_millis(700) {
+                let now = handle.load();
+                if now.home.is_some() {
+                    state = Some(now);
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            if state.is_some() {
+                break;
+            }
+        }
+        let state = state.expect("SITL answers GET_HOME_POSITION with HOME_POSITION");
+        let home = home_alt(Some(&state));
+        eprintln!(
+            "HomeAlt {home} m; GPS less relative {} m",
+            state.altitude_msl.0 - state.altitude_relative.0
+        );
+        assert!(home != 0.0);
+        #[allow(clippy::cast_possible_truncation)]
+        let expected = -home as f32;
+        assert_eq!(toggle_home_alt(0.0, home), expected);
     }
 
     // --- Resume Mission -------------------------------------------------------------------------

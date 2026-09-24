@@ -422,14 +422,25 @@ fn await_state(
     false
 }
 
+/// `mpr fly`'s link: recording where asked, and asking the vehicle for its telemetry at the rates
+/// Mission Planner asks every vehicle for - the vehicle state's own `cs.rateX`, which start from
+/// `CurrentState`'s defaults, attitude 4 Hz and position, status, sensors and RC 2 Hz. Mission
+/// Planner has no command line; its flight screen asks for these, and for more only once its
+/// Planner page's rate combos are changed, which nothing here does. Nothing `fly` waits on needs
+/// more: the GPS fix and position come at 2 Hz and the mode in the heartbeat.
+/// `LinkConfig::stream_rate_hz` only switches the requests on; the rates are the state's.
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:201-206, 2002-2007, 4632-4663; MainV2.cs:980-991`
+fn fly_config(record_path: Option<&str>) -> LinkConfig {
+    LinkConfig {
+        record_path: record_path.map(Into::into),
+        ..LinkConfig::default()
+    }
+}
+
 /// Flies a scripted mission. Intended for a simulator: it exists to produce flight data with real
 /// dynamics, which recorded ground tests do not contain.
 fn fly(url: &str, record_path: Option<&str>) -> std::process::ExitCode {
-    let config = LinkConfig {
-        record_path: record_path.map(Into::into),
-        stream_rate_hz: 10,
-        ..LinkConfig::default()
-    };
+    let config = fly_config(record_path);
     let link = match Link::connect(url, config) {
         Ok(link) => link,
         Err(err) => {
@@ -2115,6 +2126,74 @@ mod retries {
             })
             .collect();
         assert_eq!(names, ["read", "set", "set"]);
+    }
+
+    /// `mpr fly`'s link asks for the vehicle's telemetry at Mission Planner's rates - the vehicle
+    /// state's `cs.rateX`, `CurrentState`'s 4 Hz attitude and 2 Hz the rest - in
+    /// `UpdateCurrentSettings`' order, each twice as `getDatastream` sends it, and at nothing
+    /// faster.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:201-206, 4632-4663; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3247-3264`
+    #[test]
+    fn fly_asks_for_the_streams_at_mission_planners_rates() {
+        use std::sync::atomic::AtomicUsize;
+
+        let (vehicle_side, gcs_side) = Loopback::pair();
+        let stop = Arc::new(AtomicBool::new(false));
+        let asked = Arc::new(AtomicUsize::new(0));
+        let counted = Arc::clone(&asked);
+        let script = vehicle(vehicle_side, Arc::clone(&stop), move |message| {
+            if matches!(message, MavMessage::RequestDataStream(_)) {
+                counted.fetch_add(1, Ordering::AcqRel);
+            }
+            None
+        });
+        let link = Link::from_transport(Box::new(gcs_side), super::fly_config(None));
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while asked.load(Ordering::Acquire) < 14 {
+            assert!(
+                Instant::now() < deadline,
+                "the streams were never asked for"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        stop.store(true, Ordering::Release);
+        let heard = script.join().unwrap();
+        drop(link);
+
+        let asked: Vec<(u8, u16)> = heard
+            .iter()
+            .filter_map(|message| match message {
+                MavMessage::RequestDataStream(request) => {
+                    Some((request.req_stream_id, request.req_message_rate))
+                }
+                _ => None,
+            })
+            .collect();
+        // EXTENDED_STATUS, POSITION, EXTRA1, EXTRA2, EXTRA3, RAW_SENSORS, RC_CHANNELS.
+        assert_eq!(
+            asked,
+            [
+                (2, 2),
+                (2, 2),
+                (6, 2),
+                (6, 2),
+                (10, 4),
+                (10, 4),
+                (11, 4),
+                (11, 4),
+                (12, 2),
+                (12, 2),
+                (1, 2),
+                (1, 2),
+                (3, 2),
+                (3, 2)
+            ]
+        );
+        assert_eq!(
+            mp_vehicle::StreamRates::backups(),
+            mp_vehicle::StreamRates::default(),
+            "the rates are CurrentState's own: nothing here sets the saved defaults"
+        );
     }
 
     /// `mpr fly`'s arm, whose first `COMMAND_LONG` is lost: sent again with its confirmation

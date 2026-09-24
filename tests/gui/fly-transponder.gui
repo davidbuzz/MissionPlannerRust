@@ -7,7 +7,12 @@
 # waits for the answer, then three seconds for a status. SITL has no transponder and sends no
 # status, so the page stays disabled and Connect ends in "Timeout: Status message not received.";
 # what the buttons, the squawk and the flight ID send once a status has enabled them is held by
-# the unit tests in crates/mp-gui/src/transponder.rs.
+# the unit tests in crates/mp-gui/src/transponder.rs. So is "Transponder Status Lost", which
+# SITL cannot show, having no status to stop:
+#   a_status_that_repeats_stays_connected_and_one_that_stops_is_lost
+# proves it against a scripted vehicle - a status, the same status again (still connected: each
+# one counts, CurrentState.cs:4053), then none (lost at the next five-second look,
+# FlightData.cs:6373-6396).
 # `GCSViews/FlightData.cs:4314-4318, 6182-6482, GCSViews/FlightData.resx (tabTransponder)`
 #
 # Needs SITL (a copter): tools/gui-test.sh tests/gui/fly-transponder.gui -- tcp:127.0.0.1:5760

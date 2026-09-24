@@ -13,8 +13,12 @@
 #   a_reverse_box_writes_its_parameter_and_mirrors_its_bar, with SWITCH_ENABLE's Dip Switch step
 #   in the_dip_switches_are_disabled_before_the_reverse_is_written.
 # * Calibrate Radio's conversation (ConfigRadioInput.cs:197-406), step by step: its messages in
-#   order, the button's text at each, RC_CHANNELS at 10 Hz while it runs and back to the link's
-#   rate once it is saved, the minimum and maximum the loop folds in, the trims, and the summary.
+#   order, the button's text at each, RC_CHANNELS at 10 Hz while it runs and back at oldrc - the
+#   vehicle's own cs.raterc when the calibration started (ConfigRadioInput.cs:209, 388-395) -
+#   once it is saved, the minimum and maximum the loop folds in, the trims, and the summary. The
+#   saved default for raterc is set to 3 in a config.xml of the test's own (CMB_raterc, which
+#   MainV2.cs:987-988 makes ratercbackup and every vehicle starts from), so the rate put back is
+#   told apart from the page's 2 and 10 and from anything of the link's.
 #   SITL's RC inputs are static - ch1-8 read 1500 1500 1000 1500 1800 1000 1000 1800 and nothing
 #   is reported above 8 (ArduPilot's AP_RCProtocol_UDP::set_default_pwm_input_values) - so no
 #   channel moves, every minimum equals its maximum, and the C# writes nothing: its save wants
@@ -33,9 +37,15 @@
 # Nothing this test does changes a parameter, so a run that stops half way leaves the vehicle as
 # it found it.
 
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><CMB_raterc>3</CMB_raterc></Config>' > "$WORK/config.xml"
+
 screen params
 window 1600x1200
 settle 6
+
+# The vehicle's cs.rateX: the static constructor's, with raterc the saved 3.
+expect vehicle.rates 4,2,2,2,3
 
 # Initial Setup lists the page once every parameter is in (InitialSetup.cs:211, isConnected &&
 # gotAllParams), and here parameters are downloaded when asked for.
@@ -142,8 +152,8 @@ expect config.radio.button Completed
 expect config.radio.message ~ Ensure all your sticks are centered and throttle is down
 click radio-message-ok
 settle 2
-# The trims, each reading constrained into its range; nothing to write; RC_CHANNELS back at the
-# rate the link asked for on connecting; and the summary, with only its rule under the heading.
+# The trims, each reading constrained into its range; nothing to write; RC_CHANNELS back at
+# oldrc, the vehicle's raterc; and the summary, with only its rule under the heading.
 expect config.radio.trim.1 1500
 expect config.radio.trim.3 1000
 expect config.radio.trim.5 1800
@@ -151,7 +161,8 @@ expect config.radio.trim.9 0
 expect config.radio.writes none
 expect config.radio.pending 0
 expect config.radio.write none
-expect config.radio.stream 4
+expect config.radio.stream 3
+expect vehicle.rates 4,2,2,2,3
 expect config.radio.button Saving
 expect config.radio.message.title Radio
 expect config.radio.message ~ Here are the detected radio options

@@ -2841,7 +2841,7 @@ pub const CURRENTSTATE: &[Field] = &[
         "Status Update Pending",
         "Transponder Status",
         Done(
-            "transponder.status_pending (the C#'s display clears it once shown; a snapshot reader remembers what it has shown)",
+            "transponder.status_count (one more for each status, where the C# sets the flag; the Transponder page, which clears it in the C#, keeps the count it last looked at, and a status is pending while the two differ - `transponder.status_pending` says only that one has ever arrived)",
         ),
     ),
     row(

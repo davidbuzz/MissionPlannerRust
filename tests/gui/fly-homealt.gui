@@ -1,24 +1,60 @@
 # Set Home Alt switches the altitudes shown between above home and above sea level.
 #
-# BUT_Homealt_Click sets cs.altoffsethome to minus the home altitude when it is zero and back to
-# zero when it is not; cs.alt, which the HUD and the vehicle panel show, is `_alt - altoffsethome`.
-# It sends nothing. `GCSViews/FlightData.cs:1236-1247, ExtLibs/ArduPilot/CurrentState.cs:325-328`
+# BUT_Homealt_Click sets cs.altoffsethome to minus cs.HomeAlt when it is zero and back to zero
+# when it is not; cs.alt, which the HUD and the quick view show, is `_alt - altoffsethome`. It
+# sends nothing. `GCSViews/FlightData.cs:1236-1247, ExtLibs/ArduPilot/CurrentState.cs:325-328`
 #
-# Needs SITL, for a home altitude: tools/gui-test.sh tests/gui/fly-homealt.gui -- tcp:127.0.0.1:5760
+# cs.HomeAlt is HomeLocation.Alt, which only HOME_POSITION sets, and is 0 until then
+# (CurrentState.cs:40, 1568-1582; MAVLinkInterface.cs:5701-5707). SITL sends HOME_POSITION of
+# its own accord only when home is set - its first fix, or arming - so a run that joins a SITL
+# whose home is already set hears none: Set Home Alt would then set minus zero, which reads as
+# not set, and nothing would change (proven in fly.rs's
+# set_home_alt_takes_the_home_the_vehicle_reported). So the test first asks for home as Mission
+# Planner does without moving it: Set Home Here answered Cancel still calls getHomePositionAsync
+# (FlightData.cs:4852-4885), which needs a terrain tile at the point, so the data directory here
+# is a scratch one holding a flat tile at 584 m for SITL's field, as fly-sethome.gui does.
+# SITL's field is 584 m above sea level, so HomeAlt, and every altitude shown on the ground with
+# Set Home Alt on, is above 500; off, the altitude shown is the height above home, near 0.
+#
+# Needs SITL (a copter): tools/gui-test.sh tests/gui/fly-homealt.gui -- tcp:127.0.0.1:5760
 
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/Mission Planner/srtm" && python3 -c 'import sys; open(sys.argv[1], "wb").write(bytes([2, 72]) * (1201 * 1201))' "$WORK/Mission Planner/srtm/S36E149.hgt"
 screen fly
 window 1600x1200
 settle 8
+
+# The first quick view is cs.alt, as it starts; the second is made cs.HomeAlt.
+expect fly.quick.1 alt
+doubleclick fly-quick-2
+expect fly.quick.chooser 2
+click fly-quick-choice-HomeAlt
+expect fly.quick.2 HomeAlt
 
 # The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as
 # tabControlactions.SelectedIndex = 0 has it. `GCSViews/FlightData.Designer.cs:595-611`
 click fly-tab-actions
 expect fly.tab tabActions
 
+# Home asked for: the map pressed, Set Home Here, Cancel - home is not moved.
+click map@0.5x0.5
+click fly-sethome
+expect fly.prompt This will reset the onboard home position (effects RTL etc). Are you Sure?
+click fly-prompt-cancel
+expect fly.prompt none
+expect fly.sent COMMAND_LONG MAV_CMD_GET_HOME_POSITION 0,0,0,0,0,0,0
+settle 2
+expect fly.quick.2.value > 500
+expect fly.quick.1.value < 50
+
+# On: minus HomeAlt, so the altitude shown is above sea level.
 expect fly.home_alt off
 click fly-homealt
 expect fly.home_alt on
 expect status ~ above sea level
+expect fly.quick.1.value > 500
+# Off again: above home.
 click fly-homealt
 expect fly.home_alt off
 expect status ~ above home
+expect fly.quick.1.value < 50
