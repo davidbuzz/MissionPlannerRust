@@ -1,0 +1,45 @@
+# Show Params, as Log/LogBrowse.cs has it: a check box that unticks itself and shows the
+# parameters the log carries - one entry per name, the last value logged - in the Full Parameter
+# List's columns, sorted by name as ConfigRawParams sorts them. The C# pops that list out in a
+# window of its own; here it is a panel under the strip, with a Close.
+#
+# Self-contained: the healthy fixture, whose 982 parameters Mission Planner saved to
+# testdata/dataflash/golden/kml/dataflash.bin.param, first ACRO_BAL_PITCH at 1. A config.xml of
+# its own, so the boxes the log browser remembers start as the designer has them.
+
+env MP_PLAN_DIR $WORK/logs
+env MP_CONFIG_XML $WORK/config.xml
+setup mkdir -p $WORK/logs && cp testdata/dataflash.bin $WORK/logs/flight.bin
+
+screen logs
+window 1600x1200
+settle 3
+
+click log-name
+type flight.bin
+key Return
+settle 3
+
+expect log.open true
+expect log.params.shown false
+expect log.check.params false
+
+click log-chk-params
+settle 1
+expect log.params.shown true
+expect log.params.count 982
+expect log.params.first ACRO_BAL_PITCH=1
+expect log.params.defaults false
+# The box never stays ticked.
+expect log.check.params false
+
+# The wheel moves the list a row a notch; the first row is still the list's.
+expect log.params.top 0
+scroll log-params down 3
+settle 1
+expect log.params.top > 0
+expect log.params.first ACRO_BAL_PITCH=1
+
+click log-params-close
+settle 1
+expect log.params.shown false

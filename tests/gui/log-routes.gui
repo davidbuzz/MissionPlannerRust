@@ -1,0 +1,59 @@
+# The routes Log/LogBrowse.cs's DrawMap puts on the map beside the chart: the first GPS in blue,
+# the second in green, the GPSB blend in yellow, the EKF's POS in red and the logged mission in
+# indigo with a marker per waypoint - drawn when the chart is labelled with the Map box ticked,
+# for the whole log with nothing plotted and for the lines the chart shows once something is.
+#
+# Self-contained: the damaged fixture, which logs 63 GPS points with a fix and 119 POS records and
+# neither a second GPS nor a blend; and the healthy one, whose GPS never had a fix and whose
+# mission has six waypoints with a place. A config.xml of its own: ticking Map is remembered, as
+# LB_Map, and read back when the second log opens.
+
+env MP_PLAN_DIR $WORK/logs
+env MP_CONFIG_XML $WORK/config.xml
+setup mkdir -p $WORK/logs && cp testdata/dataflash_damaged.bin $WORK/logs/gpsfix.bin && cp testdata/dataflash.bin $WORK/logs/nofix.bin
+
+screen logs
+window 1600x1200
+settle 3
+
+click log-name
+type gpsfix.bin
+key Return
+settle 3
+expect log.open true
+
+# The map is hidden, as the designer leaves it, and DrawMap has not run.
+expect log.check.map false
+expect log.map.drawn.gps 0
+
+click log-chk-map
+settle 2
+expect log.check.map true
+expect log.map.drawn.gps 63
+expect log.map.drawn.gps2 0
+expect log.map.drawn.gpsb 0
+expect log.map.drawn.pos 119
+
+# On a line-number axis, with a curve and the wheel zoomed in, the map shows the stretch charted.
+click log-chk-time
+settle 1
+click logfield-ATT.Roll
+settle 2
+expect log.plotted 1
+scroll log-chart up 3
+settle 1
+expect log.zoom.depth 3
+expect log.map.drawn.pos < 119
+
+# The healthy log: the Map box is remembered, so its routes are drawn as it opens.
+click log-name
+key Escape
+type nofix.bin
+key Return
+settle 3
+expect log.open true
+expect log.check.map true
+expect log.map.drawn.gps 0
+expect log.map.drawn.pos 0
+expect log.map.drawn.cmd 6
+expect log.map.drawn.markers >= 6

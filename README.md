@@ -15,7 +15,7 @@ UI covers flying, planning and the first of the setup screens.
 
 Measured on this tree: **23 crates, 237,444 hand-written Rust LOC** (plus 91,634 generated; `.rs` files
 under `crates/`, tests included), **2,594 tests** green on `cargo test --workspace` (34 ignored:
-they need SITL, a window, or the network), **121 GUI scripts** under `tests/gui/`, across 198 commits.
+they need SITL, a window, or the network), **126 GUI scripts** under `tests/gui/`, across 199 commits.
 
 | Working today | |
 |---|---|
@@ -29,7 +29,7 @@ they need SITL, a window, or the network), **121 GUI scripts** under `tests/gui/
 | Parameter docs | fetched for the connected firmware as Mission Planner fetches them (`apm.pdef.xml`, versioned or weekly), read before the bundled table: 1,407 of a SITL's 1,408 documented instead of 798 |
 | Missions | upload and download, `.waypoints` files, 129-file corpus |
 | Survey grids | `Grid.CreateGrid`, `CreateCorridor` and `CreateRotary` transliterated over a port of ProjNet's UTM and the C#'s Clipper, bit-identical to the C# on 284 golden cases the real code generated under mono; the Survey (Grid) dialog is `GridUI.cs` whole, its Accept held to GridUI's own code under mono over 40 cases (5,656 Accept calls) bit for bit |
-| Logs | `.tlog` read and write; ArduPilot `.BIN` dataflash parsing; the log browser with `LogBrowse.cs`'s two axes, data grid, map, double-click cursor and mode/error/message overlays; `.BIN → .log`, KML+GPX and `.mat` conversions byte-identical to `BinaryLog`, `LogOutput` and `MatLab` run under mono |
+| Logs | `.tlog` read and write; ArduPilot `.BIN` dataflash parsing; the log browser with `LogBrowse.cs`'s two axes, data grid, map, double-click cursor, mode/error/message overlays, Show Params, the preselected graph sets, the five routes, point values, zoom and pan and the grid's export menu, opening a 1 GB log to its first plot in about 0.6 s; `.BIN → .log`, KML+GPX and `.mat` conversions byte-identical to `BinaryLog`, `LogOutput` and `MatLab` run under mono |
 | Flight recording | every connection recorded to a `.tlog`, both directions, into Mission Planner's own logs directory |
 | Data directory | `Settings.cs`'s rules ported, mono quirks included, so files land where the C# application looks; its `config.xml` is read for the last link, map type, log directory, planner home and quick views, and written whole on the C#'s events (start-up, the screen buttons, Connect, the close box), byte for byte what the C# writes for the same keys |
 | Health | EKF variances and vibration with ArduPilot's own thresholds, clipping counts |
@@ -49,7 +49,7 @@ they need SITL, a window, or the network), **121 GUI scripts** under `tests/gui/
 | Configuration coverage | every one of the 61 `Config*.cs` panels listed in Mission Planner's SETUP and CONFIG order with what stands in for it here — 11 done, 20 partial, 24 missing — in `docs/coverage/configuration.md`, held to the C# by tests; Flight Modes and FailSafe are ported from their `Config*.cs` and proved against SITL |
 | Planner coverage and menu | every one of `FlightPlanner`'s 121 wired actions listed the same way — 86 done, 23 missing — in `docs/coverage/flightplanner.md`; the map's right-click menu is Mission Planner's, in its order, with 22 entries working, home is its Home Location boxes written first and drawn as its green pin, the panel's radius and altitude boxes set the C#'s parameters after Write, all proved by a GUI script each |
 
-**Not yet**: the log browser's chart cursor, a joystick latency histogram from a real device
+**Not yet**: the log browser's field descriptions (`LogMessages.xml.xz`), a joystick latency histogram from a real device
 (none is attached to this machine), i18n, packaging. `PLAN.md` §13.2 is the queue, and says what *done* means for
 each.
 

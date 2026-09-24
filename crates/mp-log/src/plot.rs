@@ -74,13 +74,23 @@ pub(crate) fn instance_fields(data: &[u8]) -> std::collections::BTreeMap<String,
         }
     }
 
-    // FMTU names the format by number; the label it points at comes from that format's own
-    // declaration, which the reader has collected by the time the walk is done.
+    instance_labels(&by_type, reader.formats())
+}
+
+/// The instance field of each format, by name: the position each `FMTU` marks, looked up in the
+/// whole log's formats.
+///
+/// FMTU names the format by number; the label it points at comes from that format's own
+/// declaration, which the reader has collected by the time the walk is done.
+pub(crate) fn instance_labels(
+    by_type: &std::collections::BTreeMap<i64, usize>,
+    formats: &std::collections::BTreeMap<u8, crate::dataflash::MessageFormat>,
+) -> std::collections::BTreeMap<String, String> {
     let mut out = std::collections::BTreeMap::new();
     for (format_type, index) in by_type {
-        if let Ok(key) = u8::try_from(format_type)
-            && let Some(format) = reader.formats().get(&key)
-            && let Some(label) = format.labels.get(index)
+        if let Ok(key) = u8::try_from(*format_type)
+            && let Some(format) = formats.get(&key)
+            && let Some(label) = format.labels.get(*index)
         {
             out.insert(format.name.clone(), label.clone());
         }
@@ -273,7 +283,7 @@ impl Default for FieldUnit {
 }
 
 /// Every field's unit, as the log declares it: the C#'s `UnitMultiList`.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct UnitTable {
     by_field: std::collections::BTreeMap<(String, String), FieldUnit>,
 }
@@ -365,8 +375,20 @@ pub fn units(data: &[u8]) -> UnitTable {
         }
     }
 
+    unit_table(&fmtu, &unit_labels, &multipliers, reader.formats())
+}
+
+/// The table `BuildUnitMultiList` makes from what `FMTU`, `UNIT` and `MULT` said last of each
+/// format and id, and the whole log's formats.
+/// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:503-545`
+pub(crate) fn unit_table(
+    fmtu: &std::collections::BTreeMap<u8, (String, String)>,
+    unit_labels: &std::collections::BTreeMap<char, String>,
+    multipliers: &std::collections::BTreeMap<char, f64>,
+    formats: &std::collections::BTreeMap<u8, crate::dataflash::MessageFormat>,
+) -> UnitTable {
     let mut table = UnitTable::default();
-    for (key, format) in reader.formats() {
+    for (key, format) in formats {
         let Some((unit_ids, mult_ids)) = fmtu.get(key) else {
             continue;
         };
@@ -412,7 +434,7 @@ pub fn units(data: &[u8]) -> UnitTable {
 /// with `as_text` and got nothing, and every unit in every log was `""` - which is exactly what
 /// the C# ends up with by a different route, so the test that caught it was the one against a
 /// hand-built log with known labels, not the one against the real file.
-fn text_of(value: &Value) -> Option<String> {
+pub(crate) fn text_of(value: &Value) -> Option<String> {
     match value {
         Value::Text(text) => Some(text.trim().to_owned()),
         Value::Bytes(bytes) => {
@@ -424,7 +446,7 @@ fn text_of(value: &Value) -> Option<String> {
 }
 
 /// A `UNIT`/`MULT` id as the log stores it - an `int8` holding a character.
-fn unit_id(value: f64) -> Option<char> {
+pub(crate) fn unit_id(value: f64) -> Option<char> {
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     // the field is a byte, checked to be one before use
     let byte = if value >= 0.0 && value <= f64::from(u8::MAX) {

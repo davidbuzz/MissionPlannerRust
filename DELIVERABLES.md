@@ -378,7 +378,12 @@ Dataflash (`.bin`/`.log`) and tlog parsing, log download, graphing, LogAnalyzer 
   `graphit_clickprocess` refuses; `mp_log::track` draws the log's first GPS route and its logged
   mission on a map beside the chart; the double-click cursor with its map pin and grid row, and
   the strip's Map/Time/Data Table/Mode/Errors/MSG/Events boxes drawing what the C# draws
-  (PLAN.md §13.4 row 7). The DataFlash Logs page's four conversions are ported and held to
+  (PLAN.md §13.4 row 7); then the rest of `LogBrowse.cs`, ledgered in `docs/coverage/logbrowse.md`
+  (37 designer wirings: 28 done, 1 missing, 6 plumbing, 2 dropped): Show Params, the preselected
+  graph sets from the shipped `graphs/*.xml` evaluated without IronPython, the GPS/GPS2/GPSB/POS/CMD
+  routes with CAM markers, ZedGraph's point values, zoom and pan, the grid's export menu, Ctrl+G
+  and the field modifier; and D14's parse budget met - `mp_log::logfile::LogFile` opens a 1.07 GB
+  log to its first plot in about 0.6 s (326.8 s before), gated by `benches/parse_1gb.rs` (row 51). The DataFlash Logs page's four conversions are ported and held to
   Mission Planner's own code under mono: `.BIN → .log` byte-identical, KML+GPX and `.mat`
   identical but for a namespace order and a hash-table order, Auto Analysis as the C# runs it
   (row 23); the page's buttons call them (row 28). Geo Reference Images' logic is `mp-georef`

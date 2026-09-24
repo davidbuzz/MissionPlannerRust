@@ -1,0 +1,80 @@
+# The log browser's data grid, as Log/LogBrowse.cs wires it beyond a click: its right-click menu
+# (contextMenuStrip1) - Export Visible writes every row the grid holds to a CSV beside the log,
+# Export Files the files the log carries into a folder - Ctrl+G's "Line no", and a double click
+# on a row, which moves the chart's cursor and the map's marker to its record.
+#
+# Self-contained: the healthy fixture, and the damaged one, which carries five files in 134 FILE
+# records; a config.xml of its own.
+
+env MP_PLAN_DIR $WORK/logs
+env MP_CONFIG_XML $WORK/config.xml
+setup mkdir -p $WORK/logs && cp testdata/dataflash.bin $WORK/logs/flight.bin && cp testdata/dataflash_damaged.bin $WORK/logs/gpsfix.bin
+
+screen logs
+window 1600x1200
+settle 3
+
+click log-name
+type flight.bin
+key Return
+settle 3
+
+click log-chk-datagrid
+settle 1
+expect log.grid.rows 11439
+
+# Ctrl+G, with the screen holding the keyboard: a line, one-based.
+click loggrid-0-2
+settle 1
+key ctrl+g
+settle 1
+expect log.prompt Line no
+type 100
+key Return
+settle 1
+expect log.prompt none
+expect log.grid.current 99,1
+expect log.refused none
+
+# The grid filtered to ATT, then its menu's Export Visible: 182 rows, beside the log.
+click loggrid-head-0
+settle 1
+click loggrid-type-ATT
+settle 1
+expect log.grid.rows 182
+click loggrid-0-3:right
+settle 1
+expect log.grid.menu true
+click loggrid-menu-visible
+settle 1
+expect log.grid.menu false
+expect log.prompt Save As
+click log-prompt-ok
+settle 2
+expect log.prompt none
+expect log.exported 182 rows
+
+# A double click on a row puts the cursor on its record.
+click logfield-ATT.Roll
+settle 2
+doubleclick loggrid-2-3
+settle 1
+expect log.cursor.line > 0
+
+# Export Files from the log that carries some: a folder beside it.
+click log-name
+key Escape
+type gpsfix.bin
+key Return
+settle 3
+expect log.grid.rows > 0
+click loggrid-0-3:right
+settle 1
+click loggrid-menu-files
+settle 1
+expect log.prompt Where to save the files
+type files
+click log-prompt-ok
+settle 3
+expect log.prompt none
+expect log.exported 5 files

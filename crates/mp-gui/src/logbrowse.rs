@@ -11,15 +11,29 @@
 //! to the record under the pointer, a marker on the map to where the nearest position record
 //! says the vehicle was, and the grid to that record.
 //!
+//! The strip's Show Params lists the parameters the log carries in the Full Parameter List's
+//! columns, and its drop-down graphs the sets Mission Planner ships in its `graphs` directory.
+//! The chart zooms and pans as ZedGraph does, and its context menu turns on the value of the
+//! point under the pointer; the grid's menu exports its rows, and the files the log carries.
+//!
 //! The extraction is in `mp_log::plot`, the record index in `mp_log::index`, the routes in
-//! `mp_log::track`, the labels and the cursor's lookups in `mp_log::overlay`, and the reduction in
-//! `mp_chart`, all of which have their own tests and no gpui in them. The grid's model is
-//! [`grid`]. This is the screen.
+//! `mp_log::track`, the labels and the cursor's lookups in `mp_log::overlay`, the parameters in
+//! `mp_log::logparams`, the preselected graphs in `mp_log::mavgraph` and `mp_log::expression`,
+//! and the reduction in `mp_chart`, all of which have their own tests and no gpui in them. The
+//! grid's model is [`grid`], the chart's zoom [`view`], a field's scaler [`modifier`], the grid's
+//! menu [`export`], and [`coverage`] ledgers the whole window against its designer. This is the
+//! screen.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+pub mod coverage;
+mod export;
 mod grid;
+mod modifier;
+#[cfg(test)]
+mod ported_tests;
+mod view;
 
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
@@ -31,8 +45,11 @@ use gpui::{
     relative, rgb, rgba,
 };
 use mp_chart::Series;
+use mp_log::logparams::LogParam;
+use mp_log::mavgraph::DisplayList;
 use mp_log::overlay::{Firmware, LineAtTime, Mark, Overlays, Positions};
 use mp_log::plot::{FieldUnit, PlottableField, UnitTable};
+use mp_log::track::{RouteKind, Routes};
 use mp_tiles::store::TileStore;
 use mp_units::LatLon;
 
@@ -40,6 +57,8 @@ use crate::MissionPlanner;
 use crate::mapview::MapViewport;
 use crate::ui::{action, panel, theme};
 use grid::{Grid, ROW_HEIGHT, TYPE_COLUMN};
+use modifier::Modifier;
+use view::{Scales, Zoom};
 
 /// How many fields the list shows before it stops.
 ///
@@ -93,8 +112,9 @@ impl XAxis {
 /// A check box in the strip between the chart and the grid.
 ///
 /// The strip's boxes in the C#'s order - by `Location.X` in the resx, left to right - and with
-/// its text. Not here: Show Params, which loads the log's parameters into the parameter screen,
-/// and the preselected graphs' drop-down between it and Mode; neither is ported.
+/// its text. Not here: Show Params, which is a box only in looks - it unticks itself and shows
+/// the parameters, a button in all but name - and the preselected graphs' drop-down between it
+/// and Mode; the strip draws both in their places.
 /// `// C#: Log/LogBrowse.designer.cs:261-332; Log/LogBrowse.resx (CHK_map 401, chk_time 454,
 /// chk_datagrid 509, chk_params 594, CMB_preselect 691, chk_mode 797, chk_errors 856,
 /// chk_msg 915, chk_events 971)`
@@ -162,6 +182,38 @@ impl Check {
     const fn default(self) -> bool {
         !matches!(self, Self::Map | Self::DataTable)
     }
+
+    /// The key `LoadLog2` reads the box from and its handler writes it to, for the six it
+    /// remembers; Events is not remembered.
+    /// `// C#: Log/LogBrowse.cs:444-460`
+    #[must_use]
+    pub const fn setting(self) -> Option<&'static str> {
+        Some(match self {
+            Self::Map => "LB_Map",
+            Self::Time => "LB_Time",
+            Self::DataTable => "LB_Grid",
+            Self::Mode => "LB_Mode",
+            Self::Errors => "LB_Error",
+            Self::Msg => "LB_MSG",
+            Self::Events => return None,
+        })
+    }
+}
+
+/// `Settings.GetBoolean`: `bool.TryParse`, which takes `True` or `False` in any case with space
+/// around it, else the default.
+/// `// C#: ExtLibs/Utilities/Settings.cs:223-232`
+fn setting_bool(text: Option<&str>, default: bool) -> bool {
+    match text.map(|text| text.trim().to_ascii_lowercase()).as_deref() {
+        Some("true") => true,
+        Some("false") => false,
+        _ => default,
+    }
+}
+
+/// `bool.ToString()`, which is what the handlers write.
+const fn setting_text(on: bool) -> &'static str {
+    if on { "True" } else { "False" }
 }
 
 /// Which of the strip's boxes are ticked.
@@ -191,8 +243,8 @@ impl Strip {
 /// One series on the chart.
 #[derive(Debug)]
 pub struct Plotted {
-    /// The field it came from.
-    pub field: PlottableField,
+    /// The field it came from; `None` for a preselected graph's expression.
+    pub field: Option<PlottableField>,
     /// Its samples, scaled into its unit.
     pub series: Series,
     /// Which axis it is drawn against.
@@ -212,6 +264,7 @@ impl Plotted {
     /// which is also how the C# finds a curve to remove, by that prefix. Each sample goes at its
     /// time or its line, as the Time box says.
     /// `// C#: Log/LogBrowse.cs:1551-1561, 1605-1630, 2787-2792`
+    #[cfg(test)]
     fn new(
         field: PlottableField,
         points: &[mp_log::plot::Point],
@@ -219,9 +272,27 @@ impl Plotted {
         axis: Axis,
         x_axis: XAxis,
     ) -> Self {
+        Self::modified(field, points, unit, axis, x_axis, None)
+    }
+
+    /// [`Self::new`] with the field's scaler and offset, if it has one: applied to each value
+    /// before the unit's multiplier, as `GraphItem_GetList` applies it before
+    /// `GraphItem_AddCurve` multiplies, and its text added to the label after the unit.
+    /// `// C#: Log/LogBrowse.cs:1236-1241, 1530-1556, 1605-1630`
+    fn modified(
+        field: PlottableField,
+        points: &[mp_log::plot::Point],
+        unit: &FieldUnit,
+        axis: Axis,
+        x_axis: XAxis,
+        modifier: Option<&Modifier>,
+    ) -> Self {
         let mut label = field.to_string();
         if !unit.unit.is_empty() {
             label.push_str(&format!(" ({})", unit.unit));
+        }
+        if let Some(modifier) = modifier {
+            label.push_str(&modifier.command);
         }
         if axis == Axis::Right {
             label.push_str(" R");
@@ -233,13 +304,47 @@ impl Plotted {
                 XAxis::Time => point.seconds,
                 XAxis::Line => point.line as f64,
             };
-            series.push(x, point.value * unit.multiplier);
+            let value = modifier.map_or(point.value, |modifier| modifier.apply(point.value));
+            series.push(x, value * unit.multiplier);
         }
         Self {
-            field,
+            field: Some(field),
             series,
             axis,
             unit: unit.unit.clone(),
+            label,
+        }
+    }
+
+    /// A preselected graph's piece, evaluated: labelled as `GraphItem_AddCurve` labels an
+    /// expression - its text and a full stop, ` R` on the right - on the unit-less axis, since
+    /// `isexpression` forces the unit empty "so precaned graphs draw on a singel axis", and
+    /// unscaled, since an expression's text is no field `GetUnit` knows.
+    /// `// C#: Log/LogBrowse.cs:1283-1296, 1597-1630`
+    fn expression(
+        item: &mp_log::mavgraph::DisplayItem,
+        samples: &[mp_log::expression::Sample],
+        origin: Option<f64>,
+        x_axis: XAxis,
+    ) -> Self {
+        let label = item.label();
+        let mut series = Series::new(label.clone(), samples.len().max(1));
+        for sample in samples {
+            #[allow(clippy::cast_precision_loss)] // a line number is far below 2^53
+            let x = match x_axis {
+                XAxis::Time => match (origin, sample.time_us) {
+                    (Some(origin), Some(time)) => mp_log::plot::seconds_since(origin, time),
+                    _ => continue,
+                },
+                XAxis::Line => sample.line as f64,
+            };
+            series.push(x, sample.value);
+        }
+        Self {
+            field: None,
+            series,
+            axis: if item.left { Axis::Left } else { Axis::Right },
+            unit: String::new(),
             label,
         }
     }
@@ -258,6 +363,8 @@ pub struct MapContents {
 
 /// What the log screen keeps between frames.
 pub struct LogBrowse {
+    /// The log open, read and indexed: `logdata`, the C#'s `DFLogBuffer`.
+    log: Option<Rc<mp_log::logfile::LogFile>>,
     /// The file that was opened, if one was.
     path: Option<std::path::PathBuf>,
     /// Everything that log declares as plottable.
@@ -300,6 +407,97 @@ pub struct LogBrowse {
     /// Where the chart's plotting area was last laid out, in window coordinates, so a double
     /// click can be turned into a place on its axis.
     chart_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
+    /// Every route the log holds, read when it is opened.
+    routes: Routes,
+    /// What `DrawMap` last put on the map: the routes between the lines the chart shows.
+    drawn: Rc<Routes>,
+    /// `ZoomAndCenterRoutes` asked for and not yet done: the map fits the drawn routes the next
+    /// time it is painted, when it knows its size.
+    fit_routes: Rc<Cell<bool>>,
+    /// The log's parameters, as Show Params collects them.
+    params: Vec<LogParam>,
+    /// The parameter list on screen, if Show Params has put it there.
+    params_view: Option<ParamsView>,
+    /// `CMB_preselect`'s items: `mavgraph.graphs`, sorted.
+    graphs: Vec<DisplayList>,
+    /// `CMB_preselect.SelectedIndex`.
+    preselect: Option<usize>,
+    /// Whether the drop-down's list is open, and the first item it shows.
+    preselect_list: Option<usize>,
+    /// What the last selection graphed and what it could not.
+    preselect_outcome: Option<(usize, Vec<String>)>,
+    /// The chart's zoom.
+    zoom: Zoom,
+    /// A rectangle being dragged, from and to, as fractions of the plotting area.
+    zoom_drag: Option<((f64, f64), (f64, f64))>,
+    /// `IsShowPointValues`: off, as ZedGraph starts.
+    point_values: bool,
+    /// The pointer over the plotting area, as a fraction of it.
+    pointer: Option<(f64, f64)>,
+    /// The chart's context menu, open at a fraction of the plotting area.
+    chart_menu: Option<(f64, f64)>,
+    /// The grid's context menu, `contextMenuStrip1`, open.
+    grid_menu: bool,
+    /// An `InputBox` or a file dialog, standing in the window.
+    prompt: Option<Prompt>,
+    /// `dataModifierHash`: each field's scaler and offset, by node name.
+    modifiers: BTreeMap<String, Modifier>,
+    /// What the last export wrote: rows of Export Visible, or files of Export Files.
+    exported: Option<String>,
+    /// The time of the record the cursor was last put on from the grid, which need not be a
+    /// position record.
+    cursor_time: Option<f64>,
+    /// Wheel movement over the chart not yet worth a notch.
+    wheel_carry: f32,
+}
+
+/// Pixels a wheel notch is taken as, over the chart.
+const WHEEL_NOTCH: f32 = 20.0;
+
+/// The parameter list Show Params shows.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParamsView {
+    /// The rows, sorted as the grid sorts them.
+    rows: Vec<LogParam>,
+    /// Whether the Default column shows.
+    defaults: bool,
+    /// The first row on screen.
+    first: usize,
+}
+
+/// Rows of the parameter list on screen at once.
+const PARAM_ROWS: usize = 16;
+
+/// Items of the preselected graphs' list on screen at once.
+const PRESELECT_ROWS: usize = 20;
+
+/// The caption of the dialog standing in for `SaveFileDialog`: its own default.
+const SAVE_AS: &str = "Save As";
+
+/// What a prompt asks for, and so what OK does with the answer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PromptKind {
+    /// `ProcessCmdKey`'s Ctrl+G: `InputBox.Show("Line no", "Enter Line Number", ref lineno)`.
+    GoToLine,
+    /// `treeView1_DoubleClick`: a field's scaler and offset.
+    Modifier(String),
+    /// Export Visible's `SaveFileDialog`.
+    ExportVisible,
+    /// Export Files' `FolderBrowserDialog`.
+    ExportFiles,
+}
+
+/// A dialog, drawn in the window: a title, what it asks, the answer being typed.
+#[derive(Debug)]
+pub struct Prompt {
+    /// What it is for.
+    pub kind: PromptKind,
+    /// The caption.
+    pub title: String,
+    /// What it says.
+    pub text: String,
+    /// The answer.
+    pub field: crate::textfield::TextField,
 }
 
 impl std::fmt::Debug for LogBrowse {
@@ -329,6 +527,7 @@ impl LogBrowse {
     #[must_use]
     pub fn new() -> Self {
         Self {
+            log: None,
             path: None,
             fields: Vec::new(),
             units: UnitTable::default(),
@@ -348,25 +547,47 @@ impl LogBrowse {
             cursor: None,
             marker: None,
             chart_bounds: Rc::new(Cell::new(None)),
+            routes: Routes::default(),
+            drawn: Rc::new(Routes::default()),
+            fit_routes: Rc::new(Cell::new(false)),
+            params: Vec::new(),
+            params_view: None,
+            graphs: Vec::new(),
+            preselect: None,
+            preselect_list: None,
+            preselect_outcome: None,
+            zoom: Zoom::default(),
+            zoom_drag: None,
+            point_values: false,
+            pointer: None,
+            chart_menu: None,
+            grid_menu: false,
+            prompt: None,
+            modifiers: BTreeMap::new(),
+            exported: None,
+            cursor_time: None,
+            wheel_carry: 0.0,
         }
     }
 
     /// Opens a log: what it can plot, where it went, and the index its grid reads rows through.
     ///
-    /// The whole file is read, and walked once for each of those. A 1 GB log is not something to
-    /// do on the render thread, and D14 budgets two seconds for it with a memory-mapped columnar
-    /// parse - this is the straightforward version, and the place that gets replaced when that
-    /// lands.
+    /// `new DFLogBuffer(filename)`: the file is read and walked once for every record's place and
+    /// type, and everything after that - the field list, the units, the labels, the routes, the
+    /// parameters, the grid's rows, each curve - reads only the records of the types it needs,
+    /// through that index (`mp_log::logfile`). D14's budget for this is two seconds for a 1 GB
+    /// log to its first plot; `crates/mp-log/benches/parse_1gb.rs` measures it.
+    /// `// C#: Log/LogBrowse.cs:359-401; ExtLibs/Utilities/DFLogBuffer.cs:43-200`
     pub fn open(&mut self, path: &std::path::Path) {
-        let data = match std::fs::read(path) {
-            Ok(data) => data,
+        let log = match mp_log::logfile::LogFile::open(path) {
+            Ok(log) => Rc::new(log),
             Err(err) => {
                 self.status = Some(format!("could not read {}: {err}", path.display()));
                 return;
             }
         };
-        self.fields = mp_log::plot::plottable(&data);
-        self.units = mp_log::plot::units(&data);
+        self.fields = log.plottable();
+        self.units = log.units();
         self.path = Some(path.to_path_buf());
         self.refused = None;
         // `LogBrowse_Load` empties the map's marker; `LoadLog2` clears the chart through
@@ -374,28 +595,43 @@ impl LogBrowse {
         // `// C#: Log/LogBrowse.cs:237-240, 403-408, 479`
         self.marker = None;
         self.clear();
-        self.overlays = mp_log::overlay::overlays(&data, flight_mode_name);
-        self.positions = Positions::read(&data);
-        self.origin = mp_log::plot::time_origin(&data);
+        self.overlays = log.overlays(flight_mode_name);
+        self.positions = log.positions();
+        self.origin = log.time_origin();
         self.grid_filled = self.strip.get(Check::DataTable);
-        self.zoom_event();
-        self.show_routes(&mp_log::track::routes(&data));
-        // The grid keeps the file open and reads its rows back a screenful at a time, as
-        // `DFLogBuffer` keeps its stream; the bytes read here are dropped when this returns.
-        self.grid = None;
-        match std::fs::File::open(path) {
-            Ok(file) => {
-                self.grid = Some(Grid::new(
-                    mp_log::index::RecordIndex::build(&data),
-                    Box::new(file),
-                    leap_seconds_now(),
-                ));
-            }
-            Err(err) => {
-                self.status = Some(format!("could not reopen {}: {err}", path.display()));
-                return;
-            }
+        let parms: Vec<mp_log::dataflash::LogMessage> = log
+            .messages(&["PARM"])
+            .map(|(_, message)| message)
+            .collect();
+        self.params = mp_log::logparams::from_messages(&parms);
+        self.params_view = None;
+        self.prompt = None;
+        self.chart_menu = None;
+        self.grid_menu = false;
+        self.exported = None;
+        // `LogBrowse_Load` empties the map's overlay; `DrawMap` fills it when the chart is next
+        // labelled with the map shown.
+        self.routes = log.routes();
+        self.drawn = Rc::new(Routes::default());
+        self.map_contents = map_contents(&self.routes);
+        self.map = Rc::new(RefCell::new(MapViewport::new(0, 0)));
+        if let Some(store) = &self.tiles {
+            self.map.borrow_mut().set_tiles(Arc::clone(store));
         }
+        // `readmavgraphsxml` runs once, and `LoadLog2` hands the sorted list to `CMB_preselect`,
+        // whose first item - "a/None" - is then selected and does nothing.
+        // `// C#: Log/LogBrowse.cs:469-477; ExtLibs/Utilities/mavgraph.cs:209-215`
+        if self.graphs.is_empty() {
+            self.graphs = mp_log::mavgraph::graphs();
+        }
+        self.preselect = (!self.graphs.is_empty()).then_some(0);
+        self.preselect_list = None;
+        self.preselect_outcome = None;
+        self.zoom_event();
+        // The grid decodes its rows a screenful at a time from the log the index holds, as
+        // `CellValueNeeded` asks `DFLogBuffer` for one row at a time.
+        self.grid = Some(Grid::over(Rc::clone(&log), leap_seconds_now()));
+        self.log = Some(log);
         self.status = Some(if self.fields.is_empty() {
             format!(
                 "{} has nothing plottable - is it a dataflash log?",
@@ -431,23 +667,35 @@ impl LogBrowse {
     /// off the chart; removing one does not.
     /// `// C#: Log/LogBrowse.cs:1692-1694, 3079-3128, 3843-3855`
     pub fn graph(&mut self, field: &PlottableField, axis: Axis) {
-        if let Some(position) = self.plotted.iter().position(|shown| shown.field == *field) {
+        if let Some(position) = self
+            .plotted
+            .iter()
+            .position(|shown| shown.field.as_ref() == Some(field))
+        {
             self.plotted.remove(position);
             return;
         }
-        let Some(path) = self.path.clone() else {
+        let Some(log) = self.log.as_ref() else {
             return;
         };
-        let Ok(data) = std::fs::read(&path) else {
-            self.status = Some(format!("{} could not be re-read", path.display()));
-            return;
-        };
-        let points =
-            mp_log::plot::extract_instance(&data, &field.message, field.instance, &field.field);
+        // `GraphItem_GetList`: the type's records, through the index.
+        // `// C#: Log/LogBrowse.cs:1488-1595`
+        let points = log.extract_instance(&field.message, field.instance, &field.field);
         let unit = self.units.get(&field.message, &field.field);
-        let plotted = Plotted::new(field.clone(), &points, &unit, axis, self.x_axis());
+        let node = modifier::node_name(&field.message, field.instance, &field.field);
+        let plotted = Plotted::modified(
+            field.clone(),
+            &points,
+            &unit,
+            axis,
+            self.x_axis(),
+            self.modifiers.get(&node),
+        );
         self.status = Some(format!("{}: {} samples", plotted.label, points.len()));
         self.plotted.push(plotted);
+        // `GraphItem_AddCurve` zooms out all the way before it labels the chart.
+        // `// C#: Log/LogBrowse.cs:1685-1690`
+        self.zoom.reset();
         self.zoom_event();
     }
 
@@ -456,7 +704,7 @@ impl LogBrowse {
     pub fn axis_of(&self, field: &PlottableField) -> Option<Axis> {
         self.plotted
             .iter()
-            .find(|shown| shown.field == *field)
+            .find(|shown| shown.field.as_ref() == Some(field))
             .map(|shown| shown.axis)
     }
 
@@ -512,14 +760,325 @@ impl LogBrowse {
         self.plotted.clear();
         self.labelled = false;
         self.cursor = None;
+        self.zoom.reset();
+        self.zoom_drag = None;
     }
 
     /// `zg1_ZoomEvent`: the chart's drawn objects are emptied and the labels the ticked boxes
-    /// ask for drawn again - which empties the cursor off it too.
+    /// ask for drawn again - which empties the cursor off it too - and, with the map shown,
+    /// `DrawMap` puts on it the stretch of the routes the chart shows.
     /// `// C#: Log/LogBrowse.cs:2906-2978`
     fn zoom_event(&mut self) {
         self.labelled = true;
         self.cursor = None;
+        if self.strip.get(Check::Map) {
+            self.draw_map();
+        }
+    }
+
+    /// `DrawMap`: the routes of the whole log with nothing plotted, else of the lines the x axis
+    /// spans - on a line axis its ends as lines, on a time axis the first position record at or
+    /// after each end (`GetLineNoFromTime`) - and then `ZoomAndCenterRoutes`.
+    /// `// C#: Log/LogBrowse.cs:2938-2964, 2191-2520; ExtLibs/Utilities/DFLog.cs:736-753`
+    fn draw_map(&mut self) {
+        let drawn = match self.x_range() {
+            None => self.routes.clone(),
+            Some((min, max)) => {
+                let (start, end) = match self.x_axis() {
+                    // `(long)Scale.Min`: towards zero.
+                    #[allow(clippy::cast_possible_truncation)]
+                    XAxis::Line => (min as i64, max as i64),
+                    XAxis::Time => (self.line_at_seconds(min), self.line_at_seconds(max)),
+                };
+                match (usize::try_from(start.max(0)), usize::try_from(end)) {
+                    (Ok(start), Ok(end)) => self.routes.between(start, end),
+                    _ => Routes::default(),
+                }
+            }
+        };
+        self.drawn = Rc::new(drawn);
+        self.fit_routes.set(true);
+    }
+
+    /// `GetLineNoFromTime` for a place on the time axis, as a `long`.
+    fn line_at_seconds(&self, seconds: f64) -> i64 {
+        let Some(origin) = self.origin else {
+            return 0;
+        };
+        match self
+            .positions
+            .line_at_time(seconds.mul_add(1_000_000.0, origin))
+        {
+            LineAtTime::Line(line) => i64::try_from(line).unwrap_or(i64::MAX),
+            LineAtTime::AfterAll => i64::MAX,
+            LineAtTime::NoPositions => 0,
+        }
+    }
+
+    /// What `DrawMap` last put on the map.
+    #[must_use]
+    pub fn drawn(&self) -> &Routes {
+        &self.drawn
+    }
+
+    /// `LoadLog2`'s reading of the six remembered boxes, in its order, each through its
+    /// `CheckedChanged` when it changes, and then the chart labelled as `LoadLog2` ends.
+    /// `// C#: Log/LogBrowse.cs:444-449, 479`
+    pub fn apply_remembered(&mut self, get: impl Fn(&str) -> Option<String>) {
+        for check in [
+            Check::DataTable,
+            Check::Time,
+            Check::Map,
+            Check::Errors,
+            Check::Mode,
+            Check::Msg,
+        ] {
+            let Some(key) = check.setting() else {
+                continue;
+            };
+            let wanted = setting_bool(get(key).as_deref(), check.default());
+            if wanted != self.strip.get(check) {
+                self.toggle_check(check);
+            }
+        }
+        if self.is_open() {
+            self.zoom_event();
+        }
+    }
+
+    /// What automatic scaling shows: every curve's whole extent, each axis fitted to it.
+    fn automatic(&self) -> Option<Scales> {
+        let (from, to) = self
+            .plotted
+            .iter()
+            .filter_map(|shown| shown.series.extent())
+            .reduce(|(low, high), (from, to)| (low.min(from), high.max(to)))?;
+        let axes = Axes::over(&self.plotted, from, to);
+        Some(Scales {
+            x: (from, to),
+            left: axes.left,
+            right: axes.right,
+        })
+    }
+
+    /// The ranges the chart shows: the zoom's, where the user has chosen, and automatic for any
+    /// axis the zoom does not cover.
+    #[must_use]
+    pub fn scales(&self) -> Option<Scales> {
+        let automatic = self.automatic()?;
+        let mut scales = self.zoom.scales(automatic.clone());
+        for (unit, range) in automatic.left {
+            scales.left.entry(unit).or_insert(range);
+        }
+        if scales.right.is_none() {
+            scales.right = automatic.right;
+        }
+        Some(scales)
+    }
+
+    /// The chart's zoom.
+    #[must_use]
+    pub const fn zoom(&self) -> &Zoom {
+        &self.zoom
+    }
+
+    /// Where a window position is on the plotting area, as fractions across and down, as it was
+    /// last laid out.
+    #[must_use]
+    pub fn chart_point(&self, window_x: f32, window_y: f32) -> Option<(f64, f64)> {
+        let bounds = self.chart_bounds.get()?;
+        let (width, height) = (f32::from(bounds.size.width), f32::from(bounds.size.height));
+        (width > 0.0 && height > 0.0).then(|| {
+            (
+                f64::from((window_x - f32::from(bounds.origin.x)) / width),
+                f64::from((window_y - f32::from(bounds.origin.y)) / height),
+            )
+        })
+    }
+
+    /// The plotting area's size in pixels, as last laid out.
+    fn chart_size(&self) -> (f32, f32) {
+        self.chart_bounds.get().map_or((0.0, 0.0), |bounds| {
+            (f32::from(bounds.size.width), f32::from(bounds.size.height))
+        })
+    }
+
+    /// A press on the chart that is not a double click: Ctrl with the left button, or the
+    /// middle button, starts a pan; the left button alone starts a rectangle. Either closes an
+    /// open context menu.
+    /// `// C#: ExtLibs/ZedGraph/ZedGraph/ZedGraphControl.Events.cs:393-480`
+    pub fn chart_press(&mut self, at: (f64, f64), pan: bool) {
+        self.chart_menu = None;
+        if self.plotted.is_empty() {
+            return;
+        }
+        if pan {
+            self.zoom.begin_pan(at);
+        } else {
+            self.zoom_drag = Some((at, at));
+        }
+    }
+
+    /// The pointer moved over the chart: the point values follow it, a rectangle stretches, a
+    /// pan moves every axis.
+    pub fn chart_move(&mut self, at: (f64, f64)) {
+        self.pointer = Some(at);
+        if self.zoom.is_panning() {
+            self.chart_pan_to(at);
+        }
+        if let Some((_, to)) = self.zoom_drag.as_mut() {
+            *to = at;
+        }
+    }
+
+    /// The pointer left the chart.
+    pub fn chart_leave(&mut self) {
+        self.pointer = None;
+    }
+
+    /// The button came up: a rectangle zooms, a pan ends, and either raises `ZoomEvent`.
+    pub fn chart_release(&mut self) {
+        if self.zoom.is_panning() {
+            if self.zoom.end_pan() {
+                self.zoom_event();
+            }
+            return;
+        }
+        if let Some((from, to)) = self.zoom_drag.take() {
+            let size = self.chart_size();
+            self.chart_drag_zoom(from, to, size);
+        }
+    }
+
+    /// `HandleZoomFinish`: every axis zoomed to a dragged rectangle, if it is one.
+    pub fn chart_drag_zoom(&mut self, from: (f64, f64), to: (f64, f64), size: (f32, f32)) {
+        let Some(automatic) = self.scales_for_zoom() else {
+            return;
+        };
+        if self.zoom.drag_zoom(automatic, from, to, size) {
+            self.zoom_event();
+        }
+    }
+
+    /// The wheel over the chart, in pixels, positive away from the user: a notch is
+    /// [`WHEEL_NOTCH`] pixels, and a trackpad's few pixels at a time are carried until they make
+    /// one, so each notch is one `MouseWheel` - and one step on the zoom stack - as in Windows.
+    /// True when it zoomed.
+    pub fn chart_wheel_pixels(&mut self, pixels: f32) -> bool {
+        self.wheel_carry += pixels / WHEEL_NOTCH;
+        let mut zoomed = false;
+        while self.wheel_carry.abs() >= 1.0 {
+            // Towards the user is a negative `Delta` in Windows and a negative y here.
+            let towards_user = self.wheel_carry < 0.0;
+            self.wheel_carry -= self.wheel_carry.signum();
+            self.chart_wheel(towards_user);
+            zoomed = true;
+        }
+        zoomed
+    }
+
+    /// `ZedGraphControl_MouseWheel`: a notch, towards the user or away.
+    pub fn chart_wheel(&mut self, towards_user: bool) {
+        let Some(automatic) = self.scales_for_zoom() else {
+            return;
+        };
+        self.zoom.wheel(automatic, towards_user);
+        self.zoom_event();
+    }
+
+    /// `HandlePanDrag`.
+    pub fn chart_pan_to(&mut self, at: (f64, f64)) {
+        if let Some(automatic) = self.scales_for_zoom() {
+            self.zoom.pan_to(automatic, at);
+        }
+    }
+
+    /// The ranges a zoom starts from when it is the first: what is on screen.
+    fn scales_for_zoom(&self) -> Option<Scales> {
+        self.scales()
+    }
+
+    /// The rectangle being dragged, if one is.
+    #[must_use]
+    pub const fn zoom_drag(&self) -> Option<((f64, f64), (f64, f64))> {
+        self.zoom_drag
+    }
+
+    /// Opens ZedGraph's context menu: a right click on the chart.
+    pub fn open_chart_menu(&mut self, at: (f64, f64)) {
+        self.chart_menu = Some(at);
+        self.zoom_drag = None;
+    }
+
+    /// The chart's context menu, if it is open.
+    #[must_use]
+    pub const fn chart_menu(&self) -> Option<(f64, f64)> {
+        self.chart_menu
+    }
+
+    /// One of the chart menu's items, by its ZedGraph name: `show_val`, `unzoom`, `undo_all`,
+    /// `set_default`. Un-Zoom and Undo All do nothing with nothing to undo, where the C# draws
+    /// them disabled. Each but Show Point Values ends in `ZoomEvent`.
+    /// `// C#: ExtLibs/ZedGraph/ZedGraph/ZedGraphControl.ContextMenu.cs:130-200, 615-800`
+    pub fn chart_menu_item(&mut self, item: &str) {
+        self.chart_menu = None;
+        let changed = match item {
+            "show_val" => {
+                self.point_values = !self.point_values;
+                false
+            }
+            "unzoom" => self.zoom.undo(),
+            "undo_all" => self.zoom.undo_all(),
+            "set_default" => {
+                self.zoom.set_default();
+                true
+            }
+            _ => false,
+        };
+        if changed {
+            self.zoom_event();
+        }
+    }
+
+    /// Whether Show Point Values is on.
+    #[must_use]
+    pub const fn point_values(&self) -> bool {
+        self.point_values
+    }
+
+    /// The tooltip for the point nearest the pointer, when Show Point Values is on:
+    /// `HandlePointValues`.
+    #[must_use]
+    pub fn point_tooltip(&self, size: (f32, f32)) -> Option<String> {
+        if !self.point_values {
+            return None;
+        }
+        let pointer = self.pointer?;
+        let scales = self.scales()?;
+        let axes = Axes {
+            left: scales.left.clone(),
+            right: scales.right,
+        };
+        let curves: Vec<view::Curve<'_>> = self
+            .plotted
+            .iter()
+            .filter_map(|shown| {
+                axes.range_for(shown).map(|range| view::Curve {
+                    series: &shown.series,
+                    range,
+                })
+            })
+            .collect();
+        let (_, sample) = view::nearest_point(&curves, scales.x, pointer, size)?;
+        let x = match self.x_axis() {
+            XAxis::Time => {
+                let origin = self.origin?;
+                let boot_ms = sample.at.mul_add(1_000_000.0, origin) / 1000.0;
+                self.grid.as_ref()?.time_of_day(boot_ms)
+            }
+            XAxis::Line => mp_log::netfmt::double(sample.at),
+        };
+        Some(view::point_text(&x, sample.value))
     }
 
     /// The check boxes under the chart.
@@ -566,13 +1125,10 @@ impl LogBrowse {
     }
 
     /// The x range the chart spans: the lowest and highest x of anything plotted, as the C#'s
-    /// `ZoomOutAll` fits the axis to its curves.
+    /// `ZoomOutAll` fits the axis to its curves, or what the user zoomed or panned to.
     #[must_use]
     pub fn x_range(&self) -> Option<(f64, f64)> {
-        self.plotted
-            .iter()
-            .filter_map(|shown| shown.series.extent())
-            .reduce(|(low, high), (from, to)| (low.min(from), high.max(to)))
+        self.scales().map(|scales| scales.x)
     }
 
     /// Where a record sits on the x axis, if it can be placed there.
@@ -646,15 +1202,155 @@ impl LogBrowse {
             self.grid_current()
                 .map_or_else(none, |(row, column)| format!("{row},{column}")),
         ));
+        facts.extend(self.more_facts());
         facts
     }
 
-    /// How far across the chart's plotting area a window x is, as it was last laid out.
+    /// The facts of what this port adds to the strip, the chart, the map and the grid:
+    ///
+    /// - `log.check.params`: Show Params, which never stays ticked;
+    /// - `log.params.shown`, `.count`, `.first`, `.defaults`: the parameter list, its first row
+    ///   as `NAME=value`, and whether it has a Default column;
+    /// - `log.preselect.items`, `.selected`, `.open`, `.graphed`, `.skipped`;
+    /// - `log.map.drawn.<route>` for `gps`, `gps2`, `gpsb`, `pos` and `cmd`, and
+    ///   `log.map.drawn.markers` and `.photos`: what `DrawMap` last drew;
+    /// - `log.zoom.depth`, `log.zoom.x` (`auto` or `min,max`), `log.zoom.undo` (`Un-Zoom`,
+    ///   `Un-Pan` or `none`), `log.zoom.dragging`;
+    /// - `log.chart.pointvalues`, `log.chart.tooltip`, `log.chart.menu`, `log.grid.menu`;
+    /// - `log.prompt`: the open prompt's title, or `none`; `log.exported`; `log.modifiers`.
     #[must_use]
-    pub fn chart_fraction(&self, window_x: f32) -> Option<f64> {
-        let bounds = self.chart_bounds.get()?;
-        let width = f32::from(bounds.size.width);
-        (width > 0.0).then(|| f64::from((window_x - f32::from(bounds.origin.x)) / width))
+    pub fn more_facts(&self) -> Vec<(String, String)> {
+        let none = || "none".to_owned();
+        let mut facts = vec![("log.check.params".to_owned(), "false".to_owned())];
+        let view = self.params_view.as_ref();
+        facts.push(("log.params.shown".to_owned(), view.is_some().to_string()));
+        facts.push((
+            "log.params.count".to_owned(),
+            view.map_or(0, |view| view.rows.len()).to_string(),
+        ));
+        facts.push((
+            "log.params.first".to_owned(),
+            view.and_then(|view| view.rows.first())
+                .map_or_else(none, |param| {
+                    format!("{}={}", param.name, param.value_text())
+                }),
+        ));
+        facts.push((
+            "log.params.top".to_owned(),
+            view.map_or(0, |view| view.first).to_string(),
+        ));
+        facts.push((
+            "log.params.defaults".to_owned(),
+            view.is_some_and(|view| view.defaults).to_string(),
+        ));
+        facts.push((
+            "log.preselect.items".to_owned(),
+            self.graphs.len().to_string(),
+        ));
+        facts.push((
+            "log.preselect.selected".to_owned(),
+            self.preselected().map_or_else(none, str::to_owned),
+        ));
+        facts.push((
+            "log.preselect.open".to_owned(),
+            self.preselect_list.is_some().to_string(),
+        ));
+        facts.push((
+            "log.preselect.graphed".to_owned(),
+            self.preselect_outcome
+                .as_ref()
+                .map_or(0, |(graphed, _)| *graphed)
+                .to_string(),
+        ));
+        facts.push((
+            "log.preselect.skipped".to_owned(),
+            self.preselect_outcome
+                .as_ref()
+                .map_or(0, |(_, skipped)| skipped.len())
+                .to_string(),
+        ));
+        let drawn = self.drawn();
+        for kind in RouteKind::ALL {
+            facts.push((
+                format!("log.map.drawn.{}", route_name(kind)),
+                drawn.route(kind).len().to_string(),
+            ));
+        }
+        facts.push((
+            "log.map.drawn.markers".to_owned(),
+            (drawn.commands.len() + drawn.repeats.len()).to_string(),
+        ));
+        facts.push((
+            "log.map.drawn.photos".to_owned(),
+            drawn.cameras.len().to_string(),
+        ));
+        facts.push(("log.zoom.depth".to_owned(), self.zoom.depth().to_string()));
+        facts.push((
+            "log.zoom.x".to_owned(),
+            match (self.zoom.is_zoomed(), self.x_range()) {
+                (true, Some((low, high))) => format!("{low:.3},{high:.3}"),
+                _ => "auto".to_owned(),
+            },
+        ));
+        facts.push((
+            "log.zoom.undo".to_owned(),
+            self.zoom
+                .top()
+                .map_or_else(none, |kind| kind.undo_text().to_owned()),
+        ));
+        facts.push((
+            "log.zoom.dragging".to_owned(),
+            self.zoom_drag.is_some().to_string(),
+        ));
+        facts.push((
+            "log.chart.pointvalues".to_owned(),
+            self.point_values.to_string(),
+        ));
+        facts.push((
+            "log.chart.tooltip".to_owned(),
+            self.point_tooltip(self.chart_size()).unwrap_or_else(none),
+        ));
+        facts.push((
+            "log.chart.menu".to_owned(),
+            self.chart_menu.is_some().to_string(),
+        ));
+        facts.push(("log.grid.menu".to_owned(), self.grid_menu.to_string()));
+        facts.push((
+            "log.prompt".to_owned(),
+            self.prompt
+                .as_ref()
+                .map_or_else(none, |prompt| prompt.title.clone()),
+        ));
+        facts.push((
+            "log.exported".to_owned(),
+            self.exported.clone().unwrap_or_else(none),
+        ));
+        facts.push((
+            "log.modifiers".to_owned(),
+            self.modifiers().len().to_string(),
+        ));
+        // How much of `LogBrowse` this screen has, from its ledger, as the flight screen's
+        // coverage is published.
+        let (done, elsewhere, missing, _, _) = coverage::counts(coverage::LOGBROWSE);
+        facts.push((
+            "coverage.logbrowse.done".to_owned(),
+            (done + elsewhere).to_string(),
+        ));
+        facts.push(("coverage.logbrowse.missing".to_owned(), missing.to_string()));
+        facts.push((
+            "coverage.logbrowse.total".to_owned(),
+            coverage::LOGBROWSE.len().to_string(),
+        ));
+        let (done, elsewhere, missing, _, _) = coverage::counts(coverage::BEYOND);
+        facts.push((
+            "coverage.logbrowse.beyond.done".to_owned(),
+            (done + elsewhere).to_string(),
+        ));
+        facts.push((
+            "coverage.logbrowse.beyond.missing".to_owned(),
+            missing.to_string(),
+        ));
+        facts
     }
 
     /// A double click on the chart, `fraction` of the way across it.
@@ -685,7 +1381,25 @@ impl LogBrowse {
                 }
             }
         };
-        self.go_to_sample(sample, true, true);
+        self.go_to_sample(sample, true, false, true);
+    }
+
+    /// `dataGridView1_CellDoubleClick`: `GoToSample` on the row's record with the map and the
+    /// chart moved and the grid left where it is.
+    ///
+    /// **One deliberate difference.** The C# hands `GoToSample` the row's index, which is the
+    /// record's line only while the grid is unfiltered; filtered to one type, row 5 is the fifth
+    /// record of that type and the C# goes to line 5. Here it goes to the row's record.
+    /// `// C#: Log/LogBrowse.cs:3525-3532`
+    pub fn grid_double_click(&mut self, row: usize) {
+        let Some(grid) = self.filled_grid() else {
+            return;
+        };
+        let (Some(line), time_us) = (grid.line_of_row(row), grid.time_of_row(row)) else {
+            return;
+        };
+        self.cursor_time = time_us;
+        self.go_to_sample(i64::try_from(line).unwrap_or(i64::MAX), true, true, false);
     }
 
     /// `GoToSample`: the map's marker, the chart's cursor and the grid's current row, all on one
@@ -703,9 +1417,11 @@ impl LogBrowse {
     /// **One deliberate difference.** The C# puts its cursor line at x = the line number on both
     /// axes, and on a time axis a line number is a date in 1900: the line is off the chart, which
     /// its own `//TODO - time fails` owns up to. Here, on a time axis, it is drawn at the time of
-    /// the record it stands on, where the C# evidently means it to be.
+    /// the record it stands on, where the C# evidently means it to be. `move_graph` - the grid's
+    /// double click - centres the x axis on the cursor keeping its span, which the C# does by
+    /// setting the scale to the line number and so, on a time axis, likewise off the chart.
     /// `// C#: Log/LogBrowse.cs:3464-3523`
-    pub fn go_to_sample(&mut self, sample: i64, move_map: bool, move_grid: bool) {
+    pub fn go_to_sample(&mut self, sample: i64, move_map: bool, move_graph: bool, move_grid: bool) {
         self.marker = None;
         let Ok(line) = usize::try_from(sample) else {
             return;
@@ -719,6 +1435,12 @@ impl LogBrowse {
             }
         }
         self.cursor = Some(line);
+        if !move_graph {
+            self.cursor_time = None;
+        }
+        if move_graph && let (Some(x), Some(scales)) = (self.cursor_x(), self.scales()) {
+            self.zoom.centre_x(scales, x);
+        }
         if move_grid
             && self.grid_filled
             && let Some(grid) = self.grid.as_mut()
@@ -733,11 +1455,13 @@ impl LogBrowse {
         self.cursor
     }
 
-    /// Where the cursor is drawn on the x axis, if it can be.
+    /// Where the cursor is drawn on the x axis, if it can be: its line, or the time of the record
+    /// it was put on.
     #[must_use]
     pub fn cursor_x(&self) -> Option<f64> {
         let line = self.cursor?;
-        self.x_of(line, self.positions.time_of(line))
+        let time = self.cursor_time.or_else(|| self.positions.time_of(line));
+        self.x_of(line, time)
     }
 
     /// The map's marker.
@@ -934,6 +1658,404 @@ impl LogBrowse {
             .map_or_else(|| "none".to_owned(), |field| field.to_string())
     }
 
+    /// Show Params: `chk_params_CheckedChanged`, which unticks the box straight away and shows
+    /// the log's parameters in the Full Parameter List - here, a list in this window in its
+    /// columns.
+    ///
+    /// **One deliberate difference.** The C# puts the log's parameters in
+    /// `MainV2.comPort.MAV.param`, the connected vehicle's list, which is how its parameter
+    /// screen gets them; with a vehicle connected that replaces the vehicle's parameters on the
+    /// screen that writes them back. The list here is the log's and nothing else's.
+    /// `// C#: Log/LogBrowse.cs:3805-3841`
+    pub fn show_params(&mut self) {
+        let mut rows = self.params.clone();
+        mp_log::logparams::sort(&mut rows);
+        self.status = Some(format!("{} parameters in the log", rows.len()));
+        self.params_view = Some(ParamsView {
+            defaults: mp_log::logparams::has_defaults(&rows),
+            rows,
+            first: 0,
+        });
+    }
+
+    /// Closes the parameter list.
+    pub fn close_params(&mut self) {
+        self.params_view = None;
+    }
+
+    /// The parameter list on screen, if Show Params put it there.
+    #[must_use]
+    pub const fn params_view(&self) -> Option<&ParamsView> {
+        self.params_view.as_ref()
+    }
+
+    /// Moves the parameter list by whole rows.
+    pub fn scroll_params(&mut self, rows: isize) {
+        if let Some(view) = self.params_view.as_mut() {
+            let last = view.rows.len().saturating_sub(PARAM_ROWS);
+            view.first = view.first.saturating_add_signed(rows).min(last);
+        }
+    }
+
+    /// `CMB_preselect`'s items.
+    #[must_use]
+    pub fn graphs(&self) -> &[DisplayList] {
+        &self.graphs
+    }
+
+    /// Opens or closes the drop-down's list, which opens with the selected item in view, half
+    /// a page down where there is room.
+    pub fn toggle_preselect_list(&mut self) {
+        let last = self.graphs.len().saturating_sub(PRESELECT_ROWS);
+        self.preselect_list = match self.preselect_list {
+            Some(_) => None,
+            None => Some(
+                self.preselect
+                    .unwrap_or(0)
+                    .saturating_sub(PRESELECT_ROWS / 2)
+                    .min(last),
+            ),
+        };
+    }
+
+    /// Moves the drop-down's list by whole items.
+    pub fn scroll_preselect(&mut self, rows: isize) {
+        if let Some(first) = self.preselect_list.as_mut() {
+            let last = self.graphs.len().saturating_sub(PRESELECT_ROWS);
+            *first = first.saturating_add_signed(rows).min(last);
+        }
+    }
+
+    /// An item chosen from the drop-down: if it is another, `SelectedIndexChanged`.
+    pub fn choose_preselect(&mut self, index: usize) {
+        self.preselect_list = None;
+        if self.preselect == Some(index) || index >= self.graphs.len() {
+            return;
+        }
+        self.preselect = Some(index);
+        self.apply_preselect();
+    }
+
+    /// `CMB_preselect_SelectedIndexChanged`: the graph cleared, then every piece of the chosen
+    /// set graphed through `GraphItem`'s expression path, and the chart labelled.
+    ///
+    /// "a/None" has no items and the handler returns before clearing anything. A piece whose
+    /// types the log does not have plots nothing, silently, as `GraphItem` is told not to show
+    /// errors; one that needs Python this evaluator lacks is left out and named in the status
+    /// line. A piece whose label, and a space, starts an existing curve's is skipped, as
+    /// `GraphItem` aborts on it - which with a `.` and ` R` ending every label here is a repeat
+    /// on the right axis.
+    /// `// C#: Log/LogBrowse.cs:1129-1152, 1270-1298, 3137-3167`
+    pub fn apply_preselect(&mut self) {
+        let Some(list) = self
+            .preselect
+            .and_then(|index| self.graphs.get(index))
+            .cloned()
+        else {
+            return;
+        };
+        let Some(items) = list.items else {
+            return;
+        };
+        let Some(log) = self.log.clone() else {
+            return;
+        };
+        self.clear();
+        let parsed: Vec<(
+            &mp_log::mavgraph::DisplayItem,
+            Result<mp_log::expression::Expression, mp_log::expression::ExpressionError>,
+        )> = items
+            .iter()
+            .map(|item| (item, mp_log::expression::Expression::parse(&item.graphed())))
+            .collect();
+        let mut names: Vec<String> = parsed
+            .iter()
+            .filter_map(|(_, expression)| expression.as_ref().ok())
+            .flat_map(mp_log::expression::Expression::messages)
+            .collect();
+        names.sort();
+        names.dedup();
+        // `GetEnumeratorType` over every type the pieces name, once for the lot.
+        let records = mp_log::expression::records_in(&log, &names);
+        let mut graphed = 0;
+        let mut skipped = Vec::new();
+        for (item, expression) in parsed {
+            let expression = match expression {
+                Ok(expression) => expression,
+                Err(why) => {
+                    skipped.push(format!("{}: {why}", item.graphed()));
+                    continue;
+                }
+            };
+            let prefix = format!("{}. ", item.graphed());
+            if self
+                .plotted
+                .iter()
+                .any(|shown| shown.label.starts_with(&prefix))
+            {
+                continue;
+            }
+            let samples = expression.evaluate(
+                records
+                    .iter()
+                    .map(|(line, message, instance)| (*line, message, *instance)),
+            );
+            // `GraphItem_AddCurve` returns on an empty list.
+            if samples.is_empty() {
+                continue;
+            }
+            self.plotted.push(Plotted::expression(
+                item,
+                &samples,
+                self.origin,
+                self.x_axis(),
+            ));
+            graphed += 1;
+        }
+        self.zoom.reset();
+        self.zoom_event();
+        self.status = Some(if skipped.is_empty() {
+            format!("{}: {graphed} graphed", list.name)
+        } else {
+            format!(
+                "{}: {graphed} graphed; not graphed: {}",
+                list.name,
+                skipped.join("; ")
+            )
+        });
+        self.preselect_outcome = Some((graphed, skipped));
+    }
+
+    /// The selected preselected graph's name.
+    #[must_use]
+    pub fn preselected(&self) -> Option<&str> {
+        self.preselect
+            .and_then(|index| self.graphs.get(index))
+            .map(|list| list.name.as_str())
+    }
+
+    /// The prompt standing in the window, if there is one.
+    #[must_use]
+    pub const fn prompt(&self) -> Option<&Prompt> {
+        self.prompt.as_ref()
+    }
+
+    fn ask(&mut self, kind: PromptKind, title: String, text: &str, value: &str) {
+        let mut field = crate::textfield::TextField::new("");
+        field.set(value);
+        self.prompt = Some(Prompt {
+            kind,
+            title,
+            text: text.to_owned(),
+            field,
+        });
+        self.chart_menu = None;
+        self.grid_menu = false;
+    }
+
+    /// `ProcessCmdKey`'s Ctrl+G: `InputBox.Show("Line no", "Enter Line Number", ref lineno)`,
+    /// starting from 0.
+    /// `// C#: Log/LogBrowse.cs:183-205`
+    pub fn ask_go_to_line(&mut self) {
+        self.ask(
+            PromptKind::GoToLine,
+            "Line no".to_owned(),
+            "Enter Line Number",
+            "0",
+        );
+    }
+
+    /// `treeView1_DoubleClick`: the field's scaler and offset, starting from the one it has.
+    /// `// C#: Log/LogBrowse.cs:3037-3077`
+    pub fn ask_modifier(&mut self, field: &PlottableField) {
+        let node = modifier::node_name(&field.message, field.instance, &field.field);
+        let current = self
+            .modifiers
+            .get(&node)
+            .map(|modifier| modifier.command.clone())
+            .unwrap_or_default();
+        self.ask(
+            PromptKind::Modifier(node.clone()),
+            modifier::title(&node),
+            modifier::INSTRUCTIONS,
+            &current,
+        );
+    }
+
+    /// Export Visible: `SaveFileDialog`, suggesting `output.csv`, a name in the log's folder.
+    /// `// C#: Log/LogBrowse.cs:3588-3593`
+    pub fn ask_export_visible(&mut self) {
+        self.ask(
+            PromptKind::ExportVisible,
+            SAVE_AS.to_owned(),
+            "A file in the log's folder",
+            export::VISIBLE_NAME,
+        );
+    }
+
+    /// Export Files: `FolderBrowserDialog`, "Where to save the files", a folder in the log's
+    /// folder, made if it is not there - the dialog's New Folder.
+    /// `// C#: Log/LogBrowse.cs:3860-3866`
+    pub fn ask_export_files(&mut self) {
+        self.ask(
+            PromptKind::ExportFiles,
+            export::FILES_DESCRIPTION.to_owned(),
+            "A folder in the log's folder",
+            "",
+        );
+    }
+
+    /// A key in the prompt's field: Enter is OK and Escape Cancel, as `InputBox`'s buttons are.
+    pub fn prompt_key(&mut self, event: &gpui::KeyDownEvent) -> bool {
+        let Some(prompt) = self.prompt.as_mut() else {
+            return false;
+        };
+        match prompt.field.key(event) {
+            crate::textfield::KeyOutcome::Submitted => self.prompt_ok(),
+            crate::textfield::KeyOutcome::Cancelled => self.prompt = None,
+            crate::textfield::KeyOutcome::Ignored => return false,
+            crate::textfield::KeyOutcome::Changed => {}
+        }
+        true
+    }
+
+    /// Cancel.
+    pub fn prompt_cancel(&mut self) {
+        self.prompt = None;
+    }
+
+    /// OK: what the prompt asked for, done with the answer.
+    pub fn prompt_ok(&mut self) {
+        let Some(prompt) = self.prompt.take() else {
+            return;
+        };
+        let answer = prompt.field.value().trim().to_owned();
+        match prompt.kind {
+            PromptKind::GoToLine => self.go_to_line(&answer),
+            PromptKind::Modifier(node) => self.set_modifier(&node, &answer),
+            PromptKind::ExportVisible => self.export_visible(&answer),
+            PromptKind::ExportFiles => self.export_files(&answer),
+        }
+    }
+
+    /// Ctrl+G's answer: `dataGridView1.CurrentCell = dataGridView1[1, line - 1]`, or "Line
+    /// Doesn't Exist". A line that is not a number, which `int.Parse` throws on and nothing
+    /// catches, is refused the same way.
+    /// `// C#: Log/LogBrowse.cs:187-201`
+    pub fn go_to_line(&mut self, text: &str) {
+        let row = mp_log::netfmt::parse_i32(text)
+            .and_then(|line| usize::try_from(line.checked_sub(1)?).ok());
+        let shown = match (row, self.grid.as_mut().filter(|_| self.grid_filled)) {
+            (Some(row), Some(grid)) => grid.show(row, 1),
+            _ => false,
+        };
+        if shown {
+            self.refused = None;
+        } else {
+            self.refuse("Line Doesn't Exist".to_owned());
+        }
+    }
+
+    /// The scaler and offset typed for a field: kept if it parses, the field's old one removed
+    /// either way. It applies the next time the field is graphed.
+    /// `// C#: Log/LogBrowse.cs:3071-3077`
+    pub fn set_modifier(&mut self, node: &str, text: &str) {
+        self.modifiers.remove(node);
+        if let Some(modifier) = Modifier::parse(text) {
+            self.modifiers.insert(node.to_owned(), modifier);
+        }
+    }
+
+    /// The fields with a scaler or offset.
+    #[must_use]
+    pub fn modifiers(&self) -> &BTreeMap<String, Modifier> {
+        &self.modifiers
+    }
+
+    /// Where a name typed in an export's prompt goes: its last part, in the log's folder.
+    fn beside_log(&self, name: &str) -> Option<std::path::PathBuf> {
+        let leaf = name
+            .rsplit(['/', '\\'])
+            .next()
+            .filter(|part| !part.is_empty() && *part != "." && *part != "..")?;
+        Some(self.path.as_ref()?.parent()?.join(leaf))
+    }
+
+    /// Export Visible: every row the grid holds, each cell and a comma, a line each.
+    /// `// C#: Log/LogBrowse.cs:3588-3609`
+    pub fn export_visible(&mut self, name: &str) {
+        let Some(path) = self.beside_log(name) else {
+            self.refuse(format!("{name} is not a file name"));
+            return;
+        };
+        let mut text = String::new();
+        let mut rows = 0usize;
+        if let Some(grid) = self.grid.as_mut().filter(|_| self.grid_filled) {
+            let columns = grid.csv_columns();
+            grid.for_each_row(|row| {
+                text.push_str(&export::csv_line(&row.cells, columns));
+                text.push_str(export::NEWLINE);
+                rows += 1;
+            });
+        }
+        match std::fs::write(&path, text) {
+            Ok(()) => {
+                self.refused = None;
+                self.exported = Some(format!("{rows} rows"));
+                self.status = Some(format!("{rows} rows written to {}", path.display()));
+            }
+            Err(err) => self.refuse(format!("could not write {}: {err}", path.display())),
+        }
+    }
+
+    /// Export Files: every file the log carries, written into a folder.
+    /// `// C#: Log/LogBrowse.cs:3857-3911`
+    pub fn export_files(&mut self, name: &str) {
+        let (Some(folder), Some(log)) = (self.beside_log(name), self.log.clone()) else {
+            self.refuse(format!("{name} is not a folder name"));
+            return;
+        };
+        let written = std::fs::create_dir_all(&folder)
+            .map_err(|err| err.to_string())
+            .and_then(|()| {
+                // `logdata.GetEnumeratorType("FILE")`.
+                let records: Vec<mp_log::dataflash::LogMessage> = log
+                    .messages(&["FILE"])
+                    .map(|(_, message)| message)
+                    .collect();
+                export::export_files(&records, &folder).map_err(|err| err.to_string())
+            });
+        match written {
+            Ok(exported) => {
+                self.refused = None;
+                self.exported = Some(format!("{} files", exported.files.len()));
+                self.status = Some(format!(
+                    "{} files written to {}{}",
+                    exported.files.len(),
+                    folder.display(),
+                    if exported.refused.is_empty() {
+                        String::new()
+                    } else {
+                        format!("; refused: {}", exported.refused.join(", "))
+                    }
+                ));
+            }
+            Err(err) => self.refuse(format!("could not export to {}: {err}", folder.display())),
+        }
+    }
+
+    /// Opens or closes the grid's context menu: a right click on it.
+    pub fn toggle_grid_menu(&mut self) {
+        self.grid_menu = !self.grid_menu && self.grid.is_some();
+        self.chart_menu = None;
+    }
+
+    /// Whether the grid's context menu is open.
+    #[must_use]
+    pub const fn grid_menu(&self) -> bool {
+        self.grid_menu
+    }
+
     /// The map beside the chart.
     #[must_use]
     pub fn map(&self) -> Rc<RefCell<MapViewport>> {
@@ -974,69 +2096,22 @@ impl LogBrowse {
             self.map.borrow_mut().set_tiles(Arc::clone(store));
         }
     }
+}
 
-    /// Puts a log's routes on the map, replacing whatever the last log put there.
-    ///
-    /// `DrawMap` draws every route at once, each its own colour, over the mission the vehicle
-    /// logged. The map widget here draws one track, so it draws the first GPS's route - the
-    /// C#'s blue one - and the `POS` route only for a log whose GPS never had a fix; the second
-    /// GPS and the `GPSB` blend are not drawn. The logged mission goes on as a mission, which is
-    /// what the widget draws `CMD`'s route and markers as anyway.
-    ///
-    /// The widget's track is the path a vehicle has flown, so it ends at a vehicle symbol; here
-    /// that sits on the route's last point, pointing along the last course the GPS logged.
-    /// `// C#: Log/LogBrowse.cs:2191-2540`
-    fn show_routes(&mut self, routes: &mp_log::track::Routes) {
-        let (points, source) = if routes.gps.is_empty() && !routes.pos.is_empty() {
-            (&routes.pos, "POS")
-        } else if routes.gps.is_empty() {
-            (&routes.gps, "")
-        } else {
-            (&routes.gps, "GPS")
-        };
-
-        // A fresh widget, because a track only ever grows: the last log's would otherwise run
-        // straight into this one's.
-        let mut map = MapViewport::new(0, 0);
-        if let Some(store) = &self.tiles {
-            map.set_tiles(Arc::clone(store));
-        }
-        let mut drawn = 0;
-        for point in points {
-            if let Ok(position) = mp_units::LatLon::new(point.latitude, point.longitude) {
-                let course = mp_units::Bearing(mp_units::Degrees(point.course.unwrap_or(0.0)));
-                map.observe(position, course);
-                drawn += 1;
-            }
-        }
-        let mission: Vec<mp_mission::MissionItem> = routes
-            .commands
-            .iter()
-            .map(|command| {
-                let [param1, param2, param3, param4] = command.params;
-                mp_mission::MissionItem {
-                    seq: command.seq,
-                    current: 0,
-                    frame: command.frame.unwrap_or(0),
-                    command: command.command,
-                    param1,
-                    param2,
-                    param3,
-                    param4,
-                    x: command.latitude,
-                    y: command.longitude,
-                    z: command.altitude,
-                    autocontinue: 1,
-                }
-            })
-            .collect();
-        map.set_mission(&mission);
-        *self.map.borrow_mut() = map;
-        self.map_contents = MapContents {
-            source,
-            points: drawn,
-            waypoints: routes.commands.len(),
-        };
+/// What a log's routes hold, counted: the first GPS's route, or the `POS` route for a log whose
+/// GPS never had a fix, and the logged mission's waypoints.
+fn map_contents(routes: &Routes) -> MapContents {
+    let (points, source) = if !routes.gps.is_empty() {
+        (routes.gps.len(), "GPS")
+    } else if !routes.pos.is_empty() {
+        (routes.pos.len(), "POS")
+    } else {
+        (0, "")
+    };
+    MapContents {
+        source,
+        points,
+        waypoints: routes.commands.len(),
     }
 }
 
@@ -1246,12 +2321,12 @@ const TRACE_COLOURS: &[u32] = &[
 pub fn screen(
     browse: &LogBrowse,
     name: &crate::textfield::TextField,
-    name_focus: &gpui::FocusHandle,
-    focused: bool,
+    focus: &Focus<'_>,
     search: &str,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
     div()
+        .id("log-screen")
         .flex()
         .flex_1()
         .min_h(px(0.0))
@@ -1261,6 +2336,20 @@ pub fn screen(
         .min_w(px(0.0))
         .gap_2()
         .p_2()
+        // `ProcessCmdKey`: the form sees Ctrl+G whichever of its controls has the keyboard.
+        .track_focus(focus.screen)
+        .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
+            let keystroke = &event.keystroke;
+            if keystroke.modifiers.control
+                && keystroke.key.eq_ignore_ascii_case("g")
+                && this.log_browse.is_open()
+            {
+                this.log_browse.ask_go_to_line();
+                window.focus(&this.log_prompt_focus, cx);
+                cx.stop_propagation();
+                cx.notify();
+            }
+        }))
         // Left: everything about the plot, top to bottom.
         .child(
             div()
@@ -1269,19 +2358,276 @@ pub fn screen(
                 .flex_1()
                 .min_w(px(0.0))
                 .gap_2()
-                .child(file_panel(browse, name, name_focus, focused, cx))
+                .child(file_panel(browse, name, focus.name, focus.name_focused, cx))
+                .children(
+                    browse
+                        .prompt()
+                        .map(|prompt| prompt_panel(prompt, focus.prompt, focus.prompt_focused, cx)),
+                )
                 .children(browse.is_open().then(|| chart_row(browse, cx)))
                 .children(browse.is_open().then(|| button_strip(browse, cx)))
                 .children(
                     browse
+                        .preselect_list
+                        .filter(|_| browse.is_open())
+                        .map(|first| preselect_list(browse, first, cx)),
+                )
+                .children(browse.params_view().map(|view| params_panel(view, cx)))
+                .children(
+                    browse
                         .grid()
                         .filter(|_| browse.strip().get(Check::DataTable))
-                        .map(|grid| grid_panel(grid, cx)),
+                        .map(|grid| grid_panel(grid, browse.grid_menu(), cx)),
                 ),
         )
         // Right: the field tree, which is where LogBrowse puts it.
         .children(browse.is_open().then(|| field_panel(browse, search, cx)))
         .into_any_element()
+}
+
+/// The keyboard focus the screen's text fields and its own key handling take.
+pub struct Focus<'a> {
+    /// The log's name.
+    pub name: &'a gpui::FocusHandle,
+    /// Whether the name has it.
+    pub name_focused: bool,
+    /// A prompt's field.
+    pub prompt: &'a gpui::FocusHandle,
+    /// Whether the prompt's field has it.
+    pub prompt_focused: bool,
+    /// The screen itself, for Ctrl+G.
+    pub screen: &'a gpui::FocusHandle,
+}
+
+/// A dialog in the window: `InputBox`, `SaveFileDialog` or `FolderBrowserDialog`, as a title,
+/// what it asks, a field, OK and Cancel.
+/// `// C#: ExtLibs/Controls/InputBox.cs`
+fn prompt_panel(
+    prompt: &Prompt,
+    focus: &gpui::FocusHandle,
+    focused: bool,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    panel(
+        "prompt",
+        div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(
+                div()
+                    .text_sm()
+                    .text_color(rgb(theme::TEXT))
+                    .child(prompt.title.clone()),
+            )
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(theme::DIM))
+                    .child(prompt.text.clone()),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(crate::textfield::text_field(
+                        "log-prompt-field",
+                        &prompt.field,
+                        focus,
+                        focused,
+                        px(360.0),
+                        cx.listener(|this, event: &gpui::KeyDownEvent, _window, cx| {
+                            if this.log_browse.prompt_key(event) {
+                                cx.stop_propagation();
+                                cx.notify();
+                            }
+                        }),
+                    ))
+                    .child(action(
+                        "log-prompt-ok",
+                        "OK",
+                        theme::ACCENT,
+                        true,
+                        cx.listener(|this, _event: &(), _window, cx| {
+                            this.log_browse.prompt_ok();
+                            cx.notify();
+                        }),
+                    ))
+                    .child(action(
+                        "log-prompt-cancel",
+                        "Cancel",
+                        theme::ACCENT,
+                        true,
+                        cx.listener(|this, _event: &(), _window, cx| {
+                            this.log_browse.prompt_cancel();
+                            cx.notify();
+                        }),
+                    )),
+            ),
+    )
+    .into_any_element()
+}
+
+/// The drop-down's list: `CMB_preselect`, 300 pixels wide as its `DropDownWidth` says, a page of
+/// names at a time; the wheel moves it.
+/// `// C#: Log/LogBrowse.designer.cs:334-340`
+fn preselect_list(
+    browse: &LogBrowse,
+    first: usize,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    let mut list = div()
+        .id("log-preselect-list")
+        .flex()
+        .flex_col()
+        .w(px(300.0))
+        .border_1()
+        .border_color(rgb(theme::BORDER))
+        .bg(rgb(theme::PANEL))
+        .on_scroll_wheel(
+            cx.listener(|this, event: &gpui::ScrollWheelEvent, _window, cx| {
+                let delta = event.delta.pixel_delta(px(ROW_HEIGHT));
+                #[allow(clippy::cast_possible_truncation)] // a wheel event is a few rows
+                let rows = -(f32::from(delta.y) / ROW_HEIGHT).round() as isize;
+                this.log_browse.scroll_preselect(rows);
+                cx.stop_propagation();
+                cx.notify();
+            }),
+        );
+    for (index, graph) in browse
+        .graphs()
+        .iter()
+        .enumerate()
+        .skip(first)
+        .take(PRESELECT_ROWS)
+    {
+        let id = format!("log-preselect-item-{index}");
+        let chosen = browse.preselect == Some(index);
+        list = list.child(
+            crate::probe::measured(id.clone(), div())
+                .id(SharedString::from(id))
+                .px_2()
+                .h(px(ROW_HEIGHT))
+                .text_xs()
+                .whitespace_nowrap()
+                .overflow_hidden()
+                .bg(rgb(if chosen { theme::ACCENT } else { theme::PANEL }))
+                .text_color(rgb(if chosen { theme::BG } else { theme::TEXT }))
+                .cursor_pointer()
+                .hover(|style| style.bg(rgb(theme::BORDER)))
+                .child(graph.name.clone())
+                .on_click(cx.listener(move |this, _event, _window, cx| {
+                    this.log_browse.choose_preselect(index);
+                    cx.notify();
+                })),
+        );
+    }
+    list.into_any_element()
+}
+
+/// Show Params' list, in the Full Parameter List's columns: Command, Value, Default - when any
+/// parameter logged one - Units, Options and Desc, the last three from the parameter
+/// documentation. The favourites column is left out: it reads and writes the settings'
+/// `fav_params`, and this list writes nothing.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.Designer.cs:224-231;
+/// GCSViews/ConfigurationView/ConfigRawParams.cs:563-676`
+fn params_panel(view: &ParamsView, cx: &mut Context<MissionPlanner>) -> AnyElement {
+    const WIDTHS: [f32; 6] = [180.0, 90.0, 90.0, 70.0, 220.0, 400.0];
+    let heads = ["Command", "Value", "Default", "Units", "Options", "Desc"];
+    let shown = |column: usize| column != 2 || view.defaults;
+    let cell = |column: usize, text: String, colour: u32| {
+        div()
+            .w(px(WIDTHS.get(column).copied().unwrap_or(80.0)))
+            .flex_shrink_0()
+            .px_1()
+            .h(px(ROW_HEIGHT))
+            .overflow_hidden()
+            .whitespace_nowrap()
+            .text_xs()
+            .text_color(rgb(colour))
+            .child(text)
+    };
+    let mut header = div().flex().border_b_1().border_color(rgb(theme::BORDER));
+    for (column, head) in heads.iter().enumerate() {
+        if shown(column) {
+            header = header.child(cell(column, (*head).to_owned(), theme::DIM));
+        }
+    }
+    let mut body = div().flex().flex_col();
+    for param in view.rows.iter().skip(view.first).take(PARAM_ROWS) {
+        let meta = crate::metadata::lookup(&param.name);
+        let texts = [
+            param.name.clone(),
+            param.value_text(),
+            param.default_text(),
+            meta.map(|meta| meta.units.to_owned()).unwrap_or_default(),
+            meta.map(|meta| {
+                mp_log::logparams::options_text(meta.range, meta.values).replace('\n', "  ")
+            })
+            .unwrap_or_default(),
+            meta.map(|meta| meta.description.to_owned())
+                .unwrap_or_default(),
+        ];
+        let mut line = div().flex();
+        for (column, text) in texts.into_iter().enumerate() {
+            if shown(column) {
+                line = line.child(cell(column, text, theme::TEXT));
+            }
+        }
+        body = body.child(line);
+    }
+    let last = (view.first + PARAM_ROWS).min(view.rows.len());
+    panel(
+        "params",
+        // Measured, so a script can put the wheel over it.
+        crate::probe::measured("log-params", div())
+            .id("log-params")
+            .flex()
+            .flex_col()
+            .gap_1()
+            .on_scroll_wheel(
+                cx.listener(|this, event: &gpui::ScrollWheelEvent, _window, cx| {
+                    let delta = event.delta.pixel_delta(px(ROW_HEIGHT));
+                    #[allow(clippy::cast_possible_truncation)] // a wheel event is a few rows
+                    let rows = -(f32::from(delta.y) / ROW_HEIGHT).round() as isize;
+                    this.log_browse.scroll_params(rows);
+                    cx.stop_propagation();
+                    cx.notify();
+                }),
+            )
+            .child(
+                div()
+                    .id("log-params-scroll")
+                    .w_full()
+                    .overflow_x_scroll()
+                    .child(div().flex().flex_col().child(header).child(body)),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(div().text_xs().text_color(rgb(theme::DIM)).child(
+                        if view.rows.is_empty() {
+                            "the log has no PARM records".to_owned()
+                        } else {
+                            format!("rows {} to {last} of {}", view.first + 1, view.rows.len())
+                        },
+                    ))
+                    .child(action(
+                        "log-params-close",
+                        "Close",
+                        theme::ACCENT,
+                        true,
+                        cx.listener(|this, _event: &(), _window, cx| {
+                            this.log_browse.close_params();
+                            cx.notify();
+                        }),
+                    )),
+            ),
+    )
+    .into_any_element()
 }
 
 /// Opening a log.
@@ -1501,20 +2847,23 @@ fn chart_label(label: &Label, fraction: f32) -> AnyElement {
 /// axis, and the legend carries each series' own extent - a plot with an auto-scaled axis and no
 /// numbers on it says only "this went up and down".
 ///
-/// A double click anywhere on it is `zg1_MouseDoubleClick`. Moving the pointer over it does
-/// nothing else: `zg1_MouseMoveEvent` only debounces, and ZedGraph then shows point values only
-/// if its Show Point Values is on, which `LogBrowse` never turns on.
+/// A double click anywhere on it is `zg1_MouseDoubleClick`. The rest is ZedGraph's, as `zg1`
+/// keeps its defaults: a left drag zooms to the rectangle, Ctrl and a left drag or a middle drag
+/// pans, the wheel zooms, a right click opens its context menu, and with that menu's Show Point
+/// Values on - it starts off, and `LogBrowse` never turns it on - the pointer shows the value of
+/// the point nearest it. `zg1_MouseMoveEvent` itself only debounces.
 /// `// C#: Log/LogBrowse.cs:3278-3297, 3574-3586;
-/// ExtLibs/ZedGraph/ZedGraph/ZedGraphControl.Events.cs:670-701`
+/// ExtLibs/ZedGraph/ZedGraph/ZedGraphControl.Events.cs:393-480, 670-800, 839-876`
+#[allow(clippy::too_many_lines)] // one element tree, drawn in the C#'s layers
 fn plot_panel(browse: &LogBrowse, cx: &mut Context<MissionPlanner>) -> AnyElement {
     let plotted = browse.plotted();
-    let range = browse.x_range();
+    let scales = browse.scales();
+    let range = scales.as_ref().map(|scales| scales.x);
     let (from, to) = range.unwrap_or((f64::INFINITY, f64::NEG_INFINITY));
-    let axes = if range.is_some() {
-        Axes::over(plotted, from, to)
-    } else {
-        Axes::default()
-    };
+    let axes = scales.map_or_else(Axes::default, |scales| Axes {
+        left: scales.left,
+        right: scales.right,
+    });
     // Where an x sits across the plotting area, if it is on it.
     let across = |x: f64| -> Option<f32> {
         let (from, to) = range?;
@@ -1599,12 +2948,17 @@ fn plot_panel(browse: &LogBrowse, cx: &mut Context<MissionPlanner>) -> AnyElemen
             .copied()
             .unwrap_or(theme::TEXT);
         for column in mp_chart::reduce(&shown.series, from, to, COLUMNS) {
+            // A zoomed axis leaves some of a curve above or below the plot; what is off it is
+            // not drawn, as `IsClippedToChartRect` clips it.
+            if range.fraction(column.low) > 1.0 || range.fraction(column.high) < 0.0 {
+                continue;
+            }
             #[allow(clippy::cast_precision_loss)]
             let left = column.index as f32 / COLUMNS as f32;
             #[allow(clippy::cast_possible_truncation)]
-            let top = (1.0 - range.fraction(column.high)) as f32;
+            let top = (1.0 - range.fraction(column.high)).clamp(0.0, 1.0) as f32;
             #[allow(clippy::cast_possible_truncation)]
-            let bottom = (1.0 - range.fraction(column.low)) as f32;
+            let bottom = (1.0 - range.fraction(column.low)).clamp(0.0, 1.0) as f32;
             let height = (bottom - top).max(0.004);
             plot = plot.child(
                 div()
@@ -1618,7 +2972,55 @@ fn plot_panel(browse: &LogBrowse, cx: &mut Context<MissionPlanner>) -> AnyElemen
         }
     }
 
+    // The rectangle a left drag is drawing, dashed, as ZedGraph draws its reversible frame.
+    if let Some((drag_from, drag_to)) = browse.zoom_drag() {
+        #[allow(clippy::cast_possible_truncation)] // fractions of the plotting area
+        let (left, top, right, bottom) = (
+            drag_from.0.min(drag_to.0).clamp(0.0, 1.0) as f32,
+            drag_from.1.min(drag_to.1).clamp(0.0, 1.0) as f32,
+            drag_from.0.max(drag_to.0).clamp(0.0, 1.0) as f32,
+            drag_from.1.max(drag_to.1).clamp(0.0, 1.0) as f32,
+        );
+        plot = plot.child(
+            div()
+                .absolute()
+                .left(relative(left))
+                .top(relative(top))
+                .w(relative(right - left))
+                .h(relative(bottom - top))
+                .border_1()
+                .border_dashed()
+                .border_color(rgb(theme::TEXT)),
+        );
+    }
+    // Show Point Values: the tooltip, beside the pointer.
+    if let (Some(text), Some(pointer)) = (browse.point_tooltip(browse.chart_size()), browse.pointer)
+    {
+        #[allow(clippy::cast_possible_truncation)] // a fraction of the plotting area
+        let (left, top) = (
+            pointer.0.clamp(0.0, 0.8) as f32,
+            pointer.1.clamp(0.0, 0.9) as f32,
+        );
+        plot = plot.child(
+            crate::probe::measured("log-chart-tooltip", div())
+                .absolute()
+                .left(relative(left))
+                .top(relative(top))
+                .ml(px(12.0))
+                .mt(px(12.0))
+                .px_1()
+                .border_1()
+                .border_color(rgb(theme::BORDER))
+                .bg(rgb(theme::BG))
+                .text_xs()
+                .text_color(rgb(theme::TEXT))
+                .whitespace_nowrap()
+                .child(text),
+        );
+    }
+
     let chart = div()
+        .id("log-chart-area")
         .relative()
         .w_full()
         .h(px(2.0f32.mul_add(LABEL_LANE, PLOT_HEIGHT)))
@@ -1629,18 +3031,87 @@ fn plot_panel(browse: &LogBrowse, cx: &mut Context<MissionPlanner>) -> AnyElemen
                 .iter()
                 .filter_map(|label| across(label.x).map(|at| chart_label(label, at))),
         )
-        // `MouseDoubleClick`, which Windows raises on the second press.
+        .children(browse.chart_menu().map(|at| chart_menu(browse, at, cx)))
+        // `MouseDoubleClick`, which Windows raises on the second press; the first press starts a
+        // rectangle, or with Ctrl a pan, as ZedGraph's `MouseDown` does.
         .on_mouse_down(
             MouseButton::Left,
             cx.listener(|this, event: &gpui::MouseDownEvent, _window, cx| {
-                if event.click_count != 2 {
+                let (x, y) = (f32::from(event.position.x), f32::from(event.position.y));
+                let Some(at) = this.log_browse.chart_point(x, y) else {
                     return;
+                };
+                if event.click_count == 2 {
+                    this.log_browse.double_click(at.0);
+                } else {
+                    this.log_browse.chart_press(at, event.modifiers.control);
                 }
-                if let Some(fraction) = this.log_browse.chart_fraction(f32::from(event.position.x))
-                {
-                    this.log_browse.double_click(fraction);
+                cx.notify();
+            }),
+        )
+        .on_mouse_down(
+            MouseButton::Middle,
+            cx.listener(|this, event: &gpui::MouseDownEvent, _window, cx| {
+                let (x, y) = (f32::from(event.position.x), f32::from(event.position.y));
+                if let Some(at) = this.log_browse.chart_point(x, y) {
+                    this.log_browse.chart_press(at, true);
                     cx.notify();
                 }
+            }),
+        )
+        .on_mouse_down(
+            MouseButton::Right,
+            cx.listener(|this, event: &gpui::MouseDownEvent, _window, cx| {
+                let (x, y) = (f32::from(event.position.x), f32::from(event.position.y));
+                if let Some(at) = this.log_browse.chart_point(x, y) {
+                    this.log_browse.open_chart_menu(at);
+                    cx.notify();
+                }
+            }),
+        )
+        .on_mouse_move(
+            cx.listener(|this, event: &gpui::MouseMoveEvent, _window, cx| {
+                let (x, y) = (f32::from(event.position.x), f32::from(event.position.y));
+                if let Some(at) = this.log_browse.chart_point(x, y) {
+                    this.log_browse.chart_move(at);
+                    cx.notify();
+                }
+            }),
+        )
+        .on_mouse_up(
+            MouseButton::Left,
+            cx.listener(|this, _event: &gpui::MouseUpEvent, _window, cx| {
+                this.log_browse.chart_release();
+                cx.notify();
+            }),
+        )
+        .on_mouse_up(
+            MouseButton::Middle,
+            cx.listener(|this, _event: &gpui::MouseUpEvent, _window, cx| {
+                this.log_browse.chart_release();
+                cx.notify();
+            }),
+        )
+        .on_mouse_up_out(
+            MouseButton::Left,
+            cx.listener(|this, _event: &gpui::MouseUpEvent, _window, cx| {
+                this.log_browse.chart_release();
+                cx.notify();
+            }),
+        )
+        .on_hover(cx.listener(|this, hovered: &bool, _window, cx| {
+            if !*hovered {
+                this.log_browse.chart_leave();
+                cx.notify();
+            }
+        }))
+        .on_scroll_wheel(
+            cx.listener(|this, event: &gpui::ScrollWheelEvent, _window, cx| {
+                let delta = event.delta.pixel_delta(px(WHEEL_NOTCH));
+                if this.log_browse.chart_wheel_pixels(f32::from(delta.y)) {
+                    cx.notify();
+                }
+                cx.stop_propagation();
             }),
         );
 
@@ -1734,6 +3205,75 @@ fn plot_panel(browse: &LogBrowse, cx: &mut Context<MissionPlanner>) -> AnyElemen
     .into_any_element()
 }
 
+/// ZedGraph's context menu, as `contextMenuStrip1_Opening` builds it for `zg1`: Show Point
+/// Values, ticked when on; the undo of the last zoom, pan or wheel, named for it; Undo All
+/// Zoom/Pan; Set Scale to Default. The two undo items are drawn dimmed with nothing to undo, as
+/// ZedGraph disables them. Copy and Save Image As are not here: gpui renders no image of a view
+/// to copy or save. `LogBrowse`'s `Zg1_ContextMenuBuilder` adds nothing.
+/// `// C#: ExtLibs/ZedGraph/ZedGraph/ZedGraphControl.ContextMenu.cs:97-205;
+/// ExtLibs/ZedGraph/ZedGraph/ZedGraphLocale.resx; Log/LogBrowse.cs:324-357`
+fn chart_menu(browse: &LogBrowse, at: (f64, f64), cx: &mut Context<MissionPlanner>) -> AnyElement {
+    let undo = browse.zoom().top();
+    let items: [(&'static str, String, bool); 4] = [
+        ("show_val", "Show Point Values".to_owned(), true),
+        (
+            "unzoom",
+            undo.map_or("Un-Zoom", view::Kind::undo_text).to_owned(),
+            undo.is_some(),
+        ),
+        ("undo_all", "Undo All Zoom/Pan".to_owned(), undo.is_some()),
+        ("set_default", "Set Scale to Default".to_owned(), true),
+    ];
+    let mut menu = div()
+        .absolute()
+        .flex()
+        .flex_col()
+        .border_1()
+        .border_color(rgb(theme::BORDER))
+        .bg(rgb(theme::PANEL));
+    for (name, text, enabled) in items {
+        let id = match name {
+            "show_val" => "log-chart-menu-show_val",
+            "unzoom" => "log-chart-menu-unzoom",
+            "undo_all" => "log-chart-menu-undo_all",
+            _ => "log-chart-menu-set_default",
+        };
+        // `item.Checked`: a tick beside Show Point Values while it is on.
+        let ticked = name == "show_val" && browse.point_values();
+        let mut item = crate::probe::measured(id, div())
+            .id(id)
+            .flex()
+            .items_center()
+            .gap_1()
+            .px_2()
+            .py(px(2.0))
+            .text_xs()
+            .whitespace_nowrap()
+            .text_color(rgb(if enabled { theme::TEXT } else { theme::DIM }))
+            .child(div().size_2().rounded_sm().bg(rgb(if ticked {
+                theme::ACCENT
+            } else {
+                theme::PANEL
+            })))
+            .child(text);
+        if enabled {
+            item = item
+                .cursor_pointer()
+                .hover(|style| style.bg(rgb(theme::BORDER)))
+                .on_click(cx.listener(move |this, _event, _window, cx| {
+                    this.log_browse.chart_menu_item(name);
+                    cx.notify();
+                }));
+        }
+        menu = menu.child(item);
+    }
+    #[allow(clippy::cast_possible_truncation)] // a fraction of the plotting area
+    let (left, down) = (at.0.clamp(0.0, 0.8) as f32, at.1.clamp(0.0, 0.7) as f32);
+    menu.left(relative(left))
+        .top(px(down.mul_add(PLOT_HEIGHT, LABEL_LANE)))
+        .into_any_element()
+}
+
 /// `splitContainerZgMap`: the chart, and the map beside it once the Map box shows it.
 ///
 /// `CHK_map_CheckedChanged` uncollapses the map's panel and sets the splitter to half the width,
@@ -1759,12 +3299,12 @@ const MAP_HEIGHT: f32 = 300.0;
 /// `myGMAP1`: where the log says the vehicle went.
 ///
 /// Dragging pans and the wheel zooms about the cursor, as the designer sets `CanDragMap` and
-/// `MousePositionWithoutCenter`. The C# labels its routes in their colours in the top-left
-/// corner; the one route drawn here is labelled the same way, in the colour it is drawn.
+/// `MousePositionWithoutCenter`. The routes `DrawMap` made are drawn over it in their colours,
+/// with the waypoints and photos on top, and the four labels name the colours in the top-left
+/// corner.
 /// `// C#: Log/LogBrowse.designer.cs:153-232; Log/LogBrowse.cs:3735-3771`
 fn map_panel(browse: &LogBrowse) -> AnyElement {
     let map = browse.map();
-    let contents = browse.map_contents();
     let attribution = map.borrow().attribution();
 
     panel(
@@ -1809,21 +3349,23 @@ fn map_panel(browse: &LogBrowse) -> AnyElement {
                 }
             })
             .child(crate::mapview::map_element(Rc::clone(&map)))
+            // `mapoverlay`: the routes and markers `DrawMap` made, over the map.
+            .child(routes_element(
+                Rc::clone(&map),
+                Rc::clone(&browse.drawn),
+                Rc::clone(&browse.fit_routes),
+            ))
             // `markeroverlay`, over the map and painted after it.
             .child(marker_element(Rc::clone(&map), browse.marker()))
-            // `label1`, "GPS", in the corner, in the colour of its route - which here is the
-            // colour the map widget strokes any track in.
-            .children((!contents.source.is_empty()).then(|| {
+            // `label1` to `label4`: each route's name in its colour, where the resx puts them.
+            .children(ROUTE_LABELS.iter().map(|(text, colour, x, y)| {
                 div()
                     .absolute()
-                    .top_1()
-                    .left_1()
-                    .px_1()
-                    .rounded_sm()
-                    .bg(rgb(theme::PANEL))
+                    .top(px(*y))
+                    .left(px(*x))
                     .text_xs()
-                    .text_color(rgb(theme::OK))
-                    .child(contents.source)
+                    .text_color(rgb(*colour))
+                    .child(*text)
             }))
             // Required by the imagery's licence wherever the imagery is shown.
             .children(attribution.map(|text| {
@@ -1846,10 +3388,12 @@ fn map_panel(browse: &LogBrowse) -> AnyElement {
 /// the grid.
 ///
 /// In the C#'s order: Graph Left, Graph Right, Clear Graph, then the boxes - Map, Time, Data
-/// Table, Mode, Errors, MSG, Events. The two graph buttons act on the grid's current cell, not on
-/// the field list.
-/// `// C#: Log/LogBrowse.designer.cs:240-332; Log/LogBrowse.resx:159-160, 186-187, 675-676`
+/// Table, Show Params, the preselected graphs' drop-down, Mode, Errors, MSG, Events. The two
+/// graph buttons act on the grid's current cell, not on the field list.
+/// `// C#: Log/LogBrowse.designer.cs:240-347; Log/LogBrowse.resx (chk_params 594,
+/// CMB_preselect 691)`
 fn button_strip(browse: &LogBrowse, cx: &mut Context<MissionPlanner>) -> AnyElement {
+    let (before, after) = Check::STRIP.split_at(3);
     div()
         .flex()
         .flex_wrap()
@@ -1886,10 +3430,79 @@ fn button_strip(browse: &LogBrowse, cx: &mut Context<MissionPlanner>) -> AnyElem
             }),
         ))
         .children(
-            Check::STRIP
-                .into_iter()
-                .map(|check| check_box(check, browse.strip().get(check), cx)),
+            before
+                .iter()
+                .map(|check| check_box(*check, browse.strip().get(*check), cx)),
         )
+        .child(params_box(cx))
+        .child(preselect_box(browse, cx))
+        .children(
+            after
+                .iter()
+                .map(|check| check_box(*check, browse.strip().get(*check), cx)),
+        )
+        .into_any_element()
+}
+
+/// Show Params: a check box that unticks itself as it is ticked and shows the parameters, so it
+/// is only ever drawn unticked.
+/// `// C#: Log/LogBrowse.cs:3805-3810; Log/LogBrowse.resx (chk_params.Text)`
+fn params_box(cx: &mut Context<MissionPlanner>) -> AnyElement {
+    crate::probe::measured("log-chk-params", div())
+        .id("log-chk-params")
+        .flex()
+        .items_center()
+        .gap_1()
+        .px_1()
+        .cursor_pointer()
+        .child(
+            div()
+                .size_3()
+                .rounded_sm()
+                .border_1()
+                .border_color(rgb(theme::DIM)),
+        )
+        .child(
+            div()
+                .text_sm()
+                .text_color(rgb(theme::TEXT))
+                .child("Show Params"),
+        )
+        .on_click(cx.listener(|this, _event, _window, cx| {
+            this.log_browse.show_params();
+            cx.notify();
+        }))
+        .into_any_element()
+}
+
+/// `CMB_preselect`: the selected graph's name, 100 pixels wide as the resx has it; a click opens
+/// its list under the strip.
+/// `// C#: Log/LogBrowse.designer.cs:334-340; Log/LogBrowse.resx (CMB_preselect.Size 100, 21)`
+fn preselect_box(browse: &LogBrowse, cx: &mut Context<MissionPlanner>) -> AnyElement {
+    crate::probe::measured("log-preselect", div())
+        .id("log-preselect")
+        .w(px(100.0))
+        .h(px(21.0))
+        .px_1()
+        .flex()
+        .items_center()
+        .overflow_hidden()
+        .whitespace_nowrap()
+        .border_1()
+        .border_color(rgb(if browse.preselect_list.is_some() {
+            theme::ACCENT
+        } else {
+            theme::BORDER
+        }))
+        .bg(rgb(theme::ACTION))
+        .text_xs()
+        .text_color(rgb(theme::TEXT))
+        .cursor_pointer()
+        .child(browse.preselected().unwrap_or_default().to_owned())
+        .on_click(cx.listener(|this, _event, _window, cx| {
+            this.log_browse.toggle_preselect_list();
+            cx.notify();
+        }))
         .into_any_element()
 }
 
@@ -1922,10 +3535,176 @@ fn check_box(check: Check, ticked: bool, cx: &mut Context<MissionPlanner>) -> An
         )
         .on_click(cx.listener(move |this, _event, _window, cx| {
             this.log_browse.toggle_check(check);
+            // The handler `LoadLog2` adds: the box remembered as it now is.
+            // `// C#: Log/LogBrowse.cs:451-460`
+            if let Some(key) = check.setting() {
+                this.persisted
+                    .set(key, setting_text(this.log_browse.strip().get(check)));
+            }
             cx.notify();
         }))
         .into_any_element()
 }
+
+/// `label1` to `label4`: text, `ForeColor`, and `Location` in the map's panel.
+/// `// C#: Log/LogBrowse.designer.cs:178-204; Log/LogBrowse.resx (label1 4,8; label2 39,8;
+/// label3 80,8; label4 115,9)`
+const ROUTE_LABELS: [(&str, u32, f32, f32); 4] = [
+    ("GPS", 0x00_00_ff, 4.0, 8.0),
+    ("GPS2", 0x00_80_00, 39.0, 8.0),
+    ("POS", 0xff_00_00, 80.0, 8.0),
+    ("GPSB", 0xff_ff_00, 115.0, 9.0),
+];
+
+/// A route's name in the facts.
+const fn route_name(kind: RouteKind) -> &'static str {
+    match kind {
+        RouteKind::Gps => "gps",
+        RouteKind::Gps2 => "gps2",
+        RouteKind::Gpsb => "gpsb",
+        RouteKind::Pos => "pos",
+        RouteKind::Cmd => "cmd",
+    }
+}
+
+/// A route's pen as gpui paints it: its colour at `Color.FromArgb(127, ...)`.
+fn route_pen(kind: RouteKind) -> gpui::Hsla {
+    gpui::Hsla::from(rgba((kind.colour() << 8) | u32::from(RouteKind::ALPHA)))
+}
+
+/// `mapoverlay`: every route `DrawMap` made, two pixels wide in its pen, then the waypoint
+/// markers - numbered, one for every `CMD` record - and the photo markers on top, as GMap draws
+/// an overlay's routes and then its markers.
+///
+/// Painted after the map, from where the map says it put each place in the same frame, so the
+/// routes move with it. `ZoomAndCenterRoutes` is done here too, the first time the map is
+/// painted after `DrawMap`, because only then does the map know how big it is.
+/// `// C#: Log/LogBrowse.cs:2437-2520; ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapOverlay.cs`
+fn routes_element(
+    map: Rc<RefCell<MapViewport>>,
+    drawn: Rc<Routes>,
+    fit: Rc<Cell<bool>>,
+) -> impl IntoElement {
+    canvas(
+        |_bounds, _window, _cx| (),
+        move |_bounds, (), window, cx| {
+            if fit.replace(false) {
+                let places: Vec<LatLon> = drawn
+                    .places()
+                    .filter_map(|(latitude, longitude)| LatLon::new(latitude, longitude).ok())
+                    .collect();
+                if map.borrow_mut().zoom_to_fit(&places) {
+                    window.refresh();
+                }
+            }
+            let map = map.borrow();
+            let screen = |latitude: f64, longitude: f64| {
+                LatLon::new(latitude, longitude)
+                    .ok()
+                    .and_then(|place| map.screen_of(place))
+            };
+            for kind in RouteKind::ALL {
+                let points: Vec<(f32, f32)> = drawn
+                    .route(kind)
+                    .iter()
+                    .filter_map(|point| screen(point.latitude, point.longitude))
+                    .collect();
+                paint_polyline(window, &points, route_pen(kind));
+            }
+            for command in drawn.commands.iter().chain(&drawn.repeats) {
+                if let Some((x, y)) = screen(command.latitude, command.longitude) {
+                    paint_waypoint(window, cx, x, y, &command.seq.to_string());
+                }
+            }
+            for photo in &drawn.cameras {
+                if let Some((x, y)) = screen(photo.latitude, photo.longitude) {
+                    paint_photo(window, x, y);
+                }
+            }
+        },
+    )
+    .absolute()
+    .size_full()
+}
+
+/// A line through screen points, in chunks a gpui path can hold.
+fn paint_polyline(window: &mut gpui::Window, points: &[(f32, f32)], colour: gpui::Hsla) {
+    use gpui::{PathBuilder, point};
+    for chunk in points.chunks(60_000) {
+        if chunk.len() < 2 {
+            continue;
+        }
+        let mut builder = PathBuilder::stroke(px(2.0));
+        let mut chunk = chunk.iter();
+        if let Some((x, y)) = chunk.next() {
+            builder.move_to(point(px(*x), px(*y)));
+        }
+        for (x, y) in chunk {
+            builder.line_to(point(px(*x), px(*y)));
+        }
+        if let Ok(path) = builder.build() {
+            window.paint_path(path, colour);
+        }
+    }
+}
+
+/// `GMapMarkerWP`: a waypoint's marker, a round green head on a point, with its number.
+fn paint_waypoint(window: &mut gpui::Window, cx: &mut gpui::App, x: f32, y: f32, label: &str) {
+    use gpui::{BorderStyle, Corners, Edges, point, quad, size};
+    window.paint_quad(quad(
+        Bounds {
+            origin: point(px(x - 8.0), px(y - 20.0)),
+            size: size(px(16.0), px(16.0)),
+        },
+        Corners::all(px(8.0)),
+        rgb(WAYPOINT),
+        Edges::all(px(1.0)),
+        rgb(0x00_00_00),
+        BorderStyle::Solid,
+    ));
+    let run = gpui::TextRun {
+        len: label.len(),
+        font: window.text_style().font(),
+        color: gpui::Hsla::from(rgb(0x00_00_00)),
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+    };
+    let line = window.text_system().shape_line(
+        SharedString::from(label.to_owned()),
+        px(10.0),
+        &[run],
+        None,
+    );
+    let width = f32::from(line.width());
+    let _ = line.paint(
+        point(px(x - width / 2.0), px(y - 18.0)),
+        px(12.0),
+        gpui::TextAlign::Left,
+        None,
+        window,
+        cx,
+    );
+}
+
+/// `GMapMarkerPhoto`: where a photo was taken, a small square.
+fn paint_photo(window: &mut gpui::Window, x: f32, y: f32) {
+    use gpui::{BorderStyle, Corners, Edges, point, quad, size};
+    window.paint_quad(quad(
+        Bounds {
+            origin: point(px(x - 4.0), px(y - 4.0)),
+            size: size(px(8.0), px(8.0)),
+        },
+        Corners::all(px(1.0)),
+        rgb(0xff_ff_ff),
+        Edges::all(px(1.0)),
+        rgb(0x00_00_00),
+        BorderStyle::Solid,
+    ));
+}
+
+/// A waypoint marker's head.
+const WAYPOINT: u32 = 0x3f_b9_50;
 
 /// The marker's colour: `GMarkerGoogleType.pink_dot`.
 const PIN: u32 = 0xff_69_b4;
@@ -2011,9 +3790,11 @@ fn column_width(column: usize) -> f32 {
 /// is `dataGridView1_ColumnHeaderMouseClick`'s dialog laid out in the panel instead.
 ///
 /// Every visible cell reports its position as `loggrid-<row>-<column>`, the row counted in the
-/// grid as it is filtered, so a test can click one by name.
-/// `// C#: Log/LogBrowse.designer.cs:349-363; Log/LogBrowse.cs:2820-2896`
-fn grid_panel(grid: &Grid, cx: &mut Context<MissionPlanner>) -> AnyElement {
+/// grid as it is filtered, so a test can click one by name. A double click on a cell is
+/// `CellDoubleClick`, and a right click anywhere on the grid opens its context menu,
+/// `contextMenuStrip1`, at the top of the panel.
+/// `// C#: Log/LogBrowse.designer.cs:87-105, 349-363; Log/LogBrowse.cs:2820-2896, 3525-3532`
+fn grid_panel(grid: &Grid, menu_open: bool, cx: &mut Context<MissionPlanner>) -> AnyElement {
     let columns = grid.columns();
     let current = grid.current();
     let width: f32 = (0..columns).map(column_width).sum();
@@ -2080,14 +3861,50 @@ fn grid_panel(grid: &Grid, cx: &mut Context<MissionPlanner>) -> AnyElement {
                     .text_color(rgb(if chosen { theme::BG } else { theme::TEXT }))
                     .cursor_pointer()
                     .child(div().size_full().overflow_hidden().child(text))
-                    .on_click(cx.listener(move |this, _event, _window, cx| {
-                        this.log_browse.select_cell(at.0, at.1);
-                        cx.notify();
-                    })),
+                    .on_click(
+                        cx.listener(move |this, event: &gpui::ClickEvent, _window, cx| {
+                            this.log_browse.select_cell(at.0, at.1);
+                            if event.click_count() == 2 {
+                                this.log_browse.grid_double_click(at.0);
+                            }
+                            cx.notify();
+                        }),
+                    ),
             );
         }
         body = body.child(line);
     }
+
+    // `contextMenuStrip1`: Export Visible and Export Files.
+    let menu = menu_open.then(|| {
+        div()
+            .flex()
+            .gap_2()
+            .child(action(
+                "loggrid-menu-visible",
+                "Export Visible",
+                theme::ACCENT,
+                true,
+                cx.listener(|this, _event: &(), window, cx| {
+                    this.log_browse.toggle_grid_menu();
+                    this.log_browse.ask_export_visible();
+                    window.focus(&this.log_prompt_focus, cx);
+                    cx.notify();
+                }),
+            ))
+            .child(action(
+                "loggrid-menu-files",
+                "Export Files",
+                theme::ACCENT,
+                true,
+                cx.listener(|this, _event: &(), window, cx| {
+                    this.log_browse.toggle_grid_menu();
+                    this.log_browse.ask_export_files();
+                    window.focus(&this.log_prompt_focus, cx);
+                    cx.notify();
+                }),
+            ))
+    });
 
     // The types to filter by, when a header has been clicked.
     let chooser = grid.is_choosing().then(|| {
@@ -2157,9 +3974,18 @@ fn grid_panel(grid: &Grid, cx: &mut Context<MissionPlanner>) -> AnyElement {
     panel(
         "data",
         div()
+            .id("loggrid-panel")
             .flex()
             .flex_col()
             .gap_1()
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(|this, _event: &gpui::MouseDownEvent, _window, cx| {
+                    this.log_browse.toggle_grid_menu();
+                    cx.notify();
+                }),
+            )
+            .children(menu)
             .children(chooser)
             .child(
                 div()
@@ -2224,10 +4050,20 @@ fn field_panel(browse: &LogBrowse, search: &str, cx: &mut Context<MissionPlanner
                 .cursor_pointer()
                 .hover(|style| style.bg(rgb(theme::BORDER)))
                 .child(text)
-                .on_click(cx.listener(move |this, _event, _window, cx| {
-                    this.log_browse.toggle(&chosen_left);
-                    cx.notify();
-                }))
+                .on_click(
+                    cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                        // The first press of a double click ticked or unticked the field; the
+                        // second undoes that and asks for its scaler and offset, as a double click
+                        // on a node's text in the C#'s tree changes no tick.
+                        // `// C#: Log/LogBrowse.cs:3037-3077`
+                        this.log_browse.toggle(&chosen_left);
+                        if event.click_count() == 2 {
+                            this.log_browse.ask_modifier(&chosen_left);
+                            window.focus(&this.log_prompt_focus, cx);
+                        }
+                        cx.notify();
+                    }),
+                )
                 // gpui's `on_click` is the primary button only; the others arrive here. Only the
                 // right one means anything, as in the C# tree, where `wasrightclick` is what
                 // decides the axis.
@@ -2532,7 +4368,14 @@ mod tests {
         browse.select_cell(0, 5);
         browse.graph_selected(Axis::Left);
         assert_eq!(browse.plotted().len(), 1);
-        assert_eq!(browse.plotted()[0].field.to_string(), "VIBE[0].VibeX");
+        assert_eq!(
+            browse.plotted()[0]
+                .field
+                .as_ref()
+                .map(ToString::to_string)
+                .unwrap_or_default(),
+            "VIBE[0].VibeX"
+        );
     }
 
     /// Straight after opening, the first cell is current, and graphing it is refused in words.
@@ -2609,16 +4452,24 @@ mod tests {
     /// The fixture's GPS never had a fix: no track, and the mission it logged in its place.
     #[test]
     fn a_log_with_no_fix_maps_its_mission() {
-        let browse = opened();
+        let mut browse = opened();
         let contents = browse.map_contents();
         assert_eq!(contents.points, 0);
         assert_eq!(contents.source, "");
         assert_eq!(contents.waypoints, 6);
-        assert_eq!(browse.map().borrow().mission_len(), 6);
-        assert_eq!(browse.map().borrow().path_len(), 0);
+        // `DrawMap` runs when the map is shown, and draws the logged mission.
+        assert!(browse.drawn().commands.is_empty());
+        browse.toggle_check(Check::Map);
+        assert_eq!(browse.drawn().commands.len(), 6);
+        assert!(browse.drawn().gps.is_empty());
+        assert_eq!(
+            browse.map().borrow().path_len(),
+            0,
+            "the widget draws no track of its own"
+        );
     }
 
-    /// A log with a fix maps its first GPS's route.
+    /// A log with a fix maps its first GPS's route, and its EKF's.
     #[test]
     fn a_log_with_a_fix_maps_its_gps_route() {
         let mut browse = LogBrowse::new();
@@ -2629,10 +4480,9 @@ mod tests {
         let contents = browse.map_contents();
         assert_eq!(contents.source, "GPS");
         assert_eq!(contents.points, 63);
-        // The widget keeps a point only when the vehicle has moved; on a bench it barely does.
-        let kept = browse.map().borrow().path_len();
-        assert!((1..=63).contains(&kept), "{kept}");
-        assert!(browse.map().borrow().has_fix());
+        browse.toggle_check(Check::Map);
+        assert_eq!(browse.drawn().gps.len(), 63);
+        assert_eq!(browse.drawn().pos.len(), 119);
     }
 
     /// Opening another log replaces the map rather than adding to it.
@@ -2643,10 +4493,11 @@ mod tests {
             &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../../testdata/dataflash_damaged.bin"),
         );
-        assert!(browse.map().borrow().path_len() > 0);
+        browse.toggle_check(Check::Map);
+        assert_eq!(browse.drawn().gps.len(), 63);
         browse.open(&fixture());
-        assert_eq!(browse.map().borrow().path_len(), 0);
-        assert!(!browse.map().borrow().has_fix());
+        assert!(browse.drawn().gps.is_empty());
+        assert_eq!(browse.drawn().commands.len(), 6);
         assert_eq!(browse.map_contents().points, 0);
     }
 
@@ -2971,7 +4822,7 @@ mod tests {
         let cursor = browse.cursor();
         let current = browse.grid_current();
         assert!(browse.marker().is_some());
-        browse.go_to_sample(-1, true, true);
+        browse.go_to_sample(-1, true, false, true);
         assert_eq!(browse.marker(), None);
         assert_eq!(browse.cursor(), cursor);
         assert_eq!(browse.grid_current(), current);
@@ -3047,13 +4898,14 @@ mod tests {
     #[test]
     fn a_pointer_is_a_fraction_of_the_charts_width() {
         let browse = LogBrowse::new();
-        assert_eq!(browse.chart_fraction(100.0), None, "not laid out yet");
+        assert_eq!(browse.chart_point(100.0, 20.0), None, "not laid out yet");
         browse.chart_bounds.set(Some(Bounds {
             origin: gpui::point(px(40.0), px(10.0)),
             size: gpui::size(px(400.0), px(260.0)),
         }));
-        assert_eq!(browse.chart_fraction(240.0), Some(0.5));
-        assert_eq!(browse.chart_fraction(40.0), Some(0.0));
+        assert_eq!(browse.chart_point(240.0, 140.0), Some((0.5, 0.5)));
+        assert_eq!(browse.chart_point(40.0, 10.0), Some((0.0, 0.0)));
+        assert_eq!(browse.chart_size(), (400.0, 260.0));
     }
 
     /// Opening a log takes the last one's marker and cursor away.

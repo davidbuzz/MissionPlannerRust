@@ -24,3 +24,9 @@ mp-vehicle.workspace = true
 mp-mavlink-dialects.workspace = true
 # The tlog writer is the link's recorder; the round-trip tests read back what it writes.
 mp-link.workspace = true
+criterion.workspace = true
+
+# D14's parse budget: a 1 GB dataflash log opened to its first plot in under two seconds.
+[[bench]]
+name = "parse_1gb"
+harness = false

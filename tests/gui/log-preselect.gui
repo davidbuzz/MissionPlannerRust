@@ -1,0 +1,50 @@
+# The preselected graphs of Log/LogBrowse.cs's strip: CMB_preselect, filled when a log opens with
+# the graphs built into mavgraph and every graph of the files Mission Planner ships in its graphs
+# directory, sorted by name, "a/None" first and selected - which does nothing. Choosing a set
+# clears the chart and graphs each piece the log has, as GraphItem's expression path does: here
+# MAVProxy's "Attitude/Roll and Pitch", whose ATT.Roll and ATT.Pitch this log has and whose
+# MAVLink pieces, degrees(ATTITUDE.roll) and degrees(ATTITUDE.pitch), a dataflash log does not.
+#
+# The list sorts "Attitude/Roll and Pitch mavgraphs" tenth (mp_log::mavgraph's
+# the_first_page_is_the_a_names holds it there), on the first page the list shows.
+#
+# Self-contained: the damaged fixture, and a config.xml of its own.
+
+env MP_PLAN_DIR $WORK/logs
+env MP_CONFIG_XML $WORK/config.xml
+setup mkdir -p $WORK/logs && cp testdata/dataflash_damaged.bin $WORK/logs/gpsfix.bin
+
+screen logs
+window 1600x1200
+settle 3
+
+click log-name
+type gpsfix.bin
+key Return
+settle 3
+
+expect log.open true
+expect log.preselect.items 378
+expect log.preselect.selected a/None
+expect log.preselect.open false
+expect log.plotted 0
+
+click log-preselect
+settle 1
+expect log.preselect.open true
+click log-preselect-item-9
+settle 3
+expect log.preselect.open false
+expect log.preselect.selected Attitude/Roll and Pitch mavgraphs
+expect log.preselect.graphed 2
+expect log.preselect.skipped 0
+expect log.plotted 2
+expect log.plotted.right 0
+
+# Back to "a/None": the handler returns before it clears anything.
+click log-preselect
+settle 1
+click log-preselect-item-0
+settle 2
+expect log.preselect.selected a/None
+expect log.plotted 2

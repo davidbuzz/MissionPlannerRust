@@ -1,0 +1,74 @@
+# The log browser's chart zooms as ZedGraph's does, since Log/LogBrowse.cs leaves zg1 at its
+# defaults: the wheel zooms every axis a tenth about the middle, each step goes on the zoom stack,
+# and the right-click menu's Un-Zoom, Undo All Zoom/Pan and Set Scale to Default walk it back.
+# The same menu's Show Point Values starts off, as ZedGraph starts it. A left drag zooms to a
+# rectangle and Ctrl with a drag pans; the runner cannot drag, and the unit tests hold both.
+#
+# Self-contained: the damaged fixture, with a config.xml of its own.
+
+env MP_PLAN_DIR $WORK/logs
+env MP_CONFIG_XML $WORK/config.xml
+setup mkdir -p $WORK/logs && cp testdata/dataflash_damaged.bin $WORK/logs/gpsfix.bin
+
+screen logs
+window 1600x1200
+settle 3
+
+click log-name
+type gpsfix.bin
+key Return
+settle 3
+
+click logfield-ATT.Roll
+settle 2
+expect log.plotted 1
+expect log.zoom.x auto
+expect log.zoom.depth 0
+
+# Away from the user zooms in, towards zooms out; each notch is a step.
+scroll log-chart up 2
+settle 1
+expect log.zoom.depth 2
+expect log.zoom.undo Un-Zoom
+scroll log-chart down 1
+settle 1
+expect log.zoom.depth 3
+
+click log-chart:right
+settle 1
+expect log.chart.menu true
+click log-chart-menu-unzoom
+settle 1
+expect log.chart.menu false
+expect log.zoom.depth 2
+
+click log-chart:right
+settle 1
+click log-chart-menu-undo_all
+settle 1
+expect log.zoom.depth 0
+expect log.zoom.x auto
+
+# Show Point Values: off, then on.
+expect log.chart.pointvalues false
+click log-chart:right
+settle 1
+click log-chart-menu-show_val
+settle 1
+expect log.chart.pointvalues true
+
+# Set Scale to Default pushes what it replaces, so Un-Zoom brings it back.
+scroll log-chart up 1
+settle 1
+click log-chart:right
+settle 1
+click log-chart-menu-set_default
+settle 1
+expect log.zoom.x auto
+expect log.zoom.depth 2
+
+# A new curve zooms out all the way.
+click logfield-ATT.Pitch
+settle 2
+expect log.plotted 2
+expect log.zoom.depth 0

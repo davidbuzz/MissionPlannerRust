@@ -242,6 +242,10 @@ struct MissionPlanner {
     log_name: textfield::TextField,
     /// Focus for that field.
     log_name_focus: gpui::FocusHandle,
+    /// Focus for the log browser's prompt: Ctrl+G's line, a field's scaler, an export's name.
+    log_prompt_focus: gpui::FocusHandle,
+    /// Focus for the log browser itself, which Ctrl+G is heard through.
+    log_screen_focus: gpui::FocusHandle,
     /// What has been typed into the log field search.
     log_search: textfield::TextField,
     /// The result of the last comparison against a file, newest first.
@@ -546,6 +550,8 @@ impl MissionPlanner {
             log_browse: logbrowse::LogBrowse::new(),
             log_name: textfield::TextField::new("a .BIN or .log in the plan directory"),
             log_name_focus: cx.focus_handle(),
+            log_prompt_focus: cx.focus_handle(),
+            log_screen_focus: cx.focus_handle(),
             log_search: textfield::TextField::new("filter fields"),
             param_differences: Vec::new(),
             radio_input: config::radio::RadioInput::default(),
@@ -920,6 +926,13 @@ impl MissionPlanner {
         };
         let path = Self::plan_directory().join(leaf);
         self.log_browse.open(&path);
+        // `LoadLog2` sets six of the strip's boxes from config.xml once the log is read.
+        // `// C#: Log/LogBrowse.cs:444-449`
+        if self.log_browse.is_open() {
+            let persisted = &self.persisted;
+            self.log_browse
+                .apply_remembered(|key| persisted.get(key).map(str::to_owned));
+        }
     }
 
     /// Commands a guided move to a position, holding the current height.
@@ -2469,8 +2482,13 @@ impl Render for MissionPlanner {
                 .child(logbrowse::screen(
                     &self.log_browse,
                     &self.log_name,
-                    &self.log_name_focus,
-                    self.log_name_focus.is_focused(window),
+                    &logbrowse::Focus {
+                        name: &self.log_name_focus,
+                        name_focused: self.log_name_focus.is_focused(window),
+                        prompt: &self.log_prompt_focus,
+                        prompt_focused: self.log_prompt_focus.is_focused(window),
+                        screen: &self.log_screen_focus,
+                    },
                     self.log_search.value(),
                     cx,
                 ))

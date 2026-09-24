@@ -79,7 +79,12 @@ pub struct Overlays {
 ///
 /// `limitcount` is checked after the line is converted, so one more than this is read.
 /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:295-309`
-const FIRMWARE_LINES: usize = 100_000;
+pub(crate) const FIRMWARE_LINES: usize = 100_000;
+
+/// The firmware one `MSG` or `PARM` record's line names, if it names one.
+pub(crate) fn firmware_named(message: &LogMessage) -> Option<Firmware> {
+    guess_firmware(&line_text(message))
+}
 
 /// Reads everything `LogBrowse` draws over its chart out of a log.
 ///
@@ -93,11 +98,7 @@ const FIRMWARE_LINES: usize = 100_000;
 /// `// C#: Log/LogBrowse.cs:1731-1817, 1819-1897, 1900-2018, 2020-2089, 2091-2183`
 #[must_use]
 pub fn overlays(data: &[u8], mode_name: impl Fn(Firmware, u64) -> Option<String>) -> Overlays {
-    let mut overlays = Overlays::default();
-    let mut raw_modes: Vec<(Mark, ModeValue, i64)> = Vec::new();
-    let mut firmware_lines = 0usize;
-    let mut clock = MinuteClock::default();
-
+    let mut walk = OverlayWalk::default();
     let mut reader = DataflashReader::new(data);
     let mut line = 0usize;
     while let Some(record) = reader.next_record() {
@@ -106,11 +107,7 @@ pub fn overlays(data: &[u8], mode_name: impl Fn(Firmware, u64) -> Option<String>
         let Some(format) = reader.formats().get(&record.msg_type) else {
             continue;
         };
-        let wanted = matches!(
-            format.name.as_str(),
-            "MODE" | "ERR" | "EV" | "MSG" | "PARM" | "GPS"
-        );
-        if !wanted {
+        if !OVERLAY_TYPES.contains(&format.name.as_str()) {
             continue;
         }
         let Some(message) = data
@@ -119,66 +116,140 @@ pub fn overlays(data: &[u8], mode_name: impl Fn(Firmware, u64) -> Option<String>
         else {
             continue;
         };
+        walk.record(this_line, format, &message);
+        if matches!(message.name.as_str(), "MSG" | "PARM") {
+            walk.firmware_line(&message);
+        }
+    }
+    walk.finish(mode_name)
+}
+
+/// The message types [`overlays`] reads.
+pub(crate) const OVERLAY_TYPES: [&str; 6] = ["MODE", "ERR", "EV", "MSG", "PARM", "GPS"];
+
+/// What [`overlays`] gathers as it goes, one record at a time in log order.
+///
+/// Fed by the walk over every record, or by [`crate::logfile::LogFile`] with only the records of
+/// [`OVERLAY_TYPES`], read through the index; either way the same records in the same order, and
+/// so the same labels. The firmware guess is fed the `MSG` and `PARM` lines by
+/// [`Self::firmware_line`], or settled some other way and given to [`Self::firmware`].
+#[derive(Debug, Default)]
+pub(crate) struct OverlayWalk {
+    /// What is finished as it is read.
+    overlays: Overlays,
+    /// Mode changes, named only once the firmware guess is final.
+    raw_modes: Vec<(Mark, ModeValue, i64)>,
+    /// `MSG` and `PARM` lines the firmware guess has read.
+    firmware_lines: usize,
+    /// `DrawTime`'s state.
+    clock: MinuteClock,
+}
+
+impl OverlayWalk {
+    /// One record of a type in [`OVERLAY_TYPES`], decoded with the format it was logged under.
+    pub(crate) fn record(&mut self, line: usize, format: &MessageFormat, message: &LogMessage) {
+        let time_us = message.field(TIME_FIELD).and_then(Value::as_f64);
         let at = |text: String| Mark {
-            line: this_line,
-            time_us: message.field(TIME_FIELD).and_then(Value::as_f64),
+            line,
+            time_us,
             text,
         };
         match message.name.as_str() {
             "MODE" => {
-                if let Some((value, number)) = mode_fields(format, &message) {
-                    raw_modes.push((at(String::new()), value, number));
+                if let Some((value, number)) = mode_fields(format, message) {
+                    self.raw_modes.push((at(String::new()), value, number));
                 }
             }
             "ERR" => {
-                if let Some(text) = error_text(&message) {
-                    overlays.errors.push(at(text));
+                if let Some(text) = error_text(message) {
+                    self.overlays.errors.push(at(text));
                 }
             }
             "EV" => {
                 if let Some(id) = message.field("Id").and_then(whole) {
-                    overlays.events.push(at(format!("EV: {}", event_name(id))));
+                    self.overlays
+                        .events
+                        .push(at(format!("EV: {}", event_name(id))));
                 }
             }
             "MSG" => {
                 if let Some(value) = message.field("Message") {
-                    overlays.messages.push(at(text_of(value).trim().to_owned()));
+                    self.overlays
+                        .messages
+                        .push(at(text_of(value).trim().to_owned()));
                 }
             }
             "GPS" => {
-                if let Some(text) = clock.tick(format, &message) {
-                    overlays.minutes.push(at(text));
-                }
+                let minute = minute_field(format).and_then(|(index, micro)| {
+                    Some((micro, message.fields.get(index)?.1.as_f64()?))
+                });
+                self.gps(line, time_us, minute);
             }
             _ => {}
         }
-        if matches!(message.name.as_str(), "MSG" | "PARM") && firmware_lines <= FIRMWARE_LINES {
-            firmware_lines += 1;
-            if let Some(found) = guess_firmware(&line_text(&message)) {
-                overlays.firmware = Some(found);
+    }
+
+    /// One `MSG` or `PARM` line, for the firmware guess: the last of the first
+    /// [`FIRMWARE_LINES`] and one that names a vehicle names it.
+    pub(crate) fn firmware_line(&mut self, message: &LogMessage) {
+        if self.reading_firmware() {
+            self.firmware_lines += 1;
+            if let Some(found) = firmware_named(message) {
+                self.overlays.firmware = Some(found);
             }
         }
     }
 
-    // `BinaryLog` names a mode as the record is converted, which `DrawModes` does after the whole
-    // log's `MSG` and `PARM` lines have been read for the guess - so every mode is named against
-    // the final guess, not the one in force where the mode was logged.
-    overlays.modes = raw_modes
-        .into_iter()
-        .map(|(mut mark, value, number)| {
-            mark.text = match value {
-                ModeValue::Numbered(mode) => overlays
-                    .firmware
-                    .and_then(|firmware| mode_name(firmware, mode))
-                    .unwrap_or_else(|| mode.to_string()),
-                ModeValue::Written(text) => text,
-            }
-            .trim()
-            .to_owned();
-            ModeChange { mark, number }
-        })
-        .collect();
-    overlays
+    /// The firmware guess, settled without [`Self::firmware_line`].
+    pub(crate) const fn firmware(&mut self, firmware: Option<Firmware>) {
+        self.overlays.firmware = firmware;
+    }
+
+    /// One `GPS` record, by the two things `DrawTime` reads of it: its `TimeUS`, and the time
+    /// [`minute_field`] names, with whether that is microseconds - `None` where the record has
+    /// no such number.
+    pub(crate) fn gps(&mut self, line: usize, time_us: Option<f64>, minute: Option<(bool, f64)>) {
+        if let Some((micro, value)) = minute
+            && let Some(text) = self.clock.tick(micro, value)
+        {
+            self.overlays.minutes.push(Mark {
+                line,
+                time_us,
+                text,
+            });
+        }
+    }
+
+    /// Whether the firmware guess still reads `MSG` and `PARM` lines: once it has read its
+    /// limit, a `PARM` record changes nothing and need not be read at all.
+    pub(crate) const fn reading_firmware(&self) -> bool {
+        self.firmware_lines <= FIRMWARE_LINES
+    }
+
+    /// The labels, with every mode named.
+    pub(crate) fn finish(self, mode_name: impl Fn(Firmware, u64) -> Option<String>) -> Overlays {
+        let mut overlays = self.overlays;
+        // `BinaryLog` names a mode as the record is converted, which `DrawModes` does after the
+        // whole log's `MSG` and `PARM` lines have been read for the guess - so every mode is
+        // named against the final guess, not the one in force where the mode was logged.
+        overlays.modes = self
+            .raw_modes
+            .into_iter()
+            .map(|(mut mark, value, number)| {
+                mark.text = match value {
+                    ModeValue::Numbered(mode) => overlays
+                        .firmware
+                        .and_then(|firmware| mode_name(firmware, mode))
+                        .unwrap_or_else(|| mode.to_string()),
+                    ModeValue::Written(text) => text,
+                }
+                .trim()
+                .to_owned();
+                ModeChange { mark, number }
+            })
+            .collect();
+        overlays
+    }
 }
 
 /// A `MODE` record's `Mode` field, as `BinaryLog` turns it into a label.
@@ -308,16 +379,22 @@ struct MinuteClock {
 /// `DateTime.MaxValue` in milliseconds from `DateTime.MinValue`: what `AddMilliseconds` allows.
 const MAX_MILLIS: i64 = 315_537_897_600_000;
 
+/// Which field of a `GPS` format `DrawTime` reads its time from - `TimeMS` if the format has it,
+/// else `TimeUS` - and whether the format has a `TimeUS`, which decides the unit.
+/// `// C#: Log/LogBrowse.cs:2110-2130`
+pub(crate) fn minute_field(format: &MessageFormat) -> Option<(usize, bool)> {
+    let position = |name: &str| format.labels.iter().position(|label| label == name);
+    let micro = position("TimeUS");
+    Some((position("TimeMS").or(micro)?, micro.is_some()))
+}
+
 impl MinuteClock {
-    /// One `GPS` record; the label to draw on it, if it starts a new minute.
-    fn tick(&mut self, format: &MessageFormat, message: &LogMessage) -> Option<String> {
+    /// One `GPS` record's time, read from its [`minute_field`]; the label to draw on it, if it
+    /// starts a new minute.
+    fn tick(&mut self, micro: bool, value: f64) -> Option<String> {
         if self.stopped {
             return None;
         }
-        let position = |name: &str| format.labels.iter().position(|label| label == name);
-        let micro = position("TimeUS");
-        let index = position("TimeMS").or(micro)?;
-        let value = message.fields.get(index)?.1.as_f64()?;
         // `UInt64.TryParse` of the number written out: a whole, non-negative one only.
         if !(value >= 0.0 && value.fract() == 0.0 && value < 1.8e19) {
             return None;
@@ -328,7 +405,7 @@ impl MinuteClock {
             self.start = time;
         }
         #[allow(clippy::cast_precision_loss)] // as the C#'s double arithmetic loses it
-        let elapsed = if micro.is_some() {
+        let elapsed = if micro {
             time.wrapping_sub(self.start) as f64 / 1000.0
         } else {
             time.wrapping_sub(self.start) as f64
@@ -442,6 +519,21 @@ impl Positions {
         }
     }
 
+    /// The records a log's position records make, read some other way than by [`Self::read`]:
+    /// every one whose name starts `GPS` or `POS`, in log order; the number of records in the
+    /// log; and whether it declares a `GPS` or `POS` format.
+    pub(crate) const fn from_parts(
+        records: Vec<PositionRecord>,
+        lines: usize,
+        declared: bool,
+    ) -> Self {
+        Self {
+            records,
+            lines,
+            declared,
+        }
+    }
+
     /// The records read.
     #[must_use]
     pub fn records(&self) -> &[PositionRecord] {
@@ -533,16 +625,30 @@ impl Positions {
 /// them. A `GPS` line needs the format to have a `Status`, and a status of 3 or more.
 /// `// C#: Log/LogBrowse.cs:3374-3412`
 fn place_of(formats: &BTreeMap<u8, MessageFormat>, message: &LogMessage) -> Option<(f64, f64)> {
-    let family = if message.name.starts_with("GPS") {
+    let family = family_of(&message.name);
+    let format = formats.values().find(|format| format.name == family)?;
+    place_in(family, |name| {
+        let position = format.labels.iter().position(|label| label == name)?;
+        message.fields.get(position)?.1.as_f64()
+    })
+}
+
+/// Which format a position record's fields are found in: `GPS` for any name that starts so, and
+/// `POS` for the rest.
+pub(crate) fn family_of(name: &str) -> &'static str {
+    if name.starts_with("GPS") {
         "GPS"
     } else {
         "POS"
-    };
-    let format = formats.values().find(|format| format.name == family)?;
-    let field = |name: &str| {
-        let position = format.labels.iter().position(|label| label == name)?;
-        message.fields.get(position)?.1.as_f64()
-    };
+    }
+}
+
+/// The fields [`place_in`] reads, by name.
+pub(crate) const PLACE_FIELDS: [&str; 3] = ["Status", "Lat", "Lng"];
+
+/// [`place_of`] once the family's format is found, with `field` reading the record's field at
+/// the place the family's format gives a name - one of [`PLACE_FIELDS`].
+pub(crate) fn place_in(family: &str, field: impl Fn(&str) -> Option<f64>) -> Option<(f64, f64)> {
     if family == "GPS" {
         let status = field("Status")?;
         if status < 3.0 {

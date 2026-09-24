@@ -4,8 +4,8 @@
 //! it is told how many rows there are and asks for a cell's text as it paints it, which
 //! `CellValueNeeded` answers by decoding that one record. On Mono, where virtual mode misbehaves,
 //! it keeps a thousand real rows and repaints them from an offset a scroll bar moves. Either way
-//! only what is on screen is ever decoded, and so here: the log is indexed once, a screenful of
-//! rows is decoded when the window moves, and the rest stays on disk.
+//! only what is on screen is ever decoded, and so here: the log is indexed once when it is
+//! opened (`mp_log::logfile`), and a screenful of rows is decoded when the window moves.
 //!
 //! The columns are the C#'s: the line number, the time, the message type - `typecoloum`, which
 //! is 2 - and then the record's fields in the order its format declares them. The Graph Left and
@@ -16,9 +16,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
-use std::io::{Read, Seek, SeekFrom};
-
-use mp_log::dataflash::{LogMessage, MAX_RECORD_LEN, Value};
+use mp_log::dataflash::{LogMessage, Value};
 use mp_log::index::{RecordIndex, boot_ms};
 
 /// The column that holds the message type: `typecoloum`.
@@ -36,13 +34,8 @@ pub const ROW_HEIGHT: f32 = 18.0;
 /// What `CellValueNeeded` writes a time as: `yyyy-MM-dd HH:mm:ss.fff`.
 const TIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.3f";
 
-/// Something rows can be read back from: the log file, or bytes held in memory for a test.
-pub trait Source: Read + Seek {}
-
-impl<T: Read + Seek> Source for T {}
-
 /// One row as the grid shows it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct GridRow {
     /// Its position in the grid, counting from the top of the (possibly filtered) list.
     pub row: usize,
@@ -54,10 +47,12 @@ pub struct GridRow {
     pub cells: Vec<String>,
     /// The record's instance number, for a message type whose `FMTU` marks one.
     pub instance: Option<i64>,
+    /// The record's `TimeUS`, if it has one.
+    pub time_us: Option<f64>,
 }
 
 /// The current cell: `dataGridView1.CurrentCell`, and the row it is in.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 struct Current {
     /// Grid row.
     row: usize,
@@ -147,6 +142,19 @@ impl Clock {
     where
         Tz::Offset: std::fmt::Display,
     {
+        self.formatted_in(boot_ms, zone, TIME_FORMAT)
+    }
+
+    /// A row's time in a given zone and format.
+    fn formatted_in<Tz: chrono::TimeZone>(
+        self,
+        boot_ms: Option<f64>,
+        zone: &Tz,
+        format: &str,
+    ) -> String
+    where
+        Tz::Offset: std::fmt::Display,
+    {
         let boot_ms = boot_ms.unwrap_or(0.0);
         match self {
             Self::Gps {
@@ -160,7 +168,7 @@ impl Clock {
                     .and_then(|start| {
                         start.checked_add_signed(chrono::TimeDelta::microseconds(since_fix_us))
                     })
-                    .map(|time| time.with_timezone(zone).format(TIME_FORMAT).to_string())
+                    .map(|time| time.with_timezone(zone).format(format).to_string())
                     .unwrap_or_default()
             }
             Self::FromYearOne => {
@@ -171,7 +179,7 @@ impl Clock {
                     .and_then(|start| {
                         start.checked_add_signed(chrono::TimeDelta::microseconds(since_boot_us))
                     })
-                    .map(|time| time.format(TIME_FORMAT).to_string())
+                    .map(|time| time.format(format).to_string())
                     .unwrap_or_default()
             }
         }
@@ -187,12 +195,21 @@ struct Filter {
     rows: Vec<u32>,
 }
 
+/// Where the grid's rows come from: the log the browser opened, held in memory with its index,
+/// as `DFLogBuffer` holds its stream and `linestartoffset`.
+struct Records(std::rc::Rc<mp_log::logfile::LogFile>);
+
+impl Records {
+    /// Every record's place in the log.
+    fn index(&self) -> &RecordIndex {
+        self.0.index()
+    }
+}
+
 /// The grid: which records it shows, which are on screen, and which cell is current.
 pub struct Grid {
-    /// Where rows are read back from.
-    source: Box<dyn Source>,
-    /// Every record's place in the log.
-    index: RecordIndex,
+    /// Where rows are read back from, and every record's place in the log.
+    records: Records,
     /// How the time column is written.
     clock: Clock,
     /// The type the grid is filtered to, if it is.
@@ -212,7 +229,7 @@ pub struct Grid {
 impl std::fmt::Debug for Grid {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Grid")
-            .field("records", &self.index.len())
+            .field("records", &self.records.index().len())
             .field("filter", &self.filter.as_ref().map(|filter| &filter.name))
             .field("first", &self.first)
             .field("current", &self.current())
@@ -221,21 +238,23 @@ impl std::fmt::Debug for Grid {
 }
 
 impl Grid {
-    /// A grid over an indexed log, showing its first rows with the first cell current.
+    /// A grid over an indexed log, showing its first rows with the first cell current; its rows
+    /// are decoded from the bytes the log holds, as `DFLogBuffer`'s indexer decodes a line.
     ///
     /// A `DataGridView` makes its first cell current when it is filled, so a Graph Left pressed
     /// straight after opening a log is refused for the line-number column, as the C# refuses it.
     /// `leap_seconds` is what GPS time is ahead of UTC; the C# asks for today's.
-    pub fn new(index: RecordIndex, source: Box<dyn Source>, leap_seconds: i64) -> Self {
-        let clock = index
+    pub fn over(log: std::rc::Rc<mp_log::logfile::LogFile>, leap_seconds: i64) -> Self {
+        let records = Records(log);
+        let clock = records
+            .index()
             .gps_start()
             .map_or(Clock::FromYearOne, |start| Clock::Gps {
                 start_ms: start.unix_ms(leap_seconds),
                 boot_ms: start.boot_ms,
             });
         let mut grid = Self {
-            source,
-            index,
+            records,
             clock,
             filter: None,
             first: 0,
@@ -254,13 +273,13 @@ impl Grid {
     pub fn rows(&self) -> usize {
         self.filter
             .as_ref()
-            .map_or(self.index.len(), |filter| filter.rows.len())
+            .map_or(self.records.index().len(), |filter| filter.rows.len())
     }
 
     /// Records in the log.
     #[must_use]
     pub fn records(&self) -> usize {
-        self.index.len()
+        self.records.index().len()
     }
 
     /// Columns every row has: the widest message's fields and the three in front of them.
@@ -270,7 +289,7 @@ impl Grid {
     /// anything.
     #[must_use]
     pub fn columns(&self) -> usize {
-        self.index.widest() + TYPE_COLUMN + 1
+        self.records.index().widest() + TYPE_COLUMN + 1
     }
 
     /// The first row on screen.
@@ -308,7 +327,7 @@ impl Grid {
     /// The types there are to filter by: `SeenMessageTypes`, sorted.
     #[must_use]
     pub fn types(&self) -> Vec<String> {
-        self.index.seen()
+        self.records.index().seen()
     }
 
     /// The column headers.
@@ -321,7 +340,7 @@ impl Grid {
         let format = self
             .current
             .as_ref()
-            .and_then(|current| self.index.format_named(&current.record.name));
+            .and_then(|current| self.records.index().format_named(&current.record.name));
         (0..self.columns())
             .map(|column| {
                 let field = column.checked_sub(TYPE_COLUMN + 1);
@@ -379,7 +398,7 @@ impl Grid {
             return Err(Refusal::FirstColumn);
         }
         let name = &current.record.name;
-        let Some(format) = self.index.format_named(name) else {
+        let Some(format) = self.records.index().format_named(name) else {
             return Err(Refusal::NoFormat(name.clone()));
         };
         let Some(field) = current.column.checked_sub(TYPE_COLUMN + 1) else {
@@ -458,7 +477,7 @@ impl Grid {
     pub fn set_filter(&mut self, name: Option<&str>) {
         self.filter = name.map(|name| Filter {
             name: name.to_owned(),
-            rows: self.index.rows_named(name),
+            rows: self.records.index().rows_named(name),
         });
         self.choosing = false;
         self.first = 0;
@@ -468,6 +487,84 @@ impl Grid {
         self.select(0, 0);
     }
 
+    /// Makes a cell current and scrolls only as far as it takes to show it, as setting
+    /// `CurrentCell` does: `ProcessCmdKey`'s Ctrl+G. A row past the end is refused, and the C#
+    /// says "Line Doesn't Exist".
+    /// `// C#: Log/LogBrowse.cs:183-205`
+    pub fn show(&mut self, row: usize, column: usize) -> bool {
+        if row >= self.rows() || column >= self.columns() {
+            return false;
+        }
+        let first = if row < self.first {
+            row
+        } else if row >= self.first + VISIBLE_ROWS {
+            row + 1 - VISIBLE_ROWS
+        } else {
+            self.first
+        };
+        if first != self.first {
+            self.first = first;
+            self.carry = 0.0;
+            self.load();
+        }
+        self.select(row, column);
+        true
+    }
+
+    /// The time of day a boot-clock time is, as ZedGraph's `PointDateFormat` - `HH:mm:ss.fff` -
+    /// writes it for a point on the time axis.
+    /// `// C#: Log/LogBrowse.cs:3547`
+    #[must_use]
+    pub fn time_of_day(&self, boot_ms: f64) -> String {
+        self.clock
+            .formatted_in(Some(boot_ms), &chrono::Local, "%H:%M:%S%.3f")
+    }
+
+    /// The columns `LoadLog` gives the C#'s grid, which Export Visible writes a cell of for
+    /// every row: the longest format's column list, in characters, and three.
+    ///
+    /// `colsplit` is meant to count a format's columns but splits the list's first character, so
+    /// it is always 1, and the list's length in characters stands in for its column count.
+    /// `// C#: Log/LogBrowse.cs:380-387`
+    #[must_use]
+    pub fn csv_columns(&self) -> usize {
+        self.records
+            .index()
+            .formats()
+            .values()
+            .map(|format| format.labels.join(",").len() + TYPE_COLUMN + 1)
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// Every row the grid holds, in order, each read from the log as it is reached: Export
+    /// Visible's `foreach (DataGridViewRow row in dataGridView1.Rows)`.
+    pub fn for_each_row(&mut self, mut each: impl FnMut(&GridRow)) {
+        for row in 0..self.rows() {
+            let Some(line) = self.line_of(row) else {
+                break;
+            };
+            let message = self.read(line);
+            each(&self.build_row(row, line, message.as_ref()));
+        }
+    }
+
+    /// The record a grid row shows: its line in the log.
+    #[must_use]
+    pub fn line_of_row(&self, row: usize) -> Option<usize> {
+        self.line_of(row)
+    }
+
+    /// The `TimeUS` of the record a grid row shows, if it has one: read from the window when
+    /// the row is on screen, which a double-clicked row is.
+    #[must_use]
+    pub fn time_of_row(&self, row: usize) -> Option<f64> {
+        self.window
+            .iter()
+            .find(|shown| shown.row == row)
+            .and_then(|shown| shown.time_us)
+    }
+
     /// The record a grid row shows.
     fn line_of(&self, row: usize) -> Option<usize> {
         match &self.filter {
@@ -475,7 +572,7 @@ impl Grid {
                 .rows
                 .get(row)
                 .and_then(|line| usize::try_from(*line).ok()),
-            None => (row < self.index.len()).then_some(row),
+            None => (row < self.records.index().len()).then_some(row),
         }
     }
 
@@ -499,14 +596,7 @@ impl Grid {
     /// fails leaves the row blank rather than the grid: the file was there a moment ago, and a
     /// row that cannot be shown is not a reason to show none.
     fn read(&mut self, line: usize) -> Option<LogMessage> {
-        let offset = self.index.offset(line)?;
-        self.source.seek(SeekFrom::Start(offset)).ok()?;
-        let mut bytes = Vec::with_capacity(MAX_RECORD_LEN);
-        Read::by_ref(&mut self.source)
-            .take(MAX_RECORD_LEN as u64)
-            .read_to_end(&mut bytes)
-            .ok()?;
-        self.index.decode(&bytes)
+        self.records.0.record(line)
     }
 
     /// Writes a record out as a row: `CellValueNeeded` for every column at once.
@@ -519,10 +609,12 @@ impl Grid {
                 name: String::new(),
                 cells: vec![line.to_string()],
                 instance: None,
+                time_us: None,
             };
         };
         let codes = self
-            .index
+            .records
+            .index()
             .format_named(&message.name)
             .map(|format| format.format.as_bytes());
         let mut cells = Vec::with_capacity(message.fields.len() + TYPE_COLUMN + 1);
@@ -535,9 +627,10 @@ impl Grid {
         }
         #[allow(clippy::cast_possible_truncation)] // an instance number is a small integer
         let instance = self
-            .index
+            .records
+            .index()
             .msg_type(line)
-            .and_then(|msg_type| self.index.instance_field(msg_type))
+            .and_then(|msg_type| self.records.index().instance_field(msg_type))
             .and_then(|field| message.fields.get(field))
             .and_then(|(_, value)| value.as_f64())
             .map(|value| value as i64);
@@ -547,6 +640,7 @@ impl Grid {
             name: message.name.clone(),
             cells,
             instance,
+            time_us: message.field("TimeUS").and_then(Value::as_f64),
         }
     }
 }
@@ -609,8 +703,10 @@ mod tests {
     }
 
     fn grid_over(data: Vec<u8>) -> Grid {
-        let index = RecordIndex::build(&data);
-        Grid::new(index, Box::new(std::io::Cursor::new(data)), 18)
+        Grid::over(
+            std::rc::Rc::new(mp_log::logfile::LogFile::from_bytes(data)),
+            18,
+        )
     }
 
     fn grid() -> Grid {
@@ -908,7 +1004,7 @@ mod tests {
                 boot_ms: 458_484,
             })
         );
-        let grid = Grid::new(index, Box::new(std::io::Cursor::new(data)), 18);
+        let grid = grid_over(data);
         assert_eq!(
             grid.clock.text_in(Some(458_484.379), &chrono::Utc),
             "2026-08-16 05:41:11.000"
