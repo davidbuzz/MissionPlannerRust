@@ -28,14 +28,13 @@
 #![allow(unreachable_pub)]
 
 use gpui::{AnyElement, Context, FontWeight, SharedString, Window, div, prelude::*, px, rgb};
-use mp_calibration::{AccelCalibration, AccelPosition};
 use mp_vehicle::VehicleId;
 
 use crate::MissionPlanner;
 use crate::config::flight_modes::{Firmware, firmware_of};
 pub use crate::config_coverage::Screen as List;
 use crate::telemetry::TelemetryView;
-use crate::ui::{action, action_sized, panel, theme};
+use crate::ui::{action_sized, panel, theme};
 
 /// `WidthMenu`: the list's width.
 /// `// C#: GCSViews/InitialSetup.Designer.cs:72; GCSViews/SoftwareConfig.Designer.cs:41`
@@ -964,6 +963,19 @@ impl MissionPlanner {
             // Every time, as `ActivatePage` calls it.
             // C#: GCSViews/ConfigurationView/ConfigPlanner.cs:55-256
             Some("ConfigPlanner") => self.planner_activate(),
+            // ---- Mandatory Hardware pages ----
+            // C#: GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs:27-31
+            Some("ConfigAccelerometerCalibration") => {
+                let key = Key::of(&self.telemetry.view());
+                self.accel_calibration.activate(key);
+            }
+            // C#: GCSViews/ConfigurationView/ConfigFrameType.cs:25-34
+            Some("ConfigFrameType") => {
+                let view = self.telemetry.view();
+                self.frame_type_legacy
+                    .activate(&view.parameters, Key::of(&view));
+            }
+            // ---- end Mandatory Hardware pages ----
             _ => {}
         }
     }
@@ -1019,6 +1031,12 @@ impl MissionPlanner {
             }
             // `ConfigPlanner` is `IActivate` only: hidden, its boxes put away.
             Some("ConfigPlanner") if self.planner.is_active() => self.planner.deactivate(),
+            // ---- Mandatory Hardware pages ----
+            // C#: GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs:33-37
+            Some("ConfigAccelerometerCalibration") => self.accel_calibration.deactivate(),
+            // C#: GCSViews/ConfigurationView/ConfigFrameType.cs:36-39
+            Some("ConfigFrameType") => self.frame_type_legacy.deactivate(),
+            // ---- end Mandatory Hardware pages ----
             _ => {}
         }
     }
@@ -1093,14 +1111,35 @@ impl MissionPlanner {
             "ConfigParamLoading" => param_loading_page(cx),
             "ConfigMandatory" => heading_page(MANDATORY_TEXT),
             "ConfigOptional" => heading_page(OPTIONAL_TEXT),
-            "ConfigAccelerometerCalibration" => column()
-                .child(accelerometer_panel(
-                    self.telemetry.accel_calibration(),
-                    view,
+            // ---- Mandatory Hardware pages ----
+            // C#: GCSViews/ConfigurationView/ConfigAccelerometerCalibration.Designer.cs:31-121;
+            // ConfigAccelerometerCalibration.resx
+            "ConfigAccelerometerCalibration" => div()
+                .flex()
+                .flex_col()
+                .children(crate::config::accel_calibration::page(
+                    &self.accel_calibration,
                     cx,
                 ))
-                .child(calibration_panel(&["cal-level"], view, cx))
                 .into_any_element(),
+            // C#: GCSViews/ConfigurationView/ConfigFrameType.Designer.cs:31-222;
+            // ConfigFrameType.resx
+            "ConfigFrameType" => div()
+                .flex()
+                .flex_col()
+                .children(crate::config::frame_type_legacy::page(
+                    &self.frame_type_legacy,
+                    cx,
+                ))
+                .into_any_element(),
+            // `ConfigSecureAP` is a plain `UserControl`: nothing to activate.
+            // C#: GCSViews/ConfigurationView/ConfigSecureAP.Designer.cs:29-143
+            "ConfigSecureAP" => div()
+                .flex()
+                .flex_col()
+                .child(crate::config::secure::page())
+                .into_any_element(),
+            // ---- end Mandatory Hardware pages ----
             // C#: GCSViews/ConfigurationView/ConfigHWCompass2.Designer.cs:84-571;
             // GCSViews/ConfigurationView/ConfigHWCompass.resx
             "ConfigHWCompass2" | "ConfigHWCompass" => column()
@@ -1403,222 +1442,6 @@ pub fn record_facts(lists: [&Backstage; 2]) {
             .collect();
         record(format!("{key}.expanded"), expanded.join(","));
     }
-}
-
-/// The calibrations that are a single command.
-///
-/// Each is `MAV_CMD_PREFLIGHT_CALIBRATION` with one parameter set - the definitions are explicit
-/// that only one may be set per message - and each completes on its own without a conversation.
-const SINGLE_SHOT: &[(&str, &str, &str)] = &[
-    (
-        "cal-level",
-        "level",
-        "tells the vehicle that however it is sitting now is level; run it after mounting the \
-         autopilot even slightly askew",
-    ),
-    (
-        "cal-baro",
-        "ground pressure",
-        "re-zeroes the barometer; worth doing before a flight when the weather has changed",
-    ),
-];
-
-/// The accelerometer calibration: a conversation, one position at a time.
-///
-/// The vehicle asks for each of six orientations and waits to be told the airframe is in it. The
-/// instruction is shown as something to do rather than as a name, because getting an orientation
-/// wrong produces a calibration that is wrong in a way which only shows up in flight.
-pub fn accelerometer_panel(
-    state: AccelCalibration,
-    view: &TelemetryView,
-    cx: &mut Context<MissionPlanner>,
-) -> impl IntoElement {
-    let has_vehicle = view.vehicle.is_some();
-    let armed = view.state.as_ref().is_some_and(|state| state.armed);
-
-    let body = match state {
-        AccelCalibration::Waiting(position) => div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(
-                div()
-                    .text_lg()
-                    .text_color(rgb(theme::WARN))
-                    .child(position.instruction()),
-            )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(theme::DIM))
-                    .child("hold it still, then confirm"),
-            )
-            .child(action(
-                "cal-accel-confirm",
-                format!("{} - done", position.label()),
-                theme::OK,
-                true,
-                cx.listener(move |this, _event: &(), _window, cx| {
-                    this.telemetry.confirm_accelerometer_position(position);
-                    cx.notify();
-                }),
-            ))
-            .into_any_element(),
-        AccelCalibration::Succeeded => div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(
-                div()
-                    .text_sm()
-                    .text_color(rgb(theme::OK))
-                    .child("calibration accepted - reboot for it to take effect"),
-            )
-            .child(restart_button(cx))
-            .into_any_element(),
-        AccelCalibration::Failed => div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(
-                div()
-                    .text_sm()
-                    .text_color(rgb(theme::ALERT))
-                    .child("calibration rejected - the airframe usually moved during a sample"),
-            )
-            .child(restart_button(cx))
-            .into_any_element(),
-        AccelCalibration::Idle => div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(div().text_xs().text_color(rgb(theme::DIM)).child(
-                "six positions, in this order: level, left, right, nose down, nose up, \
-                         back. The vehicle asks for each one.",
-            ))
-            .child(action(
-                "cal-accel-start",
-                "start accelerometer calibration",
-                theme::WARN,
-                has_vehicle && !armed,
-                cx.listener(|this, _event: &(), _window, cx| {
-                    this.telemetry.start_accelerometer_calibration();
-                    cx.notify();
-                }),
-            ))
-            .into_any_element(),
-    };
-
-    // Where in the sequence we are. ArduPilot does not report a step number, so this is derived
-    // from the position it asked for - which is the order it always asks in.
-    let mut steps = div().flex().flex_wrap().gap_1();
-    let current = match state {
-        AccelCalibration::Waiting(position) => Some(position),
-        _ => None,
-    };
-    let reached = current.map_or(
-        usize::from(state == AccelCalibration::Succeeded) * AccelPosition::ALL.len(),
-        |position| {
-            AccelPosition::ALL
-                .iter()
-                .position(|candidate| *candidate == position)
-                .unwrap_or(0)
-        },
-    );
-    for (index, position) in AccelPosition::ALL.iter().enumerate() {
-        let done = index < reached;
-        let now = current == Some(*position);
-        steps = steps.child(
-            div()
-                .px_2()
-                .py(px(1.0))
-                .rounded_sm()
-                .bg(rgb(theme::ACTION))
-                .text_xs()
-                .text_color(rgb(if now {
-                    theme::WARN
-                } else if done {
-                    theme::OK
-                } else {
-                    theme::DIM
-                }))
-                .child(position.label()),
-        );
-    }
-
-    panel(
-        "accelerometer",
-        div().flex().flex_col().gap_2().child(steps).child(body),
-    )
-}
-
-/// Starts the sequence again from the beginning.
-fn restart_button(cx: &mut Context<MissionPlanner>) -> AnyElement {
-    action(
-        "cal-accel-restart",
-        "start again",
-        theme::ACCENT,
-        true,
-        cx.listener(|this, _event: &(), _window, cx| {
-            this.telemetry.clear_accel_calibration();
-            cx.notify();
-        }),
-    )
-}
-
-/// The calibrations that are a single command, those `ids` names: Calibrate Level on the
-/// accelerometer page, where the C#'s `BUT_level` is, and the ground pressure with the panels no
-/// page stands for.
-/// `// C#: GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs:143-163`
-pub fn calibration_panel(
-    ids: &[&str],
-    view: &TelemetryView,
-    cx: &mut Context<MissionPlanner>,
-) -> impl IntoElement {
-    let has_vehicle = view.vehicle.is_some();
-    let armed = view.state.as_ref().is_some_and(|state| state.armed);
-
-    let mut rows = div().flex().flex_col().gap_2();
-    for (id, name, explanation) in SINGLE_SHOT.iter().filter(|(id, _, _)| ids.contains(id)) {
-        rows = rows.child(
-            div()
-                .flex()
-                .items_center()
-                .gap_3()
-                .child(action(
-                    id,
-                    *name,
-                    theme::WARN,
-                    has_vehicle && !armed,
-                    cx.listener(move |this, _event: &(), _window, cx| {
-                        match *id {
-                            "cal-level" => this.telemetry.calibrate_level(),
-                            _ => this.telemetry.calibrate_ground_pressure(),
-                        }
-                        this.file_status = Some(format!("{name} calibration started"));
-                        cx.notify();
-                    }),
-                ))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w(px(0.0))
-                        .text_xs()
-                        .text_color(rgb(theme::DIM))
-                        .child(*explanation),
-                ),
-        );
-    }
-
-    panel(
-        "calibration",
-        div().flex().flex_col().gap_2().child(rows).child(
-            div().text_xs().text_color(rgb(theme::DIM)).child(
-                "watch the messages pane on the flight screen: the vehicle reports what \
-                         it is doing and whether it worked",
-            ),
-        ),
-    )
 }
 
 #[cfg(test)]

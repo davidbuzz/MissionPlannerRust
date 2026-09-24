@@ -335,6 +335,8 @@ path: board detect, firmware catalogue, upload via px4/DFU/serial bootloaders.
   `DetectBoardTest` cases; a real board flashes successfully on all three OSes.
 - **Replaces:** `GCSViews/InitialSetup/*`, `MagCalib.cs`, `ExtLibs/ArduPilot` firmware code (23,564).
 - **Today:** accelerometer, compass, radio and motor test are pages of the C#'s setup list;
+  accelerometer (`ConfigAccelerometerCalibration.cs` whole: the six-position conversation with
+  "Click when Done" answering each `ACCELCAL_VEHICLE_POS`, Level, Simple; PLAN.md §13.4 row 44),
   compass, radio and motor test are their `Config*.cs` whole - the priority table and onboard
   calibration of `ConfigHWCompass2`, `ConfigRadioInput`'s calibration conversation writing
   MIN/MAX/TRIM, `ConfigMotorTest`'s buttons from the frame's motor layout - each proved by a script

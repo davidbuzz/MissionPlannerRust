@@ -832,19 +832,6 @@ impl Telemetry {
         }
     }
 
-    /// Tells the vehicle the airframe is in the position it asked for.
-    ///
-    /// Sent and not waited for: the C# puts this `COMMAND_LONG` on the wire with `sendPacket`,
-    /// and the vehicle's next request for a position is the answer.
-    /// `// C#: GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs:50-51`
-    pub fn confirm_accelerometer_position(&self, position: mp_calibration::AccelPosition) {
-        if let Some((link, id)) = self.target() {
-            link.send(&mp_calibration::accelerometer_position_reached(
-                id, position,
-            ));
-        }
-    }
-
     /// What the accelerometer calibration is waiting for, if anything.
     #[must_use]
     pub fn accel_calibration(&self) -> mp_calibration::AccelCalibration {
@@ -859,25 +846,6 @@ impl Telemetry {
         if let Some(link) = &self.link {
             link.clear_accel_calibration();
         }
-    }
-
-    /// Tells the vehicle that however it is sitting now is level.
-    ///
-    /// `BUT_level_Click`: `doCommand`, a calibration, so sent twice at most, 25 seconds apart. A
-    /// refusal is `Strings.CommandFailed`, a timeout "Failed to level", and success turns the
-    /// button's text to `Strings.Completed`.
-    /// `// C#: GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs:143-162`
-    pub fn calibrate_level(&mut self) {
-        let Some(id) = self.target_id() else {
-            return;
-        };
-        let report = Report {
-            refused: Some(error_box(strings::COMMAND_FAILED)),
-            timed_out: Some(error_box("Failed to level")),
-            accepted: Some(format!("level calibration: {}", strings::COMPLETED)),
-            fallback: None,
-        };
-        self.command_message(&mp_calibration::level(id), report);
     }
 
     /// Start: `doCommand(DO_START_MAG_CAL, 0, 1, 1, 0, 0, 0, 0)` to the vehicle being flown, retried
@@ -932,22 +900,6 @@ impl Telemetry {
         if let Some(link) = &self.link {
             link.clear_compass_calibration();
         }
-    }
-
-    /// Recalibrates the barometer's ground pressure reference.
-    ///
-    /// The same `doCommand(PREFLIGHT_CALIBRATION, ...)` as the level, waited on the same way,
-    /// with its refusal and timeout said as `Strings.CommandFailed`, as `BUTactiondo_Click` says
-    /// them for the calibration it sends.
-    /// `// C#: GCSViews/FlightData.cs:1860-1874`
-    pub fn calibrate_ground_pressure(&mut self) {
-        let Some(id) = self.target_id() else {
-            return;
-        };
-        self.command_message(
-            &mp_calibration::ground_pressure(id),
-            Report::on_failure(error_box(strings::COMMAND_FAILED)),
-        );
     }
 
     /// One `testMotor` call: `MAV_CMD_DO_MOTOR_TEST` to the vehicle being flown, through the

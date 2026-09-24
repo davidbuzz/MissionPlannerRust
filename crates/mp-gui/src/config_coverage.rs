@@ -260,7 +260,16 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigSecureAP"),
         Some(4),
         &[setup(178, "Secure", TOP, DISCONNECTED)],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigSecureAP.cs:30-111 and its Designer - drawn whole;
+        // each of the four handlers is Ed25519 through BouncyCastle (SignedFW.cs), which no crate
+        // here implements, so each button is disabled with that reason.
+        Partial(
+            at("crates/mp-gui/src/config/secure.rs", "fn page"),
+            "the two groups, four buttons and three text boxes at the Designer's places; every \
+             button disabled - Generate Key, Private Key, BootLoader and Firmware are Ed25519 key \
+             generation, key reading and signing (BouncyCastle, SignedFW.cs), which this \
+             application has no implementation of",
+        ),
     ),
     panel(
         "ConfigMandatory",
@@ -282,7 +291,18 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigFrameType"),
         Some(12),
         &[setup(188, "Frame Type", MANDATORY, "copter before 3.5")],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigFrameType.cs:25-234 - Activate, DoChange, the 12
+        // wirings with WinForms' CheckedChanged cascade, and SetFrameParam. The Default Settings
+        // group is Controls/DefaultSettings.cs, a control of its own.
+        Partial(
+            at("crates/mp-gui/src/config/frame_type_legacy.rs", "fn page"),
+            "Activate on FRAME, the six radio buttons and pictures - all 12 wirings, the radio \
+             buttons' CheckedChanged cascade in the Designer's order - and the FRAME writes \
+             through the retrying set with \"Set FRAME Failed\"; missing the Default Settings \
+             group's behaviour (Controls/DefaultSettings.cs: the Tools/Frame_params listing from \
+             GitHub's contents API as JSON, and Load Params' ParamCompare form), drawn as it is \
+             before the listing arrives; the frame pictures are named boxes",
+        ),
     ),
     panel(
         "ConfigFrameClassType",
@@ -295,8 +315,8 @@ pub const PANELS: &[Panel] = &[
             "any with FRAME_CLASS; copter 3.5 and later",
         )],
         // C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs:36-336, ported but for the
-        // frame pictures (the C#'s PNG resources, drawn as named boxes), the "Other" button that
-        // has no handler, and the pre-3.5 ConfigFrameType page.
+        // frame pictures (the C#'s PNG resources, drawn as named boxes) and the "Other" button,
+        // which has no handler. The pre-3.5 page is ConfigFrameType's row.
         Partial(
             at("crates/mp-gui/src/config/frame_type.rs", "fn page"),
             "the eight class buttons and six type rows from Common.ValidList, each click \
@@ -309,11 +329,16 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigAccelerometerCalibration"),
         Some(3),
         &[setup(196, "Accel Calibration", MANDATORY, ANY)],
-        Partial(
-            at(SETUP_RS, "fn accelerometer_panel"),
-            "has Calibrate Accel's six positions, and Calibrate Level as `cal-level` on the \
-             page; missing Simple Accel Cal",
-        ),
+        // C#: GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs:27-185, ported whole:
+        // the three buttons' PREFLIGHT_CALIBRATION with param5 1, 2 and 4, Calibrate Accel's
+        // conversation - the vehicle's STATUSTEXT and ACCELCAL_VEHICLE_POS written into the label,
+        // each click sending the position back as sendPacket does, "Click when Done", "Done" and
+        // disabled on success or failure - Level's and Simple's "Completed" and their catch
+        // texts, Activate and Deactivate, and the subscriptions outliving Deactivate.
+        Ours::Done(at(
+            "crates/mp-gui/src/config/accel_calibration.rs",
+            "fn page",
+        )),
     ),
     panel(
         "ConfigHWCompass2",
@@ -342,13 +367,21 @@ pub const PANELS: &[Panel] = &[
             "any without COMPASS_PRIO1_ID",
         )],
         // C#: GCSViews/ConfigurationView/ConfigHWCompass.cs:31-780. Shown for ArduPilot before
-        // 4.1, which has no COMPASS_PRIO1_ID.
+        // 4.1, which has no COMPASS_PRIO1_ID. 20 of the 21 wirings: all but
+        // BUT_MagCalibrationLive's, whose handler is MagCalib.DoGUIMagCalib (MagCalib.cs:136-790),
+        // a feature of its own rather than this page's.
         Partial(
             at(COMPASS_RS, "fn page"),
             "has the declination and its automatic box, learn, the primary compass, each \
              compass's use, external, orientation, offsets and MOT, the three quick-configure \
-             buttons, the onboard calibration and Large Vehicle MagCal; missing Live \
-             Calibration (MagCalib.DoGUIMagCalib, drawn and inert)",
+             buttons, the onboard calibration with its timer and fitness, Large Vehicle MagCal \
+             and both links - 20 of the 21 wirings; missing Live Calibration, drawn and \
+             disabled: its handler is MagCalib.DoGUIMagCalib (MagCalib.cs), Mission Planner's \
+             own calibration from RAW_IMU and SCALED_IMU2/3 samples - the ProgressReporterSphere \
+             window with three OpenGL spheres, alglib's Levenberg-Marquardt sphere and \
+             ellipsoid fits, and the offsets saved through PREFLIGHT_SET_SENSOR_OFFSETS - a \
+             feature of its own, not ported; its group shows only for ArduPlane 3.7.1 to 4.0 \
+             or a vehicle without onboard calibration",
         ),
     ),
     panel(
@@ -1588,7 +1621,7 @@ mod tests {
             );
             checked += 1;
         }
-        assert_eq!(checked, 18);
+        assert_eq!(checked, 20);
     }
 
     /// The committed report matches the table.
@@ -1620,7 +1653,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (6, 11, 38, 2, 4)
+            (7, 12, 36, 2, 4)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

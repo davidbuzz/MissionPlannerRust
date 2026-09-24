@@ -28,8 +28,9 @@
 //!   is a box of the same size with the class or type's name in it. The fade still applies;
 //! * the fade itself, a 400 ms linear `Transition` (`ConfigFrameClassType.cs:295-300`), which is
 //!   drawn at the opacity it ends on;
-//! * `ConfigFrameType`, the page a copter older than 3.5 gets instead
-//!   (`InitialSetup.cs:188`): a separate page for firmware that has no `FRAME_CLASS`;
+//! * `ConfigFrameType`, the page a copter older than 3.5 gets instead (`InitialSetup.cs:188`):
+//!   a separate page, for firmware that has no `FRAME_CLASS`, in
+//!   [`crate::config::frame_type_legacy`];
 //! * there is no "show all" or per-vehicle filter in the C#: the eight classes and six types are
 //!   fixed controls, and `ValidList` is the only filter.
 

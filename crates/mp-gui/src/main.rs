@@ -313,6 +313,13 @@ struct MissionPlanner {
     /// Initial Setup's ESC Calibration page, and the focus of the number being typed into.
     esc_calibration: config::esc_calibration::EscCalibration,
     esc_focus: gpui::FocusHandle,
+    // ---- Mandatory Hardware pages: Accel Calibration (ConfigAccelerometerCalibration), Frame
+    // Type before 3.5 (ConfigFrameType); Secure (ConfigSecureAP) keeps no state ----
+    /// Initial Setup's Accel Calibration page.
+    accel_calibration: config::accel_calibration::AccelCalibration,
+    /// Initial Setup's Frame Type page for a copter older than 3.5.
+    frame_type_legacy: config::frame_type_legacy::FrameTypeLegacy,
+    // ---- end Mandatory Hardware pages ----
     /// CONFIG's Planner page, and its boxes' focus.
     planner: config::planner::Planner,
     planner_focus: config::planner::Focus,
@@ -510,6 +517,10 @@ impl MissionPlanner {
             serial_ports: config::serial_ports::SerialPorts::default(),
             esc_calibration: config::esc_calibration::EscCalibration::default(),
             esc_focus: cx.focus_handle(),
+            // ---- Mandatory Hardware pages ----
+            accel_calibration: config::accel_calibration::AccelCalibration::default(),
+            frame_type_legacy: config::frame_type_legacy::FrameTypeLegacy::default(),
+            // ---- end Mandatory Hardware pages ----
             planner,
             planner_focus: config::planner::Focus::new(cx),
         };
@@ -1728,6 +1739,15 @@ impl Render for MissionPlanner {
             self.esc_focus.is_focused(window),
             now,
         );
+        // ---- Mandatory Hardware pages ----
+        // The Accel Calibration page: what the vehicle says to its subscriptions, shown or not,
+        // and its blocking commands' answers; the page object disposed with its screen.
+        self.accel_calibration
+            .tick(&self.telemetry, &view, on_setup);
+        // The older Frame Type page's FRAME writes, one at a time.
+        self.frame_type_legacy
+            .tick(&self.telemetry, &view, on_setup);
+        // ---- end Mandatory Hardware pages ----
         let banner = self.telemetry.firmware_banner().map(str::to_owned);
         let mav_type = view.state.as_ref().map_or(0, |state| state.vehicle_type);
         self.metadata.advance(banner.as_deref(), mav_type);
@@ -1999,6 +2019,15 @@ impl Render for MissionPlanner {
             config::servo_output::record_facts(&self.servo_output, &view);
             config::serial_ports::record_facts(&self.serial_ports, &view);
             config::esc_calibration::record_facts(&self.esc_calibration, &view);
+            // ---- Mandatory Hardware pages ----
+            config::accel_calibration::record_facts(&self.accel_calibration, &view);
+            config::frame_type_legacy::record_facts(&self.frame_type_legacy, &view);
+            config::secure::record_facts(
+                self.setup_list
+                    .page()
+                    .is_some_and(|entry| entry.class == "ConfigSecureAP"),
+            );
+            // ---- end Mandatory Hardware pages ----
             config::planner::record_facts(&self.planner, &self.persisted, self.auto_read_mission);
             facts::publish();
             // The harness's work, which a normal run does not do, is not the frame's.
@@ -2285,6 +2314,18 @@ impl Render for MissionPlanner {
                     window,
                     cx,
                 ))
+                // ---- Mandatory Hardware pages ----
+                .children(config::accel_calibration::overlay(
+                    &self.accel_calibration,
+                    window,
+                    cx,
+                ))
+                .children(config::frame_type_legacy::overlay(
+                    &self.frame_type_legacy,
+                    window,
+                    cx,
+                ))
+                // ---- end Mandatory Hardware pages ----
                 .into_any_element(),
             Screen::Config => probe::measured("config-body", div())
                 .flex()

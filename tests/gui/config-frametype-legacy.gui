@@ -1,0 +1,56 @@
+# Initial Setup's Frame Type page for a copter older than 3.5, ported from
+# GCSViews/ConfigurationView/ConfigFrameType.cs.
+#
+# InitialSetup lists that page for isCopter && gotAllParams && !isCopter35plus, and
+# ConfigFrameClassType for a vehicle with FRAME_CLASS or a copter of 3.5 and later
+# (InitialSetup.cs:184-192). SITL runs ArduCopter 4.6, which has FRAME_CLASS and FRAME_TYPE and no
+# FRAME, so this script cannot show the page: what it proves is the list's choice - Mandatory
+# Hardware opens on ConfigFrameClassType, straight after the heading, with no ConfigFrameType - and
+# that the older page's object, never shown, has read nothing and written nothing, while the newer
+# page is the one that opens. The page itself - Activate on FRAME, the six radio buttons with
+# WinForms' events in the Designer's order, the pictures, the writes through the real link and
+# "Set FRAME Failed" - is covered by the unit tests in
+# crates/mp-gui/src/config/frame_type_legacy.rs, and the list's condition by setup.rs's
+# the_vehicle_picks_the_frame_and_compass_pages, with a copter of 3.4.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Nothing is
+# written. Run as
+#
+#   tools/gui-test.sh tests/gui/config-frametype-legacy.gui -- tcp:127.0.0.1:5760
+
+screen params
+window 1600x1200
+settle 6
+
+click param-download
+settle 15
+expect params.held > 1000
+expect params.value.FRAME_CLASS 1
+
+click tab-setup
+settle 1
+click setup-page-ConfigMandatory
+settle 1
+expect setup.page ConfigMandatory
+
+# The list: a 4.6 copter gets the newer page, right after the heading, and not the older one.
+expect setup.groups ~ Mandatory Hardware=ConfigFrameClassType,ConfigAccelerometerCalibration,
+expect setup.shown ~ ConfigMandatory,ConfigFrameClassType,ConfigAccelerometerCalibration,
+
+# The older page's object: never shown, so nothing read and nothing written.
+expect config.framelegacy.active false
+expect config.framelegacy.enabled true
+expect config.framelegacy.read none
+expect config.framelegacy.checked none
+expect config.framelegacy.sent 0
+expect config.framelegacy.pending 0
+expect config.framelegacy.message none
+
+# Frame Type opens the newer page; the older one stays as it was.
+click setup-page-ConfigFrameClassType
+settle 1
+expect setup.page ConfigFrameClassType
+expect setup.title Frame Type
+expect config.frame.active true
+expect config.framelegacy.active false
+expect config.framelegacy.sent 0

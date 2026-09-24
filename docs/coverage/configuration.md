@@ -4,11 +4,11 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui c
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 6 | 11 | 38 | 2 | 4 | 569 |
+| 61 | 7 | 12 | 36 | 2 | 4 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 6 | 9 | 27 | 2 | 0 | 258 | 147 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 7 | 10 | 25 | 2 | 0 | 258 | 131 |
 | CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 0 | 2 | 11 | 0 | 0 | 277 | 191 |
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 | 0 |
 
@@ -24,12 +24,12 @@ The largest missing panels, by wirings:
 | `ConfigFirmware` | Install Firmware Legacy | 20 |
 | `ConfigDroneCAN` | DroneCAN/UAVCAN | 15 |
 | `ConfigAdvanced` | Advanced | 13 |
-| `ConfigFrameType` | Frame Type | 12 |
 | `ConfigTerminal` | Terminal | 12 |
 | `ConfigBatteryMonitoring2` | Battery Monitor 2 | 10 |
 | `ConfigAteryx` | Ateryx Pids | 8 |
 | `ConfigADSB` | ADSB | 5 |
 | `ConfigMount` | Camera Gimbal | 5 |
+| `ConfigREPL` | Script REPL | 4 |
 
 Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConnected && gotAllParams`); **always** is connected or not; **connected** and **disconnected** are the link alone; a named vehicle, parameter or view is what the call, or the `if` around it, checks. **Advanced view** is `DisplayView.isAdvancedMode`. A page with a `DisplayView` switch also needs it on, which it is by default unless the vehicles say otherwise. The list shows a heading as `>> title` and indents what is under it (`ExtLibs/Controls/BackstageView/BackstageView.cs:227`, `:232`).
 
@@ -41,14 +41,14 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConne
 | 169 | `ConfigFirmwareDisabled` | Install Firmware |  | connected | 1 | partial: `crates/mp-gui/src/config/firmware.rs` `fn page` - the connected page's text, with Bootloader Update disabled |
 | 171 | `ConfigFirmwareManifest` | Install Firmware |  | disconnected | 16 | partial: `crates/mp-gui/src/config/firmware.rs` `fn page` - the catalogue fetched as APFirmware.GetList fetches it, each vehicle labelled with the newest firmware of the release, Beta, a vehicle's click running LookForPort to the chosen file; Upload disabled - nothing flashes in this build; the vehicle pictures are named boxes |
 | 173 | `ConfigFirmware` | Install Firmware Legacy |  | disconnected | 20 | **missing** |
-| 178 | `ConfigSecureAP` | Secure |  | disconnected | 4 | **missing** |
+| 178 | `ConfigSecureAP` | Secure |  | disconnected | 4 | partial: `crates/mp-gui/src/config/secure.rs` `fn page` - the two groups, four buttons and three text boxes at the Designer's places; every button disabled - Generate Key, Private Key, BootLoader and Firmware are Ed25519 key generation, key reading and signing (BouncyCastle, SignedFW.cs), which this application has no implementation of |
 | 182 | `ConfigMandatory` | Mandatory Hardware |  | any | 0 | plumbing: the Mandatory Hardware heading of the list: one sentence, no controls |
 | 187 | `ConfigTradHeli4` | Heli Setup | Mandatory Hardware | heli | 0 | **missing** |
-| 188 | `ConfigFrameType` | Frame Type | Mandatory Hardware | copter before 3.5 | 12 | **missing** |
+| 188 | `ConfigFrameType` | Frame Type | Mandatory Hardware | copter before 3.5 | 12 | partial: `crates/mp-gui/src/config/frame_type_legacy.rs` `fn page` - Activate on FRAME, the six radio buttons and pictures - all 12 wirings, the radio buttons' CheckedChanged cascade in the Designer's order - and the FRAME writes through the retrying set with "Set FRAME Failed"; missing the Default Settings group's behaviour (Controls/DefaultSettings.cs: the Tools/Frame_params listing from GitHub's contents API as JSON, and Load Params' ParamCompare form), drawn as it is before the listing arrives; the frame pictures are named boxes |
 | 189 | `ConfigFrameClassType` | Frame Type | Mandatory Hardware | any with FRAME_CLASS; copter 3.5 and later | 19 | partial: `crates/mp-gui/src/config/frame_type.rs` `fn page` - the eight class buttons and six type rows from Common.ValidList, each click writing FRAME_CLASS then FRAME_TYPE through the retrying set; the frame pictures are named boxes, not the C#'s images |
-| 196 | `ConfigAccelerometerCalibration` | Accel Calibration | Mandatory Hardware | any | 3 | partial: `crates/mp-gui/src/setup.rs` `fn accelerometer_panel` - has Calibrate Accel's six positions, and Calibrate Level as `cal-level` on the page; missing Simple Accel Cal |
+| 196 | `ConfigAccelerometerCalibration` | Accel Calibration | Mandatory Hardware | any | 3 | done: `crates/mp-gui/src/config/accel_calibration.rs` `fn page` |
 | 203 | `ConfigHWCompass2` | Compass | Mandatory Hardware | any with COMPASS_PRIO1_ID | 11 | done: `crates/mp-gui/src/config/compass.rs` `fn page` |
-| 206 | `ConfigHWCompass` | Compass | Mandatory Hardware | any without COMPASS_PRIO1_ID | 21 | partial: `crates/mp-gui/src/config/compass.rs` `fn page` - has the declination and its automatic box, learn, the primary compass, each compass's use, external, orientation, offsets and MOT, the three quick-configure buttons, the onboard calibration and Large Vehicle MagCal; missing Live Calibration (MagCalib.DoGUIMagCalib, drawn and inert) |
+| 206 | `ConfigHWCompass` | Compass | Mandatory Hardware | any without COMPASS_PRIO1_ID | 21 | partial: `crates/mp-gui/src/config/compass.rs` `fn page` - has the declination and its automatic box, learn, the primary compass, each compass's use, external, orientation, offsets and MOT, the three quick-configure buttons, the onboard calibration with its timer and fitness, Large Vehicle MagCal and both links - 20 of the 21 wirings; missing Live Calibration, drawn and disabled: its handler is MagCalib.DoGUIMagCalib (MagCalib.cs), Mission Planner's own calibration from RAW_IMU and SCALED_IMU2/3 samples - the ProgressReporterSphere window with three OpenGL spheres, alglib's Levenberg-Marquardt sphere and ellipsoid fits, and the offsets saved through PREFLIGHT_SET_SENSOR_OFFSETS - a feature of its own, not ported; its group shows only for ArduPlane 3.7.1 to 4.0 or a vehicle without onboard calibration |
 | 211 | `ConfigRadioInput` | Radio Calibration | Mandatory Hardware | any | 8 | done: `crates/mp-gui/src/config/radio.rs` `fn page` |
 | 215 | `ConfigRadioOutput` | Servo Output | Mandatory Hardware | any | 1 | done: `crates/mp-gui/src/config/servo_output.rs` `fn page` |
 | 220 | `ConfigSerial` | Serial Ports | Mandatory Hardware | any | 0 | partial: `crates/mp-gui/src/config/serial_ports.rs` `fn page` - a row per SERIALn to the highest SERIALn_BAUD, the speed and protocol combos writing on change through the page's setParam, SerialOptionRules.json's rules and MAVLink warning in the note, the options label and the Set Bitmask window; missing the port names from @SYS/uarts.txt, which need MAVLink FTP |

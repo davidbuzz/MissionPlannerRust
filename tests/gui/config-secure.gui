@@ -1,0 +1,38 @@
+# Initial Setup's Secure page, ported from GCSViews/ConfigurationView/ConfigSecureAP.cs.
+#
+# InitialSetup lists it at the top while no vehicle is connected (isDisConnected,
+# InitialSetup.cs:176-179), so this script runs with no link: the data directory is a scratch one,
+# so no link Mission Planner remembers is opened. It needs no SITL.
+#
+# The claims: the page is listed, shows the Designer's two groups - "Do Only Once" with Generate
+# Key, "Files" with Private Key, BootLoader and Firmware and the three text boxes beside them - and
+# every button is disabled. Each of the four handlers is Ed25519 key generation, key reading or
+# signing (ConfigSecureAP.cs:30-111, SignedFW.cs), done in the C# by BouncyCastle; this application
+# has no Ed25519 implementation, so nothing on the page can be pressed. The script clicks none of
+# them; config/secure.rs's tests hold the controls to the Designer and each handler to Ed25519.
+
+env XDG_DATA_HOME $WORK
+
+screen setup
+window 1600x1200
+settle 3
+
+expect config.secure.active false
+expect setup.pages ~ ConfigSecureAP
+click setup-page-ConfigSecureAP
+settle 1
+expect setup.page ConfigSecureAP
+expect setup.title Secure
+expect config.secure.active true
+expect config.secure.groups Do Only Once,Files
+expect config.secure.buttons Generate Key,Private Key,BootLoader,Firmware
+expect config.secure.boxes txt_pubkey,txt_bl,txt_fwapj
+expect config.secure.buttons.enabled false
+expect config.secure.disabled ~ Ed25519
+
+# Another page - the Optional Hardware heading, which fetches nothing - and Secure is no longer the
+# page showing.
+click setup-page-ConfigOptional
+settle 1
+expect setup.page ConfigOptional
+expect config.secure.active false

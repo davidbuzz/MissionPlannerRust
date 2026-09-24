@@ -1,0 +1,121 @@
+# Initial Setup's Accel Calibration page, ported from
+# GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs.
+#
+# The claims: the page shows the .resx's words - the heading, the three sentences and the three
+# buttons - with nothing in the prompt label; Calibrate Level sends MAV_CMD_PREFLIGHT_CALIBRATION
+# with param5 2 and waits for the answer, and the vehicle's ACCEPTED turns the button's text to
+# "Completed" (ConfigAccelerometerCalibration.cs:143-163); that text lives as long as the page
+# object - leaving the page and coming back keeps it - and leaving the screen disposes the object,
+# so the text is the Designer's again next time (Activate sets nothing but Calibrate Accel's
+# Enabled, :27-31).
+#
+# This script presses Calibrate Level only, and here is why.
+#
+# * Calibrate Accel (param5 1) is the six-position conversation. SITL's airframe cannot be turned:
+#   ArduPilot takes the level sample, then rejects the left one as too close to it and fails the
+#   calibration ("Calibration FAILED"). A failed calibration zeroes the accelerometer offsets the
+#   vehicle holds (AP_InertialSensor's _acal_event_failure), after which its pre-arm check says
+#   "3D Accel calibration needed" until SITL restarts - and one left waiting for a position keeps
+#   the vehicle calibrating, which refuses every other calibration. Either way every later script
+#   that arms, or calibrates, would fail. The conversation - the start going out once, each
+#   request and prompt written into the label, each click sending the position back, success or
+#   failure ending it with "Done" disabled - is covered by the unit tests in
+#   crates/mp-gui/src/config/accel_calibration.rs, against a scripted vehicle through the real
+#   link.
+# * Simple Accel Cal (param5 4) replaces INS_ACCOFFS_* and INS_ACCSCAL_* with what a still, level
+#   SITL reads and saves them. tools/sitl/params/copter.parm sets the offsets to 0.001 "so INS is
+#   recognised as being calibrated"; SITL's accelerometers read gravity with no bias, so the new
+#   offsets would be zero or next to it, saved across restarts, and zero fails the same pre-arm
+#   check. It too is covered by the unit tests.
+# * Calibrate Level (param5 2) writes AHRS_TRIM_X and AHRS_TRIM_Y from what the level vehicle
+#   reads - zero or next to it, which is what copter.parm leaves them - and recalibrates the gyros,
+#   which ArduPilot does at every boot anyway. That is what this script leaves changed, and a
+#   second run writes the same again: acceptable. The accelerometer offsets are checked unchanged
+#   before and after.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm, disarmed and
+# still (ArduPilot refuses a calibration while armed). Run as
+#
+#   tools/gui-test.sh tests/gui/config-accel.gui -- tcp:127.0.0.1:5760
+
+screen params
+window 1600x1200
+settle 6
+
+# The page is listed once every parameter is in (isConnected && gotAllParams).
+click param-download
+settle 15
+expect params.held > 1000
+expect params.value.INS_ACCOFFS_X ~ 0.001
+expect params.value.INS_ACCSCAL_X ~ 1.001
+
+click tab-setup
+settle 1
+expect config.accel.active false
+click setup-page-ConfigMandatory
+click setup-page-ConfigAccelerometerCalibration
+settle 1
+expect setup.page ConfigAccelerometerCalibration
+expect setup.title Accel Calibration
+expect config.accel.active true
+
+# The page's words, and its controls as the Designer leaves them.
+expect config.accel.heading Accelerometer Calibration
+expect config.accel.text.accel ~ accelerometer Min/Max (3 axis).
+expect config.accel.text.accel ~ This will ask you to place your autopilot on each edge.
+expect config.accel.text.level ~ accelerometer offsets (1 axis/AHRS trims).
+expect config.accel.text.simple ~ scale factors for level flight (1 axis).
+expect config.accel.text.simple ~ This requires you to place your autopilot flat and level.
+expect config.accel.calib Calibrate Accel
+expect config.accel.calib.enabled true
+expect config.accel.level Calibrate Level
+expect config.accel.level.enabled true
+expect config.accel.simple Simple Accel Cal
+expect config.accel.simple.enabled true
+expect config.accel.label none
+expect config.accel.position 0
+expect config.accel.incalibrate false
+expect config.accel.subscribed false
+expect config.accel.message none
+
+# Calibrate Level: the command goes out, the vehicle levels and accepts, the text is Completed.
+# The vehicle calibrates its gyros first and then samples the level, which takes seconds; the
+# answer is waited for up to 25.
+click accel-level
+settle 10
+expect config.accel.sent.level 1
+expect config.accel.level Completed
+expect config.accel.level.enabled true
+expect config.accel.message none
+
+# Nothing else was sent, and nothing else changed on the page or the vehicle's accelerometers.
+expect config.accel.sent.start 0
+expect config.accel.sent.position 0
+expect config.accel.sent.simple 0
+expect config.accel.calib Calibrate Accel
+expect config.accel.calib.enabled true
+expect config.accel.simple Simple Accel Cal
+expect config.accel.label none
+expect config.accel.subscribed false
+expect params.value.INS_ACCOFFS_X ~ 0.001
+expect params.value.INS_ACCSCAL_X ~ 1.001
+
+# Another page and back: the page object is the same, and keeps its text.
+click setup-page-ConfigFlightModes
+expect setup.page ConfigFlightModes
+expect config.accel.active false
+click setup-page-ConfigAccelerometerCalibration
+expect config.accel.active true
+expect config.accel.level Completed
+
+# Leaving the screen disposes the page object. Shown again - InitialSetup opens the page that was
+# showing when it closed, its lastpagename - it is the Designer's.
+click tab-params
+settle 1
+expect config.accel.active false
+click tab-setup
+settle 1
+expect setup.page ConfigAccelerometerCalibration
+expect config.accel.active true
+expect config.accel.level Calibrate Level
+expect config.accel.sent.level 1
