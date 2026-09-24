@@ -29,3 +29,11 @@ straight to the next task does not mean skipping the check before the commit.
 `mp-gui`'s quick view test (every done numeric property needs a reader): committing mp-vehicle
 after `cargo test -p mp-vehicle -p mp-link` alone left mp-gui red (2026-09-24). Before a commit,
 `cargo test --workspace`, not the changed crates' tests.
+
+**A merge's scripts are not the merge's proof.** The state wiring merged at 12:16 on 2026-09-24
+moved `StreamRates::set_backups` after the connect; its own scripts passed, and `config-radio.gui`,
+last run at 06:30, had been failing since (the vehicle's rates raced start-up). A merge that touches
+start-up, `main.rs`, `telemetry.rs` or a static every screen reads gets the whole suite
+(`tools/gui-suite.sh -o <dir> $(ls tests/gui/*.gui | xargs -n1 basename | sed 's/\.gui$//')`,
+about 80 minutes, quiet machine, no GUI rebuild while it runs), not the merged rows' scripts. A
+`PASS` logged before the merge proves nothing about the tree after it.

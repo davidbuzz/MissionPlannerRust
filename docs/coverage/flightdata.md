@@ -4,7 +4,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 
 | total | done | elsewhere | missing | plumbing | dropped |
 |---:|---:|---:|---:|---:|---:|
-| 136 | 95 | 1 | 20 | 18 | 2 |
+| 136 | 96 | 1 | 19 | 18 | 2 |
 
 | control | event | handler | text | ours |
 |---|---|---|---|---|
@@ -114,7 +114,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `setHomeHereToolStripMenuItem1` | Click | `setHomeHereToolStripMenuItem_Click` | Set Home Here | done: `fly-sethome` |
 | `setMJPEGSourceToolStripMenuItem` | Click | `setMJPEGSourceToolStripMenuItem_Click` | Set MJPEG source | **missing** - later: video (GStreamer, HereLink, MJPEG, the camera, AVI) |
 | `setViewCountToolStripMenuItem` | Click | `setViewCountToolStripMenuItem_Click` | Set View Count | **missing** - the quick views' menu and both questions are there (`fly-quick-setviewcount`) and the answer is kept; the grid is `quick.rs`'s six views, which have no resize yet |
-| `showIconsToolStripMenuItem` | Click | `showIconsToolStripMenuItem_Click` | Show icons | **missing** - the owner's call: the HUD's icons are not ported |
+| `showIconsToolStripMenuItem` | Click | `showIconsToolStripMenuItem_Click` | Show icons | done: `fly-hud-showicons` |
 | `Squawk_nud` | MouseWheel | `Squawk_nud_MouseWheel` | Squawk (transponder) | done: `fly-xpdr-squawk-box` |
 | `Squawk_nud` | ValueChanged | `Squawk_nud_ValueChanged` | Squawk (transponder) | done: `fly-xpdr-squawk` |
 | `startCameraToolStripMenuItem` | Click | `startCameraToolStripMenuItem_Click` | Start Camera | **missing** - later: video (GStreamer, HereLink, MJPEG, the camera, AVI) |

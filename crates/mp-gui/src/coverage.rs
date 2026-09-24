@@ -806,7 +806,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "showIconsToolStripMenuItem_Click",
         "Show icons",
-        Missing,
+        Done("fly-hud-showicons"),
     ),
     row(
         "Squawk_nud",
@@ -1025,11 +1025,6 @@ pub const WHY_MISSING: &[(&str, &str, &str)] = &[
         "setAspectRatioToolStripMenuItem",
         "Click",
         "the owner's call: the C#'s 4:3 would reshape the column",
-    ),
-    (
-        "showIconsToolStripMenuItem",
-        "Click",
-        "the owner's call: the HUD's icons are not ported",
     ),
     (
         "setViewCountToolStripMenuItem",
@@ -1262,7 +1257,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (95, 1, 20, 18, 2)
+            (96, 1, 19, 18, 2)
         );
     }
 }
