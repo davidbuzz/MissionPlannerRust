@@ -23,12 +23,45 @@
 //! 789-pixel table, rows of an eleventh of its height, at 9, 10. The colours are this
 //! application's.
 //!
+//! The ports' names come from the vehicle's `@SYS/uarts.txt`, which the page object downloads
+//! over MAVLink FTP the first time it is activated - once, whether or not that works: a
+//! `_gotUARTNames` set before the read (`ConfigSerial.cs:77-161`). The read is `GetFile` with
+//! `burst` false, a plain read of 80-byte chunks, behind a modal `ProgressReporterDialogue` that
+//! says "Trying to download uarts.txt / From FC" over a bar of the read's progress, with a
+//! Cancel; the table is built when the window closes, as the rest of `Activate` runs then. A
+//! line of the file that starts `SERIALn`, n above 0, names port n with its second word; row n
+//! takes the name for n, whatever order the file lists them in. Each row's label is "SERIAL PORT
+//! n" and on its own line that name - empty when the file did not name the port, or did not
+//! come - then its RTS/CTS note. SITL writes no UART name after `SERIALn` (its lines run
+//! `SERIAL1 TX=       0 RX= ...`), so there the second word is the first counter's, "TX=", and
+//! that is what the C# shows under every port.
+//!
+//! Where the reading differs from the C#, and why:
+//!
+//! * a read that returns null - the file never opened, the plain read did not finish, or Cancel
+//!   was pressed - throws in the C#: `ms.Length` on the null `GetFile` returned
+//!   (`ConfigSerial.cs:105, 123`). `BackstageView` catches it (`BackstageView.cs:495-503`), so the
+//!   page comes up empty that time, and names its ports "SERIAL PORT n" when it is next shown.
+//!   Here the table is built at once with those names, as the code means to when the download
+//!   fails silently;
+//! * Cancel's `kCmdResetSessions()` runs on the C#'s UI thread beside the read it cancelled, and
+//!   again when the read acknowledges the cancel, since setting `CancelRequested` raises the
+//!   event a second time (`ConfigSerial.cs:88-93, 112-117`;
+//!   `ExtLibs/Utilities/IProgressReporterDialogue.cs:37-47`). The link runs one request per
+//!   vehicle at a time, so here the reset is sent once, when the read has stopped;
+//! * the C#'s 200 ms timer writes the last report back over "Cancelling..." at its next tick
+//!   (`ProgressReporterDialogue.cs:313-323`); here "Cancelling..." stays until the window closes;
+//! * the finished window's 100 ms pause at 100 % before it closes
+//!   (`ProgressReporterDialogue.cs:198-215`) is not kept: it closes when the read ends;
+//! * each `ConfigSerial` makes a `MAVFtp` of its own, so its read would run beside any other on
+//!   the vehicle; the link has one client per vehicle, and a read it refuses because another is
+//!   running counts as a failed one. A page object disposed while its read runs - which the
+//!   modal window leaves no way to do but losing the vehicle - leaves the read to end on its own;
+//! * `StreamReader`'s byte-order-mark detection is kept for UTF-8 only: ArduPilot writes the file
+//!   in ASCII.
+//!
 //! What is not ported, and why:
 //!
-//! * the port names from `@SYS/uarts.txt`, which `Activate` downloads over MAVLink FTP the first
-//!   time, behind a progress window (`ConfigSerial.cs:77-161`): this application has no MAVLink
-//!   FTP client, so each port is named "SERIAL PORT n" with only its RTS/CTS note under it - as
-//!   the C# names a port when the download fails, which it does silently;
 //! * reading `SerialOptionRules.json` from beside the executable: the rules are the file Mission
 //!   Planner ships, built in, so its "Error reading SerialOptionRules.json file" box cannot arise;
 //! * the bitmask window's conversion of its value to the parameter's integer type
@@ -45,11 +78,14 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
+use std::time::Instant;
 
 use gpui::{AnyElement, Context, Div, FontWeight, SharedString, Window, div, prelude::*, px, rgb};
-use mp_link::RequestId;
+use mp_link::mavftp::{FtpOutcome, FtpRequest, RW_SIZE};
 use mp_link::requests::RequestOutcome;
+use mp_link::{FtpError, RequestId};
+use mp_vehicle::VehicleId;
 
 use crate::MissionPlanner;
 use crate::config::failsafe::{Lookup, options};
@@ -96,6 +132,205 @@ const ROW_HEIGHT: f32 = (497.0 - 25.0) / 11.0;
 /// A plain `ComboBox`'s default size, which the two combo boxes keep: their `Anchor = None`
 /// clears the `Dock = Fill` set before it, and centres them in the cell.
 const COMBO: (f32, f32) = (121.0, 21.0);
+
+/// The file `Activate` reads the ports' names from.
+/// `// C#: GCSViews/ConfigurationView/ConfigSerial.cs:82`
+pub const UARTS_FILE: &str = "@SYS/uarts.txt";
+
+/// The progress window's text while the file is read: every report the read makes is shown as
+/// this.
+/// `// C#: GCSViews/ConfigurationView/ConfigSerial.cs:95-98`
+pub const UARTS_PROGRESS: &str = "Trying to download uarts.txt\r\nFrom FC";
+
+/// The progress window's text once Cancel is pressed.
+/// `// C#: ExtLibs/Controls/ProgressReporterDialogue.cs:254-268`
+pub const CANCELLING: &str = "Cancelling...";
+
+/// The progress window's caption.
+/// `// C#: ExtLibs/Controls/ProgressReporterDialogue.resx:297-298`
+const PROGRESS_TITLE: &str = "Progress";
+
+/// The progress window's client size.
+/// `// C#: ExtLibs/Controls/ProgressReporterDialogue.resx:291-292`
+const PROGRESS_WINDOW: (f32, f32) = (306.0, 144.0);
+
+/// `lblProgressMessage`'s `Location` and `Size`.
+/// `// C#: ExtLibs/Controls/ProgressReporterDialogue.resx:150-154`
+const PROGRESS_LABEL: (f32, f32, f32, f32) = (13.0, 13.0, 275.0, 74.0);
+
+/// `progressBar1`'s.
+/// `// C#: ExtLibs/Controls/ProgressReporterDialogue.resx:125-129`
+const PROGRESS_BAR: (f32, f32, f32, f32) = (11.0, 90.0, 277.0, 13.0);
+
+/// `btnCancel`'s.
+/// `// C#: ExtLibs/Controls/ProgressReporterDialogue.resx:177-187`
+const PROGRESS_CANCEL: (f32, f32, f32, f32) = (213.0, 109.0, 75.0, 23.0);
+
+/// `MyProgressBar`'s marquee block, `BarSize` pixels wide.
+/// `// C#: ExtLibs/Controls/MyProgressBar.cs:55, 113-114`
+const MARQUEE_BLOCK: f32 = 40.0;
+
+/// The marquee's `Value` a time after it started from 0: stepped by 2 every 50 ms up to 100,
+/// then from -40 again - 71 places.
+/// `// C#: ExtLibs/Controls/MyProgressBar.cs:82-95; MyProgressBar.Designer.cs:37`
+fn marquee_value(elapsed: std::time::Duration) -> i32 {
+    let step = (elapsed.as_millis() / 50) % 71;
+    // 0 is place 20.
+    let place = i32::try_from((20 + step) % 71).unwrap_or(0);
+    -40 + 2 * place
+}
+
+/// `Int32.TryParse(s, out n)` as the .NET Framework reads it (`NumberStyles.Integer`): white
+/// space either side, a sign, then decimal digits that fit an `int` - and trailing NULs.
+fn try_parse_int32(text: &str) -> Option<i32> {
+    // `Number.IsWhite`: the space, and tab to carriage return.
+    let white = |c: char| c == ' ' || ('\t'..='\r').contains(&c);
+    let text = text
+        .trim_end_matches('\0')
+        .trim_end_matches(white)
+        .trim_start_matches(white);
+    let (negative, digits) = match text.as_bytes().first() {
+        Some(b'-') => (true, &text[1..]),
+        Some(b'+') => (false, &text[1..]),
+        _ => (false, text),
+    };
+    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let magnitude = digits.bytes().try_fold(0_i64, |n, byte| {
+        n.checked_mul(10)?.checked_add(i64::from(byte - b'0'))
+    })?;
+    i32::try_from(if negative { -magnitude } else { magnitude }).ok()
+}
+
+/// `StreamReader.ReadLine` to the end: a line ends at "\r\n", "\r" or "\n", and an end at the
+/// very end starts no line of its own.
+fn read_lines(text: &str) -> Vec<&str> {
+    let mut lines = Vec::new();
+    let mut rest = text;
+    while !rest.is_empty() {
+        let Some(at) = rest.find(['\r', '\n']) else {
+            lines.push(rest);
+            break;
+        };
+        lines.push(&rest[..at]);
+        let end = if rest[at..].starts_with("\r\n") { 2 } else { 1 };
+        rest = &rest[at + end..];
+    }
+    lines
+}
+
+/// `_uartNames` from the file: for each line of two or more words split at single spaces whose
+/// first is `SERIAL` and a number above 0, that number and the second word. A number named a
+/// second time ends the reading there, keeping what came before, as `Dictionary.Add` throws
+/// into the `catch { }` around the loop.
+/// `// C#: GCSViews/ConfigurationView/ConfigSerial.cs:123-160`
+#[must_use]
+pub fn uart_names(file: &[u8]) -> BTreeMap<usize, String> {
+    // `new StreamReader(ms)`: UTF-8, its byte-order mark skipped.
+    let file = file.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(file);
+    let text = String::from_utf8_lossy(file);
+    let mut names = BTreeMap::new();
+    for line in read_lines(&text) {
+        let words: Vec<&str> = line.split(' ').collect();
+        let [first, second, ..] = words.as_slice() else {
+            continue;
+        };
+        // `s[0].Length >= 7 && s[0].Substring(0, 6) == "SERIAL"`, then its trailing number.
+        let Some(number) = first
+            .strip_prefix("SERIAL")
+            .filter(|number| !number.is_empty())
+        else {
+            continue;
+        };
+        let Some(port) = try_parse_int32(number)
+            .filter(|n| *n > 0)
+            .and_then(|n| usize::try_from(n).ok())
+        else {
+            continue;
+        };
+        if names.contains_key(&port) {
+            break;
+        }
+        names.insert(port, (*second).to_owned());
+    }
+    names
+}
+
+/// The progress window's bar, `progressBar1`, as `timer1_Tick` sets it from the last report.
+/// `// C#: ExtLibs/Controls/ProgressReporterDialogue.cs:313-336`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Bar {
+    /// `ProgressBarStyle.Marquee`: the last report was -1.
+    pub marquee: bool,
+    /// `Value` otherwise: the last report's percentage. `MyProgressBar` takes any value.
+    pub value: i32,
+}
+
+impl Default for Bar {
+    /// `_progress` starts at -1, so the first tick makes it a marquee.
+    fn default() -> Self {
+        Self {
+            marquee: true,
+            value: 0,
+        }
+    }
+}
+
+impl Bar {
+    /// A report: -1 the marquee, anything else the bar at that value.
+    const fn report(&mut self, percent: i32) {
+        self.marquee = percent == -1;
+        if !self.marquee {
+            self.value = percent;
+        }
+    }
+}
+
+/// Where the ports' names are: `_gotUARTNames`, and the read it starts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Uarts {
+    /// `_gotUARTNames` false: this page object has not asked.
+    #[default]
+    Unread,
+    /// The file is being read, behind the progress window.
+    Reading {
+        /// The vehicle asked.
+        vehicle: VehicleId,
+        /// When, for the marquee.
+        started: Instant,
+        /// The window's bar.
+        bar: Bar,
+        /// Cancel was pressed.
+        cancelling: bool,
+    },
+    /// The file came, and `_uartNames` holds what it names - nothing, for an empty file.
+    Loaded,
+    /// No file: the vehicle refused it or never finished sending it, or there was no vehicle to
+    /// ask.
+    Failed,
+    /// Cancel was pressed, and the file did not come.
+    Cancelled,
+}
+
+impl Uarts {
+    /// The word a fact says it with.
+    #[must_use]
+    pub const fn word(&self) -> &'static str {
+        match self {
+            Self::Unread => "unread",
+            Self::Reading {
+                cancelling: false, ..
+            } => "reading",
+            Self::Reading {
+                cancelling: true, ..
+            } => "cancelling",
+            Self::Loaded => "loaded",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+        }
+    }
+}
 
 /// One entry of `SerialOptionRules.json`: for a protocol, the speed and options to preset (-1 for
 /// none) and the note's comment.
@@ -307,6 +542,10 @@ pub struct SerialPorts {
     active: bool,
     /// `_gotOptionRules` and `_optionRules`.
     rules: Option<Vec<(i64, Rule)>>,
+    /// `_gotUARTNames`, and where the read it starts has got.
+    uarts: Uarts,
+    /// `_uartNames`: a port's name, by its number.
+    uart_names: BTreeMap<usize, String>,
     /// `serialPorts`.
     ports: usize,
     /// The rows `Activate` built.
@@ -382,12 +621,51 @@ impl SerialPorts {
         self.queue.len() + usize::from(self.in_flight.is_some())
     }
 
-    /// `Activate`: the rules read the first time, then the table built afresh from the vehicle's
-    /// parameters - a row per port up to the highest, the note under them. A port with no
-    /// `SERIALn_BAUD` gets its name only; a port with no `SERIALn_OPTIONS` stops the building
-    /// there, with no note, as the C#'s exception does.
+    /// Where the ports' names are.
+    #[must_use]
+    pub const fn uarts(&self) -> Uarts {
+        self.uarts
+    }
+
+    /// The name `@SYS/uarts.txt` gave port `port`, if it gave one.
+    #[must_use]
+    pub fn uart_name(&self, port: usize) -> Option<&str> {
+        self.uart_names.get(&port).map(String::as_str)
+    }
+
+    /// Every name the file gave, by port.
+    #[must_use]
+    pub const fn uart_names(&self) -> &BTreeMap<usize, String> {
+        &self.uart_names
+    }
+
+    /// The progress window, while the names are read: its text, its bar, and whether its Cancel
+    /// shows.
+    #[must_use]
+    pub const fn progress(&self) -> Option<(&'static str, Bar, bool)> {
+        match self.uarts {
+            Uarts::Reading {
+                bar, cancelling, ..
+            } => Some(if cancelling {
+                (CANCELLING, bar, false)
+            } else {
+                (UARTS_PROGRESS, bar, true)
+            }),
+            _ => None,
+        }
+    }
+
+    /// `Activate`: the rules read the first time; the ports' names asked for the first time,
+    /// behind the progress window, the rest waiting for it to close; then the table built afresh
+    /// from the vehicle's parameters.
     /// `// C#: GCSViews/ConfigurationView/ConfigSerial.cs:37-380`
-    pub fn activate(&mut self, parameters: &[(String, f64)], key: Key, lookup: Lookup) {
+    pub fn activate(
+        &mut self,
+        telemetry: &Telemetry,
+        parameters: &[(String, f64)],
+        key: Key,
+        lookup: Lookup,
+    ) {
         if self.made_for != Some(key) {
             self.dispose();
             self.made_for = Some(key);
@@ -397,6 +675,124 @@ impl SerialPorts {
         }
         self.active = true;
         self.dropdown = None;
+        if self.uarts == Uarts::Unread {
+            self.read_uarts(telemetry);
+        }
+        // `prd.RunBackgroundOperationAsync()` is `ShowDialog`: the rest of `Activate` runs when
+        // the window closes, which `tick` sees.
+        if matches!(self.uarts, Uarts::Reading { .. }) {
+            return;
+        }
+        self.build(parameters, lookup);
+    }
+
+    /// `_gotUARTNames = true`, and `GetFile(@"@SYS/uarts.txt", cancel, false)` started on the
+    /// vehicle. With no vehicle to ask, or its client busy, it has failed already.
+    /// `// C#: GCSViews/ConfigurationView/ConfigSerial.cs:78-120`
+    fn read_uarts(&mut self, telemetry: &Telemetry) {
+        let request = FtpRequest::Get {
+            path: UARTS_FILE.to_owned(),
+            burst: false,
+            readsize: RW_SIZE,
+        };
+        self.uarts = telemetry
+            .start_ftp(request)
+            .map_or(Uarts::Failed, |vehicle| Uarts::Reading {
+                vehicle,
+                started: Instant::now(),
+                bar: Bar::default(),
+                cancelling: false,
+            });
+    }
+
+    /// The progress window's Cancel: "Cancelling...", the bar a marquee and the button hidden;
+    /// then `CancelRequestChanged`'s `cancel.Cancel()`. Its `kCmdResetSessions()` goes when the
+    /// read has stopped; see the module's notes.
+    /// `// C#: ExtLibs/Controls/ProgressReporterDialogue.cs:254-268; GCSViews/ConfigurationView/ConfigSerial.cs:88-93`
+    pub fn cancel_uarts(&mut self, telemetry: &Telemetry) {
+        if let Uarts::Reading {
+            vehicle,
+            started,
+            bar,
+            cancelling: false,
+        } = self.uarts
+        {
+            telemetry.cancel_ftp(vehicle);
+            self.uarts = Uarts::Reading {
+                vehicle,
+                started,
+                bar: Bar {
+                    marquee: true,
+                    ..bar
+                },
+                cancelling: true,
+            };
+        }
+    }
+
+    /// The read, once a frame: its progress onto the bar - none once Cancel is pressed, as
+    /// `UpdateProgressAndStatus` ignores them - and when it has ended, the names from what came,
+    /// the window closed, and the rest of `Activate`.
+    /// `// C#: GCSViews/ConfigurationView/ConfigSerial.cs:95-98, 101-161; ExtLibs/Controls/ProgressReporterDialogue.cs:282-296`
+    fn poll_uarts(&mut self, telemetry: &Telemetry, view: &TelemetryView, lookup: Lookup) {
+        let Uarts::Reading {
+            vehicle,
+            started,
+            mut bar,
+            cancelling,
+        } = self.uarts
+        else {
+            return;
+        };
+        // The outcome is kept as the request stops, under the same lock: once the client is not
+        // busy it is there to take, or it never will be - this link has no such client, or the
+        // outcome went to someone else.
+        if let Some((true, progress)) = telemetry.ftp_progress(vehicle) {
+            if !cancelling {
+                bar.report(progress.percent);
+            }
+            self.uarts = Uarts::Reading {
+                vehicle,
+                started,
+                bar,
+                cancelling,
+            };
+            return;
+        }
+        let outcome = telemetry.take_ftp_outcome(vehicle);
+        if cancelling {
+            // `// C#: :88-93`
+            telemetry.ftp_on(vehicle, FtpRequest::ResetSessions);
+        }
+        self.land(outcome, cancelling);
+        self.build(&view.parameters, lookup);
+    }
+
+    /// What `GetFile` left in `ms`: a stream with bytes in it is read for names; an empty one
+    /// names nothing; an exception leaves the empty stream `ms` began as. Null - no file, a read
+    /// cut short, a cancel - is where the C# throws; here it names nothing, as a failure does.
+    /// `// C#: GCSViews/ConfigurationView/ConfigSerial.cs:86, 103-111, 123-160`
+    fn land(&mut self, outcome: Option<Result<FtpOutcome, FtpError>>, cancelled: bool) {
+        self.uarts = match outcome {
+            Some(Ok(FtpOutcome::File {
+                data: Some(data), ..
+            })) => {
+                if !data.is_empty() {
+                    self.uart_names = uart_names(&data);
+                }
+                Uarts::Loaded
+            }
+            _ if cancelled => Uarts::Cancelled,
+            _ => Uarts::Failed,
+        };
+    }
+
+    /// The rest of `Activate`: the table built afresh from the vehicle's parameters - a row per
+    /// port up to the highest, named from `_uartNames`, the note under them. A port with no
+    /// `SERIALn_BAUD` gets its name only; a port with no `SERIALn_OPTIONS` stops the building
+    /// there, with no note, as the C#'s exception does.
+    /// `// C#: GCSViews/ConfigurationView/ConfigSerial.cs:163-380`
+    fn build(&mut self, parameters: &[(String, f64)], lookup: Lookup) {
         self.rows.clear();
         self.note = None;
         self.ports = port_count(parameters);
@@ -405,8 +801,8 @@ impl SerialPorts {
         }
         for port in 1..=self.ports {
             let name = format!("SERIAL{port}");
-            // No UART names: see the module's notes. `// C#: :188-209`
-            let mut uart = String::new();
+            // `// C#: :188-209`
+            let mut uart = self.uart_name(port).unwrap_or_default().to_owned();
             match value_of(parameters, &format!("BRD_SER{port}_RTSCTS")) {
                 Some(value) if (value - 1.0).abs() < f64::EPSILON => uart.push_str(" (RTS/CTS)"),
                 Some(value) if (value - 2.0).abs() < f64::EPSILON => {
@@ -462,11 +858,14 @@ impl SerialPorts {
         self.dropdown = None;
     }
 
-    /// The page object disposed with its screen. Sets already asked for still go.
+    /// The page object disposed with its screen. Sets already asked for still go; so does a read
+    /// of the names, whose end nobody takes. The next page object asks again.
     pub fn dispose(&mut self) {
         self.made_for = None;
         self.active = false;
         self.rules = None;
+        self.uarts = Uarts::Unread;
+        self.uart_names.clear();
         self.ports = 0;
         self.rows.clear();
         self.note = None;
@@ -595,8 +994,8 @@ impl SerialPorts {
         self.messages.push_back(Message { title: "", text });
     }
 
-    /// Once a frame: a page object whose screen has gone is disposed, the set on its way is read
-    /// back and what follows it done, and the next is sent.
+    /// Once a frame: a page object whose screen has gone is disposed, the names' read followed,
+    /// the set on its way is read back and what follows it done, and the next is sent.
     pub fn tick(
         &mut self,
         telemetry: &Telemetry,
@@ -610,6 +1009,7 @@ impl SerialPorts {
         {
             self.dispose();
         }
+        self.poll_uarts(telemetry, view, lookup);
         if let Some((id, step)) = self.in_flight.take() {
             match telemetry.request(id).map(|request| request.outcome()) {
                 Some(None) => {
@@ -795,6 +1195,27 @@ pub fn record_facts(serial: &SerialPorts, view: &TelemetryView) {
     );
     record("config.serial.write", serial.last_write().unwrap_or("none"));
     record("config.serial.writes.pending", serial.pending());
+    // The names: where the read is, how many the file gave, and the progress window.
+    record("config.serial.uarts", serial.uarts().word());
+    record("config.serial.uarts.names", serial.uart_names().len());
+    let progress = serial.progress();
+    record(
+        "config.serial.progress",
+        progress.map_or_else(|| "none".to_owned(), |(text, ..)| text.replace("\r\n", " ")),
+    );
+    record(
+        "config.serial.progress.bar",
+        progress.map_or_else(
+            || "none".to_owned(),
+            |(_, bar, _)| {
+                if bar.marquee {
+                    "marquee".to_owned()
+                } else {
+                    bar.value.to_string()
+                }
+            },
+        ),
+    );
     let top = serial.dialogs().last();
     record(
         "config.serial.dialog",
@@ -831,6 +1252,10 @@ pub fn record_facts(serial: &SerialPorts, view: &TelemetryView) {
         record(
             format!("config.serial.{n}.label"),
             row.label.replace('\n', " ").trim_end(),
+        );
+        record(
+            format!("config.serial.{n}.name"),
+            serial.uart_name(n).unwrap_or("none"),
         );
         record(format!("config.serial.{n}.baud"), combo(row.baud.as_ref()));
         record(
@@ -1170,7 +1595,140 @@ fn bitmask_window(
     .into_any_element()
 }
 
-/// The bitmask windows open, and over everything the message box showing.
+/// The progress window while the names are read: `ProgressReporterDialogue`, shown with
+/// `ShowDialog`, so nothing behind it takes a click. No close box (`ControlBox = false`); its
+/// caption, label, bar and Cancel where the `.resx` puts them; centred, as `CenterParent`
+/// centres it.
+/// `// C#: ExtLibs/Controls/ProgressReporterDialogue.cs:49-58; ProgressReporterDialogue.designer.cs:34-116; MyProgressBar.cs:98-125`
+fn progress_window(
+    serial: &SerialPorts,
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> Option<AnyElement> {
+    let (text, bar, cancel) = serial.progress()?;
+    let Uarts::Reading { started, .. } = serial.uarts() else {
+        return None;
+    };
+    let (bar_x, bar_y, bar_w, bar_h) = PROGRESS_BAR;
+    // `position = Value / 100 * Width`: the bar done from the left, or the marquee's block there.
+    #[allow(clippy::cast_precision_loss)] // a percentage
+    let position = |value: i32| value as f32 / 100.0 * bar_w;
+    let (fill_x, fill_w) = if bar.marquee {
+        (position(marquee_value(started.elapsed())), MARQUEE_BLOCK)
+    } else {
+        (0.0, position(bar.value).max(0.0))
+    };
+    let (label_x, label_y, label_w, label_h) = PROGRESS_LABEL;
+    let mut label = div()
+        .absolute()
+        .left(px(label_x))
+        .top(px(label_y))
+        .w(px(label_w))
+        .h(px(label_h))
+        .flex()
+        .flex_col()
+        .text_xs()
+        .text_color(rgb(theme::TEXT));
+    for line in text.lines() {
+        label = label.child(line.to_owned());
+    }
+    let mut client = div()
+        .relative()
+        .w(px(PROGRESS_WINDOW.0))
+        .h(px(PROGRESS_WINDOW.1))
+        .child(label)
+        .child(
+            crate::probe::measured("serial-uarts-bar", div())
+                .absolute()
+                .left(px(bar_x))
+                .top(px(bar_y))
+                .w(px(bar_w))
+                .h(px(bar_h))
+                .overflow_hidden()
+                .border_1()
+                .border_color(rgb(theme::BORDER))
+                .bg(rgb(theme::BG))
+                .child(
+                    div()
+                        .absolute()
+                        .left(px(fill_x))
+                        .top(px(0.0))
+                        .w(px(fill_w))
+                        .h_full()
+                        .bg(rgb(theme::OK)),
+                ),
+        );
+    if cancel {
+        let (x, y, w, h) = PROGRESS_CANCEL;
+        client = client.child(
+            div()
+                .absolute()
+                .left(px(x))
+                .top(px(y))
+                .w(px(w))
+                .h(px(h))
+                .child(
+                    crate::probe::measured("serial-uarts-cancel", div())
+                        .id("serial-uarts-cancel")
+                        .size_full()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded_sm()
+                        .border_1()
+                        .border_color(rgb(theme::BORDER))
+                        .bg(rgb(theme::ACTION))
+                        .text_xs()
+                        .text_color(rgb(theme::TEXT))
+                        .cursor_pointer()
+                        .hover(|style| style.bg(rgb(theme::BORDER)))
+                        .child("Cancel")
+                        .on_click(cx.listener(|this, _event, _window, cx| {
+                            this.serial_ports.cancel_uarts(&this.telemetry);
+                            cx.notify();
+                        })),
+                ),
+        );
+    }
+    let frame = crate::probe::measured("serial-uarts-progress", div())
+        .flex()
+        .flex_col()
+        .bg(rgb(theme::PANEL))
+        .border_1()
+        .border_color(rgb(theme::ACCENT))
+        .child(
+            div()
+                .px_2()
+                .py_1()
+                .text_xs()
+                .text_color(rgb(theme::DIM))
+                .child(PROGRESS_TITLE),
+        )
+        .child(client);
+    let size = window.viewport_size();
+    Some(
+        gpui::deferred(
+            gpui::anchored()
+                .position(gpui::point(px(0.0), px(0.0)))
+                .child(
+                    div()
+                        .id("serial-uarts-backdrop")
+                        .w(size.width)
+                        .h(size.height)
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .occlude()
+                        .child(frame),
+                ),
+        )
+        .with_priority(2)
+        .into_any_element(),
+    )
+}
+
+/// The bitmask windows open, over everything the message box showing, and while the names are
+/// read the progress window.
 pub fn overlay(
     serial: &SerialPorts,
     window: &Window,
@@ -1182,6 +1740,7 @@ pub fn overlay(
         .enumerate()
         .map(|(index, dialog)| bitmask_window(index, dialog, window, cx))
         .collect();
+    out.extend(progress_window(serial, window, cx));
     if let Some(message) = serial.message() {
         let ok = action(
             "serial-message-ok",
@@ -1210,6 +1769,8 @@ mod tests {
     use super::*;
     use crate::telemetry::scripted::{Vehicle, param, until};
     use mp_link::ProtocolTimeouts;
+    use mp_link::mavftp::testing::FakeVehicle;
+    use mp_link::mavftp::wire::{Errno, ErrorCode, Header, Opcode};
     use mp_mavlink_dialects::all::MavMessage;
     use mp_params::ParamMeta;
 
@@ -1330,8 +1891,11 @@ mod tests {
     #[test]
     fn the_sitl_copters_seven_ports_are_read() {
         let mut serial = SerialPorts::default();
-        serial.activate(&sitl(), key(), documented);
+        serial.activate(&Telemetry::idle(), &sitl(), key(), documented);
         assert!(serial.is_active());
+        // No vehicle to ask for the names: failed at once, the table built without them.
+        assert_eq!(serial.uarts(), Uarts::Failed);
+        assert!(serial.progress().is_none());
         assert_eq!(serial.ports(), 7);
         assert_eq!(serial.rows().len(), 7);
         assert_eq!(serial.note(), Some(REBOOT_NOTE));
@@ -1357,7 +1921,7 @@ mod tests {
     #[test]
     fn a_port_with_no_documented_values_has_no_box_for_them() {
         let mut serial = SerialPorts::default();
-        serial.activate(&sitl(), key(), bundled);
+        serial.activate(&Telemetry::idle(), &sitl(), key(), bundled);
         assert!(serial.rows()[0].baud.is_some());
         assert!(serial.rows()[0].protocol.is_some());
         assert!(serial.rows()[1].baud.is_none());
@@ -1370,6 +1934,7 @@ mod tests {
     fn rts_cts_is_named_under_the_port() {
         let mut serial = SerialPorts::default();
         serial.activate(
+            &Telemetry::idle(),
             &table(&[
                 ("SERIAL1_BAUD", 57.0),
                 ("SERIAL1_PROTOCOL", 2.0),
@@ -1391,6 +1956,7 @@ mod tests {
     fn a_gap_in_the_ports_gets_a_name_only_and_missing_options_stop_the_table() {
         let mut serial = SerialPorts::default();
         serial.activate(
+            &Telemetry::idle(),
             &table(&[
                 ("SERIAL1_BAUD", 57.0),
                 ("SERIAL1_PROTOCOL", 2.0),
@@ -1408,6 +1974,7 @@ mod tests {
 
         // No SERIAL2_OPTIONS, as on firmware older than the parameter: the C# throws there.
         serial.activate(
+            &Telemetry::idle(),
             &table(&[
                 ("SERIAL1_BAUD", 57.0),
                 ("SERIAL1_PROTOCOL", 2.0),
@@ -1438,7 +2005,7 @@ mod tests {
         let mut view = telemetry.view();
         view.parameters = sitl().into();
         let mut serial = SerialPorts::default();
-        serial.activate(&view.parameters, key(), documented);
+        serial.activate(&Telemetry::idle(), &view.parameters, key(), documented);
         // SERIAL5 to MAVLink1: the protocol, then the rule's 115200 and options 0.
         serial.choose_protocol(4, 1);
         assert_eq!(
@@ -1496,7 +2063,7 @@ mod tests {
         }
         view.parameters = table.into();
         let mut serial = SerialPorts::default();
-        serial.activate(&view.parameters, key(), documented);
+        serial.activate(&Telemetry::idle(), &view.parameters, key(), documented);
         // SERIAL1, 2 and 3 are MAVLink; SERIAL4 makes four.
         serial.choose_protocol(3, 2);
         serial.tick(&telemetry, &view, true, documented);
@@ -1517,6 +2084,7 @@ mod tests {
         view.parameters = table(&[("SERIAL1_BAUD", 57.0), ("SERIAL1_OPTIONS", 0.0)]).into();
         let mut serial = SerialPorts::default();
         serial.activate(
+            &Telemetry::idle(),
             &table(&[
                 ("SERIAL1_BAUD", 57.0),
                 ("SERIAL1_PROTOCOL", 2.0),
@@ -1536,7 +2104,7 @@ mod tests {
     #[test]
     fn a_bitmask_window_adds_up_its_boxes() {
         let mut serial = SerialPorts::default();
-        serial.activate(&sitl(), key(), documented);
+        serial.activate(&Telemetry::idle(), &sitl(), key(), documented);
         serial.open_bitmask(4, &table(&[("SERIAL5_OPTIONS", 1024.0)]), documented);
         let dialog = serial.dialogs().last().expect("a window");
         assert_eq!(dialog.param, "SERIAL5_OPTIONS");
@@ -1573,7 +2141,7 @@ mod tests {
             ("SERIAL1_OPTIONS", 0.0),
         ]);
         let mut serial = SerialPorts::default();
-        serial.activate(&parameters, key(), documented);
+        serial.activate(&Telemetry::idle(), &parameters, key(), documented);
         serial.choose_baud(0, 115);
         let mut written = None;
         until("the PARAM_SET", || {
@@ -1600,7 +2168,7 @@ mod tests {
         let telemetry = Telemetry::idle();
         let view = telemetry.view();
         let mut serial = SerialPorts::default();
-        serial.activate(&sitl(), Key::of(&view), documented);
+        serial.activate(&Telemetry::idle(), &sitl(), Key::of(&view), documented);
         serial.open_bitmask(0, &sitl(), documented);
         serial.hide();
         serial.tick(&telemetry, &view, true, documented);
@@ -1608,6 +2176,380 @@ mod tests {
         serial.tick(&telemetry, &view, false, documented);
         assert!(serial.dialogs().is_empty());
         assert!(serial.rows().is_empty());
+    }
+
+    /// `@SYS/uarts.txt` as SITL copter serves it, read with `mpr ftp get tcp:127.0.0.1:5763
+    /// @SYS/uarts.txt` on 2026-09-24: 712 bytes. SITL's UARTs have no names, so each line's
+    /// second word is "TX=".
+    const SITL_UARTS: &str = "UARTV1\n\
+        SERIAL0 TX=       0 RX=       0 TXBD=     0 RXBD=     0 not connected (tcp:0:wait)\n\
+        SERIAL1 TX=       0 RX=       0 TXBD=     0 RXBD=     0 not connected (tcp:2)\n\
+        SERIAL2 TX=   65489 RX=     515 TXBD=   244 RXBD=     1 connected     (tcp:3)\n\
+        SERIAL3 TX=  498700 RX= 5702436 TXBD=   258 RXBD=   444 connected     (GPS1)\n\
+        SERIAL4 TX=       0 RX=       0 TXBD=     0 RXBD=     0 connected     (GPS2)\n\
+        SERIAL5 TX=       0 RX=       0 TXBD=     0 RXBD=     0 not connected (tcp:5)\n\
+        SERIAL6 TX=       0 RX=       0 TXBD=     0 RXBD=     0 not connected (tcp:6)\n\
+        SERIAL7 TX=       0 RX=       0 TXBD=     0 RXBD=     0 not connected (tcp:7)\n\
+        SERIAL8 TX=       0 RX=       0 TXBD=     0 RXBD=     0 not connected (tcp:8)\n";
+
+    /// The link's own address, which the vehicle's FTP replies are addressed to.
+    const GCS: VehicleId = VehicleId::new(255, 190);
+
+    /// The vehicle's side of MAVFTP: every `FILE_TRANSFER_PROTOCOL` the link has sent answered
+    /// from `files`, as ArduPilot's `GCS_FTP.cpp` answers it - but for the answers `lost` picks.
+    fn serve(vehicle: &mut Vehicle, files: &mut FakeVehicle, lost: impl Fn(&Header) -> bool) {
+        for message in vehicle.read() {
+            if let MavMessage::FileTransferProtocol(ftp) = message {
+                let request = Header::decode(&ftp.payload);
+                for reply in files.answer(&request) {
+                    if !lost(&request) {
+                        vehicle.send(&mp_link::ftp::ftp_message(GCS, &reply));
+                    }
+                }
+            }
+        }
+    }
+
+    /// The opcodes the vehicle heard.
+    fn opcodes(files: &FakeVehicle) -> Vec<Opcode> {
+        files.heard.iter().map(|head| head.opcode).collect()
+    }
+
+    /// The page activated on a vehicle `files` answers for, with SITL's parameters, and ticked
+    /// until the names' read has ended.
+    fn read_through(
+        files: &mut FakeVehicle,
+        parameters: Vec<(String, f64)>,
+    ) -> (SerialPorts, Telemetry, Vehicle) {
+        let (telemetry, mut vehicle) = Vehicle::connect(fast());
+        let mut view = telemetry.view();
+        view.parameters = parameters.into();
+        let mut serial = SerialPorts::default();
+        serial.activate(&telemetry, &view.parameters, Key::of(&view), documented);
+        until("the read to end", || {
+            serve(&mut vehicle, files, |_| false);
+            serial.tick(&telemetry, &view, true, documented);
+            !matches!(serial.uarts(), Uarts::Reading { .. })
+        });
+        (serial, telemetry, vehicle)
+    }
+
+    #[test]
+    fn a_number_is_read_as_int32_try_parse_reads_it() {
+        assert_eq!(try_parse_int32("1"), Some(1));
+        assert_eq!(try_parse_int32("01"), Some(1));
+        assert_eq!(try_parse_int32("+2"), Some(2));
+        assert_eq!(try_parse_int32("-3"), Some(-3));
+        assert_eq!(try_parse_int32(" \t4\r "), Some(4));
+        assert_eq!(try_parse_int32("5 \0\0"), Some(5), "trailing NULs");
+        assert_eq!(try_parse_int32("6\0 "), None);
+        assert_eq!(try_parse_int32("2147483647"), Some(i32::MAX));
+        assert_eq!(try_parse_int32("2147483648"), None);
+        assert_eq!(try_parse_int32("-2147483648"), Some(i32::MIN));
+        for bad in ["", "+", "- 1", "1a", "0x1", "1.0", "１"] {
+            assert_eq!(try_parse_int32(bad), None, "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn lines_end_as_read_line_ends_them() {
+        assert_eq!(read_lines("a\r\nb\rc\nd"), ["a", "b", "c", "d"]);
+        assert_eq!(read_lines("a\n\nb\n"), ["a", "", "b"]);
+        assert!(read_lines("").is_empty());
+        assert_eq!(read_lines("\n"), [""]);
+    }
+
+    /// SITL names each port "TX=", from SERIAL1 to SERIAL8; SERIAL0 is not a row's.
+    #[test]
+    fn sitls_file_names_each_port_tx() {
+        let names = uart_names(SITL_UARTS.as_bytes());
+        assert_eq!(SITL_UARTS.len(), 712);
+        assert_eq!(
+            names.keys().copied().collect::<Vec<_>>(),
+            (1..=8).collect::<Vec<_>>()
+        );
+        assert!(names.values().all(|name| name == "TX="));
+    }
+
+    #[test]
+    fn a_name_is_the_second_word_of_a_serial_line() {
+        let file = "\u{feff}UARTV1\r\n\
+            SERIAL0 OTG1 TX=0\r\n\
+            SERIAL3 UART7 TX=0\r\
+            SERIAL1 USART2\n\
+            SERIAL x\n\
+            SERIALx UART1\n\
+            SERIAL-2 UART2\n\
+            SERIAL+2 UART4 TX=0\n\
+            SERIAL5\n\
+            serial6 UART6\n\
+            SERIAL99999999999 UART9\n\
+            SERIAL04  UART8\n\
+            SERIAL7\t UART5\n";
+        let names = uart_names(file.as_bytes());
+        let expected: BTreeMap<usize, String> = [
+            (1, "USART2"),
+            (2, "UART4"),
+            (3, "UART7"),
+            // Two spaces: `Split(' ')` makes the second word empty.
+            (4, ""),
+            // `TryParse` takes the tab as trailing white space.
+            (7, "UART5"),
+        ]
+        .into_iter()
+        .map(|(port, name)| (port, name.to_owned()))
+        .collect();
+        assert_eq!(names, expected);
+    }
+
+    /// `Dictionary.Add` throws on a port named twice, and the `catch` is around the loop.
+    #[test]
+    fn a_port_named_twice_ends_the_reading() {
+        let names = uart_names(b"SERIAL1 A\nSERIAL2 B\nSERIAL1 C\nSERIAL3 D\n");
+        assert_eq!(names.len(), 2);
+        assert_eq!(names.get(&1).map(String::as_str), Some("A"));
+        assert!(!names.contains_key(&3));
+    }
+
+    #[test]
+    fn the_bar_follows_the_reports() {
+        let mut bar = Bar::default();
+        assert!(bar.marquee, "_progress starts at -1");
+        bar.report(0);
+        assert_eq!(
+            bar,
+            Bar {
+                marquee: false,
+                value: 0
+            }
+        );
+        bar.report(56);
+        assert_eq!(
+            bar,
+            Bar {
+                marquee: false,
+                value: 56
+            }
+        );
+        bar.report(-1);
+        assert_eq!(
+            bar,
+            Bar {
+                marquee: true,
+                value: 56
+            }
+        );
+        // The marquee: 0, stepping 2 each 50 ms to 100, then -40.
+        let at = |ms| marquee_value(std::time::Duration::from_millis(ms));
+        assert_eq!(at(0), 0);
+        assert_eq!(at(49), 0);
+        assert_eq!(at(50), 2);
+        assert_eq!(at(2500), 100);
+        assert_eq!(at(2550), -40);
+        assert_eq!(at(3550), 0, "71 places round");
+    }
+
+    /// The path the product takes: the page's first `Activate` asks the vehicle for
+    /// `@SYS/uarts.txt` with a plain read of 80-byte chunks, shows the progress window with no
+    /// table behind it, and when the file has come names each row from it - SITL's "TX=".
+    #[test]
+    fn the_first_activate_reads_the_names_and_then_builds_the_table() {
+        let mut files = FakeVehicle::new().with_file(UARTS_FILE, SITL_UARTS.as_bytes());
+        let (telemetry, mut vehicle) = Vehicle::connect(fast());
+        let mut view = telemetry.view();
+        let mut parameters = sitl();
+        for (name, value) in &mut parameters {
+            if name == "BRD_SER2_RTSCTS" {
+                *value = 2.0;
+            }
+        }
+        view.parameters = parameters.into();
+        let mut serial = SerialPorts::default();
+        serial.activate(&telemetry, &view.parameters, Key::of(&view), documented);
+        assert_eq!(serial.uarts().word(), "reading");
+        assert!(serial.rows().is_empty(), "the table waits for the window");
+        assert!(serial.note().is_none());
+        assert_eq!(
+            serial.progress(),
+            Some((UARTS_PROGRESS, Bar::default(), true))
+        );
+        until("the names", || {
+            serve(&mut vehicle, &mut files, |_| false);
+            serial.tick(&telemetry, &view, true, documented);
+            serial.uarts() == Uarts::Loaded
+        });
+        assert!(serial.progress().is_none(), "the window closed");
+        assert_eq!(serial.uart_names().len(), 8);
+        assert_eq!(serial.rows().len(), 7);
+        assert_eq!(serial.rows()[0].label, "SERIAL PORT 1\nTX=");
+        assert_eq!(serial.rows()[1].label, "SERIAL PORT 2\nTX= (RTS/CTS Auto)");
+        assert_eq!(serial.rows()[6].label, "SERIAL PORT 7\nTX=");
+        assert_eq!(serial.uart_name(7), Some("TX="));
+        assert_eq!(serial.note(), Some(REBOOT_NOTE));
+        // `GetFile(filename, cancel, false)`: reset, open, then plain reads of RW_SIZE.
+        let heard = opcodes(&files);
+        assert_eq!(
+            heard[..3],
+            [
+                Opcode::RESET_SESSIONS,
+                Opcode::OPEN_FILE_RO,
+                Opcode::READ_FILE
+            ]
+        );
+        assert!(!heard.contains(&Opcode::BURST_READ_FILE));
+        let open = &files.heard[1];
+        assert_eq!(&open.data[..usize::from(open.size)], UARTS_FILE.as_bytes());
+        assert!(
+            files
+                .heard
+                .iter()
+                .filter(|head| head.opcode == Opcode::READ_FILE)
+                .all(|head| head.size == RW_SIZE)
+        );
+    }
+
+    /// `_gotUARTNames`: the page object asks once, however often it is shown; a new one - the
+    /// screen shown again - asks again.
+    #[test]
+    fn the_names_are_asked_for_once_per_page_object() {
+        let mut files = FakeVehicle::new().with_file(UARTS_FILE, SITL_UARTS.as_bytes());
+        let (mut serial, telemetry, mut vehicle) = read_through(&mut files, sitl());
+        let opens = |files: &FakeVehicle| {
+            opcodes(files)
+                .iter()
+                .filter(|opcode| **opcode == Opcode::OPEN_FILE_RO)
+                .count()
+        };
+        assert_eq!(opens(&files), 1);
+        let mut view = telemetry.view();
+        view.parameters = sitl().into();
+        serial.hide();
+        serial.activate(&telemetry, &view.parameters, Key::of(&view), documented);
+        assert_eq!(serial.uarts(), Uarts::Loaded);
+        assert_eq!(
+            serial.rows()[0].label,
+            "SERIAL PORT 1\nTX=",
+            "built at once"
+        );
+        serve(&mut vehicle, &mut files, |_| false);
+        assert_eq!(opens(&files), 1);
+        // The screen left and shown again: a new page object.
+        serial.hide();
+        serial.tick(&telemetry, &view, false, documented);
+        assert_eq!(serial.uarts(), Uarts::Unread);
+        assert!(serial.uart_names().is_empty());
+        serial.activate(&telemetry, &view.parameters, Key::of(&view), documented);
+        until("the second read", || {
+            serve(&mut vehicle, &mut files, |_| false);
+            serial.tick(&telemetry, &view, true, documented);
+            serial.uarts() == Uarts::Loaded
+        });
+        assert_eq!(opens(&files), 2);
+    }
+
+    /// A file the vehicle does not have: `GetFile` throws, the C# fails silently, and each port
+    /// is "SERIAL PORT n" alone.
+    #[test]
+    fn a_file_the_vehicle_refuses_leaves_the_ports_unnamed() {
+        let mut files = FakeVehicle::new();
+        let (serial, ..) = read_through(&mut files, sitl());
+        assert_eq!(serial.uarts(), Uarts::Failed);
+        assert!(serial.uart_names().is_empty());
+        assert_eq!(serial.rows().len(), 7);
+        assert_eq!(serial.rows()[0].label, "SERIAL PORT 1\n");
+        assert_eq!(serial.note(), Some(REBOOT_NOTE));
+        assert!(serial.message().is_none(), "silently");
+    }
+
+    /// An open that is never answered: `GetFile` returns null, where the C# throws at
+    /// `ms.Length`; here the table is built with the ports unnamed.
+    #[test]
+    fn a_file_that_never_comes_leaves_the_ports_unnamed() {
+        let mut files = FakeVehicle::new().with_file(UARTS_FILE, SITL_UARTS.as_bytes());
+        let (telemetry, mut vehicle) = Vehicle::connect(fast());
+        let mut view = telemetry.view();
+        view.parameters = sitl().into();
+        let mut serial = SerialPorts::default();
+        serial.activate(&telemetry, &view.parameters, Key::of(&view), documented);
+        until("the read to give up", || {
+            serve(&mut vehicle, &mut files, |request| {
+                request.opcode == Opcode::OPEN_FILE_RO
+            });
+            serial.tick(&telemetry, &view, true, documented);
+            !matches!(serial.uarts(), Uarts::Reading { .. })
+        });
+        assert_eq!(serial.uarts(), Uarts::Failed);
+        assert_eq!(serial.rows().len(), 7);
+        assert_eq!(serial.rows()[3].label, "SERIAL PORT 4\n");
+        assert_eq!(serial.note(), Some(REBOOT_NOTE));
+    }
+
+    /// An empty file: the read ends on end of file with nothing in the stream, `ms.Length` is
+    /// 0, and nothing is read from it.
+    #[test]
+    fn an_empty_file_names_nothing() {
+        let mut files = FakeVehicle::new().with_file(UARTS_FILE, b"");
+        let (serial, ..) = read_through(&mut files, sitl());
+        assert_eq!(serial.uarts(), Uarts::Loaded);
+        assert!(serial.uart_names().is_empty());
+        assert_eq!(serial.rows()[0].label, "SERIAL PORT 1\n");
+    }
+
+    /// Cancel mid-read: the window says "Cancelling..." with its bar a marquee and its button
+    /// gone, the read stops, the sessions are reset, and the table is built unnamed.
+    #[test]
+    fn cancel_stops_the_read_and_resets_the_sessions() {
+        let mut files = FakeVehicle::new().with_file(UARTS_FILE, SITL_UARTS.as_bytes());
+        let (telemetry, mut vehicle) = Vehicle::connect(fast());
+        let mut view = telemetry.view();
+        view.parameters = sitl().into();
+        let mut serial = SerialPorts::default();
+        serial.activate(&telemetry, &view.parameters, Key::of(&view), documented);
+        // The first chunk answered, the rest lost: the bar leaves the marquee for 0 %.
+        let first_read = std::cell::Cell::new(true);
+        until("the first chunk", || {
+            serve(&mut vehicle, &mut files, |request| {
+                request.opcode == Opcode::READ_FILE && !first_read.replace(false)
+            });
+            serial.tick(&telemetry, &view, true, documented);
+            serial.progress().is_some_and(|(_, bar, _)| !bar.marquee)
+        });
+        serial.cancel_uarts(&telemetry);
+        let Some((text, bar, cancel)) = serial.progress() else {
+            panic!("the window closed at once");
+        };
+        assert_eq!(text, CANCELLING);
+        assert!(bar.marquee);
+        assert!(!cancel, "the Cancel button is hidden");
+        assert_eq!(serial.uarts().word(), "cancelling");
+        let before = files.heard.len();
+        until("the read to stop", || {
+            serve(&mut vehicle, &mut files, |request| {
+                request.opcode == Opcode::READ_FILE
+            });
+            serial.tick(&telemetry, &view, true, documented);
+            serial.uarts() == Uarts::Cancelled
+        });
+        assert!(serial.progress().is_none());
+        assert_eq!(serial.rows().len(), 7);
+        assert_eq!(serial.rows()[0].label, "SERIAL PORT 1\n");
+        until("the sessions reset", || {
+            serve(&mut vehicle, &mut files, |_| false);
+            files.heard[before..]
+                .iter()
+                .any(|head| head.opcode == Opcode::RESET_SESSIONS)
+        });
+    }
+
+    /// A refused NAK other than "not found" fails the same way.
+    #[test]
+    fn a_refused_open_fails_silently() {
+        let mut files = FakeVehicle::new().with_file(UARTS_FILE, SITL_UARTS.as_bytes());
+        files.refuse = Some((Opcode::OPEN_FILE_RO, ErrorCode::FAIL, Errno(0)));
+        let (serial, ..) = read_through(&mut files, sitl());
+        assert_eq!(serial.uarts(), Uarts::Failed);
+        assert!(serial.message().is_none());
+        assert_eq!(serial.rows()[0].label, "SERIAL PORT 1\n");
     }
 
     /// Every fact the GUI script asserts on is one this page records, and every control it

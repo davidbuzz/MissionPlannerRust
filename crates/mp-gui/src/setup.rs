@@ -941,10 +941,12 @@ impl MissionPlanner {
                     crate::metadata::lookup,
                 );
             }
+            // The page object's first `Activate` reads the ports' names over MAVFTP.
             // C#: GCSViews/ConfigurationView/ConfigSerial.cs:37-380
             Some("ConfigSerial") => {
                 let view = self.telemetry.view();
                 self.serial_ports.activate(
+                    &self.telemetry,
                     &view.parameters,
                     Key::of(&view),
                     crate::metadata::lookup,

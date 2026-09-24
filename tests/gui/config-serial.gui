@@ -8,6 +8,16 @@
 # in the note (:384-430); a bit ticked in the bitmask window is written and named in the options
 # label (:327-353). Each change is proved by the vehicle's echo, and put back.
 #
+# The ports' names: the page object's first Activate reads @SYS/uarts.txt over MAVFTP - a plain
+# read, behind a modal progress window - and builds the table when it has ended; each row is
+# "SERIAL PORT n" with, under it, the second word of the file's SERIALn line (:77-161, 184-212).
+# SITL's UARTs have no names, so every SITL line's second word is the first counter's, "TX=":
+#
+#   SERIAL1 TX=       0 RX=       0 TXBD=     0 RXBD=     0 not connected (tcp:2)
+#
+# and SERIAL1 to SERIAL8 are named "TX=", as Mission Planner names them on SITL. Shown again on
+# the same screen, the page does not read the file again (_gotUARTNames).
+#
 # SERIAL5 is used because SITL leaves it without a protocol; a serial change takes effect only
 # when the board reboots, and nothing here reboots it.
 #
@@ -41,15 +51,24 @@ click tab-setup
 expect config.serial.active false
 click setup-page-ConfigMandatory
 click setup-page-ConfigSerial
-settle 1
+# Time for the read: a reset, an open and nine 80-byte reads of SITL's 712 bytes.
+settle 3
 expect setup.page ConfigSerial
 expect config.serial.active true
+
+# The names, read and the window closed.
+expect config.serial.uarts loaded
+expect config.serial.uarts.names 8
+expect config.serial.progress none
+expect config.serial.1.name TX=
+expect config.serial.7.name TX=
+expect config.serial.7.label SERIAL PORT 7 TX=
 
 # What Activate built.
 expect config.serial.ports 7
 expect config.serial.rows 7
 expect config.serial.note Note: Changes to the serial port settings will not take effect until the board is rebooted.
-expect config.serial.1.label SERIAL PORT 1
+expect config.serial.1.label SERIAL PORT 1 TX=
 expect config.serial.1.baud 57
 expect config.serial.1.baud.text 57600
 expect config.serial.1.protocol 2
@@ -126,3 +145,12 @@ expect config.serial.writes.pending 0
 click setup-page-ConfigFlightModes
 expect setup.page ConfigFlightModes
 expect config.serial.active false
+
+# And shown again: the same page object, which has its names already - the table is built at
+# once, with no read and no window.
+click setup-page-ConfigSerial
+expect setup.page ConfigSerial
+expect config.serial.active true
+expect config.serial.progress none
+expect config.serial.uarts loaded
+expect config.serial.1.label SERIAL PORT 1 TX=

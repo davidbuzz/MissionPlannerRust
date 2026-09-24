@@ -92,3 +92,8 @@ SITL scripts with the argument; self-contained ones (`tiles offline`, no SITL in
 without.
 `tools/gui-suite.sh -o <logdir> name...` reads that argument out of each script's header and
 passes it, waits for the load to fall below 20 first, and prints one PASS/FAIL line per script.
+
+**The probe forgets what left the screen.** Since 0b74b03 a control not measured in the last
+frame leaves the probe file, so a `click` on a closed menu's entry fails with "not found"
+instead of clicking where it used to be (which put two waypoints on the map in
+plan-survey.gui). A script that opens a menu must click its entries before anything closes it.

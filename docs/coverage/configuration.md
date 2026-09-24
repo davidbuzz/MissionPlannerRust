@@ -4,11 +4,11 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui c
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 7 | 18 | 30 | 2 | 4 | 569 |
+| 61 | 8 | 17 | 30 | 2 | 4 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 7 | 16 | 19 | 2 | 0 | 258 | 106 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 8 | 15 | 19 | 2 | 0 | 258 | 106 |
 | CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 0 | 2 | 11 | 0 | 0 | 277 | 191 |
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 | 0 |
 
@@ -51,7 +51,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConne
 | 206 | `ConfigHWCompass` | Compass | Mandatory Hardware | any without COMPASS_PRIO1_ID | 21 | partial: `crates/mp-gui/src/config/compass.rs` `fn page` - has the declination and its automatic box, learn, the primary compass, each compass's use, external, orientation, offsets and MOT, the three quick-configure buttons, the onboard calibration with its timer and fitness, Large Vehicle MagCal and both links - 20 of the 21 wirings; missing Live Calibration, drawn and disabled: its handler is MagCalib.DoGUIMagCalib (MagCalib.cs), Mission Planner's own calibration from RAW_IMU and SCALED_IMU2/3 samples - the ProgressReporterSphere window with three OpenGL spheres, alglib's Levenberg-Marquardt sphere and ellipsoid fits, and the offsets saved through PREFLIGHT_SET_SENSOR_OFFSETS - a feature of its own, not ported; its group shows only for ArduPlane 3.7.1 to 4.0 or a vehicle without onboard calibration |
 | 211 | `ConfigRadioInput` | Radio Calibration | Mandatory Hardware | any | 8 | done: `crates/mp-gui/src/config/radio.rs` `fn page` |
 | 215 | `ConfigRadioOutput` | Servo Output | Mandatory Hardware | any | 1 | done: `crates/mp-gui/src/config/servo_output.rs` `fn page` |
-| 220 | `ConfigSerial` | Serial Ports | Mandatory Hardware | any | 0 | partial: `crates/mp-gui/src/config/serial_ports.rs` `fn page` - a row per SERIALn to the highest SERIALn_BAUD, the speed and protocol combos writing on change through the page's setParam, SerialOptionRules.json's rules and MAVLink warning in the note, the options label and the Set Bitmask window; missing the port names from @SYS/uarts.txt, which need MAVLink FTP |
+| 220 | `ConfigSerial` | Serial Ports | Mandatory Hardware | any | 0 | done: `crates/mp-gui/src/config/serial_ports.rs` `fn page` |
 | 224 | `ConfigESCCalibration` | ESC Calibration | Mandatory Hardware | any | 1 | done: `crates/mp-gui/src/config/esc_calibration.rs` `fn page` |
 | 228 | `ConfigFlightModes` | Flight Modes | Mandatory Hardware | any | 8 | partial: `crates/mp-gui/src/config/flight_modes.rs` `fn page` - the six combos from the firmware's mode list, the lit PWM band, Simple and Super Simple, Save through the retrying set; not Ctrl+S, standardFlightModesOnly beyond its default, nor the message box |
 | 232 | `ConfigFailSafe` | FailSafe | Mandatory Hardware | any | 4 | partial: `crates/mp-gui/src/config/failsafe.rs` `fn page` - the channel bars, the mode/armed/GPS readouts, the throttle, battery and GCS controls writing their parameters on change through the retrying set; numbers by step arrows only, no typing |

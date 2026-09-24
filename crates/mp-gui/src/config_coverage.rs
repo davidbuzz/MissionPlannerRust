@@ -416,16 +416,17 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigSerial"),
         Some(0),
         &[setup(220, "Serial Ports", MANDATORY, ANY)],
-        // C#: GCSViews/ConfigurationView/ConfigSerial.cs:37-513, but for the port names, which
-        // Activate downloads from @SYS/uarts.txt over MAVLink FTP - a client this application
-        // does not have.
-        Partial(
-            at("crates/mp-gui/src/config/serial_ports.rs", "fn page"),
-            "a row per SERIALn to the highest SERIALn_BAUD, the speed and protocol combos \
-             writing on change through the page's setParam, SerialOptionRules.json's rules and \
-             MAVLink warning in the note, the options label and the Set Bitmask window; missing \
-             the port names from @SYS/uarts.txt, which need MAVLink FTP",
-        ),
+        // C#: GCSViews/ConfigurationView/ConfigSerial.cs:37-513, ported whole: the port names
+        // read once per page object from @SYS/uarts.txt over MAVFTP (a plain GetFile behind the
+        // ProgressReporterDialogue with its Cancel, the table built when it closes), a row per
+        // SERIALn to the highest SERIALn_BAUD, the speed and protocol combos writing on change
+        // through the page's setParam, SerialOptionRules.json's rules and MAVLink warning in the
+        // note, the options label and the Set Bitmask window. Divergences, each at its site in
+        // serial_ports.rs: a null GetFile names the ports "SERIAL PORT n" at once where the C#
+        // throws at ms.Length; Cancel's session reset goes once, after the read stops; the rules
+        // are built in rather than read from beside the executable; the bitmask value is not
+        // converted to the parameter's type, and its windows close with the screen.
+        Ours::Done(at("crates/mp-gui/src/config/serial_ports.rs", "fn page")),
     ),
     panel(
         "ConfigESCCalibration",
@@ -1701,7 +1702,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (7, 18, 30, 2, 4)
+            (8, 17, 30, 2, 4)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

@@ -10,6 +10,8 @@
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
+use mp_link::FtpError;
+use mp_link::mavftp::{FtpOutcome, FtpRequest, Progress};
 use mp_link::messages::LogMessage;
 use mp_link::mission_transfer::TransferState;
 use mp_link::requests::{Request, RequestOutcome};
@@ -962,6 +964,48 @@ impl Telemetry {
     pub fn clear_log_download(&self) {
         if let Some(link) = &self.link {
             link.clear_log_download();
+        }
+    }
+
+    // --- MAVFTP: the link's one client per vehicle -------------------------------------------------
+
+    /// Starts a MAVFTP request on the vehicle being flown and returns at once: the C#'s
+    /// `new MAVFtp(MainV2.comPort, MainV2.comPort.MAV.sysid, MainV2.comPort.MAV.compid)` and the
+    /// call made on it, run by the link rather than on a thread of the screen's. The vehicle it
+    /// went to; `None` with no vehicle, or with a request already running on that vehicle's
+    /// client. How it ends is read with [`Telemetry::ftp_progress`] and
+    /// [`Telemetry::take_ftp_outcome`].
+    /// `// C#: GCSViews/ConfigurationView/ConfigSerial.cs:83, 105`
+    pub fn start_ftp(&self, request: FtpRequest) -> Option<VehicleId> {
+        let (link, id) = self.target()?;
+        link.ftp(id, request).then_some(id)
+    }
+
+    /// Starts a MAVFTP request on a vehicle already asked: a later call on the same `MAVFtp`.
+    /// False with no link, or with a request running on it.
+    pub fn ftp_on(&self, vehicle: VehicleId, request: FtpRequest) -> bool {
+        self.link
+            .as_ref()
+            .is_some_and(|link| link.ftp(vehicle, request))
+    }
+
+    /// Whether a request is running on the vehicle's client, and its last `Progress` report;
+    /// `None` when this link has no client for the vehicle.
+    #[must_use]
+    pub fn ftp_progress(&self, vehicle: VehicleId) -> Option<(bool, Progress)> {
+        self.link.as_ref()?.ftp_progress(vehicle)
+    }
+
+    /// Takes the vehicle's finished request's outcome, once there is one: what `GetFile` and the
+    /// rest return, or the exception they throw.
+    pub fn take_ftp_outcome(&self, vehicle: VehicleId) -> Option<Result<FtpOutcome, FtpError>> {
+        self.link.as_ref()?.take_ftp_outcome(vehicle)
+    }
+
+    /// Asks the vehicle's running request to stop: the caller's `CancellationTokenSource.Cancel()`.
+    pub fn cancel_ftp(&self, vehicle: VehicleId) {
+        if let Some(link) = &self.link {
+            link.cancel_ftp(vehicle);
         }
     }
 
