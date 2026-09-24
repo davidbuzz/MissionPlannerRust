@@ -1,0 +1,84 @@
+# Auto WP > Create Wp Circle and Create Spline Circle (PLAN.md 13.4, D11).
+#
+# createWpCircleToolStripMenuItem_Click asks four questions - Radius 50, Points 20, Direction 1,
+# Angle 0 - reads them only once all are answered, and adds a WAYPOINT (16) per point from the
+# start angle round to it again inclusive, at Default Alt (GCSViews/FlightPlanner.cs:2963-3048):
+# twenty points make twenty-one rows. createSplineCircleToolStripMenuItem_Click asks five, adds a
+# DO_SET_ROI (201) at the click, then laps of five SPLINE_WAYPOINTs (82), the first lap at the
+# minimum altitude and each point after it a quarter of the step higher, while a lap starts at or
+# under the maximum (:2857-2961): 5 to 20 by 5 is five laps, the last point at 24. The positions
+# are held to the C# under mono by crates/mp-mission's circle tests.
+
+screen plan
+window 1600x1200
+settle 4
+
+expect mission.items 0
+
+# An answer int.TryParse refuses is said once all four are in: "Bad Radius", nothing added.
+click map@0.50x0.50:right
+click menu-autoWP
+click menu-createWpCircle
+expect plan.prompt Radius
+key ctrl+u
+type wide
+key Return
+key Return
+key Return
+key Return
+expect plan.prompt message
+expect plan.prompt.text Bad Radius
+key Return
+expect mission.items 0
+
+# Escape at any question adds nothing.
+click map@0.50x0.50:right
+click menu-autoWP
+click menu-createWpCircle
+key Return
+expect plan.prompt Points
+expect plan.prompt.text Number of points to generate Circle
+key Escape
+expect plan.prompt none
+expect mission.items 0
+
+# The four as offered: twenty-one waypoints at Default Alt's 100.
+click map@0.50x0.50:right
+click menu-autoWP
+click menu-createWpCircle
+expect plan.prompt Radius
+expect plan.prompt.value 50
+key Return
+expect plan.prompt.value 20
+key Return
+expect plan.prompt.text Direction of circle (-1 or 1)
+expect plan.prompt.value 1
+key Return
+expect plan.prompt angle
+expect plan.prompt.value 0
+key Return
+expect plan.prompt none
+expect mission.items 21
+expect mission.last.command 16
+expect mission.last.alt 100
+expect mission.last.position true
+
+# The spline circle, as offered: the ROI and five laps of five.
+click map@0.50x0.50:right
+click menu-autoWP
+click menu-createSplineCircle
+expect plan.prompt Radius
+key Return
+expect plan.prompt min alt
+key Return
+expect plan.prompt max alt
+key Return
+expect plan.prompt alt step
+key Return
+expect plan.prompt angle
+key Return
+expect plan.prompt none
+expect mission.items 47
+expect mission.commands ~ 16,201,82,82
+expect mission.last.command 82
+expect mission.last.alt 24

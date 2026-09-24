@@ -13,7 +13,9 @@
 
 use std::time::Instant;
 
-use mp_mavlink_dialects::all::{MavMessage, MissionSetCurrent, ParamSet};
+use mp_mavlink_dialects::all::{
+    MavMessage, MissionSetCurrent, ParamSet, RallyFetchPoint, RallyPoint,
+};
 use mp_params::{ParamTable, ParamType, ParamValue};
 use mp_vehicle::VehicleId;
 
@@ -73,6 +75,83 @@ pub enum RequestKind {
         /// The mission item to make current.
         seq: u16,
     },
+    /// `setRallyPoint`: `RALLY_POINT`, then `getRallyPoint` - `RALLY_FETCH_POINT` until the
+    /// vehicle sends that point back - and the point again if what came back is not what was
+    /// sent, three times in all. See [`RallyPointSet`].
+    SetRallyPoint(RallyPointSet),
+}
+
+/// One rally point as `setRallyPoint` puts it in a `mavlink_rally_point_t`: the position as
+/// `(int)(degrees * 1e7)`, the altitude as `(short)`.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6445-6456`
+///
+/// What the machine does, and where it departs from the C# (`setRallyPoint` `:6441-6476`,
+/// `getRallyPoint` `:6346-6412`):
+///
+/// * `RALLY_POINT` goes out (`:6462`), then `RALLY_FETCH_POINT` for its index (`:6360`), waiting
+///   700 ms for a `RALLY_POINT` of that index addressed to this ground station, three more times
+///   (`:6363-6378`).
+/// * **Divergence:** the C#'s retries send `FENCE_FETCH_POINT` - the rally request's bytes under
+///   the fence message's id (`:6372`, `:6397`) - which no vehicle answers with a rally point, so
+///   its retries can never succeed. Here they send `RALLY_FETCH_POINT`, as the first ask does.
+/// * A `RALLY_POINT` of another index asks again at once without spending a retry (`:6395-6399`).
+/// * **Divergence:** the C# takes the point as set (`:6466`) when `newfp.plla.Lat == plla.Lat &&
+///   newfp.plla.Lng == rp.lng` - the second half compares degrees with `degrees * 1e7`, and the
+///   first a double with what came back through 1e7 - so it is all but never true, and every
+///   point is sent three times and `false` returned, which its caller ignores. Here the point is
+///   set when the latitude and longitude that come back are the ones sent; otherwise it goes
+///   again, three times in all, as the C#'s loop does, and ends [`RequestOutcome::Sent`] - sent,
+///   not confirmed - as the C#'s `false`.
+/// * Every retry unanswered ends [`RequestOutcome::TimedOut`]: the C#'s `TimeoutException`,
+///   which `saveRallyPointsToolStripMenuItem_Click` turns into "Failed to save rally point".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RallyPointSet {
+    /// `idx`: the point's place, from 0.
+    pub idx: u8,
+    /// `count`: how many there are.
+    pub count: u8,
+    /// Latitude, degrees times 1e7.
+    pub lat: i32,
+    /// Longitude, degrees times 1e7.
+    pub lng: i32,
+    /// Altitude, metres.
+    pub alt: i16,
+    /// `break_alt`, metres.
+    pub break_alt: i16,
+    /// `land_dir`, centidegrees.
+    pub land_dir: u16,
+    /// `flags`.
+    pub flags: u8,
+}
+
+/// How many times `setRallyPoint` sends a point before it gives up on reading it back:
+/// `int retry = 3; while (retry > 0)`.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6458-6473`
+pub const RALLY_POINT_SENDS: u8 = 3;
+
+/// The `RALLY_POINT` that sets `set` on `target`.
+fn rally_point(target: VehicleId, set: &RallyPointSet) -> MavMessage {
+    MavMessage::RallyPoint(RallyPoint {
+        lat: set.lat,
+        lng: set.lng,
+        alt: set.alt,
+        break_alt: set.break_alt,
+        land_dir: set.land_dir,
+        target_system: target.sysid,
+        target_component: target.compid,
+        idx: set.idx,
+        count: set.count,
+        flags: set.flags,
+    })
+}
+
+/// The `RALLY_FETCH_POINT` that reads point `idx` of `target` back.
+const fn rally_fetch(target: VehicleId, idx: u8) -> MavMessage {
+    MavMessage::RallyFetchPoint(RallyFetchPoint {
+        target_system: target.sysid,
+        target_component: target.compid,
+        idx,
+    })
 }
 
 /// How a request ended.
@@ -117,7 +196,11 @@ pub enum RequestState {
 }
 
 /// What a request wants put on the wire.
+///
+/// A rally point's pair makes this two messages wide. It lives for one pass of the link loop, in a
+/// list reused every pass, so the size is paid once and a box on every pair would not be.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum Outgoing {
     /// Nothing.
     Nothing,
@@ -126,6 +209,9 @@ pub enum Outgoing {
     /// This message, twice back to back: how the C# sends a reboot and a compassmot, "just
     /// incase" (C#: MAVLinkInterface.cs:2743-2744, 2760-2761).
     Twice(MavMessage),
+    /// These two, in this order: a rally point and the fetch that reads it back
+    /// (C#: MAVLinkInterface.cs:6462-6464, 6360).
+    Pair(MavMessage, MavMessage),
 }
 
 /// One request and its retries.
@@ -143,6 +229,8 @@ pub struct Request {
     retries_left: u8,
     deadline: Instant,
     sends: u16,
+    /// A rally point's sends left after this one: `setRallyPoint`'s outer loop.
+    attempts_left: u8,
 }
 
 impl Request {
@@ -161,6 +249,7 @@ impl Request {
             retries_left: 0,
             deadline: Instant::now(),
             sends: 0,
+            attempts_left: 0,
         }
     }
 
@@ -207,7 +296,7 @@ impl Request {
         self.sends += match send {
             Outgoing::Nothing => 0,
             Outgoing::Once(_) => 1,
-            Outgoing::Twice(_) => 2,
+            Outgoing::Twice(_) | Outgoing::Pair(..) => 2,
         };
         send
     }
@@ -287,6 +376,13 @@ impl Request {
                 self.arm(message, timeouts.set_current, now);
                 Outgoing::Once(message)
             }
+            RequestKind::SetRallyPoint(set) => {
+                let fetch = rally_fetch(target, set.idx);
+                let point = rally_point(target, set);
+                self.arm(fetch, timeouts.rally_fetch, now);
+                self.attempts_left = RALLY_POINT_SENDS - 1;
+                Outgoing::Pair(point, fetch)
+            }
         };
         self.count(send)
     }
@@ -307,7 +403,9 @@ impl Request {
             // "Wrong Answer" otherwise, and keep waiting (:2365-2371).
             RequestKind::ReadParam(ParamKey::Name(wanted)) => wanted == name,
             RequestKind::ReadParam(ParamKey::Index(wanted)) => *wanted == index,
-            RequestKind::Command { .. } | RequestKind::SetCurrent { .. } => false,
+            RequestKind::Command { .. }
+            | RequestKind::SetCurrent { .. }
+            | RequestKind::SetRallyPoint(_) => false,
         };
         if matches {
             self.finish(RequestOutcome::Accepted { value: Some(value) });
@@ -358,6 +456,46 @@ impl Request {
         {
             self.finish(RequestOutcome::Accepted { value: None });
         }
+    }
+
+    /// A `RALLY_POINT` arrived from `from`; `to_us` is whether it is addressed to this ground
+    /// station, which `getRallyPoint` requires ("check this gcs sent it", `:6390-6393`). Returns
+    /// what to send: the fetch again for a point of another index, the point and the fetch again
+    /// for one that came back different. See [`RallyPointSet`].
+    pub fn on_rally_point(
+        &mut self,
+        from: VehicleId,
+        to_us: bool,
+        point: &RallyPoint,
+        now: Instant,
+    ) -> Outgoing {
+        if self.state != RequestState::Waiting || from != self.target || !to_us {
+            return Outgoing::Nothing;
+        }
+        let RequestKind::SetRallyPoint(set) = self.kind else {
+            return Outgoing::Nothing;
+        };
+        let target = self.target;
+        if point.idx != set.idx {
+            // `generatePacket(FENCE_FETCH_POINT, req); continue;` - the fetch, not the fence's.
+            return self.count(Outgoing::Once(rally_fetch(target, set.idx)));
+        }
+        if point.lat == set.lat && point.lng == set.lng {
+            self.finish(RequestOutcome::Accepted { value: None });
+            return Outgoing::Nothing;
+        }
+        if self.attempts_left == 0 {
+            self.finish(RequestOutcome::Sent);
+            return Outgoing::Nothing;
+        }
+        // `retry--` and round again: the point, and a fresh `getRallyPoint`.
+        self.attempts_left -= 1;
+        self.retries_left = self.policy.retries;
+        self.deadline = now + self.policy.timeout;
+        self.count(Outgoing::Pair(
+            rally_point(target, &set),
+            rally_fetch(target, set.idx),
+        ))
     }
 
     /// Called every pass of the link loop: sends again, or gives up.
@@ -540,6 +678,120 @@ mod tests {
             request.outcome(),
             Some(RequestOutcome::Accepted { value: Some(value) })
         );
+    }
+
+    fn rally_set() -> RallyPointSet {
+        RallyPointSet {
+            idx: 1,
+            count: 2,
+            lat: -353_632_621,
+            lng: 1_491_652_374,
+            alt: 60,
+            break_alt: 0,
+            land_dir: 0,
+            flags: 0,
+        }
+    }
+
+    /// The vehicle's answer to a fetch: the point at `idx`, addressed to the ground station.
+    fn echo(idx: u8, lat: i32, lng: i32) -> RallyPoint {
+        RallyPoint {
+            lat,
+            lng,
+            alt: 60,
+            break_alt: 0,
+            land_dir: 0,
+            target_system: 255,
+            target_component: 190,
+            idx,
+            count: 2,
+            flags: 0,
+        }
+    }
+
+    /// `setRallyPoint`: the point, then its fetch; the same point read back sets it.
+    #[test]
+    fn a_rally_point_is_sent_then_fetched_and_set_when_it_reads_back_the_same() {
+        let t = ProtocolTimeouts::default();
+        let t0 = Instant::now();
+        let mut request = Request::new(target(), RequestKind::SetRallyPoint(rally_set()));
+        let Outgoing::Pair(MavMessage::RallyPoint(point), MavMessage::RallyFetchPoint(fetch)) =
+            request.begin(&t, None, true, t0)
+        else {
+            panic!("the point and its fetch");
+        };
+        assert_eq!(
+            (point.idx, point.count, point.lat, point.lng, point.alt),
+            (1, 2, -353_632_621, 1_491_652_374, 60)
+        );
+        assert_eq!((point.target_system, point.target_component), (1, 1));
+        assert_eq!(fetch.idx, 1);
+        // Another GCS's answer, and another index's, do not end it; the second asks again.
+        let answer = echo(1, -353_632_621, 1_491_652_374);
+        assert_eq!(
+            request.on_rally_point(target(), false, &answer, t0),
+            Outgoing::Nothing
+        );
+        assert!(matches!(
+            request.on_rally_point(target(), true, &echo(0, 0, 0), t0),
+            Outgoing::Once(MavMessage::RallyFetchPoint(RallyFetchPoint { idx: 1, .. }))
+        ));
+        assert_eq!(request.outcome(), None);
+        assert_eq!(
+            request.on_rally_point(target(), true, &answer, t0),
+            Outgoing::Nothing
+        );
+        assert_eq!(
+            request.outcome(),
+            Some(RequestOutcome::Accepted { value: None })
+        );
+        assert_eq!(request.sends(), 3);
+    }
+
+    /// Unanswered, the fetch goes four times, 700 ms apart - as `RALLY_FETCH_POINT`, where the
+    /// C#'s retries send `FENCE_FETCH_POINT` (MAVLinkInterface.cs:6372) - and then it has timed
+    /// out: "Failed to save rally point" to the handler.
+    #[test]
+    fn a_rally_point_never_read_back_times_out_after_four_fetches() {
+        let t = ProtocolTimeouts::default();
+        let t0 = Instant::now();
+        let mut request = Request::new(target(), RequestKind::SetRallyPoint(rally_set()));
+        let _ = request.begin(&t, None, true, t0);
+        for step in 1..=3u32 {
+            assert!(matches!(
+                request.on_tick(t0 + t.rally_fetch.timeout * step),
+                Outgoing::Once(MavMessage::RallyFetchPoint(_))
+            ));
+        }
+        assert_eq!(
+            request.on_tick(t0 + t.rally_fetch.timeout * 4),
+            Outgoing::Nothing
+        );
+        assert_eq!(request.outcome(), Some(RequestOutcome::TimedOut));
+        assert_eq!(request.sends(), 1 + t.rally_fetch.sends());
+    }
+
+    /// A point that comes back different is sent again, three times in all, and then left as
+    /// sent: `setRallyPoint`'s `false`, which its caller ignores.
+    #[test]
+    fn a_rally_point_that_reads_back_different_is_sent_three_times() {
+        let t = ProtocolTimeouts::default();
+        let t0 = Instant::now();
+        let mut request = Request::new(target(), RequestKind::SetRallyPoint(rally_set()));
+        let _ = request.begin(&t, None, true, t0);
+        let wrong = echo(1, -353_000_000, 1_490_000_000);
+        for _ in 0..2 {
+            assert!(matches!(
+                request.on_rally_point(target(), true, &wrong, t0),
+                Outgoing::Pair(MavMessage::RallyPoint(_), MavMessage::RallyFetchPoint(_))
+            ));
+        }
+        assert_eq!(
+            request.on_rally_point(target(), true, &wrong, t0),
+            Outgoing::Nothing
+        );
+        assert_eq!(request.outcome(), Some(RequestOutcome::Sent));
+        assert_eq!(request.sends(), 6);
     }
 
     #[test]

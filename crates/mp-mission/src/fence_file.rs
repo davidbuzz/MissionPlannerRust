@@ -1,9 +1,11 @@
-//! `.fen` and `.ral` files: the formats Mission Planner saves fences and rally points in.
+//! `.fen`, `.ral` and `.poly` files: the formats Mission Planner saves fences, rally points and
+//! the drawn polygon in.
 //!
-//! Ported from `GCSViews/FlightPlanner.cs` @ efb0801 (GPL-3.0-or-later) - the writers at 5970 and
-//! 6038, the readers at 4349 and 4419.
+//! Ported from `GCSViews/FlightPlanner.cs` @ efb0801 (GPL-3.0-or-later) - the writers at 5970,
+//! 6038 and 5892, the readers at 4349, 4419 and 4528.
 //!
-//! Two formats, and they are not alike:
+//! The `.poly` is the `.fen` without its return point: `#saved by Mission Planner <version>`, then
+//! `lat lng` per corner and the first corner again. The other two are not alike:
 //!
 //! ```text
 //! # .fen - space separated, and the first data line is the RETURN POINT, not a vertex
@@ -36,18 +38,22 @@ pub struct FenceFile {
     pub vertices: Vec<LatLon>,
 }
 
-/// A rally point as a file holds it.
+/// A rally point as `loadFromFileToolStripMenuItem1_Click` reads a row into a
+/// `mavlink_rally_point_t`: the position through `(int)(float.Parse(..) * 1e7)` and back over 1e7,
+/// the altitudes as `(short)`, the landing direction as `(ushort)`, the flags as `byte.Parse`.
+/// The marker the C# then makes keeps only the position and the altitude.
+/// `// C#: GCSViews/FlightPlanner.cs:4437-4458`
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RallyPointFile {
-    /// Where it is.
+    /// Where it is: `rally.lat / 1e7`, `rally.lng / 1e7`.
     pub position: LatLon,
-    /// Altitude, in metres.
+    /// `rally.alt`, a `short`, in metres.
     pub altitude: f64,
-    /// Break altitude - the height to leave a loiter at, for a plane.
+    /// `rally.break_alt`, a `short`.
     pub break_altitude: f64,
-    /// Landing direction in degrees, for a plane.
+    /// `rally.land_dir`, a `ushort`.
     pub land_direction: f64,
-    /// `RALLY_FLAGS`.
+    /// `rally.flags`.
     pub flags: u8,
 }
 
@@ -59,6 +65,10 @@ const FENCE_HEADER: &str = concat!("#saved by APM Planner ", env!("CARGO_PKG_VER
 /// The header a `.ral` starts with, `"#saved by Mission Planner " + Application.ProductVersion`.
 /// `// C#: GCSViews/FlightPlanner.cs:6046`
 const RALLY_HEADER: &str = concat!("#saved by Mission Planner ", env!("CARGO_PKG_VERSION"));
+
+/// The header a `.poly` starts with: the same words as a `.ral`'s.
+/// `// C#: GCSViews/FlightPlanner.cs:5909`
+const POLYGON_HEADER: &str = concat!("#saved by Mission Planner ", env!("CARGO_PKG_VERSION"));
 
 /// `double.ToString(CultureInfo.InvariantCulture)` as Mission Planner's .NET Framework runtime
 /// writes it, which is the general format at fifteen significant digits: trailing zeros dropped,
@@ -196,29 +206,68 @@ pub fn read_fence(text: &str) -> FenceFile {
     }
 }
 
-/// Writes a `.ral`.
+/// Writes a `.ral`: `saveToFileToolStripMenuItem1_Click`.
 ///
-/// Tab separated, one `RALLY` row per point. `// C#: GCSViews/FlightPlanner.cs:6049-6054`
+/// Tab separated, one `RALLY` row per marker: its latitude and longitude as
+/// `ToString(CultureInfo.InvariantCulture)` writes a `double`, its altitude -
+/// `GMapMarkerRallyPt.Alt`, an `int` - and then `0, 0, 0` whatever the point was loaded with: the
+/// marker keeps no break altitude, landing direction or flags, so the C# writes the literals.
+/// `// C#: GCSViews/FlightPlanner.cs:6044-6055; ExtLibs/Maps/GMapMarkerRallyPt.cs:23`
 #[must_use]
-pub fn write_rally(points: &[RallyPointFile]) -> String {
+pub fn write_rally(markers: &[(LatLon, i32)]) -> String {
     let mut out = format!("{RALLY_HEADER}\n");
-    for point in points {
+    for (position, altitude) in markers {
         out.push_str(&format!(
-            "RALLY\t{}\t{}\t{}\t{}\t{}\t{}\n",
-            point.position.latitude(),
-            point.position.longitude(),
-            point.altitude,
-            point.break_altitude,
-            point.land_direction,
-            point.flags
+            "RALLY\t{}\t{}\t{altitude}\t0\t0\t0\n",
+            invariant_double(position.latitude()),
+            invariant_double(position.longitude()),
         ));
     }
     out
 }
 
-/// Reads a `.ral`.
+/// One row as the C# reads it, or nothing where it would throw: `float.Parse` and `byte.Parse`
+/// refusing their text, or an index past the row's end. `(int)`, `(short)` and `(ushort)` of a
+/// floating value truncate toward zero in the C#'s unchecked context, as `as` does inside the
+/// range, which is all a rally point uses.
+/// `// C#: GCSViews/FlightPlanner.cs:4437-4444`
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // the C#'s casts, on purpose
+fn rally_row(items: &[&str]) -> Option<RallyPointFile> {
+    let float = |index: usize| {
+        items
+            .get(index)
+            .and_then(|text| crate::dotnet::parse_f32(text))
+    };
+    // `rally.lat = (int) (float.Parse(items[1]) * 1e7)`: the float widened, times the double 1e7,
+    // truncated; the marker is at `rally.lat / 1e7`.
+    let latitude = (f64::from(float(1)?) * 1e7) as i32;
+    let longitude = (f64::from(float(2)?) * 1e7) as i32;
+    let altitude = float(3)? as i16;
+    let break_altitude = float(4)? as i16;
+    let land_direction = float(5)? as u16;
+    let flags =
+        crate::dotnet::parse_i32(items.get(6)?).and_then(|flags| u8::try_from(flags).ok())?;
+    let position = LatLon::new(f64::from(latitude) / 1e7, f64::from(longitude) / 1e7).ok()?;
+    Some(RallyPointFile {
+        position,
+        altitude: f64::from(altitude),
+        break_altitude: f64::from(break_altitude),
+        land_direction: f64::from(land_direction),
+        flags,
+    })
+}
+
+/// Reads a `.ral`: `loadFromFileToolStripMenuItem1_Click`.
 ///
-/// `// C#: GCSViews/FlightPlanner.cs:4430-4445`
+/// A line starting `#` is passed over; any other is split on spaces and tabs and read from
+/// `items[1]` to `items[6]`. The first word is not looked at - the C# reads a row whatever it
+/// begins with.
+///
+/// **A divergence, kept from the first port of this reader.** The C# indexes `items[1]` to
+/// `items[6]` and parses them unchecked, so a row that is short or does not parse throws, and the
+/// handler is abandoned there with the points before it on the map. Here that row is passed over
+/// and the rest of the file is read.
+/// `// C#: GCSViews/FlightPlanner.cs:4426-4461`
 #[must_use]
 pub fn read_rally(text: &str) -> Vec<RallyPointFile> {
     let mut points = Vec::new();
@@ -226,44 +275,79 @@ pub fn read_rally(text: &str) -> Vec<RallyPointFile> {
         if line.starts_with('#') {
             continue;
         }
-        let fields: Vec<&str> = line
+        let items: Vec<&str> = line
             .split([' ', '\t'])
             .filter(|field| !field.is_empty())
             .collect();
-        // The keyword, then latitude, longitude, altitude at minimum. The C# indexes items[1]
-        // through items[6] without checking, which throws on a short line and abandons the file;
-        // a short line here is skipped and the rest of the points are kept.
-        let number = |index: usize| -> f64 {
-            fields
-                .get(index)
-                .and_then(|field| field.parse::<f64>().ok())
-                .unwrap_or(0.0)
-        };
-        let is_rally = fields
-            .first()
-            .is_some_and(|keyword| keyword.eq_ignore_ascii_case("RALLY"));
-        if fields.len() < 4 || !is_rally {
+        if let Some(point) = rally_row(&items) {
+            points.push(point);
+        }
+    }
+    points
+}
+
+/// Writes a `.poly`: `savePolygonToolStripMenuItem_Click`.
+///
+/// The header, every corner as `lat.ToString(InvariantCulture) + " " + lng.ToString(...)`, then
+/// the first corner again. The C# returns before its dialog when there are no corners, so it
+/// never writes an empty polygon; here that is the header alone.
+/// `// C#: GCSViews/FlightPlanner.cs:5892-5933`
+#[must_use]
+pub fn write_polygon(vertices: &[LatLon]) -> String {
+    let line = |position: &LatLon| {
+        format!(
+            "{} {}\n",
+            invariant_double(position.latitude()),
+            invariant_double(position.longitude())
+        )
+    };
+    let mut out = format!("{POLYGON_HEADER}\n");
+    for vertex in vertices {
+        out.push_str(&line(vertex));
+    }
+    if let Some(first) = vertices.first() {
+        out.push_str(&line(first));
+    }
+    out
+}
+
+/// Reads a `.poly`: `loadPolygonToolStripMenuItem_Click`.
+///
+/// `#` lines are passed over, and so is a line of fewer than two words; the rest are
+/// `double.Parse(items[0])` for latitude and `items[1]` for longitude. Then "remove loop close":
+/// more than one corner, and the last equal to the first, loses the last.
+///
+/// A line whose numbers `double.Parse` refuses throws in the C# and abandons the load with the
+/// corners before it drawn; here that line is passed over, as [`read_rally`] passes one over.
+/// `// C#: GCSViews/FlightPlanner.cs:4540-4576`
+#[must_use]
+pub fn read_polygon(text: &str) -> Vec<LatLon> {
+    let mut vertices = Vec::new();
+    for line in text.lines() {
+        if line.starts_with('#') {
             continue;
         }
-        let (Some(Ok(latitude)), Some(Ok(longitude))) = (
-            fields.get(1).map(|f| f.parse::<f64>()),
-            fields.get(2).map(|f| f.parse::<f64>()),
+        let items: Vec<&str> = line
+            .split([' ', '\t'])
+            .filter(|field| !field.is_empty())
+            .collect();
+        let (Some(latitude), Some(longitude)) = (items.first(), items.get(1)) else {
+            continue;
+        };
+        let (Some(latitude), Some(longitude)) = (
+            crate::dotnet::parse_f64(latitude),
+            crate::dotnet::parse_f64(longitude),
         ) else {
             continue;
         };
-        let Ok(position) = LatLon::new(latitude, longitude) else {
-            continue;
-        };
-        points.push(RallyPointFile {
-            position,
-            altitude: number(3),
-            break_altitude: number(4),
-            land_direction: number(5),
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            flags: number(6).clamp(0.0, 255.0) as u8,
-        });
+        if let Ok(position) = LatLon::new(latitude, longitude) {
+            vertices.push(position);
+        }
     }
-    points
+    if vertices.len() > 1 && vertices.first() == vertices.last() {
+        vertices.pop();
+    }
+    vertices
 }
 
 /// How a file differs from what a vehicle holds.
@@ -472,48 +556,121 @@ mod tests {
         assert_eq!(read_fence(&text), fence);
     }
 
-    /// Rally points are tab separated and keyword led.
-    #[test]
-    fn a_rally_file_round_trips() {
-        let points = vec![
-            RallyPointFile {
-                position: at(-35.363, 149.165),
-                altitude: 100.0,
-                break_altitude: 0.0,
-                land_direction: 0.0,
-                flags: 0,
-            },
-            RallyPointFile {
-                position: at(-35.361, 149.167),
-                altitude: 120.0,
-                break_altitude: 45.0,
-                land_direction: 270.0,
-                flags: 1,
-            },
-        ];
-        let text = write_rally(&points);
-        assert!(text.contains("RALLY\t-35.363\t149.165\t100"));
-        assert_eq!(read_rally(&text), points);
+    /// The rally markers the oracle wrote (`tools/csharp-reference/PlannerOracle.cs`, `RallyMarkers`).
+    fn oracle_markers() -> Vec<(LatLon, i32)> {
+        vec![
+            (at(-35.363_262_1, 149.165_237_4), 100),
+            (at(-35.363_262_345_678_91, 149.165_237_412_345_67), 60),
+            (at(-0.000_01, 0.000_015), 0),
+        ]
     }
 
-    /// A row that is not a rally point is skipped, not guessed at.
+    /// The `.ral` `saveToFileToolStripMenuItem1_Click` writes, under mono: after the header's
+    /// version, the same bytes - fifteen significant digits, `1E-05` where the Framework writes
+    /// it, the altitude as an integer and three literal zeros.
     #[test]
-    fn a_line_that_is_not_a_rally_point_is_skipped() {
+    fn a_rally_file_is_the_c_sharps_byte_for_byte() {
+        let golden = include_str!("../../../testdata/planner/golden/rally.ral");
+        let ours = write_rally(&oracle_markers());
+        let (golden_header, golden_body) = golden.split_once('\n').expect("a header");
+        let (our_header, our_body) = ours.split_once('\n').expect("a header");
+        assert_eq!(our_body, golden_body);
+        assert!(golden_header.starts_with("#saved by Mission Planner "));
+        assert!(our_header.starts_with("#saved by Mission Planner "));
+    }
+
+    /// What `loadFromFileToolStripMenuItem1_Click` makes of each row, under mono: the position
+    /// through a `float` and a truncation to 1e-7, the altitude a `short`, the rest parsed and -
+    /// for the marker - dropped. Whatever the first word says.
+    #[test]
+    fn a_rally_file_reads_as_the_c_sharp_reads_it() {
+        let golden = include_str!("../../../testdata/planner/golden/rally_read.csv");
+        let text = format!(
+            "{}RALLY\t-35.12345678\t149.98765432\t123.9\t-4.5\t270.7\t1\nANYTHING 51.5 -0.125 7 0 0 0\n",
+            include_str!("../../../testdata/planner/golden/rally.ral")
+        );
+        let points = read_rally(&text);
+        let expected: Vec<Vec<&str>> = golden
+            .lines()
+            .map(|line| line.split(',').collect())
+            .collect();
+        assert_eq!(points.len(), expected.len());
+        for (point, row) in points.iter().zip(&expected) {
+            let number = |index: usize| row[index].parse::<f64>().expect("a number");
+            assert_eq!(
+                point.position.latitude().to_bits(),
+                number(1).to_bits(),
+                "{row:?}"
+            );
+            assert_eq!(
+                point.position.longitude().to_bits(),
+                number(2).to_bits(),
+                "{row:?}"
+            );
+            assert_eq!(point.altitude, number(3), "{row:?}");
+            assert_eq!(point.break_altitude, number(4), "{row:?}");
+            assert_eq!(point.land_direction, number(5), "{row:?}");
+            assert_eq!(f64::from(point.flags), number(6), "{row:?}");
+        }
+    }
+
+    /// Rows the C# would throw on - short, or `byte.Parse` refusing its flags - are passed over.
+    #[test]
+    fn a_line_the_c_sharp_throws_on_is_skipped() {
         let points = read_rally(
             "#comment\n\
              RALLY\t-35.0\t149.0\t100\t0\t0\t0\n\
              GARBAGE\t1\t2\t3\n\
              \n\
+             RALLY\t-35.2\t149.2\t100\t0\t0\t1.5\n\
              RALLY\t-35.1\t149.1\t120\t0\t0\t0\n",
         );
         assert_eq!(points.len(), 2);
         assert_eq!(points[1].altitude, 120.0);
     }
 
+    /// The `.poly` `savePolygonToolStripMenuItem_Click` writes, under mono, after the header's
+    /// version: every corner, then the first again.
+    #[test]
+    fn a_polygon_file_is_the_c_sharps_byte_for_byte() {
+        let golden = include_str!("../../../testdata/planner/golden/polygon.poly");
+        let corners = vec![
+            at(-35.362, 149.164),
+            at(-35.362, 149.165),
+            at(-35.363, 149.165),
+            at(-35.363, 149.167),
+            at(-35.364, 149.167),
+            at(-35.364, 149.164),
+            at(-35.363_262_345_678_91, 149.165_237_412_345_67),
+        ];
+        let ours = write_polygon(&corners);
+        let (_, golden_body) = golden.split_once('\n').expect("a header");
+        let (our_header, our_body) = ours.split_once('\n').expect("a header");
+        assert_eq!(our_body, golden_body);
+        assert!(our_header.starts_with("#saved by Mission Planner "));
+        // Read back: the closing repeat goes, the fifteen digits stay as written.
+        let read = read_polygon(&ours);
+        assert_eq!(read.len(), corners.len());
+        assert_eq!(read[..6], corners[..6]);
+        assert_eq!(read[6], at(-35.363_262_345_678_9, 149.165_237_412_346));
+    }
+
+    /// A short line, and a line `double.Parse` refuses, are passed over; an open polygon keeps its
+    /// last corner.
+    #[test]
+    fn a_polygon_file_skips_what_it_cannot_read() {
+        let read = read_polygon("#x\n-35.0 149.0\n-35.1\nfoo bar\n-35.1 149.1\n-35.2 149.0\n");
+        assert_eq!(
+            read,
+            vec![at(-35.0, 149.0), at(-35.1, 149.1), at(-35.2, 149.0)]
+        );
+        assert!(read_polygon("").is_empty());
+    }
+
     /// A short row loses that point, not the rest of the file.
     ///
     /// The C# indexes items[1] through items[6] unchecked, so a truncated line throws and the
-    /// whole load is abandoned - a file with one bad row loads as no rally points at all.
+    /// load is abandoned there - the rows after a bad one are never read.
     #[test]
     fn a_truncated_row_does_not_lose_the_whole_file() {
         let points = read_rally(
@@ -639,13 +796,11 @@ mod tests {
         assert!(without.compare(&without).is_empty());
     }
 
-    /// A rally row with only position and altitude is still a rally point.
+    /// A rally row with only position and altitude is not a rally point: the C# reads
+    /// `items[4]` to `items[6]` unconditionally and throws on it. (An earlier port defaulted the
+    /// missing columns; nothing in the C# does.)
     #[test]
-    fn the_optional_columns_default_rather_than_refusing() {
-        let points = read_rally("RALLY\t-35.0\t149.0\t100\n");
-        assert_eq!(points.len(), 1);
-        assert_eq!(points[0].altitude, 100.0);
-        assert_eq!(points[0].break_altitude, 0.0);
-        assert_eq!(points[0].flags, 0);
+    fn a_row_without_its_last_three_columns_is_not_read() {
+        assert!(read_rally("RALLY\t-35.0\t149.0\t100\n").is_empty());
     }
 }

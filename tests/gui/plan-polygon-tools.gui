@@ -1,0 +1,117 @@
+# Polygon > Save Polygon, Load Polygon, Area, Offset Polygon and From SHP (PLAN.md 13.4, D11).
+#
+# savePolygonToolStripMenuItem_Click writes a .poly - the corners, then the first again - and does
+# nothing with no polygon drawn (GCSViews/FlightPlanner.cs:5892-5933); loadPolygonToolStripMenuItem_
+# Click replaces the polygon with a file's corners (:4528-4586). areaToolStripMenuItem_Click says
+# "Area: <m2> m2" and the acres, hectares and square feet, or first "Please define a polygon!"
+# (:1760-1773, 1986-2036). offsetPolygonToolStripMenuItem_Click asks for metres and puts the
+# ClipperLib offset in the polygon's place (:3639-3686). fromSHPToolStripMenuItem_Click clears the
+# polygon, then reads a shapefile's features, reprojected from its .prj to WGS 1984 (:3533-3616).
+# The geometry is held to the C# under mono by crates/mp-mission's tests; this is the path an
+# operator takes to it.
+#
+# The shapefile is testdata/planner/field: one ring in UTM zone 55S, near CMAC, with its .prj.
+
+env XDG_DATA_HOME $WORK
+env MP_PLAN_DIR $WORK
+setup cp testdata/planner/field.shp "$WORK/utm.shp" && cp testdata/planner/field.shx "$WORK/utm.shx" && cp testdata/planner/field.dbf "$WORK/utm.dbf" && cp testdata/planner/field.prj "$WORK/utm.prj"
+
+screen plan
+window 1600x1200
+settle 4
+
+# Nothing drawn: Save Polygon does nothing, Area asks for a polygon and then says nought.
+click map@0.30x0.70:right
+click menu-polygon
+click menu-savePolygon2
+expect plan.prompt none
+click map@0.30x0.70:right
+click menu-polygon
+click menu-area2
+expect plan.prompt message
+expect plan.prompt.text Please define a polygon!
+key Return
+expect plan.prompt Area
+expect plan.prompt.text ~ Area: 0 m2
+key Return
+expect plan.prompt none
+
+# A square drawn with Draw a Polygon.
+click map@0.40x0.40:right
+click menu-polygon
+click menu-addPolygonPoint2
+click map@0.40x0.40
+click map@0.60x0.40
+click map@0.60x0.60
+click map@0.40x0.60
+expect survey.points 4
+
+# Area, from Auto WP's entry as from Polygon's.
+click map@0.30x0.70:right
+click menu-autoWP
+click menu-area1
+expect plan.prompt Area
+expect plan.prompt.text ~ m2
+expect plan.prompt.text ~ Hectare
+key Return
+
+# Save Polygon, Clear Polygon, Load Polygon: the four corners come back.
+click map@0.30x0.70:right
+click menu-polygon
+click menu-savePolygon2
+expect plan.prompt Save As
+expect plan.prompt.text ~ Polygon
+type square
+key Return
+expect status ~ saved the polygon
+click map@0.30x0.70:right
+click menu-polygon
+click menu-clearPolygon2
+expect survey.points 0
+click map@0.30x0.70:right
+click menu-polygon
+click menu-loadPolygon2
+expect plan.prompt Open
+type square
+key Return
+expect status ~ loaded a polygon
+expect survey.points 4
+
+# Offset Polygon: "Offset in Meters", offering 0; ten metres out is still four corners, and an
+# inset that leaves nothing leaves the polygon as it was.
+click map@0.30x0.70:right
+click menu-polygon
+click menu-offsetPolygon2
+expect plan.prompt Offset in Meters
+expect plan.prompt.value 0
+key ctrl+u
+type 10
+key Return
+expect plan.prompt none
+expect survey.points 4
+click map@0.30x0.70:right
+click menu-polygon
+click menu-offsetPolygon2
+key ctrl+u
+type -100000
+key Return
+expect survey.points 4
+
+# From SHP: the field, reprojected; Escape at its dialog still clears the polygon.
+click map@0.30x0.70:right
+click menu-polygon
+click menu-fromSHP2
+expect plan.prompt Open
+expect plan.prompt.text Shape file
+type utm
+key Return
+expect plan.prompt none
+expect status ~ loaded a polygon
+expect survey.points 4
+expect plan.polygon ~ -35.3673009385
+click map@0.30x0.70:right
+click menu-polygon
+click menu-fromSHP2
+key Escape
+expect plan.prompt none
+expect survey.points 0

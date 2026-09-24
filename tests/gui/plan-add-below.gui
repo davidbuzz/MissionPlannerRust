@@ -1,0 +1,35 @@
+# Add Below: BUT_Add_Click (GCSViews/FlightPlanner.cs:1780-1811), the button to the right of the
+# panel's boxes. A blank row - WAYPOINT (16), zeroes, the screen's frame, as Commands_RowsAdded
+# leaves one (:2407-2441) - at the end while there is at most one row or the current row is the
+# last, and otherwise after the current row; the new row becomes selectedrow (:2472-2475).
+
+screen plan
+window 1600x1200
+settle 4
+
+expect mission.items 0
+click plan-add-below
+expect mission.items 1
+expect mission.last.command 16
+expect mission.last.alt 0
+expect mission.frames relative
+expect mission.selected 1
+
+# Two waypoints clicked on; with the last row current, Add Below appends.
+click map@0.40x0.40
+click map@0.60x0.40
+expect mission.items 3
+click plan-row-3
+expect mission.selected 3
+click plan-add-below
+expect mission.items 4
+expect mission.selected 4
+expect mission.last.alt 0
+
+# With the first row current, the new row goes second: the last row is still a blank one.
+click plan-row-1
+click plan-add-below
+expect mission.items 5
+expect mission.selected 2
+expect mission.last.alt 0
+expect mission.commands 16,16,16,16,16

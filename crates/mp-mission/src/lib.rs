@@ -6,6 +6,7 @@
 #![forbid(unsafe_code)]
 
 pub mod cameras;
+pub mod circle;
 mod clipper;
 pub mod commands;
 pub mod corridor;
@@ -15,8 +16,10 @@ pub mod fence_file;
 pub mod grid;
 pub mod gridui;
 pub mod item;
+pub mod polygon;
 pub mod rotary;
 pub mod rows;
+pub mod shapefile;
 pub mod survey;
 mod utm;
 pub mod validate;

@@ -474,6 +474,12 @@ impl MapViewport {
             .collect();
     }
 
+    /// How many rally pins the map draws.
+    #[must_use]
+    pub fn rally_count(&self) -> usize {
+        self.rally.len()
+    }
+
     /// Replaces the rally points shown on the map.
     pub fn set_rally(&mut self, positions: &[LatLon]) {
         self.rally = positions
@@ -2110,6 +2116,97 @@ pub fn pin_outline(radius: f32, tip: f32) -> Vec<(f32, f32)> {
     points
 }
 
+/// Where `GMapMarkerRallyPt`'s pin has its head, from its point: `marker_02.png` is 24 x 45 and
+/// drawn with `Offset = (-10, -40)`, so its pixel (10, 40) sits on the position; the head is the
+/// circle about pixel (12, 13), ten and a half pixels round, and the point is at pixel (11, 41).
+/// `// C#: ExtLibs/Maps/GMapMarkerRallyPt.cs:17-31, 45-50; Resources/marker_02.png`
+pub const RALLY_PIN_HEAD: (f32, f32) = (2.0, -27.0);
+/// The rally pin's head radius, to the outside of its dark edge.
+pub const RALLY_PIN_RADIUS: f32 = 10.5;
+/// The rally pin's point, from the position.
+pub const RALLY_PIN_TIP: (f32, f32) = (1.0, 1.0);
+/// The hole in the rally pin's head: a ring about pixel (12, 13.5), three pixels round.
+pub const RALLY_PIN_HOLE: (f32, f32, f32) = (2.0, -26.5, 3.0);
+/// `marker_02`'s fill, the purple most of its opaque pixels are.
+pub const RALLY_PIN_FILL: u32 = 0x9b_4d_95;
+
+/// A pin's outline with its head of `radius` at `head` and its point at `tip`: from the point up
+/// one tangent, round the head the long way, and down the other.
+#[must_use]
+pub fn pin_outline_at(head: (f32, f32), radius: f32, tip: (f32, f32)) -> Vec<(f32, f32)> {
+    const SEGMENTS: u16 = 24;
+    let (cx, cy) = head;
+    let (dx, dy) = (tip.0 - cx, tip.1 - cy);
+    let distance = dx.hypot(dy);
+    if distance <= radius {
+        return Vec::new();
+    }
+    // The tangent points are either side of the direction to the point, and the arc between them
+    // goes the long way round, away from it.
+    let towards = dy.atan2(dx);
+    let half = (radius / distance).acos();
+    let start = towards + half;
+    let sweep = std::f32::consts::TAU - 2.0 * half;
+    let mut points = vec![tip];
+    for step in 0..=SEGMENTS {
+        let angle = start + sweep * f32::from(step) / f32::from(SEGMENTS);
+        points.push((cx + radius * angle.cos(), cy + radius * angle.sin()));
+    }
+    points
+}
+
+/// Paints `GMapMarkerRallyPt` with its point at `at`: `marker_02`, a purple pin whose head has a
+/// hole. The bitmap is drawn here as its shape: the dark edge, the purple inside it, and the hole
+/// as the dark ring it is ringed by - the C#'s shows the map through it.
+/// `// C#: ExtLibs/Maps/GMapMarkerRallyPt.cs:42-50`
+fn paint_rally_pin(window: &mut Window, at: Point<Pixels>) {
+    let polygon = |window: &mut Window, points: &[(f32, f32)], colour: u32| {
+        let mut builder = PathBuilder::fill();
+        let mut points = points.iter();
+        let Some((x, y)) = points.next() else {
+            return;
+        };
+        builder.move_to(point(at.x + px(*x), at.y + px(*y)));
+        for (x, y) in points {
+            builder.line_to(point(at.x + px(*x), at.y + px(*y)));
+        }
+        builder.close();
+        if let Ok(path) = builder.build() {
+            window.paint_path(path, Hsla::from(rgb(colour)));
+        }
+    };
+    polygon(
+        window,
+        &pin_outline_at(RALLY_PIN_HEAD, RALLY_PIN_RADIUS, RALLY_PIN_TIP),
+        PIN_EDGE,
+    );
+    let (tip_x, tip_y) = RALLY_PIN_TIP;
+    polygon(
+        window,
+        &pin_outline_at(
+            RALLY_PIN_HEAD,
+            RALLY_PIN_RADIUS - 1.5,
+            (tip_x + 0.5, tip_y - 2.0),
+        ),
+        RALLY_PIN_FILL,
+    );
+    let (hole_x, hole_y, hole_radius) = RALLY_PIN_HOLE;
+    window.paint_quad(quad(
+        Bounds {
+            origin: point(
+                at.x + px(hole_x - hole_radius),
+                at.y + px(hole_y - hole_radius),
+            ),
+            size: size(px(hole_radius * 2.0), px(hole_radius * 2.0)),
+        },
+        Corners::all(px(hole_radius)),
+        rgb(PIN_EDGE),
+        gpui::Edges::default(),
+        rgb(PIN_EDGE),
+        gpui::BorderStyle::default(),
+    ));
+}
+
 /// GMap's zoom level for a view `span` world units across `width` pixels: a map is
 /// `256 * 2^zoom` pixels round at `zoom`.
 #[must_use]
@@ -2389,23 +2486,9 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
         }
     }
 
-    // Rally points: diamonds, so they read as somewhere to go rather than as a waypoint on the
-    // route. Drawn over the mission, because a failsafe overrides it.
+    // Rally points: `GMapMarkerRallyPt`, the purple pin `marker_02`, over the mission.
     for rally in &map.rally {
-        let at = to_screen(*rally);
-        for (extent, colour) in [(8.0_f32, 0x00_00_00), (6.0, 0xd2_99_22)] {
-            window.paint_quad(quad(
-                Bounds {
-                    origin: point(at.x - px(extent / 2.0), at.y - px(extent / 2.0)),
-                    size: size(px(extent), px(extent)),
-                },
-                gpui::Corners::all(px(extent / 2.0)),
-                rgb(colour),
-                gpui::Edges::default(),
-                rgb(0x00_00_00),
-                gpui::BorderStyle::default(),
-            ));
-        }
+        paint_rally_pin(window, to_screen(*rally));
     }
 
     // Other aircraft. Drawn last, over everything else, because a symbol that says where not to

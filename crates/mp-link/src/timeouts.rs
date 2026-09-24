@@ -106,6 +106,10 @@ pub struct ProtocolTimeouts {
     /// C#: ExtLibs/ArduPilot/CurrentState.cs:4633 (`lastdata.AddSeconds(8)`), :4662
     /// (`DateTime.Now.AddSeconds(30)`).
     pub stream_rerequest: Duration,
+    /// `RALLY_FETCH_POINT` until the vehicle sends the point back, `getRallyPoint`.
+    ///
+    /// C#: MAVLinkInterface.cs:6363 (`retrys = 3`), :6367 (700 ms).
+    pub rally_fetch: Retry,
 }
 
 impl Default for ProtocolTimeouts {
@@ -127,6 +131,7 @@ impl Default for ProtocolTimeouts {
             param_list_full_retries: 2,
             ftp: mp_ftp::mavftp::FtpTimeouts::default(),
             stream_rerequest: Duration::from_secs(30 + 8),
+            rally_fetch: Retry::new(700, 3),
         }
     }
 }
@@ -161,6 +166,7 @@ impl ProtocolTimeouts {
             param_list_full_retries: self.param_list_full_retries,
             ftp: self.ftp.faster(divisor),
             stream_rerequest: self.stream_rerequest / divisor,
+            rally_fetch: scale(self.rally_fetch),
         }
     }
 }

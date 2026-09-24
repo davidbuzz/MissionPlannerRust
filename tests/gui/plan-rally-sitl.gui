@@ -1,0 +1,95 @@
+# Rally Points > Download, Upload and Clear Rally Points on a vehicle (PLAN.md 13.4, D11).
+#
+# getRallyPointsToolStripMenuItem_Click tests (capabilities & MISSION_RALLY) >= 0, which every uint
+# passes, so it always takes mav_mission.download of the rally list - MISSION_REQUEST_LIST with
+# mission_type 2 - whose items fill MAV.rallypoints and do not touch the markers (GCSViews/
+# FlightPlanner.cs:915-928); plan.rally.vehicle is that list's length.
+#
+# saveRallyPointsToolStripMenuItem_Click has one branch, the legacy protocol: setParam RALLY_TOTAL
+# to the markers' count, then setRallyPoint per marker - RALLY_POINT, read back with
+# RALLY_FETCH_POINT - and "Failed to save rally point" when a read-back times out (:5936-5957;
+# MAVLinkInterface.cs:6346-6476). The SITL this runs against is ArduCopter 4.8.0-dev, built without
+# the legacy rally messages: it never answers RALLY_FETCH_POINT, so the C#'s Upload sets
+# RALLY_TOTAL and then fails on the first point, and so does this. (A firmware with the legacy
+# protocol takes the points; the link's side of that is requests::tests::a_rally_point_* and
+# plan.rs's upload_goes_through_the_link_as_the_c_sharp_sends_it.)
+#
+# clearRallyPointsToolStripMenuItem_Click sets RALLY_TOTAL to 0 and clears the markers and
+# MAV.rallypoints (:2096-2110).
+#
+# Two rally points are put on the vehicle first with the mission protocol, through the draw
+# panel's rally write, so Download has a known list to read. The vehicle is left with RALLY_TOTAL
+# 0, as Clear Rally Points leaves it.
+#
+# Needs SITL (a copter): tools/gui-test.sh tests/gui/plan-rally-sitl.gui -- tcp:127.0.0.1:5760
+
+env XDG_DATA_HOME $WORK
+env MP_PLAN_DIR $WORK
+
+screen params
+window 1600x1200
+settle 6
+
+click param-download
+settle 15
+expect params.held > 500
+
+click tab-plan
+settle 1
+
+# The vehicle's list, arranged: two points written with the mission protocol.
+click draw-rally
+click map@0.40x0.40
+click map@0.60x0.40
+expect rally.points 2
+click rally-write
+settle 4
+click draw-waypoints
+
+# Download: the vehicle's two, and the markers as they were.
+click map@0.30x0.70:right
+click menu-rallyPoints
+click menu-getRallyPoints
+settle 4
+expect plan.rally.downloading false
+expect plan.prompt none
+expect plan.rally.vehicle 2
+expect rally.points 2
+
+# A third marker, then Upload: RALLY_TOTAL goes to 3, and the first point is never read back.
+click map@0.50x0.60:right
+click menu-rallyPoints
+click menu-setRallyPoint
+key Return
+expect rally.points 3
+click map@0.30x0.70:right
+click menu-rallyPoints
+click menu-saveRallyPoints
+expect plan.rally.upload busy
+settle 6
+expect plan.rally.upload ~ RALLY_TOTAL=3
+expect plan.rally.upload ~ ,0=timeout
+expect plan.prompt Error
+expect plan.prompt.text Failed to save rally point
+key Return
+expect plan.prompt none
+
+# Clear Rally Points: RALLY_TOTAL to 0, the markers and the vehicle's list gone.
+click map@0.30x0.70:right
+click menu-rallyPoints
+click menu-clearRallyPoints
+settle 3
+expect plan.params.busy false
+expect plan.params ~ RALLY_TOTAL=0
+expect rally.points 0
+expect map.rally 0
+expect plan.rally.vehicle 0
+
+# And the vehicle agrees: Download reads nothing.
+click map@0.30x0.70:right
+click menu-rallyPoints
+click menu-getRallyPoints
+settle 3
+expect plan.rally.downloading false
+expect plan.prompt none
+expect plan.rally.vehicle 0

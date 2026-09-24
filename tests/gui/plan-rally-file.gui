@@ -1,0 +1,109 @@
+# Rally Points > Set Rally Point, Save Rally to File, Clear Rally Points and Load Rally from File
+# (PLAN.md 13.4, D11), with no vehicle.
+#
+# setRallyPointToolStripMenuItem_Click asks "Altitude", offering Default Alt, and puts a
+# GMapMarkerRallyPt - the purple pin - at the click, or says "Invalid Alt" (GCSViews/
+# FlightPlanner.cs:6635-6661). Save Rally to File writes "RALLY lat lng alt 0 0 0" a marker
+# (:6020-6063). Clear Rally Points sets RALLY_TOTAL to 0 - with no vehicle there is none to set,
+# and the C# catches that - and clears the markers (:2096-2110). Load Rally from File reads each
+# row through float.Parse and a truncation to 1e-7 degrees (:4414-4464). The .ral laid out
+# beforehand is the one tools/csharp-reference/PlannerOracle.cs wrote under mono with the C#'s own
+# format string; its second marker, saved with every digit a click carries, reads back as the C#
+# reads it: -35.3632621.
+
+env XDG_DATA_HOME $WORK
+env MP_PLAN_DIR $WORK
+setup cp testdata/planner/golden/rally.ral "$WORK/oracle.ral"
+
+screen plan
+window 1600x1200
+settle 4
+
+expect rally.points 0
+expect map.rally 0
+
+# Set Rally Point: "Altitude", offering Default Alt's 100.
+click map@0.40x0.40:right
+click menu-rallyPoints
+click menu-setRallyPoint
+expect plan.prompt Altitude
+expect plan.prompt.text Altitude
+expect plan.prompt.value 100
+key ctrl+u
+type 60
+key Return
+expect plan.prompt none
+expect rally.points 1
+expect map.rally 1
+expect plan.rally.markers ~ ,60
+
+# An altitude int.TryParse refuses is "Invalid Alt", and places nothing.
+click map@0.60x0.40:right
+click menu-rallyPoints
+click menu-setRallyPoint
+key ctrl+u
+type 7.5
+key Return
+expect plan.prompt Error
+expect plan.prompt.text Invalid Alt
+key Return
+expect plan.prompt none
+expect rally.points 1
+
+# Default Alt as offered.
+click map@0.60x0.40:right
+click menu-rallyPoints
+click menu-setRallyPoint
+key Return
+expect rally.points 2
+expect plan.rally.markers ~ ,100
+
+# Save Rally to File, Clear Rally Points, Load Rally from File: the two come back.
+click map@0.30x0.70:right
+click menu-rallyPoints
+click menu-saveToFile1
+expect plan.prompt Save As
+expect plan.prompt.text ~ Rally
+type pair
+key Return
+expect plan.prompt none
+expect status ~ saved the rally points
+
+click map@0.30x0.70:right
+click menu-rallyPoints
+click menu-clearRallyPoints
+settle 1
+expect plan.params RALLY_TOTAL=unknown
+expect rally.points 0
+expect map.rally 0
+
+# Save with none: "Please set some rally points", and no dialog.
+click map@0.30x0.70:right
+click menu-rallyPoints
+click menu-saveToFile1
+expect plan.prompt message
+expect plan.prompt.text Please set some rally points
+key Return
+expect plan.prompt none
+
+click map@0.30x0.70:right
+click menu-rallyPoints
+click menu-loadFromFile1
+expect plan.prompt Open
+type pair
+key Return
+expect status ~ loaded rally points
+expect rally.points 2
+expect map.rally 2
+expect plan.rally.markers ~ ,60;
+
+# The oracle's file: three markers, the first row clearing the two, the second read back through a
+# float to seven places.
+click map@0.30x0.70:right
+click menu-rallyPoints
+click menu-loadFromFile1
+type oracle
+key Return
+expect rally.points 3
+expect map.rally 3
+expect plan.rally.markers ~ -35.3632621,149.1652374,100;-35.3632621,149.1652374,60;

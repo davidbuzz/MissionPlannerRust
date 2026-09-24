@@ -307,6 +307,15 @@ pub struct Plan {
     write_results: String,
     /// A Write whose upload has not finished, and the sets that follow it.
     pending_write: Option<PendingWrite>,
+    /// Rally Points > Upload under way: `RALLY_TOTAL`, then one point at a time.
+    rally_upload: Option<RallyUpload>,
+    /// What the last Rally Points > Upload did, point by point, for the facts.
+    rally_upload_results: String,
+    /// Whether Rally Points > Download is waiting for the vehicle's list.
+    rally_download: bool,
+    /// `MainV2.comPort.MAV.rallypoints`: the rally list the vehicle last sent, which Download
+    /// fills and Clear Rally Points empties. The planner's markers are [`Plan::rally`].
+    vehicle_rally: Vec<MissionItem>,
 }
 
 /// Which of the three Home Location boxes.
@@ -679,6 +688,8 @@ pub enum AfterWrites {
     Nothing,
     /// Geo-Fence > Clear's clearing of the map.
     ClearFence,
+    /// Clear Rally Points' clearing of the markers and of `MAV.rallypoints`.
+    ClearRally,
 }
 
 /// How a row of sets ended.
@@ -864,6 +875,164 @@ impl PendingWrite {
             return None;
         }
         Some(!status.failed)
+    }
+}
+
+/// What Rally Points > Upload puts on the wire next.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum RallyDue {
+    /// `setParam("RALLY_TOTAL", rallypointoverlay.Markers.Count)`.
+    Total(f64),
+    /// `setRallyPoint` of the next marker.
+    Point(mp_link::requests::RallyPointSet),
+}
+
+/// Rally Points > Upload: `saveRallyPointsToolStripMenuItem_Click`, one blocking call at a time
+/// as the C# makes them.
+///
+/// `RALLY_TOTAL` is set to the number of markers first, its outcome not looked at - `setParam`
+/// returns false without sending for a vehicle that has not listed it, and the handler goes on.
+/// Then each marker in turn goes to `setRallyPoint` with the index counted from 0 and
+/// `(byte)(float) MAV.param["RALLY_TOTAL"]` as the count - which throws where the vehicle has not
+/// listed `RALLY_TOTAL`, inside the handler's `try`, as a read-back that times out does: both say
+/// "Failed to save rally point" and stop. A set that went out and never read back the same is
+/// passed over, as the C# ignores `setRallyPoint`'s `false`.
+///
+/// `RALLY_TOTAL` is set outside that `try`, so a set that times out throws out of the handler
+/// altogether; here that is said with the exception's message and the upload stops.
+/// `// C#: GCSViews/FlightPlanner.cs:5936-5957`
+#[derive(Debug, Clone)]
+pub struct RallyUpload {
+    /// The markers, as they were when Upload was chosen.
+    markers: Vec<(LatLon, i32)>,
+    /// The next marker to send, once `RALLY_TOTAL` has been set.
+    next: Option<usize>,
+    /// The request carrying the call in flight.
+    request: Option<mp_link::RequestId>,
+    /// What each call did: `RALLY_TOTAL=n` and its outcome, then `index=set|sent` per marker.
+    results: Vec<String>,
+    end: Option<WritesEnd>,
+}
+
+impl RallyUpload {
+    /// An upload of `markers`, `RALLY_TOTAL` due first.
+    #[must_use]
+    pub const fn new(markers: Vec<(LatLon, i32)>) -> Self {
+        Self {
+            markers,
+            next: None,
+            request: None,
+            results: Vec::new(),
+            end: None,
+        }
+    }
+
+    fn stop(&mut self, title: &'static str, text: impl Into<String>) {
+        self.end = Some(WritesEnd::Stopped {
+            title,
+            text: text.into(),
+        });
+    }
+
+    /// What to send now, given the vehicle's `RALLY_TOTAL` as its parameter list holds it; none
+    /// while a call is out or once the upload has ended. Ends it where the next marker cannot be
+    /// sent: all sent, or no `RALLY_TOTAL` to count them by.
+    pub fn due(&mut self, rally_total: Option<f64>) -> Option<RallyDue> {
+        if self.request.is_some() || self.end.is_some() {
+            return None;
+        }
+        let Some(index) = self.next else {
+            #[allow(clippy::cast_precision_loss)] // `rallypointoverlay.Markers.Count`
+            return Some(RallyDue::Total(self.markers.len() as f64));
+        };
+        let Some(&(position, altitude)) = self.markers.get(index) else {
+            self.end = Some(WritesEnd::Done);
+            return None;
+        };
+        let Some(total) = rally_total else {
+            // `(float) MAV.param["RALLY_TOTAL"]` on a parameter the vehicle has not listed.
+            self.stop(ERROR, RALLY_SAVE_FAILED);
+            return None;
+        };
+        // `byte count` counts up from 0; `(int)(plla.Lat * t7)`, `(short) plla.Alt`,
+        // `(byte)(float)` of the count: the C#'s casts, which truncate.
+        // `// C#: GCSViews/FlightPlanner.cs:5938, 5947-5948; MAVLinkInterface.cs:6447-6451`
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let set = mp_link::requests::RallyPointSet {
+            idx: index as u8,
+            count: total as f32 as u8,
+            lat: (position.latitude() * 1e7) as i32,
+            lng: (position.longitude() * 1e7) as i32,
+            alt: altitude as i16,
+            break_alt: 0,
+            land_dir: 0,
+            flags: 0,
+        };
+        Some(RallyDue::Point(set))
+    }
+
+    /// The call that is due has gone out, carried by `request`.
+    pub const fn sent(&mut self, request: mp_link::RequestId) {
+        self.request = Some(request);
+    }
+
+    /// The request carrying the call in flight.
+    #[must_use]
+    pub const fn in_flight(&self) -> Option<mp_link::RequestId> {
+        self.request
+    }
+
+    /// How the call in flight ended. `None` is one that could not be sent - no vehicle, or no
+    /// link: `RALLY_TOTAL` not in the list, and a rally point whose read-back cannot come.
+    pub fn answer(&mut self, outcome: Option<mp_link::requests::RequestOutcome>) {
+        use mp_link::requests::RequestOutcome;
+        self.request = None;
+        match self.next {
+            None => {
+                let total = self.markers.len();
+                match outcome {
+                    Some(RequestOutcome::TimedOut) => {
+                        self.results.push(format!("RALLY_TOTAL={total} timeout"));
+                        self.stop(ERROR, "Timeout on read - setParam RALLY_TOTAL");
+                        return;
+                    }
+                    Some(RequestOutcome::Accepted { .. }) => {
+                        self.results.push(format!("RALLY_TOTAL={total}"));
+                    }
+                    Some(RequestOutcome::Unchanged) => {
+                        self.results.push(format!("RALLY_TOTAL={total} unchanged"));
+                    }
+                    _ => self.results.push("RALLY_TOTAL=unknown".to_owned()),
+                }
+                self.next = Some(0);
+            }
+            Some(index) => {
+                match outcome {
+                    Some(RequestOutcome::Accepted { .. }) => {
+                        self.results.push(format!("{index}=set"));
+                    }
+                    None | Some(RequestOutcome::TimedOut) => {
+                        self.results.push(format!("{index}=timeout"));
+                        self.stop(ERROR, RALLY_SAVE_FAILED);
+                        return;
+                    }
+                    Some(_) => self.results.push(format!("{index}=sent")),
+                }
+                self.next = Some(index + 1);
+            }
+        }
+    }
+
+    /// How the upload ended, once it has.
+    #[must_use]
+    pub const fn end(&self) -> Option<&WritesEnd> {
+        self.end.as_ref()
+    }
+
+    /// What each call did, in order.
+    #[must_use]
+    pub fn results(&self) -> String {
+        self.results.join(",")
     }
 }
 
@@ -1618,6 +1787,220 @@ impl Plan {
         self.rally_error = None;
     }
 
+    /// Set Rally Point's marker: at the menu's position, `alt / CurrentState.multiplieralt` -
+    /// metres here, so the altitude typed - kept by the marker as an `int`.
+    /// `// C#: GCSViews/FlightPlanner.cs:6646-6653; ExtLibs/Maps/GMapMarkerRallyPt.cs:33-37`
+    pub fn add_rally_marker(&mut self, position: LatLon, altitude: i32) {
+        self.rally.push(RallyPoint {
+            position,
+            altitude: f64::from(altitude),
+            break_altitude: None,
+        });
+        self.rally_error = None;
+    }
+
+    /// The rally markers as the C# holds them, `rallypointoverlay.Markers`: each position and its
+    /// `int` altitude.
+    #[must_use]
+    pub fn rally_markers(&self) -> Vec<(LatLon, i32)> {
+        self.rally
+            .iter()
+            .map(|point| {
+                #[allow(clippy::cast_possible_truncation)] // `(int) plla.Alt`
+                let altitude = point.altitude as i32;
+                (point.position, altitude)
+            })
+            .collect()
+    }
+
+    /// Load Rally from File, once the file is read: the first row the C# reads clears the markers,
+    /// then each row is a marker at its position and altitude. A file with no row it reads leaves
+    /// the markers as they were.
+    /// `// C#: GCSViews/FlightPlanner.cs:4446-4458`
+    pub fn load_rally_file(&mut self, rows: &[mp_mission::fence_file::RallyPointFile]) {
+        if rows.is_empty() {
+            return;
+        }
+        self.rally.clear();
+        for row in rows {
+            #[allow(clippy::cast_possible_truncation)] // `(int) plla.Alt`, of a `short`
+            self.add_rally_marker(row.position, row.altitude as i32);
+        }
+    }
+
+    /// Clear Rally Points, once its set of `RALLY_TOTAL` has been made or failed: the markers go,
+    /// and so does `MAV.rallypoints`.
+    /// `// C#: GCSViews/FlightPlanner.cs:2108-2109`
+    pub fn clear_rally_points(&mut self) {
+        self.clear_rally();
+        self.vehicle_rally.clear();
+    }
+
+    /// `MAV.rallypoints`: the rally list the vehicle last sent.
+    #[must_use]
+    pub fn vehicle_rally(&self) -> &[MissionItem] {
+        &self.vehicle_rally
+    }
+
+    /// Rally Points > Upload under way, if one is.
+    #[must_use]
+    pub const fn rally_upload(&self) -> Option<&RallyUpload> {
+        self.rally_upload.as_ref()
+    }
+
+    /// Whether Rally Points > Download is waiting for the vehicle.
+    #[must_use]
+    pub const fn rally_downloading(&self) -> bool {
+        self.rally_download
+    }
+
+    /// Polygon > Area's figure: `Math.Abs(calcpolygonarea(drawnpolygon.Points))`, square metres,
+    /// or `None` where `calcpolygonarea` says "Please define a polygon!" and returns 0. As the C#'s
+    /// does, it closes the polygon to measure it and takes the last corner off if it then equals
+    /// the first - so a polygon that arrived closed leaves open.
+    /// `// C#: GCSViews/FlightPlanner.cs:1762, 1986-2036`
+    pub fn polygon_area(&mut self) -> Option<f64> {
+        if self.polygon.is_empty() {
+            return None;
+        }
+        Some(mp_mission::gridui::calc_polygon_area(&mut self.polygon))
+    }
+
+    /// Polygon > Offset Polygon, once the offset is known: the drawn polygon replaced by what
+    /// `redrawPolygonSurvey` is handed, and left as it was where the C# returns first.
+    /// `// C#: GCSViews/FlightPlanner.cs:3639-3686, 1014-1050`
+    pub fn offset_polygon(&mut self, metres: f64) {
+        if let Some(corners) = mp_mission::polygon::offset_polygon(&self.polygon, metres) {
+            self.polygon = corners;
+            self.polygon_hidden = false;
+        }
+    }
+
+    /// Polygon > Load Polygon, once the file is read: `drawnpolygon.Points` cleared and given the
+    /// file's corners, even none.
+    /// `// C#: GCSViews/FlightPlanner.cs:4538-4576`
+    pub fn load_polygon(&mut self, corners: Vec<LatLon>) {
+        self.polygon = corners;
+        self.polygon_hidden = false;
+    }
+
+    /// Polygon > From SHP: every feature's coordinates added to the drawn polygon in turn, and
+    /// after each feature "remove loop close" - the last corner dropped where it equals the
+    /// polygon's first. The polygon was cleared before the file was opened.
+    /// `// C#: GCSViews/FlightPlanner.cs:3564-3601`
+    pub fn add_shp_features(
+        &mut self,
+        features: &[Vec<(f64, f64)>],
+        projection: Option<mp_mission::shapefile::Projection>,
+    ) {
+        for feature in features {
+            for (x, y) in feature {
+                if let Some(position) = mp_mission::shapefile::position(projection, *x, *y) {
+                    self.polygon.push(position);
+                }
+            }
+            if self.polygon.len() > 1 && self.polygon.first() == self.polygon.last() {
+                self.polygon.pop();
+            }
+        }
+        self.polygon_hidden = false;
+    }
+
+    /// Create Wp Circle's rows, once its four answers have parsed: `WAYPOINT` rows round the
+    /// menu's position at `(int) float.Parse(TXT_DefaultAlt.Text)` as `setfromMap` takes it, in
+    /// the screen's altitude frame. `Radius / CurrentState.multiplierdist` is the radius itself in
+    /// metres.
+    ///
+    /// The C# adds each row and then fills it, so a Default Alt that does not parse leaves a row
+    /// with no position and throws, and one that is not a whole number leaves every row empty with
+    /// "Your default alt is not valid" said once a row; here it is said once and nothing is added.
+    /// `// C#: GCSViews/FlightPlanner.cs:2992, 3015-3047`
+    pub fn wp_circle(
+        &mut self,
+        centre: LatLon,
+        radius: i32,
+        points: i32,
+        direction: i32,
+        start_angle: i32,
+        context: &MenuContext,
+    ) -> Result<(), &'static str> {
+        let passed = mp_mission::dotnet::parse_f32(self.panel_text(PanelBox::DefaultAlt))
+            .ok_or(FORMAT_EXCEPTION)?;
+        let passed = mp_mission::dotnet::to_int(f64::from(passed));
+        let altitude = self.new_row_altitude(f64::from(passed), context.copter)?;
+        let frame = context.frame.mav_frame();
+        for (lat, lng) in mp_mission::circle::wp_circle(
+            centre.latitude(),
+            centre.longitude(),
+            radius,
+            points,
+            direction,
+            start_angle,
+        ) {
+            self.items.push(circle_row(
+                mp_mission::commands::WAYPOINT,
+                frame,
+                lat,
+                lng,
+                altitude,
+            ));
+        }
+        self.renumber();
+        self.origin = Origin::Edited;
+        Ok(())
+    }
+
+    /// Create Spline Circle's rows, once its answers have parsed: a `DO_SET_ROI` at the menu's
+    /// position, altitude 0 (`AddCommand`, which fills its cells directly), then
+    /// `SPLINE_WAYPOINT` rows lap by lap, each at the altitude handed to `setfromMap` - which
+    /// writes none for -1 or -2, leaving the row's 0.
+    ///
+    /// As [`Plan::wp_circle`], a Default Alt `setfromMap` refuses is said once and nothing added.
+    /// `// C#: GCSViews/FlightPlanner.cs:2909-2960, 540-550, 3376-3414`
+    pub fn spline_circle(
+        &mut self,
+        centre: LatLon,
+        radius: i32,
+        min_alt: i32,
+        max_alt: i32,
+        alt_step: i32,
+        context: &MenuContext,
+    ) -> Result<(), &'static str> {
+        let points = mp_mission::circle::spline_circle(
+            centre.latitude(),
+            centre.longitude(),
+            radius,
+            min_alt,
+            max_alt,
+            alt_step,
+        )
+        .map_err(|_| "Bad alt step")?;
+        let mut rows = Vec::with_capacity(points.len());
+        for (lat, lng, step_alt) in points {
+            let altitude = if matches!(step_alt, -1 | -2) {
+                0.0
+            } else {
+                self.new_row_altitude(f64::from(step_alt), context.copter)?
+            };
+            rows.push(circle_row(
+                mp_mission::commands::SPLINE_WAYPOINT,
+                context.frame.mav_frame(),
+                lat,
+                lng,
+                altitude,
+            ));
+        }
+        self.items.push(mp_mission::commands::set_roi(
+            centre,
+            0.0,
+            context.frame.mav_frame(),
+        ));
+        self.items.extend(rows);
+        self.renumber();
+        self.origin = Origin::Edited;
+        Ok(())
+    }
+
     /// Why the rally points are not usable, if they are not.
     #[must_use]
     pub fn rally_error(&self) -> Option<&str> {
@@ -1813,6 +2196,38 @@ impl Plan {
         }
         self.remove(seq);
         true
+    }
+
+    /// Add Below: a row as `Commands_RowsAdded` leaves one - `WAYPOINT`, zeroes, the screen's
+    /// frame - added after the current row, or at the end when there is at most one row or the
+    /// current row is the last. With no current row the C# takes row 0 as current, so with two
+    /// rows or more the new one goes after the first. The new row becomes the selected one, as
+    /// `Commands_RowValidating` makes it `selectedrow`.
+    /// `// C#: GCSViews/FlightPlanner.cs:1780-1811, 2407-2441, 2472-2475`
+    pub fn add_below(&mut self, frame: AltitudeFrame) {
+        let current = self
+            .selected
+            .and_then(|seq| self.items.iter().position(|item| item.seq == seq))
+            .unwrap_or(0);
+        let count = self.items.len();
+        let index = if count <= 1 || count == current + 1 {
+            count
+        } else {
+            current + 1
+        };
+        self.items.insert(
+            index,
+            circle_row(
+                mp_mission::commands::WAYPOINT,
+                frame.mav_frame(),
+                0.0,
+                0.0,
+                0.0,
+            ),
+        );
+        self.renumber();
+        self.selected = self.items.get(index).map(|item| item.seq);
+        self.origin = Origin::Edited;
     }
 
     /// Clear Mission: `Commands.Rows.Clear()`. Every row goes; home, not being one, stays.
@@ -2127,6 +2542,19 @@ pub fn waypoint_strip(
         };
         boxes = boxes.child(div().flex().flex_col().gap_1().child(label).child(field));
     }
+    // `BUT_Add`, "Add Below", to the right of the boxes at (398, 8) in `panelWaypoints`.
+    // `// C#: GCSViews/FlightPlanner.resx (BUT_Add.Location, BUT_Add.Text); FlightPlanner.cs:1780`
+    boxes = boxes.child(action(
+        "plan-add-below",
+        "Add Below",
+        theme::TEXT,
+        true,
+        cx.listener(|this, _event: &(), _window, cx| {
+            this.plan.add_below(this.altitude_frame);
+            this.sync_map_mission();
+            cx.notify();
+        }),
+    ));
 
     let mut frames = div().flex().items_center().gap_1();
     for choice in AltitudeFrame::all() {
@@ -3299,6 +3727,116 @@ fn start_fence_clear(this: &mut MissionPlanner) {
     ));
 }
 
+/// Clear Rally Points: `setParam("RALLY_TOTAL", 0)`, whatever it says - the C# catches and logs
+/// a failure - and then the markers and `MAV.rallypoints` cleared.
+/// `// C#: GCSViews/FlightPlanner.cs:2096-2110`
+fn start_rally_clear(this: &mut MissionPlanner) {
+    // One row at a time, as the C#'s blocking calls allow.
+    if this.plan.writes.is_some() {
+        return;
+    }
+    this.plan.writes = Some(ParamWrites::new(
+        vec![ParamStep::one("RALLY_TOTAL", 0.0, OnTimeout::CarryOn)],
+        AfterWrites::ClearRally,
+    ));
+}
+
+/// Rally Points > Upload: the markers as they are now, sent one call at a time by
+/// [`drive_rally`].
+/// `// C#: GCSViews/FlightPlanner.cs:5936-5957`
+fn start_rally_upload(this: &mut MissionPlanner) {
+    if this.plan.rally_upload.is_some() {
+        return;
+    }
+    this.plan.rally_upload = Some(RallyUpload::new(this.plan.rally_markers()));
+}
+
+/// Rally Points > Download: `(capabilities & MISSION_RALLY) >= 0` is true of every `uint`, so the
+/// C# always takes its first branch - "Please connect first" without a link, else
+/// `mav_mission.download` of the rally list, whose answer fills `MAV.rallypoints` and is otherwise
+/// thrown away: the markers on this map do not change. The `RALLY_TOTAL` and `getRallyPoint`
+/// loop after that branch - "Not Supported", "Rally points - Nothing to download", each point a
+/// marker - is never reached, and is not ported.
+/// `// C#: GCSViews/FlightPlanner.cs:915-928 (reached), 930-966 (not reached)`
+fn start_rally_download(this: &mut MissionPlanner) {
+    if !this.telemetry.view().connected || !this.telemetry.download_rally() {
+        this.plan_menus.say("", PLEASE_CONNECT);
+        return;
+    }
+    this.plan.rally_download = true;
+}
+
+/// Moves Rally Points > Upload and Download on, each frame, as far as they go without waiting.
+/// A download that fails says why, as the exception `AwaitSync` rethrows would.
+fn drive_rally(
+    this: &mut MissionPlanner,
+    view: &TelemetryView,
+    window: &mut gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) {
+    if this.plan.rally_download
+        && let Some(list) = this.telemetry.rally_list()
+    {
+        this.plan.rally_download = false;
+        match list {
+            Ok(items) => this.plan.vehicle_rally = items,
+            Err(why) => {
+                this.plan_menus.say(ERROR, why);
+                this.plan_prompt_focus.focus(window, cx);
+            }
+        }
+    }
+
+    let Some(upload) = this.plan.rally_upload.as_mut() else {
+        return;
+    };
+    let rally_total = view
+        .parameters
+        .iter()
+        .find(|(name, _)| name == "RALLY_TOTAL")
+        .map(|(_, value)| *value);
+    step_rally_upload(&this.telemetry, upload, rally_total);
+    if let Some(end) = upload.end().cloned() {
+        this.plan.rally_upload_results = upload.results();
+        this.plan.rally_upload = None;
+        if let WritesEnd::Stopped { title, text } = end {
+            this.plan_menus.say(title, text);
+            this.plan_prompt_focus.focus(window, cx);
+        }
+    }
+}
+
+/// Moves an upload on as far as it goes without waiting: each answered call lets the next go,
+/// through the link - `setParam` for `RALLY_TOTAL`, `setRallyPoint` for each marker - until one
+/// is out or the upload has ended.
+fn step_rally_upload(
+    telemetry: &crate::telemetry::Telemetry,
+    upload: &mut RallyUpload,
+    rally_total: Option<f64>,
+) {
+    while upload.end().is_none() {
+        if let Some(request) = upload.in_flight() {
+            match telemetry.request(request) {
+                Some(request) => match request.outcome() {
+                    Some(outcome) => upload.answer(Some(outcome)),
+                    None => return,
+                },
+                None => upload.answer(None),
+            }
+            continue;
+        }
+        let sent = match upload.due(rally_total) {
+            None => continue,
+            Some(RallyDue::Total(count)) => telemetry.write_parameter("RALLY_TOTAL", count, false),
+            Some(RallyDue::Point(set)) => telemetry.set_rally_point(set),
+        };
+        match sent {
+            Some(request) => upload.sent(request),
+            None => upload.answer(None),
+        }
+    }
+}
+
 /// Moves the rows of parameter sets on, each frame, as far as they go without waiting: a Write
 /// whose upload has finished starts its sets, a set that has been answered lets the next one go,
 /// and a finished row does what follows it.
@@ -3308,6 +3846,7 @@ pub fn drive_writes(
     window: &mut gpui::Window,
     cx: &mut Context<MissionPlanner>,
 ) {
+    drive_rally(this, view, window, cx);
     if let Some(pending) = this.plan.pending_write.as_mut() {
         match pending.upload_ended(view.transfer.as_ref(), &view.mission) {
             None => {}
@@ -3351,13 +3890,18 @@ pub fn drive_writes(
             let after = writes.after();
             this.plan.writes = None;
             match end {
-                WritesEnd::Done => {
-                    if after == AfterWrites::ClearFence {
+                WritesEnd::Done => match after {
+                    AfterWrites::ClearFence => {
                         this.plan.clear_geofence();
                         this.sync_map_fence();
                         this.sync_map_polygon();
                     }
-                }
+                    AfterWrites::ClearRally => {
+                        this.plan.clear_rally_points();
+                        this.sync_map_rally();
+                    }
+                    AfterWrites::Nothing => {}
+                },
                 WritesEnd::Stopped { title, text } => {
                     this.plan_menus.say(title, text);
                     this.plan_prompt_focus.focus(window, cx);
@@ -3380,6 +3924,13 @@ pub fn drive_writes(
 /// empty name: the C# acts only on `sf.FileName != ""`, and `File.Exists("")` is false.
 #[must_use]
 pub fn fence_file_name(typed: &str) -> Option<String> {
+    dialog_file_name(typed, "fen")
+}
+
+/// The file a typed name means in the plan directory, `extension` - the dialog filter's - added
+/// when it has none. See [`fence_file_name`].
+#[must_use]
+pub fn dialog_file_name(typed: &str, extension: &str) -> Option<String> {
     let leaf = typed
         .trim()
         .rsplit(['/', '\\'])
@@ -3388,8 +3939,134 @@ pub fn fence_file_name(typed: &str) -> Option<String> {
     Some(if leaf.contains('.') {
         leaf.to_owned()
     } else {
-        format!("{leaf}.fen")
+        format!("{leaf}.{extension}")
     })
+}
+
+/// Polygon > From SHP once its dialog has returned: the polygon cleared whatever it returned,
+/// then - `if (File.Exists(file))` - the `.prj` of the same name read if there is one, and every
+/// feature's coordinates added in turn. A file that cannot be read is said as the C#'s `catch`
+/// says it, `Strings.ERROR + "\n" + ex`. The map is fitted to the corners, as
+/// `ZoomAndCenterMarkers(drawnpolygonsoverlay.Id)` does after each feature.
+/// `// C#: GCSViews/FlightPlanner.cs:3533-3616`
+fn load_shp(this: &mut MissionPlanner, name: &str) -> Result<(), String> {
+    // Poly Clear
+    this.plan.load_polygon(Vec::new());
+    let Some(name) = dialog_file_name(name, "shp") else {
+        return Ok(());
+    };
+    let path = MissionPlanner::plan_directory().join(name);
+    let Ok(bytes) = std::fs::read(&path) else {
+        this.file_status = Some(format!("could not read {}", path.display()));
+        return Ok(());
+    };
+    // `Path.GetFileNameWithoutExtension(file) + ".prj"`, its first line.
+    let projection = match std::fs::read_to_string(path.with_extension("prj")) {
+        Ok(text) => Some(
+            mp_mission::shapefile::Projection::from_esri(text.lines().next().unwrap_or(""))
+                .map_err(|why| format!("{ERROR}\n{why}"))?,
+        ),
+        Err(_) => None,
+    };
+    let features =
+        mp_mission::shapefile::features(&bytes).map_err(|why| format!("{ERROR}\n{why}"))?;
+    this.plan.add_shp_features(&features, projection);
+    this.map.borrow_mut().zoom_to_fit(this.plan.polygon());
+    this.file_status = Some(format!("loaded a polygon from {}", path.display()));
+    Ok(())
+}
+
+/// The dialogs' files, once named: Geo-Fence > Load from File and Save to File, Polygon > Save
+/// Polygon, Load Polygon and From SHP, Rally Points > Save Rally to File and Load Rally from File.
+/// Each name is a file in the plan directory, as the mission file is.
+fn file_request(
+    this: &mut MissionPlanner,
+    request: FileRequest,
+    window: &mut gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) {
+    let path = |name: &str, extension: &str| {
+        dialog_file_name(name, extension).map(|name| MissionPlanner::plan_directory().join(name))
+    };
+    let mut refused: Option<(&'static str, String)> = None;
+    match request {
+        // `if (File.Exists(fd.FileName))`, then the polygon replaced by the file's corners and
+        // the map fitted to them.
+        // `// C#: GCSViews/FlightPlanner.cs:4534-4584`
+        FileRequest::LoadPolygon(name) => {
+            let Some(path) = path(&name, "poly") else {
+                return;
+            };
+            match std::fs::read_to_string(&path) {
+                Ok(text) => {
+                    this.plan
+                        .load_polygon(mp_mission::fence_file::read_polygon(&text));
+                    this.map.borrow_mut().zoom_to_fit(this.plan.polygon());
+                    this.file_status = Some(format!("loaded a polygon from {}", path.display()));
+                }
+                Err(err) => {
+                    this.file_status = Some(format!("could not read {}: {err}", path.display()));
+                }
+            }
+        }
+        // `// C#: GCSViews/FlightPlanner.cs:5903-5931`
+        FileRequest::SavePolygon(name) => {
+            let Some(path) = path(&name, "poly") else {
+                return;
+            };
+            let text = mp_mission::fence_file::write_polygon(this.plan.polygon());
+            match std::fs::write(&path, text) {
+                Ok(()) => {
+                    this.file_status = Some(format!("saved the polygon to {}", path.display()));
+                }
+                // The polygon's writer says the fence's words.
+                Err(_) => refused = Some(("", FENCE_FILE_FAILED.to_owned())),
+            }
+        }
+        FileRequest::LoadShp(name) => {
+            if let Err(why) = load_shp(this, &name) {
+                refused = Some((ERROR, why));
+            }
+        }
+        // `// C#: GCSViews/FlightPlanner.cs:6039-6062`
+        FileRequest::SaveRally(name) => {
+            let Some(path) = path(&name, "ral") else {
+                return;
+            };
+            let text = mp_mission::fence_file::write_rally(&this.plan.rally_markers());
+            match std::fs::write(&path, text) {
+                Ok(()) => {
+                    this.file_status =
+                        Some(format!("saved the rally points to {}", path.display()));
+                }
+                Err(_) => refused = Some(("", RALLY_FILE_FAILED.to_owned())),
+            }
+        }
+        // `if (File.Exists(fd.FileName))`, then a marker per row.
+        // `// C#: GCSViews/FlightPlanner.cs:4421-4462`
+        FileRequest::LoadRally(name) => {
+            let Some(path) = path(&name, "ral") else {
+                return;
+            };
+            match std::fs::read_to_string(&path) {
+                Ok(text) => {
+                    this.plan
+                        .load_rally_file(&mp_mission::fence_file::read_rally(&text));
+                    this.file_status = Some(format!("loaded rally points from {}", path.display()));
+                }
+                Err(err) => {
+                    this.file_status = Some(format!("could not read {}: {err}", path.display()));
+                }
+            }
+        }
+        FileRequest::LoadFence(_) | FileRequest::SaveFence(_) => {
+            fence_file(this, request, window, cx);
+        }
+    }
+    if let Some((title, text)) = refused {
+        this.plan_menus.say(title, text);
+        this.plan_prompt_focus.focus(window, cx);
+    }
 }
 
 /// Geo-Fence > Load from File and Save to File, once the file has been named.
@@ -3436,6 +4113,12 @@ fn fence_file(
                 }
             }
         }
+        // `file_request`'s own.
+        FileRequest::SavePolygon(_)
+        | FileRequest::LoadPolygon(_)
+        | FileRequest::LoadShp(_)
+        | FileRequest::SaveRally(_)
+        | FileRequest::LoadRally(_) => {}
     }
 }
 
@@ -3636,6 +4319,32 @@ pub enum MenuAction {
     FenceClear,
     /// `surveyGridToolStripMenuItem_Click`: the Survey (Grid) dialog, `survey_ui.rs`.
     SurveyGrid,
+    /// `savePolygonToolStripMenuItem_Click`.
+    SavePolygon,
+    /// `loadPolygonToolStripMenuItem_Click`.
+    LoadPolygon,
+    /// `fromSHPToolStripMenuItem_Click`.
+    FromShp,
+    /// `offsetPolygonToolStripMenuItem_Click`.
+    OffsetPolygon,
+    /// `areaToolStripMenuItem_Click`, under Polygon and under Auto WP.
+    Area,
+    /// `setRallyPointToolStripMenuItem_Click`.
+    SetRallyPoint,
+    /// `getRallyPointsToolStripMenuItem_Click`: Rally Points > Download.
+    GetRallyPoints,
+    /// `saveRallyPointsToolStripMenuItem_Click`: Rally Points > Upload.
+    SaveRallyPoints,
+    /// `clearRallyPointsToolStripMenuItem_Click`.
+    ClearRallyPoints,
+    /// `saveToFileToolStripMenuItem1_Click`: Save Rally to File.
+    SaveRallyToFile,
+    /// `loadFromFileToolStripMenuItem1_Click`: Load Rally from File.
+    LoadRallyFromFile,
+    /// `createWpCircleToolStripMenuItem_Click`.
+    CreateWpCircle,
+    /// `createSplineCircleToolStripMenuItem_Click`.
+    CreateSplineCircle,
 }
 
 /// One entry of `contextMenuStrip1` or of one of its drop-downs.
@@ -3708,11 +4417,13 @@ const fn drop_down(
 /// `// C#: GCSViews/FlightPlanner.Designer.cs:899-922`
 pub const MAP_MENU: &[MenuEntry] = {
     use MenuAction::{
-        ClearMission, ClearPolygon, DeleteWp, DrawPolygon, FenceClear, FenceLoadFromFile,
-        FenceSaveToFile, InsertAtCurrentPosition, InsertSplineWp, InsertWp, JumpStart, JumpWp,
-        Land, LoadWpFile, LoiterCircles, LoiterForever, LoiterTime, MeasureDistance, ModifyAlt,
-        PolygonFromWaypoints, ReverseWps, Rtl, SaveWpFile, SetReturnLocation, SetRoi, SurveyGrid,
-        Takeoff, ZoomTo,
+        Area, ClearMission, ClearPolygon, ClearRallyPoints, CreateSplineCircle, CreateWpCircle,
+        DeleteWp, DrawPolygon, FenceClear, FenceLoadFromFile, FenceSaveToFile, FromShp,
+        GetRallyPoints, InsertAtCurrentPosition, InsertSplineWp, InsertWp, JumpStart, JumpWp, Land,
+        LoadPolygon, LoadRallyFromFile, LoadWpFile, LoiterCircles, LoiterForever, LoiterTime,
+        MeasureDistance, ModifyAlt, OffsetPolygon, PolygonFromWaypoints, ReverseWps, Rtl,
+        SavePolygon, SaveRallyPoints, SaveRallyToFile, SaveWpFile, SetRallyPoint,
+        SetReturnLocation, SetRoi, SurveyGrid, Takeoff, ZoomTo,
     };
     &[
         item(
@@ -3828,23 +4539,26 @@ pub const MAP_MENU: &[MenuEntry] = {
                     "Clear Polygon",
                     Some(ClearPolygon),
                 ),
+                // `// C#: GCSViews/FlightPlanner.cs:5892-5933`
                 item(
                     "menu-savePolygon2",
                     "savePolygonToolStripMenuItem2",
                     "Save Polygon",
-                    None,
+                    Some(SavePolygon),
                 ),
+                // `// C#: GCSViews/FlightPlanner.cs:4528-4586`
                 item(
                     "menu-loadPolygon2",
                     "loadPolygonToolStripMenuItem2",
                     "Load Polygon",
-                    None,
+                    Some(LoadPolygon),
                 ),
+                // `// C#: GCSViews/FlightPlanner.cs:3533-3616`
                 item(
                     "menu-fromSHP2",
                     "fromSHPToolStripMenuItem2",
                     "From SHP",
-                    None,
+                    Some(FromShp),
                 ),
                 item(
                     "menu-fromCurrentWaypoints",
@@ -3852,13 +4566,15 @@ pub const MAP_MENU: &[MenuEntry] = {
                     "From Current Waypoints",
                     Some(PolygonFromWaypoints),
                 ),
+                // `// C#: GCSViews/FlightPlanner.cs:3639-3686`
                 item(
                     "menu-offsetPolygon2",
                     "offsetPolygonToolStripMenuItem2",
                     "Offset Polygon",
-                    None,
+                    Some(OffsetPolygon),
                 ),
-                item("menu-area2", "areaToolStripMenuItem2", "Area", None),
+                // `// C#: GCSViews/FlightPlanner.cs:1760-1773`
+                item("menu-area2", "areaToolStripMenuItem2", "Area", Some(Area)),
             ],
         ),
         // `// C#: GCSViews/FlightPlanner.Designer.cs:1101-1107`
@@ -3912,42 +4628,54 @@ pub const MAP_MENU: &[MenuEntry] = {
             "rallyPointsToolStripMenuItem",
             "Rally Points",
             None,
+            // Shown whatever the vehicle: `contextMenuStrip1_Opening` hides this drop-down, and
+            // Geo-Fence, when the vehicle reports `MAV_PROTOCOL_CAPABILITY_MISSION_FENCE`
+            // (`FlightPlanner.cs:2680-2691`), and `rallyPointsToolStripMenuItem.Visible` follows
+            // `DisplayConfiguration.displayRallyPointsMenu` (`:1325`); neither is ported. The SITL
+            // here (ArduCopter 4.8.0-dev) reports capabilities 0xfbef, without that bit, so the C#
+            // shows it there too.
             &[
+                // `// C#: GCSViews/FlightPlanner.cs:6635-6661`
                 item(
                     "menu-setRallyPoint",
                     "setRallyPointToolStripMenuItem",
                     "Set Rally Point",
-                    None,
+                    Some(SetRallyPoint),
                 ),
+                // `// C#: GCSViews/FlightPlanner.cs:915-967`
                 item(
                     "menu-getRallyPoints",
                     "getRallyPointsToolStripMenuItem",
                     "Download",
-                    None,
+                    Some(GetRallyPoints),
                 ),
+                // `// C#: GCSViews/FlightPlanner.cs:5936-5957`
                 item(
                     "menu-saveRallyPoints",
                     "saveRallyPointsToolStripMenuItem",
                     "Upload",
-                    None,
+                    Some(SaveRallyPoints),
                 ),
+                // `// C#: GCSViews/FlightPlanner.cs:2096-2110`
                 item(
                     "menu-clearRallyPoints",
                     "clearRallyPointsToolStripMenuItem",
                     "Clear Rally Points",
-                    None,
+                    Some(ClearRallyPoints),
                 ),
+                // `// C#: GCSViews/FlightPlanner.cs:6020-6063`
                 item(
                     "menu-saveToFile1",
                     "saveToFileToolStripMenuItem1",
                     "Save Rally to File",
-                    None,
+                    Some(SaveRallyToFile),
                 ),
+                // `// C#: GCSViews/FlightPlanner.cs:4414-4464`
                 item(
                     "menu-loadFromFile1",
                     "loadFromFileToolStripMenuItem1",
                     "Load Rally from File",
-                    None,
+                    Some(LoadRallyFromFile),
                 ),
             ],
         ),
@@ -3958,19 +4686,23 @@ pub const MAP_MENU: &[MenuEntry] = {
             "Auto WP",
             None,
             &[
+                // `// C#: GCSViews/FlightPlanner.cs:2963-3048`
                 item(
                     "menu-createWpCircle",
                     "createWpCircleToolStripMenuItem",
                     "Create Wp Circle",
-                    None,
+                    Some(CreateWpCircle),
                 ),
+                // `// C#: GCSViews/FlightPlanner.cs:2857-2961`
                 item(
                     "menu-createSplineCircle",
                     "createSplineCircleToolStripMenuItem",
                     "Create Spline Circle",
-                    None,
+                    Some(CreateSplineCircle),
                 ),
-                item("menu-area1", "areaToolStripMenuItem1", "Area", None),
+                // The Designer wires this Area to Polygon > Area's handler.
+                // `// C#: GCSViews/FlightPlanner.Designer.cs:1223`
+                item("menu-area1", "areaToolStripMenuItem1", "Area", Some(Area)),
                 item("menu-text", "textToolStripMenuItem", "Text", None),
                 item(
                     "menu-createCircleSurvey",
@@ -4246,6 +4978,33 @@ pub enum PromptKind {
     FenceSaveFile,
     /// Map Tool > Zoom To's "Enter your location".
     ZoomTo,
+    /// Polygon > Save Polygon's `SaveFileDialog`, filtered to `Polygon (*.poly)`.
+    PolygonSaveFile,
+    /// Polygon > Load Polygon's `OpenFileDialog`, likewise.
+    PolygonLoadFile,
+    /// Polygon > From SHP's `OpenFileDialog`, filtered to `Shape file`.
+    ShpLoadFile,
+    /// Polygon > Offset Polygon's "Please enter the offset in meters".
+    OffsetPolygon,
+    /// Area's "Please define a polygon!", after which the area is said all the same.
+    DefinePolygon,
+    /// Rally Points > Set Rally Point's "Altitude".
+    RallyAltitude {
+        /// Where the menu was opened.
+        position: LatLon,
+    },
+    /// Rally Points > Save Rally to File's `SaveFileDialog`, filtered to `Rally (*.ral)`.
+    RallySaveFile,
+    /// Rally Points > Load Rally from File's `OpenFileDialog`, likewise.
+    RallyLoadFile,
+    /// One of Create Wp Circle's or Create Spline Circle's questions, all asked before any is
+    /// read; the answers so far are in [`PlanMenus`].
+    Circle {
+        /// Create Spline Circle rather than Create Wp Circle.
+        spline: bool,
+        /// Where the menu was opened.
+        position: LatLon,
+    },
     /// A message with an OK.
     Message,
 }
@@ -4257,6 +5016,16 @@ pub enum FileRequest {
     LoadFence(String),
     /// Geo-Fence > Save to File.
     SaveFence(String),
+    /// Polygon > Save Polygon.
+    SavePolygon(String),
+    /// Polygon > Load Polygon.
+    LoadPolygon(String),
+    /// Polygon > From SHP. Empty when the dialog was cancelled, which the C# goes on with.
+    LoadShp(String),
+    /// Rally Points > Save Rally to File.
+    SaveRally(String),
+    /// Rally Points > Load Rally from File.
+    LoadRally(String),
 }
 
 /// The caption of the dialog standing in for `OpenFileDialog`: its own default.
@@ -4266,6 +5035,33 @@ pub const SAVE_FILE: &str = "Save As";
 /// The filter both fence dialogs are given.
 /// `// C#: GCSViews/FlightPlanner.cs:4349, 5969`
 pub const FENCE_FILTER: &str = "Fence (*.fen)";
+/// The filter both polygon dialogs are given.
+/// `// C#: GCSViews/FlightPlanner.cs:4532, 5902`
+pub const POLYGON_FILTER: &str = "Polygon (*.poly)";
+/// The filter From SHP's dialog is given, `"Shape file|*.shp"`.
+/// `// C#: GCSViews/FlightPlanner.cs:3537`
+pub const SHP_FILTER: &str = "Shape file";
+/// The filter both rally dialogs are given.
+/// `// C#: GCSViews/FlightPlanner.cs:4419, 6038`
+pub const RALLY_FILTER: &str = "Rally (*.ral)";
+/// `Strings.InvalidAlt`, what Set Rally Point says of an altitude `int.TryParse` refuses.
+/// `// C#: GCSViews/FlightPlanner.cs:6657; ExtLibs/Strings/Strings.resx:174-176`
+pub const INVALID_ALT: &str = "Invalid Alt";
+/// What Save Rally to File says with no rally points.
+/// `// C#: GCSViews/FlightPlanner.cs:6022-6026`
+pub const SET_SOME_RALLY_POINTS: &str = "Please set some rally points";
+/// What Save Rally to File says when writing throws.
+/// `// C#: GCSViews/FlightPlanner.cs:6058-6061`
+pub const RALLY_FILE_FAILED: &str = "Failed to write rally file";
+/// What Rally Points > Upload says when a point cannot be sent or read back.
+/// `// C#: GCSViews/FlightPlanner.cs:5951-5955`
+pub const RALLY_SAVE_FAILED: &str = "Failed to save rally point";
+/// `Strings.PleaseConnect`, what Rally Points > Download says without a link.
+/// `// C#: GCSViews/FlightPlanner.cs:919-923; ExtLibs/Strings/Strings.resx:205-207`
+pub const PLEASE_CONNECT: &str = "Please connect first";
+/// What Area says with no polygon, before it says the area of nothing.
+/// `// C#: GCSViews/FlightPlanner.cs:1992-1996`
+pub const DEFINE_POLYGON: &str = "Please define a polygon!";
 
 /// A dialog: an `InputBox` with its field, a Yes/No question, or a message.
 ///
@@ -4324,6 +5120,45 @@ impl Prompt {
 
 /// `Strings.InvalidNumberEntered`, without the resource's trailing newline.
 const INVALID_NUMBER: &str = "Invalid number entered";
+
+/// A circle's row: `command` at a latitude and longitude as the C# computed them - nothing wraps
+/// a longitude past 180, as nothing in the C# does - and `altitude`, the rest as
+/// `Commands_RowsAdded` leaves a row.
+fn circle_row(command: u16, frame: u8, lat: f64, lng: f64, altitude: f64) -> MissionItem {
+    MissionItem {
+        seq: 0,
+        current: 0,
+        frame,
+        command,
+        param1: 0.0,
+        param2: 0.0,
+        param3: 0.0,
+        param4: 0.0,
+        x: lat,
+        y: lng,
+        z: altitude,
+        autocontinue: 1,
+    }
+}
+
+/// Area's message: `"Area: " + aream2.ToString("0") + " m2\n\t" + areaa.ToString("0.00") +
+/// " Acre\n\t" + areaha.ToString("0.00") + " Hectare\n\t" + areasqf.ToString("0") + " sqf"`, the
+/// custom formats rounding fifteen significant digits half away from zero.
+/// `// C#: GCSViews/FlightPlanner.cs:1764-1772`
+#[must_use]
+pub fn area_text(aream2: f64) -> String {
+    use mp_mission::dotnet::format_f64;
+    let areaa = aream2 * 0.000_247_105;
+    let areaha = aream2 * 1e-4;
+    let areasqf = aream2 * 10.7639;
+    format!(
+        "Area: {} m2\n\t{} Acre\n\t{} Hectare\n\t{} sqf",
+        format_f64(aream2, "0"),
+        format_f64(areaa, "0.00"),
+        format_f64(areaha, "0.00"),
+        format_f64(areasqf, "0")
+    )
+}
 
 /// What the menu needs to know that the plan does not.
 #[derive(Debug, Clone, Copy)]
@@ -4400,6 +5235,9 @@ pub struct PlanMenus {
     zoom_track: std::rc::Rc<std::cell::Cell<Option<(f32, f32)>>>,
     /// A Zoom To search on its way to the geocoder.
     geocoding: Option<Geocoding>,
+    /// The answers Create Wp Circle or Create Spline Circle has had so far: each `InputBox` is
+    /// asked before any answer is read.
+    circle_answers: Vec<String>,
     /// What a test puts in the geocoder's place, so Zoom To runs its whole course offline.
     #[cfg(test)]
     fake_geocoder: Option<GeocoderFetch>,
@@ -4715,10 +5553,168 @@ impl PlanMenus {
                     ));
                 }
             }
+            // Nothing drawn, nothing saved: the C# returns before its dialog.
+            // `// C#: GCSViews/FlightPlanner.cs:5894-5897, 5899-5903`
+            MenuAction::SavePolygon => {
+                if !plan.polygon().is_empty() {
+                    self.ask(Prompt::input(
+                        SAVE_FILE,
+                        POLYGON_FILTER,
+                        "",
+                        PromptKind::PolygonSaveFile,
+                    ));
+                }
+            }
+            // `// C#: GCSViews/FlightPlanner.cs:4530-4533`
+            MenuAction::LoadPolygon => self.ask(Prompt::input(
+                OPEN_FILE,
+                POLYGON_FILTER,
+                "",
+                PromptKind::PolygonLoadFile,
+            )),
+            // `// C#: GCSViews/FlightPlanner.cs:3535-3538`
+            MenuAction::FromShp => self.ask(Prompt::input(
+                OPEN_FILE,
+                SHP_FILTER,
+                "",
+                PromptKind::ShpLoadFile,
+            )),
+            // `// C#: GCSViews/FlightPlanner.cs:3641-3647`
+            MenuAction::OffsetPolygon => {
+                if !plan.polygon().is_empty() {
+                    self.ask(Prompt::input(
+                        "Offset in Meters",
+                        "Please enter the offset in meters. Enter a negative value to make the polygon smaller",
+                        "0",
+                        PromptKind::OffsetPolygon,
+                    ));
+                }
+            }
+            // `// C#: GCSViews/FlightPlanner.cs:1760-1773, 1992-1996`
+            MenuAction::Area => match plan.polygon_area() {
+                Some(aream2) => self.tell("Area", area_text(aream2)),
+                None => self.ask(Prompt {
+                    title: "",
+                    text: DEFINE_POLYGON.to_owned(),
+                    field: None,
+                    kind: PromptKind::DefinePolygon,
+                }),
+            },
+            // `InputBox.Show("Altitude", "Altitude", ref altstring)`, offering Default Alt.
+            // `// C#: GCSViews/FlightPlanner.cs:6637-6640`
+            MenuAction::SetRallyPoint => self.ask(Prompt::input(
+                "Altitude",
+                "Altitude",
+                plan.panel_text(PanelBox::DefaultAlt),
+                PromptKind::RallyAltitude { position },
+            )),
+            // `// C#: GCSViews/FlightPlanner.cs:6022-6039`
+            MenuAction::SaveRallyToFile => {
+                if plan.rally().is_empty() {
+                    self.tell("", SET_SOME_RALLY_POINTS);
+                } else {
+                    self.ask(Prompt::input(
+                        SAVE_FILE,
+                        RALLY_FILTER,
+                        "",
+                        PromptKind::RallySaveFile,
+                    ));
+                }
+            }
+            // `// C#: GCSViews/FlightPlanner.cs:4416-4420`
+            MenuAction::LoadRallyFromFile => self.ask(Prompt::input(
+                OPEN_FILE,
+                RALLY_FILTER,
+                "",
+                PromptKind::RallyLoadFile,
+            )),
+            MenuAction::CreateWpCircle | MenuAction::CreateSplineCircle => {
+                self.circle_answers.clear();
+                let spline = action == MenuAction::CreateSplineCircle;
+                self.ask_circle(spline, position);
+            }
             MenuAction::LoadWpFile
             | MenuAction::SaveWpFile
             | MenuAction::FenceClear
-            | MenuAction::SurveyGrid => {}
+            | MenuAction::SurveyGrid
+            | MenuAction::GetRallyPoints
+            | MenuAction::SaveRallyPoints
+            | MenuAction::ClearRallyPoints => {}
+        }
+    }
+
+    /// The next of a circle's questions, by how many have been answered, or `false` once all have.
+    /// Create Wp Circle asks four and Create Spline Circle five, each offering the C#'s value.
+    /// `// C#: GCSViews/FlightPlanner.cs:2965-2979 (Wp), 2859-2877 (Spline)`
+    fn ask_circle(&mut self, spline: bool, position: LatLon) -> bool {
+        const WP: [(&str, &str, &str); 4] = [
+            ("Radius", "Radius", "50"),
+            ("Points", "Number of points to generate Circle", "20"),
+            ("Points", "Direction of circle (-1 or 1)", "1"),
+            ("angle", "Angle of first point (whole degrees)", "0"),
+        ];
+        const SPLINE: [(&str, &str, &str); 5] = [
+            ("Radius", "Radius", "50"),
+            ("min alt", "Min Alt", "5"),
+            ("max alt", "Max Alt", "20"),
+            ("alt step", "alt step", "5"),
+            ("angle", "Angle of first point (whole degrees)", "0"),
+        ];
+        let questions: &[(&'static str, &str, &str)] = if spline { &SPLINE } else { &WP };
+        let Some(&(title, text, value)) = questions.get(self.circle_answers.len()) else {
+            return false;
+        };
+        self.ask(Prompt::input(
+            title,
+            text,
+            value,
+            PromptKind::Circle { spline, position },
+        ));
+        true
+    }
+
+    /// A circle's answers read, in the C#'s order, and its rows added - or the first refusal said.
+    fn make_circle(
+        &mut self,
+        plan: &mut Plan,
+        context: &MenuContext,
+        spline: bool,
+        position: LatLon,
+    ) {
+        let answers = std::mem::take(&mut self.circle_answers);
+        let int = |index: usize| {
+            answers
+                .get(index)
+                .and_then(|text| mp_mission::dotnet::parse_i32(text))
+        };
+        let outcome = if spline {
+            // `int.TryParse` of each, the C#'s message for the first that fails. The angle is
+            // asked and never read.
+            // `// C#: GCSViews/FlightPlanner.cs:2885-2907`
+            match (int(0), int(1), int(2), int(3)) {
+                (None, ..) => Err("Bad Radius"),
+                (_, None, ..) => Err("Bad min alt"),
+                (_, _, None, _) => Err("Bad maxalt"),
+                (_, _, _, None) => Err("Bad alt step"),
+                (Some(radius), Some(min_alt), Some(max_alt), Some(alt_step)) => {
+                    plan.spline_circle(position, radius, min_alt, max_alt, alt_step, context)
+                }
+            }
+        } else {
+            // `// C#: GCSViews/FlightPlanner.cs:2986-3013`
+            match (int(0), int(1), int(2), int(3)) {
+                (None, ..) => Err("Bad Radius"),
+                (_, None, ..) => Err("Bad Point value"),
+                (_, _, None, _) => Err("Bad Direction value"),
+                (_, _, _, None) => Err("Bad start angle value"),
+                (Some(radius), Some(points), Some(direction), Some(start)) => {
+                    plan.wp_circle(position, radius, points, direction, start, context)
+                }
+            }
+        };
+        if let Err(why) = outcome {
+            let title = if why == FORMAT_EXCEPTION { ERROR } else { "" };
+            self.tell(title, why);
         }
     }
 
@@ -4831,14 +5827,58 @@ impl PlanMenus {
             PromptKind::FenceLoadFile => return Some(FileRequest::LoadFence(value)),
             PromptKind::FenceSaveFile => return Some(FileRequest::SaveFence(value)),
             PromptKind::ZoomTo => self.start_geocode(value),
+            PromptKind::PolygonSaveFile => return Some(FileRequest::SavePolygon(value)),
+            PromptKind::PolygonLoadFile => return Some(FileRequest::LoadPolygon(value)),
+            PromptKind::ShpLoadFile => return Some(FileRequest::LoadShp(value)),
+            PromptKind::RallySaveFile => return Some(FileRequest::SaveRally(value)),
+            PromptKind::RallyLoadFile => return Some(FileRequest::LoadRally(value)),
+            // `if (meter != "0") intmeter = double.Parse(meter);` - a FormatException past that,
+            // which reaches the application's handler with its message.
+            // `// C#: GCSViews/FlightPlanner.cs:3645-3651`
+            PromptKind::OffsetPolygon => {
+                let metres = if value == "0" {
+                    Some(0.0)
+                } else {
+                    mp_mission::dotnet::parse_f64(&value)
+                };
+                match metres {
+                    Some(metres) => plan.offset_polygon(metres),
+                    None => self.tell(ERROR, FORMAT_EXCEPTION),
+                }
+            }
+            PromptKind::DefinePolygon => self.tell("Area", area_text(0.0)),
+            // `int.TryParse(altstring, out alt)`, or "Invalid Alt".
+            // `// C#: GCSViews/FlightPlanner.cs:6642-6658`
+            PromptKind::RallyAltitude { position } => match mp_mission::dotnet::parse_i32(&value) {
+                Some(altitude) => plan.add_rally_marker(position, altitude),
+                None => self.tell(ERROR, INVALID_ALT),
+            },
+            PromptKind::Circle { spline, position } => {
+                self.circle_answers.push(value);
+                if !self.ask_circle(spline, position) {
+                    self.make_circle(plan, context, spline, position);
+                }
+            }
             PromptKind::Message => {}
         }
         None
     }
 
-    /// Cancel, or No: the handler returns.
-    pub fn cancel(&mut self) {
-        self.prompt = None;
+    /// Cancel, or No: the handler returns - bar three whose C# goes on. Offset Polygon's
+    /// `InputBox` returning Cancel leaves the offset at 0 and offsets by it
+    /// (`FlightPlanner.cs:3647-3653`); From SHP clears the polygon before it looks at what its
+    /// dialog returned (`:3541-3544`); and Area's "Please define a polygon!" is a message whose
+    /// closing says the area all the same (`:1994-1995`).
+    pub fn cancel(&mut self, plan: &mut Plan) -> Option<FileRequest> {
+        let prompt = self.prompt.take()?;
+        match prompt.kind {
+            PromptKind::OffsetPolygon => plan.offset_polygon(0.0),
+            PromptKind::ShpLoadFile => return Some(FileRequest::LoadShp(String::new())),
+            PromptKind::DefinePolygon => self.tell("Area", area_text(0.0)),
+            PromptKind::Circle { .. } => self.circle_answers.clear(),
+            _ => {}
+        }
+        None
     }
 }
 
@@ -5496,6 +6536,18 @@ fn choose_entry(
             this.plan_menus.open = None;
             start_fence_clear(this);
         }
+        MenuAction::GetRallyPoints => {
+            this.plan_menus.open = None;
+            start_rally_download(this);
+        }
+        MenuAction::SaveRallyPoints => {
+            this.plan_menus.open = None;
+            start_rally_upload(this);
+        }
+        MenuAction::ClearRallyPoints => {
+            this.plan_menus.open = None;
+            start_rally_clear(this);
+        }
         MenuAction::ZoomToVehicle | MenuAction::ZoomToMission | MenuAction::ZoomToHome => {
             this.plan_menus.zoom_menu = None;
             zoom_menu_entry(this, action);
@@ -5525,7 +6577,23 @@ fn submit_prompt(
 ) {
     let context = menu_context(this);
     if let Some(request) = this.plan_menus.submit(&mut this.plan, &context) {
-        fence_file(this, request, window, cx);
+        file_request(this, request, window, cx);
+    }
+    sync_everything(this);
+    if this.plan_menus.prompt.is_some() {
+        this.plan_prompt_focus.focus(window, cx);
+    }
+    cx.notify();
+}
+
+/// Cancel, No, or Escape in a dialog: what the handler does when its dialog says Cancel.
+fn cancel_prompt(
+    this: &mut MissionPlanner,
+    window: &mut gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) {
+    if let Some(request) = this.plan_menus.cancel(&mut this.plan) {
+        file_request(this, request, window, cx);
     }
     sync_everything(this);
     if this.plan_menus.prompt.is_some() {
@@ -5803,10 +6871,7 @@ fn prompt_dialog(
                 label,
                 theme::TEXT,
                 true,
-                cx.listener(|this, _event: &(), _window, cx| {
-                    this.plan_menus.cancel();
-                    cx.notify();
-                }),
+                cx.listener(|this, _event: &(), window, cx| cancel_prompt(this, window, cx)),
             )
         }));
 
@@ -5825,10 +6890,7 @@ fn prompt_dialog(
         };
         match outcome {
             crate::textfield::KeyOutcome::Submitted => submit_prompt(this, window, cx),
-            crate::textfield::KeyOutcome::Cancelled => {
-                this.plan_menus.cancel();
-                cx.notify();
-            }
+            crate::textfield::KeyOutcome::Cancelled => cancel_prompt(this, window, cx),
             crate::textfield::KeyOutcome::Changed => cx.notify(),
             crate::textfield::KeyOutcome::Ignored => {}
         }
@@ -5993,6 +7055,38 @@ pub fn record_facts(plan: &Plan, menus: &PlanMenus) {
     record("survey.points", plan.polygon().len());
     // The corners the map shows, which Geo-Fence > Clear takes off it while keeping them.
     record("survey.shown", plan.shown_polygon().len());
+    // The drawn polygon's corners, `lat,lng` each and `;` between: what Offset Polygon, Load
+    // Polygon and From SHP left.
+    record(
+        "plan.polygon",
+        plan.polygon()
+            .iter()
+            .map(|corner| format!("{},{}", corner.latitude(), corner.longitude()))
+            .collect::<Vec<_>>()
+            .join(";"),
+    );
+    // The rally markers, `lat,lng,alt` each; `MAV.rallypoints`' count, what Download fills; and
+    // Upload - `busy` while its calls are out, then what each did.
+    record(
+        "plan.rally.markers",
+        plan.rally_markers()
+            .iter()
+            .map(|(at, alt)| format!("{},{},{alt}", at.latitude(), at.longitude()))
+            .collect::<Vec<_>>()
+            .join(";"),
+    );
+    record("plan.rally.vehicle", plan.vehicle_rally().len());
+    record("plan.rally.downloading", plan.rally_downloading());
+    record(
+        "plan.rally.upload",
+        if plan.rally_upload().is_some() {
+            "busy"
+        } else if plan.rally_upload_results.is_empty() {
+            "none"
+        } else {
+            plan.rally_upload_results.as_str()
+        },
+    );
     // The panel boxes as they read, whether Loiter Radius takes typing and Spline is ticked, and
     // what the last row of parameter sets did - `NAME=value` for each the vehicle echoed,
     // `unknown` for one it does not have - with whether one is still going.
@@ -7147,7 +8241,7 @@ mod tests {
         let mut plan = from_vehicle();
         let mut menus = PlanMenus::default();
         choose(&mut plan, &mut menus, MenuAction::LoiterTime, None);
-        menus.cancel();
+        menus.cancel(&mut plan);
         assert!(menus.prompt.is_none());
         assert_eq!(plan.items().len(), 2);
     }
@@ -7418,7 +8512,7 @@ mod tests {
         );
         assert!(question.is_question());
         // No keeps the mission.
-        menus.cancel();
+        menus.cancel(&mut plan);
         assert_eq!(plan.items().len(), 3);
         // Yes clears it; home, not a row, stays.
         choose(
@@ -7457,7 +8551,7 @@ mod tests {
         menus.choose(&mut plan, MenuAction::MeasureDistance, &context());
         assert!(menus.measure_from.is_some());
         assert_eq!(menus.prompt.as_ref().map(|p| p.title), Some("Measure Dist"));
-        menus.cancel();
+        menus.cancel(&mut plan);
         menus.open_at(CLICK, at(0.0, 1.0), None);
         menus.choose(&mut plan, MenuAction::MeasureDistance, &context());
         assert!(menus.measure_from.is_none(), "startmeasure is reset");
@@ -8097,7 +9191,7 @@ mod tests {
             menus.prompt.as_ref().map(|prompt| prompt.text.as_str()),
             Some(SET_RETURN_LOCATION)
         );
-        menus.cancel();
+        menus.cancel(&mut plan);
         choose(&mut plan, &mut menus, MenuAction::SetReturnLocation, None);
         choose(&mut plan, &mut menus, MenuAction::FenceSaveToFile, None);
         let prompt = menus.prompt.as_ref().expect("the file dialog");
@@ -8427,7 +9521,7 @@ mod tests {
             ("Reset Home Coords", "Reset Home to loaded coords")
         );
         assert!(question.is_question());
-        menus.cancel();
+        menus.cancel(&mut plan);
         assert_eq!(plan.home_text(HomeBox::Lat), "-35.5", "No");
 
         menus.offer_home_reset(offer);
@@ -8601,11 +9695,25 @@ mod tests {
                 "menu-clearMission",
                 "menu-addPolygonPoint2",
                 "menu-clearPolygon2",
+                "menu-savePolygon2",
+                "menu-loadPolygon2",
+                "menu-fromSHP2",
                 "menu-fromCurrentWaypoints",
+                "menu-offsetPolygon2",
+                "menu-area2",
                 "menu-setReturnLocation",
                 "menu-loadFromFile",
                 "menu-saveToFile",
                 "menu-clear",
+                "menu-setRallyPoint",
+                "menu-getRallyPoints",
+                "menu-saveRallyPoints",
+                "menu-clearRallyPoints",
+                "menu-saveToFile1",
+                "menu-loadFromFile1",
+                "menu-createWpCircle",
+                "menu-createSplineCircle",
+                "menu-area1",
                 "menu-surveyGrid",
                 "menu-ContextMeasure",
                 "menu-zoomTo",
@@ -8697,7 +9805,7 @@ mod tests {
                 "Perth Airport, Australia"
             )
         );
-        menus.cancel();
+        menus.cancel(&mut plan);
         assert!(!menus.geocoding(), "Cancel asks the geocoder nothing");
         assert!(plan.items().is_empty());
     }
@@ -8882,5 +9990,835 @@ mod tests {
         assert!(facts.contains(&("plan.zoommenu", "closed".to_owned())));
         assert!(facts.contains(&("plan.zoomlevel", "16.0".to_owned())));
         assert!(facts.contains(&("plan.geocoding", "false".to_owned())));
+    }
+}
+
+/// Rally Points, the polygon's files and tools, and Auto WP's circles: the map menu's entries
+/// from `FlightPlanner.cs`, held to the C#'s messages and, where the geometry is the C#'s, to its
+/// numbers under mono (`testdata/planner/golden`).
+#[cfg(test)]
+mod menu_batch_tests {
+    use super::*;
+    use mp_link::requests::{RallyPointSet, RequestOutcome};
+
+    const CLICK: (f32, f32) = (400.0, 300.0);
+
+    /// SITL's home at CMAC, which the goldens draw about.
+    fn cmac() -> LatLon {
+        LatLon::new(-35.363_262_1, 149.165_237_4).expect("a position")
+    }
+
+    fn at(lat: f64, lng: f64) -> LatLon {
+        LatLon::new(lat, lng).expect("a position")
+    }
+
+    fn context() -> MenuContext {
+        MenuContext {
+            frame: AltitudeFrame::Relative,
+            vehicle: None,
+            takeoff_pitch: false,
+            copter: false,
+        }
+    }
+
+    fn choose(plan: &mut Plan, menus: &mut PlanMenus, action: MenuAction) {
+        menus.open_at(CLICK, cmac(), None);
+        menus.choose(plan, action, &context());
+    }
+
+    fn answer(plan: &mut Plan, menus: &mut PlanMenus, value: &str) -> Option<FileRequest> {
+        menus
+            .prompt
+            .as_mut()
+            .and_then(|prompt| prompt.field.as_mut())
+            .expect("a prompt with a field")
+            .set(value);
+        menus.submit(plan, &context())
+    }
+
+    /// The dialog showing: its caption, its text and what its field offers.
+    fn showing(menus: &PlanMenus) -> (&'static str, String, String) {
+        let prompt = menus.prompt.as_ref().expect("a dialog");
+        (prompt.title, prompt.text.clone(), prompt.value().to_owned())
+    }
+
+    /// The golden's blocks: each `case,<name>...` line and the lines under it.
+    fn golden_cases(golden: &str) -> Vec<(String, Vec<Vec<String>>)> {
+        let mut out: Vec<(String, Vec<Vec<String>>)> = Vec::new();
+        for line in golden.lines() {
+            let fields: Vec<String> = line.split(',').map(ToOwned::to_owned).collect();
+            if fields[0] == "case" {
+                out.push((fields[1].clone(), Vec::new()));
+            } else if let Some((_, rows)) = out.last_mut() {
+                rows.push(fields);
+            }
+        }
+        out
+    }
+
+    fn golden_case(golden: &str, name: &str) -> Vec<Vec<String>> {
+        golden_cases(golden)
+            .into_iter()
+            .find(|(case, _)| case == name)
+            .unwrap_or_else(|| panic!("no case {name}"))
+            .1
+    }
+
+    fn number(field: &str) -> f64 {
+        field.parse().expect("a number")
+    }
+
+    // ---- Rally Points ----
+
+    /// Set Rally Point asks "Altitude", offering Default Alt, and puts a marker at the menu's
+    /// position at the whole number given; one `int.TryParse` refuses is "Invalid Alt".
+    #[test]
+    fn set_rally_point_asks_an_altitude_and_places_a_marker() {
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::SetRallyPoint);
+        assert_eq!(
+            showing(&menus),
+            ("Altitude", "Altitude".to_owned(), "100".to_owned())
+        );
+        answer(&mut plan, &mut menus, "60");
+        assert_eq!(plan.rally_markers(), vec![(cmac(), 60)]);
+
+        choose(&mut plan, &mut menus, MenuAction::SetRallyPoint);
+        answer(&mut plan, &mut menus, "12.5");
+        assert_eq!(
+            showing(&menus),
+            (ERROR, INVALID_ALT.to_owned(), String::new())
+        );
+        assert_eq!(plan.rally().len(), 1, "a refused altitude places nothing");
+
+        menus.submit(&mut plan, &context());
+        choose(&mut plan, &mut menus, MenuAction::SetRallyPoint);
+        menus.cancel(&mut plan);
+        assert_eq!(plan.rally().len(), 1, "Cancel places nothing");
+    }
+
+    /// Save Rally to File says "Please set some rally points" with none, and otherwise asks for a
+    /// file filtered to `.ral`; Load Rally from File asks for one.
+    #[test]
+    fn the_rally_file_entries_ask_for_their_files() {
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::SaveRallyToFile);
+        assert_eq!(
+            showing(&menus),
+            ("", SET_SOME_RALLY_POINTS.to_owned(), String::new())
+        );
+        menus.submit(&mut plan, &context());
+
+        plan.add_rally_marker(cmac(), 60);
+        choose(&mut plan, &mut menus, MenuAction::SaveRallyToFile);
+        assert_eq!(showing(&menus).0, SAVE_FILE);
+        assert_eq!(showing(&menus).1, RALLY_FILTER);
+        assert_eq!(
+            answer(&mut plan, &mut menus, "home"),
+            Some(FileRequest::SaveRally("home".to_owned()))
+        );
+
+        choose(&mut plan, &mut menus, MenuAction::LoadRallyFromFile);
+        assert_eq!(showing(&menus).0, OPEN_FILE);
+        assert_eq!(
+            answer(&mut plan, &mut menus, "home"),
+            Some(FileRequest::LoadRally("home".to_owned()))
+        );
+        assert_eq!(dialog_file_name("home", "ral"), Some("home.ral".to_owned()));
+    }
+
+    /// What Save Rally to File writes from the markers is the C#'s file; what Load Rally from
+    /// File reads from it replaces the markers - with the C#'s float and truncation - and a file
+    /// with no row it reads leaves them.
+    #[test]
+    fn a_rally_file_saves_and_loads_the_markers() {
+        let mut plan = Plan::default();
+        plan.add_rally_marker(at(-35.363_262_1, 149.165_237_4), 100);
+        plan.add_rally_marker(at(-35.363_262_345_678_91, 149.165_237_412_345_67), 60);
+        plan.add_rally_marker(at(-0.000_01, 0.000_015), 0);
+        let written = mp_mission::fence_file::write_rally(&plan.rally_markers());
+        let golden = include_str!("../../../testdata/planner/golden/rally.ral");
+        assert_eq!(
+            written.split_once('\n').map(|s| s.1),
+            golden.split_once('\n').map(|s| s.1)
+        );
+
+        let mut other = Plan::default();
+        other.add_rally_marker(at(-30.0, 150.0), 5);
+        other.load_rally_file(&mp_mission::fence_file::read_rally("#nothing\n"));
+        assert_eq!(other.rally().len(), 1, "no row read, nothing cleared");
+        other.load_rally_file(&mp_mission::fence_file::read_rally(&written));
+        let markers = other.rally_markers();
+        assert_eq!(markers.len(), 3);
+        // `(int)(float.Parse("-35.3632623456789") * 1e7) / 1e7`, as the C# read it back.
+        assert_eq!(markers[1].0.latitude(), -35.363_262_1);
+        assert_eq!(markers[1].1, 60);
+        assert_eq!(markers[2].0.latitude(), -9.9e-6);
+    }
+
+    fn upload_of(count: usize) -> RallyUpload {
+        RallyUpload::new(
+            (0..count)
+                .map(|index| {
+                    let index = i32::try_from(index).expect("a few");
+                    (at(-35.36 - f64::from(index) * 0.001, 149.16), 50 + index)
+                })
+                .collect(),
+        )
+    }
+
+    /// The waits the scripted vehicle is driven with: the C#'s counts, a twentieth of its waits.
+    fn fast() -> mp_link::ProtocolTimeouts {
+        mp_link::ProtocolTimeouts::default().faster(20)
+    }
+
+    /// Upload sets `RALLY_TOTAL` to the markers' count, then sends each marker as `setRallyPoint`
+    /// builds it - index from 0, the vehicle's `RALLY_TOTAL` as the count, degrees times 1e7
+    /// truncated - one at a time; a point sent and never read back the same is passed over.
+    #[test]
+    fn upload_sets_the_total_then_each_point_in_turn() {
+        let mut upload = upload_of(2);
+        assert_eq!(upload.due(None), Some(RallyDue::Total(2.0)));
+        upload.answer(Some(RequestOutcome::Accepted { value: None }));
+        let Some(RallyDue::Point(first)) = upload.due(Some(2.0)) else {
+            panic!("the first point");
+        };
+        assert_eq!(
+            first,
+            RallyPointSet {
+                idx: 0,
+                count: 2,
+                lat: -353_600_000,
+                lng: 1_491_600_000,
+                alt: 50,
+                break_alt: 0,
+                land_dir: 0,
+                flags: 0,
+            }
+        );
+        upload.answer(Some(RequestOutcome::Accepted { value: None }));
+        let Some(RallyDue::Point(second)) = upload.due(Some(2.0)) else {
+            panic!("the second point");
+        };
+        assert_eq!((second.idx, second.alt, second.lat), (1, 51, -353_610_000));
+        upload.answer(Some(RequestOutcome::Sent));
+        assert_eq!(upload.due(Some(2.0)), None);
+        assert_eq!(upload.end(), Some(&WritesEnd::Done));
+        assert_eq!(upload.results(), "RALLY_TOTAL=2,0=set,1=sent");
+    }
+
+    /// A vehicle that has not listed `RALLY_TOTAL` takes no set, and the first point's count
+    /// throws: "Failed to save rally point", nothing sent. A point never read back is the same
+    /// message; a `RALLY_TOTAL` never echoed is the exception's own.
+    #[test]
+    fn upload_stops_where_the_c_sharp_says_it_failed() {
+        let failed = WritesEnd::Stopped {
+            title: ERROR,
+            text: RALLY_SAVE_FAILED.to_owned(),
+        };
+        let mut upload = upload_of(1);
+        let _ = upload.due(None);
+        upload.answer(Some(RequestOutcome::UnknownParameter));
+        assert_eq!(upload.due(None), None);
+        assert_eq!(upload.end(), Some(&failed));
+
+        let mut upload = upload_of(2);
+        let _ = upload.due(Some(1.0));
+        upload.answer(Some(RequestOutcome::Unchanged));
+        let _ = upload.due(Some(1.0));
+        upload.answer(Some(RequestOutcome::TimedOut));
+        assert_eq!(upload.end(), Some(&failed));
+        assert_eq!(upload.results(), "RALLY_TOTAL=2 unchanged,0=timeout");
+
+        let mut upload = upload_of(1);
+        let _ = upload.due(Some(1.0));
+        upload.answer(Some(RequestOutcome::TimedOut));
+        assert_eq!(
+            upload.end(),
+            Some(&WritesEnd::Stopped {
+                title: ERROR,
+                text: "Timeout on read - setParam RALLY_TOTAL".to_owned()
+            })
+        );
+
+        // No markers: the total is set to 0 and nothing else is said.
+        let mut upload = upload_of(0);
+        assert_eq!(upload.due(None), Some(RallyDue::Total(0.0)));
+        upload.answer(None);
+        assert_eq!(upload.due(None), None);
+        assert_eq!(upload.end(), Some(&WritesEnd::Done));
+    }
+
+    /// Upload through the real link, to a scripted ArduPilot that answers the legacy protocol:
+    /// `PARAM_SET RALLY_TOTAL`, then each `RALLY_POINT` and the `RALLY_FETCH_POINT` that reads it
+    /// back, in that order - and a vehicle that never reads a point back gives "Failed to save
+    /// rally point" after the fetch has gone four times.
+    #[test]
+    fn upload_goes_through_the_link_as_the_c_sharp_sends_it() {
+        use crate::telemetry::scripted::{INT32, VEHICLE, Vehicle, param, until};
+        use mp_mavlink_dialects::all::{MavMessage, RallyPoint};
+
+        let (telemetry, mut vehicle) = Vehicle::connect(fast());
+        vehicle.send(&param("RALLY_TOTAL", 0.0, INT32));
+        until("RALLY_TOTAL listed", || {
+            telemetry.holds_parameter("RALLY_TOTAL")
+        });
+
+        let mut upload = upload_of(2);
+        let mut rally_total = None;
+        until("the upload to end", || {
+            for message in vehicle.read() {
+                match message {
+                    MavMessage::ParamSet(set) => {
+                        rally_total = Some(f64::from(set.param_value));
+                        vehicle.send(&param("RALLY_TOTAL", set.param_value, INT32));
+                    }
+                    MavMessage::RallyFetchPoint(fetch) => {
+                        let sent = vehicle.heard.iter().rev().find_map(|heard| match heard {
+                            MavMessage::RallyPoint(point) if point.idx == fetch.idx => Some(*point),
+                            _ => None,
+                        });
+                        if let Some(point) = sent {
+                            vehicle.send(&MavMessage::RallyPoint(RallyPoint {
+                                target_system: 255,
+                                target_component: 190,
+                                ..point
+                            }));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            step_rally_upload(&telemetry, &mut upload, rally_total);
+            upload.end().is_some()
+        });
+        assert_eq!(upload.end(), Some(&WritesEnd::Done));
+        assert_eq!(upload.results(), "RALLY_TOTAL=2,0=set,1=set");
+        let order: Vec<String> = vehicle
+            .heard
+            .iter()
+            .filter_map(|message| match message {
+                MavMessage::ParamSet(_) => Some("PARAM_SET".to_owned()),
+                MavMessage::RallyPoint(point) => Some(format!("RALLY_POINT {}", point.idx)),
+                MavMessage::RallyFetchPoint(fetch) => Some(format!("FETCH {}", fetch.idx)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            order,
+            [
+                "PARAM_SET",
+                "RALLY_POINT 0",
+                "FETCH 0",
+                "RALLY_POINT 1",
+                "FETCH 1"
+            ]
+        );
+        let first = vehicle
+            .heard
+            .iter()
+            .find_map(|message| match message {
+                MavMessage::RallyPoint(point) => Some(*point),
+                _ => None,
+            })
+            .expect("a point");
+        assert_eq!(
+            (
+                first.count,
+                first.lat,
+                first.lng,
+                first.alt,
+                first.target_system
+            ),
+            (2, -353_600_000, 1_491_600_000, 50, VEHICLE.sysid)
+        );
+
+        // A vehicle that never reads a point back.
+        let mut upload = upload_of(1);
+        until("the upload to fail", || {
+            for message in vehicle.read() {
+                if let MavMessage::ParamSet(set) = message {
+                    vehicle.send(&param("RALLY_TOTAL", set.param_value, INT32));
+                }
+            }
+            step_rally_upload(&telemetry, &mut upload, Some(1.0));
+            upload.end().is_some()
+        });
+        assert_eq!(
+            upload.end(),
+            Some(&WritesEnd::Stopped {
+                title: ERROR,
+                text: RALLY_SAVE_FAILED.to_owned()
+            })
+        );
+        let _ = vehicle.read();
+        let fetches = vehicle.count(
+            |message| matches!(message, MavMessage::RallyFetchPoint(fetch) if fetch.idx == 0),
+        );
+        // One from the first upload's point 0, then this upload's four - all RALLY_FETCH_POINT,
+        // where the C#'s retries would be FENCE_FETCH_POINT.
+        assert_eq!(fetches, 1 + 4);
+    }
+
+    /// Download's list: nothing while the transfer is queued or running, then the vehicle's
+    /// rally items - here none - through `mav_mission.download`'s messages.
+    #[test]
+    fn download_reads_the_vehicles_rally_list() {
+        use crate::telemetry::scripted::{Vehicle, until};
+        use mp_mavlink_dialects::all::{MavMessage, MissionCount};
+
+        let (telemetry, mut vehicle) = Vehicle::connect(fast());
+        assert!(telemetry.download_rally());
+        assert_eq!(telemetry.rally_list(), None, "queued, not answered");
+        until("the rally list", || {
+            for message in vehicle.read() {
+                if let MavMessage::MissionRequestList(request) = message {
+                    assert_eq!(request.mission_type, 2, "the rally list");
+                    vehicle.send(&MavMessage::MissionCount(MissionCount {
+                        count: 0,
+                        target_system: 255,
+                        target_component: 190,
+                        mission_type: 2,
+                    }));
+                }
+            }
+            telemetry.rally_list().is_some()
+        });
+        assert_eq!(telemetry.rally_list(), Some(Ok(Vec::new())));
+    }
+
+    /// Clear Rally Points' `RALLY_TOTAL = 0` carries on whatever it gets, and then the markers
+    /// and `MAV.rallypoints` go.
+    #[test]
+    fn clear_rally_points_clears_after_its_set_whatever_it_gets() {
+        let mut writes = ParamWrites::new(
+            vec![ParamStep::one("RALLY_TOTAL", 0.0, OnTimeout::CarryOn)],
+            AfterWrites::ClearRally,
+        );
+        assert_eq!(writes.due(), Some(("RALLY_TOTAL", 0.0)));
+        writes.answer(Some(RequestOutcome::TimedOut));
+        assert_eq!(writes.end(), Some(&WritesEnd::Done));
+        assert_eq!(writes.after(), AfterWrites::ClearRally);
+
+        let mut plan = Plan::default();
+        plan.add_rally_marker(cmac(), 60);
+        plan.vehicle_rally = vec![
+            RallyPoint {
+                position: cmac(),
+                altitude: 60.0,
+                break_altitude: None,
+            }
+            .to_item(0),
+        ];
+        plan.clear_rally_points();
+        assert!(plan.rally().is_empty());
+        assert!(plan.vehicle_rally().is_empty());
+    }
+
+    // ---- Polygon ----
+
+    fn square() -> Vec<LatLon> {
+        vec![
+            at(-35.3627, 149.1646),
+            at(-35.3627, 149.1658),
+            at(-35.3637, 149.1658),
+            at(-35.3637, 149.1646),
+        ]
+    }
+
+    fn corners(rows: &[Vec<String>]) -> Vec<LatLon> {
+        rows.iter()
+            .filter(|row| row[0] == "corner")
+            .map(|row| at(number(&row[1]), number(&row[2])))
+            .collect()
+    }
+
+    /// Save Polygon with nothing drawn does nothing; with a polygon it asks for a `.poly`. Load
+    /// Polygon asks for one, and its corners replace the polygon's.
+    #[test]
+    fn the_polygon_file_entries_ask_for_their_files() {
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::SavePolygon);
+        assert!(menus.prompt.is_none(), "nothing drawn, nothing asked");
+        plan.load_polygon(square());
+        choose(&mut plan, &mut menus, MenuAction::SavePolygon);
+        assert_eq!(
+            (showing(&menus).0, showing(&menus).1),
+            (SAVE_FILE, POLYGON_FILTER.to_owned())
+        );
+        assert_eq!(
+            answer(&mut plan, &mut menus, "field"),
+            Some(FileRequest::SavePolygon("field".to_owned()))
+        );
+        choose(&mut plan, &mut menus, MenuAction::LoadPolygon);
+        assert_eq!(showing(&menus).0, OPEN_FILE);
+        assert_eq!(
+            answer(&mut plan, &mut menus, "field"),
+            Some(FileRequest::LoadPolygon("field".to_owned()))
+        );
+        let text = mp_mission::fence_file::write_polygon(plan.polygon());
+        let mut other = Plan::default();
+        other.load_polygon(mp_mission::fence_file::read_polygon(&text));
+        assert_eq!(other.polygon(), square().as_slice());
+    }
+
+    /// Offset Polygon asks for metres, offering 0, and the polygon becomes the C#'s offset of it
+    /// under mono; Cancel offsets by 0 all the same, as the C# goes on with its 0; an answer
+    /// `double.Parse` refuses is the exception's message and the polygon stays.
+    #[test]
+    fn offset_polygon_is_the_c_sharps() {
+        let golden = include_str!("../../../testdata/planner/golden/offset.csv");
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::OffsetPolygon);
+        assert!(menus.prompt.is_none(), "no polygon, no question");
+
+        plan.load_polygon(square());
+        choose(&mut plan, &mut menus, MenuAction::OffsetPolygon);
+        assert_eq!(
+            showing(&menus),
+            (
+                "Offset in Meters",
+                "Please enter the offset in meters. Enter a negative value to make the polygon smaller"
+                    .to_owned(),
+                "0".to_owned()
+            )
+        );
+        answer(&mut plan, &mut menus, "10");
+        assert_eq!(
+            plan.polygon(),
+            corners(&golden_case(golden, "square_out")).as_slice()
+        );
+
+        plan.load_polygon(square());
+        choose(&mut plan, &mut menus, MenuAction::OffsetPolygon);
+        menus.cancel(&mut plan);
+        assert_eq!(
+            plan.polygon(),
+            corners(&golden_case(golden, "square_zero")).as_slice()
+        );
+
+        plan.load_polygon(square());
+        choose(&mut plan, &mut menus, MenuAction::OffsetPolygon);
+        answer(&mut plan, &mut menus, "ten");
+        assert_eq!(
+            showing(&menus),
+            (ERROR, FORMAT_EXCEPTION.to_owned(), String::new())
+        );
+        assert_eq!(plan.polygon(), square().as_slice());
+    }
+
+    /// Area says the polygon's area in the C#'s words and figures under mono; with no polygon it
+    /// says "Please define a polygon!" and then the area of nothing, however that is closed. Auto
+    /// WP > Area is the same entry.
+    #[test]
+    fn area_is_said_as_the_c_sharp_says_it() {
+        let golden = include_str!("../../../testdata/planner/golden/area.csv");
+        let text = |name: &str| {
+            golden_case(golden, name)
+                .iter()
+                .filter(|row| row[0] == "text")
+                .map(|row| row[1..].join(","))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        plan.load_polygon(square());
+        choose(&mut plan, &mut menus, MenuAction::Area);
+        assert_eq!(showing(&menus), ("Area", text("square"), String::new()));
+        assert_eq!(plan.polygon(), square().as_slice(), "measured, not changed");
+        menus.submit(&mut plan, &context());
+
+        for (name, vertices) in [
+            (
+                "ell",
+                vec![
+                    at(-35.362, 149.164),
+                    at(-35.362, 149.165),
+                    at(-35.363, 149.165),
+                    at(-35.363, 149.167),
+                    at(-35.364, 149.167),
+                    at(-35.364, 149.164),
+                ],
+            ),
+            (
+                "small",
+                vec![
+                    at(-35.36326, 149.16523),
+                    at(-35.36326, 149.16526),
+                    at(-35.36329, 149.16526),
+                ],
+            ),
+        ] {
+            plan.load_polygon(vertices);
+            let aream2 = plan.polygon_area().expect("a polygon");
+            assert_eq!(area_text(aream2), text(name), "{name}");
+        }
+
+        plan.load_polygon(Vec::new());
+        choose(&mut plan, &mut menus, MenuAction::Area);
+        assert_eq!(
+            showing(&menus),
+            ("", DEFINE_POLYGON.to_owned(), String::new())
+        );
+        menus.submit(&mut plan, &context());
+        assert_eq!(showing(&menus), ("Area", text("empty"), String::new()));
+        menus.submit(&mut plan, &context());
+        choose(&mut plan, &mut menus, MenuAction::Area);
+        menus.cancel(&mut plan);
+        assert_eq!(
+            showing(&menus).0,
+            "Area",
+            "Escape closes it and the area follows"
+        );
+
+        let area1 = MAP_MENU
+            .iter()
+            .flat_map(|entry| entry.children.iter())
+            .find(|entry| entry.id == "menu-area1")
+            .expect("Auto WP > Area");
+        assert_eq!(area1.action, Some(MenuAction::Area));
+    }
+
+    /// From SHP asks for a shape file; cancelling it still clears the polygon, as the C# clears
+    /// it before looking at what its dialog returned. The committed field - one ring in UTM 55S
+    /// with its `.prj` - lands where DotSpatial puts it, its closing corner dropped.
+    #[test]
+    fn from_shp_reads_the_field_where_dotspatial_puts_it() {
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        plan.load_polygon(square());
+        choose(&mut plan, &mut menus, MenuAction::FromShp);
+        assert_eq!(
+            (showing(&menus).0, showing(&menus).1),
+            (OPEN_FILE, SHP_FILTER.to_owned())
+        );
+        assert_eq!(
+            menus.cancel(&mut plan),
+            Some(FileRequest::LoadShp(String::new()))
+        );
+
+        let shp = include_bytes!("../../../testdata/planner/field.shp");
+        let prj = include_str!("../../../testdata/planner/field.prj");
+        let projection =
+            mp_mission::shapefile::Projection::from_esri(prj.lines().next().unwrap_or(""))
+                .expect("UTM 55S");
+        let features = mp_mission::shapefile::features(shp).expect("a shape file");
+        plan.load_polygon(Vec::new());
+        plan.add_shp_features(&features, Some(projection));
+        assert_eq!(
+            plan.polygon().len(),
+            4,
+            "five points, the closing one dropped"
+        );
+        // DotSpatial under mono: (695400, 6084100) in UTM 55S (golden/reproject.csv).
+        let first = plan.polygon()[0];
+        assert!((first.latitude() - -35.367_300_938_561_82).abs() < 1e-11);
+        assert!((first.longitude() - 149.150_818_946_920_45).abs() < 1e-11);
+    }
+
+    /// Two features accumulate, and "remove loop close" compares each feature's last corner with
+    /// the polygon's first - so only the first ring's close is dropped.
+    #[test]
+    fn from_shp_accumulates_features_as_the_c_sharp_does() {
+        let mut plan = Plan::default();
+        let ring = |x: f64| vec![(x, -35.0), (x + 0.1, -35.0), (x + 0.1, -35.1), (x, -35.0)];
+        plan.add_shp_features(&[ring(149.0), ring(150.0)], None);
+        assert_eq!(plan.polygon().len(), 3 + 4);
+        assert_eq!(plan.polygon()[0], at(-35.0, 149.0));
+        assert_eq!(plan.polygon()[6], at(-35.0, 150.0));
+    }
+
+    // ---- Auto WP's circles ----
+
+    /// Answers every question a circle asks, in turn, returning what each offered.
+    fn answer_all(
+        plan: &mut Plan,
+        menus: &mut PlanMenus,
+        answers: &[&str],
+    ) -> Vec<(String, String, String)> {
+        let mut asked = Vec::new();
+        for value in answers {
+            let (title, text, offered) = showing(menus);
+            asked.push((title.to_owned(), text, offered));
+            answer(plan, menus, value);
+        }
+        asked
+    }
+
+    /// Create Wp Circle asks its four questions with the C#'s captions and offers, then adds a
+    /// `WAYPOINT` row per point of the C#'s circle under mono, at Default Alt, in the screen's
+    /// frame.
+    #[test]
+    fn a_wp_circle_asks_four_questions_and_adds_the_c_sharps_points() {
+        let golden = include_str!("../../../testdata/planner/golden/wp_circle.csv");
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::CreateWpCircle);
+        let asked = answer_all(&mut plan, &mut menus, &["50", "20", "1", "0"]);
+        let asked: Vec<(&str, &str, &str)> = asked
+            .iter()
+            .map(|(a, b, c)| (a.as_str(), b.as_str(), c.as_str()))
+            .collect();
+        assert_eq!(
+            asked,
+            [
+                ("Radius", "Radius", "50"),
+                ("Points", "Number of points to generate Circle", "20"),
+                ("Points", "Direction of circle (-1 or 1)", "1"),
+                ("angle", "Angle of first point (whole degrees)", "0"),
+            ]
+        );
+        assert!(menus.prompt.is_none());
+        let expected: Vec<Vec<String>> = golden_case(golden, "default");
+        assert_eq!(plan.items().len(), expected.len());
+        for (item, row) in plan.items().iter().zip(&expected) {
+            assert_eq!(item.command, mp_mission::commands::WAYPOINT);
+            assert_eq!(item.x.to_bits(), number(&row[1]).to_bits());
+            assert_eq!(item.y.to_bits(), number(&row[2]).to_bits());
+            assert_eq!(item.z, 100.0, "Default Alt");
+            assert_eq!(item.frame, FRAME_RELATIVE);
+        }
+        assert_eq!(plan.items()[20].seq, 21, "numbered from 1");
+    }
+
+    /// Every answer is asked for before any is read, and the first that `int.TryParse` refuses
+    /// is said in the C#'s words; Cancel at any question adds nothing.
+    #[test]
+    fn a_wp_circle_refuses_as_the_c_sharp_does() {
+        for (answers, message) in [
+            (["fifty", "20", "1", "0"], "Bad Radius"),
+            (["50", "x", "y", "0"], "Bad Point value"),
+            (["50", "20", "up", "0"], "Bad Direction value"),
+            (["50", "20", "1", "north"], "Bad start angle value"),
+        ] {
+            let mut plan = Plan::default();
+            let mut menus = PlanMenus::default();
+            choose(&mut plan, &mut menus, MenuAction::CreateWpCircle);
+            answer_all(&mut plan, &mut menus, &answers);
+            assert_eq!(showing(&menus), ("", message.to_owned(), String::new()));
+            assert!(plan.items().is_empty());
+        }
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::CreateWpCircle);
+        answer_all(&mut plan, &mut menus, &["50", "20"]);
+        menus.cancel(&mut plan);
+        assert!(menus.prompt.is_none() && plan.items().is_empty());
+        // A Default Alt `float.Parse` refuses throws in the C#: its message, and nothing added.
+        plan.set_panel_text(PanelBox::DefaultAlt, "high");
+        choose(&mut plan, &mut menus, MenuAction::CreateWpCircle);
+        answer_all(&mut plan, &mut menus, &["50", "20", "1", "0"]);
+        assert_eq!(
+            showing(&menus),
+            (ERROR, FORMAT_EXCEPTION.to_owned(), String::new())
+        );
+        assert!(plan.items().is_empty());
+    }
+
+    /// Create Spline Circle asks five questions, then adds a `DO_SET_ROI` at the menu's position
+    /// at 0 and the C#'s laps of `SPLINE_WAYPOINT`s at its altitudes; a step under 4 is refused
+    /// where the C# would lap forever.
+    #[test]
+    fn a_spline_circle_adds_the_roi_and_the_c_sharps_laps() {
+        let golden = include_str!("../../../testdata/planner/golden/spline_circle.csv");
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        choose(&mut plan, &mut menus, MenuAction::CreateSplineCircle);
+        let asked = answer_all(&mut plan, &mut menus, &["50", "5", "20", "5", "0"]);
+        let titles: Vec<&str> = asked.iter().map(|(title, ..)| title.as_str()).collect();
+        assert_eq!(
+            titles,
+            ["Radius", "min alt", "max alt", "alt step", "angle"]
+        );
+        let expected = golden_case(golden, "default");
+        let items = plan.items();
+        assert_eq!(items.len(), expected.len());
+        assert_eq!(items[0].command, mp_mission::commands::DO_SET_ROI);
+        assert_eq!(
+            (items[0].x, items[0].y, items[0].z),
+            (cmac().latitude(), cmac().longitude(), 0.0)
+        );
+        for (item, row) in items.iter().zip(&expected).skip(1) {
+            assert_eq!(item.command, mp_mission::commands::SPLINE_WAYPOINT);
+            assert_eq!(item.x.to_bits(), number(&row[1]).to_bits());
+            assert_eq!(item.y.to_bits(), number(&row[2]).to_bits());
+            assert_eq!(item.z, number(&row[3]));
+        }
+
+        let mut plan = Plan::default();
+        choose(&mut plan, &mut menus, MenuAction::CreateSplineCircle);
+        answer_all(&mut plan, &mut menus, &["50", "5", "20", "3", "0"]);
+        assert_eq!(
+            showing(&menus),
+            ("", "Bad alt step".to_owned(), String::new())
+        );
+        assert!(plan.items().is_empty());
+    }
+
+    // ---- Add Below ----
+
+    /// Add Below appends while there is at most one row or the current row is the last, and
+    /// otherwise puts the row after the current one - after the first when none is current - and
+    /// selects it: a `WAYPOINT` of zeroes in the screen's frame.
+    #[test]
+    fn add_below_puts_a_blank_row_where_the_c_sharp_does() {
+        let mut plan = Plan::default();
+        plan.add_below(AltitudeFrame::Absolute);
+        assert_eq!(plan.items().len(), 1);
+        let row = plan.items()[0];
+        assert_eq!(
+            (row.command, row.frame, row.x, row.y, row.z),
+            (
+                mp_mission::commands::WAYPOINT,
+                FRAME_ABSOLUTE,
+                0.0,
+                0.0,
+                0.0
+            )
+        );
+        assert_eq!(plan.selected(), Some(1));
+        plan.add_waypoint_in(cmac(), 50.0, AltitudeFrame::Relative);
+        plan.add_waypoint_in(cmac(), 60.0, AltitudeFrame::Relative);
+        // Row 1 current, three rows: the new one goes second.
+        plan.select(Some(1));
+        plan.add_below(AltitudeFrame::Relative);
+        let altitudes: Vec<f64> = plan.items().iter().map(|item| item.z).collect();
+        assert_eq!(altitudes, [0.0, 0.0, 50.0, 60.0]);
+        assert_eq!(plan.selected(), Some(2));
+        // The last current: appended.
+        plan.select(Some(4));
+        plan.add_below(AltitudeFrame::Relative);
+        assert_eq!(plan.items().len(), 5);
+        assert_eq!(plan.selected(), Some(5));
+        // None current: after row 0, the first.
+        plan.select(None);
+        plan.add_below(AltitudeFrame::Relative);
+        assert_eq!(plan.selected(), Some(2));
+        assert_eq!(plan.items().len(), 6);
+    }
+
+    // ---- The map ----
+
+    /// The rally pin's outline starts at its point and goes round its head.
+    #[test]
+    fn the_rally_pin_is_a_pin_about_its_head() {
+        let outline = mapview::pin_outline_at(
+            mapview::RALLY_PIN_HEAD,
+            mapview::RALLY_PIN_RADIUS,
+            mapview::RALLY_PIN_TIP,
+        );
+        assert_eq!(outline.first(), Some(&mapview::RALLY_PIN_TIP));
+        assert_eq!(outline.len(), 26);
+        for (x, y) in &outline[1..] {
+            let (hx, hy) = mapview::RALLY_PIN_HEAD;
+            assert!(((x - hx).hypot(y - hy) - mapview::RALLY_PIN_RADIUS).abs() < 1e-3);
+        }
+        // Over the top: the arc reaches the head's highest point.
+        assert!(outline.iter().any(|(_, y)| *y < -37.0));
     }
 }

@@ -1968,6 +1968,8 @@ impl Render for MissionPlanner {
             });
             facts::record("fence.points", self.plan.fence().len());
             facts::record("rally.points", self.plan.rally().len());
+            // The rally pins the map draws: `rallypointoverlay`'s markers.
+            facts::record("map.rally", self.map.borrow().rally_count());
             facts::record("vehicle.connected", view.connected);
             facts::record("vehicle.count", view.vehicle_count);
             facts::record("link.frames", view.frames);

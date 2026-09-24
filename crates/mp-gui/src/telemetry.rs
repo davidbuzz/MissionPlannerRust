@@ -594,6 +594,43 @@ impl Telemetry {
         self.completed_list(mp_mission::fence::MISSION_TYPE_RALLY)
     }
 
+    /// `mav_mission.download(..., MAV_MISSION_TYPE.RALLY)` from the vehicle being flown, which
+    /// [`Telemetry::rally_list`] then reads. False with no vehicle to ask.
+    /// `// C#: ExtLibs/ArduPilot/mav_mission.cs:14-63`
+    pub fn download_rally(&self) -> bool {
+        self.target()
+            .is_some_and(|(link, id)| link.download_list(id, mp_mission::fence::MISSION_TYPE_RALLY))
+    }
+
+    /// The last rally-point transfer, once it has ended and nothing newer is waiting to start:
+    /// its items, or why it failed. `None` while one runs or is still queued, and with no link.
+    ///
+    /// What `mav_mission.download(..., MAV_MISSION_TYPE.RALLY)` returns, or throws.
+    /// `// C#: ExtLibs/ArduPilot/mav_mission.cs:14-63`
+    #[must_use]
+    pub fn rally_list(&self) -> Option<Result<Vec<MissionItem>, String>> {
+        let (link, id) = self.target()?;
+        let rally = mp_mission::fence::MISSION_TYPE_RALLY;
+        if link.list_transfer_queued(id, rally) {
+            return None;
+        }
+        let transfer = link.list_transfer(id, rally)?;
+        match transfer.state() {
+            TransferState::Complete => Some(Ok(transfer.items().to_vec())),
+            TransferState::Failed(why) => Some(Err(why.to_string())),
+            _ => None,
+        }
+    }
+
+    /// `setRallyPoint` on the vehicle being flown: `RALLY_POINT`, read back with
+    /// `RALLY_FETCH_POINT`, the link's retries between. `None` with no vehicle; the outcome is read
+    /// with [`Telemetry::request`].
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6441-6476`
+    pub fn set_rally_point(&self, point: mp_link::requests::RallyPointSet) -> Option<RequestId> {
+        let (link, id) = self.target()?;
+        Some(link.set_rally_point(id, point))
+    }
+
     /// The items of a finished transfer of one list, or nothing if it has not finished.
     ///
     /// Only when complete: a partial list read mid-transfer would be adopted as if it were the

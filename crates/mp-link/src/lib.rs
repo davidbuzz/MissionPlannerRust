@@ -33,7 +33,7 @@
 //!   `holes_are_read_ten_at_a_time_*`, `a_stream_under_three_quarters_*`,
 //!   `a_hole_never_filled_*`, `a_parameter_outside_a_download_*`,
 //!   `a_parameter_download_over_a_bad_link_*`.
-//! * [`requests::Request`] - one machine for four C# loops, `Queued` → `Waiting` → `Finished`:
+//! * [`requests::Request`] - one machine for five C# loops, `Queued` → `Waiting` → `Finished`:
 //!   - `SetParam`, `setParamAsync`: 3 retries, 700 ms (:1748, :1754); unknown names and
 //!     unchanged values not sent (:1640-1651). Tests: `a_set_whose_echo_never_comes_*`,
 //!     `a_late_echo_*`, `an_echo_of_a_different_value_*`, `an_echo_of_another_parameter_*`,
@@ -48,6 +48,10 @@
 //!     `arming_waits_*`, `a_calibration_is_sent_twice_*`, `the_commands_not_waited_for_*`.
 //!   - `SetCurrent`, `setWPCurrentAsync`: 5, 2000 ms (:2472, :2476). Test:
 //!     `set_current_is_sent_six_times_*`.
+//!   - `SetRallyPoint`, `setRallyPoint` and the `getRallyPoint` it reads back with: the point
+//!     sent up to 3 times (:6458), each read back with 3 retries, 700 ms (:6363, :6367);
+//!     `requests::RallyPointSet` says where it departs from the C#. Tests:
+//!     `requests::tests::a_rally_point_*`.
 //! * [`mission_transfer::MissionTransfer`] - mission, fence and rally alike.
 //!   - Download, `AwaitingCount` → `Downloading` → `Complete` or `Failed`: `getWPCountAsync` 6,
 //!     700 ms (:3297, :3301); `getWPAsync` 5, 2500 ms (:3459, :3463). Tests: `a_download_*`.
@@ -535,6 +539,12 @@ impl Link {
         self.queue_request(target, RequestKind::SetCurrent { seq })
     }
 
+    /// Sets one rally point with the legacy `RALLY_POINT` message and reads it back with
+    /// `RALLY_FETCH_POINT`: `setRallyPoint`. See [`requests::RallyPointSet`].
+    pub fn set_rally_point(&self, target: VehicleId, point: requests::RallyPointSet) -> RequestId {
+        self.queue_request(target, RequestKind::SetRallyPoint(point))
+    }
+
     /// Where a request is, or `None` if the link has forgotten it or never had it.
     #[must_use]
     pub fn request(&self, id: RequestId) -> Option<Request> {
@@ -644,6 +654,21 @@ impl Link {
         if let Ok(mut writes) = self.shared.state_writes.lock() {
             writes.push((target, write));
         }
+    }
+
+    /// Whether a transfer of this list has been asked for and not yet picked up by the link
+    /// thread - in which case [`Link::list_transfer`] still shows the one before it.
+    ///
+    /// The link thread holds the queue while it moves what it picks up into the table, and this
+    /// reads the queue under the same lock, so a transfer is always in one or the other when it
+    /// is asked about: a caller that sees it not queued and reads the table finds the new one.
+    #[must_use]
+    pub fn list_transfer_queued(&self, target: VehicleId, mission_type: u8) -> bool {
+        self.shared.mission_requests.lock().is_ok_and(|queue| {
+            queue
+                .iter()
+                .any(|transfer| transfer.target == target && transfer.mission_type == mission_type)
+        })
     }
 
     /// A snapshot of a vehicle's parameters.
@@ -1199,6 +1224,21 @@ fn run_link(
                                         }
                                     }
                                 }
+                                // A rally point read back answers the set that asked for it
+                                // (getRallyPoint), if it is addressed to us.
+                                MavMessage::RallyPoint(point) => {
+                                    let to_us = point.target_system == config.sysid
+                                        && point.target_component == config.compid;
+                                    if let Ok(mut held) = shared.requests.lock() {
+                                        let now = Instant::now();
+                                        for request in held.values_mut() {
+                                            match request.on_rally_point(id, to_us, point, now) {
+                                                requests::Outgoing::Nothing => {}
+                                                send => request_sends.push(send),
+                                            }
+                                        }
+                                    }
+                                }
                                 // Any MISSION_CURRENT answers a set-current (setWPCurrentAsync).
                                 MavMessage::MissionCurrent(_) => {
                                     if let Ok(mut held) = shared.requests.lock() {
@@ -1526,19 +1566,20 @@ fn run_link(
             }
         }
         for send in request_sends.drain(..) {
-            let (message, times) = match send {
+            let messages = match send {
                 requests::Outgoing::Nothing => continue,
-                requests::Outgoing::Once(message) => (message, 1),
-                requests::Outgoing::Twice(message) => (message, 2),
+                requests::Outgoing::Once(message) => [Some(message), None],
+                requests::Outgoing::Twice(message) => [Some(message), Some(message)],
+                requests::Outgoing::Pair(first, second) => [Some(first), Some(second)],
             };
-            for _ in 0..times {
+            for message in messages.iter().flatten() {
                 send_message(
                     transport.as_mut(),
                     recorder.as_mut(),
                     &mut stats,
                     &config,
                     &mut tx_seq,
-                    &message,
+                    message,
                 );
             }
         }
