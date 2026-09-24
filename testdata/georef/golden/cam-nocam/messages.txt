@@ -1,0 +1,5 @@
+Using AMSL Altitude False
+Reading log for CAM Messages
+Log Read with - 0 - CAM Messages found
+Error System.NullReferenceException: Object reference not set to an instance of an objectGeoTagging FINISHED 
+

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-16"?>
+<Document xmlns="http://www.opengis.net/kml/2.2">
+  <Folder>
+    <name>Pins</name>
+    <Placemark>
+      <name>path</name>
+      <LineString>
+        <altitudeMode>absolute</altitudeMode>
+        <coordinates />
+      </LineString>
+    </Placemark>
+  </Folder>
+  <Folder>
+    <name>Overlay</name>
+  </Folder>
+</Document>

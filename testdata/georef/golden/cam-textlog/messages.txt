@@ -1,0 +1,64 @@
+Using AMSL Altitude True
+Reading log for GPS Messages in order to get AMSL Altitude
+Log Read for GPS Messages
+Log locations : 617
+Reading log for CAM Messages
+Log Read with - 25 - CAM Messages found
+Possible Shutter speed issue - 0.4s
+Filtered - 24 - CAM Messages found
+Read images
+Images read : 25
+CAM Msgs and Files discrepancy. Check it! files: 25 vs CAM msg: 24
+Photo IMG_0001 processed with GPS Msg : 200.39 ms ahead of CAM Msg. AMSL Alt
+Photo IMG_0002 processed with GPS Msg : 200.4229 ms ahead of CAM Msg. AMSL Alt
+Photo IMG_0003 processed with GPS Msg : 200.456 ms ahead of CAM Msg. AMSL Alt
+Photo IMG_0004 processed with GPS Msg : 200.569 ms ahead of CAM Msg. AMSL Alt
+Photo IMG_0005 processed with GPS Msg : 200.4419 ms ahead of CAM Msg. AMSL Alt
+Photo IMG_0006 processed with GPS Msg : 200.475 ms ahead of CAM Msg. AMSL Alt
+Photo IMG_0007 processed with GPS Msg : 200.508 ms ahead of CAM Msg. AMSL Alt
+Photo IMG_0008 processed with GPS Msg : 200.541 ms ahead of CAM Msg. AMSL Alt
+Photo IMG_0009 processed with GPS Msg : 200.6539 ms ahead of CAM Msg. AMSL Alt
+Photo IMG_0010 processed with GPS Msg : 200.607 ms ahead of CAM Msg. AMSL Alt
+Photo IMG_0011 processed with GPS Msg : 200.56 ms ahead of CAM Msg. AMSL Alt
+Photo IMG_0012 processed with GPS Msg : 200.433 ms ahead of CAM Msg. AMSL Alt
+Photo IMG_0013 processed with GPS Msg : 200.546 ms ahead of CAM Msg. AMSL Alt
+Photo IMG_0014 processed with GPS Msg : 200.579 ms ahead of CAM Msg. AMSL Alt
+Photo IMG_0015 processed with GPS Msg : 200.6119 ms ahead of CAM Msg. AMSL Alt
+Photo IMG_0016 processed with GPS Msg : 200.725 ms ahead of CAM Msg. AMSL Alt
+Photo IMG_0017 processed with GPS Msg : 200.678 ms ahead of CAM Msg. AMSL Alt
+Photo IMG_0018 processed with GPS Msg : 200.711 ms ahead of CAM Msg. AMSL Alt
+Photo IMG_0019 processed with GPS Msg : 200.744 ms ahead of CAM Msg. AMSL Alt
+Photo IMG_0020 processed with GPS Msg : 200.777 ms ahead of CAM Msg. AMSL Alt
+Photo IMG_0021 processed with GPS Msg : 200.81 ms ahead of CAM Msg. AMSL Alt
+Photo IMG_0022 processed with GPS Msg : 200.763 ms ahead of CAM Msg. AMSL Alt
+Photo IMG_0023 processed with GPS Msg : 200.796 ms ahead of CAM Msg. AMSL Alt
+Photo IMG_0024 processed with GPS Msg : 180.837 ms ahead of CAM Msg. AMSL Alt
+Start Processing
+Done 
+
+GeoTagging {dir}/IMG_0001.jpg
+GeoTagging {dir}/IMG_0002.jpg
+GeoTagging {dir}/IMG_0003.jpg
+GeoTagging {dir}/IMG_0004.jpg
+GeoTagging {dir}/IMG_0005.jpg
+GeoTagging {dir}/IMG_0006.jpg
+GeoTagging {dir}/IMG_0007.jpg
+GeoTagging {dir}/IMG_0008.jpg
+GeoTagging {dir}/IMG_0009.jpg
+GeoTagging {dir}/IMG_0010.jpg
+GeoTagging {dir}/IMG_0011.jpg
+GeoTagging {dir}/IMG_0012.jpg
+GeoTagging {dir}/IMG_0013.jpg
+GeoTagging {dir}/IMG_0014.jpg
+GeoTagging {dir}/IMG_0015.jpg
+GeoTagging {dir}/IMG_0016.jpg
+GeoTagging {dir}/IMG_0017.jpg
+GeoTagging {dir}/IMG_0018.jpg
+GeoTagging {dir}/IMG_0019.jpg
+GeoTagging {dir}/IMG_0020.jpg
+GeoTagging {dir}/IMG_0021.jpg
+GeoTagging {dir}/IMG_0022.jpg
+GeoTagging {dir}/IMG_0023.jpg
+GeoTagging {dir}/IMG_0024.jpg
+GeoTagging FINISHED 
+

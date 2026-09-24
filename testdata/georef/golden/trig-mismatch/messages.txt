@@ -1,0 +1,8 @@
+Using AMSL Altitude True
+Reading log for TRIG Messages
+Log Read with - 25 - TRIG Messages found
+Filtered - 24 - TRIG Messages found
+Read images
+Images read : 25
+TRIG Msgs and Files discrepancy. Check it! files: 25 vs TRIG msg: 24
+no valid matchs

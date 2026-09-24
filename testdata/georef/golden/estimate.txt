@@ -1,0 +1,23 @@
+1 Picture IMG_0001 with DateTime: 2026:09:24 11:30:08
+1 GPS Log Msg: 2026:09:24 01:29:38
+1 Est: 36029.599
+2 Picture IMG_0002 with DateTime: 2026:09:24 11:30:10
+2 GPS Log Msg: 2026:09:24 01:29:38
+2 Est: 36031.4
+3 Picture IMG_0003 with DateTime: 2026:09:24 11:30:12
+3 GPS Log Msg: 2026:09:24 01:29:38
+3 Est: 36033.2
+4 Picture IMG_0004 with DateTime: 2026:09:24 11:30:14
+4 GPS Log Msg: 2026:09:24 01:29:39
+4 Est: 36035
+23 Picture IMG_0023 with DateTime: 2026:09:24 11:30:51
+23 GPS Log Msg: 2026:09:24 01:29:42
+23 Est: 36068.2
+24 Picture IMG_0024 with DateTime: 2026:09:24 11:30:53
+24 GPS Log Msg: 2026:09:24 01:29:43
+24 Est: 36070
+25 Picture IMG_0025 with DateTime: 2026:09:24 11:30:55
+25 GPS Log Msg: 2026:09:24 01:29:43
+25 Est: 36071.8
+Offset around :  36066.103109375
+

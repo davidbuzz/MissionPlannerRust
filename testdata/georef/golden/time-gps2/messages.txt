@@ -1,0 +1,35 @@
+Reading log for CAM Messages
+Reading log for GPS-ATT Messages
+Log locations : 0
+Read images
+Images read : 25
+Photo IMG_0001 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0002 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0003 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0004 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0005 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0006 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0007 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0008 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0009 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0010 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0011 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0012 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0013 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0014 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0015 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0016 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0017 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0018 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0019 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0020 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0021 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0022 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0023 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0024 NOT PROCESSED. No GPS match in the log file. Please take care
+Photo IMG_0025 NOT PROCESSED. No GPS match in the log file. Please take care
+Start Processing
+Done 
+
+GeoTagging FINISHED 
+

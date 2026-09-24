@@ -31,3 +31,5 @@ mp-settings.workspace = true
 ureq.workspace = true
 # `mpr terrain`: srtm.getAltitude over the planner's terrain cache.
 mp-terrain.workspace = true
+# `mpr georef`: the Geo Reference Images form's buttons.
+mp-georef.workspace = true

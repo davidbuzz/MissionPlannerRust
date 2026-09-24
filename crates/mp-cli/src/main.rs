@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 
 mod dflog;
 mod ftp;
+mod georef;
 mod logs;
 
 use mp_link::requests::RequestOutcome;
@@ -160,6 +161,7 @@ fn main() -> std::process::ExitCode {
             }
         },
         Some("ftp") => ftp::run(args.get(1..).unwrap_or_default()),
+        Some("georef") => georef::run(args.get(1..).unwrap_or_default()),
         Some("ports") => ports(),
         Some("help" | "--help" | "-h") | None => {
             usage();
@@ -200,6 +202,7 @@ fn usage() {
   mpr firmware detect <port>  name the board from its USB ids
   mpr firmware list [...]     the firmware the catalogue would give a board
   mpr terrain <lat> <lng>     the ground there, from the SRTM tiles the planner uses
+  {}
   mpr ports                   list serial ports\n\n\
          url forms:\n  \
          serial:/dev/ttyACM0:115200\n  \
@@ -208,7 +211,8 @@ fn usage() {
          udpcl:192.168.4.1:14550     (send to the vehicle, and hear it back)\n  \
          ws://host:8080/path         (websocket)\n  \
          ntrip://user:pass@caster:2101/MOUNT (RTCM from an NTRIP caster)\n  \
-         file:flight.tlog            (replay a recording)"
+         file:flight.tlog            (replay a recording)",
+        georef::USAGE
     );
 }
 

@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="us-ascii" standalone="no"?>
+<JOBFile jobName="MPGeoRef" product="Gatewing" productVersion="1.0" version="5.6">
+  <Environment>
+    <CoordinateSystem>
+      <SystemName>Default</SystemName>
+      <ZoneName>Default</ZoneName>
+      <DatumName>WGS 1984</DatumName>
+      <Ellipsoid>
+        <EarthRadius>6378137</EarthRadius>
+        <Flattening>0.00335281067183</Flattening>
+      </Ellipsoid>
+      <Projection>
+        <Type>NoProjection</Type>
+        <Scale>1</Scale>
+        <GridOrientation>IncreasingNorthEast</GridOrientation>
+        <SouthAzimuth>false</SouthAzimuth>
+        <ApplySeaLevelCorrection>true</ApplySeaLevelCorrection>
+      </Projection>
+      <LocalSite>
+        <Type>Grid</Type>
+        <ProjectLocationLatitude />
+        <ProjectLocationLongitude />
+        <ProjectLocationHeight />
+      </LocalSite>
+      <Datum>
+        <Type>ThreeParameter</Type>
+        <GridName>WGS 1984</GridName>
+        <Direction>WGS84ToLocal</Direction>
+        <EarthRadius>6378137</EarthRadius>
+        <Flattening>0.00335281067183</Flattening>
+        <TranslationX>0</TranslationX>
+        <TranslationY>0</TranslationY>
+        <TranslationZ>0</TranslationZ>
+      </Datum>
+      <HorizontalAdjustment>
+        <Type>NoAdjustment</Type>
+      </HorizontalAdjustment>
+      <VerticalAdjustment>
+        <Type>NoAdjustment</Type>
+      </VerticalAdjustment>
+      <CombinedScaleFactor>
+        <Location>
+          <Latitude />
+          <Longitude />
+          <Height />
+        </Location>
+        <Scale />
+      </CombinedScaleFactor>
+    </CoordinateSystem>
+  </Environment>
+  <FieldBook>   <CameraDesignRecord ID='00000001'>
+                                      <Type>GoPro   </Type>
+                                      <HeightPixels>2400</HeightPixels>
+                                      <WidthPixels>3200</WidthPixels>
+                                      <PixelSize>0.0000022</PixelSize>
+                                      <LensModel>Rectilinear</LensModel>
+                                      <NominalFocalLength>0.002</NominalFocalLength>
+                                    </CameraDesignRecord>
+                                    <CameraRecord2 ID='00000002'>
+                                      <CameraDesignID>00000001</CameraDesignID>
+                                      <CameraPosition>01</CameraPosition>
+                                      <Optics>
+                                        <IdealAngularMagnification>1.0</IdealAngularMagnification>
+                                        <AngleSymmetricDistortion>
+                                          <Order3>-0.35</Order3>
+                                          <Order5>0.15</Order5>
+                                          <Order7>-0.033</Order7>
+                                          <Order9> 0</Order9>
+                                        </AngleSymmetricDistortion>
+                                        <AngleDecenteringDistortion>
+                                          <Column>0</Column>
+                                          <Row>0</Row>
+                                        </AngleDecenteringDistortion>
+                                      </Optics>
+                                      <Geometry>
+                                        <PerspectiveCenterPixels>
+                                          <PrincipalPointColumn>-1615.5</PrincipalPointColumn>
+                                          <PrincipalPointRow>-1187.5</PrincipalPointRow>
+                                          <PrincipalDistance>-2102</PrincipalDistance>
+                                        </PerspectiveCenterPixels>
+                                        <VectorOffset>
+                                          <X>0</X>
+                                          <Y>0</Y>
+                                          <Z>0</Z>
+                                        </VectorOffset>
+                                        <BiVectorAngle>
+                                          <XX>0</XX>
+                                          <YY>0</YY>
+                                          <ZZ>-1.5707963268</ZZ>
+                                        </BiVectorAngle>
+                                      </Geometry>
+                                    </CameraRecord2><PhotoInstrumentRecord ID="0000000E"><Type>Aerial</Type><Model>X100</Model><Serial>000-000</Serial><FirmwareVersion>v0.0</FirmwareVersion><UserDefinedName>Prototype</UserDefinedName></PhotoInstrumentRecord><AtmosphereRecord ID="0000000F"><Pressure /><Temperature /><PPM /><ApplyEarthCurvatureCorrection>false</ApplyEarthCurvatureCorrection><ApplyRefractionCorrection>false</ApplyRefractionCorrection><RefractionCoefficient>0</RefractionCoefficient><PressureInputMethod>ReadFromInstrument</PressureInputMethod></AtmosphereRecord><FlightMissionRecord ID="0000010"><Name>MP</Name><FlightBlock><FlightPlan height="100" percentForwardOverlap="75" percentLateralOverlap="75" /><StationList /></FlightBlock></FlightMissionRecord></FieldBook>
+</JOBFile>

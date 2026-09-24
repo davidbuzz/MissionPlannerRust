@@ -1,0 +1,61 @@
+Using AMSL Altitude False
+Reading log for CAM Messages
+Log Read with - 25 - CAM Messages found
+Possible Shutter speed issue - 0.4s
+Filtered - 24 - CAM Messages found
+Read images
+Images read : 25
+CAM Msgs and Files discrepancy. Check it! files: 25 vs CAM msg: 24
+Photo IMG_0001 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Photo IMG_0002 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Photo IMG_0003 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Photo IMG_0004 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Photo IMG_0005 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Photo IMG_0006 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Photo IMG_0007 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Photo IMG_0008 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Photo IMG_0009 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Photo IMG_0010 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Photo IMG_0011 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Photo IMG_0012 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Photo IMG_0013 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Photo IMG_0014 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Photo IMG_0015 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Photo IMG_0016 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Photo IMG_0017 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Photo IMG_0018 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Photo IMG_0019 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Photo IMG_0020 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Photo IMG_0021 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Photo IMG_0022 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Photo IMG_0023 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Photo IMG_0024 processed from CAM Msg with 0 ms shutter lag. RelAlt
+Start Processing
+Done 
+
+GeoTagging {dir}/IMG_0001.jpg
+GeoTagging {dir}/IMG_0002.jpg
+GeoTagging {dir}/IMG_0003.jpg
+GeoTagging {dir}/IMG_0004.jpg
+GeoTagging {dir}/IMG_0005.jpg
+GeoTagging {dir}/IMG_0006.jpg
+GeoTagging {dir}/IMG_0007.jpg
+GeoTagging {dir}/IMG_0008.jpg
+GeoTagging {dir}/IMG_0009.jpg
+GeoTagging {dir}/IMG_0010.jpg
+GeoTagging {dir}/IMG_0011.jpg
+GeoTagging {dir}/IMG_0012.jpg
+GeoTagging {dir}/IMG_0013.jpg
+GeoTagging {dir}/IMG_0014.jpg
+GeoTagging {dir}/IMG_0015.jpg
+GeoTagging {dir}/IMG_0016.jpg
+GeoTagging {dir}/IMG_0017.jpg
+GeoTagging {dir}/IMG_0018.jpg
+GeoTagging {dir}/IMG_0019.jpg
+GeoTagging {dir}/IMG_0020.jpg
+GeoTagging {dir}/IMG_0021.jpg
+GeoTagging {dir}/IMG_0022.jpg
+GeoTagging {dir}/IMG_0023.jpg
+GeoTagging {dir}/IMG_0024.jpg
+GeoTagging FINISHED 
+

@@ -1,0 +1,21 @@
+today 639258048000000000
+e01_no_exif.jpg 0 Unspecified
+e02_xmp_first.jpg 0 Unspecified
+e03_blank_date.jpg 639258048000000000 Local
+e04_zero_date.jpg 639258048000000000 Local
+e05_iso_date.jpg 639258462080000000 Unspecified
+e06_mm_sshort_float.jpg 639258462080000000 Unspecified
+e07_short_values.jpg 639258462080000000 Unspecified
+e08_unicode_comment.jpg 639258462080000000 Unspecified
+e09_unknown_comment.jpg 639258462080000000 Unspecified
+e10_gps_short_latitude.jpg 639258462080000000 Unspecified
+e11_jfxx.jpg 639258462080000000 Unspecified
+e12_trailing.jpg 639258462080000000 Unspecified
+e13_no_eoi.jpg 639258462080000000 Unspecified
+e14_shared_ifd_offset.jpg 639258462080000000 Unspecified
+e15_strip_thumbnail.jpg 639258462080000000 Unspecified
+e16_non_ascii.jpg 639258462080000000 Unspecified
+e17_makernote_first.jpg 0 Unspecified
+e18_makernote_with_make.jpg 639258462080000000 Unspecified
+e19_tiff.tif 639258462080000000 Unspecified
+e20_gps_fields.jpg 639258462080000000 Unspecified

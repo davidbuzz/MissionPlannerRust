@@ -381,8 +381,12 @@ Dataflash (`.bin`/`.log`) and tlog parsing, log download, graphing, LogAnalyzer 
   (PLAN.md §13.4 row 7). The DataFlash Logs page's four conversions are ported and held to
   Mission Planner's own code under mono: `.BIN → .log` byte-identical, KML+GPX and `.mat`
   identical but for a namespace order and a hash-table order, Auto Analysis as the C# runs it
-  (row 23). Not yet: the page's buttons calling them, the point-value tooltip (off by default in
-  the C#), the strip's Show Params and preselect, GPS2/POS routes, the memory-mapped parse.
+  (row 23); the page's buttons call them (row 28). Geo Reference Images' logic is `mp-georef`
+  (`georefimage.cs` and `GeoRefImageBase.cs`: the three matching modes, every output file and the
+  EXIF geotags byte for byte to the real classes under mono over a SITL flight with camera
+  messages, `tools/csharp-reference/GeorefOracle.cs`, row 49); its form is row 54. Not yet: the
+  point-value tooltip (off by default in the C#), the strip's Show Params and preselect, GPS2/POS
+  routes, the memory-mapped parse (row 51, in flight).
 - **Tests:** `tests/parser_diff.rs` parses a corpus of real dataflash and tlog files and diffs every decoded field against the C# parser's output; `fuzz/fuzz_targets/dataflash.rs` and `tlog.rs` asserting no panic and no unbounded allocation on corrupt logs (truncated, bit-flipped, wrong-endian, fabricated FMT messages); `tests/fft.rs` compares against `Exocortex.DSP` golden spectra; `tests/exports.rs` `.mat`/CSV/KML round-trips; `benches/parse_1gb.rs` gates <2 s to first plot and `benches/scrub_10m.rs` gates 120 fps scrubbing.
 
 ### D15. CAN, peripherals and outboard features

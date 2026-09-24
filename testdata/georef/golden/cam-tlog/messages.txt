@@ -1,0 +1,64 @@
+Using AMSL Altitude True
+Reading log for GPS Messages in order to get AMSL Altitude
+Log Read for GPS Messages
+Log locations : 778
+Reading log for CAM Messages
+Log Read with - 25 - CAM Messages found
+Possible Shutter speed issue - 0.405s
+Filtered - 24 - CAM Messages found
+Read images
+Images read : 25
+CAM Msgs and Files discrepancy. Check it! files: 25 vs CAM msg: 24
+Photo IMG_0001 processed from CAM Msg with 0 ms shutter lag. AMSL Alt -4 ms away offset: 36003.355
+Photo IMG_0002 processed from CAM Msg with 0 ms shutter lag. AMSL Alt -14 ms away offset: 36003.342
+Photo IMG_0003 processed from CAM Msg with 0 ms shutter lag. AMSL Alt -80 ms away offset: 36003.262
+Photo IMG_0004 processed from CAM Msg with 0 ms shutter lag. AMSL Alt 97 ms away offset: 36003.449
+Photo IMG_0005 processed from CAM Msg with 0 ms shutter lag. AMSL Alt -32 ms away offset: 36004.137
+Photo IMG_0006 processed from CAM Msg with 0 ms shutter lag. AMSL Alt -13 ms away offset: 36004.119
+Photo IMG_0007 processed from CAM Msg with 0 ms shutter lag. AMSL Alt -27 ms away offset: 36004.122
+Photo IMG_0008 processed from CAM Msg with 0 ms shutter lag. AMSL Alt -32 ms away offset: 36004.119
+Photo IMG_0009 processed from CAM Msg with 0 ms shutter lag. AMSL Alt -76 ms away offset: 36003.262
+Photo IMG_0010 processed from CAM Msg with 0 ms shutter lag. AMSL Alt 75 ms away offset: 36004.012
+Photo IMG_0011 processed from CAM Msg with 0 ms shutter lag. AMSL Alt -12 ms away offset: 36003.957
+Photo IMG_0012 processed from CAM Msg with 0 ms shutter lag. AMSL Alt -66 ms away offset: 36003.467
+Photo IMG_0013 processed from CAM Msg with 0 ms shutter lag. AMSL Alt 27 ms away offset: 36001.757
+Photo IMG_0014 processed from CAM Msg with 0 ms shutter lag. AMSL Alt 42 ms away offset: 36001.757
+Photo IMG_0015 processed from CAM Msg with 0 ms shutter lag. AMSL Alt 21 ms away offset: 36001.749
+Photo IMG_0016 processed from CAM Msg with 0 ms shutter lag. AMSL Alt 73 ms away offset: 36001.799
+Photo IMG_0017 processed from CAM Msg with 0 ms shutter lag. AMSL Alt -47 ms away offset: 36001.754
+Photo IMG_0018 processed from CAM Msg with 0 ms shutter lag. AMSL Alt 5 ms away offset: 36001.657
+Photo IMG_0019 processed from CAM Msg with 0 ms shutter lag. AMSL Alt -78 ms away offset: 36001.642
+Photo IMG_0020 processed from CAM Msg with 0 ms shutter lag. AMSL Alt -25 ms away offset: 36001.687
+Photo IMG_0021 processed from CAM Msg with 0 ms shutter lag. AMSL Alt 12 ms away offset: 36001.757
+Photo IMG_0022 processed from CAM Msg with 0 ms shutter lag. AMSL Alt 17 ms away offset: 36001.557
+Photo IMG_0023 processed from CAM Msg with 0 ms shutter lag. AMSL Alt 54 ms away offset: 36001.552
+Photo IMG_0024 processed from CAM Msg with 0 ms shutter lag. AMSL Alt 55 ms away offset: 36001.552
+Start Processing
+Done 
+
+GeoTagging {dir}/IMG_0001.jpg
+GeoTagging {dir}/IMG_0002.jpg
+GeoTagging {dir}/IMG_0003.jpg
+GeoTagging {dir}/IMG_0004.jpg
+GeoTagging {dir}/IMG_0005.jpg
+GeoTagging {dir}/IMG_0006.jpg
+GeoTagging {dir}/IMG_0007.jpg
+GeoTagging {dir}/IMG_0008.jpg
+GeoTagging {dir}/IMG_0009.jpg
+GeoTagging {dir}/IMG_0010.jpg
+GeoTagging {dir}/IMG_0011.jpg
+GeoTagging {dir}/IMG_0012.jpg
+GeoTagging {dir}/IMG_0013.jpg
+GeoTagging {dir}/IMG_0014.jpg
+GeoTagging {dir}/IMG_0015.jpg
+GeoTagging {dir}/IMG_0016.jpg
+GeoTagging {dir}/IMG_0017.jpg
+GeoTagging {dir}/IMG_0018.jpg
+GeoTagging {dir}/IMG_0019.jpg
+GeoTagging {dir}/IMG_0020.jpg
+GeoTagging {dir}/IMG_0021.jpg
+GeoTagging {dir}/IMG_0022.jpg
+GeoTagging {dir}/IMG_0023.jpg
+GeoTagging {dir}/IMG_0024.jpg
+GeoTagging FINISHED 
+

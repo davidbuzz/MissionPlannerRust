@@ -1,0 +1,25 @@
+[package]
+name = "mp-georef"
+description = "Geo Reference Images, ported from Mission Planner's GeoRefImageBase.cs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# DFLogBuffer, BinaryLog and .NET's number text, which every dataflash value goes through before
+# GeoRefImageBase parses it back (L4, below this crate's L5).
+mp-log.workspace = true
+# The tlog's frames: CRC_EXTRA seeds and the checksum MavlinkParse.ReadPacket checks (L1).
+mp-mavlink.workspace = true
+# GLOBAL_POSITION_INT, GPS_RAW_INT, ATTITUDE, RANGEFINDER and CAMERA_FEEDBACK, decoded as the C#'s
+# MAVLinkMessage.data decodes them (L1).
+mp-mavlink-dialects.workspace = true
+# srtm.getAltitude, which ImageProjection.calcIntersection asks for the ground under each photo
+# (the same layer, L5).
+mp-terrain.workspace = true
+thiserror.workspace = true

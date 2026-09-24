@@ -1,0 +1,19 @@
+GeoTagging {dir}/e01_no_exif.jpg
+GeoTagging {dir}/e02_xmp_first.jpg
+GeoTagging {dir}/e03_blank_date.jpg
+GeoTagging {dir}/e04_zero_date.jpg
+GeoTagging {dir}/e05_iso_date.jpg
+GeoTagging {dir}/e06_mm_sshort_float.jpg
+GeoTagging {dir}/e07_short_values.jpg
+GeoTagging {dir}/e08_unicode_comment.jpg
+GeoTagging {dir}/e09_unknown_comment.jpg
+GeoTagging {dir}/e10_gps_short_latitude.jpg
+There was a problem with image {dir}/e10_gps_short_latitude.jpgGeoTagging {dir}/e11_jfxx.jpg
+GeoTagging {dir}/e12_trailing.jpg
+GeoTagging {dir}/e13_no_eoi.jpg
+GeoTagging {dir}/e14_shared_ifd_offset.jpg
+There was a problem with image {dir}/e14_shared_ifd_offset.jpgGeoTagging {dir}/e15_strip_thumbnail.jpg
+GeoTagging {dir}/e16_non_ascii.jpg
+GeoTagging {dir}/e17_makernote_first.jpg
+GeoTagging {dir}/e18_makernote_with_make.jpg
+GeoTagging {dir}/e20_gps_fields.jpg

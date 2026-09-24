@@ -1,0 +1,4 @@
+Using AMSL Altitude True
+Reading log for GPS Messages in order to get AMSL Altitude
+Log file problem. Aborting....
+no valid matchs

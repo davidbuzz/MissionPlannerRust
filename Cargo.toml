@@ -33,6 +33,7 @@ mp-input = { path = "crates/mp-input" }
 mp-firmware = { path = "crates/mp-firmware" }
 mp-kml = { path = "crates/mp-kml" }
 mp-terrain = { path = "crates/mp-terrain" }
+mp-georef = { path = "crates/mp-georef" }
 mp-chart = { path = "crates/mp-chart" }
 mp-script = { path = "crates/mp-script" }
 thiserror = "2"

@@ -1,0 +1,60 @@
+Reading log for CAM Messages
+Reading log for GPS-ATT Messages
+Log locations : 617
+Read images
+Images read : 25
+Photo IMG_0001 PROCESSED with GPS position found -98.9631 ms away
+Photo IMG_0002 PROCESSED with GPS position found -98.93 ms away
+Photo IMG_0003 PROCESSED with GPS position found -98.897 ms away
+Photo IMG_0004 PROCESSED with GPS position found -98.864 ms away
+Photo IMG_0005 PROCESSED with GPS position found -98.398 ms away
+Photo IMG_0006 PROCESSED with GPS position found -98.3651 ms away
+Photo IMG_0007 PROCESSED with GPS position found -98.332 ms away
+Photo IMG_0008 PROCESSED with GPS position found -98.299 ms away
+Photo IMG_0009 PROCESSED with GPS position found -98.699 ms away
+Photo IMG_0010 PROCESSED with GPS position found -98.233 ms away
+Photo IMG_0011 PROCESSED with GPS position found -98.2 ms away
+Photo IMG_0012 PROCESSED with GPS position found 101.7529 ms away
+Photo IMG_0013 PROCESSED with GPS position found 101.7529 ms away
+Photo IMG_0014 PROCESSED with GPS position found -98.9671 ms away
+Photo IMG_0015 PROCESSED with GPS position found -98.934 ms away
+Photo IMG_0016 PROCESSED with GPS position found -98.901 ms away
+Photo IMG_0017 PROCESSED with GPS position found -98.868 ms away
+Photo IMG_0018 PROCESSED with GPS position found -98.8351 ms away
+Photo IMG_0019 PROCESSED with GPS position found -98.802 ms away
+Photo IMG_0020 PROCESSED with GPS position found -98.769 ms away
+Photo IMG_0021 PROCESSED with GPS position found -98.736 ms away
+Photo IMG_0022 PROCESSED with GPS position found -98.703 ms away
+Photo IMG_0023 PROCESSED with GPS position found -98.67 ms away
+Photo IMG_0024 PROCESSED with GPS position found -98.637 ms away
+Photo IMG_0025 PROCESSED with GPS position found -98.6041 ms away
+Start Processing
+Done 
+
+GeoTagging {dir}/IMG_0001.jpg
+GeoTagging {dir}/IMG_0002.jpg
+GeoTagging {dir}/IMG_0003.jpg
+GeoTagging {dir}/IMG_0004.jpg
+GeoTagging {dir}/IMG_0005.jpg
+GeoTagging {dir}/IMG_0006.jpg
+GeoTagging {dir}/IMG_0007.jpg
+GeoTagging {dir}/IMG_0008.jpg
+GeoTagging {dir}/IMG_0009.jpg
+GeoTagging {dir}/IMG_0010.jpg
+GeoTagging {dir}/IMG_0011.jpg
+GeoTagging {dir}/IMG_0012.jpg
+GeoTagging {dir}/IMG_0013.jpg
+GeoTagging {dir}/IMG_0014.jpg
+GeoTagging {dir}/IMG_0015.jpg
+GeoTagging {dir}/IMG_0016.jpg
+GeoTagging {dir}/IMG_0017.jpg
+GeoTagging {dir}/IMG_0018.jpg
+GeoTagging {dir}/IMG_0019.jpg
+GeoTagging {dir}/IMG_0020.jpg
+GeoTagging {dir}/IMG_0021.jpg
+GeoTagging {dir}/IMG_0022.jpg
+GeoTagging {dir}/IMG_0023.jpg
+GeoTagging {dir}/IMG_0024.jpg
+GeoTagging {dir}/IMG_0025.jpg
+GeoTagging FINISHED 
+
