@@ -1,0 +1,36 @@
+# CONFIG's Basic Tuning for a plane, ported from GCSViews/ConfigurationView/ConfigArduplane.cs.
+#
+# SoftwareConfig adds ConfigArduplane as "Basic Tuning", and opens on it, only when the vehicle is
+# an ArduPlane (SoftwareConfig.cs:173-178); a copter's Basic Tuning is ConfigSimplePids
+# (:160-165). The SITL these scripts run against is a copter, so the page cannot be opened here:
+# the claim this script checks is the list's condition - with every parameter in, CONFIG opens on
+# the copter's Basic Tuning, and ConfigArduplane is neither listed nor shown.
+#
+# The page itself is proved against a scripted plane by the unit tests in
+# crates/mp-gui/src/config/basic_tuning.rs: every Designer control at its .resx place, Activate's
+# 44 bindings (the first name the vehicle has, the scale, the tooltips), a change held in
+# `changes` and green until Write Params, Write Params through the retrying set - its "more than
+# doubled" question, "Your are not connected", "Set NAME Failed" - Ctrl+S, Refresh Params and
+# Refresh Screen, and the list's condition for each firmware.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run as
+#
+#   tools/gui-test.sh tests/gui/config-basic-tuning.gui -- tcp:127.0.0.1:5760
+
+screen params
+window 1600x1200
+settle 6
+
+# CONFIG lists the tuning pages once every parameter is in (SoftwareConfig.cs:148-150), and here
+# parameters are downloaded when asked for.
+click param-download
+settle 15
+expect params.held > 1000
+
+click tab-config
+settle 1
+expect screen config
+expect config.page ConfigSimplePids
+expect config.title Basic Tuning
+expect config.tuning.listed false
+expect config.tuning.active false

@@ -4,12 +4,12 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui c
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 8 | 17 | 30 | 2 | 4 | 569 |
+| 61 | 9 | 18 | 28 | 2 | 4 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 8 | 15 | 19 | 2 | 0 | 258 | 106 |
-| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 0 | 2 | 11 | 0 | 0 | 277 | 191 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 8 | 16 | 18 | 2 | 0 | 258 | 93 |
+| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 1 | 2 | 10 | 0 | 0 | 277 | 144 |
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 | 0 |
 
 The lists also add 4 pages that are not in `ConfigurationView/` (`Sikradio`, `JoystickSetup`, `TrackerUI`, `MavFTPUI`): 0 done, 1 partial, 3 missing, 0 plumbing, 0 dropped. They are in the lists below and not in the counts above.
@@ -19,17 +19,17 @@ The largest missing panels, by wirings:
 | panel | title | wirings |
 |---|---|---:|
 | `ConfigArducopter` | Extended Tuning | 128 |
-| `ConfigArduplane` | Basic Tuning | 47 |
 | `ConfigSerialInjectGPS` | RTK/GPS Inject | 24 |
 | `ConfigFirmware` | Install Firmware Legacy | 20 |
 | `ConfigDroneCAN` | DroneCAN/UAVCAN | 15 |
-| `ConfigAdvanced` | Advanced | 13 |
 | `ConfigTerminal` | Terminal | 12 |
 | `ConfigAteryx` | Ateryx Pids | 8 |
 | `ConfigREPL` | Script REPL | 4 |
 | `ConfigAntennaTracker` | Antenna tracker | 3 |
 | `ConfigArdurover` | Basic Tuning | 3 |
 | `ConfigAteryxSensors` | Ateryx Zero Sensors | 3 |
+| `ConfigHWESP8266` (`ConfigHWesp8266.cs`) | ESP8266 Setup | 3 |
+| `ConfigInitialParams` | Initial Tune Parameter | 3 |
 
 Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConnected && gotAllParams`); **always** is connected or not; **connected** and **disconnected** are the link alone; a named vehicle, parameter or view is what the call, or the `if` around it, checks. **Advanced view** is `DisplayView.isAdvancedMode`. A page with a `DisplayView` switch also needs it on, which it is by default unless the vehicles say otherwise. The list shows a heading as `>> title` and indents what is under it (`ExtLibs/Controls/BackstageView/BackstageView.cs:227`, `:232`).
 
@@ -63,7 +63,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConne
 | 259 | `Sikradio` (`Radio/Sikradio.cs`, not a panel) | Sik Radio | Optional Hardware | always | 17 | **missing** |
 | 263 | `ConfigADSB` | ADSB | Mandatory Hardware | any | 5 | partial: `crates/mp-gui/src/config/adsb.rs` `fn page` - a RangeControl, bitmask or ValuesControl per documented ADSB_/AVD_ parameter, favourites first, recording changes; Write Params writing them ENABLE-first, each in its own try, then "Parameters successfully saved."; Refresh Params with MessageShowAgain; Find filtering as typed; a bitmask updated on Activate writing as the C#'s does; missing Ctrl+S, dragging the track bar (a click pages it), typing into a ValuesControl, and the InputBox's remembered answers |
 | 266 | `ConfigGPSOrder` | CAN GPS Order | Optional Hardware | any | 1 | **missing** |
-| 270 | `ConfigBatteryMonitoring` | Battery Monitor | Optional Hardware | any | 13 | partial: `crates/mp-gui/src/config/battery_monitor.rs` `fn page` - the Monitor, Sensor and HW Ver combos with the nine presets and the pin table, the divider and amps-per-volt arithmetic in single precision, each box writing its parameter on leaving through the retrying set; no photo, no typing into the combos |
+| 270 | `ConfigBatteryMonitoring` | Battery Monitor | Optional Hardware | any | 13 | partial: `crates/mp-gui/src/config/battery_monitor.rs` `fn page` - the Monitor, Sensor and HW Ver combos with the nine presets and the pin table, the divider and amps-per-volt arithmetic in single precision, each box writing its parameter on leaving through the retrying set, the Low Battery alert and its three questions in Settings.Instance and config.xml; no photo, no typing into the combos |
 | 271 | `ConfigBatteryMonitoring2` | Battery Monitor 2 | Optional Hardware | any | 10 | partial: `crates/mp-gui/src/config/battery_monitor2.rs` `fn page` - the BATT2 monitor and pin combos, the capacity and calibration boxes validated on leaving and on Enter with the divider and amps-per-volt arithmetic in floats, the one-second readings of the second battery, the page disabled for good without BATT2_MONITOR, MP Alert on Low Battery with its three questions in the settings; the power module photo is a named box, and the questions' remembered answers are not kept |
 | 276 | `ConfigDroneCAN` | DroneCAN/UAVCAN | Optional Hardware | always | 15 | **missing** |
 | 280 | `JoystickSetup` (`Joystick/JoystickSetup.cs`, not a panel) | Joystick | Optional Hardware | always | 11 | partial: `crates/mp-gui/src/joystick.rs` `fn panel_for` - has the device list and Enable; missing the per-channel axis grid, the button functions, Elevons, Save, Manual Control, Import and Export |
@@ -81,7 +81,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConne
 | 329 | `ConfigHWESP8266` (`ConfigHWesp8266.cs`) | ESP8266 Setup | Optional Hardware | any | 3 | **missing** |
 | 333 | `TrackerUI` (`Antenna/TrackerUI.cs`, not a panel) | Antenna Tracker | Optional Hardware | always | 0 | **missing** |
 | 337 | `ConfigFFT` | FFT Setup | Optional Hardware | any | no Designer | **missing** |
-| 342 | `ConfigAdvanced` | Advanced |  | always, Advanced view | 13 | **missing** |
+| 342 | `ConfigAdvanced` | Advanced |  | always, Advanced view | 13 | partial: `crates/mp-gui/src/config/advanced.rs` `fn page` - the text and the thirteen buttons with their labels at the table's places; every button dimmed - the Warnings Manager, MAVLink Inspector, proximity, signing keys, MAVLink mirror, NMEA output, Follow Me, parameter regeneration, moving base, log anonymiser, FFT, spectrogram and support proxy windows they open are not ported |
 | 346 | `ConfigTerminal` | Terminal | Advanced | always, Advanced view | 12 | **missing** |
 | 351 | `ConfigREPL` | Script REPL | Advanced | connected, Advanced view | 4 | **missing** |
 
@@ -92,7 +92,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConne
 | 156 | `ConfigAC_Fence` | GeoFence |  | copter | 0 | **missing** |
 | 164 | `ConfigSimplePids` | Basic Tuning |  | copter | 1 | **missing** |
 | 169 | `ConfigArducopter` | Extended Tuning |  | copter | 128 | **missing** |
-| 177 | `ConfigArduplane` | Basic Tuning |  | plane | 47 | **missing** |
+| 177 | `ConfigArduplane` | Basic Tuning |  | plane | 47 | done: `crates/mp-gui/src/config/basic_tuning.rs` `fn page` |
 | 182 | `ConfigArducopter` | QP Extended Tuning |  | plane (enabled for a quadplane) | 128 | as at `GCSViews/SoftwareConfig.cs:169` |
 | 188 | `ConfigArdurover` | Basic Tuning |  | rover | 3 | **missing** |
 | 193 | `ConfigAntennaTracker` | Extended Tuning |  | tracker | 3 | as at `GCSViews/InitialSetup.cs:313` |

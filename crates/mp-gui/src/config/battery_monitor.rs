@@ -33,15 +33,23 @@
 //! * holding the focus in a calibration box whose text does not parse: `Validating`'s `e.Cancel`
 //!   keeps the caret there in WinForms. Here the text is not written, as there, but the focus
 //!   goes where it was sent;
-//! * the "MP Alert on Low Battery" settings (`speechbatteryenabled`, `speechenable`,
-//!   `speechbattery`, `speechbatteryvolt`, `speechbatterypercent`) are read from Mission Planner's
-//!   `config.xml` and changed for this session only: this application writes no `config.xml`, and
-//!   has no speech engine to read them.
+//! * the `InputBox`es' remembered answers, which `InputBox.Show` keeps as an `InputBox<title>`
+//!   list in `Settings.Instance` (`ExtLibs/Controls/InputBox.cs:178-184`): the Planner page and
+//!   Battery Monitor 2 do not carry them either.
+//!
+//! "MP Alert on Low Battery" reads and writes `Settings.Instance` - Mission Planner's `config.xml`,
+//! the dictionary [`Persisted`] is, which the Planner page and Battery Monitor 2 read and write
+//! too: `Activate` ticks it from `speechbatteryenabled` and `speechenable`
+//! (`ConfigBatteryMonitoring.cs:53-60`), and a click writes those two and, ticked, asks the three
+//! `InputBox` questions whose answers are `speechbattery`, `speechbatteryvolt` and
+//! `speechbatterypercent` (`ConfigBatteryMonitoring.cs:565-601`). Each change is in
+//! the dictionary at once and in the file at the next `SaveConfig`; nothing here speaks them, as
+//! nothing in this application has a speech engine.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
 use gpui::{
@@ -54,6 +62,7 @@ use mp_params::param_file::invariant_double;
 use super::failsafe::{Lookup, Message, options};
 use super::flight_modes::{ParamWriter, Progress};
 use crate::MissionPlanner;
+use crate::settings::Persisted;
 use crate::telemetry::{Telemetry, TelemetryView};
 use crate::textfield::{KeyOutcome, TextField};
 use crate::ui::{action, panel, theme};
@@ -785,60 +794,14 @@ impl ComboId {
     }
 }
 
-/// Mission Planner's settings that the Low Battery check box reads and writes, held for this
-/// session: seeded from `config.xml`, changed here only.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct SpeechSettings {
-    values: BTreeMap<String, String>,
-    seeded: bool,
-}
-
-impl SpeechSettings {
-    /// The settings the page touches.
-    const KEYS: [&'static str; 5] = [
-        "speechbatteryenabled",
-        "speechenable",
-        "speechbattery",
-        "speechbatteryvolt",
-        "speechbatterypercent",
-    ];
-
-    /// Takes the page's settings from `config.xml`, the first time only.
-    pub fn seed(&mut self, config: Option<&mp_settings::Config>) {
-        if self.seeded {
-            return;
-        }
-        self.seeded = true;
-        let Some(config) = config else {
-            return;
-        };
-        for key in Self::KEYS {
-            if let Some(value) = config.get(key) {
-                self.values.insert(key.to_owned(), value.to_owned());
-            }
-        }
-    }
-
-    /// `Settings.Instance[key]`.
-    #[must_use]
-    pub fn get(&self, key: &str) -> Option<&str> {
-        self.values.get(key).map(String::as_str)
-    }
-
-    /// `Settings.Instance.GetBoolean(key)`: `bool.TryParse`, false when absent or not a boolean.
-    /// `// C#: ExtLibs/Utilities/Settings.cs:223-232`
-    #[must_use]
-    pub fn get_bool(&self, key: &str) -> bool {
-        self.get(key).is_some_and(|value| {
-            value
-                .trim_matches(|c: char| c.is_whitespace() || c == '\0')
-                .eq_ignore_ascii_case("true")
-        })
-    }
-
-    fn set(&mut self, key: &str, value: impl Into<String>) {
-        self.values.insert(key.to_owned(), value.into());
-    }
+/// `Settings.Instance.GetBoolean(key)`: `bool.TryParse`, false when absent or not a boolean.
+/// `// C#: ExtLibs/Utilities/Settings.cs:223-232`
+fn get_boolean(settings: &Persisted, key: &str) -> bool {
+    settings.get(key).is_some_and(|value| {
+        value
+            .trim_matches(|c: char| c.is_whitespace() || c == '\0')
+            .eq_ignore_ascii_case("true")
+    })
 }
 
 /// One of the Low Battery alert's `InputBox`es.
@@ -851,7 +814,9 @@ pub struct Prompt {
 }
 
 impl Prompt {
-    fn at(stage: usize, settings: &SpeechSettings) -> Option<Self> {
+    /// The `stage`th question, its box holding the setting or the handler's literal.
+    /// `// C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring.cs:577-599`
+    fn at(stage: usize, settings: &Persisted) -> Option<Self> {
         let (_, _, key, default) = SPEECH_PROMPTS.get(stage)?;
         let mut field = TextField::new("");
         field.set(settings.get(key).unwrap_or(*default));
@@ -959,7 +924,7 @@ impl Controls {
     pub fn activate(
         view: &TelemetryView,
         lookup: Lookup,
-        speech: &SpeechSettings,
+        settings: &Persisted,
     ) -> (Self, Vec<Job>) {
         let mut controls = Self::default();
         let parameters = &view.parameters;
@@ -1004,7 +969,7 @@ impl Controls {
 
         // `// C#: :53-60`
         controls.speech =
-            speech.get_bool("speechbatteryenabled") && speech.get_bool("speechenable");
+            get_boolean(settings, "speechbatteryenabled") && get_boolean(settings, "speechenable");
 
         // Setting `SelectedIndex` raises the sensor handler, which has no `startup` check but
         // writes nothing while it is set. `// C#: :62-103`
@@ -1353,8 +1318,6 @@ pub struct BatteryMonitor {
     ticks: u32,
     /// The vehicle's parameter count when a refresh was asked for.
     refresh_from: Option<u16>,
-    /// The Low Battery alert's settings.
-    speech: SpeechSettings,
 }
 
 impl BatteryMonitor {
@@ -1382,15 +1345,21 @@ impl BatteryMonitor {
         self.prompt.as_ref()
     }
 
+    /// The question showing, to type into, for a test.
+    #[cfg(test)]
+    pub fn prompt_mut(&mut self) -> Option<&mut Prompt> {
+        self.prompt.as_mut()
+    }
+
     /// How many handlers' writes are still to finish.
     #[must_use]
     pub fn pending(&self) -> usize {
         self.runner.pending()
     }
 
-    /// Opens the page: `Activate`.
-    pub fn open(&mut self, view: &TelemetryView, lookup: Lookup) {
-        let (controls, jobs) = Controls::activate(view, lookup, &self.speech);
+    /// Opens the page: `Activate`, which reads the alert's settings from `Settings.Instance`.
+    pub fn open(&mut self, view: &TelemetryView, lookup: Lookup, settings: &Persisted) {
+        let (controls, jobs) = Controls::activate(view, lookup, settings);
         self.timer = (controls.enabled && !controls.startup).then(Instant::now);
         self.controls = Some(controls);
         self.dropdown = None;
@@ -1412,16 +1381,11 @@ impl BatteryMonitor {
     }
 
     /// The page's entry on the setup screen: opens it, or closes it again.
-    pub fn toggle(&mut self, telemetry: &Telemetry) {
+    pub fn toggle(&mut self, telemetry: &Telemetry, settings: &Persisted) {
         if self.is_open() {
             self.close();
         } else {
-            self.speech.seed(
-                mp_settings::Config::default_path()
-                    .and_then(|path| mp_settings::Config::load(&path).ok())
-                    .as_ref(),
-            );
-            self.open(&telemetry.view(), crate::metadata::lookup);
+            self.open(&telemetry.view(), crate::metadata::lookup, settings);
         }
     }
 
@@ -1548,10 +1512,10 @@ impl BatteryMonitor {
         }
     }
 
-    /// A click on "MP Alert on Low Battery": the settings changed and, when it ends checked, the
-    /// first of the three questions asked.
+    /// A click on "MP Alert on Low Battery": `Settings.Instance` changed and, when it ends
+    /// checked, the first of the three questions asked.
     /// `// C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring.cs:565-601`
-    pub fn click_speech(&mut self) {
+    pub fn click_speech(&mut self, settings: &mut Persisted) {
         let Some(controls) = self.controls.as_mut() else {
             return;
         };
@@ -1563,27 +1527,28 @@ impl BatteryMonitor {
             return;
         }
         let checked = controls.speech;
-        self.speech.set(
+        // `((CheckBox)sender).Checked.ToString()`: "True" or "False".
+        settings.set(
             "speechbatteryenabled",
             if checked { "True" } else { "False" },
         );
-        self.speech.set("speechenable", "True");
+        settings.set("speechenable", "True");
         self.prompt = if checked {
-            Prompt::at(0, &self.speech)
+            Prompt::at(0, settings)
         } else {
             None
         };
     }
 
-    /// OK on a question: the answer kept and the next asked.
-    pub fn answer(&mut self) {
+    /// OK on a question: the answer kept in `Settings.Instance` and the next asked.
+    pub fn answer(&mut self, settings: &mut Persisted) {
         let Some(prompt) = self.prompt.take() else {
             return;
         };
         if let Some((_, _, key, _)) = SPEECH_PROMPTS.get(prompt.stage) {
-            self.speech.set(key, prompt.field.value());
+            settings.set(key, prompt.field.value());
         }
-        self.prompt = Prompt::at(prompt.stage + 1, &self.speech);
+        self.prompt = Prompt::at(prompt.stage + 1, settings);
     }
 
     /// Cancel on a question: `return`, the questions after it unasked.
@@ -1592,12 +1557,12 @@ impl BatteryMonitor {
     }
 
     /// A key in the question's box.
-    pub fn prompt_key(&mut self, event: &KeyDownEvent) -> bool {
+    pub fn prompt_key(&mut self, event: &KeyDownEvent, settings: &mut Persisted) -> bool {
         let Some(prompt) = self.prompt.as_mut() else {
             return false;
         };
         match prompt.field.key(event) {
-            KeyOutcome::Submitted => self.answer(),
+            KeyOutcome::Submitted => self.answer(settings),
             KeyOutcome::Cancelled => self.cancel(),
             KeyOutcome::Changed => {}
             KeyOutcome::Ignored => return false,
@@ -1608,13 +1573,6 @@ impl BatteryMonitor {
     /// Dismisses the message box showing.
     pub fn dismiss_message(&mut self) {
         self.messages.pop_front();
-    }
-
-    /// The session's Low Battery settings.
-    #[cfg(test)]
-    #[must_use]
-    pub const fn speech_settings(&self) -> &SpeechSettings {
-        &self.speech
     }
 
     /// Reads what running the jobs produced into messages, the record, and a refresh.
@@ -1677,6 +1635,7 @@ impl BatteryMonitor {
         view: &TelemetryView,
         focused: [bool; 5],
         on_setup: bool,
+        settings: &Persisted,
     ) {
         if !on_setup && self.is_open() {
             self.close();
@@ -1707,7 +1666,7 @@ impl BatteryMonitor {
             && view.parameters.len() >= usize::from(view.parameters_expected)
         {
             self.refresh_from = None;
-            self.open(view, crate::metadata::lookup);
+            self.open(view, crate::metadata::lookup, settings);
         }
     }
 }
@@ -2218,7 +2177,7 @@ fn speech_box(checked: bool, enabled: bool, cx: &mut Context<MissionPlanner>) ->
         body.cursor_pointer()
             .on_click(cx.listener(|this, _event, window, cx| {
                 window.blur(cx);
-                this.battery_monitor.click_speech();
+                this.battery_monitor.click_speech(&mut this.persisted);
                 if this.battery_monitor.prompt().is_some() {
                     this.battery_focus.prompt.focus(window, cx);
                 }
@@ -2299,7 +2258,7 @@ pub fn overlay(
                 focused,
                 px(310.0),
                 cx.listener(|this, event: &KeyDownEvent, _window, cx| {
-                    if this.battery_monitor.prompt_key(event) {
+                    if this.battery_monitor.prompt_key(event, &mut this.persisted) {
                         cx.notify();
                     }
                 }),
@@ -2315,7 +2274,7 @@ pub fn overlay(
                         theme::ACCENT,
                         true,
                         cx.listener(|this, _event: &(), _window, cx| {
-                            this.battery_monitor.answer();
+                            this.battery_monitor.answer(&mut this.persisted);
                             cx.notify();
                         }),
                     ))
@@ -2396,7 +2355,7 @@ mod tests {
     fn open(parameters: &[(&str, f64)]) -> (BatteryMonitor, TelemetryView) {
         let view = view_with(parameters);
         let mut battery = BatteryMonitor::default();
-        battery.open(&view, bundled);
+        battery.open(&view, bundled, &Persisted::at(None));
         (battery, view)
     }
 
@@ -2637,8 +2596,7 @@ mod tests {
             .iter()
             .map(|(name, value)| (name.to_owned(), value))
             .collect();
-        let speech = SpeechSettings::default();
-        let (controls, jobs) = Controls::activate(&view, bundled, &speech);
+        let (controls, jobs) = Controls::activate(&view, bundled, &Persisted::at(None));
         assert!(controls.enabled);
         assert!(!controls.startup);
         assert_eq!(controls.monitor, Some(4));
@@ -2825,7 +2783,7 @@ mod tests {
         let mut view = view_with(&SITL);
         view.connected = false;
         let mut battery = BatteryMonitor::default();
-        battery.open(&view, bundled);
+        battery.open(&view, bundled, &Persisted::at(None));
         assert!(!battery.controls().unwrap().enabled);
     }
 
@@ -3131,9 +3089,9 @@ mod tests {
         battery.type_into(Field::Capacity, "3400");
         let mut focused = [false; 5];
         focused[Field::Capacity.index()] = true;
-        battery.tick(&telemetry, &view, focused, true);
+        battery.tick(&telemetry, &view, focused, true, &Persisted::at(None));
         assert!(battery.message().is_none(), "still in the box");
-        battery.tick(&telemetry, &view, [false; 5], true);
+        battery.tick(&telemetry, &view, [false; 5], true, &Persisted::at(None));
         assert_eq!(
             battery.message().map(|message| message.text.as_str()),
             Some(CAPACITY_FAILED)
@@ -3153,8 +3111,8 @@ mod tests {
         drain(&mut battery);
         let mut focused = [false; 5];
         focused[Field::Capacity.index()] = true;
-        battery.tick(&telemetry, &view, focused, true);
-        battery.tick(&telemetry, &view, [false; 5], false);
+        battery.tick(&telemetry, &view, focused, true, &Persisted::at(None));
+        battery.tick(&telemetry, &view, [false; 5], false, &Persisted::at(None));
         assert!(!battery.is_open());
         assert!(battery.message().is_none());
         assert_eq!(battery.pending(), 0);
@@ -3171,10 +3129,10 @@ mod tests {
         state.battery.voltage = 11.1;
         state.battery.current = 2.5;
         view.state = Some(Arc::new(state));
-        battery.tick(&telemetry, &view, [false; 5], true);
+        battery.tick(&telemetry, &view, [false; 5], true, &Persisted::at(None));
         assert_eq!(battery.ticks, 0, "not a second yet");
         battery.timer = Instant::now().checked_sub(TIMER_INTERVAL);
-        battery.tick(&telemetry, &view, [false; 5], true);
+        battery.tick(&telemetry, &view, [false; 5], true, &Persisted::at(None));
         assert_eq!(battery.ticks, 1);
         let controls = battery.controls().unwrap();
         assert_eq!(controls.voltage, invariant_double(f64::from(11.1_f32)));
@@ -3187,45 +3145,42 @@ mod tests {
         );
     }
 
-    /// `GetBoolean`, and the check box: its settings for this session, then the three questions,
-    /// each offering the setting or its default; Cancel stops them.
+    /// `GetBoolean` over `Settings.Instance`: "True" in any case, blanks and NULs trimmed; absent or
+    /// anything else is false.
     #[test]
-    fn the_low_battery_alert_asks_its_three_questions() {
-        let mut config = mp_settings::Config::default();
-        config.set("speechbatteryenabled", "True");
-        config.set("speechenable", " true ");
-        config.set("speechbatteryvolt", "10.5");
-        let mut settings = SpeechSettings::default();
-        settings.seed(Some(&config));
-        assert!(settings.get_bool("speechbatteryenabled"));
-        assert!(settings.get_bool("speechenable"));
-        assert!(!settings.get_bool("speechbattery"), "absent");
-        config.set("speechenable", "yes");
-        let mut again = SpeechSettings::default();
-        again.seed(Some(&config));
-        assert!(!again.get_bool("speechenable"), "not a boolean");
+    fn get_boolean_reads_the_dictionary_as_bool_try_parse_does() {
+        let mut settings = Persisted::at(None);
+        settings.set("speechbatteryenabled", "True");
+        settings.set("speechenable", " true ");
+        assert!(get_boolean(&settings, "speechbatteryenabled"));
+        assert!(get_boolean(&settings, "speechenable"));
+        assert!(!get_boolean(&settings, "speechbattery"), "absent");
+        settings.set("speechenable", "yes");
+        assert!(!get_boolean(&settings, "speechenable"), "not a boolean");
+    }
 
+    /// The check box reads and writes `Settings.Instance`: `Activate` ticks it from the
+    /// dictionary; a click writes "True"/"False" and `speechenable`, and ticked asks the three
+    /// questions, each offering the dictionary's value or its default and putting the answer in
+    /// the dictionary; Cancel stops them.
+    #[test]
+    fn the_low_battery_alert_reads_and_writes_settings_instance() {
+        let mut settings = Persisted::at(None);
+        settings.set("speechbatteryenabled", "True");
+        settings.set("speechenable", "True");
+        settings.set("speechbatteryvolt", "10.5");
         let view = view_with(&SITL);
-        let mut battery = BatteryMonitor {
-            speech: settings,
-            ..BatteryMonitor::default()
-        };
-        battery.open(&view, bundled);
-        assert!(battery.controls().unwrap().speech);
-        battery.click_speech();
+        let mut battery = BatteryMonitor::default();
+        battery.open(&view, bundled, &settings);
+        assert!(battery.controls().unwrap().speech, "read at Activate");
+        battery.click_speech(&mut settings);
         assert!(!battery.controls().unwrap().speech);
-        assert_eq!(
-            battery.speech_settings().get("speechbatteryenabled"),
-            Some("False")
-        );
+        assert_eq!(settings.get("speechbatteryenabled"), Some("False"));
         assert!(battery.prompt().is_none(), "unchecking asks nothing");
 
-        battery.click_speech();
-        assert_eq!(
-            battery.speech_settings().get("speechbatteryenabled"),
-            Some("True")
-        );
-        assert_eq!(battery.speech_settings().get("speechenable"), Some("True"));
+        battery.click_speech(&mut settings);
+        assert_eq!(settings.get("speechbatteryenabled"), Some("True"));
+        assert_eq!(settings.get("speechenable"), Some("True"));
         let prompt = battery.prompt().unwrap();
         assert_eq!(
             prompt.text(),
@@ -3235,7 +3190,12 @@ mod tests {
             prompt.field.value(),
             "WARNING, Battery at {batv} Volt, {batp} percent"
         );
-        battery.answer();
+        battery.answer(&mut settings);
+        assert_eq!(
+            settings.get("speechbattery"),
+            Some("WARNING, Battery at {batv} Volt, {batp} percent"),
+            "in the dictionary at once"
+        );
         let prompt = battery.prompt().unwrap();
         assert_eq!(prompt.text().1, "What Voltage do you want to warn at?");
         assert_eq!(
@@ -3245,11 +3205,110 @@ mod tests {
         );
         battery.cancel();
         assert!(battery.prompt().is_none());
+        assert_eq!(settings.get("speechbatteryvolt"), Some("10.5"));
+        assert_eq!(settings.get("speechbatterypercent"), None);
+
+        // Another page's write - Battery Monitor 2 and the Planner page share the dictionary - is
+        // what the next `Activate` reads.
+        settings.set("speechbatteryenabled", "False");
+        battery.close();
+        battery.open(&view, bundled, &settings);
+        assert!(!battery.controls().unwrap().speech);
+    }
+
+    /// A change made on the page is in `Settings.Instance` at once, in `config.xml` after the next
+    /// `SaveConfig` and not before, and read back by the page after a restart.
+    #[test]
+    fn a_speech_change_is_saved_with_config_xml_and_comes_back() {
+        let dir =
+            std::env::temp_dir().join(format!("mp-gui-battery-speech-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("Mission Planner").join("config.xml");
+        let mut settings = Persisted::at(Some(path.clone()));
+        let view = view_with(&SITL);
+        let mut battery = BatteryMonitor::default();
+        battery.open(&view, bundled, &settings);
+        assert!(!battery.controls().unwrap().speech);
+
+        battery.click_speech(&mut settings);
+        for answer in ["LOW {batv}", "11.1", "30"] {
+            battery.prompt_mut().unwrap().field.set(answer);
+            battery.answer(&mut settings);
+        }
+        assert!(battery.prompt().is_none(), "three questions");
+        assert_eq!(settings.get("speechbattery"), Some("LOW {batv}"));
+        assert!(!path.exists(), "nothing on disk before a save");
+
+        settings
+            .save_config(crate::settings::SaveEvent::FlightData)
+            .expect("the save");
+        let on_disk = mp_settings::Config::load(&path).expect("the file reads back");
+        for (key, value) in [
+            ("speechbatteryenabled", "True"),
+            ("speechenable", "True"),
+            ("speechbattery", "LOW {batv}"),
+            ("speechbatteryvolt", "11.1"),
+            ("speechbatterypercent", "30"),
+        ] {
+            assert_eq!(on_disk.get(key), Some(value), "{key}");
+        }
+
+        // A restart: the dictionary read from the file, the page ticked from it, and the saved
+        // answer offered when the box is ticked again.
+        let mut restarted = Persisted::at(Some(path));
+        let mut again = BatteryMonitor::default();
+        again.open(&view, bundled, &restarted);
+        assert!(again.controls().unwrap().speech);
+        again.click_speech(&mut restarted);
+        again.click_speech(&mut restarted);
         assert_eq!(
-            battery.speech_settings().get("speechbattery"),
-            Some("WARNING, Battery at {batv} Volt, {batp} percent")
+            again.prompt().map(|prompt| prompt.field.value().to_owned()),
+            Some("LOW {batv}".to_owned())
         );
-        assert_eq!(battery.speech_settings().get("speechbatterypercent"), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Every fact `tests/gui/config-battery.gui` asserts on is one this page records or one of
+    /// the dictionary's published keys; the script keeps a config.xml of its own, restarts to
+    /// read it back, and the alert's box it clicks is one this page draws.
+    #[test]
+    fn the_gui_script_names_facts_this_page_and_the_dictionary_have() {
+        let script = include_str!("../../../../tests/gui/config-battery.gui");
+        let source = include_str!("battery_monitor.rs");
+        let mut speech = 0;
+        for line in script.lines() {
+            let line = line.split('#').next().unwrap_or("");
+            let mut words = line.split_whitespace();
+            match (words.next(), words.next()) {
+                (Some("expect"), Some(key)) if key.starts_with("config.battery.") => {
+                    // A box's `.enabled` is recorded per box, by its key.
+                    let per_box = key
+                        .strip_prefix("config.battery.")
+                        .and_then(|rest| rest.strip_suffix(".enabled"))
+                        .is_some_and(|name| {
+                            Field::ALL.iter().any(|field| field_key(*field) == name)
+                        });
+                    assert!(per_box || source.contains(&format!("\"{key}\"")), "{key}");
+                }
+                (Some("expect"), Some(key)) if key.starts_with("config.speech") => {
+                    let name = key.trim_start_matches("config.");
+                    assert!(crate::settings::PUBLISHED.contains(&name), "{key}");
+                    speech += 1;
+                }
+                (Some("click"), Some(id)) if id.starts_with("battery-") => {
+                    assert!(source.contains(&format!("\"{id}\"")), "{id}");
+                }
+                _ => {}
+            }
+        }
+        assert!(speech >= 10, "{speech} speech facts");
+        assert!(
+            script
+                .lines()
+                .any(|line| line == "env MP_CONFIG_XML $WORK/config.xml")
+        );
+        assert!(script.lines().any(|line| line == "restart"));
+        assert!(script.contains("click battery-speech"));
     }
 
     /// The combos drop down only when they are enabled, and one at a time.

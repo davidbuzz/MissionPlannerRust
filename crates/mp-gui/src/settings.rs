@@ -224,9 +224,10 @@ impl SaveEvent {
 }
 
 /// The keys the facts publish as `config.<key>`: every key the screens other than the Planner page
-/// write, and the display units, which that page writes too. The Planner page publishes each of
-/// its own keys as `config.planner.<key>` (`config/planner.rs`), from this same dictionary.
-pub const PUBLISHED: [&str; 22] = [
+/// write, and the display units, which that page writes too - as does the speech alert that
+/// Initial Setup's Battery Monitor writes (`config/battery_monitor.rs`). The Planner page publishes
+/// each of its own keys as `config.planner.<key>` (`config/planner.rs`), from this same dictionary.
+pub const PUBLISHED: [&str; 27] = [
     "TXT_homelat",
     "TXT_homelng",
     "TXT_homealt",
@@ -249,6 +250,13 @@ pub const PUBLISHED: [&str; 22] = [
     "distunits",
     "altunits",
     "speedunits",
+    // Battery Monitor's "MP Alert on Low Battery".
+    // C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring.cs:565-601
+    "speechbatteryenabled",
+    "speechenable",
+    "speechbattery",
+    "speechbatteryvolt",
+    "speechbatterypercent",
 ];
 
 /// `CMB_baudrate`'s ninth item, which `MainV2` selects before anything is loaded.

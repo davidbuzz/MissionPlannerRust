@@ -14,6 +14,16 @@
 #
 # A run that stops half way leaves BATT_CAPACITY at 3400; the next run's first capacity expectation
 # fails, and restoring it by hand (or re-running from a fresh SITL) puts it back.
+#
+# "MP Alert on Low Battery" reads and writes Settings.Instance - Mission Planner's config.xml, one
+# dictionary with the Planner page's and Battery Monitor 2's keys (ConfigBatteryMonitoring.cs:53-60,
+# 565-601). Ticking it puts speechbatteryenabled and speechenable in the dictionary at once and asks
+# three InputBox questions whose answers go in too (config.<key> is the dictionary's own fact,
+# settings.rs's); the page saves nothing, and after `restart` - which closes through the close box,
+# which saves - the dictionary read back from the file holds them and the page opens ticked. The
+# script has a config.xml of its own, so Mission Planner's is neither read nor written.
+
+env MP_CONFIG_XML $WORK/config.xml
 
 screen params
 window 1600x1200
@@ -91,7 +101,57 @@ expect params.value.BATT_CAPACITY 3300
 expect params.value.BATT_VOLT_MULT 10.1
 expect config.battery.message none
 
+# The Low Battery alert. The script's config.xml has none of its keys: unticked, and the start-up
+# save the only one.
+expect config.battery.speech false
+expect config.speechbatteryenabled none
+expect config.saves 1
+click battery-speech
+settle 1
+expect config.battery.speech true
+expect config.speechbatteryenabled True
+expect config.speechenable True
+expect config.battery.prompt ~ What do you want it to say
+key ctrl+u
+type LOW {batv}
+key Return
+expect config.speechbattery LOW {batv}
+expect config.battery.prompt ~ What Voltage do you want to warn at
+key ctrl+u
+type 10.8
+key Return
+expect config.battery.prompt ~ What percentage do you want to warn at
+key ctrl+u
+type 25
+key Return
+expect config.battery.prompt none
+expect config.speechbatteryvolt 10.8
+expect config.speechbatterypercent 25
+# In the dictionary, not yet in the file: the page saves nothing.
+expect config.saves 1
+
 # Choosing another page deactivates this one, as BackstageView does on every change.
 click setup-page-ConfigOptional
 settle 1
 expect config.battery.open false
+
+# The close box saves config.xml; the new process reads it back before any page shows, and the
+# page opens ticked from it.
+restart
+settle 6
+expect config.saved startup
+expect config.error none
+expect config.speechbatteryenabled True
+expect config.speechenable True
+expect config.speechbattery LOW {batv}
+expect config.speechbatteryvolt 10.8
+expect config.speechbatterypercent 25
+click param-download
+settle 15
+expect params.held > 1000
+click tab-setup
+click setup-page-ConfigOptional
+click setup-page-ConfigBatteryMonitoring
+settle 2
+expect config.battery.open true
+expect config.battery.speech true

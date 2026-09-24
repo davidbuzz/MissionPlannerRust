@@ -916,7 +916,8 @@ impl MissionPlanner {
             }
             // C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring.cs:18-176
             Some("ConfigBatteryMonitoring") if !self.battery_monitor.is_open() => {
-                self.battery_monitor.toggle(&self.telemetry);
+                self.battery_monitor
+                    .toggle(&self.telemetry, &self.persisted);
             }
             // C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:42-177
             Some("ConfigRadioInput") if !self.radio_input.is_active() => {
@@ -991,6 +992,11 @@ impl MissionPlanner {
                 | "ConfigMount"),
             ) => self.optional_activate(class),
             // end Optional Hardware pages
+            // ---- Basic Tuning / Advanced ----
+            // Every time, as `ActivatePage` calls it. `ConfigAdvanced.Activate` does nothing.
+            // C#: GCSViews/ConfigurationView/ConfigArduplane.cs:26-126
+            Some("ConfigArduplane") => self.basic_tuning_activate(),
+            // ---- end Basic Tuning / Advanced ----
             _ => {}
         }
     }
@@ -1064,6 +1070,10 @@ impl MissionPlanner {
                 | "ConfigMount"),
             ) => self.optional_deactivate(class),
             // end Optional Hardware pages
+            // ---- Basic Tuning / Advanced ----
+            // `ConfigArduplane` is `IActivate` only: hidden, a number being typed into read.
+            Some("ConfigArduplane") => self.basic_tuning.hide(std::time::Instant::now()),
+            // ---- end Basic Tuning / Advanced ----
             _ => {}
         }
     }
@@ -1256,6 +1266,17 @@ impl MissionPlanner {
             // C#: GCSViews/ConfigurationView/ConfigMount.resx
             "ConfigMount" => self.optional_page(class, view, window, cx),
             // end Optional Hardware pages
+            // ---- Basic Tuning / Advanced ----
+            // C#: GCSViews/ConfigurationView/ConfigArduplane.Designer.cs:29-1078; ConfigArduplane.resx
+            "ConfigArduplane" => crate::config::basic_tuning::page(
+                &self.basic_tuning,
+                &self.basic_tuning_focus,
+                window,
+                cx,
+            ),
+            // C#: GCSViews/ConfigurationView/ConfigAdvanced.Designer.cs:29-266; ConfigAdvanced.resx
+            "ConfigAdvanced" => crate::config::advanced::page(),
+            // ---- end Basic Tuning / Advanced ----
             _ => return None,
         })
     }

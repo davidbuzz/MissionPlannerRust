@@ -543,13 +543,14 @@ pub const PANELS: &[Panel] = &[
         Some(13),
         &[setup(270, "Battery Monitor", OPTIONAL, ANY)],
         // C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring.cs:18-653, ported but for the
-        // power-module photo, typing into the Sensor and HW Ver combos, and the speech alert,
-        // which lasts a session since nothing writes config.xml.
+        // power-module photo and typing into the Sensor and HW Ver combos; the speech alert reads
+        // and writes Settings.Instance (:53-60, 565-601), saved with config.xml.
         Partial(
             at("crates/mp-gui/src/config/battery_monitor.rs", "fn page"),
             "the Monitor, Sensor and HW Ver combos with the nine presets and the pin table, the \
              divider and amps-per-volt arithmetic in single precision, each box writing its \
-             parameter on leaving through the retrying set; no photo, no typing into the combos",
+             parameter on leaving through the retrying set, the Low Battery alert and its three \
+             questions in Settings.Instance and config.xml; no photo, no typing into the combos",
         ),
     ),
     panel(
@@ -706,7 +707,16 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigAdvanced"),
         Some(13),
         &[setup(342, "Advanced", TOP, "always, Advanced view")],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:18-127 and its .resx - drawn whole;
+        // every button opens a window of its own that is not ported, so each is dimmed with the
+        // window it would open as the reason.
+        Partial(
+            at("crates/mp-gui/src/config/advanced.rs", "fn page"),
+            "the text and the thirteen buttons with their labels at the table's places; every \
+             button dimmed - the Warnings Manager, MAVLink Inspector, proximity, signing keys, \
+             MAVLink mirror, NMEA output, Follow Me, parameter regeneration, moving base, log \
+             anonymiser, FFT, spectrogram and support proxy windows they open are not ported",
+        ),
     ),
     panel(
         "ConfigTerminal",
@@ -759,7 +769,11 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigArduplane"),
         Some(47),
         &[config(177, "Basic Tuning", "plane")],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigArduplane.cs:26-331 - the 44 boxes bound as
+        // Activate binds them, changes held green until Write Params (or Ctrl+S) sets them
+        // through the retrying set with the doubled-value question, Refresh Params and Refresh
+        // Screen; the divergences are at the sites in basic_tuning.rs.
+        Ours::Done(at("crates/mp-gui/src/config/basic_tuning.rs", "fn page")),
     ),
     panel(
         "ConfigArdurover",
@@ -1670,7 +1684,7 @@ mod tests {
             );
             checked += 1;
         }
-        assert_eq!(checked, 26);
+        assert_eq!(checked, 28);
     }
 
     /// The committed report matches the table.
@@ -1702,7 +1716,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (8, 17, 30, 2, 4)
+            (9, 18, 28, 2, 4)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

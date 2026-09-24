@@ -1,0 +1,48 @@
+# Initial Setup's Advanced page, ported from GCSViews/ConfigurationView/ConfigAdvanced.cs.
+#
+# InitialSetup adds it in the Advanced view whether or not a vehicle is connected, as the heading
+# of Terminal and Script REPL (InitialSetup.cs:340-353); choosing it shows the page and opens the
+# heading. Its Activate does nothing and it reads no parameter, so this script runs with no link:
+# the data directory is a scratch one, so no link Mission Planner remembers is opened. It needs
+# no SITL, and there is no parameter on the page to write.
+#
+# The claims: the page shows label1's text and the table's thirteen buttons with the label beside
+# each, in the .resx's order, and every button is dimmed - each opens a window of its own
+# (ConfigAdvanced.cs:22-127: the Warnings Manager, MAVLink Inspector, proximity, signing keys,
+# MAVLink mirror, NMEA output, Follow Me, parameter regeneration, moving base, log anonymiser, FFT,
+# spectrogram, support proxy) that this application does not have. The script clicks none of
+# them; config/advanced.rs's tests hold the controls to the Designer and the .resx and each
+# handler to the window its row names.
+
+env XDG_DATA_HOME $WORK
+
+screen setup
+window 1600x1200
+settle 3
+
+expect config.advanced.active false
+expect setup.pages ~ ConfigAdvanced,ConfigTerminal
+click setup-page-ConfigAdvanced
+settle 1
+expect setup.page ConfigAdvanced
+expect setup.title Advanced
+expect setup.expanded ConfigAdvanced
+expect setup.shown ConfigFirmwareManifest,ConfigFirmware,ConfigSecureAP,ConfigOptional,ConfigAdvanced,ConfigTerminal
+expect config.advanced.active true
+expect config.advanced.text The following pages are for advanced configutation only. use with caution
+expect config.advanced.buttons Warning Manager,MAVLink Inspector,Proximity,Mavlink Signing,Mavlink Mirror,NMEA,Follow Me,Param gen,Moving Base,Anon Log,FFT,Spectrogram,Support Proxy
+expect config.advanced.labels ~ Enable custom warnings based on a set of conditions|View decoded mavlink data
+expect config.advanced.labels ~ |Share connection with support engineer
+expect config.advanced.buttons.enabled false
+expect config.advanced.dimmed ~ but_mavinspector: the MAVLink Inspector window (Controls/MAVLinkInspector.cs) is not ported
+
+# The heading again closes it, and Advanced is still the page showing; another page and it is not.
+click setup-page-ConfigAdvanced
+settle 1
+expect setup.page ConfigAdvanced
+expect setup.shown ConfigFirmwareManifest,ConfigFirmware,ConfigSecureAP,ConfigOptional,ConfigAdvanced
+expect config.advanced.active true
+click setup-page-ConfigOptional
+settle 1
+expect setup.page ConfigOptional
+expect config.advanced.active false

@@ -330,6 +330,13 @@ struct MissionPlanner {
     /// Their boxes' focus.
     optional_focus: config::optional::Focus,
     // end Optional Hardware pages
+    // ---- Basic Tuning / Advanced ----
+    /// CONFIG's Basic Tuning page for a plane (`ConfigArduplane`); Advanced (`ConfigAdvanced`)
+    /// keeps no state.
+    basic_tuning: config::basic_tuning::BasicTuning,
+    /// The focus of its box being typed into.
+    basic_tuning_focus: gpui::FocusHandle,
+    // ---- end Basic Tuning / Advanced ----
 }
 
 impl MissionPlanner {
@@ -534,6 +541,10 @@ impl MissionPlanner {
             optional: config::optional::Optional::default(),
             optional_focus: config::optional::Focus::new(cx),
             // end Optional Hardware pages
+            // ---- Basic Tuning / Advanced ----
+            basic_tuning: config::basic_tuning::BasicTuning::default(),
+            basic_tuning_focus: cx.focus_handle(),
+            // ---- end Basic Tuning / Advanced ----
         };
         // Opening on the planning screen activates it, as switching to it does.
         if this.screen == Screen::Plan {
@@ -1705,6 +1716,7 @@ impl Render for MissionPlanner {
             &view,
             self.battery_focus.focused(window),
             self.screen == Screen::Setup,
+            &self.persisted,
         );
         // Install Firmware's catalogue arriving, and the page closing when the screen changes.
         self.install_firmware.tick(self.screen == Screen::Setup);
@@ -1761,6 +1773,10 @@ impl Render for MissionPlanner {
         // ---- end Mandatory Hardware pages ----
         // Optional Hardware pages: their page objects, timers, boxes and writes.
         self.optional_tick(&view, window);
+        // ---- Basic Tuning / Advanced ----
+        // Basic Tuning's page object, the box the focus left, Refresh Params and Write Params.
+        self.basic_tuning_tick(&view, window);
+        // ---- end Basic Tuning / Advanced ----
         let banner = self.telemetry.firmware_banner().map(str::to_owned);
         let mav_type = view.state.as_ref().map_or(0, |state| state.vehicle_type);
         self.metadata.advance(banner.as_deref(), mav_type);
@@ -2043,6 +2059,20 @@ impl Render for MissionPlanner {
                     .is_some_and(|entry| entry.class == "ConfigSecureAP"),
             );
             // ---- end Mandatory Hardware pages ----
+            // ---- Basic Tuning / Advanced ----
+            config::basic_tuning::record_facts(
+                &self.basic_tuning,
+                self.config_list
+                    .pages()
+                    .iter()
+                    .any(|row| row.class == config::basic_tuning::CLASS),
+            );
+            config::advanced::record_facts(
+                self.setup_list
+                    .page()
+                    .is_some_and(|entry| entry.class == "ConfigAdvanced"),
+            );
+            // ---- end Basic Tuning / Advanced ----
             config::planner::record_facts(&self.planner, &self.persisted, self.auto_read_mission);
             facts::publish();
             // The harness's work, which a normal run does not do, is not the frame's.
@@ -2349,6 +2379,13 @@ impl Render for MissionPlanner {
                 .flex_1()
                 .min_h(px(0.0))
                 .child(self.backstage_screen(setup::List::Config, &view, window, cx))
+                // ---- Basic Tuning / Advanced ----
+                .children(config::basic_tuning::overlay(
+                    &self.basic_tuning,
+                    window,
+                    cx,
+                ))
+                // ---- end Basic Tuning / Advanced ----
                 .into_any_element(),
         };
 
