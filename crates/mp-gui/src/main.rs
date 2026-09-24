@@ -380,6 +380,29 @@ impl MissionPlanner {
         let mut fly_data = fly::FlightData::new();
         // The link this start opens, which Mission Planner's Connect would save.
         let opened = target.clone().filter(|_| !storm::enabled());
+        // Mission Planner's config.xml, read once as `Settings.Instance` is, before anything
+        // below reads it: the map's access mode is one of its keys. `// C#: MainV2.cs:782-808`
+        let mut persisted = settings::Persisted::load();
+        // `CurrentState`'s statics, as `MainV2`'s start-up sets them from config.xml: the
+        // telemetry rates' saved defaults, the custom fields' names, the planned home put back to
+        // 0,0,0 when it is off the globe, and the K-index - today's saved one, or a download on a
+        // thread of its own. Set before the link opens: a vehicle takes its `rate*` from the
+        // backups as it is made, on the link's thread, at its first heartbeat - which came before
+        // this block when it sat after the connect, so the saved `CMB_raterc` reached the vehicle
+        // only when start-up won the race. `// C#: MainV2.cs:981-1000, 1010-1028, 3306, 3940-3962`
+        mp_vehicle::StreamRates::set_backups(persisted.rate_backups());
+        for (index, name) in persisted.custom_field_names() {
+            mp_vehicle::VehicleState::add_custom_field_name(index, &name);
+        }
+        let planned = plan::planned_home_from_config(Some(persisted.config()));
+        mp_vehicle::VehicleState::set_planned_home(mp_vehicle::LatLngAlt {
+            lat: planned.lat,
+            lng: planned.lng,
+            alt: planned.alt,
+        });
+        if persisted.kindex_at_start(&settings::short_date_today()) {
+            settings::download_kindex(mp_firmware::manifest::Http);
+        }
         let telemetry = match (storm::telemetry(), target) {
             (Some(storm), _) => storm,
             (None, Some(url)) => match url.parse::<mp_transport::LinkUrl>() {
@@ -427,10 +450,6 @@ impl MissionPlanner {
             .and_then(|v| v.parse().ok())
             .unwrap_or(0);
 
-        // Mission Planner's config.xml, read once as `Settings.Instance` is, before anything
-        // below reads it: the map's access mode is one of its keys.
-        let mut persisted = settings::Persisted::load();
-
         // Map imagery. Off with MP_NO_TILES, which is how the offline behaviour gets exercised
         // and how a screenshot avoids depending on a tile server being up.
         let mut map = MapViewport::new(track_points, markers);
@@ -470,24 +489,6 @@ impl MissionPlanner {
         // The Planner page's keys `MainV2` sets up from before any page shows: the units, the
         // telemetry rates and the GCS id. `// C#: MainV2.cs:683, 836, 981-1002`
         let planner = config::planner::Planner::new(&persisted);
-        // `CurrentState`'s statics, as `MainV2`'s start-up sets them from config.xml: the
-        // telemetry rates' saved defaults, the custom fields' names, the planned home put back to
-        // 0,0,0 when it is off the globe, and the K-index - today's saved one, or a download on a
-        // thread of its own. `// C#: MainV2.cs:981-1000, 1010-1028, 3306, 3940-3962`
-        mp_vehicle::StreamRates::set_backups(persisted.rate_backups());
-        for (index, name) in persisted.custom_field_names() {
-            mp_vehicle::VehicleState::add_custom_field_name(index, &name);
-        }
-        let planned = plan::planned_home_from_config(Some(persisted.config()));
-        mp_vehicle::VehicleState::set_planned_home(mp_vehicle::LatLngAlt {
-            lat: planned.lat,
-            lng: planned.lng,
-            alt: planned.alt,
-        });
-        if persisted.kindex_at_start(&settings::short_date_today()) {
-            settings::download_kindex(mp_firmware::manifest::Http);
-        }
-
         let mut this = Self {
             telemetry,
             map: std::rc::Rc::new(std::cell::RefCell::new(map)),
