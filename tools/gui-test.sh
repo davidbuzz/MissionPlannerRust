@@ -23,6 +23,7 @@
 #   doubleclick log-chart@0.5x0.5  a double click: two left presses at one point, 80 ms apart
 #   scroll servo-SERVO9_FUNCTION-list down 3 [ms]  the wheel over a control: up or down, N notches, a gap between them
 #   hover map@0.40x0.40          move the pointer onto a control and press nothing
+#   reveal servo-SERVO9_FUNCTION-list servo-SERVO9_FUNCTION-1   wheel a list until an entry is inside its box
 #   type flight.bin             type into whatever has focus
 #   key Return                  press a named key
 #   expect mission.items 3      assert a published fact equals a value
@@ -341,6 +342,58 @@ while IFS= read -r RAW; do
                 xdotool click --repeat 2 --delay 80 1
             else
                 echo "line $LINE_NO: could not double-click '$TARGET'" >&2
+                FAILURES=$((FAILURES + 1))
+            fi
+            sleep 0.6
+            ;;
+        reveal)
+            # Scrolls a drop-down list until one of its entries lies inside the list's box, a
+            # notch at a time from the probe's positions, so a script need not know which row a
+            # documentation order puts a value on. Fails when forty notches do not bring it in.
+            LIST="${2:?reveal needs a list}"
+            ENTRY="${3:?reveal needs an entry}"
+            REVEALED=""
+            # A list draws only the rows in its box, so an entry above or below it is not in the
+            # probe at all: start from the top - the wheel stops there - and walk down.
+            if COORDS=$("$ROOT/tools/gui-click.sh" --resolve "$PROBE_FILE" "$WIN_ID" "$LIST"); then
+                # shellcheck disable=SC2086 # "x y", two words on purpose
+                xdotool mousemove --window "$WIN_ID" $COORDS
+                sleep 0.05
+                xdotool click --repeat 45 --delay 60 4
+                sleep 0.6
+            fi
+            for _ in $(seq 1 45); do
+                DIRECTION=$(python3 - "$PROBE_FILE" "$LIST" "$ENTRY" <<'PY'
+import json, sys
+probe = json.load(open(sys.argv[1]))
+lst, entry = probe.get(sys.argv[2]), probe.get(sys.argv[3])
+if lst is None or entry is None:
+    print("missing"); sys.exit(0)
+top, bottom = lst["y"], lst["y"] + lst["height"]
+cy = entry["centre_y"]
+print("inside" if top <= cy < bottom else ("down" if cy >= bottom else "up"))
+PY
+)
+                case "$DIRECTION" in
+                    inside) REVEALED=yes; break ;;
+                    # Not drawn yet: it is further down.
+                    missing) DIRECTION=down ;;
+                esac
+                WHEEL=5; [ "$DIRECTION" = up ] && WHEEL=4
+                if COORDS=$("$ROOT/tools/gui-click.sh" --resolve "$PROBE_FILE" "$WIN_ID" "$LIST"); then
+                    # shellcheck disable=SC2086 # "x y", two words on purpose
+                    xdotool mousemove --window "$WIN_ID" $COORDS
+                    sleep 0.05
+                    xdotool click "$WHEEL"
+                    sleep 0.4
+                else
+                    break
+                fi
+            done
+            if [ -n "$REVEALED" ]; then
+                echo "revealed '$ENTRY' in '$LIST'"
+            else
+                echo "line $LINE_NO: could not reveal '$ENTRY' in '$LIST' ($DIRECTION)" >&2
                 FAILURES=$((FAILURES + 1))
             fi
             sleep 0.6

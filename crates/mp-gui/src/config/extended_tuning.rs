@@ -1757,6 +1757,27 @@ pub fn record_facts(page: &ExtendedTuning, view: &TelemetryView) {
     for (name, _) in page.changes() {
         bound.insert(name.clone());
     }
+    // Every parameter a control could bind, whether or not the page has been shown yet: a script
+    // reads the vehicle's values on the parameter screen before opening the page, as
+    // config-servo.gui does for SERVO*.
+    for spec in NUMBERS {
+        let lists: &[&[&str]] = match spec.bind {
+            Bind::Names(_, names) => &[names],
+            Bind::Imax {
+                when, otherwise, ..
+            } => &[when, otherwise.1],
+        };
+        for name in lists.iter().flat_map(|names| names.iter()) {
+            bound.insert((*name).to_owned());
+        }
+    }
+    for spec in COMBOS {
+        if let ComboBind::Names(names) = spec.bind {
+            for name in names {
+                bound.insert((*name).to_owned());
+            }
+        }
+    }
     for name in bound {
         if let Some(value) = value_of(&view.parameters, &name) {
             record(format!("params.value.{name}"), value);

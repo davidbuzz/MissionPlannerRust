@@ -161,7 +161,9 @@ expect params.value.RC8_OPTION 9
 expect config.extended.changes none
 # And back: 0 is not more than double 9, so nothing is asked.
 click extended-CH8_OPTION
+reveal extended-CH8_OPTION-list extended-CH8_OPTION-0
 click extended-CH8_OPTION-0
+settle 1
 expect config.extended.changes RC8_OPTION=0
 click extended-BUT_writePIDS
 settle 2
@@ -176,7 +178,10 @@ settle 2
 expect config.extended.changes none
 expect config.extended.write RC9_OPTION 9 accepted
 expect params.value.RC9_OPTION 9
+# The list opens on Camera Trigger; Do Nothing sits further down the documentation's alphabetical
+# order, so the wheel brings it into the box first.
 click extended-CH9_OPTION
+reveal extended-CH9_OPTION-list extended-CH9_OPTION-0
 click extended-CH9_OPTION-0
 settle 2
 expect config.extended.write RC9_OPTION 0 accepted
