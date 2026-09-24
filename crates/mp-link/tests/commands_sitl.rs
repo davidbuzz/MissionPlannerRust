@@ -301,3 +301,127 @@ fn a_real_vehicle_says_something_about_itself_on_connect() {
 
     link.send(&commands::arm(id, false, false));
 }
+
+/// Copter's Land mode, from the generated table.
+const MODE_LAND: u32 = 9;
+
+#[test]
+#[ignore = "requires ArduPilot SITL listening on tcp:127.0.0.1:5760"]
+fn a_user_takeoff_in_guided_is_accepted_once_armed() {
+    // Resume Mission's third loop (`FlightData.cs:1587-1600`): Guided until the vehicle is in
+    // it, arm until armed, then `doCommand(TAKEOFF, 0,0,0,0,0,0, alt)` - and the C# gives up
+    // with "The Command failed to execute" the moment the vehicle refuses. `fly-resumemis.gui`
+    // has been failing at exactly that step, so this asks the firmware the same question
+    // without a window: is a user take-off accepted in Guided once armed on the ground?
+    // `Mode::do_user_takeoff_U_m` (ArduCopter/takeoff.cpp) refuses when not armed, not landed,
+    // in a mode without user take-off, or for a target no higher than the current altitude.
+    let (link, id) = connect();
+    let handle = link.vehicle(id).expect("the vehicle's state");
+    let wait = |what: &str, secs: u64, check: &dyn Fn(&mp_vehicle::VehicleState) -> bool| {
+        let deadline = Instant::now() + Duration::from_secs(secs);
+        while !check(&handle.load()) {
+            assert!(Instant::now() < deadline, "timed out waiting for {what}");
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    };
+
+    // Guided, asked for once a second until the vehicle reports it, as the C# loops.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while handle.load().custom_mode != MODE_GUIDED {
+        assert!(
+            Instant::now() < deadline,
+            "the vehicle never entered Guided"
+        );
+        link.send(&commands::set_mode(id, MODE_GUIDED));
+        std::thread::sleep(Duration::from_secs(1));
+    }
+    // Arm, the same way.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !handle.load().armed {
+        assert!(
+            Instant::now() < deadline,
+            "the vehicle never armed in Guided"
+        );
+        link.send(&commands::arm(id, true, false));
+        std::thread::sleep(Duration::from_secs(1));
+    }
+    let before = handle.load();
+    println!(
+        "armed in Guided at {:.1} m relative, mode {}",
+        before.altitude_relative.0, before.custom_mode
+    );
+
+    assert!(link.send(&commands::takeoff(id, 10.0)), "send failed");
+    let ack = await_message(&link, "a take-off acknowledgement", |message| {
+        message.text.contains("NAV_TAKEOFF")
+    });
+    println!("firmware: {}", ack.text);
+    let accepted = ack.text.contains("accepted");
+    if accepted {
+        wait("8 m of climb", 60, &|s| s.altitude_relative.0 > 8.0);
+    }
+
+    // Down and as we found it, whatever the answer was.
+    link.send(&commands::set_mode(id, MODE_LAND));
+    wait("the vehicle to land and disarm", 120, &|s| !s.armed);
+    link.send(&commands::set_mode(id, MODE_STABILIZE));
+    wait("Stabilize", 10, &|s| s.custom_mode == MODE_STABILIZE);
+
+    assert!(accepted, "the firmware refused the take-off: {}", ack.text);
+}
+
+#[test]
+#[ignore = "requires ArduPilot SITL listening on tcp:127.0.0.1:5760"]
+fn a_user_takeoff_sent_the_instant_the_heartbeat_shows_armed() {
+    // The same as above with no second's grace: the take-off goes out within 10 ms of the first
+    // heartbeat that shows the vehicle armed, which is when a screen that acts on telemetry would
+    // send it. ArduCopter holds `in_arming_delay` for ARMING_DELAY_SEC after arming; whether a
+    // take-off asked for inside that window is refused is what this records.
+    let (link, id) = connect();
+    let handle = link.vehicle(id).expect("the vehicle's state");
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while handle.load().custom_mode != MODE_GUIDED {
+        assert!(
+            Instant::now() < deadline,
+            "the vehicle never entered Guided"
+        );
+        link.send(&commands::set_mode(id, MODE_GUIDED));
+        std::thread::sleep(Duration::from_secs(1));
+    }
+    assert!(link.send(&commands::arm(id, true, false)), "send failed");
+    let asked = Instant::now();
+    let deadline = asked + Duration::from_secs(30);
+    while !handle.load().armed {
+        assert!(
+            Instant::now() < deadline,
+            "the vehicle never armed in Guided"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let armed_after = asked.elapsed();
+    assert!(link.send(&commands::takeoff(id, 10.0)), "send failed");
+    let ack = await_message(&link, "a take-off acknowledgement", |message| {
+        message.text.contains("NAV_TAKEOFF")
+    });
+    println!(
+        "armed {armed_after:?} after the arm was sent; take-off sent at once; firmware: {}",
+        ack.text
+    );
+    let accepted = ack.text.contains("accepted");
+    let wait = |what: &str, secs: u64, check: &dyn Fn(&mp_vehicle::VehicleState) -> bool| {
+        let deadline = Instant::now() + Duration::from_secs(secs);
+        while !check(&handle.load()) {
+            assert!(Instant::now() < deadline, "timed out waiting for {what}");
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    };
+    if accepted {
+        wait("8 m of climb", 60, &|s| s.altitude_relative.0 > 8.0);
+    }
+    link.send(&commands::set_mode(id, MODE_LAND));
+    wait("the vehicle to land and disarm", 120, &|s| !s.armed);
+    link.send(&commands::set_mode(id, MODE_STABILIZE));
+    wait("Stabilize", 10, &|s| s.custom_mode == MODE_STABILIZE);
+    // Recorded, not asserted: the answer is the firmware's to give, and either is a finding.
+    println!("accepted = {accepted}");
+}
