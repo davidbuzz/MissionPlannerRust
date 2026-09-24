@@ -1,0 +1,63 @@
+# Initial Setup's Camera Gimbal page, ported from GCSViews/ConfigurationView/ConfigMount.cs.
+#
+# The claim: the page object's constructor fills the four output boxes with the channel names,
+# the RC ones removed on a vehicle with SERVO1_MIN (ConfigMount.cs:21-102), and binds MNT_TYPE;
+# Activate needs CAM_TRIGG_TYPE and, without it, disables the page and writes nothing (:104-112).
+#
+# What SITL cannot exercise: every write. SITL's copter is 4.5, whose camera is CAM1_TYPE and
+# whose mount is MNT1_TYPE: it has no CAM_TRIGG_TYPE, so the page is disabled - as Mission Planner
+# disables it against this firmware - and no MNT_TYPE, so the type combo is disabled too. The
+# output assignment, its ensureDisabled clearing, MNT_MODE, the shutter's relay and transistor,
+# the angle limits and Activate's writes are covered, against a 4.2 copter's parameters, by the
+# unit tests in crates/mp-gui/src/config/mount.rs. The script proves the page shows, disabled,
+# with the lists the constructor builds, and that clicking it writes nothing.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run as
+#
+#   tools/gui-test.sh tests/gui/config-mount.gui -- tcp:127.0.0.1:5760
+
+screen params
+window 1600x1200
+settle 6
+
+click param-download
+settle 15
+expect params.held > 1000
+expect params.value.MNT1_TYPE 0
+expect params.value.CAM1_TYPE 0
+
+click tab-setup
+expect config.mount.active false
+click setup-page-ConfigOptional
+click setup-page-ConfigMount
+settle 1
+expect setup.page ConfigMount
+expect config.mount.active true
+
+# No CAM_TRIGG_TYPE: the page is disabled.
+expect config.mount.enabled false
+expect config.mount.MNT_TYPE.enabled false
+expect config.mount.note NOTE: the gimbal type takes effect on the next reboot of the fight controller
+expect config.mount.trigger Please set the Ch7 Option to Camera Trigger
+
+# The constructor's lists: SERVO1_MIN is listed, so the RC names are removed - Disable and
+# fourteen outputs, and for the shutter the relay and transistor besides.
+expect config.mount.tilt.options 15
+expect config.mount.roll.options 15
+expect config.mount.pan.options 15
+expect config.mount.shutter.options 17
+expect config.mount.tilt none
+expect config.mount.TSM.enabled false
+
+# A disabled page takes no clicks: nothing is written.
+click mount-tilt
+click mount-TR
+click mount-TSM-up
+settle 2
+expect config.mount.write none
+expect config.mount.writes.pending 0
+expect config.mount.message none
+
+click setup-page-ConfigOptional
+settle 1
+expect config.mount.active false

@@ -1,0 +1,54 @@
+# Initial Setup's Range Finder page, ported from GCSViews/ConfigurationView/ConfigHWRangeFinder.cs.
+#
+# The claim: Activate binds the type combo to RNGFND_TYPE and starts the 200 ms timer that shows
+# cs.sonarrange and cs.sonarvoltage (ConfigHWRangeFinder.cs:17-45); Deactivate stops it (:36-39).
+#
+# What SITL cannot exercise: the page's only write. SITL's copter numbers its rangefinders
+# (RNGFND1_TYPE), and the C# binds RNGFND_TYPE, the name of firmware before 4.0 - so the combo
+# stays disabled, as it does in Mission Planner against this firmware, and there is nothing to
+# write and restore. The combo's write and the page's TeraRanger handler are covered by the unit
+# tests in crates/mp-gui/src/config/rangefinder.rs. With no rangefinder SITL sends no RANGEFINDER,
+# so the timer shows zeros: "0", the float's text, where the Designer's "0.0" stood.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run as
+#
+#   tools/gui-test.sh tests/gui/config-rangefinder.gui -- tcp:127.0.0.1:5760
+
+screen params
+window 1600x1200
+settle 6
+
+click param-download
+settle 15
+expect params.held > 1000
+expect params.value.RNGFND1_TYPE 0
+
+click tab-setup
+expect config.rangefinder.active false
+click setup-page-ConfigOptional
+click setup-page-ConfigHWRangeFinder
+settle 2
+expect setup.page ConfigHWRangeFinder
+expect config.rangefinder.active true
+expect config.rangefinder.enabled true
+expect config.rangefinder.heading RangeFinder
+
+# RNGFND_TYPE is not SITL's: the combo is disabled, and nothing can be chosen from it.
+expect config.rangefinder.type.enabled false
+click rangefinder-RNGFND_TYPE
+expect config.rangefinder.write none
+expect params.value.RNGFND1_TYPE 0
+
+# The timer has run in the two seconds settled.
+expect config.rangefinder.timer true
+expect config.rangefinder.readouts >= 5
+expect config.rangefinder.distance 0
+expect config.rangefinder.voltage 0
+expect config.rangefinder.write none
+expect config.rangefinder.message none
+
+# Deactivate stops the timer.
+click setup-page-ConfigOptional
+settle 1
+expect config.rangefinder.active false
+expect config.rangefinder.timer false

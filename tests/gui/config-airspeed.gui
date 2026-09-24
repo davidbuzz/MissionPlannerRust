@@ -1,0 +1,71 @@
+# Initial Setup's Airspeed page, ported from GCSViews/ConfigurationView/ConfigHWAirspeed.cs.
+#
+# The claim: Activate shows "Enable" and "Use Airspeed" only for the parameters the vehicle has and
+# binds the pin and type combos (ConfigHWAirspeed.cs:18-63); "Enable" writes ARSPD_ENABLE twice -
+# the page's handler first (:65-84), then the MavlinkCheckBox's own write, which finds the value
+# already held (Controls/MavlinkCheckBox.cs:106-143; ExtLibs/ArduPilot/Mavlink/
+# MAVLinkInterface.cs:1647-1651). Each change is proved by the vehicle's echo, and put back.
+#
+# SITL's copter lists ARSPD_ENABLE 0 and, with the sensor off, none of ARSPD_USE, ARSPD_PIN or
+# ARSPD_TYPE: "Use Airspeed" is hidden and both combos stay disabled, as in the C#, so the combos'
+# writes are covered by the unit tests in crates/mp-gui/src/config/airspeed.rs.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run as
+#
+#   tools/gui-test.sh tests/gui/config-airspeed.gui -- tcp:127.0.0.1:5760
+#
+# A run that stops half way can leave ARSPD_ENABLE at 1; the first expectation on it then fails
+# until a fresh SITL.
+
+screen params
+window 1600x1200
+settle 6
+
+# Initial Setup lists the page once every parameter is in (isConnected && gotAllParams,
+# InitialSetup.cs:291-294), and here parameters are downloaded when asked for.
+click param-download
+settle 15
+expect params.held > 1000
+expect params.value.ARSPD_ENABLE 0
+
+click tab-setup
+expect config.airspeed.active false
+click setup-page-ConfigOptional
+click setup-page-ConfigHWAirspeed
+settle 1
+expect setup.page ConfigHWAirspeed
+expect config.airspeed.active true
+expect config.airspeed.enabled true
+expect config.airspeed.heading Airspeed
+
+# What Activate made of SITL's parameters.
+expect config.airspeed.enable unchecked
+expect config.airspeed.enable.visible true
+expect config.airspeed.enable.enabled true
+expect config.airspeed.use.visible false
+expect config.airspeed.pin.enabled false
+expect config.airspeed.pin.options 14
+expect config.airspeed.type.enabled false
+expect config.airspeed.write none
+
+# Enable: the handler's write, echoed, then the control's, which finds 1 already held.
+click airspeed-ARSPD_ENABLE
+settle 3
+expect config.airspeed.enable checked
+expect params.value.ARSPD_ENABLE 1
+expect config.airspeed.write ARSPD_ENABLE 1 unchanged
+expect config.airspeed.writes.pending 0
+expect config.airspeed.message none
+
+# And back.
+click airspeed-ARSPD_ENABLE
+settle 3
+expect config.airspeed.enable unchecked
+expect params.value.ARSPD_ENABLE 0
+expect config.airspeed.write ARSPD_ENABLE 0 unchanged
+expect config.airspeed.message none
+
+# Choosing another page hides this one; it is IActivate only.
+click setup-page-ConfigOptional
+settle 1
+expect config.airspeed.active false

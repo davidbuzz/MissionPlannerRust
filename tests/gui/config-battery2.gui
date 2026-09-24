@@ -1,0 +1,99 @@
+# Initial Setup's Battery Monitor 2 page, ported from
+# GCSViews/ConfigurationView/ConfigBatteryMonitoring2.cs.
+#
+# The claim: Activate binds the monitor and pin combos, fills the capacity and calibration boxes
+# from the second battery's parameters and readings (ConfigBatteryMonitoring2.cs:17-62); the
+# capacity box, left, asks the vehicle's table and says the feature is not enabled when
+# BATT2_CAPACITY is missing (:70-89); the measured voltage, on Enter, needs a divider to scale
+# (:91-119, 206-210); the monitor combo writes BATT2_MONITOR itself. The write is proved by the
+# vehicle's echo, and put back.
+#
+# SITL's copter lists BATT2_MONITOR 0 and, with the second monitor off, none of its other
+# parameters: the pin combos stay disabled, the capacity keeps the Designer's 2200, and the
+# divider and amps-per-volt boxes are empty. The calibration arithmetic and the other boxes'
+# writes need a second battery SITL does not have; the unit tests in
+# crates/mp-gui/src/config/battery_monitor2.rs cover them.
+#
+# A config.xml of its own, so the machine's Mission Planner's low-battery alert does not tick the
+# box.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run as
+#
+#   tools/gui-test.sh tests/gui/config-battery2.gui -- tcp:127.0.0.1:5760
+#
+# A run that stops half way can leave BATT2_MONITOR at 3; the first expectation on it then fails
+# until a fresh SITL.
+
+env MP_CONFIG_XML $WORK/config.xml
+screen params
+window 1600x1200
+settle 6
+
+click param-download
+settle 15
+expect params.held > 1000
+expect params.value.BATT2_MONITOR 0
+
+click tab-setup
+expect config.battery2.active false
+click setup-page-ConfigOptional
+click setup-page-ConfigBatteryMonitoring2
+settle 2
+expect setup.page ConfigBatteryMonitoring2
+expect config.battery2.active true
+expect config.battery2.enabled true
+
+# What Activate read.
+expect config.battery2.monitor 0
+expect config.battery2.monitor.text Disabled
+expect config.battery2.monitor.enabled true
+expect config.battery2.voltpin.enabled false
+expect config.battery2.currpin.enabled false
+expect config.battery2.capacity 2200
+expect config.battery2.measured 0
+expect config.battery2.voltage 0
+expect config.battery2.speech false
+expect config.battery2.readouts >= 1
+expect config.battery2.write none
+
+# The capacity, typed and left for the monitor combo: BATT2_CAPACITY is not listed.
+click battery2-capacity
+expect config.battery2.editing battery2-capacity
+key ctrl+u
+type 3000
+click battery2-BATT2_MONITOR
+settle 1
+expect config.battery2.capacity 3000
+expect config.battery2.message This feature is not enabled in your firmware.
+expect config.battery2.write none
+click battery2-message-ok
+expect config.battery2.message none
+
+# The monitor's list is down: Analog Voltage Only, then Disabled again.
+click battery2-BATT2_MONITOR-3
+settle 2
+expect config.battery2.monitor 3
+expect config.battery2.monitor.text Analog Voltage Only
+expect config.battery2.write BATT2_MONITOR 3 accepted
+expect params.value.BATT2_MONITOR 3
+click battery2-BATT2_MONITOR
+click battery2-BATT2_MONITOR-0
+settle 2
+expect config.battery2.write BATT2_MONITOR 0 accepted
+expect params.value.BATT2_MONITOR 0
+expect config.battery2.message none
+
+# The measured voltage on Enter: no divider to scale.
+click battery2-measured
+key Return
+settle 1
+expect config.battery2.message ~ Invalid number entered
+click battery2-message-ok
+expect config.battery2.writes.pending 0
+
+# Deactivate sets _startup: the box left as the page goes writes nothing.
+click setup-page-ConfigOptional
+settle 1
+expect config.battery2.active false
+expect config.battery2.message none
+expect params.value.BATT2_MONITOR 0

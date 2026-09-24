@@ -323,6 +323,13 @@ struct MissionPlanner {
     /// CONFIG's Planner page, and its boxes' focus.
     planner: config::planner::Planner,
     planner_focus: config::planner::Focus,
+    // Optional Hardware pages: ADSB, Battery Monitor 2, Range Finder, Airspeed, Optical Flow and
+    // Camera Gimbal (`config/optional.rs`).
+    /// The six page objects.
+    optional: config::optional::Optional,
+    /// Their boxes' focus.
+    optional_focus: config::optional::Focus,
+    // end Optional Hardware pages
 }
 
 impl MissionPlanner {
@@ -523,6 +530,10 @@ impl MissionPlanner {
             // ---- end Mandatory Hardware pages ----
             planner,
             planner_focus: config::planner::Focus::new(cx),
+            // Optional Hardware pages
+            optional: config::optional::Optional::default(),
+            optional_focus: config::optional::Focus::new(cx),
+            // end Optional Hardware pages
         };
         // Opening on the planning screen activates it, as switching to it does.
         if this.screen == Screen::Plan {
@@ -1748,6 +1759,8 @@ impl Render for MissionPlanner {
         self.frame_type_legacy
             .tick(&self.telemetry, &view, on_setup);
         // ---- end Mandatory Hardware pages ----
+        // Optional Hardware pages: their page objects, timers, boxes and writes.
+        self.optional_tick(&view, window);
         let banner = self.telemetry.firmware_banner().map(str::to_owned);
         let mav_type = view.state.as_ref().map_or(0, |state| state.vehicle_type);
         self.metadata.advance(banner.as_deref(), mav_type);
@@ -2019,6 +2032,8 @@ impl Render for MissionPlanner {
             config::servo_output::record_facts(&self.servo_output, &view);
             config::serial_ports::record_facts(&self.serial_ports, &view);
             config::esc_calibration::record_facts(&self.esc_calibration, &view);
+            // Optional Hardware pages
+            config::optional::record_facts(&self.optional, &view);
             // ---- Mandatory Hardware pages ----
             config::accel_calibration::record_facts(&self.accel_calibration, &view);
             config::frame_type_legacy::record_facts(&self.frame_type_legacy, &view);
@@ -2326,6 +2341,8 @@ impl Render for MissionPlanner {
                     cx,
                 ))
                 // ---- end Mandatory Hardware pages ----
+                // Optional Hardware pages
+                .children(self.optional_overlay(window, cx))
                 .into_any_element(),
             Screen::Config => probe::measured("config-body", div())
                 .flex()

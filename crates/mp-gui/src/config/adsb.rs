@@ -1,0 +1,2294 @@
+//! ADSB: `GCSViews/ConfigurationView/ConfigADSB.cs`, the last entry under Mandatory Hardware in
+//! Initial Setup's list (`GCSViews/InitialSetup.cs:262-263`, whose `mand` puts it there), listed
+//! once every parameter is in.
+//!
+//! What it shows: Write Params, Refresh Params and Find along the top; a panel for the flight
+//! identification and aircraft registration, disabled - the code that would fill and save them is
+//! commented out in the C# (`ConfigADSB.cs:260-304, 673-709`); and below, one control per `ADSB_`
+//! and `AVD_` parameter the vehicle holds and documents with a display name, in the order of their
+//! names, favourites (`fav_adsb`) first (`:349-419`). Each is built from the documentation as the
+//! C# builds it (`:421-620`): a range with an increment is a `RangeControl` - a number and a track
+//! bar - a bitmask is a `MavlinkCheckBoxBitMask`, a list of values is a `ValuesControl`, and
+//! anything else gets no control.
+//!
+//! Changing a control writes nothing: it records the value (`Control_ValueChanged`, `:622-625`),
+//! and Write Params writes every recorded value, `ENABLE` parameters first, each in its own `try`,
+//! then says "Parameters successfully saved." when none failed (`:179-205`). Refresh Params asks
+//! "Update Params" with its "Show me again?" box, fetches the parameters again and rebuilds
+//! (`:212-236`). Find asks for a word and shows only the controls whose name or description has
+//! it, filtering as it is typed, half a second after the last key (`:21-116`).
+//!
+//! Showing the page again updates the controls it has from the vehicle's values. A bitmask whose
+//! bits change there writes each change straight to the vehicle, as the C#'s does: its
+//! `ValueChanged` is unsubscribed for the update, and with no subscriber the control writes
+//! itself (`:451-457`; `Controls/MavlinkCheckBoxBitMask.cs:143-160`).
+//!
+//! The layout is `ConfigADSB.resx`'s: the buttons and the panel at their `Location`s, the controls
+//! stacked from (12, 67) at their own heights - `RangeControl` 108, `ValuesControl` 89, a bitmask
+//! as its rows of check boxes make it - 578 wide.
+//!
+//! What is not ported, and why:
+//!
+//! * Ctrl+S (`ProcessCmdKey`, `:159-168`): the page's key handling needs a focus the page does not
+//!   have here, as on the Flight Modes page;
+//! * the list panel's own scroll bar: the page scrolls, with the list in it;
+//! * typing into a `ValuesControl`'s box: it is a `DropDown` combo, and text that names no row
+//!   leaves `SelectedValue` null, which its `Value` getter throws on; here it is a list;
+//! * dragging the track bar's thumb and its keys: a click beside the thumb moves it by
+//!   `LargeChange`, five of its thousand, as a click on a WinForms track bar's channel does;
+//! * a bitmask value's narrowing to the parameter's integer type (`TypeAP`): the vehicle's table
+//!   here carries values, not types; it matters only for a mask with its type's top bit set;
+//! * the `InputBox`'s remembered answers (`InputBox.cs:177-181`), and a "Show me again?" answer
+//!   beyond the session: this application writes no `config.xml`.
+//!
+//! Where the C# is wrong and this is not: a control added by a later `Activate` - a parameter
+//! the vehicle has begun listing - is placed at the top, over the first, because `y` starts again
+//! at 10 and the existing controls do not advance it (`:255, 432-457`); here it goes below the
+//! last.
+
+// This module is internal to the binary; `pub` here documents intent rather than exporting API.
+#![allow(unreachable_pub)]
+
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, VecDeque};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use gpui::{
+    AnyElement, Context, FocusHandle, KeyDownEvent, SharedString, Window, div, prelude::*, px, rgb,
+};
+
+use super::battery_monitor::float_text;
+use super::optional::{
+    Event, Focus, InputBox, Job, Set, SetQueue, at, button, error, input_box, label, message_box,
+    set_failed, text_box,
+};
+use crate::MissionPlanner;
+use crate::config::failsafe::{CheckState, Lookup, decimal_of};
+use crate::config::servo_output::{
+    Check, Combo, Message, check_box, combo_box, decimal_text, dropdown,
+};
+use crate::setup::Key;
+use crate::telemetry::{Telemetry, TelemetryView};
+use crate::textfield::{KeyOutcome, TextField};
+use crate::ui::{action, panel, theme};
+
+/// The page's title in Initial Setup's list: the literal "ADSB".
+/// `// C#: GCSViews/InitialSetup.cs:263`
+pub const TITLE: &str = "ADSB";
+
+/// `Strings.WarningUpdateParamList`, Refresh Params' question.
+/// `// C#: ExtLibs/Strings/Strings.resx:221-225`
+pub const REFRESH_WARNING: &str = "Update Params\nDON'T DO THIS IF YOU ARE IN THE AIR\n";
+
+/// `Strings.ShowMeAgain`.
+/// `// C#: ExtLibs/Strings/Strings.resx:441-443`
+pub const SHOW_ME_AGAIN: &str = "Show me again?";
+
+/// The setting `MessageShowAgain` keeps the answer under: `SHOWAGAIN_` and the title.
+/// `// C#: Common.cs:268`
+pub const SHOW_AGAIN_KEY: &str = "SHOWAGAIN_Refresh_Params";
+
+/// Write Params' box when every write went.
+/// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:203`
+pub const SAVED: &str = "Parameters successfully saved.";
+
+/// `Strings.ErrorReceivingParams`.
+/// `// C#: ExtLibs/Strings/Strings.resx:158-160`
+pub const ERROR_RECEIVING: &str = "Error receiving list\n";
+
+/// How long Find waits after a key before it filters.
+/// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:42`
+pub const FILTER_DELAY: Duration = Duration::from_millis(500);
+
+/// Where the list starts, and its width: `tableLayoutPanel1` at (12, 67), its controls
+/// `tableLayoutPanel1.Width - 50` wide.
+/// `// C#: GCSViews/ConfigurationView/ConfigADSB.resx tableLayoutPanel1.Location, .Size; ConfigADSB.cs:513`
+const LIST_AT: (f32, f32) = (12.0, 67.0);
+/// The list's width.
+const LIST_WIDTH: f32 = 628.0;
+/// A control's width.
+const CONTROL_WIDTH: f32 = LIST_WIDTH - 50.0;
+/// `FitDescriptionText`'s widths: the list's, and a bitmask's control's.
+/// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:508, 552, 583-584`
+const DESCRIPTION_WIDTH: i32 = 628;
+/// A bitmask's.
+const BITMASK_DESCRIPTION_WIDTH: i32 = 578;
+/// The list panel's height before it grows with the page.
+const LIST_HEIGHT: f32 = 154.0;
+/// The first control's `y`.
+const FIRST_Y: f32 = 10.0;
+
+/// `RangeControl`'s and `ValuesControl`'s heights.
+/// `// C#: ExtLibs/Controls/RangeControl.Designer.cs:88; ExtLibs/Controls/ValuesControl.Designer.cs:78`
+const RANGE_HEIGHT: f32 = 108.0;
+/// `ValuesControl`'s.
+const VALUES_HEIGHT: f32 = 89.0;
+
+/// A WinForms track bar's `LargeChange`, and the range `trackBar1` has.
+const TRACK_PAGE: i32 = 5;
+/// `trackBar1.Maximum`. `// C#: ExtLibs/Controls/RangeControl.Designer.cs:55`
+const TRACK_MAX: i32 = 1000;
+
+// ---------------------------------------------------------------------------------------------
+// Text as .NET makes it.
+// ---------------------------------------------------------------------------------------------
+
+/// `double.ToString("0.###")`: at most three places, rounded half away from zero, no trailing
+/// zeros, and no "-0".
+#[must_use]
+pub fn three_places(value: f64) -> String {
+    let rounded = (value * 1000.0).round() / 1000.0;
+    let text = format!("{rounded:.3}");
+    let text = text.trim_end_matches('0').trim_end_matches('.');
+    if text == "-0" || text.is_empty() {
+        "0".to_owned()
+    } else {
+        text.to_owned()
+    }
+}
+
+/// `(decimal)x` for a float: seven significant digits, as an `f64`, with its places.
+fn decimal(value: f32) -> (f64, u32) {
+    let (mantissa, places) = decimal_of(value);
+    #[allow(clippy::cast_precision_loss)] // seven digits fit
+    let exact = mantissa as f64 / 10_f64.powi(i32::try_from(places).unwrap_or(0));
+    (exact, places)
+}
+
+/// `decimal.ToString()`: its digits at its own scale.
+fn decimal_string(value: f32) -> String {
+    let (exact, places) = decimal(value);
+    decimal_text(exact, places)
+}
+
+/// A character's place in the order .NET's culture-sensitive comparison gives the characters
+/// parameter names use: the underscore before the digits, the digits before the letters, a letter
+/// with its other case.
+fn collation(c: char) -> (u8, u32) {
+    match c {
+        '0'..='9' => (1, u32::from(c)),
+        'a'..='z' | 'A'..='Z' => (2, u32::from(c.to_ascii_lowercase())),
+        _ => (0, u32::from(c)),
+    }
+}
+
+/// `string.CompareTo` and the default `OrderBy` comparer in an English culture, for parameter
+/// names; case alone, which names do not differ by, falls back to the characters' order.
+#[must_use]
+pub fn culture_cmp(a: &str, b: &str) -> Ordering {
+    a.chars()
+        .map(collation)
+        .cmp(b.chars().map(collation))
+        .then_with(|| a.cmp(b))
+}
+
+/// `List<string>.SortENABLE`: names ending `ENABLE` first - whatever its comment says - each part
+/// in culture order.
+/// `// C#: ExtLibs/Utilities/ListExtension.cs:10-28`
+pub fn sort_enable(names: &mut [String]) {
+    names.sort_by(
+        |a, b| match (a.ends_with("ENABLE"), b.ends_with("ENABLE")) {
+            (true, false) => Ordering::Less,
+            (false, true) => Ordering::Greater,
+            _ => culture_cmp(a, b),
+        },
+    );
+}
+
+/// `FitDescriptionText`: the units on a line of their own, then "Description: " and the words, a
+/// line break after every `width / 40`th word but the first.
+/// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:633-663; ExtLibs/Strings/Strings.resx:244-267`
+#[must_use]
+pub fn fit_description(units: &str, description: &str, width: i32) -> String {
+    let mut text = String::new();
+    if !units.is_empty() {
+        text.push_str(&format!("Units: {units}\r\n"));
+    }
+    if !description.is_empty() {
+        text.push_str("Description: ");
+        let every = width / 40;
+        for (index, word) in description.split(' ').enumerate() {
+            text.push_str(word);
+            text.push(' ');
+            let index = i32::try_from(index).unwrap_or(i32::MAX);
+            if index != 0 && every != 0 && index % every == 0 {
+                text.push_str("\r\n");
+            }
+        }
+    }
+    text
+}
+
+// ---------------------------------------------------------------------------------------------
+// The three controls.
+// ---------------------------------------------------------------------------------------------
+
+/// A `RangeControl`: a `NumericUpDown` and a track bar over the documented range.
+/// `// C#: ExtLibs/Controls/RangeControl.cs:13-236`
+#[derive(Debug)]
+pub struct RangeControl {
+    /// `_minrange`, `_maxrange`: the documented range.
+    min_range: f32,
+    max_range: f32,
+    /// `DisplayScale`.
+    scale: f32,
+    /// `Increment`.
+    increment: f32,
+    /// `numericUpDown1.Minimum`, `.Maximum`, `.DecimalPlaces`, `.Increment`, `.Value`.
+    pub minimum: f64,
+    /// Its maximum.
+    pub maximum: f64,
+    /// Its places.
+    pub decimals: u32,
+    step: f64,
+    value: f64,
+    /// `trackBar1.Value`, 0 to 1000.
+    pub trackbar: i32,
+    /// `LBL_min.Text`, `LBL_max.Text`.
+    pub lbl_min: String,
+    /// The maximum's.
+    pub lbl_max: String,
+    /// The box's orange: the value outside the documented range.
+    pub orange: bool,
+    field: TextField,
+    edited: bool,
+}
+
+/// `map`, in decimals; `None` for the `DivideByZeroException` of an empty range.
+/// `// C#: ExtLibs/Controls/RangeControl.cs:196-199`
+fn map(x: f64, in_min: f64, in_max: f64, out_min: f64, out_max: f64) -> Option<f64> {
+    #[allow(clippy::float_cmp)] // decimals compare exactly
+    if in_max == in_min {
+        return None;
+    }
+    Some((x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min)
+}
+
+/// `Math.Round(decimal, 0)`: half to even.
+fn round_even(value: f64) -> f64 {
+    let floor = value.floor();
+    let diff = value - floor;
+    #[allow(clippy::float_cmp)]
+    if diff == 0.5 {
+        if floor % 2.0 == 0.0 {
+            floor
+        } else {
+            floor + 1.0
+        }
+    } else {
+        value.round()
+    }
+}
+
+impl RangeControl {
+    /// `new RangeControl(param, Desc, Label, increment, displayscale, minrange, maxrange, value)`,
+    /// then the page's own colouring; `None` where the C# throws and `AddControl`'s `catch`
+    /// leaves the parameter without a control.
+    /// `// C#: ExtLibs/Controls/RangeControl.cs:120-147; GCSViews/ConfigurationView/ConfigADSB.cs:472-537`
+    #[must_use]
+    pub fn new(
+        increment: f32,
+        scale: f32,
+        min_range: f32,
+        max_range: f32,
+        value: &str,
+    ) -> Option<Self> {
+        // `InitializeComponent`: 0 to 100, three places, the labels' text.
+        let mut control = Self {
+            min_range: 0.0,
+            max_range: 10.0,
+            scale,
+            increment,
+            minimum: 0.0,
+            maximum: 100.0,
+            decimals: 3,
+            step: 1.0,
+            value: 0.0,
+            trackbar: 0,
+            lbl_min: "0".to_owned(),
+            lbl_max: "65535".to_owned(),
+            orange: false,
+            field: TextField::new(""),
+            edited: false,
+        };
+        // `Increment = increment`: its step, and `ToString().Length - 1` places.
+        let (step, _) = decimal(increment);
+        control.step = step;
+        control.decimals =
+            u32::try_from(float_text(increment).len().saturating_sub(1)).unwrap_or(0);
+        control.set_min_range(min_range);
+        control.set_max_range(max_range);
+        control.set_value(value)?;
+        // `AddControl`: orange for a value outside the documented range.
+        let parsed: f32 = value.parse().unwrap_or(0.0);
+        if parsed < min_range || parsed > max_range {
+            control.orange = true;
+        }
+        Some(control)
+    }
+
+    /// `MinRange`'s setter.
+    fn set_min_range(&mut self, value: f32) {
+        self.min_range = value;
+        let (minimum, _) = decimal(value / self.scale);
+        self.minimum = minimum;
+        if self.maximum < minimum {
+            self.maximum = minimum;
+        }
+        self.value = self.value.clamp(self.minimum, self.maximum);
+        self.lbl_min = decimal_string(value / self.scale);
+    }
+
+    /// `MaxRange`'s setter.
+    fn set_max_range(&mut self, value: f32) {
+        self.max_range = value;
+        let (maximum, _) = decimal(value / self.scale);
+        self.maximum = maximum;
+        if self.minimum > maximum {
+            self.minimum = maximum;
+        }
+        self.value = self.value.clamp(self.minimum, self.maximum);
+        self.lbl_max = decimal_string(value / self.scale);
+    }
+
+    /// The `Value` setter: the range widened to hold the value - the documented range kept - and
+    /// the value set, as the vehicle holds it.
+    /// `// C#: ExtLibs/Controls/RangeControl.cs:77-102`
+    pub fn set_value(&mut self, text: &str) -> Option<()> {
+        let parsed: f64 = text.parse().ok()?;
+        let (low, high) = (self.min_range, self.max_range);
+        #[allow(clippy::cast_possible_truncation)] // `(float)Math.Min(...)`
+        let widened_low = f64::from(low).min(parsed) as f32;
+        #[allow(clippy::cast_possible_truncation)]
+        let widened_high = f64::from(high).max(parsed) as f32;
+        self.set_min_range(widened_low);
+        self.set_max_range(widened_high);
+        self.min_range = low;
+        self.max_range = high;
+        #[allow(clippy::cast_possible_truncation)] // `(float)decimal.Parse(value)`
+        let single = parsed as f32;
+        let (shown, _) = decimal(single / self.scale);
+        self.value = shown.clamp(self.minimum, self.maximum);
+        self.value_changed(false)
+    }
+
+    /// `numericUpDown1_ValueChanged`: the track bar follows unless it moved the value, a whole
+    /// increment rounds the value, and the box is orange outside the documented range.
+    /// `// C#: ExtLibs/Controls/RangeControl.cs:201-226`
+    fn value_changed(&mut self, from_trackbar: bool) -> Option<()> {
+        if !from_trackbar {
+            let mapped = map(
+                self.value,
+                self.minimum,
+                self.maximum,
+                0.0,
+                f64::from(TRACK_MAX),
+            )?;
+            #[allow(clippy::cast_possible_truncation)] // `(int)` truncates
+            let mapped = mapped as i32;
+            self.trackbar = mapped.clamp(0, TRACK_MAX);
+        }
+        #[allow(clippy::float_cmp)]
+        if self.increment % 1.0 == 0.0 {
+            let round = round_even(self.value);
+            if round > self.minimum && round != self.value {
+                self.value = round;
+                // The assignment raises the handler again, which settles here.
+                return self.value_changed(from_trackbar);
+            }
+        }
+        #[allow(clippy::cast_possible_truncation)] // `(float)numericUpDown1.Value`
+        let single = self.value as f32;
+        self.orange = single < self.min_range || single > self.max_range;
+        self.field.set(self.text());
+        self.edited = false;
+        Some(())
+    }
+
+    /// The box's text: `Value` to `DecimalPlaces` places.
+    #[must_use]
+    pub fn text(&self) -> String {
+        decimal_text(self.value, self.decimals)
+    }
+
+    /// What the box shows now, typed or not.
+    #[must_use]
+    pub fn shown(&self) -> &str {
+        self.field.value()
+    }
+
+    /// `Value`: `((float)numericUpDown1.Value * DisplayScale).ToString(InvariantCulture)`.
+    #[must_use]
+    pub fn value_text(&self) -> String {
+        #[allow(clippy::cast_possible_truncation)]
+        let single = self.value as f32;
+        float_text(single * self.scale)
+    }
+
+    /// Sets the value as a user's change does; whether it changed, raising `ValueChanged`.
+    fn change_to(&mut self, value: f64, from_trackbar: bool) -> bool {
+        let value = value.clamp(self.minimum, self.maximum);
+        #[allow(clippy::float_cmp)]
+        if value == self.value {
+            self.field.set(self.text());
+            self.edited = false;
+            return false;
+        }
+        self.value = value;
+        self.value_changed(from_trackbar).is_some()
+    }
+
+    /// `ValidateEditText`: typed text that parses becomes the value, held to the bounds.
+    pub fn commit(&mut self) -> bool {
+        if !self.edited {
+            return false;
+        }
+        self.edited = false;
+        match self.field.value().trim().replace(',', "").parse::<f64>() {
+            Ok(typed) => self.change_to(typed, false),
+            Err(_) => {
+                self.field.set(self.text());
+                false
+            }
+        }
+    }
+
+    /// `UpButton` and `DownButton`: the typed text read, then one `Increment`, stopping at the
+    /// bound.
+    pub fn step(&mut self, up: bool) -> bool {
+        let committed = self.commit();
+        let next = if up {
+            (self.value + self.step).min(self.maximum)
+        } else {
+            (self.value - self.step).max(self.minimum)
+        };
+        let next = (next * 1e9).round() / 1e9;
+        self.change_to(next, false) || committed
+    }
+
+    /// A click on the track bar's channel: `LargeChange` towards the click, then the value from
+    /// the bar.
+    /// `// C#: ExtLibs/Controls/RangeControl.cs:228-233`
+    pub fn page(&mut self, up: bool) -> bool {
+        let committed = self.commit();
+        let next = if up {
+            (self.trackbar + TRACK_PAGE).min(TRACK_MAX)
+        } else {
+            (self.trackbar - TRACK_PAGE).max(0)
+        };
+        if next == self.trackbar {
+            return committed;
+        }
+        self.trackbar = next;
+        let Some(value) = map(
+            f64::from(next),
+            0.0,
+            f64::from(TRACK_MAX),
+            self.minimum,
+            self.maximum,
+        ) else {
+            return committed;
+        };
+        self.change_to(value, true) || committed
+    }
+
+    /// A key while the box has the focus.
+    pub fn key(&mut self, event: &KeyDownEvent) -> (bool, bool) {
+        match event.keystroke.key.as_str() {
+            "up" => return (true, self.step(true)),
+            "down" => return (true, self.step(false)),
+            _ => {}
+        }
+        match self.field.key(event) {
+            KeyOutcome::Changed => {
+                self.edited = true;
+                (true, false)
+            }
+            KeyOutcome::Submitted => (true, self.commit()),
+            KeyOutcome::Cancelled | KeyOutcome::Ignored => (false, false),
+        }
+    }
+
+    /// Replaces the box's text as typing would.
+    #[cfg(test)]
+    pub fn type_text(&mut self, text: &str) {
+        self.field.set(text);
+        self.edited = true;
+    }
+}
+
+/// A `MavlinkCheckBoxBitMask`: a box per documented bit.
+/// `// C#: Controls/MavlinkCheckBoxBitMask.cs:8-160`
+#[derive(Debug, Clone)]
+pub struct Bitmask {
+    /// Each bit, its name and whether it is ticked.
+    pub bits: Vec<(u32, &'static str, bool)>,
+}
+
+impl Bitmask {
+    /// `setup`: each bit ticked as the vehicle's value has it.
+    fn new(bits: &'static [(u32, &'static str)], value: f64) -> Self {
+        let mut mask = Self {
+            bits: bits
+                .iter()
+                .map(|(bit, name)| (*bit, *name, false))
+                .collect(),
+        };
+        mask.set(value);
+        mask
+    }
+
+    /// The `Value` setter: returns the bits that changed, in order.
+    fn set(&mut self, value: f64) -> Vec<usize> {
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // `(uint)value`
+        let value = value as i64 as u32;
+        let mut changed = Vec::new();
+        for (index, (bit, _, checked)) in self.bits.iter_mut().enumerate() {
+            let on = value & 1_u32.checked_shl(*bit).unwrap_or(0) != 0;
+            if *checked != on {
+                *checked = on;
+                changed.push(index);
+            }
+        }
+        changed
+    }
+
+    /// The `Value` getter, as a float's text.
+    #[must_use]
+    pub fn value(&self) -> f32 {
+        let mut answer: f32 = 0.0;
+        for (bit, _, checked) in &self.bits {
+            if *checked {
+                #[allow(clippy::cast_precision_loss)]
+                let add = 1_u32.checked_shl(*bit).unwrap_or(0) as f32;
+                answer += add;
+            }
+        }
+        answer
+    }
+
+    /// Where each box goes and the rows' bottom: 9 from the left and top, each box's width and
+    /// five more along, a new row, 22 lower, past 500. A check box's width is its text's at six
+    /// pixels a character and the box's eighteen.
+    /// `// C#: Controls/MavlinkCheckBoxBitMask.cs:93-130`
+    fn layout(&self) -> (Vec<(f32, f32)>, f32) {
+        let (mut left, mut top, mut bottom) = (9.0_f32, 9.0_f32, 0.0_f32);
+        let mut places = Vec::new();
+        for (_, name, _) in &self.bits {
+            places.push((left, top));
+            bottom = top + 17.0;
+            #[allow(clippy::cast_precision_loss)]
+            let width = 18.0 + 6.0 * name.chars().count() as f32;
+            left += width + 5.0;
+            if left > 500.0 {
+                top += 22.0;
+                left = 9.0;
+            }
+        }
+        (places, bottom)
+    }
+}
+
+/// What kind of control a parameter got.
+#[derive(Debug)]
+pub enum Kind {
+    /// A `RangeControl`.
+    Range(RangeControl),
+    /// A `MavlinkCheckBoxBitMask`.
+    Bitmask(Bitmask),
+    /// A `ValuesControl`: its combo box, keyed by the documented values.
+    Values(Combo),
+}
+
+/// One parameter's control.
+#[derive(Debug)]
+pub struct Control {
+    /// The parameter, the control's `Name`.
+    pub name: String,
+    /// `LabelText`: the display name and, in brackets, the parameter.
+    pub label: String,
+    /// `DescriptionText`, from `FitDescriptionText`.
+    pub description: String,
+    /// The control.
+    pub kind: Kind,
+    /// Whether Find left it showing.
+    pub visible: bool,
+}
+
+impl Control {
+    /// What a fact calls its kind.
+    #[must_use]
+    pub const fn kind_name(&self) -> &'static str {
+        match self.kind {
+            Kind::Range(_) => "range",
+            Kind::Bitmask(_) => "bitmask",
+            Kind::Values(_) => "values",
+        }
+    }
+
+    /// Its height in the list.
+    fn height(&self) -> f32 {
+        match &self.kind {
+            Kind::Range(_) => RANGE_HEIGHT,
+            Kind::Values(_) => VALUES_HEIGHT,
+            // `Height = myLabel1.Height + tableLayoutPanel1.Height + 25`, the table its padding,
+            // the description's lines and the boxes' rows with their margins.
+            Kind::Bitmask(mask) => {
+                let (_, bottom) = mask.layout();
+                #[allow(clippy::cast_precision_loss)]
+                let lines = self.description.lines().count().max(1) as f32;
+                23.0 + (5.0 + (13.0 * lines + 6.0) + (bottom + 6.0) + 10.0) + 25.0
+            }
+        }
+    }
+
+    /// What it shows, for the facts.
+    #[must_use]
+    pub fn shown(&self) -> String {
+        match &self.kind {
+            Kind::Range(range) => range.shown().to_owned(),
+            Kind::Bitmask(mask) => float_text(mask.value()),
+            Kind::Values(combo) => combo.text().to_owned(),
+        }
+    }
+}
+
+/// `ValuesControl`'s combo: the documented values, the one the vehicle holds selected - by the
+/// text of the values, as `SelectedValue` compares them.
+fn values_combo(name: &str, values: &'static [(i64, &'static str)], value: &str) -> Combo {
+    let options: Vec<(i64, String)> = values
+        .iter()
+        .map(|(key, text)| (*key, text.trim().to_owned()))
+        .collect();
+    let selected = options
+        .iter()
+        .find(|(key, _)| key.to_string() == value)
+        .map(|(key, _)| *key);
+    Combo {
+        param: name.to_owned(),
+        options,
+        selected,
+        enabled: true,
+        top_index: 0,
+    }
+}
+
+/// `AddControl` for a parameter without one: the control its documentation makes, or `None`.
+/// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:460-613`
+#[must_use]
+pub fn build(name: &str, display: &str, value: f64, lookup: Lookup) -> Option<Control> {
+    let meta = lookup(name)?;
+    let text = three_places(value);
+    let label = format!("{display} ({name})");
+    let units = meta.units;
+    if let (Some((low, high)), Some(increment)) = (meta.range, meta.increment) {
+        #[allow(clippy::cast_possible_truncation)]
+        let (low, high, mut increment) = (low as f32, high as f32, increment as f32);
+        if increment > 0.0 {
+            let mut scale = 1.0;
+            let mut units = units.to_owned();
+            if units.eq_ignore_ascii_case("centi-degrees") {
+                scale = 100.0;
+                units = "Degrees (Scaled)".to_owned();
+                increment /= 100.0;
+            }
+            let description = fit_description(&units, meta.description, DESCRIPTION_WIDTH);
+            // A range the control cannot map throws in its constructor: no control.
+            return RangeControl::new(increment, scale, low, high, &text).map(|range| Control {
+                name: name.to_owned(),
+                label,
+                description,
+                kind: Kind::Range(range),
+                visible: true,
+            });
+        }
+    }
+    if !meta.bitmask.is_empty() {
+        return Some(Control {
+            name: name.to_owned(),
+            label,
+            description: fit_description(units, meta.description, BITMASK_DESCRIPTION_WIDTH),
+            kind: Kind::Bitmask(Bitmask::new(meta.bitmask, value)),
+            visible: true,
+        });
+    }
+    if !meta.values.is_empty() {
+        return Some(Control {
+            name: name.to_owned(),
+            label,
+            description: fit_description(units, meta.description, DESCRIPTION_WIDTH),
+            kind: Kind::Values(values_combo(name, meta.values, &text)),
+            visible: true,
+        });
+    }
+    None
+}
+
+// ---------------------------------------------------------------------------------------------
+// The page.
+// ---------------------------------------------------------------------------------------------
+
+/// Find's `InputBox` and what it began with.
+#[derive(Debug)]
+struct Find {
+    input: InputBox,
+    /// `searchfor` when it opened, which Cancel puts back.
+    before: String,
+}
+
+/// The page object.
+#[derive(Debug, Default)]
+pub struct Adsb {
+    made_for: Option<Key>,
+    active: bool,
+    /// `tableLayoutPanel1.Controls`, in the order they were added.
+    controls: Vec<Control>,
+    /// `_params_changed`.
+    changed: BTreeMap<String, String>,
+    /// `searchfor`.
+    search: String,
+    /// Find's box, while it is open.
+    find: Option<Find>,
+    /// When the filter timer fires, while it runs.
+    filter_due: Option<Instant>,
+    /// Refresh Params' question, while it is asked, and its "Show me again?".
+    confirm: Option<bool>,
+    /// The session's `SHOWAGAIN_Refresh_Params`: `None` until read from `config.xml`.
+    show_again: Option<bool>,
+    /// While the parameters are being fetched again: the table they were fetched over.
+    refreshing: Option<Arc<[(String, f64)]>>,
+    /// The combo whose list is down, by the control's index.
+    dropdown: Option<usize>,
+    /// The number being typed into, by the control's index.
+    editing: Option<usize>,
+    messages: VecDeque<Message>,
+    queue: SetQueue,
+}
+
+/// `Settings.Instance.GetList("fav_adsb")`, from Mission Planner's `config.xml`: the favourites,
+/// `;`-separated and URL-encoded. Nothing on this page adds to it.
+/// `// C#: ExtLibs/Utilities/Settings.cs:164-169`
+#[must_use]
+pub fn favourites() -> Vec<String> {
+    mp_settings::Config::default_path()
+        .and_then(|path| mp_settings::Config::load(&path).ok())
+        .and_then(|config| config.get("fav_adsb").map(str::to_owned))
+        .map(|list| list.split(';').map(url_decode).collect::<Vec<_>>())
+        .unwrap_or_default()
+}
+
+/// `WebUtility.UrlDecode`: `+` a space, `%XX` a byte.
+fn url_decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while let Some(&byte) = bytes.get(index) {
+        match byte {
+            b'+' => out.push(b' '),
+            b'%' => {
+                let hex = bytes
+                    .get(index + 1..index + 3)
+                    .and_then(|pair| std::str::from_utf8(pair).ok())
+                    .and_then(|pair| u8::from_str_radix(pair, 16).ok());
+                if let Some(value) = hex {
+                    out.push(value);
+                    index += 2;
+                } else {
+                    out.push(b'%');
+                }
+            }
+            other => out.push(other),
+        }
+        index += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+impl Adsb {
+    /// Whether the page is showing.
+    #[must_use]
+    pub const fn is_active(&self) -> bool {
+        self.active
+    }
+
+    /// The controls, in the order they were added.
+    #[must_use]
+    pub fn controls(&self) -> &[Control] {
+        &self.controls
+    }
+
+    /// A control by its parameter.
+    #[cfg(test)]
+    #[must_use]
+    pub fn control(&self, name: &str) -> Option<&Control> {
+        self.controls.iter().find(|control| control.name == name)
+    }
+
+    /// `_params_changed`.
+    #[must_use]
+    pub const fn changed(&self) -> &BTreeMap<String, String> {
+        &self.changed
+    }
+
+    /// The message box showing.
+    #[must_use]
+    pub fn message(&self) -> Option<&Message> {
+        self.messages.front()
+    }
+
+    /// Dismisses it.
+    pub fn dismiss_message(&mut self) {
+        self.messages.pop_front();
+    }
+
+    /// Whether Refresh Params can be pressed: not while it is fetching.
+    #[must_use]
+    pub fn refresh_enabled(&self) -> bool {
+        self.refreshing.is_none()
+    }
+
+    /// Shows the page: a new page object for a new screen, then `Activate`, which binds the
+    /// list. Returns the writes a changed bitmask makes.
+    /// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:253-258, 324-419`
+    pub fn activate(
+        &mut self,
+        parameters: &[(String, f64)],
+        key: Key,
+        lookup: Lookup,
+        favourites: &[String],
+    ) -> Vec<Job> {
+        if self.made_for != Some(key) {
+            let messages = std::mem::take(&mut self.messages);
+            let queue = std::mem::take(&mut self.queue);
+            let show_again = self.show_again;
+            *self = Self {
+                made_for: Some(key),
+                messages,
+                queue,
+                show_again,
+                ..Self::default()
+            };
+        }
+        self.active = true;
+        self.dropdown = None;
+        self.bind(parameters, lookup, favourites)
+    }
+
+    /// `BindParamList`: each `ADSB_` and `AVD_` parameter with a display name, favourites first,
+    /// by name, given its control or its control given the vehicle's value.
+    fn bind(
+        &mut self,
+        parameters: &[(String, f64)],
+        lookup: Lookup,
+        favourites: &[String],
+    ) -> Vec<Job> {
+        let mut names: Vec<(String, String, f64)> = parameters
+            .iter()
+            .filter(|(name, _)| name.starts_with("ADSB_") || name.starts_with("AVD_"))
+            .filter_map(|(name, value)| {
+                let meta = lookup(name)?;
+                (!meta.display_name.is_empty())
+                    .then(|| (name.clone(), meta.display_name.to_owned(), *value))
+            })
+            .collect();
+        let order = |name: &str| {
+            if favourites.iter().any(|favourite| favourite == name) {
+                format!("0{name}")
+            } else {
+                name.to_owned()
+            }
+        };
+        names.sort_by(|a, b| culture_cmp(&order(&a.0), &order(&b.0)));
+        let mut jobs = Vec::new();
+        for (name, display, value) in names {
+            if let Some(existing) = self
+                .controls
+                .iter_mut()
+                .find(|control| control.name == name)
+            {
+                let text = three_places(value);
+                match &mut existing.kind {
+                    Kind::Range(range) => {
+                        let _ = range.set_value(&text);
+                    }
+                    Kind::Values(combo) => {
+                        combo.selected = combo
+                            .options
+                            .iter()
+                            .find(|(key, _)| key.to_string() == text)
+                            .map(|(key, _)| *key);
+                    }
+                    Kind::Bitmask(mask) => {
+                        // Each box that changes raises the control's own write, with the value
+                        // its boxes add up to so far.
+                        let mut sets = Vec::new();
+                        let target: f32 = text.parse().unwrap_or(0.0);
+                        let mut partial = mask.clone();
+                        for index in mask.set(f64::from(target)) {
+                            if let Some(bit) = partial.bits.get_mut(index) {
+                                bit.2 = !bit.2;
+                            }
+                            sets.push(Set::control(crate::config::servo_output::Write::other(
+                                &name,
+                                f64::from(partial.value()),
+                            )));
+                        }
+                        if !sets.is_empty() {
+                            jobs.push(Job::new("bitmask", sets));
+                        }
+                    }
+                }
+                continue;
+            }
+            if let Some(control) = build(&name, &display, value, lookup) {
+                self.controls.push(control);
+            }
+        }
+        jobs
+    }
+
+    /// `Deactivate`: its unsubscriptions are of packets the C# no longer subscribes to.
+    /// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:667-671`
+    pub fn deactivate(&mut self) {
+        self.active = false;
+        self.dropdown = None;
+        if let Some(index) = self.editing.take() {
+            self.commit(index);
+        }
+    }
+
+    /// `Control_ValueChanged`: the value recorded for Write Params.
+    fn record_change(&mut self, index: usize) {
+        let Some(control) = self.controls.get(index) else {
+            return;
+        };
+        let value = match &control.kind {
+            Kind::Range(range) => range.value_text(),
+            Kind::Bitmask(mask) => float_text(mask.value()),
+            Kind::Values(combo) => match combo.selected {
+                Some(key) => key.to_string(),
+                None => return,
+            },
+        };
+        self.changed.insert(control.name.clone(), value);
+    }
+
+    /// Drops a values control's list down, or back up.
+    pub fn toggle_dropdown(&mut self, index: usize) {
+        self.leave();
+        self.dropdown = if self.dropdown == Some(index) {
+            None
+        } else {
+            if let Some(Control {
+                kind: Kind::Values(combo),
+                ..
+            }) = self.controls.get_mut(index)
+            {
+                combo.open_list();
+            }
+            Some(index)
+        };
+    }
+
+    /// The wheel over the list.
+    pub fn scroll_list(&mut self, index: usize, lines: i32) {
+        if self.dropdown == Some(index)
+            && let Some(Control {
+                kind: Kind::Values(combo),
+                ..
+            }) = self.controls.get_mut(index)
+        {
+            combo.scroll_list(lines);
+        }
+    }
+
+    /// A value chosen: `SelectedIndexChanged`, recorded when the row changed.
+    pub fn choose(&mut self, index: usize, key: i64) {
+        self.dropdown = None;
+        let changed = match self.controls.get_mut(index) {
+            Some(Control {
+                kind: Kind::Values(combo),
+                ..
+            }) => combo.select(key),
+            _ => false,
+        };
+        if changed {
+            self.record_change(index);
+        }
+    }
+
+    /// A bitmask's box clicked.
+    pub fn click_bit(&mut self, index: usize, bit: usize) {
+        self.leave();
+        self.dropdown = None;
+        let changed = match self.controls.get_mut(index) {
+            Some(Control {
+                kind: Kind::Bitmask(mask),
+                ..
+            }) => mask
+                .bits
+                .get_mut(bit)
+                .map(|entry| entry.2 = !entry.2)
+                .is_some(),
+            _ => false,
+        };
+        if changed {
+            self.record_change(index);
+        }
+    }
+
+    fn range_mut(&mut self, index: usize) -> Option<&mut RangeControl> {
+        match self.controls.get_mut(index) {
+            Some(Control {
+                kind: Kind::Range(range),
+                ..
+            }) => Some(range),
+            _ => None,
+        }
+    }
+
+    /// A number clicked into.
+    pub fn begin(&mut self, index: usize) {
+        if self.editing == Some(index) {
+            return;
+        }
+        self.leave();
+        self.dropdown = None;
+        if self.range_mut(index).is_some() {
+            self.editing = Some(index);
+        }
+    }
+
+    /// The number being typed into loses the focus.
+    pub fn leave(&mut self) {
+        if let Some(index) = self.editing.take() {
+            self.commit(index);
+        }
+    }
+
+    fn commit(&mut self, index: usize) {
+        if self.range_mut(index).is_some_and(RangeControl::commit) {
+            self.record_change(index);
+        }
+    }
+
+    /// A key for the number being typed into.
+    pub fn key(&mut self, event: &KeyDownEvent) -> bool {
+        let Some(index) = self.editing else {
+            return false;
+        };
+        let Some((handled, changed)) = self.range_mut(index).map(|range| range.key(event)) else {
+            return false;
+        };
+        if changed {
+            self.record_change(index);
+        }
+        handled
+    }
+
+    /// A number's arrow.
+    pub fn step(&mut self, index: usize, up: bool) {
+        self.begin(index);
+        if self.range_mut(index).is_some_and(|range| range.step(up)) {
+            self.record_change(index);
+        }
+    }
+
+    /// A click on a track bar's channel, above or below its thumb.
+    pub fn page_trackbar(&mut self, index: usize, up: bool) {
+        self.leave();
+        self.dropdown = None;
+        if self.range_mut(index).is_some_and(|range| range.page(up)) {
+            self.record_change(index);
+        }
+    }
+
+    /// Write Params: every recorded value, `ENABLE` names first, each in its own `try`.
+    /// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:179-205`
+    pub fn write_params(&mut self) -> Vec<Job> {
+        self.leave();
+        self.dropdown = None;
+        let mut names: Vec<String> = self.changed.keys().cloned().collect();
+        sort_enable(&mut names);
+        let sets = names.into_iter().filter_map(|name| {
+            let value: f32 = self.changed.get(&name)?.parse().ok()?;
+            Some(Set::caught(
+                name.clone(),
+                f64::from(value),
+                set_failed(&name),
+            ))
+        });
+        let mut job = Job::new("write", sets);
+        job.each_caught = true;
+        vec![job]
+    }
+
+    /// Refresh Params, before its question: with no link, nothing; with "Show me again?" turned
+    /// off, straight to the fetch.
+    /// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:212-218; Common.cs:260-270`
+    pub fn press_refresh(&mut self, connected: bool, telemetry: &Telemetry, view: &TelemetryView) {
+        self.leave();
+        self.dropdown = None;
+        if !connected || !self.refresh_enabled() {
+            return;
+        }
+        let show_again = *self.show_again.get_or_insert_with(|| {
+            mp_settings::Config::default_path()
+                .and_then(|path| mp_settings::Config::load(&path).ok())
+                .and_then(|config| config.get(SHOW_AGAIN_KEY).map(str::to_owned))
+                .is_none_or(|value| !value.trim().eq_ignore_ascii_case("false"))
+        });
+        if show_again {
+            self.confirm = Some(true);
+        } else {
+            self.refresh(telemetry, view);
+        }
+    }
+
+    /// The question's "Show me again?" box clicked.
+    pub fn toggle_show_again(&mut self) {
+        if let Some(checked) = self.confirm.as_mut() {
+            *checked = !*checked;
+            self.show_again = Some(*checked);
+        }
+    }
+
+    /// The question answered: OK fetches, Cancel does nothing.
+    pub fn answer_refresh(&mut self, ok: bool, telemetry: &Telemetry, view: &TelemetryView) {
+        if self.confirm.take().is_some() && ok {
+            self.refresh(telemetry, view);
+        }
+    }
+
+    /// `getParamList`, the button disabled until the list is whole again.
+    fn refresh(&mut self, telemetry: &Telemetry, view: &TelemetryView) {
+        self.refreshing = Some(Arc::clone(&view.parameters));
+        telemetry.download_parameters();
+    }
+
+    /// Find: its `InputBox`, holding the last word.
+    /// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:21-32`
+    pub fn open_find(&mut self) {
+        self.leave();
+        self.dropdown = None;
+        self.find = Some(Find {
+            input: InputBox::new(
+                "Search For",
+                "Enter a single word to search for",
+                &self.search,
+            ),
+            before: self.search.clone(),
+        });
+    }
+
+    /// A key in Find's box: the word follows the text and the timer starts again.
+    /// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:34-45`
+    pub fn find_key(&mut self, event: &KeyDownEvent, now: Instant) -> bool {
+        let Some(find) = self.find.as_mut() else {
+            return false;
+        };
+        match find.input.field.key(event) {
+            KeyOutcome::Changed => {
+                self.search = find.input.field.value().to_owned();
+                self.filter_due = Some(now + FILTER_DELAY);
+            }
+            KeyOutcome::Submitted => self.close_find(true),
+            KeyOutcome::Cancelled => self.close_find(false),
+            KeyOutcome::Ignored => return false,
+        }
+        true
+    }
+
+    /// Find's box closed: OK filters by what it holds; Cancel puts the word back and shows all.
+    pub fn close_find(&mut self, ok: bool) {
+        let Some(find) = self.find.take() else {
+            return;
+        };
+        if ok {
+            self.search = find.input.field.value().to_owned();
+            let search = self.search.clone();
+            self.filter(&search);
+        } else {
+            self.search = find.before;
+            self.filter("");
+        }
+    }
+
+    /// Types into Find's box, for a test.
+    #[cfg(test)]
+    pub fn type_find(&mut self, text: &str, now: Instant) {
+        if let Some(find) = self.find.as_mut() {
+            find.input.field.set(text);
+            self.search = text.to_owned();
+            self.filter_due = Some(now + FILTER_DELAY);
+        }
+    }
+
+    /// `filterList`: two letters or none, matched without case against each control's name and
+    /// description.
+    /// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:58-116`
+    pub fn filter(&mut self, search: &str) {
+        let count = search.chars().count();
+        if count < 2 && count != 0 {
+            return;
+        }
+        let word = search.to_lowercase();
+        for control in &mut self.controls {
+            control.visible = control.label.to_lowercase().contains(&word)
+                || control.description.to_lowercase().contains(&word);
+        }
+    }
+
+    /// Queues handlers' jobs.
+    pub fn push(&mut self, jobs: Vec<Job>) {
+        self.queue.push(jobs);
+    }
+
+    /// Once a frame: a page object whose screen has gone is let go, Find's timer, the fetch's
+    /// end, and the writes, with Write Params' box when they are done.
+    pub fn tick(
+        &mut self,
+        telemetry: &Telemetry,
+        view: &TelemetryView,
+        on_setup: bool,
+        now: Instant,
+    ) {
+        if !self.active
+            && self.made_for.is_some()
+            && (!on_setup || self.made_for != Some(Key::of(view)))
+        {
+            self.made_for = None;
+            self.controls.clear();
+            self.changed.clear();
+            self.refreshing = None;
+            self.find = None;
+            self.confirm = None;
+            self.filter_due = None;
+        }
+        if let Some(due) = self.filter_due
+            && now >= due
+        {
+            self.filter_due = None;
+            let search = self.search.clone();
+            self.filter(&search);
+        }
+        if let Some(before) = &self.refreshing {
+            let whole = !view.parameters.is_empty()
+                && view.parameters.len() >= usize::from(view.parameters_expected);
+            if !view.connected {
+                self.refreshing = None;
+                self.messages.push_back(error(ERROR_RECEIVING));
+            } else if whole && !Arc::ptr_eq(before, &view.parameters) {
+                self.refreshing = None;
+                if self.active {
+                    let jobs = self.bind(&view.parameters, crate::metadata::lookup, &favourites());
+                    self.queue.push(jobs);
+                }
+            }
+        }
+        for event in self.queue.advance(telemetry, &mut self.messages) {
+            if let Event::Done {
+                tag: "write",
+                threw,
+            } = event
+            {
+                self.written(threw);
+            }
+        }
+    }
+
+    /// Write Params' end: with nothing thrown, the recorded values cleared and the box.
+    fn written(&mut self, threw: bool) {
+        if threw {
+            return;
+        }
+        self.changed.clear();
+        self.messages.push_back(Message {
+            title: "Saved",
+            text: SAVED.to_owned(),
+        });
+    }
+}
+
+/// Facts a UI test asserts on.
+pub fn record_facts(page: &Adsb, view: &TelemetryView) {
+    use crate::facts::record;
+    record("config.adsb.active", page.is_active());
+    record("config.adsb.controls", page.controls().len());
+    record(
+        "config.adsb.visible",
+        page.controls()
+            .iter()
+            .filter(|control| control.visible)
+            .count(),
+    );
+    record(
+        "config.adsb.order",
+        page.controls()
+            .iter()
+            .map(|control| control.name.as_str())
+            .collect::<Vec<_>>()
+            .join(","),
+    );
+    record("config.adsb.search", &page.search);
+    record(
+        "config.adsb.find",
+        page.find.as_ref().map_or("none", |find| find.input.prompt),
+    );
+    record(
+        "config.adsb.confirm",
+        if page.confirm.is_some() {
+            REFRESH_WARNING.lines().next().unwrap_or("")
+        } else {
+            "none"
+        },
+    );
+    record("config.adsb.refresh.enabled", page.refresh_enabled());
+    record("config.adsb.changed", page.changed().len());
+    for (name, value) in page.changed() {
+        record(format!("config.adsb.changed.{name}"), value);
+    }
+    for control in page.controls() {
+        let name = &control.name;
+        record(format!("config.adsb.{name}.kind"), control.kind_name());
+        record(format!("config.adsb.{name}.text"), control.shown());
+        record(format!("config.adsb.{name}.visible"), control.visible);
+        record(format!("config.adsb.{name}.label"), &control.label);
+    }
+    record("config.adsb.write", page.queue.last().unwrap_or("none"));
+    record("config.adsb.writes.pending", page.queue.pending());
+    record(
+        "config.adsb.message",
+        page.message()
+            .map_or("none", |message| message.text.as_str()),
+    );
+    for (name, value) in view.parameters.iter() {
+        if name.starts_with("ADSB_") || name.starts_with("AVD_") {
+            record(format!("params.value.{name}"), value);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Drawing.
+// ---------------------------------------------------------------------------------------------
+
+/// A control's name and description, as `RangeControl` paints them and the others label them.
+fn texts(control: &Control, x: f32, y: f32) -> AnyElement {
+    div()
+        .absolute()
+        .left(px(x))
+        .top(px(y))
+        .w(px(CONTROL_WIDTH - 6.0))
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .text_sm()
+                .font_weight(gpui::FontWeight::BOLD)
+                .text_color(rgb(theme::TEXT))
+                .whitespace_nowrap()
+                .child(control.label.clone()),
+        )
+        .children(control.description.replace('\r', "").lines().map(|line| {
+            div()
+                .text_xs()
+                .text_color(rgb(theme::DIM))
+                .whitespace_nowrap()
+                .child(line.to_owned())
+        }))
+        .into_any_element()
+}
+
+/// A `RangeControl`'s number: its text, the arrows, orange outside the documented range.
+#[allow(clippy::too_many_arguments)]
+fn range_number(
+    id: String,
+    range: &RangeControl,
+    index: usize,
+    editing: bool,
+    handle: &FocusHandle,
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    let focused = editing && handle.is_focused(window);
+    let text = crate::probe::measured(id.clone(), div())
+        .id(SharedString::from(id.clone()))
+        .flex_1()
+        .h_full()
+        .flex()
+        .items_center()
+        .px_1()
+        .overflow_hidden()
+        .text_xs()
+        .text_color(rgb(theme::TEXT))
+        .cursor_text()
+        .child(
+            div()
+                .flex_1()
+                .whitespace_nowrap()
+                .child(range.shown().to_owned()),
+        )
+        .children(focused.then(|| div().w(px(1.0)).h(px(12.0)).bg(rgb(theme::ACCENT))));
+    let text = if editing {
+        text.track_focus(handle)
+            .key_context("TextField")
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _window, cx| {
+                if this.optional.adsb.key(event) {
+                    cx.notify();
+                }
+            }))
+    } else {
+        let handle = handle.clone();
+        text.on_click(cx.listener(move |this, _event, window, cx| {
+            this.optional.adsb.begin(index);
+            handle.focus(window, cx);
+            cx.notify();
+        }))
+    };
+    let arrow = |up: bool, cx: &mut Context<MissionPlanner>| {
+        let name = format!("{id}-{}", if up { "up" } else { "down" });
+        crate::probe::measured(name.clone(), div())
+            .id(SharedString::from(name))
+            .flex_1()
+            .flex()
+            .items_center()
+            .justify_center()
+            .text_size(px(7.0))
+            .text_color(rgb(theme::TEXT))
+            .cursor_pointer()
+            .hover(|style| style.bg(rgb(theme::BORDER)))
+            .child(if up { "▲" } else { "▼" })
+            .on_click(cx.listener(move |this, _event, _window, cx| {
+                this.optional.adsb.step(index, up);
+                cx.notify();
+            }))
+    };
+    at(6.0, 58.0, 57.0, 20.0)
+        .flex()
+        .rounded_sm()
+        .border_1()
+        .border_color(rgb(if range.orange {
+            theme::WARN
+        } else if focused {
+            theme::ACCENT
+        } else {
+            theme::OK
+        }))
+        .bg(rgb(theme::ACTION))
+        .child(text)
+        .child(
+            div()
+                .w(px(12.0))
+                .h_full()
+                .flex()
+                .flex_col()
+                .border_l_1()
+                .border_color(rgb(theme::BORDER))
+                .child(arrow(true, cx))
+                .child(arrow(false, cx)),
+        )
+        .into_any_element()
+}
+
+/// A `RangeControl`'s track bar: the channel either side of the thumb takes a click.
+fn trackbar(
+    id: &str,
+    range: &RangeControl,
+    index: usize,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    const WIDTH: f32 = 293.0;
+    #[allow(clippy::cast_precision_loss)]
+    let thumb = (WIDTH - 10.0) * range.trackbar as f32 / TRACK_MAX as f32;
+    let side = |up: bool, cx: &mut Context<MissionPlanner>| {
+        let name = format!("{id}-track-{}", if up { "up" } else { "down" });
+        crate::probe::measured(name.clone(), div())
+            .id(SharedString::from(name))
+            .h_full()
+            .cursor_pointer()
+            .on_click(cx.listener(move |this, _event, _window, cx| {
+                this.optional.adsb.page_trackbar(index, up);
+                cx.notify();
+            }))
+    };
+    at(69.0, 58.0, WIDTH, 20.0)
+        .flex()
+        .items_center()
+        .child(
+            div()
+                .absolute()
+                .left_0()
+                .top(px(9.0))
+                .w_full()
+                .h(px(2.0))
+                .bg(rgb(theme::BORDER)),
+        )
+        .child(side(false, cx).w(px(thumb)))
+        .child(
+            div()
+                .w(px(10.0))
+                .h(px(18.0))
+                .flex_shrink_0()
+                .rounded_sm()
+                .bg(rgb(theme::ACCENT)),
+        )
+        .child(side(true, cx).flex_1())
+        .into_any_element()
+}
+
+/// The page, laid out as `ConfigADSB.resx` lays it out.
+pub fn page(
+    adsb: &Adsb,
+    focus: &Focus,
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    if !adsb.is_active() {
+        return div().into_any_element();
+    }
+    let mut body = div().relative().w(px(654.0));
+    body = body
+        .child(button(
+            "adsb-write",
+            "Write Params",
+            (12.0, 11.0, 103.0, 19.0),
+            true,
+            |this, _window, _cx| {
+                let jobs = this.optional.adsb.write_params();
+                this.optional.adsb.push(jobs);
+            },
+            cx,
+        ))
+        .child(button(
+            "adsb-refresh",
+            "Refresh Params",
+            (121.0, 11.0, 103.0, 19.0),
+            adsb.refresh_enabled(),
+            |this, _window, _cx| {
+                let view = this.telemetry.view();
+                let connected = view.connected && view.vehicle.is_some();
+                this.optional
+                    .adsb
+                    .press_refresh(connected, &this.telemetry, &view);
+            },
+            cx,
+        ))
+        .child(button(
+            "adsb-find",
+            "Find",
+            (230.0, 11.0, 103.0, 19.0),
+            true,
+            |this, window, cx| {
+                this.optional.adsb.open_find();
+                this.optional_focus.prompt.focus(window, cx);
+            },
+            cx,
+        ));
+
+    // panel1: disabled, as the Designer leaves it; nothing enables it.
+    let panel1 = at(12.0, 36.0, 628.0, 25.0)
+        .child(label(5.0, 4.0, "Flight Identification:", false))
+        .child(text_box(
+            "adsb-flid",
+            "",
+            None,
+            false,
+            false,
+            (109.0, 2.0, 86.0, 20.0),
+            |_| {},
+            |_, _| false,
+            cx,
+        ))
+        .child(button(
+            "adsb-saveflid",
+            "Save",
+            (201.0, 2.0, 103.0, 19.0),
+            false,
+            |_, _, _| {},
+            cx,
+        ))
+        .child(label(310.0, 5.0, "Aircraft Registration", false))
+        .child(text_box(
+            "adsb-acreg",
+            "",
+            None,
+            false,
+            false,
+            (415.0, 3.0, 100.0, 20.0),
+            |_| {},
+            |_, _| false,
+            cx,
+        ))
+        .child(button(
+            "adsb-saveacreg",
+            "Save",
+            (521.0, 3.0, 103.0, 19.0),
+            false,
+            |_, _, _| {},
+            cx,
+        ));
+    body = body.child(panel1);
+
+    // tableLayoutPanel1's controls, stacked.
+    let (list_x, list_y) = LIST_AT;
+    let mut y = FIRST_Y;
+    let mut dropdown_at = None;
+    for (index, control) in adsb.controls().iter().enumerate() {
+        if !control.visible {
+            continue;
+        }
+        let height = control.height();
+        let mut item = at(list_x, list_y + y, CONTROL_WIDTH, height)
+            .border_b_1()
+            .border_color(rgb(theme::BORDER));
+        let id = format!("adsb-{}", control.name);
+        match &control.kind {
+            Kind::Range(range) => {
+                item = item
+                    .child(texts(control, 3.0, 0.0))
+                    .child(range_number(
+                        id.clone(),
+                        range,
+                        index,
+                        adsb.editing == Some(index),
+                        &focus.number,
+                        window,
+                        cx,
+                    ))
+                    .child(trackbar(&id, range, index, cx))
+                    .child(label(72.0, 90.0, range.lbl_min.clone(), true))
+                    .child(label(296.0, 90.0, range.lbl_max.clone(), true));
+            }
+            Kind::Values(combo) => {
+                item = item.child(texts(control, 4.0, 3.0)).child(combo_box(
+                    id.clone(),
+                    combo,
+                    (3.0, 65.0, 207.0, 21.0),
+                    move |this| this.optional.adsb.toggle_dropdown(index),
+                    cx,
+                ));
+                if adsb.dropdown == Some(index) {
+                    dropdown_at = Some((index, list_x + 3.0, list_y + y + 65.0 + 21.0));
+                }
+            }
+            Kind::Bitmask(mask) => {
+                item = item.child(texts(control, 3.0, 3.0));
+                let (places, _) = mask.layout();
+                #[allow(clippy::cast_precision_loss)]
+                let lines = control.description.lines().count().max(1) as f32;
+                let top = 28.0 + 5.0 + 13.0 * lines + 6.0;
+                for (bit, ((_, name, checked), (x, by))) in mask.bits.iter().zip(places).enumerate()
+                {
+                    let mut check = Check::default();
+                    check.enabled = true;
+                    check.state = if *checked {
+                        CheckState::Checked
+                    } else {
+                        CheckState::Unchecked
+                    };
+                    item = item.child(check_box(
+                        format!("{id}-bit{bit}"),
+                        &check,
+                        name,
+                        (x + 3.0, top + by),
+                        move |this| this.optional.adsb.click_bit(index, bit),
+                        cx,
+                    ));
+                }
+            }
+        }
+        body = body.child(item);
+        y += height;
+    }
+    let height = list_y + y.max(LIST_HEIGHT) + 9.0;
+    body = body.h(px(height));
+    if let Some((index, x, y)) = dropdown_at
+        && let Some(Control {
+            kind: Kind::Values(combo),
+            name,
+            ..
+        }) = adsb.controls().get(index)
+    {
+        body = body.child(dropdown(
+            &format!("adsb-{name}"),
+            combo,
+            (x, y, 207.0),
+            move |this, key| this.optional.adsb.choose(index, key),
+            move |this, lines| this.optional.adsb.scroll_list(index, lines),
+            cx,
+        ));
+    }
+    panel(TITLE, body).into_any_element()
+}
+
+/// Find's box, Refresh Params' question or a message box, over the whole window.
+pub fn overlay(
+    adsb: &Adsb,
+    focus: &Focus,
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> Option<AnyElement> {
+    if let Some(message) = adsb.message() {
+        return Some(message_box(
+            "adsb-message",
+            "adsb-message-ok",
+            message,
+            window,
+            |this| this.optional.adsb.dismiss_message(),
+            cx,
+        ));
+    }
+    if let Some(find) = &adsb.find {
+        return Some(input_box(
+            "adsb-find-box",
+            &find.input,
+            &focus.prompt,
+            window,
+            |this, event| this.optional.adsb.find_key(event, Instant::now()),
+            |this| this.optional.adsb.close_find(true),
+            |this| this.optional.adsb.close_find(false),
+            cx,
+        ));
+    }
+    let show_again = adsb.confirm?;
+    let mut check = Check::default();
+    check.enabled = true;
+    check.state = if show_again {
+        CheckState::Checked
+    } else {
+        CheckState::Unchecked
+    };
+    let buttons = vec![
+        div()
+            .relative()
+            .w(px(120.0))
+            .h(px(20.0))
+            .child(check_box(
+                "adsb-confirm-showagain".to_owned(),
+                &check,
+                SHOW_ME_AGAIN,
+                (0.0, 2.0),
+                |this| this.optional.adsb.toggle_show_again(),
+                cx,
+            ))
+            .into_any_element(),
+        action(
+            "adsb-confirm-ok",
+            "OK",
+            theme::ACCENT,
+            true,
+            cx.listener(|this, _event: &(), _window, cx| {
+                let view = this.telemetry.view();
+                this.optional
+                    .adsb
+                    .answer_refresh(true, &this.telemetry, &view);
+                cx.notify();
+            }),
+        ),
+        action(
+            "adsb-confirm-cancel",
+            "Cancel",
+            theme::DIM,
+            true,
+            cx.listener(|this, _event: &(), _window, cx| {
+                let view = this.telemetry.view();
+                this.optional
+                    .adsb
+                    .answer_refresh(false, &this.telemetry, &view);
+                cx.notify();
+            }),
+        ),
+    ];
+    Some(crate::config::servo_output::modal(
+        "adsb-confirm",
+        "Refresh Params",
+        REFRESH_WARNING.trim_end(),
+        true,
+        buttons,
+        window,
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::flight_modes::Progress;
+    use crate::config::optional::tests::Answering;
+    use mp_link::requests::RequestOutcome;
+
+    fn bundled(name: &str) -> Option<&'static mp_params::ParamMeta> {
+        mp_params::param_meta::lookup(name)
+    }
+
+    /// The bundled documentation, with a range and an increment for `AVD_F_DIST_XY`, which it
+    /// documents with neither: no `ADSB_` or `AVD_` parameter has both there.
+    fn documented(name: &str) -> Option<&'static mp_params::ParamMeta> {
+        static META: std::sync::OnceLock<mp_params::ParamMeta> = std::sync::OnceLock::new();
+        if name == "AVD_F_DIST_XY" {
+            let base = bundled(name)?;
+            return Some(META.get_or_init(|| mp_params::ParamMeta {
+                range: Some((0.0, 5000.0)),
+                increment: Some(1.0),
+                ..*base
+            }));
+        }
+        bundled(name)
+    }
+
+    fn table(entries: &[(&str, f64)]) -> Vec<(String, f64)> {
+        entries
+            .iter()
+            .map(|(name, value)| ((*name).to_owned(), *value))
+            .collect()
+    }
+
+    fn key() -> Key {
+        Key::of(&TelemetryView::disconnected("test"))
+    }
+
+    fn run(jobs: Vec<Job>, link: &Answering) -> (Vec<Message>, Vec<Event>) {
+        let mut queue = SetQueue::<usize>::default();
+        queue.push(jobs);
+        let mut messages = VecDeque::new();
+        let mut events = Vec::new();
+        for _ in 0..100 {
+            events.extend(queue.advance(link, &mut messages));
+            if queue.pending() == 0 {
+                break;
+            }
+        }
+        (messages.into_iter().collect(), events)
+    }
+
+    /// A vehicle with ADSB configured, a parameter of each kind.
+    fn configured() -> Vec<(String, f64)> {
+        table(&[
+            ("ADSB_TYPE", 1.0),
+            ("ADSB_RF_SELECT", 1.0),
+            ("ADSB_LIST_MAX", 25.0),
+            ("ADSB_LIST_RADIUS", 10000.0),
+            ("AVD_ENABLE", 0.0),
+            ("AVD_F_DIST_XY", 300.0),
+            ("RTL_ALT", 1500.0),
+        ])
+    }
+
+    #[test]
+    fn the_text_is_the_resx_text() {
+        let Some(resx) =
+            crate::config_coverage::source::csharp("GCSViews/ConfigurationView/ConfigADSB.resx")
+        else {
+            eprintln!("skipped: the C# tree is not checked out");
+            return;
+        };
+        let values = crate::config_coverage::source::resx(&resx);
+        let get = |key: &str| values.get(key).map(String::as_str);
+        assert_eq!(get("BUT_writePIDS.Text"), Some("Write Params"));
+        assert_eq!(get("BUT_writePIDS.Location"), Some("12, 11"));
+        assert_eq!(get("BUT_rerequestparams.Text"), Some("Refresh Params"));
+        assert_eq!(get("BUT_rerequestparams.Location"), Some("121, 11"));
+        assert_eq!(get("BUT_Find.Text"), Some("Find"));
+        assert_eq!(get("BUT_Find.Location"), Some("230, 11"));
+        assert_eq!(get("label2.Text"), Some("Flight Identification:"));
+        assert_eq!(get("label1.Text"), Some("Aircraft Registration"));
+        assert_eq!(get("panel1.Enabled"), Some("False"));
+        assert_eq!(get("tableLayoutPanel1.Location"), Some("12, 67"));
+        assert_eq!(get("tableLayoutPanel1.Size"), Some("628, 154"));
+    }
+
+    #[test]
+    fn numbers_are_written_to_three_places() {
+        assert_eq!(three_places(1.0), "1");
+        assert_eq!(three_places(0.1_f32.into()), "0.1");
+        assert_eq!(three_places(2.0005), "2.001");
+        assert_eq!(three_places(-0.0001), "0");
+        assert_eq!(three_places(16_777_215.0), "16777215");
+    }
+
+    #[test]
+    fn names_sort_as_the_culture_sorts_them() {
+        // The underscore before the letters, where ordinal order puts it after.
+        assert_eq!(culture_cmp("A_B", "AB"), Ordering::Less);
+        assert_eq!("A_B".cmp("AB"), Ordering::Greater);
+        assert_eq!(culture_cmp("ADSB_1", "ADSB_A"), Ordering::Less);
+        let mut names = vec![
+            "ADSB_TYPE".to_owned(),
+            "AVD_ENABLE".to_owned(),
+            "ADSB_LIST_MAX".to_owned(),
+            "ADSB_ENABLE".to_owned(),
+        ];
+        sort_enable(&mut names);
+        assert_eq!(
+            names,
+            ["ADSB_ENABLE", "AVD_ENABLE", "ADSB_LIST_MAX", "ADSB_TYPE"]
+        );
+    }
+
+    #[test]
+    fn a_description_breaks_every_width_over_forty_words() {
+        let words: Vec<String> = (0..20).map(|n| format!("w{n}")).collect();
+        let text = fit_description("m", &words.join(" "), 628);
+        let lines: Vec<&str> = text.split("\r\n").collect();
+        assert_eq!(lines[0], "Units: m");
+        // 628 / 40 is 15: a break after the fifteenth word, index 15.
+        assert!(lines[1].starts_with("Description: w0 "));
+        assert!(lines[1].ends_with("w15 "));
+        assert_eq!(fit_description("", "", 628), "");
+    }
+
+    /// SITL's copter: the two enable parameters, each a list of values.
+    #[test]
+    fn the_sitl_copter_gets_two_value_lists() {
+        let mut page = Adsb::default();
+        let parameters = table(&[("ADSB_TYPE", 0.0), ("AVD_ENABLE", 0.0), ("RTL_ALT", 1500.0)]);
+        let jobs = page.activate(&parameters, key(), bundled, &[]);
+        assert!(jobs.is_empty());
+        let names: Vec<&str> = page.controls().iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, ["ADSB_TYPE", "AVD_ENABLE"]);
+        let adsb_type = page.control("ADSB_TYPE").expect("ADSB_TYPE");
+        assert_eq!(adsb_type.kind_name(), "values");
+        assert_eq!(adsb_type.shown(), "Disabled");
+        assert_eq!(adsb_type.label, "ADSB Type (ADSB_TYPE)");
+        assert!(
+            adsb_type
+                .description
+                .starts_with("Description: Type of ADS-B")
+        );
+        assert_eq!(
+            page.control("AVD_ENABLE").map(Control::shown).as_deref(),
+            Some("Disabled")
+        );
+    }
+
+    /// Each kind from the documentation, and none for a range with no increment.
+    #[test]
+    fn each_parameter_gets_the_control_its_documentation_makes() {
+        let mut page = Adsb::default();
+        page.activate(&configured(), key(), documented, &[]);
+        assert_eq!(
+            page.control("ADSB_RF_SELECT").map(Control::kind_name),
+            Some("bitmask")
+        );
+        assert!(
+            page.control("ADSB_LIST_MAX").is_none(),
+            "a range with no increment"
+        );
+        let avd = page.control("AVD_F_DIST_XY").expect("a range");
+        assert_eq!(avd.kind_name(), "range");
+        let Kind::Range(range) = &avd.kind else {
+            panic!("a range");
+        };
+        assert_eq!(range.value_text(), "300");
+        // An increment of 1 is `"1".Length - 1`, no places.
+        assert_eq!(range.decimals, 0);
+        assert_eq!(range.shown(), "300");
+        // Favourites first, then by name.
+        let mut page = Adsb::default();
+        page.activate(&configured(), key(), bundled, &["AVD_ENABLE".to_owned()]);
+        assert_eq!(
+            page.controls().first().map(|c| c.name.as_str()),
+            Some("AVD_ENABLE")
+        );
+    }
+
+    /// A changed value is recorded, not written; Write Params writes it, `ENABLE`s first, and
+    /// says so; the record is cleared.
+    #[test]
+    fn write_params_writes_what_changed() {
+        let mut page = Adsb::default();
+        let parameters = configured();
+        page.activate(&parameters, key(), bundled, &[]);
+        let type_index = page
+            .controls()
+            .iter()
+            .position(|c| c.name == "ADSB_TYPE")
+            .unwrap_or(0);
+        let avd_index = page
+            .controls()
+            .iter()
+            .position(|c| c.name == "AVD_ENABLE")
+            .unwrap_or(0);
+        page.toggle_dropdown(type_index);
+        page.choose(type_index, 0);
+        page.choose(avd_index, 1);
+        page.choose(avd_index, 1);
+        assert_eq!(page.changed().len(), 2);
+        assert_eq!(
+            page.changed().get("AVD_ENABLE").map(String::as_str),
+            Some("1")
+        );
+        let jobs = page.write_params();
+        let link = Answering::new(&[]);
+        let (messages, events) = run(jobs, &link);
+        assert!(messages.is_empty());
+        assert_eq!(
+            link.taken(),
+            [
+                ("AVD_ENABLE".to_owned(), 1.0),
+                ("ADSB_TYPE".to_owned(), 0.0)
+            ]
+        );
+        for event in events {
+            if let Event::Done {
+                tag: "write",
+                threw,
+            } = event
+            {
+                page.written(threw);
+            }
+        }
+        assert!(page.changed().is_empty());
+        assert_eq!(page.message().map(|m| m.text.as_str()), Some(SAVED));
+        assert_eq!(page.message().map(|m| m.title), Some("Saved"));
+    }
+
+    /// A write that times out: its own box, the rest still written, no "saved", and the record
+    /// kept.
+    #[test]
+    fn a_failed_write_keeps_the_record() {
+        let mut page = Adsb::default();
+        page.activate(&configured(), key(), bundled, &[]);
+        let type_index = page
+            .controls()
+            .iter()
+            .position(|c| c.name == "ADSB_TYPE")
+            .unwrap_or(0);
+        let avd_index = page
+            .controls()
+            .iter()
+            .position(|c| c.name == "AVD_ENABLE")
+            .unwrap_or(0);
+        page.choose(type_index, 2);
+        page.choose(avd_index, 1);
+        let link = Answering::new(&[("AVD_ENABLE", Progress::Finished(RequestOutcome::TimedOut))]);
+        let (messages, events) = run(page.write_params(), &link);
+        assert_eq!(messages, [error("Set AVD_ENABLE Failed")]);
+        assert_eq!(link.taken().len(), 2, "ADSB_TYPE after it");
+        for event in events {
+            if let Event::Done {
+                tag: "write",
+                threw,
+            } = event
+            {
+                assert!(threw);
+                page.written(threw);
+            }
+        }
+        assert_eq!(page.changed().len(), 2);
+        assert!(page.message().is_none());
+    }
+
+    /// The range: arrows step by the increment, the track bar pages by five thousandths, typing
+    /// is held to the bounds, and each is recorded as the float the value makes.
+    #[test]
+    #[allow(clippy::cast_possible_truncation)] // the floats the control writes
+    fn a_range_steps_pages_and_types() {
+        let mut page = Adsb::default();
+        page.activate(&configured(), key(), documented, &[]);
+        let index = page
+            .controls()
+            .iter()
+            .position(|c| c.name == "AVD_F_DIST_XY")
+            .unwrap_or(0);
+        page.step(index, true);
+        assert_eq!(
+            page.changed().get("AVD_F_DIST_XY").map(String::as_str),
+            Some("301")
+        );
+        let Some(Kind::Range(range)) = page.controls().get(index).map(|c| &c.kind) else {
+            panic!("a range");
+        };
+        let (minimum, maximum) = (range.minimum, range.maximum);
+        let before = range.trackbar;
+        page.page_trackbar(index, true);
+        let Some(Kind::Range(range)) = page.controls().get(index).map(|c| &c.kind) else {
+            panic!("a range");
+        };
+        assert_eq!(range.trackbar, before + TRACK_PAGE);
+        let expected = map(
+            f64::from(before + TRACK_PAGE),
+            0.0,
+            1000.0,
+            minimum,
+            maximum,
+        )
+        .map(round_even)
+        .unwrap_or(0.0);
+        assert_eq!(range.value_text(), float_text(expected as f32));
+        page.begin(index);
+        if let Some(range) = page.range_mut(index) {
+            range.type_text("999999999");
+        }
+        page.leave();
+        let Some(Kind::Range(range)) = page.controls().get(index).map(|c| &c.kind) else {
+            panic!("a range");
+        };
+        assert_eq!(
+            range.value_text(),
+            float_text(maximum as f32),
+            "held to the maximum"
+        );
+    }
+
+    /// A value the vehicle holds outside the documented range widens the box's bounds and turns
+    /// it orange.
+    #[test]
+    fn an_out_of_range_value_widens_and_is_orange() {
+        let range = RangeControl::new(1.0, 1.0, 0.0, 100.0, "150").expect("a control");
+        assert!((range.maximum - 150.0).abs() < 1e-9);
+        assert_eq!(range.lbl_max, "150");
+        assert!(range.orange);
+        assert_eq!(range.trackbar, 1000);
+        let inside = RangeControl::new(0.01, 1.0, 0.0, 1.0, "0.5").expect("a control");
+        // "0.01".Length - 1: three places.
+        assert_eq!(inside.decimals, 3);
+        assert_eq!(inside.shown(), "0.500");
+        assert!(!inside.orange);
+        assert!(
+            RangeControl::new(1.0, 1.0, 5.0, 5.0, "5").is_none(),
+            "an empty range throws"
+        );
+    }
+
+    /// Showing the page again takes the vehicle's values; a bitmask whose bits changed writes
+    /// each change as it makes it.
+    #[test]
+    fn showing_again_takes_the_vehicles_values_and_a_bitmask_writes() {
+        let mut page = Adsb::default();
+        page.activate(&configured(), key(), bundled, &[]);
+        let mut later = configured();
+        for (name, value) in &mut later {
+            match name.as_str() {
+                "ADSB_TYPE" => *value = 2.0,
+                "ADSB_RF_SELECT" => *value = 2.0,
+                _ => {}
+            }
+        }
+        let jobs = page.activate(&later, key(), bundled, &[]);
+        assert_eq!(
+            page.control("ADSB_TYPE").map(Control::shown).as_deref(),
+            Some("Sagetech")
+        );
+        let link = Answering::new(&[]);
+        run(jobs, &link);
+        // Bit 0 off (0), then bit 1 on (2).
+        assert_eq!(
+            link.taken(),
+            [
+                ("ADSB_RF_SELECT".to_owned(), 0.0),
+                ("ADSB_RF_SELECT".to_owned(), 2.0)
+            ]
+        );
+        assert!(page.changed().is_empty(), "nothing recorded");
+    }
+
+    /// Find filters two letters or none, as typed after half a second, and on OK; Cancel shows
+    /// every control and puts the word back.
+    #[test]
+    fn find_filters_by_name_and_description() {
+        let mut page = Adsb::default();
+        page.activate(&configured(), key(), bundled, &[]);
+        let total = page.controls().len();
+        let now = Instant::now();
+        page.open_find();
+        page.type_find("rf", now);
+        let telemetry = Telemetry::idle();
+        let view = TelemetryView::disconnected("test");
+        page.active = true;
+        page.tick(&telemetry, &view, true, now);
+        assert_eq!(
+            page.controls().iter().filter(|c| c.visible).count(),
+            total,
+            "not yet"
+        );
+        page.made_for = Some(Key::of(&view));
+        page.tick(&telemetry, &view, true, now + FILTER_DELAY);
+        let shown: Vec<&str> = page
+            .controls()
+            .iter()
+            .filter(|c| c.visible)
+            .map(|c| c.name.as_str())
+            .collect();
+        assert!(shown.contains(&"ADSB_RF_SELECT"));
+        assert!(shown.len() < total);
+        page.type_find("r", now);
+        page.close_find(true);
+        assert_eq!(page.search, "r");
+        assert!(
+            page.controls().iter().filter(|c| c.visible).count() < total,
+            "one letter changes nothing"
+        );
+        page.open_find();
+        page.type_find("avd", now);
+        page.close_find(false);
+        assert_eq!(page.search, "r", "Cancel puts the word back");
+        assert_eq!(page.controls().iter().filter(|c| c.visible).count(), total);
+    }
+
+    #[test]
+    fn refresh_asks_first_and_fetches_on_ok() {
+        let telemetry = Telemetry::idle();
+        let view = TelemetryView::disconnected("test");
+        let mut page = Adsb::default();
+        page.activate(&configured(), key(), bundled, &[]);
+        page.press_refresh(false, &telemetry, &view);
+        assert!(page.confirm.is_none(), "no link, no question");
+        page.show_again = Some(true);
+        page.press_refresh(true, &telemetry, &view);
+        assert_eq!(page.confirm, Some(true));
+        page.answer_refresh(false, &telemetry, &view);
+        assert!(
+            page.confirm.is_none() && page.refresh_enabled(),
+            "Cancel does nothing"
+        );
+        page.press_refresh(true, &telemetry, &view);
+        page.toggle_show_again();
+        assert_eq!(page.show_again, Some(false));
+        page.answer_refresh(true, &telemetry, &view);
+        assert!(!page.refresh_enabled(), "fetching");
+        // The link went: the fetch fails with the C#'s box.
+        page.tick(&telemetry, &view, true, Instant::now());
+        assert!(page.refresh_enabled());
+        assert_eq!(
+            page.message().map(|m| m.text.as_str()),
+            Some(ERROR_RECEIVING)
+        );
+    }
+
+    #[test]
+    fn favourites_are_url_decoded() {
+        assert_eq!(url_decode("ADSB_TYPE"), "ADSB_TYPE");
+        assert_eq!(url_decode("A%5FB+C"), "A_B C");
+    }
+
+    #[test]
+    fn the_gui_script_names_facts_and_controls_this_page_has() {
+        let script = include_str!("../../../../tests/gui/config-adsb.gui");
+        let source = include_str!("adsb.rs");
+        let per_control = [".kind", ".text", ".visible", ".label"];
+        let mut facts = 0;
+        for line in script.lines() {
+            let line = line.split('#').next().unwrap_or("");
+            let mut words = line.split_whitespace();
+            match (words.next(), words.next()) {
+                (Some("expect"), Some(key)) if key.starts_with("config.adsb.") => {
+                    let recorded = source.contains(&format!("\"{key}\""))
+                        || key.starts_with("config.adsb.changed.")
+                        || per_control.iter().any(|suffix| key.ends_with(suffix));
+                    assert!(recorded, "{key} is not recorded");
+                    facts += 1;
+                }
+                (Some("click"), Some(id)) if id.starts_with("adsb-") => {
+                    let drawn = source.contains(&format!("\"{id}\""))
+                        || id.starts_with("adsb-ADSB_")
+                        || id.starts_with("adsb-AVD_");
+                    assert!(drawn, "{id} is not drawn");
+                }
+                _ => {}
+            }
+        }
+        assert!(facts > 10, "{facts} facts");
+    }
+}

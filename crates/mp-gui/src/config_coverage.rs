@@ -516,7 +516,18 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigADSB"),
         Some(5),
         &[setup(263, "ADSB", MANDATORY, ANY)],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigADSB.cs:17-710 - the controls built from the
+        // documentation, Write Params, Refresh Params with its question, Find; the flight id and
+        // registration panel disabled, as the C# leaves it.
+        Partial(
+            at("crates/mp-gui/src/config/adsb.rs", "fn page"),
+            "a RangeControl, bitmask or ValuesControl per documented ADSB_/AVD_ parameter, \
+             favourites first, recording changes; Write Params writing them ENABLE-first, each \
+             in its own try, then \"Parameters successfully saved.\"; Refresh Params with \
+             MessageShowAgain; Find filtering as typed; a bitmask updated on Activate writing as \
+             the C#'s does; missing Ctrl+S, dragging the track bar (a click pages it), typing \
+             into a ValuesControl, and the InputBox's remembered answers",
+        ),
     ),
     panel(
         "ConfigGPSOrder",
@@ -545,7 +556,16 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigBatteryMonitoring2"),
         Some(10),
         &[setup(271, "Battery Monitor 2", OPTIONAL, ANY)],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring2.cs:8-253
+        Partial(
+            at("crates/mp-gui/src/config/battery_monitor2.rs", "fn page"),
+            "the BATT2 monitor and pin combos, the capacity and calibration boxes validated on \
+             leaving and on Enter with the divider and amps-per-volt arithmetic in floats, the \
+             one-second readings of the second battery, the page disabled for good without \
+             BATT2_MONITOR, MP Alert on Low Battery with its three questions in the settings; \
+             the power module photo is a named box, and the questions' remembered answers are \
+             not kept",
+        ),
     ),
     panel(
         "ConfigDroneCAN",
@@ -566,14 +586,27 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigHWRangeFinder"),
         Some(2),
         &[setup(289, "Range Finder", OPTIONAL, ANY)],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigHWRangeFinder.cs:8-59
+        Partial(
+            at("crates/mp-gui/src/config/rangefinder.rs", "fn page"),
+            "RNGFND_TYPE's combo (disabled on firmware that numbers its rangefinders, as in the \
+             C#), the TeraRanger limits its handler sets, the 200 ms distance and voltage \
+             readout; the sonar picture is a named box, and an unhandled timeout's error report \
+             is shown without its Send",
+        ),
     ),
     panel(
         "ConfigHWAirspeed",
         cv!("ConfigHWAirspeed"),
         Some(1),
         &[setup(293, "Airspeed", OPTIONAL, ANY)],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigHWAirspeed.cs:9-85
+        Partial(
+            at("crates/mp-gui/src/config/airspeed.rs", "fn page"),
+            "Enable and Use Airspeed, each shown only for its parameter, Enable's handler \
+             writing before the control, the pin list and ARSPD_TYPE; the sensor picture is a \
+             named box",
+        ),
     ),
     panel(
         "ConfigHWPX4Flow",
@@ -587,7 +620,14 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigHWOptFlow"),
         Some(2),
         &[setup(301, "Optical Flow", OPTIONAL, ANY)],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigHWOptFlow.cs:8-114
+        Partial(
+            at("crates/mp-gui/src/config/optical_flow.rs", "fn page"),
+            "the legacy FLOW_ENABLE page or the new-style one: FLOW_TYPE, the yaw in degrees, \
+             the scalers and positions writing 300 ms after a change, the rover's height \
+             override shown by the type's handler; the sensor picture is a named box, and a yaw \
+             below -179 degrees is kept rather than written back as the C#'s Minimum does",
+        ),
     ),
     panel(
         "ConfigHWOSD",
@@ -601,7 +641,15 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigMount"),
         Some(5),
         &[setup(309, "Camera Gimbal", OPTIONAL, ANY)],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigMount.cs:14-480
+        Partial(
+            at("crates/mp-gui/src/config/mount.rs", "fn page"),
+            "the mount type, the tilt, roll, pan and shutter outputs assigned through \
+             ensureDisabled, MNT_MODE and CAM_TRIGG_TYPE, each axis's servo and angle limits, \
+             reverse and input channel, stabilise, neutral and retract angles, the shutter's \
+             pulses; the page disabled without CAM_TRIGG_TYPE, as on firmware from 4.3; the four \
+             gimbal pictures are named boxes",
+        ),
     ),
     panel(
         "ConfigAntennaTracker",
@@ -1621,7 +1669,7 @@ mod tests {
             );
             checked += 1;
         }
-        assert_eq!(checked, 20);
+        assert_eq!(checked, 26);
     }
 
     /// The committed report matches the table.
@@ -1653,7 +1701,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (7, 12, 36, 2, 4)
+            (7, 18, 30, 2, 4)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

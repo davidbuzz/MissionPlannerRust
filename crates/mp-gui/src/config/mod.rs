@@ -13,3 +13,11 @@ pub mod radio;
 pub mod secure;
 pub mod serial_ports;
 pub mod servo_output;
+// The Optional Hardware pages (and ADSB), ported together: `optional.rs` holds what they share.
+pub mod adsb;
+pub mod airspeed;
+pub mod battery_monitor2;
+pub mod mount;
+pub mod optical_flow;
+pub mod optional;
+pub mod rangefinder;

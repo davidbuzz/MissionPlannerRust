@@ -976,6 +976,19 @@ impl MissionPlanner {
                     .activate(&view.parameters, Key::of(&view));
             }
             // ---- end Mandatory Hardware pages ----
+            // Optional Hardware pages (`config/optional.rs`), each `Activate` every time.
+            // C#: GCSViews/ConfigurationView/ConfigADSB.cs:253-305; ConfigBatteryMonitoring2.cs:17-62;
+            // ConfigHWRangeFinder.cs:17-34; ConfigHWAirspeed.cs:18-63; ConfigHWOptFlow.cs:17-75;
+            // ConfigMount.cs:21-168
+            Some(
+                class @ ("ConfigADSB"
+                | "ConfigBatteryMonitoring2"
+                | "ConfigHWRangeFinder"
+                | "ConfigHWAirspeed"
+                | "ConfigHWOptFlow"
+                | "ConfigMount"),
+            ) => self.optional_activate(class),
+            // end Optional Hardware pages
             _ => {}
         }
     }
@@ -1037,6 +1050,18 @@ impl MissionPlanner {
             // C#: GCSViews/ConfigurationView/ConfigFrameType.cs:36-39
             Some("ConfigFrameType") => self.frame_type_legacy.deactivate(),
             // ---- end Mandatory Hardware pages ----
+            // Optional Hardware pages: `Deactivate` where the page has one, else hidden.
+            // C#: GCSViews/ConfigurationView/ConfigADSB.cs:667-671; ConfigBatteryMonitoring2.cs:64-68;
+            // ConfigHWRangeFinder.cs:36-39
+            Some(
+                class @ ("ConfigADSB"
+                | "ConfigBatteryMonitoring2"
+                | "ConfigHWRangeFinder"
+                | "ConfigHWAirspeed"
+                | "ConfigHWOptFlow"
+                | "ConfigMount"),
+            ) => self.optional_deactivate(class),
+            // end Optional Hardware pages
             _ => {}
         }
     }
@@ -1215,6 +1240,20 @@ impl MissionPlanner {
             "ConfigRawParams" => self.params_body(view, window, cx),
             // C#: GCSViews/ConfigurationView/ConfigPlanner.Designer.cs:29-994; ConfigPlanner.resx
             "ConfigPlanner" => self.planner_page(view, window, cx),
+            // Optional Hardware pages (`config/optional.rs`), each at its `.resx` places.
+            // C#: GCSViews/ConfigurationView/ConfigADSB.resx
+            "ConfigADSB" => self.optional_page(class, view, window, cx),
+            // C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring2.resx
+            "ConfigBatteryMonitoring2" => self.optional_page(class, view, window, cx),
+            // C#: GCSViews/ConfigurationView/ConfigHWRangeFinder.resx
+            "ConfigHWRangeFinder" => self.optional_page(class, view, window, cx),
+            // C#: GCSViews/ConfigurationView/ConfigHWAirspeed.resx
+            "ConfigHWAirspeed" => self.optional_page(class, view, window, cx),
+            // C#: GCSViews/ConfigurationView/ConfigHWOptFlow.resx
+            "ConfigHWOptFlow" => self.optional_page(class, view, window, cx),
+            // C#: GCSViews/ConfigurationView/ConfigMount.resx
+            "ConfigMount" => self.optional_page(class, view, window, cx),
+            // end Optional Hardware pages
             _ => return None,
         })
     }

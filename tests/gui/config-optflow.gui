@@ -1,0 +1,75 @@
+# Initial Setup's Optical Flow page, ported from GCSViews/ConfigurationView/ConfigHWOptFlow.cs.
+#
+# The claim: Activate shows the new-style page on firmware without FLOW_ENABLE - "Enable" hidden,
+# the type, yaw, scale and position controls bound - and hides the height override on anything
+# but a rover (ConfigHWOptFlow.cs:17-75); the type combo writes FLOW_TYPE itself, after the page's
+# handler has hidden the height override again (:98-113). The write is proved by the vehicle's
+# echo, and put back.
+#
+# SITL's copter lists FLOW_TYPE 0 and, with no sensor, none of FLOW_ORIENT_YAW, the scalers or the
+# positions: their boxes show, disabled. The numbers' writes and the legacy page's "Enable" are
+# covered by the unit tests in crates/mp-gui/src/config/optical_flow.rs.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run as
+#
+#   tools/gui-test.sh tests/gui/config-optflow.gui -- tcp:127.0.0.1:5760
+#
+# A run that stops half way can leave FLOW_TYPE at 1; the first expectation on it then fails until
+# a fresh SITL.
+
+screen params
+window 1600x1200
+settle 6
+
+click param-download
+settle 15
+expect params.held > 1000
+expect params.value.FLOW_TYPE 0
+
+click tab-setup
+expect config.optflow.active false
+click setup-page-ConfigOptional
+click setup-page-ConfigHWOptFlow
+settle 1
+expect setup.page ConfigHWOptFlow
+expect config.optflow.active true
+expect config.optflow.enabled true
+expect config.optflow.heading Optical Flow
+
+# The new-style page.
+expect config.optflow.enable.visible false
+expect config.optflow.type.visible true
+expect config.optflow.type.enabled true
+expect config.optflow.type 0
+expect config.optflow.type.text None
+expect config.optflow.flow_orient_yaw.visible true
+expect config.optflow.flow_orient_yaw.enabled false
+expect config.optflow.flow_fxscaler.enabled false
+expect config.optflow.flow_pos_x.enabled false
+# Not a rover: the height override and its labels are hidden.
+expect config.optflow.flow_hgt_ovr.visible false
+expect config.optflow.height.labels.visible false
+expect config.optflow.write none
+
+# The type: PX4Flow, then None again.
+click optflow-FLOW_TYPE
+click optflow-FLOW_TYPE-1
+settle 2
+expect config.optflow.type 1
+expect config.optflow.type.text PX4Flow
+expect config.optflow.write FLOW_TYPE 1 accepted
+expect params.value.FLOW_TYPE 1
+expect config.optflow.flow_hgt_ovr.visible false
+
+click optflow-FLOW_TYPE
+click optflow-FLOW_TYPE-0
+settle 2
+expect config.optflow.type 0
+expect config.optflow.write FLOW_TYPE 0 accepted
+expect params.value.FLOW_TYPE 0
+expect config.optflow.message none
+expect config.optflow.writes.pending 0
+
+click setup-page-ConfigOptional
+settle 1
+expect config.optflow.active false
