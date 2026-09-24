@@ -1,0 +1,99 @@
+# Initial Setup's RTK/GPS Inject page, ported from GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs.
+#
+# The claim: the page restores its port from Settings.Instance (ConfigSerialInjectGPS.cs:103-106);
+# Connect on NTRIP asks for the caster's URL with the saved one in the box, saves it and opens
+# CommsNTRIP (:336-355, ExtLibs/Comms/CommsNTRIP.cs:96-114), sets the baud box to its first item
+# and disables "Send NTRIP GGA" (:338, 353); the read loop finds each RTCM 3 frame by its CRC-24Q,
+# counts it by number (:725-746), injects it into the vehicle as GPS_RTCM_DATA fragments
+# (:1136-1151, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3897-3950) and logs every byte to a
+# .gpsbase file (:434-445, 709-719); a 1005 puts the base station in cs.Base and on the RTCM Base
+# line (:1062-1086); each constellation's messages turn its light green (:807-875) and each
+# observation message sets the signal bars (:167-252); the Messages Seen label clears them when
+# clicked (:1430-1433); Connect again closes the port (:301-319).
+#
+# The caster is the script's own: tests/gui/rtk-caster.py, started by the setup line on a free
+# port of 127.0.0.1, serving testdata/rtcm/base-station.rtcm3 - a minute of a base station's
+# messages whose station is SITL's home (testdata/rtcm/generate.py) - about ninety messages a
+# second. It writes the config.xml the application reads: NTRIP chosen, its URL saved, the logs
+# in $WORK/logs. SITL answers GPS_RTCM_DATA with nothing, so the injection is proved by the
+# messages the page handed the link, and by the base in the vehicle's own state.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760, for a vehicle to inject into. Run as
+#
+#   tools/gui-test.sh tests/gui/config-rtk.gui -- tcp:127.0.0.1:5760
+
+env MP_CONFIG_XML $WORK/config.xml
+env XDG_DATA_HOME $WORK
+setup python3 tests/gui/rtk-caster.py --work $WORK --stream testdata/rtcm/base-station.rtcm3
+
+screen params
+window 1600x1200
+settle 6
+expect vehicle.connected true
+
+click tab-setup
+settle 1
+expect config.rtk.active false
+# RTK/GPS Inject is under Optional Hardware, and listed with or without a vehicle
+# (InitialSetup.cs:251).
+click setup-page-ConfigOptional
+click setup-page-ConfigSerialInjectGPS
+settle 1
+expect setup.page ConfigSerialInjectGPS
+expect config.rtk.active true
+expect config.rtk.title RTK/GPS Inject
+expect config.rtk.port NTRIP
+expect config.rtk.baud.enabled false
+expect config.rtk.button Connect
+expect config.rtk.open false
+expect config.rtk.lights base=Red,gps=Red,glonass=Red,beidou=Red,galileo=Red
+expect config.rtk.bars 0
+
+# Connect: CommsNTRIP.Open's question, the saved URL in it.
+click rtk-BUT_connect
+expect config.rtk.prompt remote host
+expect config.rtk.prompt.value ~ ntrip://mpr:rtk@127.0.0.1:
+click rtk-prompt-ok
+settle 3
+expect config.rtk.prompt none
+expect config.rtk.message none
+expect config.rtk.open true
+expect config.rtk.running true
+expect config.rtk.button Stop
+expect config.rtk.baud 2400
+expect config.rtk.sendgga.enabled false
+expect config.rtk.setting.url ~ ntrip://mpr:rtk@127.0.0.1:
+expect config.rtk.setting.port NTRIP
+
+# The counts climbing, every message injected, the base found.
+expect config.rtk.messages > 20
+expect config.rtk.types ~ Rtcm1005
+expect config.rtk.types ~ Rtcm1074
+expect config.rtk.types ~ Rtcm1124
+settle 4
+expect config.rtk.messages > 200
+expect config.rtk.injected > 5000
+expect config.rtk.injected.messages > 100
+expect config.rtk.base ~ -35.36326
+expect config.rtk.cs.base ~ -35.36326
+expect config.rtk.msgseen ~ Rtcm1094=
+expect config.rtk.bps ~ bps
+expect config.rtk.bps.sent ~ bps sent
+expect config.rtk.lights base=Green,gps=Green,glonass=Green,beidou=Green,galileo=Green
+expect config.rtk.bars 25
+expect config.rtk.bars.labels ~ G2
+expect config.rtk.logged > 5000
+expect config.rtk.log ~ .gpsbase
+
+# Messages Seen, clicked, starts again from nothing.
+click rtk-labelmsgseen
+expect config.rtk.messages < 150
+
+# Connect again: the port closed, the loop ended, GGA offered again.
+click rtk-BUT_connect
+settle 1
+expect config.rtk.button Connect
+expect config.rtk.open false
+expect config.rtk.running false
+expect config.rtk.sendgga.enabled true
+expect config.rtk.message none

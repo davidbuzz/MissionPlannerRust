@@ -4,11 +4,11 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui c
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 10 | 18 | 27 | 2 | 4 | 569 |
+| 61 | 10 | 19 | 26 | 2 | 4 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 8 | 16 | 18 | 2 | 0 | 258 | 93 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 8 | 17 | 17 | 2 | 0 | 258 | 69 |
 | CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 2 | 2 | 9 | 0 | 0 | 277 | 16 |
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 | 0 |
 
@@ -18,7 +18,6 @@ The largest missing panels, by wirings:
 
 | panel | title | wirings |
 |---|---|---:|
-| `ConfigSerialInjectGPS` | RTK/GPS Inject | 24 |
 | `ConfigFirmware` | Install Firmware Legacy | 20 |
 | `ConfigDroneCAN` | DroneCAN/UAVCAN | 15 |
 | `ConfigTerminal` | Terminal | 12 |
@@ -30,6 +29,7 @@ The largest missing panels, by wirings:
 | `ConfigHWESP8266` (`ConfigHWesp8266.cs`) | ESP8266 Setup | 3 |
 | `ConfigInitialParams` | Initial Tune Parameter | 3 |
 | `ConfigCompassMot` | Compass/Motor Calib | 2 |
+| `ConfigCubeID` | CubeID Update | 2 |
 
 Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConnected && gotAllParams`); **always** is connected or not; **connected** and **disconnected** are the link alone; a named vehicle, parameter or view is what the call, or the `if` around it, checks. **Advanced view** is `DisplayView.isAdvancedMode`. A page with a `DisplayView` switch also needs it on, which it is by default unless the vehicles say otherwise. The list shows a heading as `>> title` and indents what is under it (`ExtLibs/Controls/BackstageView/BackstageView.cs:227`, `:232`).
 
@@ -58,7 +58,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConne
 | 237 | `ConfigInitialParams` | Initial Tune Parameter | Mandatory Hardware | copter, quadplane | 3 | **missing** |
 | 241 | `ConfigHWIDs` | HW ID | Mandatory Hardware | any | 0 | **missing** |
 | 243 | `ConfigOptional` | Optional Hardware |  | always | 0 | plumbing: the Optional Hardware heading of the list: one sentence, no controls |
-| 251 | `ConfigSerialInjectGPS` | RTK/GPS Inject | Optional Hardware | always | 24 | **missing** |
+| 251 | `ConfigSerialInjectGPS` | RTK/GPS Inject | Optional Hardware | always | 24 | partial: `crates/mp-gui/src/config/rtk_inject.rs` `fn page` - every control and handler, the read loop, the RTCM/SBP/UBX/NMEA parsers, GPS_RTCM_DATA and GPS_INJECT_DATA injection, cs.Base, the .gpsbase log, the u-blox, Septentrio and Unicore set-up, the base positions; not DroneCAN over SLCAN (ExtLibs/DroneCAN is not ported) nor the Windows named-pipe fallback (CommsSerialPipe) |
 | 254 | `ConfigCubeID` | CubeID Update | Optional Hardware | connected | 2 | **missing** |
 | 259 | `Sikradio` (`Radio/Sikradio.cs`, not a panel) | Sik Radio | Optional Hardware | always | 17 | **missing** |
 | 263 | `ConfigADSB` | ADSB | Mandatory Hardware | any | 5 | partial: `crates/mp-gui/src/config/adsb.rs` `fn page` - a RangeControl, bitmask or ValuesControl per documented ADSB_/AVD_ parameter, favourites first, recording changes; Write Params writing them ENABLE-first, each in its own try, then "Parameters successfully saved."; Refresh Params with MessageShowAgain; Find filtering as typed; a bitmask updated on Activate writing as the C#'s does; missing Ctrl+S, dragging the track bar (a click pages it), typing into a ValuesControl, and the InputBox's remembered answers |

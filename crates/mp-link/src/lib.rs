@@ -66,6 +66,7 @@ pub mod commands;
 pub mod current_settings;
 pub mod fence_points;
 pub mod ftp;
+pub mod inject;
 pub mod messages;
 pub mod mission_transfer;
 pub mod param_download;
@@ -86,7 +87,9 @@ use mp_mavlink_dialects::all::{DIALECT, Heartbeat, MavCmd, MavMessage, MissionWr
 use mp_mission::{MISSION_TYPE_MISSION, MissionItem, WireItem};
 use mp_params::{ParamTable, ParamType, ParamValue, decode_param_id};
 use mp_transport::{OpenError, ReadTime, Transport};
-use mp_vehicle::{DateTime, FenceItem, StateHandle, StreamRates, VehicleId, VehicleRegistry};
+use mp_vehicle::{
+    DateTime, FenceItem, LatLngAlt, StateHandle, StreamRates, VehicleId, VehicleRegistry,
+};
 use param_download::{ParamAction, ParamDownload};
 use requests::{ParamKey, Request, RequestKind};
 pub use timeouts::{ProtocolTimeouts, Retry};
@@ -263,6 +266,14 @@ struct Shared {
     stats: Mutex<LinkStats>,
     running: AtomicBool,
     frames_received: AtomicU64,
+    /// `inject_seq_no`, the GPS injection's sequence number, one per link: shared with every
+    /// [`LinkSender`], which is what injects.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3891`
+    inject_seq: Arc<AtomicU32>,
+    /// `cs.Base` set from outside the link - the RTK page's base station - waiting for the link
+    /// thread to write it into the vehicle's state.
+    /// `// C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:910, 1077, 1098`
+    bases: Arc<Mutex<Vec<(VehicleId, LatLngAlt)>>>,
 }
 
 /// A field the C#'s screens write into `MainV2.comPort.MAV.cs` from outside it.
@@ -283,12 +294,45 @@ pub struct LinkSender {
     outbound: std::sync::mpsc::Sender<Vec<u8>>,
     sysid: u8,
     compid: u8,
+    /// The link's `inject_seq_no`.
+    inject_seq: Arc<AtomicU32>,
+    /// The link's queue of `cs.Base` writes.
+    bases: Arc<Mutex<Vec<(VehicleId, LatLngAlt)>>>,
 }
 
 impl LinkSender {
     /// Queues a message for transmission. Never blocks; false once the link has stopped.
     pub fn send(&self, message: &MavMessage) -> bool {
         queue_frame(&self.outbound, self.sysid, self.compid, message)
+    }
+
+    /// `InjectGpsData(sysid, compid, data, length, rtcm_message)`: `data` cut into
+    /// `GPS_RTCM_DATA` fragments, or `GPS_INJECT_DATA` pieces for `target`, as
+    /// [`inject::gps_inject_messages`] cuts them, and queued. How many were queued; none once the
+    /// link has stopped, as `generatePacket` sends nothing on a closed port.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3897-3972`
+    pub fn inject_gps_data(&self, target: VehicleId, data: &[u8], rtcm_message: bool) -> usize {
+        let mut messages = Vec::new();
+        // One number per message even with two senders at once: the messages are made from the
+        // number the counter is moved on from.
+        let _ = self
+            .inject_seq
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                let mut seq = current;
+                messages = inject::gps_inject_messages(target, data, rtcm_message, &mut seq);
+                Some(seq)
+            });
+        messages.iter().filter(|message| self.send(message)).count()
+    }
+
+    /// `MAV.cs.Base = position`: the vehicle's moving base, written into its state by the link
+    /// thread before the next snapshot. The setter keeps the old point when latitude, longitude
+    /// and altitude are all the same, which writing the same values again amounts to.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1591-1604`
+    pub fn set_base(&self, target: VehicleId, position: LatLngAlt) {
+        if let Ok(mut bases) = self.bases.lock() {
+            bases.push((target, position));
+        }
     }
 }
 
@@ -838,6 +882,8 @@ impl Link {
             outbound: self.outbound.clone(),
             sysid: self.config.sysid,
             compid: self.config.compid,
+            inject_seq: Arc::clone(&self.shared.inject_seq),
+            bases: Arc::clone(&self.shared.bases),
         }
     }
 
@@ -1500,6 +1546,15 @@ fn run_link(
         // Publish snapshots on a cadence rather than per packet: no display can show more than
         // one state per frame, so per-packet publishing is pure overhead.
         if last_publish.elapsed() >= config.publish_interval {
+            // `cs.Base` from the RTK page, into the vehicle's state for this snapshot.
+            // `// C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:910, 1077, 1098`
+            if let Ok(mut bases) = shared.bases.lock() {
+                for (id, position) in bases.drain(..) {
+                    if let Some(state) = registry.working_mut(id) {
+                        state.base = position;
+                    }
+                }
+            }
             registry.publish_all();
             if let Ok(mut description) = shared.description.lock() {
                 // Borrowed, so asking is free; the text is copied only when it changed - a UDP

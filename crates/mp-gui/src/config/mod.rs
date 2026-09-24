@@ -27,3 +27,6 @@ pub mod basic_tuning;
 // ---- end Basic Tuning / Advanced ----
 // ---- Extended Tuning ----
 pub mod extended_tuning;
+// ---- RTK/GPS Inject ----
+pub mod rtk_inject;
+// ---- end RTK/GPS Inject ----

@@ -343,6 +343,12 @@ struct MissionPlanner {
     extended_tuning: config::extended_tuning::ExtendedTuning,
     extended_focus: config::extended_tuning::Focus,
     // ---- end Extended Tuning ----
+    // ---- RTK/GPS Inject ----
+    /// Initial Setup's RTK/GPS Inject page, with its statics and the thread it starts.
+    rtk_inject: config::rtk_inject::RtkInject,
+    /// Its boxes' focus.
+    rtk_focus: config::rtk_inject::Focus,
+    // ---- end RTK/GPS Inject ----
 }
 
 impl MissionPlanner {
@@ -572,6 +578,10 @@ impl MissionPlanner {
             extended_tuning: config::extended_tuning::ExtendedTuning::default(),
             extended_focus: config::extended_tuning::Focus::new(cx),
             // ---- end Extended Tuning ----
+            // ---- RTK/GPS Inject ----
+            rtk_inject: config::rtk_inject::RtkInject::default(),
+            rtk_focus: config::rtk_inject::Focus::new(cx),
+            // ---- end RTK/GPS Inject ----
         };
         // Opening on the planning screen activates it, as switching to it does.
         if this.screen == Screen::Plan {
@@ -1824,6 +1834,11 @@ impl Render for MissionPlanner {
         // and Refresh Screen's calls.
         self.extended_tuning_tick(&view, window);
         // ---- end Extended Tuning ----
+        // ---- RTK/GPS Inject ----
+        // The page object disposed with its screen, what its thread did, its timer, and where
+        // its thread sends.
+        self.rtk_inject_tick(&view, window, cx);
+        // ---- end RTK/GPS Inject ----
         let banner = self.telemetry.firmware_banner().map(str::to_owned);
         let mav_type = view.state.as_ref().map_or(0, |state| state.vehicle_type);
         self.metadata.advance(banner.as_deref(), mav_type);
@@ -2099,6 +2114,9 @@ impl Render for MissionPlanner {
             config::esc_calibration::record_facts(&self.esc_calibration, &view);
             // Optional Hardware pages
             config::optional::record_facts(&self.optional, &view);
+            // ---- RTK/GPS Inject ----
+            config::rtk_inject::record_facts(&self.rtk_inject, &view, &self.persisted);
+            // ---- end RTK/GPS Inject ----
             // ---- Mandatory Hardware pages ----
             config::accel_calibration::record_facts(&self.accel_calibration, &view);
             config::frame_type_legacy::record_facts(&self.frame_type_legacy, &view);
@@ -2425,6 +2443,14 @@ impl Render for MissionPlanner {
                 // ---- end Mandatory Hardware pages ----
                 // Optional Hardware pages
                 .children(self.optional_overlay(window, cx))
+                // ---- RTK/GPS Inject ----
+                .children(config::rtk_inject::overlay(
+                    &self.rtk_inject,
+                    &self.rtk_focus,
+                    window,
+                    cx,
+                ))
+                // ---- end RTK/GPS Inject ----
                 .into_any_element(),
             Screen::Config => probe::measured("config-body", div())
                 .flex()

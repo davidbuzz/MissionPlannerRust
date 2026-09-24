@@ -1002,6 +1002,10 @@ impl MissionPlanner {
             // C#: GCSViews/ConfigurationView/ConfigArducopter.cs:26-204
             Some("ConfigArducopter") => self.extended_tuning_activate(),
             // ---- end Extended Tuning ----
+            // ---- RTK/GPS Inject ----
+            // C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:81-165, 1214-1222
+            Some("ConfigSerialInjectGPS") => self.rtk_inject_activate(),
+            // ---- end RTK/GPS Inject ----
             _ => {}
         }
     }
@@ -1083,6 +1087,10 @@ impl MissionPlanner {
             // `ConfigArducopter` is `IActivate` only: hidden, a number being typed into read.
             Some("ConfigArducopter") => self.extended_tuning_hide(),
             // ---- end Extended Tuning ----
+            // ---- RTK/GPS Inject ----
+            // C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:1224-1227
+            Some("ConfigSerialInjectGPS") => self.rtk_inject_deactivate(),
+            // ---- end RTK/GPS Inject ----
             _ => {}
         }
     }
@@ -1290,6 +1298,13 @@ impl MissionPlanner {
             // C#: GCSViews/ConfigurationView/ConfigArducopter.Designer.cs; ConfigArducopter.resx
             "ConfigArducopter" => self.extended_tuning_page(window, cx),
             // ---- end Extended Tuning ----
+            // ---- RTK/GPS Inject ----
+            // C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.Designer.cs:29-783;
+            // ConfigSerialInjectGPS.resx
+            "ConfigSerialInjectGPS" => {
+                crate::config::rtk_inject::page(&self.rtk_inject, &self.rtk_focus, window, cx)
+            }
+            // ---- end RTK/GPS Inject ----
             _ => return None,
         })
     }

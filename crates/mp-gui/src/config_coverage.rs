@@ -498,13 +498,32 @@ pub const PANELS: &[Panel] = &[
         // C#: GCSViews/ConfigurationView/ConfigOptional.resx, label1.Text
         Plumbing("the Optional Hardware heading of the list: one sentence, no controls"),
     ),
+    // ---- RTK/GPS Inject ----
     panel(
         "ConfigSerialInjectGPS",
         cv!("ConfigSerialInjectGPS"),
         Some(24),
         &[setup(251, "RTK/GPS Inject", OPTIONAL, ALWAYS)],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:26-1626, with rtcm3.cs, sbp.cs,
+        // nmea.cs, ubx_m8p.cs, Septentrio.cs and Unicore.cs as it uses them, ported but for
+        // DroneCAN. The port - serial, UDP host or client, TCP client, NTRIP - and its Open's
+        // questions; the read loop's RTCM 3 framing and CRC-24Q, SBP, UBX and NMEA, each message
+        // counted and injected as MAVLinkInterface.InjectGpsData cuts it; the .gpsbase log; the
+        // rates, lights, signal bars, RTCM Base line, map marker and cs.Base; the u-blox M8P/F9P,
+        // Septentrio and Unicore configuration; the survey-in labels; the base positions' grid
+        // and baseposlist.xml. Divergences, each at its site in rtk_inject.rs: the port opened
+        // and a receiver configured on the port's thread, not the UI's; the baud box enabled for
+        // any serial port, not only a name with "com" in it.
+        Partial(
+            at("crates/mp-gui/src/config/rtk_inject.rs", "fn page"),
+            "every control and handler, the read loop, the RTCM/SBP/UBX/NMEA parsers, \
+             GPS_RTCM_DATA and GPS_INJECT_DATA injection, cs.Base, the .gpsbase log, the u-blox, \
+             Septentrio and Unicore set-up, the base positions; not DroneCAN over SLCAN \
+             (ExtLibs/DroneCAN is not ported) nor the Windows named-pipe fallback \
+             (CommsSerialPipe)",
+        ),
     ),
+    // ---- end RTK/GPS Inject ----
     panel(
         "ConfigCubeID",
         cv!("ConfigCubeID"),
@@ -1696,7 +1715,7 @@ mod tests {
             );
             checked += 1;
         }
-        assert_eq!(checked, 29);
+        assert_eq!(checked, 30);
     }
 
     /// The committed report matches the table.
@@ -1728,7 +1747,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (10, 18, 27, 2, 4)
+            (10, 19, 26, 2, 4)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()
