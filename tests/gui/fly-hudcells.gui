@@ -1,0 +1,49 @@
+# The HUD menu's Battery Cell Voltage: off, it asks "Cell Count" from 4 and draws the battery's
+# voltage over that count - "Cell 4.20v" - on the HUD's lower bottom line, the battery line moved
+# up above it; a count that is not a whole number is the C#'s "Bad Radius"; on, a click turns the
+# line off without asking.
+# `GCSViews/FlightData.cs:6115-6140, ExtLibs/Controls/HUD.cs:2846-2918`
+#
+# Needs SITL (a copter, whose battery reads about 12.6 V): tools/gui-test.sh tests/gui/fly-hudcells.gui -- tcp:127.0.0.1:5760
+
+screen fly
+window 1600x1200
+settle 8
+
+expect fly.hud.cells off
+expect fly.hud.cell none
+
+click hud@0.5x0.4:right
+expect fly.hud.menu true
+click fly-hud-batterycells
+expect fly.hud.menu false
+expect fly.prompt Cell Count
+expect fly.prompt.value 4
+key ctrl+u
+type four
+settle 1
+click fly-prompt-ok
+expect fly.prompt none
+expect status Error: Bad Radius
+expect fly.hud.cells off
+
+# Cancel leaves it off.
+click hud@0.5x0.4:right
+click fly-hud-batterycells
+click fly-prompt-cancel
+expect fly.hud.cells off
+
+click hud@0.5x0.4:right
+click fly-hud-batterycells
+key ctrl+u
+type 3
+settle 1
+click fly-prompt-ok
+expect fly.hud.cells 3
+expect fly.hud.cell ~ Cell 4.
+
+click hud@0.5x0.4:right
+click fly-hud-batterycells
+expect fly.prompt none
+expect fly.hud.cells off
+expect fly.hud.cell none

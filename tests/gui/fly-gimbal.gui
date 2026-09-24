@@ -1,0 +1,62 @@
+# The Payload Control page, tabPayload: the gimbal's Tilt, Pan and Roll bars where the .resx puts
+# them, and Reset Position.
+#
+# A press on a bar beside its thumb moves it one LargeChange, 10, toward the press - Tilt stands up,
+# its maximum at the top - and each move sends all three angles as MAV_CMD_DO_MOUNT_CONTROL in the
+# MAVLink-targeting mode, not waited for. Reset Position puts the bars at zero, sets the mount to
+# MAVLink targeting with no stabilisation (DO_MOUNT_CONFIGURE), and sends the zeros. Video Control
+# is the gimbal's video, not ported, and says so. SITL has no mount; the commands go all the same.
+# `GCSViews/FlightData.cs:1471-1478, 2946-2950, GCSViews/FlightData.Designer.cs:2088-2191,
+# ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4572-4605`
+#
+# Needs SITL (a copter): tools/gui-test.sh tests/gui/fly-gimbal.gui -- tcp:127.0.0.1:5760
+
+screen fly
+window 1600x1200
+settle 8
+
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+expect fly.tabs.first 11
+click fly-tab-payload
+expect fly.tab tabPayload
+expect fly.page.overflow 0
+
+expect fly.gimbal.pitch 0
+expect fly.gimbal.yaw 0
+expect fly.gimbal.roll 0
+expect fly.gimbal.campoint ~ ;
+
+click fly-gimbal-pitch@0.5x0.1
+expect fly.gimbal.pitch 10
+expect fly.sent COMMAND_LONG MAV_CMD_DO_MOUNT_CONTROL 10,0,0,0,0,0,2
+
+click fly-gimbal-yaw@0.95x0.5
+expect fly.gimbal.yaw 10
+expect fly.sent COMMAND_LONG MAV_CMD_DO_MOUNT_CONTROL 10,0,10,0,0,0,2
+
+click fly-gimbal-roll@0.05x0.5
+expect fly.gimbal.roll -10
+expect fly.sent COMMAND_LONG MAV_CMD_DO_MOUNT_CONTROL 10,-10,10,0,0,0,2
+
+click fly-gimbal-pitch@0.5x0.1
+expect fly.gimbal.pitch 20
+expect fly.sent COMMAND_LONG MAV_CMD_DO_MOUNT_CONTROL 20,-10,10,0,0,0,2
+
+click fly-gimbal-reset
+expect fly.gimbal.pitch 0
+expect fly.gimbal.yaw 0
+expect fly.gimbal.roll 0
+expect fly.sent COMMAND_LONG MAV_CMD_DO_MOUNT_CONFIGURE 2,0,0,0,0,0,0; COMMAND_LONG MAV_CMD_DO_MOUNT_CONTROL 0,0,0,0,0,0,2
+
+click fly-gimbal-video
+expect status ~ Video Control is not ported

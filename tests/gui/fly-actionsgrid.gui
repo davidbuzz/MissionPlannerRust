@@ -1,0 +1,59 @@
+# The Actions grid's Message, Set Mount and Clear Track, in the cells the .resx gives them.
+#
+# Message (2,4) asks "Enter Message to be logged" and sends it as a STATUSTEXT of severity 5, which
+# the vehicle writes to its log; Cancel sends nothing. Set Mount (1,3) sends the mode chosen in
+# CMB_mountmode (0,3) - the documented values of the first of MNT1_DEFLT_MODE, MNT_DEFLT_MODE and
+# MNT_MODE, starting on the first - as MNT_MODE where the vehicle has that parameter and as
+# DO_MOUNT_CONTROL's seventh parameter where it does not, as SITL does not; both are waited for.
+# Clear Track (4,3) takes the route flown off the map, which records it again from the next
+# position. Raw Sensor View (3,2) is a window of its own and is drawn dimmed.
+# `GCSViews/FlightData.cs:1101-1107, 1255-1271, 1392-1415, 2718-2729, GCSViews/FlightData.Designer.cs:747-770`
+#
+# Needs SITL (a copter): tools/gui-test.sh tests/gui/fly-actionsgrid.gui -- tcp:127.0.0.1:5760
+
+screen fly
+window 1600x1200
+settle 8
+
+click fly-tab-actions
+expect fly.tab tabActions
+expect fly.page.overflow 0
+
+click fly-sendmsg
+expect fly.prompt Enter Message to be logged
+type hello log
+settle 1
+expect fly.prompt.value hello log
+click fly-prompt-ok
+expect fly.prompt none
+expect fly.sent STATUSTEXT severity=5 text=hello log
+
+click fly-sendmsg
+type not sent
+settle 1
+click fly-prompt-cancel
+expect fly.prompt none
+expect fly.sent STATUSTEXT severity=5 text=hello log
+
+# The list starts on its first mode.
+expect fly.mountmode ~ 0 Retract
+click fly-mountmode
+expect fly.sent COMMAND_LONG MAV_CMD_DO_MOUNT_CONTROL 0,0,0,0,0,0,0
+settle 3
+expect fly.ack ~ MAV_CMD_DO_MOUNT_CONTROL:
+
+click fly-mountmode-list
+click fly-mountmode-2
+expect fly.mountmode ~ 2 M
+click fly-mountmode
+expect fly.sent COMMAND_LONG MAV_CMD_DO_MOUNT_CONTROL 0,0,0,0,0,0,2
+expect fly.page.overflow 0
+
+# Clear Track takes the route recorded so far - one point while SITL stands still - and the next
+# position starts it again.
+expect fly.track.cleared none
+expect fly.track > 0
+click fly-cleartrack
+expect fly.track.cleared > 0
+settle 1
+expect fly.track > 0

@@ -1,0 +1,65 @@
+# The quick views' menu, contextMenuStripQuickView: Set View Count and Undock.
+#
+# Set View Count asks "Enter number of columns to have." from the setting or 2, then "Enter number
+# of rows to have." from it or 3; when both are numbers - decimal.TryParse - setQuickViewRowsCols
+# keeps them, at least one each. The quick views here are quick.rs's six in two columns of three,
+# which have no resize yet: the numbers are kept and the status line says the page is not resized.
+# Undock drops the page out into a window of its own, which one window has nowhere to put: it is
+# dimmed and says so.
+# `GCSViews/FlightData.cs:4920-4935, 5078-5099, 6142-6173, GCSViews/FlightData.Designer.cs:647-660`
+#
+# Self-contained, no link: tools/gui-test.sh tests/gui/fly-quickmenu.gui
+
+screen fly
+window 1600x1200
+settle 3
+
+expect fly.tab tabQuick
+expect fly.menu none
+expect fly.quick.grid none
+
+click fly-quick-3:right
+expect fly.menu quick
+click fly-quick-undock
+expect fly.menu none
+expect status ~ Undock is not ported
+
+click fly-quick-3:right
+click fly-quick-setviewcount
+expect fly.menu none
+expect fly.prompt Enter number of columns to have.
+expect fly.prompt.value 2
+key ctrl+u
+type 3
+settle 1
+click fly-prompt-ok
+expect fly.prompt Enter number of rows to have.
+expect fly.prompt.value 3
+key ctrl+u
+type 2
+settle 1
+click fly-prompt-ok
+expect fly.prompt none
+expect fly.quick.grid 3x2
+expect status ~ Set View Count: 3 x 2
+expect fly.page.overflow 0
+
+# Asked again, the questions start from what was kept; a row count that is not a number keeps
+# nothing new.
+click fly-quick-1:right
+click fly-quick-setviewcount
+expect fly.prompt.value 3
+click fly-prompt-ok
+expect fly.prompt.value 2
+key ctrl+u
+type two
+settle 1
+click fly-prompt-ok
+expect fly.prompt none
+expect fly.quick.grid 3x2
+
+# Cancel on the columns asks nothing more.
+click fly-quick-1:right
+click fly-quick-setviewcount
+click fly-prompt-cancel
+expect fly.prompt none

@@ -1,0 +1,63 @@
+# The flight map menu's POI drop-down: Save File and Load File.
+#
+# Load File reads a file as POI.LoadFile does - latitude, longitude and ID a line, tab-separated -
+# and adds its points to the ones there are; Save File writes them as SaveFile writes poi.txt. The
+# C#'s dialogs are the platform's; here the path is typed, into a box that starts in the folder
+# poi.txt is kept in, which is a scratch one through XDG_DATA_HOME. The C#'s menu is on the map;
+# this application's map menu entries are the row under the Actions grid.
+# `Utilities/POI.cs:143-207, GCSViews/FlightData.cs:3362-3365, 4741-4744`
+#
+# Self-contained, no link: tools/gui-test.sh tests/gui/fly-poifile.gui
+
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/Mission Planner" && printf '%s\t%s\t%s\r\n' -35.3625 149.1655 gate -35.3640 149.1640 mast > "$WORK/Mission Planner/extra.txt"
+screen fly
+window 1600x1200
+settle 4
+
+expect fly.poi.count 0
+click fly-tab-actions
+expect fly.tab tabActions
+expect fly.page.overflow 0
+
+click fly-poi-load
+expect fly.prompt Poi File
+expect fly.prompt.value ~ Mission Planner/
+type extra.txt
+settle 1
+click fly-prompt-ok
+expect fly.prompt none
+expect fly.poi.count 2
+expect fly.poi.list ~ gate -35.3625;149.1655
+expect fly.poi.list ~ mast -35.364;149.164
+
+click fly-poi-save
+expect fly.prompt Poi File
+type saved.txt
+settle 1
+click fly-prompt-ok
+expect status ~ Save File:
+expect status ~ saved.txt
+
+# Loaded back, its points are added to the two there are.
+click fly-poi-load
+type saved.txt
+settle 1
+click fly-prompt-ok
+expect fly.poi.count 4
+
+# A file that is not there is said, and adds nothing.
+click fly-poi-load
+type missing.txt
+settle 1
+click fly-prompt-ok
+expect status ~ missing.txt
+expect fly.poi.count 4
+
+# Cancel closes the box and reads nothing.
+click fly-poi-load
+type extra.txt
+settle 1
+click fly-prompt-cancel
+expect fly.prompt none
+expect fly.poi.count 4

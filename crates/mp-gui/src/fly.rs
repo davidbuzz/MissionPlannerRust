@@ -892,6 +892,35 @@ pub enum Prompt {
     /// `InputBox.Show("Hud Header", "Please enter your item prefix", ref prefix)`, for a User
     /// Items box just checked. `// C#: GCSViews/FlightData.cs:2445-2455`
     HudHeader,
+    /// Set Home Here's `CustomMessageBox.Show("This will reset ...", "Are you sure?", OKCancel)`.
+    /// `// C#: GCSViews/FlightData.cs:4866-4869`
+    SetHome,
+    /// Message's `InputBox.Show("Enter Message", "Enter Message to be logged", ref txt)`.
+    /// `// C#: GCSViews/FlightData.cs:1264`
+    SendMessage,
+    /// Point Camera Here's `InputBox.Show("Enter Alt", "Enter Target Alt (Relative to home)",
+    /// ref alt)`. `// C#: GCSViews/FlightData.cs:4519-4522`
+    PointCameraAlt,
+    /// Point Camera Coords' `InputBox.Show("Enter Coords", ..., ref location)`.
+    /// `// C#: GCSViews/FlightData.cs:4481`
+    PointCameraCoords,
+    /// The POI menu's Save File: `POISave`'s `SaveFileDialog`, typed as Load Log's is, titled
+    /// with the entry and worded with the dialog's filter. `// C#: Utilities/POI.cs:143-154`
+    PoiSave,
+    /// The POI menu's Load File: `POILoad`'s `OpenFileDialog`. `// C#: Utilities/POI.cs:171-182`
+    PoiLoad,
+    /// Set View Count's first question, `InputBox.Show("Columns", "Enter number of columns to
+    /// have.", ref cols)`. `// C#: GCSViews/FlightData.cs:5088`
+    ViewColumns,
+    /// Its second, `InputBox.Show("Rows", "Enter number of rows to have.", ref rows)`.
+    /// `// C#: GCSViews/FlightData.cs:5090`
+    ViewRows,
+    /// Battery Cell Voltage's `InputBox.Show("Battery Cell Count", "Cell Count", ref
+    /// CellCount)`. `// C#: GCSViews/FlightData.cs:6127`
+    CellCount,
+    /// The speed dial's double click: `InputBox.Show("Enter Max Speed", "Enter Max Speed", ref
+    /// max)`. `// C#: GCSViews/FlightData.cs:3140-3143`
+    GaugeMax,
 }
 
 impl Prompt {
@@ -910,6 +939,16 @@ impl Prompt {
             Self::Convert(kind) => kind.text(),
             Self::JumpToTag => "Jump to Tag",
             Self::HudHeader => "Hud Header",
+            Self::SetHome => "Are you sure?",
+            Self::SendMessage => "Enter Message",
+            Self::PointCameraAlt => "Enter Alt",
+            Self::PointCameraCoords => "Enter Coords",
+            Self::PoiSave => "Save File",
+            Self::PoiLoad => "Load File",
+            Self::ViewColumns => "Columns",
+            Self::ViewRows => "Rows",
+            Self::CellCount => "Battery Cell Count",
+            Self::GaugeMax => "Enter Max Speed",
         }
     }
 
@@ -934,6 +973,21 @@ impl Prompt {
             Self::Convert(kind) => kind.filter().to_owned(),
             Self::JumpToTag => "Tag Id:".to_owned(),
             Self::HudHeader => "Please enter your item prefix".to_owned(),
+            Self::SetHome => {
+                "This will reset the onboard home position (effects RTL etc). Are you Sure?"
+                    .to_owned()
+            }
+            Self::SendMessage => "Enter Message to be logged".to_owned(),
+            Self::PointCameraAlt => "Enter Target Alt (Relative to home)".to_owned(),
+            Self::PointCameraCoords => {
+                "Please enter the coords 'lat;long;alt(abs)' or 'lat;long'".to_owned()
+            }
+            // `sfd.Filter = "Poi File|*.txt"`.
+            Self::PoiSave | Self::PoiLoad => "Poi File".to_owned(),
+            Self::ViewColumns => "Enter number of columns to have.".to_owned(),
+            Self::ViewRows => "Enter number of rows to have.".to_owned(),
+            Self::CellCount => "Cell Count".to_owned(),
+            Self::GaugeMax => "Enter Max Speed".to_owned(),
         }
     }
 
@@ -951,6 +1005,15 @@ impl Prompt {
                 | Self::Convert(_)
                 | Self::JumpToTag
                 | Self::HudHeader
+                | Self::SendMessage
+                | Self::PointCameraAlt
+                | Self::PointCameraCoords
+                | Self::PoiSave
+                | Self::PoiLoad
+                | Self::ViewColumns
+                | Self::ViewRows
+                | Self::CellCount
+                | Self::GaugeMax
         )
     }
 
@@ -1929,6 +1992,18 @@ pub fn describe(message: &MavMessage) -> String {
             m.latitude, m.longitude, m.altitude
         ),
         MavMessage::SystemTime(m) => format!("SYSTEM_TIME time_unix_usec={}", m.time_unix_usec),
+        MavMessage::Statustext(m) => format!(
+            "STATUSTEXT severity={} text={}",
+            m.severity,
+            String::from_utf8_lossy(&m.text).trim_end_matches('\0')
+        ),
+        MavMessage::UavionixAdsbOutControl(m) => format!(
+            "UAVIONIX_ADSB_OUT_CONTROL state={} squawk={} flight_id={} baroaltmsl={}",
+            m.state,
+            m.squawk,
+            String::from_utf8_lossy(&m.flight_id).trim_end_matches('\0'),
+            m.baroaltmsl
+        ),
         other => other.name().to_owned(),
     }
 }
@@ -1975,6 +2050,10 @@ pub struct Actions {
     pub action_selected: usize,
     /// Whether its list is open.
     pub action_open: bool,
+    /// Which of `CMB_mountmode`'s items is chosen: the first, as a bound list starts.
+    pub mount_selected: usize,
+    /// Whether its list is open.
+    pub mount_open: bool,
     /// `modifyandSetSpeed`.
     pub speed: ModifyAndSet,
     /// `modifyandSetAlt`.
@@ -2018,6 +2097,8 @@ impl Default for Actions {
             setwp_open: false,
             action_selected: 0,
             action_open: false,
+            mount_selected: 0,
+            mount_open: false,
             speed: ModifyAndSet::speed(),
             alt: ModifyAndSet::alt(),
             loiter_rad: ModifyAndSet::loiter_rad(),
@@ -2113,6 +2194,12 @@ impl Actions {
         );
         crate::facts::record("fly.action", self.action());
         crate::facts::record(
+            "fly.mountmode",
+            mount_modes(crate::metadata::lookup)
+                .get(self.mount_selected)
+                .map_or_else(|| "none".to_owned(), |(key, text)| format!("{key} {text}")),
+        );
+        crate::facts::record(
             "fly.home_alt",
             if self.alt_offset_home == 0.0 {
                 "off"
@@ -2134,6 +2221,14 @@ impl Actions {
         crate::facts::record(
             "vehicle.mission_current",
             state.map_or(0, |s| s.mission_current),
+        );
+        // `cs.HomeLocation`, which Set Home Here moves: the vehicle's own, as it reports it.
+        crate::facts::record(
+            "vehicle.home",
+            state.and_then(|s| s.home).map_or_else(
+                || "none".to_owned(),
+                |home| format!("{:.6},{:.6}", home.latitude(), home.longitude()),
+            ),
         );
     }
 }
@@ -2163,16 +2258,19 @@ pub struct ActionsFocus {
     pub loiter_rad: FocusHandle,
     /// The question's box, or the dialog itself when the question has no box.
     pub prompt: FocusHandle,
+    /// The Transponder page's flight ID and squawk boxes.
+    pub xpdr: crate::transponder::Focus,
 }
 
 impl ActionsFocus {
-    /// Four new handles.
+    /// New handles.
     pub fn new(cx: &mut Context<MissionPlanner>) -> Self {
         Self {
             speed: cx.focus_handle(),
             alt: cx.focus_handle(),
             loiter_rad: cx.focus_handle(),
             prompt: cx.focus_handle(),
+            xpdr: crate::transponder::Focus::new(cx),
         }
     }
 }
@@ -2286,6 +2384,52 @@ fn list_chip(
         .into_any_element()
 }
 
+/// An entry of the map's menu, drawn as the menu's small type rather than as a command button:
+/// the menu is a column of them in the C#, and here a row that wraps. Dimmed, a click says why it
+/// does nothing, as the HUD menu's dimmed rows do.
+fn menu_entry(
+    id: &'static str,
+    label: &'static str,
+    dimmed: Option<&'static str>,
+    cx: &mut Context<MissionPlanner>,
+    on_click: impl Fn(&mut MissionPlanner, &mut Window, &mut Context<MissionPlanner>) + 'static,
+) -> AnyElement {
+    let base = crate::probe::measured(id, div())
+        .id(id)
+        .px_2()
+        .py(px(1.0))
+        .rounded_sm()
+        .border_1()
+        .text_xs()
+        .child(label);
+    match dimmed {
+        None => base
+            .bg(rgb(theme::ACTION))
+            .border_color(rgb(theme::ACCENT))
+            .text_color(rgb(theme::ACCENT))
+            .cursor_pointer()
+            .hover(|style| style.bg(rgb(theme::BORDER)))
+            .on_click(cx.listener(move |this, _event, window, cx| {
+                on_click(this, window, cx);
+                cx.notify();
+            }))
+            .into_any_element(),
+        Some(why) => base
+            .bg(rgb(theme::PANEL))
+            .border_color(rgb(theme::BORDER))
+            .text_color(rgb(theme::DIM))
+            .on_click(cx.listener(move |this, _event, _window, cx| {
+                this.file_status = Some(format!("{label} is not ported: {why}"));
+                cx.notify();
+            }))
+            .into_any_element(),
+    }
+}
+
+/// Why Camera Overlap is dimmed. `// C#: GCSViews/FlightData.cs:4003-4082, 4457-4471`
+const NO_PHOTOS: &str = "it shows or hides the overlap of the camera's photo footprints, and the \
+                         CAMERA_FEEDBACK photo markers, photosoverlay, are not drawn here";
+
 /// Which `ModifyandSet` a listener acts on.
 type Select = fn(&mut Actions) -> &mut ModifyAndSet;
 
@@ -2341,8 +2485,8 @@ impl ModifyAndSetCell<'_> {
     }
 }
 
-/// The Actions tab: the grid, the list a combo has open, and the map menu's two entries. The
-/// question a press asks is not here: it is a dialog over the window, [`prompt_dialog`].
+/// The Actions tab: the grid, the list a combo has open, and the map menu's entries. The question
+/// a press asks is not here: it is a dialog over the window, [`prompt_dialog`].
 fn actions_tab(
     view: &TelemetryView,
     tab: &Actions,
@@ -2356,6 +2500,10 @@ fn actions_tab(
         .get(tab.setwp_selected)
         .cloned()
         .unwrap_or_default();
+    let mount_options = mount_modes(crate::metadata::lookup);
+    let mount_text = mount_options
+        .get(tab.mount_selected)
+        .map_or("", |(_, text)| text.as_str());
 
     let grid = div()
         .grid()
@@ -2372,6 +2520,7 @@ fn actions_tab(
                 cx.listener(|this, _event: &(), _window, cx| {
                     this.fly_actions.action_open = !this.fly_actions.action_open;
                     this.fly_actions.setwp_open = false;
+                    this.fly_actions.mount_open = false;
                     cx.notify();
                 }),
             ),
@@ -2494,7 +2643,78 @@ fn actions_tab(
             }
             .render(window, cx),
         ))
-        // Row 4: -, -, (BUT_SendMSG), BUT_resumemis, BUT_abortland.
+        // `BUT_RAWSensor`: `new RAW_Sensor().Show()`, a window of its own, not ported.
+        // `// C#: GCSViews/FlightData.cs:1464-1469`
+        .child(cell(
+            3,
+            2,
+            grid_button(
+                "fly-rawsensor",
+                "Raw Sensor View",
+                theme::ACCENT,
+                false,
+                |_event: &(), _window, _cx| {},
+            ),
+        ))
+        // Row 3: CMB_mountmode, BUT_mountmode, (BUT_joystick), (BUT_ARM), BUT_clear_track.
+        .child(cell(
+            0,
+            3,
+            combo(
+                "fly-mountmode-list",
+                mount_text,
+                tab.mount_open,
+                cx.listener(|this, _event: &(), _window, cx| {
+                    this.fly_actions.mount_open = !this.fly_actions.mount_open;
+                    this.fly_actions.action_open = false;
+                    this.fly_actions.setwp_open = false;
+                    cx.notify();
+                }),
+            ),
+        ))
+        .child(cell(
+            1,
+            3,
+            grid_button(
+                "fly-mountmode",
+                "Set Mount",
+                theme::ACCENT,
+                has_vehicle,
+                cx.listener(|this, _event: &(), _window, cx| {
+                    this.fly_set_mount();
+                    cx.notify();
+                }),
+            ),
+        ))
+        .child(cell(
+            4,
+            3,
+            grid_button(
+                "fly-cleartrack",
+                "Clear Track",
+                theme::ACCENT,
+                true,
+                cx.listener(|this, _event: &(), _window, cx| {
+                    this.fly_clear_track();
+                    cx.notify();
+                }),
+            ),
+        ))
+        // Row 4: -, -, BUT_SendMSG, BUT_resumemis, BUT_abortland.
+        .child(cell(
+            2,
+            4,
+            grid_button(
+                "fly-sendmsg",
+                "Message",
+                theme::ACCENT,
+                has_vehicle,
+                cx.listener(|this, _event: &(), window, cx| {
+                    this.fly_ask_message(window, cx);
+                    cx.notify();
+                }),
+            ),
+        ))
         .child(cell(
             3,
             4,
@@ -2560,10 +2780,31 @@ fn actions_tab(
         }
         body = body.child(list);
     }
+    if tab.mount_open {
+        let mut list = div().flex().flex_wrap().gap_1();
+        for (index, (key, text)) in mount_options.iter().enumerate() {
+            list = list.child(list_chip(
+                format!("fly-mountmode-{key}"),
+                text,
+                index == tab.mount_selected,
+                cx.listener(move |this, _event, _window, cx| {
+                    this.fly_actions.mount_selected = index;
+                    this.fly_actions.mount_open = false;
+                    cx.notify();
+                }),
+            ));
+        }
+        body = body.child(list);
+    }
 
-    // The map's context menu in the C#. This application's map has no menu - a right click flies
-    // there, which is the menu's Fly To Here - so the three entries that need no point on the map
-    // are here, under the grid. The row wraps where the column is too narrow for all three.
+    // The map's context menu in the C#, `contextMenuStripMap`, in its order. This application's
+    // map has no menu - a right click flies there, which is the menu's Fly To Here, and the
+    // planner is the FLIGHT PLAN tab and TakeOff a button over the grid - so the rest of its
+    // entries are here, under the grid, acting where the map was last pressed as the C#'s act
+    // where it was pressed to open the menu. Set Home Here's drop-down is its two entries. The
+    // Gimbal Video drop-down is video, which is not ported. The row wraps where the column is too
+    // narrow for them all.
+    // `// C#: GCSViews/FlightData.Designer.cs:2518-2531, 2612-2630`
     body = body.child(
         div()
             .flex()
@@ -2576,79 +2817,130 @@ fn actions_tab(
                     .text_color(rgb(theme::DIM))
                     .child("map menu"),
             )
-            .child(action(
-                "fly-flytocoords",
-                "Fly To Coords",
-                theme::ACCENT,
-                true,
-                cx.listener(|this, _event: &(), window, cx| {
-                    this.fly_actions.ask(Prompt::FlyToCoords, "");
-                    this.fly_focus.prompt.focus(window, cx);
-                    cx.notify();
-                }),
-            ))
-            .child(action(
+            .child(menu_entry(
                 "fly-flytohere-alt",
                 "Fly To Here Alt",
-                theme::ACCENT,
-                true,
-                cx.listener(|this, _event: &(), window, cx| {
+                None,
+                cx,
+                |this, window, cx| {
                     this.fly_ask_guided_alt();
                     this.fly_focus.prompt.focus(window, cx);
-                    cx.notify();
-                }),
+                },
+            ))
+            .child(menu_entry(
+                "fly-flytocoords",
+                "Fly To Coords",
+                None,
+                cx,
+                |this, window, cx| {
+                    this.fly_actions.ask(Prompt::FlyToCoords, "");
+                    this.fly_focus.prompt.focus(window, cx);
+                },
+            ))
+            .child(menu_entry(
+                "fly-pointcamerahere",
+                "Point Camera Here",
+                None,
+                cx,
+                |this, window, cx| this.fly_ask_point_camera_here(window, cx),
+            ))
+            .child(menu_entry(
+                "fly-pointcameracoords",
+                "Point Camera Coords",
+                None,
+                cx,
+                |this, window, cx| {
+                    this.fly_actions.ask(Prompt::PointCameraCoords, "");
+                    this.fly_focus.prompt.focus(window, cx);
+                },
+            ))
+            .child(menu_entry(
+                "fly-triggercamera",
+                "Trigger Camera NOW",
+                None,
+                cx,
+                |this, _window, _cx| this.fly_trigger_camera(),
+            ))
+            .child(menu_entry(
+                "fly-setekforigin",
+                "Set EKF Origin Here",
+                None,
+                cx,
+                |this, _window, _cx| this.fly_set_ekf_origin(),
+            ))
+            .child(menu_entry(
+                "fly-sethome",
+                "Set Home Here",
+                None,
+                cx,
+                |this, window, cx| this.fly_ask_set_home(window, cx),
+            ))
+            .child(menu_entry(
+                "fly-cameraoverlap",
+                "Camera Overlap",
+                Some(NO_PHOTOS),
+                cx,
+                |_this, _window, _cx| {},
             ))
             // `jumpToTagToolStripMenuItem`. `// C#: GCSViews/FlightData.Designer.cs:2645-2649`
-            .child(action(
+            .child(menu_entry(
                 "fly-jumptotag",
                 "Jump To Tag",
-                theme::ACCENT,
-                true,
-                cx.listener(|this, _event: &(), window, cx| {
+                None,
+                cx,
+                |this, window, cx| {
                     this.fly_actions.ask(Prompt::JumpToTag, "");
                     this.fly_focus.prompt.focus(window, cx);
-                    cx.notify();
-                }),
+                },
             )),
     );
-    // The menu's POI entry and three of its four: Add Poi at the point the map was last
-    // pressed, Delete the one under it, and Coords. `// C#: GCSViews/FlightData.Designer.cs:2553-2586`
+    // The menu's POI entry and its drop-down: Add Poi at the point the map was last pressed,
+    // Delete the one under it, Save File and Load File, and Coords.
+    // `// C#: GCSViews/FlightData.Designer.cs:2553-2586`
     body = body.child(
         div()
             .flex()
+            .flex_wrap()
             .items_center()
             .gap_1()
             .child(div().text_xs().text_color(rgb(theme::DIM)).child("POI"))
-            .child(action(
+            .child(menu_entry(
                 "fly-poi-add",
                 "Add Poi",
-                theme::ACCENT,
-                true,
-                cx.listener(|this, _event: &(), window, cx| {
-                    this.poi_add(window, cx);
-                    cx.notify();
-                }),
+                None,
+                cx,
+                |this, window, cx| this.poi_add(window, cx),
             ))
-            .child(action(
+            .child(menu_entry(
                 "fly-poi-delete",
                 "Delete",
-                theme::ACCENT,
-                true,
-                cx.listener(|this, _event: &(), _window, cx| {
-                    this.poi_delete();
-                    cx.notify();
-                }),
+                None,
+                cx,
+                |this, _window, _cx| this.poi_delete(),
             ))
-            .child(action(
+            .child(menu_entry(
+                "fly-poi-save",
+                "Save File",
+                None,
+                cx,
+                |this, window, cx| this.poi_ask_file(Prompt::PoiSave, window, cx),
+            ))
+            .child(menu_entry(
+                "fly-poi-load",
+                "Load File",
+                None,
+                cx,
+                |this, window, cx| this.poi_ask_file(Prompt::PoiLoad, window, cx),
+            ))
+            .child(menu_entry(
                 "fly-poi-coords",
                 "Coords",
-                theme::ACCENT,
-                true,
-                cx.listener(|this, _event: &(), window, cx| {
+                None,
+                cx,
+                |this, window, cx| {
                     this.fly_actions.ask(Prompt::PoiCoords, "");
                     this.fly_focus.prompt.focus(window, cx);
-                    cx.notify();
-                }),
+                },
             )),
     );
 
@@ -2961,7 +3253,7 @@ impl Page {
     #[must_use]
     pub const fn note(self) -> Option<&'static str> {
         Some(match self {
-            Self::Quick | Self::Actions => return None,
+            Self::Quick | Self::Actions | Self::Transponder => return None,
             // `// C#: GCSViews/FlightData.Designer.cs:1086`
             Self::Messages => "txt_messagebox: the messages are under the map on this screen.",
             // `// C#: GCSViews/FlightData.Designer.cs:1098-1140`, each wired to a quick-mode
@@ -2973,11 +3265,9 @@ impl Page {
             // `// C#: GCSViews/FlightData.Designer.cs:1143, Controls/PreFlight/CheckListControl.cs`
             Self::PreFlight => "checkListControl1, the pre-flight checklist, is not ported.",
             // `// C#: GCSViews/FlightData.Designer.cs:1155-1158`
-            Self::Gauges => "Gspeed, Galt, Gheading and Gvspeed, the four dials, are not ported.",
-            // `// C#: GCSViews/FlightData.Designer.cs:1612-1626`
-            Self::Transponder => {
-                "The transponder controls (Connect to Transponder, STBY, ON, ALT, IDENT, squawk, \
-                 flight ID) are not ported."
+            Self::Gauges => {
+                "Galt, Gheading and Gvspeed, the altitude, heading and vertical speed dials, are \
+                 not ported."
             }
             // `// C#: GCSViews/FlightData.cs:6045-6072`, painted from `cs.GetItemList`.
             Self::Status => "tabStatus, every CurrentState field by name, is not ported.",
@@ -2990,10 +3280,9 @@ impl Page {
                 "Select Script, Run Script, Abort Running Script and Edit Selected Script are \
                  not ported."
             }
-            // `// C#: GCSViews/FlightData.Designer.cs:2091-2095`
+            // `// C#: GCSViews/FlightData.Designer.cs:2091, 2098-2103, GCSViews/FlightData.cs:6678-6700`
             Self::Payload => {
-                "The gimbal controls (pitch, roll and yaw, Reset Position, Video Control) are \
-                 not ported."
+                "Video Control, the gimbal's video in a window of its own, is not ported."
             }
             // `// C#: GCSViews/FlightData.Designer.cs:2208`
             Self::TLogs => "Tlog > Kml or Graph is mpr kml, on the command line.",
@@ -3021,6 +3310,12 @@ pub enum Panel {
     Playback,
     /// `tableLayoutPanel2`: [`dataflash_page`].
     DataFlash,
+    /// `tabTransponder`'s controls: [`crate::transponder::page`].
+    Transponder,
+    /// `tabPayload`'s controls: [`crate::payload::page`].
+    Payload,
+    /// `tabGauges`' speed dial: [`gauges_page`].
+    Gauges,
 }
 
 impl Page {
@@ -3040,6 +3335,9 @@ impl Page {
     ///   (`// C#: GCSViews/FlightData.Designer.cs:2195-2211`).
     /// - DataFlash Logs: `tableLayoutPanel2`, the log tools, whose first opens the Log Downloader
     ///   (`// C#: GCSViews/FlightData.Designer.cs:2374-2389`).
+    /// - Transponder, Payload Control and Gauges: their controls where the `.resx` puts them -
+    ///   the transponder's, the gimbal's, and the speed dial
+    ///   (`// C#: GCSViews/FlightData.Designer.cs:1155-1158, 1609-1626, 2088-2095`).
     ///
     /// The messages stay under the map, where this screen has always had them, and the tuning
     /// graph is above the map, where the C# has it.
@@ -3051,6 +3349,9 @@ impl Page {
             Self::PreFlight => &[Panel::PreArm, Panel::Health],
             Self::TLogs => &[Panel::Playback],
             Self::LogBrowse => &[Panel::DataFlash],
+            Self::Transponder => &[Panel::Transponder],
+            Self::Payload => &[Panel::Payload],
+            Self::Gauges => &[Panel::Gauges],
             _ => &[],
         }
     }
@@ -3060,15 +3361,26 @@ impl Page {
 /// `// C#: GCSViews/FlightData.Designer.cs:611`
 pub const DEFAULT_PAGE: Page = Page::ALL[0];
 
-/// Which page is showing, and which header the strip starts from.
+/// Which page is showing, which pages the strip has, and which header the strip starts from.
 ///
 /// `Multiline` is off by default (`// C#: GCSViews/FlightData.cs:429`), so the headers are one
 /// row and the ones that do not fit are reached with the two arrows a `TabControl` puts at the
-/// end of the row, each moving the row along by one header.
+/// end of the row, each moving the row along by one header. MultiLine, on the strip's menu, lets
+/// the headers wrap onto as many rows as they need instead, with no arrows.
+///
+/// The pages are all fourteen until Customize chooses others: `loadTabControlActions` returns
+/// before touching them while the `tabcontrolactions` setting is empty. The setting and the
+/// multi-line choice last for the session; the settings file is not this module's to extend.
 #[derive(Debug)]
 pub struct Pages {
     selected: Page,
     first_shown: usize,
+    /// `tabControlactions.TabPages`, in their order.
+    shown: Vec<Page>,
+    /// `tabControlactions.Multiline`.
+    pub multiline: bool,
+    /// `Settings.Instance["tabcontrolactions"]`: page names, each followed by a `;`.
+    setting: Option<String>,
 }
 
 impl Default for Pages {
@@ -3076,6 +3388,9 @@ impl Default for Pages {
         Self {
             selected: DEFAULT_PAGE,
             first_shown: 0,
+            shown: Page::ALL.to_vec(),
+            multiline: false,
+            setting: None,
         }
     }
 }
@@ -3092,6 +3407,12 @@ impl Pages {
         self.selected = page;
     }
 
+    /// The pages the strip has, in its order.
+    #[must_use]
+    pub fn shown(&self) -> &[Page] {
+        &self.shown
+    }
+
     /// The index of the first header in the row.
     #[must_use]
     pub const fn first_shown(&self) -> usize {
@@ -3106,8 +3427,8 @@ impl Pages {
 
     /// Whether the right arrow has anywhere to go: until the last header is the first shown.
     #[must_use]
-    pub const fn can_scroll_right(&self) -> bool {
-        self.first_shown + 1 < Page::ALL.len()
+    pub fn can_scroll_right(&self) -> bool {
+        self.first_shown + 1 < self.shown.len()
     }
 
     /// The left arrow: one header back.
@@ -3122,34 +3443,113 @@ impl Pages {
         }
     }
 
+    /// MultiLine: `tabControlactions.Multiline` turned over.
+    /// `// C#: GCSViews/FlightData.cs:6498-6502`
+    pub fn toggle_multiline(&mut self) {
+        self.multiline = !self.multiline;
+    }
+
+    /// Customize's list: every page `TabListOriginal` holds - all are displayed by the default
+    /// display configuration - checked where the setting names it. With no setting yet, the
+    /// pages the strip has are saved as it first, as `saveTabControlActions` saves them.
+    /// `// C#: GCSViews/FlightData.cs:2584-2615, 4747-4757, ExtLibs/Utilities/DisplayView.cs:146-159`
+    pub fn customize_list(&mut self) -> Vec<(Page, bool)> {
+        let setting = self
+            .setting
+            .get_or_insert_with(|| page_names(&self.shown))
+            .clone();
+        let names: Vec<&str> = setting.split(';').collect();
+        Page::ALL
+            .iter()
+            .map(|page| (*page, names.contains(&page.name())))
+            .collect()
+    }
+
+    /// Customize closed: the checked pages saved as the setting, then `updateDisplayView` - the
+    /// strip rebuilt from the setting in its order, unless the setting is empty, when
+    /// `loadTabControlActions` returns before touching the pages. A rebuilt strip shows its first
+    /// page, as a `TabControl` cleared and filled again selects the first added.
+    /// `// C#: GCSViews/FlightData.cs:2617-2627, 733-791`
+    pub fn customize(&mut self, list: &[(Page, bool)]) {
+        let checked: Vec<Page> = list
+            .iter()
+            .filter(|(_, on)| *on)
+            .map(|(page, _)| *page)
+            .collect();
+        let answer = page_names(&checked);
+        self.setting = Some(answer.clone());
+        if answer.is_empty() {
+            return;
+        }
+        let mut shown = Vec::new();
+        for name in answer.split(';') {
+            if let Some(page) = Page::ALL.iter().find(|page| page.name() == name) {
+                shown.push(*page);
+            }
+        }
+        // `updateDisplayView`: at least one page - Quick. `// C#: GCSViews/FlightData.cs:775-780`
+        let first = *shown.first().unwrap_or(&Page::Quick);
+        if shown.is_empty() {
+            shown.push(first);
+        }
+        self.selected = first;
+        self.shown = shown;
+        self.first_shown = 0;
+    }
+
     /// Publishes what a UI test asserts on: the page showing, by the Designer's name and by its
-    /// header, the strip's order both ways, where the row starts, and how far the page runs past
-    /// the bottom of the column - `overflow`, the page's scroll range, which is zero when it fits.
+    /// header, the strip's pages in order both ways, where the row starts, whether it wraps, and
+    /// how far the page runs past the bottom of the column - `overflow`, the page's scroll
+    /// range, which is zero when it fits.
     pub fn record_facts(&self, overflow: f32) {
         crate::facts::record("fly.tab", self.selected.name());
         crate::facts::record("fly.tab.text", self.selected.text());
-        crate::facts::record("fly.tabs", page_list(Page::name));
-        crate::facts::record("fly.tabs.text", page_list(Page::text));
+        crate::facts::record("fly.tabs", page_list(&self.shown, Page::name));
+        crate::facts::record("fly.tabs.text", page_list(&self.shown, Page::text));
         crate::facts::record("fly.tabs.first", self.first_shown);
+        crate::facts::record("fly.tabs.multiline", self.multiline);
         crate::facts::record("fly.page.overflow", format!("{:.0}", overflow.max(0.0)));
     }
 }
 
-/// Every page's name or text, in the strip's order, joined with commas.
-fn page_list(of: fn(Page) -> &'static str) -> String {
-    Page::ALL.map(of).join(",")
+/// Pages' names each followed by `;`, as `saveTabControlActions` and Customize write them.
+fn page_names(pages: &[Page]) -> String {
+    pages
+        .iter()
+        .map(|page| format!("{};", page.name()))
+        .collect()
+}
+
+/// Pages' names or texts, joined with commas.
+fn page_list(pages: &[Page], of: fn(Page) -> &'static str) -> String {
+    pages
+        .iter()
+        .map(|page| of(*page))
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 /// The header row: one header per page from the first shown on, clipped at the column's edge,
-/// and the two arrows at the end of the row.
+/// and the two arrows at the end of the row - or, MultiLine, every header on as many rows as
+/// they take, and no arrows. The right button opens the strip's menu, Customize and MultiLine,
+/// `tabControlactions.ContextMenuStrip`. `// C#: GCSViews/FlightData.Designer.cs:327, 594`
+///
+/// A multi-line `TabControl` also moves the row holding the selected header next to the page;
+/// the rows stay in the pages' order here.
 pub fn page_strip(pages: &Pages, cx: &mut Context<MissionPlanner>) -> impl IntoElement {
     let mut row = div()
         .flex()
         .flex_1()
         .min_w(px(0.0))
         .overflow_hidden()
-        .gap_1();
-    for page in Page::ALL.iter().copied().skip(pages.first_shown()) {
+        .gap_1()
+        .when(pages.multiline, gpui::Styled::flex_wrap);
+    let skip = if pages.multiline {
+        0
+    } else {
+        pages.first_shown()
+    };
+    for page in pages.shown().iter().copied().skip(skip) {
         let selected = page == pages.selected();
         row = row.child(
             crate::probe::measured(page.id(), div())
@@ -3176,14 +3576,25 @@ pub fn page_strip(pages: &Pages, cx: &mut Context<MissionPlanner>) -> impl IntoE
     }
 
     crate::probe::measured("fly-tabs", div())
+        .id("fly-tabs")
         .flex()
         .flex_shrink_0()
         .items_end()
         .gap_1()
         .border_b_1()
         .border_color(rgb(theme::BORDER))
+        .on_mouse_up(
+            gpui::MouseButton::Right,
+            cx.listener(|this, event: &gpui::MouseUpEvent, _window, cx| {
+                this.fly_data.menu = Some((
+                    MenuKind::Tabs,
+                    (f32::from(event.position.x), f32::from(event.position.y)),
+                ));
+                cx.notify();
+            }),
+        )
         .child(row)
-        .child(
+        .children((!pages.multiline).then(|| {
             div()
                 .flex()
                 .flex_shrink_0()
@@ -3206,8 +3617,8 @@ pub fn page_strip(pages: &Pages, cx: &mut Context<MissionPlanner>) -> impl IntoE
                         this.fly_pages.scroll_right();
                         cx.notify();
                     }),
-                )),
-        )
+                ))
+        }))
 }
 
 /// One of the strip's two arrows.
@@ -3276,8 +3687,33 @@ pub fn page_content(
                     ));
                     shown
                 });
-                crate::quick::page(&inputs.data.quick, shown.as_ref(), cx)
+                // Each view's `ContextMenuStrip` is `contextMenuStripQuickView`: the right button
+                // opens it over the view. `// C#: GCSViews/FlightData.Designer.cs:636-725`
+                div()
+                    .id("fly-quick-views")
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .min_h(px(180.0))
+                    .child(crate::quick::page(&inputs.data.quick, shown.as_ref(), cx))
+                    .on_mouse_up(
+                        gpui::MouseButton::Right,
+                        cx.listener(|this, event: &gpui::MouseUpEvent, _window, cx| {
+                            this.fly_data.menu = Some((
+                                MenuKind::Quick,
+                                (f32::from(event.position.x), f32::from(event.position.y)),
+                            ));
+                            cx.stop_propagation();
+                            cx.notify();
+                        }),
+                    )
+                    .into_any_element()
             }
+            Panel::Transponder => {
+                crate::transponder::page(&inputs.data.transponder, &inputs.focus.xpdr, window, cx)
+            }
+            Panel::Payload => crate::payload::page(&inputs.data.payload, view.state.as_deref(), cx),
+            Panel::Gauges => gauges_page(inputs.data, view.state.as_deref(), cx),
             Panel::Playback => playback_page(&inputs.data.playback, cx),
             Panel::DataFlash => dataflash_page(inputs.data, cx),
             Panel::Actions => actions_panel(
@@ -3316,6 +3752,29 @@ impl MissionPlanner {
     /// retrying requests, with `report` said on the status line when each ends, and the rest go
     /// once. Returns the requests made, in order.
     fn fly_send(&mut self, sends: Sends, view: &TelemetryView, report: &Report) -> Vec<RequestId> {
+        self.fly_send_by(sends, view, Some(report))
+    }
+
+    /// The same, every message sent once and none waited for: `doCommand` with `requireack`
+    /// false, as `setMountControl` and `setMountConfigure` send.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2717-2723`
+    pub(crate) fn fly_send_once(&mut self, sends: Sends) {
+        let view = self.telemetry.view();
+        let sends = match self.telemetry.send_handle() {
+            Some(_) => sends,
+            None => Err(Refusal::quiet("no vehicle")),
+        };
+        self.fly_send_by(sends, &view, None);
+    }
+
+    /// [`MissionPlanner::fly_send`], each message routed where `report` is given and sent once
+    /// where it is not.
+    fn fly_send_by(
+        &mut self,
+        sends: Sends,
+        view: &TelemetryView,
+        report: Option<&Report>,
+    ) -> Vec<RequestId> {
         let messages = match sends {
             Ok(messages) if !messages.is_empty() => messages,
             Ok(_) => {
@@ -3336,13 +3795,22 @@ impl MissionPlanner {
             self.file_status = Some("no vehicle to send to".to_owned());
             return Vec::new();
         };
-        let (requests, queued) = send_routed(
-            &mut self.telemetry,
-            &sender,
-            &messages,
-            report,
-            view.connected,
-        );
+        let (requests, queued) = match report {
+            Some(report) => send_routed(
+                &mut self.telemetry,
+                &sender,
+                &messages,
+                report,
+                view.connected,
+            ),
+            None => {
+                let mut queued = true;
+                for message in &messages {
+                    queued &= sender.send(message);
+                }
+                (Vec::new(), queued)
+            }
+        };
         self.fly_actions
             .record(&messages, view.messages.last().map_or(0, |m| m.seq));
         self.file_status = Some(if queued {
@@ -3355,17 +3823,17 @@ impl MissionPlanner {
 
     /// Builds a press's messages for the vehicle being flown and sends them, with `report` said
     /// when a request among them ends.
-    fn fly_press(
+    pub(crate) fn fly_press(
         &mut self,
         report: &Report,
         build: impl FnOnce(&mut Actions, VehicleId, &TelemetryView) -> Sends,
-    ) {
+    ) -> Vec<RequestId> {
         let view = self.telemetry.view();
         let sends = match self.telemetry.send_handle() {
             Some((_, target)) => build(&mut self.fly_actions, target, &view),
             None => Err(Refusal::quiet("no vehicle")),
         };
-        self.fly_send(sends, &view, report);
+        self.fly_send(sends, &view, report)
     }
 
     /// `CMB_setwp_Click`: the list rebuilt, and opened.
@@ -3376,6 +3844,7 @@ impl MissionPlanner {
             .refresh_setwp(&view.parameters, view.mission.len());
         self.fly_actions.setwp_open = !self.fly_actions.setwp_open;
         self.fly_actions.action_open = false;
+        self.fly_actions.mount_open = false;
     }
 
     /// Set WP: `setWPCurrent(sysid, compid, (ushort) CMB_setwp.SelectedIndex)`, and
@@ -3585,6 +4054,79 @@ impl MissionPlanner {
                     self.fly_data.hud_settings.add_item(&name, &text);
                 }
             }
+            Prompt::SetHome => {
+                if let Some(point) = self.fly_data.pending_home.take() {
+                    self.fly_press(&Report::default(), |_, target, _| {
+                        Ok(set_home_messages(target, point, accepted))
+                    });
+                }
+            }
+            Prompt::SendMessage => {
+                // `if (DialogResult.Cancel == ...) return;`, then `send_text(5, txt)`.
+                if accepted {
+                    self.fly_press(&Report::default(), |_, _, _| {
+                        Ok(vec![statustext(MESSAGE_SEVERITY, &text)])
+                    });
+                }
+            }
+            Prompt::PointCameraAlt => {
+                if accepted {
+                    let point = mouse_down_point(&self.fly_data);
+                    self.fly_press(&Report::default(), |_, target, _| {
+                        point_camera_here_sends(target, point, &text)
+                    });
+                }
+            }
+            // The C# does not look at the dialog's answer: a cancelled box is empty, which is
+            // neither two parts nor three.
+            Prompt::PointCameraCoords => {
+                let text = if accepted { text } else { String::new() };
+                self.fly_press(&Report::default(), |_, target, _| {
+                    point_camera_coords_sends(target, &text, |lat, lng| {
+                        crate::srtm::altitude(lat, lng).alt
+                    })
+                });
+            }
+            Prompt::PoiSave => {
+                if accepted {
+                    self.poi_save(&text);
+                }
+            }
+            Prompt::PoiLoad => {
+                if accepted {
+                    self.poi_load(&text);
+                }
+            }
+            Prompt::ViewColumns => {
+                if accepted {
+                    let rows = self
+                        .fly_data
+                        .quick_grid
+                        .map_or_else(|| "3".to_owned(), |(_, rows)| rows.to_string());
+                    self.fly_data.quick_cols = Some(text);
+                    self.fly_actions.ask(Prompt::ViewRows, &rows);
+                    self.fly_focus.prompt.focus(window, cx);
+                }
+            }
+            Prompt::ViewRows => {
+                let cols = self.fly_data.quick_cols.take();
+                if accepted && let Some(cols) = cols {
+                    self.fly_view_count(&cols, &text);
+                }
+            }
+            Prompt::CellCount => {
+                if accepted {
+                    match dotnet_int(&text) {
+                        Some(count) => self.fly_data.hud_settings.cells = Some(count),
+                        None => self.file_status = Some(error_box(BAD_RADIUS)),
+                    }
+                }
+            }
+            Prompt::GaugeMax => {
+                if accepted && let Err(why) = self.fly_data.speed_gauge.set_max(&text) {
+                    self.file_status = Some(error_box(why));
+                }
+            }
         }
     }
 
@@ -3731,9 +4273,11 @@ impl MissionPlanner {
     }
 
     /// Once a frame: `cs.lastautowp`, a Resume Mission moved on, the Telemetry Logs page
-    /// following the log it plays, and the DataFlash Logs page's conversion finishing.
-    pub(crate) fn fly_tick(&mut self, view: &TelemetryView) {
+    /// following the log it plays, the Transponder page's wait and look for a status, and the
+    /// DataFlash Logs page's conversion finishing.
+    pub(crate) fn fly_tick(&mut self, view: &TelemetryView, window: &Window) {
         self.fly_data.playback.tick();
+        self.fly_xpdr_tick(view, window);
         // A conversion that has finished says so on the status line.
         if let Some(outcome) = self.fly_data.conversions.poll() {
             self.file_status = Some(conversion_status(&outcome));
@@ -3888,6 +4432,27 @@ pub struct FlightData {
     /// Whether Swap With Map has put the HUD where the map was: the C#'s `HudSwap`.
     /// `// C#: GCSViews/FlightData.cs:5139-5159`
     pub swapped: bool,
+    /// The strip's or the quick views' context menu, where the right button came up.
+    pub menu: Option<(MenuKind, (f32, f32))>,
+    /// Customize's list while its form is open: each page, and whether it is checked.
+    pub customizing: Option<Vec<(Page, bool)>>,
+    /// `Settings.Instance["quickViewCols"]` and `["quickViewRows"]`, once Set View Count has
+    /// set them. For the session, as the quick views' own choices are.
+    pub quick_grid: Option<(i32, i32)>,
+    /// Set View Count's columns, between its two questions.
+    pub quick_cols: Option<String>,
+    /// Set Home Here's point and terrain height, while its question is asked.
+    pub pending_home: Option<(f64, f64, f64)>,
+    /// The Transponder page.
+    pub transponder: crate::transponder::Transponder,
+    /// The Payload Control page's gimbal bars.
+    pub payload: crate::payload::Payload,
+    /// How many points the last Clear Track took off the map.
+    pub track_cleared: Option<usize>,
+    /// The Gauges page's speed dial, `Gspeed`.
+    pub speed_gauge: crate::gauge::SpeedGauge,
+    /// Where the Gauges page was laid out, which places the dial as `tabPage1_Resize` does.
+    pub gauges_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
 }
 
 impl FlightData {
@@ -3913,6 +4478,16 @@ impl FlightData {
             hud_menu: HudMenu::default(),
             hud_settings: HudSettings::default(),
             swapped: false,
+            menu: None,
+            customizing: None,
+            quick_grid: None,
+            quick_cols: None,
+            pending_home: None,
+            transponder: crate::transponder::Transponder::default(),
+            payload: crate::payload::Payload::default(),
+            track_cleared: None,
+            speed_gauge: crate::gauge::SpeedGauge::default(),
+            gauges_bounds: Rc::new(Cell::new(None)),
         }
     }
 
@@ -3981,6 +4556,15 @@ impl FlightData {
                 |(at, _)| format!("{:.6};{:.6}", at.latitude(), at.longitude()),
             ),
         );
+        // How far the vehicle's home is from the point last pressed, in whole metres: where Set
+        // Home Here puts it, this is nothing.
+        crate::facts::record(
+            "fly.mousedown.home",
+            match (self.mouse_down_start, state.and_then(|state| state.home)) {
+                (Some((at, _)), Some(home)) => format!("{:.0}", at.distance_to(home).0),
+                _ => "none".to_owned(),
+            },
+        );
         self.conversions.record_facts();
         crate::facts::record("fly.hud.menu", self.hud_menu.open.is_some());
         crate::facts::record("fly.hud.menu.video", self.hud_menu.video);
@@ -4017,6 +4601,71 @@ impl FlightData {
             self.hud_bounds.get().map_or_else(
                 || "none".to_owned(),
                 |laid_out| format!("{:.0}", f32::from(laid_out.origin.x)),
+            ),
+        );
+        // Battery Cell Voltage: the count, and the line the HUD draws with it.
+        crate::facts::record(
+            "fly.hud.cells",
+            self.hud_settings
+                .cells
+                .map_or_else(|| "off".to_owned(), |count| count.to_string()),
+        );
+        crate::facts::record(
+            "fly.hud.cell",
+            match (self.hud_settings.cells, state) {
+                (Some(count), Some(state)) if count != 0 => {
+                    #[allow(clippy::cast_precision_loss)] // a cell count
+                    let per_cell = state.battery.voltage / count as f32;
+                    format!("Cell {per_cell:.2}v")
+                }
+                _ => "none".to_owned(),
+            },
+        );
+        crate::facts::record(
+            "fly.menu",
+            self.menu.map_or("none", |(kind, _)| kind.name()),
+        );
+        crate::facts::record(
+            "fly.customize",
+            self.customizing.as_ref().map_or_else(
+                || "none".to_owned(),
+                |list| {
+                    list.iter()
+                        .map(|(page, on)| format!("{}={}", page.name(), u8::from(*on)))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                },
+            ),
+        );
+        crate::facts::record(
+            "fly.quick.grid",
+            self.quick_grid.map_or_else(
+                || "none".to_owned(),
+                |(cols, rows)| format!("{cols}x{rows}"),
+            ),
+        );
+        // What the last Clear Track took off the map: the route starts again from the vehicle's
+        // next position, so the count on the map is back to one a frame later.
+        crate::facts::record(
+            "fly.track.cleared",
+            self.track_cleared
+                .map_or_else(|| "none".to_owned(), |points| points.to_string()),
+        );
+        self.transponder.record_facts();
+        self.payload.record_facts(state);
+        crate::facts::record("fly.gauge.speed.max", self.speed_gauge.max);
+        crate::facts::record(
+            "fly.gauge.speed.size",
+            format!("{:.0}", gauge_place(self).2),
+        );
+        crate::facts::record(
+            "fly.gauge.speed.needles",
+            state.map_or_else(
+                || "none".to_owned(),
+                |state| {
+                    let [air, ground] = gauge_needles(&self.speed_gauge, state);
+                    format!("{};{}", air.value, ground.value)
+                },
             ),
         );
     }
@@ -5039,12 +5688,8 @@ pub fn hud_panel(
             gpui::canvas(
                 move |laid_out, _window, _cx| bounds.set(Some(laid_out)),
                 move |bounds, (), window, cx| {
-                    let scene = hud_scene(
-                        &painted,
-                        ground,
-                        f32::from(bounds.size.width),
-                        f32::from(bounds.size.height),
-                    );
+                    let height = f32::from(bounds.size.height);
+                    let scene = hud_scene(&painted, ground, f32::from(bounds.size.width), height);
                     crate::hud::paint(&scene, bounds, window, cx);
                 },
             )
@@ -5421,6 +6066,8 @@ pub enum HudAction {
     /// `showIconsToolStripMenuItem`: `hud1.displayicons` turned over, saved as `HUD_showicons`,
     /// the entry reading "Show text" while the pictures show.
     ShowIcons,
+    /// `setBatteryCellCountToolStripMenuItem`: the cell voltage line off, or its count asked.
+    BatteryCells,
 }
 
 /// A row of `contextMenuStripHud`, or of its Video drop-down.
@@ -5491,7 +6138,7 @@ pub const HUD_MENU: [HudRow; 8] = [
         text: "Battery Cell Voltage",
         id: "fly-hud-batterycells",
         // `// C#: GCSViews/FlightData.cs:6115-6140, ExtLibs/Controls/HUD.cs:2896-2906`
-        does: Err("the HUD's cell voltage line is not drawn here"),
+        does: Ok(HudAction::BatteryCells),
     },
     HudRow {
         control: "showIconsToolStripMenuItem",
@@ -5589,6 +6236,8 @@ pub struct HudSettings {
     /// instead of text. Read from `HUD_showicons` when the flight screen loads.
     /// `// C#: GCSViews/FlightData.cs:427`
     pub icons: bool,
+    /// `hud1.displayCellVoltage` with `hud1.batterycellcount`: the count while the line is on.
+    pub cells: Option<i32>,
 }
 
 impl HudSettings {
@@ -5675,6 +6324,9 @@ impl HudSettings {
     ) {
         inputs.russian = self.russian;
         inputs.display_icons = self.icons;
+        // `hud1.displayCellVoltage` and `hud1.batterycellcount`, which HUD.cs:2896-2923 draws.
+        inputs.display_cell_voltage = self.cells.is_some();
+        inputs.battery_cell_count = self.cells.unwrap_or(0);
         inputs.custom_items = self
             .items
             .iter()
@@ -5823,8 +6475,11 @@ fn hud_menu_row(
                     cx.notify();
                 }
             }))
-            .on_click(cx.listener(move |this, _event, _window, cx| {
-                this.fly_hud_menu(action);
+            .on_click(cx.listener(move |this, _event, window, cx| {
+                // A question asked takes the keys.
+                if this.fly_hud_menu(action) {
+                    this.fly_focus.prompt.focus(window, cx);
+                }
                 cx.notify();
             }))
             .into_any_element(),
@@ -6062,8 +6717,8 @@ fn hud_items_chooser(
 }
 
 /// What the flight screen shows over itself besides the question, the HUD's windows, the Log
-/// Downloader and the quick view's chooser: the HUD's menu, its User Items form, and Auto
-/// Analysis's report.
+/// Downloader and the quick view's chooser: the HUD's menu, its User Items form, Auto
+/// Analysis's report, Customize's form, and the strip's and quick views' menus.
 pub fn overlays(
     data: &FlightData,
     window: &Window,
@@ -6077,6 +6732,12 @@ pub fn overlays(
         shown.push(hud_items_chooser(&data.hud_settings, window, cx));
     }
     shown.extend(hud_menu(data.hud_menu, &data.hud_settings, window, cx));
+    if let Some(list) = &data.customizing {
+        shown.push(customize_form(list, window, cx));
+    }
+    if let Some(menu) = data.menu {
+        shown.push(context_menu(menu, window, cx));
+    }
     shown
 }
 
@@ -6108,6 +6769,446 @@ pub fn jump_to_tag_message(target: VehicleId, tag: u16) -> MavMessage {
         command,
         [f32::from(tag), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
     )
+}
+
+// --- The map menu's camera and home entries, and the grid's Message and Set Mount ---------------
+
+/// Set Home Here's and Set EKF Origin Here's message box where the terrain has no height for the
+/// point. `// C#: GCSViews/FlightData.cs:4798, 4861`
+pub const NO_SRTM: &str = "No SRTM data for this area";
+
+/// Point Camera Here's message box with no link. `// C#: GCSViews/FlightData.cs:4513-4517`
+pub const PLEASE_CONNECT: &str = "Please Connect First";
+
+/// Point Camera Here's message box before the map has been pressed - not `Strings.BadCoords`,
+/// which reads "Lng". `// C#: GCSViews/FlightData.cs:4530-4534`
+pub const BAD_LAT_LONG: &str = "Bad Lat/Long";
+
+/// Battery Cell Voltage's message box for a count that is not a whole number - the C#'s words.
+/// `// C#: GCSViews/FlightData.cs:6130-6134`
+pub const BAD_RADIUS: &str = "Bad Radius";
+
+/// `send_text`'s severity for Message: 5, `MAV_SEVERITY_NOTICE`. `// C#: GCSViews/FlightData.cs:1266`
+pub const MESSAGE_SEVERITY: u8 = 5;
+
+/// `MouseDownStart`, as degrees: where the flight map was last pressed, or `(0, 0)` -
+/// `PointLatLng`'s default - before any press. `// C#: GCSViews/FlightData.cs:58, 2956-2959`
+#[must_use]
+pub fn mouse_down_point(data: &FlightData) -> (f64, f64) {
+    data.mouse_down_start
+        .map_or((0.0, 0.0), |(at, _)| (at.latitude(), at.longitude()))
+}
+
+/// `GET_HOME_POSITION`, which `getHomePositionAsync` sends without waiting for an answer to it -
+/// it waits for `HOME_POSITION` instead. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3343-3362`
+#[must_use]
+pub fn get_home_position(target: VehicleId) -> MavMessage {
+    commands::command_long(target, requests::CMD_GET_HOME_POSITION, [0.0; 7])
+}
+
+/// Set Home Here's terrain check: the height at the point, from a tile or the sea; anything else
+/// is [`NO_SRTM`]. `// C#: GCSViews/FlightData.cs:4858-4863`
+pub fn set_home_height(answer: crate::srtm::AltResponse) -> Result<f64, Refusal> {
+    match answer.current_type {
+        crate::srtm::TileType::Valid | crate::srtm::TileType::Ocean => Ok(answer.alt),
+        crate::srtm::TileType::Invalid => Err(Refusal::error(NO_SRTM)),
+    }
+}
+
+/// Set Home Here, once asked: `DO_SET_HOME` as a `COMMAND_INT` at the point and the terrain's
+/// height if the answer was OK, and then - whatever the answer - the home position asked for,
+/// as the C#'s `getHomePositionAsync` is outside its `if`.
+///
+/// Both go once: `doCommandInt` waits for its `COMMAND_ACK`, which the link has no request for
+/// (see [`route`]), and `getHomePositionAsync` waits for `HOME_POSITION`, sending
+/// `GET_HOME_POSITION` again three times 700 ms apart, which the link has no request for
+/// either. The home the vehicle then reports is what the map draws.
+/// `// C#: GCSViews/FlightData.cs:4852-4885`
+#[must_use]
+pub fn set_home_messages(
+    target: VehicleId,
+    (latitude, longitude, altitude): (f64, f64, f64),
+    accepted: bool,
+) -> Vec<MavMessage> {
+    let mut messages = Vec::new();
+    if accepted {
+        messages.push(commands::set_home(target, latitude, longitude, altitude));
+    }
+    messages.push(get_home_position(target));
+    messages
+}
+
+/// Set EKF Origin Here: `SET_GPS_GLOBAL_ORIGIN` at the point with the terrain's height, which
+/// must come from a tile - the sea will not do here. `// C#: GCSViews/FlightData.cs:4789-4811`
+pub fn set_ekf_origin_sends(
+    target: VehicleId,
+    (latitude, longitude): (f64, f64),
+    answer: crate::srtm::AltResponse,
+) -> Sends {
+    if answer.current_type != crate::srtm::TileType::Valid {
+        return Err(Refusal::error(NO_SRTM));
+    }
+    Ok(vec![commands::set_gps_global_origin(
+        target.sysid,
+        latitude,
+        longitude,
+        answer.alt,
+    )])
+}
+
+/// `MAV_CMD_DO_SET_ROI` as `doCommandInt` sends it: the point at 1e7 in `x` and `y`.
+#[must_use]
+pub fn do_set_roi(
+    target: VehicleId,
+    frame: u8,
+    latitude: f64,
+    longitude: f64,
+    z: f32,
+) -> MavMessage {
+    let command = u16::try_from(MavCmd::MAV_CMD_DO_SET_ROI.0).unwrap_or(u16::MAX);
+    #[allow(clippy::cast_possible_truncation)] // `(int)(lat * 1e7)`
+    let (x, y) = ((latitude * 1e7) as i32, (longitude * 1e7) as i32);
+    commands::command_int(target, command, frame, [0.0; 4], x, y, z)
+}
+
+/// `float.TryParse`: a single, white space around it allowed.
+#[must_use]
+pub fn dotnet_float(text: &str) -> Option<f32> {
+    text.trim()
+        .parse::<f32>()
+        .ok()
+        .filter(|value| !value.is_infinite())
+}
+
+/// `int.TryParse`: a whole number with an optional sign, white space around it allowed.
+#[must_use]
+pub fn dotnet_int(text: &str) -> Option<i32> {
+    text.trim().parse::<i32>().ok()
+}
+
+/// `string.IsNumber()`: `decimal.TryParse` with `NumberStyles.Number` - white space around it,
+/// a sign before or after, thousands separators and one decimal point, and at least one digit.
+/// `// C#: ExtLibs/Utilities/Extensions.cs:670-674`
+#[must_use]
+pub fn is_number(text: &str) -> bool {
+    let text = text.trim();
+    let text = text
+        .strip_prefix(['-', '+'])
+        .or_else(|| text.strip_suffix(['-', '+']))
+        .unwrap_or(text);
+    let (whole, fraction) = text.split_once('.').unwrap_or((text, ""));
+    let digits = whole.chars().filter(char::is_ascii_digit).count()
+        + fraction.chars().filter(char::is_ascii_digit).count();
+    digits > 0
+        && whole.chars().all(|c| c.is_ascii_digit() || c == ',')
+        && fraction.chars().all(|c| c.is_ascii_digit())
+        && !whole.starts_with(',')
+}
+
+/// Point Camera Here, once its height is given: `DO_SET_ROI` at the point last pressed, the
+/// height above home in the relative frame. A height that is not a number is "Bad Alt", and a
+/// point with a zero latitude or longitude - the map not pressed yet - is "Bad Lat/Long".
+/// `// C#: GCSViews/FlightData.cs:4524-4541`
+pub fn point_camera_here_sends(target: VehicleId, (lat, lng): (f64, f64), text: &str) -> Sends {
+    let Some(alt) = dotnet_float(text) else {
+        return Err(Refusal::error(strings::BAD_ALT));
+    };
+    if lat == 0.0 || lng == 0.0 {
+        return Err(Refusal::error(BAD_LAT_LONG));
+    }
+    Ok(vec![do_set_roi(
+        target,
+        commands::FRAME_GLOBAL_RELATIVE_ALT,
+        lat,
+        lng,
+        alt / MULTIPLIER_ALT,
+    )])
+}
+
+/// Point Camera Coords: `lat;long;alt` sends `DO_SET_ROI` at that height above sea level, and
+/// `lat;long` at the terrain's height there - its `alt` whatever the answer, 0 where there is no
+/// tile - both in `doCommandInt`'s default frame, `GLOBAL`. Each part is a `float`, as Fly To
+/// Coords reads them, and anything else is `Strings.InvalidField`; a part that is not a number
+/// throws in the C#, which has no `catch` here, and is the same `InvalidField` here.
+/// `// C#: GCSViews/FlightData.cs:4478-4509`
+pub fn point_camera_coords_sends(
+    target: VehicleId,
+    text: &str,
+    terrain: impl Fn(f64, f64) -> f64,
+) -> Sends {
+    let (latitude, longitude, z) = match parse_coords(text)? {
+        Coords::Full {
+            latitude,
+            longitude,
+            altitude,
+        } => {
+            // `alt / CurrentState.multiplieralt`, a float.
+            #[allow(clippy::cast_possible_truncation)]
+            let z = altitude as f32 / MULTIPLIER_ALT;
+            (latitude, longitude, z)
+        }
+        Coords::Position {
+            latitude,
+            longitude,
+        } => {
+            // `(float)srtm.getAltitude(lat, lng).alt`.
+            #[allow(clippy::cast_possible_truncation)]
+            let z = terrain(latitude, longitude) as f32;
+            (latitude, longitude, z)
+        }
+    };
+    Ok(vec![do_set_roi(
+        target,
+        commands::FRAME_GLOBAL,
+        latitude,
+        longitude,
+        z,
+    )])
+}
+
+/// `send_text(5, txt)`: a `STATUSTEXT` the vehicle writes to its log, the text's ASCII bytes cut
+/// or padded with zeros to fifty, as `StructureToByteArray` fits an array to its field.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6493-6498, ExtLibs/Mavlink/MavlinkUtil.cs:270-297`
+#[must_use]
+pub fn statustext(severity: u8, text: &str) -> MavMessage {
+    let mut bytes = [0u8; 50];
+    for (slot, c) in bytes.iter_mut().zip(text.chars()) {
+        // `Encoding.ASCII` writes anything outside ASCII as '?'.
+        *slot = u8::try_from(c).ok().filter(u8::is_ascii).unwrap_or(b'?');
+    }
+    MavMessage::Statustext(mp_mavlink_dialects::all::Statustext {
+        severity,
+        text: bytes,
+        id: 0,
+        chunk_seq: 0,
+    })
+}
+
+/// What `CMB_mountmode` lists: the documented values of the first of `MNT1_DEFLT_MODE`,
+/// `MNT_DEFLT_MODE` and `MNT_MODE` that has any, as `FlightData_Load` binds it. A bound list
+/// selects its first item.
+///
+/// The C# binds it once, when the screen loads, from the documentation for the firmware it has
+/// then; this reads the documentation each time, so a file fetched for the vehicle since is used.
+/// `// C#: GCSViews/FlightData.cs:2718-2729`
+#[must_use]
+pub fn mount_modes(
+    lookup: fn(&str) -> Option<&'static mp_params::ParamMeta>,
+) -> Vec<(i64, String)> {
+    ["MNT1_DEFLT_MODE", "MNT_DEFLT_MODE", "MNT_MODE"]
+        .iter()
+        .filter_map(|name| lookup(name))
+        .map(|meta| {
+            meta.values
+                .iter()
+                .map(|(key, text)| (*key, text.trim().to_owned()))
+                .collect::<Vec<_>>()
+        })
+        .find(|options| !options.is_empty())
+        .unwrap_or_default()
+}
+
+/// Set Mount: `MNT_MODE` set to the chosen mode where the vehicle has that parameter, and
+/// `DO_MOUNT_CONTROL` with the mode in its seventh parameter where it does not - "copter 3.3
+/// acks with an error, but is ok". Both wait for their answer. With nothing chosen, the C#'s
+/// `(int) CMB_mountmode.SelectedValue` throws into its `catch`: `Strings.ErrorNoResponse`.
+/// `// C#: GCSViews/FlightData.cs:1392-1415`
+pub fn mount_mode_sends(
+    target: VehicleId,
+    parameters: &[(String, f64)],
+    chosen: Option<i64>,
+) -> Sends {
+    let Some(mode) = chosen else {
+        return Err(Refusal::error(strings::ERROR_NO_RESPONSE));
+    };
+    #[allow(clippy::cast_precision_loss)] // a mode number
+    let value = mode as f32;
+    if parameters.iter().any(|(name, _)| name == "MNT_MODE") {
+        return Ok(vec![commands::param_set(target, "MNT_MODE", value)]);
+    }
+    let command = u16::try_from(MavCmd::MAV_CMD_DO_MOUNT_CONTROL.0).unwrap_or(u16::MAX);
+    Ok(vec![commands::command_long(
+        target,
+        command,
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, value],
+    )])
+}
+
+/// A `CheckedListBox` item's check.
+fn check_glyph(checked: bool) -> &'static str {
+    if checked { "\u{2611}" } else { "\u{2610}" }
+}
+
+// --- The Gauges page -------------------------------------------------------------------------
+
+/// The speed dial's place on the Gauges page, from where the page was last laid out - the
+/// column's width and the page's height before the first.
+fn gauge_place(data: &FlightData) -> (f32, f32, f32) {
+    let (width, height) = data.gauges_bounds.get().map_or((392.0, 770.0), |laid_out| {
+        (
+            f32::from(laid_out.size.width),
+            f32::from(laid_out.size.height),
+        )
+    });
+    crate::gauge::speed_place(width, height)
+}
+
+/// The speed dial's two needles: `Value0` bound to `airspeed` and `Value1` to `groundspeed`.
+/// `// C#: GCSViews/FlightData.Designer.cs:1496-1497`
+fn gauge_needles(
+    gauge: &crate::gauge::SpeedGauge,
+    state: &mp_vehicle::VehicleState,
+) -> [crate::gauge::Needle; 2] {
+    #[allow(clippy::cast_possible_truncation)] // speeds in m/s
+    gauge.needles(state.air_speed.0 as f32, state.ground_speed.0 as f32)
+}
+
+/// The Gauges page: `Gspeed` where `tabPage1_Resize` puts it on a page this size, and a double
+/// click on it asking for its maximum.
+/// `// C#: GCSViews/FlightData.cs:3140-3148, 5217-5278`
+fn gauges_page(
+    data: &FlightData,
+    state: Option<&mp_vehicle::VehicleState>,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    let (left, top, side) = gauge_place(data);
+    let gauge = data.speed_gauge.clone();
+    let needles = state.map(|state| gauge_needles(&gauge, state));
+    let bounds = Rc::clone(&data.gauges_bounds);
+    div()
+        .relative()
+        .flex_1()
+        .min_h(px(side))
+        .child(
+            gpui::canvas(
+                move |laid_out, _window, _cx| bounds.set(Some(laid_out)),
+                |_bounds, (), _window, _cx| {},
+            )
+            .absolute()
+            .inset_0(),
+        )
+        .child(
+            crate::probe::measured("fly-gauge-speed", div())
+                .id("fly-gauge-speed")
+                .absolute()
+                .left(px(left))
+                .top(px(top))
+                .w(px(side))
+                .h(px(side))
+                .cursor_pointer()
+                .child(
+                    gpui::canvas(
+                        |_bounds, _window, _cx| (),
+                        move |bounds, (), window, cx| {
+                            let scene = gauge.scene(side, needles.as_ref().map_or(&[], |n| n));
+                            crate::hud::paint(&scene, bounds, window, cx);
+                        },
+                    )
+                    .size_full(),
+                )
+                // `DoubleClick`, which Windows raises on the second press. The box starts at 60
+                // whatever the maximum is. `// C#: GCSViews/FlightData.cs:3142`
+                .on_mouse_down(
+                    gpui::MouseButton::Left,
+                    cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {
+                        if event.click_count == 2 {
+                            this.fly_actions.ask(Prompt::GaugeMax, "60");
+                            this.fly_focus.prompt.focus(window, cx);
+                            cx.notify();
+                        }
+                    }),
+                ),
+        )
+        .into_any_element()
+}
+
+// --- The two context menus under the HUD ---------------------------------------------------------
+
+/// Which of the column's small context menus is open.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MenuKind {
+    /// `contextMenuStripactionstab`, on the page strip: Customize and MultiLine.
+    /// `// C#: GCSViews/FlightData.Designer.cs:327, 572-594`
+    Tabs,
+    /// `contextMenuStripQuickView`, on each quick view: Set View Count and Undock.
+    /// `// C#: GCSViews/FlightData.Designer.cs:636, 647-660`
+    Quick,
+}
+
+/// An entry of one of those menus.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MenuEntry {
+    /// `customizeToolStripMenuItem`.
+    Customize,
+    /// `multiLineToolStripMenuItem`.
+    MultiLine,
+    /// `setViewCountToolStripMenuItem`.
+    SetViewCount,
+    /// `undockToolStripMenuItem`, dropped: one window.
+    Undock,
+}
+
+impl MenuEntry {
+    /// The entry's text in the `.resx`.
+    #[must_use]
+    pub const fn text(self) -> &'static str {
+        match self {
+            Self::Customize => "Customize",
+            Self::MultiLine => "MultiLine",
+            Self::SetViewCount => "Set View Count",
+            Self::Undock => "Undock",
+        }
+    }
+
+    /// The id a script clicks it by.
+    #[must_use]
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Customize => "fly-tabs-customize",
+            Self::MultiLine => "fly-tabs-multiline",
+            Self::SetViewCount => "fly-quick-setviewcount",
+            Self::Undock => "fly-quick-undock",
+        }
+    }
+
+    /// Why the entry is dimmed, where it is.
+    #[must_use]
+    pub const fn dimmed(self) -> Option<&'static str> {
+        match self {
+            Self::Undock => Some("one window: nothing to undock from"),
+            _ => None,
+        }
+    }
+}
+
+impl MenuKind {
+    /// The menu's entries, in the Designer's order.
+    #[must_use]
+    pub const fn entries(self) -> &'static [MenuEntry] {
+        match self {
+            Self::Tabs => &[MenuEntry::Customize, MenuEntry::MultiLine],
+            Self::Quick => &[MenuEntry::SetViewCount, MenuEntry::Undock],
+        }
+    }
+
+    /// Its name, for a fact.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Tabs => "tabs",
+            Self::Quick => "quick",
+        }
+    }
+}
+
+/// `setQuickViewRowsCols`'s numbers: each `Math.Max(1, int.Parse(text))`. `int.Parse` throws on
+/// a number `IsNumber` allowed but is not whole - "2.5" - and nothing is set; the message is
+/// .NET's. `// C#: GCSViews/FlightData.cs:4925-4933`
+pub fn view_count(cols: &str, rows: &str) -> Result<(i32, i32), &'static str> {
+    const FORMAT: &str = "Input string was not in a correct format.";
+    let cols = dotnet_int(cols).ok_or(FORMAT)?;
+    let rows = dotnet_int(rows).ok_or(FORMAT)?;
+    Ok((cols.max(1), rows.max(1)))
 }
 
 // --- The handlers for the pages and the map's POI entries -----------------------------------------
@@ -6170,19 +7271,29 @@ impl MissionPlanner {
     /// one opens it; the others do what the C#'s handler does, and the menu closes, as a
     /// `ToolStripMenuItem`'s click closes it.
     /// `// C#: GCSViews/FlightData.cs:3185, 4735-4739, 5161-5164, 3122-3139`
-    fn fly_hud_menu(&mut self, action: HudAction) {
+    fn fly_hud_menu(&mut self, action: HudAction) -> bool {
         match action {
             HudAction::Video => {
                 self.fly_data.hud_menu.video = true;
-                return;
+                return false;
             }
             HudAction::UserItems => self.fly_data.hud_settings.choosing = true,
             HudAction::Russian => self.fly_data.hud_settings.toggle_russian(),
             HudAction::SwapWithMap => self.fly_data.swapped = !self.fly_data.swapped,
             HudAction::GroundColor => self.fly_data.hud_settings.toggle_ground(),
             HudAction::ShowIcons => self.fly_data.hud_settings.toggle_icons(&mut self.persisted),
+            // On, a click turns the line off; off, it asks the count, starting at 4 each time.
+            // `// C#: GCSViews/FlightData.cs:6115-6128`
+            HudAction::BatteryCells => {
+                if self.fly_data.hud_settings.cells.take().is_none() {
+                    self.fly_actions.ask(Prompt::CellCount, "4");
+                    self.fly_data.hud_menu = HudMenu::default();
+                    return true;
+                }
+            }
         }
         self.fly_data.hud_menu = HudMenu::default();
+        false
     }
 
     /// Load Log, once a path is given: the link given over to playing it - or, with a port
@@ -6254,6 +7365,521 @@ impl MissionPlanner {
             Err(why) => self.file_status = Some(error_box(why)),
         }
     }
+}
+
+// --- The fourth batch's handlers: the map menu's camera and home entries, the grid's Message,
+// --- Set Mount and Clear Track, the POI files, the strip's and quick views' menus, the
+// --- Transponder page and the gimbal ---------------------------------------------------------
+
+impl MissionPlanner {
+    /// Message: nothing without a link, else the question. `// C#: GCSViews/FlightData.cs:1255-1264`
+    fn fly_ask_message(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !port_open(&self.telemetry.view()) {
+            return;
+        }
+        self.fly_actions.ask(Prompt::SendMessage, "");
+        self.fly_focus.prompt.focus(window, cx);
+    }
+
+    /// Set Mount: the chosen mode as `MNT_MODE` or `DO_MOUNT_CONTROL`, `Strings.ErrorNoResponse`
+    /// from the `catch`. `// C#: GCSViews/FlightData.cs:1392-1415`
+    fn fly_set_mount(&mut self) {
+        self.fly_actions.mount_open = false;
+        let chosen = mount_modes(crate::metadata::lookup)
+            .get(self.fly_actions.mount_selected)
+            .map(|(key, _)| *key);
+        let report = Report::on_timeout(error_box(strings::ERROR_NO_RESPONSE));
+        self.fly_press(&report, |_, target, view| {
+            mount_mode_sends(target, &view.parameters, chosen)
+        });
+    }
+
+    /// Clear Track: the route flown so far taken off the map, which records it again from the
+    /// vehicle's next position. The C# also empties `MAV.camerapoints`, which nothing here holds.
+    /// `// C#: GCSViews/FlightData.cs:1101-1107`
+    fn fly_clear_track(&mut self) {
+        let mut map = self.map.borrow_mut();
+        self.fly_data.track_cleared = Some(map.path_len());
+        map.clear_track();
+    }
+
+    /// Point Camera Here: "Please Connect First" without a link, else the height asked for,
+    /// starting at 0. `// C#: GCSViews/FlightData.cs:4511-4522`
+    fn fly_ask_point_camera_here(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !port_open(&self.telemetry.view()) {
+            self.file_status = Some(error_box(PLEASE_CONNECT));
+            return;
+        }
+        self.fly_actions.ask(Prompt::PointCameraAlt, "0");
+        self.fly_focus.prompt.focus(window, cx);
+    }
+
+    /// Trigger Camera NOW: `setDigicamControl(true)`, as Do Action's `Trigger_Camera` sends it -
+    /// `DO_DIGICAM_CONTROL`, and `DIGICAM_CONTROL` if the vehicle refuses it - with
+    /// `Strings.CommandFailed` from the `catch`. `// C#: GCSViews/FlightData.cs:5381-5391`
+    fn fly_trigger_camera(&mut self) {
+        let report = self
+            .telemetry
+            .send_handle()
+            .map(|(_, target)| action_report("Trigger_Camera", target))
+            .unwrap_or_default();
+        self.fly_press(&report, |_, target, _| {
+            action_messages(
+                "Trigger_Camera",
+                &ActionContext {
+                    target,
+                    copter: false,
+                    motor_outputs_enabled: false,
+                    now_unix_usec: 0,
+                },
+            )
+        });
+    }
+
+    /// Set EKF Origin Here: nothing without a link; the terrain's height at the point last
+    /// pressed, or [`NO_SRTM`]; then `SET_GPS_GLOBAL_ORIGIN`, sent once.
+    /// `// C#: GCSViews/FlightData.cs:4789-4811`
+    fn fly_set_ekf_origin(&mut self) {
+        if !port_open(&self.telemetry.view()) {
+            return;
+        }
+        let (lat, lng) = mouse_down_point(&self.fly_data);
+        let answer = crate::srtm::altitude(lat, lng);
+        self.fly_press(&Report::default(), |_, target, _| {
+            set_ekf_origin_sends(target, (lat, lng), answer)
+        });
+    }
+
+    /// Set Home Here: nothing without a link; the terrain's height at the point last pressed,
+    /// from a tile or the sea, or [`NO_SRTM`]; then "Are you sure?".
+    /// `// C#: GCSViews/FlightData.cs:4852-4870`
+    fn fly_ask_set_home(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !port_open(&self.telemetry.view()) {
+            return;
+        }
+        let (lat, lng) = mouse_down_point(&self.fly_data);
+        match set_home_height(crate::srtm::altitude(lat, lng)) {
+            Ok(alt) => {
+                self.fly_data.pending_home = Some((lat, lng, alt));
+                self.fly_actions.ask(Prompt::SetHome, "");
+                // No box, but OK and closing it are Enter and Escape.
+                self.fly_focus.prompt.focus(window, cx);
+            }
+            Err(refusal) => {
+                self.fly_actions.record_nothing(refusal.text());
+                self.file_status = Some(error_box(refusal.text()));
+            }
+        }
+    }
+
+    /// Save File or Load File on the POI menu: the dialog, as a question whose box starts in the
+    /// folder the POI file is kept in.
+    ///
+    /// The C#'s dialogs set no starting folder, so they open wherever the platform's dialog last
+    /// was; a typed path needs somewhere to start, and this starts it beside `poi.txt`.
+    /// `// C#: Utilities/POI.cs:143-182`
+    fn poi_ask_file(&mut self, prompt: Prompt, window: &mut Window, cx: &mut Context<Self>) {
+        let start = self
+            .fly_data
+            .pois
+            .file()
+            .and_then(std::path::Path::parent)
+            .map_or_else(String::new, |dir| {
+                format!("{}{}", dir.display(), std::path::MAIN_SEPARATOR)
+            });
+        self.fly_actions.ask(prompt, &start);
+        self.fly_focus.prompt.focus(window, cx);
+    }
+
+    /// A typed path that names a file: empty or only the folder is the dialog closed without one.
+    fn poi_path(text: &str) -> Option<std::path::PathBuf> {
+        let path = text.trim();
+        (!path.is_empty() && !std::path::Path::new(path).is_dir())
+            .then(|| std::path::PathBuf::from(path))
+    }
+
+    /// Save File, once named: `SaveFile(sfd.FileName)` - the points as the C# writes `poi.txt`.
+    /// The C# says nothing either way, and a failure reaches no handler; both are said here.
+    /// `// C#: Utilities/POI.cs:143-168`
+    fn poi_save(&mut self, text: &str) {
+        let Some(path) = Self::poi_path(text) else {
+            return;
+        };
+        let rendered = crate::poi::render(self.fly_data.pois.points());
+        self.file_status = Some(match std::fs::write(&path, rendered) {
+            Ok(()) => format!("Save File: {}", path.display()),
+            Err(err) => error_box(format!("{}: {err}", path.display())),
+        });
+    }
+
+    /// Load File, once named: `LoadFile` - each line's point added to the ones there are.
+    ///
+    /// The C# adds them with `poi.txt`'s saving held off until the load is done, and the next
+    /// change saves them all; `Pois::add` saves as it adds, so the file has them straight away.
+    /// `// C#: Utilities/POI.cs:171-207`
+    fn poi_load(&mut self, text: &str) {
+        let Some(path) = Self::poi_path(text) else {
+            return;
+        };
+        match std::fs::read(&path) {
+            Ok(bytes) => {
+                for poi in crate::poi::parse(&String::from_utf8_lossy(&bytes)) {
+                    self.fly_data.pois.add(poi.lat, poi.lng, 0.0, poi.id());
+                }
+            }
+            Err(err) => self.file_status = Some(error_box(format!("{}: {err}", path.display()))),
+        }
+    }
+
+    /// A row of the strip's or the quick views' menu clicked: the menu closes, as a
+    /// `ToolStripMenuItem`'s click closes it, and the entry does what the C#'s handler does.
+    fn fly_menu_entry(&mut self, entry: MenuEntry, window: &mut Window, cx: &mut Context<Self>) {
+        self.fly_data.menu = None;
+        if let Some(why) = entry.dimmed() {
+            self.file_status = Some(format!("{} is not ported: {why}", entry.text()));
+            return;
+        }
+        match entry {
+            MenuEntry::MultiLine => self.fly_pages.toggle_multiline(),
+            // `customForm.ShowDialog()`: the list, over everything, until it is closed.
+            MenuEntry::Customize => {
+                self.fly_data.customizing = Some(self.fly_pages.customize_list());
+            }
+            // The columns asked first, from the setting or 2; the rows after, from it or 3.
+            // `// C#: GCSViews/FlightData.cs:5078-5099`
+            MenuEntry::SetViewCount => {
+                let cols = self
+                    .fly_data
+                    .quick_grid
+                    .map_or_else(|| "2".to_owned(), |(cols, _)| cols.to_string());
+                self.fly_actions.ask(Prompt::ViewColumns, &cols);
+                self.fly_focus.prompt.focus(window, cx);
+            }
+            MenuEntry::Undock => {}
+        }
+    }
+
+    /// Customize's form closed: the checked pages are the strip's.
+    /// `// C#: GCSViews/FlightData.cs:2617-2627`
+    fn fly_customize_close(&mut self) {
+        if let Some(list) = self.fly_data.customizing.take() {
+            self.fly_pages.customize(&list);
+            self.fly_scroll.set_offset(gpui::point(px(0.0), px(0.0)));
+        }
+    }
+
+    /// Set View Count, once both are given: `IsNumber` on both, then `setQuickViewRowsCols` -
+    /// the numbers kept as the settings it writes. The quick views here are the six `quick.rs`
+    /// draws in two columns of three, and it has nothing to resize them with yet, so the page
+    /// stays as it is and the status line says so.
+    /// `// C#: GCSViews/FlightData.cs:5092-5096, 4920-4935`
+    fn fly_view_count(&mut self, cols: &str, rows: &str) {
+        if !(is_number(rows) && is_number(cols)) {
+            return;
+        }
+        match view_count(cols, rows) {
+            Ok((cols, rows)) => {
+                self.fly_data.quick_grid = Some((cols, rows));
+                self.file_status = Some(format!(
+                    "Set View Count: {cols} x {rows} kept; the Quick page's six views are not \
+                     resized here"
+                ));
+            }
+            Err(why) => self.file_status = Some(error_box(why)),
+        }
+    }
+
+    /// STBY, ON, ALT or IDENT: the control message, sent once.
+    pub(crate) fn fly_xpdr_press(&mut self, button: crate::transponder::Button) {
+        let message = self.fly_data.transponder.press(button);
+        self.fly_press(&Report::default(), |_, _, _| Ok(vec![message]));
+    }
+
+    /// A keystroke in the flight ID box.
+    pub(crate) fn fly_xpdr_flight_id(&mut self) {
+        let message = self.fly_data.transponder.flight_id_changed();
+        self.fly_press(&Report::default(), |_, _, _| Ok(vec![message]));
+    }
+
+    /// Enter in the squawk box.
+    pub(crate) fn fly_xpdr_squawk_commit(&mut self) {
+        if let Some(message) = self.fly_data.transponder.commit_squawk() {
+            self.fly_press(&Report::default(), |_, _, _| Ok(vec![message]));
+        }
+    }
+
+    /// The squawk's wheel, or its up and down buttons.
+    pub(crate) fn fly_xpdr_squawk_step(&mut self, up: bool) {
+        if let Some(message) = self.fly_data.transponder.step_squawk(up) {
+            self.fly_press(&Report::default(), |_, _, _| Ok(vec![message]));
+        }
+    }
+
+    /// Connect to Transponder: the status asked for through `doCommand`, which waits for its
+    /// answer - "Timeout." where none comes - and then up to three seconds for a status. Without
+    /// a vehicle `doCommand` returns at once and the three seconds start.
+    /// `// C#: GCSViews/FlightData.cs:6348-6365`
+    pub(crate) fn fly_xpdr_connect(&mut self) {
+        let now = Instant::now();
+        let requests = if self.telemetry.send_handle().is_some() {
+            self.fly_press(
+                &Report::on_timeout(crate::transponder::TIMEOUT),
+                |_, target, _| Ok(vec![crate::transponder::set_message_interval(target)]),
+            )
+        } else {
+            Vec::new()
+        };
+        let request = requests.first().map(|id| (*id, now));
+        self.fly_data.transponder.connecting = Some(crate::transponder::Connecting {
+            request,
+            waiting_since: request.is_none().then_some(now),
+        });
+    }
+
+    /// Once a frame: Connect's wait, and the main loop's `updateTransponder` - on a status the
+    /// page has not shown, or every five seconds. `// C#: GCSViews/FlightData.cs:4314-4318, 6352-6358`
+    fn fly_xpdr_tick(&mut self, view: &TelemetryView, window: &Window) {
+        let now = Instant::now();
+        let status = view.state.as_deref().map(|state| state.transponder);
+        let open = port_open(view);
+        let focus = (
+            self.fly_focus.xpdr.flight_id.is_focused(window),
+            self.fly_focus.xpdr.squawk.is_focused(window),
+        );
+        if let Some(mut connecting) = self.fly_data.transponder.connecting {
+            if connecting.waiting_since.is_none()
+                && let Some((id, made)) = connecting.request
+            {
+                match self.telemetry.lookup(id, made) {
+                    Lookup::Found(request) => match request.outcome() {
+                        // The command's own "Timeout.", said by its report; the wait is over.
+                        Some(RequestOutcome::TimedOut) => {
+                            self.fly_data.transponder.connecting = None;
+                            return;
+                        }
+                        Some(_) => connecting.waiting_since = Some(now),
+                        None => {}
+                    },
+                    Lookup::PickingUp => {}
+                    Lookup::Gone => connecting.waiting_since = Some(now),
+                }
+            }
+            if let Some(since) = connecting.waiting_since {
+                let arrived = status.as_ref().is_some_and(|status| status.status_pending);
+                if arrived {
+                    self.fly_data.transponder.connecting = None;
+                    self.fly_xpdr_update(status.as_ref(), open, focus, now);
+                    return;
+                }
+                if now.duration_since(since) >= crate::transponder::STATUS_WAIT {
+                    self.fly_data.transponder.connecting = None;
+                    self.file_status = Some(crate::transponder::NO_STATUS.to_owned());
+                    return;
+                }
+            }
+            self.fly_data.transponder.connecting = Some(connecting);
+        }
+        if self.fly_data.transponder.due(status.as_ref(), now) {
+            self.fly_xpdr_update(status.as_ref(), open, focus, now);
+        }
+    }
+
+    /// `updateTransponder`, and the subscription its first status sends.
+    fn fly_xpdr_update(
+        &mut self,
+        status: Option<&mp_vehicle::onboard::Transponder>,
+        open: bool,
+        focus: (bool, bool),
+        now: Instant,
+    ) {
+        if self.fly_data.transponder.update(status, open, focus, now) {
+            self.fly_press(&Report::default(), |_, target, _| {
+                Ok(vec![crate::transponder::set_message_interval(target)])
+            });
+        }
+    }
+
+    /// `gimbalTrackbar_Scroll`: the three bars' values, sent once.
+    pub(crate) fn fly_gimbal_scroll(&mut self) {
+        let Some((_, target)) = self.telemetry.send_handle() else {
+            self.fly_send_once(Ok(Vec::new()));
+            return;
+        };
+        let message = self.fly_data.payload.scroll_message(target);
+        self.fly_send_once(Ok(vec![message]));
+    }
+
+    /// Reset Position: the bars to zero, MAVLink targeting, and the zeros - each sent once.
+    pub(crate) fn fly_gimbal_reset(&mut self) {
+        let Some((_, target)) = self.telemetry.send_handle() else {
+            // The bars go back whatever the link; nothing is sent.
+            self.fly_data.payload.reset(VehicleId::new(0, 0));
+            self.fly_send_once(Ok(Vec::new()));
+            return;
+        };
+        let messages = self.fly_data.payload.reset(target);
+        self.fly_send_once(Ok(messages));
+    }
+}
+
+/// One row of the strip's or the quick views' menu, as the HUD menu's rows are drawn.
+fn menu_row(entry: MenuEntry, cx: &mut Context<MissionPlanner>) -> AnyElement {
+    let base = crate::probe::measured(entry.id(), div())
+        .id(entry.id())
+        .h(px(HUD_MENU_ROW))
+        .px_2()
+        .flex()
+        .items_center()
+        .text_xs()
+        .child(entry.text())
+        .on_click(cx.listener(move |this, _event, window, cx| {
+            this.fly_menu_entry(entry, window, cx);
+            cx.notify();
+        }));
+    if entry.dimmed().is_some() {
+        base.text_color(rgb(theme::DIM)).into_any_element()
+    } else {
+        base.text_color(rgb(theme::TEXT))
+            .bg(rgb(theme::PANEL))
+            .cursor_pointer()
+            .hover(|style| style.bg(rgb(theme::BORDER)))
+            .into_any_element()
+    }
+}
+
+/// A press that closes the strip's or the quick views' menu.
+fn close_menu(
+    cx: &mut Context<MissionPlanner>,
+) -> impl Fn(&gpui::MouseDownEvent, &mut Window, &mut gpui::App) + 'static {
+    cx.listener(|this, _event: &gpui::MouseDownEvent, _window, cx| {
+        this.fly_data.menu = None;
+        cx.notify();
+    })
+}
+
+/// The strip's or the quick views' context menu, where the right button came up, moved in to fit
+/// the window. A press anywhere else closes it and goes no further.
+fn context_menu(
+    (kind, (x, y)): (MenuKind, (f32, f32)),
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    let size = window.viewport_size();
+    let entries = kind.entries();
+    #[allow(clippy::cast_precision_loss)] // two rows
+    let height = 2.0f32.mul_add(HUD_MENU_PADDING, 2.0) + entries.len() as f32 * HUD_MENU_ROW;
+    let left = x.min(f32::from(size.width) - HUD_MENU_WIDTH).max(0.0);
+    let top = y.min(f32::from(size.height) - height).max(0.0);
+    let rows = entries.iter().map(|entry| menu_row(*entry, cx)).collect();
+    let id = match kind {
+        MenuKind::Tabs => "fly-tabs-menu",
+        MenuKind::Quick => "fly-quick-menu",
+    };
+    gpui::deferred(
+        gpui::anchored()
+            .position(gpui::point(px(0.0), px(0.0)))
+            .child(
+                div()
+                    .relative()
+                    .w(size.width)
+                    .h(size.height)
+                    .child(
+                        div()
+                            .id("fly-menu-backdrop")
+                            .absolute()
+                            .inset_0()
+                            .occlude()
+                            .on_mouse_down(gpui::MouseButton::Left, close_menu(cx))
+                            .on_mouse_down(gpui::MouseButton::Right, close_menu(cx)),
+                    )
+                    .child(
+                        div()
+                            .absolute()
+                            .left(px(left))
+                            .top(px(top))
+                            .child(hud_menu_column(id, rows)),
+                    ),
+            ),
+    )
+    .with_priority(2)
+    .into_any_element()
+}
+
+/// Customize's form: a `CheckedListBox` of every page's name, `CheckOnClick`, filling a form of
+/// its own that applies the list when it is closed - drawn here over the window, as
+/// `ShowDialog` shows it. `// C#: GCSViews/FlightData.cs:2584-2627`
+fn customize_form(
+    list: &[(Page, bool)],
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    let size = window.viewport_size();
+    let mut items = div().flex().flex_col();
+    for (index, (page, checked)) in list.iter().enumerate() {
+        let id = format!("fly-customize-{}", page.name());
+        items = items.child(
+            crate::probe::measured(id.clone(), div())
+                .id(SharedString::from(id))
+                .flex()
+                .items_center()
+                .gap_1()
+                .h(px(18.0))
+                .px_1()
+                .text_xs()
+                .text_color(rgb(theme::TEXT))
+                .cursor_pointer()
+                .hover(|style| style.bg(rgb(theme::BORDER)))
+                .child(check_glyph(*checked))
+                .child(page.name())
+                .on_click(cx.listener(move |this, _event, _window, cx| {
+                    if let Some(list) = &mut this.fly_data.customizing
+                        && let Some(item) = list.get_mut(index)
+                    {
+                        item.1 = !item.1;
+                    }
+                    cx.notify();
+                })),
+        );
+    }
+    let form = crate::probe::measured("fly-customize", div())
+        .id("fly-customize")
+        .flex()
+        .flex_col()
+        .gap_2()
+        .w(px(300.0))
+        .p_3()
+        .bg(rgb(theme::PANEL))
+        .border_1()
+        .border_color(rgb(theme::BORDER))
+        .rounded_md()
+        .child(div().flex().justify_end().child(action(
+            "fly-customize-close",
+            "\u{2715}",
+            theme::TEXT,
+            true,
+            cx.listener(|this, _event: &(), _window, cx| {
+                this.fly_customize_close();
+                cx.notify();
+            }),
+        )))
+        .child(items);
+    gpui::deferred(
+        gpui::anchored()
+            .position(gpui::point(px(0.0), px(0.0)))
+            .child(
+                div()
+                    .id("fly-customize-backdrop")
+                    .w(size.width)
+                    .h(size.height)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .occlude()
+                    .child(form),
+            ),
+    )
+    .with_priority(2)
+    .into_any_element()
 }
 
 #[cfg(test)]
@@ -7347,12 +8973,12 @@ mod tests {
     #[test]
     fn the_strip_reads_quick_actions_messages_and_on() {
         assert_eq!(
-            page_list(Page::text),
+            page_list(&Page::ALL, Page::text),
             "Quick,Actions,Messages,Actions,PreFlight,Gauges,Transponder,Status,Servo/Relay,\
              Aux Function,Scripts,Payload Control,Telemetry Logs,DataFlash Logs"
         );
         assert_eq!(
-            page_list(Page::name),
+            page_list(&Page::ALL, Page::name),
             "tabQuick,tabActions,tabPagemessages,tabActionsSimple,tabPagePreFlight,tabGauges,\
              tabTransponder,tabStatus,tabServo,tabAuxFunction,tabScripts,tabPayload,tabTLogs,\
              tablogbrowse"
@@ -7381,6 +9007,9 @@ mod tests {
             Panel::Health,
             Panel::Playback,
             Panel::DataFlash,
+            Panel::Transponder,
+            Panel::Payload,
+            Panel::Gauges,
         ] {
             let pages: Vec<Page> = Page::ALL
                 .into_iter()
@@ -7393,10 +9022,13 @@ mod tests {
         assert_eq!(Page::TLogs.panels(), &[Panel::Playback]);
         assert_eq!(Page::LogBrowse.panels(), &[Panel::DataFlash]);
         assert_eq!(Page::PreFlight.panels(), &[Panel::PreArm, Panel::Health]);
+        assert_eq!(Page::Transponder.panels(), &[Panel::Transponder]);
+        assert_eq!(Page::Payload.panels(), &[Panel::Payload]);
+        assert_eq!(Page::Gauges.panels(), &[Panel::Gauges]);
         for page in Page::ALL {
             assert_eq!(
                 page.note().is_none(),
-                matches!(page, Page::Actions | Page::Quick),
+                matches!(page, Page::Actions | Page::Quick | Page::Transponder),
                 "{} should say what the C# has on it that this does not",
                 page.name()
             );
@@ -8147,6 +9779,7 @@ mod tests {
                 "Russian Hud",
                 "Swap With Map",
                 "Ground Color",
+                "Battery Cell Voltage",
                 "Show icons"
             ]
         );
@@ -8319,5 +9952,432 @@ mod tests {
         assert_eq!(Prompt::HudHeader.title(), "Hud Header");
         assert_eq!(Prompt::HudHeader.text(), "Please enter your item prefix");
         assert!(Prompt::HudHeader.takes_text());
+    }
+
+    // --- The fourth batch ---------------------------------------------------------------------
+
+    /// Every question and message box of the fourth batch is worded as `FlightData.cs` and
+    /// `POI.cs` word it.
+    #[test]
+    fn the_fourth_batchs_words_are_the_csharps() {
+        let (Some(source), Some(poi)) =
+            (csharp("GCSViews/FlightData.cs"), csharp("Utilities/POI.cs"))
+        else {
+            eprintln!("skipped: the C# tree is not checked out here");
+            return;
+        };
+        for prompt in [
+            Prompt::SetHome,
+            Prompt::SendMessage,
+            Prompt::PointCameraAlt,
+            Prompt::PointCameraCoords,
+            Prompt::ViewColumns,
+            Prompt::ViewRows,
+            Prompt::CellCount,
+            Prompt::GaugeMax,
+        ] {
+            assert!(
+                source.contains(&format!("\"{}\"", prompt.title())),
+                "{prompt:?}'s title"
+            );
+            assert!(
+                source.contains(&format!("\"{}\"", prompt.text())),
+                "{prompt:?}'s text"
+            );
+        }
+        assert_eq!(Prompt::SetHome.buttons(), ("OK", "Cancel"));
+        assert!(!Prompt::SetHome.takes_text());
+        for text in [
+            NO_SRTM,
+            PLEASE_CONNECT,
+            BAD_LAT_LONG,
+            BAD_RADIUS,
+            crate::transponder::CONNECT_AGAIN,
+            crate::transponder::STATUS_LOST,
+            crate::transponder::CONNECTED,
+            crate::transponder::OFFLINE,
+            crate::transponder::NO_STATUS,
+            crate::transponder::TIMEOUT,
+        ] {
+            assert!(source.contains(&format!("\"{text}\"")), "{text}");
+        }
+        assert!(poi.contains("\"Poi File|*.txt\""));
+        assert_eq!(Prompt::PoiSave.text(), "Poi File");
+        assert_eq!(
+            (Prompt::PoiSave.title(), Prompt::PoiLoad.title()),
+            ("Save File", "Load File")
+        );
+    }
+
+    /// `this.X.Items.AddRange(` or `.DropDownItems.AddRange(`'s items, by name.
+    fn designer_items(designer: &str, header: &str) -> Vec<String> {
+        designer
+            .lines()
+            .skip_while(|line| !line.trim().starts_with(header))
+            .skip(1)
+            .map(str::trim)
+            .take_while(|line| line.starts_with("this.") && !line.contains(" = "))
+            .map(|line| {
+                line.trim_start_matches("this.")
+                    .trim_end_matches(['}', ')', ';', ','])
+                    .to_owned()
+            })
+            .collect()
+    }
+
+    /// The strip's menu and the quick views' menu are the Designer's, in its order, with the
+    /// `.resx`'s words.
+    #[test]
+    fn the_strip_and_quick_view_menus_are_the_designers() {
+        let (Some(designer), Some(resx)) = (
+            csharp("GCSViews/FlightData.Designer.cs"),
+            csharp("GCSViews/FlightData.resx"),
+        ) else {
+            eprintln!("skipped: the C# tree is not checked out here");
+            return;
+        };
+        let control = |entry: MenuEntry| match entry {
+            MenuEntry::Customize => "customizeToolStripMenuItem",
+            MenuEntry::MultiLine => "multiLineToolStripMenuItem",
+            MenuEntry::SetViewCount => "setViewCountToolStripMenuItem",
+            MenuEntry::Undock => "undockToolStripMenuItem",
+        };
+        for (kind, header) in [
+            (
+                MenuKind::Tabs,
+                "this.contextMenuStripactionstab.Items.AddRange(",
+            ),
+            (
+                MenuKind::Quick,
+                "this.contextMenuStripQuickView.Items.AddRange(",
+            ),
+        ] {
+            assert_eq!(
+                designer_items(&designer, header),
+                kind.entries()
+                    .iter()
+                    .map(|entry| control(*entry))
+                    .collect::<Vec<_>>()
+            );
+            for entry in kind.entries() {
+                assert_eq!(
+                    resx_text(&resx, control(*entry)).as_deref(),
+                    Some(entry.text())
+                );
+            }
+        }
+        assert!(MenuEntry::Undock.dimmed().is_some(), "one window");
+        assert!(MenuEntry::SetViewCount.dimmed().is_none());
+    }
+
+    /// Set Home Here takes a height from a tile or the sea and refuses anything else; OK sends
+    /// `DO_SET_HOME` at the point and then asks for home, Cancel only asks. The ask goes as a
+    /// command the link does not wait on; `DO_SET_HOME` goes once, as every `COMMAND_INT` does.
+    #[test]
+    fn set_home_here_sends_do_set_home_and_asks_for_home_either_way() {
+        use crate::srtm::{AltResponse, TileType};
+        let valid = AltResponse {
+            current_type: TileType::Valid,
+            alt: 584.5,
+        };
+        let sea = AltResponse {
+            current_type: TileType::Ocean,
+            alt: 0.0,
+        };
+        assert_eq!(set_home_height(valid), Ok(584.5));
+        assert_eq!(set_home_height(sea), Ok(0.0));
+        assert_eq!(
+            set_home_height(AltResponse::INVALID),
+            Err(Refusal::error(NO_SRTM))
+        );
+        let described =
+            |messages: Vec<MavMessage>| messages.iter().map(describe).collect::<Vec<_>>();
+        let point = (-35.5, 149.25, 584.5);
+        assert_eq!(
+            described(set_home_messages(target(), point, true)),
+            [
+                "COMMAND_INT MAV_CMD_DO_SET_HOME 0,0,0,0 x=-355000000 y=1492500000 z=584.5 frame=0",
+                "COMMAND_LONG MAV_CMD_GET_HOME_POSITION 0,0,0,0,0,0,0",
+            ]
+        );
+        assert_eq!(
+            described(set_home_messages(target(), point, false)),
+            ["COMMAND_LONG MAV_CMD_GET_HOME_POSITION 0,0,0,0,0,0,0"]
+        );
+        let home = set_home_messages(target(), point, true);
+        assert_eq!(route(&home[0]), Route::Raw);
+        assert_eq!(
+            route(&home[1]),
+            Route::Command {
+                target: target(),
+                command: requests::CMD_GET_HOME_POSITION,
+                params: [0.0; 7],
+            }
+        );
+    }
+
+    /// Set EKF Origin Here wants a tile's height - the sea will not do - and sends the whole
+    /// metres as millimetres.
+    #[test]
+    fn set_ekf_origin_here_wants_a_tile() {
+        use crate::srtm::{AltResponse, TileType};
+        let valid = AltResponse {
+            current_type: TileType::Valid,
+            alt: 584.7,
+        };
+        let sent = set_ekf_origin_sends(target(), (-35.5, 149.25), valid).expect("sent");
+        assert_eq!(
+            sent.iter().map(describe).collect::<Vec<_>>(),
+            ["SET_GPS_GLOBAL_ORIGIN lat=-355000000 lon=1492500000 alt=584000"]
+        );
+        let sea = AltResponse {
+            current_type: TileType::Ocean,
+            alt: 0.0,
+        };
+        assert_eq!(
+            set_ekf_origin_sends(target(), (-35.5, 149.25), sea),
+            Err(Refusal::error(NO_SRTM))
+        );
+        assert_eq!(
+            set_ekf_origin_sends(target(), (0.0, 0.0), AltResponse::INVALID),
+            Err(Refusal::error(NO_SRTM))
+        );
+    }
+
+    /// The whole path from a tile on disk: the terrain height the SRTM reader finds is the
+    /// height Set Home Here sends.
+    #[test]
+    fn set_home_here_sends_the_height_of_the_tile_under_the_press() {
+        let dir = std::env::temp_dir().join(format!("mpr-fly-srtm-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("scratch folder");
+        let mut tile = Vec::with_capacity(1201 * 1201 * 2);
+        for _ in 0..1201 * 1201 {
+            tile.extend_from_slice(&584i16.to_be_bytes());
+        }
+        std::fs::write(dir.join("S36E149.hgt"), tile).expect("the tile");
+        let (lat, lng) = (-35.363_262_1, 149.165_237_4);
+        let height = set_home_height(crate::srtm::altitude_in(&dir, lat, lng)).expect("a height");
+        let sent = set_home_messages(target(), (lat, lng, height), true);
+        assert!(
+            describe(&sent[0]).contains("z=584 frame=0"),
+            "{}",
+            describe(&sent[0])
+        );
+        // No tile a degree west.
+        assert_eq!(
+            set_home_height(crate::srtm::altitude_in(&dir, lat, 148.9)),
+            Err(Refusal::error(NO_SRTM))
+        );
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    /// Point Camera Here: the height is a float or "Bad Alt", then a point that is not the
+    /// unpressed (0, 0) or "Bad Lat/Long", and `DO_SET_ROI` above home.
+    #[test]
+    fn point_camera_here_sends_set_roi_above_home() {
+        let at = (-35.5, 149.25);
+        let sent = point_camera_here_sends(target(), at, " 12.5 ").expect("sent");
+        assert_eq!(
+            describe(&sent[0]),
+            "COMMAND_INT MAV_CMD_DO_SET_ROI 0,0,0,0 x=-355000000 y=1492500000 z=12.5 frame=3"
+        );
+        assert_eq!(route(&sent[0]), Route::Raw);
+        assert_eq!(
+            point_camera_here_sends(target(), at, "high"),
+            Err(Refusal::error(strings::BAD_ALT))
+        );
+        assert_eq!(
+            point_camera_here_sends(target(), (0.0, 0.0), "5"),
+            Err(Refusal::error(BAD_LAT_LONG))
+        );
+        // The height is looked at first.
+        assert_eq!(
+            point_camera_here_sends(target(), (0.0, 0.0), "x"),
+            Err(Refusal::error(strings::BAD_ALT))
+        );
+    }
+
+    /// Point Camera Coords: three floats are the height above sea level, two take the
+    /// terrain's, in `doCommandInt`'s default frame; anything else is Invalid Field.
+    #[test]
+    fn point_camera_coords_takes_a_height_or_the_terrains() {
+        let terrain = |_: f64, _: f64| 584.25;
+        let sent = point_camera_coords_sends(target(), "-35.5;149.25;600", terrain).expect("sent");
+        assert_eq!(
+            describe(&sent[0]),
+            "COMMAND_INT MAV_CMD_DO_SET_ROI 0,0,0,0 x=-355000000 y=1492500000 z=600 frame=0"
+        );
+        let sent = point_camera_coords_sends(target(), "-35.5;149.25", terrain).expect("sent");
+        assert!(describe(&sent[0]).ends_with("z=584.25 frame=0"));
+        for text in ["", "junk", "-35.5", "1;2;3;4", "a;b"] {
+            assert_eq!(
+                point_camera_coords_sends(target(), text, terrain),
+                Err(Refusal::error(strings::INVALID_FIELD)),
+                "{text}"
+            );
+        }
+    }
+
+    /// Message: a `STATUSTEXT` of severity 5, the text in ASCII cut to fifty.
+    #[test]
+    fn message_sends_the_text_as_a_notice() {
+        assert_eq!(
+            describe(&statustext(MESSAGE_SEVERITY, "hello")),
+            "STATUSTEXT severity=5 text=hello"
+        );
+        assert_eq!(
+            describe(&statustext(5, "h\u{e9}llo")),
+            "STATUSTEXT severity=5 text=h?llo"
+        );
+        let long = "x".repeat(60);
+        assert_eq!(
+            describe(&statustext(5, &long)),
+            format!("STATUSTEXT severity=5 text={}", "x".repeat(50))
+        );
+        assert_eq!(route(&statustext(5, "a")), Route::Raw);
+    }
+
+    /// `CMB_mountmode` lists the first documented mount-mode parameter's values; Set Mount writes
+    /// `MNT_MODE` where the vehicle has it and sends `DO_MOUNT_CONTROL` where not, both waited
+    /// for; with nothing to choose it is `Strings.ErrorNoResponse`.
+    #[test]
+    fn set_mount_writes_mnt_mode_or_sends_mount_control() {
+        let modes = mount_modes(mp_params::param_meta::lookup);
+        assert_eq!(modes.first(), Some(&(0, "Retracted".to_owned())));
+        assert!(modes.contains(&(2, "MavLink Targeting".to_owned())));
+        let with = vec![("MNT_MODE".to_owned(), 0.0)];
+        let sent = mount_mode_sends(target(), &with, Some(2)).expect("sent");
+        assert_eq!(describe(&sent[0]), "PARAM_SET MNT_MODE=2");
+        let sent = mount_mode_sends(target(), &[], Some(2)).expect("sent");
+        assert_eq!(
+            describe(&sent[0]),
+            "COMMAND_LONG MAV_CMD_DO_MOUNT_CONTROL 0,0,0,0,0,0,2"
+        );
+        assert!(matches!(
+            route(&sent[0]),
+            Route::Command { command: 205, .. }
+        ));
+        assert_eq!(
+            mount_mode_sends(target(), &[], None),
+            Err(Refusal::error(strings::ERROR_NO_RESPONSE))
+        );
+        fn nothing(_: &str) -> Option<&'static mp_params::ParamMeta> {
+            None
+        }
+        assert!(mount_modes(nothing).is_empty());
+    }
+
+    /// `IsNumber` is `decimal.TryParse`; `setQuickViewRowsCols` then wants whole numbers, and at
+    /// least one of each.
+    #[test]
+    fn set_view_count_takes_numbers_and_keeps_at_least_one() {
+        for yes in ["3", " 2 ", "2.5", "-1", "+4", "1,000", "5-"] {
+            assert!(is_number(yes), "{yes}");
+        }
+        for no in ["", "abc", "1.2.3", ".", "-", ",5"] {
+            assert!(!is_number(no), "{no}");
+        }
+        assert_eq!(view_count("3", "2"), Ok((3, 2)));
+        assert_eq!(view_count("0", "-5"), Ok((1, 1)));
+        assert!(view_count("2.5", "3").is_err());
+    }
+
+    /// Battery Cell Voltage: with a count, the HUD is told to draw the cell line for it; off, it
+    /// is told not to. The line itself is `hud.rs`'s (HUD.cs:2896-2923), from those inputs.
+    #[test]
+    fn the_cell_count_reaches_the_hud_as_its_own_inputs() {
+        let mut settings = HudSettings::default();
+        let mut inputs = crate::hud::HudInputs {
+            has_vehicle: true,
+            battery_voltage: 12.6,
+            ..crate::hud::HudInputs::default()
+        };
+        settings.apply(&mut inputs, None);
+        assert!(!inputs.display_cell_voltage);
+        assert_eq!(inputs.battery_cell_count, 0);
+        settings.cells = Some(3);
+        settings.apply(&mut inputs, None);
+        assert!(inputs.display_cell_voltage);
+        assert_eq!(inputs.battery_cell_count, 3);
+        let scene = crate::hud::scene(&inputs, 398.0, 258.0);
+        assert!(
+            scene.items.iter().any(|item| matches!(item, crate::hud::Item::Label { text, .. } if text.starts_with("Cell "))),
+            "the HUD draws the cell line from the inputs"
+        );
+    }
+
+    /// Battery Cell Voltage from the HUD's menu: off, it asks for the count from 4; on, it
+    /// turns the line off without asking.
+    #[test]
+    fn battery_cell_voltage_asks_its_count_or_turns_off() {
+        let row = HUD_MENU
+            .iter()
+            .find(|row| row.control == "setBatteryCellCountToolStripMenuItem")
+            .expect("the row");
+        assert_eq!(row.does, Ok(HudAction::BatteryCells));
+        assert_eq!(Prompt::CellCount.title(), "Battery Cell Count");
+        assert_eq!(dotnet_int(" 4 "), Some(4));
+        assert_eq!(dotnet_int("four"), None);
+        assert_eq!(dotnet_int("3.5"), None);
+    }
+
+    /// Customize lists every page, checked while the strip has it; closing it makes the checked
+    /// ones the strip, showing the first. Nothing checked leaves the strip as it was, since
+    /// `loadTabControlActions` returns on an empty setting - and the next Customize shows them
+    /// all unchecked, as the empty setting names none.
+    #[test]
+    fn customize_chooses_the_strips_pages() {
+        let mut pages = Pages::default();
+        pages.select(Page::Status);
+        let mut list = pages.customize_list();
+        assert_eq!(list.len(), 14);
+        assert!(list.iter().all(|(_, on)| *on));
+        for (page, on) in &mut list {
+            if matches!(page, Page::Gauges | Page::Status) {
+                *on = false;
+            }
+        }
+        pages.customize(&list);
+        assert_eq!(pages.shown().len(), 12);
+        assert!(!pages.shown().contains(&Page::Gauges));
+        assert_eq!(pages.selected(), Page::Quick);
+        assert_eq!(pages.first_shown(), 0);
+        let again = pages.customize_list();
+        assert!(again.iter().any(|(page, on)| *page == Page::Gauges && !on));
+        assert!(again.iter().any(|(page, on)| *page == Page::Quick && *on));
+
+        let none: Vec<(Page, bool)> = again.iter().map(|(page, _)| (*page, false)).collect();
+        pages.customize(&none);
+        assert_eq!(pages.shown().len(), 12, "an empty setting changes nothing");
+        assert!(pages.customize_list().iter().all(|(_, on)| !on));
+
+        // The arrows stop at the strip's own last header.
+        let mut short = Pages::default();
+        short.customize(&[(Page::Quick, true), (Page::Actions, true)]);
+        short.scroll_right();
+        assert!(!short.can_scroll_right());
+        assert_eq!(short.first_shown(), 1);
+    }
+
+    /// MultiLine turns the strip's wrapping over.
+    #[test]
+    fn multiline_turns_the_strips_wrapping_over() {
+        let mut pages = Pages::default();
+        assert!(!pages.multiline);
+        pages.toggle_multiline();
+        assert!(pages.multiline);
+        pages.toggle_multiline();
+        assert!(!pages.multiline);
+    }
+
+    /// The transponder's messages read as the sent-message fact shows them.
+    #[test]
+    fn a_transponder_control_is_described_by_its_fields() {
+        let message = crate::transponder::control(1200, 176, "QFA1");
+        assert_eq!(
+            describe(&message),
+            "UAVIONIX_ADSB_OUT_CONTROL state=176 squawk=1200 flight_id=QFA1 baroaltmsl=2147483647"
+        );
+        assert_eq!(route(&message), Route::Raw);
     }
 }

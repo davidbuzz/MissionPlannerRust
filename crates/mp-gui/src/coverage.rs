@@ -81,7 +81,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "ALT_btn_Click",
         "ALT (transponder)",
-        Missing,
+        Done("fly-xpdr-alt"),
     ),
     row(
         "BUT_abortland",
@@ -123,7 +123,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUT_clear_track_Click",
         "Clear Track",
-        Missing,
+        Done("fly-cleartrack"),
     ),
     row(
         "but_dflogtokml",
@@ -221,7 +221,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUT_mountmode_Click",
         "Set Mount",
-        Missing,
+        Done("fly-mountmode"),
     ),
     row(
         "BUT_playlog",
@@ -263,7 +263,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUT_resetGimbalPos_Click",
         "Reset Position",
-        Missing,
+        Done("fly-gimbal-reset"),
     ),
     row(
         "BUTrestartmission",
@@ -298,7 +298,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUT_SendMSG_Click",
         "Message",
-        Missing,
+        Done("fly-sendmsg"),
     ),
     row(
         "BUT_setmode",
@@ -396,7 +396,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "customizeToolStripMenuItem_Click",
         "Customize",
-        Missing,
+        Done("fly-tabs-customize"),
     ),
     row(
         "deleteToolStripMenuItem",
@@ -410,7 +410,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "TextChanged",
         "FlightID_tb_TextChanged",
         "FlightID",
-        Missing,
+        Done("fly-xpdr-flightid"),
     ),
     row(
         "flightPlannerToolStripMenuItem",
@@ -515,7 +515,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "DoubleClick",
         "Gspeed_DoubleClick",
         "the speed gauge",
-        Missing,
+        Done("fly-gauge-speed"),
     ),
     row(
         "gStreamerStopToolStripMenuItem",
@@ -566,7 +566,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "IDENT_btn_Click",
         "IDENT (transponder)",
-        Missing,
+        Done("fly-xpdr-ident"),
     ),
     row(
         "jumpToTagToolStripMenuItem",
@@ -575,12 +575,13 @@ pub const FLIGHTDATA: &[Action] = &[
         "Jump To Tag",
         Done("fly-jumptotag"),
     ),
+    // The POI menu's Load File, `POI.POILoad`: the map menu's POI drop-down, not the tuning graph's.
     row(
         "loadFileToolStripMenuItem",
         "Click",
         "loadFileToolStripMenuItem_Click",
         "Load File",
-        Missing,
+        Done("fly-poi-load"),
     ),
     row(
         "Messagetabtimer",
@@ -622,7 +623,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "multiLineToolStripMenuItem_Click",
         "MultiLine",
-        Missing,
+        Done("fly-tabs-multiline"),
     ),
     row(
         "myButton1",
@@ -650,7 +651,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "ON_btn_Click",
         "ON (transponder)",
-        Missing,
+        Done("fly-xpdr-on"),
     ),
     row(
         "onOffCameraOverlapToolStripMenuItem",
@@ -671,14 +672,14 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "PointCameraCoordsToolStripMenuItem1_Click",
         "Point Camera Coords",
-        Missing,
+        Done("fly-pointcameracoords"),
     ),
     row(
         "pointCameraHereToolStripMenuItem",
         "Click",
         "pointCameraHereToolStripMenuItem_Click",
         "Point Camera Here",
-        Missing,
+        Done("fly-pointcamerahere"),
     ),
     row(
         "quickView1",
@@ -736,12 +737,13 @@ pub const FLIGHTDATA: &[Action] = &[
         "Russian Hud",
         Done("fly-hud-russian"),
     ),
+    // The POI menu's Save File, `POI.POISave`.
     row(
         "saveFileToolStripMenuItem",
         "Click",
         "saveFileToolStripMenuItem_Click",
         "Save File",
-        Missing,
+        Done("fly-poi-save"),
     ),
     row(
         "scriptChecker",
@@ -762,14 +764,14 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "setBatteryCellCountToolStripMenuItem_Click",
         "Battery Cell Voltage",
-        Missing,
+        Done("fly-hud-batterycells"),
     ),
     row(
         "setEKFHomeHereToolStripMenuItem",
         "Click",
         "setEKFHomeHereToolStripMenuItem_Click",
         "Set EKF Origin Here",
-        Missing,
+        Done("fly-setekforigin"),
     ),
     row(
         "setGStreamerSourceToolStripMenuItem",
@@ -783,7 +785,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "setHomeHereToolStripMenuItem_Click",
         "Set Home Here",
-        Missing,
+        Done("fly-sethome"),
     ),
     row(
         "setMJPEGSourceToolStripMenuItem",
@@ -811,14 +813,14 @@ pub const FLIGHTDATA: &[Action] = &[
         "MouseWheel",
         "Squawk_nud_MouseWheel",
         "Squawk (transponder)",
-        Missing,
+        Done("fly-xpdr-squawk-box"),
     ),
     row(
         "Squawk_nud",
         "ValueChanged",
         "Squawk_nud_ValueChanged",
         "Squawk (transponder)",
-        Missing,
+        Done("fly-xpdr-squawk"),
     ),
     row(
         "startCameraToolStripMenuItem",
@@ -832,7 +834,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "STBY_btn_Click",
         "STBY (transponder)",
-        Missing,
+        Done("fly-xpdr-stby"),
     ),
     row(
         "stopRecordToolStripMenuItem",
@@ -879,21 +881,21 @@ pub const FLIGHTDATA: &[Action] = &[
         "Scroll",
         "gimbalTrackbar_Scroll",
         "Tilt (gimbal)",
-        Missing,
+        Done("fly-gimbal-pitch"),
     ),
     row(
         "trackBarRoll",
         "Scroll",
         "gimbalTrackbar_Scroll",
         "Roll (gimbal)",
-        Missing,
+        Done("fly-gimbal-roll"),
     ),
     row(
         "trackBarYaw",
         "Scroll",
         "gimbalTrackbar_Scroll",
         "Pan (gimbal)",
-        Missing,
+        Done("fly-gimbal-yaw"),
     ),
     row(
         "tracklog",
@@ -907,7 +909,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "triggerCameraToolStripMenuItem_Click",
         "Trigger Camera NOW",
-        Missing,
+        Done("fly-triggercamera"),
     ),
     row("TRK_zoom", "Scroll", "TRK_zoom_Scroll", "Zoom", Done("map")),
     row(
@@ -929,7 +931,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "XPDRConnect_btn_Click",
         "Connect (transponder)",
-        Missing,
+        Done("fly-xpdr-connect"),
     ),
     row(
         "ZedGraphTimer",
@@ -990,6 +992,66 @@ pub const FLIGHTDATA: &[Action] = &[
     ),
 ];
 
+/// Why each row still missing is missing, rendered beside it in the report: left for later, a
+/// window of its own, or the owner's call.
+#[cfg(test)]
+pub const WHY_MISSING: &[(&str, &str, &str)] = &[
+    ("BUT_abort_script", "Click", SCRIPTS),
+    ("BUT_edit_selected", "Click", SCRIPTS),
+    ("BUT_run_script", "Click", SCRIPTS),
+    ("BUT_select_script", "Click", SCRIPTS),
+    (
+        "BUT_georefimage",
+        "Click",
+        "later: the Georefimage window; drawn dimmed on the DataFlash Logs page",
+    ),
+    (
+        "BUT_RAWSensor",
+        "Click",
+        "later: RAW_Sensor is a window of its own; drawn dimmed in the Actions grid",
+    ),
+    ("BUT_GimbalVideo", "Click", VIDEO),
+    ("gimbalVideoFullSizedToolStripMenuItem", "Click", VIDEO),
+    ("gimbalVideoMiniToolStripMenuItem", "Click", VIDEO),
+    ("gimbalVideoPopOutToolStripMenuItem", "Click", VIDEO),
+    ("gStreamerStopToolStripMenuItem", "Click", VIDEO),
+    ("hereLinkVideoToolStripMenuItem", "Click", VIDEO),
+    ("recordHudToAVIToolStripMenuItem", "Click", VIDEO),
+    ("setGStreamerSourceToolStripMenuItem", "Click", VIDEO),
+    ("setMJPEGSourceToolStripMenuItem", "Click", VIDEO),
+    ("startCameraToolStripMenuItem", "Click", VIDEO),
+    ("stopRecordToolStripMenuItem", "Click", VIDEO),
+    (
+        "onOffCameraOverlapToolStripMenuItem",
+        "Click",
+        "drawn dimmed: it acts on the CAMERA_FEEDBACK photo markers, which the map does not draw",
+    ),
+    (
+        "setAspectRatioToolStripMenuItem",
+        "Click",
+        "the owner's call: the C#'s 4:3 would reshape the column",
+    ),
+    (
+        "showIconsToolStripMenuItem",
+        "Click",
+        "the owner's call: the HUD's icons are not ported",
+    ),
+    (
+        "setViewCountToolStripMenuItem",
+        "Click",
+        "the quick views' menu and both questions are there (`fly-quick-setviewcount`) and the \
+         answer is kept; the grid is `quick.rs`'s six views, which have no resize yet",
+    ),
+];
+
+/// Left for later: scripts.
+#[cfg(test)]
+const SCRIPTS: &str = "later: scripts - `mp-script` has no interpreter yet";
+
+/// Left for later: video.
+#[cfg(test)]
+const VIDEO: &str = "later: video (GStreamer, HereLink, MJPEG, the camera, AVI)";
+
 /// How many rows are in each state: (done, elsewhere, missing, plumbing, dropped).
 #[must_use]
 pub fn counts() -> (usize, usize, usize, usize, usize) {
@@ -1027,7 +1089,13 @@ pub fn report() -> String {
         let ours = match action.ours {
             Done(id) => format!("done: `{id}`"),
             Elsewhere(what) => format!("elsewhere: {what}"),
-            Missing => "**missing**".to_owned(),
+            Missing => WHY_MISSING
+                .iter()
+                .find(|(control, event, _)| *control == action.control && *event == action.event)
+                .map_or_else(
+                    || "**missing**".to_owned(),
+                    |(_, _, why)| format!("**missing** - {why}"),
+                ),
             Plumbing => "plumbing".to_owned(),
             Dropped(reason) => format!("dropped: {reason}"),
         };
@@ -1061,6 +1129,9 @@ mod tests {
         include_str!("quick.rs"),
         include_str!("poi.rs"),
         include_str!("logdownload.rs"),
+        include_str!("transponder.rs"),
+        include_str!("payload.rs"),
+        include_str!("gauge.rs"),
     ];
 
     fn designer() -> Option<String> {
@@ -1163,6 +1234,26 @@ mod tests {
         std::fs::write(&path, report()).expect("write the report");
     }
 
+    /// Every reason given for a missing row is for a row that is there and missing, once.
+    #[test]
+    fn each_reason_is_for_a_missing_row() {
+        for (index, (control, event, _)) in WHY_MISSING.iter().enumerate() {
+            let row = FLIGHTDATA
+                .iter()
+                .find(|action| action.control == *control && action.event == *event);
+            assert!(
+                matches!(row, Some(Action { ours: Missing, .. })),
+                "{control}.{event} is not a missing row"
+            );
+            assert!(
+                !WHY_MISSING[..index]
+                    .iter()
+                    .any(|(c, e, _)| c == control && e == event),
+                "{control}.{event} twice"
+            );
+        }
+    }
+
     /// The count is what the plan says, so a change in either direction is a deliberate edit.
     #[test]
     fn the_counts_are_the_ones_the_plan_records() {
@@ -1176,7 +1267,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (68, 1, 47, 18, 2)
+            (94, 1, 21, 18, 2)
         );
     }
 }

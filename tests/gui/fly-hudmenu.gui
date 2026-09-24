@@ -7,7 +7,8 @@
 # "Display This"; a box checked asks "Please enter your item prefix", starting at its name and
 # ": ", and the item is drawn on the HUD; checked again it comes off. Swap With Map puts the HUD
 # where the map was and the map where the HUD was, and again puts them back. The rows not ported
-# - Set Aspect Ratio, Battery Cell Voltage, Show icons and the Video drop-down's - are dimmed,
+# - Set Aspect Ratio and the Video drop-down's - are dimmed (Show icons and Battery Cell Voltage
+# have scripts of their own),
 # and a click on one says why on the status line. A press anywhere else closes the menu and goes
 # no further.
 # `GCSViews/FlightData.Designer.cs:346, 458-566, GCSViews/FlightData.cs:2436-2472, 3122-3139,
@@ -53,12 +54,8 @@ expect fly.hud.menu.video true
 click fly-hud-recordavi
 expect status ~ Record Hud to AVI is not ported
 expect fly.hud.menu true
-click fly-hud-showicons
-expect status ~ Show icons is not ported
 click fly-hud-aspect
 expect status ~ Set Aspect Ratio is not ported
-click fly-hud-batterycells
-expect status ~ Battery Cell Voltage is not ported
 expect fly.hud.menu true
 
 # A press elsewhere closes the menu and presses nothing else: the header strip stays put.

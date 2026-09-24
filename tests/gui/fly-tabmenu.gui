@@ -1,0 +1,65 @@
+# The page strip's menu, contextMenuStripactionstab: Customize and MultiLine, where the right button
+# comes up on the strip or on a page with no menu of its own.
+#
+# MultiLine turns tabControlactions.Multiline over: every header on as many rows as they need, and
+# no arrows. Customize lists every page by its Designer name, checked while the strip has it, and
+# when its form is closed the checked ones are the strip, in the Designer's order, showing the
+# first. For the session: the C# keeps both in its settings.
+# `GCSViews/FlightData.cs:733-791, 2584-2627, 6498-6502, GCSViews/FlightData.Designer.cs:327, 572-594`
+#
+# Self-contained, no link: tools/gui-test.sh tests/gui/fly-tabmenu.gui
+
+screen fly
+window 1600x1200
+settle 3
+
+expect fly.tabs.multiline false
+expect fly.menu none
+
+click fly-tabs:right
+expect fly.menu tabs
+click fly-tabs-multiline
+expect fly.menu none
+expect fly.tabs.multiline true
+# Every header is on the strip: the last is there to click without the arrows.
+click fly-tab-logbrowse
+expect fly.tab tablogbrowse
+expect fly.page.overflow 0
+click fly-tab-transponder
+expect fly.tab tabTransponder
+expect fly.page.overflow 0
+click fly-tabs:right
+click fly-tabs-multiline
+expect fly.tabs.multiline false
+expect fly.tabs.first 0
+
+click fly-tabs:right
+click fly-tabs-customize
+expect fly.menu none
+expect fly.customize ~ tabQuick=1
+expect fly.customize ~ tabGauges=1
+click fly-customize-tabGauges
+click fly-customize-tabStatus
+expect fly.customize ~ tabGauges=0
+expect fly.customize ~ tabStatus=0
+click fly-customize-close
+expect fly.customize none
+expect fly.tabs tabQuick,tabActions,tabPagemessages,tabActionsSimple,tabPagePreFlight,tabTransponder,tabServo,tabAuxFunction,tabScripts,tabPayload,tabTLogs,tablogbrowse
+expect fly.tab tabQuick
+
+# Checked again, they are back in their places.
+click fly-tabs:right
+click fly-tabs-customize
+expect fly.customize ~ tabGauges=0
+click fly-customize-tabGauges
+click fly-customize-tabStatus
+click fly-customize-close
+expect fly.tabs tabQuick,tabActions,tabPagemessages,tabActionsSimple,tabPagePreFlight,tabGauges,tabTransponder,tabStatus,tabServo,tabAuxFunction,tabScripts,tabPayload,tabTLogs,tablogbrowse
+
+# On a page, the same menu; a press anywhere else closes it.
+click fly-tab-actions
+expect fly.tab tabActions
+click fly-sidebar@0.5x0.98:right
+expect fly.menu tabs
+click map@0.5x0.5
+expect fly.menu none

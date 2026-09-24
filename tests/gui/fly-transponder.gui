@@ -1,0 +1,56 @@
+# The Transponder page, tabTransponder, with each control where the .resx puts it.
+#
+# Until the transponder has reported, every control but Connect to Transponder is disabled, as the
+# .resx starts them. Five seconds after the screen starts, and every five after, the page looks for
+# a UAVIONIX_ADSB_OUT_STATUS; with none ever had the button reads "Connect To Transponder", the
+# C#'s own capital T. Connect sends MAV_CMD_SET_MESSAGE_INTERVAL for that status once a second,
+# waits for the answer, then three seconds for a status. SITL has no transponder and sends no
+# status, so the page stays disabled and Connect ends in "Timeout: Status message not received.";
+# what the buttons, the squawk and the flight ID send once a status has enabled them is held by
+# the unit tests in crates/mp-gui/src/transponder.rs.
+# `GCSViews/FlightData.cs:4314-4318, 6182-6482, GCSViews/FlightData.resx (tabTransponder)`
+#
+# Needs SITL (a copter): tools/gui-test.sh tests/gui/fly-transponder.gui -- tcp:127.0.0.1:5760
+
+screen fly
+window 1600x1200
+
+# Within the first five seconds: the page as the .resx starts it.
+expect fly.xpdr.connect Connect to Transponder
+expect fly.xpdr.connect.enabled true
+expect fly.xpdr.enabled false
+expect fly.xpdr.squawk 1200
+expect fly.xpdr.modes none
+expect fly.xpdr.bold none
+expect fly.xpdr.faults 0,0,0,0,0
+
+# Brought to the front of the row, so its header is in view.
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+expect fly.tabs.first 6
+click fly-tab-transponder
+expect fly.tab tabTransponder
+expect fly.page.overflow 0
+
+# Past the first five seconds with the port open and no status.
+settle 7
+expect fly.xpdr.connect Connect To Transponder
+expect fly.xpdr.connect.enabled true
+expect fly.xpdr.enabled false
+
+click fly-xpdr-connect
+expect fly.sent COMMAND_LONG MAV_CMD_SET_MESSAGE_INTERVAL 10008,1000000,0,0,0,0,0
+settle 5
+expect status Timeout: Status message not received.
+expect fly.xpdr.waiting no
+expect fly.xpdr.enabled false
+
+# Disabled, the mode buttons send nothing and nothing goes bold.
+click fly-xpdr-on
+expect fly.sent COMMAND_LONG MAV_CMD_SET_MESSAGE_INTERVAL 10008,1000000,0,0,0,0,0
+expect fly.xpdr.bold none
+expect fly.page.overflow 0

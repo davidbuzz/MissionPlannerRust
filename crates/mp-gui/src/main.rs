@@ -12,6 +12,7 @@ mod config_coverage;
 mod coverage;
 mod facts;
 mod fly;
+mod gauge;
 mod hud;
 mod joystick;
 mod logbrowse;
@@ -19,6 +20,7 @@ mod logdownload;
 mod mapview;
 mod metadata;
 mod params;
+mod payload;
 mod plan;
 mod planner_coverage;
 mod platform;
@@ -28,10 +30,12 @@ mod quick;
 mod settings;
 mod setup;
 mod smoke;
+mod srtm;
 mod storm;
 mod survey_ui;
 mod telemetry;
 mod textfield;
+mod transponder;
 mod tuning;
 mod ui;
 
@@ -1188,6 +1192,24 @@ impl MissionPlanner {
                             .pr_2()
                             .overflow_y_scroll()
                             .track_scroll(&self.fly_scroll)
+                            // `SubMainLeft.Panel2.ContextMenuStrip`: the strip's menu, Customize
+                            // and MultiLine, anywhere on the page that has no menu of its own.
+                            // `// C#: GCSViews/FlightData.Designer.cs:327`
+                            .on_mouse_up(
+                                MouseButton::Right,
+                                cx.listener(|this, event: &gpui::MouseUpEvent, _window, cx| {
+                                    if this.fly_data.menu.is_none() {
+                                        this.fly_data.menu = Some((
+                                            fly::MenuKind::Tabs,
+                                            (
+                                                f32::from(event.position.x),
+                                                f32::from(event.position.y),
+                                            ),
+                                        ));
+                                        cx.notify();
+                                    }
+                                }),
+                            )
                             .children(page),
                     )
                     .children(ui::scroll_indicator(&self.fly_scroll)),
@@ -1709,8 +1731,9 @@ impl Render for MissionPlanner {
         let banner = self.telemetry.firmware_banner().map(str::to_owned);
         let mav_type = view.state.as_ref().map_or(0, |state| state.vehicle_type);
         self.metadata.advance(banner.as_deref(), mav_type);
-        // The Actions tab's clock: `cs.lastautowp`, and a Resume Mission moved on a step.
-        self.fly_tick(&view);
+        // The flight screen's clock: `cs.lastautowp`, a Resume Mission moved on a step, and the
+        // Transponder page's look for a status.
+        self.fly_tick(&view, window);
         // The sets and commands the link is retrying: what those that ended say goes on the
         // status line, where this application says what the C# puts in a message box, and
         // parameter writes move on to their next.
@@ -1963,6 +1986,8 @@ impl Render for MissionPlanner {
             );
             self.fly_pages
                 .record_facts(f32::from(self.fly_scroll.max_offset().y));
+            // The flown route's points, which Clear Track empties.
+            facts::record("fly.track", self.map.borrow().path_len());
             config::failsafe::record_facts(&self.failsafe, &view);
             setup::record_facts([&self.setup_list, &self.config_list]);
             config::frame_type::record_facts(&self.frame_type, &view);

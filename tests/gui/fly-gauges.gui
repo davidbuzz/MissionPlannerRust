@@ -1,0 +1,48 @@
+# The Gauges page's speed dial, Gspeed: an AGauge with airspeed and ground speed needles over a
+# scale to its maximum, 60, placed as tabPage1_Resize places it for a page this size. A double
+# click asks "Enter Max Speed", starting at 60 whatever the maximum is, and sets it: a number above
+# the minimum changes it, anything else is refused as float.Parse refuses it. Galt, Gheading and
+# Gvspeed are not ported.
+# `GCSViews/FlightData.cs:3140-3148, 5217-5278, ExtLibs/Controls/AGauge.cs:446-462, 1499-1987`
+#
+# Needs SITL (a copter, standing still): tools/gui-test.sh tests/gui/fly-gauges.gui -- tcp:127.0.0.1:5760
+
+screen fly
+window 1600x1200
+settle 8
+
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+expect fly.tabs.first 5
+click fly-tab-gauges
+expect fly.tab tabGauges
+expect fly.page.overflow 0
+
+expect fly.gauge.speed.max 60
+expect fly.gauge.speed.size > 100
+# Airspeed and ground speed, each held to the scale.
+expect fly.gauge.speed.needles ~ ;
+
+doubleclick fly-gauge-speed
+expect fly.prompt Enter Max Speed
+expect fly.prompt.value 60
+key ctrl+u
+type 25
+settle 1
+click fly-prompt-ok
+expect fly.prompt none
+expect fly.gauge.speed.max 25
+
+# Asked again it starts at 60; text that is not a number changes nothing.
+doubleclick fly-gauge-speed
+expect fly.prompt.value 60
+key ctrl+u
+type fast
+settle 1
+click fly-prompt-ok
+expect status Error: Input string was not in a correct format.
+expect fly.gauge.speed.max 25
+expect fly.page.overflow 0
