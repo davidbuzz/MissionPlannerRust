@@ -114,14 +114,16 @@ signing, zero-copy frame parse/serialize.
 - **Today:** the allocation claim is tested. `crates/mp-mavlink/tests/no_alloc.rs` installs a
   counting allocator and replays every frame of every recorded flight through the framing and
   the typed decoder: 211,638 decodes, zero allocations, the same in release. The 24-hour soaks of
-  `frame_parse` and `message_decode` started 2026-09-23 16:01Z and end 2026-09-24 16:01Z, with no
-  artefact so far; their result goes into `fuzz/README.md`, which still shows only the short runs.
+  `frame_parse` and `message_decode` ran 2026-09-23 16:01Z to 2026-09-24 16:01Z and ended clean:
+  30.7 billion and 4.1 billion executions, no crash, no timeout, no out-of-memory; `frame_parse`
+  stayed at its 90 edges all day, `message_decode` grew from 13,419 to 13,782 (`fuzz/README.md`).
+  D2's 24-hour clause is met.
   `benches/decode.rs` measures the frame decoder over a five-message mix as ArduPilot sends it:
   **9.5 M frames/s** whole-buffer and in 64- and 256-byte chunks, 10.2 M in 1,024-byte chunks
   (criterion, release, 2026-09-24, with the fuzz soak on two other cores) - nine times the
   target for the framing and CRC, on one core. The typed decode of every message is
   `tests/no_alloc.rs`'s 211,638 and is not timed separately.
-- **Tests:** `crates/mp-mavlink/tests/roundtrip.rs` (proptest encode→decode identity over every generated message type); the golden decode is `tests/differential_tlog.rs` (35,750 frames against `MAVLink.dll` under mono) with `crates/mp-mavlink-dialects/tests/differential_fields.rs` (24,626 field values by name) and `reference_table.rs` (349 `CRC_EXTRA`/`min_len`/`len` against the shipped assembly); `tests/signing.rs`; the truncation cases live in `tests/robustness.rs` and `tests/decoder.rs`; `fuzz/fuzz_targets/frame_parse.rs` and `message_decode.rs` (24 h soak in flight); `crates/mp-fuzz-checks/tests/bounded.rs` runs every fuzz property on stable in `cargo test --workspace`; `tests/no_alloc.rs`; `benches/decode.rs` (9.5 M frames/s, recorded above).
+- **Tests:** `crates/mp-mavlink/tests/roundtrip.rs` (proptest encode→decode identity over every generated message type); the golden decode is `tests/differential_tlog.rs` (35,750 frames against `MAVLink.dll` under mono) with `crates/mp-mavlink-dialects/tests/differential_fields.rs` (24,626 field values by name) and `reference_table.rs` (349 `CRC_EXTRA`/`min_len`/`len` against the shipped assembly); `tests/signing.rs`; the truncation cases live in `tests/robustness.rs` and `tests/decoder.rs`; `fuzz/fuzz_targets/frame_parse.rs` and `message_decode.rs` (24 h soak clean, `fuzz/README.md`); `crates/mp-fuzz-checks/tests/bounded.rs` runs every fuzz property on stable in `cargo test --workspace`; `tests/no_alloc.rs`; `benches/decode.rs` (9.5 M frames/s, recorded above).
 
 ### D3. Transport layer
 `serial | TCP | UDP | BLE | NTRIP | websocket | file-replay`, device enumeration and hotplug on all three

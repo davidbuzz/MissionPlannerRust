@@ -100,10 +100,21 @@ all five ran clean.
 The two edge counts are the point. `message_decode` reaches 150 times more of the codebase than
 `frame_parse` does, which is the measure of how much was going unfuzzed before it existed.
 
-**D2's definition of done asks for 24 hours clean on `frame_parse`, which has not been done.** The
-short runs above are a regression check, not that soak. Run it and record the result here — and
-run `message_decode` for as long, because it is the one that reaches the code a truncated frame
-gets to.
+**The 24-hour soak D2's definition of done asks for was run 2026-09-23 16:01Z to 2026-09-24
+16:01Z**, `frame_parse` and `message_decode` at once, one core each, `-max_total_time=86400`,
+the fuzz soak sharing the machine with a day's builds and GUI runs. Both clean: no crash, no
+timeout, no out-of-memory, `fuzz/artifacts/` empty at the end.
+
+| target | executions | time | exec/s | edges | features | corpus |
+|---|---:|---:|---:|---:|---:|---:|
+| `frame_parse` | 30,729,462,219 | 86,401 s | 355,660 | 90 | 113 | 20 units, 680 B |
+| `message_decode` | 4,141,970,579 | 86,401 s | 47,938 | 13,782 | 15,912 | 2,608 units, 65 KB |
+
+`frame_parse` found nothing new after its first minute - 90 edges is the whole framing path, and
+no input reaches more - so its day was thirty billion confirmations rather than a search.
+`message_decode` grew its corpus from the seeds to 2,608 units and its edges from 13,419 to 13,782
+over the day, the per-message decoders being where new paths still turned up. The short runs
+above remain the regression check.
 
 CI runs a bounded pass of all five on every push (the `fuzz` job in `.github/workflows/ci.yml`),
 and uploads any crashing input as an artifact: a crash whose input is gone is a crash nobody can
