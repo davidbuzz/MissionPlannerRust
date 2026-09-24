@@ -1404,6 +1404,15 @@ impl Telemetry {
     pub fn send_handle(&self) -> Option<(mp_link::LinkSender, VehicleId)> {
         self.target().map(|(link, id)| (link.sender(), id))
     }
+
+    /// Sets the shown vehicle's stream rates, `MainV2.comPort.MAV.cs.rateX`, without saving them
+    /// as the defaults: what Radio Calibration does around its capture.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:214-217, 388-391`
+    pub fn set_stream_rates(&self, rates: mp_vehicle::StreamRates) {
+        if let Some((link, id)) = self.target() {
+            link.set_stream_rates(id, rates);
+        }
+    }
 }
 
 /// A scripted vehicle on the far end of an in-memory link, for driving a screen's sets and

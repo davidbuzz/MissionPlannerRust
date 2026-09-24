@@ -292,7 +292,10 @@ pub fn fill_row(plan: &Plan, call: &Call, fill: &Fill) -> (MissionItem, Option<&
         item.x = seven_decimals(call.y);
         item.y = seven_decimals(call.x);
         match plan.new_row_altitude(f64::from(to_int(call.z)), fill.copter) {
-            Ok(altitude) => item.z = altitude,
+            // `setfromMap`'s Verify Height branch applies to the grid's rows as to any other:
+            // `AddWPtoList` goes through `AddCommand` and `setfromMap`.
+            // `// C#: Grid/GridUI.cs:896-902; GCSViews/FlightPlanner.cs:1209-1236`
+            Ok(altitude) => item.z = plan.verified_altitude(item.x, item.y, altitude, fill.frame),
             Err(why) => return (item, Some(why)),
         }
         if !fill.plane {
@@ -1926,6 +1929,39 @@ mod tests {
         assert_eq!(waypoint.frame, AltitudeFrame::Relative.mav_frame());
         let last = plan.items()[114];
         assert_eq!(last.command, 20);
+    }
+
+    /// Verify Height reaches the grid's rows as it reaches a map click's: with the box ticked
+    /// and no terrain under the row, an Absolute row is the ground (0) plus Default Alt rather
+    /// than the altitude the grid passed.
+    #[test]
+    fn verify_height_applies_to_the_grids_rows() {
+        let mut plan = Plan::default();
+        plan.set_panel_text(crate::plan::PanelBox::DefaultAlt, "50");
+        let call = Call {
+            command: cmd::WAYPOINT,
+            params: [0.0, 0.0, 0.0, 0.0],
+            x: 149.16,
+            y: -35.36,
+            z: 100.0,
+        };
+        let fill = Fill {
+            frame: AltitudeFrame::Absolute,
+            copter: false,
+            plane: true,
+        };
+        let (unverified, _) = fill_row(&plan, &call, &fill);
+        plan.set_verify_height(true);
+        let (verified, _) = fill_row(&plan, &call, &fill);
+        assert_eq!(
+            verified.z,
+            plan.verified_altitude(verified.x, verified.y, unverified.z, fill.frame)
+        );
+        assert_ne!(
+            verified.z, unverified.z,
+            "the box changes an Absolute row's altitude"
+        );
+        assert_eq!(verified.z, 50.0, "ground 0 plus Default Alt");
     }
 
     /// Spline on the planner turns the grid's waypoints into spline waypoints; a delay is rounded

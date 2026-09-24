@@ -589,6 +589,9 @@ enum Task {
     Bind(Spektrum),
     /// `requestDatastream(RC_CHANNELS, hz)`.
     Stream(i32),
+    /// `cs.raterc = ...; cs.rateattitude = ...; ...`: the vehicle's stream rates set, so the
+    /// periodic re-request asks for them. `// C#: ConfigRadioInput.cs:214-217, 388-391`
+    Rates(mp_vehicle::StreamRates),
     /// A message box, holding everything after it until dismissed.
     Say(Message, AfterOk),
 }
@@ -664,6 +667,9 @@ pub struct RadioInput {
     /// `oldrc`: the vehicle's `cs.raterc` when the calibration started, which its end asks
     /// `RC_CHANNELS` for at again. `// C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:209`
     old_rc: Option<i32>,
+    /// `oldatt`, `oldpos`, `oldstatus` with it: the vehicle's rates before the capture set
+    /// RC to 10 and those three to 0, put back after the save.
+    old_rates: Option<mp_vehicle::StreamRates>,
 }
 
 impl Default for RadioInput {
@@ -700,6 +706,7 @@ impl Default for RadioInput {
             last_bind: None,
             stream: None,
             old_rc: None,
+            old_rates: None,
         }
     }
 }
@@ -1037,8 +1044,18 @@ impl RadioInput {
                 // C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:209, `var oldrc =
                 // MainV2.comPort.MAV.cs.raterc;` - read once the first message is dismissed.
                 self.old_rc = Some(rates.rc);
+                self.old_rates = Some(rates);
                 self.button = CLICK_WHEN_DONE;
+                // C#: ConfigRadioInput.cs:214-217 - `cs.raterc = 10; cs.rateattitude = 0;
+                // cs.rateposition = 0; cs.ratestatus = 0;` before the RC request.
                 self.next(vec![
+                    Task::Rates(mp_vehicle::StreamRates {
+                        rc: CALIBRATION_RATE,
+                        attitude: 0,
+                        position: 0,
+                        status: 0,
+                        ..rates
+                    }),
                     Task::Stream(CALIBRATION_RATE),
                     Task::Say(Message::plain(MOVE_STICKS), AfterOk::Run),
                 ]);
@@ -1065,6 +1082,10 @@ impl RadioInput {
                 // here, the loop being reachable only through the first message; without it the
                 // vehicle's `raterc` now is the same number, as nothing here changes it between.
                 let old_rc = self.old_rc.take().unwrap_or(rates.rc);
+                // C#: ConfigRadioInput.cs:388-391 - the four rates put back, then the request.
+                if let Some(old) = self.old_rates.take() {
+                    tail.push(Task::Rates(old));
+                }
                 tail.push(Task::Stream(old_rc));
                 tail.push(Task::Say(
                     Message {
@@ -1139,6 +1160,7 @@ impl RadioInput {
                         None => self.ended(Asked::Bind(spektrum), Ended::NotSent, telemetry),
                     }
                 }
+                Task::Rates(rates) => telemetry.set_stream_rates(rates),
                 Task::Stream(hz) => {
                     // Nothing for a rate of -1, and the rate as a byte otherwise.
                     // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3061-3070, 3256
@@ -2156,6 +2178,13 @@ mod tests {
         assert_eq!(radio.button, "Calibrate Radio");
         ok(&mut radio, TRANSMITTER_ON, &sitl());
         assert_eq!(radio.button, "Click when Done");
+        // C#: ConfigRadioInput.cs:214-217 - RC to 10 and attitude, position and status to 0,
+        // before the RC request.
+        assert!(
+            matches!(radio.tasks.front(), Some(Task::Rates(r)) if r.rc == 10 && r.attitude == 0 && r.position == 0 && r.status == 0),
+            "{:?}",
+            radio.tasks.front()
+        );
         radio.advance(&mut telemetry);
         assert_eq!(radio.stream, Some(10));
         ok(&mut radio, MOVE_STICKS, &sitl());
@@ -2181,6 +2210,21 @@ mod tests {
         );
         assert_eq!(radio.calibration.trim, sitl());
         assert_eq!(radio.button, "Saving");
+        // C#: ConfigRadioInput.cs:388-391 - the four rates read at the first message put back,
+        // before the RC request.
+        let restored = radio
+            .tasks
+            .iter()
+            .position(|task| matches!(task, Task::Rates(r) if *r == RATES));
+        let stream = radio
+            .tasks
+            .iter()
+            .position(|task| matches!(task, Task::Stream(_)));
+        assert!(
+            restored.is_some() && stream.is_some() && restored < stream,
+            "{:?}",
+            radio.tasks
+        );
         radio.advance(&mut telemetry);
         assert_eq!(radio.stream, Some(RATES.rc), "oldrc, the vehicle's raterc");
         assert_eq!(

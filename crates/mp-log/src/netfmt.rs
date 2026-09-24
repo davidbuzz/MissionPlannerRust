@@ -40,27 +40,74 @@ pub fn double(value: f64) -> String {
     general(value, 15)
 }
 
-/// `double.ToString("R")`, which is what `XmlConvert.ToString(double)` writes: the 15-digit form
-/// when it reads back as the same double, else 17 digits.
+/// A number as .NET's general format with `precision` digits has it: sign, digits (trailing zeros
+/// dropped), and the power of ten of the first digit's place plus one (`0.d1d2... x 10^scale`).
+#[must_use]
+pub fn general_digits(value: f64, precision: i32) -> (bool, Vec<u8>, i32) {
+    let text = general(value, usize::try_from(precision).unwrap_or(15));
+    let negative = text.starts_with('-');
+    let body = text.trim_start_matches('-');
+    let (mantissa, exponent) = match body.split_once('E') {
+        Some((m, e)) => (m, e.parse::<i32>().unwrap_or(0)),
+        None => (body, 0),
+    };
+    let (whole, fraction) = mantissa.split_once('.').unwrap_or((mantissa, ""));
+    let mut digits: Vec<u8> = whole
+        .bytes()
+        .chain(fraction.bytes())
+        .map(|b| b - b'0')
+        .collect();
+    let mut scale = i32::try_from(whole.len()).unwrap_or(0) + exponent;
+    while digits.first() == Some(&0) && digits.len() > 1 {
+        digits.remove(0);
+        scale -= 1;
+    }
+    if digits.iter().all(|&d| d == 0) {
+        return (negative, Vec::new(), 0);
+    }
+    (negative, digits, scale)
+}
+
+/// `DoubleToNumber(value, precision)` read back through `NumberToDouble`: the magnitude of the
+/// value's first `precision` significant digits, zeros kept.
+fn reread(value: f64, precision: i32) -> f64 {
+    let (_, mut digits, scale) = general_digits(value, precision);
+    digits.resize(usize::try_from(precision).unwrap_or(0).max(digits.len()), 0);
+    number_to_double_digits(&digits, i64::from(scale))
+}
+
+/// `double.ToString("R")` as .NET Framework (and mono, the oracle) writes it, which is what
+/// `XmlConvert.ToString(double)` and so `XmlSerializer` write: 15 digits when `NumberToDouble` of
+/// those 15 digits gives the value back, else 17 - and that test is not "does the text parse back",
+/// because the digits it reads keep their trailing zeros (see `number_to_double`), so
+/// `-27.4692539`, whose 15 digits end `…539000000`, comes out `-27.469253899999998`.
+/// `// C#: clr/src/classlibnative/bcltype/number.cpp FormatDouble, case 'R'`
 #[must_use]
 pub fn double_roundtrip(value: f64) -> String {
-    let short = general(value, 15);
-    if short.parse::<f64>().ok() == Some(value) {
-        short
+    if !value.is_finite() || value == 0.0 {
+        return general(value, 15);
+    }
+    if reread(value, 15) == value.abs() {
+        general(value, 15)
     } else {
         general(value, 17)
     }
 }
 
-/// `float.ToString("R")`, which is what `XmlConvert.ToString(float)` writes: 7 digits when they
-/// read back as the same float, else 9.
+/// `float.ToString("R")`: 7 digits when `NumberToDouble` of those 7, narrowed, is the value, else 9.
+/// `// C#: clr/src/classlibnative/bcltype/number.cpp FormatSingle, case 'R'`
 #[must_use]
 pub fn single_roundtrip(value: f32) -> String {
-    let short = general(f64::from(value), 7);
-    if short.parse::<f32>().ok() == Some(value) {
-        short
+    let wide = f64::from(value);
+    if !value.is_finite() || value == 0.0 {
+        return general(wide, 7);
+    }
+    #[allow(clippy::cast_possible_truncation)]
+    let back = reread(wide, 7) as f32;
+    if back == value.abs() {
+        general(wide, 7)
     } else {
-        general(f64::from(value), 9)
+        general(wide, 9)
     }
 }
 
@@ -502,16 +549,28 @@ fn mul64_lossy(a: u64, b: u64, exponent: &mut i32) -> u64 {
 /// reads a unit in the last place away from the nearest double. Mission Planner parses every number
 /// of a log's text this way, and a `.mat` stores what it gets.
 fn number_to_double(digits: &str, scale: i64) -> f64 {
-    // `NUMBER` holds 50 digits; the trailing zeros of those are dropped (`digEnd`).
-    let stored: Vec<u8> = digits.trim_start_matches('0').bytes().take(50).collect();
-    let significant = stored
+    // `ParseNumber`'s `NUMBER` holds 50 digits and drops the trailing zeros of those (`digEnd`).
+    let stored: Vec<u8> = digits
+        .trim_start_matches('0')
+        .bytes()
+        .take(50)
+        .map(|b| b - b'0')
+        .collect();
+    let significant = stored.iter().rposition(|&d| d != 0).map_or(0, |at| at + 1);
+    number_to_double_digits(stored.get(..significant).unwrap_or_default(), scale)
+}
+
+/// `NumberToDouble` over a `NUMBER` whose digits are given as-is - **trailing zeros included**,
+/// which is how `DoubleToNumber` fills one for "R"'s round-trip test. The zeros change how many
+/// digits go into the 64-bit mantissa and which power of ten it is scaled by, and so, for about
+/// one number in a thousand, the rounding: `-27.4692539`'s 15 digits `274692539000000` read back a
+/// unit in the last place away, so "R" writes it with 17.
+/// `// C#: clr/src/classlibnative/bcltype/number.cpp NumberToDouble`
+fn number_to_double_digits(digits: &[u8], scale: i64) -> f64 {
+    let digits: Vec<u64> = digits
         .iter()
-        .rposition(|&b| b != b'0')
-        .map_or(0, |at| at + 1);
-    let digits: Vec<u64> = stored
-        .iter()
-        .take(significant)
-        .map(|&b| u64::from(b - b'0'))
+        .skip_while(|&&d| d == 0)
+        .map(|&d| u64::from(d))
         .collect();
     let total = digits.len();
     if total == 0 {
@@ -704,6 +763,25 @@ pub fn culture_compare(a: &str, b: &str) -> std::cmp::Ordering {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn round_trip_keeps_the_trailing_zeros_it_reads() {
+        // What mono printed for ToString("R") (and XmlConvert.ToString) of double.Parse(text).
+        for (text, r) in [
+            ("-27.4692539", "-27.469253899999998"),
+            ("-27.4698", "-27.4698"),
+            ("153.0251011", "153.0251011"),
+            ("65.18", "65.18"),
+            ("25.1", "25.1"),
+            ("-13.1813034", "-13.181303399999999"),
+            ("41.3394838", "41.339483799999996"),
+        ] {
+            let v = parse_double(text).unwrap();
+            assert_eq!(double_roundtrip(v), r, "{text}");
+        }
+        assert_eq!(double_roundtrip(0.0), "0");
+        assert_eq!(single_roundtrip(0.073_479_59), "0.07347959");
+    }
 
     /// Every value here was printed by mono 6.12 (`((IConvertible)f).ToString(Invariant)`), which
     /// formats as .NET Framework does.
