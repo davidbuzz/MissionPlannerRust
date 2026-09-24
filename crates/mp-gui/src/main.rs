@@ -13,6 +13,9 @@ mod coverage;
 mod facts;
 mod fly;
 mod gauge;
+// ---- Geo Reference ----
+mod georef_ui;
+// ---- end Geo Reference ----
 mod hud;
 mod joystick;
 mod logbrowse;
@@ -358,6 +361,10 @@ struct MissionPlanner {
     ateryx: config::ateryx::Ateryx,
     ateryx_focus: gpui::FocusHandle,
     // ---- end Firmware Legacy / Ateryx ----
+    // ---- Geo Reference ----
+    /// The Geo Reference Images form (`GeoRef/georefimage.cs`) the DataFlash Logs page opens.
+    georef: georef_ui::GeorefUi,
+    // ---- end Geo Reference ----
 }
 
 impl MissionPlanner {
@@ -597,6 +604,9 @@ impl MissionPlanner {
             ateryx: config::ateryx::Ateryx::default(),
             ateryx_focus: cx.focus_handle(),
             // ---- end Firmware Legacy / Ateryx ----
+            // ---- Geo Reference ----
+            georef: georef_ui::GeorefUi::new(cx),
+            // ---- end Geo Reference ----
         };
         // Opening on the planning screen activates it, as switching to it does.
         if this.screen == Screen::Plan {
@@ -1861,6 +1871,11 @@ impl Render for MissionPlanner {
         self.firmware_legacy_tick(window, cx);
         self.ateryx_tick(&view, window);
         // ---- end Firmware Legacy / Ateryx ----
+        // ---- Geo Reference ----
+        // The Geo Reference Images form: a run's lines and its end, the map's fit, and its
+        // dialog's hold on the keyboard.
+        self.georef.tick(window, cx);
+        // ---- end Geo Reference ----
         let banner = self.telemetry.firmware_banner().map(str::to_owned);
         let mav_type = view.state.as_ref().map_or(0, |state| state.vehicle_type);
         self.metadata.advance(banner.as_deref(), mav_type);
@@ -2185,6 +2200,9 @@ impl Render for MissionPlanner {
                     .any(|row| row.class == config::ateryx::CLASS),
             );
             // ---- end Firmware Legacy / Ateryx ----
+            // ---- Geo Reference ----
+            georef_ui::record_facts(&self.georef);
+            // ---- end Geo Reference ----
             facts::publish();
             // The harness's work, which a normal run does not do, is not the frame's.
             storm::exclude(harness.elapsed());
@@ -2399,6 +2417,10 @@ impl Render for MissionPlanner {
                 .children(quick::chooser(&self.fly_data.quick, window, cx))
                 // The HUD's menu and its User Items form, and Auto Analysis's report.
                 .children(fly::overlays(&self.fly_data, window, cx))
+                // ---- Geo Reference ----
+                // `new Georefimage().Show()`: its form over the screen, which stays usable.
+                .children(georef_ui::window(self, window, cx))
+                // ---- end Geo Reference ----
                 .into_any_element(),
             // The Survey (Grid) dialog is modal: while it shows it is the screen.
             Screen::Plan if self.survey.is_open() => div()

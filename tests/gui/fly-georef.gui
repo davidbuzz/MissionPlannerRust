@@ -1,0 +1,162 @@
+# Geo Reference Images: the DataFlash Logs page's button opens GeoRef/georefimage.cs's form over
+# the flight screen, every control at its georefimage.resx place, with the Designer's defaults -
+# CAM Message checked, the time offset panel disabled, GeoTag Images dimmed. Browse Log's dialog is
+# a box that starts in the log directory, as the page's conversions' do; the log named there fills
+# the log box, and the photo box with its folder, where the setup lines put camera.bin - the SITL
+# flight with 25 CAM messages - and its 25 photos. Estimate Offset, in the time offset panel its
+# radio button enables, prints the C#'s estimate; Pre-process in CAM mode matches 24 photos and
+# writes the eight report files at the sizes Mission Planner's own writes them
+# (testdata/georef/golden/cam-amsl: the terrain is the S28E153 tile the oracle's footprints were
+# projected onto, in the scratch data directory's srtm folder); the map draws the route and the
+# markers; GeoTag Images writes the 24 tagged copies. Then the boxes the C# wires to forget the
+# positions forget them: Use GPS2 the positions, a keystroke in the log box the pictures too, and
+# GeoTag Images is dimmed again.
+# `GeoRef/georefimage.cs:26-391, GeoRef/georefimage.resx, GCSViews/FlightData.cs:5933-5936,
+# testdata/georef/golden/`
+#
+# The lines and every byte of the files are held to mp-georef's goldens by
+# georef_ui::tests::the_text_box_holds_the_recorded_flights_golden_lines.
+#
+# Needs no link: tools/gui-test.sh tests/gui/fly-georef.gui
+
+env MP_LOG_DIR $WORK/logs
+env XDG_DATA_HOME $WORK
+setup mkdir -p $WORK/logs && cp testdata/georef/camera.bin testdata/georef/photos/*.jpg $WORK/logs/
+setup mkdir -p "$WORK/Mission Planner/srtm" && python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' testdata/srtm/S28E153.hgt.zip "$WORK/Mission Planner/srtm"
+
+screen fly
+window 1600x1200
+settle 2
+
+# DataFlash Logs is the last header: bring it to the front of the row, then show its page.
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+expect fly.tabs.first 13
+click fly-tab-logbrowse
+expect fly.tab tablogbrowse
+expect fly.georef closed
+
+# The button opens the form, as the Designer and the constructor leave it.
+click fly-georefimage
+expect fly.georef open
+expect fly.georef.RDIO_CAMMsgSynchro True
+expect fly.georef.RDIO_TimeOffset False
+expect fly.georef.RDIO_trigmsg False
+expect fly.georef.mode CAM_MSG
+expect fly.georef.CHECK_AMSLAlt_Use True
+expect fly.georef.useAMSLAlt True
+expect fly.georef.chk_usegps2 False
+expect fly.georef.PANEL_TIME_OFFSET.enabled False
+expect fly.georef.PANEL_SHUTTER_LAG.enabled True
+expect fly.georef.txt_basealt.enabled False
+expect fly.georef.BUT_Geotagimages.enabled False
+expect fly.georef.BUT_networklinkgeoref.enabled False
+expect fly.georef.num_camerarotation 90
+expect fly.georef.num_hfov 200
+expect fly.georef.num_vfov 130
+expect fly.georef.num_minshutter 0.50
+expect fly.georef.num_dropfromstart 0
+expect fly.georef.num_dropend 0
+expect fly.georef.TXT_offsetseconds 0
+expect fly.georef.TXT_shutterLag 0
+expect fly.georef.minshutter 0.5
+expect fly.georef.running none
+expect fly.georef.last none
+
+# Browse Log: the box starts in the log directory, the log's name typed after it.
+click georef-BUT_browselog
+expect fly.georef.prompt Browse Log
+expect fly.georef.prompt.text ~ /logs/
+type camera.bin
+settle 1
+expect fly.georef.prompt.text ~ /logs/camera.bin
+click georef-prompt-ok
+expect fly.georef.prompt none
+expect fly.georef.TXT_logfile ~ /logs/camera.bin
+expect fly.georef.TXT_jpgdir ~ /logs
+
+# Estimate Offset: in the time offset panel, which its radio button enables.
+click georef-RDIO_TimeOffset
+expect fly.georef.RDIO_TimeOffset True
+expect fly.georef.RDIO_CAMMsgSynchro False
+expect fly.georef.mode TIME_OFFSET
+expect fly.georef.PANEL_TIME_OFFSET.enabled True
+expect fly.georef.PANEL_SHUTTER_LAG.enabled False
+click georef-BUT_estoffset
+settle 5
+expect fly.georef.running none
+expect fly.georef.last estimate
+expect fly.georef.offset 36066.103109375
+expect fly.georef.TXT_outputlog ~ 1 Picture IMG_0001 with DateTime: 2026:09:24 11:30:08
+expect fly.georef.TXT_outputlog ~ 25 Est: 36071.8
+expect fly.georef.TXT_outputlog ~ Offset around :
+expect fly.georef.TXT_outputlog ~ 36066.103109375
+expect fly.georef.lines 23
+expect fly.georef.positions 617
+
+# Pre-process in CAM mode: the box emptied, 24 of the 25 photos matched to CAM messages, the
+# report files written beside them, the map drawn, GeoTag Images enabled.
+click georef-RDIO_CAMMsgSynchro
+expect fly.georef.mode CAM_MSG
+click georef-BUT_doit
+settle 8
+expect fly.georef.running none
+expect fly.georef.last process
+expect fly.georef.TXT_outputlog ~ Using AMSL Altitude True
+expect fly.georef.TXT_outputlog ~ Filtered - 24 - CAM Messages found
+expect fly.georef.TXT_outputlog ~ CAM Msgs and Files discrepancy. Check it! files: 25 vs CAM msg: 24
+expect fly.georef.TXT_outputlog ~ Photo IMG_0024 processed from CAM Msg with 0 ms shutter lag. AMSL Alt 0.076 ms away offset: 36000.6
+expect fly.georef.TXT_outputlog ~ Start Processing
+expect fly.georef.lines 38
+expect fly.georef.files loglocation.csv:0,location.csv:1718,location.kml:45204,location.txt:1824,location.geo:1321,location.tel:1606,location.jxl:35591,location.gpx:3679
+expect fly.georef.kml 45204
+expect fly.georef.pictures 24
+expect fly.georef.cams 24
+expect fly.georef.positions 617
+expect fly.georef.BUT_doit.enabled True
+expect fly.georef.BUT_Geotagimages.enabled True
+expect fly.georef.map.route 617
+expect fly.georef.map.cams 24
+expect fly.georef.map.photos 24
+
+# GeoTag Images: a tagged copy of each matched photo in the folder's geotagged folder.
+click georef-BUT_Geotagimages
+settle 6
+expect fly.georef.running none
+expect fly.georef.last geotag
+expect fly.georef.geotagged 24
+expect fly.georef.TXT_outputlog ~ /logs/IMG_0024.jpg
+expect fly.georef.TXT_outputlog ~ GeoTagging FINISHED
+expect fly.georef.lines 64
+expect fly.georef.prompt none
+
+# Use GPS2 forgets the positions and keeps the pictures ...
+click georef-chk_usegps2
+expect fly.georef.chk_usegps2 True
+expect fly.georef.positions 0
+expect fly.georef.pictures 24
+click georef-chk_usegps2
+expect fly.georef.chk_usegps2 False
+
+# ... and a keystroke in the log box forgets the pictures too, and dims GeoTag Images.
+click georef-TXT_logfile
+expect fly.georef.editing TXT_logfile
+key BackSpace
+expect fly.georef.TXT_logfile ~ /logs/camera.bi
+expect fly.georef.pictures 0
+expect fly.georef.BUT_Geotagimages.enabled False
+
+# The close box.
+click georef-close
+expect fly.georef closed

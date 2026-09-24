@@ -3304,11 +3304,9 @@ impl Page {
             }
             // `// C#: GCSViews/FlightData.Designer.cs:2208`
             Self::TLogs => "Tlog > Kml or Graph is mpr kml, on the command line.",
-            // `// C#: GCSViews/FlightData.Designer.cs:2383, GCSViews/FlightData.cs:5933-5936`
-            Self::LogBrowse => {
-                "Geo Reference Images, the Georefimage window, is not ported. A log is named \
-                 by typing it, from the log directory."
-            }
+            // The conversions' and Geo Reference Images' file dialogs are boxes.
+            // `// C#: GCSViews/FlightData.cs:1084-1089, 1137-1151, 1313-1317; GeoRef/georefimage.cs:87-138`
+            Self::LogBrowse => "A log is named by typing it, from the log directory.",
         })
     }
 }
@@ -5174,7 +5172,7 @@ fn track_bar(playback: &Playback, cx: &mut Context<MissionPlanner>) -> AnyElemen
 /// `LayoutSettings` place each button. Download DataFlash Log Via Mavlink opens the Log
 /// Downloader and Review a Log the log browser; the four conversions ask for a log and convert it
 /// on a thread of their own, the page's conversion buttons waiting until it is done as the C#'s
-/// window waits; Geo Reference Images is drawn dimmed, its window not ported.
+/// window waits; Geo Reference Images opens its form (`crate::georef_ui`).
 /// `// C#: GCSViews/FlightData.Designer.cs:2379-2389, GCSViews/FlightData.resx (tableLayoutPanel2.LayoutSettings)`
 pub fn dataflash_page(data: &FlightData, cx: &mut Context<MissionPlanner>) -> AnyElement {
     let idle = data.conversions.running().is_none();
@@ -5230,7 +5228,7 @@ pub fn dataflash_page(data: &FlightData, cx: &mut Context<MissionPlanner>) -> An
             ),
         ));
     }
-    // `new Georefimage().Show()`: a window of its own, not ported.
+    // `new Georefimage().Show()`: the Geo Reference Images form, over the screen.
     // `// C#: GCSViews/FlightData.cs:5933-5936`
     grid = grid.child(cell(
         0,
@@ -5239,8 +5237,11 @@ pub fn dataflash_page(data: &FlightData, cx: &mut Context<MissionPlanner>) -> An
             "fly-georefimage",
             "Geo Reference Images",
             theme::ACCENT,
-            false,
-            |_event: &(), _window, _cx| {},
+            true,
+            cx.listener(|this, _event: &(), _window, cx| {
+                crate::georef_ui::open(this);
+                cx.notify();
+            }),
         ),
     ));
     let mut page = div().flex().flex_col().gap_1().child(grid);

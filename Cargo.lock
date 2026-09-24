@@ -3389,6 +3389,7 @@ dependencies = [
  "mp-chart",
  "mp-firmware",
  "mp-ftp",
+ "mp-georef",
  "mp-input",
  "mp-kml",
  "mp-link",

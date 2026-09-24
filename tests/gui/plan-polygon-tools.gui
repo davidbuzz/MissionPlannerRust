@@ -96,7 +96,9 @@ click map@0.30x0.70:right
 click menu-polygon
 click menu-offsetPolygon2
 key ctrl+u
-type -100000
+# The minus as a key: `xdotool type -100000` would read the text as an option.
+key minus
+type 100000
 key Return
 expect survey.points 4
 

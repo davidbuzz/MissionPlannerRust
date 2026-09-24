@@ -4,7 +4,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 
 | total | done | elsewhere | missing | plumbing | dropped |
 |---:|---:|---:|---:|---:|---:|
-| 136 | 94 | 1 | 21 | 18 | 2 |
+| 136 | 95 | 1 | 20 | 18 | 2 |
 
 | control | event | handler | text | ours |
 |---|---|---|---|---|
@@ -20,7 +20,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `BUT_DFMavlink` | Click | `BUT_DFMavlink_Click` | Download DataFlash Log Via Mavlink | done: `fly-dfmavlink` |
 | `but_disablejoystick` | Click | `but_disablejoystick_Click` | Disable Joystick | done: `joystick-enable` |
 | `BUT_edit_selected` | Click | `BUT_edit_selected_Click` | Edit Selected Script | **missing** - later: scripts - `mp-script` has no interpreter yet |
-| `BUT_georefimage` | Click | `BUT_georefimage_Click` | Geo Reference Images | **missing** - later: the Georefimage window; drawn dimmed on the DataFlash Logs page |
+| `BUT_georefimage` | Click | `BUT_georefimage_Click` | Geo Reference Images | done: `fly-georefimage` |
 | `BUT_GimbalVideo` | Click | `gimbalVideoPopOutToolStripMenuItem_Click` | Video Control | **missing** - later: video (GStreamer, HereLink, MJPEG, the camera, AVI) |
 | `BUT_Homealt` | Click | `BUT_Homealt_Click` | Set Home Alt | done: `fly-homealt` |
 | `BUT_joystick` | Click | `BUT_joystick_Click` | Joystick | done: `joystick-refresh` |

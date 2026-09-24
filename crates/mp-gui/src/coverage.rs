@@ -158,7 +158,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUT_georefimage_Click",
         "Geo Reference Images",
-        Missing,
+        Done("fly-georefimage"),
     ),
     row(
         "BUT_GimbalVideo",
@@ -1001,11 +1001,6 @@ pub const WHY_MISSING: &[(&str, &str, &str)] = &[
     ("BUT_run_script", "Click", SCRIPTS),
     ("BUT_select_script", "Click", SCRIPTS),
     (
-        "BUT_georefimage",
-        "Click",
-        "later: the Georefimage window; drawn dimmed on the DataFlash Logs page",
-    ),
-    (
         "BUT_RAWSensor",
         "Click",
         "later: RAW_Sensor is a window of its own; drawn dimmed in the Actions grid",
@@ -1267,7 +1262,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (94, 1, 21, 18, 2)
+            (95, 1, 20, 18, 2)
         );
     }
 }
