@@ -1279,6 +1279,7 @@ impl MissionPlanner {
                 .child(crate::config::battery_monitor::page(
                     &self.battery_monitor,
                     &self.battery_focus,
+                    window,
                     cx,
                 ))
                 .into_any_element(),

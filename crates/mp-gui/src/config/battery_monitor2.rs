@@ -22,14 +22,17 @@
 //!
 //! "MP Alert on Low Battery" reads and writes `Settings.Instance`'s `speechbatteryenabled`,
 //! `speechenable` and the three the questions fill - the Planner page's keys, saved with them -
-//! and asks the three `InputBox` questions when it is ticked (`:168-204`).
+//! and asks the three `InputBox` questions when it is ticked (`:168-204`). Each OK also keeps the
+//! answer as `InputBox` does, under `InputBox<caption><question>` (`InputBox.cs:73-84, 178-184`).
+//!
+//! What a write's failure says - the `catch`es' "Set ... Failed" after a `setParam` timed out, a
+//! combo's "Set ... Failed!" - goes on the status line, the owner's ruling of 2026-09-25; the
+//! boxes for what was typed - "Invalid number entered", a capacity that does not parse, the
+//! feature not enabled - keep their boxes.
 //!
 //! The layout is `ConfigBatteryMonitoring2.resx`'s, every control at its `Location` in a 521 x 322
-//! page.
-//!
-//! What is not ported, and why: `pictureBox5`'s image (`Resources.BR_APMPWRDEAN_2`), a resource
-//! this application does not carry; and the `InputBox`es' remembered answers
-//! (`InputBox.cs:177-181`), which the Planner page does not carry either.
+//! page. `pictureBox5`'s image (`Resources.BR_APMPWRDEAN_2`) is a box with the resource's name in
+//! it: this repository carries none of Mission Planner's artwork.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -42,8 +45,8 @@ use mp_params::param_file::invariant_double;
 
 use super::battery_monitor::{calibrate, float_text, param_text, parse_float};
 use super::optional::{
-    FEATURE_NOT_ENABLED, Focus, INVALID_NUMBER, InputBox, Job, Set, SetQueue, error, group, has,
-    input_box, label, message_box, picture, text_box, value_of,
+    FEATURE_NOT_ENABLED, Focus, INVALID_NUMBER, InputBox, Job, Set, SetQueue, error,
+    failure_status, group, has, input_box, label, message_box, picture, text_box, value_of,
 };
 use crate::MissionPlanner;
 use crate::config::failsafe::{CheckState, Lookup, options};
@@ -209,6 +212,8 @@ pub struct BatteryMonitor2 {
     timer: Option<Instant>,
     ticks: u32,
     messages: VecDeque<Message>,
+    /// The last link failure's words, for the status line.
+    status: Option<String>,
     queue: SetQueue,
 }
 
@@ -239,6 +244,7 @@ impl Default for BatteryMonitor2 {
             timer: None,
             ticks: 0,
             messages: VecDeque::new(),
+            status: None,
             queue: SetQueue::default(),
         }
     }
@@ -326,6 +332,11 @@ impl BatteryMonitor2 {
         self.messages.pop_front();
     }
 
+    /// The last link failure's words, taken for the status line.
+    pub fn take_status(&mut self) -> Option<String> {
+        self.status.take()
+    }
+
     /// The question being asked.
     #[must_use]
     pub fn prompt(&self) -> Option<&InputBox> {
@@ -344,10 +355,12 @@ impl BatteryMonitor2 {
     ) {
         if self.made_for != Some(key) {
             let messages = std::mem::take(&mut self.messages);
+            let status = self.status.take();
             let queue = std::mem::take(&mut self.queue);
             *self = Self {
                 made_for: Some(key),
                 messages,
+                status,
                 queue,
                 ..Self::default()
             };
@@ -656,11 +669,14 @@ impl BatteryMonitor2 {
         Some((stage, InputBox::new(title, question, value)))
     }
 
-    /// OK on a question: the answer kept and the next asked.
+    /// OK on a question: `InputBox` keeping the answer in its list, the page keeping it in its
+    /// setting, and the next asked.
+    /// `// C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring2.cs:183-202; ExtLibs/Controls/InputBox.cs:178-184`
     pub fn answer(&mut self, settings: &mut Persisted) {
         let Some((stage, input)) = self.prompt.take() else {
             return;
         };
+        input.remember(settings);
         if let Some((_, _, key, _)) = SPEECH_PROMPTS.get(stage) {
             settings.set(key, input.field.value());
         }
@@ -718,7 +734,16 @@ impl BatteryMonitor2 {
             self.timer_tick(view);
             self.timer = Some(now);
         }
-        self.queue.advance(telemetry, &mut self.messages);
+        // A `catch`'s "Set ... Failed" after a timeout and a combo's "Set ... Failed!" go on the
+        // status line (the owner's ruling of 2026-09-25); a handler's own box ahead of its
+        // calls - what was typed refused - stays a box.
+        // C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring2.cs:85-88, 115-118, 129-132, 143-146, 248-251
+        let mut failures = Vec::new();
+        self.queue
+            .advance_split(telemetry, &mut self.messages, &mut failures);
+        if let Some(status) = failure_status(&failures) {
+            self.status = Some(status);
+        }
     }
 }
 
@@ -836,6 +861,9 @@ pub fn page(
         .relative()
         .w(px(521.0))
         .h(px(322.0))
+        // `Resources.BR_APMPWRDEAN_2`, drawn as its name: no artwork is carried (a deliberate
+        // divergence).
+        // C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring2.Designer.cs:84-91
         .child(picture("BR_APMPWRDEAN_2", (3.0, 41.0, 97.0, 75.0)))
         .child(label(106.0, 45.0, "Monitor", enabled))
         .child(label(106.0, 71.0, "Volt Pin", enabled))
@@ -944,6 +972,13 @@ pub fn overlay(
         ));
     }
     let input = battery.prompt()?;
+    // The `InputBox` form opens modal with its answer box focused, the one control that takes
+    // the focus; so here, whatever the click that asked it left focused.
+    // C#: ExtLibs/Controls/InputBox.cs:142-172
+    if !focus.prompt.is_focused(window) {
+        let handle = focus.prompt.clone();
+        cx.defer_in(window, move |_, window, cx| handle.focus(window, cx));
+    }
     Some(input_box(
         "battery2-prompt",
         input,
@@ -1193,6 +1228,48 @@ mod tests {
         assert_eq!(run(jobs, &link), [error("Set BATT2_CAPACITY Failed")]);
     }
 
+    /// The owner's ruling, through the page's own loop: a write's failure is the status line's,
+    /// what was typed refused is still a box.
+    #[test]
+    fn a_failed_write_is_a_status_line_and_a_refusal_a_box() {
+        let telemetry = Telemetry::idle();
+        let view = configured();
+        let mut page = BatteryMonitor2::default();
+        let now = Instant::now();
+        page.activate(&view, key(), true, bundled, &Persisted::at(None));
+        // With no vehicle the combo's `setParam` is false: "Set BATT2_MONITOR Failed!".
+        let jobs = page.choose(Which::Monitor, 3);
+        page.push(jobs);
+        page.tick(&telemetry, &view, true, false, now);
+        assert!(page.message().is_none());
+        assert_eq!(
+            page.take_status().as_deref(),
+            Some("Set BATT2_MONITOR Failed!")
+        );
+        // A capacity that does not parse: the `catch`'s box, for what was typed.
+        page.type_into(Field::Capacity, "lots");
+        let jobs = page.validated(Field::Capacity, &view.parameters);
+        page.push(jobs);
+        page.tick(&telemetry, &view, true, false, now);
+        assert_eq!(page.message(), Some(&error("Set BATT2_CAPACITY Failed")));
+        assert!(page.take_status().is_none());
+        // A timeout in the `catch`: sorted out for the status line.
+        page.dismiss_message();
+        let jobs = page.enter(Field::Divider, &view.parameters);
+        let link = Answering::new(&[(DIVIDER, Progress::Finished(RequestOutcome::TimedOut))]);
+        let mut queue = SetQueue::<usize>::default();
+        queue.push(jobs);
+        let (mut boxes, mut failures) = (VecDeque::new(), Vec::new());
+        while queue.pending() > 0 {
+            queue.advance_split(&link, &mut boxes, &mut failures);
+        }
+        assert!(boxes.is_empty());
+        assert_eq!(
+            failure_status(&failures).as_deref(),
+            Some("Set BATT2_VOLT_MULT Failed")
+        );
+    }
+
     #[test]
     fn choosing_a_monitor_writes_it() {
         let view = view_with(&[("BATT2_MONITOR", 0.0)]);
@@ -1227,6 +1304,11 @@ mod tests {
         assert_eq!(
             settings.get("speechbattery"),
             Some("WARNING, Battery at {batv} Volt, {batp} percent")
+        );
+        // `InputBox` keeps the answer too, URL-encoded under its caption and question.
+        assert_eq!(
+            settings.get("InputBoxNotificationWhatdoyouwantittosay"),
+            Some("WARNING%2C+Battery+at+%7Bbatv%7D+Volt%2C+%7Bbatp%7D+percent")
         );
         assert_eq!(
             page.prompt().map(|input| input.prompt),

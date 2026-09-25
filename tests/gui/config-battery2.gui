@@ -91,6 +91,42 @@ expect config.battery2.message ~ Invalid number entered
 click battery2-message-ok
 expect config.battery2.writes.pending 0
 
+# MP Alert on Low Battery: ticked, it asks three questions, each in an InputBox that takes the
+# keyboard; each OK keeps the answer in its setting and, as InputBox does, in a URL-encoded list
+# under the caption and question (ConfigBatteryMonitoring2.cs:168-204; InputBox.cs:73-84, 178-184).
+# The script's config.xml starts with none of them.
+expect config.InputBoxNotificationWhatdoyouwantittosay none
+click battery2-speech
+settle 1
+expect config.battery2.speech true
+expect config.speechbatteryenabled True
+expect config.speechenable True
+expect config.battery2.prompt What do you want it to say?
+key ctrl+u
+type LOW {batv}
+key Return
+expect config.speechbattery LOW {batv}
+expect config.InputBoxNotificationWhatdoyouwantittosay LOW+%7Bbatv%7D
+expect config.battery2.prompt What Voltage do you want to warn at?
+key ctrl+u
+type 10.8
+key Return
+expect config.speechbatteryvolt 10.8
+expect config.InputBoxBatteryLevelWhatVoltagedoyouwanttowarnat 10.8
+expect config.battery2.prompt What percentage do you want to warn at?
+key ctrl+u
+type 25
+key Return
+expect config.battery2.prompt none
+expect config.speechbatterypercent 25
+expect config.InputBoxBatteryLevelWhatpercentagedoyouwanttowarnat 25
+# Unticked: the setting False, and no question.
+click battery2-speech
+settle 1
+expect config.battery2.speech false
+expect config.speechbatteryenabled False
+expect config.battery2.prompt none
+
 # Deactivate sets _startup: the box left as the page goes writes nothing.
 click setup-page-ConfigOptional
 settle 1

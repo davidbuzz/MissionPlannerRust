@@ -101,6 +101,41 @@ expect params.value.BATT_CAPACITY 3300
 expect params.value.BATT_VOLT_MULT 10.1
 expect config.battery.message none
 
+# The Sensor box is a DropDown combo: its text takes typing, which clears its selection and runs
+# nothing - only SelectedIndexChanged is wired (ConfigBatteryMonitoring.Designer.cs:72-87). Clicking
+# into it leaves the divider box, whose unchanged 10.1 is written back as before.
+click battery-sensor
+key BackSpace
+type Z
+settle 2
+expect config.battery.sensor.text 0: OtheZ
+expect config.battery.sensor none
+expect config.battery.list none
+expect config.battery.writes.pending 0
+expect config.battery.message none
+# Its arrow drops the list; choosing "0: Other" is a change again, so its text comes back and the
+# handler writes the divider and amps-per-volt the boxes hold - what the vehicle already has.
+click battery-sensor-button
+expect config.battery.list battery-sensor
+click battery-sensor-0
+settle 3
+expect config.battery.list none
+expect config.battery.sensor 0
+expect config.battery.sensor.text 0: Other
+expect config.battery.writes.pending 0
+expect config.battery.message none
+expect params.value.BATT_VOLT_MULT 10.1
+expect params.value.BATT_AMP_PERVLT 17
+# The HW Ver box takes typing the same way, and writes nothing for it.
+click battery-hw
+key BackSpace
+settle 1
+expect config.battery.hwversion.text 2: APM2.5+/ZealotF427 - 3DR Power Modul
+expect config.battery.hwversion none
+expect config.battery.writes.pending 0
+expect params.value.BATT_VOLT_PIN 13
+expect params.value.BATT_CURR_PIN 12
+
 # The Low Battery alert. The script's config.xml has none of its keys: unticked, and the start-up
 # save the only one.
 expect config.battery.speech false
@@ -127,6 +162,11 @@ key Return
 expect config.battery.prompt none
 expect config.speechbatteryvolt 10.8
 expect config.speechbatterypercent 25
+# InputBox keeps each answer too, URL-encoded under its caption and question (InputBox.cs:73-84,
+# 178-184).
+expect config.InputBoxNotificationWhatdoyouwantittosay LOW+%7Bbatv%7D
+expect config.InputBoxBatteryLevelWhatVoltagedoyouwanttowarnat 10.8
+expect config.InputBoxBatteryLevelWhatpercentagedoyouwanttowarnat 25
 # In the dictionary, not yet in the file: the page saves nothing.
 expect config.saves 1
 
@@ -146,6 +186,9 @@ expect config.speechenable True
 expect config.speechbattery LOW {batv}
 expect config.speechbatteryvolt 10.8
 expect config.speechbatterypercent 25
+expect config.InputBoxNotificationWhatdoyouwantittosay LOW+%7Bbatv%7D
+expect config.InputBoxBatteryLevelWhatVoltagedoyouwanttowarnat 10.8
+expect config.InputBoxBatteryLevelWhatpercentagedoyouwanttowarnat 25
 click param-download
 settle 15
 expect params.held > 1000

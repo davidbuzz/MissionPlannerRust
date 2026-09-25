@@ -2584,6 +2584,10 @@ impl Render for MissionPlanner {
             self.screen == Screen::Setup,
             &self.persisted,
         );
+        // Its write failures on the status line, not in a box: the owner's ruling of 2026-09-25.
+        if let Some(status) = self.battery_monitor.take_status() {
+            self.file_status = Some(status);
+        }
         // Install Firmware's catalogue arriving, and the page closing when the screen changes.
         self.install_firmware.tick(self.screen == Screen::Setup);
         // Bootloader Update's second Yes: `doCommand(MAV_CMD.FLASH_BOOTLOADER, 0, 0, 0, 0,

@@ -22,10 +22,12 @@
 //!
 //! The handler's calls are made one after another against the vehicle's table as each earlier
 //! one leaves it - the output the C#'s `ensureDisabled` clears is gone from the table before the
-//! next call reads it - and a call that times out ends the handler with the C#'s box, "Failed to
-//! set Param", which `Activate` follows by disabling the page. The controls each axis binds are
-//! bound as the handler runs, from the table its calls will leave; the C# binds them after the
-//! calls return, and so binds none after one that times out.
+//! next call reads it - and a call that times out ends the handler with the C#'s "Failed to set
+//! Param", which `Activate` follows by disabling the page. That text, and a control's own "Set
+//! ... Failed", are link failures and go on the status line rather than in a box - the owner's
+//! ruling of 2026-09-25; the out-of-range question keeps its box. The controls each axis binds
+//! are bound as the handler runs, from the table its calls will leave; the C# binds them after
+//! the calls return, and so binds none after one that times out.
 //!
 //! The channel names are `Enum.GetNames` of the C#'s enums - by value, and among equal values in
 //! the order they are declared, as .NET Framework's native sort leaves them - with the `RC` names
@@ -33,24 +35,26 @@
 //! branches build the same lists. `CAM_TRIGG_TYPE`'s name is `Enum.GetName`'s binary search over
 //! those values, which finds Relay for 1 and Transistor for 4.
 //!
-//! The layout is `ConfigMount.resx`'s, every control at its `Location` in a 674 x 620 page.
+//! The layout is `ConfigMount.resx`'s, every control at its `Location` in a 674 x 620 page. The
+//! four pictures (`Resources.cameraGimalPitch1`, `Roll1`, `Yaw` and `Shutter`) are boxes with the
+//! resource's name in them: this repository carries none of Mission Planner's artwork.
 //!
-//! What is not ported, and why: the four pictures (`Resources.cameraGimalPitch1`, `Roll1`,
-//! `Yaw` and `Shutter`), resources this application does not carry; and the Wiki link's colour
-//! fade, `Transitions` animation, which is decoration.
+//! The Wiki link starts `CornflowerBlue` and fades, over 300 ms linearly, to `CornflowerBlue`
+//! when the mouse comes onto it and to `WhiteSmoke` when it leaves - `Transitions` interpolating
+//! each channel from wherever the last fade had got to (`ConfigMount.cs:32-33, 330-335`).
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
 use std::collections::VecDeque;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use gpui::{AnyElement, Context, KeyDownEvent, Window, div, prelude::*, px, rgb};
 
 use super::battery_monitor::param_text;
 use super::optional::{
-    Event, Focus, Job, Set, SetQueue, group, has, heading, label, message_box, picture, plain,
-    rule, timeout_text, value_of,
+    Event, Focus, Job, Set, SetQueue, failure_status, group, has, heading, label, message_box,
+    picture, plain, rule, timeout_text, value_of,
 };
 use crate::MissionPlanner;
 use crate::config::failsafe::{Lookup, options};
@@ -83,6 +87,58 @@ pub const TRIGGER_NOTE: &str = "Please set the Ch7 Option to Camera Trigger";
 /// `// C#: GCSViews/ConfigurationView/ConfigMount.resx label44.Text`
 pub const TYPE_NOTE: &str =
     "NOTE: the gimbal type takes effect on the next reboot of the fight controller";
+
+/// `Color.CornflowerBlue`: `LNK_wiki.LinkColor`, and what it fades to under the mouse.
+/// `// C#: GCSViews/ConfigurationView/ConfigMount.designer.cs:195; ConfigMount.cs:32`
+pub const CORNFLOWER_BLUE: [u8; 3] = [100, 149, 237];
+
+/// `Color.WhiteSmoke`, what it fades to when the mouse leaves.
+/// `// C#: GCSViews/ConfigurationView/ConfigMount.cs:33`
+pub const WHITE_SMOKE: [u8; 3] = [245, 245, 245];
+
+/// `new TransitionType_Linear(300)`.
+/// `// C#: GCSViews/ConfigurationView/ConfigMount.cs:332`
+const FADE_TIME: Duration = Duration::from_millis(300);
+
+/// `FadeLinkTo`: a `Transition` of `LinkColor` from what it was when the fade began.
+/// `// C#: GCSViews/ConfigurationView/ConfigMount.cs:330-335; ExtLibs/Transitions/Transition.cs:79-90`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Fade {
+    /// The colour when `run()` read it.
+    pub from: [u8; 3],
+    /// The colour it goes to.
+    pub to: [u8; 3],
+    /// When it began.
+    pub started: Instant,
+}
+
+impl Fade {
+    /// The colour `at`: `TransitionType_Linear` - the whole milliseconds gone over 300, at most
+    /// one - through `ManagedType_Color`, each channel `(int)(start + (end - start) * percent)`.
+    /// `// C#: ExtLibs/Transitions/TransitionType_Linear.cs:16-28; ManagedType_Color.cs:18-34;
+    /// Utility.cs:24-33`
+    #[must_use]
+    pub fn colour(&self, at: Instant) -> [u8; 3] {
+        // `(int)m_Stopwatch.ElapsedMilliseconds / m_dTransitionTime`.
+        let elapsed = at.saturating_duration_since(self.started).as_millis();
+        #[allow(clippy::cast_precision_loss)] // whole milliseconds, far below 2^52
+        let percent = (elapsed as f64 / FADE_TIME.as_millis() as f64).min(1.0);
+        let mut colour = self.from;
+        for (channel, (start, end)) in colour.iter_mut().zip(self.from.iter().zip(self.to)) {
+            let (start, end) = (f64::from(*start), f64::from(end));
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // `(int)`, 0-255
+            let value = (start + (end - start) * percent) as u8;
+            *channel = value;
+        }
+        colour
+    }
+
+    /// Whether it is still going `at`.
+    #[must_use]
+    pub fn running(&self, at: Instant) -> bool {
+        at.saturating_duration_since(self.started) < FADE_TIME
+    }
+}
 
 /// `Channelac` (and `Channelap`, the same): `Disable` 0, the rest 1, in declaration order.
 /// `// C#: GCSViews/ConfigurationView/ConfigMount.cs:374-431`
@@ -514,6 +570,10 @@ pub struct Mount {
     editing: Option<usize>,
     question: Option<(usize, Question)>,
     messages: VecDeque<Message>,
+    /// The last link failure's words, for the status line.
+    status: Option<String>,
+    /// The Wiki link's last fade; none yet, and it is the Designer's `CornflowerBlue`.
+    wiki: Option<Fade>,
     queue: SetQueue,
 }
 
@@ -540,6 +600,8 @@ impl Default for Mount {
             editing: None,
             question: None,
             messages: VecDeque::new(),
+            status: None,
+            wiki: None,
             queue: SetQueue::default(),
         }
     }
@@ -688,6 +750,38 @@ impl Mount {
         self.messages.pop_front();
     }
 
+    /// The last link failure's words, taken for the status line.
+    pub fn take_status(&mut self) -> Option<String> {
+        self.status.take()
+    }
+
+    /// The mouse onto the Wiki link, or off it: `FadeLinkTo` `CornflowerBlue` or `WhiteSmoke`,
+    /// from the colour it shows now.
+    /// `// C#: GCSViews/ConfigurationView/ConfigMount.cs:32-33, 330-335`
+    pub fn hover_wiki(&mut self, hovered: bool, now: Instant) {
+        self.wiki = Some(Fade {
+            from: self.wiki_colour(now),
+            to: if hovered {
+                CORNFLOWER_BLUE
+            } else {
+                WHITE_SMOKE
+            },
+            started: now,
+        });
+    }
+
+    /// The Wiki link's `LinkColor` `at`.
+    #[must_use]
+    pub fn wiki_colour(&self, at: Instant) -> [u8; 3] {
+        self.wiki.map_or(CORNFLOWER_BLUE, |fade| fade.colour(at))
+    }
+
+    /// Whether the Wiki link is fading `at`.
+    #[must_use]
+    pub fn wiki_fading(&self, at: Instant) -> bool {
+        self.wiki.is_some_and(|fade| fade.running(at))
+    }
+
     fn channel_items(&self, channel: Channel) -> Vec<String> {
         self.channel(channel)
             .options
@@ -721,9 +815,11 @@ impl Mount {
     fn dispose(&mut self) -> Vec<Write> {
         let pending = self.numbers.iter_mut().filter_map(Number::flush).collect();
         let messages = std::mem::take(&mut self.messages);
+        let status = self.status.take();
         let queue = std::mem::take(&mut self.queue);
         *self = Self {
             messages,
+            status,
             queue,
             ..Self::default()
         };
@@ -1131,7 +1227,16 @@ impl Mount {
             .map(Job::control)
             .collect();
         self.queue.push(due);
-        let events = self.queue.advance(telemetry, &mut self.messages);
+        // "Failed to set Param" and a control's "Set ... Failed" go on the status line, the
+        // owner's ruling of 2026-09-25.
+        // C#: GCSViews/ConfigurationView/ConfigMount.cs:163-167, 367-370
+        let mut failures = Vec::new();
+        let events = self
+            .queue
+            .advance_split(telemetry, &mut self.messages, &mut failures);
+        if let Some(status) = failure_status(&failures) {
+            self.status = Some(status);
+        }
         self.absorb(&events);
     }
 
@@ -1199,6 +1304,8 @@ pub fn record_facts(page: &Mount, view: &TelemetryView) {
         record(format!("config.mount.{key}"), check.state.key());
         record(format!("config.mount.{key}.enabled"), check.enabled);
     }
+    let [red, green, blue] = page.wiki_colour(Instant::now());
+    record("config.mount.wiki", format!("{red},{green},{blue}"));
     record("config.mount.write", page.queue.last().unwrap_or("none"));
     record("config.mount.writes.pending", page.queue.pending());
     record(
@@ -1270,6 +1377,9 @@ pub fn page(
         .relative()
         .w(px(674.0))
         .h(px(620.0))
+        // The four resources drawn as their names: no artwork is carried (a deliberate
+        // divergence).
+        // C#: GCSViews/ConfigurationView/ConfigMount.designer.cs:157, 170, 213, 1105
         .child(picture("cameraGimalPitch1", (33.0, 47.0, 203.0, 112.0)))
         .child(picture("cameraGimalRoll1", (33.0, 172.0, 203.0, 112.0)))
         .child(picture("cameraGimalYaw", (33.0, 296.0, 203.0, 112.0)))
@@ -1285,23 +1395,34 @@ pub fn page(
             label(x, y, text, enabled)
         });
     }
-    body = body.child(
-        crate::probe::measured("mount-wiki", div())
-            .id("mount-wiki")
-            .absolute()
-            .left(px(624.0))
-            .top(px(12.0))
-            .text_xs()
-            .text_color(rgb(if enabled { theme::ACCENT } else { theme::DIM }))
+    // `LNK_wiki`: `LinkBehavior.HoverUnderline`, its colour faded on the mouse coming and going.
+    // C#: GCSViews/ConfigurationView/ConfigMount.designer.cs:191-198; ConfigMount.cs:32-33, 330-342
+    let now = Instant::now();
+    let [red, green, blue] = mount.wiki_colour(now);
+    if mount.wiki_fading(now) {
+        window.request_animation_frame();
+    }
+    let wiki = crate::probe::measured("mount-wiki", div())
+        .id("mount-wiki")
+        .absolute()
+        .left(px(624.0))
+        .top(px(12.0))
+        .text_xs()
+        .child("Wiki");
+    body = body.child(if enabled {
+        wiki.text_color(rgb((u32::from(red) << 16)
+            | (u32::from(green) << 8)
+            | u32::from(blue)))
             .cursor_pointer()
             .hover(|style| style.underline())
-            .child("Wiki")
-            .on_click(move |_event, _window, cx| {
-                if enabled {
-                    cx.open_url(WIKI);
-                }
-            }),
-    );
+            .on_hover(cx.listener(|this, hovered: &bool, _window, cx| {
+                this.optional.mount.hover_wiki(*hovered, Instant::now());
+                cx.notify();
+            }))
+            .on_click(|_event, _window, cx| cx.open_url(WIKI))
+    } else {
+        wiki.text_color(rgb(theme::DIM))
+    });
     let number_box_at = |index: usize, (x, y): (f32, f32), cx: &mut Context<MissionPlanner>| {
         let spec = NUMBERS.get(index).copied();
         let name = spec.map_or("", |spec| spec.name);
@@ -1829,6 +1950,75 @@ mod tests {
         }]);
         assert!(page.enabled());
         let _ = telemetry;
+    }
+
+    /// The owner's ruling: `Activate`'s "Failed to set Param" is a link failure - the status
+    /// line's words, no box - and the page is still disabled.
+    #[test]
+    fn a_failed_activate_is_a_status_line_and_no_box() {
+        let key = key();
+        let mut page = Mount::default();
+        let jobs = page.activate(&gimbal(), key, Firmware::ArduCopter2, bundled);
+        let link = Answering::new(&[(
+            "SERVO10_FUNCTION",
+            Progress::Finished(RequestOutcome::TimedOut),
+        )]);
+        let mut queue = SetQueue::<usize>::default();
+        queue.push(jobs);
+        let (mut boxes, mut failures) = (VecDeque::new(), Vec::new());
+        let events = queue.advance_split(&link, &mut boxes, &mut failures);
+        assert!(boxes.is_empty());
+        assert_eq!(failures, [failed_to_set("SERVO10_FUNCTION")]);
+        assert_eq!(
+            failure_status(&failures).as_deref(),
+            Some(
+                "Failed to set Param System.TimeoutException: Timeout on read - setParam SERVO10_FUNCTION"
+            )
+        );
+        page.absorb(&events);
+        assert!(!page.enabled());
+        // Through the page's own loop: with no vehicle every write is `setParam`'s false, and a
+        // control's "Set ... Failed" is the status line's.
+        let telemetry = Telemetry::idle();
+        let view = telemetry.view();
+        let mut page = Mount::default();
+        let _ = page.activate(&gimbal(), Key::of(&view), Firmware::ArduCopter2, bundled);
+        let jobs = page.choose_input(Input::Tilt, 7);
+        page.push(jobs);
+        page.tick(&telemetry, &view, true, false, Instant::now());
+        assert!(page.message().is_none());
+        assert_eq!(
+            page.take_status().as_deref(),
+            Some("Set MNT_RC_IN_TILT Failed")
+        );
+    }
+
+    /// The Wiki link: `CornflowerBlue` until the mouse first leaves, then a 300 ms linear fade
+    /// each way, a new fade starting from where the last had got to.
+    #[test]
+    fn the_wiki_link_fades_as_transitions_fades_it() {
+        let mut page = Mount::default();
+        let start = Instant::now();
+        assert_eq!(page.wiki_colour(start), CORNFLOWER_BLUE);
+        page.hover_wiki(true, start);
+        assert_eq!(page.wiki_colour(start), CORNFLOWER_BLUE, "already there");
+        let left = start + Duration::from_millis(500);
+        page.hover_wiki(false, left);
+        assert_eq!(page.wiki_colour(left), CORNFLOWER_BLUE);
+        assert!(page.wiki_fading(left));
+        // Half way: each channel `(int)(start + (end - start) * 0.5)`.
+        let half = left + Duration::from_millis(150);
+        assert_eq!(page.wiki_colour(half), [172, 197, 241]);
+        // Back onto it half way: from [172, 197, 241] to CornflowerBlue.
+        page.hover_wiki(true, half);
+        let third = half + Duration::from_millis(100);
+        // 100 / 300: 172 - 72/3 = 148, 197 - 48/3 = 181, 241 - 4/3 = 239.666, truncated 239.
+        assert_eq!(page.wiki_colour(third), [148, 181, 239]);
+        let done = half + FADE_TIME;
+        assert_eq!(page.wiki_colour(done), CORNFLOWER_BLUE);
+        assert!(!page.wiki_fading(done));
+        page.hover_wiki(false, done);
+        assert_eq!(page.wiki_colour(done + FADE_TIME * 2), WHITE_SMOKE);
     }
 
     #[test]

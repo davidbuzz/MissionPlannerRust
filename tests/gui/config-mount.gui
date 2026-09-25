@@ -58,6 +58,14 @@ expect config.mount.write none
 expect config.mount.writes.pending 0
 expect config.mount.message none
 
+# The Wiki link keeps the Designer's CornflowerBlue: a disabled control gets no MouseEnter, so
+# FadeLinkTo never runs (ConfigMount.cs:32-33, 330-335). (Enabled, the pointer on it and off
+# fades it to CornflowerBlue and then WhiteSmoke over 300 ms - the unit tests cover that.) It is
+# hovered, never clicked: a click would open a browser.
+hover mount-wiki
+settle 1
+expect config.mount.wiki 100,149,237
+
 click setup-page-ConfigOptional
 settle 1
 expect config.mount.active false

@@ -233,7 +233,7 @@ impl SaveEvent {
 /// write, and the display units, which that page writes too - as does the speech alert that
 /// Initial Setup's Battery Monitor writes (`config/battery_monitor.rs`). The Planner page publishes
 /// each of its own keys as `config.planner.<key>` (`config/planner.rs`), from this same dictionary.
-pub const PUBLISHED: [&str; 27] = [
+pub const PUBLISHED: [&str; 30] = [
     "TXT_homelat",
     "TXT_homelng",
     "TXT_homealt",
@@ -263,6 +263,11 @@ pub const PUBLISHED: [&str; 27] = [
     "speechbattery",
     "speechbatteryvolt",
     "speechbatterypercent",
+    // The lists `InputBox` keeps for the alert's three questions.
+    // C#: ExtLibs/Controls/InputBox.cs:75, 178-184
+    "InputBoxNotificationWhatdoyouwantittosay",
+    "InputBoxBatteryLevelWhatVoltagedoyouwanttowarnat",
+    "InputBoxBatteryLevelWhatpercentagedoyouwanttowarnat",
 ];
 
 /// `CMB_baudrate`'s ninth item, which `MainV2` selects before anything is loaded.

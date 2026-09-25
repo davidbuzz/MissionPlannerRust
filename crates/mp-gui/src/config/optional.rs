@@ -212,6 +212,15 @@ pub enum Event {
     },
 }
 
+/// Where a box the jobs put up comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Raised {
+    /// A job's `before`: the handler's own box, ahead of its calls.
+    Handler,
+    /// A call's `false` or throw, or the `catch` a throw ends its job in: the link failing.
+    Link,
+}
+
 /// The job running and where it is.
 #[derive(Debug)]
 struct Running<H> {
@@ -263,6 +272,31 @@ impl<H: Copy> SetQueue<H> {
         writer: &W,
         messages: &mut VecDeque<Message>,
     ) -> Vec<Event> {
+        self.run(writer, |_, message| messages.push_back(message))
+    }
+
+    /// [`Self::advance`], with the boxes sorted by where they come from: a handler's own box
+    /// ahead of its calls - a refusal of what was typed - into `boxes`, and what a call's
+    /// `false`, its throw or the job's `catch` says into `failures`, for the status line. The
+    /// owner's ruling of 2026-09-25: an error the window can show as state never gets a box.
+    pub fn advance_split<W: ParamWriter<Handle = H>>(
+        &mut self,
+        writer: &W,
+        boxes: &mut VecDeque<Message>,
+        failures: &mut Vec<Message>,
+    ) -> Vec<Event> {
+        self.run(writer, |raised, message| match raised {
+            Raised::Handler => boxes.push_back(message),
+            Raised::Link => failures.push(message),
+        })
+    }
+
+    /// The jobs moved on, each box handed to `raise` with where it comes from.
+    fn run<W: ParamWriter<Handle = H>>(
+        &mut self,
+        writer: &W,
+        mut raise: impl FnMut(Raised, Message),
+    ) -> Vec<Event> {
         let mut events = Vec::new();
         loop {
             let Some(running) = self.running.as_mut() else {
@@ -270,7 +304,7 @@ impl<H: Copy> SetQueue<H> {
                     return events;
                 };
                 if let Some(message) = job.before.take() {
-                    messages.push_back(message);
+                    raise(Raised::Handler, message);
                 }
                 self.running = Some(Running {
                     job,
@@ -325,17 +359,17 @@ impl<H: Copy> SetQueue<H> {
             match outcome {
                 Outcome::False => {
                     if let Some(message) = set.on_false.clone() {
-                        messages.push_back(message);
+                        raise(Raised::Link, message);
                     }
                 }
                 Outcome::Threw => {
                     if let Some(message) = set.on_throw.clone() {
-                        messages.push_back(message);
+                        raise(Raised::Link, message);
                     }
                     running.threw = true;
                     if !running.job.each_caught {
                         if let Some(catch) = running.job.on_throw {
-                            messages.push_back(catch(&set.param));
+                            raise(Raised::Link, catch(&set.param));
                         }
                         running.job.sets.clear();
                     }
@@ -361,6 +395,13 @@ pub fn value_of(parameters: &[(String, f64)], name: &str) -> Option<f64> {
 #[must_use]
 pub fn has(parameters: &[(String, f64)], name: &str) -> bool {
     value_of(parameters, name).is_some()
+}
+
+/// The status line's words for the last of the link failures [`SetQueue::advance_split`] sorted
+/// out, as `extra_setup` words its pages' - the C#'s box's text on one line.
+#[must_use]
+pub fn failure_status(failures: &[Message]) -> Option<String> {
+    failures.last().map(super::extra_setup::status_words)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -581,6 +622,86 @@ impl InputBox {
             field,
         }
     }
+
+    /// OK: the answer kept in `Settings.Instance`, as [`remember_answer`] keeps it.
+    pub fn remember(&self, settings: &mut crate::settings::Persisted) {
+        remember_answer(settings, self.title, self.prompt, self.field.value());
+    }
+}
+
+/// The key `InputBox` keeps a question's answers under: `"InputBox" + title.CleanString() +
+/// promptText.CleanString()`, `CleanString` keeping the letters and digits.
+/// `// C#: ExtLibs/Controls/InputBox.cs:75, 183; ExtLibs/Utilities/Extensions.cs:494-497`
+#[must_use]
+pub fn answers_key(title: &str, prompt: &str) -> String {
+    // `Char.IsLetterOrDigit`; Rust's `is_alphanumeric` also takes letter-numbers and marks some
+    // scripts class as alphabetic, which no question here holds.
+    let clean = |text: &str| {
+        text.chars()
+            .filter(|c| c.is_alphanumeric())
+            .collect::<String>()
+    };
+    format!("InputBox{}{}", clean(title), clean(prompt))
+}
+
+/// `WebUtility.UrlEncode`: letters, digits and `-_.!*()` as they are, a space `+`, every other
+/// UTF-8 byte `%XX` in capitals.
+#[must_use]
+pub fn url_encode(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for byte in text.bytes() {
+        match byte {
+            b'a'..=b'z'
+            | b'A'..=b'Z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'_'
+            | b'.'
+            | b'!'
+            | b'*'
+            | b'('
+            | b')' => out.push(char::from(byte)),
+            b' ' => out.push('+'),
+            _ => {
+                use std::fmt::Write as _;
+                let _ = write!(out, "%{byte:02X}");
+            }
+        }
+    }
+    out
+}
+
+/// What `InputBox.Show` keeps when its OK is pressed: the box's autocomplete list with the answer
+/// added, `SetList` into `Settings.Instance` - distinct, URL-encoded, `;`-joined. The list it
+/// started from is `GetList` of the key filtered to its null or empty entries (`Where(a => a ==
+/// null || a == "")`), so the list kept is an empty entry, if the setting had one, then the
+/// answer; and the suggestions the box offers are only ever empty. Nothing on the pages that ask
+/// reads the list back.
+/// `// C#: ExtLibs/Controls/InputBox.cs:73-84, 178-184; ExtLibs/Utilities/Settings.cs:164-176`
+pub fn remember_answer(
+    settings: &mut crate::settings::Persisted,
+    title: &str,
+    prompt: &str,
+    answer: &str,
+) {
+    // `if (title != "")`: an untitled box has no list, and `AutoCompleteCustomSource` stays null.
+    if title.is_empty() {
+        return;
+    }
+    let key = answers_key(title, prompt);
+    // `GetList`: split on `;`, each URL-decoded; an entry decodes to "" only when it is "".
+    let had_empty = settings
+        .get(&key)
+        .is_some_and(|list| list.split(';').any(str::is_empty));
+    let mut list: Vec<&str> = Vec::new();
+    if had_empty {
+        list.push("");
+    }
+    if !list.contains(&answer) {
+        list.push(answer);
+    }
+    let encoded: Vec<String> = list.iter().map(|entry| url_encode(entry)).collect();
+    settings.set(&key, encoded.join(";"));
 }
 
 /// An `InputBox` drawn over the window, modal as the C#'s is.
@@ -929,6 +1050,17 @@ impl MissionPlanner {
         optional
             .mount
             .tick(telemetry, view, on_setup, number_focused, now);
+        // What the C#'s boxes say when a write fails - a `setParam` returning false or timing out,
+        // "Failed to set Param", the unhandled-exception box - goes on the status line instead:
+        // the owner's ruling of 2026-09-25. The pages never queue those boxes.
+        let failures = [
+            optional.battery2.take_status(),
+            optional.rangefinder.take_status(),
+            optional.mount.take_status(),
+        ];
+        for status in failures.into_iter().flatten() {
+            self.file_status = Some(status);
+        }
     }
 
     /// Battery Monitor 2's handlers that change `Settings.Instance` - Mission Planner's
@@ -1024,6 +1156,73 @@ pub mod tests {
             }
         }
         messages.into_iter().collect()
+    }
+
+    /// `advance_split`: a handler's box ahead of its calls is a box; a call's false, its throw
+    /// and the job's `catch` are link failures, for the status line.
+    #[test]
+    fn a_handlers_box_is_a_box_and_a_failed_call_a_status_line() {
+        let link = Answering::new(&[
+            ("B", Progress::Finished(RequestOutcome::UnknownParameter)),
+            ("C", Progress::Finished(RequestOutcome::TimedOut)),
+        ]);
+        let mut queue = SetQueue::<usize>::default();
+        let refused = error("refused");
+        let mut caught = Job::new(
+            "caught",
+            [Set::caught("C", 3.0, "C threw"), Set::plain("D", 4.0)],
+        );
+        caught.on_throw = Some(|param: &str| plain(format!("catch {param}")));
+        queue.push([
+            Job::show("typed", refused.clone()),
+            Job::control(Write::other("B", 2.0)),
+            caught,
+        ]);
+        let (mut boxes, mut failures) = (VecDeque::new(), Vec::new());
+        while queue.pending() > 0 {
+            queue.advance_split(&link, &mut boxes, &mut failures);
+        }
+        assert_eq!(boxes, [refused]);
+        assert_eq!(
+            failures,
+            [error("Set B Failed"), error("C threw"), plain("catch C")]
+        );
+        assert_eq!(failure_status(&failures).as_deref(), Some("catch C"));
+        assert_eq!(failure_status(&[]), None);
+        assert_eq!(
+            link.taken(),
+            [("B".to_owned(), 2.0), ("C".to_owned(), 3.0)],
+            "D never sent"
+        );
+    }
+
+    /// `InputBox`'s list: the key is the caption and question's letters and digits; the answer
+    /// URL-encoded as `WebUtility.UrlEncode` does, after an empty entry the list had.
+    #[test]
+    fn an_input_box_keeps_its_answer_as_the_csharp_does() {
+        assert_eq!(
+            answers_key("Battery Level", "What Voltage do you want to warn at?"),
+            "InputBoxBatteryLevelWhatVoltagedoyouwanttowarnat"
+        );
+        assert_eq!(
+            url_encode("a b,c{d}-_.!*()é/"),
+            "a+b%2Cc%7Bd%7D-_.!*()%C3%A9%2F"
+        );
+        let mut settings = crate::settings::Persisted::at(None);
+        let key = answers_key("T", "Q?");
+        remember_answer(&mut settings, "T", "Q?", "x y");
+        assert_eq!(settings.get(&key), Some("x+y"));
+        // The earlier answer is not a suggestion: only empty entries are kept.
+        remember_answer(&mut settings, "T", "Q?", "z");
+        assert_eq!(settings.get(&key), Some("z"));
+        settings.set(&key, "a;;b");
+        remember_answer(&mut settings, "T", "Q?", "z");
+        assert_eq!(settings.get(&key), Some(";z"));
+        remember_answer(&mut settings, "T", "Q?", "");
+        assert_eq!(settings.get(&key), Some(""));
+        // An untitled box keeps nothing.
+        remember_answer(&mut settings, "", "Q?", "w");
+        assert_eq!(settings.get(&answers_key("", "Q?")), None);
     }
 
     #[test]

@@ -22,20 +22,26 @@
 //! them in the opposite order, newest first, so the oldest name the vehicle has wins both ways.
 //!
 //! The layout is `ConfigBatteryMonitoring.resx`'s, every control at its `Location` in a 512 x 322
-//! page. The colours are this application's.
+//! page. The colours are this application's. `pictureBox5`, a photograph of a power module held
+//! in the `.resx`, is a box with the control's name in it: this repository carries none of
+//! Mission Planner's artwork.
 //!
-//! What is not ported, and why:
+//! The Sensor and HW Ver boxes are `DropDown` combos: their text takes typing, which no handler
+//! reads - only `SelectedIndexChanged` is wired - and which leaves no row selected, as the native
+//! combo box clears its list's selection when its edit text changes with the list closed; so
+//! choosing any row afterwards is a change, puts that row's text back and runs the handler. The
+//! arrow drops the list; the text is typed into.
 //!
-//! * `pictureBox5`, a photograph of a power module: decoration, and an image this application
-//!   does not carry. Its 97 x 75 is left empty;
-//! * typing into the Sensor and HW Ver boxes: both are `DropDown` combos, which take typed text,
-//!   and a typed selection is not one the handlers can parse. They are lists here;
-//! * holding the focus in a calibration box whose text does not parse: `Validating`'s `e.Cancel`
-//!   keeps the caret there in WinForms. Here the text is not written, as there, but the focus
-//!   goes where it was sent;
-//! * the `InputBox`es' remembered answers, which `InputBox.Show` keeps as an `InputBox<title>`
-//!   list in `Settings.Instance` (`ExtLibs/Controls/InputBox.cs:178-184`): the Planner page and
-//!   Battery Monitor 2 do not carry them either.
+//! The `.cs` has `Validating` handlers for the three calibration boxes (`:268-272, 308-312,
+//! 332-336`) that would hold the caret in a box whose text does not parse, but the Designer wires
+//! none of them: leaving a box always runs `Validated`, whose `float.Parse` throws into its
+//! `catch`.
+//!
+//! What a write's failure says - a `catch`'s "Set ... Failed" after `setParam` timed out, the
+//! monitor combo's own "Set BATT_MONITOR Failed!" - goes on the status line, the owner's ruling of
+//! 2026-09-25; what refuses what was typed - "Invalid number entered", text that does not parse,
+//! the feature not enabled - keeps its box. Each `InputBox` OK also keeps the answer as `InputBox`
+//! does, under `InputBox<caption><question>` (`ExtLibs/Controls/InputBox.cs:73-84, 178-184`).
 //!
 //! "MP Alert on Low Battery" reads and writes `Settings.Instance` - Mission Planner's `config.xml`,
 //! the dictionary [`Persisted`] is, which the Planner page and Battery Monitor 2 read and write
@@ -61,6 +67,8 @@ use mp_params::param_file::invariant_double;
 
 use super::failsafe::{Lookup, Message, options};
 use super::flight_modes::{ParamWriter, Progress};
+use super::optional::{picture, remember_answer};
+use super::servo_output::{Combo, dropdown};
 use crate::MissionPlanner;
 use crate::settings::Persisted;
 use crate::telemetry::{Telemetry, TelemetryView};
@@ -548,9 +556,16 @@ pub enum Event {
         /// The vehicle's answer.
         outcome: RequestOutcome,
     },
-    /// A message box.
+    /// A handler's message box, outside its writes.
     Message(&'static str),
-    /// A `catch` ran; the message, if it shows one for the monitor the vehicle has.
+    /// A step every name of which the vehicle refused - `setParam`'s false - with what
+    /// `MavlinkComboBox` says of it: a link failure.
+    Refused(&'static str),
+    /// A `float.Parse` of what was typed threw into the `catch`; its message, if it shows one
+    /// for the monitor the vehicle has.
+    Unparsed(OnThrow),
+    /// A write threw into the `catch` - a timeout, or no vehicle; its message, if it shows one
+    /// for the monitor the vehicle has: a link failure.
     Threw {
         /// What was being written, for the record.
         what: String,
@@ -628,10 +643,7 @@ impl<H: Copy> Runner<H> {
                     refresh,
                 } => (steps, *on_throw, *on_false, *refresh),
                 &mut Job::Throw(on_throw) => {
-                    events.push(Event::Threw {
-                        what: "a number that does not parse".to_owned(),
-                        on_throw,
-                    });
+                    events.push(Event::Unparsed(on_throw));
                     self.running = None;
                     continue;
                 }
@@ -687,7 +699,7 @@ impl<H: Copy> Runner<H> {
             let Some(name) = step.names.get(running.name).copied() else {
                 // Every name refused: `setParam` returned false.
                 if let Some(text) = on_false {
-                    events.push(Event::Message(text));
+                    events.push(Event::Refused(text));
                 }
                 running.name = 0;
                 steps.pop_front();
@@ -763,13 +775,6 @@ impl Field {
     /// `// C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring.cs:603-619`
     const fn validates_on_enter(self) -> bool {
         matches!(self, Self::Measured | Self::Divider | Self::AmpsPerVolt)
-    }
-
-    /// Whether it has a `Validating` handler, which stops `Validated` for text that does not
-    /// parse when the box is left.
-    /// `// C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring.cs:268-272, 308-312, 332-336`
-    const fn has_validating(self) -> bool {
-        self.validates_on_enter()
     }
 }
 
@@ -849,10 +854,15 @@ pub struct Controls {
     pub sensor: Option<usize>,
     /// Its `Enabled`.
     pub sensor_enabled: bool,
+    /// Its `Text` as typed into its edit box, until a row is chosen again; `None` while it
+    /// shows the selected row.
+    pub sensor_typed: Option<String>,
     /// `CMB_HWVersion.SelectedIndex`.
     pub hardware: Option<usize>,
     /// Its `Enabled`.
     pub hardware_enabled: bool,
+    /// Its `Text` as typed.
+    pub hardware_typed: Option<String>,
     /// `TXT_battcapacity`.
     pub capacity: TextField,
     /// `TXT_measuredvoltage`.
@@ -895,8 +905,10 @@ impl Default for Controls {
             monitor_enabled: false,
             sensor: None,
             sensor_enabled: true,
+            sensor_typed: None,
             hardware: None,
             hardware_enabled: true,
+            hardware_typed: None,
             capacity,
             measured: TextField::new(""),
             measured_enabled: true,
@@ -1046,6 +1058,50 @@ impl Controls {
                 ComboId::Sensor => self.sensor_enabled,
                 ComboId::Hardware => self.hardware_enabled,
             }
+    }
+
+    /// A `DropDown` combo's `Text`: what was typed into it, else its selected row's.
+    #[must_use]
+    pub fn combo_text(&self, combo: ComboId) -> &str {
+        let (typed, selected, items) = match combo {
+            ComboId::Monitor => return self.monitor_text(),
+            ComboId::Sensor => (&self.sensor_typed, self.sensor, SENSORS.as_slice()),
+            ComboId::Hardware => (&self.hardware_typed, self.hardware, HW_VERSIONS.as_slice()),
+        };
+        typed.as_deref().unwrap_or_else(|| {
+            selected
+                .and_then(|index| items.get(index))
+                .copied()
+                .unwrap_or("")
+        })
+    }
+
+    /// A key in a `DropDown` combo's edit box: its text edited, and with it the selection gone -
+    /// `SelectedIndex` -1, and no `SelectedIndexChanged`, which is raised by the list alone. The
+    /// monitor combo is a `DropDownList` and takes no typing. Whether the key was taken.
+    /// `// C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring.Designer.cs:72-87, 107, 135-151`
+    fn type_combo(&mut self, combo: ComboId, event: &KeyDownEvent) -> bool {
+        if !self.combo_enabled(combo) || combo == ComboId::Monitor {
+            return false;
+        }
+        let mut field = TextField::new("");
+        field.set(self.combo_text(combo));
+        if field.key(event) != KeyOutcome::Changed {
+            return false;
+        }
+        let text = field.value().to_owned();
+        match combo {
+            ComboId::Sensor => {
+                self.sensor = None;
+                self.sensor_typed = Some(text);
+            }
+            ComboId::Hardware => {
+                self.hardware = None;
+                self.hardware_typed = Some(text);
+            }
+            ComboId::Monitor => {}
+        }
+        true
     }
 
     /// The monitor combo's text.
@@ -1264,11 +1320,11 @@ impl Controls {
         }
     }
 
-    /// Leaving a box: `Validating`, where it has one, then `Validated`.
+    /// Leaving a box: `Validated`. The `.cs`'s three `Validating` handlers, which would cancel
+    /// it for text that does not parse, are wired to nothing in the Designer, so they never run.
+    /// `// C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring.cs:268-272, 308-312, 332-336;
+    /// ConfigBatteryMonitoring.Designer.cs:103, 174-175, 192-193, 204-205, 250`
     fn left(&mut self, field: Field, parameters: &[(String, f64)]) -> Vec<Job> {
-        if field.has_validating() && parse_float(self.field(field).value()).is_none() {
-            return Vec::new();
-        }
         self.validated(field, parameters)
     }
 
@@ -1302,8 +1358,12 @@ pub struct BatteryMonitor {
     controls: Option<Controls>,
     /// The combo whose list is down.
     dropdown: Option<ComboId>,
+    /// The first row the dropped-down list shows, which the wheel moves.
+    list_top: usize,
     /// Message boxes, the first showing.
     messages: VecDeque<Message>,
+    /// The last write failure's words, for the status line.
+    status: Option<String>,
     /// The Low Battery alert's question, if one is being asked.
     prompt: Option<Prompt>,
     /// The handlers' writes.
@@ -1400,6 +1460,68 @@ impl BatteryMonitor {
         } else {
             Some(combo)
         };
+        if let Some(mut list) = self.list() {
+            list.open_list();
+            self.list_top = list.top_index;
+        }
+    }
+
+    /// The dropped-down list, as the shared drop-down draws it: the rows, the selected one, and
+    /// the first showing.
+    #[must_use]
+    pub fn list(&self) -> Option<Combo> {
+        let combo = self.dropdown?;
+        let controls = self.controls.as_ref()?;
+        let (options, selected) = match combo {
+            ComboId::Monitor => (controls.monitor_options.clone(), controls.monitor),
+            ComboId::Sensor => (
+                numbered(&SENSORS),
+                controls.sensor.and_then(|index| i64::try_from(index).ok()),
+            ),
+            ComboId::Hardware => (
+                numbered(&HW_VERSIONS),
+                controls
+                    .hardware
+                    .and_then(|index| i64::try_from(index).ok()),
+            ),
+        };
+        Some(Combo {
+            options,
+            selected,
+            enabled: true,
+            top_index: self.list_top,
+            ..Combo::default()
+        })
+    }
+
+    /// The list back up, without a choice.
+    pub fn close_list(&mut self) {
+        self.dropdown = None;
+    }
+
+    /// The wheel over the dropped-down list.
+    pub fn scroll_list(&mut self, lines: i32) {
+        if let Some(mut list) = self.list() {
+            list.scroll_list(lines);
+            self.list_top = list.top_index;
+        }
+    }
+
+    /// A key in the Sensor or HW Ver box's text: it takes the typing, and the list goes up.
+    pub fn type_combo(&mut self, combo: ComboId, event: &KeyDownEvent) -> bool {
+        let Some(controls) = self.controls.as_mut() else {
+            return false;
+        };
+        let taken = controls.type_combo(combo, event);
+        if taken {
+            self.dropdown = None;
+        }
+        taken
+    }
+
+    /// The last write failure's words, taken for the status line.
+    pub fn take_status(&mut self) -> Option<String> {
+        self.status.take()
     }
 
     /// Chooses from a combo's list. `SelectedIndexChanged` only for a different row; the monitor
@@ -1443,6 +1565,7 @@ impl BatteryMonitor {
                     return;
                 }
                 controls.sensor = Some(index);
+                controls.sensor_typed = None;
                 controls.sensor_changed()
             }
             ComboId::Hardware => {
@@ -1453,6 +1576,7 @@ impl BatteryMonitor {
                     return;
                 }
                 controls.hardware = Some(index);
+                controls.hardware_typed = None;
                 controls.hardware_changed()
             }
         };
@@ -1540,11 +1664,15 @@ impl BatteryMonitor {
         };
     }
 
-    /// OK on a question: the answer kept in `Settings.Instance` and the next asked.
+    /// OK on a question: `InputBox` keeping the answer in its list, the page keeping it in its
+    /// setting in `Settings.Instance`, and the next asked.
+    /// `// C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring.cs:580-599; ExtLibs/Controls/InputBox.cs:178-184`
     pub fn answer(&mut self, settings: &mut Persisted) {
         let Some(prompt) = self.prompt.take() else {
             return;
         };
+        let (title, question) = prompt.text();
+        remember_answer(settings, title, question, prompt.field.value());
         if let Some((_, _, key, _)) = SPEECH_PROMPTS.get(prompt.stage) {
             settings.set(key, prompt.field.value());
         }
@@ -1575,10 +1703,21 @@ impl BatteryMonitor {
         self.messages.pop_front();
     }
 
-    /// Reads what running the jobs produced into messages, the record, and a refresh.
+    /// Reads what running the jobs produced into messages, the status line, the record, and a
+    /// refresh. A write's failure - `setParam`'s false or a throw - is the status line's, the
+    /// owner's ruling of 2026-09-25; a handler's box, and a `catch` reached by text that does not
+    /// parse, are boxes.
     fn absorb(&mut self, events: Vec<Event>, telemetry: Option<&Telemetry>, view: &TelemetryView) {
         let analog = value_of(&view.parameters, "BATT_MONITOR")
             .is_some_and(|monitor| monitor == 3.0 || monitor == 4.0);
+        let shown = |on_throw: OnThrow| match on_throw {
+            OnThrow::Show(text) => Some(text),
+            OnThrow::ShowIfAnalog(text) => analog.then_some(text),
+        };
+        let error = |text: &str| Message {
+            title: ERROR_TITLE,
+            text: text.to_owned(),
+        };
         for event in events {
             match event {
                 Event::Written {
@@ -1594,21 +1733,18 @@ impl BatteryMonitor {
                         _ => format!("{name} {value} unchanged"),
                     });
                 }
-                Event::Message(text) => self.messages.push_back(Message {
-                    title: ERROR_TITLE,
-                    text: text.to_owned(),
-                }),
+                Event::Message(text) => self.messages.push_back(error(text)),
+                Event::Refused(text) => self.status = Some(text.to_owned()),
+                Event::Unparsed(on_throw) => {
+                    self.last_write = Some("a number that does not parse failed".to_owned());
+                    if let Some(text) = shown(on_throw) {
+                        self.messages.push_back(error(text));
+                    }
+                }
                 Event::Threw { what, on_throw } => {
                     self.last_write = Some(format!("{what} failed"));
-                    let text = match on_throw {
-                        OnThrow::Show(text) => Some(text),
-                        OnThrow::ShowIfAnalog(text) => analog.then_some(text),
-                    };
-                    if let Some(text) = text {
-                        self.messages.push_back(Message {
-                            title: ERROR_TITLE,
-                            text: text.to_owned(),
-                        });
+                    if let Some(text) = shown(on_throw) {
+                        self.status = Some(text.to_owned());
                     }
                 }
                 Event::Refresh => {
@@ -1675,6 +1811,9 @@ impl BatteryMonitor {
 pub struct Focus {
     fields: [FocusHandle; 5],
     prompt: FocusHandle,
+    /// The Sensor and HW Ver boxes' edit text.
+    sensor: FocusHandle,
+    hardware: FocusHandle,
 }
 
 impl Focus {
@@ -1689,6 +1828,17 @@ impl Focus {
                 cx.focus_handle(),
             ],
             prompt: cx.focus_handle(),
+            sensor: cx.focus_handle(),
+            hardware: cx.focus_handle(),
+        }
+    }
+
+    /// A `DropDown` combo's edit text's handle.
+    const fn combo(&self, combo: ComboId) -> Option<&FocusHandle> {
+        match combo {
+            ComboId::Sensor => Some(&self.sensor),
+            ComboId::Hardware => Some(&self.hardware),
+            ComboId::Monitor => None,
         }
     }
 
@@ -1755,6 +1905,18 @@ pub fn record_facts(battery: &BatteryMonitor, view: &TelemetryView) {
     record(
         "config.battery.sensor.enabled",
         controls.is_some_and(|controls| controls.combo_enabled(ComboId::Sensor)),
+    );
+    record(
+        "config.battery.sensor.text",
+        controls.map_or("", |controls| controls.combo_text(ComboId::Sensor)),
+    );
+    record(
+        "config.battery.hwversion.text",
+        controls.map_or("", |controls| controls.combo_text(ComboId::Hardware)),
+    );
+    record(
+        "config.battery.list",
+        battery.dropdown.map_or("none", ComboId::id),
     );
     record(
         "config.battery.hwversion",
@@ -1846,91 +2008,102 @@ fn label(x: f32, y: f32, text: &'static str, enabled: bool) -> Div {
         .child(text)
 }
 
-/// A combo box: its text, and a click to drop its list down. The click takes the focus from a
-/// text box first, as clicking a WinForms combo does, so the box is validated before the choice.
+/// A combo box at its `.resx` place. The monitor's, a `DropDownList`, drops its list on a click
+/// anywhere. The Sensor and HW Ver boxes, `DropDown`s, take typing in their text - `edit` is its
+/// focus handle and whether it has the focus - and drop their list from the arrow,
+/// `<id>-button`. A click that drops a list takes the focus from a text box first, as clicking a
+/// WinForms combo does, so the box is validated before the choice; a click into the text takes
+/// it too, and the box left is validated the same way.
+/// `// C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring.Designer.cs:72-87, 107-118, 135-151`
 fn combo_box(
     combo: ComboId,
     text: String,
     enabled: bool,
     (x, y, width, height): (f32, f32, f32, f32),
+    edit: Option<(&FocusHandle, bool)>,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
+    let drop_list =
+        move |this: &mut MissionPlanner, window: &mut Window, cx: &mut Context<MissionPlanner>| {
+            window.blur(cx);
+            this.battery_monitor.toggle_dropdown(combo);
+            cx.notify();
+        };
+    let arrow = div().flex_shrink_0().px_1().child("▾");
     let base = crate::probe::measured(combo.id(), div())
         .id(combo.id())
         .size_full()
         .flex()
         .items_center()
         .justify_between()
-        .px_1()
         .rounded_sm()
         .border_1()
-        .border_color(rgb(theme::BORDER))
-        .text_xs()
-        .child(div().truncate().child(text))
-        .child("▾");
-    let base = if enabled {
-        base.bg(rgb(theme::ACTION))
+        .text_xs();
+    let base = match edit {
+        _ if !enabled => base
+            .border_color(rgb(theme::BORDER))
+            .bg(rgb(theme::PANEL))
+            .text_color(rgb(theme::DIM))
+            .child(div().px_1().truncate().child(text))
+            .child(arrow),
+        None => base
+            .border_color(rgb(theme::BORDER))
+            .bg(rgb(theme::ACTION))
             .text_color(rgb(theme::TEXT))
             .cursor_pointer()
             .hover(|style| style.border_color(rgb(theme::ACCENT)))
-            .on_click(cx.listener(move |this, _event, window, cx| {
-                window.blur(cx);
-                this.battery_monitor.toggle_dropdown(combo);
-                cx.notify();
+            .child(div().px_1().truncate().child(text))
+            .child(arrow)
+            .on_click(cx.listener(move |this, _event, window, cx| drop_list(this, window, cx))),
+        Some((handle, focused)) => {
+            let focus = handle.clone();
+            let button = format!("{}-button", combo.id());
+            base.border_color(rgb(if focused {
+                theme::ACCENT
+            } else {
+                theme::BORDER
             }))
-    } else {
-        base.bg(rgb(theme::PANEL)).text_color(rgb(theme::DIM))
+            .bg(rgb(theme::ACTION))
+            .text_color(rgb(theme::TEXT))
+            .track_focus(handle)
+            .key_context("TextField")
+            .on_key_down(cx.listener(move |this, event: &KeyDownEvent, _window, cx| {
+                if this.battery_monitor.type_combo(combo, event) {
+                    cx.notify();
+                }
+            }))
+            .child(
+                div()
+                    .flex_1()
+                    .flex()
+                    .items_center()
+                    .px_1()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .cursor_text()
+                    .child(text)
+                    .children(focused.then(|| div().w(px(1.0)).h(px(12.0)).bg(rgb(theme::ACCENT))))
+                    .on_mouse_down(
+                        gpui::MouseButton::Left,
+                        cx.listener(move |this, _event, window, cx| {
+                            this.battery_monitor.close_list();
+                            focus.focus(window, cx);
+                            cx.notify();
+                        }),
+                    ),
+            )
+            .child(
+                crate::probe::measured(button.clone(), arrow)
+                    .id(SharedString::from(button))
+                    .cursor_pointer()
+                    .hover(|style| style.text_color(rgb(theme::ACCENT)))
+                    .on_click(
+                        cx.listener(move |this, _event, window, cx| drop_list(this, window, cx)),
+                    ),
+            )
+        }
     };
     at(x, y, width, height).child(base).into_any_element()
-}
-
-/// A combo's list, dropped down over what is under it, at `DropDownWidth` 200 and scrolling past
-/// `MaxDropDownItems`' eight.
-fn dropdown(
-    combo: ComboId,
-    items: Vec<(i64, String)>,
-    selected: Option<i64>,
-    (x, y): (f32, f32),
-    cx: &mut Context<MissionPlanner>,
-) -> AnyElement {
-    const ROW: f32 = 16.0;
-    let mut list = div()
-        .id(SharedString::from(format!("{}-list", combo.id())))
-        .absolute()
-        .left(px(x))
-        .top(px(y))
-        .w(px(200.0))
-        .max_h(px(ROW * 8.0 + 2.0))
-        .overflow_y_scroll()
-        .flex()
-        .flex_col()
-        .bg(rgb(theme::PANEL))
-        .border_1()
-        .border_color(rgb(theme::ACCENT))
-        .occlude();
-    for (key, text) in items {
-        let chosen = selected == Some(key);
-        let name = format!("{}-{key}", combo.id());
-        list = list.child(
-            crate::probe::measured(name.clone(), div())
-                .id(SharedString::from(name))
-                .flex_shrink_0()
-                .h(px(ROW))
-                .px_1()
-                .text_xs()
-                .bg(rgb(if chosen { theme::BORDER } else { theme::PANEL }))
-                .text_color(rgb(theme::TEXT))
-                .cursor_pointer()
-                .hover(|style| style.bg(rgb(theme::ACTION)))
-                .child(text)
-                .on_click(cx.listener(move |this, _event, _window, cx| {
-                    let view = this.telemetry.view();
-                    this.battery_monitor.choose(combo, key, &view.parameters);
-                    cx.notify();
-                })),
-        );
-    }
-    list.into_any_element()
 }
 
 /// A text box at its `.resx` place: typing and a caret while it has the focus, dimmed and inert
@@ -1986,6 +2159,7 @@ fn text_box(
 pub fn page(
     battery: &BatteryMonitor,
     focus: &Focus,
+    window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
     let Some(controls) = battery.controls() else {
@@ -1994,38 +2168,43 @@ pub fn page(
     let enabled = controls.enabled;
     let mut body = div().relative().w(px(512.0)).h(px(322.0));
 
-    // The three combos and their labels, left column. `pictureBox5` at 3,41 is left empty.
-    let sensor_text = controls
-        .sensor
-        .and_then(|index| SENSORS.get(index))
-        .map_or("", |text| text);
-    let hardware_text = controls
-        .hardware
-        .and_then(|index| HW_VERSIONS.get(index))
-        .map_or("", |text| text);
+    // `pictureBox5`'s photograph, held in the `.resx`, drawn as the control's name: no artwork
+    // is carried (a deliberate divergence).
+    // C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring.Designer.cs:120-126; ConfigBatteryMonitoring.resx:315
+    body = body.child(picture("pictureBox5", (3.0, 41.0, 97.0, 75.0)));
+
+    // The three combos and their labels, left column.
+    let edit = |combo: ComboId| {
+        focus
+            .combo(combo)
+            .map(|handle| (handle, handle.is_focused(window)))
+    };
     body = body
         .child(label(106.0, 45.0, "Monitor", enabled))
         .child(combo_box(
             ComboId::Monitor,
-            controls.monitor_text().to_owned(),
+            controls.combo_text(ComboId::Monitor).to_owned(),
             controls.combo_enabled(ComboId::Monitor),
             (160.0, 41.0, 162.0, 21.0),
+            None,
             cx,
         ))
         .child(label(106.0, 71.0, "Sensor", enabled))
         .child(combo_box(
             ComboId::Sensor,
-            sensor_text.to_owned(),
+            controls.combo_text(ComboId::Sensor).to_owned(),
             controls.combo_enabled(ComboId::Sensor),
             (160.0, 68.0, 162.0, 20.0),
+            edit(ComboId::Sensor),
             cx,
         ))
         .child(label(106.0, 98.0, "HW Ver", enabled))
         .child(combo_box(
             ComboId::Hardware,
-            hardware_text.to_owned(),
+            controls.combo_text(ComboId::Hardware).to_owned(),
             controls.combo_enabled(ComboId::Hardware),
             (160.0, 95.0, 162.0, 20.0),
+            edit(ComboId::Hardware),
             cx,
         ));
 
@@ -2107,28 +2286,25 @@ pub fn page(
         ));
     body = body.child(group);
 
-    // A dropped-down list goes last, so it draws over what is below it.
-    if let Some(combo) = battery.dropdown {
-        let (items, selected, y) = match combo {
-            ComboId::Monitor => (
-                controls.monitor_options.clone(),
-                controls.monitor,
-                41.0 + 21.0,
-            ),
-            ComboId::Sensor => (
-                numbered(&SENSORS),
-                controls.sensor.and_then(|index| i64::try_from(index).ok()),
-                68.0 + 20.0,
-            ),
-            ComboId::Hardware => (
-                numbered(&HW_VERSIONS),
-                controls
-                    .hardware
-                    .and_then(|index| i64::try_from(index).ok()),
-                95.0 + 20.0,
-            ),
+    // A dropped-down list, deferred and anchored so it lies over the page, `DropDownWidth` 200.
+    // C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring.Designer.cs:72, 108, 135
+    if let (Some(combo), Some(list)) = (battery.dropdown, battery.list()) {
+        let y = match combo {
+            ComboId::Monitor => 41.0 + 21.0,
+            ComboId::Sensor => 68.0 + 20.0,
+            ComboId::Hardware => 95.0 + 20.0,
         };
-        body = body.child(dropdown(combo, items, selected, (160.0, y), cx));
+        body = body.child(dropdown(
+            combo.id(),
+            &list,
+            (160.0, y, 200.0),
+            move |this, key| {
+                let view = this.telemetry.view();
+                this.battery_monitor.choose(combo, key, &view.parameters);
+            },
+            |this, lines| this.battery_monitor.scroll_list(lines),
+            cx,
+        ));
     }
 
     panel(TITLE, body).into_any_element()
@@ -2943,22 +3119,34 @@ mod tests {
         );
     }
 
-    /// `Validating` stops a box that does not parse from being written when it is left; Enter
-    /// goes straight to `Validated`, whose `float.Parse` throws, and the `catch` speaks only for
-    /// an analog monitor.
+    /// The `Validating` handlers are wired to nothing: leaving a box whose text does not parse
+    /// runs `Validated` as Enter does, whose `float.Parse` throws, and the `catch` speaks - in a
+    /// box, for what was typed - only for an analog monitor.
     #[test]
-    fn text_that_does_not_parse_is_refused_on_leaving_and_reported_on_enter() {
+    fn text_that_does_not_parse_is_reported_on_leaving_and_on_enter() {
+        let Some(designer) = crate::config_coverage::source::csharp(
+            "GCSViews/ConfigurationView/ConfigBatteryMonitoring.Designer.cs",
+        ) else {
+            eprintln!("skipped: the C# tree is not checked out");
+            return;
+        };
+        assert!(!designer.contains("Validating"), "no Validating is wired");
         let (mut battery, view) = open(&SITL);
         drain(&mut battery);
         battery.type_into(Field::Divider, "ten");
         battery.leave(Field::Divider, &view.parameters);
-        assert!(drain(&mut battery).is_empty(), "Validating cancelled");
+        let left = drain(&mut battery);
         battery.enter(Field::Divider, &view.parameters);
         let jobs = drain(&mut battery);
+        assert_eq!(left, jobs, "leaving is Enter");
         assert_eq!(
             jobs,
             vec![Job::Throw(OnThrow::ShowIfAnalog(DIVIDER_FAILED))]
         );
+        // The measured voltage, left not parsing: "Invalid number entered".
+        battery.type_into(Field::Measured, "twelve");
+        battery.leave(Field::Measured, &view.parameters);
+        assert_eq!(drain(&mut battery), vec![Job::Show(INVALID_NUMBER)]);
 
         let mut runner = Runner::<usize>::default();
         runner.push(jobs.clone());
@@ -2968,6 +3156,7 @@ mod tests {
             battery.message().map(|message| message.text.as_str()),
             Some("Set BATT_VOLT_MULT Failed")
         );
+        assert!(battery.take_status().is_none(), "a box, not a status line");
         battery.dismiss_message();
 
         // With a monitor that is not analog, the same failure is silent.
@@ -3053,7 +3242,7 @@ mod tests {
             what: "BATT_VOLT_PIN 2".to_owned(),
             on_throw: OnThrow::Show(PINS_FAILED),
         }));
-        assert!(events.contains(&Event::Message(COMBO_FAILED)));
+        assert!(events.contains(&Event::Refused(COMBO_FAILED)));
         assert!(
             events.contains(&Event::Refresh),
             "after the writes, even refused"
@@ -3080,7 +3269,8 @@ mod tests {
     }
 
     /// The page's own loop: a box the focus leaves is validated and its write goes to the link;
-    /// with no vehicle to take it the C#'s message shows.
+    /// with no vehicle to take it the C#'s `catch` speaks - on the status line, the owner's
+    /// ruling of 2026-09-25, and not in a box.
     #[test]
     fn leaving_a_box_in_the_frame_loop_writes_it() {
         let telemetry = Telemetry::idle();
@@ -3090,16 +3280,142 @@ mod tests {
         let mut focused = [false; 5];
         focused[Field::Capacity.index()] = true;
         battery.tick(&telemetry, &view, focused, true, &Persisted::at(None));
-        assert!(battery.message().is_none(), "still in the box");
+        assert!(battery.take_status().is_none(), "still in the box");
         battery.tick(&telemetry, &view, [false; 5], true, &Persisted::at(None));
-        assert_eq!(
-            battery.message().map(|message| message.text.as_str()),
-            Some(CAPACITY_FAILED)
-        );
+        assert!(battery.message().is_none());
+        assert_eq!(battery.take_status().as_deref(), Some(CAPACITY_FAILED));
         assert_eq!(
             battery.last_write.as_deref(),
             Some("BATT_CAPACITY 3400 failed")
         );
+    }
+
+    /// `MavlinkComboBox`'s false - a vehicle without the name - is a link failure too.
+    #[test]
+    fn a_refused_monitor_write_is_a_status_line() {
+        let (mut battery, view) = open(&SITL);
+        drain(&mut battery);
+        battery.absorb(vec![Event::Refused(COMBO_FAILED)], None, &view);
+        assert!(battery.message().is_none());
+        assert_eq!(battery.take_status().as_deref(), Some(COMBO_FAILED));
+        // A handler's own box stays a box.
+        battery.absorb(vec![Event::Message(FEATURE_NOT_ENABLED)], None, &view);
+        assert_eq!(
+            battery.message().map(|message| message.text.as_str()),
+            Some(FEATURE_NOT_ENABLED)
+        );
+        assert!(battery.take_status().is_none());
+    }
+
+    /// The Sensor and HW Ver boxes are `DropDown`s: typing changes their text and clears the
+    /// selection, runs no handler and writes nothing; a row chosen afterwards - even the one that
+    /// was selected - is a change, puts its text back and runs the handler.
+    #[test]
+    fn typing_into_the_sensor_and_board_boxes_writes_nothing_until_a_row_is_chosen() {
+        let (mut battery, view) = open(&SITL);
+        drain(&mut battery);
+        let typed = |key: &str| KeyDownEvent {
+            keystroke: gpui::Keystroke {
+                modifiers: gpui::Modifiers::default(),
+                key: key.to_owned(),
+                key_char: (key.chars().count() == 1).then(|| key.to_owned()),
+            },
+            is_held: false,
+            prefer_character_input: false,
+        };
+        let controls = battery.controls().expect("open");
+        assert_eq!(controls.combo_text(ComboId::Sensor), "0: Other");
+        assert_eq!(
+            controls.combo_text(ComboId::Hardware),
+            "2: APM2.5+/ZealotF427 - 3DR Power Module"
+        );
+        // The monitor combo is a `DropDownList`: no typing.
+        assert!(!battery.type_combo(ComboId::Monitor, &typed("x")));
+        // A backspace and a letter: the text edited, no row selected, nothing queued.
+        assert!(battery.type_combo(ComboId::Sensor, &typed("backspace")));
+        assert!(battery.type_combo(ComboId::Sensor, &typed("x")));
+        let controls = battery.controls().expect("open");
+        assert_eq!(controls.combo_text(ComboId::Sensor), "0: Othex");
+        assert_eq!(controls.sensor, None);
+        assert!(battery.type_combo(ComboId::Hardware, &typed("7")));
+        assert_eq!(battery.controls().and_then(|c| c.hardware), None);
+        assert!(drain(&mut battery).is_empty(), "no handler ran");
+        // Choosing the row that was selected is a change now: its text back, its pins written.
+        battery.toggle_dropdown(ComboId::Hardware);
+        battery.choose(ComboId::Hardware, 2, &view.parameters);
+        let controls = battery.controls().expect("open");
+        assert_eq!(
+            controls.combo_text(ComboId::Hardware),
+            "2: APM2.5+/ZealotF427 - 3DR Power Module"
+        );
+        assert_eq!(controls.hardware_typed, None);
+        assert_eq!(
+            steps(&drain(&mut battery)),
+            vec![(vec!["BATT_VOLT_PIN"], 13.0), (vec!["BATT_CURR_PIN"], 12.0)]
+        );
+        battery.choose(ComboId::Sensor, 0, &view.parameters);
+        assert_eq!(
+            battery.controls().map(|c| c.combo_text(ComboId::Sensor)),
+            Some("0: Other")
+        );
+        assert_eq!(
+            steps(&drain(&mut battery)),
+            vec![
+                (AMPS_NAMES.to_vec(), 17.0),
+                (DIVIDER_NAMES.to_vec(), f64::from(10.1_f32)),
+            ]
+        );
+        // A disabled box takes nothing: monitor 0 disables the sensor combo.
+        let (mut off, _) = open(&[("BATT_MONITOR", 0.0), ("BATT_VOLT_PIN", 13.0)]);
+        assert!(!off.type_combo(ComboId::Sensor, &typed("x")));
+    }
+
+    /// Each OK keeps the answer as `InputBox` keeps it, under its caption and question.
+    #[test]
+    fn each_answer_is_kept_as_input_box_keeps_it() {
+        let (mut battery, _) = open(&SITL);
+        let mut settings = Persisted::at(None);
+        battery.click_speech(&mut settings);
+        for _ in SPEECH_PROMPTS {
+            battery.answer(&mut settings);
+        }
+        assert!(battery.prompt().is_none());
+        assert_eq!(
+            settings.get("InputBoxNotificationWhatdoyouwantittosay"),
+            Some("WARNING%2C+Battery+at+%7Bbatv%7D+Volt%2C+%7Bbatp%7D+percent")
+        );
+        assert_eq!(
+            settings.get("InputBoxBatteryLevelWhatVoltagedoyouwanttowarnat"),
+            Some("9.6")
+        );
+        assert_eq!(
+            settings.get("InputBoxBatteryLevelWhatpercentagedoyouwanttowarnat"),
+            Some("20")
+        );
+        for (title, question, _, _) in SPEECH_PROMPTS {
+            let key = crate::config::optional::answers_key(title, question);
+            assert!(crate::settings::PUBLISHED.contains(&key.as_str()), "{key}");
+        }
+    }
+
+    /// The lists drop down through the shared drop-down: the rows, the selection, and the wheel.
+    #[test]
+    fn the_lists_are_the_shared_drop_down() {
+        let (mut battery, _) = open(&SITL);
+        assert!(battery.list().is_none());
+        battery.toggle_dropdown(ComboId::Hardware);
+        let list = battery.list().expect("down");
+        assert_eq!(list.options.len(), HW_VERSIONS.len());
+        assert_eq!(list.selected, Some(2));
+        assert_eq!(list.top_index, 0);
+        battery.scroll_list(1);
+        assert_eq!(
+            battery.list().map(|list| list.top_index),
+            Some(0),
+            "all rows show"
+        );
+        battery.close_list();
+        assert!(battery.list().is_none());
     }
 
     /// Leaving the setup screen closes the page, as leaving Initial Setup deactivates it; a box
@@ -3290,13 +3606,21 @@ mod tests {
                         });
                     assert!(per_box || source.contains(&format!("\"{key}\"")), "{key}");
                 }
-                (Some("expect"), Some(key)) if key.starts_with("config.speech") => {
+                (Some("expect"), Some(key))
+                    if key.starts_with("config.speech") || key.starts_with("config.InputBox") =>
+                {
                     let name = key.trim_start_matches("config.");
                     assert!(crate::settings::PUBLISHED.contains(&name), "{key}");
                     speech += 1;
                 }
                 (Some("click"), Some(id)) if id.starts_with("battery-") => {
-                    assert!(source.contains(&format!("\"{id}\"")), "{id}");
+                    // A `DropDown` combo's arrow is `<id>-button`, a list's row `<id>-<value>`.
+                    let base = id.strip_suffix("-button").unwrap_or_else(|| {
+                        id.rsplit_once('-')
+                            .filter(|(_, row)| row.chars().all(|c| c.is_ascii_digit()))
+                            .map_or(id, |(base, _)| base)
+                    });
+                    assert!(source.contains(&format!("\"{base}\"")), "{id}");
                 }
                 _ => {}
             }

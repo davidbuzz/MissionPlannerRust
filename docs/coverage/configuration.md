@@ -11,12 +11,12 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 20 | 23 | 4 | 2 | 12 | 569 |
+| 61 | 24 | 19 | 4 | 2 | 12 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings
         // in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 15 | 18 | 2 | 2 | 7 | 258 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 19 | 14 | 2 | 2 | 7 | 258 |
         //     15 |
 | CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 5 | 5 | 2 | 0 | 1 | 277 |
         //     1 |
@@ -123,24 +123,13 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
         //     the C#'s does; missing Ctrl+S, dragging the track bar (a click pages it), typing
         //     into a ValuesControl, and the InputBox's remembered answers |
 | 266 | `ConfigGPSOrder` | CAN GPS Order | Optional Hardware | any | 1 | done: `crates/mp-gui/src/config/gps_order.rs` `fn page` |
-| 270 | `ConfigBatteryMonitoring` | Battery Monitor | Optional Hardware | any | 13 | partial: `crates/mp-gui/src/config/battery_monitor.rs` `fn page` - the Monitor, Sensor and HW Ver combos with the nine presets and the pin table, the
-        //     divider and amps-per-volt arithmetic in single precision, each box writing its
-        //     parameter on leaving through the retrying set, the Low Battery alert and its three
-        //     questions in Settings.Instance and config.xml; no photo, no typing into the combos |
-| 271 | `ConfigBatteryMonitoring2` | Battery Monitor 2 | Optional Hardware | any | 10 | partial: `crates/mp-gui/src/config/battery_monitor2.rs` `fn page` - the BATT2 monitor and pin combos, the capacity and calibration boxes validated on
-        //     leaving and on Enter with the divider and amps-per-volt arithmetic in floats, the
-        //     one-second readings of the second battery, the page disabled for good without
-        //     BATT2_MONITOR, MP Alert on Low Battery with its three questions in the settings;
-        //     the power module photo is a named box, and the questions' remembered answers are
-        //     not kept |
+| 270 | `ConfigBatteryMonitoring` | Battery Monitor | Optional Hardware | any | 13 | done: `crates/mp-gui/src/config/battery_monitor.rs` `fn page` |
+| 271 | `ConfigBatteryMonitoring2` | Battery Monitor 2 | Optional Hardware | any | 10 | done: `crates/mp-gui/src/config/battery_monitor2.rs` `fn page` |
 | 276 | `ConfigDroneCAN` | DroneCAN/UAVCAN | Optional Hardware | always | 15 | **missing** |
 | 280 | `JoystickSetup` (`Joystick/JoystickSetup.cs`, not a panel) | Joystick | Optional Hardware | always | 11 | partial: `crates/mp-gui/src/joystick.rs` `fn panel_for` - has the device list and Enable; missing the per-channel axis grid, the button
         //     functions, Elevons, Save, Manual Control, Import and Export |
 | 285 | `ConfigCompassMot` | Compass/Motor Calib | Optional Hardware | any | 2 | done: `crates/mp-gui/src/config/compass_mot.rs` `fn page` |
-| 289 | `ConfigHWRangeFinder` | Range Finder | Optional Hardware | any | 2 | partial: `crates/mp-gui/src/config/rangefinder.rs` `fn page` - RNGFND_TYPE's combo (disabled on firmware that numbers its rangefinders, as in the
-        //     C#), the TeraRanger limits its handler sets, the 200 ms distance and voltage
-        //     readout; the sonar picture is a named box, and an unhandled timeout's error report
-        //     is shown without its Send |
+| 289 | `ConfigHWRangeFinder` | Range Finder | Optional Hardware | any | 2 | done: `crates/mp-gui/src/config/rangefinder.rs` `fn page` |
 | 293 | `ConfigHWAirspeed` | Airspeed | Optional Hardware | any | 1 | partial: `crates/mp-gui/src/config/airspeed.rs` `fn page` - Enable and Use Airspeed, each shown only for its parameter, Enable's handler
         //     writing before the control, the pin list and ARSPD_TYPE; the sensor picture is a
         //     named box |
@@ -150,11 +139,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
         //     override shown by the type's handler; the sensor picture is a named box, and a yaw
         //     below -179 degrees is kept rather than written back as the C#'s Minimum does |
 | 305 | `ConfigHWOSD` | OSD | Optional Hardware | any | 1 | done: `crates/mp-gui/src/config/osd.rs` `fn page` |
-| 309 | `ConfigMount` | Camera Gimbal | Optional Hardware | any | 5 | partial: `crates/mp-gui/src/config/mount.rs` `fn page` - the mount type, the tilt, roll, pan and shutter outputs assigned through
-        //     ensureDisabled, MNT_MODE and CAM_TRIGG_TYPE, each axis's servo and angle limits,
-        //     reverse and input channel, stabilise, neutral and retract angles, the shutter's
-        //     pulses; the page disabled without CAM_TRIGG_TYPE, as on firmware from 4.3; the four
-        //     gimbal pictures are named boxes |
+| 309 | `ConfigMount` | Camera Gimbal | Optional Hardware | any | 5 | done: `crates/mp-gui/src/config/mount.rs` `fn page` |
 | 313 | `ConfigAntennaTracker` | Antenna tracker | Optional Hardware | tracker | 3 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 | 317 | `ConfigMotorTest` | Motor Test | Optional Hardware | any | 3 | done: `crates/mp-gui/src/config/motor_test.rs` `fn page` |
 | 321 | `ConfigHWBT` | Bluetooth Setup | Optional Hardware | always | 1 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |

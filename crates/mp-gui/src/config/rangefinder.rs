@@ -14,14 +14,14 @@
 //! rangefinders (`RNGFND1_TYPE`), and on it the combo stays disabled, as in the C#.
 //!
 //! The layout is `ConfigHWRangeFinder.resx`'s, every control at its `Location` in a 650 x 116 page.
+//! `pictureBox3`'s image (`Resources.sonar`) is drawn as a box with the resource's name in it:
+//! this repository carries none of Mission Planner's artwork.
 //!
-//! What is not ported, and why:
-//!
-//! * `pictureBox3`'s image (`Resources.sonar`), a resource this application does not carry;
-//! * the report Mission Planner offers to send when the handler's `setParam` times out: its
-//!   handler has no `try`, so the `TimeoutException` reaches `Program.handleException`
-//!   (`Program.cs:717-800`), whose box is shown here with OK alone - there is no error-report
-//!   service for its Yes to send to.
+//! When the handler's `setParam` times out, its `TimeoutException` - the handler has no `try` -
+//! reaches `Program.handleException` (`Program.cs:717-800`), whose "Send Error" box is the
+//! unhandled-exception box; a write the combo's own `setParam` fails shows "Set RNGFND_TYPE
+//! Failed!". Both are link failures, and go on the status line: the owner's ruling of 2026-09-25
+//! (see `extra_setup::link_error`). The page shows no box of its own.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -33,7 +33,7 @@ use gpui::{AnyElement, Context, Window, div, prelude::*, px, rgb};
 
 use super::battery_monitor::float_text;
 use super::optional::{
-    Job, Set, SetQueue, heading, message_box, picture, rule, timeout_text, value_of,
+    Job, Set, SetQueue, failure_status, heading, message_box, picture, rule, timeout_text, value_of,
 };
 use crate::MissionPlanner;
 use crate::config::failsafe::{Lookup, options};
@@ -100,6 +100,8 @@ pub struct RangeFinder {
     /// How many times it has run.
     ticks: u32,
     messages: VecDeque<Message>,
+    /// The last link failure's words, for the status line.
+    status: Option<String>,
     queue: SetQueue,
 }
 
@@ -126,6 +128,7 @@ impl Default for RangeFinder {
             timer: None,
             ticks: 0,
             messages: VecDeque::new(),
+            status: None,
             queue: SetQueue::default(),
         }
     }
@@ -179,6 +182,11 @@ impl RangeFinder {
         self.messages.pop_front();
     }
 
+    /// The last link failure's words, taken for the status line.
+    pub fn take_status(&mut self) -> Option<String> {
+        self.status.take()
+    }
+
     /// Shows the page: a new page object for a new screen, then `Activate`.
     /// `// C#: GCSViews/ConfigurationView/ConfigHWRangeFinder.cs:17-34`
     pub fn activate(
@@ -191,10 +199,12 @@ impl RangeFinder {
     ) {
         if self.made_for != Some(key) {
             let messages = std::mem::take(&mut self.messages);
+            let status = self.status.take();
             let queue = std::mem::take(&mut self.queue);
             *self = Self {
                 made_for: Some(key),
                 messages,
+                status,
                 queue,
                 ..Self::default()
             };
@@ -303,7 +313,15 @@ impl RangeFinder {
             self.timer_tick(view);
             self.timer = Some(now);
         }
-        self.queue.advance(telemetry, &mut self.messages);
+        // The combo's "Set RNGFND_TYPE Failed!" and `Program.handleException`'s box go on the
+        // status line, the owner's ruling of 2026-09-25.
+        // C#: GCSViews/ConfigurationView/ConfigHWRangeFinder.cs:47-58; Program.cs:717-800
+        let mut failures = Vec::new();
+        self.queue
+            .advance_split(telemetry, &mut self.messages, &mut failures);
+        if let Some(status) = failure_status(&failures) {
+            self.status = Some(status);
+        }
     }
 }
 
@@ -375,6 +393,8 @@ pub fn page(rangefinder: &RangeFinder, cx: &mut Context<MissionPlanner>) -> AnyE
         .h(px(116.0))
         .child(heading(7.0, 5.0, HEADING, enabled))
         .child(rule(3.0, 23.0, 644.0))
+        // `Resources.sonar`, drawn as its name: no artwork is carried (a deliberate divergence).
+        // C#: GCSViews/ConfigurationView/ConfigHWRangeFinder.Designer.cs:60-67
         .child(picture("sonar", (11.0, 35.0, 75.0, 75.0)))
         .child(combo_box(
             "rangefinder-RNGFND_TYPE".to_owned(),
@@ -605,6 +625,54 @@ mod tests {
         assert_eq!(messages, [unhandled("RNGFND_MAX_CM")]);
         assert_eq!(link.taken().len(), 1);
         assert_ne!(messages[0].title, ERROR_TITLE);
+    }
+
+    /// The owner's ruling: the unhandled-exception box a timeout raises is a link failure, sorted
+    /// out for the status line, never a box.
+    #[test]
+    fn a_timeout_in_the_handler_goes_on_the_status_line() {
+        let mut page = RangeFinder::default();
+        let view = view_with(&[("RNGFND_TYPE", 0.0), ("RNGFND_MAX_CM", 700.0)]);
+        page.activate(&view, key(), true, with_teraranger, Instant::now());
+        let jobs = page.choose(14);
+        let link = Answering::new(&[(
+            "RNGFND_MAX_CM",
+            Progress::Finished(RequestOutcome::TimedOut),
+        )]);
+        let mut queue = SetQueue::<usize>::default();
+        queue.push(jobs);
+        let (mut boxes, mut failures) = (VecDeque::new(), Vec::new());
+        while queue.pending() > 0 {
+            queue.advance_split(&link, &mut boxes, &mut failures);
+        }
+        assert!(boxes.is_empty(), "no box");
+        assert_eq!(failures, [unhandled("RNGFND_MAX_CM")]);
+        assert_eq!(
+            failure_status(&failures).as_deref(),
+            Some(
+                "An error has occurred System.TimeoutException: Timeout on read - setParam \
+                 RNGFND_MAX_CM  Report this Error???"
+            )
+        );
+    }
+
+    /// The page's own loop: the combo's write, with no vehicle to take it, is `setParam`'s false
+    /// - "Set RNGFND_TYPE Failed!" on the status line, and no box.
+    #[test]
+    fn a_failed_write_is_a_status_line_through_the_frame_loop() {
+        let mut page = RangeFinder::default();
+        let view = view_with(&[("RNGFND_TYPE", 0.0)]);
+        let now = Instant::now();
+        page.activate(&view, key(), true, bundled, now);
+        let jobs = page.choose(1);
+        page.push(jobs);
+        page.tick(&Telemetry::idle(), &view, true, now);
+        assert!(page.message().is_none());
+        assert_eq!(
+            page.take_status().as_deref(),
+            Some("Set RNGFND_TYPE Failed!")
+        );
+        assert!(page.take_status().is_none(), "taken once");
     }
 
     #[test]

@@ -608,32 +608,31 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigBatteryMonitoring"),
         Some(13),
         &[setup(270, "Battery Monitor", OPTIONAL, ANY)],
-        // C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring.cs:18-653, ported but for the
-        // power-module photo and typing into the Sensor and HW Ver combos; the speech alert reads
-        // and writes Settings.Instance (:53-60, 565-601), saved with config.xml.
-        Partial(
-            at("crates/mp-gui/src/config/battery_monitor.rs", "fn page"),
-            "the Monitor, Sensor and HW Ver combos with the nine presets and the pin table, the
-        //     divider and amps-per-volt arithmetic in single precision, each box writing its
-        //     parameter on leaving through the retrying set, the Low Battery alert and its three
-        //     questions in Settings.Instance and config.xml; no photo, no typing into the combos",
-        ),
+        // C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring.cs:18-653, ported whole: the
+        // Monitor, Sensor and HW Ver combos with the nine presets and the pin table, the Sensor
+        // and HW Ver boxes taking typing as DropDown combos do (their selection cleared, no
+        // handler run), the divider and amps-per-volt arithmetic in single precision, each box
+        // writing its parameter on leaving (the .cs's Validating handlers are wired to nothing)
+        // and on Enter through the retrying set, the Low Battery alert and its three questions in
+        // Settings.Instance and config.xml with InputBox's answer lists (:53-60, 565-601;
+        // InputBox.cs:73-84, 178-184); write failures on the status line (the owner's ruling),
+        // the lists drawn deferred. The power-module photo is a named box: no artwork is carried.
+        Ours::Done(at("crates/mp-gui/src/config/battery_monitor.rs", "fn page")),
     ),
     panel(
         "ConfigBatteryMonitoring2",
         cv!("ConfigBatteryMonitoring2"),
         Some(10),
         &[setup(271, "Battery Monitor 2", OPTIONAL, ANY)],
-        // C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring2.cs:8-253
-        Partial(
-            at("crates/mp-gui/src/config/battery_monitor2.rs", "fn page"),
-            "the BATT2 monitor and pin combos, the capacity and calibration boxes validated on
-        //     leaving and on Enter with the divider and amps-per-volt arithmetic in floats, the
-        //     one-second readings of the second battery, the page disabled for good without
-        //     BATT2_MONITOR, MP Alert on Low Battery with its three questions in the settings;
-        //     the power module photo is a named box, and the questions' remembered answers are
-        //     not kept",
-        ),
+        // C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring2.cs:8-253, ported whole: the
+        // BATT2 monitor and pin combos, the capacity and calibration boxes validated on leaving
+        // and on Enter with the divider and amps-per-volt arithmetic in floats, the one-second
+        // readings of the second battery, the page disabled for good without BATT2_MONITOR, MP
+        // Alert on Low Battery with its three questions in the settings and InputBox's answer
+        // lists (InputBox.cs:73-84, 178-184), the question taking the keyboard; write failures on
+        // the status line (the owner's ruling). The power module photo is a named box: no artwork
+        // is carried.
+        Ours::Done(at("crates/mp-gui/src/config/battery_monitor2.rs", "fn page")),
     ),
     panel(
         "ConfigDroneCAN",
@@ -657,14 +656,13 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigHWRangeFinder"),
         Some(2),
         &[setup(289, "Range Finder", OPTIONAL, ANY)],
-        // C#: GCSViews/ConfigurationView/ConfigHWRangeFinder.cs:8-59
-        Partial(
-            at("crates/mp-gui/src/config/rangefinder.rs", "fn page"),
-            "RNGFND_TYPE's combo (disabled on firmware that numbers its rangefinders, as in the
-        //     C#), the TeraRanger limits its handler sets, the 200 ms distance and voltage
-        //     readout; the sonar picture is a named box, and an unhandled timeout's error report
-        //     is shown without its Send",
-        ),
+        // C#: GCSViews/ConfigurationView/ConfigHWRangeFinder.cs:8-59, ported whole: RNGFND_TYPE's
+        // combo (disabled on firmware that numbers its rangefinders, as in the C#), the
+        // TeraRanger limits its handler sets with the trailing-space name, the 200 ms distance
+        // and voltage readout; the combo's write failure and the unhandled-exception box a
+        // timeout raises go on the status line (the owner's ruling). The sonar picture is a named
+        // box: no artwork is carried.
+        Ours::Done(at("crates/mp-gui/src/config/rangefinder.rs", "fn page")),
     ),
     panel(
         "ConfigHWAirspeed",
@@ -715,15 +713,14 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigMount"),
         Some(5),
         &[setup(309, "Camera Gimbal", OPTIONAL, ANY)],
-        // C#: GCSViews/ConfigurationView/ConfigMount.cs:14-480
-        Partial(
-            at("crates/mp-gui/src/config/mount.rs", "fn page"),
-            "the mount type, the tilt, roll, pan and shutter outputs assigned through
-        //     ensureDisabled, MNT_MODE and CAM_TRIGG_TYPE, each axis's servo and angle limits,
-        //     reverse and input channel, stabilise, neutral and retract angles, the shutter's
-        //     pulses; the page disabled without CAM_TRIGG_TYPE, as on firmware from 4.3; the four
-        //     gimbal pictures are named boxes",
-        ),
+        // C#: GCSViews/ConfigurationView/ConfigMount.cs:14-480, ported whole: the mount type, the
+        // tilt, roll, pan and shutter outputs assigned through ensureDisabled, MNT_MODE and
+        // CAM_TRIGG_TYPE, each axis's servo and angle limits, reverse and input channel,
+        // stabilise, neutral and retract angles, the shutter's pulses; the page disabled without
+        // CAM_TRIGG_TYPE, as on firmware from 4.3; the Wiki link and its Transitions colour fade;
+        // "Failed to set Param" and the controls' write failures on the status line (the owner's
+        // ruling). The four gimbal pictures are named boxes: no artwork is carried.
+        Ours::Done(at("crates/mp-gui/src/config/mount.rs", "fn page")),
     ),
     panel(
         "ConfigAntennaTracker",
@@ -1891,7 +1888,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (20, 23, 4, 2, 12)
+            (24, 19, 4, 2, 12)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()
