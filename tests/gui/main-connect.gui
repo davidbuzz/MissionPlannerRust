@@ -1,0 +1,73 @@
+# MainV2's connection controls, ported from MainV2.Designer.cs and MainV2.cs (PLAN.md §13.6 row 80).
+#
+# The claim: the port box, the baud box and CONNECT sit at the top right of the window
+# (MainV2.Designer.cs:176-190, Controls/ConnectionControl.Designer.cs); the port box's list is
+# filled when clicked with the machine's serial ports and AUTO, TCP, UDP, UDPCl and WS
+# (MainV2.cs:1283-1290, 961-975); choosing TCP dims the baud box (ConnectionControl.cs:24-30);
+# CONNECT asks TCP's two questions - "remote host" then "remote Port", each offered from the
+# settings or the transport's default (ExtLibs/Comms/CommsTCPSerial.cs:112-125) - and opens the
+# link; the button reads DISCONNECT while connected and both boxes go dim (MainV2.cs:2459-2482);
+# DISCONNECT closes the link, and a model at rest is not asked about (MainV2.cs:1841-1880,
+# 1389-1447). The settings are saved after each (MenuConnect_Click: comport TCP, TCP_host,
+# TCP_port).
+#
+# Divergences, written at their sites in crates/mp-gui/src/main.rs and connect.rs: AUTO's port
+# scan (CommsSerialScan) is not ported and is refused on the status line; "Invalid BaudRate" is a
+# status line, never a box (the owner's ruling of 2026-09-25).
+#
+# The application starts with no link: its own settings file, empty, and an empty config.xml, so
+# nothing is opened at start-up (the saved link and the settings' comport both would be).
+#
+# Needs SITL copter on tcp:127.0.0.1:5760. Run as
+#
+#   tools/gui-test.sh tests/gui/main-connect.gui
+
+env XDG_DATA_HOME $WORK
+env TMPDIR $WORK
+env MP_SETTINGS $WORK/settings.conf
+setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config></Config>' > "$WORK/MissionPlannerRust/config.xml"
+
+screen fly
+window 1600x1200
+settle 4
+
+expect vehicle.connected false
+expect link.button CONNECT
+expect link.prompt none
+expect link.baud 115200
+# The boxes at the top right, the button after them.
+expect main-port left-of main-baud
+expect main-baud left-of main-connect
+
+# `CMB_serialport_Click`: the list, with the five kinds after the machine's ports.
+click main-port
+settle 1
+expect link.ports >= 5
+click main-port-TCP
+settle 1
+expect link.port TCP
+
+# `Connect` → `CommsTCPSerial.Open`: the host, then the port, each with its default.
+click main-connect
+settle 1
+expect link.prompt remote host
+key ctrl+u
+type 127.0.0.1
+key Return
+settle 1
+expect link.prompt remote Port
+key ctrl+u
+type 5760
+key Return
+settle 8
+expect link.prompt none
+expect vehicle.connected true
+expect link.button DISCONNECT
+expect status ~ connected to tcp:127.0.0.1:5760
+
+# `doDisconnect`, without the "still moving" question: SITL sits on the ground.
+click main-connect
+settle 3
+expect vehicle.connected false
+expect link.button CONNECT
+expect status disconnected

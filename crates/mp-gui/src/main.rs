@@ -9,6 +9,7 @@
 
 mod config;
 mod config_coverage;
+mod connect;
 mod coords;
 mod coverage;
 mod facts;
@@ -74,6 +75,32 @@ impl Docking {
             Self::Bottom => "Bottom",
         }
     }
+}
+
+/// A combo's open list: below its box, above everything else, thirty rows at most before it
+/// scrolls, as this application draws every drop-down.
+fn dropdown(rows: Vec<gpui::AnyElement>) -> gpui::AnyElement {
+    gpui::deferred(
+        gpui::anchored()
+            .snap_to_window()
+            .child(
+                div()
+                    .id("main-dropdown")
+                    .mt(px(22.0))
+                    .flex()
+                    .flex_col()
+                    .max_h(px(30.0 * 20.0))
+                    .overflow_y_scroll()
+                    .bg(rgb(theme::PANEL))
+                    .border_1()
+                    .border_color(rgb(theme::BORDER))
+                    .rounded_sm()
+                    .occlude()
+                    .children(rows),
+            ),
+    )
+    .with_priority(2)
+    .into_any_element()
 }
 
 /// Which of the planning screen's panels to build.
@@ -332,6 +359,12 @@ struct MissionPlanner {
     plan_scroll: gpui::ScrollHandle,
     /// `FP_docking`: where `panelAction` and `panelWaypoints` sit.
     plan_docking: Docking,
+    /// `MainV2`'s connection box and CONNECT button.
+    connect_box: connect::ConnectBox,
+    /// The box a network kind's question is typed into.
+    connect_field: textfield::TextField,
+    /// Its keyboard focus, and the dialogs' when they have no box.
+    connect_focus: gpui::FocusHandle,
     /// Initial Setup's FailSafe page.
     failsafe: config::failsafe::FailSafe,
     /// The SETUP screen's backstage view: `InitialSetup`'s list and the page chosen from it.
@@ -543,6 +576,12 @@ impl MissionPlanner {
         } else {
             Docking::Right
         };
+        // `CMB_serialport` and `CMB_baudrate` as the settings left them: `comport`, its baud.
+        // `// C#: MainV2.cs:961-975`
+        let connect_box = connect::ConnectBox::new(
+            persisted.get("comport").unwrap_or_default(),
+            persisted.baud(),
+        );
         let mut this = Self {
             telemetry,
             map: std::rc::Rc::new(std::cell::RefCell::new(map)),
@@ -616,6 +655,9 @@ impl MissionPlanner {
             fly_scroll: gpui::ScrollHandle::new(),
             plan_scroll: gpui::ScrollHandle::new(),
             plan_docking,
+            connect_box,
+            connect_field: textfield::TextField::new(""),
+            connect_focus: cx.focus_handle(),
             fly_actions: fly::Actions::default(),
             fly_focus: fly::ActionsFocus::new(cx),
             fly_pages: fly::Pages::default(),
@@ -963,6 +1005,405 @@ impl MissionPlanner {
             Docking::Bottom => Docking::Right,
         };
         self.persisted.set("FP_docking", self.plan_docking.name());
+    }
+
+    /// `ConnectionControl` and `MenuConnect`, right-aligned in the menu strip: the port box, the
+    /// baud box (off for the kinds without one, and both off while connected, as `IsConnected`
+    /// sets them), and the button, CONNECT or DISCONNECT by the link.
+    /// `// C#: MainV2.Designer.cs:176-190; Controls/ConnectionControl.Designer.cs; Controls/ConnectionControl.cs:24-30`
+    fn connection_controls(&self, view: &TelemetryView, cx: &mut Context<Self>) -> impl IntoElement {
+        let connected = view.connected && !view.target.starts_with("file:");
+        let port = self.connect_box.port.clone();
+        let baud_on = connect::baud_enabled(&port) && !connected;
+        let mut strip = div().flex().items_center().gap_2().pb_2();
+        // `cmb_Connection`: the choice, and its list below it when clicked.
+        strip = strip.child(
+            probe::measured("main-port", div())
+                .id("main-port")
+                .relative()
+                .px_2()
+                .py(px(1.0))
+                .min_w(px(121.0))
+                .rounded_sm()
+                .border_1()
+                .border_color(rgb(theme::BORDER))
+                .text_xs()
+                .text_color(rgb(if connected { theme::DIM } else { theme::TEXT }))
+                .cursor_pointer()
+                .hover(|style| style.bg(rgb(theme::BORDER)))
+                .child(if port.is_empty() { "port".to_owned() } else { port.clone() })
+                .on_click(cx.listener(|this, _event, _window, cx| {
+                    // `CMB_serialport_Click`: the list filled afresh, the old choice kept if
+                    // it is still there.
+                    // `// C#: MainV2.cs:1283-1290`
+                    if this.telemetry.view().connected {
+                        return;
+                    }
+                    let serial: Vec<String> = mp_transport::list_ports()
+                        .into_iter()
+                        .map(|port| port.name)
+                        .collect();
+                    this.connect_box.ports = connect::port_list(&serial);
+                    this.connect_box.ports_open = !this.connect_box.ports_open;
+                    this.connect_box.bauds_open = false;
+                    cx.notify();
+                }))
+                .children(self.connect_box.ports_open.then(|| {
+                    let rows: Vec<gpui::AnyElement> = self
+                        .connect_box
+                        .ports
+                        .iter()
+                        .map(|name| {
+                            let choice = name.clone();
+                            let id = format!("main-port-{}", name.replace('/', "-"));
+                            probe::measured(id.clone(), div())
+                                .id(gpui::SharedString::from(id))
+                                .px_2()
+                                .py(px(2.0))
+                                .text_xs()
+                                .text_color(rgb(theme::TEXT))
+                                .cursor_pointer()
+                                .hover(|style| style.bg(rgb(theme::BORDER)))
+                                .child(name.clone())
+                                .on_click(cx.listener(move |this, _event, _window, cx| {
+                                    // `CMB_serialport_SelectedIndexChanged`: `comPortName`,
+                                    // and the baud saved for the port put back.
+                                    // `// C#: MainV2.cs:1962-1984`
+                                    this.connect_box.port.clone_from(&choice);
+                                    this.persisted.select_port(&choice);
+                                    this.connect_box.baud = this.persisted.baud().to_owned();
+                                    this.connect_box.ports_open = false;
+                                    cx.notify();
+                                }))
+                                .into_any_element()
+                        })
+                        .collect();
+                    dropdown(rows)
+                })),
+        );
+        // `cmb_Baud`: its text, and the sixteen rates below it when clicked.
+        strip = strip.child(
+            probe::measured("main-baud", div())
+                .id("main-baud")
+                .relative()
+                .px_2()
+                .py(px(1.0))
+                .min_w(px(70.0))
+                .rounded_sm()
+                .border_1()
+                .border_color(rgb(theme::BORDER))
+                .text_xs()
+                .text_color(rgb(if baud_on { theme::TEXT } else { theme::DIM }))
+                .cursor_pointer()
+                .hover(|style| style.bg(rgb(theme::BORDER)))
+                .child(self.connect_box.baud.clone())
+                .on_click(cx.listener(move |this, _event, _window, cx| {
+                    if !baud_on {
+                        return;
+                    }
+                    this.connect_box.bauds_open = !this.connect_box.bauds_open;
+                    this.connect_box.ports_open = false;
+                    cx.notify();
+                }))
+                .children(self.connect_box.bauds_open.then(|| {
+                    let rows: Vec<gpui::AnyElement> = connect::BAUDS
+                        .iter()
+                        .map(|rate| {
+                            let id = format!("main-baud-{rate}");
+                            probe::measured(id.clone(), div())
+                                .id(gpui::SharedString::from(id))
+                                .px_2()
+                                .py(px(2.0))
+                                .text_xs()
+                                .text_color(rgb(theme::TEXT))
+                                .cursor_pointer()
+                                .hover(|style| style.bg(rgb(theme::BORDER)))
+                                .child(*rate)
+                                .on_click(cx.listener(move |this, _event, _window, cx| {
+                                    // `CMB_baudrate_TextChanged`: a number, its digits kept.
+                                    // `// C#: MainV2.cs:4333-4350`
+                                    match connect::baud_changed(rate) {
+                                        Ok(baud) => {
+                                            this.connect_box.baud = baud;
+                                            this.persisted.set_baud(&this.connect_box.baud);
+                                        }
+                                        // `Strings.InvalidBaudRate` is a box in the C#; here a
+                                        // status line - the owner's ruling of 2026-09-25: no
+                                        // box for an error the window can show as state.
+                                        Err(why) => this.file_status = Some(why.to_owned()),
+                                    }
+                                    this.connect_box.bauds_open = false;
+                                    cx.notify();
+                                }))
+                                .into_any_element()
+                        })
+                        .collect();
+                    dropdown(rows)
+                })),
+        );
+        // `MenuConnect`: CONNECT, or DISCONNECT while the link is open.
+        // `// C#: MainV2.cs:2459-2482`
+        strip = strip.child(ui::action(
+            "main-connect",
+            if connected {
+                connect::DISCONNECT
+            } else {
+                connect::CONNECT
+            },
+            if connected { theme::WARN } else { theme::OK },
+            true,
+            cx.listener(|this, _event: &(), window, cx| {
+                this.connect_clicked(window, cx);
+                cx.notify();
+            }),
+        ));
+        strip
+    }
+
+    /// `MenuConnect_Click` → `Connect`: a moving model is asked about first; then the link is
+    /// closed if it is open, else opened from the boxes; and the settings are saved either way.
+    /// `// C#: MainV2.cs:1841-1880`
+    fn connect_clicked(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let view = self.telemetry.view();
+        let connected = view.connected && !view.target.starts_with("file:");
+        let groundspeed = view
+            .state
+            .as_deref()
+            .map_or(0.0, |state| state.ground_speed.0);
+        if connect::asks_before_disconnecting(connected, groundspeed) {
+            self.connect_box.still_moving = true;
+            self.connect_focus.focus(window, cx);
+            return;
+        }
+        if connected {
+            self.do_disconnect();
+        } else {
+            self.do_connect(window, cx);
+        }
+    }
+
+    /// `doDisconnect`: the port closed, the recording with it, and the settings saved as
+    /// `MenuConnect_Click` saves them.
+    /// `// C#: MainV2.cs:1389-1447, 1844-1845`
+    fn do_disconnect(&mut self) {
+        self.telemetry = Telemetry::idle();
+        self.mission_requested = false;
+        self.file_status = Some("disconnected".to_owned());
+        self.save_config(settings::SaveEvent::Connect);
+    }
+
+    /// `doConnect` from the boxes: AUTO's port scan is not ported and is refused as such; a
+    /// serial port opens at once; a network kind asks its transport's questions first.
+    /// `// C#: MainV2.cs:1448-1526`
+    fn do_connect(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let port = self.connect_box.port.clone();
+        let kind = connect::kind(&port);
+        if port.is_empty() {
+            self.file_status = Some("choose a port first".to_owned());
+            return;
+        }
+        if kind == connect::Kind::Auto {
+            // `CommsSerialScan` is not ported: the C#'s scan of every port for a heartbeat.
+            self.file_status = Some("AUTO is not ported; choose the port".to_owned());
+            return;
+        }
+        let questions = connect::questions(kind);
+        if questions.is_empty() {
+            if let Some(url) = connect::url(kind, &port, &self.connect_box.baud, &[]) {
+                self.open_link(&url);
+            }
+            return;
+        }
+        let Some(first) = questions.first().cloned() else {
+            return;
+        };
+        self.connect_box.asking = Some(connect::Asking {
+            kind,
+            questions,
+            answers: Vec::new(),
+        });
+        self.connect_field.set(self.persisted.get(first.key).unwrap_or(first.default));
+        self.connect_focus.focus(window, cx);
+    }
+
+    /// The link opened and, as `MenuConnect_Click` then does, the settings saved: the box's
+    /// port and baud, a network kind's answers under its keys.
+    /// `// C#: MainV2.cs:1841-1847; ExtLibs/Comms/CommsTCPSerial.cs:142-143`
+    fn open_link(&mut self, url: &str) {
+        self.telemetry = Telemetry::connect(url);
+        self.mission_requested = false;
+        if let Some(err) = self.telemetry.error() {
+            self.file_status = Some(format!("could not open {url}: {err}"));
+        } else {
+            self.file_status = Some(format!("connected to {url}"));
+            self.persisted.link_opened(url);
+            self.remember();
+        }
+        self.save_config(settings::SaveEvent::Connect);
+    }
+
+    /// A question's OK (or Enter): the answer kept under its settings key, the next question
+    /// asked, and the link opened after the last.
+    fn connect_answered(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(mut asking) = self.connect_box.asking.take() else {
+            return;
+        };
+        let Some(question) = asking.current().cloned() else {
+            return;
+        };
+        let answer = self.connect_field.value().trim().to_owned();
+        self.persisted.set(question.key, answer.clone());
+        asking.answers.push(answer);
+        if let Some(next) = asking.current().cloned() {
+            self.connect_field
+                .set(self.persisted.get(next.key).unwrap_or(next.default));
+            self.connect_box.asking = Some(asking);
+            self.connect_focus.focus(window, cx);
+            return;
+        }
+        let port = self.connect_box.port.clone();
+        let baud = self.connect_box.baud.clone();
+        if let Some(url) = connect::url(asking.kind, &port, &baud, &asking.answers) {
+            self.open_link(&url);
+        }
+    }
+
+    /// The dialogs of the connection box: a network kind's question with its box, and "Your
+    /// model is still moving ..." with Yes and No - each modal over the window, as the C#'s
+    /// are. (`Strings.InvalidBaudRate`'s box is a status line here, the owner's ruling.)
+    fn connect_dialogs(
+        &self,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        let focus = &self.connect_focus;
+        let (title, text, has_box, yes_no) = if let Some(asking) = &self.connect_box.asking {
+            let question = asking.current()?;
+            (question.title, question.text, true, false)
+        } else if self.connect_box.still_moving {
+            (connect::DISCONNECT_TITLE, connect::STILL_MOVING, false, true)
+        } else {
+            return None;
+        };
+        let on_key = cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
+            let outcome = if this.connect_box.asking.is_some() {
+                this.connect_field.key(event)
+            } else {
+                fly::answer_key(event)
+            };
+            match outcome {
+                textfield::KeyOutcome::Submitted => this.connect_answer(true, window, cx),
+                textfield::KeyOutcome::Cancelled => this.connect_answer(false, window, cx),
+                textfield::KeyOutcome::Changed => cx.notify(),
+                textfield::KeyOutcome::Ignored => {}
+            }
+        });
+        let size = window.viewport_size();
+        let mut dialog = probe::measured("main-connect-prompt", div())
+            .flex()
+            .flex_col()
+            .gap_2()
+            .w(px(340.0))
+            .p_3()
+            .bg(rgb(theme::PANEL))
+            .border_1()
+            .border_color(rgb(theme::ACCENT))
+            .rounded_md()
+            .child(div().text_xs().text_color(rgb(theme::DIM)).child(title))
+            .child(div().text_sm().text_color(rgb(theme::TEXT)).child(text));
+        let mut on_key = Some(on_key);
+        if has_box && let Some(on_key) = on_key.take() {
+            dialog = dialog.child(textfield::text_field(
+                "main-connect-field",
+                &self.connect_field,
+                focus,
+                focus.is_focused(window),
+                px(310.0),
+                on_key,
+            ));
+        }
+        let (yes, no) = if yes_no {
+            ("Yes", Some("No"))
+        } else if has_box {
+            ("OK", Some("Cancel"))
+        } else {
+            ("OK", None)
+        };
+        dialog = dialog.child(
+            div()
+                .flex()
+                .justify_end()
+                .gap_2()
+                .child(ui::action(
+                    "main-connect-ok",
+                    yes,
+                    theme::ACCENT,
+                    true,
+                    cx.listener(|this, _event: &(), window, cx| {
+                        this.connect_answer(true, window, cx);
+                    }),
+                ))
+                .children(no.map(|label| {
+                    ui::action(
+                        "main-connect-cancel",
+                        label,
+                        theme::TEXT,
+                        true,
+                        cx.listener(|this, _event: &(), window, cx| {
+                            this.connect_answer(false, window, cx);
+                        }),
+                    )
+                })),
+        );
+        let body = match on_key {
+            Some(on_key) => dialog
+                .id("main-connect-keys")
+                .track_focus(focus)
+                .on_key_down(on_key)
+                .into_any_element(),
+            None => dialog.into_any_element(),
+        };
+        Some(
+            gpui::deferred(
+                gpui::anchored()
+                    .position(gpui::point(px(0.0), px(0.0)))
+                    .child(
+                        div()
+                            .id("main-connect-backdrop")
+                            .w(size.width)
+                            .h(size.height)
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .occlude()
+                            .child(body),
+                    ),
+            )
+            .with_priority(3)
+            .into_any_element(),
+        )
+    }
+
+    /// A connection dialog answered: Yes disconnects the moving model, OK takes a question's
+    /// answer, Cancel or No leaves things as they were.
+    fn connect_answer(&mut self, yes: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if self.connect_box.still_moving {
+            self.connect_box.still_moving = false;
+            if yes {
+                self.do_disconnect();
+            }
+            cx.notify();
+            return;
+        }
+        if self.connect_box.asking.is_some() {
+            if yes {
+                self.connect_answered(window, cx);
+            } else {
+                // "Canceled by request": the transport's Open throws, and nothing opens.
+                self.connect_box.asking = None;
+            }
+        }
+        cx.notify();
     }
 
     fn set_altitude_frame(&mut self, frame: plan::AltitudeFrame) {
@@ -2367,6 +2808,7 @@ impl Render for MissionPlanner {
                 facts::record(key, value);
             }
             plan::record_facts(&self.plan, &self.plan_menus);
+            connect::record_facts(&self.connect_box, view.connected);
             prefetch_ui::record_facts(&self.plan_menus);
             facts::record("plan.docking", self.plan_docking.name());
             // The map's zoom and centre, its radius circles and what the pointer is over, and the
@@ -2870,8 +3312,10 @@ impl Render for MissionPlanner {
                                     ),
                             )
                             .child(self.tabs(cx))
-                            .child(self.vehicle_picker(&view, cx)),
+                            .child(self.vehicle_picker(&view, cx))
+                            .child(self.connection_controls(&view, cx)),
                     )
+                    .children(self.connect_dialogs(window, cx))
                     .child(
                         div()
                             .flex()

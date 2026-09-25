@@ -211,6 +211,8 @@ pub enum SaveEvent {
     FlightPlanner,
     /// `MainV2_FormClosing`, after the screen showing is deactivated.
     Close,
+    /// `MenuConnect_Click`, after the link is opened or closed.
+    Connect,
 }
 
 impl SaveEvent {
@@ -222,6 +224,7 @@ impl SaveEvent {
             Self::FlightData => "fly",
             Self::FlightPlanner => "plan",
             Self::Close => "close",
+            Self::Connect => "connect",
         }
     }
 }
@@ -368,6 +371,17 @@ impl Persisted {
         &self.baud
     }
 
+    /// `CMB_baudrate_TextChanged`'s number, kept for the port and written by the next save.
+    /// `// C#: MainV2.cs:4333-4350, 2219-2237`
+    pub fn set_baud(&mut self, baud: &str) {
+        baud.clone_into(&mut self.baud);
+    }
+
+    /// `CMB_serialport_SelectedIndexChanged`, from the connection box.
+    pub fn select_port(&mut self, port: &str) {
+        self.select_port_inner(port);
+    }
+
     /// `Settings.Instance[key] = value`: in the dictionary at once, and in the file at the next
     /// [`Persisted::save_config`] - a screen's handler writes nothing to disk itself.
     /// `// C#: ExtLibs/Utilities/Settings.cs:58-61`
@@ -460,28 +474,28 @@ impl Persisted {
         };
         match link {
             mp_transport::LinkUrl::Tcp { host, port } => {
-                self.select_port("TCP");
+                self.select_port_inner("TCP");
                 self.config.set("TCP_port", port.to_string());
                 self.config.set("TCP_host", host);
             }
             mp_transport::LinkUrl::Udp { port, .. } => {
-                self.select_port("UDP");
+                self.select_port_inner("UDP");
                 self.config.set("UDP_port", port.to_string());
             }
             mp_transport::LinkUrl::Serial { path, baud } => {
-                self.select_port(&path);
+                self.select_port_inner(&path);
                 self.baud = baud.to_string();
             }
             // `CommsUDPSerialConnect.Open` saves the host and port it was given, `CommsWebSocket.Open`
             // its URL; NTRIP is not one of the connection box's ports.
             // `// C#: ExtLibs/Comms/CommsUDPSerialConnect.cs:78-79; ExtLibs/Comms/CommsWebSocket.cs:109`
             mp_transport::LinkUrl::UdpClient { host, port } => {
-                self.select_port("UDPCl");
+                self.select_port_inner("UDPCl");
                 self.config.set("UDP_port", port.to_string());
                 self.config.set("UDP_host", host);
             }
             mp_transport::LinkUrl::WebSocket { url } => {
-                self.select_port("WS");
+                self.select_port_inner("WS");
                 self.config.set("WS_url", url);
             }
             mp_transport::LinkUrl::TcpListen { .. }
@@ -492,7 +506,7 @@ impl Persisted {
 
     /// `CMB_serialport_SelectedIndexChanged`: the port chosen, and the baud box restored.
     /// `// C#: MainV2.cs:1962-1984`
-    fn select_port(&mut self, port: &str) {
+    fn select_port_inner(&mut self, port: &str) {
         port.clone_into(&mut self.comport);
         if let Some(saved) = self.config.get(&format!("{}_BAUD", port.replace(' ', "_"))) {
             saved.clone_into(&mut self.baud);

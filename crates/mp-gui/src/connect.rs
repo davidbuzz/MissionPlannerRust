@@ -19,36 +19,36 @@
 
 /// `cmb_Baud`'s items.
 /// `// C#: Controls/ConnectionControl.resx (cmb_Baud.Items..Items15)`
-pub const BAUDS: [&str; 16] = [
+pub(crate) const BAUDS: [&str; 16] = [
     "1200", "2400", "4800", "9600", "19200", "38400", "57600", "111100", "115200", "230400",
     "460800", "500000", "625000", "921600", "1000000", "1500000",
 ];
 
 /// The port box's entries after the serial ports.
 /// `// C#: MainV2.cs:1295-1299`
-pub const NETWORK_PORTS: [&str; 4] = ["TCP", "UDP", "UDPCl", "WS"];
+pub(crate) const NETWORK_PORTS: [&str; 4] = ["TCP", "UDP", "UDPCl", "WS"];
 
 /// `Strings.CONNECTc` and `DISCONNECTc`, the button's two texts.
 /// `// C#: ExtLibs/Strings/Strings.resx:271-279`
-pub const CONNECT: &str = "CONNECT";
-pub const DISCONNECT: &str = "DISCONNECT";
+pub(crate) const CONNECT: &str = "CONNECT";
+pub(crate) const DISCONNECT: &str = "DISCONNECT";
 /// `Strings.Stillmoving`, asked before disconnecting from a moving model, under `Strings.Disconnect`.
 /// `// C#: MainV2.cs:1851-1857; ExtLibs/Strings/Strings.resx:274-296`
-pub const STILL_MOVING: &str = "Your model is still moving are you sure you want to disconnect?";
-pub const DISCONNECT_TITLE: &str = "Disconnect";
+pub(crate) const STILL_MOVING: &str = "Your model is still moving are you sure you want to disconnect?";
+pub(crate) const DISCONNECT_TITLE: &str = "Disconnect";
 /// `Strings.InvalidBaudRate`, for a baud box that is not a number.
 /// `// C#: MainV2.cs:4335-4339; ExtLibs/Strings/Strings.resx:177-179`
-pub const INVALID_BAUD_RATE: &str = "Invalid BaudRate";
+pub(crate) const INVALID_BAUD_RATE: &str = "Invalid BaudRate";
 /// `comPort.MAV.cs.groundspeed > 4`: faster than this, disconnecting is asked about.
 /// `// C#: MainV2.cs:1851`
-pub const STILL_MOVING_SPEED: f64 = 4.0;
+pub(crate) const STILL_MOVING_SPEED: f64 = 4.0;
 
 /// `PopulateSerialportList`: `AUTO`, the serial ports as the system lists them, then the network
 /// kinds. `AUTO` is listed as the C# lists it, and refused when chosen: its port scan
 /// (`CommsSerialScan`) is not ported.
 /// `// C#: MainV2.cs:1291-1300`
 #[must_use]
-pub fn port_list(serial_ports: &[String]) -> Vec<String> {
+pub(crate) fn port_list(serial_ports: &[String]) -> Vec<String> {
     let mut list = vec!["AUTO".to_owned()];
     list.extend(serial_ports.iter().cloned());
     list.extend(NETWORK_PORTS.iter().map(|name| (*name).to_owned()));
@@ -58,7 +58,7 @@ pub fn port_list(serial_ports: &[String]) -> Vec<String> {
 /// `CMB_serialport_SelectedIndexChanged`: the baud box is off for the kinds that have no baud.
 /// `// C#: MainV2.cs:1967-1974`
 #[must_use]
-pub fn baud_enabled(port: &str) -> bool {
+pub(crate) fn baud_enabled(port: &str) -> bool {
     !matches!(port, "UDP" | "UDPCl" | "TCP" | "AUTO")
 }
 
@@ -68,8 +68,8 @@ pub fn baud_enabled(port: &str) -> bool {
 ///
 /// # Errors
 ///
-/// The message box's words.
-pub fn baud_changed(text: &str) -> Result<String, &'static str> {
+/// The status line's words (a box in the C#, never here - the owner's ruling of 2026-09-25).
+pub(crate) fn baud_changed(text: &str) -> Result<String, &'static str> {
     if text.trim().parse::<i32>().is_err() {
         return Err(INVALID_BAUD_RATE);
     }
@@ -78,7 +78,7 @@ pub fn baud_changed(text: &str) -> Result<String, &'static str> {
 
 /// What the port box names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Kind {
+pub(crate) enum Kind {
     /// A serial device.
     Serial,
     /// `TcpSerial`: a TCP client.
@@ -96,7 +96,7 @@ pub enum Kind {
 /// `doConnect`'s `switch (portname)`.
 /// `// C#: MainV2.cs:1452-1526`
 #[must_use]
-pub fn kind(port: &str) -> Kind {
+pub(crate) fn kind(port: &str) -> Kind {
     match port {
         "TCP" => Kind::Tcp,
         "UDP" => Kind::Udp,
@@ -110,22 +110,22 @@ pub fn kind(port: &str) -> Kind {
 /// One of the `InputBox`es a transport's `Open` shows: its title, its words, the settings key
 /// whose value it offers, and what it offers when the key is empty.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Question {
+pub(crate) struct Question {
     /// The box's title.
-    pub title: &'static str,
+    pub(crate) title: &'static str,
     /// Its words.
-    pub text: &'static str,
+    pub(crate) text: &'static str,
     /// The `Settings` key it reads and, once answered, writes.
-    pub key: &'static str,
+    pub(crate) key: &'static str,
     /// The transport's own default.
-    pub default: &'static str,
+    pub(crate) default: &'static str,
 }
 
 /// The questions a kind asks before opening, in the order its `Open` asks them.
 /// `// C#: ExtLibs/Comms/CommsTCPSerial.cs:112-125; CommsUdpSerial.cs:110-115;
 /// CommsUDPSerialConnect.cs:136-146; CommsWebSocket.cs:103-106`
 #[must_use]
-pub fn questions(kind: Kind) -> Vec<Question> {
+pub(crate) fn questions(kind: Kind) -> Vec<Question> {
     match kind {
         Kind::Tcp => vec![
             Question {
@@ -175,7 +175,7 @@ pub fn questions(kind: Kind) -> Vec<Question> {
 /// `serial:<port>:<baud>`, `tcp:host:port`, `udp:0.0.0.0:port`, `udpcl:host:port`, or the URL
 /// typed for WS. `None` for AUTO, and for a network kind whose answers are not there yet.
 #[must_use]
-pub fn url(kind: Kind, port: &str, baud: &str, answers: &[String]) -> Option<String> {
+pub(crate) fn url(kind: Kind, port: &str, baud: &str, answers: &[String]) -> Option<String> {
     let answer = |index: usize| answers.get(index).map(|answer| answer.trim());
     match kind {
         Kind::Serial => Some(format!("serial:{port}:{baud}")),
@@ -190,54 +190,52 @@ pub fn url(kind: Kind, port: &str, baud: &str, answers: &[String]) -> Option<Str
 /// `Connect`'s first check: a moving model is asked about before disconnecting.
 /// `// C#: MainV2.cs:1851-1857`
 #[must_use]
-pub fn asks_before_disconnecting(connected: bool, groundspeed: f64) -> bool {
+pub(crate) fn asks_before_disconnecting(connected: bool, groundspeed: f64) -> bool {
     connected && groundspeed > STILL_MOVING_SPEED
 }
 
 /// A network kind's questions on their way to being answered.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Asking {
+pub(crate) struct Asking {
     /// What is being opened.
-    pub kind: Kind,
+    pub(crate) kind: Kind,
     /// The questions, in order.
-    pub questions: Vec<Question>,
+    pub(crate) questions: Vec<Question>,
     /// The answers so far.
-    pub answers: Vec<String>,
+    pub(crate) answers: Vec<String>,
 }
 
 impl Asking {
     /// The question due now, if one is.
     #[must_use]
-    pub fn current(&self) -> Option<&Question> {
+    pub(crate) fn current(&self) -> Option<&Question> {
         self.questions.get(self.answers.len())
     }
 }
 
 /// The connection controls' state.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ConnectBox {
+pub(crate) struct ConnectBox {
     /// `cmb_Connection.Text`, `MainV2.comPortName`.
-    pub port: String,
+    pub(crate) port: String,
     /// `cmb_Baud.Text`.
-    pub baud: String,
+    pub(crate) baud: String,
     /// The port box's list, filled when the box is clicked.
-    pub ports: Vec<String>,
+    pub(crate) ports: Vec<String>,
     /// Whether the port list is open.
-    pub ports_open: bool,
+    pub(crate) ports_open: bool,
     /// Whether the baud list is open.
-    pub bauds_open: bool,
+    pub(crate) bauds_open: bool,
     /// A network kind's questions being asked.
-    pub asking: Option<Asking>,
+    pub(crate) asking: Option<Asking>,
     /// "Your model is still moving ..." showing.
-    pub still_moving: bool,
-    /// The last message box: "Invalid BaudRate".
-    pub message: Option<&'static str>,
+    pub(crate) still_moving: bool,
 }
 
 impl ConnectBox {
     /// The boxes as the settings left them: `comport` and its baud.
     #[must_use]
-    pub fn new(port: &str, baud: &str) -> Self {
+    pub(crate) fn new(port: &str, baud: &str) -> Self {
         Self {
             port: port.to_owned(),
             baud: baud.to_owned(),
@@ -246,15 +244,37 @@ impl ConnectBox {
             bauds_open: false,
             asking: None,
             still_moving: false,
-            message: None,
         }
     }
+}
 
-    /// Whether a dialog of the box's is showing.
-    #[must_use]
-    pub fn dialog_open(&self) -> bool {
-        self.asking.is_some() || self.still_moving || self.message.is_some()
-    }
+/// What a UI test asserts on.
+pub(crate) fn record_facts(state: &ConnectBox, connected: bool) {
+    use crate::facts::record;
+    record("link.port", &state.port);
+    record("link.baud", &state.baud);
+    record(
+        "link.button",
+        if connected { DISCONNECT } else { CONNECT },
+    );
+    record(
+        "link.prompt",
+        state
+            .asking
+            .as_ref()
+            .and_then(Asking::current)
+            .map_or_else(
+                || {
+                    if state.still_moving {
+                        DISCONNECT_TITLE.to_owned()
+                    } else {
+                        "none".to_owned()
+                    }
+                },
+                |question| question.title.to_owned(),
+            ),
+    );
+    record("link.ports", state.ports.len());
 }
 
 #[cfg(test)]
