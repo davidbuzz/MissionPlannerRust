@@ -327,7 +327,17 @@ pub fn browser_panel(
                         theme::ACCENT,
                         has_vehicle,
                         cx.listener(|this, _event: &(), _window, cx| {
-                            this.telemetry.download_parameters();
+                            // `BUT_rerequestparams_Click`: an armed vehicle is asked first.
+                            // `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:420-428`
+                            let view = this.telemetry.view();
+                            let armed = view.state.as_deref().is_some_and(|state| state.armed);
+                            let persisted = &this.persisted;
+                            if this
+                                .param_grid
+                                .press_refresh(view.connected, armed, |key| persisted.get(key))
+                            {
+                                this.telemetry.download_parameters();
+                            }
                             cx.notify();
                         }),
                     ))

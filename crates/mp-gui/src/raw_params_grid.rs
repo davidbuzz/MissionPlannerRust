@@ -1051,6 +1051,14 @@ pub const RAW_PARAM_WARNING_TEXT: &str = "All values on this screen are not min/
 /// `// C#: Common.cs:264-268`
 pub const WARNING_KEY: &str = "SHOWAGAIN_Raw_Param_Warning";
 
+/// Refresh Params' question on an armed vehicle: `MessageShowAgain("Refresh Params",
+/// Strings.WarningUpdateParamList, true)`, its tick kept under `SHOWAGAIN_Refresh_Params` - the
+/// key ADSB's and the Standard and Advanced pages' Refresh share, as the title is the tag.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:426-427; ExtLibs/Strings/Strings.resx:221-223`
+pub const REFRESH_TITLE: &str = "Refresh Params";
+/// `Strings.WarningUpdateParamList`, with the newline the `.resx` value ends in.
+pub const REFRESH_TEXT: &str = "Update Params\nDON'T DO THIS IF YOU ARE IN THE AIR\n";
+
 /// The grid's state between frames.
 #[derive(Debug, Default)]
 pub struct RawGrid {
@@ -1074,6 +1082,8 @@ pub struct RawGrid {
     boxes: VecDeque<GridBox>,
     /// RawParamWarning showing, and its "Show me again?" tick.
     warning: Option<bool>,
+    /// Refresh Params' armed-only question showing, and its "Show me again?" tick.
+    refresh: Option<bool>,
     /// Write Params under way.
     saving: Option<Saving>,
     /// The last address a Desc cell opened, for the facts.
@@ -1154,6 +1164,47 @@ impl RawGrid {
     #[must_use]
     pub const fn warning(&self) -> Option<bool> {
         self.warning
+    }
+
+    /// Refresh Params' question's "Show me again?", while it shows.
+    #[must_use]
+    pub const fn refresh(&self) -> Option<bool> {
+        self.refresh
+    }
+
+    /// `BUT_rerequestparams_Click` up to the fetch: nothing without a link; on a vehicle that is
+    /// not armed, the fetch; armed, the question - unless its tick was cleared, when
+    /// `MessageShowAgain` is OK at once. Returns whether to fetch now.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:420-428; Common.cs:267-270`
+    pub fn press_refresh<'a>(
+        &mut self,
+        open: bool,
+        armed: bool,
+        get: impl Fn(&str) -> Option<&'a str>,
+    ) -> bool {
+        if !open {
+            return false;
+        }
+        let suppressed = get(crate::config::adsb::SHOW_AGAIN_KEY)
+            .is_some_and(|value| !crate::raw_params::get_boolean(Some(value)));
+        if !armed || suppressed {
+            return true;
+        }
+        self.refresh = Some(true);
+        false
+    }
+
+    /// The question's "Show me again?" clicked: the setting's new value, `Checked.ToString()`.
+    /// `// C#: Common.cs:446-449`
+    pub fn toggle_refresh(&mut self) -> Option<&'static str> {
+        let ticked = self.refresh.as_mut()?;
+        *ticked = !*ticked;
+        Some(if *ticked { "True" } else { "False" })
+    }
+
+    /// The question answered: OK fetches, Cancel does not.
+    pub fn answer_refresh(&mut self, ok: bool) -> bool {
+        self.refresh.take().is_some() && ok
     }
 
     /// Set Bitmask's window.
@@ -1797,6 +1848,11 @@ impl MissionPlanner {
         );
         record("params.warning", grid.warning.is_some());
         record(
+            "params.refresh",
+            grid.refresh
+                .map_or("none", |ticked| if ticked { "ticked" } else { "unticked" }),
+        );
+        record(
             "params.bitmask",
             grid.bitmask
                 .as_ref()
@@ -2335,6 +2391,53 @@ pub fn overlays(
             "raw-param-warning",
             RAW_PARAM_WARNING,
             RAW_PARAM_WARNING_TEXT,
+            false,
+            buttons,
+            window,
+        ));
+    } else if let Some(again) = grid.refresh() {
+        // `MessageShowAgain("Refresh Params", ..., show_cancel: true)`: the text, "Show me
+        // again?" ticked at the left, OK and Cancel. C#: Common.cs:296-443
+        let buttons = vec![
+            check(
+                "param-refresh-again",
+                crate::config::adsb::SHOW_ME_AGAIN,
+                again,
+                |this| {
+                    if let Some(value) = this.param_grid.toggle_refresh() {
+                        this.persisted
+                            .set(crate::config::adsb::SHOW_AGAIN_KEY, value);
+                    }
+                },
+                cx,
+            ),
+            action(
+                "param-refresh-ok",
+                "OK",
+                theme::ACCENT,
+                true,
+                cx.listener(|this, _event: &(), _window, cx| {
+                    if this.param_grid.answer_refresh(true) {
+                        this.telemetry.download_parameters();
+                    }
+                    cx.notify();
+                }),
+            ),
+            action(
+                "param-refresh-cancel",
+                "Cancel",
+                theme::TEXT,
+                true,
+                cx.listener(|this, _event: &(), _window, cx| {
+                    this.param_grid.answer_refresh(false);
+                    cx.notify();
+                }),
+            ),
+        ];
+        shown.push(servo_output::modal(
+            "param-refresh",
+            REFRESH_TITLE,
+            REFRESH_TEXT,
             false,
             buttons,
             window,
@@ -3366,6 +3469,35 @@ mod tests {
         assert_eq!(WARNING_KEY, "SHOWAGAIN_Raw_Param_Warning");
     }
 
+    /// Refresh Params asks only on an armed vehicle whose tick is not cleared: not armed, the
+    /// fetch at once; armed, the question, OK fetching and Cancel not; the tick cleared, kept
+    /// as `SHOWAGAIN_Refresh_Params` and the question not asked again; no link, nothing.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:420-428`
+    #[test]
+    fn refresh_params_asks_only_when_armed_and_not_suppressed() {
+        let mut grid = RawGrid::default();
+        assert!(!grid.press_refresh(false, true, |_| None));
+        assert_eq!(grid.refresh(), None);
+        assert!(grid.press_refresh(true, false, |_| None));
+        assert_eq!(grid.refresh(), None);
+        assert!(!grid.press_refresh(true, true, |_| None));
+        assert_eq!(grid.refresh(), Some(true));
+        assert!(!grid.answer_refresh(false));
+        assert_eq!(grid.refresh(), None);
+        assert!(!grid.press_refresh(true, true, |_| None));
+        assert_eq!(grid.toggle_refresh(), Some("False"));
+        assert_eq!(grid.toggle_refresh(), Some("True"));
+        assert_eq!(grid.toggle_refresh(), Some("False"));
+        assert!(grid.answer_refresh(true));
+        assert_eq!(grid.toggle_refresh(), None);
+        let key = crate::config::adsb::SHOW_AGAIN_KEY;
+        assert!(grid.press_refresh(true, true, |name| (name == key).then_some("False")));
+        assert_eq!(grid.refresh(), None);
+        assert!(!grid.press_refresh(true, true, |name| (name == key).then_some("True")));
+        assert_eq!(grid.refresh(), Some(true));
+        assert_eq!(key, "SHOWAGAIN_Refresh_Params");
+    }
+
     /// The warning's text and title are `Strings.resx`'s.
     #[test]
     fn the_warning_is_the_strings_resx() {
@@ -3375,6 +3507,10 @@ mod tests {
             return;
         };
         let values = crate::config_coverage::source::resx(&strings);
+        assert_eq!(
+            values.get("WarningUpdateParamList").map(String::as_str),
+            Some(REFRESH_TEXT)
+        );
         assert_eq!(
             values.get("RawParamWarning").map(String::as_str),
             Some(RAW_PARAM_WARNING)

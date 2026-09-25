@@ -35,3 +35,11 @@ down is a suite he will kill, and its results are lost either way.
 
 See [[gui-runs-stay-short]] for the window's lifetime and the quiet-machine rule, and
 [[no-foreground-waiting]] for how a suite runs in the background once it is allowed.
+
+**2026-09-25, Buzz, twice in one hour: "stop UI testing" - "its too slow, steals the mouse cursor,
+and is annoying me. i'll let you run it when i leave."** A suite of 29 scripts is 20 to 30 minutes
+of a desk that cannot be used. The go for GUI runs is not a standing permission: it holds for the
+moment it is given, and a suite runs only when Buzz says he has left the machine. Stop means now:
+kill the runner, the driver and the window by PID (pgrep with a bracketed pattern, e.g.
+`gui-suite.s[h]`, so the pattern does not match the killing shell), and confirm with
+`xdotool search --name`.

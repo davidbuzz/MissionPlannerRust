@@ -20,6 +20,7 @@ redistributing a binary.
 ```sh
 tools/sitl/run-sitl.sh copter      # listens on tcp:127.0.0.1:5760
 tools/sitl/run-sitl.sh plane
+tools/sitl/start-sitl.sh copter    # the same, in the background, proved to be streaming first
 
 headless-planner watch tcp:127.0.0.1:5760
 cargo test -p mp-link -- --ignored   # the live-vehicle test
@@ -35,3 +36,12 @@ pins an exact, reproducible vehicle firmware is the cheaper trade, and it makes
 If the binary is ever inconvenient - a different architecture, a newer ArduPilot, a licence audit
 that prefers source-only - `run-sitl.sh` takes `SITL_BINARY` to point at your own build, and
 nothing else in the repository depends on these files.
+
+## Starting it for a test run
+
+`start-sitl.sh` starts `run-sitl.sh` in the background, connects a throwaway client and requires a
+MAVLink frame within ten seconds, restarting the simulator up to three times when none comes: on
+2026-09-25 one start in about a dozen stopped after "Smoothing reset at 0.001" and never sent a
+frame. SITL accepts one client at a time on 5760 and the next one the moment the last leaves. To
+stop it, kill by pid - `pgrep -f "sitl/arducopte[r]"` - never with a pattern the killing shell's own
+command line would match.

@@ -904,6 +904,20 @@ pub const ONLY_FOR_MISSIONS: &str = "Only available for missions";
 /// `// C#: GCSViews/FlightPlanner.cs:1757-1765, 1897-1905`
 pub const ALT_MODE_TITLE: &str = "Alt Mode";
 pub const ALT_MODE_QUESTION: &str = "Absolute Alt is selected are you sure?";
+/// `MessageShowAgain("Measure Dist", ...)`'s setting: the title with its space made an
+/// underscore.
+/// `// C#: GCSViews/FlightPlanner.cs:2632; Common.cs:268`
+pub const MEASURE_DIST_KEY: &str = "SHOWAGAIN_Measure_Dist";
+
+/// `MessageShowAgain("FlightPlan Fence", ...)`, shown each time the mission type is set to
+/// FENCE, and its setting.
+/// `// C#: GCSViews/FlightPlanner.cs:2190-2199; Common.cs:268`
+pub const FENCE_TITLE: &str = "FlightPlan Fence";
+/// Its setting.
+pub const FENCE_KEY: &str = "SHOWAGAIN_FlightPlan_Fence";
+/// Its text.
+pub const FENCE_TEXT: &str = "Please use the Polygon drawing tool to draw Inclusion and Exclusion areas (round circle to the left), once drawn use the same icon to convert it to a inclusion or exclusion fence";
+
 /// `Strings.ZeroAltWarningTitle`, and the two warnings with their `{0}`.
 /// `// C#: ExtLibs/Strings/Strings.resx (ZeroAltWarningTitle, ZeroAltWarningCopter, ZeroAltWarningPlane)`
 pub const ZERO_ALT_TITLE: &str = "Zero Altitude Warning";
@@ -3679,8 +3693,8 @@ pub fn draw_panel(
                 .cursor_pointer()
                 .hover(|style| style.bg(rgb(theme::BORDER)))
                 .child(mode.label())
-                .on_click(cx.listener(move |this, _event, _window, cx| {
-                    this.plan.set_draw_mode(mode);
+                .on_click(cx.listener(move |this, _event, window, cx| {
+                    draw_mode_clicked(this, mode, window, cx);
                     cx.notify();
                 })),
         );
@@ -5000,6 +5014,31 @@ fn fence_file(
     }
 }
 
+/// One of the draw-mode buttons: `cmb_missiontype` set. FENCE also shows
+/// `MessageShowAgain("FlightPlan Fence", ...)`, every time, unless its tick was cleared.
+/// `// C#: GCSViews/FlightPlanner.cs:2190-2199`
+fn draw_mode_clicked(
+    this: &mut MissionPlanner,
+    mode: DrawMode,
+    window: &mut gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) {
+    this.plan.set_draw_mode(mode);
+    if mode != DrawMode::Fence || ShowAgain::suppressed(this.persisted.get(FENCE_KEY)) {
+        return;
+    }
+    this.plan_menus
+        .ask(Prompt::message(FENCE_TITLE, FENCE_TEXT).with_show_again(FENCE_KEY));
+    this.plan_prompt_focus.focus(window, cx);
+}
+
+/// Once a frame: a show-again message whose tick was cleared is not shown.
+pub fn drop_suppressed_prompt(this: &mut MissionPlanner) {
+    let persisted = &this.persisted;
+    this.plan_menus
+        .drop_suppressed_prompt(|key| ShowAgain::suppressed(persisted.get(key)));
+}
+
 /// `BUT_write_Click` and `but_writewpfast_Click` up to their progress dialogue: with Absolute
 /// selected, "Absolute Alt is selected are you sure?" (No makes it Relative and goes on); Write
 /// Fast refuses a fence or rally list; then the rows' checks, and the upload.
@@ -5099,11 +5138,10 @@ fn continue_write(
                     next_row: index + 1,
                     ..flow
                 });
-                this.plan_menus.ask(Prompt::question(
-                    ZERO_ALT_TITLE,
-                    warning,
-                    PromptKind::WriteZeroAlt,
-                ));
+                this.plan_menus.ask(
+                    Prompt::question(ZERO_ALT_TITLE, warning, PromptKind::WriteZeroAlt)
+                        .with_show_again(key),
+                );
                 this.plan_prompt_focus.focus(window, cx);
                 cx.notify();
                 return;
@@ -6924,6 +6962,29 @@ pub struct Prompt {
     pub field: Option<TextField>,
     /// What OK does.
     pub kind: PromptKind,
+    /// `MessageShowAgain`'s "Show me again?" tick, for a box that has one.
+    pub show_again: Option<ShowAgain>,
+}
+
+/// `Common.MessageShowAgain`'s tick: the setting it is kept under and whether it is ticked -
+/// ticked to start, and written at every click as `chk_CheckStateChanged` writes it.
+/// `// C#: Common.cs:260-270, 390-400, 446-449`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShowAgain {
+    /// `SHOWAGAIN_` and the tag with its spaces, `+`, `-` and `.` made underscores.
+    pub key: &'static str,
+    /// `Checked`.
+    pub ticked: bool,
+}
+
+impl ShowAgain {
+    /// Whether the setting says the box is not to show: there and not true, as
+    /// `GetBoolean(key) == false` reads it.
+    /// `// C#: Common.cs:268-270`
+    #[must_use]
+    pub fn suppressed(setting: Option<&str>) -> bool {
+        setting.and_then(mp_mission::dotnet::parse_bool) == Some(false)
+    }
 }
 
 impl Prompt {
@@ -6936,6 +6997,7 @@ impl Prompt {
             text: text.to_owned(),
             field: Some(field),
             kind,
+            show_again: None,
         }
     }
 
@@ -6946,6 +7008,7 @@ impl Prompt {
             text: text.into(),
             field: None,
             kind: PromptKind::Message,
+            show_again: None,
         }
     }
 
@@ -6956,7 +7019,18 @@ impl Prompt {
             text: text.into(),
             field: None,
             kind,
+            show_again: None,
         }
+    }
+
+    /// The same box as `Common.MessageShowAgain` shows it: "Show me again?" ticked under the
+    /// text, OK, and Cancel for a question. The caller checks the setting first, as
+    /// `MessageShowAgain` returns OK at once when the tick was cleared.
+    /// `// C#: Common.cs:260-443`
+    #[must_use]
+    pub fn with_show_again(mut self, key: &'static str) -> Self {
+        self.show_again = Some(ShowAgain { key, ticked: true });
+        self
     }
 
     /// What has been typed, or nothing.
@@ -7253,6 +7327,28 @@ impl PlanMenus {
 
     fn ask(&mut self, prompt: Prompt) {
         self.prompt = Some(prompt);
+    }
+
+    /// The dialog's "Show me again?" clicked: the setting's key and its new value, `Checked`,
+    /// which the window writes at once.
+    /// `// C#: Common.cs:446-449`
+    pub fn toggle_show_again(&mut self) -> Option<(&'static str, bool)> {
+        let again = self.prompt.as_mut()?.show_again.as_mut()?;
+        again.ticked = !again.ticked;
+        Some((again.key, again.ticked))
+    }
+
+    /// `MessageShowAgain`'s early return: a message whose tick was cleared on an earlier
+    /// showing is not shown - the window calls this once a frame with the settings, as the C#
+    /// reads `Settings.Instance` before it makes the form. A question is checked at its site.
+    /// `// C#: Common.cs:267-270`
+    pub fn drop_suppressed_prompt(&mut self, is_off: impl Fn(&str) -> bool) {
+        if let Some(prompt) = &self.prompt
+            && prompt.kind == PromptKind::Message
+            && prompt.show_again.is_some_and(|again| is_off(again.key))
+        {
+            self.prompt = None;
+        }
     }
 
     fn tell(&mut self, title: &'static str, text: impl Into<String>) {
@@ -7591,6 +7687,7 @@ impl PlanMenus {
             text: text.to_owned(),
             field: None,
             kind: PromptKind::HomeLatEnter,
+            show_again: None,
         });
     }
 
@@ -7604,6 +7701,7 @@ impl PlanMenus {
             text: "Reset Home to loaded coords".to_owned(),
             field: None,
             kind: PromptKind::ResetHome(loaded),
+            show_again: None,
         });
     }
 
@@ -7785,6 +7883,7 @@ impl PlanMenus {
                         text: "Clear current waypoints?".to_owned(),
                         field: None,
                         kind: PromptKind::ClearWaypoints,
+                        show_again: None,
                     });
                 }
             }
@@ -7792,9 +7891,14 @@ impl PlanMenus {
             MenuAction::MeasureDistance => match self.measure_from.take() {
                 None => {
                     self.measure_from = Some(position);
-                    self.tell(
-                        "Measure Dist",
-                        "You can now pan/zoom around.\nClick this option again to get the distance.",
+                    // `MessageShowAgain("Measure Dist", ...)`, its tick kept as
+                    // `SHOWAGAIN_Measure_Dist`. `// C#: GCSViews/FlightPlanner.cs:2632-2633`
+                    self.ask(
+                        Prompt::message(
+                            "Measure Dist",
+                            "You can now pan/zoom around.\nClick this option again to get the distance.",
+                        )
+                        .with_show_again(MEASURE_DIST_KEY),
                     );
                 }
                 Some(from) => self.tell("", measure_text(from, position)),
@@ -7954,6 +8058,7 @@ impl PlanMenus {
                     text: DEFINE_POLYGON.to_owned(),
                     field: None,
                     kind: PromptKind::DefinePolygon,
+                    show_again: None,
                 }),
             },
             // `InputBox.Show("Altitude", "Altitude", ref altstring)`, offering Default Alt.
@@ -9696,7 +9801,11 @@ fn prompt_dialog(
     let focused = focus.is_focused(window);
     let size = window.viewport_size();
 
-    let (accept, refuse) = if prompt.is_question() {
+    // `CreateMessageShowAgainForm`'s buttons are OK, and Cancel when `show_cancel`.
+    // `// C#: Common.cs:412-426`
+    let (accept, refuse) = if prompt.show_again.is_some() {
+        ("OK", prompt.is_question().then_some("Cancel"))
+    } else if prompt.is_question() {
         ("Yes", Some("No"))
     } else if prompt.field.is_some() {
         ("OK", Some("Cancel"))
@@ -9707,6 +9816,42 @@ fn prompt_dialog(
         .flex()
         .justify_end()
         .gap_2()
+        .children(prompt.show_again.map(|again| {
+            // "Show me again?", ticked to start, at the left of the buttons; its click writes
+            // the setting at once. `// C#: Common.cs:390-400, 446-449`
+            crate::probe::measured("plan-prompt-again", div())
+                .id("plan-prompt-again")
+                .flex()
+                .flex_1()
+                .items_center()
+                .gap_1()
+                .text_xs()
+                .text_color(rgb(theme::TEXT))
+                .cursor_pointer()
+                .child(
+                    div()
+                        .size(px(12.0))
+                        .rounded_sm()
+                        .border_1()
+                        .border_color(rgb(theme::BORDER))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .children(
+                            again
+                                .ticked
+                                .then(|| div().size(px(7.0)).bg(rgb(theme::ACCENT))),
+                        ),
+                )
+                .child(crate::config::adsb::SHOW_ME_AGAIN)
+                .on_click(cx.listener(|this, _event: &gpui::ClickEvent, _window, cx| {
+                    if let Some((key, ticked)) = this.plan_menus.toggle_show_again() {
+                        this.persisted
+                            .set(key, if ticked { "True" } else { "False" });
+                    }
+                    cx.notify();
+                }))
+        }))
         .child(action(
             "plan-prompt-ok",
             accept,
@@ -10356,6 +10501,17 @@ pub fn record_facts(plan: &Plan, menus: &PlanMenus) {
     record(
         "plan.prompt.value",
         menus.prompt.as_ref().map_or("", Prompt::value),
+    );
+    record(
+        "plan.prompt.showagain",
+        menus
+            .prompt
+            .as_ref()
+            .and_then(|prompt| prompt.show_again)
+            .map_or(
+                "none",
+                |again| if again.ticked { "ticked" } else { "unticked" },
+            ),
     );
     record("plan.measure", menus.measure_from.is_some());
     // Terrain: the lookup's access mode, Verify Height, `sethome`, every row's altitude, and the
@@ -12279,6 +12435,86 @@ mod tests {
             menus.prompt.as_ref().map(|p| p.text.as_str()),
             Some("Distance: 111319.49 m AZ: 90")
         );
+    }
+
+    /// Measure Dist's first box is `MessageShowAgain`'s: "Show me again?" ticked under the
+    /// text, OK alone, the tick's click the setting's new value, and a cleared tick - the
+    /// setting false - the box not shown at all on the next choice.
+    /// `// C#: GCSViews/FlightPlanner.cs:2632-2633; Common.cs:260-270, 446-449`
+    #[test]
+    fn measure_dist_is_a_show_again_box() {
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        menus.open_at(CLICK, at(0.0, 0.0), None);
+        menus.choose(&mut plan, MenuAction::MeasureDistance, &context());
+        let prompt = menus.prompt.as_ref().expect("the box");
+        assert_eq!(prompt.kind, PromptKind::Message);
+        assert!(!prompt.is_question());
+        assert_eq!(
+            prompt.show_again,
+            Some(ShowAgain {
+                key: MEASURE_DIST_KEY,
+                ticked: true
+            })
+        );
+        assert_eq!(MEASURE_DIST_KEY, "SHOWAGAIN_Measure_Dist");
+        assert_eq!(menus.toggle_show_again(), Some((MEASURE_DIST_KEY, false)));
+        assert_eq!(menus.toggle_show_again(), Some((MEASURE_DIST_KEY, true)));
+        assert_eq!(menus.toggle_show_again(), Some((MEASURE_DIST_KEY, false)));
+        // Another key cleared: this box stays.
+        menus.drop_suppressed_prompt(|key| key == FENCE_KEY);
+        assert!(menus.prompt.is_some());
+        // Its own key cleared: the box goes, as `MessageShowAgain` returns OK before the form.
+        menus.drop_suppressed_prompt(|key| key == MEASURE_DIST_KEY);
+        assert!(menus.prompt.is_none());
+        assert_eq!(menus.toggle_show_again(), None);
+        // A plain message has no tick and is never dropped.
+        menus.tell("", "plain");
+        menus.drop_suppressed_prompt(|_| true);
+        assert!(menus.prompt.is_some());
+        assert_eq!(menus.toggle_show_again(), None);
+    }
+
+    /// A show-again question - the zero altitude warning's, with Cancel - is checked at its
+    /// site, not dropped: only a message goes.
+    #[test]
+    fn a_show_again_question_is_not_dropped_and_keeps_its_cancel() {
+        let mut menus = PlanMenus::default();
+        menus.ask(
+            Prompt::question(ZERO_ALT_TITLE, "zero", PromptKind::WriteZeroAlt)
+                .with_show_again("SHOWAGAIN_Zero_Altitude_Warning"),
+        );
+        menus.drop_suppressed_prompt(|_| true);
+        let prompt = menus.prompt.as_ref().expect("kept");
+        assert!(prompt.is_question());
+        assert_eq!(
+            prompt.show_again.map(|again| again.key),
+            Some("SHOWAGAIN_Zero_Altitude_Warning")
+        );
+        // The settings' reading: false, or a word `bool.TryParse` refuses, suppresses; true
+        // and nothing do not.
+        assert!(ShowAgain::suppressed(Some("False")));
+        assert!(!ShowAgain::suppressed(Some("True")));
+        assert!(!ShowAgain::suppressed(None));
+    }
+
+    /// The three boxes and their keys are the C#'s calls.
+    #[test]
+    fn the_show_again_boxes_are_the_csharps() {
+        let Some(source) = crate::config_coverage::source::csharp("GCSViews/FlightPlanner.cs")
+        else {
+            return;
+        };
+        assert!(source.contains("Common.MessageShowAgain(\"Measure Dist\","));
+        assert!(source.contains("Common.MessageShowAgain(\"FlightPlan Fence\", \"Please use the Polygon drawing tool to draw \" +"));
+        assert!(
+            source.contains("Strings.ZeroAltWarningTitle + (is_arduplane ? \" Plane\" : \"\")")
+        );
+        assert_eq!(FENCE_KEY, "SHOWAGAIN_FlightPlan_Fence");
+        assert!(FENCE_TEXT.starts_with(
+            "Please use the Polygon drawing tool to draw Inclusion and Exclusion areas"
+        ));
+        assert!(FENCE_TEXT.ends_with("convert it to a inclusion or exclusion fence"));
     }
 
     /// Modify Alt adds, or multiplies with a star, every row's altitude and leaves home alone.

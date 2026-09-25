@@ -26,3 +26,10 @@ session's own background work on 2026-09-24 (a release build and a suite, exit 1
 itself ignored the signal. Remove a locked agent worktree with
 `git worktree remove --force --force <path>` and `git branch -D <branch>`; never signal the pid the
 lock names.
+
+**2026-09-25:** three of my kill loops died with exit 144 because `pgrep -f "<pattern>"` inside
+`$( )` matched the shell running the loop - its own command line carries the pattern - and the
+loop killed itself before reaching its targets; one such loop also killed the SITL I was
+diagnosing, which then looked like a SITL crash. Write the pattern so it cannot match its own
+text: a bracketed last letter, `pgrep -f "sitl/arducopte[r]"`, matches the process and not the
+shell whose command line contains `arducopte[r]`.

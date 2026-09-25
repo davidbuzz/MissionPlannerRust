@@ -2891,6 +2891,7 @@ impl Render for MissionPlanner {
             std::env::var_os("MP_OFFLINE").is_some()
                 || config::planner::cache_only(&self.persisted),
         );
+        plan::drop_suppressed_prompt(self);
         plan::drive_writes(self, &view, window, cx);
         // A quick view chosen since the last frame goes into Mission Planner's config.xml, as the
         // chooser's check box puts it there.
@@ -2975,6 +2976,10 @@ impl Render for MissionPlanner {
             facts::record("vehicle.connected", view.connected);
             facts::record("vehicle.count", view.vehicle_count);
             facts::record("link.frames", view.frames);
+            // What the link was opened on and why it is not open, for a script that finds no
+            // vehicle: `MainV2.comPort.BaseStream.PortName` and `OpenBg`'s exception.
+            facts::record("link.target", &view.target);
+            facts::record("link.error", self.telemetry.error().unwrap_or("none"));
             facts::record("params.held", view.parameters.len());
             facts::record("params.expected", view.parameters_expected);
             facts::record("params.fetch", &view.parameters_fetch);
@@ -3344,11 +3349,13 @@ impl Render for MissionPlanner {
         }
 
         // `Open`'s `getParamListMavftp` (`MAVLinkInterface.cs:930-939`): the parameters fetched
-        // as soon as a vehicle is heard - MAVFTP first, the stream after - unless a copy is
-        // already held (the owner's rule, 2026-09-25: only when we have none).
+        // as soon as a vehicle is heard - MAVFTP first, the stream after - unless the whole
+        // table is already held (the owner's rule, 2026-09-25: only when we have none). A few
+        // names read one by one - the pages' `ReadParam`s, which arrive before this runs - are
+        // not a copy: found 2026-09-25, when 33 held of 1,400 left the table unfetched.
         if !self.params_requested && view.vehicle.is_some() && !view.target.starts_with("file:") {
             self.params_requested = true;
-            if view.parameters.is_empty() {
+            if auto_fetch_wanted(view.parameters.len(), view.parameters_expected) {
                 self.telemetry.download_parameters();
             }
         }
@@ -3820,6 +3827,12 @@ ENVIRONMENT:
 /// rule that matters: anything starting with `-` is an option, never the link. Taking the first
 /// argument as the link regardless meant `planner --help` tried to connect to a serial port called
 /// "--help", and so did `--read-mission`.
+/// Whether the connect-time fetch is due: yes unless every parameter the vehicle has announced
+/// is already held. A table with no count yet is not a copy, nor is one short of the count.
+const fn auto_fetch_wanted(held: usize, expected: u16) -> bool {
+    expected == 0 || held < expected as usize
+}
+
 fn parse_arguments(arguments: impl IntoIterator<Item = String>) -> Result<Arguments, String> {
     let mut parsed = Arguments {
         target: None,
@@ -3975,6 +3988,20 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    /// The connect-time fetch runs unless the whole announced table is held: nothing held and
+    /// no count, a few names read one by one, or a table short of the count all fetch; the full
+    /// table does not.
+    #[test]
+    fn the_connect_time_fetch_runs_unless_the_whole_table_is_held() {
+        assert!(super::auto_fetch_wanted(0, 0));
+        assert!(super::auto_fetch_wanted(33, 1400));
+        assert!(super::auto_fetch_wanted(1399, 1400));
+        assert!(!super::auto_fetch_wanted(1400, 1400));
+        assert!(!super::auto_fetch_wanted(1401, 1400));
+        // No count yet but names held: still fetched - the count comes with the first answer.
+        assert!(super::auto_fetch_wanted(5, 0));
+    }
+
     use super::*;
 
     #[test]
