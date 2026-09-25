@@ -11,3 +11,14 @@ publish = false
 workspace = true
 
 [dependencies]
+
+[dev-dependencies]
+proptest.workspace = true
+# The scrub bench builds its plot from a generated dataflash log, as the log browser does (L4,
+# below this crate's L6).
+mp-log.workspace = true
+
+# D14's scrub budget: ten million samples in each of eight series, a frame in 8.33 ms.
+[[bench]]
+name = "scrub_10m"
+harness = false

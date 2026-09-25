@@ -464,6 +464,13 @@ pub struct Positions {
     lines: usize,
     /// Whether the log declares a `GPS` or a `POS` format at all.
     declared: bool,
+    /// [`Self::line_at_time`]'s index: for each `GPS`, `GPS2` or `POS` record with a time, in log
+    /// order, the latest time of any of them up to and including it, and its line. The first
+    /// record at or after a time is the first whose running latest reaches it, and the running
+    /// latest never decreases, so it is found by search.
+    by_time: Vec<(f64, usize)>,
+    /// Whether the log has any `GPS`, `GPS2` or `POS` record, timed or not.
+    any_timeline: bool,
 }
 
 /// How far `GetGPSFromRow` looks either way for a position record.
@@ -512,25 +519,30 @@ impl Positions {
             .formats()
             .values()
             .any(|format| format.name == "GPS" || format.name == "POS");
-        Self {
-            records,
-            lines: line,
-            declared,
-        }
+        Self::from_parts(records, line, declared)
     }
 
     /// The records a log's position records make, read some other way than by [`Self::read`]:
     /// every one whose name starts `GPS` or `POS`, in log order; the number of records in the
     /// log; and whether it declares a `GPS` or `POS` format.
-    pub(crate) const fn from_parts(
-        records: Vec<PositionRecord>,
-        lines: usize,
-        declared: bool,
-    ) -> Self {
+    pub(crate) fn from_parts(records: Vec<PositionRecord>, lines: usize, declared: bool) -> Self {
+        let timeline = || records.iter().filter(|record| is_timeline(&record.name));
+        let any_timeline = timeline().next().is_some();
+        let mut latest = f64::NEG_INFINITY;
+        let by_time = timeline()
+            .filter_map(|record| {
+                // A time that is not a number is never at or after anything.
+                let time = record.time_us.filter(|time| !time.is_nan())?;
+                latest = latest.max(time);
+                Some((latest, record.line))
+            })
+            .collect();
         Self {
             records,
             lines,
             declared,
+            by_time,
+            any_timeline,
         }
     }
 
@@ -588,23 +600,25 @@ impl Positions {
     ///
     /// "Always forwards": the first in log order, so a log whose clock restarts part way through
     /// answers from before the restart where it can.
+    ///
+    /// The C# walks the records; this searches an index of their running latest time, which
+    /// gives the same record in the logarithm of the time, so that a cursor dragged across a
+    /// long log costs the same at every step. `tests::line_at_time_is_the_walk` holds the two
+    /// together.
     /// `// C#: ExtLibs/Utilities/DFLog.cs:736-753`
     #[must_use]
     pub fn line_at_time(&self, time_us: f64) -> LineAtTime {
-        let mut any = false;
-        for record in &self.records {
-            if !matches!(record.name.as_str(), "GPS" | "GPS2" | "POS") {
-                continue;
-            }
-            any = true;
-            if record.time_us.is_some_and(|time| time >= time_us) {
-                return LineAtTime::Line(record.line);
-            }
-        }
-        if any {
-            LineAtTime::AfterAll
-        } else {
-            LineAtTime::NoPositions
+        // Before the answer, the running latest is below the time (or the time is not a number).
+        let first = self.by_time.partition_point(|(latest, _)| {
+            !matches!(
+                latest.partial_cmp(&time_us),
+                Some(std::cmp::Ordering::Greater | std::cmp::Ordering::Equal)
+            )
+        });
+        match self.by_time.get(first) {
+            Some((_, line)) => LineAtTime::Line(*line),
+            None if self.any_timeline => LineAtTime::AfterAll,
+            None => LineAtTime::NoPositions,
         }
     }
 
@@ -617,6 +631,12 @@ impl Positions {
             .and_then(|index| self.records.get(index))
             .and_then(|record| record.time_us)
     }
+}
+
+/// Whether a record is one `GetLineNoFromTime` looks at: `GPS`, `GPS2` or `POS`.
+/// `// C#: ExtLibs/Utilities/DFLog.cs:736-753`
+fn is_timeline(name: &str) -> bool {
+    matches!(name, "GPS" | "GPS2" | "POS")
 }
 
 /// Where a position record says the vehicle was, if `GetGPSFromRow` would accept it.
@@ -804,6 +824,78 @@ mod tests {
             .format_named(name)
             .map(|format| format.msg_type)
             .unwrap_or_else(|| panic!("{name} is declared"))
+    }
+
+    /// `GetLineNoFromTime` as the C# writes it: a walk over every record.
+    /// `// C#: ExtLibs/Utilities/DFLog.cs:736-753`
+    fn line_at_time_walk(positions: &Positions, time_us: f64) -> LineAtTime {
+        let mut any = false;
+        for record in &positions.records {
+            if !matches!(record.name.as_str(), "GPS" | "GPS2" | "POS") {
+                continue;
+            }
+            any = true;
+            if record.time_us.is_some_and(|time| time >= time_us) {
+                return LineAtTime::Line(record.line);
+            }
+        }
+        if any {
+            LineAtTime::AfterAll
+        } else {
+            LineAtTime::NoPositions
+        }
+    }
+
+    /// The search gives the walk's record for every time, over a clock that restarts, repeats,
+    /// has records with no time and a time that is not a number, and names the walk skips.
+    #[test]
+    fn line_at_time_is_the_walk() {
+        let names = ["GPS", "GPS2", "POS", "GPSB", "GPA", "POSX"];
+        let mut state = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = move |modulus: u64| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state % modulus
+        };
+        for trial in 0..200 {
+            let mut records = Vec::new();
+            let mut time = 0.0f64;
+            let count = next(60);
+            for line in 0..count {
+                time = match next(10) {
+                    0 => 0.0,
+                    1 => time,
+                    _ => time + f64::from(u32::try_from(next(1000)).unwrap_or(0)),
+                };
+                let time_us = match next(12) {
+                    0 => None,
+                    1 => Some(f64::NAN),
+                    _ => Some(time),
+                };
+                records.push(PositionRecord {
+                    line: usize::try_from(line).unwrap_or(0) * 3,
+                    name: names[usize::try_from(next(6)).unwrap_or(0)].to_owned(),
+                    time_us,
+                    place: None,
+                });
+            }
+            let positions = Positions::from_parts(records, 200, true);
+            for probe in 0..400 {
+                let at = f64::from(probe) * 50.0 - 100.0;
+                assert_eq!(
+                    positions.line_at_time(at),
+                    line_at_time_walk(&positions, at),
+                    "trial {trial}, time {at}"
+                );
+            }
+            for at in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+                assert_eq!(
+                    positions.line_at_time(at),
+                    line_at_time_walk(&positions, at)
+                );
+            }
+        }
     }
 
     /// The healthy fixture: a copter, one mode change named Auto, fourteen messages, and no

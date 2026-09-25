@@ -70,6 +70,9 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg"]
 fluent-bundle = "0.16"
 fluent-syntax = "0.12"
 unic-langid = "0.9"
+# D14's FFT: the log FFT window's transform (`ExtLibs/Utilities/fft.cs`'s `FFT2`). PLAN.md's
+# numerics row pins it.
+rustfft = "6.4.1"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

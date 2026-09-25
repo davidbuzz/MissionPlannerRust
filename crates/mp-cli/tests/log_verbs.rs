@@ -139,3 +139,43 @@ fn a_verb_without_a_file_is_a_usage_error() {
     let output = headless_planner(&[Path::new("matlab")]);
     assert_eq!(output.status.code(), Some(2));
 }
+
+/// `headless-planner log fft`: the FFT window's title and its peaks, from the checked-in log's first IMU.
+#[test]
+fn fft_prints_the_windows_title_and_the_peaks() {
+    let output = headless_planner(&[
+        Path::new("fft"),
+        &testdata("dataflash.bin"),
+        Path::new("IMU[0].AccZ"),
+        Path::new("128"),
+        Path::new("--peaks"),
+        Path::new("3"),
+    ]);
+    assert!(output.status.success(), "{output:?}");
+    let text = String::from_utf8(output.stdout).unwrap();
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines[0], "FFT IMU - dataflash.bin - 22.2hz input");
+    assert_eq!(
+        lines[1],
+        "IMU[0].AccZ: 128-point FFT, 3 slices of which 2 averaged, amplitude in dB from 5 Hz"
+    );
+    assert_eq!(lines.len(), 5, "{text}");
+    assert!(lines[2].trim_start().starts_with("8 hz/480 rpm"), "{text}");
+
+    // Too few samples for the size is a failure that says so; a size that is not a power of two
+    // is a usage error.
+    let short = headless_planner(&[
+        Path::new("fft"),
+        &testdata("dataflash.bin"),
+        Path::new("IMU[0].AccZ"),
+    ]);
+    assert!(!short.status.success());
+    assert!(String::from_utf8_lossy(&short.stderr).contains("455 samples"));
+    let odd = headless_planner(&[
+        Path::new("fft"),
+        &testdata("dataflash.bin"),
+        Path::new("IMU[0].AccZ"),
+        Path::new("100"),
+    ]);
+    assert_eq!(odd.status.code(), Some(2));
+}

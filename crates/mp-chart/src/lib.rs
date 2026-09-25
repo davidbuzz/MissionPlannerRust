@@ -10,8 +10,17 @@
 //! somebody opens a tuning graph to find. Two values per column costs nothing and cannot hide a
 //! spike. PLAN.md §8.1 makes the same argument for log plotting at ten million points, and this is
 //! the same shape at a smaller scale so the two do not end up with different behaviour.
+//!
+//! **A frame costs the plot's width, not the log's length.** Each series keeps an index - its
+//! runs of non-decreasing time and a min/max pyramid over its values (`lod`) - so the extent,
+//! [`auto_range`] and [`reduce`] search and read summaries instead of visiting every sample, and
+//! give exactly what a pass over every sample gives ([`reduce_scan`], kept as the reference).
+//! D14's scrub budget, ten million samples in each of eight series at 120 frames a second, is
+//! `benches/scrub_10m.rs`.
 
 use std::collections::VecDeque;
+
+mod lod;
 
 /// How long the tuning graph shows, in seconds.
 ///
@@ -34,6 +43,8 @@ pub struct Series {
     pub name: String,
     samples: VecDeque<Sample>,
     capacity: usize,
+    /// The runs and the min/max pyramid every query reads instead of the samples.
+    index: lod::Index,
 }
 
 impl Series {
@@ -44,6 +55,7 @@ impl Series {
             name: name.into(),
             samples: VecDeque::with_capacity(capacity.min(4096)),
             capacity: capacity.max(1),
+            index: lod::Index::new(capacity.max(1)),
         }
     }
 
@@ -55,14 +67,18 @@ impl Series {
     pub fn push(&mut self, at: f64, value: f64) {
         // A value that is not a number cannot be drawn and poisons every min and max it touches.
         // Dropped rather than stored: a telemetry field is absent often enough that this is a
-        // normal event, not an error.
-        if !value.is_finite() {
+        // normal event, not an error. A time that is not a number has no place on the axis
+        // either, and would make the series' order meaningless to search.
+        if !value.is_finite() || !at.is_finite() {
             return;
         }
-        if self.samples.len() >= self.capacity {
-            self.samples.pop_front();
+        if self.samples.len() >= self.capacity && self.samples.pop_front().is_some() {
+            self.index.pop_front();
         }
-        self.samples.push_back(Sample { at, value });
+        let sample = Sample { at, value };
+        self.index
+            .push(self.samples.len(), self.samples.back(), sample);
+        self.samples.push_back(sample);
     }
 
     /// Everything in the series, oldest first.
@@ -98,8 +114,21 @@ impl Series {
     ///
     /// Not the first and last sample's: a log's clock can restart part way through, and the
     /// samples after the restart would then fall outside a range read off the ends.
+    ///
+    /// Each run's first and last sample, which within a run are its earliest and latest.
     #[must_use]
     pub fn extent(&self) -> Option<(f64, f64)> {
+        if self.index.searchable() {
+            return self
+                .index
+                .runs(self.samples.len())
+                .filter_map(|(start, end)| {
+                    let first = self.samples.get(start)?.at;
+                    let last = self.samples.get(end.checked_sub(1)?)?.at;
+                    Some((first, last))
+                })
+                .reduce(|(low, high), (first, last)| (low.min(first), high.max(last)));
+        }
         let mut samples = self.samples.iter();
         let first = samples.next()?.at;
         Some(samples.fold((first, first), |(low, high), sample| {
@@ -110,6 +139,51 @@ impl Series {
     /// Forgets everything.
     pub fn clear(&mut self) {
         self.samples.clear();
+        self.index.clear();
+    }
+
+    /// The lowest and highest value of the samples from `from` to `to` inclusive, by the index.
+    fn value_range(&self, from: f64, to: f64) -> Option<(f64, f64)> {
+        if !self.index.searchable() {
+            return self
+                .samples
+                .iter()
+                .filter(|sample| sample.at >= from && sample.at <= to)
+                .fold(None, |acc, sample| {
+                    Some(
+                        acc.map_or((sample.value, sample.value), |(low, high): (f64, f64)| {
+                            (low.min(sample.value), high.max(sample.value))
+                        }),
+                    )
+                });
+        }
+        let mut found: Option<(f64, f64)> = None;
+        let mut reads = 0;
+        for (start, end) in self.index.runs(self.samples.len()) {
+            let (lo, hi) = self.window(start, end, from, to, &mut reads);
+            if let Some((low, high)) = self.index.min_max(&self.samples, lo, hi, &mut reads) {
+                found = Some(found.map_or((low, high), |(l, h)| (l.min(low), h.max(high))));
+            }
+        }
+        found
+    }
+
+    /// The positions `[lo, hi)` of a run's samples from `from` to `to` inclusive.
+    fn window(
+        &self,
+        start: usize,
+        end: usize,
+        from: f64,
+        to: f64,
+        reads: &mut usize,
+    ) -> (usize, usize) {
+        let lo = self
+            .index
+            .search(&self.samples, start, end, |at| at >= from, reads);
+        let hi = self
+            .index
+            .search(&self.samples, lo, end, |at| at > to, reads);
+        (lo, hi)
     }
 }
 
@@ -150,11 +224,9 @@ pub fn auto_range(series: &[&Series], from: f64, to: f64) -> Option<Range> {
     let mut low = f64::INFINITY;
     let mut high = f64::NEG_INFINITY;
     for one in series {
-        for sample in one.samples() {
-            if sample.at >= from && sample.at <= to {
-                low = low.min(sample.value);
-                high = high.max(sample.value);
-            }
+        if let Some((one_low, one_high)) = one.value_range(from, to) {
+            low = low.min(one_low);
+            high = high.max(one_high);
         }
     }
     if !low.is_finite() || !high.is_finite() {
@@ -188,8 +260,78 @@ pub struct Column {
 ///
 /// Columns with no samples are absent rather than zero, so a gap in telemetry draws as a gap
 /// instead of as a line to the axis - which is what it would mean.
+///
+/// Through the series' index: each run's stretch inside the window found by search, then each
+/// column's stretch within it by search on the same expression [`reduce_scan`] places a sample
+/// with, and its min/max read from the pyramid - a few hundred reads a column however many
+/// samples it holds. The result is [`reduce_scan`]'s.
 #[must_use]
 pub fn reduce(series: &Series, from: f64, to: f64, columns: usize) -> Vec<Column> {
+    reduce_counted(series, from, to, columns).0
+}
+
+/// [`reduce`], and how many things it read to get there: sample times and values, block
+/// summaries and block start times, one each. The measure D14's "work provably O(width)" is
+/// held to (`benches/scrub_10m.rs`): a count, not a time, so it is the same on every machine at
+/// every load. A scan reads every sample; the index reads a few hundred things a column.
+#[must_use]
+pub fn reduce_counted(series: &Series, from: f64, to: f64, columns: usize) -> (Vec<Column>, usize) {
+    if columns == 0 || to <= from {
+        return (Vec::new(), 0);
+    }
+    let span = to - from;
+    // Bounds that are not numbers, or a span too wide to be one, place samples in ways that are
+    // not monotonic in time, and so cannot be searched for; the scan places them as it always has.
+    if !series.index.searchable() || !from.is_finite() || !span.is_finite() {
+        return (reduce_scan(series, from, to, columns), series.len());
+    }
+    #[allow(clippy::cast_precision_loss)] // a column count is a viewport width
+    let width = columns as f64;
+    // The scan's expression, exactly.
+    let column_of = |at: f64| -> usize {
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let index = (((at - from) / span) * width) as usize;
+        index.min(columns - 1)
+    };
+    let mut out: Vec<Option<Column>> = vec![None; columns];
+    let samples = &series.samples;
+    let mut reads = 0;
+    for (start, end) in series.index.runs(samples.len()) {
+        let (lo, hi) = series.window(start, end, from, to, &mut reads);
+        let mut first = lo;
+        while let Some(sample) = samples.get(first).filter(|_| first < hi) {
+            reads += 1;
+            let index = column_of(sample.at);
+            let last = series.index.search(
+                samples,
+                first + 1,
+                hi,
+                |at| column_of(at) > index,
+                &mut reads,
+            );
+            if let (Some((low, high)), Some(slot)) = (
+                series.index.min_max(samples, first, last, &mut reads),
+                out.get_mut(index),
+            ) {
+                match slot {
+                    Some(column) => {
+                        column.low = column.low.min(low);
+                        column.high = column.high.max(high);
+                    }
+                    None => *slot = Some(Column { index, low, high }),
+                }
+            }
+            first = last;
+        }
+    }
+    (out.into_iter().flatten().collect(), reads)
+}
+
+/// [`reduce`] by a pass over every sample: the reduction as it was first written, kept as the
+/// reference the index is held to and for a series whose clock goes backwards too often to
+/// search.
+#[must_use]
+pub fn reduce_scan(series: &Series, from: f64, to: f64, columns: usize) -> Vec<Column> {
     if columns == 0 || to <= from {
         return Vec::new();
     }

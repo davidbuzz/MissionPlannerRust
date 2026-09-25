@@ -19,6 +19,8 @@ flate2.workspace = true
 roxmltree.workspace = true
 # The flight mode tables `BinaryLog.onFlightMode` names modes from (L3, below this crate's L4).
 mp-vehicle.workspace = true
+# The FFT window's transform (`mp_log::fft`), in place of `FFT2.run`.
+rustfft.workspace = true
 
 [dev-dependencies]
 mp-mavlink-dialects.workspace = true

@@ -497,12 +497,31 @@ Dataflash (`.bin`/`.log`) and tlog parsing, log download, graphing, LogAnalyzer 
   (row 23); the page's buttons call them (row 28). Geo Reference Images' logic is `mp-georef`
   (`georefimage.cs` and `GeoRefImageBase.cs`: the three matching modes, every output file and the
   EXIF geotags byte for byte to the real classes under mono over a SITL flight with camera
-  messages, `tools/csharp-reference/GeorefOracle.cs`, row 49) and its form is inside this window (row 54). Not yet: the
-  field descriptions from `LogMessages.xml.xz` (the one missing designer wiring), the FFT
-  (`Exocortex.DSP`), the 10 M-point scrub at 120 fps (unmeasured), and a memory-mapped parse -
-  `LogFile` reads and indexes instead, `unsafe` being forbidden in `mp-log`, and meets the budget
-  without it, at a peak of 1.62 GB for the 1.07 GB log.
-- **Tests:** `crates/mp-log/tests/dataflash.rs`, `tlog.rs`, `logfile.rs`, `convert.rs` (`.BIN → .log` byte-identical to `BinaryLog` under mono), `matlab.rs`, `analysis.rs`, `robustness.rs`, with `crates/mp-kml/tests/dflog.rs` and `real_flight.rs` for KML+GPX, `crates/mp-cli/tests/log_verbs.rs`, and `crates/mp-georef/tests/oracle.rs` (14 cases against the C# classes), `photos.rs`, `roundtrip.rs`, `edge.rs`, `behaviour.rs`; `fuzz/fuzz_targets/tlog_reader.rs` with the bounded pass in `mp-fuzz-checks`; `benches/parse_1gb.rs` (0.6 s to first plot on a 1.07 GB log); the log browser's `logbrowse/coverage.rs` tests and the 8 `tests/gui/log-*.gui` scripts. Not yet: a dataflash fuzz target, `tests/fft.rs`, `benches/scrub_10m.rs`.
+  messages, `tools/csharp-reference/GeorefOracle.cs`, row 49) and its form is inside this window (row 54).
+  **The FFT** is `mp_log::fft` on `rustfft`: nothing in Mission Planner calls `Exocortex.DSP` (nor
+  `fft3.cs`, the alglib sliding DFT) - the FFT window `Controls/fftui.cs` and `Spectrogram.cs` both
+  use `FFT2` in `ExtLibs/Utilities/fft.cs`, so that is the spec: a periodic Hann window with gain
+  `4/N` (a sine of amplitude A on a bin reads A), the unnormalised forward DFT, `N/2` magnitudes,
+  dB as `20/ln10 * ln(m + double.Epsilon)`, `FreqTable`'s whole-hertz `int` bins, the window's
+  sample-rate estimate (`Math.Round(1000/timedelta, 1)` over its exponential average) and the
+  "Run all imus" average (every whole slice but the last, each over the slice count, bins below
+  Start Freq zero). `headless-planner log fft <log> <MSG.Field> [size] [--mag] [--start hz]` prints the graph's
+  title and the highest peaks as its tooltip reads them (`"{0} hz/{1} rpm"`). No GUI yet: the
+  window opens from SETUP's FFT Setup page and the advanced config, not the log browser, and
+  calls `fft::field_spectrum` per series. **The 10 M-point scrub** is measured and met:
+  `mp_chart::Series` keeps an index - runs of non-decreasing time and a min/max pyramid with each
+  block's first time - so `extent`, `auto_range` and `reduce` read O(width x log32(n/width))
+  things instead of every sample, the same columns, lows and highs as the scan to the bit
+  (`reduce_scan`, kept as the reference); `Positions::line_at_time` searches a running-latest
+  time index instead of walking. Eight series of 10 M samples, 1,000 cursor steps: whole log p50
+  1.89 ms, p99 3.41 ms a step (1 M: 1.30 / 1.87 ms); zoomed to a minute p50 0.71 ms, p99 1.08 ms;
+  reads a frame 10 M/1 M 1.35 (116 a column), time 1.46; the frame before was 1,270 ms at 10 M.
+  `logbrowse/view.rs`'s `nearest_point` (Show Point Values, off by default) still visits every
+  sample. Not yet: the field descriptions from `LogMessages.xml.xz` (the one missing designer
+  wiring), the FFT window itself and `Spectrogram`, and a memory-mapped parse - `LogFile` reads
+  and indexes instead, `unsafe` being forbidden in `mp-log`, and meets the budget without it, at
+  a peak of 1.62 GB for the 1.07 GB log.
+- **Tests:** `crates/mp-log/tests/dataflash.rs`, `tlog.rs`, `logfile.rs`, `convert.rs` (`.BIN → .log` byte-identical to `BinaryLog` under mono), `matlab.rs`, `analysis.rs`, `robustness.rs`, with `crates/mp-kml/tests/dflog.rs` and `real_flight.rs` for KML+GPX, `crates/mp-cli/tests/log_verbs.rs`, and `crates/mp-georef/tests/oracle.rs` (14 cases against the C# classes), `photos.rs`, `roundtrip.rs`, `edge.rs`, `behaviour.rs`; `fuzz/fuzz_targets/tlog_reader.rs` with the bounded pass in `mp-fuzz-checks`; `benches/parse_1gb.rs` (0.6 s to first plot on a 1.07 GB log); the log browser's `logbrowse/coverage.rs` tests and the 8 `tests/gui/log-*.gui` scripts; `crates/mp-log/tests/fft.rs` (synthetic sines recovered at their bin to 1e-6 relative, A/2 either side, a DC level at 2c, dB, the average's slices and start frequency, and `rustfft` against a line-for-line transcription of `FFT2.run` to 1e-12 of the peak) with `fft`'s unit tests and `log_verbs.rs`'s `headless-planner log fft` case; `crates/mp-chart/tests/lod.rs` (the indexed extent, range and reduction equal to the scan at 1-2,560 columns over rolling, repeating, restarting and random series, proptest, and the reads a frame bounded as the length grows 16 times) and `overlay.rs`'s `line_at_time_is_the_walk`; `crates/mp-chart/benches/scrub_10m.rs` (the gate: p99 <= 8.33 ms at 10 M, reads 10 M/1 M <= 1.5 and <= 800 a column, time ratio <= 2.5, and the reduction at 10 M equal to the scan at 240 and 1,920 columns). Not yet: a dataflash fuzz target.
 
 ### D15. CAN, peripherals and outboard features
 DroneCAN/UAVCAN (node list, param edit, firmware update), OSD configurator, antenna tracker, SiK radio

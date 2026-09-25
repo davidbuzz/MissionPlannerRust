@@ -29,6 +29,7 @@ pub mod convert;
 pub mod dataflash;
 pub mod dflogbuffer;
 pub mod expression;
+pub mod fft;
 pub mod index;
 pub mod logfile;
 pub mod logparams;
