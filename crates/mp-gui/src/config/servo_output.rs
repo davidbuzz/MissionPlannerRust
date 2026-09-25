@@ -96,9 +96,9 @@ const PWM_BOX: Designer = Designer {
     decimals: 0,
 };
 
-/// `setup(800, 2200, 1, 1, ...)` for each of the three numbers.
-/// `// C#: GCSViews/ConfigurationView/ConfigRadioOutput.cs:66-68`
-const PWM_SETUP: Setup = Setup {
+/// `setup(800, 2200, 1, 1, ...)` for each of the three numbers; Heli Setup's servo rows too.
+/// `// C#: GCSViews/ConfigurationView/ConfigRadioOutput.cs:66-68; ConfigTradHeli4.cs:182-184`
+pub const PWM_SETUP: Setup = Setup {
     minimum: 800.0,
     maximum: 2200.0,
     scale: 1.0,
@@ -970,6 +970,19 @@ impl ServoRow {
     /// `// C#: GCSViews/ConfigurationView/ConfigRadioOutput.cs:35-69`
     #[must_use]
     pub fn setup(servo: usize, parameters: &[(String, f64)], lookup: Lookup) -> Self {
+        Self::setup_from(servo, PWM_BOX, parameters, lookup)
+    }
+
+    /// `setup(servono)` over numbers as a Designer left them: this page's constructor makes
+    /// them 800 to 2200 at 1500, Heli Setup's Designer leaves them `NumericUpDown`'s own.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRadioOutput.cs:35-69; ConfigTradHeli4.cs:174-185`
+    #[must_use]
+    pub fn setup_from(
+        servo: usize,
+        designer: Designer,
+        parameters: &[(String, f64)],
+        lookup: Lookup,
+    ) -> Self {
         let name = format!("SERVO{servo}");
         let mut reversed = Check::default();
         reversed.setup(1.0, 0.0, &format!("{name}_REVERSED"), parameters);
@@ -981,7 +994,7 @@ impl ServoRow {
             parameters,
         );
         let number = |column: Column| {
-            let mut number = Number::new(PWM_BOX);
+            let mut number = Number::new(designer);
             number.setup(
                 PWM_SETUP,
                 &format!("{name}_{}", column.suffix()),

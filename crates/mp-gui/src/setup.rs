@@ -54,69 +54,15 @@ const CAPABILITY_FTP: u32 = 32;
 /// `MAV_TYPE_HELICOPTER`, `isHeli`'s `aptype`.
 const TYPE_HELICOPTER: u8 = 4;
 
-/// The display view's switches the two lists read, as `DisplayView.Advanced()` leaves them.
-///
-/// `MainV2` starts in that view unless a custom one or a saved one exists (`MainV2.cs:351-353`),
-/// and this application has no display-view setting, so it is always the one. `BackstageView`'s
-/// own `Advanced`, which hides a page added as advanced, is `isAdvancedMode` (`MainV2.cs:601`).
-/// `// C#: ExtLibs/Utilities/DisplayView.cs:37-212, 377-460`
-const ADVANCED_VIEW: &[(&str, bool)] = &[
-    ("displayInstallFirmware", true),
-    ("displayFrameType", true),
-    ("displayAccelCalibration", true),
-    ("displayCompassConfiguration", true),
-    ("displayRadioCalibration", true),
-    ("displayServoOutput", true),
-    ("displaySerialPorts", true),
-    ("displayEscCalibration", true),
-    ("displayFlightModes", true),
-    ("displayFailSafe", true),
-    ("displayInitialParams", true),
-    ("displayHWIDs", true),
-    ("displayRTKInject", true),
-    ("displaySikRadio", true),
-    ("displayADSB", true),
-    ("displayGPSOrder", true),
-    ("displayBattMonitor", true),
-    ("displayCAN", true),
-    ("displayJoystick", true),
-    ("displayCompassMotorCalib", true),
-    ("displayRangeFinder", true),
-    ("displayAirSpeed", true),
-    ("displayPx4Flow", true),
-    ("displayOpticalFlow", true),
-    ("displayOsd", true),
-    ("displayCameraGimbal", true),
-    ("displayAntennaTracker", true),
-    ("displayMotorTest", true),
-    ("displayBluetooth", true),
-    ("displayParachute", true),
-    ("displayEsp", true),
-    ("displayFFTSetup", true),
-    ("isAdvancedMode", true),
-    ("displayTerminal", true),
-    ("displayREPL", true),
-    ("displayGeoFence", true),
-    ("displayBasicTuning", true),
-    ("displayExtendedTuning", true),
-    ("displayStandardParams", false),
-    ("displayAdvancedParams", false),
-    ("displayOSD", true),
-    ("displayMavFTP", true),
-    ("displayUserParam", true),
-    ("displayFullParamList", true),
-    ("displayPlannerSettings", true),
-    // Read by the Full Parameter List's Commit Params, not by the lists.
-    // C#: GCSViews/ConfigurationView/ConfigRawParams.cs:61
-    ("displayParamCommitButton", false),
-];
-
-/// A display-view switch; one the lists do not read is off. `MainV2.DisplayConfiguration.<flag>`.
+// ---- Display view (row 71) ----
+/// A display-view switch: `MainV2.DisplayConfiguration.<flag>`, of the view chosen - Advanced
+/// unless the Planner page's Layout or the saved `displayview` says otherwise
+/// (`display_view.rs`). One the class does not have is off.
+/// `// C#: ExtLibs/Utilities/DisplayView.cs:37-455; MainV2.cs:351-366`
 pub(crate) fn display(flag: &str) -> bool {
-    ADVANCED_VIEW
-        .iter()
-        .any(|(name, value)| *name == flag && *value)
+    crate::display_view::flag(flag)
 }
+// ---- end Display view ----
 
 /// What the lists' conditions read: the C#'s `isConnected`, `gotAllParams` and the rest.
 #[derive(Debug, Clone, Copy)]
@@ -868,6 +814,23 @@ impl MissionPlanner {
         }
     }
 
+    // ---- Display view (row 71) ----
+    /// A SETUP or CONFIG tab clicked while its screen shows: `MainSwitcher.ShowScreen` disposes
+    /// the screen showing - the same one included, as it is not persistent - and makes it anew,
+    /// so its list is closed here, its page deactivated, and built again at the next tick with
+    /// the display view as it is now.
+    /// `// C#: ExtLibs/Controls/MainSwitcher.cs:112-153; MainV2.cs:1357-1362, 3179-3180`
+    pub(crate) fn show_screen_again(&mut self, screen: crate::Screen) {
+        for list in List::ALL {
+            if screen_of(list) == screen
+                && let Some(old) = self.backstage_mut(list).close()
+            {
+                self.deactivate_page(list, old);
+            }
+        }
+    }
+    // ---- end Display view ----
+
     /// `ActivatePage`: the list's part, then the old page's `Deactivate` and the new one's
     /// `Activate`.
     /// `// C#: ExtLibs/Controls/BackstageView/BackstageView.cs:428-523`
@@ -1020,6 +983,18 @@ impl MissionPlanner {
                 self.software_activate(class);
             }
             // ---- end GeoFence / rover Basic Tuning / User Params ----
+            // ---- Standard / Advanced Params, MAVFtp, Heli Setup (row 71) ----
+            // Every time, as `ActivatePage` calls it (`config/software_pages2.rs`); `MavFTPUI`
+            // loads once per screen, as it is not `IActivate`.
+            // C#: GCSViews/ConfigurationView/ConfigFriendlyParams.cs:253-260; Controls/MavFTPUI.cs:665-668;
+            // GCSViews/ConfigurationView/ConfigTradHeli4.cs:28-172
+            Some(
+                class @ ("ConfigFriendlyParams"
+                | "ConfigFriendlyParamsAdv"
+                | "MavFTPUI"
+                | "ConfigTradHeli4"),
+            ) => self.software2_activate(class),
+            // ---- end Standard / Advanced Params, MAVFtp, Heli Setup ----
             // ---- SETUP's small pages (row 70) ----
             // Every time, as `ActivatePage` calls it (`config/extra_setup.rs`).
             // C#: GCSViews/ConfigurationView/ConfigHWParachute.cs:17-45; ConfigHWOSD.cs:14-21;
@@ -1129,6 +1104,17 @@ impl MissionPlanner {
                 self.software_deactivate(class);
             }
             // ---- end GeoFence / rover Basic Tuning / User Params ----
+            // ---- Standard / Advanced Params, MAVFtp, Heli Setup (row 71) ----
+            // `ConfigTradHeli4.Deactivate` empties its four tables; the others are hidden, a
+            // number or a name being typed into read.
+            // C#: GCSViews/ConfigurationView/ConfigTradHeli4.cs:187-193
+            Some(
+                class @ ("ConfigFriendlyParams"
+                | "ConfigFriendlyParamsAdv"
+                | "MavFTPUI"
+                | "ConfigTradHeli4"),
+            ) => self.software2_deactivate(class),
+            // ---- end Standard / Advanced Params, MAVFtp, Heli Setup ----
             // ---- SETUP's small pages (row 70) ----
             // `ConfigCompassMot.Deactivate` stops a running calibration; the rest are `IActivate`
             // only: hidden, a number or text being typed into read.
@@ -1373,6 +1359,15 @@ impl MissionPlanner {
             // C#: GCSViews/ConfigurationView/ConfigUserDefined.cs:46-86
             "ConfigUserDefined" => self.software_page(class, window, cx),
             // ---- end GeoFence / rover Basic Tuning / User Params ----
+            // ---- Standard / Advanced Params, MAVFtp, Heli Setup (row 71) ----
+            // C#: GCSViews/ConfigurationView/ConfigFriendlyParams.Designer.cs:29-74; ConfigFriendlyParams.resx
+            "ConfigFriendlyParams" => self.software2_page(class, window, cx),
+            "ConfigFriendlyParamsAdv" => self.software2_page(class, window, cx),
+            // C#: Controls/MavFTPUI.Designer.cs:29-235
+            "MavFTPUI" => self.software2_page(class, window, cx),
+            // C#: GCSViews/ConfigurationView/ConfigTradHeli4.Designer.cs:29-1068
+            "ConfigTradHeli4" => self.software2_page(class, window, cx),
+            // ---- end Standard / Advanced Params, MAVFtp, Heli Setup ----
             // ---- SETUP's small pages (row 70) ----
             // C#: GCSViews/ConfigurationView/ConfigHWParachute.Designer.cs; ConfigHWOSD.resx;
             // ConfigGPSOrder.Designer.cs; ConfigHWIDs.Designer.cs; ConfigCompassMot.Designer.cs;
@@ -1622,7 +1617,6 @@ pub fn record_facts(lists: [&Backstage; 2]) {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
     use std::sync::Arc;
 
     use mp_vehicle::VehicleState;
@@ -1809,88 +1803,83 @@ mod tests {
         );
     }
 
-    /// The code in a block: from the first `{` after `marker` to its `}`.
-    fn block_after<'a>(source: &'a str, marker: &str) -> &'a str {
-        let start = source.find(marker).unwrap_or_else(|| panic!("{marker}"));
-        let open = start + source[start..].find('{').expect("a block");
-        let mut depth = 0_i32;
-        for (at, c) in source[open..].char_indices() {
-            match c {
-                '{' => depth += 1,
-                '}' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        return &source[open + 1..open + at];
-                    }
-                }
-                _ => {}
-            }
-        }
-        panic!("the block after {marker} does not close");
-    }
-
-    /// `name = true` and `name = false`, with `;` or `,` after.
-    fn assignments(block: &str) -> BTreeMap<String, bool> {
-        block
-            .lines()
-            .filter_map(|line| {
-                let (name, value) = line.trim().split_once(" = ")?;
-                match value.trim_end_matches([';', ',']).trim() {
-                    "true" => Some((name.trim().to_owned(), true)),
-                    "false" => Some((name.trim().to_owned(), false)),
-                    _ => None,
-                }
-            })
-            .collect()
-    }
-
-    /// The switches are `DisplayView.Advanced()`'s - the property's initialiser, then the
-    /// constructor, then `Advanced()` over both - and that is the view `MainV2` starts in. Every
-    /// switch a list reads is among them.
+    /// Every switch a list reads is one `DisplayView` has (`display_view.rs` holds the table to
+    /// the C#), and the view the application starts in is Mission Planner's Advanced one.
     #[test]
     fn the_display_view_is_mission_planners_advanced_view() {
-        let (Some(source), Some(main)) = (
-            csharp("ExtLibs/Utilities/DisplayView.cs"),
-            csharp("MainV2.cs"),
-        ) else {
+        let Some(main) = csharp("MainV2.cs") else {
             eprintln!("skipped: the C# tree is not checked out here");
             return;
         };
-        let mut values: BTreeMap<String, bool> = BTreeMap::new();
-        for line in source.lines() {
-            let line = line.trim();
-            let Some(rest) = line
-                .strip_prefix("public bool ")
-                .or_else(|| line.strip_prefix("public Boolean "))
-            else {
-                continue;
-            };
-            if let Some((name, tail)) = rest.split_once(" { get; set; }") {
-                values.insert(name.to_owned(), tail.trim() == "= true;");
-            }
-        }
-        values.extend(assignments(block_after(&source, "public DisplayView()")));
-        values.extend(assignments(block_after(
-            &source,
-            "public static DisplayView Advanced(this DisplayView v)",
-        )));
-        for (flag, value) in ADVANCED_VIEW {
-            assert_eq!(values.get(*flag), Some(value), "{flag}");
-        }
         assert!(main.contains(": new DisplayView().Advanced();"));
         assert!(main.contains("BackstageView.Advanced = DisplayConfiguration.isAdvancedMode;"));
+        assert_eq!(
+            crate::display_view::current(),
+            crate::display_view::DisplayView::advanced()
+        );
         for list in List::ALL {
             for entry in entries(list) {
                 for guard in entry.guards {
                     if let Guard::Display(flag) = guard {
                         assert!(
-                            ADVANCED_VIEW.iter().any(|(name, _)| name == flag),
+                            crate::display_view::PROPERTIES
+                                .iter()
+                                .any(|(name, ..)| name == flag),
                             "{flag} is read and not in the table"
                         );
                     }
                 }
             }
         }
+    }
+
+    /// A Custom view that turns Standard and Advanced Params on, chosen, and the CONFIG list built
+    /// again: both pages listed - Advanced Params only while `isAdvancedMode` is on.
+    #[test]
+    fn a_custom_view_lists_the_parameter_pages() {
+        let params = parameters(&["OSD_TYPE"]);
+        let vehicle = copter(&params);
+        let dir = std::env::temp_dir().join(format!("headless-planner-setup-view-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let mut settings = crate::settings::Persisted::at(Some(dir.join("config.xml")));
+        let file = dir.join(crate::display_view::CUSTOM_FILE);
+        let _ = std::fs::write(
+            &file,
+            "{\"displayStandardParams\": true, \"displayAdvancedParams\": true, \"isAdvancedMode\": true}",
+        );
+        let custom = crate::display_view::DisplayView::custom(Some(&file));
+        crate::display_view::set(custom, &mut settings);
+        let mut config = Backstage::new(List::Config);
+        config.load(&vehicle, KEY);
+        let shown = classes(&config.rows());
+        assert!(shown.contains(&"ConfigFriendlyParams"), "{shown:?}");
+        assert!(shown.contains(&"ConfigFriendlyParamsAdv"), "{shown:?}");
+        // Without the Advanced mode, the advanced page is added and not drawn.
+        let _ = std::fs::write(
+            &file,
+            "{\"displayStandardParams\": true, \"displayAdvancedParams\": true}",
+        );
+        let custom = crate::display_view::DisplayView::custom(Some(&file));
+        crate::display_view::set(custom, &mut settings);
+        config.close();
+        config.load(&vehicle, KEY);
+        assert!(config.built.items.iter().any(|(index, _)| {
+            CONFIG_LIST
+                .get(*index)
+                .is_some_and(|e| e.class == "ConfigFriendlyParamsAdv")
+        }));
+        assert!(!classes(&config.rows()).contains(&"ConfigFriendlyParamsAdv"));
+        assert!(classes(&config.rows()).contains(&"ConfigFriendlyParams"));
+        // Basic: neither, and SETUP loses its Terminal.
+        crate::display_view::set(crate::display_view::DisplayView::basic(), &mut settings);
+        config.close();
+        config.load(&vehicle, KEY);
+        assert!(!classes(&config.pages()).contains(&"ConfigFriendlyParams"));
+        let mut setup = Backstage::new(List::Setup);
+        setup.load(&vehicle, KEY);
+        assert!(!classes(&setup.pages()).contains(&"ConfigTerminal"));
+        crate::display_view::set(crate::display_view::DisplayView::advanced(), &mut settings);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     const KEY: Key = Key {

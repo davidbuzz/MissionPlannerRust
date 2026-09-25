@@ -1,0 +1,103 @@
+# CONFIG's Advanced Params page, ported from GCSViews/ConfigurationView/ConfigFriendlyParams.cs
+# in Advanced mode (ConfigFriendlyParamsAdv.cs; PLAN.md §13.6 row 71).
+#
+# The claim: SoftwareConfig adds the page, as an advanced page, only when the display view's
+# displayAdvancedParams is on (SoftwareConfig.cs:201-204), and BackstageView draws an advanced page
+# only while the view's isAdvancedMode is on (BackstageView.cs:285; MainV2.cs:601). Neither preset
+# turns displayAdvancedParams on; a Custom view read from custom.displayview does
+# (DisplayView.cs:442-455; here beside config.xml). A saved displayview comes back at start-up with
+# the page forced off (MainV2.cs:916-925), so after Advanced is chosen and saved, the page is back
+# only once Custom is chosen again on the Planner page (ConfigPlanner.cs:1018-1033) and the CONFIG
+# screen made anew (MainSwitcher.cs:112-153). Showing it binds a control per parameter documented
+# @User: Advanced or not at all: BARO_FLTR_RNG, which has no @User, is a RangeControl; its arrow
+# records a value, and Write Params writes it (ConfigFriendlyParams.cs:179-205). The write is proved
+# by the vehicle's echo, and put back.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm (BARO_FLTR_RNG
+# 0). Run as
+#
+#   tools/gui-test.sh tests/gui/config-advanced-params.gui -- tcp:127.0.0.1:5760
+#
+# A run that stops half way can leave BARO_FLTR_RNG at 1; the first expectation on it then fails
+# until a fresh SITL.
+
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '{\n  "displayAdvancedParams": true,\n  "isAdvancedMode": true\n}\n' > $WORK/custom.displayview
+screen params
+window 1600x1200
+settle 6
+
+click param-download
+settle 15
+expect params.held > 1000
+expect params.value.BARO_FLTR_RNG 0
+
+# The file makes the start-up view Custom, with the page.
+click tab-config
+settle 1
+expect display.view Custom
+expect display.displayAdvancedParams true
+expect config.shown ~ ConfigFriendlyParamsAdv
+
+# Basic: neither the page nor, isAdvancedMode off, any advanced page.
+click config-page-ConfigPlanner
+settle 1
+click planner-CMB_Layout
+click planner-CMB_Layout-Basic
+settle 1
+expect display.view Basic
+expect display.isAdvancedMode false
+click tab-config
+settle 2
+expect config.pages ~ ConfigArducopter,ConfigOSD
+
+# Custom again, and the page shown.
+click config-page-ConfigPlanner
+settle 1
+click planner-CMB_Layout
+click planner-CMB_Layout-Custom
+settle 1
+expect display.view Custom
+expect display.displayAdvancedParams true
+click tab-config
+settle 2
+expect config.shown ~ ConfigFriendlyParamsAdv
+expect config.titles ~ Advanced Params
+click config-page-ConfigFriendlyParamsAdv
+settle 3
+expect config.page ConfigFriendlyParamsAdv
+expect config.title Advanced Params
+expect config.advanced.active true
+expect config.advanced.controls > 100
+
+# Find brings BARO_FLTR_RNG to the top.
+click advanced-find
+type baro_fltr_rng
+key Return
+settle 1
+expect config.advanced.visible 1
+expect config.advanced.BARO_FLTR_RNG.kind range
+expect config.advanced.BARO_FLTR_RNG.text 0
+
+# Its arrow records 1; Write Params writes it.
+click advanced-BARO_FLTR_RNG-up
+settle 1
+expect config.advanced.changed.BARO_FLTR_RNG 1
+expect params.value.BARO_FLTR_RNG 0
+click advanced-write
+settle 3
+expect config.advanced.write BARO_FLTR_RNG 1 accepted
+expect params.value.BARO_FLTR_RNG 1
+expect config.advanced.message Parameters successfully saved.
+click advanced-message-ok
+
+# And back.
+click advanced-BARO_FLTR_RNG-down
+click advanced-write
+settle 3
+expect params.value.BARO_FLTR_RNG 0
+click advanced-message-ok
+
+click config-page-ConfigPlanner
+settle 1
+expect config.advanced.active false

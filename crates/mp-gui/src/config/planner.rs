@@ -24,12 +24,22 @@
 //! Dimmed, each naming what it stands for here, are the controls whose handler drives something
 //! this application does not have: the video device, format, Start and Stop and the HUD overlay
 //! on video (no video capture); GDI+ (gpui draws the HUD); the UI language (English only); the
-//! theme and Custom (the dark palette is ratified); Layout (the display view is `setup.rs`'s
-//! fixed Advanced one); OSD Color (its handler's body is commented out, `ConfigPlanner.cs:432-439`);
+//! theme and Custom (the dark palette is ratified); OSD Color (its handler's body is commented out, `ConfigPlanner.cs:432-439`);
 //! Start/Stop Vario; Password Protect Config; ADSB (no ADSB server client); OptOut Anon Stats (no
 //! analytics); Beta Updates (no updater); Mavlink Message Debug; Testing Screen.
 //! `CHK_AutoParamCommit` is not drawn: `Activate` hides it outside a display view with the
-//! parameter commit button, and the Advanced view has none (`DisplayView.cs:214`).
+//! parameter commit button, and neither preset has one (`DisplayView.cs:214`); a Custom view that
+//! turns it on shows it in the C#, for a commit button this application's parameter list does
+//! not have.
+//!
+//! Layout picks the display view (`display_view.rs`): Basic, Advanced or Custom, each saved as
+//! `displayview` (`ConfigPlanner.cs:1018-1033`). `Activate` selects the view's name, and, the
+//! handler checking no `startup`, a selection that changes runs it: the preset of that name is
+//! made the view again (`:55-73`). The page object here lives as long as the application, where
+//! the C#'s is made with its screen, so that happens at its first `Activate`, and after only when
+//! the view's name has changed; a view the preset makes again is the same view, except a Custom
+//! file changed on disk in between. `label5` and the box are hidden for a view without
+//! `displayPlannerLayout` (`:75-79`).
 //!
 //! What is not ported, and why:
 //!
@@ -61,6 +71,7 @@ use mp_mavlink_dialects::all::{MavDataStream, MavMessage, RequestDataStream};
 use mp_vehicle::units::DisplayUnits;
 
 use crate::MissionPlanner;
+use crate::display_view::{DisplayName, DisplayView};
 use crate::settings::Persisted;
 use crate::telemetry::{Telemetry, TelemetryView};
 use crate::textfield::{KeyOutcome, TextField};
@@ -163,6 +174,8 @@ const KEYS: &[&str] = &[
     "GMapMarkerBase_InactiveDisplayStyle",
     // C#: ConfigPlanner.cs:249, 1165
     "mapCache",
+    // C#: ConfigPlanner.cs:1032; MainV2.cs:363
+    "displayview",
     // The speech templates and levels. C#: ConfigPlanner.cs:442-549, 660-686, 811-916
     "speechwaypoint",
     "speechmode",
@@ -191,8 +204,8 @@ const KEYS: &[&str] = &[
 /// A `Label`: its `Location`, `Size` and `Text`.
 type Label = (f32, f32, f32, f32, &'static str);
 
-/// Every label, as `ConfigPlanner.resx` places it. `label5` shows because the Advanced view's
-/// `displayPlannerLayout` is true (`DisplayView.cs:129`).
+/// Every label, as `ConfigPlanner.resx` places it. `label5`, "Layout", is hidden with the Layout
+/// box for a view without `displayPlannerLayout` (`ConfigPlanner.cs:75-79`).
 /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.resx (labelN.Location, .Size, .Text)`
 const LABELS: &[Label] = &[
     (9.0, 11.0, 71.0, 13.0, "Video Device"),
@@ -674,12 +687,7 @@ pub const COMBOS: &[ComboSpec] = &[
         &[],
         Some("the dark palette is ratified: there is no theme to load"),
     ),
-    combo(
-        "CMB_Layout",
-        (107, 448, 138, 21),
-        LAYOUTS,
-        Some("the display view is the Advanced one (setup.rs ADVANCED_VIEW); there is no other"),
-    ),
+    combo("CMB_Layout", (107, 448, 138, 21), LAYOUTS, None),
     combo(
         "cmb_secondarydisplaystyle",
         (107, 524, 138, 21),
@@ -1166,6 +1174,9 @@ pub struct Planner {
     effects: Vec<Effect>,
     /// The requests put on the link, as `stream@hz`, oldest first.
     sent: Vec<(u8, i32)>,
+    /// `label5.Visible` and `CMB_Layout.Visible` set false by `Activate`, which nothing sets
+    /// back. `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:75-79`
+    layout_hidden: bool,
 }
 
 impl Planner {
@@ -1206,6 +1217,7 @@ impl Planner {
             focused: None,
             effects: Vec::new(),
             sent: Vec::new(),
+            layout_hidden: false,
         };
         planner.change_units(settings);
         planner
@@ -1365,8 +1377,19 @@ impl Planner {
         self.open = None;
         self.dim_text.clear();
 
-        // C#: ConfigPlanner.cs:58-73 - the Advanced view.
-        self.selected.insert("CMB_Layout", Some(1));
+        // C#: ConfigPlanner.cs:58-73 - the view's name selected; a change runs the handler.
+        let index = match crate::display_view::current().name {
+            DisplayName::Basic => 0,
+            DisplayName::Advanced => 1,
+            DisplayName::Custom => 2,
+        };
+        if self.selected.insert("CMB_Layout", Some(index)) != Some(Some(index)) {
+            self.layout_changed(index, settings);
+        }
+        // C#: ConfigPlanner.cs:75-79
+        if !crate::display_view::flag("displayPlannerLayout") {
+            self.layout_hidden = true;
+        }
         // C#: ConfigPlanner.cs:81 - `KnownColor`'s names; `hudcolor` selects one.
         // C#: ConfigPlanner.cs:194-205
         self.dim_text.insert(
@@ -1734,6 +1757,8 @@ impl Planner {
             return;
         }
         match name {
+            // C#: ConfigPlanner.cs:1018-1033
+            "CMB_Layout" => self.layout_changed(index, settings),
             // C#: ConfigPlanner.cs:411-414
             "CMB_severity" => settings.set("severity", index.to_string()),
             // C#: ConfigPlanner.cs:557-571, 1049-1055
@@ -1774,6 +1799,23 @@ impl Planner {
                 }
             }
         }
+    }
+
+    /// `CMB_Layout_SelectedIndexChanged`: the preset of the name chosen made the view - which the
+    /// setter saves as `displayview` - and saved again.
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:1018-1033; MainV2.cs:357-366`
+    fn layout_changed(&mut self, index: usize, settings: &mut Persisted) {
+        let Some(name) = DisplayName::ALL.get(index).copied() else {
+            return;
+        };
+        let custom = crate::display_view::custom_path(settings);
+        crate::display_view::set(DisplayView::named(name, custom.as_deref()), settings);
+    }
+
+    /// Whether `label5` and the Layout box are drawn.
+    #[must_use]
+    pub const fn layout_shown(&self) -> bool {
+        !self.layout_hidden
     }
 
     /// A number box's arrow.
@@ -2064,6 +2106,9 @@ impl MissionPlanner {
         let focus = &self.planner_focus;
         let mut body = div().relative().w(px(PAGE.0)).h(px(PAGE.1));
         for (x, y, width, height, text) in LABELS {
+            if *text == "Layout" && !planner.layout_shown() {
+                continue;
+            }
             body = body.child(
                 at(*x, *y, *width, *height)
                     .text_xs()
@@ -2077,6 +2122,9 @@ impl MissionPlanner {
             }
         }
         for spec in COMBOS {
+            if spec.name == "CMB_Layout" && !planner.layout_shown() {
+                continue;
+            }
             body = body.child(combo_box(planner, spec, cx));
         }
         for spec in BUTTONS {
@@ -3361,12 +3409,7 @@ mod tests {
             planner.click(name, &mut settings);
             assert_eq!(planner.checked(name), was, "{name}");
         }
-        for name in [
-            "CMB_theme",
-            "CMB_language",
-            "CMB_Layout",
-            "CMB_videosources",
-        ] {
+        for name in ["CMB_theme", "CMB_language", "CMB_videosources"] {
             planner.toggle_dropdown(name);
             assert_eq!(planner.dropdown(), None, "{name}");
             planner.choose(name, 0, &mut settings);
@@ -3393,13 +3436,60 @@ mod tests {
                 "CMB_osdcolor",
                 "CMB_language",
                 "CMB_theme",
-                "CMB_Layout",
                 "BUT_videostart",
                 "BUT_videostop",
                 "BUT_themecustom",
                 "BUT_Vario",
             ]
         );
+    }
+
+    /// Layout: `Activate` selects the view's name - its first time raising the handler, which
+    /// makes the preset the view and saves it - and a choice makes that preset the view: Basic
+    /// takes the Advanced pages away, Custom with no file is Advanced again.
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:55-73, 1018-1033; MainV2.cs:357-366`
+    #[test]
+    fn layout_chooses_the_display_view() {
+        use crate::display_view::{DisplayName, DisplayView, SETTING, current, flag};
+        let dir = std::env::temp_dir().join(format!("mpr-planner-layout-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        let mut settings = Persisted::at(Some(dir.join("config.xml")));
+        let mut planner = Planner::new(&settings);
+        planner.activate(&mut settings, None);
+        assert_eq!(planner.combo_text("CMB_Layout"), "Advanced");
+        assert_eq!(
+            settings.get(SETTING).map(str::to_owned),
+            Some(DisplayView::advanced().convert_to_string()),
+            "the first Activate's handler saves the view"
+        );
+        assert!(planner.layout_shown());
+        planner.choose("CMB_Layout", 0, &mut settings);
+        assert_eq!(current(), DisplayView::basic());
+        assert!(!flag("isAdvancedMode"));
+        assert_eq!(
+            settings.get(SETTING).map(str::to_owned),
+            Some(DisplayView::basic().convert_to_string())
+        );
+        // Custom with no file: the Advanced preset, named Advanced.
+        planner.choose("CMB_Layout", 2, &mut settings);
+        assert_eq!(current().name, DisplayName::Advanced);
+        // With the file beside config.xml: read, named Custom.
+        let _ = std::fs::write(
+            dir.join(crate::display_view::CUSTOM_FILE),
+            "{\"displayStandardParams\": true, \"displayPlannerLayout\": false}",
+        );
+        planner.choose("CMB_Layout", 0, &mut settings);
+        planner.choose("CMB_Layout", 2, &mut settings);
+        assert_eq!(current().name, DisplayName::Custom);
+        assert!(flag("displayStandardParams"));
+        // Activated again in that view: Custom selected, and the box hidden.
+        planner.deactivate();
+        planner.activate(&mut settings, None);
+        assert_eq!(planner.combo_text("CMB_Layout"), "Custom");
+        assert!(!planner.layout_shown());
+        crate::display_view::set(DisplayView::advanced(), &mut settings);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

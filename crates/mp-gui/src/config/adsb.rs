@@ -25,7 +25,12 @@
 //!
 //! The layout is `ConfigADSB.resx`'s: the buttons and the panel at their `Location`s, the controls
 //! stacked from (12, 67) at their own heights - `RangeControl` 108, `ValuesControl` 89, a bitmask
-//! as its rows of check boxes make it - 578 wide.
+//! as its rows of check boxes make it - 578 wide, a `RangeControl`'s track bar and maximum
+//! anchored to its right as its Designer anchors them.
+//!
+//! Standard Params and Advanced Params (`ConfigFriendlyParams.cs`) are this page's code with
+//! another list, and their page object is this one with another [`Spec`]; see
+//! `friendly_params.rs`.
 //!
 //! What is not ported, and why:
 //!
@@ -72,6 +77,7 @@ use crate::setup::Key;
 use crate::telemetry::{Telemetry, TelemetryView};
 use crate::textfield::{KeyOutcome, TextField};
 use crate::ui::{action, panel, theme};
+use mp_params::ParamMeta;
 
 /// The page's title in Initial Setup's list: the literal "ADSB".
 /// `// C#: GCSViews/InitialSetup.cs:263`
@@ -101,23 +107,122 @@ pub const ERROR_RECEIVING: &str = "Error receiving list\n";
 /// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:42`
 pub const FILTER_DELAY: Duration = Duration::from_millis(500);
 
-/// Where the list starts, and its width: `tableLayoutPanel1` at (12, 67), its controls
-/// `tableLayoutPanel1.Width - 50` wide.
-/// `// C#: GCSViews/ConfigurationView/ConfigADSB.resx tableLayoutPanel1.Location, .Size; ConfigADSB.cs:513`
-const LIST_AT: (f32, f32) = (12.0, 67.0);
-/// The list's width.
-const LIST_WIDTH: f32 = 628.0;
-/// A control's width.
-const CONTROL_WIDTH: f32 = LIST_WIDTH - 50.0;
-/// `FitDescriptionText`'s widths: the list's, and a bitmask's control's.
-/// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:508, 552, 583-584`
-const DESCRIPTION_WIDTH: i32 = 628;
-/// A bitmask's.
-const BITMASK_DESCRIPTION_WIDTH: i32 = 578;
-/// The list panel's height before it grows with the page.
-const LIST_HEIGHT: f32 = 154.0;
-/// The first control's `y`.
+/// The first control's `y` on a page that places its controls itself.
+/// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:62, 255, 530`
 const FIRST_Y: f32 = 10.0;
+
+/// A control's `Margin` in a `FlowLayoutPanel`, WinForms' default three pixels each side.
+const FLOW_MARGIN: f32 = 3.0;
+
+/// The fixed control ids of a page built from the documentation.
+#[derive(Debug, Clone, Copy)]
+pub struct Ids {
+    /// Write Params.
+    pub write: &'static str,
+    /// Refresh Params.
+    pub refresh: &'static str,
+    /// Find.
+    pub find: &'static str,
+    /// Find's `InputBox`.
+    pub find_box: &'static str,
+    /// A message box, and its OK.
+    pub message: &'static str,
+    /// The message box's OK.
+    pub message_ok: &'static str,
+    /// Refresh Params' question, its "Show me again?", OK and Cancel.
+    pub confirm: &'static str,
+    /// Its "Show me again?".
+    pub confirm_showagain: &'static str,
+    /// Its OK.
+    pub confirm_ok: &'static str,
+    /// Its Cancel.
+    pub confirm_cancel: &'static str,
+}
+
+/// What sets one page built from the documentation apart from another. `ConfigADSB` is
+/// `ConfigFriendlyParams`' code with its own list: the same buttons at the same places, the same
+/// `AddControl`, `filterList` and handlers (`diff ConfigADSB.cs ConfigFriendlyParams.cs`), a
+/// `tableLayoutPanel1` whose controls it places in place of a `flowLayoutPanel1` that places them,
+/// and which parameters get a control.
+#[derive(Debug)]
+pub struct Spec {
+    /// The start of the page's control ids and facts.
+    pub name: &'static str,
+    /// The page's title in its list.
+    pub title: &'static str,
+    /// The `Settings` list whose parameters go first.
+    pub favourites: &'static str,
+    /// Whether a parameter the vehicle has, with its documentation, gets a control.
+    pub select: fn(&str, &ParamMeta) -> bool,
+    /// The list panel's `Location`.
+    pub list_at: (f32, f32),
+    /// Its `Size`: the controls are `Width - 50` wide, and `FitDescriptionText` breaks for its
+    /// width (a bitmask's, for the control's).
+    pub list_size: (f32, f32),
+    /// Whether the panel is a `FlowLayoutPanel`, which lays the controls out itself - each three
+    /// pixels in, three pixels apart, a hidden one taking no room - rather than a panel whose
+    /// controls the page stacks from `y = 10`.
+    pub flow: bool,
+    /// The fixed control ids.
+    pub ids: Ids,
+}
+
+impl Spec {
+    /// A control's width: `Width - 50`.
+    /// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:513, 553, 581`
+    #[must_use]
+    pub fn control_width(&self) -> f32 {
+        self.list_size.0 - 50.0
+    }
+
+    /// `FitDescriptionText`'s width for a range and a list of values: the panel's.
+    /// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:508, 583-584`
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation)] // a Designer width
+    pub fn description_width(&self) -> i32 {
+        self.list_size.0 as i32
+    }
+
+    /// Its width for a bitmask: the control's.
+    /// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:552`
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation)] // a Designer width
+    pub fn bitmask_description_width(&self) -> i32 {
+        self.control_width() as i32
+    }
+}
+
+/// `ConfigADSB`: the `ADSB_` and `AVD_` parameters with a display name, in `tableLayoutPanel1`
+/// at (12, 67), 628 by 154.
+/// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:324-343, 397-408; ConfigADSB.resx
+/// tableLayoutPanel1.Location, .Size`
+pub static ADSB: Spec = Spec {
+    name: "adsb",
+    title: TITLE,
+    favourites: "fav_adsb",
+    select: |name, meta| {
+        (name.starts_with("ADSB_") || name.starts_with("AVD_")) && !meta.display_name.is_empty()
+    },
+    list_at: (12.0, 67.0),
+    list_size: (628.0, 154.0),
+    flow: false,
+    ids: Ids {
+        write: "adsb-write",
+        refresh: "adsb-refresh",
+        find: "adsb-find",
+        find_box: "adsb-find-box",
+        message: "adsb-message",
+        message_ok: "adsb-message-ok",
+        confirm: "adsb-confirm",
+        confirm_showagain: "adsb-confirm-showagain",
+        confirm_ok: "adsb-confirm-ok",
+        confirm_cancel: "adsb-confirm-cancel",
+    },
+};
+
+/// How a page's drawing reaches its page object in the application: a page built from the
+/// documentation is drawn by the same code whichever it is.
+pub type Access = fn(&mut MissionPlanner) -> &mut Adsb;
 
 /// `RangeControl`'s and `ValuesControl`'s heights.
 /// `// C#: ExtLibs/Controls/RangeControl.Designer.cs:88; ExtLibs/Controls/ValuesControl.Designer.cs:78`
@@ -675,9 +780,15 @@ fn values_combo(name: &str, values: &'static [(i64, &'static str)], value: &str)
 }
 
 /// `AddControl` for a parameter without one: the control its documentation makes, or `None`.
-/// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:460-613`
+/// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:460-613; ConfigFriendlyParams.cs:380-536`
 #[must_use]
-pub fn build(name: &str, display: &str, value: f64, lookup: Lookup) -> Option<Control> {
+pub fn build(
+    spec: &Spec,
+    name: &str,
+    display: &str,
+    value: f64,
+    lookup: Lookup,
+) -> Option<Control> {
     let meta = lookup(name)?;
     let text = three_places(value);
     let label = format!("{display} ({name})");
@@ -693,7 +804,7 @@ pub fn build(name: &str, display: &str, value: f64, lookup: Lookup) -> Option<Co
                 units = "Degrees (Scaled)".to_owned();
                 increment /= 100.0;
             }
-            let description = fit_description(&units, meta.description, DESCRIPTION_WIDTH);
+            let description = fit_description(&units, meta.description, spec.description_width());
             // A range the control cannot map throws in its constructor: no control.
             return RangeControl::new(increment, scale, low, high, &text).map(|range| Control {
                 name: name.to_owned(),
@@ -708,7 +819,7 @@ pub fn build(name: &str, display: &str, value: f64, lookup: Lookup) -> Option<Co
         return Some(Control {
             name: name.to_owned(),
             label,
-            description: fit_description(units, meta.description, BITMASK_DESCRIPTION_WIDTH),
+            description: fit_description(units, meta.description, spec.bitmask_description_width()),
             kind: Kind::Bitmask(Bitmask::new(meta.bitmask, value)),
             visible: true,
         });
@@ -717,7 +828,7 @@ pub fn build(name: &str, display: &str, value: f64, lookup: Lookup) -> Option<Co
         return Some(Control {
             name: name.to_owned(),
             label,
-            description: fit_description(units, meta.description, DESCRIPTION_WIDTH),
+            description: fit_description(units, meta.description, spec.description_width()),
             kind: Kind::Values(values_combo(name, meta.values, &text)),
             visible: true,
         });
@@ -737,9 +848,11 @@ struct Find {
     before: String,
 }
 
-/// The page object.
-#[derive(Debug, Default)]
+/// The page object: ADSB's, and Standard and Advanced Params', whose code it is.
+#[derive(Debug)]
 pub struct Adsb {
+    /// Which page it is.
+    spec: &'static Spec,
     made_for: Option<Key>,
     active: bool,
     /// `tableLayoutPanel1.Controls`, in the order they were added.
@@ -766,14 +879,22 @@ pub struct Adsb {
     queue: SetQueue,
 }
 
-/// `Settings.Instance.GetList("fav_adsb")`, from Mission Planner's `config.xml`: the favourites,
-/// `;`-separated and URL-encoded. Nothing on this page adds to it.
+impl Default for Adsb {
+    /// ADSB's page object, as nothing has shown it.
+    fn default() -> Self {
+        Self::new(&ADSB)
+    }
+}
+
+/// `Settings.Instance.GetList(key)` - `"fav_adsb"`, `"fav_params"` - from Mission Planner's
+/// `config.xml`: the favourites, `;`-separated and URL-encoded. Nothing on these pages adds to
+/// it.
 /// `// C#: ExtLibs/Utilities/Settings.cs:164-169`
 #[must_use]
-pub fn favourites() -> Vec<String> {
+pub fn favourites(key: &str) -> Vec<String> {
     mp_settings::Config::default_path()
         .and_then(|path| mp_settings::Config::load(&path).ok())
-        .and_then(|config| config.get("fav_adsb").map(str::to_owned))
+        .and_then(|config| config.get(key).map(str::to_owned))
         .map(|list| list.split(';').map(url_decode).collect::<Vec<_>>())
         .unwrap_or_default()
 }
@@ -806,10 +927,50 @@ fn url_decode(text: &str) -> String {
 }
 
 impl Adsb {
+    /// A page object as nothing has shown it.
+    #[must_use]
+    pub fn new(spec: &'static Spec) -> Self {
+        Self {
+            spec,
+            made_for: None,
+            active: false,
+            controls: Vec::new(),
+            changed: BTreeMap::new(),
+            search: String::new(),
+            find: None,
+            filter_due: None,
+            confirm: None,
+            show_again: None,
+            refreshing: None,
+            dropdown: None,
+            editing: None,
+            messages: VecDeque::new(),
+            queue: SetQueue::default(),
+        }
+    }
+
+    /// Which page it is.
+    #[must_use]
+    pub const fn spec(&self) -> &'static Spec {
+        self.spec
+    }
+
     /// Whether the page is showing.
     #[must_use]
     pub const fn is_active(&self) -> bool {
         self.active
+    }
+
+    /// Find's question, while its box is open.
+    #[must_use]
+    pub fn find_prompt(&self) -> Option<&'static str> {
+        self.find.as_ref().map(|find| find.input.prompt)
+    }
+
+    /// Whether Refresh Params' question is showing.
+    #[must_use]
+    pub const fn confirming(&self) -> bool {
+        self.confirm.is_some()
     }
 
     /// The controls, in the order they were added.
@@ -850,7 +1011,7 @@ impl Adsb {
 
     /// Shows the page: a new page object for a new screen, then `Activate`, which binds the
     /// list. Returns the writes a changed bitmask makes.
-    /// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:253-258, 324-419`
+    /// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:253-258, 324-419; ConfigFriendlyParams.cs:253-337`
     pub fn activate(
         &mut self,
         parameters: &[(String, f64)],
@@ -867,7 +1028,7 @@ impl Adsb {
                 messages,
                 queue,
                 show_again,
-                ..Self::default()
+                ..Self::new(self.spec)
             };
         }
         self.active = true;
@@ -875,21 +1036,23 @@ impl Adsb {
         self.bind(parameters, lookup, favourites)
     }
 
-    /// `BindParamList`: each `ADSB_` and `AVD_` parameter with a display name, favourites first,
-    /// by name, given its control or its control given the vehicle's value.
+    /// `BindParamList`: each parameter the page's list takes (for ADSB each `ADSB_` and `AVD_`
+    /// parameter with a display name), favourites first, by name, given its control or its
+    /// control given the vehicle's value. `ConfigFriendlyParams` builds the new controls first
+    /// and sorts them after, by the same key, which comes to the same order.
+    /// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:349-419; ConfigFriendlyParams.cs:299-337`
     fn bind(
         &mut self,
         parameters: &[(String, f64)],
         lookup: Lookup,
         favourites: &[String],
     ) -> Vec<Job> {
+        let select = self.spec.select;
         let mut names: Vec<(String, String, f64)> = parameters
             .iter()
-            .filter(|(name, _)| name.starts_with("ADSB_") || name.starts_with("AVD_"))
             .filter_map(|(name, value)| {
                 let meta = lookup(name)?;
-                (!meta.display_name.is_empty())
-                    .then(|| (name.clone(), meta.display_name.to_owned(), *value))
+                select(name, meta).then(|| (name.clone(), meta.display_name.to_owned(), *value))
             })
             .collect();
         let order = |name: &str| {
@@ -941,7 +1104,7 @@ impl Adsb {
                 }
                 continue;
             }
-            if let Some(control) = build(&name, &display, value, lookup) {
+            if let Some(control) = build(self.spec, &name, &display, value, lookup) {
                 self.controls.push(control);
             }
         }
@@ -1127,11 +1290,12 @@ impl Adsb {
     /// Refresh Params, before its question: with no link, nothing; with "Show me again?" turned
     /// off, straight to the fetch.
     /// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:212-218; Common.cs:260-270`
-    pub fn press_refresh(&mut self, connected: bool, telemetry: &Telemetry, view: &TelemetryView) {
+    /// Returns whether to fetch the parameters now: `getParamList`, which the caller starts.
+    pub fn press_refresh(&mut self, connected: bool, view: &TelemetryView) -> bool {
         self.leave();
         self.dropdown = None;
         if !connected || !self.refresh_enabled() {
-            return;
+            return false;
         }
         let show_again = *self.show_again.get_or_insert_with(|| {
             mp_settings::Config::default_path()
@@ -1141,8 +1305,9 @@ impl Adsb {
         });
         if show_again {
             self.confirm = Some(true);
+            false
         } else {
-            self.refresh(telemetry, view);
+            self.refresh(view)
         }
     }
 
@@ -1154,17 +1319,15 @@ impl Adsb {
         }
     }
 
-    /// The question answered: OK fetches, Cancel does nothing.
-    pub fn answer_refresh(&mut self, ok: bool, telemetry: &Telemetry, view: &TelemetryView) {
-        if self.confirm.take().is_some() && ok {
-            self.refresh(telemetry, view);
-        }
+    /// The question answered: OK fetches, Cancel does nothing. Returns whether to fetch.
+    pub fn answer_refresh(&mut self, ok: bool, view: &TelemetryView) -> bool {
+        self.confirm.take().is_some() && ok && self.refresh(view)
     }
 
-    /// `getParamList`, the button disabled until the list is whole again.
-    fn refresh(&mut self, telemetry: &Telemetry, view: &TelemetryView) {
+    /// `getParamList`, the button disabled until the list is whole again: always a fetch.
+    fn refresh(&mut self, view: &TelemetryView) -> bool {
         self.refreshing = Some(Arc::clone(&view.parameters));
-        telemetry.download_parameters();
+        true
     }
 
     /// Find: its `InputBox`, holding the last word.
@@ -1246,17 +1409,18 @@ impl Adsb {
     }
 
     /// Once a frame: a page object whose screen has gone is let go, Find's timer, the fetch's
-    /// end, and the writes, with Write Params' box when they are done.
+    /// end, and the writes, with Write Params' box when they are done. `on_screen` is whether the
+    /// page's screen - SETUP for ADSB, CONFIG for the others - is showing.
     pub fn tick(
         &mut self,
         telemetry: &Telemetry,
         view: &TelemetryView,
-        on_setup: bool,
+        on_screen: bool,
         now: Instant,
     ) {
         if !self.active
             && self.made_for.is_some()
-            && (!on_setup || self.made_for != Some(Key::of(view)))
+            && (!on_screen || self.made_for != Some(Key::of(view)))
         {
             self.made_for = None;
             self.controls.clear();
@@ -1282,7 +1446,8 @@ impl Adsb {
             } else if whole && !Arc::ptr_eq(before, &view.parameters) {
                 self.refreshing = None;
                 if self.active {
-                    let jobs = self.bind(&view.parameters, crate::metadata::lookup, &favourites());
+                    let favourites = favourites(self.spec.favourites);
+                    let jobs = self.bind(&view.parameters, crate::metadata::lookup, &favourites);
                     self.queue.push(jobs);
                 }
             }
@@ -1311,60 +1476,58 @@ impl Adsb {
     }
 }
 
-/// Facts a UI test asserts on.
+/// Facts a UI test asserts on, under `config.<name>.`: `config.adsb.` for ADSB.
 pub fn record_facts(page: &Adsb, view: &TelemetryView) {
     use crate::facts::record;
-    record("config.adsb.active", page.is_active());
-    record("config.adsb.controls", page.controls().len());
+    let fact = |what: &str| format!("config.{}.{what}", page.spec.name);
+    record(fact("active"), page.is_active());
+    record(fact("controls"), page.controls().len());
     record(
-        "config.adsb.visible",
+        fact("visible"),
         page.controls()
             .iter()
             .filter(|control| control.visible)
             .count(),
     );
     record(
-        "config.adsb.order",
+        fact("order"),
         page.controls()
             .iter()
             .map(|control| control.name.as_str())
             .collect::<Vec<_>>()
             .join(","),
     );
-    record("config.adsb.search", &page.search);
+    record(fact("search"), &page.search);
+    record(fact("find"), page.find_prompt().unwrap_or("none"));
     record(
-        "config.adsb.find",
-        page.find.as_ref().map_or("none", |find| find.input.prompt),
-    );
-    record(
-        "config.adsb.confirm",
-        if page.confirm.is_some() {
+        fact("confirm"),
+        if page.confirming() {
             REFRESH_WARNING.lines().next().unwrap_or("")
         } else {
             "none"
         },
     );
-    record("config.adsb.refresh.enabled", page.refresh_enabled());
-    record("config.adsb.changed", page.changed().len());
+    record(fact("refresh.enabled"), page.refresh_enabled());
+    record(fact("changed"), page.changed().len());
     for (name, value) in page.changed() {
-        record(format!("config.adsb.changed.{name}"), value);
+        record(fact(&format!("changed.{name}")), value);
     }
     for control in page.controls() {
         let name = &control.name;
-        record(format!("config.adsb.{name}.kind"), control.kind_name());
-        record(format!("config.adsb.{name}.text"), control.shown());
-        record(format!("config.adsb.{name}.visible"), control.visible);
-        record(format!("config.adsb.{name}.label"), &control.label);
+        record(fact(&format!("{name}.kind")), control.kind_name());
+        record(fact(&format!("{name}.text")), control.shown());
+        record(fact(&format!("{name}.visible")), control.visible);
+        record(fact(&format!("{name}.label")), &control.label);
     }
-    record("config.adsb.write", page.queue.last().unwrap_or("none"));
-    record("config.adsb.writes.pending", page.queue.pending());
+    record(fact("write"), page.queue.last().unwrap_or("none"));
+    record(fact("writes.pending"), page.queue.pending());
     record(
-        "config.adsb.message",
+        fact("message"),
         page.message()
             .map_or("none", |message| message.text.as_str()),
     );
     for (name, value) in view.parameters.iter() {
-        if name.starts_with("ADSB_") || name.starts_with("AVD_") {
+        if page.controls().iter().any(|control| control.name == *name) {
             record(format!("params.value.{name}"), value);
         }
     }
@@ -1375,12 +1538,12 @@ pub fn record_facts(page: &Adsb, view: &TelemetryView) {
 // ---------------------------------------------------------------------------------------------
 
 /// A control's name and description, as `RangeControl` paints them and the others label them.
-fn texts(control: &Control, x: f32, y: f32) -> AnyElement {
+fn texts(control: &Control, width: f32, x: f32, y: f32) -> AnyElement {
     div()
         .absolute()
         .left(px(x))
         .top(px(y))
-        .w(px(CONTROL_WIDTH - 6.0))
+        .w(px(width - 6.0))
         .flex()
         .flex_col()
         .child(
@@ -1408,6 +1571,7 @@ fn range_number(
     range: &RangeControl,
     index: usize,
     editing: bool,
+    access: Access,
     handle: &FocusHandle,
     window: &Window,
     cx: &mut Context<MissionPlanner>,
@@ -1434,15 +1598,15 @@ fn range_number(
     let text = if editing {
         text.track_focus(handle)
             .key_context("TextField")
-            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _window, cx| {
-                if this.optional.adsb.key(event) {
+            .on_key_down(cx.listener(move |this, event: &KeyDownEvent, _window, cx| {
+                if access(this).key(event) {
                     cx.notify();
                 }
             }))
     } else {
         let handle = handle.clone();
         text.on_click(cx.listener(move |this, _event, window, cx| {
-            this.optional.adsb.begin(index);
+            access(this).begin(index);
             handle.focus(window, cx);
             cx.notify();
         }))
@@ -1461,7 +1625,7 @@ fn range_number(
             .hover(|style| style.bg(rgb(theme::BORDER)))
             .child(if up { "▲" } else { "▼" })
             .on_click(cx.listener(move |this, _event, _window, cx| {
-                this.optional.adsb.step(index, up);
+                access(this).step(index, up);
                 cx.notify();
             }))
     };
@@ -1492,16 +1656,20 @@ fn range_number(
         .into_any_element()
 }
 
-/// A `RangeControl`'s track bar: the channel either side of the thumb takes a click.
+/// A `RangeControl`'s track bar: the channel either side of the thumb takes a click. Anchored
+/// left and right, it keeps the Designer's margins as the control is made wider: 69 in from the
+/// left, 3 from the right.
+/// `// C#: ExtLibs/Controls/RangeControl.Designer.cs:48-58`
 fn trackbar(
     id: &str,
     range: &RangeControl,
     index: usize,
+    width: f32,
+    access: Access,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
-    const WIDTH: f32 = 293.0;
     #[allow(clippy::cast_precision_loss)]
-    let thumb = (WIDTH - 10.0) * range.trackbar as f32 / TRACK_MAX as f32;
+    let thumb = (width - 10.0) * range.trackbar as f32 / TRACK_MAX as f32;
     let side = |up: bool, cx: &mut Context<MissionPlanner>| {
         let name = format!("{id}-track-{}", if up { "up" } else { "down" });
         crate::probe::measured(name.clone(), div())
@@ -1509,11 +1677,11 @@ fn trackbar(
             .h_full()
             .cursor_pointer()
             .on_click(cx.listener(move |this, _event, _window, cx| {
-                this.optional.adsb.page_trackbar(index, up);
+                access(this).page_trackbar(index, up);
                 cx.notify();
             }))
     };
-    at(69.0, 58.0, WIDTH, 20.0)
+    at(69.0, 58.0, width, 20.0)
         .flex()
         .items_center()
         .child(
@@ -1538,7 +1706,163 @@ fn trackbar(
         .into_any_element()
 }
 
-/// The page, laid out as `ConfigADSB.resx` lays it out.
+/// Write Params, Refresh Params and Find at their places, and the list panel's controls - one
+/// per parameter Find leaves showing, each at its height - with a values control's list dropped
+/// down over them. The page's own panel is the caller's.
+/// `// C#: GCSViews/ConfigurationView/ConfigADSB.Designer.cs; ConfigFriendlyParams.Designer.cs:29-74;
+/// ConfigFriendlyParams.resx`
+pub fn list_body(
+    list: &Adsb,
+    access: Access,
+    number: &FocusHandle,
+    prompt: &FocusHandle,
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> gpui::Div {
+    let spec = list.spec;
+    let ids = spec.ids;
+    let prompt = prompt.clone();
+    let mut body = div()
+        .relative()
+        .w(px(spec.list_at.0 + spec.list_size.0 + 14.0))
+        .child(button(
+            ids.write,
+            "Write Params",
+            (12.0, 11.0, 103.0, 19.0),
+            true,
+            move |this, _window, _cx| {
+                let jobs = access(this).write_params();
+                access(this).push(jobs);
+            },
+            cx,
+        ))
+        .child(button(
+            ids.refresh,
+            "Refresh Params",
+            (121.0, 11.0, 103.0, 19.0),
+            list.refresh_enabled(),
+            move |this, _window, _cx| {
+                let view = this.telemetry.view();
+                let connected = view.connected && view.vehicle.is_some();
+                if access(this).press_refresh(connected, &view) {
+                    this.telemetry.download_parameters();
+                }
+            },
+            cx,
+        ))
+        .child(button(
+            ids.find,
+            "Find",
+            (230.0, 11.0, 103.0, 19.0),
+            true,
+            move |this, window, cx| {
+                access(this).open_find();
+                prompt.focus(window, cx);
+            },
+            cx,
+        ));
+
+    let (list_x, list_y) = spec.list_at;
+    let width = spec.control_width();
+    // A panel the page stacks from y = 10, or a flow panel's three-pixel margins.
+    let (x, mut y, gap) = if spec.flow {
+        (FLOW_MARGIN, FLOW_MARGIN, 2.0 * FLOW_MARGIN)
+    } else {
+        (0.0, FIRST_Y, 0.0)
+    };
+    let mut dropdown_at = None;
+    for (index, control) in list.controls().iter().enumerate() {
+        if !control.visible {
+            continue;
+        }
+        let height = control.height();
+        let mut item = at(list_x + x, list_y + y, width, height)
+            .border_b_1()
+            .border_color(rgb(theme::BORDER));
+        let id = format!("{}-{}", spec.name, control.name);
+        match &control.kind {
+            Kind::Range(range) => {
+                item = item
+                    .child(texts(control, width, 3.0, 0.0))
+                    .child(range_number(
+                        id.clone(),
+                        range,
+                        index,
+                        list.editing == Some(index),
+                        access,
+                        number,
+                        window,
+                        cx,
+                    ))
+                    .child(trackbar(&id, range, index, width - 72.0, access, cx))
+                    .child(label(72.0, 90.0, range.lbl_min.clone(), true))
+                    .child(label(width - 69.0, 90.0, range.lbl_max.clone(), true));
+            }
+            Kind::Values(combo) => {
+                item = item.child(texts(control, width, 4.0, 3.0)).child(combo_box(
+                    id.clone(),
+                    combo,
+                    (3.0, 65.0, 207.0, 21.0),
+                    move |this| access(this).toggle_dropdown(index),
+                    cx,
+                ));
+                if list.dropdown == Some(index) {
+                    dropdown_at = Some((index, list_x + x + 3.0, list_y + y + 65.0 + 21.0));
+                }
+            }
+            Kind::Bitmask(mask) => {
+                item = item.child(texts(control, width, 3.0, 3.0));
+                let (places, _) = mask.layout();
+                #[allow(clippy::cast_precision_loss)]
+                let lines = control.description.lines().count().max(1) as f32;
+                let top = 28.0 + 5.0 + 13.0 * lines + 6.0;
+                for (bit, ((_, name, checked), (bx, by))) in
+                    mask.bits.iter().zip(places).enumerate()
+                {
+                    let mut check = Check::default();
+                    check.enabled = true;
+                    check.state = if *checked {
+                        CheckState::Checked
+                    } else {
+                        CheckState::Unchecked
+                    };
+                    item = item.child(check_box(
+                        format!("{id}-bit{bit}"),
+                        &check,
+                        name,
+                        (bx + 3.0, top + by),
+                        move |this| access(this).click_bit(index, bit),
+                        cx,
+                    ));
+                }
+            }
+        }
+        body = body.child(item);
+        y += height + gap;
+    }
+    let height = list_y + y.max(spec.list_size.1) + 9.0;
+    body = body.h(px(height));
+    if let Some((index, x, y)) = dropdown_at
+        && let Some(Control {
+            kind: Kind::Values(combo),
+            name,
+            ..
+        }) = list.controls().get(index)
+    {
+        body = body.child(dropdown(
+            &format!("{}-{name}", spec.name),
+            combo,
+            (x, y, 207.0),
+            move |this, key| access(this).choose(index, key),
+            move |this, lines| access(this).scroll_list(index, lines),
+            cx,
+        ));
+    }
+    body
+}
+
+/// The page, laid out as `ConfigADSB.resx` lays it out: the list's buttons, `panel1` - disabled,
+/// as the Designer leaves it; nothing enables it - and the controls.
 pub fn page(
     adsb: &Adsb,
     focus: &Focus,
@@ -1548,46 +1872,7 @@ pub fn page(
     if !adsb.is_active() {
         return div().into_any_element();
     }
-    let mut body = div().relative().w(px(654.0));
-    body = body
-        .child(button(
-            "adsb-write",
-            "Write Params",
-            (12.0, 11.0, 103.0, 19.0),
-            true,
-            |this, _window, _cx| {
-                let jobs = this.optional.adsb.write_params();
-                this.optional.adsb.push(jobs);
-            },
-            cx,
-        ))
-        .child(button(
-            "adsb-refresh",
-            "Refresh Params",
-            (121.0, 11.0, 103.0, 19.0),
-            adsb.refresh_enabled(),
-            |this, _window, _cx| {
-                let view = this.telemetry.view();
-                let connected = view.connected && view.vehicle.is_some();
-                this.optional
-                    .adsb
-                    .press_refresh(connected, &this.telemetry, &view);
-            },
-            cx,
-        ))
-        .child(button(
-            "adsb-find",
-            "Find",
-            (230.0, 11.0, 103.0, 19.0),
-            true,
-            |this, window, cx| {
-                this.optional.adsb.open_find();
-                this.optional_focus.prompt.focus(window, cx);
-            },
-            cx,
-        ));
-
-    // panel1: disabled, as the Designer leaves it; nothing enables it.
+    let access: Access = |this| &mut this.optional.adsb;
     let panel1 = at(12.0, 36.0, 628.0, 25.0)
         .child(label(5.0, 4.0, "Flight Identification:", false))
         .child(text_box(
@@ -1629,130 +1914,42 @@ pub fn page(
             |_, _, _| {},
             cx,
         ));
-    body = body.child(panel1);
-
-    // tableLayoutPanel1's controls, stacked.
-    let (list_x, list_y) = LIST_AT;
-    let mut y = FIRST_Y;
-    let mut dropdown_at = None;
-    for (index, control) in adsb.controls().iter().enumerate() {
-        if !control.visible {
-            continue;
-        }
-        let height = control.height();
-        let mut item = at(list_x, list_y + y, CONTROL_WIDTH, height)
-            .border_b_1()
-            .border_color(rgb(theme::BORDER));
-        let id = format!("adsb-{}", control.name);
-        match &control.kind {
-            Kind::Range(range) => {
-                item = item
-                    .child(texts(control, 3.0, 0.0))
-                    .child(range_number(
-                        id.clone(),
-                        range,
-                        index,
-                        adsb.editing == Some(index),
-                        &focus.number,
-                        window,
-                        cx,
-                    ))
-                    .child(trackbar(&id, range, index, cx))
-                    .child(label(72.0, 90.0, range.lbl_min.clone(), true))
-                    .child(label(296.0, 90.0, range.lbl_max.clone(), true));
-            }
-            Kind::Values(combo) => {
-                item = item.child(texts(control, 4.0, 3.0)).child(combo_box(
-                    id.clone(),
-                    combo,
-                    (3.0, 65.0, 207.0, 21.0),
-                    move |this| this.optional.adsb.toggle_dropdown(index),
-                    cx,
-                ));
-                if adsb.dropdown == Some(index) {
-                    dropdown_at = Some((index, list_x + 3.0, list_y + y + 65.0 + 21.0));
-                }
-            }
-            Kind::Bitmask(mask) => {
-                item = item.child(texts(control, 3.0, 3.0));
-                let (places, _) = mask.layout();
-                #[allow(clippy::cast_precision_loss)]
-                let lines = control.description.lines().count().max(1) as f32;
-                let top = 28.0 + 5.0 + 13.0 * lines + 6.0;
-                for (bit, ((_, name, checked), (x, by))) in mask.bits.iter().zip(places).enumerate()
-                {
-                    let mut check = Check::default();
-                    check.enabled = true;
-                    check.state = if *checked {
-                        CheckState::Checked
-                    } else {
-                        CheckState::Unchecked
-                    };
-                    item = item.child(check_box(
-                        format!("{id}-bit{bit}"),
-                        &check,
-                        name,
-                        (x + 3.0, top + by),
-                        move |this| this.optional.adsb.click_bit(index, bit),
-                        cx,
-                    ));
-                }
-            }
-        }
-        body = body.child(item);
-        y += height;
-    }
-    let height = list_y + y.max(LIST_HEIGHT) + 9.0;
-    body = body.h(px(height));
-    if let Some((index, x, y)) = dropdown_at
-        && let Some(Control {
-            kind: Kind::Values(combo),
-            name,
-            ..
-        }) = adsb.controls().get(index)
-    {
-        body = body.child(dropdown(
-            &format!("adsb-{name}"),
-            combo,
-            (x, y, 207.0),
-            move |this, key| this.optional.adsb.choose(index, key),
-            move |this, lines| this.optional.adsb.scroll_list(index, lines),
-            cx,
-        ));
-    }
+    let body = list_body(adsb, access, &focus.number, &focus.prompt, window, cx).child(panel1);
     panel(TITLE, body).into_any_element()
 }
 
 /// Find's box, Refresh Params' question or a message box, over the whole window.
-pub fn overlay(
-    adsb: &Adsb,
-    focus: &Focus,
+pub fn list_overlay(
+    list: &Adsb,
+    access: Access,
+    prompt: &FocusHandle,
     window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> Option<AnyElement> {
-    if let Some(message) = adsb.message() {
+    let ids = list.spec.ids;
+    if let Some(message) = list.message() {
         return Some(message_box(
-            "adsb-message",
-            "adsb-message-ok",
+            ids.message,
+            ids.message_ok,
             message,
             window,
-            |this| this.optional.adsb.dismiss_message(),
+            move |this| access(this).dismiss_message(),
             cx,
         ));
     }
-    if let Some(find) = &adsb.find {
+    if let Some(find) = &list.find {
         return Some(input_box(
-            "adsb-find-box",
+            ids.find_box,
             &find.input,
-            &focus.prompt,
+            prompt,
             window,
-            |this, event| this.optional.adsb.find_key(event, Instant::now()),
-            |this| this.optional.adsb.close_find(true),
-            |this| this.optional.adsb.close_find(false),
+            move |this, event| access(this).find_key(event, Instant::now()),
+            move |this| access(this).close_find(true),
+            move |this| access(this).close_find(false),
             cx,
         ));
     }
-    let show_again = adsb.confirm?;
+    let show_again = list.confirm?;
     let mut check = Check::default();
     check.enabled = true;
     check.state = if show_again {
@@ -1766,49 +1963,65 @@ pub fn overlay(
             .w(px(120.0))
             .h(px(20.0))
             .child(check_box(
-                "adsb-confirm-showagain".to_owned(),
+                ids.confirm_showagain.to_owned(),
                 &check,
                 SHOW_ME_AGAIN,
                 (0.0, 2.0),
-                |this| this.optional.adsb.toggle_show_again(),
+                move |this| access(this).toggle_show_again(),
                 cx,
             ))
             .into_any_element(),
         action(
-            "adsb-confirm-ok",
+            ids.confirm_ok,
             "OK",
             theme::ACCENT,
             true,
-            cx.listener(|this, _event: &(), _window, cx| {
+            cx.listener(move |this, _event: &(), _window, cx| {
                 let view = this.telemetry.view();
-                this.optional
-                    .adsb
-                    .answer_refresh(true, &this.telemetry, &view);
+                if access(this).answer_refresh(true, &view) {
+                    this.telemetry.download_parameters();
+                }
                 cx.notify();
             }),
         ),
         action(
-            "adsb-confirm-cancel",
+            ids.confirm_cancel,
             "Cancel",
             theme::DIM,
             true,
-            cx.listener(|this, _event: &(), _window, cx| {
+            cx.listener(move |this, _event: &(), _window, cx| {
                 let view = this.telemetry.view();
-                this.optional
-                    .adsb
-                    .answer_refresh(false, &this.telemetry, &view);
+                if access(this).answer_refresh(false, &view) {
+                    this.telemetry.download_parameters();
+                }
                 cx.notify();
             }),
         ),
     ];
     Some(crate::config::servo_output::modal(
-        "adsb-confirm",
+        ids.confirm,
         "Refresh Params",
         REFRESH_WARNING.trim_end(),
         true,
         buttons,
         window,
     ))
+}
+
+/// ADSB's box or question, over the whole window.
+pub fn overlay(
+    adsb: &Adsb,
+    focus: &Focus,
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> Option<AnyElement> {
+    list_overlay(
+        adsb,
+        |this| &mut this.optional.adsb,
+        &focus.prompt,
+        window,
+        cx,
+    )
 }
 
 #[cfg(test)]
@@ -2233,20 +2446,20 @@ mod tests {
         let view = TelemetryView::disconnected("test");
         let mut page = Adsb::default();
         page.activate(&configured(), key(), bundled, &[]);
-        page.press_refresh(false, &telemetry, &view);
+        assert!(!page.press_refresh(false, &view));
         assert!(page.confirm.is_none(), "no link, no question");
         page.show_again = Some(true);
-        page.press_refresh(true, &telemetry, &view);
+        assert!(!page.press_refresh(true, &view), "asks first");
         assert_eq!(page.confirm, Some(true));
-        page.answer_refresh(false, &telemetry, &view);
+        assert!(!page.answer_refresh(false, &view));
         assert!(
             page.confirm.is_none() && page.refresh_enabled(),
             "Cancel does nothing"
         );
-        page.press_refresh(true, &telemetry, &view);
+        assert!(!page.press_refresh(true, &view));
         page.toggle_show_again();
         assert_eq!(page.show_again, Some(false));
-        page.answer_refresh(true, &telemetry, &view);
+        assert!(page.answer_refresh(true, &view), "OK fetches");
         assert!(!page.refresh_enabled(), "fetching");
         // The link went: the fetch fails with the C#'s box.
         page.tick(&telemetry, &view, true, Instant::now());
@@ -2274,7 +2487,9 @@ mod tests {
             let mut words = line.split_whitespace();
             match (words.next(), words.next()) {
                 (Some("expect"), Some(key)) if key.starts_with("config.adsb.") => {
-                    let recorded = source.contains(&format!("\"{key}\""))
+                    // Recorded as `fact("<what>")`, under the page's name.
+                    let what = key.trim_start_matches("config.adsb.");
+                    let recorded = source.contains(&format!("fact(\"{what}\")"))
                         || key.starts_with("config.adsb.changed.")
                         || per_control.iter().any(|suffix| key.ends_with(suffix));
                     assert!(recorded, "{key} is not recorded");

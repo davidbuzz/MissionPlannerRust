@@ -3604,6 +3604,7 @@ dependencies = [
  "mp-units",
  "mp-vehicle",
  "regex",
+ "roxmltree 0.20.0",
  "serde_json",
  "ttf-parser",
  "unic-langid",

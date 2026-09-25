@@ -50,3 +50,9 @@ pub mod osd;
 pub mod parachute;
 pub mod param_compare;
 // ---- end SETUP's small pages ----
+// ---- Standard / Advanced Params, MAVFtp, Heli Setup (row 71) ----
+pub mod friendly_params;
+pub mod mavftp;
+pub mod software_pages2;
+pub mod trad_heli;
+// ---- end Standard / Advanced Params, MAVFtp, Heli Setup ----

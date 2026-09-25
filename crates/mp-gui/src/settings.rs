@@ -382,6 +382,27 @@ impl Persisted {
         self.select_port_inner(port);
     }
 
+    /// `Settings.Instance.Remove(key)`: from the dictionary at once, from the file at the next
+    /// save.
+    pub fn remove(&mut self, key: &str) {
+        if self.config.get(key).is_none() {
+            return;
+        }
+        let mut kept = mp_settings::Config::default();
+        for other in self.config.keys().into_iter().filter(|other| *other != key) {
+            if let Some(value) = self.config.get(other) {
+                kept.set(other, value);
+            }
+        }
+        self.config = kept;
+    }
+
+    /// The directory `config.xml` is in: the user data directory, or `MP_CONFIG_XML`'s.
+    #[must_use]
+    pub fn directory(&self) -> Option<&std::path::Path> {
+        self.path.as_deref().and_then(std::path::Path::parent)
+    }
+
     /// `Settings.Instance[key] = value`: in the dictionary at once, and in the file at the next
     /// [`Persisted::save_config`] - a screen's handler writes nothing to disk itself.
     /// `// C#: ExtLibs/Utilities/Settings.cs:58-61`

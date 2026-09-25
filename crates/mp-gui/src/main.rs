@@ -12,6 +12,9 @@ mod config_coverage;
 mod connect;
 mod coords;
 mod coverage;
+// ---- Display view (row 71) ----
+mod display_view;
+// ---- end Display view ----
 mod facts;
 mod fly;
 mod gauge;
@@ -459,6 +462,13 @@ struct MissionPlanner {
     /// Their boxes' focus.
     software_focus: config::software_pages::Focus,
     // ---- end GeoFence / rover Basic Tuning / User Params ----
+    // ---- Standard / Advanced Params, MAVFtp, Heli Setup (row 71) ----
+    /// CONFIG's Standard Params, Advanced Params and MAVFtp pages and SETUP's Heli Setup
+    /// (`config/software_pages2.rs`).
+    software_pages2: config::software_pages2::SoftwarePages2,
+    /// Their boxes' focus.
+    software2_focus: config::software_pages2::Focus,
+    // ---- end Standard / Advanced Params, MAVFtp, Heli Setup ----
     // ---- SETUP's small pages (row 70) ----
     /// SETUP's Parachute, OSD, CAN GPS Order, HW ID, Compass/Motor Calib and Initial Tune
     /// Parameter pages (`config/extra_setup.rs`).
@@ -512,6 +522,11 @@ impl MissionPlanner {
         let mut fly_data = fly::FlightData::new();
         // The link this start opens, which Mission Planner's Connect would save.
         let opened = target.clone().filter(|_| !storm::enabled());
+        // ---- Display view (row 71) ----
+        // `MainV2.DisplayConfiguration` as its start-up makes it, before any list is built.
+        // `// C#: MainV2.cs:351-353, 898-933`
+        display_view::start(&mut persisted);
+        // ---- end Display view ----
         // `CurrentState`'s statics, as `MainV2`'s start-up sets them from config.xml: the
         // telemetry rates' saved defaults, the custom fields' names, the planned home put back to
         // 0,0,0 when it is off the globe, and the K-index - today's saved one, or a download on a
@@ -753,6 +768,10 @@ impl MissionPlanner {
             software_pages: config::software_pages::SoftwarePages::default(),
             software_focus: config::software_pages::Focus::new(cx),
             // ---- end GeoFence / rover Basic Tuning / User Params ----
+            // ---- Standard / Advanced Params, MAVFtp, Heli Setup (row 71) ----
+            software_pages2: config::software_pages2::SoftwarePages2::default(),
+            software2_focus: config::software_pages2::Focus::new(cx),
+            // ---- end Standard / Advanced Params, MAVFtp, Heli Setup ----
             // ---- SETUP's small pages (row 70) ----
             extra: config::extra_setup::ExtraSetup::default(),
             extra_focus: config::extra_setup::Focus::new(cx),
@@ -1747,6 +1766,12 @@ impl MissionPlanner {
                             this.sitl.deactivate();
                         }
                         // ---- end SITL ----
+                        // ---- Display view (row 71) ----
+                        // SETUP and CONFIG are made anew when shown again.
+                        if this.screen == screen {
+                            this.show_screen_again(screen);
+                        }
+                        // ---- end Display view ----
                         this.screen = screen;
                         if screen == Screen::Plan {
                             plan::activate(this);
@@ -2638,6 +2663,11 @@ impl Render for MissionPlanner {
         // Their page objects, the box the focus left, the timers and the writes.
         self.software_tick(&view, window);
         // ---- end GeoFence / rover Basic Tuning / User Params ----
+        // ---- Standard / Advanced Params, MAVFtp, Heli Setup (row 71) ----
+        // Their page objects, the box the focus left, the timers, the writes and the MAVFtp
+        // commands.
+        self.software2_tick(&view, window);
+        // ---- end Standard / Advanced Params, MAVFtp, Heli Setup ----
         // ---- SETUP's small pages (row 70) ----
         // Their page objects, the box the focus left, the timers, the calibration's statuses
         // and the writes.
@@ -3019,6 +3049,9 @@ impl Render for MissionPlanner {
                 &view,
             );
             // ---- end GeoFence / rover Basic Tuning / User Params ----
+            // ---- Standard / Advanced Params, MAVFtp, Heli Setup (row 71) ----
+            config::software_pages2::record_facts(&self.software_pages2, &view);
+            // ---- end Standard / Advanced Params, MAVFtp, Heli Setup ----
             // ---- SETUP's small pages (row 70) ----
             config::extra_setup::record_facts(&self.extra, &view);
             // ---- end SETUP's small pages ----
@@ -3390,6 +3423,9 @@ impl Render for MissionPlanner {
                 // ---- GeoFence / rover Basic Tuning / User Params ----
                 .children(self.software_overlay(window, cx))
                 // ---- end GeoFence / rover Basic Tuning / User Params ----
+                // ---- Standard / Advanced Params, MAVFtp, Heli Setup (row 71) ----
+                .children(self.software2_overlay(window, cx))
+                // ---- end Standard / Advanced Params, MAVFtp, Heli Setup ----
                 // ---- SETUP's small pages (row 70) ----
                 .children(self.extra_setup_overlay(window, cx))
                 // ---- end SETUP's small pages ----

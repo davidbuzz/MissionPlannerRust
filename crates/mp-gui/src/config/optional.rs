@@ -601,6 +601,23 @@ pub fn input_box(
         // ---- SITL ----
         "sitl-howmany" => ("sitl-howmany-ok", "sitl-howmany-cancel", "sitl-howmany-value"),
         // ---- end SITL ----
+        // ---- Standard / Advanced Params, MAVFtp ----
+        "standard-find-box" => (
+            "standard-find-ok",
+            "standard-find-cancel",
+            "standard-find-value",
+        ),
+        "advanced-find-box" => (
+            "advanced-find-ok",
+            "advanced-find-cancel",
+            "advanced-find-value",
+        ),
+        "mavftp-prompt-box" => (
+            "mavftp-prompt-ok",
+            "mavftp-prompt-cancel",
+            "mavftp-prompt-value",
+        ),
+        // ---- end Standard / Advanced Params, MAVFtp ----
         _ => (
             "battery2-prompt-ok",
             "battery2-prompt-cancel",
@@ -812,7 +829,7 @@ impl MissionPlanner {
         let lookup = crate::metadata::lookup;
         match page {
             Page::Adsb => {
-                let favourites = adsb::favourites();
+                let favourites = adsb::favourites(adsb::ADSB.favourites);
                 let jobs = self
                     .optional
                     .adsb

@@ -1,0 +1,38 @@
+# SETUP's Heli Setup page, ported from GCSViews/ConfigurationView/ConfigTradHeli4.cs (PLAN.md
+# §13.6 rows 63 and 71).
+#
+# The claim: InitialSetup adds the page under Mandatory Hardware only for a traditional helicopter
+# with every parameter in (InitialSetup.cs:184-187, `isHeli && gotAllParams`); ConfigTradHeli is
+# commented out (:186) and never listed. SITL's bundled copter is a quad, so its Mandatory Hardware
+# goes straight from the heading to Frame Type (:189), and the page object is never shown.
+#
+# What the page does for a heli - the eight servo rows bound to SERVOn_FUNCTION, _MIN, _MAX, _TRIM
+# and _REVERSED; the Swashplate, Throttle, Governor and Misc tables filled from their lists, each
+# row a label with the units and a combo or a number bound to the parameter; every control writing
+# its own parameter; Deactivate emptying the tables - is proved by the unit tests in
+# crates/mp-gui/src/config/trad_heli.rs, over a heli's parameters: there is no heli SITL here.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run as
+#
+#   tools/gui-test.sh tests/gui/config-heli.gui -- tcp:127.0.0.1:5760
+
+env MP_CONFIG_XML $WORK/config.xml
+screen params
+window 1600x1200
+settle 6
+
+click param-download
+settle 15
+expect params.held > 1000
+expect params.value.FRAME_CLASS 1
+
+click tab-setup
+settle 1
+expect setup.pages ~ ConfigMandatory,ConfigFrameClassType
+click setup-page-ConfigMandatory
+settle 1
+expect setup.groups ~ Mandatory Hardware=ConfigFrameClassType,
+expect config.heli.active false
+expect config.heli.swash.rows 0
+expect config.heli.throttle.rows 0
+expect config.heli.message none

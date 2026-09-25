@@ -1,0 +1,115 @@
+# CONFIG's Standard Params page, ported from GCSViews/ConfigurationView/ConfigFriendlyParams.cs
+# (PLAN.md §13.6 row 71).
+#
+# The claim: SoftwareConfig adds the page only when the display view's displayStandardParams is on
+# (SoftwareConfig.cs:196-199). Neither preset turns it on (DisplayView.cs:344, 425), so on SITL's
+# copter in the Advanced view - Mission Planner's default - the list goes from Extended Tuning to
+# Onboard OSD without it. The Planner page's Layout box (ConfigPlanner.cs:1018-1033) chooses a
+# Custom view, read from custom.displayview (DisplayView.cs:442-455; here beside config.xml), which
+# turns it on; the CONFIG screen is made anew when its tab is clicked (MainSwitcher.cs:112-153), and
+# its list then has the page. Showing it binds a control per Standard parameter with a display
+# name (ConfigFriendlyParams.cs:269-337); a value chosen is recorded, and Write Params writes it and
+# says "Parameters successfully saved." (:179-205). The write is proved by the vehicle's echo, and
+# put back. The rest - Find, Refresh Params, the ranges and bitmasks - is proved by the unit tests in
+# crates/mp-gui/src/config/friendly_params.rs and adsb.rs.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm (FS_THR_ENABLE
+# 1). Run as
+#
+#   tools/gui-test.sh tests/gui/config-standard-params.gui -- tcp:127.0.0.1:5760
+#
+# A run that stops half way can leave FS_THR_ENABLE at 3; the first expectation on it then fails
+# until a fresh SITL.
+
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '{\n  "displayStandardParams": true,\n  "isAdvancedMode": true\n}\n' > $WORK/custom.displayview
+screen params
+window 1600x1200
+settle 6
+
+# The list is built once every parameter is in (SoftwareConfig.cs:146-148).
+click param-download
+settle 15
+expect params.held > 1000
+expect params.value.FS_THR_ENABLE 1
+
+# At start-up the file exists, so the view is Custom (MainV2.cs:351-353); nothing is saved yet.
+click tab-config
+settle 1
+expect screen config
+expect display.view Custom
+expect display.displayStandardParams true
+expect config.pages ~ ConfigFriendlyParams
+
+# Advanced: the page goes when the screen is made anew.
+click config-page-ConfigPlanner
+settle 1
+expect config.planner.combo.CMB_Layout Custom
+click planner-CMB_Layout
+click planner-CMB_Layout-Advanced
+settle 1
+expect display.view Advanced
+expect display.displayStandardParams false
+click tab-config
+settle 2
+expect config.titles ~ Extended Tuning,Onboard OSD
+expect config.standard.active false
+
+# Custom again: the file read, the page back.
+click config-page-ConfigPlanner
+settle 1
+click planner-CMB_Layout
+click planner-CMB_Layout-Custom
+settle 1
+expect display.view Custom
+expect display.displayStandardParams true
+click tab-config
+settle 2
+expect config.pages ~ ConfigArducopter,ConfigFriendlyParams,ConfigOSD
+expect config.titles ~ Extended Tuning,Standard Params,Onboard OSD
+
+click config-page-ConfigFriendlyParams
+settle 3
+expect config.page ConfigFriendlyParams
+expect config.title Standard Params
+expect config.standard.active true
+expect config.standard.controls > 100
+expect config.standard.FS_THR_ENABLE.kind values
+expect config.standard.FS_THR_ENABLE.text Enabled always RTL
+expect config.standard.FS_THR_ENABLE.label Throttle Failsafe Enable (FS_THR_ENABLE)
+expect config.standard.changed 0
+
+# Find brings it to the top of the list: its name is in its label (ConfigFriendlyParams.cs:21-118).
+click standard-find
+expect config.standard.find Enter a single word to search for
+type fs_thr_enable
+key Return
+settle 1
+expect config.standard.visible 1
+expect config.standard.FS_THR_ENABLE.visible true
+
+# A value chosen is recorded and not written; Write Params writes it.
+click standard-FS_THR_ENABLE
+click standard-FS_THR_ENABLE-3
+settle 1
+expect config.standard.changed.FS_THR_ENABLE 3
+expect params.value.FS_THR_ENABLE 1
+click standard-write
+settle 3
+expect config.standard.write FS_THR_ENABLE 3 accepted
+expect params.value.FS_THR_ENABLE 3
+expect config.standard.message Parameters successfully saved.
+click standard-message-ok
+expect config.standard.message none
+
+# And back.
+click standard-FS_THR_ENABLE
+click standard-FS_THR_ENABLE-1
+click standard-write
+settle 3
+expect params.value.FS_THR_ENABLE 1
+click standard-message-ok
+
+click config-page-ConfigPlanner
+settle 1
+expect config.standard.active false

@@ -1,0 +1,140 @@
+# CONFIG's MAVFtp page, ported from Controls/MavFTPUI.cs (PLAN.md §13.6 rows 62 and 71).
+#
+# The claim: SoftwareConfig lists the page for a vehicle reporting MAVLink FTP
+# (SoftwareConfig.cs:211-216). Loading it lists "/" and "@SYS/", each a root of the tree - "/"
+# with no name, as Path.GetFileName("/") has it - selects the last, @SYS, and lists it
+# (MavFTPUI.cs:73-125, 151-203). Clicking the root lists it. The list's right-click menu makes a
+# folder (New Folder's InputBox, :515-546), a double click opens it (:587-605), Upload writes a file
+# into it and checks the vehicle's CRC of it (:381-448), GetCRC32 shows that CRC in a box
+# (:548-572), Download reads it back into a folder (:324-379), Rename renames it in place
+# (:482-513) and Delete removes it (:450-480). Each is proved by the list the vehicle gives after.
+#
+# The scratch file is made here, under /tmp: the path boxes standing in for OpenFileDialog and
+# FolderBrowserDialog take typed text, which is not expanded as $WORK is.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm; its FTP root
+# is SITL's working directory. Run as
+#
+#   tools/gui-test.sh tests/gui/config-mavftp.gui -- tcp:127.0.0.1:5760
+#
+# A run that stops half way can leave the folder mprtest in SITL's working directory; New Folder
+# then puts "Failed to create directory" on the status line until a fresh SITL.
+
+env MP_CONFIG_XML $WORK/config.xml
+setup rm -rf /tmp/planner-mavftp && mkdir -p /tmp/planner-mavftp/down && printf 'hello from the mavftp page\n' > /tmp/planner-mavftp/hello.txt
+screen params
+window 1600x1200
+settle 6
+
+click param-download
+settle 15
+expect params.held > 1000
+
+click tab-config
+settle 1
+expect config.pages ~ MavFTPUI
+expect config.mavftp.active false
+click config-page-MavFTPUI
+settle 8
+expect config.page MavFTPUI
+expect config.title MAVFtp
+expect config.mavftp.active true
+expect config.mavftp.busy false
+expect config.mavftp.tree.enabled true
+
+# Load: the two roots, @SYS selected and listed.
+expect config.mavftp.tree ~ /,
+expect config.mavftp.tree ~ @SYS/
+expect config.mavftp.selected @SYS/
+expect config.mavftp.list ~ uarts.txt
+expect config.mavftp.item.uarts.txt.type File
+expect config.mavftp.dialog none
+
+# The root, and a folder made in it.
+click mavftp-node-/
+settle 4
+expect config.mavftp.selected /
+click mavftp-list:right
+settle 1
+expect config.mavftp.menu true
+click mavftp-menu-newfolder
+settle 1
+expect config.mavftp.menu false
+expect config.mavftp.prompt Folder Name
+type mprtest
+key Return
+settle 5
+expect config.mavftp.prompt none
+expect config.mavftp.list ~ mprtest
+expect config.mavftp.item.mprtest.type Directory
+expect config.mavftp.status Ready
+
+# Into it, and a file uploaded there: its CRC agrees, or the status line would say so.
+doubleclick mavftp-item-mprtest
+settle 4
+expect config.mavftp.selected /mprtest
+expect config.mavftp.list.count 0
+click mavftp-list:right
+click mavftp-menu-upload
+settle 1
+expect config.mavftp.prompt Open
+type /tmp/planner-mavftp/hello.txt
+key Return
+settle 8
+expect config.mavftp.dialog none
+expect config.mavftp.list hello.txt
+expect config.mavftp.item.hello.txt.size 27B
+
+# GetCRC32: the box.
+click mavftp-item-hello.txt
+click mavftp-item-hello.txt:right
+click mavftp-menu-crc
+settle 4
+expect config.mavftp.message ~ hello.txt: 0x
+click mavftp-message-ok
+expect config.mavftp.message none
+
+# Read back into a folder of its own.
+click mavftp-item-hello.txt:right
+click mavftp-menu-download
+settle 1
+expect config.mavftp.prompt Browse For Folder
+key ctrl+u
+type /tmp/planner-mavftp/down
+key Return
+settle 6
+expect config.mavftp.dialog none
+expect config.mavftp.status Ready
+
+# Renamed in place.
+click mavftp-item-hello.txt:right
+click mavftp-menu-rename
+settle 1
+expect config.mavftp.renaming hello.txt
+key ctrl+u
+type renamed.txt
+key Return
+settle 5
+expect config.mavftp.renaming none
+expect config.mavftp.list renamed.txt
+
+# Removed.
+click mavftp-item-renamed.txt:right
+click mavftp-menu-delete
+settle 5
+expect config.mavftp.list.count 0
+expect config.mavftp.status Ready
+
+# Sorting: the root's list by name, then back.
+click mavftp-node-/
+settle 4
+click mavftp-col-0
+settle 1
+click mavftp-col-0
+settle 1
+expect config.mavftp.list ~ mprtest
+
+# Choosing another page hides this one.
+click config-page-ConfigUserDefined
+settle 1
+expect config.mavftp.active false

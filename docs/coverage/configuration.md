@@ -11,20 +11,20 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 19 | 21 | 7 | 2 | 12 | 569 |
+| 61 | 20 | 23 | 4 | 2 | 12 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings
         // in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 14 | 18 | 3 | 2 | 7 | 258 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 15 | 18 | 2 | 2 | 7 | 258 |
         //     15 |
-| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 5 | 3 | 4 | 0 | 1 | 277 |
-        //     2 |
+| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 5 | 5 | 2 | 0 | 1 | 277 |
+        //     1 |
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 |
         //     0 |
 
 The lists also add 4 pages that are not in `ConfigurationView/` (`Sikradio`, `JoystickSetup`, `TrackerUI`, `MavFTPUI`): 0 done,
-        // 1 partial, 3 missing, 0 plumbing, 0 dropped. They are
+        // 2 partial, 2 missing, 0 plumbing, 0 dropped. They are
         // in the lists below and not in the counts above.
 
 The largest missing panels, by wirings:
@@ -32,12 +32,9 @@ The largest missing panels, by wirings:
 | panel | title | wirings |
 |---|---|---:|
 | `ConfigDroneCAN` | DroneCAN/UAVCAN | 15 |
-| `ConfigFriendlyParams` | Standard Params | 1 |
 | `ConfigSimplePids` | Basic Tuning | 1 |
 | `ConfigFFT` | FFT Setup | no Designer |
-| `ConfigFriendlyParamsAdv` | Advanced Params | no Designer |
 | `ConfigOSD` | Onboard OSD | 0 |
-| `ConfigTradHeli4` | Heli Setup | 0 |
 
 Vehicles: **any** is a connected vehicle whose parameter list is whole
         // (`isConnected && gotAllParams`); **always** is connected or not; **connected** and
@@ -77,7 +74,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
         //     generation, key reading and signing (BouncyCastle, SignedFW.cs), which this
         //     application has no implementation of |
 | 182 | `ConfigMandatory` | Mandatory Hardware |  | any | 0 | plumbing: the Mandatory Hardware heading of the list: one sentence, no controls |
-| 187 | `ConfigTradHeli4` | Heli Setup | Mandatory Hardware | heli | 0 | **missing** |
+| 187 | `ConfigTradHeli4` | Heli Setup | Mandatory Hardware | heli | 0 | done: `crates/mp-gui/src/config/trad_heli.rs` `fn page` |
 | 188 | `ConfigFrameType` | Frame Type | Mandatory Hardware | copter before 3.5 | 12 | partial: `crates/mp-gui/src/config/frame_type_legacy.rs` `fn page` - Activate on FRAME, the six radio buttons and pictures - all 12 wirings, the radio
         //     buttons' CheckedChanged cascade in the Designer's order - and the FRAME writes
         //     through the retrying set with "Set FRAME Failed"; missing the Default Settings
@@ -183,10 +180,25 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
 | 182 | `ConfigArducopter` | QP Extended Tuning |  | plane (enabled for a quadplane) | 128 | as at `GCSViews/SoftwareConfig.cs:169` |
 | 188 | `ConfigArdurover` | Basic Tuning |  | rover | 3 | done: `crates/mp-gui/src/config/rover_tuning.rs` `fn page` |
 | 193 | `ConfigAntennaTracker` | Extended Tuning |  | tracker | 3 | as at `GCSViews/InitialSetup.cs:313` |
-| 198 | `ConfigFriendlyParams` | Standard Params |  | any, Custom view with Standard Params | 1 | **missing** |
-| 203 | `ConfigFriendlyParamsAdv` | Advanced Params |  | any, Custom view with Advanced Params and Advanced mode | no Designer | **missing** |
+| 198 | `ConfigFriendlyParams` | Standard Params |  | any, Custom view with Standard Params | 1 | partial: `crates/mp-gui/src/config/friendly_params.rs` `fn page` - a RangeControl, bitmask or ValuesControl per parameter documented @User: Standard
+        //     with a display name, fav_params first; changes recorded; Write Params ENABLE-first,
+        //     each in its own try, then "Parameters successfully saved."; Refresh Params with
+        //     MessageShowAgain; Find filtering as typed; the flow panel's layout; a failed write or
+        //     fetch on the status line (the owner's ruling); missing Ctrl+S, dragging the track
+        //     bar (a click pages it), typing into a ValuesControl, and the InputBox's remembered
+        //     answers |
+| 203 | `ConfigFriendlyParamsAdv` | Advanced Params |  | any, Custom view with Advanced Params and Advanced mode | no Designer | partial: `crates/mp-gui/src/config/friendly_params.rs` `fn page` - Standard Params' page over the parameters documented @User: Advanced or not at all;
+        //     missing what it misses |
 | 208 | `ConfigOSD` | Onboard OSD |  | any with OSD parameters, not on Mono | 0 | **missing** |
-| 215 | `MavFTPUI` (`Controls/MavFTPUI.cs`, not a panel) | MAVFtp |  | any reporting MAVLink FTP | 16 | **missing** |
+| 215 | `MavFTPUI` (`Controls/MavFTPUI.cs`, not a panel) | MAVFtp |  | any reporting MAVLink FTP | 16 | partial: `crates/mp-gui/src/config/mavftp.rs` `fn page` - the tree of / and @SYS/ with @SYS selected and listed, a node's listing replacing its
+        //     children, the list's double click and column sort; Download Burst, Download,
+        //     Upload with its CRC check, Delete, Rename in place, New Folder and GetCRC32 behind
+        //     the progress window with its Cancel and the sessions' reset; dropped files uploaded;
+        //     the status strip's reports every 100 ms; Mount as Drive failing as the C# does
+        //     without Dokan, on the status line; the link's failures there too (the owner's
+        //     rulings); missing
+        //     the tree's and list's keys, several files in one Upload (the path is typed: there
+        //     is no platform dialog) and dragging the column headers |
 | 221 | `ConfigUserDefined` | User Params |  | any | 0 | partial: `crates/mp-gui/src/config/user_params.rs` `fn page` - the UserParams list (or the C#'s 22 RC option names), a row for each name the
         //     vehicle has with a combo of its documented values writing it, Modify's multiline
         //     InputBox saving the list and building the page again - Cancel included, as the
@@ -212,8 +224,10 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
 | 250 | `ConfigPlanner` | Planner |  | connected | 64 | partial: `crates/mp-gui/src/config/planner.rs` `fn planner_page` - every control at its place, each bound to the Settings key its handler writes; the
         //     units (ChangeUnits), the telemetry rates and their stream requests, the speech boxes
         //     and their InputBox templates, Load Waypoints on connect, the map access mode,
-        //     Joystick Setup, Browse and Open Map Cache act at once; dimmed for want of what they
-        //     drive: video, the HUD overlay, GDI+, language, theme, Layout, OSD colour, Vario,
+        //     Joystick Setup, Browse and Open Map Cache act at once; Layout picks the display
+        //     view the lists read (Basic, Advanced, or the Custom file), saved as displayview;
+        //     dimmed for want of what they drive: video, the HUD overlay, GDI+, language, theme,
+        //     OSD colour, Vario,
         //     password, the ADSB server, analytics, beta updates, MAVLink debug and the testing
         //     screen; the flight screen does not yet read the units, the track length, the map's
         //     rotation or the icon settings, nor the link the GCS id or the rates on connecting |

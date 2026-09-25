@@ -739,8 +739,8 @@ pub fn record_facts<H: Copy>(page: &RoverTuning<H>, listed: bool, view: &Telemet
 // Drawing.
 // ---------------------------------------------------------------------------------------------
 
-/// A control's tooltip.
-struct Tip(SharedString);
+/// A control's tooltip: a `ToolTip`'s text in a box, as gpui shows it. Heli Setup's too.
+pub struct Tip(pub SharedString);
 
 impl Render for Tip {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {

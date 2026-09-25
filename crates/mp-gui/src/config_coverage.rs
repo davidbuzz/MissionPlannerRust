@@ -312,7 +312,16 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigTradHeli4"),
         Some(0),
         &[setup(187, "Heli Setup", MANDATORY, "heli")],
-        Missing,
+        // ---- Standard / Advanced Params, MAVFtp, Heli Setup (row 71) ----
+        // C#: GCSViews/ConfigurationView/ConfigTradHeli4.cs:28-193, whole: the eight servo rows
+        // (SERVOn_FUNCTION's documented values, _MIN/_MAX/_TRIM 800-2200, _REVERSED) at the
+        // Designer's places; the Swashplate, Throttle, Governor and Misc tables filled from the
+        // C#'s four lists, each row the display name or the name with its units and a
+        // MavlinkComboBox or MavlinkNumericUpDown bound to it, the description as both tooltips;
+        // every control writing its own parameter; Deactivate emptying the tables. A failed write
+        // is a status line (the owner's ruling).
+        Ours::Done(at("crates/mp-gui/src/config/trad_heli.rs", "fn page")),
+        // ---- end Standard / Advanced Params, MAVFtp, Heli Setup ----
     ),
     panel(
         "ConfigFrameType",
@@ -890,7 +899,22 @@ pub const PANELS: &[Panel] = &[
             "Standard Params",
             "any, Custom view with Standard Params",
         )],
-        Missing,
+        // ---- Standard / Advanced Params, MAVFtp, Heli Setup (row 71) ----
+        // C#: GCSViews/ConfigurationView/ConfigFriendlyParams.cs:17-589 - ConfigADSB's code over
+        // another list: adsb.rs's page object with friendly_params.rs's Spec. Listed, as in the
+        // C#, only for a Custom display view that turns displayStandardParams on, chosen with the
+        // Planner page's Layout (display_view.rs); neither preset does.
+        Partial(
+            at("crates/mp-gui/src/config/friendly_params.rs", "fn page"),
+            "a RangeControl, bitmask or ValuesControl per parameter documented @User: Standard
+        //     with a display name, fav_params first; changes recorded; Write Params ENABLE-first,
+        //     each in its own try, then \"Parameters successfully saved.\"; Refresh Params with
+        //     MessageShowAgain; Find filtering as typed; the flow panel's layout; a failed write or
+        //     fetch on the status line (the owner's ruling); missing Ctrl+S, dragging the track
+        //     bar (a click pages it), typing into a ValuesControl, and the InputBox's remembered
+        //     answers",
+        ),
+        // ---- end Standard / Advanced Params, MAVFtp, Heli Setup ----
     ),
     panel(
         "ConfigFriendlyParamsAdv",
@@ -904,7 +928,16 @@ pub const PANELS: &[Panel] = &[
             "Advanced Params",
             "any, Custom view with Advanced Params and Advanced mode",
         )],
-        Missing,
+        // ---- Standard / Advanced Params, MAVFtp, Heli Setup (row 71) ----
+        // C#: GCSViews/ConfigurationView/ConfigFriendlyParamsAdv.cs:5-10 - ConfigFriendlyParams
+        // with ParameterMode Advanced: @User: Advanced, or no @User. Listed for a Custom display
+        // view with displayAdvancedParams on, and drawn while its isAdvancedMode is on.
+        Partial(
+            at("crates/mp-gui/src/config/friendly_params.rs", "fn page"),
+            "Standard Params' page over the parameters documented @User: Advanced or not at all;
+        //     missing what it misses",
+        ),
+        // ---- end Standard / Advanced Params, MAVFtp, Heli Setup ----
     ),
     panel(
         "ConfigOSD",
@@ -991,8 +1024,10 @@ pub const PANELS: &[Panel] = &[
             "every control at its place, each bound to the Settings key its handler writes; the
         //     units (ChangeUnits), the telemetry rates and their stream requests, the speech boxes
         //     and their InputBox templates, Load Waypoints on connect, the map access mode,
-        //     Joystick Setup, Browse and Open Map Cache act at once; dimmed for want of what they
-        //     drive: video, the HUD overlay, GDI+, language, theme, Layout, OSD colour, Vario,
+        //     Joystick Setup, Browse and Open Map Cache act at once; Layout picks the display
+        //     view the lists read (Basic, Advanced, or the Custom file), saved as displayview;
+        //     dimmed for want of what they drive: video, the HUD overlay, GDI+, language, theme,
+        //     OSD colour, Vario,
         //     password, the ADSB server, analytics, beta updates, MAVLink debug and the testing
         //     screen; the flight screen does not yet read the units, the track length, the map's
         //     rotation or the icon settings, nor the link the GCS id or the rates on connecting",
@@ -1071,7 +1106,23 @@ pub const OTHER_PAGES: &[Panel] = &[
         "Controls/MavFTPUI.cs",
         Some(16),
         &[config(215, "MAVFtp", "any reporting MAVLink FTP")],
-        Missing,
+        // ---- Standard / Advanced Params, MAVFtp, Heli Setup (row 71) ----
+        // C#: Controls/MavFTPUI.cs:17-711 over the link's MAVFTP client: PopulateTreeView's two
+        // roots, NodeMouseClick's listing, the context menu's seven items, drag and drop, the
+        // column sort, the progress window with its Cancel, the status strip's reports.
+        Partial(
+            at("crates/mp-gui/src/config/mavftp.rs", "fn page"),
+            "the tree of / and @SYS/ with @SYS selected and listed, a node's listing replacing its
+        //     children, the list's double click and column sort; Download Burst, Download,
+        //     Upload with its CRC check, Delete, Rename in place, New Folder and GetCRC32 behind
+        //     the progress window with its Cancel and the sessions' reset; dropped files uploaded;
+        //     the status strip's reports every 100 ms; Mount as Drive failing as the C# does
+        //     without Dokan, on the status line; the link's failures there too (the owner's
+        //     rulings); missing
+        //     the tree's and list's keys, several files in one Upload (the path is typed: there
+        //     is no platform dialog) and dragging the column headers",
+        ),
+        // ---- end Standard / Advanced Params, MAVFtp, Heli Setup ----
     ),
 ];
 
@@ -1806,7 +1857,7 @@ mod tests {
             );
             checked += 1;
         }
-        assert_eq!(checked, 41);
+        assert_eq!(checked, 45);
     }
 
     /// The committed report matches the table.
@@ -1838,7 +1889,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (19, 21, 7, 2, 12)
+            (20, 23, 4, 2, 12)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

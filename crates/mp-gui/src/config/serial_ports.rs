@@ -279,7 +279,7 @@ impl Default for Bar {
 
 impl Bar {
     /// A report: -1 the marquee, anything else the bar at that value.
-    const fn report(&mut self, percent: i32) {
+    pub const fn report(&mut self, percent: i32) {
         self.marquee = percent == -1;
         if !self.marquee {
             self.value = percent;
@@ -1596,10 +1596,8 @@ fn bitmask_window(
 }
 
 /// The progress window while the names are read: `ProgressReporterDialogue`, shown with
-/// `ShowDialog`, so nothing behind it takes a click. No close box (`ControlBox = false`); its
-/// caption, label, bar and Cancel where the `.resx` puts them; centred, as `CenterParent`
-/// centres it.
-/// `// C#: ExtLibs/Controls/ProgressReporterDialogue.cs:49-58; ProgressReporterDialogue.designer.cs:34-116; MyProgressBar.cs:98-125`
+/// `ShowDialog`, so nothing behind it takes a click.
+/// `// C#: GCSViews/ConfigurationView/ConfigSerial.cs:84-120`
 fn progress_window(
     serial: &SerialPorts,
     window: &Window,
@@ -1609,6 +1607,53 @@ fn progress_window(
     let Uarts::Reading { started, .. } = serial.uarts() else {
         return None;
     };
+    let on_cancel = cancel.then_some(|this: &mut MissionPlanner| {
+        this.serial_ports.cancel_uarts(&this.telemetry);
+    });
+    Some(progress_dialog(
+        ProgressIds {
+            frame: "serial-uarts-progress",
+            bar: "serial-uarts-bar",
+            cancel: "serial-uarts-cancel",
+            backdrop: "serial-uarts-backdrop",
+        },
+        text,
+        bar,
+        started,
+        on_cancel,
+        window,
+        cx,
+    ))
+}
+
+/// The ids of a progress window's parts.
+#[derive(Debug, Clone, Copy)]
+pub struct ProgressIds {
+    /// The window.
+    pub frame: &'static str,
+    /// Its bar.
+    pub bar: &'static str,
+    /// Its Cancel.
+    pub cancel: &'static str,
+    /// What is under it, which takes the clicks meant for the page.
+    pub backdrop: &'static str,
+}
+
+/// A `ProgressReporterDialogue`, shown with `ShowDialog`, so nothing behind it takes a click. No
+/// close box (`ControlBox = false`); its caption, label, bar and - while `on_cancel` is given -
+/// Cancel where the `.resx` puts them; centred, as `CenterParent` centres it. The Serial Ports
+/// page's, and the MAVFtp page's.
+/// `// C#: ExtLibs/Controls/ProgressReporterDialogue.cs:49-58; ProgressReporterDialogue.designer.cs:34-116; MyProgressBar.cs:98-125`
+#[allow(clippy::too_many_arguments)]
+pub fn progress_dialog(
+    ids: ProgressIds,
+    text: &str,
+    bar: Bar,
+    started: Instant,
+    on_cancel: Option<impl Fn(&mut MissionPlanner) + 'static>,
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
     let (bar_x, bar_y, bar_w, bar_h) = PROGRESS_BAR;
     // `position = Value / 100 * Width`: the bar done from the left, or the marquee's block there.
     #[allow(clippy::cast_precision_loss)] // a percentage
@@ -1638,7 +1683,7 @@ fn progress_window(
         .h(px(PROGRESS_WINDOW.1))
         .child(label)
         .child(
-            crate::probe::measured("serial-uarts-bar", div())
+            crate::probe::measured(ids.bar, div())
                 .absolute()
                 .left(px(bar_x))
                 .top(px(bar_y))
@@ -1658,7 +1703,7 @@ fn progress_window(
                         .bg(rgb(theme::OK)),
                 ),
         );
-    if cancel {
+    if let Some(on_cancel) = on_cancel {
         let (x, y, w, h) = PROGRESS_CANCEL;
         client = client.child(
             div()
@@ -1668,8 +1713,8 @@ fn progress_window(
                 .w(px(w))
                 .h(px(h))
                 .child(
-                    crate::probe::measured("serial-uarts-cancel", div())
-                        .id("serial-uarts-cancel")
+                    crate::probe::measured(ids.cancel, div())
+                        .id(ids.cancel)
                         .size_full()
                         .flex()
                         .items_center()
@@ -1683,14 +1728,14 @@ fn progress_window(
                         .cursor_pointer()
                         .hover(|style| style.bg(rgb(theme::BORDER)))
                         .child("Cancel")
-                        .on_click(cx.listener(|this, _event, _window, cx| {
-                            this.serial_ports.cancel_uarts(&this.telemetry);
+                        .on_click(cx.listener(move |this, _event, _window, cx| {
+                            on_cancel(this);
                             cx.notify();
                         })),
                 ),
         );
     }
-    let frame = crate::probe::measured("serial-uarts-progress", div())
+    let frame = crate::probe::measured(ids.frame, div())
         .flex()
         .flex_col()
         .bg(rgb(theme::PANEL))
@@ -1706,25 +1751,23 @@ fn progress_window(
         )
         .child(client);
     let size = window.viewport_size();
-    Some(
-        gpui::deferred(
-            gpui::anchored()
-                .position(gpui::point(px(0.0), px(0.0)))
-                .child(
-                    div()
-                        .id("serial-uarts-backdrop")
-                        .w(size.width)
-                        .h(size.height)
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .occlude()
-                        .child(frame),
-                ),
-        )
-        .with_priority(2)
-        .into_any_element(),
+    gpui::deferred(
+        gpui::anchored()
+            .position(gpui::point(px(0.0), px(0.0)))
+            .child(
+                div()
+                    .id(ids.backdrop)
+                    .w(size.width)
+                    .h(size.height)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .occlude()
+                    .child(frame),
+            ),
     )
+    .with_priority(2)
+    .into_any_element()
 }
 
 /// The bitmask windows open, over everything the message box showing, and while the names are
