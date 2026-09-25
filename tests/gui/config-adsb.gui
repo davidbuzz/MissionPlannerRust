@@ -4,8 +4,9 @@
 # of the kind its documentation makes (ConfigADSB.cs:349-620); changing one records its value and
 # writes nothing (:622-625); Write Params writes what was recorded, ENABLE names first, and says
 # "Parameters successfully saved." (:179-205); Find shows only the controls whose name or
-# description has the word (:21-116); Refresh Params asks first (:212-218). The write is proved by
-# the vehicle's echo, and put back.
+# description has the word (:21-116), and its OK keeps the word as InputBox keeps every titled
+# answer, under InputBoxSearchForEnterasinglewordtosearchfor (InputBox.cs:73-84, 178-184); Refresh
+# Params asks first (:212-218). The write is proved by the vehicle's echo, and put back.
 #
 # SITL's copter, with ADS-B and avoidance off, lists two of them: ADSB_TYPE and AVD_ENABLE, each a
 # list of values. The other kinds - a RangeControl, a bitmask - and a bitmask's writes on showing
@@ -89,6 +90,7 @@ expect config.adsb.message Parameters successfully saved.
 click adsb-message-ok
 
 # Find: "type" is in ADSB_TYPE's name and not AVD_ENABLE's, filtered half a second after the key.
+expect config.InputBoxSearchForEnterasinglewordtosearchfor none
 click adsb-find
 expect config.adsb.find Enter a single word to search for
 type type
@@ -96,10 +98,19 @@ settle 1
 expect config.adsb.visible 1
 expect config.adsb.ADSB_TYPE.visible true
 expect config.adsb.AVD_ENABLE.visible false
+expect config.InputBoxSearchForEnterasinglewordtosearchfor none
 key Return
 expect config.adsb.find none
 expect config.adsb.search type
 expect config.adsb.visible 1
+expect config.InputBoxSearchForEnterasinglewordtosearchfor type
+# Cancel keeps nothing new.
+click adsb-find
+type x
+click adsb-find-cancel
+expect config.adsb.find none
+expect config.adsb.search type
+expect config.InputBoxSearchForEnterasinglewordtosearchfor type
 # Emptied, every control shows again.
 click adsb-find
 key ctrl+u

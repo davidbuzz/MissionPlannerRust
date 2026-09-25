@@ -109,9 +109,9 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
 | 263 | `ConfigADSB` | ADSB | Mandatory Hardware | any | 5 | partial: `crates/mp-gui/src/config/adsb.rs` `fn page` - a RangeControl, bitmask or ValuesControl per documented ADSB_/AVD_ parameter,
         //     favourites first, recording changes; Write Params writing them ENABLE-first, each
         //     in its own try, then "Parameters successfully saved."; Refresh Params with
-        //     MessageShowAgain; Find filtering as typed; a bitmask updated on Activate writing as
-        //     the C#'s does; missing Ctrl+S, dragging the track bar (a click pages it), typing
-        //     into a ValuesControl, and the InputBox's remembered answers |
+        //     MessageShowAgain; Find filtering as typed, its OK's word kept as InputBox keeps
+        //     it; a bitmask updated on Activate writing as the C#'s does; missing Ctrl+S,
+        //     dragging the track bar (a click pages it) and typing into a ValuesControl |
 | 266 | `ConfigGPSOrder` | CAN GPS Order | Optional Hardware | any | 1 | done: `crates/mp-gui/src/config/gps_order.rs` `fn page` |
 | 270 | `ConfigBatteryMonitoring` | Battery Monitor | Optional Hardware | any | 13 | done: `crates/mp-gui/src/config/battery_monitor.rs` `fn page` |
 | 271 | `ConfigBatteryMonitoring2` | Battery Monitor 2 | Optional Hardware | any | 10 | done: `crates/mp-gui/src/config/battery_monitor2.rs` `fn page` |

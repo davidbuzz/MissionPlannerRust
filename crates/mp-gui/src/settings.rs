@@ -233,7 +233,7 @@ impl SaveEvent {
 /// write, and the display units, which that page writes too - as does the speech alert that
 /// Initial Setup's Battery Monitor writes (`config/battery_monitor.rs`). The Planner page publishes
 /// each of its own keys as `config.planner.<key>` (`config/planner.rs`), from this same dictionary.
-pub const PUBLISHED: [&str; 30] = [
+pub const PUBLISHED: [&str; 34] = [
     "TXT_homelat",
     "TXT_homelng",
     "TXT_homealt",
@@ -268,6 +268,14 @@ pub const PUBLISHED: [&str; 30] = [
     "InputBoxNotificationWhatdoyouwantittosay",
     "InputBoxBatteryLevelWhatVoltagedoyouwanttowarnat",
     "InputBoxBatteryLevelWhatpercentagedoyouwanttowarnat",
+    // Find's, on ADSB, Standard Params and Advanced Params, and the SIMULATION screen's swarm.
+    // C#: GCSViews/ConfigurationView/ConfigADSB.cs:24; ConfigFriendlyParams.cs:24; SITL.cs:997
+    "InputBoxSearchForEnterasinglewordtosearchfor",
+    "InputBoxhowmanyhowmany",
+    // Two of the Survey (Grid) dialog's `savesettings` keys, the two its script types.
+    // C#: Grid/GridUI.cs:409-447, 1882
+    "grid_alt",
+    "grid_angle",
 ];
 
 /// `CMB_baudrate`'s ninth item, which `MainV2` selects before anything is loaded.

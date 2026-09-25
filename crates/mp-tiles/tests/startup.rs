@@ -139,9 +139,9 @@ fn cached_tiles_arrive_while_every_fetch_thread_is_stuck() {
     let took = asked.elapsed();
     assert_eq!((found.width, found.height), (256, 256));
     let stats = store.stats();
-    // At least one: a second `get` before the reader publishes queues the tile again, and the
-    // reader reads it again, which is a wasted read and not a wait.
-    assert!(stats.disk_hits >= 1, "{stats:?}");
+    // Exactly one: a second `get` before the reader publishes queues the tile again, and the
+    // reader finds it in memory when it takes that ask rather than reading it again.
+    assert_eq!(stats.disk_hits, 1, "{stats:?}");
     assert_eq!(
         stats.fetched, 0,
         "nothing came from the silent proxy: {stats:?}"

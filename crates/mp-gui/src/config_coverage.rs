@@ -586,9 +586,9 @@ pub const PANELS: &[Panel] = &[
             "a RangeControl, bitmask or ValuesControl per documented ADSB_/AVD_ parameter,
         //     favourites first, recording changes; Write Params writing them ENABLE-first, each
         //     in its own try, then \"Parameters successfully saved.\"; Refresh Params with
-        //     MessageShowAgain; Find filtering as typed; a bitmask updated on Activate writing as
-        //     the C#'s does; missing Ctrl+S, dragging the track bar (a click pages it), typing
-        //     into a ValuesControl, and the InputBox's remembered answers",
+        //     MessageShowAgain; Find filtering as typed, its OK's word kept as InputBox keeps
+        //     it; a bitmask updated on Activate writing as the C#'s does; missing Ctrl+S,
+        //     dragging the track bar (a click pages it) and typing into a ValuesControl",
         ),
     ),
     panel(

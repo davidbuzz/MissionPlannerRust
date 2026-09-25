@@ -642,6 +642,15 @@ impl Sitl {
         self.how_many = None;
     }
 
+    /// "how many?"'s OK: the box closed, its answer kept as `InputBox` keeps every titled answer
+    /// on OK - `InputBoxhowmanyhowmany` - and the answer, for the caller to parse.
+    /// `// C#: GCSViews/SITL.cs:997; ExtLibs/Controls/InputBox.cs:21-27, 73-84, 178-184`
+    pub fn how_many_ok(&mut self, settings: &mut crate::settings::Persisted) -> Option<String> {
+        let input = self.how_many.take()?;
+        input.remember(settings);
+        Some(input.field.value().to_owned())
+    }
+
     /// The home's command-line form for a point, with SRTM's height there.
     fn home_at(&self, at: (f64, f64)) -> String {
         let alt = crate::srtm::altitude(at.0, at.1).alt;
@@ -765,18 +774,17 @@ impl MissionPlanner {
         ));
     }
 
-    /// "how many?" answered: the chain swarm on a thread. The C#'s `int.Parse` throws on an
-    /// answer that is not a number, out of the button's handler; here it is a status line.
-    /// `// C#: GCSViews/SITL.cs:993-1125; ExtLibs/Controls/InputBox.cs:21-27`
+    /// "how many?" answered: the chain swarm on a thread. The answer is kept first, as
+    /// `InputBox` keeps every titled answer on OK (under `InputBoxhowmanyhowmany`), before the
+    /// `ref int` overload parses it - so an answer that is not a number is kept too. The C#'s
+    /// `int.Parse` then throws, out of the button's handler; here it is a status line.
+    /// `// C#: GCSViews/SITL.cs:993-1125; ExtLibs/Controls/InputBox.cs:21-27, 73-84, 178-184`
     pub(crate) fn sitl_how_many_ok(&mut self) {
-        let Some(input) = self.sitl.how_many.take() else {
+        let Some(answer) = self.sitl.how_many_ok(&mut self.persisted) else {
             return;
         };
-        let Ok(how_many) = input.field.value().trim().parse::<i32>() else {
-            self.file_status = Some(format!(
-                "how many? wants a whole number, not \"{}\"",
-                input.field.value()
-            ));
+        let Ok(how_many) = answer.trim().parse::<i32>() else {
+            self.file_status = Some(format!("how many? wants a whole number, not \"{answer}\""));
             return;
         };
         self.persisted
@@ -985,6 +993,43 @@ mod tests {
         speed.key(&key("backspace", None));
         speed.commit();
         assert_eq!(speed.value(), 1, "an empty box puts the value back");
+    }
+
+    /// "how many?"'s OK keeps the answer as `InputBox` does, before anything parses it - a
+    /// word as well as a number, since the C#'s `int.Parse` runs after the box has kept it -
+    /// and Cancel keeps nothing.
+    /// `// C#: GCSViews/SITL.cs:997; ExtLibs/Controls/InputBox.cs:21-27, 73-84, 178-184`
+    #[test]
+    fn how_many_ok_keeps_the_answer_under_the_input_box_key() {
+        let key_name = crate::config::optional::answers_key(model::HOW_MANY, model::HOW_MANY);
+        assert_eq!(key_name, "InputBoxhowmanyhowmany");
+        assert!(crate::settings::PUBLISHED.contains(&key_name.as_str()));
+        let mut settings = crate::settings::Persisted::at(None);
+        let mut sitl = Sitl::with_launcher(Arc::new(StubLauncher::new(Image::NotAvailable(
+            "n".to_owned(),
+        ))));
+        assert_eq!(sitl.how_many_ok(&mut settings), None, "no box, nothing kept");
+        let ask = |sitl: &mut Sitl| {
+            sitl.how_many = Some(InputBox::new(
+                model::HOW_MANY,
+                model::HOW_MANY,
+                &model::HOW_MANY_DEFAULT.to_string(),
+            ));
+        };
+        ask(&mut sitl);
+        sitl.how_many_cancel();
+        assert_eq!(settings.get(&key_name), None, "Cancel keeps nothing");
+        ask(&mut sitl);
+        assert_eq!(sitl.how_many_key(&key("backspace", None)), KeyOutcome::Changed);
+        assert_eq!(sitl.how_many_ok(&mut settings).as_deref(), Some("1"));
+        assert!(sitl.how_many().is_none(), "OK closes the box");
+        assert_eq!(settings.get(&key_name), Some("1"));
+        ask(&mut sitl);
+        if let Some(input) = sitl.how_many.as_mut() {
+            input.field.set("some");
+        }
+        assert_eq!(sitl.how_many_ok(&mut settings).as_deref(), Some("some"));
+        assert_eq!(settings.get(&key_name), Some("some"), "kept before the parse");
     }
 
     /// The page's lists and boxes as the model uses them.

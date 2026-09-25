@@ -43,8 +43,7 @@
 //!   `LargeChange`, five of its thousand, as a click on a WinForms track bar's channel does;
 //! * a bitmask value's narrowing to the parameter's integer type (`TypeAP`): the vehicle's table
 //!   here carries values, not types; it matters only for a mask with its type's top bit set;
-//! * the `InputBox`'s remembered answers (`InputBox.cs:177-181`), and a "Show me again?" answer
-//!   beyond the session: this application writes no `config.xml`.
+//! * a "Show me again?" answer beyond the session: this application writes no `config.xml`.
 //!
 //! Where the C# is wrong and this is not: a control added by a later `Activate` - a parameter
 //! the vehicle has begun listing - is placed at the top, over the first, because `y` starts again
@@ -868,6 +867,8 @@ pub struct Adsb<H = mp_link::RequestId> {
     search: String,
     /// Find's box, while it is open.
     find: Option<Find>,
+    /// Find's box as its OK closed it, until the holder keeps the answer in `Settings.Instance`.
+    answered: Option<InputBox>,
     /// When the filter timer fires, while it runs.
     filter_due: Option<Instant>,
     /// Refresh Params' question, while it is asked, and its "Show me again?".
@@ -946,6 +947,7 @@ impl<H: Copy> Adsb<H> {
             changed: BTreeMap::new(),
             search: String::new(),
             find: None,
+            answered: None,
             filter_due: None,
             confirm: None,
             show_again: None,
@@ -1387,11 +1389,19 @@ impl<H: Copy> Adsb<H> {
         if ok {
             self.search = find.input.field.value().to_owned();
             let search = self.search.clone();
+            self.answered = Some(find.input);
             self.filter(&search);
         } else {
             self.search = find.before;
             self.filter("");
         }
+    }
+
+    /// Find's box as its OK closed it, once: the answer `InputBox` keeps in `Settings.Instance`
+    /// under `InputBoxSearchForEnterasinglewordtosearchfor`, which [`keep_find_answer`] writes.
+    /// `// C#: ExtLibs/Controls/InputBox.cs:73-84, 178-184`
+    pub fn take_answered(&mut self) -> Option<InputBox> {
+        self.answered.take()
     }
 
     /// Types into Find's box, for a test.
@@ -1978,6 +1988,15 @@ pub fn page(
     panel(TITLE, body).into_any_element()
 }
 
+/// Find's answer kept as `InputBox` keeps it, after a key or a button that may have closed the
+/// box with OK: the page object holds no settings, the window does.
+/// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:24; ExtLibs/Controls/InputBox.cs:178-184`
+pub fn keep_find_answer(this: &mut MissionPlanner, access: Access) {
+    if let Some(input) = access(this).take_answered() {
+        input.remember(&mut this.persisted);
+    }
+}
+
 /// Find's box, Refresh Params' question or a message box, over the whole window.
 pub fn list_overlay(
     list: &Adsb,
@@ -2003,8 +2022,15 @@ pub fn list_overlay(
             &find.input,
             prompt,
             window,
-            move |this, event| access(this).find_key(event, Instant::now()),
-            move |this| access(this).close_find(true),
+            move |this, event| {
+                let used = access(this).find_key(event, Instant::now());
+                keep_find_answer(this, access);
+                used
+            },
+            move |this| {
+                access(this).close_find(true);
+                keep_find_answer(this, access);
+            },
             move |this| access(this).close_find(false),
             cx,
         ));
@@ -2540,6 +2566,45 @@ mod tests {
         assert_eq!(page.controls().iter().filter(|c| c.visible).count(), total);
     }
 
+    /// Find's OK keeps the word as `InputBox` keeps every titled answer, under the caption and
+    /// question with all but letters and digits taken out; Cancel keeps nothing. The key is
+    /// ADSB's, Standard Params' and Advanced Params' alike: the three ask the same question.
+    /// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:24; ConfigFriendlyParams.cs:24;
+    /// ExtLibs/Controls/InputBox.cs:73-84, 178-184`
+    #[test]
+    fn find_ok_keeps_the_answer_under_the_input_box_key() {
+        let key_name =
+            crate::config::optional::answers_key("Search For", "Enter a single word to search for");
+        assert_eq!(key_name, "InputBoxSearchForEnterasinglewordtosearchfor");
+        assert!(crate::settings::PUBLISHED.contains(&key_name.as_str()));
+        let now = Instant::now();
+        for spec in [
+            &ADSB,
+            &crate::config::friendly_params::STANDARD,
+            &crate::config::friendly_params::ADVANCED,
+        ] {
+            let mut settings = crate::settings::Persisted::at(None);
+            let mut page: Adsb = Adsb::new(spec);
+            page.open_find();
+            page.type_find("avd", now);
+            page.close_find(false);
+            assert!(page.take_answered().is_none(), "Cancel keeps nothing");
+            page.open_find();
+            page.type_find("rf select", now);
+            page.close_find(true);
+            let answered = page.take_answered().expect("OK's box");
+            assert_eq!(answered.field.value(), "rf select");
+            answered.remember(&mut settings);
+            assert!(page.take_answered().is_none(), "kept once");
+            assert_eq!(
+                settings.get(&key_name),
+                Some("rf+select"),
+                "{}",
+                spec.ids.find_box
+            );
+        }
+    }
+
     #[test]
     fn refresh_asks_first_and_fetches_on_ok() {
         let telemetry = Telemetry::idle();
@@ -2598,7 +2663,9 @@ mod tests {
                     facts += 1;
                 }
                 (Some("click"), Some(id)) if id.starts_with("adsb-") => {
+                    // Find's OK and Cancel are the shared `InputBox`'s, named in its table.
                     let drawn = source.contains(&format!("\"{id}\""))
+                        || include_str!("optional.rs").contains(&format!("\"{id}\""))
                         || id.starts_with("adsb-ADSB_")
                         || id.starts_with("adsb-AVD_");
                     assert!(drawn, "{id} is not drawn");

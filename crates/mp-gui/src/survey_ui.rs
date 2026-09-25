@@ -26,13 +26,13 @@
 //! that `.grid` loader - with fewer than three corners this says its No, "Please define a
 //! polygon.". `BUT_save` asks for a camera name and writes `cameras.xml`, and the constructor
 //! writes it when there is none, both in this application's user data directory
-//! (`mp_mission::cameras`). The settings Accept saves are kept for the session, over what `config.xml` holds:
-//! this application does not write `config.xml`.
+//! (`mp_mission::cameras`). The settings Accept saves (`savesettings`, the `grid_*` keys and the
+//! camera's field of view) go into `Settings.Instance` - [`crate::settings::Persisted`], which the
+//! next `SaveConfig` writes to `config.xml` - and the dialog opened next loads them from there
+//! (`loadsettings`), in this session or the next.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
-
-use std::collections::BTreeMap;
 
 use gpui::{
     AnyElement, Context, Div, FocusHandle, MouseButton, SharedString, Window, div, prelude::*, px,
@@ -61,9 +61,6 @@ pub struct SurveyUi {
     focus: FocusHandle,
     /// `Grid.StartPointLatLngAlt`: a static, so it carries from one dialog to the next.
     start_point: LatLon,
-    /// What Accept saved this session (`savesettings`), which the next dialog loads over
-    /// `config.xml`'s values.
-    saved: BTreeMap<String, String>,
     /// The rows the last Accept added.
     added: usize,
 }
@@ -132,7 +129,6 @@ impl SurveyUi {
             open: None,
             focus: cx.focus_handle(),
             start_point: LatLon::default(),
-            saved: BTreeMap::new(),
             added: 0,
         }
     }
@@ -208,22 +204,15 @@ pub fn open(this: &mut MissionPlanner, window: &mut Window, cx: &mut Context<Mis
         plane: firmware_is_plane(&view),
         start_point: this.survey.start_point,
     };
-    // `plugin.Host.config`: what this session's Accepts saved, over `config.xml`.
-    let config =
-        mp_settings::Config::default_path().and_then(|path| mp_settings::Config::load(&path).ok());
-    let session = &this.survey.saved;
-    let saved = |key: &str| {
-        session.get(key).cloned().or_else(|| {
-            config
-                .as_ref()
-                .and_then(|c| c.get(key))
-                .map(ToOwned::to_owned)
-        })
-    };
     // `xmlcamera`'s write `catch`: `CustomMessageBox.Show(ex.ToString())`.
     // `// C#: Grid/GridUI.cs:122-124, 497`
     let (cameras, unwritten) = Cameras::load(mp_settings::user_data_directory().as_deref());
-    let dialog = Dialog::open(&polygon, cameras, &context, &saved);
+    let dialog = Dialog::open(
+        &polygon,
+        cameras,
+        &context,
+        &loaded_settings(&this.persisted),
+    );
     this.survey.open = Some(Open {
         dialog,
         tab: Tab::Simple,
@@ -233,6 +222,26 @@ pub fn open(this: &mut MissionPlanner, window: &mut Window, cx: &mut Context<Mis
     });
     this.survey.added = 0;
     changed(this, window, cx);
+}
+
+/// What `loadsettings` reads: `plugin.Host.config[key]`, which is `Settings.Instance[key]` -
+/// `config.xml` as it was read at start-up and as this session has changed it.
+/// `// C#: Plugin/Plugin.cs:121-124; Grid/GridUI.cs:129-134, 325-407`
+fn loaded_settings(persisted: &crate::settings::Persisted) -> impl Fn(&str) -> Option<String> + '_ {
+    |key: &str| persisted.get(key).map(ToOwned::to_owned)
+}
+
+/// `BUT_Accept_Click`'s writes to `Settings.Instance`: `camera_fovh` and `camera_fovv`, then
+/// `savesettings`' `grid_*` keys - in the dictionary at once, in `config.xml` at the next
+/// `SaveConfig`, as every `Settings.Instance[key] = value` is.
+/// `// C#: Grid/GridUI.cs:1858-1882, 409-447`
+fn keep_settings(
+    persisted: &mut crate::settings::Persisted,
+    settings: Vec<(&'static str, String)>,
+) {
+    for (key, value) in settings {
+        persisted.set(key, value);
+    }
 }
 
 /// The form's close box: the dialog goes, and nothing is added.
@@ -375,9 +384,7 @@ fn accept(this: &mut MissionPlanner) {
             for vertex in &accepted.polygon {
                 this.plan.add_area_vertex(*vertex);
             }
-            for (key, value) in accepted.settings {
-                this.survey.saved.insert(key.to_owned(), value);
-            }
+            keep_settings(&mut this.persisted, accepted.settings);
             this.survey.added = accepted.steps.len();
             close(this);
             if let Some(why) = refused {
@@ -1997,6 +2004,70 @@ mod tests {
         save_camera(&mut open, "Mine", Some(&blocked.join("inner")));
         assert!(matches!(&open.prompt, Some(Prompt::Message(_, ""))));
         let _ = std::fs::remove_file(&blocked);
+    }
+
+    /// Accept's settings go into `Settings.Instance` and the next dialog loads them from there:
+    /// in the same session, and in the next, from the `config.xml` the close's save wrote. The
+    /// angle is saved and never loaded (`loadsetting("grid_angle", ...)` is commented out).
+    /// `// C#: Grid/GridUI.cs:129-134, 325-447, 1858-1882`
+    #[test]
+    fn accept_settings_are_kept_in_config_xml_and_loaded_next_time() {
+        let dir =
+            std::env::temp_dir().join(format!("mp-gui-survey-settings-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("config.xml");
+        let context = GridContext {
+            home: (-35.363_262_1, 149.165_237_4, 584.1),
+            plane: false,
+            start_point: LatLon::default(),
+        };
+        let mut persisted = crate::settings::Persisted::at(Some(file.clone()));
+        assert_eq!(persisted.get("grid_camera"), None, "nothing saved yet");
+
+        let mut dialog = Dialog::open(
+            &square(),
+            Cameras::builtin(),
+            &context,
+            &loaded_settings(&persisted),
+        );
+        dialog.type_num(Num::Angle, "45");
+        dialog.type_num(Num::Altitude, "120");
+        let accepted = dialog
+            .accept(&gridui::Planner::default())
+            .expect("a grid to accept");
+        keep_settings(&mut persisted, accepted.settings);
+        assert_eq!(persisted.get("grid_alt"), Some("120"));
+        assert_eq!(persisted.get("grid_angle"), Some("45"));
+        assert_eq!(persisted.get("grid_camdir"), Some("True"));
+        assert!(persisted.get("grid_camera").is_some());
+        assert!(persisted.get("camera_fovh").is_some());
+        assert!(!file.exists(), "Accept writes nothing to disk itself");
+
+        // The same session: the next dialog has the altitude, and the angle of the polygon.
+        let again = Dialog::open(
+            &square(),
+            Cameras::builtin(),
+            &context,
+            &loaded_settings(&persisted),
+        );
+        assert_eq!(again.num(Num::Altitude).to_text(), "120");
+        assert_eq!(again.num(Num::Angle), gui_dialog().num(Num::Angle));
+
+        // The next session: what the close's save wrote, read back.
+        persisted
+            .save_config(crate::settings::SaveEvent::Close)
+            .expect("config.xml written");
+        let next = crate::settings::Persisted::at(Some(file));
+        assert_eq!(next.get("grid_alt"), Some("120"));
+        let reopened = Dialog::open(
+            &square(),
+            Cameras::builtin(),
+            &context,
+            &loaded_settings(&next),
+        );
+        assert_eq!(reopened.num(Num::Altitude).to_text(), "120");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The script's path: the angle and the altitude typed, Accept, and the rows in the plan -

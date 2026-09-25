@@ -13,8 +13,10 @@
 # remembering it: the setting is written when a picture is pressed (:272). Leaving the page and
 # coming back keeps every choice (the page object is made once, as MainV2 makes it).
 #
-# This script NEVER presses a vehicle picture and never answers "how many?" with OK: either
-# downloads a simulator and starts it. What a start does - the URLs, the command line, the spawn
+# This script NEVER presses a vehicle picture and never answers "how many?" with OK and a number:
+# either downloads a simulator and starts it. It answers OK with a word, which InputBox keeps -
+# under InputBoxhowmanyhowmany, as it keeps every titled answer (InputBox.cs:73-84, 178-184) -
+# before the C#'s int.Parse refuses it; here the refusal is the status line and nothing starts. What a start does - the URLs, the command line, the spawn
 # and the link to tcp:127.0.0.1:5760 - is proved against a stub web and a stub launcher by the
 # unit tests in crates/mp-gui/src/sitl/.
 #
@@ -121,6 +123,20 @@ click sitl-swarm-seq
 expect sitl.howmany.open true
 click sitl-howmany-cancel
 expect sitl.howmany.open false
+expect sitl.running false
+expect sitl.outcome none
+expect config.InputBoxhowmanyhowmany none
+
+# OK with a word: kept, then refused, nothing started.
+click sitl-swarm-seq
+expect sitl.howmany.open true
+click sitl-howmany-value
+key ctrl+u
+type some
+click sitl-howmany-ok
+expect sitl.howmany.open false
+expect config.InputBoxhowmanyhowmany some
+expect status how many? wants a whole number, not "some"
 expect sitl.running false
 expect sitl.outcome none
 

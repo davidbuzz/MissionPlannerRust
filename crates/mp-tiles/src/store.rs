@@ -140,6 +140,18 @@ struct Shared {
     stats: Mutex<StoreStats>,
     /// Bumped whenever a tile arrives, so the UI knows to repaint without polling every tile.
     generation: AtomicU64,
+    /// Holds the reader after it has taken a tile and before it looks at it, so a test can ask
+    /// again while the first ask is being answered.
+    #[cfg(test)]
+    reader_gate: Mutex<Option<ReaderGate>>,
+}
+
+/// The reader's gate, for tests: it says which tile it took, then waits to be let go.
+#[cfg(test)]
+#[derive(Debug)]
+struct ReaderGate {
+    taken: std::sync::mpsc::Sender<TileId>,
+    go: std::sync::mpsc::Receiver<()>,
 }
 
 /// The in-memory tiles, with a least-recently-used order.
@@ -248,6 +260,8 @@ impl TileStore {
             running: AtomicBool::new(true),
             stats: Mutex::new(StoreStats::default()),
             generation: AtomicU64::new(0),
+            #[cfg(test)]
+            reader_gate: Mutex::new(None),
         });
 
         let mut threads = Vec::new();
@@ -426,6 +440,28 @@ fn run_reader(source: &'static TileSource, cache: &TileCache, shared: &Arc<Share
             continue;
         };
 
+        #[cfg(test)]
+        if let Ok(gate) = shared.reader_gate.lock()
+            && let Some(gate) = gate.as_ref()
+        {
+            let _ = gate.taken.send(tile);
+            let _ = gate.go.recv();
+        }
+
+        // A tile already in memory is not loaded again. The map asks every frame, so a tile it
+        // asks for a second time while the first ask is still being read is queued again - the
+        // queue only refuses a tile it still holds - and by the time this thread takes the second
+        // ask, the first has been published. GMap.NET's load task makes the same check before it
+        // loads anything: `Matrix.GetTileWithReadLock`, and nothing unless `!m.NotEmpty`.
+        // `// C#: ExtLibs/GMap.NET.Core/GMap.NET.Internals/Core.cs:881-882, 1139-1142`
+        if shared
+            .memory
+            .lock()
+            .is_ok_and(|memory| memory.tiles.contains_key(&tile))
+        {
+            continue;
+        }
+
         // The cache is the primary source. Checked here rather than on the render thread because
         // reading and decoding a tile is far too slow to do in a painter.
         if let Some(cached) = cache.read(source.cache_name, tile)
@@ -533,11 +569,85 @@ fn publish(
     decoded: DecodedTile,
     count: impl FnOnce(&mut StoreStats),
 ) {
+    // Counted with the memory still held, so whoever finds the tile in memory also finds it
+    // counted: a caller that sees the tile and then reads the stats never sees it uncounted.
     if let Ok(mut memory) = shared.memory.lock() {
         memory.insert(tile, Arc::new(decoded));
-    }
-    if let Ok(mut stats) = shared.stats.lock() {
-        count(&mut stats);
+        if let Ok(mut stats) = shared.stats.lock() {
+            count(&mut stats);
+        }
     }
     shared.generation.fetch_add(1, Ordering::AcqRel);
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
+    use super::*;
+    use crate::source::BING_MAP;
+    use std::sync::mpsc;
+
+    /// A 256x256 PNG, which is what a tile server sends.
+    fn png() -> Vec<u8> {
+        let mut buffer = std::io::Cursor::new(Vec::new());
+        image::RgbaImage::from_pixel(256, 256, image::Rgba([0x30, 0x60, 0x90, 255]))
+            .write_to(&mut buffer, image::ImageFormat::Png)
+            .unwrap();
+        buffer.into_inner()
+    }
+
+    /// Row 85: the map asks again while the reader is still reading the first ask. The second
+    /// ask is queued - the first has left the queue - and must not be read from disk a second
+    /// time. The reader is held on a gate after taking the first ask until the second has been
+    /// made, so the race happens every run rather than one run in a hundred under load.
+    #[test]
+    fn a_second_ask_while_the_first_is_being_read_reads_the_disk_once() {
+        let root =
+            std::env::temp_dir().join(format!("mp-tiles-store-second-ask-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let cache = TileCache::new(&root);
+        let tile = TileId::new(10, 500, 600).unwrap();
+        cache.write(BING_MAP.cache_name, tile, &png()).unwrap();
+
+        let store = TileStore::offline(&BING_MAP, cache);
+        let (taken_tx, taken) = mpsc::channel();
+        let (go, go_rx) = mpsc::channel();
+        *store.shared.reader_gate.lock().unwrap() = Some(ReaderGate {
+            taken: taken_tx,
+            go: go_rx,
+        });
+        let wait = Duration::from_secs(5);
+
+        assert!(matches!(store.get(tile), TileAnswer::Missing));
+        assert_eq!(
+            taken.recv_timeout(wait).unwrap(),
+            tile,
+            "the reader took the first ask"
+        );
+
+        // The first ask is in the reader's hands and out of the queue; this one is queued.
+        assert!(matches!(store.get(tile), TileAnswer::Missing));
+        assert!(
+            store.shared.queue.lock().unwrap().contains(&tile),
+            "the second ask was queued, which is the race"
+        );
+
+        go.send(()).unwrap();
+        assert_eq!(
+            taken.recv_timeout(wait).unwrap(),
+            tile,
+            "the reader took the second ask"
+        );
+        go.send(()).unwrap();
+
+        // Dropping the store joins the reader, which finishes the second ask first.
+        let shared = Arc::clone(&store.shared);
+        drop(store);
+        let stats = *shared.stats.lock().unwrap();
+        assert_eq!(stats.disk_hits, 1, "{stats:?}");
+        assert_eq!(stats.misses, 2, "{stats:?}");
+        assert!(shared.memory.lock().unwrap().tiles.contains_key(&tile));
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }

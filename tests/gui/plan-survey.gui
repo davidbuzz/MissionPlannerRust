@@ -10,7 +10,9 @@
 # home planned: the angle of its longest side, the Stats, the angle and the altitude typed, Accept -
 # and the mission is golden/accept/accept_gui_angle_alt.csv's, item for item, which
 # crates/mp-mission/tests/gridui_vectors.rs checks this script asserts. Opened again, the dialog has
-# the altitude Accept saved (savesettings, loadsettings).
+# the altitude Accept saved (savesettings, loadsettings) - in Settings.Instance, whose close writes
+# config.xml, so after `restart` the dialog over the same square opens with it too
+# (GridUI.cs:129-134, 325-447, 1882).
 
 env XDG_DATA_HOME $WORK
 env MP_PLAN_DIR $WORK
@@ -134,9 +136,12 @@ expect survey.dialog.lbl_distance 23.25 km
 expect survey.dialog.lbl_flighttime 1:36:52 Hours
 
 # Accept: a takeoff, each lane's waypoints with CAM_TRIGG_DIST started and stopped, the trigger
-# stopped, RTL.
+# stopped, RTL. savesettings puts the numbers in Settings.Instance.
+expect config.grid_alt none
 click survey-BUT_Accept
 expect survey.dialog closed
+expect config.grid_alt 120
+expect config.grid_angle 45
 expect survey.dialog.added 115
 expect mission.items 115
 expect mission.commands 22,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,16,206,206,20
@@ -153,3 +158,24 @@ expect survey.dialog.NUM_angle 180
 click survey-close
 expect survey.dialog closed
 expect mission.items 115
+
+# The close box saves config.xml; the next process reads it back, and the dialog over the square
+# loads the altitude from it. The polygon is not kept, so the .fen is loaded again.
+restart
+settle 4
+expect config.grid_alt 120
+expect config.grid_angle 45
+click map@0.30x0.70:right
+click menu-geoFence
+click menu-loadFromFile
+type square
+key Return
+expect survey.points 4
+click map@0.50x0.50:right
+click menu-autoWP
+click menu-surveyGrid
+expect survey.dialog open
+expect survey.dialog.NUM_altitude 120
+expect survey.dialog.NUM_angle 180
+click survey-close
+expect survey.dialog closed
