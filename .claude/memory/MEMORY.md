@@ -13,6 +13,7 @@ controlled; the per-project memory directory holds symlinks to them.
 - [Work the matrix in priority order](work-the-matrix-in-priority-order.md) — every "high" row of NOT_DONE_YET_MATRIX.md to 100% before any "med" row (Buzz, 2026-09-26)
 
 - [One build at a time](one-build-at-a-time.md) — one cargo build at a time under `flock <scratchpad>/build.lock`; with the VM up, debug at 4 jobs and NO release build (a release build beside the VM OOM-killed gnome-shell and the VM on 2026-09-26)
+- [Scratch target dirs fill the disk](scratch-target-dirs-fill-the-disk.md) — /tmp is the root disk, 96% full without me; target-solo hit 65 GB; prune planner-* incremental caches, old test binaries and finished agents' target dirs; df before big runs (2026-09-26)
 - [No foreground waiting](no-foreground-waiting.md) — background long operations, poll cheaply, never block the session
 - [GUI runs stay short](gui-runs-stay-short.md) — windows live ~5s, pinned to DP-1-3; never debug by re-running the GUI
 - [GUI tests take the mouse](gui-tests-take-the-mouse.md) — on the desktop, scripts drive the real pointer: only on Buzz's word, stop means now; `tools/gui-headless.sh` runs them on Xvfb :99 with lavapipe and touches nothing of his

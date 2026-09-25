@@ -5,7 +5,7 @@
 # its maximum at the top - and each move sends all three angles as MAV_CMD_DO_MOUNT_CONTROL in the
 # MAVLink-targeting mode, not waited for. Reset Position puts the bars at zero, sets the mount to
 # MAVLink targeting with no stabilisation (DO_MOUNT_CONFIGURE), and sends the zeros. Video Control
-# is the gimbal's video, not ported, and says so. SITL has no mount; the commands go all the same.
+# pops the gimbal's video out. SITL has no mount; the commands go all the same.
 # `GCSViews/FlightData.cs:1471-1478, 2946-2950, GCSViews/FlightData.Designer.cs:2088-2191,
 # ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4572-4605`
 #
@@ -61,5 +61,9 @@ expect fly.gimbal.yaw 0
 expect fly.gimbal.roll 0
 expect fly.sent COMMAND_LONG MAV_CMD_DO_MOUNT_CONFIGURE 2,0,0,0,0,0,0; COMMAND_LONG MAV_CMD_DO_MOUNT_CONTROL 0,0,0,0,0,0,2
 
+# Video Control is the map menu's Gimbal Video Pop Out (fly-gimbal-video.gui has the rest); its
+# window's close box closes the control with it.
 click fly-gimbal-video
-expect status ~ Video Control is not ported
+expect fly.gimbal.video popout
+click fly-gimbal-popout-close
+expect fly.gimbal.video hidden

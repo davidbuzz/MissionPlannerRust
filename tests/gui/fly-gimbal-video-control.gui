@@ -1,0 +1,88 @@
+# GimbalVideoControl's own menu and its keys and clicks: Mini map, Swap with map, Yaw Lock, the
+# keys and a click reaching the vehicle, and Settings.
+#
+# The claim: Mini map is CheckOnClick; unchecked it hides the map and Swap with map, checked it
+# shows both (FlightData.cs:6547-6551). Swap with map is Mini from full sized and Full Sized from
+# the mini video (6552-6562). A click on the picture focuses it (GimbalVideoControl.cs:609-612);
+# with the focus the keys steer: Alt+F takes a picture - IMAGE_START_CAPTURE to the camera, which
+# needs no capability (459-511, CameraProtocol.cs:397-409); W held is a pitch rate the manager has
+# not said it can do, so nothing is sent, and let go the zero rates, which need no axis, are sent
+# as DO_GIMBAL_MANAGER_PITCHYAW (397-457, GimbalManagerProtocol.cs:273-294). L toggles the yaw lock,
+# which Yaw Lock shows checked (477-479, 528-535). The plain left click is Click Pan/Tilt, which
+# needs the gimbal's reported attitude: SITL has none, so nothing goes (622-640). Settings opens
+# GimbalControlSettingsForm with each preference's binding; Slew Left pressed listens, J is taken,
+# and Save keeps it as the control's preference (GimbalControlSettingsForm.cs:19-170,
+# KeyBindingButton.cs:83-163, GimbalVideoControl.cs:755-763).
+#
+# Needs SITL (a copter: a gimbal manager and a camera object, no gimbal):
+#   tools/gui-test.sh tests/gui/fly-gimbal-video-control.gui -- tcp:127.0.0.1:5760
+
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+screen fly
+window 1600x1200
+budget 19
+
+expect vehicle.count > 0
+click fly-tab-actions
+expect fly.tab tabActions
+click fly-gimbalvideo-full
+expect fly.gimbal.video full
+expect fly.gimbal.map mini
+
+# Mini map unchecked: the map and Swap with map hidden; checked again, both back.
+click fly-gimbal-video-box:right
+expect fly.gimbal.menu true
+click fly-gimbal-menu-minimap
+expect fly.gimbal.minimap false
+expect fly.gimbal.map hidden
+expect fly.gimbal.items minimap,close
+click fly-gimbal-video-box:right
+click fly-gimbal-menu-minimap
+expect fly.gimbal.minimap true
+expect fly.gimbal.map mini
+expect fly.gimbal.items minimap,swap,close
+
+# Swap with map: the mini video, then full sized again.
+click fly-gimbal-video-box:right
+click fly-gimbal-menu-swap
+expect fly.gimbal.video mini
+expect fly.gimbal.map full
+click fly-gimbal-video-box:right
+click fly-gimbal-menu-swap
+expect fly.gimbal.video full
+expect fly.gimbal.map mini
+
+# A click on the picture: the focus, and Click Pan/Tilt, which has no attitude to start from.
+click fly-gimbal-video-box
+expect fly.gimbal.command SetAttitudeAsync: not sent (no attitude)
+
+# The keys: Alt+F takes a picture.
+key alt+f
+expect fly.gimbal.command ~ TakeSinglePictureAsync: COMMAND_LONG MAV_CMD_IMAGE_START_CAPTURE
+# W pressed and let go: the zero rates go out.
+key w
+expect fly.gimbal.held none
+expect fly.gimbal.command ~ SetRatesCommandAsync: COMMAND_LONG MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW
+# L: the yaw lock, which the menu shows.
+expect fly.gimbal.yawlock false
+key l
+expect fly.gimbal.yawlock true
+click fly-gimbal-video-box:right
+click fly-gimbal-menu-yawlock
+expect fly.gimbal.yawlock false
+
+# Settings: Slew Left listens, J taken, Save keeps it.
+expect fly.gimbal.pref.SlewLeft A
+click fly-gimbal-video-box:right
+click fly-gimbal-menu-settings
+expect fly.gimbal.settings true
+expect fly.gimbal.settings.SlewLeft A
+click fly-gimbal-settings-SlewLeft
+expect fly.gimbal.settings.listening SlewLeft
+key j
+expect fly.gimbal.settings.listening none
+expect fly.gimbal.settings.SlewLeft J
+click fly-gimbal-settings-save
+expect fly.gimbal.settings false
+expect fly.gimbal.pref.SlewLeft J

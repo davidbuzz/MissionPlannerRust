@@ -2902,9 +2902,9 @@ fn actions_tab(
     // map has no menu - a right click flies there, which is the menu's Fly To Here, and the
     // planner is the FLIGHT PLAN tab and TakeOff a button over the grid - so the rest of its
     // entries are here, under the grid, acting where the map was last pressed as the C#'s act
-    // where it was pressed to open the menu. Set Home Here's drop-down is its two entries. The
-    // Gimbal Video drop-down is video, which is not ported. The row wraps where the column is too
-    // narrow for them all.
+    // where it was pressed to open the menu. Set Home Here's drop-down is its two entries, and
+    // Gimbal Video's its three (`gimbal_video.rs`). The row wraps where the column is too narrow
+    // for them all.
     // `// C#: GCSViews/FlightData.Designer.cs:2518-2531, 2612-2630`
     body = body.child(
         div()
@@ -2993,6 +2993,29 @@ fn actions_tab(
                     this.fly_actions.ask(Prompt::JumpToTag, "");
                     this.fly_focus.prompt.focus(window, cx);
                 },
+            ))
+            // `gimbalVideoToolStripMenuItem`'s Full Sized, Mini and Pop Out.
+            // `// C#: GCSViews/FlightData.Designer.cs:2651-2675`
+            .child(menu_entry(
+                "fly-gimbalvideo-full",
+                "Gimbal Video: Full Sized",
+                None,
+                cx,
+                |this, window, cx| this.gimbal_video_full_sized(window, cx),
+            ))
+            .child(menu_entry(
+                "fly-gimbalvideo-mini",
+                "Mini",
+                None,
+                cx,
+                |this, window, cx| this.gimbal_video_mini(window, cx),
+            ))
+            .child(menu_entry(
+                "fly-gimbalvideo-popout",
+                "Pop Out",
+                None,
+                cx,
+                |this, window, cx| this.gimbal_video_pop_out(window, cx),
             )),
     );
     // The menu's POI entry and its drop-down: Add Poi at the point the map was last pressed,
@@ -4616,6 +4639,9 @@ pub struct FlightData {
     /// `CaptureMJPEG`, while Set MJPEG source has it reading.
     /// `// C#: ExtLibs/Utilities/CaptureMJPEG.cs:13-51`
     pub mjpeg: Option<mp_video::mjpeg::CaptureMjpeg>,
+    /// The map menu's Gimbal Video: `gimbalVideoControl` and where it and the map are.
+    /// `// C#: GCSViews/FlightData.cs:6534-6712`
+    pub gimbal_video: crate::gimbal_video::GimbalVideo,
     /// `GStreamerUI.DownloadGStreamer`, while the runtime is being fetched.
     pub gst_download: Option<GstDownload>,
 }
@@ -4902,6 +4928,7 @@ impl FlightData {
             gauges_bounds: Rc::new(Cell::new(None)),
             gstreamer: mp_video::gstreamer::GStreamer::default(),
             mjpeg: None,
+            gimbal_video: crate::gimbal_video::GimbalVideo::default(),
             gst_download: None,
         }
     }

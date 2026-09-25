@@ -9,8 +9,8 @@
 //! `// C#: GCSViews/FlightData.cs:1471-1478, 2946-2950, GCSViews/FlightData.Designer.cs:2088-2191,
 //! ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4572-4605`
 //!
-//! Video Control, the page's fifth control, opens the gimbal's video in a window of its own; the
-//! video sources are not ported, and it is drawn dimmed.
+//! Video Control, the page's fifth control, opens the gimbal's video in a window of its own: the
+//! map menu's Gimbal Video Pop Out (`crate::gimbal_video`).
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -508,9 +508,6 @@ fn button(
     }
 }
 
-/// Why Video Control is dimmed.
-pub const NO_VIDEO: &str = "the gimbal's video, a window of its own, is not ported";
-
 /// The page, each control where the `.resx` puts it in `tabPayload`.
 /// `// C#: GCSViews/FlightData.resx (tabPayload and its controls)`
 pub fn page(
@@ -567,13 +564,15 @@ pub fn page(
                 cx.notify();
             }),
         ))
+        // `BUT_GimbalVideo.Click += gimbalVideoPopOutToolStripMenuItem_Click`.
+        // `// C#: GCSViews/FlightData.Designer.cs:2106`
         .child(button(
             "fly-gimbal-video",
             fl!("flightdata-BUT_GimbalVideo-Text"),
             (73.0, 134.0, 56.0, 23.0),
-            false,
-            cx.listener(|this, _event, _window, cx| {
-                this.file_status = Some(format!("Video Control is not ported: {NO_VIDEO}"));
+            true,
+            cx.listener(|this, _event, window, cx| {
+                this.gimbal_video_pop_out(window, cx);
                 cx.notify();
             }),
         ))

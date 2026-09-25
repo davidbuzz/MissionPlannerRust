@@ -4,7 +4,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 
 | total | done | elsewhere | missing | plumbing | dropped |
 |---:|---:|---:|---:|---:|---:|
-| 136 | 105 | 1 | 10 | 18 | 2 |
+| 136 | 109 | 1 | 6 | 18 | 2 |
 
 | control | event | handler | text | ours |
 |---|---|---|---|---|
@@ -21,7 +21,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `but_disablejoystick` | Click | `but_disablejoystick_Click` | Disable Joystick | done: `joystick-enable` |
 | `BUT_edit_selected` | Click | `BUT_edit_selected_Click` | Edit Selected Script | done: `fly-script-edit` |
 | `BUT_georefimage` | Click | `BUT_georefimage_Click` | Geo Reference Images | done: `fly-georefimage` |
-| `BUT_GimbalVideo` | Click | `gimbalVideoPopOutToolStripMenuItem_Click` | Video Control | **missing** - later: video (the camera, AVI, the gimbal's video) |
+| `BUT_GimbalVideo` | Click | `gimbalVideoPopOutToolStripMenuItem_Click` | Video Control | done: `fly-gimbal-video` |
 | `BUT_Homealt` | Click | `BUT_Homealt_Click` | Set Home Alt | done: `fly-homealt` |
 | `BUT_joystick` | Click | `BUT_joystick_Click` | Joystick | done: `joystick-refresh` |
 | `BUT_loadtelem` | Click | `BUT_loadtelem_Click` | Load Log | done: `fly-loadtelem` |
@@ -60,9 +60,9 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `flightPlannerToolStripMenuItem` | Click | `flightPlannerToolStripMenuItem_Click` | Flight Planner | done: `tab-plan` |
 | `flyToCoordsToolStripMenuItem` | Click | `flyToCoordsToolStripMenuItem_Click` | Fly To Coords | done: `fly-flytocoords` |
 | `flyToHereAltToolStripMenuItem` | Click | `flyToHereAltToolStripMenuItem_Click` | Fly To Here Alt | done: `fly-flytohere-alt` |
-| `gimbalVideoFullSizedToolStripMenuItem` | Click | `gimbalVideoFullSizedToolStripMenuItem_Click` | Full Sized | **missing** - later: video (the camera, AVI, the gimbal's video) |
-| `gimbalVideoMiniToolStripMenuItem` | Click | `gimbalVideoMiniToolStripMenuItem_Click` | Mini | **missing** - later: video (the camera, AVI, the gimbal's video) |
-| `gimbalVideoPopOutToolStripMenuItem` | Click | `gimbalVideoPopOutToolStripMenuItem_Click` | Pop Out | **missing** - later: video (the camera, AVI, the gimbal's video) |
+| `gimbalVideoFullSizedToolStripMenuItem` | Click | `gimbalVideoFullSizedToolStripMenuItem_Click` | Full Sized | done: `fly-gimbalvideo-full` |
+| `gimbalVideoMiniToolStripMenuItem` | Click | `gimbalVideoMiniToolStripMenuItem_Click` | Mini | done: `fly-gimbalvideo-mini` |
+| `gimbalVideoPopOutToolStripMenuItem` | Click | `gimbalVideoPopOutToolStripMenuItem_Click` | Pop Out | done: `fly-gimbalvideo-popout` |
 | `gMapControl1` | Click | `gMapControl1_Click` | the map | plumbing |
 | `gMapControl1` | MouseDown | `gMapControl1_MouseDown` | the map: start a drag | done: `map` |
 | `gMapControl1` | MouseLeave | `gMapControl1_MouseLeave` | the map | plumbing |
@@ -103,7 +103,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `quickView4` | DoubleClick | `quickView_DoubleClick` | quick view 4: choose its field | done: `fly-quick-4` |
 | `quickView5` | DoubleClick | `quickView_DoubleClick` | quick view 5: choose its field | done: `fly-quick-5` |
 | `quickView6` | DoubleClick | `quickView_DoubleClick` | quick view 6: choose its field | done: `fly-quick-6` |
-| `recordHudToAVIToolStripMenuItem` | Click | `recordHudToAVIToolStripMenuItem_Click` | Record Hud to AVI | **missing** - later: video (the camera, AVI, the gimbal's video) |
+| `recordHudToAVIToolStripMenuItem` | Click | `recordHudToAVIToolStripMenuItem_Click` | Record Hud to AVI | **missing** - later: video (the camera, AVI) |
 | `russianHudToolStripMenuItem` | Click | `russianHudToolStripMenuItem_Click` | Russian Hud | done: `fly-hud-russian` |
 | `saveFileToolStripMenuItem` | Click | `saveFileToolStripMenuItem_Click` | Save File | done: `fly-poi-save` |
 | `scriptChecker` | Tick | `scriptChecker_Tick` | the script status timer | plumbing |
@@ -117,9 +117,9 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `showIconsToolStripMenuItem` | Click | `showIconsToolStripMenuItem_Click` | Show icons | done: `fly-hud-showicons` |
 | `Squawk_nud` | MouseWheel | `Squawk_nud_MouseWheel` | Squawk (transponder) | done: `fly-xpdr-squawk-box` |
 | `Squawk_nud` | ValueChanged | `Squawk_nud_ValueChanged` | Squawk (transponder) | done: `fly-xpdr-squawk` |
-| `startCameraToolStripMenuItem` | Click | `startCameraToolStripMenuItem_Click` | Start Camera | **missing** - later: video (the camera, AVI, the gimbal's video) |
+| `startCameraToolStripMenuItem` | Click | `startCameraToolStripMenuItem_Click` | Start Camera | **missing** - later: video (the camera, AVI) |
 | `STBY_btn` | Click | `STBY_btn_Click` | STBY (transponder) | done: `fly-xpdr-stby` |
-| `stopRecordToolStripMenuItem` | Click | `stopRecordToolStripMenuItem_Click` | Stop Record | **missing** - later: video (the camera, AVI, the gimbal's video) |
+| `stopRecordToolStripMenuItem` | Click | `stopRecordToolStripMenuItem_Click` | Stop Record | **missing** - later: video (the camera, AVI) |
 | `swapWithMapToolStripMenuItem` | Click | `swapWithMapToolStripMenuItem_Click` | Swap With Map | done: `fly-hud-swap` |
 | `tabControlactions` | DrawItem | `tabControl1_DrawItem` | the actions tabs | plumbing |
 | `tabControlactions` | SelectedIndexChanged | `tabControl1_SelectedIndexChanged` | the actions tabs | done: `fly-tabs` |

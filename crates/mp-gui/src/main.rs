@@ -18,6 +18,8 @@ mod display_view;
 mod facts;
 mod fly;
 mod gauge;
+// The flight map's Gimbal Video: GimbalVideoControl and its forms.
+mod gimbal_video;
 // ---- Geo Reference ----
 mod georef_ui;
 mod glyph_text;
@@ -1970,7 +1972,7 @@ impl MissionPlanner {
                             .flex_shrink_0()
                             .child(tuning::panel_for(&self.tuning, cx)),
                     )
-                    .child(self.map_pane(cx))
+                    .child(self.map_pane(window, cx))
                     .into_any_element()
             } else {
                 fly::hud_panel(&self.hud, &self.fly_data, cx).into_any_element()
@@ -2175,7 +2177,7 @@ impl MissionPlanner {
                 .gap_2()
                 .p_2()
                 .child(self.plan_sidebar(view, window, cx))
-                .child(self.map_pane(cx))
+                .child(self.map_pane(window, cx))
                 .children(overlays)
                 .into_any_element(),
             Docking::Bottom => {
@@ -2194,7 +2196,7 @@ impl MissionPlanner {
                             .flex_1()
                             .min_h(px(0.0))
                             .gap_2()
-                            .child(self.map_pane(cx))
+                            .child(self.map_pane(window, cx))
                             .child(
                                 div()
                                     .id("plan-waypoints")
@@ -2323,7 +2325,7 @@ impl MissionPlanner {
         // ---- end ConfigRawParams remainder ----
     }
     /// The map, with the handlers that make it a map rather than a picture.
-    fn map_pane(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn map_pane(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         let following = self.map.borrow().is_following();
         let attribution = self.map.borrow().attribution();
         let planning = self.screen == Screen::Plan;
@@ -2563,12 +2565,18 @@ impl MissionPlanner {
                     ),
             )
             .child(self.map_status());
-        div()
+        let pane = div()
             .flex()
             .flex_1()
             .min_w(px(0.0))
             .child(column)
-            .children(zoom_column)
+            .children(zoom_column);
+        // The flight map's panel holds the gimbal video too (`splitContainer1.Panel2`).
+        if planning {
+            pane.into_any_element()
+        } else {
+            gimbal_video::map_place(self, pane.into_any_element(), window, cx)
+        }
     }
 
     /// The strip under the map: what it drew and how long it took.
@@ -3453,7 +3461,7 @@ impl Render for MissionPlanner {
                         .child(if self.fly_data.swapped {
                             fly::hud_panel(&self.hud, &self.fly_data, cx).into_any_element()
                         } else {
-                            self.map_pane(cx).into_any_element()
+                            self.map_pane(window, cx).into_any_element()
                         })
                         .child(div().flex_shrink_0().child(fly::messages_panel(&view))),
                 )

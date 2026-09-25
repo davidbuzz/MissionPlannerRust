@@ -1,0 +1,90 @@
+# The flight map menu's Gimbal Video: Full Sized, Mini and Pop Out, and the control's Close.
+#
+# The claim: the first of them makes GimbalVideoControl and adds Mini map (checked), Swap with map
+# and Close to its menu (FlightData.cs:6539-6587). Full Sized puts the video in the map's panel
+# with the map the mini map at the bottom right, 30% of the panel each way (6624-6649, 6611-6619).
+# The control's Video Stream opens VideoStreamSelector; Connect plays the pipeline typed in its box
+# through GStreamer, each frame the control's picture (GimbalVideoControl.cs:311-333, 211-290,
+# VideoStreamSelector.cs:37-46). Mini puts the map back filling the panel and the video the mini
+# video at the bottom right, fitted to the picture (6651-6676, 6597-6610); the menu then has Swap
+# with map and Close. Pop Out puts the video in a window of its own, "Gimbal Control", 600 by 400,
+# the map full sized, none of the three items in its menu (6678-6712). Full Sized takes it back
+# from the window, still playing. Close is Mini, hidden, Stop, Dispose: the video gone, the map full
+# sized, and the next item makes a new control (6563-6569). This machine's map menu is the row
+# under the Actions grid, where the other entries are (fly-camera.gui).
+#
+# Needs SITL (a copter, which has a gimbal manager and a camera object but no gimbal) and the
+# GStreamer runtime (gst-launch-1.0 with the base plugins):
+#   tools/gui-test.sh tests/gui/fly-gimbal-video.gui -- tcp:127.0.0.1:5760
+
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+screen fly
+window 1600x1200
+budget 15
+
+# The vehicle first: a click before its first heartbeat is a click the screen may forget.
+expect vehicle.count > 0
+click fly-tab-actions
+expect fly.tab tabActions
+expect fly.gimbal.video hidden
+expect fly.gimbal.map full
+
+# Full Sized: the video in the panel, the map the mini map.
+click fly-gimbalvideo-full
+expect fly.gimbal.video full
+expect fly.gimbal.minimap true
+expect fly.gimbal.map mini
+expect fly.gimbal.items minimap,swap,close
+expect fly.gimbal.minimapbox ~ ,
+expect fly.gimbal.frames 0
+
+# Video Stream: a test pipeline typed and connected.
+click fly-gimbal-video-box:right
+expect fly.gimbal.menu true
+click fly-gimbal-menu-videostream
+expect fly.gimbal.menu false
+expect fly.gimbal.selector true
+click fly-gimbal-pipeline
+type videotestsrc pattern=ball ! appsink name=outsink
+expect fly.gimbal.selector.pipeline videotestsrc pattern=ball ! appsink name=outsink
+click fly-gimbal-connect
+expect fly.gimbal.selector false
+expect fly.gimbal.pipeline videotestsrc pattern=ball ! appsink name=outsink
+expect fly.gimbal.frames > 10
+expect fly.gimbal.frame 320x240
+
+# Mini: the map fills the panel, the video the mini video; still playing.
+click fly-gimbalvideo-mini
+expect fly.gimbal.video mini
+expect fly.gimbal.map full
+expect fly.gimbal.items swap,close
+expect fly.gimbal.minivideo ~ ,
+expect fly.gimbal.frames > 20
+
+# Pop Out: its own window, the map full sized, none of the three items.
+click fly-gimbalvideo-popout
+expect fly.gimbal.video popout
+expect fly.gimbal.map full
+expect fly.gimbal.items none
+
+# Full Sized takes it back from the window: the same control, still playing.
+click fly-gimbalvideo-full
+expect fly.gimbal.video full
+expect fly.gimbal.map mini
+expect fly.gimbal.pipeline videotestsrc pattern=ball ! appsink name=outsink
+
+# Close: gone, stopped, the map full sized.
+click fly-gimbal-video-box:right
+click fly-gimbal-menu-close
+expect fly.gimbal.video hidden
+expect fly.gimbal.map full
+expect fly.gimbal.frames 0
+expect fly.gimbal.pipeline none
+
+# The next item makes a new control, with no stream.
+click fly-gimbalvideo-popout
+expect fly.gimbal.video popout
+expect fly.gimbal.pipeline none
+click fly-gimbal-popout-close
+expect fly.gimbal.video hidden

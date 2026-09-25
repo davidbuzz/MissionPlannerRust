@@ -165,7 +165,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "gimbalVideoPopOutToolStripMenuItem_Click",
         "Video Control",
-        Missing,
+        Done("fly-gimbal-video"),
     ),
     row(
         "BUT_Homealt",
@@ -438,21 +438,21 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "gimbalVideoFullSizedToolStripMenuItem_Click",
         "Full Sized",
-        Missing,
+        Done("fly-gimbalvideo-full"),
     ),
     row(
         "gimbalVideoMiniToolStripMenuItem",
         "Click",
         "gimbalVideoMiniToolStripMenuItem_Click",
         "Mini",
-        Missing,
+        Done("fly-gimbalvideo-mini"),
     ),
     row(
         "gimbalVideoPopOutToolStripMenuItem",
         "Click",
         "gimbalVideoPopOutToolStripMenuItem_Click",
         "Pop Out",
-        Missing,
+        Done("fly-gimbalvideo-popout"),
     ),
     row(
         "gMapControl1",
@@ -1001,10 +1001,6 @@ pub const WHY_MISSING: &[(&str, &str, &str)] = &[
         "Click",
         "later: RAW_Sensor is a window of its own; drawn dimmed in the Actions grid",
     ),
-    ("BUT_GimbalVideo", "Click", VIDEO),
-    ("gimbalVideoFullSizedToolStripMenuItem", "Click", VIDEO),
-    ("gimbalVideoMiniToolStripMenuItem", "Click", VIDEO),
-    ("gimbalVideoPopOutToolStripMenuItem", "Click", VIDEO),
     ("recordHudToAVIToolStripMenuItem", "Click", VIDEO),
     ("startCameraToolStripMenuItem", "Click", VIDEO),
     ("stopRecordToolStripMenuItem", "Click", VIDEO),
@@ -1023,7 +1019,7 @@ pub const WHY_MISSING: &[(&str, &str, &str)] = &[
 
 /// Left for later: video.
 #[cfg(test)]
-const VIDEO: &str = "later: video (the camera, AVI, the gimbal's video)";
+const VIDEO: &str = "later: video (the camera, AVI)";
 
 /// How many rows are in each state: (done, elsewhere, missing, plumbing, dropped).
 #[must_use]
@@ -1241,7 +1237,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (105, 1, 10, 18, 2)
+            (109, 1, 6, 18, 2)
         );
     }
 }

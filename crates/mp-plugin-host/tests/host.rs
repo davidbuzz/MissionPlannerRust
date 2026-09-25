@@ -277,21 +277,38 @@ fn loop_runs_at_its_rate() {
 
 /// On the host's thread the rate is kept by the clock: a quarter of a second at 50 Hz is about
 /// a dozen loops, and closing runs `Exit`.
+///
+/// The quarter second is counted from the first loop, not from the load: the thread compiles
+/// the component first, which took over a quarter of a second on a loaded machine and left this
+/// test with no loops at all (the flake of 2026-09-26). The rate is the thing under test; the
+/// compile is not.
 #[test]
 fn the_thread_loops_at_the_rate() {
     let Some(misbehave) = path("misbehave") else {
         return;
     };
     let mut host = PluginHost::load_files(&[misbehave], Limits::default());
-    let started = Instant::now();
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let mut started = None;
     let mut loops = 0;
-    while started.elapsed() < Duration::from_millis(250) {
+    loop {
         for request in host.drain() {
             match request.body {
-                RequestBody::Status(_) => loops += 1,
+                RequestBody::Status(_) => {
+                    if started.is_none() {
+                        started = Some(Instant::now());
+                    } else {
+                        loops += 1;
+                    }
+                }
                 RequestBody::ConfigGet { reply, .. } => reply.send(None),
                 _ => {}
             }
+        }
+        match started {
+            Some(at) if at.elapsed() >= Duration::from_millis(250) => break,
+            None => assert!(Instant::now() < deadline, "the plugin never looped"),
+            Some(_) => {}
         }
         std::thread::sleep(Duration::from_millis(5));
     }

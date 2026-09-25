@@ -20,14 +20,14 @@
 //! port open, then [`crate::ProtocolTimeouts::stream_rerequest`] after each time - never while a
 //! log is being played, which the C# plays with its port closed (`CurrentState.cs:4632-4663`).
 //! Each goes out as `requestDatastream` sends it: twice, with the rate as a byte, and not at all
-//! for a rate of -1 (`MAVLinkInterface.cs:3061-3073, 3218-3220, 3247-3264`).
+//! for a rate of -1 (`MAVLinkInterface.cs:3061-3073, 3218-3220, 3247-3264`). After them come
+//! `MAV.Camera?.RequestMessageIntervals(ratestatus)` and `MAV.GimbalManager?.Discover()`
+//! (`crate::camera`, `crate::gimbal_manager`).
 //!
 //! Not ported, each for a reason given where it would be:
 //! * `requestDatastream`'s `hzratecheck`, which skips a stream the vehicle already sends at about
 //!   the rate asked: this application does not count packets per message, so every rate but -1
 //!   is sent - as the Planner page's port of the same method does (`config/planner.rs`);
-//! * `MAV.Camera?.RequestMessageIntervals` and `MAV.GimbalManager?.Discover()` after the streams:
-//!   there is no camera or gimbal manager object for them to call;
 //! * `linkqualitygcs`, which `mp_vehicle::link_quality` works out from each packet, and
 //!   `dowindcalc`, which is not ported (see `VehicleState::wind_speed`).
 

@@ -66,15 +66,18 @@
 
 #![forbid(unsafe_code)]
 
+pub mod camera;
 pub mod commands;
 pub mod current_settings;
 pub mod fence_points;
 pub mod ftp;
+pub mod gimbal_manager;
 pub mod inject;
 pub mod messages;
 pub mod mission_transfer;
 pub mod param_download;
 pub mod param_fetch;
+mod protocols;
 pub mod requests;
 pub mod testing;
 pub mod timeouts;
@@ -309,6 +312,13 @@ struct Shared {
     /// thread to write it into the vehicle's state.
     /// `// C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:910, 1077, 1098`
     bases: Arc<Mutex<Vec<(VehicleId, LatLngAlt)>>>,
+    /// `MAVState.Camera` per component (see [`camera`] and `protocols`).
+    cameras: Mutex<BTreeMap<VehicleId, camera::Camera>>,
+    /// `MAVState.GimbalManager` per component (see [`gimbal_manager`] and `protocols`).
+    gimbal_managers: Mutex<BTreeMap<VehicleId, gimbal_manager::GimbalManager>>,
+    /// `CameraProtocol.VideoStreams`: every `VIDEO_STREAM_INFORMATION` a started camera reported,
+    /// by its system, component and stream id.
+    video_streams: Mutex<BTreeMap<(u8, u8, u8), mp_mavlink_dialects::all::VideoStreamInformation>>,
 }
 
 /// A field the C#'s screens write into `MainV2.comPort.MAV.cs` from outside it.
@@ -989,6 +999,42 @@ impl Link {
         self.shared.running.load(Ordering::Acquire)
     }
 
+    /// `MAVlist[id].Camera`: the component's camera as it stands, if the C# makes one for it.
+    #[must_use]
+    pub fn camera(&self, id: VehicleId) -> Option<camera::Camera> {
+        self.shared.cameras.lock().ok()?.get(&id).cloned()
+    }
+
+    /// `MAVlist[id].GimbalManager`: the component's gimbal manager as it stands.
+    #[must_use]
+    pub fn gimbal_manager(&self, id: VehicleId) -> Option<gimbal_manager::GimbalManager> {
+        self.shared.gimbal_managers.lock().ok()?.get(&id).cloned()
+    }
+
+    /// `CameraProtocol.VideoStreams`, in key order: (system, component, stream id).
+    #[must_use]
+    pub fn video_streams(
+        &self,
+    ) -> Vec<((u8, u8, u8), mp_mavlink_dialects::all::VideoStreamInformation)> {
+        self.shared
+            .video_streams
+            .lock()
+            .map(|held| held.iter().map(|(k, v)| (*k, *v)).collect())
+            .unwrap_or_default()
+    }
+
+    /// `Camera.RequestCameraInformationAsync()`: started unless it is already under way; false
+    /// where the component has no started camera. `// C#: CameraProtocol.cs:224-262`
+    pub fn request_camera_information(&self, id: VehicleId) -> bool {
+        protocols::request_information(&self.shared, id)
+    }
+
+    /// Whether that request is still under way: what the C#'s `.Wait()` waits for.
+    #[must_use]
+    pub fn camera_information_pending(&self, id: VehicleId) -> bool {
+        protocols::information_pending(&self.shared, id)
+    }
+
     /// Queues a message for transmission.
     ///
     /// Returns false if the link has stopped. Never blocks: a wedged link must not stall the
@@ -1152,6 +1198,11 @@ fn run_link(
     let mut last_heartbeat = Instant::now() - config.heartbeat_interval;
     // Every vehicle heard, with `UpdateCurrentSettings`' clocks for it (see `current_settings`).
     let mut known: BTreeMap<VehicleId, current_settings::Clocks> = BTreeMap::new();
+    // `MAVDetected`'s components, and those still waiting for their camera and gimbal manager to
+    // start (see `protocols`).
+    let mut detected: std::collections::BTreeSet<VehicleId> = std::collections::BTreeSet::new();
+    let mut protocol_starts: protocols::Starts = Vec::new();
+    let mut protocol_sends: Vec<MavMessage> = Vec::new();
     let gcs = VehicleId::new(config.sysid, config.compid);
 
     while shared.running.load(Ordering::Acquire) {
@@ -1208,6 +1259,14 @@ fn run_link(
                                 .entry(id)
                                 .or_insert_with(|| current_settings::Clocks::new(arrived))
                                 .heard(&msg);
+                            // `MAVDetected` on a component's first heartbeat, and the camera and
+                            // gimbal managers told of every packet. C#: MAVLinkInterface.cs:5308-5323
+                            if matches!(msg, MavMessage::Heartbeat(_) | MavMessage::HighLatency2(_))
+                                && detected.insert(id)
+                            {
+                                protocols::detected(shared, id, arrived, &mut protocol_starts);
+                            }
+                            protocols::observe(shared, id, &msg);
                             // The fence the vehicle holds, as MAVState.fencepoints has it: from
                             // this link's own upload, before the transfer moves on, and from
                             // whatever passes (see `fence_points`).
@@ -1603,6 +1662,23 @@ fn run_link(
                     );
                 }
             }
+            // `MAV.Camera?.RequestMessageIntervals(ratestatus)` and
+            // `MAV.GimbalManager?.Discover()`. C#: CurrentState.cs:4654-4655
+            protocols::on_streams(shared, *id, rates.status, &mut protocol_sends);
+        }
+
+        // The cameras and gimbal managers started two seconds after their heartbeat, and the
+        // camera information requests' answers followed up (see `protocols`).
+        protocols::tick(shared, Instant::now(), &mut protocol_starts, &mut protocol_sends);
+        for message in protocol_sends.drain(..) {
+            send_message(
+                transport.as_mut(),
+                recorder.as_mut(),
+                &mut stats,
+                &config,
+                &mut tx_seq,
+                &message,
+            );
         }
 
         // MAVFTP: let each client's wait run out, and send what the clients want sent - this

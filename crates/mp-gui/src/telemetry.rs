@@ -1716,6 +1716,43 @@ impl Telemetry {
         self.target().map(|(link, id)| (link.sender(), id))
     }
 
+    /// `MainV2.comPort.MAV.Camera`: the shown vehicle's camera, and the vehicle.
+    /// `// C#: Controls/GimbalVideoControl.cs:53-63`
+    pub fn camera(&self) -> Option<(VehicleId, mp_link::camera::Camera)> {
+        self.target()
+            .and_then(|(link, id)| link.camera(id).map(|camera| (id, camera)))
+    }
+
+    /// `MainV2.comPort.MAV.GimbalManager`: the shown vehicle's gimbal manager, and the vehicle.
+    /// `// C#: Controls/GimbalVideoControl.cs:80-90`
+    pub fn gimbal_manager(&self) -> Option<(VehicleId, mp_link::gimbal_manager::GimbalManager)> {
+        self.target()
+            .and_then(|(link, id)| link.gimbal_manager(id).map(|manager| (id, manager)))
+    }
+
+    /// `CameraProtocol.VideoStreams`.
+    pub fn video_streams(
+        &self,
+    ) -> Vec<((u8, u8, u8), mp_mavlink_dialects::all::VideoStreamInformation)> {
+        self.link
+            .as_ref()
+            .map(Link::video_streams)
+            .unwrap_or_default()
+    }
+
+    /// `selectedCamera?.RequestCameraInformationAsync()` for the shown vehicle's camera; false
+    /// with no link or no started camera.
+    pub fn request_camera_information(&self) -> bool {
+        self.target()
+            .is_some_and(|(link, id)| link.request_camera_information(id))
+    }
+
+    /// Whether that request is still under way.
+    pub fn camera_information_pending(&self) -> bool {
+        self.target()
+            .is_some_and(|(link, id)| link.camera_information_pending(id))
+    }
+
     /// Sets the shown vehicle's stream rates, `MainV2.comPort.MAV.cs.rateX`, without saving them
     /// as the defaults: what Radio Calibration does around its capture.
     /// `// C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:214-217, 388-391`
