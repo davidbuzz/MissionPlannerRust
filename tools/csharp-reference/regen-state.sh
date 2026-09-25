@@ -21,7 +21,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
-MP="${MP_SRC:-$ROOT/referneces/missionplanner}"
+MP="${MP_SRC:-$ROOT/references/missionplanner}"
 DATA="$ROOT/testdata/currentstate"
 LOGS=("$ROOT/testdata/mavlink/autotest.tlog" "$ROOT/testdata/mavlink/multisystem.tlog")
 

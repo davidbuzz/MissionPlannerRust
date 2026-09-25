@@ -2,7 +2,7 @@
 //!
 //! DO NOT EDIT. Regenerate with `cargo xtask codegen mavlink`.
 //!
-//! Source: `referneces/missionplanner/ExtLibs/Mavlink/message_definitions/all.xml`
+//! Source: `references/missionplanner/ExtLibs/Mavlink/message_definitions/all.xml`
 //! Metadata (CRC_EXTRA, min_len, len) is verified against the shipping C# table by
 //! `cargo xtask verify-mavlink`.
 

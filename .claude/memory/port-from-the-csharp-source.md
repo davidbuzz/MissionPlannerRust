@@ -1,6 +1,6 @@
 ---
 name: port-from-the-csharp-source
-description: The C# tree at referneces/missionplanner is the spec; read the .cs file before implementing
+description: The C# tree at references/missionplanner is the spec; read the .cs file before implementing
 metadata:
   node_type: memory
   type: project
@@ -9,15 +9,15 @@ metadata:
 ---
 
 **This project is a reimplementation of Mission Planner's C# code, and that code is here.**
-`referneces/missionplanner` is a full read-only clone of the upstream tree (note the spelling —
-"referneces", with the typo, is the real directory name). It is gitignored, so it does not appear
-in `git status` and is easy to forget exists. `referneces/zed` is the gpui tree, the same way.
+`references/missionplanner` is a full read-only clone of the upstream tree (the directory was
+named `referneces` until 2026-09-25, when Buzz renamed it). It is gitignored, so it does not appear
+in `git status` and is easy to forget exists. `references/zed` is the gpui tree, the same way.
 
 Before writing any feature that Mission Planner already has, **find and read the `.cs` file**:
 
 ```sh
-find referneces/missionplanner -name "ParamFile.cs"
-grep -rn "SaveParamFile" --include=*.cs referneces/missionplanner/
+find references/missionplanner -name "ParamFile.cs"
+grep -rn "SaveParamFile" --include=*.cs references/missionplanner/
 ```
 
 **Why:** on 2026-09-23 I implemented `.param` file save/load having concluded the C# source was

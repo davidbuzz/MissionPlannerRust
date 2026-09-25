@@ -460,6 +460,10 @@ impl Telemetry {
                     let done = last_requested.map_or(0, |seq| u32::from(seq) + 1);
                     format!("writing item {done} of {}", transfer.items().len())
                 }
+                // `saveWPsFast`'s "Setting WP a": the item the burst reached.
+                TransferState::UploadingFast { next, .. } => {
+                    format!("writing item {next} of {}", transfer.items().len())
+                }
                 TransferState::Complete => "mission transferred".to_owned(),
                 TransferState::Failed(why) => format!("transfer failed: {why}"),
             };
@@ -547,6 +551,15 @@ impl Telemetry {
     }
 
     /// Sends a geofence, replacing whatever the vehicle holds.
+    /// Write Fast's upload.
+    pub fn upload_mission_fast(&self, items: Vec<MissionItem>) {
+        if let Some(link) = &self.link
+            && let Some((id, _)) = link.primary_vehicle()
+        {
+            link.upload_mission_fast(id, items);
+        }
+    }
+
     pub fn upload_fence(&self, items: Vec<MissionItem>) {
         if let Some(link) = &self.link
             && let Some((id, _)) = link.primary_vehicle()

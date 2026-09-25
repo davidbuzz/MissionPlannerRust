@@ -415,6 +415,8 @@ impl Persisted {
             self.config.set(which.config_key(), plan.panel_text(which));
         }
         self.config.set("CMB_altmode", frame.combo_text());
+        // `Settings.Instance["fpcoordmouse"] = coords1.System`.
+        self.config.set("fpcoordmouse", plan.coords().system.name());
     }
 
     /// `CMB_altmode_SelectedIndexChanged`: the frame chosen, as the `altmode` number.

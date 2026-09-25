@@ -45,6 +45,9 @@ pub struct AltResponse {
     pub current_type: TileType,
     /// `alt`.
     pub alt: f64,
+    /// `altsource`: "SRTM", "ASCII", "Invalid", "Ocean", or "" - what `coords1` shows under
+    /// the height.
+    pub alt_source: &'static str,
 }
 
 impl AltResponse {
@@ -52,6 +55,7 @@ impl AltResponse {
     pub const INVALID: Self = Self {
         current_type: TileType::Invalid,
         alt: 0.0,
+        alt_source: "Invalid",
     };
 }
 
@@ -60,6 +64,7 @@ impl From<mp_terrain::AltResponse> for AltResponse {
         Self {
             current_type: answer.current_type.into(),
             alt: answer.alt,
+            alt_source: answer.alt_source,
         }
     }
 }

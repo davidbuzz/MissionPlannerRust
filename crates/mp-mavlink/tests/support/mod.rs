@@ -1,7 +1,7 @@
 //! Shared test helpers: a dialect built from the C# original's message table.
 //!
 //! `testdata/mavlink/csharp_message_infos.csv` is extracted from `MAVLINK_MESSAGE_INFOS` in
-//! `referneces/missionplanner/ExtLibs/Mavlink/Mavlink.cs`. Testing against it means our codec is
+//! `references/missionplanner/ExtLibs/Mavlink/Mavlink.cs`. Testing against it means our codec is
 //! checked against the shipping C# implementation's own metadata, not against our assumptions.
 
 #![allow(dead_code)]

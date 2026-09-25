@@ -109,7 +109,7 @@ pub fn emit_dialect(dialect: &Dialect) -> String {
          //!\n\
          //! DO NOT EDIT. Regenerate with `cargo xtask codegen mavlink`.\n\
          //!\n\
-         //! Source: `referneces/missionplanner/ExtLibs/Mavlink/message_definitions/{}.xml`\n\
+         //! Source: `references/missionplanner/ExtLibs/Mavlink/message_definitions/{}.xml`\n\
          //! Metadata (CRC_EXTRA, min_len, len) is verified against the shipping C# table by\n\
          //! `cargo xtask verify-mavlink`.\n\n\
          #![allow(clippy::unreadable_literal)]\n\

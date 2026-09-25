@@ -9,6 +9,7 @@
 
 mod config;
 mod config_coverage;
+mod coords;
 mod coverage;
 mod facts;
 mod fly;
@@ -486,6 +487,7 @@ impl MissionPlanner {
         let mut plan = Plan::default();
         plan.set_planned_home(plan::planned_home_from_config(Some(persisted.config())));
         plan.apply_panel_config(Some(persisted.config()));
+        plan.apply_mavftp_config(Some(persisted.config()));
         persisted.restore_quick_views(&mut fly_data.quick);
         fly_data.hud_settings.load_icons(&persisted);
         if let Some(url) = &opened {
@@ -1379,6 +1381,15 @@ impl MissionPlanner {
                             focused: self.plan_name_focus.is_focused(window),
                         },
                         self.tile_source_id(),
+                        &plan::ActionExtras {
+                            grid: self.plan.grid(),
+                            tiles_loading: {
+                                let map = self.map.borrow();
+                                map.painted().then(|| map.tile_counts().2 > 0)
+                            },
+                            coords: self.plan.coords(),
+                            mission_ftp: self.plan.mission_ftp(),
+                        },
                         cx,
                     ))
                     .child(plan::home_panel(
@@ -1408,7 +1419,13 @@ impl MissionPlanner {
                             },
                             cx,
                         );
-                        plan::items_panel(&items, selected, strip, cx)
+                        plan::items_panel(
+                            &items,
+                            selected,
+                            strip,
+                            self.plan.commands_minimised(),
+                            cx,
+                        )
                     })
                     .child(plan::editor_panel(&items, selected, cx))
                     .child(plan::checks_panel(&items, view)),
@@ -1540,6 +1557,15 @@ impl MissionPlanner {
                             // `// C#: ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/
                             // GMapControl.cs:2134`
                             if event.pressed_button.is_none() {
+                                // `MainMap_MouseMove` → `SetMouseDisplay`: the planner's
+                                // pointer read-out follows the mouse.
+                                // `// C#: GCSViews/FlightPlanner.cs:2778-2797`
+                                if planning
+                                    && let Some(at) = this.map.borrow().position_at(x, y)
+                                {
+                                    this.plan.set_mouse_display(at);
+                                    cx.notify();
+                                }
                                 if plan::map_hover(this, planning, Some((x, y))) {
                                     window.refresh();
                                     cx.notify();
@@ -2002,6 +2028,20 @@ impl Render for MissionPlanner {
             }
             facts::record("mission.items", self.plan.items().len());
             facts::record("mission.origin", self.plan.origin().label());
+            // The mission transfer's words, as the action panel shows them, and the map's zoom.
+            facts::record(
+                "plan.transfer",
+                view.transfer
+                    .as_ref()
+                    .map_or("none", |status| status.label.as_str()),
+            );
+            facts::record(
+                "map.zoom",
+                self.map
+                    .borrow()
+                    .zoom_level()
+                    .map_or_else(|| "none".to_owned(), |zoom| format!("{zoom:.2}")),
+            );
             facts::record("plan.frame", self.altitude_frame.key());
             facts::record("map.source", self.tile_source_id().unwrap_or("none"));
             facts::record(
@@ -2021,6 +2061,7 @@ impl Render for MissionPlanner {
                 facts::record("map.tiles.missing", missing);
                 facts::record("map.tiles.disk", stats.disk_hits);
                 facts::record("map.tiles.fetched", stats.fetched);
+                facts::record("map.grid.lines", map.grid_lines_drawn());
             }
             // Every frame in the mission, deduplicated. A test asserting on this catches a
             // waypoint created in the wrong frame, which every other field would hide.

@@ -68,7 +68,7 @@ fn verify_mavlink(dialect: Option<&str>) -> Result<()> {
     let root = repo_root();
     let dialect = dialect.unwrap_or("all");
     let xml = root
-        .join("referneces/missionplanner/ExtLibs/Mavlink/message_definitions")
+        .join("references/missionplanner/ExtLibs/Mavlink/message_definitions")
         .join(format!("{dialect}.xml"));
     if !xml.exists() {
         bail!("dialect not found: {}", xml.display());
@@ -151,12 +151,12 @@ fn codegen_mavlink(dialect: Option<&str>, check_only: bool) -> Result<()> {
     let root = repo_root();
     let dialect = dialect.unwrap_or("all");
     let xml = root
-        .join("referneces/missionplanner/ExtLibs/Mavlink/message_definitions")
+        .join("references/missionplanner/ExtLibs/Mavlink/message_definitions")
         .join(format!("{dialect}.xml"));
     if !xml.exists() {
         bail!(
             "dialect not found: {}\nThe reference tree is git-excluded; clone Mission Planner \
-             into referneces/missionplanner to regenerate.",
+             into references/missionplanner to regenerate.",
             xml.display()
         );
     }
@@ -276,11 +276,11 @@ fn dump_tlog(path: Option<&str>) -> Result<()> {
 /// Regenerates the flight mode tables.
 fn codegen_modes() -> Result<()> {
     let root = repo_root();
-    let metadata = root.join("referneces/missionplanner/ParameterMetaDataBackup.xml");
+    let metadata = root.join("references/missionplanner/ParameterMetaDataBackup.xml");
     if !metadata.exists() {
         bail!(
             "parameter metadata not found at {}\nThe reference tree is git-excluded; clone \
-             Mission Planner into referneces/missionplanner to regenerate.",
+             Mission Planner into references/missionplanner to regenerate.",
             metadata.display()
         );
     }
@@ -308,7 +308,7 @@ fn codegen_modes() -> Result<()> {
 /// Regenerates parameter metadata.
 fn codegen_param_meta() -> Result<()> {
     let root = repo_root();
-    let metadata = root.join("referneces/missionplanner/ParameterMetaDataBackup.xml");
+    let metadata = root.join("references/missionplanner/ParameterMetaDataBackup.xml");
     if !metadata.exists() {
         bail!("parameter metadata not found at {}", metadata.display());
     }
@@ -343,10 +343,10 @@ fn codegen_param_meta() -> Result<()> {
 /// missing, or is there and would not be generated.
 fn codegen_resx(check_only: bool) -> Result<()> {
     let root = repo_root();
-    let tree = root.join("referneces/missionplanner");
+    let tree = root.join("references/missionplanner");
     if !tree.is_dir() {
         bail!(
-            "{} is absent (it is gitignored): clone Mission Planner into referneces/missionplanner \
+            "{} is absent (it is gitignored): clone Mission Planner into references/missionplanner \
              to regenerate.",
             tree.display()
         );

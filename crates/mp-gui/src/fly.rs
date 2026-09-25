@@ -7984,7 +7984,7 @@ mod tests {
     fn csharp(path: &str) -> Option<String> {
         std::fs::read_to_string(
             std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../referneces/missionplanner")
+                .join("../../references/missionplanner")
                 .join(path),
         )
         .ok()
@@ -10352,10 +10352,12 @@ mod tests {
         let valid = AltResponse {
             current_type: TileType::Valid,
             alt: 584.5,
+            alt_source: "SRTM",
         };
         let sea = AltResponse {
             current_type: TileType::Ocean,
             alt: 0.0,
+            alt_source: "Ocean",
         };
         assert_eq!(set_home_height(valid), Ok(584.5));
         assert_eq!(set_home_height(sea), Ok(0.0));
@@ -10396,6 +10398,7 @@ mod tests {
         let valid = AltResponse {
             current_type: TileType::Valid,
             alt: 584.7,
+            alt_source: "SRTM",
         };
         let sent = set_ekf_origin_sends(target(), (-35.5, 149.25), valid).expect("sent");
         assert_eq!(
@@ -10405,6 +10408,7 @@ mod tests {
         let sea = AltResponse {
             current_type: TileType::Ocean,
             alt: 0.0,
+            alt_source: "Ocean",
         };
         assert_eq!(
             set_ekf_origin_sends(target(), (-35.5, 149.25), sea),

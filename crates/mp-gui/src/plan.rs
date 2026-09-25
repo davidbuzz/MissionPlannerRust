@@ -9,6 +9,7 @@
 #![allow(unreachable_pub)]
 
 use gpui::{AnyElement, Context, div, prelude::*, px, rgb};
+use mp_link::mavftp::{FtpOutcome, FtpRequest};
 use mp_mavlink_dialects::all::MavCmd;
 use mp_mission::fence::{FenceItem, RallyPoint};
 use mp_mission::rows::Home;
@@ -337,6 +338,182 @@ pub struct Plan {
     kml_on_flight: bool,
     /// The exclusion polygons of the geofence: Fence Exclusion's, and the vehicle's on a read.
     fence_exclusions: Vec<Vec<LatLon>>,
+    /// `grid`, `chk_grid.Checked`: the UTM grid over the map.
+    grid: bool,
+    /// `chk_usemavftp.Checked`, kept as `UseMissionMAVFTP`.
+    use_mavftp: bool,
+    /// `panelWaypoints` collapsed to `but_mincommands`' height.
+    commands_minimised: bool,
+    /// `coords1`: the pointer read-out.
+    coords: crate::coords::Coords,
+    /// A mission going over MAVFTP, Read or Write with the box ticked.
+    mission_ftp: Option<MissionFtp>,
+}
+
+/// A mission transfer over MAVFTP: `saveWPs`' and `getWPs`' `chk_usemavftp.Checked` branches,
+/// a `@MISSION/mission.dat` written or read by `MAVFtp`, with the ordinary transfer as the
+/// fallback when the FTP one throws (`catch (Exception ex) { log.Error(ex); }` then on).
+/// `// C#: GCSViews/FlightPlanner.cs:3985-4014, 6237-6256`
+#[derive(Debug, Clone, PartialEq)]
+pub enum MissionFtp {
+    /// `ftp.UploadFile("@MISSION/mission.dat", ...)`, `items` being what it carries.
+    Uploading {
+        /// Whose FTP client.
+        vehicle: mp_vehicle::VehicleId,
+        /// The list packed into the file, home first.
+        items: Vec<MissionItem>,
+        /// `Progress`'s last words.
+        status: String,
+    },
+    /// `ftp.GetFile("@MISSION/mission.dat", null, true, 110)`.
+    Downloading {
+        /// Whose FTP client.
+        vehicle: mp_vehicle::VehicleId,
+        /// `Progress`'s last words.
+        status: String,
+    },
+    /// The transfer ended, one way or the other; `text` says how.
+    Ended {
+        /// Whether it succeeded.
+        ok: bool,
+        /// What is shown for it.
+        text: String,
+    },
+}
+
+impl MissionFtp {
+    /// The file `saveWPs` and `getWPs` name for the mission.
+    pub const MISSION_FILE: &'static str = "@MISSION/mission.dat";
+
+    /// The words for the status line.
+    #[must_use]
+    pub fn label(&self) -> String {
+        match self {
+            Self::Uploading { status, .. } => {
+                if status.is_empty() {
+                    "MAVFTP: writing the mission".to_owned()
+                } else {
+                    format!("MAVFTP: {status}")
+                }
+            }
+            Self::Downloading { status, .. } => {
+                if status.is_empty() {
+                    "MAVFTP: reading the mission".to_owned()
+                } else {
+                    format!("MAVFTP: {status}")
+                }
+            }
+            Self::Ended { text, .. } => text.clone(),
+        }
+    }
+
+    /// Whether the transfer is still going.
+    #[must_use]
+    pub const fn running(&self) -> bool {
+        matches!(self, Self::Uploading { .. } | Self::Downloading { .. })
+    }
+
+    /// What the facts call the state.
+    #[must_use]
+    pub const fn state_name(&self) -> &'static str {
+        match self {
+            Self::Uploading { .. } => "uploading",
+            Self::Downloading { .. } => "downloading",
+            Self::Ended { ok: true, .. } => "done",
+            Self::Ended { ok: false, .. } => "failed",
+        }
+    }
+}
+
+/// A Write or Write Fast on its way through the handler's questions: the Alt Mode question,
+/// then each row's checks in turn with `checkZeroAlts`' question where a row has none.
+/// `// C#: GCSViews/FlightPlanner.cs:1755-1830, 1895-1970`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WriteFlow {
+    /// `but_writewpfast_Click` rather than `BUT_write_Click`.
+    pub fast: bool,
+    /// The first row whose checks have not run.
+    pub next_row: usize,
+}
+
+/// What a Write question's button meant for the flow.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WriteAnswer {
+    /// Yes, or OK: on with it.
+    Continue,
+    /// No to "Absolute Alt is selected are you sure?": `CMB_altmode.SelectedValue = Relative`,
+    /// then on with it.
+    RelativeThenContinue,
+    /// Cancel to the zero altitude warning: `return`.
+    Abort,
+}
+
+/// `MAV_CMD.LAST` in Mission Planner's dialect: the commands below it are the navigation ones.
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs:921`
+const MAV_CMD_LAST: u16 = 95;
+
+/// The grid checks both Write buttons run over row `index` before sending: every number column
+/// a number ("There are errors in your mission"), and a navigation command's altitude not under
+/// Alt Warn ("Low alt on WP#n"), take-off, land and RTL excepted. An empty Alt Warn is 0; a word
+/// there is `double.Parse`'s exception, as in the C#.
+///
+/// # Errors
+///
+/// The message box's words.
+/// `// C#: GCSViews/FlightPlanner.cs:1783-1815`
+pub fn write_row_checks(item: &MissionItem, index: usize, alt_warn: &str) -> Result<(), String> {
+    let numbers = [
+        item.param1, item.param2, item.param3, item.param4, item.x, item.y, item.z,
+    ];
+    if numbers.iter().any(|number| !number.is_finite()) {
+        return Err(MISSION_ERRORS.to_owned());
+    }
+    let alt_warn = if alt_warn.trim().is_empty() {
+        "0"
+    } else {
+        alt_warn
+    };
+    let Some(warn) = mp_mission::dotnet::parse_f64(alt_warn) else {
+        return Err(format_exception(alt_warn));
+    };
+    if item.command < MAV_CMD_LAST
+        && item.z < warn
+        && !matches!(item.command, 20..=22)
+    {
+        return Err(format!(
+            "Low alt on WP#{}\nPlease reduce the alt warning, or increase the altitude",
+            index + 1
+        ));
+    }
+    Ok(())
+}
+
+/// `checkZeroAlts`: on a plane or a copter, a WAYPOINT, LOITER_TIME, LOITER_UNLIM,
+/// LOITER_TURNS or LOITER_TO_ALT at exactly zero altitude gets the firmware's warning with the
+/// row's number, and its show-again key.
+/// `// C#: GCSViews/FlightPlanner.cs:1831-1873; Common.cs (MessageShowAgain)`
+#[must_use]
+pub fn zero_alt_warning(
+    item: &MissionItem,
+    index: usize,
+    family: Option<mp_vehicle::VehicleFamily>,
+) -> Option<(String, &'static str)> {
+    let plane = match family {
+        Some(mp_vehicle::VehicleFamily::Plane) => true,
+        Some(mp_vehicle::VehicleFamily::Copter) => false,
+        _ => return None,
+    };
+    if item.z != 0.0 || !matches!(item.command, 16 | 19 | 17 | 18 | 31) {
+        return None;
+    }
+    let warning = if plane { ZERO_ALT_PLANE } else { ZERO_ALT_COPTER };
+    // `SHOWAGAIN_` + the tag with its spaces made underscores.
+    let key = if plane {
+        "SHOWAGAIN_Zero_Altitude_Warning_Plane"
+    } else {
+        "SHOWAGAIN_Zero_Altitude_Warning"
+    };
+    Some((warning.replace("{0}", &(index + 1).to_string()), key))
 }
 
 /// `srtm.getAltitude(lat, lng)` as the planning screen asks it: the process's lookup over Mission
@@ -493,11 +670,19 @@ pub enum PanelBox {
     LoiterRadius,
     /// `TXT_DefaultAlt`: the altitude a new row gets.
     DefaultAlt,
+    /// `TXT_altwarn`, "Alt Warn": the height under which Write refuses a navigation command.
+    /// `// C#: GCSViews/FlightPlanner.resx (label17, TXT_altwarn); GCSViews/FlightPlanner.cs:1826-1843`
+    AltWarn,
 }
 
 impl PanelBox {
-    /// The three, left to right.
-    pub const ALL: [Self; 3] = [Self::WpRadius, Self::LoiterRadius, Self::DefaultAlt];
+    /// The four, left to right.
+    pub const ALL: [Self; 4] = [
+        Self::WpRadius,
+        Self::LoiterRadius,
+        Self::DefaultAlt,
+        Self::AltWarn,
+    ];
 
     /// The label above the box: `LBL_WPRad`, `label5` and `LBL_defalutalt` in the `.resx`.
     #[must_use]
@@ -506,6 +691,7 @@ impl PanelBox {
             Self::WpRadius => "WP Radius",
             Self::LoiterRadius => "Loiter Radius",
             Self::DefaultAlt => "Default Alt",
+            Self::AltWarn => "Alt Warn",
         }
     }
 
@@ -516,6 +702,7 @@ impl PanelBox {
             Self::WpRadius => "plan-wprad",
             Self::LoiterRadius => "plan-loiterrad",
             Self::DefaultAlt => "plan-defaultalt",
+            Self::AltWarn => "plan-altwarn",
         }
     }
 
@@ -527,6 +714,7 @@ impl PanelBox {
             Self::WpRadius => "30",
             Self::LoiterRadius => "45",
             Self::DefaultAlt => "100",
+            Self::AltWarn => "0",
         }
     }
 
@@ -538,6 +726,9 @@ impl PanelBox {
             Self::WpRadius => "TXT_WPRad",
             Self::LoiterRadius => "TXT_loiterrad",
             Self::DefaultAlt => "TXT_DefaultAlt",
+            // `config(true)`: `Settings.Instance["fpminaltwarning"] = TXT_altwarn.Text`.
+            // `// C#: GCSViews/FlightPlanner.cs:2600, 2622-2624`
+            Self::AltWarn => "fpminaltwarning",
         }
     }
 
@@ -555,6 +746,9 @@ impl PanelBox {
             Self::WpRadius => character == '.',
             Self::LoiterRadius => character == '-',
             Self::DefaultAlt => false,
+            // `TXT_altwarn` has no KeyPress handler: it takes what is typed and `double.Parse`
+            // reads it at Write.
+            Self::AltWarn => character == '.' || character == '-',
         }
     }
 }
@@ -565,6 +759,7 @@ pub struct PanelBoxes {
     wp_radius: TextField,
     loiter_radius: TextField,
     default_alt: TextField,
+    alt_warn: TextField,
     /// `startupWPradius`: what an emptied WP Radius goes back to - the saved value, else "5.0".
     /// `// C#: GCSViews/FlightPlanner.cs:118, 2600-2601`
     startup_wp_radius: String,
@@ -581,6 +776,7 @@ impl PanelBoxes {
             PanelBox::WpRadius => &self.wp_radius,
             PanelBox::LoiterRadius => &self.loiter_radius,
             PanelBox::DefaultAlt => &self.default_alt,
+            PanelBox::AltWarn => &self.alt_warn,
         }
     }
 
@@ -589,6 +785,7 @@ impl PanelBoxes {
             PanelBox::WpRadius => &mut self.wp_radius,
             PanelBox::LoiterRadius => &mut self.loiter_radius,
             PanelBox::DefaultAlt => &mut self.default_alt,
+            PanelBox::AltWarn => &mut self.alt_warn,
         }
     }
 }
@@ -605,6 +802,7 @@ impl Default for PanelBoxes {
             wp_radius: field(PanelBox::WpRadius),
             loiter_radius: field(PanelBox::LoiterRadius),
             default_alt: field(PanelBox::DefaultAlt),
+            alt_warn: field(PanelBox::AltWarn),
             startup_wp_radius: "5.0".to_owned(),
             loiter_enabled: true,
             spline: false,
@@ -689,6 +887,22 @@ pub fn two_decimals(value: f64) -> String {
 
 /// `Strings.ERROR`.
 pub const ERROR: &str = "Error";
+
+/// `but_writewpfast_Click`'s refusal of a fence or rally list.
+/// `// C#: GCSViews/FlightPlanner.cs:1907-1910`
+pub const ONLY_FOR_MISSIONS: &str = "Only available for missions";
+/// The Alt Mode question both Write buttons ask with Absolute selected.
+/// `// C#: GCSViews/FlightPlanner.cs:1757-1765, 1897-1905`
+pub const ALT_MODE_TITLE: &str = "Alt Mode";
+pub const ALT_MODE_QUESTION: &str = "Absolute Alt is selected are you sure?";
+/// `Strings.ZeroAltWarningTitle`, and the two warnings with their `{0}`.
+/// `// C#: ExtLibs/Strings/Strings.resx (ZeroAltWarningTitle, ZeroAltWarningCopter, ZeroAltWarningPlane)`
+pub const ZERO_ALT_TITLE: &str = "Zero Altitude Warning";
+pub const ZERO_ALT_COPTER: &str = "WP# {0} has zero altitude, this means no altitude change! If you want zero altitude, change it to 0.01. Do you want to continue or cancel wp upload?";
+pub const ZERO_ALT_PLANE: &str = "WP# {0} has zero altitude. If you actually want zero altitude, change it to 0.01 instead for predictable behavior.\n\nOn ArduPlane, zero altitudes may interpreted in two different ways: actual zero altitude, or keep current altitude. WAYPOINT commands will generally honor a zero altitude and LOITER commands will generally interpret it as \"use current altitude\", but only if the altitude frame is \"relative\". There may be more exceptions and this could change in future versions.\n\nONLY SET TO ZERO IF YOU REALLY UNDERSTAND EXACTLY WHAT IS GOING TO HAPPEN IN YOUR CASE (use a simulator to be sure).[link;https://ardupilot.org/plane/docs/common-mavlink-mission-command-messages-mav_cmd.html;Command Documentation]";
+/// The write handlers' grid checks.
+/// `// C#: GCSViews/FlightPlanner.cs:1783-1815`
+pub const MISSION_ERRORS: &str = "There are errors in your mission";
 /// What `BUT_write_Click` says when the Home Location boxes do not parse.
 /// `// C#: GCSViews/FlightPlanner.cs:670`
 pub const HOME_INVALID: &str = "Your home location is invalid";
@@ -1430,6 +1644,8 @@ impl Plan {
             return;
         }
         match which {
+            // No `Leave` handler: Write reads an empty box as 0.
+            PanelBox::AltWarn => {}
             PanelBox::DefaultAlt => self.set_panel_text(which, "100"),
             PanelBox::LoiterRadius => self.set_panel_text(which, "45"),
             PanelBox::WpRadius => {
@@ -1456,6 +1672,15 @@ impl Plan {
             if which == PanelBox::WpRadius {
                 text.clone_into(&mut self.panel.startup_wp_radius);
             }
+        }
+        // `case "fpcoordmouse": coords1.System = ...`: a name the combo has not got leaves it.
+        // `// C#: GCSViews/FlightPlanner.cs:2625-2627`
+        if let Some(system) = config.get("fpcoordmouse").and_then(|name| {
+            crate::coords::CoordSystem::ALL
+                .into_iter()
+                .find(|system| system.name() == name)
+        }) {
+            self.coords.system = system;
         }
     }
 
@@ -1571,6 +1796,87 @@ impl Plan {
     #[must_use]
     pub const fn terrain(&self) -> Terrain {
         self.terrain
+    }
+
+    /// `chk_grid.Checked`, the static `grid`.
+    #[must_use]
+    pub const fn grid(&self) -> bool {
+        self.grid
+    }
+
+    /// `chk_grid_CheckedChanged`: `grid = chk_grid.Checked`; the map repaints with it.
+    /// `// C#: GCSViews/FlightPlanner.cs:2053-2057`
+    pub fn set_grid(&mut self, on: bool) {
+        self.grid = on;
+    }
+
+    /// `chk_usemavftp.Checked`.
+    #[must_use]
+    pub const fn use_mavftp(&self) -> bool {
+        self.use_mavftp
+    }
+
+    /// The box as `Init` restores it: `Settings.Instance.GetBoolean("UseMissionMAVFTP", false)`,
+    /// `bool.TryParse` of the saved text.
+    /// `// C#: GCSViews/FlightPlanner.cs:319; ExtLibs/Utilities/Settings.cs:203-212`
+    pub fn apply_mavftp_config(&mut self, config: Option<&mp_settings::Config>) {
+        self.use_mavftp = config
+            .and_then(|config| config.get("UseMissionMAVFTP"))
+            .and_then(mp_mission::dotnet::parse_bool)
+            .unwrap_or(false);
+    }
+
+    /// `chk_usemavftp_CheckedChanged`'s state; the caller saves `UseMissionMAVFTP`.
+    /// `// C#: GCSViews/FlightPlanner.cs:8403-8406`
+    pub fn set_use_mavftp(&mut self, on: bool) {
+        self.use_mavftp = on;
+    }
+
+    /// Whether `panelWaypoints` is collapsed to its button.
+    #[must_use]
+    pub const fn commands_minimised(&self) -> bool {
+        self.commands_minimised
+    }
+
+    /// `but_mincommands_Click`: a panel 30 high or less grows back to 166 and the button says
+    /// ˅; a taller one shrinks to the button's height and it says ˄.
+    /// `// C#: GCSViews/FlightPlanner.cs:69-80`
+    pub fn toggle_commands_minimised(&mut self) {
+        self.commands_minimised = !self.commands_minimised;
+    }
+
+    /// `coords1` as it stands.
+    #[must_use]
+    pub const fn coords(&self) -> &crate::coords::Coords {
+        &self.coords
+    }
+
+    /// `CMB_coordsystem_SelectedIndexChanged`: the system chosen.
+    /// `// C#: ExtLibs/Controls/Coords.cs:172-179`
+    pub fn set_coord_system(&mut self, system: crate::coords::CoordSystem) {
+        self.coords.system = system;
+    }
+
+    /// `SetMouseDisplay(lat, lng, alt)`: the pointer's position into `coords1` with
+    /// `srtm.getAltitude`'s height and source, the height in the display unit.
+    /// `// C#: GCSViews/FlightPlanner.cs:2778-2797`
+    pub fn set_mouse_display(&mut self, at: LatLon) {
+        let (lat, lng) = (at.latitude(), at.longitude());
+        if (self.coords.lat, self.coords.lng) == (lat, lng) {
+            return;
+        }
+        let answer = self.terrain.at(lat, lng);
+        self.coords.lat = lat;
+        self.coords.lng = lng;
+        self.coords.alt = answer.alt * f64::from(MULTIPLIER_ALT);
+        self.coords.alt_source = answer.alt_source;
+        self.coords.alt_unit = "m";
+    }
+
+    /// The mission going over MAVFTP, if one is.
+    #[must_use]
+    pub const fn mission_ftp(&self) -> Option<&MissionFtp> {
+        self.mission_ftp.as_ref()
     }
 
     /// Puts a test's terrain in the process's place.
@@ -2739,7 +3045,7 @@ pub struct StripState<'a> {
     /// The panel boxes' focus.
     pub focus: &'a PanelFocus,
     /// Which of them has the keyboard.
-    pub focused: [bool; 3],
+    pub focused: [bool; 4],
     /// `CMB_altmode`.
     pub frame: AltitudeFrame,
     /// Whether the Spline check box shows: only on a copter.
@@ -2794,13 +3100,60 @@ pub fn waypoint_strip(
     state: &StripState<'_>,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
+    div()
+        .flex()
+        .flex_col()
+        .gap_2()
+        .child(strip_boxes(plan, state, cx))
+        .child(strip_checks(plan, state, cx))
+        .into_any_element()
+}
+
+/// The strip's first row: the boxes with their labels, Add Below, then Alt Warn.
+fn strip_boxes(
+    plan: &Plan,
+    state: &StripState<'_>,
+    cx: &mut Context<MissionPlanner>,
+) -> gpui::Div {
     let mut boxes = div().flex().items_end().gap_2();
     for (index, which) in PanelBox::ALL.into_iter().enumerate() {
+        // Alt Warn sits right of Add Below in the `.resx` (479 to its 398).
+        if which == PanelBox::AltWarn {
+            continue;
+        }
+        boxes = boxes.children(panel_box(plan, state, index, which, cx));
+    }
+    // `BUT_Add`, "Add Below", to the right of the boxes at (398, 8) in `panelWaypoints`.
+    // `// C#: GCSViews/FlightPlanner.resx (BUT_Add.Location, BUT_Add.Text); FlightPlanner.cs:1780`
+    boxes = boxes.child(action(
+        "plan-add-below",
+        "Add Below",
+        theme::TEXT,
+        true,
+        cx.listener(|this, _event: &(), _window, cx| {
+            this.plan.add_below(this.altitude_frame);
+            this.sync_map_mission();
+            cx.notify();
+        }),
+    ));
+    // `label17` "Alt Warn" over `TXT_altwarn` at (482, 20).
+    boxes.children(panel_box(plan, state, 3, PanelBox::AltWarn, cx))
+}
+
+/// One panel box with its label above it, or nothing for an index the focus has no handle for.
+fn panel_box(
+    plan: &Plan,
+    state: &StripState<'_>,
+    index: usize,
+    which: PanelBox,
+    cx: &mut Context<MissionPlanner>,
+) -> Option<gpui::Div> {
+    {
         let (Some(handle), Some(focused)) = (
             state.focus.handles.get(index),
             state.focused.get(index).copied(),
         ) else {
-            continue;
+            return None;
         };
         let enabled = which != PanelBox::LoiterRadius || plan.loiter_enabled();
         let label = div()
@@ -2837,22 +3190,16 @@ pub fn waypoint_strip(
                 .child(plan.panel_text(which).to_owned())
                 .into_any_element()
         };
-        boxes = boxes.child(div().flex().flex_col().gap_1().child(label).child(field));
+        Some(div().flex().flex_col().gap_1().child(label).child(field))
     }
-    // `BUT_Add`, "Add Below", to the right of the boxes at (398, 8) in `panelWaypoints`.
-    // `// C#: GCSViews/FlightPlanner.resx (BUT_Add.Location, BUT_Add.Text); FlightPlanner.cs:1780`
-    boxes = boxes.child(action(
-        "plan-add-below",
-        "Add Below",
-        theme::TEXT,
-        true,
-        cx.listener(|this, _event: &(), _window, cx| {
-            this.plan.add_below(this.altitude_frame);
-            this.sync_map_mission();
-            cx.notify();
-        }),
-    ));
+}
 
+/// The strip's second row: the altitude frame, Verify Height, Spline and MAVFTP.
+fn strip_checks(
+    plan: &Plan,
+    state: &StripState<'_>,
+    cx: &mut Context<MissionPlanner>,
+) -> gpui::Div {
     let mut frames = div().flex().items_center().gap_1();
     for choice in AltitudeFrame::all() {
         let chosen = choice == state.frame;
@@ -2903,29 +3250,35 @@ pub fn waypoint_strip(
                 cx.notify();
             }))
     });
+    // `chk_usemavftp`, "MAVFTP", at (589, 12): Read and Write go through `@MISSION/mission.dat`
+    // while it is ticked, and the tick is kept as `UseMissionMAVFTP`.
+    // `// C#: GCSViews/FlightPlanner.cs:319, 8403-8406`
+    let mavftp = {
+        let checked = plan.use_mavftp();
+        check_box("plan-mavftp", "MAVFTP", checked, true)
+            .cursor_pointer()
+            .on_click(cx.listener(move |this, _event, _window, cx| {
+                this.plan.set_use_mavftp(!checked);
+                this.persisted
+                    .set("UseMissionMAVFTP", if checked { "False" } else { "True" });
+                cx.notify();
+            }))
+    };
     let checks = div()
         .flex()
         .items_center()
         .gap_3()
         .children(spline)
-        .child(check_box("plan-mavftp", "MAVFTP", false, false));
+        .child(mavftp);
 
     div()
         .flex()
-        .flex_col()
-        .gap_2()
-        .child(boxes)
-        .child(
-            div()
-                .flex()
-                .flex_wrap()
-                .items_center()
-                .gap_3()
-                .child(frames)
-                .child(verify)
-                .child(checks),
-        )
-        .into_any_element()
+        .flex_wrap()
+        .items_center()
+        .gap_3()
+        .child(frames)
+        .child(verify)
+        .child(checks)
 }
 
 /// The waypoint table.
@@ -2933,8 +3286,25 @@ pub fn items_panel(
     plan_items: &[MissionItem],
     selected: Option<u16>,
     strip: AnyElement,
+    minimised: bool,
     cx: &mut Context<MissionPlanner>,
 ) -> impl IntoElement {
+    // `but_mincommands` at (938, 0), anchored top right: ˅ folds `panelWaypoints` to the
+    // button's own height, so only it remains; ˄ opens it to 166 again.
+    // `// C#: GCSViews/FlightPlanner.cs:69-80; GCSViews/FlightPlanner.resx (but_mincommands)`
+    let min_button = div().flex().justify_end().child(action(
+        "plan-mincommands",
+        if minimised { "˄" } else { "˅" },
+        theme::TEXT,
+        true,
+        cx.listener(|this, _event: &(), _window, cx| {
+            this.plan.toggle_commands_minimised();
+            cx.notify();
+        }),
+    ));
+    if minimised {
+        return panel("mission items", min_button);
+    }
     let mut rows = div().flex().flex_col();
 
     rows = rows.child(
@@ -3037,6 +3407,7 @@ pub fn items_panel(
             .flex()
             .flex_col()
             .gap_2()
+            .child(min_button)
             .child(strip)
             .child(
                 div()
@@ -3627,6 +3998,65 @@ pub struct NameField<'a> {
     /// Whether it currently has focus.
     pub focused: bool,
 }
+/// What the action panel shows besides the mission: `panel3`'s Grid box and status label, and
+/// `panel4`'s pointer read-out, with a MAVFTP transfer's words when one is going.
+pub struct ActionExtras<'a> {
+    /// `chk_grid.Checked`.
+    pub grid: bool,
+    /// `lbl_status`: `None` before the map has painted, then whether tiles are still loading.
+    pub tiles_loading: Option<bool>,
+    /// `coords1`.
+    pub coords: &'a crate::coords::Coords,
+    /// The mission going over MAVFTP, if one is.
+    pub mission_ftp: Option<&'a MissionFtp>,
+}
+
+/// `coords1`, the `Coords` control with `Vertical` set: the system combo - three buttons here,
+/// as the other combos are - with `AltSource` under it, and the position's lines to its right.
+/// `// C#: ExtLibs/Controls/Coords.cs:100-170; ExtLibs/Controls/Coords.Designer.cs:24-33`
+fn coords_panel(coords: &crate::coords::Coords, cx: &mut Context<MissionPlanner>) -> AnyElement {
+    use crate::coords::CoordSystem;
+    let mut combo = div().flex().items_center().gap_1();
+    for system in CoordSystem::ALL {
+        let chosen = coords.system == system;
+        combo = combo.child(
+            crate::probe::measured(system.id(), div())
+                .id(system.id())
+                .px_1()
+                .py(px(1.0))
+                .rounded_sm()
+                .border_1()
+                .border_color(rgb(if chosen { theme::ACCENT } else { theme::BORDER }))
+                .text_xs()
+                .text_color(rgb(if chosen { theme::ACCENT } else { theme::TEXT }))
+                .cursor_pointer()
+                .hover(|style| style.bg(rgb(theme::BORDER)))
+                .child(system.name())
+                .on_click(cx.listener(move |this, _event, _window, cx| {
+                    this.plan.set_coord_system(system);
+                    cx.notify();
+                })),
+        );
+    }
+    let text = crate::probe::measured("plan-coords-text", div())
+        .flex()
+        .flex_col()
+        .text_xs()
+        .text_color(rgb(theme::TEXT))
+        .children(coords.lines().into_iter().map(|line| div().child(line)));
+    let source = div()
+        .text_xs()
+        .text_color(rgb(theme::DIM))
+        .child(coords.alt_source.to_owned());
+    crate::probe::measured("plan-coords", div())
+        .flex()
+        .items_start()
+        .gap_3()
+        .child(div().flex().flex_col().gap_1().child(combo).child(source))
+        .child(text)
+        .into_any_element()
+}
+
 
 pub fn actions_panel(
     plan_items: &[MissionItem],
@@ -3634,12 +4064,40 @@ pub fn actions_panel(
     view: &TelemetryView,
     name: &NameField<'_>,
     tile_source: Option<&'static str>,
+    extras: &ActionExtras<'_>,
     cx: &mut Context<MissionPlanner>,
 ) -> impl IntoElement {
     let (name_focus, name_focused) = (name.focus, name.focused);
     let name = name.field;
     let has_vehicle = view.vehicle.is_some();
     let has_items = !plan_items.is_empty();
+    // `panel4`, first in `flowLayoutPanel1`: the pointer read-out.
+    let coords = coords_panel(extras.coords, cx);
+    // `chk_grid` at (3, 3) of `panel3`, above the map type box.
+    // `// C#: GCSViews/FlightPlanner.resx (chk_grid); GCSViews/FlightPlanner.cs:2053-2057`
+    let grid = {
+        let checked = extras.grid;
+        check_box("plan-grid", "Grid", checked, true)
+            .cursor_pointer()
+            .on_click(cx.listener(move |this, _event, window, cx| {
+                this.plan.set_grid(!checked);
+                this.map.borrow_mut().set_grid(!checked);
+                window.refresh();
+                cx.notify();
+            }))
+    };
+    // `lbl_status` at (4, 46) of `panel3`: "Status" until the map loads tiles, then
+    // `MainMap_OnTileLoadStart`'s "Status: loading tiles..." and `OnTileLoadComplete`'s
+    // "Status: loaded tiles".
+    // `// C#: GCSViews/FlightPlanner.resx (lbl_status); GCSViews/FlightPlanner.cs:8172, 8190`
+    let status = crate::probe::measured("plan-status", div())
+        .text_xs()
+        .text_color(rgb(theme::DIM))
+        .child(match extras.tiles_loading {
+            None => "Status",
+            Some(true) => "Status: loading tiles...",
+            Some(false) => "Status: loaded tiles",
+        });
     // The map provider - `comboBoxMapType`, which lives on this screen in the C# and changes the
     // flight screen's map with it. Buttons rather than a combo, because gpui has no combo and
     // three providers do not need one.
@@ -3672,7 +4130,17 @@ pub fn actions_panel(
         );
     }
 
-    let transfer_line = view.transfer.as_ref().map_or_else(
+    let transfer_line = if let Some(ftp) = extras.mission_ftp {
+        let colour = if ftp.running() {
+            theme::ACCENT
+        } else if matches!(ftp, MissionFtp::Ended { ok: false, .. }) {
+            theme::ALERT
+        } else {
+            theme::OK
+        };
+        div().text_xs().text_color(rgb(colour)).child(ftp.label())
+    } else {
+        view.transfer.as_ref().map_or_else(
         || {
             div()
                 .text_xs()
@@ -3692,7 +4160,8 @@ pub fn actions_panel(
                 .text_color(rgb(colour))
                 .child(status.label.clone())
         },
-    );
+    )
+    };
 
     panel(
         "mission",
@@ -3700,7 +4169,9 @@ pub fn actions_panel(
             .flex()
             .flex_col()
             .gap_2()
-            .child(providers)
+            .child(coords)
+            .child(providers.child(grid))
+            .child(status)
             .child(
                 div()
                     .flex()
@@ -3712,8 +4183,7 @@ pub fn actions_panel(
                         theme::ACCENT,
                         has_vehicle,
                         cx.listener(|this, _event: &(), _window, cx| {
-                            this.telemetry.request_mission();
-                            this.adopt_vehicle_mission = true;
+                            read_from_vehicle(this);
                             cx.notify();
                         }),
                     ))
@@ -3723,7 +4193,18 @@ pub fn actions_panel(
                         theme::WARN,
                         has_vehicle && has_items,
                         cx.listener(|this, _event: &(), window, cx| {
-                            write_to_vehicle(this, window, cx);
+                            start_write(this, false, window, cx);
+                        }),
+                    ))
+                    // `but_writewpfast`, "Write Fast", under Write at (3, 61) of `panel5`.
+                    // `// C#: GCSViews/FlightPlanner.resx (but_writewpfast); GCSViews/FlightPlanner.cs:1895-1980`
+                    .child(action(
+                        "plan-writefast",
+                        "Write Fast",
+                        theme::WARN,
+                        has_vehicle && has_items,
+                        cx.listener(|this, _event: &(), window, cx| {
+                            start_write(this, true, window, cx);
                         }),
                     ))
                     .child(action(
@@ -3919,8 +4400,8 @@ pub fn flight_map_home(
 /// The panel boxes' focus handles, and which had the keyboard at the last frame.
 pub struct PanelFocus {
     /// One per box, in [`PanelBox::ALL`] order.
-    pub handles: [gpui::FocusHandle; 3],
-    was: [bool; 3],
+    pub handles: [gpui::FocusHandle; 4],
+    was: [bool; 4],
     /// Whether the Home Location Lat box had the keyboard at the last frame, for its `Enter`.
     home_lat_was: bool,
 }
@@ -3929,8 +4410,13 @@ impl PanelFocus {
     /// Three handles, none focused.
     pub fn new(cx: &mut Context<MissionPlanner>) -> Self {
         Self {
-            handles: [cx.focus_handle(), cx.focus_handle(), cx.focus_handle()],
-            was: [false; 3],
+            handles: [
+                cx.focus_handle(),
+                cx.focus_handle(),
+                cx.focus_handle(),
+                cx.focus_handle(),
+            ],
+            was: [false; 4],
             home_lat_was: false,
         }
     }
@@ -4214,6 +4700,7 @@ pub fn drive_writes(
     cx: &mut Context<MissionPlanner>,
 ) {
     drive_rally(this, view, window, cx);
+    drive_mission_ftp(this, view, window, cx);
     if let Some(pending) = this.plan.pending_write.as_mut() {
         match pending.upload_ended(view.transfer.as_ref(), &view.mission) {
             None => {}
@@ -4500,33 +4987,267 @@ fn fence_file(
     }
 }
 
-/// Write: `BUT_write_Click`'s home check, then `saveWPs`' list - home from the boxes at item 0
-/// when the vehicle is an ArduPilot - or "Your home location is invalid" and nothing sent.
-/// `// C#: GCSViews/FlightPlanner.cs:646-671, 6196-6227`
-fn write_to_vehicle(
+/// `BUT_write_Click` and `but_writewpfast_Click` up to their progress dialogue: with Absolute
+/// selected, "Absolute Alt is selected are you sure?" (No makes it Relative and goes on); Write
+/// Fast refuses a fence or rally list; then the rows' checks, and the upload.
+/// `// C#: GCSViews/FlightPlanner.cs:1755-1830, 1895-1980`
+pub fn start_write(
+    this: &mut MissionPlanner,
+    fast: bool,
+    window: &mut gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) {
+    // Clicking Write takes the focus, so a panel box being typed in is left first.
+    leave_panel_boxes(this, window, cx);
+    this.plan_menus.write_flow = Some(WriteFlow { fast, next_row: 0 });
+    if this.altitude_frame == AltitudeFrame::Absolute {
+        this.plan_menus.ask(Prompt::question(
+            ALT_MODE_TITLE,
+            ALT_MODE_QUESTION,
+            PromptKind::WriteAltMode,
+        ));
+        this.plan_prompt_focus.focus(window, cx);
+        cx.notify();
+        return;
+    }
+    continue_write(this, window, cx);
+}
+
+/// A Write question answered: No to Alt Mode makes the frame Relative first, Cancel to the zero
+/// altitude warning ends the write, and anything else goes on.
+fn write_answered(
     this: &mut MissionPlanner,
     window: &mut gpui::Window,
     cx: &mut Context<MissionPlanner>,
 ) {
-    let ardupilot = this
-        .telemetry
-        .view()
+    match this.plan_menus.take_write_answer() {
+        None | Some(WriteAnswer::Abort) => {}
+        Some(WriteAnswer::RelativeThenContinue) => {
+            this.set_altitude_frame(AltitudeFrame::Relative);
+            continue_write(this, window, cx);
+        }
+        Some(WriteAnswer::Continue) => continue_write(this, window, cx),
+    }
+}
+
+/// The write from where its questions left it: the mission-type refusal, home, each row's
+/// checks with the zero altitude question where one is due, then the send.
+fn continue_write(
+    this: &mut MissionPlanner,
+    window: &mut gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) {
+    let Some(flow) = this.plan_menus.write_flow else {
+        return;
+    };
+    let mut refuse = |this: &mut MissionPlanner, title: &'static str, text: String| {
+        this.plan_menus.write_flow = None;
+        this.plan_menus.say(title, text);
+        this.plan_prompt_focus.focus(window, cx);
+        cx.notify();
+    };
+    // `if (cmb_missiontype.SelectedValue != MISSION) "Only available for missions"`.
+    if flow.fast && matches!(this.plan.draw_mode(), DrawMode::Fence | DrawMode::Rally) {
+        refuse(this, "", ONLY_FOR_MISSIONS.to_owned());
+        return;
+    }
+    let view = this.telemetry.view();
+    let ardupilot = view
         .state
         .as_ref()
         .is_some_and(|state| state.autopilot == MAV_AUTOPILOT_ARDUPILOTMEGA);
-    // Clicking Write takes the focus, so a panel box being typed in is left first.
-    leave_panel_boxes(this, window, cx);
-    match this.plan.vehicle_mission(ardupilot) {
-        Ok(items) => {
-            // The radii follow once the vehicle has the mission: `saveWPs`' "Setting params".
+    let items = match this.plan.vehicle_mission(ardupilot) {
+        Ok(items) => items,
+        Err(why) => {
+            refuse(this, ERROR, why.to_owned());
+            return;
+        }
+    };
+    let family = view
+        .state
+        .as_ref()
+        .and_then(|state| mp_vehicle::VehicleFamily::from_mav_type(state.vehicle_type));
+    let alt_warn = this.plan.panel_text(PanelBox::AltWarn).to_owned();
+    let rows: Vec<MissionItem> = this.plan.items().to_vec();
+    for (index, item) in rows.iter().enumerate().skip(flow.next_row) {
+        if let Err(why) = write_row_checks(item, index, &alt_warn) {
+            refuse(this, "", why);
+            return;
+        }
+        if let Some((warning, key)) = zero_alt_warning(item, index, family) {
+            // `MessageShowAgain`: a prompt turned off by its show-again key is OK at once.
+            let suppressed = this
+                .persisted
+                .get(key)
+                .and_then(mp_mission::dotnet::parse_bool)
+                == Some(false);
+            if !suppressed {
+                this.plan_menus.write_flow = Some(WriteFlow {
+                    next_row: index + 1,
+                    ..flow
+                });
+                this.plan_menus.ask(Prompt::question(
+                    ZERO_ALT_TITLE,
+                    warning,
+                    PromptKind::WriteZeroAlt,
+                ));
+                this.plan_prompt_focus.focus(window, cx);
+                cx.notify();
+                return;
+            }
+        }
+    }
+    this.plan_menus.write_flow = None;
+    send_mission(this, flow.fast, items);
+    cx.notify();
+}
+
+/// The upload itself: `saveWPsFast` for Write Fast (no parameters follow it); for Write, the
+/// MAVFTP file while the box is ticked, else `mav_mission.upload` with the radii after it.
+/// `// C#: GCSViews/FlightPlanner.cs:6237-6256, 6293-6310, 6340-6582`
+fn send_mission(this: &mut MissionPlanner, fast: bool, items: Vec<MissionItem>) {
+    if fast {
+        this.telemetry.upload_mission_fast(items);
+        return;
+    }
+    if this.plan.use_mavftp() {
+        let data = mp_mission::missionpck::pack(&items, 0, 0);
+        let request = FtpRequest::Put {
+            path: MissionFtp::MISSION_FILE.to_owned(),
+            data,
+        };
+        if let Some(vehicle) = this.telemetry.start_ftp(request) {
+            this.plan.mission_ftp = Some(MissionFtp::Uploading {
+                vehicle,
+                items,
+                status: String::new(),
+            });
+            return;
+        }
+        // No client to start: the C#'s `catch` - logged, and the ordinary upload follows.
+    }
+    // The radii follow once the vehicle has the mission: `saveWPs`' "Setting params".
+    this.plan.pending_write = Some(PendingWrite::new(items.clone(), this.plan.wp_param_steps()));
+    this.telemetry.upload_mission(items);
+}
+
+/// `BUT_read_Click` → `getWPs`: the MAVFTP file while the box is ticked, else the mission
+/// protocol's download, adopted when it completes.
+/// `// C#: GCSViews/FlightPlanner.cs:3977-4014`
+fn read_from_vehicle(this: &mut MissionPlanner) {
+    if this.plan.use_mavftp() {
+        let request = FtpRequest::Get {
+            path: MissionFtp::MISSION_FILE.to_owned(),
+            burst: true,
+            readsize: 110,
+        };
+        if let Some(vehicle) = this.telemetry.start_ftp(request) {
+            this.plan.mission_ftp = Some(MissionFtp::Downloading {
+                vehicle,
+                status: String::new(),
+            });
+            return;
+        }
+    }
+    this.telemetry.request_mission();
+    this.adopt_vehicle_mission = true;
+}
+
+/// The MAVFTP transfer moved on each frame: its progress words while it runs; when it stops, a
+/// written file is done (no parameters follow, as `saveWPs` returns before "Setting params"), a
+/// read file is unpacked and shown (`WPtoScreen`), and a failure of either falls back to the
+/// mission protocol, as the C#'s `catch` does.
+/// `// C#: GCSViews/FlightPlanner.cs:3985-4014, 6237-6256`
+fn drive_mission_ftp(
+    this: &mut MissionPlanner,
+    view: &TelemetryView,
+    window: &mut gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) {
+    let Some(ftp) = this.plan.mission_ftp.clone() else {
+        return;
+    };
+    let vehicle = match &ftp {
+        MissionFtp::Uploading { vehicle, .. } | MissionFtp::Downloading { vehicle, .. } => *vehicle,
+        MissionFtp::Ended { .. } => return,
+    };
+    if let Some((true, progress)) = this.telemetry.ftp_progress(vehicle) {
+        this.plan.mission_ftp = Some(match ftp {
+            MissionFtp::Uploading { vehicle, items, .. } => MissionFtp::Uploading {
+                vehicle,
+                items,
+                status: progress.message,
+            },
+            MissionFtp::Downloading { vehicle, .. } => MissionFtp::Downloading {
+                vehicle,
+                status: progress.message,
+            },
+            ended @ MissionFtp::Ended { .. } => ended,
+        });
+        return;
+    }
+    let outcome = this.telemetry.take_ftp_outcome(vehicle);
+    let why = |outcome: &Option<Result<FtpOutcome, mp_ftp::FtpError>>| match outcome {
+        Some(Err(error)) => error.to_string(),
+        Some(Ok(_)) => "no file came back".to_owned(),
+        None => "no answer".to_owned(),
+    };
+    match ftp {
+        MissionFtp::Uploading { items, .. } => {
+            if matches!(outcome, Some(Ok(_))) {
+                this.plan.mission_ftp = Some(MissionFtp::Ended {
+                    ok: true,
+                    text: "MAVFTP: mission written".to_owned(),
+                });
+                return;
+            }
+            this.plan.mission_ftp = Some(MissionFtp::Ended {
+                ok: false,
+                text: format!(
+                    "MAVFTP failed ({}); writing over the mission protocol",
+                    why(&outcome)
+                ),
+            });
             this.plan.pending_write =
                 Some(PendingWrite::new(items.clone(), this.plan.wp_param_steps()));
             this.telemetry.upload_mission(items);
         }
-        Err(why) => {
-            this.plan_menus.say(ERROR, why);
-            this.plan_prompt_focus.focus(window, cx);
+        MissionFtp::Downloading { .. } => {
+            let unpacked = match &outcome {
+                Some(Ok(FtpOutcome::File {
+                    data: Some(data), ..
+                })) => mp_mission::missionpck::unpack(data).map_err(|error| error.to_string()),
+                other => Err(why(other)),
+            };
+            match unpacked {
+                Ok(unpacked) => {
+                    // `WPtoScreen(values.wps)`: the file's items become the grid, as a read
+                    // over the protocol does when it completes.
+                    if let Some(home) = this.plan.adopt_from_vehicle(&unpacked.items) {
+                        this.plan_menus.offer_home_reset(home);
+                        this.plan_prompt_focus.focus(window, cx);
+                    }
+                    this.plan.set_wp_params(&view.parameters);
+                    this.file_status = Some(format!(
+                        "read {} items from the vehicle over MAVFTP",
+                        unpacked.items.len()
+                    ));
+                    this.plan.mission_ftp = Some(MissionFtp::Ended {
+                        ok: true,
+                        text: "MAVFTP: mission read".to_owned(),
+                    });
+                }
+                Err(why) => {
+                    this.plan.mission_ftp = Some(MissionFtp::Ended {
+                        ok: false,
+                        text: format!("MAVFTP failed ({why}); reading over the mission protocol"),
+                    });
+                    this.telemetry.request_mission();
+                    this.adopt_vehicle_mission = true;
+                }
+            }
         }
+        MissionFtp::Ended { .. } => {}
     }
     cx.notify();
 }
@@ -5995,6 +6716,10 @@ pub enum PromptKind {
     },
     /// A message with an OK.
     Message,
+    /// Write's "Absolute Alt is selected are you sure?".
+    WriteAltMode,
+    /// `checkZeroAlts`' warning, OK or Cancel.
+    WriteZeroAlt,
     /// `TXT_homelat_Enter`'s "Click on the Map to set Home ": a message, after which the Lat box
     /// has the keyboard again, as it does when the C#'s modal box closes.
     HomeLatEnter,
@@ -6221,6 +6946,8 @@ impl Prompt {
                 | PromptKind::ResetHome(_)
                 | PromptKind::KmlToFlightScreen
                 | PromptKind::KmlZoomTo
+                | PromptKind::WriteAltMode
+                | PromptKind::WriteZeroAlt
         )
     }
 }
@@ -6399,6 +7126,9 @@ pub struct PlanMenus {
     text_answers: (String, String),
     /// Text's start once its rotation box was cancelled: the screen finishes it.
     text_pending: Option<LatLon>,
+    /// A Write or Write Fast on its way through its questions.
+    pub write_flow: Option<WriteFlow>,
+    write_answer: Option<WriteAnswer>,
 }
 
 /// How a page is fetched from the geocoder: its URL in, its text or why not out.
@@ -6497,6 +7227,11 @@ impl PlanMenus {
     }
 
     /// What POI > Add or Edit asked for, once.
+    /// What the last Write question's button meant, once.
+    pub fn take_write_answer(&mut self) -> Option<WriteAnswer> {
+        self.write_answer.take()
+    }
+
     pub fn take_poi_request(&mut self) -> Option<PoiRequest> {
         self.poi_request.take()
     }
@@ -7396,6 +8131,9 @@ impl PlanMenus {
                 }
             }
             PromptKind::ClearWaypoints => plan.clear_mission(),
+            PromptKind::WriteAltMode | PromptKind::WriteZeroAlt => {
+                self.write_answer = Some(WriteAnswer::Continue);
+            }
             PromptKind::ResetHome(loaded) => plan.reset_home_to(loaded),
             PromptKind::FenceLoadFile => return Some(FileRequest::LoadFence(value)),
             PromptKind::FenceSaveFile => return Some(FileRequest::SaveFence(value)),
@@ -7532,6 +8270,15 @@ impl PlanMenus {
             PromptKind::TextRotation { position } => self.text_pending = Some(position),
             PromptKind::DefinePolygon => self.tell("Area", area_text(0.0)),
             PromptKind::Circle { .. } => self.circle_answers.clear(),
+            // No: `CMB_altmode.SelectedValue = (int) altmode.Relative`, and on with the write.
+            PromptKind::WriteAltMode => {
+                self.write_answer = Some(WriteAnswer::RelativeThenContinue);
+            }
+            // Cancel: `if (!checkZeroAlts(a)) return;`.
+            PromptKind::WriteZeroAlt => {
+                self.write_flow = None;
+                self.write_answer = Some(WriteAnswer::Abort);
+            }
             _ => {}
         }
         None
@@ -7576,6 +8323,7 @@ fn sync_everything(this: &MissionPlanner) {
     map.set_kml(this.plan.kml_overlay(), this.plan.kml_on_flight());
     map.set_fence_exclusions(this.plan.fence_exclusions());
     map.set_tracker(tracker_marker(this));
+    map.set_grid(this.plan.grid());
 }
 
 /// What POI > Delete or Edit found under the press, for a test to read: the index, the press,
@@ -8499,6 +9247,7 @@ fn submit_prompt(
     if let Some(request) = this.plan_menus.submit(&mut this.plan, &context) {
         file_request(this, request, window, cx);
     }
+    write_answered(this, window, cx);
     // Yes to "Zoom to the center or the loaded file?".
     // `// C#: GCSViews/FlightPlanner.cs:4264-4271`
     if this.plan_menus.take_zoom_to_kml() {
@@ -8551,6 +9300,7 @@ fn cancel_prompt(
     if let Some(request) = this.plan_menus.cancel(&mut this.plan) {
         file_request(this, request, window, cx);
     }
+    write_answered(this, window, cx);
     // Create Circle Survey's sixth box cancelled: the survey is made all the same.
     if let Some(position) = this.plan_menus.take_survey_pending() {
         let context = menu_context(this);
@@ -9353,6 +10103,20 @@ pub fn record_facts(plan: &Plan, menus: &PlanMenus) {
     record("plan.kml.ground", kml.map_or(0, |kml| kml.ground_overlays));
     record("plan.kml.flight", plan.kml_on_flight());
     record("plan.fence.exclusions", plan.fence_exclusions().len());
+    record("plan.grid", plan.grid());
+    record("plan.mavftp", plan.use_mavftp());
+    record(
+        "plan.mavftp.state",
+        plan.mission_ftp().map_or("idle", MissionFtp::state_name),
+    );
+    record(
+        "plan.mavftp.text",
+        plan.mission_ftp().map_or_else(String::new, MissionFtp::label),
+    );
+    record("plan.commands.minimised", plan.commands_minimised());
+    record("plan.coords.system", plan.coords().system.name());
+    record("plan.coords.lines", plan.coords().lines().join("|"));
+    record("plan.coords.source", plan.coords().alt_source);
     record(
         "plan.fence.exclusion.points",
         plan.fence_exclusions()
@@ -11483,7 +12247,8 @@ mod tests {
             vec![
                 ("WP Radius", "30"),
                 ("Loiter Radius", "45"),
-                ("Default Alt", "100")
+                ("Default Alt", "100"),
+                ("Alt Warn", "0")
             ]
         );
         assert!(plan.loiter_enabled());
@@ -14142,6 +14907,7 @@ mod terrain_tests {
         AltResponse {
             current_type: TileType::Valid,
             alt,
+            alt_source: "SRTM",
         }
     }
 
@@ -14371,7 +15137,7 @@ mod terrain_tests {
     #[test]
     fn the_alt_column_is_the_one_mavcmd_xml_heads_alt() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../referneces/missionplanner/mavcmd.xml");
+            .join("../../references/missionplanner/mavcmd.xml");
         let Ok(xml) = std::fs::read_to_string(&path) else {
             println!("skipped: {} is not here", path.display());
             return;

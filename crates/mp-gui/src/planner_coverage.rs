@@ -120,7 +120,7 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "Click",
         "but_writewpfast_Click",
         "Write Fast",
-        Missing,
+        Done("plan-writefast"),
     ),
     row(
         "BUT_write",
@@ -176,21 +176,21 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "SystemChanged",
         "coords1_SystemChanged",
         "the pointer coordinates: system",
-        Missing,
+        Done("plan-coords-geo"),
     ),
     row(
         "chk_usemavftp",
         "CheckedChanged",
         "chk_usemavftp_CheckedChanged",
         "MAVFTP",
-        Missing,
+        Done("plan-mavftp"),
     ),
     row(
         "but_mincommands",
         "Click",
         "but_mincommands_Click",
         "˅",
-        Missing,
+        Done("plan-mincommands"),
     ),
     row(
         "CMB_altmode",
@@ -288,7 +288,7 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "CheckedChanged",
         "chk_grid_CheckedChanged",
         "Grid",
-        Missing,
+        Done("plan-grid"),
     ),
     row(
         "lnk_kml",
@@ -1031,11 +1031,12 @@ mod tests {
         include_str!("plan.rs"),
         include_str!("main.rs"),
         include_str!("mapview.rs"),
+        include_str!("coords.rs"),
     ];
 
     fn reference(name: &str) -> Option<String> {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../referneces/missionplanner/GCSViews")
+            .join("../../references/missionplanner/GCSViews")
             .join(name);
         std::fs::read_to_string(path).ok()
     }
@@ -1347,7 +1348,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (95, 0, 14, 12, 0)
+            (100, 0, 9, 12, 0)
         );
     }
 }

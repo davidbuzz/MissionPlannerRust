@@ -557,7 +557,8 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigCubeID"),
         Some(2),
         &[setup(254, "CubeID Update", OPTIONAL, CONNECTED)],
-        Missing,
+        // Ruled out of the port by the owner, 2026-09-25: PLAN §12 D13.
+        Ours::Dropped("ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13)"),
     ),
     panel(
         "ConfigADSB",
@@ -662,7 +663,8 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigHWPX4Flow"),
         Some(1),
         &[setup(297, "PX4Flow", OPTIONAL, ALWAYS)],
-        Missing,
+        // Ruled out of the port by the owner, 2026-09-25: PLAN §12 D13.
+        Ours::Dropped("ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13)"),
     ),
     panel(
         "ConfigHWOptFlow",
@@ -708,7 +710,8 @@ pub const PANELS: &[Panel] = &[
             setup(313, "Antenna tracker", OPTIONAL, "tracker"),
             config(193, "Extended Tuning", "tracker"),
         ],
-        Missing,
+        // Ruled out of the port by the owner, 2026-09-25: PLAN §12 D13.
+        Ours::Dropped("ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13)"),
     ),
     panel(
         "ConfigMotorTest",
@@ -726,7 +729,8 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigHWBT"),
         Some(1),
         &[setup(321, "Bluetooth Setup", OPTIONAL, ALWAYS)],
-        Missing,
+        // Ruled out of the port by the owner, 2026-09-25: PLAN §12 D13.
+        Ours::Dropped("ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13)"),
     ),
     panel(
         "ConfigHWParachute",
@@ -740,7 +744,8 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigHWesp8266"),
         Some(3),
         &[setup(329, "ESP8266 Setup", OPTIONAL, ANY)],
-        Missing,
+        // Ruled out of the port by the owner, 2026-09-25: PLAN §12 D13.
+        Ours::Dropped("ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13)"),
     ),
     panel(
         "ConfigFFT",
@@ -770,7 +775,8 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigTerminal"),
         Some(12),
         &[setup(346, "Terminal", ADVANCED, "always, Advanced view")],
-        Missing,
+        // Ruled out of the port by the owner, 2026-09-25: PLAN §12 D13.
+        Ours::Dropped("ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13)"),
     ),
     panel(
         "ConfigREPL",
@@ -782,7 +788,8 @@ pub const PANELS: &[Panel] = &[
             ADVANCED,
             "connected, Advanced view",
         )],
-        Missing,
+        // Ruled out of the port by the owner, 2026-09-25: PLAN §12 D13.
+        Ours::Dropped("ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13)"),
     ),
     // ---- CONFIG: SoftwareConfig.SoftwareConfig_Load, GCSViews/SoftwareConfig.cs:142 ----
     panel(
@@ -904,7 +911,8 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigAteryxSensors"),
         Some(3),
         &[config(236, "Ateryx Zero Sensors", "Ateryx")],
-        Missing,
+        // Ruled out of the port by the owner, 2026-09-25: PLAN §12 D13.
+        Ours::Dropped("ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13)"),
     ),
     panel(
         "ConfigAteryx",
@@ -1303,7 +1311,7 @@ pub(crate) mod source {
 
     /// The C# tree.
     pub(crate) fn csharp_root() -> PathBuf {
-        workspace().join("referneces/missionplanner")
+        workspace().join("references/missionplanner")
     }
 
     /// A C# file, relative to the tree, or `None` when the tree is not checked out.
@@ -1780,7 +1788,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (11, 20, 24, 2, 4)
+            (11, 20, 16, 2, 12)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

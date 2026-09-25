@@ -611,7 +611,7 @@ mod tests {
     #[test]
     fn the_table_is_the_csharps_file() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../referneces/missionplanner/APMotorLayout.json");
+            .join("../../references/missionplanner/APMotorLayout.json");
         let Ok(text) = std::fs::read_to_string(&path) else {
             eprintln!("{} not present; skipped", path.display());
             return;

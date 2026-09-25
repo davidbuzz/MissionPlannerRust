@@ -24,7 +24,7 @@ row, has no oracle to be checked against, and has to be maintained forever by so
 wonder what it was for. It also makes the completeness claim unfalsifiable — "3,678 of 3,678" means
 nothing if the Rust side has grown things the C# never had.
 
-**How to apply:** before building anything, find it in `referneces/missionplanner`. If it is not
+**How to apply:** before building anything, find it in `references/missionplanner`. If it is not
 there, it is not in scope — say so and do the thing that is, rather than building the adjacent
 thing that was easier. Two legitimate exceptions, and neither is a feature:
 
@@ -41,3 +41,11 @@ Buzz asked for this to be recorded as a critical, essential memory, in capitals,
 it three times in five minutes. Treat a plan item as a *question about where the behaviour lives in
 the C#* before it is a question about how to write it in Rust. See [[port-from-the-csharp-source]] — that memory is about
 reading the `.cs` before writing; this one is about not writing when there is no `.cs` to read.
+
+**The other direction (2026-09-25):** being in the C# is necessary, not sufficient. Buzz keeps an
+explicit out-of-scope list in `PLAN.md` §12 D13 (PX4Flow, Bluetooth Setup, the Antenna Tracker,
+Ateryx, ESP8266, CubeID, Terminal, REPL, LogAnalyzer, OSD Video, Altitude Angel, Swarm, Follow
+Me, Moving Base, the example plugins…), and rulings on the rest of §12. Check it before queuing a
+page or a row; a ruled-out feature's ledger row is `Dropped` with the ruling as its reason, never
+`Missing`. When something looks low-engagement and is not on the list, suggest it to Buzz with its
+size in lines; do not skip it silently.

@@ -1,0 +1,59 @@
+# Write Fast: `but_writewpfast_Click` → `saveWPsFast` (GCSViews/FlightPlanner.cs:1895-1980,
+# 6340-6582). The count goes out, then the items in bursts of ten without waiting to be asked,
+# pausing at each tenth until the vehicle's request catches up (1.1 s, then on from its last
+# request); when the last has gone the ground station sends its own MISSION_ACK and is done. No
+# parameters follow, unlike Write. With Absolute selected the button first asks "Absolute Alt is
+# selected are you sure?" (Alt Mode, Yes/No; No makes it Relative and goes on).
+#
+# Twelve waypoints, so two bursts and one pause. The vehicle's copy is proved by reading it back
+# over the mission protocol: home and the twelve.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760. Run as
+#
+#   tools/gui-test.sh tests/gui/plan-writefast.gui -- tcp:127.0.0.1:5760
+
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
+env MP_PLAN_DIR $WORK
+
+screen plan
+window 1600x1200
+settle 6
+expect mission.home true
+
+click map@0.30x0.30
+click map@0.35x0.30
+click map@0.40x0.30
+click map@0.45x0.30
+click map@0.50x0.30
+click map@0.55x0.30
+click map@0.60x0.30
+click map@0.60x0.40
+click map@0.55x0.40
+click map@0.50x0.40
+click map@0.45x0.40
+click map@0.40x0.40
+expect mission.items 12
+
+# Absolute asks first; No makes the frame Relative and writes anyway.
+click plan-frame-absolute
+expect plan.frame absolute
+click plan-writefast
+expect plan.prompt Alt Mode
+expect plan.prompt.text Absolute Alt is selected are you sure?
+click plan-prompt-cancel
+expect plan.prompt none
+expect plan.frame relative
+settle 6
+expect plan.transfer mission transferred
+
+click plan-clear
+expect mission.items 0
+click plan-mavftp
+expect plan.mavftp true
+click plan-mavftp
+expect plan.mavftp false
+click plan-read
+settle 8
+expect mission.items 12
+expect mission.origin ~ vehicle

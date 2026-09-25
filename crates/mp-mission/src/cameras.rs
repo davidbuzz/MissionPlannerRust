@@ -343,7 +343,7 @@ mod tests {
     #[test]
     fn the_asset_is_mission_planners_file() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../referneces/missionplanner/camerasBuiltin.xml");
+            .join("../../references/missionplanner/camerasBuiltin.xml");
         let Ok(shipped) = std::fs::read_to_string(&path) else {
             eprintln!("skipped: the C# tree is not checked out here");
             return;

@@ -2921,7 +2921,7 @@ mod tests {
 
     fn csharp(path: &str) -> Option<String> {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../referneces/missionplanner")
+            .join("../../references/missionplanner")
             .join(path);
         std::fs::read_to_string(path).ok()
     }

@@ -96,6 +96,10 @@ pub struct MapViewport {
     tracker: Option<GuidedMarker>,
     /// The geofence's exclusion polygons.
     fence_exclusions: Vec<Vec<WebMercator>>,
+    /// The planner's `chk_grid`: the UTM grid over the map at zoom 10 and closer.
+    grid: bool,
+    /// How many grid lines the last paint drew.
+    grid_lines_drawn: usize,
     /// The survey area being drawn, if any.
     polygon: Vec<WebMercator>,
     /// Map Tool > KML Overlay's shapes and labels.
@@ -275,6 +279,8 @@ impl MapViewport {
             guided: None,
             tracker: None,
             fence_exclusions: Vec::new(),
+            grid: false,
+            grid_lines_drawn: 0,
             polygon: Vec::new(),
             kml: KmlLayer::default(),
             fence: Vec::new(),
@@ -933,6 +939,12 @@ impl MapViewport {
     #[must_use]
     pub const fn has_tiles(&self) -> bool {
         self.tiles.is_some()
+    }
+
+    /// Whether the map has painted at all yet.
+    #[must_use]
+    pub const fn painted(&self) -> bool {
+        self.paints > 0
     }
 
     /// How the last paint went: drawn, approximated from a coarser tile, and missing.
@@ -1756,6 +1768,32 @@ impl MapViewport {
     /// Puts the planner's "Tracker Home" marker on the map, or takes it away.
     pub fn set_tracker(&mut self, tracker: Option<GuidedMarker>) {
         self.tracker = tracker;
+    }
+
+    /// `chk_grid_CheckedChanged`: `grid = chk_grid.Checked; MainMap.Refresh()`.
+    /// `// C#: GCSViews/FlightPlanner.cs:2053-2057`
+    pub fn set_grid(&mut self, on: bool) {
+        self.grid = on;
+    }
+
+    /// How many UTM grid lines the last paint drew, zone boundaries included.
+    #[must_use]
+    pub const fn grid_lines_drawn(&self) -> usize {
+        self.grid_lines_drawn
+    }
+
+    /// The view's corners as the C#'s `MainMap.ViewArea` gives them: top-left and bottom-right,
+    /// from the rectangle the last paint recorded. `None` before the first paint.
+    #[must_use]
+    pub fn view_corners(&self) -> Option<(LatLon, LatLon)> {
+        let (x, y, width, height) = self.last_view?;
+        let top_left = LatLon::from_web_mercator(WebMercator { x, y }).ok()?;
+        let bottom_right = LatLon::from_web_mercator(WebMercator {
+            x: x + width,
+            y: y + height,
+        })
+        .ok()?;
+        Some((top_left, bottom_right))
     }
 
     /// Replaces the geofence's exclusion polygons.
@@ -2715,6 +2753,44 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
         match builder.build() {
             Ok(path) => window.paint_path(path, Hsla::from(rgb(0xf8_51_49))),
             Err(_) => map.track_path_failures += 1,
+        }
+    }
+
+    // The planner's UTM grid, `MainMap_Paint` with `grid` set: the lines `utm_grid` works out
+    // for the view's corners, drawn straight between their ends in the selection pen's blue -
+    // one pixel wide, the zone's two meridians two - at zoom 10 and closer. Planner only: the
+    // flight screen's map has no grid box.
+    // `// C#: GCSViews/FlightPlanner.cs:4809-4903; ExtLibs/GMap.NET.WindowsForms/GMapControl.cs:166`
+    map.grid_lines_drawn = 0;
+    let planner = map.overlay_mode.is_some_and(|overlay| overlay.planner);
+    if map.grid && planner {
+        let corners = map.view_corners();
+        let zoom = map.zoom_level();
+        if let (Some((top_left, bottom_right)), Some(zoom)) = (corners, zoom) {
+            let lines = mp_mission::utm_grid::grid_lines(
+                (top_left.latitude(), top_left.longitude()),
+                (bottom_right.latitude(), bottom_right.longitude()),
+                zoom,
+            );
+            for line in &lines {
+                let (Ok(from), Ok(to)) = (
+                    LatLon::new(line.from.0, line.from.1),
+                    LatLon::new(line.to.0, line.to.1),
+                ) else {
+                    continue;
+                };
+                let width = if line.boundary { 2.0 } else { 1.0 };
+                let mut builder = PathBuilder::stroke(px(width));
+                builder.move_to(to_screen(from.to_web_mercator()));
+                builder.line_to(to_screen(to.to_web_mercator()));
+                match builder.build() {
+                    Ok(path) => {
+                        window.paint_path(path, Hsla::from(rgb(0x00_00_ff)));
+                        map.grid_lines_drawn += 1;
+                    }
+                    Err(_) => map.track_path_failures += 1,
+                }
+            }
         }
     }
 
@@ -4368,6 +4444,7 @@ mod point_list_tests {
         AltResponse {
             current_type: TileType::Valid,
             alt: 584.0,
+            alt_source: "SRTM",
         }
     }
 

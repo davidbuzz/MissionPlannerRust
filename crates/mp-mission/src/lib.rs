@@ -16,6 +16,7 @@ pub mod dotnet;
 pub mod fence;
 pub mod fence_file;
 pub mod geoutility;
+pub mod missionpck;
 pub mod grid;
 pub mod gridui;
 pub mod item;

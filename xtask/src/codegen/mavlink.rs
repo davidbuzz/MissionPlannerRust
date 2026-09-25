@@ -1,6 +1,6 @@
 //! Generates Rust from the MAVLink XML message definitions.
 //!
-//! Source of truth: `referneces/missionplanner/ExtLibs/Mavlink/message_definitions/*.xml`, the
+//! Source of truth: `references/missionplanner/ExtLibs/Mavlink/message_definitions/*.xml`, the
 //! same files the C# build generates from. We reimplement mavgen's layout rules rather than
 //! shelling out to Python so the build has no external toolchain dependency.
 //!

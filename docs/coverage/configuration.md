@@ -4,12 +4,12 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui c
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 11 | 20 | 24 | 2 | 4 | 569 |
+| 61 | 11 | 20 | 16 | 2 | 12 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 8 | 18 | 16 | 2 | 0 | 258 | 49 |
-| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 3 | 2 | 8 | 0 | 0 | 277 | 8 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 8 | 18 | 9 | 2 | 7 | 258 | 23 |
+| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 3 | 2 | 7 | 0 | 1 | 277 | 5 |
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 | 0 |
 
 The lists also add 4 pages that are not in `ConfigurationView/` (`Sikradio`, `JoystickSetup`, `TrackerUI`, `MavFTPUI`): 0 done, 1 partial, 3 missing, 0 plumbing, 0 dropped. They are in the lists below and not in the counts above.
@@ -19,17 +19,17 @@ The largest missing panels, by wirings:
 | panel | title | wirings |
 |---|---|---:|
 | `ConfigDroneCAN` | DroneCAN/UAVCAN | 15 |
-| `ConfigTerminal` | Terminal | 12 |
-| `ConfigREPL` | Script REPL | 4 |
-| `ConfigAntennaTracker` | Antenna tracker | 3 |
 | `ConfigArdurover` | Basic Tuning | 3 |
-| `ConfigAteryxSensors` | Ateryx Zero Sensors | 3 |
-| `ConfigHWESP8266` (`ConfigHWesp8266.cs`) | ESP8266 Setup | 3 |
 | `ConfigInitialParams` | Initial Tune Parameter | 3 |
 | `ConfigCompassMot` | Compass/Motor Calib | 2 |
-| `ConfigCubeID` | CubeID Update | 2 |
 | `ConfigFriendlyParams` | Standard Params | 1 |
 | `ConfigGPSOrder` | CAN GPS Order | 1 |
+| `ConfigHWOSD` | OSD | 1 |
+| `ConfigHWParachute` | Parachute | 1 |
+| `ConfigSimplePids` | Basic Tuning | 1 |
+| `ConfigAC_Fence` | GeoFence | 0 |
+| `ConfigFFT` | FFT Setup | no Designer |
+| `ConfigFriendlyParamsAdv` | Advanced Params | no Designer |
 
 Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConnected && gotAllParams`); **always** is connected or not; **connected** and **disconnected** are the link alone; a named vehicle, parameter or view is what the call, or the `if` around it, checks. **Advanced view** is `DisplayView.isAdvancedMode`. A page with a `DisplayView` switch also needs it on, which it is by default unless the vehicles say otherwise. The list shows a heading as `>> title` and indents what is under it (`ExtLibs/Controls/BackstageView/BackstageView.cs:227`, `:232`).
 
@@ -59,7 +59,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConne
 | 241 | `ConfigHWIDs` | HW ID | Mandatory Hardware | any | 0 | **missing** |
 | 243 | `ConfigOptional` | Optional Hardware |  | always | 0 | plumbing: the Optional Hardware heading of the list: one sentence, no controls |
 | 251 | `ConfigSerialInjectGPS` | RTK/GPS Inject | Optional Hardware | always | 24 | partial: `crates/mp-gui/src/config/rtk_inject.rs` `fn page` - every control and handler, the read loop, the RTCM/SBP/UBX/NMEA parsers, GPS_RTCM_DATA and GPS_INJECT_DATA injection, cs.Base, the .gpsbase log, the u-blox, Septentrio and Unicore set-up, the base positions; not DroneCAN over SLCAN (ExtLibs/DroneCAN is not ported) nor the Windows named-pipe fallback (CommsSerialPipe) |
-| 254 | `ConfigCubeID` | CubeID Update | Optional Hardware | connected | 2 | **missing** |
+| 254 | `ConfigCubeID` | CubeID Update | Optional Hardware | connected | 2 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 | 259 | `Sikradio` (`Radio/Sikradio.cs`, not a panel) | Sik Radio | Optional Hardware | always | 17 | **missing** |
 | 263 | `ConfigADSB` | ADSB | Mandatory Hardware | any | 5 | partial: `crates/mp-gui/src/config/adsb.rs` `fn page` - a RangeControl, bitmask or ValuesControl per documented ADSB_/AVD_ parameter, favourites first, recording changes; Write Params writing them ENABLE-first, each in its own try, then "Parameters successfully saved."; Refresh Params with MessageShowAgain; Find filtering as typed; a bitmask updated on Activate writing as the C#'s does; missing Ctrl+S, dragging the track bar (a click pages it), typing into a ValuesControl, and the InputBox's remembered answers |
 | 266 | `ConfigGPSOrder` | CAN GPS Order | Optional Hardware | any | 1 | **missing** |
@@ -70,20 +70,20 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConne
 | 285 | `ConfigCompassMot` | Compass/Motor Calib | Optional Hardware | any | 2 | **missing** |
 | 289 | `ConfigHWRangeFinder` | Range Finder | Optional Hardware | any | 2 | partial: `crates/mp-gui/src/config/rangefinder.rs` `fn page` - RNGFND_TYPE's combo (disabled on firmware that numbers its rangefinders, as in the C#), the TeraRanger limits its handler sets, the 200 ms distance and voltage readout; the sonar picture is a named box, and an unhandled timeout's error report is shown without its Send |
 | 293 | `ConfigHWAirspeed` | Airspeed | Optional Hardware | any | 1 | partial: `crates/mp-gui/src/config/airspeed.rs` `fn page` - Enable and Use Airspeed, each shown only for its parameter, Enable's handler writing before the control, the pin list and ARSPD_TYPE; the sensor picture is a named box |
-| 297 | `ConfigHWPX4Flow` | PX4Flow | Optional Hardware | always | 1 | **missing** |
+| 297 | `ConfigHWPX4Flow` | PX4Flow | Optional Hardware | always | 1 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 | 301 | `ConfigHWOptFlow` | Optical Flow | Optional Hardware | any | 2 | partial: `crates/mp-gui/src/config/optical_flow.rs` `fn page` - the legacy FLOW_ENABLE page or the new-style one: FLOW_TYPE, the yaw in degrees, the scalers and positions writing 300 ms after a change, the rover's height override shown by the type's handler; the sensor picture is a named box, and a yaw below -179 degrees is kept rather than written back as the C#'s Minimum does |
 | 305 | `ConfigHWOSD` | OSD | Optional Hardware | any | 1 | **missing** |
 | 309 | `ConfigMount` | Camera Gimbal | Optional Hardware | any | 5 | partial: `crates/mp-gui/src/config/mount.rs` `fn page` - the mount type, the tilt, roll, pan and shutter outputs assigned through ensureDisabled, MNT_MODE and CAM_TRIGG_TYPE, each axis's servo and angle limits, reverse and input channel, stabilise, neutral and retract angles, the shutter's pulses; the page disabled without CAM_TRIGG_TYPE, as on firmware from 4.3; the four gimbal pictures are named boxes |
-| 313 | `ConfigAntennaTracker` | Antenna tracker | Optional Hardware | tracker | 3 | **missing** |
+| 313 | `ConfigAntennaTracker` | Antenna tracker | Optional Hardware | tracker | 3 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 | 317 | `ConfigMotorTest` | Motor Test | Optional Hardware | any | 3 | done: `crates/mp-gui/src/config/motor_test.rs` `fn page` |
-| 321 | `ConfigHWBT` | Bluetooth Setup | Optional Hardware | always | 1 | **missing** |
+| 321 | `ConfigHWBT` | Bluetooth Setup | Optional Hardware | always | 1 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 | 325 | `ConfigHWParachute` | Parachute | Optional Hardware | any | 1 | **missing** |
-| 329 | `ConfigHWESP8266` (`ConfigHWesp8266.cs`) | ESP8266 Setup | Optional Hardware | any | 3 | **missing** |
+| 329 | `ConfigHWESP8266` (`ConfigHWesp8266.cs`) | ESP8266 Setup | Optional Hardware | any | 3 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 | 333 | `TrackerUI` (`Antenna/TrackerUI.cs`, not a panel) | Antenna Tracker | Optional Hardware | always | 0 | **missing** |
 | 337 | `ConfigFFT` | FFT Setup | Optional Hardware | any | no Designer | **missing** |
 | 342 | `ConfigAdvanced` | Advanced |  | always, Advanced view | 13 | partial: `crates/mp-gui/src/config/advanced.rs` `fn page` - the text and the thirteen buttons with their labels at the table's places; every button dimmed - the Warnings Manager, MAVLink Inspector, proximity, signing keys, MAVLink mirror, NMEA output, Follow Me, parameter regeneration, moving base, log anonymiser, FFT, spectrogram and support proxy windows they open are not ported |
-| 346 | `ConfigTerminal` | Terminal | Advanced | always, Advanced view | 12 | **missing** |
-| 351 | `ConfigREPL` | Script REPL | Advanced | connected, Advanced view | 4 | **missing** |
+| 346 | `ConfigTerminal` | Terminal | Advanced | always, Advanced view | 12 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
+| 351 | `ConfigREPL` | Script REPL | Advanced | connected, Advanced view | 4 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 
 ## CONFIG - `GCSViews/SoftwareConfig.cs` `SoftwareConfig_Load`
 
@@ -103,7 +103,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConne
 | 221 | `ConfigUserDefined` | User Params |  | any | 0 | **missing** |
 | 229 | `ConfigRawParams` | Full Parameter List |  | any, or disconnected | 22 | partial: `crates/mp-gui/src/params.rs` `fn list_panel` - the parameter screen has Refresh Params, Search, the group tree, editing a value, Save to file, Compare Params, and Load from file as compare then apply; missing Reset to Default, Load Presaved and its file list, Commit Params, the Modified and None Default filters, Refresh Table and the tree's collapse |
 | 235 | `ConfigFlightModes` | Flight Modes |  | Ateryx | 8 | as at `GCSViews/InitialSetup.cs:228` |
-| 236 | `ConfigAteryxSensors` | Ateryx Zero Sensors |  | Ateryx | 3 | **missing** |
+| 236 | `ConfigAteryxSensors` | Ateryx Zero Sensors |  | Ateryx | 3 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 | 237 | `ConfigAteryx` | Ateryx Pids |  | Ateryx | 8 | done: `crates/mp-gui/src/config/ateryx.rs` `fn page` |
 | 243 | `ConfigParamLoading` | Loading |  | connected, parameters still arriving | 2 | as at `GCSViews/InitialSetup.cs:162` |
 | 245 | `ConfigParamLoading` | Loading |  | connected, parameters still arriving | 2 | as at `GCSViews/InitialSetup.cs:162` |

@@ -345,7 +345,7 @@ mod tests {
     #[test]
     fn the_shipped_files_are_mission_planners() {
         let reference = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../referneces/missionplanner/graphs");
+            .join("../../references/missionplanner/graphs");
         if !reference.is_dir() {
             eprintln!("skipped: the C# tree is not checked out here");
             return;

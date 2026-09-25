@@ -62,13 +62,34 @@
 //!   capability, and sends `MISSION_ITEM` then (:3420-3453, :4000-4058). This always uses the
 //!   `_INT` forms; see [`crate::commands::request_mission_item`] for why.
 
-use std::time::Instant;
+//! # Write Fast
+//!
+//! `saveWPsFast` (C#: GCSViews/FlightPlanner.cs:6340-6582) is the planner's other upload: after
+//! `setWPTotal` it sends the items without waiting to be asked, pausing every tenth item until
+//! the vehicle's `MISSION_REQUEST` catches up - up to 1.1 s, after which it goes on from
+//! whatever the vehicle last asked for (`a = reqno`). A `MISSION_ACK` seen while it pauses ends
+//! it: `NO_SPACE` and `INVALID` with the ordinary words, `ERROR` with a partial list from the
+//! last request and the items from there again, anything else but `ACCEPTED` as "Upload wps
+//! failed". Once the last item has gone it sends its own `MISSION_ACK` and is done - it does not
+//! wait for the vehicle's. [`MissionTransfer::upload_fast`] is that machine; the bursts come out
+//! as [`Action::SendItems`].
+
+use std::time::{Duration, Instant};
 
 use mp_mavlink_dialects::all::{MavCmd, MavMissionResult, MavMissionType};
 use mp_mission::{MissionItem, WireItem};
 use mp_vehicle::VehicleId;
 
 use crate::timeouts::{ProtocolTimeouts, Retry};
+
+/// How long `saveWPsFast` waits at each tenth item for the vehicle's request to catch up before
+/// going on from the last request: `start.AddSeconds(1.1) < DateTime.Now`.
+/// `// C#: GCSViews/FlightPlanner.cs:6444`
+pub const FAST_CHECKPOINT_WAIT: Duration = Duration::from_millis(1100);
+
+/// Every tenth item, `saveWPsFast` pauses: `if (a % 10 == 0 && a != 0)`.
+/// `// C#: GCSViews/FlightPlanner.cs:6423`
+pub const FAST_BURST: u16 = 10;
 
 /// `MAV_MISSION_ACCEPTED`.
 pub const MISSION_ACCEPTED: u8 = 0;
@@ -99,6 +120,15 @@ pub enum TransferState {
     Uploading {
         /// The last sequence the vehicle asked for.
         last_requested: Option<u16>,
+    },
+    /// Write Fast: items sent in bursts without waiting to be asked.
+    UploadingFast {
+        /// The C#'s `a`: the next item to send.
+        next: u16,
+        /// The C#'s `reqno`: the vehicle's last request, `None` until the count is answered.
+        requested: Option<u16>,
+        /// When the pause at a tenth item began; `None` while nothing is awaited.
+        waiting_since: Option<Instant>,
     },
     /// Finished successfully.
     Complete,
@@ -165,6 +195,24 @@ pub enum TransferFailure {
         /// Which list.
         mission_type: u8,
     },
+    /// Write Fast's `MAV_MISSION_INVALID`, with its own misspelling and the checkpoint's item.
+    /// `// C#: GCSViews/FlightPlanner.cs:6474-6478`
+    #[error(
+        "Upload failed, mission was rejected byt the Mav,\n item had a bad option wp# {seq} MAV_MISSION_INVALID"
+    )]
+    FastInvalid {
+        /// The item the loop stood at, the C#'s `a`.
+        seq: u16,
+    },
+    /// Write Fast's other refusals: `"Upload wps failed " + reqno + " " + result`.
+    /// `// C#: GCSViews/FlightPlanner.cs:6484-6488`
+    #[error("Upload wps failed {seq} {}", result_name(.result))]
+    FastRejected {
+        /// The vehicle's last request, the C#'s `reqno`.
+        seq: u16,
+        /// The `MAV_MISSION_RESULT` it sent.
+        result: u8,
+    },
     /// The vehicle asked for an item that is not in the mission being uploaded.
     #[error("the vehicle asked for item {0}, which is not in this mission")]
     RequestOutOfRange(u16),
@@ -219,6 +267,8 @@ pub struct MissionTransfer {
     error_retried: Option<u16>,
     /// Upload: after `MAV_MISSION_INVALID_SEQUENCE`, until when to wait for the vehicle's request.
     resync_until: Option<Instant>,
+    /// Write Fast: a burst is owed on the next tick, after a partial list went out.
+    burst_due: bool,
 }
 
 /// What the link thread should send next, decided by the state machine rather than by the caller.
@@ -243,6 +293,8 @@ pub enum Action {
         /// The mission's length, as the C# sends it (mav_mission.cs:107).
         end: u16,
     },
+    /// Write Fast's burst: each of these as a `MISSION_ITEM_INT`, in order, without waiting.
+    SendItems(Vec<MissionItem>),
 }
 
 impl MissionTransfer {
@@ -258,6 +310,7 @@ impl MissionTransfer {
             requested: Vec::new(),
             error_retried: None,
             resync_until: None,
+            burst_due: false,
         }
     }
 
@@ -278,6 +331,23 @@ impl MissionTransfer {
             },
         );
         transfer.requested = vec![false; items.len()];
+        transfer.items = items;
+        transfer
+    }
+
+    /// Write Fast: `saveWPsFast`'s upload of `items`, the count first, then the items in bursts.
+    /// `// C#: GCSViews/FlightPlanner.cs:6340-6582`
+    #[must_use]
+    pub fn upload_fast(target: VehicleId, items: Vec<MissionItem>, mission_type: u8) -> Self {
+        let mut transfer = Self::new(
+            target,
+            mission_type,
+            TransferState::UploadingFast {
+                next: 0,
+                requested: None,
+                waiting_since: None,
+            },
+        );
         transfer.items = items;
         transfer
     }
@@ -331,6 +401,9 @@ impl MissionTransfer {
                 let done = last_requested.map_or(0, |seq| u32::from(seq) + 1);
                 done as f32 / self.items.len() as f32
             }
+            TransferState::UploadingFast { next, .. } if !self.items.is_empty() => {
+                f32::from(*next) / self.items.len() as f32
+            }
             TransferState::Complete => 1.0,
             _ => 0.0,
         }
@@ -345,9 +418,46 @@ impl MissionTransfer {
     pub fn begin(&self) -> Action {
         match self.state {
             TransferState::AwaitingCount => Action::RequestList,
-            TransferState::Uploading { .. } => Action::SendCount(self.count()),
+            TransferState::Uploading { .. } | TransferState::UploadingFast { .. } => {
+                Action::SendCount(self.count())
+            }
             _ => Action::Nothing,
         }
+    }
+
+    /// The end of the burst that starts at `from`: the next multiple of ten above it, or the
+    /// count - the C#'s loop pauses at every `a % 10 == 0 && a != 0` before sending that item.
+    fn burst_end(&self, from: u16) -> u16 {
+        let next_pause = (from / FAST_BURST + 1) * FAST_BURST;
+        next_pause.min(self.count())
+    }
+
+    /// Write Fast: the items from `next` to the next pause, sent at once; the pause begins if
+    /// items remain, else the transfer is complete and the ack follows on the next tick.
+    fn burst(&mut self) -> Action {
+        let TransferState::UploadingFast {
+            next, requested, ..
+        } = self.state
+        else {
+            return Action::Nothing;
+        };
+        self.burst_due = false;
+        let end = self.burst_end(next);
+        let items: Vec<MissionItem> = self
+            .items
+            .get(usize::from(next)..usize::from(end))
+            .map(<[MissionItem]>::to_vec)
+            .unwrap_or_default();
+        self.touch();
+        self.state = TransferState::UploadingFast {
+            next: end,
+            requested,
+            waiting_since: (end < self.count()).then_some(self.last_activity),
+        };
+        if items.is_empty() {
+            return Action::Nothing;
+        }
+        Action::SendItems(items)
     }
 
     /// The vehicle reported how many items it holds.
@@ -405,6 +515,34 @@ impl MissionTransfer {
 
     /// The vehicle asked for an item during an upload.
     pub fn on_request(&mut self, seq: u16) -> Action {
+        if let TransferState::UploadingFast {
+            next,
+            requested,
+            waiting_since,
+        } = self.state
+        {
+            // `reqno = data.seq`, whatever it is.
+            self.state = TransferState::UploadingFast {
+                next,
+                requested: Some(seq),
+                waiting_since,
+            };
+            // `setWPTotal` returns on a request for 0 or 1; the loop then starts sending.
+            // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3800-3803`
+            if requested.is_none() && next == 0 {
+                return if seq <= 1 {
+                    self.burst()
+                } else {
+                    Action::Nothing
+                };
+            }
+            // At a pause, `if (reqno == a) break;` - the vehicle has all of them; go on.
+            // `// C#: GCSViews/FlightPlanner.cs:6439-6443`
+            if waiting_since.is_some() && seq == next {
+                return self.burst();
+            }
+            return Action::Nothing;
+        }
         let TransferState::Uploading { last_requested } = self.state else {
             return Action::Nothing;
         };
@@ -441,6 +579,12 @@ impl MissionTransfer {
     ///
     /// See the module documentation for what each `MAV_MISSION_RESULT` does.
     pub fn on_ack(&mut self, result: u8) -> Action {
+        if let TransferState::UploadingFast {
+            next, requested, ..
+        } = self.state
+        {
+            return self.on_fast_ack(result, next, requested.unwrap_or(0));
+        }
         let TransferState::Uploading { last_requested } = self.state else {
             return Action::Nothing;
         };
@@ -486,9 +630,94 @@ impl MissionTransfer {
         Action::Nothing
     }
 
+    /// Write Fast's reading of a `MISSION_ACK`, as the pause loop reads `result`: `a` is the
+    /// item the loop stands at (`next`), `reqno` the vehicle's last request.
+    /// `// C#: GCSViews/FlightPlanner.cs:6446-6489`
+    fn on_fast_ack(&mut self, result: u8, a: u16, reqno: u16) -> Action {
+        let failure = match result {
+            // `result` stays accepted; INVALID_SEQUENCE only sleeps 500 ms inside the pause.
+            MISSION_ACCEPTED | MISSION_INVALID_SEQUENCE => return Action::Nothing,
+            // "resend for partial upload": the list from `reqno`, then `a = reqno` and on.
+            MISSION_ERROR => {
+                self.state = TransferState::UploadingFast {
+                    next: reqno,
+                    requested: Some(reqno),
+                    waiting_since: None,
+                };
+                self.burst_due = true;
+                self.touch();
+                return Action::SendPartialList {
+                    start: reqno,
+                    end: self.count(),
+                };
+            }
+            MISSION_NO_SPACE => TransferFailure::NoSpace,
+            MISSION_INVALID => TransferFailure::FastInvalid { seq: a },
+            other => TransferFailure::FastRejected {
+                seq: reqno,
+                result: other,
+            },
+        };
+        self.state = TransferState::Failed(failure);
+        Action::Nothing
+    }
+
+    /// Write Fast's clock: the count's retries until the vehicle asks (`setWPTotal`), the 1.1 s
+    /// pause at each tenth item, and the ack once everything has gone.
+    fn fast_tick(&mut self, now: Instant) -> Action {
+        let TransferState::UploadingFast {
+            next,
+            requested,
+            waiting_since,
+        } = self.state
+        else {
+            return Action::Nothing;
+        };
+        if self.burst_due {
+            return self.burst();
+        }
+        if next >= self.count() && requested.is_some() {
+            // `MainV2.comPort.setWPACK()`: done, without waiting for the vehicle's ack.
+            // `// C#: GCSViews/FlightPlanner.cs:6567`
+            self.state = TransferState::Complete;
+            return Action::SendAck;
+        }
+        if requested.is_none() {
+            // `setWPTotal`: 700 ms, three more tries, then "Timeout on read - setWPTotal".
+            let policy = self.timeouts.mission_count;
+            if now.saturating_duration_since(self.last_activity) < policy.timeout {
+                return Action::Nothing;
+            }
+            if self.retries >= policy.retries {
+                self.state =
+                    TransferState::Failed(TransferFailure::TimedOut(TransferStep::SendCount));
+                return Action::Nothing;
+            }
+            self.retries += 1;
+            self.last_activity = now;
+            return Action::SendCount(self.count());
+        }
+        if let Some(since) = waiting_since
+            && now.saturating_duration_since(since) >= FAST_CHECKPOINT_WAIT
+        {
+            // "do next 10 starting at reqno": `a = reqno`.
+            // `// C#: GCSViews/FlightPlanner.cs:6444-6449`
+            self.state = TransferState::UploadingFast {
+                next: requested.unwrap_or(0),
+                requested,
+                waiting_since: None,
+            };
+            return self.burst();
+        }
+        Action::Nothing
+    }
+
     /// Called periodically. Retries the outstanding step, or gives up.
     pub fn on_tick(&mut self) -> Action {
         let now = Instant::now();
+        if matches!(self.state, TransferState::UploadingFast { .. }) {
+            return self.fast_tick(now);
+        }
         let (policy, step): (Retry, TransferStep) = match self.state {
             TransferState::AwaitingCount => (self.timeouts.mission_list, TransferStep::RequestList),
             TransferState::Downloading { .. } => (
@@ -515,7 +744,10 @@ impl MissionTransfer {
                     (self.timeouts.mission_count, TransferStep::SendCount)
                 }
             }
-            TransferState::Idle | TransferState::Complete | TransferState::Failed(_) => {
+            TransferState::Idle
+            | TransferState::Complete
+            | TransferState::Failed(_)
+            | TransferState::UploadingFast { .. } => {
                 return Action::Nothing;
             }
         };
@@ -544,9 +776,10 @@ impl MissionTransfer {
                 .get(usize::from(*seq))
                 .copied()
                 .map_or(Action::Nothing, Action::SendItem),
-            TransferState::Idle | TransferState::Complete | TransferState::Failed(_) => {
-                Action::Nothing
-            }
+            TransferState::Idle
+            | TransferState::Complete
+            | TransferState::Failed(_)
+            | TransferState::UploadingFast { .. } => Action::Nothing,
         }
     }
 
@@ -715,5 +948,141 @@ mod tests {
         assert_eq!(command_name(&65_000), "65000");
         assert_eq!(mission_type_name(&1), "FENCE");
         assert_eq!(result_name(&13), "MAV_MISSION_INVALID_SEQUENCE");
+    }
+
+    fn fast(count: u16) -> MissionTransfer {
+        MissionTransfer::upload_fast(target(), (0..count).map(item).collect(), 0)
+    }
+
+    fn sent(action: &Action) -> Vec<u16> {
+        match action {
+            Action::SendItems(items) => items.iter().map(|item| item.seq).collect(),
+            other => panic!("expected a burst, got {other:?}"),
+        }
+    }
+
+    /// Winds a Write Fast pause back so the next tick sees it as over.
+    fn expire_pause(transfer: &mut MissionTransfer) {
+        if let TransferState::UploadingFast {
+            next, requested, ..
+        } = transfer.state
+        {
+            transfer.state = TransferState::UploadingFast {
+                next,
+                requested,
+                waiting_since: Some(
+                    Instant::now() - FAST_CHECKPOINT_WAIT - Duration::from_millis(1),
+                ),
+            };
+        }
+    }
+
+    fn failure(transfer: &MissionTransfer) -> String {
+        match transfer.state() {
+            TransferState::Failed(why) => why.to_string(),
+            other => panic!("not failed: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_fast_upload_sends_the_count_then_the_items_ten_at_a_time_as_the_requests_catch_up() {
+        let mut transfer = fast(25);
+        assert_eq!(transfer.begin(), Action::SendCount(25));
+        // Nothing goes until the vehicle asks for item 0 (`setWPTotal` returns on 0 or 1).
+        assert_eq!(transfer.on_tick(), Action::Nothing);
+        assert_eq!(sent(&transfer.on_request(0)), (0..10).collect::<Vec<_>>());
+        // Paused at 10: a request for 10 means the vehicle has 0..9.
+        assert_eq!(transfer.on_tick(), Action::Nothing);
+        assert_eq!(transfer.on_request(4), Action::Nothing);
+        assert_eq!(sent(&transfer.on_request(10)), (10..20).collect::<Vec<_>>());
+        assert_eq!(sent(&transfer.on_request(20)), (20..25).collect::<Vec<_>>());
+        assert!((transfer.progress() - 1.0).abs() < f32::EPSILON);
+        // Everything has gone: the C# sends its own ack and is done, without the vehicle's.
+        assert_eq!(transfer.on_tick(), Action::SendAck);
+        assert!(matches!(transfer.state(), TransferState::Complete));
+        assert_eq!(transfer.on_ack(MISSION_ACCEPTED), Action::Nothing);
+    }
+
+    #[test]
+    fn a_fast_upload_goes_on_from_the_last_request_when_the_pause_runs_out() {
+        let mut transfer = fast(25);
+        let _ = transfer.begin();
+        transfer.on_request(0);
+        // The vehicle got as far as asking for 7 and went quiet.
+        assert_eq!(transfer.on_request(7), Action::Nothing);
+        assert_eq!(transfer.on_tick(), Action::Nothing);
+        expire_pause(&mut transfer);
+        // `a = reqno`: 7, 8, 9 again, then the pause at 10.
+        assert_eq!(sent(&transfer.on_tick()), vec![7, 8, 9]);
+        assert_eq!(transfer.on_tick(), Action::Nothing);
+        assert_eq!(sent(&transfer.on_request(10)), (10..20).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn a_fast_upload_told_error_writes_a_partial_list_from_the_request_and_resends() {
+        let mut transfer = fast(25);
+        let _ = transfer.begin();
+        transfer.on_request(0);
+        transfer.on_request(4);
+        assert_eq!(
+            transfer.on_ack(MISSION_ERROR),
+            Action::SendPartialList { start: 4, end: 25 }
+        );
+        assert_eq!(sent(&transfer.on_tick()), (4..10).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn a_fast_upload_refused_says_why_in_save_wps_fasts_words() {
+        let mut transfer = fast(25);
+        let _ = transfer.begin();
+        transfer.on_request(0);
+        transfer.on_ack(MISSION_NO_SPACE);
+        assert_eq!(
+            failure(&transfer),
+            "Upload failed, please reduce the number of wp's"
+        );
+
+        let mut transfer = fast(25);
+        let _ = transfer.begin();
+        transfer.on_request(0);
+        transfer.on_ack(MISSION_INVALID);
+        assert_eq!(
+            failure(&transfer),
+            "Upload failed, mission was rejected byt the Mav,\n item had a bad option wp# 10 MAV_MISSION_INVALID"
+        );
+
+        let mut transfer = fast(25);
+        let _ = transfer.begin();
+        transfer.on_request(0);
+        transfer.on_request(6);
+        // MAV_MISSION_UNSUPPORTED.
+        transfer.on_ack(3);
+        assert_eq!(failure(&transfer), "Upload wps failed 6 MAV_MISSION_UNSUPPORTED");
+        assert!(transfer.is_finished());
+    }
+
+    #[test]
+    fn a_fast_upload_whose_count_is_unanswered_retries_it_then_gives_up() {
+        let mut transfer = fast(3);
+        assert_eq!(transfer.begin(), Action::SendCount(3));
+        let policy = transfer.timeouts.mission_count;
+        for _ in 0..policy.retries {
+            expire(&mut transfer, policy.timeout);
+            assert_eq!(transfer.on_tick(), Action::SendCount(3));
+        }
+        expire(&mut transfer, policy.timeout);
+        assert_eq!(transfer.on_tick(), Action::Nothing);
+        assert_eq!(
+            failure(&transfer),
+            TransferFailure::TimedOut(TransferStep::SendCount).to_string()
+        );
+    }
+
+    #[test]
+    fn a_fast_upload_of_fewer_than_ten_items_needs_one_burst() {
+        let mut transfer = fast(4);
+        let _ = transfer.begin();
+        assert_eq!(sent(&transfer.on_request(1)), vec![0, 1, 2, 3]);
+        assert_eq!(transfer.on_tick(), Action::SendAck);
     }
 }

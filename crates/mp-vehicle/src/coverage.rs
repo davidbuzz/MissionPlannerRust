@@ -3095,7 +3095,7 @@ mod tests {
 
     fn current_state() -> Option<String> {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../referneces/missionplanner/ExtLibs/ArduPilot/CurrentState.cs");
+            .join("../../references/missionplanner/ExtLibs/ArduPilot/CurrentState.cs");
         std::fs::read_to_string(path).ok()
     }
 

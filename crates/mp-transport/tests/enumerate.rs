@@ -379,7 +379,7 @@ fn an_empty_listing_lists_nothing() {
 // ---------------------------------------------------------------------------------------------
 
 fn csharp(relative: &str) -> Option<String> {
-    let path = repo().join("referneces/missionplanner").join(relative);
+    let path = repo().join("references/missionplanner").join(relative);
     match std::fs::read_to_string(&path) {
         Ok(text) => Some(text),
         Err(_) => {

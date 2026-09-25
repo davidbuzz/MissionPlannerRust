@@ -5,7 +5,7 @@ controlled; the per-project memory directory holds symlinks to them.
 
 **CRITICAL:**
 - [NOT IN THE C#, NOT IN SCOPE](not-in-the-csharp-not-in-scope.md) — never invent a feature Mission Planner does not have; ask instead
-- [Port from the C# source](port-from-the-csharp-source.md) — referneces/missionplanner is the spec; read the .cs, never recall it
+- [Port from the C# source](port-from-the-csharp-source.md) — references/missionplanner is the spec; read the .cs, never recall it
 - [Match the original layout](match-the-original-layout.md) — Buzz is the oracle on look and feel; default to MP's arrangement, read it from the .resx
 
 - [No foreground waiting](no-foreground-waiting.md) — background long operations, poll cheaply, never block the session

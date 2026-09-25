@@ -26,12 +26,12 @@ fn repo() -> PathBuf {
 }
 
 fn tree() -> Option<PathBuf> {
-    let tree = repo().join("referneces/missionplanner");
+    let tree = repo().join("references/missionplanner");
     if tree.is_dir() {
         Some(tree)
     } else {
         println!(
-            "referneces/missionplanner is absent (it is gitignored); the tree tests are skipped"
+            "references/missionplanner is absent (it is gitignored); the tree tests are skipped"
         );
         None
     }

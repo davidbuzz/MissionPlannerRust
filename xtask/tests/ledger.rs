@@ -757,9 +757,9 @@ fn status_reports_retired_lines_in_the_plan_shape() {
 #[test]
 fn the_real_ledger_passes_check() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-    if !repo.join("referneces/missionplanner").is_dir() {
+    if !repo.join("references/missionplanner").is_dir() {
         println!(
-            "referneces/missionplanner is absent (it is gitignored): checking \
+            "references/missionplanner is absent (it is gitignored): checking \
              ledger/ledger.csv's internal consistency only"
         );
     }

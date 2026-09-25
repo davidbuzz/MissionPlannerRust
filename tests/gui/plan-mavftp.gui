@@ -1,0 +1,44 @@
+# The MAVFTP box: with `chk_usemavftp` ticked, Write packs the mission as `missionpck.pack` does
+# and uploads it as `@MISSION/mission.dat` over MAVFTP (saveWPs, GCSViews/FlightPlanner.cs:6237-
+# 6256), and Read fetches the same file and unpacks it into the grid (getWPs, :3985-4008). The
+# tick is kept as `UseMissionMAVFTP` (:319, 8403-8406). A failure of either falls back to the
+# mission protocol, as the C#'s `catch` does.
+#
+# Two waypoints written over MAVFTP, the grid cleared, then read back over MAVFTP: the two return
+# as waypoints 1 and 2 with home in front, as `WPtoScreen` lays them out.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760. Run as
+#
+#   tools/gui-test.sh tests/gui/plan-mavftp.gui -- tcp:127.0.0.1:5760
+
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
+env MP_PLAN_DIR $WORK
+
+screen plan
+window 1600x1200
+settle 6
+expect mission.home true
+
+expect plan.mavftp false
+click plan-mavftp
+expect plan.mavftp true
+
+click map@0.45x0.40
+click map@0.60x0.55
+expect mission.items 2
+
+click plan-write
+settle 6
+expect plan.mavftp.state done
+expect plan.mavftp.text MAVFTP: mission written
+
+click plan-clear
+expect mission.items 0
+
+click plan-read
+settle 6
+expect plan.mavftp.state done
+expect plan.mavftp.text MAVFTP: mission read
+expect mission.items 2
+expect mission.origin ~ vehicle

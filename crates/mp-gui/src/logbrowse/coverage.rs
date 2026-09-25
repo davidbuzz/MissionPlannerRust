@@ -508,7 +508,7 @@ mod tests {
 
     fn designer() -> Option<String> {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../referneces/missionplanner/Log/LogBrowse.designer.cs");
+            .join("../../references/missionplanner/Log/LogBrowse.designer.cs");
         std::fs::read_to_string(path).ok()
     }
 

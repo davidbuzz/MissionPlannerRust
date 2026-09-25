@@ -1,0 +1,57 @@
+# The action panel's remainder that needs no vehicle: the Grid box, the pointer read-out and the
+# waypoint panel's ˅ button.
+#
+# Grid (`chk_grid_CheckedChanged`, GCSViews/FlightPlanner.cs:2053-2057) sets `grid` and repaints:
+# `MainMap_Paint` (:4809-4903) then draws the UTM grid over the map at zoom 10 and closer, the
+# zone's two meridians included. The read-out (`coords1`, ExtLibs/Controls/Coords.cs) follows the
+# mouse (`SetMouseDisplay`, :2778-2797): GEO is seven decimals of latitude and longitude, UTM the
+# zone and band then easting and northing, MGRS one reference; each ends with the terrain height
+# in the display unit. ˅ (`but_mincommands_Click`, :69-80) folds `panelWaypoints` to the button.
+#
+# The map is fitted to the seeded home at CMAC, in UTM zone 55H, square FA.
+#
+# Needs no link: tools/gui-test.sh tests/gui/plan-grid-coords.gui
+
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
+env MP_PLAN_DIR $WORK
+
+screen plan
+window 1600x1200
+settle 4
+expect mission.home true
+expect map.zoom >= 10
+
+# Grid off to begin with; on, the paint draws lines.
+expect plan.grid false
+expect map.grid.lines 0
+click plan-grid
+settle 1
+expect plan.grid true
+expect map.grid.lines > 2
+click plan-grid
+settle 1
+expect plan.grid false
+expect map.grid.lines 0
+
+# The read-out follows the pointer over the map.
+expect plan.coords.system GEO
+hover map@0.50x0.50
+settle 1
+expect plan.coords.lines ~ -35.
+expect plan.coords.lines ~ |149.
+click plan-coords-utm
+expect plan.coords.system UTM
+expect plan.coords.lines ~ 55H|
+click plan-coords-mgrs
+expect plan.coords.system MGRS
+expect plan.coords.lines ~ 55HFA
+click plan-coords-geo
+expect plan.coords.system GEO
+
+# ˅ folds the waypoint panel; ˄ opens it.
+expect plan.commands.minimised false
+click plan-mincommands
+expect plan.commands.minimised true
+click plan-mincommands
+expect plan.commands.minimised false

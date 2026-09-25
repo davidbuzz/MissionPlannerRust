@@ -147,7 +147,7 @@ mod tests {
     /// The `MAV_CMD` members `Mavlink.cs` marks `[hasLocation()]`, read from the C# tree.
     fn has_location_in_the_c_sharp() -> Option<Vec<u16>> {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../referneces/missionplanner/ExtLibs/Mavlink/Mavlink.cs");
+            .join("../../references/missionplanner/ExtLibs/Mavlink/Mavlink.cs");
         let source = std::fs::read_to_string(path).ok()?;
         let start = source.find("public enum MAV_CMD: ushort")?;
         let body = &source[start..];

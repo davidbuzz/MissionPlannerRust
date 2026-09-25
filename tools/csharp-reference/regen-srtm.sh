@@ -4,7 +4,7 @@
 #
 # The build is regen-grid.sh's, step for step and in the same cache, so whichever script runs first
 # builds ExtLibs/Utilities once for all of them:
-#   1. copy referneces/missionplanner/ExtLibs out of tree, so the reference tree stays read-only;
+#   1. copy references/missionplanner/ExtLibs out of tree, so the reference tree stays read-only;
 #   2. msbuild ExtLibs/Utilities/MissionPlanner.Utilities.csproj under mono - srtm.cs, GeoTiff.cs
 #      and DTED.cs are all in it, with GMap.NET.Core and SharpZipLib beside it;
 #   3. mcs SrtmOracle.cs against the result;
@@ -22,7 +22,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
-MP="${MP_SRC:-$ROOT/referneces/missionplanner}"
+MP="${MP_SRC:-$ROOT/references/missionplanner}"
 DATA="$ROOT/testdata/srtm"
 
 [ -f "$MP/ExtLibs/Utilities/srtm.cs" ] || {

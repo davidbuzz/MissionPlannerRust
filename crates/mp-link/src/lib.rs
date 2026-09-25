@@ -637,6 +637,17 @@ impl Link {
         self.upload_list(target, items, MISSION_TYPE_MISSION)
     }
 
+    /// Write Fast: starts `saveWPsFast`'s upload of a mission, the items sent in bursts without
+    /// waiting to be asked for each.
+    /// `// C#: GCSViews/FlightPlanner.cs:6340-6582`
+    pub fn upload_mission_fast(&self, target: VehicleId, items: Vec<MissionItem>) -> bool {
+        self.queue_transfer(MissionTransfer::upload_fast(
+            target,
+            items,
+            MISSION_TYPE_MISSION,
+        ))
+    }
+
     /// Starts downloading one of the vehicle's lists: mission, geofence or rally points.
     ///
     /// They share one protocol, so this is the same transfer with a different `mission_type`.
@@ -1576,6 +1587,21 @@ fn run_link(
         // Send whatever the state machines decided, outside their lock.
         for (id, kind, action) in pending_actions.drain(..) {
             let message = match action {
+                // Write Fast's burst: the items straight after one another, as `saveWPsFast`'s
+                // loop sends them, without waiting for a request between them.
+                Action::SendItems(items) => {
+                    for item in items {
+                        send_message(
+                            transport.as_mut(),
+                            recorder.as_mut(),
+                            &mut stats,
+                            &config,
+                            &mut tx_seq,
+                            &commands::send_mission_item(id, &item, kind),
+                        );
+                    }
+                    continue;
+                }
                 Action::RequestList => commands::request_mission_list(id, kind),
                 Action::RequestItem(seq) => commands::request_mission_item(id, seq, kind),
                 Action::SendCount(count) => commands::send_mission_count(id, count, kind),

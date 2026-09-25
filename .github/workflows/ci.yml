@@ -166,7 +166,7 @@ jobs:
       # that it stops matching the definitions it claims to come from.
       - name: Check regeneration
         run: |
-          if [ -d referneces/missionplanner ]; then
+          if [ -d references/missionplanner ]; then
             cargo run -p xtask -- verify-mavlink all
             cargo run -p xtask -- codegen all --check
           else

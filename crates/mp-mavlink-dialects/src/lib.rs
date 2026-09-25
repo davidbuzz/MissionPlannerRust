@@ -1,7 +1,7 @@
 //! Generated MAVLink message types, metadata and enums.
 //!
 //! The contents of `generated/` are produced by `cargo xtask codegen mavlink` from
-//! `referneces/missionplanner/ExtLibs/Mavlink/message_definitions/*.xml` - the same definitions
+//! `references/missionplanner/ExtLibs/Mavlink/message_definitions/*.xml` - the same definitions
 //! the C# build uses. They are checked in so building needs no Python, no network and no
 //! reference tree.
 //!

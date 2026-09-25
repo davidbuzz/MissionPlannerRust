@@ -804,7 +804,7 @@ mod tests {
     fn the_magic_values_are_mission_planners_own() {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../referneces/missionplanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs"
+            "/../../references/missionplanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs"
         );
         let Ok(source) = std::fs::read_to_string(path) else {
             eprintln!("skipped: no C# tree at {path}");

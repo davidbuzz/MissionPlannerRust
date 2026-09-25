@@ -5,7 +5,7 @@
 #
 # The build is regen-grid.sh's, step for step and in the same cache, so whichever script runs first
 # builds ExtLibs/Utilities once for all of them:
-#   1. copy referneces/missionplanner/ExtLibs out of tree, so the reference tree stays read-only;
+#   1. copy references/missionplanner/ExtLibs out of tree, so the reference tree stays read-only;
 #   2. msbuild ExtLibs/Utilities/MissionPlanner.Utilities.csproj under mono - BinaryLog.cs,
 #      DFLogBuffer.cs, LogOutput.cs and MatLab.cs are all in it, with KMLib, csmatio and SharpZipLib
 #      beside it;
@@ -35,7 +35,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
-MP="${MP_SRC:-$ROOT/referneces/missionplanner}"
+MP="${MP_SRC:-$ROOT/references/missionplanner}"
 DATA="$ROOT/testdata/dataflash"
 LOGS=("$ROOT/testdata/dataflash.bin" "$ROOT/testdata/dataflash_damaged.bin")
 

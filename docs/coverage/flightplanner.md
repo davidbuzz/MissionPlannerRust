@@ -4,15 +4,15 @@ Generated from `crates/mp-gui/src/planner_coverage.rs` by `cargo test -p mp-gui 
 
 | total | done | elsewhere | missing | plumbing | dropped |
 |---:|---:|---:|---:|---:|---:|
-| 121 | 95 | 0 | 14 | 12 | 0 |
+| 121 | 100 | 0 | 9 | 12 | 0 |
 
 Missing, by where the control sits:
 
 | group | missing |
 |---|---:|
-| planning panel | 7 |
 | Map Tool | 4 |
 | Geo-Fence | 2 |
+| planning panel | 2 |
 | map menu | 1 |
 
 | control | event | handler | text | ours |
@@ -23,7 +23,7 @@ Missing, by where the control sits:
 | `TXT_DefaultAlt` | Leave | `TXT_DefaultAlt_Leave` | Default Alt | done: `fn panel_leave` |
 | `TXT_loiterrad` | KeyPress | `TXT_loiterrad_KeyPress` | Loiter Radius | done: `plan-loiterrad` |
 | `TXT_loiterrad` | Leave | `TXT_loiterrad_Leave` | Loiter Radius | done: `fn panel_leave` |
-| `but_writewpfast` | Click | `but_writewpfast_Click` | Write Fast | **missing** |
+| `but_writewpfast` | Click | `but_writewpfast_Click` | Write Fast | done: `plan-writefast` |
 | `BUT_write` | Click | `BUT_write_Click` | Write | done: `plan-write` |
 | `BUT_read` | Click | `BUT_read_Click` | Read | done: `plan-read` |
 | `label4` | LinkClicked | `label4_LinkClicked` | Home Location | done: `plan-home-link` |
@@ -31,9 +31,9 @@ Missing, by where the control sits:
 | `TXT_homelng` | TextChanged | `TXT_homelng_TextChanged` | Home Location: Long | done: `plan-home-lng` |
 | `TXT_homelat` | TextChanged | `TXT_homelat_TextChanged` | Home Location: Lat | done: `plan-home-lat` |
 | `TXT_homelat` | Enter | `TXT_homelat_Enter` | Home Location: Lat | done: `fn track_home_focus` |
-| `coords1` | SystemChanged | `coords1_SystemChanged` | the pointer coordinates: system | **missing** |
-| `chk_usemavftp` | CheckedChanged | `chk_usemavftp_CheckedChanged` | MAVFTP | **missing** |
-| `but_mincommands` | Click | `but_mincommands_Click` | ˅ | **missing** |
+| `coords1` | SystemChanged | `coords1_SystemChanged` | the pointer coordinates: system | done: `plan-coords-geo` |
+| `chk_usemavftp` | CheckedChanged | `chk_usemavftp_CheckedChanged` | MAVFTP | done: `plan-mavftp` |
+| `but_mincommands` | Click | `but_mincommands_Click` | ˅ | done: `plan-mincommands` |
 | `CMB_altmode` | SelectedIndexChanged | `CMB_altmode_SelectedIndexChanged` | the altitude frame | done: `fn set_altitude_frame` |
 | `CHK_splinedefault` | CheckedChanged | `CHK_splinedefault_CheckedChanged` | Spline | done: `plan-spline` |
 | `Commands` | CellContentClick | `Commands_CellContentClick` | the waypoint grid: Delete, Up, Down | done: `fn row_controls` |
@@ -47,7 +47,7 @@ Missing, by where the control sits:
 | `Commands` | RowValidating | `Commands_RowValidating` | the waypoint grid | plumbing |
 | `BUT_Add` | Click | `BUT_Add_Click` | Add Below | done: `plan-add-below` |
 | `BUT_InjectCustomMap` | Click | `BUT_InjectCustomMap_Click` | Inject Custom Map | **missing** |
-| `chk_grid` | CheckedChanged | `chk_grid_CheckedChanged` | Grid | **missing** |
+| `chk_grid` | CheckedChanged | `chk_grid_CheckedChanged` | Grid | done: `plan-grid` |
 | `lnk_kml` | LinkClicked | `lnk_kml_LinkClicked` | View KML | **missing** |
 | `BUT_loadwpfile` | Click | `BUT_loadwpfile_Click` | Load File | done: `plan-load` |
 | `BUT_saveWPFile` | Click | `BUT_saveWPFile_Click` | Save File | done: `plan-save` |

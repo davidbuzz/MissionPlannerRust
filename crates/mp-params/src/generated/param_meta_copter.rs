@@ -2,7 +2,7 @@
 //!
 //! DO NOT EDIT. Regenerate with `cargo xtask codegen-param-meta`.
 //!
-//! Source: `referneces/missionplanner/ParameterMetaDataBackup.xml`, which ArduPilot
+//! Source: `references/missionplanner/ParameterMetaDataBackup.xml`, which ArduPilot
 //! generates from its own source comments. 3136 parameters.
 
 // These are ranges and defaults copied from firmware documentation, not computed
