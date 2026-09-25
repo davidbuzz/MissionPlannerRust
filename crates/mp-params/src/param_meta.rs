@@ -120,9 +120,28 @@ pub fn lookup(name: &str) -> Option<&'static ParamMeta> {
         .and_then(|index| copter::PARAMETERS.get(index))
 }
 
+/// Whether the bundled XML marks the parameter `<ReadOnly>True</ReadOnly>`: the C#'s
+/// `ParameterMetaDataRepositoryAPM` answer for `ReadOnly`, asked when the fetched `apm.pdef.xml`
+/// has nothing for the name.
+/// `// C#: ExtLibs/Utilities/ParameterMetaDataRepository.cs:42-49; ParameterMetaDataRepositoryAPM.cs:70-104`
+#[must_use]
+pub fn read_only_backup(name: &str) -> bool {
+    copter::READ_ONLY.binary_search(&name).is_ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The bundled file's ReadOnly marks: a device id is read-only, a tuning gain is not, and
+    /// the list is sorted for the bisection.
+    #[test]
+    fn the_bundled_read_only_marks_are_looked_up() {
+        assert!(read_only_backup("BARO1_DEVID"));
+        assert!(!read_only_backup("ATC_RAT_RLL_P"));
+        assert!(!read_only_backup("NOT_A_PARAM"));
+        assert!(copter::READ_ONLY.windows(2).all(|pair| pair[0] < pair[1]));
+    }
 
     /// SITL's 1,408 names, as `testdata/params/sitl-copter.param` lists them.
     fn sitl_names() -> Vec<String> {

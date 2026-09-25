@@ -46,9 +46,10 @@
 //!
 //! **Where this differs, and why** (each also at its site):
 //!
-//! * a typed value is read as a number, not by mXparser (`cell_value_changed`);
-//! * the `NumericUpDown` takes its arrows, not typing into its own box - the Value cell beside
-//!   it is typed into instead (`options_cell`);
+//! * a typed value is read as arithmetic - `+ - * / ^`, parentheses, a unary minus - and not
+//!   mXparser's whole grammar of functions and constants (`calculate`);
+//! * the `NumericUpDown`'s box, clicked, begins the Value cell's edit with its text: what is
+//!   typed shows in the Value cell, where the C# mirrors each keystroke into it (`options_cell`);
 //! * a bit clicked in Set Bitmask's window edits that window's parameter, where the C# writes
 //!   whichever row is current by then (`param_grid_click_bit`);
 //! * the Options cell's range is written from its two numbers, not the file's text
@@ -197,6 +198,56 @@ impl Column {
 
 /// `new DataGridViewRow() { Height = 36 }`. `// C#: ConfigRawParams.cs:589`
 pub const ROW_HEIGHT: f32 = 36.0;
+
+/// How the grid is sorted: a column header clicked sorts by it, ascending, and clicked again
+/// descending, as a `DataGridView`'s automatic sort on a text column does (the Fav check-box
+/// column has no automatic sort). `Params.Sort(Command, Ascending)` at start and after each
+/// load; `OnParamsOnSortCompare` keeps favourites first either way.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:674-676, 833-858, 1062`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Sort {
+    /// The column sorted by.
+    pub column: Column,
+    /// Ascending, else descending.
+    pub ascending: bool,
+}
+
+impl Default for Sort {
+    fn default() -> Self {
+        Self {
+            column: Column::Command,
+            ascending: true,
+        }
+    }
+}
+
+impl Sort {
+    /// For the fact: `Command asc`.
+    #[must_use]
+    pub fn label(self) -> String {
+        format!(
+            "{} {}",
+            self.column.name(),
+            if self.ascending { "asc" } else { "desc" }
+        )
+    }
+
+    /// A header clicked: the same column turns the order round, another sorts ascending;
+    /// the Fav column is `NotSortable` and changes nothing.
+    pub fn click(&mut self, column: Column) {
+        if column == Column::Fav {
+            return;
+        }
+        if self.column == column {
+            self.ascending = !self.ascending;
+        } else {
+            *self = Self {
+                column,
+                ascending: true,
+            };
+        }
+    }
+}
 /// Where the splitter's distance is kept. `// C#: ConfigRawParams.cs:84, 112`
 pub const SPLITTER_KEY: &str = "rawparam_splitterdistance";
 /// `GetInt32("rawparam_splitterdistance", 180)`'s default, the Designer's distance.
@@ -499,11 +550,204 @@ fn natural_in(x: impl Fn(usize) -> Option<char>, y: impl Fn(usize) -> Option<cha
 /// `OnParamsOnSortCompare` under `Params.Sort(Command, Ascending)`: favourites first, and by
 /// name in natural order within each.
 /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:674-676, 833-858, 1062`
-pub fn sort_rows(rows: &mut [&Parameter], favourites: &BTreeSet<String>) {
+pub fn sort_rows(
+    rows: &mut [&Parameter],
+    favourites: &BTreeSet<String>,
+    sort: Sort,
+    changes: &BTreeMap<String, f64>,
+) {
+    // The cell's text in the sorted column, as the comparer reads `CellValue1.ToString()`.
+    let text = |parameter: &Parameter| -> String {
+        match sort.column {
+            Column::Command | Column::Fav => parameter.name.clone(),
+            Column::Value => value_text(parameter, changes),
+            Column::DefaultValue => parameter.default_shown(),
+            Column::Units => cells(parameter.meta).units,
+            Column::Options => cells(parameter.meta).options,
+            Column::Desc => cells(parameter.meta).desc,
+        }
+    };
     rows.sort_by(|a, b| {
         let (fa, fb) = (favourites.contains(&a.name), favourites.contains(&b.name));
-        fb.cmp(&fa).then_with(|| natural_compare(&a.name, &b.name))
+        fb.cmp(&fa).then_with(|| {
+            let order = natural_compare(&text(a), &text(b))
+                .then_with(|| natural_compare(&a.name, &b.name));
+            if sort.ascending { order } else { order.reverse() }
+        })
     });
+}
+
+// --- The cells' tooltips ---------------------------------------------------------------------------
+
+/// `maximumSingleLineTooltipLength`: a description shorter than this is one line.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:27`
+const MAX_SINGLE_LINE_TOOLTIP: usize = 50;
+
+/// `AddNewLinesForTooltip`: the Name, Value and Desc cells' tooltip. Text under fifty characters
+/// stays as it is; longer text is broken into lines of about `2 * sqrt(length)` characters -
+/// a break at the first whitespace once a line is that long, the whitespace after a break
+/// dropped - so a long description reads as a block rather than one line across the screen.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:535-560`
+#[must_use]
+pub fn tooltip_lines(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() < MAX_SINGLE_LINE_TOOLTIP {
+        return text.to_owned();
+    }
+    // `(int)Math.Sqrt(text.Length) * 2`: the root truncated, then doubled.
+    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let line_length = (chars.len() as f64).sqrt() as usize * 2;
+    let mut out = String::new();
+    let mut position = 0;
+    let mut index = 0;
+    while let Some(&current) = chars.get(index) {
+        if position >= line_length && current.is_whitespace() {
+            out.push('\n');
+            position = 0;
+        }
+        if position == 0 {
+            while chars.get(index).is_some_and(|c| c.is_whitespace()) {
+                index += 1;
+            }
+        }
+        if let Some(&c) = chars.get(index) {
+            out.push(c);
+        }
+        position += 1;
+        index += 1;
+    }
+    out
+}
+
+/// The Options cell's tooltip: the values one to a line, and past fifty of them in columns -
+/// `(N - 1) / 50 + 1` values a line, each followed by ", " - as `processToScreen` lays them out.
+/// None without values.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:622-642`
+#[must_use]
+pub fn options_tooltip(options: &str) -> Option<String> {
+    if options.is_empty() {
+        return None;
+    }
+    let commas = options.matches(',').count();
+    if commas <= 50 {
+        return Some(options.replace(',', "\n"));
+    }
+    let columns = (commas - 1) / 50 + 1;
+    let mut opts = options.split(',');
+    let mut out = String::new();
+    let mut i = 0;
+    'lines: loop {
+        for _ in 0..columns {
+            out.push_str(opts.next().unwrap_or_default());
+            out.push_str(", ");
+            i += 1;
+            if i >= commas {
+                break 'lines;
+            }
+        }
+        out.push('\n');
+    }
+    Some(out)
+}
+
+// --- A typed value's expression --------------------------------------------------------------------
+
+/// `new Expression(value).calculate()`: the Value cell's text is an arithmetic expression, not
+/// only a number - `2*3.5`, `(1+2)/4`, `-0.5`, `2^10`. mXparser's grammar for these: `+ - * /`
+/// and `^` (right to left), parentheses, a unary minus, decimal numbers; whitespace ignored.
+/// Anything else mXparser also knows - its functions and constants, `pi`, `sqrt(2)` - is not
+/// read here and is NaN, which the C# throws on and the cell refuses (the divergence at the
+/// top of the file). `None` for what does not parse, NaN or infinity.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:471-478`
+#[must_use]
+pub fn calculate(text: &str) -> Option<f64> {
+    let chars: Vec<char> = text.chars().filter(|c| !c.is_whitespace()).collect();
+    let mut at = 0;
+    let value = expr_sum(&chars, &mut at)?;
+    (at == chars.len() && value.is_finite()).then_some(value)
+}
+
+fn expr_sum(chars: &[char], at: &mut usize) -> Option<f64> {
+    let mut left = expr_product(chars, at)?;
+    while let Some(&op) = chars.get(*at)
+        && (op == '+' || op == '-')
+    {
+        *at += 1;
+        let right = expr_product(chars, at)?;
+        left = if op == '+' { left + right } else { left - right };
+    }
+    Some(left)
+}
+
+fn expr_product(chars: &[char], at: &mut usize) -> Option<f64> {
+    let mut left = expr_power(chars, at)?;
+    while let Some(&op) = chars.get(*at)
+        && (op == '*' || op == '/')
+    {
+        *at += 1;
+        let right = expr_power(chars, at)?;
+        left = if op == '*' { left * right } else { left / right };
+    }
+    Some(left)
+}
+
+fn expr_power(chars: &[char], at: &mut usize) -> Option<f64> {
+    let base = expr_unary(chars, at)?;
+    if chars.get(*at) == Some(&'^') {
+        *at += 1;
+        // Right to left: `2^3^2` is `2^9`.
+        let exponent = expr_power(chars, at)?;
+        return Some(base.powf(exponent));
+    }
+    Some(base)
+}
+
+fn expr_unary(chars: &[char], at: &mut usize) -> Option<f64> {
+    match chars.get(*at) {
+        Some('-') => {
+            *at += 1;
+            expr_unary(chars, at).map(|value| -value)
+        }
+        Some('+') => {
+            *at += 1;
+            expr_unary(chars, at)
+        }
+        Some('(') => {
+            *at += 1;
+            let inner = expr_sum(chars, at)?;
+            if chars.get(*at) != Some(&')') {
+                return None;
+            }
+            *at += 1;
+            Some(inner)
+        }
+        _ => expr_number(chars, at),
+    }
+}
+
+/// A number: digits with a point, and mXparser's `1e3` / `1.5E-2` exponent form.
+fn expr_number(chars: &[char], at: &mut usize) -> Option<f64> {
+    let start = *at;
+    while chars.get(*at).is_some_and(|c| c.is_ascii_digit() || *c == '.') {
+        *at += 1;
+    }
+    if *at == start {
+        return None;
+    }
+    if chars.get(*at).is_some_and(|c| *c == 'e' || *c == 'E') {
+        let mut after = *at + 1;
+        if chars.get(after).is_some_and(|c| *c == '+' || *c == '-') {
+            after += 1;
+        }
+        let digits = after;
+        while chars.get(after).is_some_and(char::is_ascii_digit) {
+            after += 1;
+        }
+        if after > digits {
+            *at = after;
+        }
+    }
+    chars.get(start..*at)?.iter().collect::<String>().parse().ok()
 }
 
 // --- The documentation's cells -------------------------------------------------------------------
@@ -640,13 +884,9 @@ pub fn cell_value_changed(
     } else {
         text
     };
-    let Some(value) = text
-        .replace(',', ".")
-        .trim()
-        .parse::<f64>()
-        .ok()
-        .filter(|value| value.is_finite())
-    else {
+    // `new Expression(value).calculate()`: arithmetic, not only a number; NaN or infinity
+    // throws in the C#, which is the refusal here.
+    let Some(value) = calculate(&text.replace(',', ".")) else {
         return Edit::Invalid;
     };
     if let Some(read_only) = read_only.filter(|text| !text.is_empty()) {
@@ -1064,6 +1304,8 @@ pub const REFRESH_TEXT: &str = "Update Params\nDON'T DO THIS IF YOU ARE IN THE A
 pub struct RawGrid {
     /// The Fav cells ticked: from `fav_params` when the rows are made, then as clicked.
     favourites: BTreeSet<String>,
+    /// The column sorted by and its direction.
+    sort: Sort,
     /// The widths and the splitter.
     layout: Layout,
     /// A header edge or the splitter being dragged.
@@ -1123,6 +1365,17 @@ impl RawGrid {
     #[must_use]
     pub const fn layout(&self) -> &Layout {
         &self.layout
+    }
+
+    /// How the rows are sorted.
+    #[must_use]
+    pub const fn sort(&self) -> Sort {
+        self.sort
+    }
+
+    /// A column header clicked.
+    pub fn click_header(&mut self, column: Column) {
+        self.sort.click(column);
     }
 
     /// The Fav cells ticked.
@@ -1793,6 +2046,7 @@ impl MissionPlanner {
             self.param_search.value(),
             &filters,
             &grid.favourites,
+            grid.sort,
         )
         .unwrap_or_default();
         record(
@@ -1805,6 +2059,7 @@ impl MissionPlanner {
         // How many rows the grid built for its box, the last time it drew: the rows in view,
         // not every row shown.
         record("params.rows.drawn", crate::params::rows_drawn());
+        record("params.sort", self.param_grid.sort().label());
         let selected = self
             .selected_param
             .as_deref()
@@ -1912,6 +2167,7 @@ fn width(layout: &Layout, column: Column) -> gpui::Pixels {
 pub fn header(
     layout: &Layout,
     with_defaults: bool,
+    sort: Sort,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
     let mut row = div()
@@ -1923,11 +2179,28 @@ pub fn header(
         if column == Column::DefaultValue && !with_defaults {
             continue;
         }
-        let mut cell = div()
+        // The header's text, with the sort glyph a `DataGridView` draws on the sorted column;
+        // a click sorts by the column (the Fav check-box column is `NotSortable`).
+        let glyph = if sort.column == column {
+            if sort.ascending { " \u{25b2}" } else { " \u{25bc}" }
+        } else {
+            ""
+        };
+        let id = format!("param-col-{}", column.name());
+        let mut cell = crate::probe::measured(id.clone(), div())
+            .id(SharedString::from(id))
             .relative()
             .flex_shrink_0()
             .overflow_hidden()
-            .child(column.header());
+            .child(format!("{}{glyph}", column.header()));
+        if column != Column::Fav {
+            cell = cell.cursor_pointer().on_click(cx.listener(
+                move |this, _event: &gpui::ClickEvent, _window, cx| {
+                    this.param_grid.click_header(column);
+                    cx.notify();
+                },
+            ));
+        }
         cell = if column == Column::Desc {
             cell.flex_1().min_w(px(0.0))
         } else {
@@ -1960,6 +2233,17 @@ pub fn header(
     row.into_any_element()
 }
 
+/// A cell with its `ToolTipText`, when it has one: shown as the log browser's chips show
+/// theirs, in the panel's colours.
+fn with_tip(cell: gpui::Stateful<gpui::Div>, tip: Option<String>) -> gpui::Stateful<gpui::Div> {
+    let Some(tip) = tip else { return cell };
+    let tip = SharedString::from(tip);
+    cell.tooltip(move |_window, cx| -> gpui::AnyView {
+        let tip = tip.clone();
+        cx.new(|_| crate::config::rover_tuning::Tip(tip)).into()
+    })
+}
+
 /// A text cell of a fixed width, as tall as the row, clipped.
 fn cell(layout: &Layout, column: Column) -> gpui::Div {
     div()
@@ -1982,6 +2266,9 @@ pub fn row(
     let name = parameter.name.clone();
     let texts = cells(parameter.meta);
     let value = value_text(parameter, view.changes);
+    // The description, broken into lines, as the Name, Value and Desc cells' tooltip.
+    // `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:610-611, 644`
+    let tip_text = (!texts.desc.is_empty()).then(|| tooltip_lines(&texts.desc));
 
     // `Value`: typed into, or the value - green while it waits in `_changes`, red after a text
     // that was no number.
@@ -2010,21 +2297,24 @@ pub fn row(
                 shown = shown.bg(rgb(theme::OK)).text_color(rgb(theme::BG));
             }
             let clicked = name.clone();
-            crate::probe::measured(format!("param-value-{name}"), shown)
-                .id(SharedString::from(format!("value-{name}")))
-                .cursor_text()
-                .on_click(
-                    cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
-                        this.param_grid_select(&clicked, false, window, cx);
-                        // A double click begins the edit, as the grid's does.
-                        if event.click_count() >= 2 {
-                            this.param_grid_begin_edit(None, window, cx);
-                        }
-                        cx.stop_propagation();
-                        cx.notify();
-                    }),
-                )
-                .into_any_element()
+            with_tip(
+                crate::probe::measured(format!("param-value-{name}"), shown)
+                    .id(SharedString::from(format!("value-{name}")))
+                    .cursor_text()
+                    .on_click(
+                        cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                            this.param_grid_select(&clicked, false, window, cx);
+                            // A double click begins the edit, as the grid's does.
+                            if event.click_count() >= 2 {
+                                this.param_grid_begin_edit(None, window, cx);
+                            }
+                            cx.stop_propagation();
+                            cx.notify();
+                        }),
+                    ),
+                tip_text.clone(),
+            )
+            .into_any_element()
         }
     };
 
@@ -2033,10 +2323,16 @@ pub fn row(
         Some((entered, control)) if selected && entered == name => {
             options_cell(control, layout, cx)
         }
-        _ => cell(layout, Column::Options)
-            .text_color(rgb(theme::DIM))
-            .child(texts.options.clone())
-            .into_any_element(),
+        // The text form's tooltip lists the values, in columns past fifty.
+        // `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:622-642`
+        _ => with_tip(
+            cell(layout, Column::Options)
+                .id(SharedString::from(format!("options-{name}")))
+                .text_color(rgb(theme::DIM))
+                .child(texts.options.clone()),
+            options_tooltip(&texts.options),
+        )
+        .into_any_element(),
     };
 
     let fav = view.grid.favourites().contains(&name);
@@ -2061,7 +2357,12 @@ pub fn row(
         }))
         .text_color(rgb(if selected { theme::ACCENT } else { theme::TEXT }))
         .hover(|style| style.bg(rgb(theme::BORDER)))
-        .child(cell(layout, Column::Command).child(name.clone()))
+        .child(with_tip(
+            cell(layout, Column::Command)
+                .id(SharedString::from(format!("name-{name}")))
+                .child(name.clone()),
+            tip_text.clone(),
+        ))
         .child(value_cell)
         // `Default_value`: `default_value_to_string`, "NaN" without one.
         // C#: GCSViews/ConfigurationView/ConfigRawParams.cs:598-603
@@ -2082,7 +2383,7 @@ pub fn row(
         .child(options_cell)
         // `Desc`: the fill column; a click opens the first address in it.
         // C#: GCSViews/ConfigurationView/ConfigRawParams.cs:643, 1033-1043
-        .child(
+        .child(with_tip(
             crate::probe::measured(format!("param-desc-{name}"), div())
                 .id(SharedString::from(format!("desc-{name}")))
                 .flex_1()
@@ -2097,7 +2398,8 @@ pub fn row(
                     cx.stop_propagation();
                     cx.notify();
                 })),
-        )
+            tip_text,
+        ))
         // `Fav`: a check box.
         // C#: GCSViews/ConfigurationView/ConfigRawParams.cs:596, 1045-1063
         .child(
@@ -2199,23 +2501,31 @@ fn options_cell(
             }
             holder.into_any_element()
         }
-        // The `NumericUpDown`: its text and its arrows. Typing into its own box - whose every
-        // `TextChanged`, key by key, is an edit of the Value cell - is not drawn: the Value cell
-        // beside it takes typing.
+        // The `NumericUpDown`: its text and its arrows. Its own box is typed into: every
+        // `TextChanged`, key by key, is the Value cell's text, so a click in the box begins the
+        // Value cell's edit with the box's text, and what is typed shows there.
         // C#: GCSViews/ConfigurationView/ConfigRawParams.cs:1281-1314
         OptionsControl::Range(numeric) => cell(layout, Column::Options)
             .flex()
             .items_center()
             .gap_1()
-            .child(
+            .child({
+                let text = numeric.text();
                 crate::probe::measured("param-options-number", div())
+                    .id("param-options-number")
                     .flex_1()
                     .px_1()
                     .border_1()
                     .border_color(rgb(theme::BORDER))
                     .text_color(rgb(theme::TEXT))
-                    .child(numeric.text()),
-            )
+                    .cursor_text()
+                    .child(numeric.text())
+                    .on_click(cx.listener(move |this, _event, window, cx| {
+                        this.param_grid_begin_edit(Some(&text), window, cx);
+                        cx.stop_propagation();
+                        cx.notify();
+                    }))
+            })
             .child(arrow("param-options-up", "▲", true, cx))
             .child(arrow("param-options-down", "▼", false, cx))
             .into_any_element(),
@@ -2967,7 +3277,7 @@ mod tests {
         let favourites: BTreeSet<String> = ["RTL_SPEED".to_owned(), "RTL_LOIT_TIME".to_owned()]
             .into_iter()
             .collect();
-        sort_rows(&mut shown, &favourites);
+        sort_rows(&mut shown, &favourites, Sort::default(), &BTreeMap::new());
         let names: Vec<&str> = shown.iter().map(|p| p.name.as_str()).collect();
         assert_eq!(
             names,
@@ -3596,5 +3906,103 @@ mod tests {
                 _ => {}
             }
         }
+    }
+
+    /// `AddNewLinesForTooltip`: short text as it is; long text in lines of `2 * (int)sqrt(n)`
+    /// characters, broken at whitespace, the whitespace after a break dropped.
+    #[test]
+    fn a_long_tooltip_is_broken_into_lines_at_whitespace() {
+        assert_eq!(tooltip_lines("short"), "short");
+        let text = "a".repeat(20) + " " + &"b".repeat(20) + "  " + &"c".repeat(20) + " tail";
+        // 66 characters: (int)sqrt(66) = 8, lines of 16. The first break comes at the first
+        // whitespace at or past position 16 (after the a's), the next after the b's.
+        let broken = tooltip_lines(&text);
+        assert_eq!(
+            broken,
+            "a".repeat(20) + "\n" + &"b".repeat(20) + "\n" + &"c".repeat(20) + "\ntail"
+        );
+        // Exactly 49 characters is still one line; 50 is broken.
+        assert_eq!(tooltip_lines("x ".repeat(24).trim_end()), "x ".repeat(24).trim_end());
+        assert!(tooltip_lines(&"x ".repeat(25)).contains('\n'));
+    }
+
+    /// The Options tooltip: the values one a line, and past fifty of them in columns.
+    #[test]
+    fn the_options_tooltip_lists_values_and_columns_many() {
+        assert_eq!(options_tooltip(""), None);
+        assert_eq!(
+            options_tooltip("0:Off,1:On,").as_deref(),
+            Some("0:Off\n1:On\n")
+        );
+        let many: String = (0..60).map(|i| format!("{i}:v{i},")).collect();
+        let tip = options_tooltip(&many).expect("a tooltip");
+        // 60 commas: (60 - 1) / 50 + 1 = 2 columns; the first line holds two values.
+        assert!(tip.starts_with("0:v0, 1:v1, \n2:v2, 3:v3, "), "{tip}");
+        assert_eq!(tip.matches('\n').count(), 29);
+    }
+
+    /// `new Expression(value).calculate()`: arithmetic with precedence and parentheses; what
+    /// does not parse, or is not finite, is refused.
+    #[test]
+    fn a_typed_value_may_be_an_expression() {
+        assert_eq!(calculate("2*3.5"), Some(7.0));
+        assert_eq!(calculate(" (1 + 2) / 4 "), Some(0.75));
+        assert_eq!(calculate("-0.5"), Some(-0.5));
+        assert_eq!(calculate("2^10"), Some(1024.0));
+        assert_eq!(calculate("2^3^2"), Some(512.0), "right to left");
+        assert_eq!(calculate("1-2-3"), Some(-4.0), "left to right");
+        assert_eq!(calculate("--2"), Some(2.0));
+        assert_eq!(calculate("1e3"), Some(1000.0));
+        assert_eq!(calculate("1.5E-2*2"), Some(0.03));
+        assert_eq!(calculate("1/0"), None, "infinity is refused");
+        assert_eq!(calculate("abc"), None);
+        assert_eq!(calculate("2*"), None);
+        assert_eq!(calculate("(2"), None);
+        assert_eq!(calculate("sqrt(4)"), None, "mXparser's functions are not read here");
+        assert_eq!(calculate(""), None);
+    }
+
+    /// A header clicked sorts by its column, ascending, then descending; the Fav column is
+    /// `NotSortable`; favourites stay first either way, and the rows tie-break by name.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:674-676, 833-858`
+    #[test]
+    fn a_header_click_sorts_by_its_column_with_favourites_first() {
+        let mut sort = Sort::default();
+        assert_eq!(sort.label(), "Command asc");
+        sort.click(Column::Value);
+        assert_eq!(sort.label(), "Value asc");
+        sort.click(Column::Value);
+        assert_eq!(sort.label(), "Value desc");
+        sort.click(Column::Fav);
+        assert_eq!(sort.label(), "Value desc", "Fav is NotSortable");
+        sort.click(Column::Command);
+        assert_eq!(sort.label(), "Command asc");
+
+        let a = parameter("B_ONE", 3.0);
+        let b = parameter("A_TWO", 1.0);
+        let c = parameter("C_TEN", 10.0);
+        let d = parameter("D_TWO", 1.0);
+        let favourites: BTreeSet<String> = ["C_TEN".to_owned()].into_iter().collect();
+        let changes = BTreeMap::new();
+        fn names<'a>(rows: &[&'a Parameter]) -> Vec<&'a str> {
+            rows.iter().map(|p| p.name.as_str()).collect()
+        }
+
+        let mut rows = vec![&a, &b, &c, &d];
+        sort_rows(&mut rows, &favourites, Sort::default(), &changes);
+        assert_eq!(names(&rows), ["C_TEN", "A_TWO", "B_ONE", "D_TWO"]);
+
+        let by_value = Sort { column: Column::Value, ascending: true };
+        sort_rows(&mut rows, &favourites, by_value, &changes);
+        assert_eq!(names(&rows), ["C_TEN", "A_TWO", "D_TWO", "B_ONE"], "ties by name");
+
+        let by_value_desc = Sort { column: Column::Value, ascending: false };
+        sort_rows(&mut rows, &favourites, by_value_desc, &changes);
+        assert_eq!(names(&rows), ["C_TEN", "B_ONE", "D_TWO", "A_TWO"], "the favourite still first");
+
+        // A value waiting in `_changes` sorts by what the cell shows.
+        let changed: BTreeMap<String, f64> = [("A_TWO".to_owned(), 100.0)].into_iter().collect();
+        sort_rows(&mut rows, &favourites, by_value, &changed);
+        assert_eq!(names(&rows), ["C_TEN", "D_TWO", "B_ONE", "A_TWO"]);
     }
 }

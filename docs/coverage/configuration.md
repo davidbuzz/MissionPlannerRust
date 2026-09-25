@@ -193,14 +193,14 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
         //     question, Ctrl+S as Write Params over _changes with its question and its ends, the
         //     columns' widths and the splitter kept under rawparam_* on Deactivate and read on
         //     Activate (both draggable), and RawParamWarning's MessageShowAgain box -
-        //     raw_params_grid.rs; missing the cells' tooltips (AddNewLinesForTooltip), the
-        //     headers' click sorting (a text column's automatic SortMode through
-        //     OnParamsOnSortCompare), mXparser's expressions in a typed value (read as a number
-        //     here), typing into the NumericUpDown's own box, the questions on a file's or a
-        //     presaved file's values (the C#'s ParamCompare puts them through the grid's
-        //     CellValueChanged), ReadOnly from anything but the fetched apm.pdef.xml (the C#'s
-        //     SITL, AP_Periph and ParameterMetaData.xml fallbacks), and the Options cell's range
-        //     as the file writes it (here from its two numbers) |
+        //     raw_params_grid.rs; the cells' tooltips (AddNewLinesForTooltip, the
+        //     Options list in columns past fifty), the headers' click sorting (natural order,
+        //     favourites first, the glyph), a typed value's arithmetic (mXparser's `+ - * / ^`
+        //     and parentheses; not its functions), the NumericUpDown's box typed into (through
+        //     the Value cell), a compared file's values through the cells' questions, ReadOnly
+        //     from the bundled ParameterMetaDataBackup.xml when the fetched file has none;
+        //     missing the SITL and AP_Periph files' ReadOnly (two more fetches) and the Options
+        //     cell's range as the file writes it (here from its two numbers) |
 | 235 | `ConfigFlightModes` | Flight Modes |  | Ateryx | 8 | as at `GCSViews/InitialSetup.cs:228` |
 | 236 | `ConfigAteryxSensors` | Ateryx Zero Sensors |  | Ateryx | 3 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 | 237 | `ConfigAteryx` | Ateryx Pids |  | Ateryx | 8 | done: `crates/mp-gui/src/config/ateryx.rs` `fn page` |

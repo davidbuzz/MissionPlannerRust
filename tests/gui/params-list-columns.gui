@@ -39,7 +39,7 @@ setup printf '\357\273\277<?xml version="1.0" encoding="utf-8"?>\n<Config>\n  <r
 
 screen params
 window 1600x1200
-budget 84
+budget 88
 
 expect vehicle.connected true
 expect params.held > 1000
@@ -68,6 +68,18 @@ expect params.rows.first RTL_ALT_FINAL_M
 click param-fav-RTL_LOIT_TIME
 expect params.fav RTL_LOIT_TIME
 expect params.config.fav_params RTL_LOIT_TIME
+expect params.rows.first RTL_LOIT_TIME
+
+# A header clicked sorts by its column, and again turns the order round; the favourite stays
+# first either way, as OnParamsOnSortCompare keeps it. Name descending puts RTL_ALT_FINAL_M last.
+expect params.sort Command asc
+click param-col-Command
+expect params.sort Command desc
+expect params.rows.first RTL_LOIT_TIME
+click param-col-Value
+expect params.sort Value asc
+click param-col-Command
+expect params.sort Command asc
 expect params.rows.first RTL_LOIT_TIME
 
 # The Fav click entered the row: its documentation, and the NumericUpDown over its range.

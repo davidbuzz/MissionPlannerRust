@@ -37,6 +37,10 @@ pub struct ParamMeta {
     pub user_level: String,
     /// Whether changing it requires a reboot.
     pub reboot_required: bool,
+    /// `<ReadOnly>True</ReadOnly>`: the C#'s `ParameterMetaDataRepositoryAPM` fallback answers
+    /// `GetParameterMetaData(name, ReadOnly, ...)` from this file for a name the fetched
+    /// `apm.pdef.xml` lacks.
+    pub read_only: bool,
 }
 
 /// Reads one tag's contents.
@@ -124,6 +128,8 @@ fn parameters_in(section: &str) -> BTreeMap<String, ParamMeta> {
                 user_level: tag(body, "User").map(clean).unwrap_or_default(),
                 reboot_required: tag(body, "RebootRequired")
                     .is_some_and(|v| v.trim().eq_ignore_ascii_case("true")),
+                read_only: tag(body, "ReadOnly")
+                    .is_some_and(|v| v.trim().eq_ignore_ascii_case("true")),
             },
         );
 
@@ -204,6 +210,17 @@ pub fn generate(metadata_path: &Path, section_name: &str) -> Result<String> {
             meta.reboot_required
         ));
         out.push_str("    },\n");
+    }
+    out.push_str("];\n");
+
+    // The names marked ReadOnly, sorted as the table is, for the same binary search.
+    out.push_str(
+        "\n/// The parameters the file marks `<ReadOnly>True</ReadOnly>`, sorted by name: the C#'s \
+         fallback for a name the fetched documentation lacks.\n",
+    );
+    out.push_str("pub static READ_ONLY: &[&str] = &[\n");
+    for meta in params.values().filter(|meta| meta.read_only) {
+        out.push_str(&format!("    \"{}\",\n", meta.name));
     }
     out.push_str("];\n");
 

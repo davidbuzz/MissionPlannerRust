@@ -562,9 +562,10 @@ pub fn grid_order(
     search: &str,
     filters: &Filters<'_>,
     favourites: &std::collections::BTreeSet<String>,
+    sort: crate::raw_params_grid::Sort,
 ) -> Option<Vec<usize>> {
     let mut rows = shown(parameters, group, search, filters)?;
-    crate::raw_params_grid::sort_rows(&mut rows, favourites);
+    crate::raw_params_grid::sort_rows(&mut rows, favourites, sort, filters.changes);
     Some(
         rows.into_iter()
             .filter_map(|row| parameters.element_offset(row))
@@ -604,7 +605,14 @@ pub fn list_panel(
     // `Params.Sort(Command, Ascending)` with `OnParamsOnSortCompare` over `filterList`'s rows:
     // favourites first, then by name in natural order.
     // C#: GCSViews/ConfigurationView/ConfigRawParams.cs:674-676, 833-858, 889-944
-    let Some(order) = grid_order(parameters, group, search, filters, grid.grid.favourites()) else {
+    let Some(order) = grid_order(
+        parameters,
+        group,
+        search,
+        filters,
+        grid.grid.favourites(),
+        grid.grid.sort(),
+    ) else {
         return panel(
             "values",
             div()
@@ -676,6 +684,7 @@ pub fn list_panel(
             .child(crate::raw_params_grid::header(
                 grid.grid.layout(),
                 with_defaults,
+                grid.grid.sort(),
                 cx,
             ))
             // Measured by the rows' box - the rows in view - so a script can `reveal` a row
@@ -1328,6 +1337,7 @@ impl MissionPlanner {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::raw_params_grid::Sort;
 
     /// SITL's 1,408 parameters, as a view carries them: every line of the dump, including the
     /// dozen a `.param` file load drops (`WP_TOTAL` and the like), since the vehicle sends those.
@@ -1592,11 +1602,11 @@ mod tests {
         let none = std::collections::BTreeSet::new();
 
         // Nothing chosen and the tree showing: the prompt, not rows.
-        assert!(grid_order(&parameters, None, "", &filters(false, false), &none).is_none());
+        assert!(grid_order(&parameters, None, "", &filters(false, false), &none, Sort::default()).is_none());
 
         // The tree collapsed: every row once, in natural order.
         let started = Instant::now();
-        let all = grid_order(&parameters, None, "", &filters(true, false), &none).expect("rows");
+        let all = grid_order(&parameters, None, "", &filters(true, false), &none, Sort::default()).expect("rows");
         let ordering = started.elapsed();
         assert_eq!(all.len(), 1408);
         let mut once = all.clone();
@@ -1627,7 +1637,7 @@ mod tests {
         let favourites: std::collections::BTreeSet<String> =
             std::iter::once("RTL_LOIT_TIME".to_owned()).collect();
         let favoured =
-            grid_order(&parameters, None, "", &filters(true, false), &favourites).expect("rows");
+            grid_order(&parameters, None, "", &filters(true, false), &favourites, Sort::default()).expect("rows");
         assert_eq!(drawn(&favoured, 0..1), ["RTL_LOIT_TIME"]);
         let rest: Vec<String> = names
             .iter()
@@ -1638,7 +1648,7 @@ mod tests {
 
         // A group: its rows only, in natural order; a box taller than eight rows draws eight.
         let rtl =
-            grid_order(&parameters, Some("RTL"), "", &filters(false, false), &none).expect("rows");
+            grid_order(&parameters, Some("RTL"), "", &filters(false, false), &none, Sort::default()).expect("rows");
         assert_eq!(
             drawn(&rtl, 0..12),
             [
@@ -1659,7 +1669,14 @@ mod tests {
             (Some("RTL"), "", true),
             (None, "zzzz", false),
         ] {
-            let order = grid_order(&parameters, group, search, &filters(false, modified), &none)
+            let order = grid_order(
+                &parameters,
+                group,
+                search,
+                &filters(false, modified),
+                &none,
+                Sort::default(),
+            )
                 .expect("rows");
             let counted: Vec<String> = shown(&parameters, group, search, &filters(false, modified))
                 .expect("rows")

@@ -71,14 +71,18 @@ fn lookup_in(
 
 // ---- ConfigRawParams remainder ----
 /// `GetParameterMetaData(name, ParameterMetaDataConstants.ReadOnly, firmware)`: the fetched
-/// file's `<field name="ReadOnly">` text for the parameter, or `None`, which is the C#'s empty
-/// string. The C# goes on to the SITL and AP_Periph files and the old `ParameterMetaData.xml`
-/// for a name its vehicle's file lacks; here there is only the one fetched file, and the bundled
-/// table carries no ReadOnly, so a parameter read before the file arrives is not read-only.
+/// file's `<field name="ReadOnly">` text for the parameter, else the bundled
+/// `ParameterMetaDataBackup.xml`'s mark (`ParameterMetaDataRepositoryAPM`, the C#'s last
+/// fallback, as "True"), else `None`, the C#'s empty string. The two fallbacks between - the
+/// SITL and AP_Periph vehicles' own `apm.pdef.xml` files - are not fetched here.
 /// `// C#: ExtLibs/Utilities/ParameterMetaDataRepository.cs:27-67; GCSViews/ConfigurationView/ConfigRawParams.cs:480-483`
 #[must_use]
 pub fn read_only(name: &str) -> Option<String> {
-    LOADED.read().ok()?.as_ref()?.read_only.get(name).cloned()
+    let fetched = LOADED
+        .read()
+        .ok()
+        .and_then(|guard| guard.as_ref().and_then(|loaded| loaded.read_only.get(name).cloned()));
+    fetched.or_else(|| mp_params::param_meta::read_only_backup(name).then(|| "True".to_owned()))
 }
 // ---- end ConfigRawParams remainder ----
 

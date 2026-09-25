@@ -2,7 +2,7 @@
 |---|---|---|---|
 | crates/mp-video, crates/mp-gui/src/fly.rs | GStreamer video into the HUD (row 93, gstreamer-rs) | high | 5 |
 | crates/mp-gui/src/fly.rs | HereLink, MJPEG and GStreamer source menu items | high | 5 |
-| crates/mp-gui/src/params.rs | Full Parameter List: remaining wirings of 22 | high | 85 |
+| crates/mp-gui/src/params.rs | Full Parameter List: range text as the file writes it; SITL/AP_Periph ReadOnly files | high | 95 |
 | crates/mp-gui/src/config/compass.rs | Compass page: remaining wirings of 21 | high | 60 |
 | experiments/wasm-plugin-host | WASM plugin host in the application (row 96, component model) | high | 10 |
 | CI, Windows | First Windows run of the application: VM reached, toolchain in, repo cloned, build next | high | 30 |

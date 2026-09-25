@@ -779,21 +779,23 @@ impl MissionPlanner {
     /// Params to press, so the box would tell the operator to do something that does not exist;
     /// the writes' own summary goes on the status line instead.
     /// `// C#: Controls/paramcompare.cs:90-109; GCSViews/ConfigurationView/ConfigRawParams.cs:962-965`
+    /// `BUT_save_Click` with the grid handed in (`dgv`): each ticked row's new value is put in
+    /// the grid's Value cell, which is `Params_CellValueChanged` for it - the ReadOnly box, the
+    /// out-of-range question, the write through `_changes` - one row after another, so the
+    /// questions come in turn. A value that is no number is the C#'s `double.Parse` throwing
+    /// into the `ErrorSettingParameter` box: the status line's here (the owner's ruling).
+    /// `// C#: Controls/paramcompare.cs:65-108; GCSViews/ConfigurationView/ConfigRawParams.cs:453-524`
     fn save_compare(&mut self) {
         let Some(form) = self.raw_params.compare.take() else {
             return;
         };
-        let writes: Vec<(String, f64)> = form
-            .rows()
-            .iter()
-            .filter(|row| row.used)
-            .filter_map(|row| {
-                let value = mp_log::netfmt::parse_double(&row.new_value)?;
-                Some((row.name.trim().to_owned(), value))
-            })
-            .collect();
-        if !writes.is_empty() {
-            self.start_param_writes(crate::params::ParamWrites::apply(writes, 0));
+        for row in form.rows().iter().filter(|row| row.used) {
+            let name = row.name.trim().to_owned();
+            if mp_log::netfmt::parse_double(&row.new_value).is_none() {
+                self.file_status = Some(crate::config::compass::ERROR_SETTING_PARAMETER.to_owned());
+                continue;
+            }
+            self.param_grid_edit(&name, row.new_value.trim());
         }
     }
 
