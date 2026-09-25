@@ -8,11 +8,14 @@
 
 screen fly
 window 1600x1200
-settle 8
+budget 10
 
 expect fly.hud.cells off
 expect fly.hud.cell none
 
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click hud@0.5x0.4:right
 expect fly.hud.menu true
 click fly-hud-batterycells
@@ -21,7 +24,6 @@ expect fly.prompt Cell Count
 expect fly.prompt.value 4
 key ctrl+u
 type four
-settle 1
 click fly-prompt-ok
 expect fly.prompt none
 expect status Error: Bad Radius
@@ -37,7 +39,6 @@ click hud@0.5x0.4:right
 click fly-hud-batterycells
 key ctrl+u
 type 3
-settle 1
 click fly-prompt-ok
 expect fly.hud.cells 3
 expect fly.hud.cell ~ Cell 4.

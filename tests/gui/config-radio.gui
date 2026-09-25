@@ -42,9 +42,12 @@ setup printf '<?xml version="1.0" encoding="utf-8"?><Config><CMB_raterc>3</CMB_r
 
 screen params
 window 1600x1200
-settle 6
+budget 9
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
@@ -54,7 +57,6 @@ expect vehicle.rates 4,2,2,2,3
 # Initial Setup lists the page once every parameter is in (InitialSetup.cs:211, isConnected &&
 # gotAllParams), and here parameters are downloaded when asked for.
 click param-download
-settle 15
 expect params.held > 1000
 expect params.value.RC1_MIN 1000
 expect params.value.RC1_MAX 2000
@@ -67,7 +69,6 @@ expect config.radio.active false
 click tab-setup
 click setup-page-ConfigMandatory
 click setup-page-ConfigRadioInput
-settle 2
 expect setup.page ConfigRadioInput
 expect config.radio.active true
 expect config.radio.enabled true
@@ -118,18 +119,15 @@ expect config.radio.message none
 
 # Calibrate Radio: the first message; the button's text is unchanged until it is dismissed.
 click radio-calibrate
-settle 1
 expect config.radio.message ~ Ensure your transmitter is on and receiver is powered and connected
 expect config.radio.message ~ Ensure your motor does not have power/no props!!!
 expect config.radio.button Calibrate Radio
 click radio-message-ok
-settle 1
 # RC_CHANNELS at 10 Hz, the button's new text, and the second message.
 expect config.radio.stream 10
 expect config.radio.button Click when Done
 expect config.radio.message ~ Click OK and move all RC sticks and switches to their
 click radio-message-ok
-settle 2
 # The loop: every channel folded into its minimum and maximum, and the bars' red lines on them.
 expect config.radio.running true
 expect config.radio.message none
@@ -150,12 +148,10 @@ expect config.radio.writes none
 
 # Click when Done: the loop ends, channel 1 read a real pulse, so the sticks-centred message.
 click radio-calibrate
-settle 1
 expect config.radio.running false
 expect config.radio.button Completed
 expect config.radio.message ~ Ensure all your sticks are centered and throttle is down
 click radio-message-ok
-settle 2
 # The trims, each reading constrained into its range; nothing to write; RC_CHANNELS back at
 # oldrc, the vehicle's raterc; and the summary, with only its rule under the heading.
 expect config.radio.trim.1 1500
@@ -173,7 +169,6 @@ expect config.radio.message ~ Here are the detected radio options
 expect config.radio.message ~ Normal values are around 1100 | 1900
 expect config.radio.message ~ ---------------
 click radio-message-ok
-settle 1
 expect config.radio.button Completed
 expect config.radio.message none
 
@@ -187,14 +182,11 @@ expect params.value.RC8_MAX 2000
 
 # Bind DSM2: START_RX_PAIR with 0, accepted, and the C#'s message.
 click radio-bind-dsm2
-settle 3
 expect config.radio.bind START_RX_PAIR 0 accepted
 expect config.radio.message Put the transmitter in bind mode. Receiver is waiting.
 click radio-message-ok
-settle 1
 expect config.radio.message none
 
 # Choosing another page deactivates this one (BackstageView.cs:453-464).
 click setup-page-ConfigMandatory
-settle 1
 expect config.radio.active false

@@ -11,7 +11,8 @@
 #   tools/gui-suite.sh [-o logdir] name [name ...]     names without tests/gui/ and .gui
 #   tools/gui-suite.sh -o logdir --all                 every script
 #
-# One line per script: "name: PASS" or "name: FAIL <first failures>", then "suite done <time>".
+# One line per script: "name: PASS", "name: FAIL <first failures>" or "name: SKIP <why>" (a
+# setup line that exited 3: the script cannot run here, and said why), then "suite done <time>".
 # Waits for the load average to fall below MAX_LOAD (default 20) before each script; lost
 # keystrokes and facts read before a render are what a loaded machine does to these tests.
 set -u
@@ -28,9 +29,12 @@ while [ $# -gt 0 ]; do
 done
 mkdir -p "$LOGDIR"
 if [ "$ALL" = 1 ]; then
-    set -- $(ls "$ROOT"/tests/gui/*.gui | xargs -n1 basename | sed 's/\.gui$//')
+    # Never the bench scripts: they name the CubeOrange's port themselves and flash it, which
+    # happens only on the owner's word, one script at a time (2026-09-25).
+    set -- $(ls "$ROOT"/tests/gui/*.gui | grep -v -- '-bench\.gui$' | xargs -n1 basename | sed 's/\.gui$//')
 fi
 FAILED=0
+SKIPPED=0
 for NAME in "$@"; do
     SCRIPT="$ROOT/tests/gui/$NAME.gui"
     if [ ! -f "$SCRIPT" ]; then echo "$NAME: no script"; FAILED=$((FAILED+1)); continue; fi
@@ -49,18 +53,25 @@ for NAME in "$@"; do
         sleep 10
     done
     LOG="$LOGDIR/gui-$NAME.log"
+    # A hard stop's screenshot lands beside the log.
     if [ -n "$ARG" ]; then
-        SHOT_AT="${SHOT_AT:-2560,0}" timeout 300 "$ROOT/tools/gui-test.sh" "$SCRIPT" -- "$ARG" > "$LOG" 2>&1
+        MP_GUI_SHOT_DIR="$LOGDIR" SHOT_AT="${SHOT_AT:-2560,0}" timeout 300 "$ROOT/tools/gui-test.sh" "$SCRIPT" -- "$ARG" > "$LOG" 2>&1
     else
-        SHOT_AT="${SHOT_AT:-2560,0}" timeout 300 "$ROOT/tools/gui-test.sh" "$SCRIPT" > "$LOG" 2>&1
+        MP_GUI_SHOT_DIR="$LOGDIR" SHOT_AT="${SHOT_AT:-2560,0}" timeout 300 "$ROOT/tools/gui-test.sh" "$SCRIPT" > "$LOG" 2>&1
     fi
     STATUS=$?
     if [ "$STATUS" = 0 ]; then
         echo "$NAME: PASS"
+    elif grep -q "setup exited 3," "$LOG"; then
+        # A setup line that exits 3 says the script cannot run here - a port it needs held by
+        # the suite's own SITL, a build it is not being run against - and says why on stderr;
+        # that is a skip, not a failure of what the script tests.
+        SKIPPED=$((SKIPPED+1))
+        echo "$NAME: SKIP $(grep -m1 -B1 "setup exited 3," "$LOG" | head -1 | cut -c1-150)"
     else
         FAILED=$((FAILED+1))
         echo "$NAME: FAIL $(grep -m3 -E "^FAIL|not found|exited" "$LOG" | cut -c1-150 | tr '\n' '|')"
     fi
 done
-echo "suite done $(date -u +%T), $FAILED failed"
+echo "suite done $(date -u +%T), $FAILED failed, $SKIPPED skipped"
 [ "$FAILED" = 0 ]

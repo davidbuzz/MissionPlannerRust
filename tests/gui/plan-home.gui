@@ -19,7 +19,7 @@ setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encodin
 
 screen plan
 window 1600x1200
-settle 4
+budget 16
 
 # The saved home is in the boxes, and the grid is empty.
 expect plan.home -35.3632621,149.1652374,584.10
@@ -27,6 +27,8 @@ expect mission.home true
 expect mission.items 0
 
 # Two clicks are waypoints 1 and 2, and what would be written has home at 0 in front of them.
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.45x0.40
 click map@0.60x0.55
 expect mission.items 2

@@ -19,19 +19,21 @@
 
 screen params
 window 1600x1200
+budget 6
 # A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
 # suppressed by the settings of the machine running it.
 env MP_CONFIG_XML $WORK/config.xml
-settle 6
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
 # Initial Setup lists the page once every parameter is in (isConnected && gotAllParams,
 # InitialSetup.cs:291-294), and here parameters are downloaded when asked for.
 click param-download
-settle 15
 expect params.held > 1000
 expect params.value.ARSPD_ENABLE 0
 
@@ -39,7 +41,6 @@ click tab-setup
 expect config.airspeed.active false
 click setup-page-ConfigOptional
 click setup-page-ConfigHWAirspeed
-settle 1
 expect setup.page ConfigHWAirspeed
 expect config.airspeed.active true
 expect config.airspeed.enabled true
@@ -57,7 +58,6 @@ expect config.airspeed.write none
 
 # Enable: the handler's write, echoed, then the control's, which finds 1 already held.
 click airspeed-ARSPD_ENABLE
-settle 3
 expect config.airspeed.enable checked
 expect params.value.ARSPD_ENABLE 1
 expect config.airspeed.write ARSPD_ENABLE 1 unchanged
@@ -66,7 +66,6 @@ expect config.airspeed.message none
 
 # And back.
 click airspeed-ARSPD_ENABLE
-settle 3
 expect config.airspeed.enable unchecked
 expect params.value.ARSPD_ENABLE 0
 expect config.airspeed.write ARSPD_ENABLE 0 unchanged
@@ -74,5 +73,4 @@ expect config.airspeed.message none
 
 # Choosing another page hides this one; it is IActivate only.
 click setup-page-ConfigOptional
-settle 1
 expect config.airspeed.active false

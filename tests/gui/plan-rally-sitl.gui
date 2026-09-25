@@ -29,33 +29,35 @@ env MP_PLAN_DIR $WORK
 
 screen params
 window 1600x1200
-settle 6
+budget 16
+# A first budget, set by hand until a passing run records one.
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
 click param-download
-settle 15
 expect params.held > 500
 
 click tab-plan
-settle 1
 
 # The vehicle's list, arranged: two points written with the mission protocol.
 click draw-rally
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.40x0.40
 click map@0.60x0.40
 expect rally.points 2
 click rally-write
-settle 4
 click draw-waypoints
 
 # Download: the vehicle's two, and the markers as they were.
 click map@0.30x0.70:right
 click menu-rallyPoints
 click menu-getRallyPoints
-settle 4
 expect plan.rally.downloading false
 expect plan.prompt none
 expect plan.rally.vehicle 2
@@ -71,7 +73,8 @@ click map@0.30x0.70:right
 click menu-rallyPoints
 click menu-saveRallyPoints
 expect plan.rally.upload busy
-settle 6
+# The upload runs the mission protocol's retries to their timeout before it reports.
+within 15
 expect plan.rally.upload ~ RALLY_TOTAL=3
 expect plan.rally.upload ~ ,0=timeout
 expect plan.prompt Error
@@ -83,7 +86,6 @@ expect plan.prompt none
 click map@0.30x0.70:right
 click menu-rallyPoints
 click menu-clearRallyPoints
-settle 3
 expect plan.params.busy false
 expect plan.params ~ RALLY_TOTAL=0
 expect rally.points 0
@@ -94,7 +96,6 @@ expect plan.rally.vehicle 0
 click map@0.30x0.70:right
 click menu-rallyPoints
 click menu-getRallyPoints
-settle 3
 expect plan.rally.downloading false
 expect plan.prompt none
 expect plan.rally.vehicle 0

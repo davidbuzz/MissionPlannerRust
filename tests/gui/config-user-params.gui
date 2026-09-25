@@ -24,24 +24,24 @@
 env MP_CONFIG_XML $WORK/config.xml
 screen params
 window 1600x1200
-settle 6
+budget 17
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
 click param-download
-settle 15
 expect params.held > 1000
 # The count passes before the last parameters land.
-settle 5
 expect params.value.RC7_OPTION 7
 expect params.value.RC8_OPTION 0
 
 click tab-config
 expect config.userparams.active false
 click config-page-ConfigUserDefined
-settle 1
 expect config.page ConfigUserDefined
 expect config.title User Params
 expect config.userparams.active true
@@ -56,14 +56,12 @@ expect config.userparams.write none
 # RC8's option chosen: written at once, echoed; and back.
 click userparams-RC8_OPTION
 click userparams-RC8_OPTION-9
-settle 2
 expect config.userparams.RC8_OPTION 9
 expect config.userparams.write RC8_OPTION 9 accepted
 expect params.value.RC8_OPTION 9
 click userparams-RC8_OPTION
 reveal userparams-RC8_OPTION-list userparams-RC8_OPTION-0
 click userparams-RC8_OPTION-0
-settle 2
 expect config.userparams.write RC8_OPTION 0 accepted
 expect params.value.RC8_OPTION 0
 expect config.userparams.message none
@@ -71,14 +69,12 @@ expect config.userparams.message none
 # Modify: the names one to a line. Two typed; OK builds the page from them and saves them.
 expect config.InputBoxParamsEnterParamNames none
 click userparams-Modify
-settle 1
 expect config.userparams.input ~ RC6_OPTION|RC7_OPTION
 key ctrl+u
 type RC7_OPTION
 key Return
 type RTL_ALT_M
 click userparams-input-ok
-settle 1
 expect config.userparams.input none
 expect config.userparams.options RC7_OPTION,RTL_ALT_M
 expect config.userparams.rows RC7_OPTION,RTL_ALT_M
@@ -91,17 +87,15 @@ expect config.userparams.RTL_ALT_M label
 click config-page-ConfigPlanner
 expect config.userparams.active false
 click config-page-ConfigUserDefined
-settle 1
 expect config.userparams.rows RC7_OPTION,RTL_ALT_M
 
 # Modify again, typed over and cancelled: the list is the one the box opened with, saved again,
 # and the kept answer is still the OK's.
 click userparams-Modify
-settle 1
+settle 0.3
 key ctrl+u
 type RC9_OPTION
 click userparams-input-cancel
-settle 1
 expect config.userparams.input none
 expect config.userparams.rows RC7_OPTION,RTL_ALT_M
 expect config.InputBoxParamsEnterParamNames RC7_OPTION%0D%0ARTL_ALT_M

@@ -14,6 +14,7 @@
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::ops::Range;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -177,6 +178,18 @@ pub fn refresh_table() {
 #[must_use]
 pub fn tables_built() -> (u64, u64) {
     BUILT.with(std::cell::Cell::get)
+}
+
+thread_local! {
+    /// The most rows the grid's list built at one asking since the screen was last drawn: the
+    /// rows in its box. The fact `params.rows.drawn`.
+    static DRAWN: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// How many rows the grid built for its box the last time it was drawn; 0 with no rows showing.
+#[must_use]
+pub fn rows_drawn() -> usize {
+    DRAWN.with(std::cell::Cell::get)
 }
 
 /// [`collect`] with the documentation, and which generation of it, given.
@@ -538,9 +551,43 @@ pub fn shown<'a>(
     shown
 }
 
-/// The parameters of the chosen group.
-pub fn list_panel(
+/// `filterList` then `Params.Sort(Command, Ascending)` with `OnParamsOnSortCompare`: the rows
+/// the grid shows, in its order - favourites first, then by name in natural order - each by its
+/// place in `parameters`. `None` is the screen's prompt, as for [`shown`].
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:674-676, 833-858, 889-944`
+#[must_use]
+pub fn grid_order(
     parameters: &[Parameter],
+    group: Option<&str>,
+    search: &str,
+    filters: &Filters<'_>,
+    favourites: &std::collections::BTreeSet<String>,
+) -> Option<Vec<usize>> {
+    let mut rows = shown(parameters, group, search, filters)?;
+    crate::raw_params_grid::sort_rows(&mut rows, favourites);
+    Some(
+        rows.into_iter()
+            .filter_map(|row| parameters.element_offset(row))
+            .collect(),
+    )
+}
+
+/// The rows a list asks to draw: those of `rows` in `range`, as many of them as there are. A
+/// range past the end asks for none.
+#[must_use]
+pub fn in_view<T>(rows: &[T], range: Range<usize>) -> &[T] {
+    let end = range.end.min(rows.len());
+    rows.get(range.start.min(end)..end).unwrap_or_default()
+}
+
+/// The parameters of the chosen group.
+///
+/// Only the rows in the grid's box are built, as a `DataGridView` paints only its displayed
+/// rows: a `uniform_list` of rows `ROW_HEIGHT` high asks for the range in view. With the tree
+/// collapsed every one of the vehicle's parameters shows, and building fourteen hundred rows a
+/// frame took seconds a frame.
+pub fn list_panel(
+    parameters: &Arc<[Parameter]>,
     group: Option<&str>,
     search: &str,
     selected: Option<&str>,
@@ -551,7 +598,13 @@ pub fn list_panel(
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
     let with_defaults = has_defaults(parameters);
-    let Some(mut shown) = shown(parameters, group, search, filters) else {
+    // No rows built this frame until the list asks for them.
+    DRAWN.with(|drawn| drawn.set(0));
+    // ---- ConfigRawParams remainder ----
+    // `Params.Sort(Command, Ascending)` with `OnParamsOnSortCompare` over `filterList`'s rows:
+    // favourites first, then by name in natural order.
+    // C#: GCSViews/ConfigurationView/ConfigRawParams.cs:674-676, 833-858, 889-944
+    let Some(order) = grid_order(parameters, group, search, filters, grid.grid.favourites()) else {
         return panel(
             "values",
             div()
@@ -561,8 +614,9 @@ pub fn list_panel(
         )
         .into_any_element();
     };
+    // ---- end ConfigRawParams remainder ----
 
-    if shown.is_empty() {
+    if order.is_empty() {
         return panel(
             "values",
             div()
@@ -574,40 +628,64 @@ pub fn list_panel(
     }
 
     // ---- ConfigRawParams remainder ----
-    // `Params.Sort(Command, Ascending)` with `OnParamsOnSortCompare`: favourites first, then by
-    // name in natural order. The grid's columns - Name, Value, Default (with defaults), Units,
-    // Options, Desc and Fav - at their widths, each row 36 high.
-    // C#: GCSViews/ConfigurationView/ConfigRawParams.cs:589-645, 674-676, 833-858
-    crate::raw_params_grid::sort_rows(&mut shown, grid.grid.favourites());
-    let mut rows = div()
-        .flex()
-        .flex_col()
-        .child(crate::raw_params_grid::header(
-            grid.grid.layout(),
-            with_defaults,
-            cx,
-        ));
-    for parameter in shown {
-        let chosen = selected == Some(parameter.name.as_str());
-        rows = rows.child(crate::raw_params_grid::row(
-            parameter,
-            grid,
-            with_defaults,
-            chosen,
-            cx,
-        ));
-    }
+    // The grid's columns - Name, Value, Default (with defaults), Units, Options, Desc and Fav -
+    // at their widths, each row 36 high, under the column headers, which stay put as the rows
+    // scroll.
+    // C#: GCSViews/ConfigurationView/ConfigRawParams.cs:589-645;
+    //     ConfigRawParams.Designer.cs:214-258
+    //
+    // The list asks for rows three times a frame - the first row twice, to measure it, then
+    // the range in view - so the order is worked out once, here, and the list holds it with
+    // the frame's parameters; each row's cells are drawn from the screen's state as it is.
+    let count = order.len();
+    let parameters = Arc::clone(parameters);
+    let selected = selected.map(str::to_owned);
+    let rows = gpui::uniform_list(
+        "param-values",
+        count,
+        cx.processor(
+            move |this: &mut MissionPlanner, range: Range<usize>, window, cx| {
+                let grid = this.param_grid_view(window);
+                let wanted = in_view(&order, range);
+                DRAWN.with(|drawn| drawn.set(drawn.get().max(wanted.len())));
+                wanted
+                    .iter()
+                    .filter_map(|&at| parameters.get(at))
+                    .map(|parameter| {
+                        crate::raw_params_grid::row(
+                            parameter,
+                            &grid,
+                            with_defaults,
+                            selected.as_deref() == Some(parameter.name.as_str()),
+                            cx,
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            },
+        ),
+    )
+    .with_sizing_behavior(gpui::ListSizingBehavior::Infer)
+    .max_h(px(420.0));
 
     panel(
         "values",
         div()
-            .id("param-values")
             .track_focus(grid.grid_focus)
             .flex()
             .flex_col()
-            .max_h(px(420.0))
-            .overflow_y_scroll()
-            .child(rows),
+            .child(crate::raw_params_grid::header(
+                grid.grid.layout(),
+                with_defaults,
+                cx,
+            ))
+            // Measured by the rows' box - the rows in view - so a script can `reveal` a row
+            // below it, as the tree is.
+            .child(
+                crate::probe::measured("param-values", div())
+                    .flex()
+                    .flex_col()
+                    .child(rows),
+            ),
     )
     .into_any_element()
     // ---- end ConfigRawParams remainder ----
@@ -1468,6 +1546,135 @@ mod tests {
             .find(|p| p.name == "INS_GYRO_FILTER")
             .expect("SITL has it");
         assert_eq!(filter.default, Some(20.0));
+    }
+
+    /// The rows a list asks for are those of the range, as many as there are: a range that runs
+    /// past the end is cut at it, and one that starts past it is nothing.
+    #[test]
+    fn a_range_in_view_is_cut_to_the_rows_there_are() {
+        let rows = ["A", "B", "C", "D", "E"];
+        assert_eq!(in_view(&rows, 0..2), ["A", "B"]);
+        assert_eq!(in_view(&rows, 1..4), ["B", "C", "D"]);
+        assert_eq!(in_view(&rows, 3..12), ["D", "E"]);
+        assert_eq!(in_view(&rows, 0..5), rows);
+        assert!(in_view(&rows, 5..9).is_empty());
+        assert!(in_view(&rows, 7..9).is_empty());
+        assert!(in_view(&rows, 2..2).is_empty());
+        assert!(in_view::<&str>(&[], 0..11).is_empty());
+    }
+
+    /// The grid's rows are `filterList`'s, sorted as `Params.Sort` sorts them - favourites
+    /// first, then natural order - each held by its place in the collection. With the tree
+    /// collapsed that is every one of SITL's 1,408, and the rows a list draws one box at a time,
+    /// box after box, are that list exactly - none missed, none twice - while a box's worth is a
+    /// dozen rows, not fourteen hundred. A group, a search and the boxes give what [`shown`]
+    /// gives, in the grid's order: the rows drawn are the rows counted.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:674-676, 833-858, 889-944`
+    #[test]
+    fn the_grid_draws_the_rows_in_view_of_the_sorted_list() {
+        let view = sitl_view();
+        let parameters = collected(&view, 11, bundled);
+        let mut changes = std::collections::BTreeMap::new();
+        changes.insert("RTL_ALT_M".to_owned(), 20.0);
+        let filters = |collapsed, modified| Filters {
+            none_default: false,
+            modified,
+            changes: &changes,
+            collapsed,
+        };
+        // What a list asked for `range` draws: the names of the rows there.
+        let drawn = |order: &[usize], range: Range<usize>| -> Vec<String> {
+            in_view(order, range)
+                .iter()
+                .map(|&at| parameters[at].name.clone())
+                .collect()
+        };
+        let none = std::collections::BTreeSet::new();
+
+        // Nothing chosen and the tree showing: the prompt, not rows.
+        assert!(grid_order(&parameters, None, "", &filters(false, false), &none).is_none());
+
+        // The tree collapsed: every row once, in natural order.
+        let started = Instant::now();
+        let all = grid_order(&parameters, None, "", &filters(true, false), &none).expect("rows");
+        let ordering = started.elapsed();
+        assert_eq!(all.len(), 1408);
+        let mut once = all.clone();
+        once.sort_unstable();
+        once.dedup();
+        assert_eq!(once.len(), 1408, "every row, once");
+        let names = drawn(&all, 0..all.len());
+        assert!(
+            names.windows(2).all(|pair| {
+                crate::raw_params_grid::natural_compare(&pair[0], &pair[1])
+                    != std::cmp::Ordering::Greater
+            }),
+            "natural order"
+        );
+
+        // Box after box of twelve (420 pixels of 36-pixel rows, the last cut off) is the list.
+        let mut boxes = Vec::new();
+        let mut start = 0;
+        while start < all.len() {
+            let rows = drawn(&all, start..start + 12);
+            assert!(rows.len() <= 12, "{start}");
+            boxes.extend(rows);
+            start += 12;
+        }
+        assert_eq!(boxes, names);
+
+        // A favourite goes first, the rest keep their order.
+        let favourites: std::collections::BTreeSet<String> =
+            std::iter::once("RTL_LOIT_TIME".to_owned()).collect();
+        let favoured =
+            grid_order(&parameters, None, "", &filters(true, false), &favourites).expect("rows");
+        assert_eq!(drawn(&favoured, 0..1), ["RTL_LOIT_TIME"]);
+        let rest: Vec<String> = names
+            .iter()
+            .filter(|name| *name != "RTL_LOIT_TIME")
+            .cloned()
+            .collect();
+        assert_eq!(drawn(&favoured, 1..favoured.len()), rest);
+
+        // A group: its rows only, in natural order; a box taller than eight rows draws eight.
+        let rtl =
+            grid_order(&parameters, Some("RTL"), "", &filters(false, false), &none).expect("rows");
+        assert_eq!(
+            drawn(&rtl, 0..12),
+            [
+                "RTL_ALT_FINAL_M",
+                "RTL_ALT_M",
+                "RTL_ALT_TYPE",
+                "RTL_CLIMB_MIN_M",
+                "RTL_CONE_SLOPE",
+                "RTL_LOIT_TIME",
+                "RTL_OPTIONS",
+                "RTL_SPEED_MS",
+            ]
+        );
+
+        // A search, and Modified: what `shown` counts, and the same rows.
+        for (group, search, modified) in [
+            (None, "batt", false),
+            (Some("RTL"), "", true),
+            (None, "zzzz", false),
+        ] {
+            let order = grid_order(&parameters, group, search, &filters(false, modified), &none)
+                .expect("rows");
+            let counted: Vec<String> = shown(&parameters, group, search, &filters(false, modified))
+                .expect("rows")
+                .iter()
+                .map(|parameter| parameter.name.clone())
+                .collect();
+            let mut rows = drawn(&order, 0..order.len());
+            assert_eq!(rows.len(), counted.len(), "{search:?}");
+            rows.sort();
+            let mut counted = counted;
+            counted.sort();
+            assert_eq!(rows, counted, "{search:?}");
+        }
+
+        eprintln!("the collapsed grid's 1,408 rows filtered and sorted: {ordering:?}");
     }
 
     #[test]

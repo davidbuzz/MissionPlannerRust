@@ -23,12 +23,11 @@ env XDG_DATA_HOME $WORK
 
 screen setup
 window 1600x1200
-settle 3
+budget 8
 
 expect config.advanced.active false
 expect setup.pages ~ ConfigAdvanced,ConfigTerminal
 click setup-page-ConfigAdvanced
-settle 1
 expect setup.page ConfigAdvanced
 expect setup.title Advanced
 expect setup.expanded ConfigAdvanced
@@ -45,7 +44,6 @@ expect config.fft.window false
 
 # FFT: the window, as the Designer makes it, with no vehicle and the FFT Setup page never shown.
 click advanced-but_fft
-settle 1
 expect config.fft.window true
 expect config.fft.opened 1
 expect config.fft.active false
@@ -62,13 +60,10 @@ expect config.fft.window.bins 8
 
 # Run all imus - IMU1-3 MSG: its file dialog, the log typed.
 click fft-but_fftimu13
-settle 1
 expect config.fft.window.prompt Run all imus - IMU1-3 MSG
 type testdata/dataflash.bin
-settle 1
 expect config.fft.window.prompt.text testdata/dataflash.bin
 click fft-open-ok
-settle 4
 expect config.fft.window.prompt none
 expect config.fft.window.running none
 expect config.fft.window.last imu13 done
@@ -80,18 +75,15 @@ expect config.fft.window.graph.1.title FFT IMU ACC - dataflash.bin - 22.2hz inpu
 
 # The close box; the page stays.
 click fft-close
-settle 1
 expect config.fft.window false
 expect setup.page ConfigAdvanced
 expect config.advanced.active true
 
 # The heading again closes it, and Advanced is still the page showing; another page and it is not.
 click setup-page-ConfigAdvanced
-settle 1
 expect setup.page ConfigAdvanced
 expect setup.shown ConfigFirmwareManifest,ConfigFirmware,ConfigSecureAP,ConfigOptional,ConfigAdvanced
 expect config.advanced.active true
 click setup-page-ConfigOptional
-settle 1
 expect setup.page ConfigOptional
 expect config.advanced.active false

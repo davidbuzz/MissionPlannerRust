@@ -16,7 +16,7 @@ setup printf '<?xml version="1.0" encoding="utf-8"?>\n<Config>\n  <language>de-D
 
 screen fly
 window 1600x1200
-settle 6
+budget 2
 
 expect i18n.culture de-DE
 expect i18n.chain de-DE,en
@@ -28,7 +28,6 @@ expect fly.tabs.text Schnell,Aktionen,Meldungen,Aktionen,Vorflug,Instrumente,Tra
 expect fly.tab.text Schnell
 
 click fly-tab-actions
-settle 1
 expect fly.tab tabActions
 expect fly.tab.text Aktionen
 expect i18n.missing 0

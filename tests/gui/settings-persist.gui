@@ -24,7 +24,7 @@ setup printf '\357\273\277<?xml version="1.0" encoding="utf-8"?>\n<Config>\n  <a
 tiles offline
 screen fly
 window 1600x1200
-settle 5
+budget 15
 
 # SaveConfig ran at start-up; the map is the one config.xml names.
 expect config.saved startup
@@ -71,7 +71,6 @@ click plan-frame-terrain
 expect plan.frame terrain
 expect config.FPaltmode 10
 click plan-map-bing-satellite
-settle 2
 expect map.source bing-satellite
 expect config.MapType BingSatelliteMap
 expect config.TXT_homelat none
@@ -79,7 +78,6 @@ expect config.saves 2
 
 # The close box: MyView.Dispose deactivates the planning screen, then SaveConfig.
 restart
-settle 5
 
 # What was read back: the start-up save of what was loaded.
 expect config.saved startup

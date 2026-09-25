@@ -20,14 +20,15 @@ tiles offline
 
 screen plan
 window 1600x1200
-settle 4
+budget 23
 expect mission.home true
 expect plan.prefetch.state idle
 
 # Prefetch: the question, the menu, the walk.
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.45x0.40:right
 click menu-mapTool
-settle 1
 click menu-prefetch
 expect plan.prompt Rip
 expect plan.prompt.text No ripp area defined, ripp displayed on screen?
@@ -63,7 +64,6 @@ expect plan.prefetch.menu 3-3
 # The C#'s size text ends with a space (sizeConverter), which a value here cannot carry.
 expect plan.prefetch.menu.total ~ Estimated: 1 tile for 14.65 KB
 click plan-prefetch-ok
-settle 2
 expect plan.prefetch.walks 1
 expect plan.prefetch.state done
 expect plan.prefetch.ok 0
@@ -74,7 +74,6 @@ expect plan.prefetch.state idle
 # No to the question leaves the map alone.
 click map@0.45x0.40:right
 click menu-mapTool
-settle 1
 click menu-prefetch
 click plan-prompt-cancel
 expect plan.prompt none
@@ -86,7 +85,6 @@ click map@0.60x0.55
 expect mission.items 2
 click map@0.30x0.70:right
 click menu-mapTool
-settle 1
 click menu-prefetchWPPath
 expect plan.prompt max zoom
 expect plan.prompt.text Enter the max zoom to prefetch to.
@@ -94,7 +92,6 @@ key ctrl+u
 type 4
 key Return
 expect plan.prompt none
-settle 3
 expect plan.prefetch.walks 8
 expect plan.prefetch.state done
 expect plan.prefetch.ok 0
@@ -103,7 +100,6 @@ click plan-prefetch-cancel
 # A word for the zoom is "Invalid number entered".
 click map@0.30x0.70:right
 click menu-mapTool
-settle 1
 click menu-prefetchWPPath
 key ctrl+u
 type lots

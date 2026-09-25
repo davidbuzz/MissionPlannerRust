@@ -27,7 +27,8 @@ setup printf '<?xml version="1.0" encoding="utf-8"?><Config><CMB_rateattitude>7<
 
 screen fly
 window 1600x1200
-settle 8
+budget 11
+# A first budget, set by hand until a passing run records one.
 
 expect vehicle.connected true
 # The clock: stamped with each packet as it is read, so it keeps up with the wall clock.
@@ -62,32 +63,34 @@ expect vehicle.geofencedist 99999
 
 # The Planner page's attitude rate to 10: the vehicle's rate follows.
 click tab-config
-settle 1
 click config-page-ConfigPlanner
 expect config.page ConfigPlanner
 click planner-CMB_rateattitude
 click planner-CMB_rateattitude-10
 expect config.planner.rates 10,2,2,2,2
 click tab-fly
-settle 1
 expect vehicle.rates 10,2,2,2,2
 expect fly.quick.2.value 10.00
 
 # A fence drawn in a corner of the planning map, written to the vehicle and read back.
 click tab-plan
-settle 1
 click draw-fence
+# The first fence asks "FlightPlan Fence" with its "Show me again?" (row 92): unticked, so a
+# later Draw Fence in this run is not asked again, then OK.
+expect plan.prompt FlightPlan Fence
+click plan-prompt-again
+click plan-prompt-ok
+expect plan.prompt none
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.10x0.10
 click map@0.20x0.10
 click map@0.15x0.20
 expect fence.points 3
 click fence-write
-settle 4
 click fence-read
-settle 4
 expect vehicle.fence.points 3
 expect vehicle.geofencedist < 99999
 click tab-fly
-settle 1
 expect fly.quick.3 GeoFenceDist
 expect vehicle.datetime.age < 2000

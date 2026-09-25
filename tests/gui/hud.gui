@@ -11,7 +11,7 @@
 
 screen fly
 window 1600x1200
-settle 6
+budget 2
 
 expect hud.drawn ~ sky-ground
 expect hud.drawn ~ pitch-ladder

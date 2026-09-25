@@ -534,6 +534,8 @@ struct MissionPlanner {
     /// The SIMULATION screen's page object (`GCSViews/SITL.cs`), and its keyboard focus.
     sitl: sitl::Sitl,
     sitl_focus: sitl::Focus,
+    /// The Flight Modes page, for its Ctrl+S (`ProcessCmdKey`).
+    flight_modes_focus: gpui::FocusHandle,
     // ---- end SITL ----
 }
 
@@ -632,6 +634,11 @@ impl MissionPlanner {
         // Map imagery. Off with MP_NO_TILES, which is how the offline behaviour gets exercised
         // and how a screenshot avoids depending on a tile server being up.
         let mut map = MapViewport::new(track_points, markers);
+        // `FlightData.Activate`: the map opens where it was last left.
+        // `// C#: GCSViews/FlightData.cs:524-548`
+        if let Some((at, zoom)) = persisted.flight_map_start() {
+            map.start_at(at, zoom);
+        }
         if std::env::var("MP_NO_TILES").is_err() {
             let cache = TileCache::new(TileCache::default_root());
             // The environment wins over the remembered choice, so a screenshot or a test can
@@ -838,6 +845,7 @@ impl MissionPlanner {
             // ---- SITL ----
             sitl: sitl::Sitl::new(),
             sitl_focus: sitl::Focus::new(cx),
+            flight_modes_focus: cx.focus_handle(),
             // ---- end SITL ----
         };
         // Opening on the planning screen activates it, as switching to it does.
@@ -875,6 +883,10 @@ impl MissionPlanner {
         if self.screen == Screen::Plan {
             self.persisted
                 .planner_deactivated(&self.plan, self.altitude_frame);
+        }
+        if self.screen == Screen::Fly {
+            self.persisted
+                .flight_data_deactivated(self.map.borrow().position_and_zoom());
         }
         self.persisted.observe_quick_views(&self.fly_data.quick);
         self.save_config(settings::SaveEvent::Close);
@@ -1823,6 +1835,12 @@ impl MissionPlanner {
                         if this.screen == Screen::Plan {
                             this.persisted
                                 .planner_deactivated(&this.plan, this.altitude_frame);
+                        }
+                        // `FlightData.Deactivate` keeps the map's place for the next start.
+                        // `// C#: GCSViews/FlightData.cs:662-664`
+                        if this.screen == Screen::Fly {
+                            this.persisted
+                                .flight_data_deactivated(this.map.borrow().position_and_zoom());
                         }
                         // ---- SITL ----
                         if this.screen == Screen::Sitl {
@@ -2956,6 +2974,7 @@ impl Render for MissionPlanner {
                 let map = self.map.borrow();
                 let (drawn, approximate, missing) = map.tile_counts();
                 let stats = map.tile_stats().unwrap_or_default();
+                facts::record("map.ready", map.has_view());
                 facts::record("map.tiles.drawn", drawn);
                 facts::record("map.tiles.approximate", approximate);
                 facts::record("map.tiles.missing", missing);

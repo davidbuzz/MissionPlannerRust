@@ -123,7 +123,8 @@ pub const MSG_ID_AUTOPILOT_VERSION: f32 = 148.0;
 /// version and its ids - "using all three methods", in the C#'s words: `MAV_CMD_REQUEST_MESSAGE`
 /// for message 148, the deprecated `MAV_CMD_REQUEST_AUTOPILOT_CAPABILITIES`, and the deprecated
 /// `AUTOPILOT_VERSION_REQUEST` message. Mission Planner sends them at connect, before the banner
-/// request, and does not wait for the answer there.
+/// request, and waits there for the answer (`responcerequired`, true by default); here the
+/// answer arrives with the stream and is read from the vehicle's state when it has.
 /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:928, 5847-5861`
 #[must_use]
 pub fn get_version(target: VehicleId) -> [MavMessage; 3] {

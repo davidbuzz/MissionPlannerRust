@@ -877,6 +877,12 @@ pub struct Adsb<H = mp_link::RequestId> {
     confirm: Option<bool>,
     /// While the parameters are being fetched again: the table they were fetched over.
     refreshing: Option<Arc<[(String, f64)]>>,
+    /// How many times Refresh Params fetched, for the fact a script asserts on: the fetch over
+    /// MAVFTP replaces the list too quickly for the disabled button to be seen.
+    refreshes: u32,
+    /// What the last Refresh Params press decided, for the fact: "fetch", "ask", or why it did
+    /// nothing.
+    last_press: &'static str,
     /// The combo whose list is down, by the control's index.
     dropdown: Option<usize>,
     /// The number being typed into, by the control's index.
@@ -951,6 +957,8 @@ impl<H: Copy> Adsb<H> {
             filter_due: None,
             confirm: None,
             refreshing: None,
+            refreshes: 0,
+            last_press: "none",
             dropdown: None,
             editing: None,
             messages: VecDeque::new(),
@@ -1315,7 +1323,12 @@ impl<H: Copy> Adsb<H> {
     ) -> bool {
         self.leave();
         self.dropdown = None;
-        if !connected || !self.refresh_enabled() {
+        if !connected {
+            self.last_press = "refused: not connected";
+            return false;
+        }
+        if !self.refresh_enabled() {
+            self.last_press = "refused: fetching";
             return false;
         }
         // `ContainsKey(key) && GetBoolean(key) == false`: a value `bool.TryParse` refuses is
@@ -1323,8 +1336,10 @@ impl<H: Copy> Adsb<H> {
         let suppressed =
             shown_again.is_some_and(|value| !crate::raw_params::get_boolean(Some(value)));
         if suppressed {
+            self.last_press = "fetch";
             self.refresh(view)
         } else {
+            self.last_press = "ask";
             self.confirm = Some(true);
             false
         }
@@ -1347,6 +1362,7 @@ impl<H: Copy> Adsb<H> {
     /// `getParamList`, the button disabled until the list is whole again: always a fetch.
     fn refresh(&mut self, view: &TelemetryView) -> bool {
         self.refreshing = Some(Arc::clone(&view.parameters));
+        self.refreshes += 1;
         true
     }
 
@@ -1549,6 +1565,8 @@ pub fn record_facts(page: &Adsb, view: &TelemetryView) {
         },
     );
     record(fact("refresh.enabled"), page.refresh_enabled());
+    record(fact("refreshes"), page.refreshes);
+    record(fact("press"), page.last_press);
     record(fact("changed"), page.changed().len());
     for (name, value) in page.changed() {
         record(fact(&format!("changed.{name}")), value);

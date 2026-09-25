@@ -35,13 +35,12 @@ setup printf '<?xml version="1.0" encoding="utf-8"?><Config><FirmwareFileDirecto
 
 screen setup
 window 1600x1200
-settle 3
+budget 10
 
 expect config.firmware_legacy.active false
 # Disconnected, InitialSetup lists Install Firmware Legacy after Install Firmware
 # (InitialSetup.cs:169-173).
 click setup-page-ConfigFirmware
-settle 3
 expect config.firmware_legacy.active true
 expect config.firmware_legacy.listed true
 expect config.firmware_legacy.list loaded
@@ -66,10 +65,8 @@ expect config.firmware_legacy.upload disabled
 # called CubeOrange; its URL is the entry's fmuv2 one with the board put in; the file is
 # downloaded and read (board 140, a 3,000-byte image); and the flow stops before the reboot.
 click fwl-quad
-settle 1
 expect config.firmware_legacy.question Are you sure you want to upload ArduCopter V4.7.1 Quad?
 click fwl-question-yes
-settle 3
 expect config.firmware_legacy.question none
 expect config.firmware_legacy.message none
 expect config.firmware_legacy.flow done
@@ -86,11 +83,9 @@ expect config.firmware_legacy.stopped the next step would reboot the board into 
 # Load custom firmware: the box opens in the folder config.xml names; an .apj is a px4v3, read, and
 # stopped at the reboot; its folder is remembered.
 click fwl-custom
-settle 1
 expect config.firmware_legacy.path ~ /fw/
 type custom.apj
 key Return
-settle 2
 expect config.firmware_legacy.path closed
 expect config.firmware_legacy.flow.board px4v3
 expect config.firmware_legacy.download.url none
@@ -102,7 +97,6 @@ expect config.firmware_legacy.custom.dir ~ /fw
 # Pick previous firmware: the history in the drop-down, its first entry selected - which loads
 # that list at once.
 click fwl-history-label
-settle 3
 expect config.firmware_legacy.history visible
 expect config.firmware_legacy.history.label false
 expect config.firmware_legacy.history.items 70
@@ -114,31 +108,24 @@ expect config.firmware_legacy.entries 12
 # The second history: not in the mirror, so the progress dialog shows the error, and Close. The
 # list is cleared, but each picture keeps the entry it was given.
 click fwl-history
-settle 1
 click fwl-history-1
-settle 2
 expect config.firmware_legacy.history.selected AC 4.0.2 AP 4.0.4
 expect config.firmware_legacy.list failed
 expect config.firmware_legacy.list.error ~ There was an unexpected error
 click fwl-loading-close
-settle 1
 expect config.firmware_legacy.list none
 expect config.firmware_legacy.tag.quad ArduCopter V4.7.1 Quad
 
 # Beta firmwares: the warning, then the dev list - not in the mirror either - and the history
 # hidden.
 click fwl-beta
-settle 1
 expect config.firmware_legacy.message These are beta firmware, use at your own risk!!!
 click fwl-message-ok
-settle 2
 expect config.firmware_legacy.url https://github.com/ArduPilot/binary/raw/master/dev/firmware2.xml;https://firmware.ardupilot.org/Tools/MissionPlanner/dev/firmware2.xml
 expect config.firmware_legacy.list failed
 expect config.firmware_legacy.history hidden
 click fwl-loading-close
-settle 1
 
 # Choosing another entry deactivates the page.
 click setup-page-ConfigOptional
-settle 1
 expect config.firmware_legacy.active false

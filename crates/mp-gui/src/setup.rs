@@ -553,12 +553,21 @@ pub fn build(list: List, vehicle: &Vehicle) -> Built {
 }
 
 /// What a list was built for. `MainV2` shows a SETUP or CONFIG screen again - closing it and
-/// running its `Load` anew - when the link opens or closes and when the vehicle changes.
-/// `// C#: MainV2.cs:1419-1425, 1740-1748; Controls/ConnectionControl.cs:143`
+/// running its `Load` anew - when the link opens or closes and when the vehicle changes; and
+/// `doConnect` shows it again at its end, after `getParamList` has run, which is the list a
+/// connected vehicle's pages are built from. Here the download runs after the connect rather
+/// than inside it, so the download's end is a change of its own: a list built while the
+/// parameters were still coming (the Loading page listed) is built again once the download is
+/// done. The download's end, not `gotAllParams`: a feature switched on makes the vehicle report
+/// more parameters than are held (AVD_ENABLE 1 took a copter from 1,408 to 1,419), which is not
+/// a reload in the C# either - the page stays until the screen is shown again.
+/// `// C#: MainV2.cs:1419-1425, 1684, 1740-1748; Controls/ConnectionControl.cs:143`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Key {
     connected: bool,
     vehicle: Option<VehicleId>,
+    /// The connect-time download has run to its end.
+    params_fetched: bool,
 }
 
 impl Key {
@@ -568,6 +577,7 @@ impl Key {
         Self {
             connected: view.connected && view.vehicle.is_some(),
             vehicle: view.vehicle,
+            params_fetched: view.parameters_fetched,
         }
     }
 }
@@ -1290,6 +1300,7 @@ impl MissionPlanner {
                 .children(crate::config::flight_modes::page(
                     &self.flight_modes,
                     view,
+                    &self.flight_modes_focus,
                     cx,
                 ))
                 .into_any_element(),
@@ -1921,6 +1932,7 @@ mod tests {
     const KEY: Key = Key {
         connected: true,
         vehicle: None,
+        params_fetched: true,
     };
 
     fn parameters(names: &[&str]) -> Vec<(String, f64)> {
@@ -2281,6 +2293,36 @@ mod tests {
         assert_eq!(banner_version("ArduCopter V4.5.7 (2a3dc4b7)"), Some((4, 5)));
         assert_eq!(banner_version("ArduPlane V4.6.0-dev (abc)"), Some((4, 6)));
         assert_eq!(banner_version("ArduCopter"), None);
+    }
+
+    /// The key a list is built for moves when the link opens, when the vehicle changes and when
+    /// the connect-time download ends (`doConnect` shows the screen again after `getParamList`),
+    /// and not when a parameter arrives, changes, or the vehicle raises its count afterwards.
+    /// `// C#: MainV2.cs:1684, 1740-1748`
+    #[test]
+    fn the_key_moves_when_the_download_ends() {
+        let mut view = TelemetryView::disconnected("tcp:127.0.0.1:5760");
+        let idle = Key::of(&view);
+        view.connected = true;
+        view.vehicle = Some(VehicleId::new(1, 1));
+        let heard = Key::of(&view);
+        assert_ne!(idle, heard, "the link opened");
+
+        view.parameters = parameters(&["FRAME_CLASS"]).into();
+        view.parameters_expected = 3;
+        let arriving = Key::of(&view);
+        assert_eq!(heard, arriving, "a parameter arriving is not a reload");
+        view.parameters = parameters(&["FRAME_CLASS", "FRAME_TYPE", "ARMING_CHECK"]).into();
+        assert_eq!(arriving, Key::of(&view), "nor the last of them");
+
+        view.parameters_fetched = true;
+        let fetched = Key::of(&view);
+        assert_ne!(arriving, fetched, "the download ended: the list is built again");
+        // AVD_ENABLE 1: the vehicle now reports more than are held. Not a reload.
+        view.parameters_expected = 5;
+        assert_eq!(fetched, Key::of(&view), "a raised count is not a reload");
+        view.parameters = parameters(&["FRAME_CLASS", "FRAME_TYPE", "ARMING_CHECK"]).into();
+        assert_eq!(fetched, Key::of(&view), "a value changing is not a reload");
     }
 
     /// A view's vehicle: connected once heard from, every parameter in only when some are, and

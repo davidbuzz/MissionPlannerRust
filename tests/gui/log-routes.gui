@@ -14,12 +14,11 @@ setup mkdir -p $WORK/logs && cp testdata/dataflash_damaged.bin $WORK/logs/gpsfix
 
 screen logs
 window 1600x1200
-settle 3
+budget 9
 
 click log-name
 type gpsfix.bin
 key Return
-settle 3
 expect log.open true
 
 # The map is hidden, as the designer leaves it, and DrawMap has not run.
@@ -27,7 +26,6 @@ expect log.check.map false
 expect log.map.drawn.gps 0
 
 click log-chk-map
-settle 2
 expect log.check.map true
 expect log.map.drawn.gps 63
 expect log.map.drawn.gps2 0
@@ -36,12 +34,9 @@ expect log.map.drawn.pos 119
 
 # On a line-number axis, with a curve and the wheel zoomed in, the map shows the stretch charted.
 click log-chk-time
-settle 1
 click logfield-ATT.Roll
-settle 2
 expect log.plotted 1
 scroll log-chart up 3
-settle 1
 expect log.zoom.depth 3
 expect log.map.drawn.pos < 119
 
@@ -50,7 +45,6 @@ click log-name
 key Escape
 type nofix.bin
 key Return
-settle 3
 expect log.open true
 expect log.check.map true
 expect log.map.drawn.gps 0

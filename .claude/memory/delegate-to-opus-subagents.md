@@ -1,6 +1,6 @@
 ---
 name: delegate-to-opus-subagents
-description: Buzz authorises delegating coding tasks to at most SIX Opus subagents at a time (2026-09-25 afternoon; the order was three, six, none, three, six); they never open windows, never commit, and get disjoint files
+description: Buzz allows at most TWO Opus subagents at a time (2026-09-26, after the stop of 2026-09-25 17:35; the order was three, six, none, three, six, none, two); they never open windows, never commit, and get disjoint files
 metadata:
   type: feedback
 ---
@@ -62,3 +62,10 @@ they touch `lib.rs` to recover; a per-agent target dir would cost disk but save 
 tasks, dont make more."** The cap is now zero for new launches until he says otherwise; the six
 running at that moment finish and are merged, and then the work is mine alone. Order so far:
 three → six → none → three → six → none (this).
+
+**2026-09-26 (~00:20 local), Buzz: "pls use as many as 2 opus sub agents moving forward."** The
+stop of 2026-09-25 17:35 is lifted and the cap is **two**. Order so far: three → six → none →
+three → six → none → two (this). Same rules: worktree each, disjoint files, the C# read first,
+tests shipped, no window, no commit; a per-agent target directory
+(`CARGO_TARGET_DIR=<scratchpad>/target-agentN`) so two builds do not thrash one another. A
+read-only reviewer of a pending diff counts as one of the two.

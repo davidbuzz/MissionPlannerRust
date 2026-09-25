@@ -17,12 +17,14 @@ setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encodin
 
 screen plan
 window 1600x1200
-settle 4
+budget 11
 
 # Nothing planned: home's rect has no radius, so there is no circle.
 expect map.circles 0
 
 # Two waypoints: two circles of the WP Radius the .resx gives, 30 m.
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.40x0.40
 click map@0.60x0.60
 expect mission.items 2
@@ -35,7 +37,6 @@ click plan-wprad
 key ctrl+u
 type 12
 click plan-defaultalt
-settle 1
 expect plan.wprad 12
 expect map.circles.radii 12,12
 
@@ -71,14 +72,11 @@ click plan-wprad
 key ctrl+u
 type 0
 click plan-defaultalt
-settle 1
 expect map.circles 1
 expect map.circles.radii 45
 
 # The flight screen's overlay has no radii, and the loiter carries none of its own.
 click tab-fly
-settle 1
 expect map.circles 0
 click tab-plan
-settle 1
 expect map.circles 1

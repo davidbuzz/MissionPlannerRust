@@ -28,21 +28,22 @@ setup python3 tests/gui/rtk-caster.py --work $WORK --stream testdata/rtcm/base-s
 
 screen params
 window 1600x1200
-settle 6
+budget 8
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 expect vehicle.connected true
 
 click tab-setup
-settle 1
 expect config.rtk.active false
 # RTK/GPS Inject is under Optional Hardware, and listed with or without a vehicle
 # (InitialSetup.cs:251).
 click setup-page-ConfigOptional
 click setup-page-ConfigSerialInjectGPS
-settle 1
 expect setup.page ConfigSerialInjectGPS
 expect config.rtk.active true
 expect config.rtk.title RTK/GPS Inject
@@ -60,7 +61,6 @@ click rtk-BUT_connect
 expect config.rtk.prompt remote host
 expect config.rtk.prompt.value ~ ntrip://headless-planner:rtk@127.0.0.1:
 click rtk-prompt-ok
-settle 3
 expect config.rtk.prompt none
 expect config.InputBoxremotehostEnterurleghttpuserpasshostportmount ~ ntrip%3A%2F%2Fheadless-planner%3Artk%40127.0.0.1%3A
 expect config.rtk.message none
@@ -77,7 +77,6 @@ expect config.rtk.messages > 20
 expect config.rtk.types ~ Rtcm1005
 expect config.rtk.types ~ Rtcm1074
 expect config.rtk.types ~ Rtcm1124
-settle 4
 expect config.rtk.messages > 200
 expect config.rtk.injected > 5000
 expect config.rtk.injected.messages > 100
@@ -98,7 +97,6 @@ expect config.rtk.messages < 150
 
 # Connect again: the port closed, the loop ended, GGA offered again.
 click rtk-BUT_connect
-settle 1
 expect config.rtk.button Connect
 expect config.rtk.open false
 expect config.rtk.running false

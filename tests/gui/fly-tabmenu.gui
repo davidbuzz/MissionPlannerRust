@@ -11,7 +11,7 @@
 
 screen fly
 window 1600x1200
-settle 3
+budget 10
 
 expect fly.tabs.multiline false
 expect fly.menu none
@@ -62,5 +62,7 @@ click fly-tab-actions
 expect fly.tab tabActions
 click fly-tabs:right
 expect fly.menu tabs
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.5x0.5
 expect fly.menu none

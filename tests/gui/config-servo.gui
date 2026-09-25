@@ -21,19 +21,21 @@
 
 screen params
 window 1600x1200
+budget 21
 # A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
 # suppressed by the settings of the machine running it.
 env MP_CONFIG_XML $WORK/config.xml
-settle 6
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
 # Initial Setup lists the page once every parameter is in (isConnected && gotAllParams,
 # InitialSetup.cs:213-216), and here parameters are downloaded when asked for.
 click param-download
-settle 15
 expect params.held > 1000
 expect params.value.SERVO9_TRIM 1500
 expect params.value.SERVO9_FUNCTION 0
@@ -43,7 +45,6 @@ click tab-setup
 expect config.servo.active false
 click setup-page-ConfigMandatory
 click setup-page-ConfigRadioOutput
-settle 1
 expect setup.page ConfigRadioOutput
 expect config.servo.active true
 expect config.servo.rows 16
@@ -70,14 +71,12 @@ expect config.servo.editing SERVO9_TRIM
 key ctrl+u
 type 1510
 key Return
-settle 2
 expect config.servo.9.trim 1510
 expect config.servo.write SERVO9_TRIM 1510 accepted
 expect params.value.SERVO9_TRIM 1510
 
 # The arrows step by one: down to 1509, and the timer writes it.
 click servo-SERVO9_TRIM-down
-settle 2
 expect config.servo.9.trim 1509
 expect config.servo.write SERVO9_TRIM 1509 accepted
 expect params.value.SERVO9_TRIM 1509
@@ -87,18 +86,15 @@ click servo-SERVO9_TRIM
 key ctrl+u
 type 1500
 key Return
-settle 2
 expect config.servo.write SERVO9_TRIM 1500 accepted
 expect params.value.SERVO9_TRIM 1500
 
 # The Reverse box writes 1, then 0.
 click servo-SERVO9_REVERSED
-settle 2
 expect config.servo.9.reversed checked
 expect config.servo.write SERVO9_REVERSED 1 accepted
 expect params.value.SERVO9_REVERSED 1
 click servo-SERVO9_REVERSED
-settle 2
 expect config.servo.9.reversed unchecked
 expect params.value.SERVO9_REVERSED 0
 
@@ -114,7 +110,6 @@ expect config.servo.list.top 98
 scroll servo-SERVO9_FUNCTION-list up 2
 expect config.servo.list.top 92
 click servo-SERVO9_FUNCTION-1
-settle 2
 expect config.servo.9.function 1
 expect config.servo.9.function.text RCPassThru
 expect config.servo.write SERVO9_FUNCTION 1 accepted
@@ -126,7 +121,6 @@ expect config.servo.list.top 67
 scroll servo-SERVO9_FUNCTION-list up 40
 expect config.servo.list.top 0
 click servo-SERVO9_FUNCTION-0
-settle 2
 expect config.servo.9.function 0
 expect params.value.SERVO9_FUNCTION 0
 expect config.servo.message none

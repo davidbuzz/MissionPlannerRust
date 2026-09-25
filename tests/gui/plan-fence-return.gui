@@ -12,11 +12,13 @@ setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encodin
 
 screen plan
 window 1600x1200
-settle 4
+budget 6
 
 expect fence.return none
 
 # Save to File with no return location says so, and asks for no file.
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.30x0.70:right
 click menu-geoFence
 expect plan.menu.submenu menu-geoFence

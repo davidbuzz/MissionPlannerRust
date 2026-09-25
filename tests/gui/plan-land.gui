@@ -4,8 +4,10 @@
 env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
-settle 4
+budget 3
 
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.45x0.40
 click map@0.30x0.70:right
 click menu-land

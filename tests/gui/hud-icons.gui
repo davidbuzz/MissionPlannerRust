@@ -21,7 +21,7 @@
 
 screen fly
 window 1600x1200
-settle 6
+budget 4
 
 # Text, as HUD_showicons leaves it with nothing saved.
 expect hud.icons none
@@ -30,9 +30,11 @@ expect hud.vibe.colour white
 expect hud.zone.vibe 638,239,40,18
 expect hud.zone.ekf 593,239,40,18
 
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click hud@0.5x0.4:right
 click fly-hud-showicons
-settle 1
 expect hud.icons ~ batt_
 # The GPS picture is the fix SITL reports (RTK fixed here) and the pre-arm one its readiness;
 # the pictures' presence is the test, not the vehicle's state.
@@ -49,7 +51,6 @@ expect hud.zone.ekf 561,238,51,17
 # Clicked again, the text is back.
 click hud@0.5x0.4:right
 click fly-hud-showicons
-settle 1
 expect hud.icons none
 expect hud.gps ~ GPS:
 expect hud.vibe.colour white

@@ -17,21 +17,31 @@ env MP_PLAN_DIR $WORK
 
 screen params
 window 1600x1200
-settle 6
+budget 7
+# A first budget, set by hand until a passing run records one.
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
 click param-download
-settle 15
 expect params.held > 500
 
 click tab-plan
-settle 1
 
 # A geofence drawn on the map, to be cleared.
 click draw-fence
+# The first fence asks "FlightPlan Fence" with its "Show me again?" (row 92): unticked, so a
+# later Draw Fence in this run is not asked again, then OK.
+expect plan.prompt FlightPlan Fence
+click plan-prompt-again
+click plan-prompt-ok
+expect plan.prompt none
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.40x0.40
 click map@0.60x0.40
 click map@0.60x0.60
@@ -40,7 +50,6 @@ expect fence.points 3
 click map@0.30x0.70:right
 click menu-geoFence
 click menu-clear
-settle 4
 expect plan.params.busy false
 expect plan.prompt none
 expect plan.params ~ FENCE_ENABLE=0

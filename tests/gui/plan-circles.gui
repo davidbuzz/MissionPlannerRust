@@ -12,11 +12,14 @@
 env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
-settle 4
+budget 15
+# A first budget, set by hand until a passing run records one.
 
 expect mission.items 0
 
 # An answer int.TryParse refuses is said once all four are in: "Bad Radius", nothing added.
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.50x0.50:right
 click menu-autoWP
 click menu-createWpCircle
@@ -24,13 +27,12 @@ expect plan.prompt Radius
 key ctrl+u
 type wide
 key Return
-settle 1
+settle 0.3
 key Return
-settle 1
+settle 0.3
 key Return
-settle 1
+settle 0.3
 key Return
-settle 1
 expect plan.prompt message
 expect plan.prompt.text Bad Radius
 key Return

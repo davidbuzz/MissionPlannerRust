@@ -26,6 +26,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
 
+use mp_units::LatLon;
 use mp_vehicle::{StreamRates, VehicleState};
 
 use crate::plan::{AltitudeFrame, HomeBox, PanelBox, Plan};
@@ -519,6 +520,48 @@ impl Persisted {
         self.config.set("CMB_altmode", frame.combo_text());
         // `Settings.Instance["fpcoordmouse"] = coords1.System`.
         self.config.set("fpcoordmouse", plan.coords().system.name());
+    }
+
+    /// `FlightData.Deactivate`: where the flight map is and its zoom, as `maplast_lat`,
+    /// `maplast_lng` and `maplast_zoom`, for the next start. A map that has not been shown yet
+    /// has no position, and the keys are left as they were.
+    /// `// C#: GCSViews/FlightData.cs:662-664`
+    pub fn flight_data_deactivated(&mut self, position_and_zoom: Option<(LatLon, f64)>) {
+        if let Some((at, zoom)) = position_and_zoom {
+            self.config.set("maplast_lat", at.latitude().to_string());
+            self.config.set("maplast_lng", at.longitude().to_string());
+            self.config.set("maplast_zoom", zoom.to_string());
+        }
+    }
+
+    /// `FlightData.Activate`'s start position: with `maplast_lat` set, the position is
+    /// `GetDouble` of it and of `maplast_lng` - 0 for a value that does not parse, as `GetDouble`
+    /// answers - at zoom 3 when the latitude rounds to zero (`Math.Round(lat, 1)`, half to even:
+    /// no zoom in), else `GetFloat("maplast_zoom")` capped at `Zoomlevel.Maximum`, 18. A zoom
+    /// under `Zoomlevel.Minimum`, 1 - what a missing or unreadable one reads as - throws at
+    /// `Zoomlevel.Value` into the `catch`, after the position is set, so the place stands at the
+    /// zoom the map had: the start-up's 3.
+    /// `// C#: GCSViews/FlightData.cs:524-548; FlightData.Designer.cs:2703-2715; ExtLibs/Utilities/Settings.cs:234-253`
+    #[must_use]
+    pub fn flight_map_start(&self) -> Option<(LatLon, f64)> {
+        self.get("maplast_lat").filter(|s| !s.is_empty())?;
+        let number = |key: &str| -> f64 {
+            self.get(key)
+                .and_then(|text| text.trim().parse::<f64>().ok())
+                .filter(|value| value.is_finite())
+                .unwrap_or(0.0)
+        };
+        let (lat, lng) = (number("maplast_lat"), number("maplast_lng"));
+        let at = LatLon::new(lat, lng).ok()?;
+        let zoom = if (lat * 10.0).round_ties_even() == 0.0 {
+            3.0
+        } else {
+            match number("maplast_zoom") {
+                zoom if zoom < 1.0 => 3.0,
+                zoom => zoom.min(18.0),
+            }
+        };
+        Some((at, zoom))
     }
 
     /// `CMB_altmode_SelectedIndexChanged`: the frame chosen, as the `altmode` number.
@@ -1618,5 +1661,51 @@ mod tests {
         let parts: Vec<&str> = today.split('/').collect();
         assert_eq!(parts.len(), 3, "{today}");
         assert!(parts.iter().all(|part| !part.starts_with('0')), "{today}");
+    }
+
+    /// `FlightData.Activate`: the flight map opens where `Deactivate` left it, at zoom 3 when the
+    /// latitude rounds to zero, and nowhere with the key empty or unreadable.
+    /// `// C#: GCSViews/FlightData.cs:524-548, 662-664`
+    #[test]
+    fn the_flight_map_starts_where_it_was_last_left() {
+        let scratch = Scratch::new("maplast");
+        let mut persisted = Persisted::at(Some(scratch.config()));
+        assert_eq!(persisted.flight_map_start(), None, "no keys, no start");
+
+        let canberra = LatLon::new(-35.3632621, 149.1652374).expect("Canberra");
+        persisted.flight_data_deactivated(Some((canberra, 16.0)));
+        let (at, zoom) = persisted.flight_map_start().expect("restored");
+        assert!((at.latitude() - canberra.latitude()).abs() < 1e-9);
+        assert!((at.longitude() - canberra.longitude()).abs() < 1e-9);
+        assert!((zoom - 16.0).abs() < f64::EPSILON);
+
+        // A map not shown has no position: the keys stay.
+        persisted.flight_data_deactivated(None);
+        assert_eq!(persisted.get("maplast_zoom"), Some("16"));
+
+        // `Math.Round(lat, 1) == 0`: no zoom in, whatever maplast_zoom says; half to even, so
+        // 0.05 rounds to 0 as well.
+        persisted.set("maplast_lat", "0.04");
+        assert!((persisted.flight_map_start().expect("start").1 - 3.0).abs() < f64::EPSILON);
+        persisted.set("maplast_lat", "0.05");
+        assert!((persisted.flight_map_start().expect("start").1 - 3.0).abs() < f64::EPSILON);
+
+        // `GetDouble` of a value that does not parse is 0: the position (0, lng) at zoom 3.
+        persisted.set("maplast_lat", "north");
+        let (at, zoom) = persisted.flight_map_start().expect("a start");
+        assert!(at.latitude().abs() < f64::EPSILON && (zoom - 3.0).abs() < f64::EPSILON);
+        // An empty latitude is the C#'s `!= ""`: no start position.
+        persisted.set("maplast_lat", "");
+        assert_eq!(persisted.flight_map_start(), None);
+
+        // The zoom: capped at the control's 18; under its 1 - missing, "NaN", "0" - the place
+        // stands at the map's own 3.
+        persisted.set("maplast_lat", "-35.36");
+        persisted.set("maplast_zoom", "22");
+        assert!((persisted.flight_map_start().expect("start").1 - 18.0).abs() < f64::EPSILON);
+        persisted.set("maplast_zoom", "NaN");
+        assert!((persisted.flight_map_start().expect("start").1 - 3.0).abs() < f64::EPSILON);
+        persisted.remove("maplast_zoom");
+        assert!((persisted.flight_map_start().expect("start").1 - 3.0).abs() < f64::EPSILON);
     }
 }

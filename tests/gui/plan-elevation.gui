@@ -15,11 +15,13 @@ setup printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.363
 
 screen plan
 window 1600x1200
-settle 4
+budget 8
 
 expect plan.elevation closed
 
 # Home alone is one point.
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.50x0.70:right
 click menu-mapTool
 click menu-elevationGraph

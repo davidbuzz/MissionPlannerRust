@@ -22,12 +22,11 @@ setup mkdir -p $WORK/logs && cp testdata/dataflash_damaged.bin $WORK/logs/gpsfix
 
 screen logs
 window 1600x1200
-settle 3
+budget 17
 
 click log-name
 type gpsfix.bin
 key Return
-settle 3
 
 expect log.open true
 # The boxes as the C# opens with them: Map and Data Table off, the rest on.
@@ -50,21 +49,17 @@ expect log.cursor.marker none
 
 # Show the map and the grid.
 click log-chk-map
-settle 1
 click log-chk-datagrid
-settle 1
 expect log.check.map true
 expect log.check.datagrid true
 expect log.grid.rows > 0
 
 click logfield-ATT.Roll
-settle 2
 expect log.plotted 1
 
 # The middle of the chart: the cursor on the next position record, the marker where it says the
 # vehicle was, the map centred on it, and the grid on its time cell.
 doubleclick log-chart@0.5x0.5
-settle 1
 expect log.cursor.line > 0
 expect log.cursor.marker ~ -27.51
 expect log.cursor.marker ~ ,153.00
@@ -74,7 +69,6 @@ expect log.cursor.grid true
 # Unticking Events takes its labels off; redrawing the labels takes the cursor off the chart; the
 # marker is on the map and stays.
 click log-chk-events
-settle 1
 expect log.check.events false
 expect log.overlays.events 0
 expect log.overlays.messages 144
@@ -83,19 +77,16 @@ expect log.cursor.marker ~ -27.51
 
 # Unticking Time plots against line numbers, and clears the chart and its labels.
 click log-chk-time
-settle 1
 expect log.axis line
 expect log.plotted 0
 expect log.overlays.messages 0
 
 click logfield-ATT.Roll
-settle 2
 expect log.plotted 1
 expect log.overlays.messages 144
 expect log.overlays.minutes 0
 
 doubleclick log-chart@0.5x0.5
-settle 1
 expect log.cursor.line > 0
 expect log.cursor.grid true
 expect log.cursor.marker ~ -27.51
@@ -106,7 +97,6 @@ click log-name
 key Escape
 type nofix.bin
 key Return
-settle 3
 expect log.open true
 expect log.cursor.marker none
 expect log.cursor.line none
@@ -114,9 +104,7 @@ expect log.overlays.modes 1
 expect log.overlays.messages 14
 
 click logfield-ATT.Roll
-settle 2
 doubleclick log-chart@0.5x0.5
-settle 1
 expect log.cursor.line > 0
 expect log.cursor.marker none
 expect log.cursor.centred false

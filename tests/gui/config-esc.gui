@@ -16,17 +16,19 @@
 
 screen params
 window 1600x1200
+budget 5
 # A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
 # suppressed by the settings of the machine running it.
 env MP_CONFIG_XML $WORK/config.xml
-settle 6
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
 click param-download
-settle 15
 expect params.held > 1000
 expect params.value.ESC_CALIBRATION 0
 
@@ -34,7 +36,6 @@ click tab-setup
 expect config.esc.active false
 click setup-page-ConfigMandatory
 click setup-page-ConfigESCCalibration
-settle 1
 expect setup.page ConfigESCCalibration
 expect config.esc.active true
 
@@ -58,7 +59,6 @@ expect config.esc.mot_spin_max 0.95
 expect config.esc.mot_spin_max.enabled true
 
 # Nothing sent: the button was not pressed.
-settle 2
 expect config.esc.sent 0
 expect config.esc.calibration none
 expect config.esc.write none
@@ -68,6 +68,5 @@ expect params.value.ESC_CALIBRATION 0
 click setup-page-ConfigFlightModes
 expect setup.page ConfigFlightModes
 expect config.esc.active false
-settle 2
 expect config.esc.sent 0
 expect params.value.ESC_CALIBRATION 0

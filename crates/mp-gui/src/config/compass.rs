@@ -2892,9 +2892,16 @@ fn table(compass: &Compass, cx: &mut Context<MissionPlanner>) -> AnyElement {
                     // The C#'s `up.png`/`down.png` image cells, centred in the 40 x 22 cell
                     // (`ConfigHWCompass2.Designer.cs:523, 531`); the glyph stands in only when
                     // the image is not carried. The C# draws the arrows the same in every row.
+                    // A size of its own: the picture fills its parent, and a parent sized by
+                    // the picture came out 0 x 0, with no area to click (row 88's pictures,
+                    // found by config-compass.gui on 2026-09-25).
                     crate::probe::measured(id.clone(), div())
                         .id(SharedString::from(id))
-                        .px_1()
+                        .w(px(24.0))
+                        .h(px(20.0))
+                        .flex()
+                        .items_center()
+                        .justify_center()
                         .text_color(rgb(if usable { theme::ACCENT } else { theme::DIM }))
                         .cursor_pointer()
                         .hover(|style| style.bg(rgb(theme::BORDER)))

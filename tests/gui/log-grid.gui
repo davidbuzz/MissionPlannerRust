@@ -13,12 +13,11 @@ setup mkdir -p $WORK/logs && cp testdata/dataflash.bin $WORK/logs/flight.bin && 
 
 screen logs
 window 1600x1200
-settle 3
+budget 17
 
 click log-name
 type flight.bin
 key Return
-settle 3
 
 expect log.open true
 expect log.grid.records 11439
@@ -26,70 +25,54 @@ expect log.grid.records 11439
 expect log.check.datagrid false
 expect log.grid.rows 0
 click log-chk-datagrid
-settle 1
 expect log.grid.rows 11439
 expect log.refused none
 
 # A filled grid makes its first cell current, and that is the line number: refused, in words.
 expect log.grid.selected none
 click log-graph-left
-settle 1
 expect log.plotted 0
 expect log.refused ~ Please pick another column
 
 # Row 0 is the log declaring FMT itself. Its Type column is a field, but not one with a time series.
 click loggrid-0-3
-settle 1
 expect log.grid.selected FMT.Type
 click log-graph-left
-settle 1
 expect log.plotted 0
 expect log.refused ~ cannot be plotted against time
 
 # A click on a column header offers the log's types; ATT narrows the grid to its 182 records.
 click loggrid-head-0
-settle 1
 click loggrid-type-ATT
-settle 1
 expect log.grid.rows 182
 expect log.grid.records 11439
 
 # ATT is TimeUS, DesRoll, Roll, DesPitch, Pitch...: Roll is column 5 and Pitch column 7.
 click loggrid-0-5
-settle 1
 expect log.grid.selected ATT.Roll
 click log-graph-left
-settle 1
 expect log.plotted 1
 expect log.plotted.right 0
 expect log.refused none
 
 click loggrid-0-7
-settle 1
 expect log.grid.selected ATT.Pitch
 click log-graph-right
-settle 1
 expect log.plotted 2
 expect log.plotted.right 1
 
 # The C#'s refusals on a data row: the line number, the time, and a column past ATT's ten fields.
 click loggrid-1-0
-settle 1
 click log-graph-left
-settle 1
 expect log.plotted 2
 expect log.refused ~ Please pick another column
 
 click loggrid-1-1
-settle 1
 click log-graph-right
-settle 1
 expect log.refused ~ Cannot graph this field
 
 click loggrid-1-13
-settle 1
 click log-graph-left
-settle 1
 expect log.refused ~ Invalid Field
 expect log.plotted 2
 
@@ -102,7 +85,6 @@ click log-name
 key Escape
 type gpsfix.bin
 key Return
-settle 3
 
 expect log.open true
 expect log.plotted 0

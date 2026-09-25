@@ -26,7 +26,7 @@ setup mkdir -p "$WORK/MissionPlannerRust/srtm" && python3 -c 'import sys, zipfil
 
 screen fly
 window 1600x1200
-settle 2
+budget 16
 
 # DataFlash Logs is the last header: bring it to the front of the row, then show its page.
 click fly-tabs-right
@@ -79,7 +79,6 @@ click georef-BUT_browselog
 expect fly.georef.prompt Browse Log
 expect fly.georef.prompt.text ~ /logs/
 type camera.bin
-settle 1
 expect fly.georef.prompt.text ~ /logs/camera.bin
 click georef-prompt-ok
 expect fly.georef.prompt none
@@ -94,7 +93,6 @@ expect fly.georef.mode TIME_OFFSET
 expect fly.georef.PANEL_TIME_OFFSET.enabled True
 expect fly.georef.PANEL_SHUTTER_LAG.enabled False
 click georef-BUT_estoffset
-settle 5
 expect fly.georef.running none
 expect fly.georef.last estimate
 expect fly.georef.offset 36066.103109375
@@ -110,7 +108,6 @@ expect fly.georef.positions 617
 click georef-RDIO_CAMMsgSynchro
 expect fly.georef.mode CAM_MSG
 click georef-BUT_doit
-settle 8
 expect fly.georef.running none
 expect fly.georef.last process
 expect fly.georef.TXT_outputlog ~ Using AMSL Altitude True
@@ -132,7 +129,6 @@ expect fly.georef.map.photos 24
 
 # GeoTag Images: a tagged copy of each matched photo in the folder's geotagged folder.
 click georef-BUT_Geotagimages
-settle 6
 expect fly.georef.running none
 expect fly.georef.last geotag
 expect fly.georef.geotagged 24

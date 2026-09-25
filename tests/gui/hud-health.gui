@@ -9,7 +9,7 @@
 
 screen fly
 window 1600x1200
-settle 6
+budget 2
 
 # A copter at rest in SITL shakes far below the C#'s 30 m/s² line (HUD.cs:3166).
 expect hud.vibe.colour white

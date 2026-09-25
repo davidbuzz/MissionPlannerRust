@@ -5,9 +5,11 @@
 env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
-settle 4
+budget 5
 
 # A waypoint first, so the map has a scale that is not the empty graticule's.
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.50x0.50
 click map@0.30x0.30:right
 click menu-mapTool

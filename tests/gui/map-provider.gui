@@ -10,31 +10,27 @@ env XDG_DATA_HOME $WORK/data
 
 screen plan
 window 1600x1200
-settle 5
+budget 3
 
 expect map.source google-satellite
 expect map.attribution ~ Google
 
 # Another of the C#'s providers: Bing's imagery, and Microsoft's copyright line with it.
 click plan-map-bing-satellite
-settle 2
 expect map.source bing-satellite
 expect map.attribution ~ Microsoft
 
 click plan-map-osm
-settle 2
 expect map.source osm
 expect map.attribution ~ OpenStreetMap
 
 # Esri is this application's own rather than the C#'s, and is still offered after them.
 click plan-map-esri-imagery
-settle 3
 expect map.source esri-imagery
 expect map.attribution ~ Esri
 
 # And GoogleSatelliteMap can be chosen, not only defaulted to - so the choice is a choice rather
 # than a one-way door.
 click plan-map-google-satellite
-settle 2
 expect map.source google-satellite
 expect map.attribution ~ Google

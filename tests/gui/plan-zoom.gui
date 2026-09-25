@@ -20,7 +20,7 @@ setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encodin
 
 screen plan
 window 1600x1200
-settle 8
+budget 16
 
 expect vehicle.connected true
 
@@ -61,6 +61,8 @@ click menu-zoomToVehicle
 expect map.zoom 17.50
 
 # Zoom to Mission: home and two waypoints, framed at the whole zoom that fits them.
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.30x0.30
 click map@0.70x0.70
 expect mission.items 2
@@ -94,23 +96,19 @@ expect plan.geocoding false
 # WP radius, in blue, its tooltip always showing. The mission's waypoints have no circles on this
 # screen: its overlay is built with no radii (FlightData.cs:3830-3843).
 click tab-fly
-settle 1
 expect map.circles 0
 click fly-tab-actions
 click fly-flytocoords
 # The minus as a key: `xdotool type -35...` would read the text as an option.
 key minus
 type 35.3625;149.1657;20
-settle 2
 expect fly.prompt.value -35.3625;149.1657;20
 click fly-prompt-ok
-settle 2
 expect vehicle.mode Guided
 expect map.circles 1
 expect map.tooltip ~ Guided Mode : 20
 
 # Out of Guided, and the marker goes.
 click Stabilize
-settle 2
 expect vehicle.mode Stabilize
 expect map.circles 0

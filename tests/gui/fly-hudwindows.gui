@@ -14,7 +14,7 @@
 
 screen fly
 window 1600x1200
-settle 4
+budget 4
 
 expect fly.ekf.open false
 expect fly.vibration.open false

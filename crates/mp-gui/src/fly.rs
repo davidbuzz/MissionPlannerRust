@@ -3043,6 +3043,18 @@ fn actions_tab(
     body.into_any_element()
 }
 
+impl Prompt {
+    /// Whether this stands for an `OpenFileDialog` or a `SaveFileDialog`: its answer is a path,
+    /// typed, and the box is drawn wider for it.
+    #[must_use]
+    pub const fn is_file_dialog(self) -> bool {
+        matches!(
+            self,
+            Self::LoadLog | Self::PoiSave | Self::PoiLoad | Self::SelectScript
+        )
+    }
+}
+
 /// What a key does to a question with no box: Enter is the dialog's accept button and Escape its
 /// cancel button, as on the C#'s message boxes, and nothing else is anything.
 /// `// C#: ExtLibs/Controls/CustomMessageBox.cs:305, 317, ExtLibs/Controls/InputBox.cs:151-152`
@@ -3096,7 +3108,8 @@ pub fn prompt_dialog(
         .flex()
         .flex_col()
         .gap_2()
-        .w(px(340.0))
+        // A file question is half again as wide, for the path it takes (the owner, 2026-09-25).
+        .w(px(if prompt.is_file_dialog() { 510.0 } else { 340.0 }))
         .p_3()
         .bg(rgb(theme::PANEL))
         .border_1()

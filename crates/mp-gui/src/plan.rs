@@ -7342,10 +7342,16 @@ impl PlanMenus {
     /// showing is not shown - the window calls this once a frame with the settings, as the C#
     /// reads `Settings.Instance` before it makes the form. A question is checked at its site.
     /// `// C#: Common.cs:267-270`
+    ///
+    /// Only a box whose tick is still set: one the user has just unticked has its key off too,
+    /// and the C#'s form stays until OK - dropping it under the pointer was a defect found by
+    /// the fence scripts on 2026-09-25.
     pub fn drop_suppressed_prompt(&mut self, is_off: impl Fn(&str) -> bool) {
         if let Some(prompt) = &self.prompt
             && prompt.kind == PromptKind::Message
-            && prompt.show_again.is_some_and(|again| is_off(again.key))
+            && prompt
+                .show_again
+                .is_some_and(|again| again.ticked && is_off(again.key))
         {
             self.prompt = None;
         }
@@ -9894,7 +9900,8 @@ fn prompt_dialog(
         .flex()
         .flex_col()
         .gap_2()
-        .w(px(340.0))
+        // A file question is half again as wide, for the path it takes (the owner, 2026-09-25).
+        .w(px(if prompt.is_file_dialog() { 510.0 } else { 340.0 }))
         .p_3()
         .bg(rgb(theme::PANEL))
         .border_1()
@@ -12464,7 +12471,13 @@ mod tests {
         // Another key cleared: this box stays.
         menus.drop_suppressed_prompt(|key| key == FENCE_KEY);
         assert!(menus.prompt.is_some());
-        // Its own key cleared: the box goes, as `MessageShowAgain` returns OK before the form.
+        // Its own key cleared by its own tick, just now: the box stays until OK, as the C#'s
+        // form does (a box that vanished under the pointer was a defect, 2026-09-25).
+        menus.drop_suppressed_prompt(|key| key == MEASURE_DIST_KEY);
+        assert!(menus.prompt.is_some());
+        // Ticked, with its key already off - a box made after an earlier clearing - it goes,
+        // as `MessageShowAgain` returns OK before the form.
+        assert_eq!(menus.toggle_show_again(), Some((MEASURE_DIST_KEY, true)));
         menus.drop_suppressed_prompt(|key| key == MEASURE_DIST_KEY);
         assert!(menus.prompt.is_none());
         assert_eq!(menus.toggle_show_again(), None);

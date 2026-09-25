@@ -20,7 +20,7 @@ setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encodin
 
 screen fly
 window 1600x1200
-settle 8
+budget 3
 
 # A vehicle, but its mission not read: no home on the flight map.
 expect vehicle.connected true
@@ -28,17 +28,14 @@ expect map.home none
 
 # Read the mission from the planning screen.
 click tab-plan
-settle 1
 click plan-read
-settle 6
+settle 0.3
 key Return
-settle 1
 expect plan.prompt none
 expect plan.home ~ -35.36
 expect map.home ~ -35.36
 
 # The flight map now draws the vehicle's home.
 click tab-fly
-settle 1
 expect map.home ~ -35.36
 expect map.home ~ 149.16

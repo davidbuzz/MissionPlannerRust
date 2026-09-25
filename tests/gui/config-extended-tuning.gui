@@ -25,19 +25,21 @@
 
 screen params
 window 1600x1200
+budget 46
 # A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
 # suppressed by the settings of the machine running it.
 env MP_CONFIG_XML $WORK/config.xml
-settle 6
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
 # SoftwareConfig adds the page inside `if (gotAllParams)` (SoftwareConfig.cs:148-169), and here
 # parameters are downloaded when asked for.
 click param-download
-settle 15
 expect params.held > 1000
 expect params.value.ATC_RAT_RLL_P 0.135
 expect params.value.ATC_RAT_PIT_P 0.135
@@ -47,7 +49,6 @@ expect params.value.RC9_OPTION 0
 click tab-config
 expect config.extended.active false
 click config-page-ConfigArducopter
-settle 1
 expect config.page ConfigArducopter
 expect config.title Extended Tuning
 expect config.extended.active true
@@ -108,7 +109,6 @@ expect config.extended.number.RATE_PIT_P.marked false
 # Nothing is written until Write Params, whose key is ctrl+S.
 expect params.value.ATC_RAT_RLL_P 0.135
 key ctrl+s
-settle 2
 expect config.extended.write ATC_RAT_RLL_P 0.14 accepted
 expect params.value.ATC_RAT_RLL_P 0.14
 expect config.extended.changes none
@@ -122,7 +122,6 @@ type 0.135
 key Return
 expect config.extended.changes ATC_RAT_RLL_P=0.135
 click extended-BUT_writePIDS
-settle 2
 expect config.extended.write ATC_RAT_RLL_P 0.135 accepted
 expect params.value.ATC_RAT_RLL_P 0.135
 expect config.extended.changes none
@@ -145,12 +144,10 @@ expect config.extended.changes RC8_OPTION=9
 expect params.value.RC8_OPTION 0
 # From 0 any option is more than double: Write Params asks first.
 click extended-BUT_writePIDS
-settle 1
 expect config.extended.large RC8_OPTION has more than doubled the last input. Are you sure?
 # No puts the vehicle's value back as text, which no row of the list is: the combo keeps its
 # choice and changes its value, the colour clears, and nothing is written.
 click extended-large-no
-settle 1
 expect config.extended.large none
 expect config.extended.writing false
 expect config.extended.combo.CH8_OPTION 9
@@ -159,10 +156,8 @@ expect config.extended.changes RC8_OPTION=9
 expect params.value.RC8_OPTION 0
 # Asked again, Yes writes it.
 click extended-BUT_writePIDS
-settle 1
 expect config.extended.large RC8_OPTION has more than doubled the last input. Are you sure?
 click extended-large-yes
-settle 2
 expect config.extended.write RC8_OPTION 9 accepted
 expect params.value.RC8_OPTION 9
 expect config.extended.changes none
@@ -170,10 +165,8 @@ expect config.extended.changes none
 click extended-CH8_OPTION
 reveal extended-CH8_OPTION-list extended-CH8_OPTION-0
 click extended-CH8_OPTION-0
-settle 1
 expect config.extended.changes RC8_OPTION=0
 click extended-BUT_writePIDS
-settle 2
 expect config.extended.large none
 expect config.extended.write RC8_OPTION 0 accepted
 expect params.value.RC8_OPTION 0
@@ -181,7 +174,6 @@ expect params.value.RC8_OPTION 0
 # RC9's option has no ValueUpdated: it writes the moment it changes, and changes stays empty.
 click extended-CH9_OPTION
 click extended-CH9_OPTION-9
-settle 2
 expect config.extended.changes none
 expect config.extended.write RC9_OPTION 9 accepted
 expect params.value.RC9_OPTION 9
@@ -190,7 +182,6 @@ expect params.value.RC9_OPTION 9
 click extended-CH9_OPTION
 reveal extended-CH9_OPTION-list extended-CH9_OPTION-0
 click extended-CH9_OPTION-0
-settle 2
 expect config.extended.write RC9_OPTION 0 accepted
 expect params.value.RC9_OPTION 0
 expect config.extended.message none
@@ -200,7 +191,8 @@ expect config.extended.writes.pending 0
 # each wait out GetParam's retries - then runs Activate.
 click extended-BUT_refreshpart
 expect config.extended.refreshing true
-settle 45
+# The partial refresh reads the page's parameters back from the vehicle one by one.
+within 45
 expect config.extended.refreshing false
 expect config.extended.number.RATE_RLL_P 0.135
 expect config.extended.number.HLD_LAT_P.enabled false

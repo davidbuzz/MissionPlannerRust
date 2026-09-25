@@ -1786,20 +1786,25 @@ impl MissionPlanner {
             changes: self.raw_params.changes(),
             collapsed: self.raw_params.collapsed(),
         };
-        let mut shown = crate::params::shown(
+        // The grid's first row, as the grid orders them.
+        let order = crate::params::grid_order(
             parameters,
             self.selected_param_group.as_deref(),
             self.param_search.value(),
             &filters,
+            &grid.favourites,
         )
         .unwrap_or_default();
-        sort_rows(&mut shown, &grid.favourites);
         record(
             "params.rows.first",
-            shown
+            order
                 .first()
+                .and_then(|&at| parameters.get(at))
                 .map_or("none", |parameter| parameter.name.as_str()),
         );
+        // How many rows the grid built for its box, the last time it drew: the rows in view,
+        // not every row shown.
+        record("params.rows.drawn", crate::params::rows_drawn());
         let selected = self
             .selected_param
             .as_deref()
@@ -1880,6 +1885,19 @@ pub struct GridView<'a> {
     pub edit_focus: &'a FocusHandle,
     /// Whether that has the keyboard.
     pub edit_focused: bool,
+}
+
+impl MissionPlanner {
+    /// What drawing a row needs, from the screen's state as it is now.
+    pub(crate) fn param_grid_view(&self, window: &Window) -> GridView<'_> {
+        GridView {
+            grid: &self.param_grid,
+            changes: self.raw_params.changes(),
+            grid_focus: &self.param_grid_focus,
+            edit_focus: &self.param_edit_focus,
+            edit_focused: self.param_edit_focus.is_focused(window),
+        }
+    }
 }
 
 /// A column's width in pixels.

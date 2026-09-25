@@ -36,17 +36,19 @@
 
 screen params
 window 1600x1200
+budget 12
 # A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
 # suppressed by the settings of the machine running it.
 env MP_CONFIG_XML $WORK/config.xml
-settle 6
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
 click param-download
-settle 15
 expect params.held > 1000
 expect params.value.SERIAL5_PROTOCOL -1
 expect params.value.SERIAL5_BAUD 57
@@ -59,7 +61,6 @@ expect config.serial.active false
 click setup-page-ConfigMandatory
 click setup-page-ConfigSerial
 # Time for the read: a reset, an open and nine 80-byte reads of SITL's 712 bytes.
-settle 3
 expect setup.page ConfigSerial
 expect config.serial.active true
 
@@ -91,14 +92,12 @@ expect config.serial.write none
 # The speed: 115200, then 57600 again.
 click serial-SERIAL5_BAUD
 click serial-SERIAL5_BAUD-115
-settle 3
 expect config.serial.5.baud 115
 expect config.serial.5.baud.text 115200
 expect config.serial.write SERIAL5_BAUD 115 accepted
 expect params.value.SERIAL5_BAUD 115
 click serial-SERIAL5_BAUD
 click serial-SERIAL5_BAUD-57
-settle 3
 expect config.serial.write SERIAL5_BAUD 57 accepted
 expect params.value.SERIAL5_BAUD 57
 
@@ -111,7 +110,6 @@ expect config.serial.list.top 0
 scroll serial-SERIAL5_PROTOCOL-list down 1
 expect config.serial.list.top 3
 click serial-SERIAL5_PROTOCOL-2
-settle 3
 expect config.serial.5.protocol 2
 expect config.serial.5.protocol.text MAVLink2
 expect params.value.SERIAL5_PROTOCOL 2
@@ -124,7 +122,6 @@ expect config.serial.list.top 1
 scroll serial-SERIAL5_PROTOCOL-list up 1
 expect config.serial.list.top 0
 click serial-SERIAL5_PROTOCOL--1
-settle 3
 expect config.serial.5.protocol -1
 expect config.serial.write SERIAL5_PROTOCOL -1 accepted
 expect params.value.SERIAL5_PROTOCOL -1
@@ -134,13 +131,11 @@ click serial-SERIAL5_OPTIONS-bitmask
 expect config.serial.dialog SERIAL5_OPTIONS
 expect config.serial.dialog.checked none
 click serial-bitmask-SERIAL5_OPTIONS-0
-settle 3
 expect config.serial.dialog.checked 0
 expect config.serial.write SERIAL5_OPTIONS 1 accepted
 expect params.value.SERIAL5_OPTIONS 1
 expect config.serial.5.options InvertRX
 click serial-bitmask-SERIAL5_OPTIONS-0
-settle 3
 expect config.serial.write SERIAL5_OPTIONS 0 accepted
 expect params.value.SERIAL5_OPTIONS 0
 click serial-bitmask-SERIAL5_OPTIONS-close

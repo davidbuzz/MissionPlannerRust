@@ -12,7 +12,7 @@
 
 screen fly
 window 1600x1200
-settle 3
+budget 12
 
 expect fly.tab tabQuick
 expect fly.menu none
@@ -31,13 +31,11 @@ expect fly.prompt Enter number of columns to have.
 expect fly.prompt.value 2
 key ctrl+u
 type 3
-settle 1
 click fly-prompt-ok
 expect fly.prompt Enter number of rows to have.
 expect fly.prompt.value 3
 key ctrl+u
 type 2
-settle 1
 click fly-prompt-ok
 expect fly.prompt none
 expect fly.quick.grid 3x2
@@ -53,7 +51,6 @@ click fly-prompt-ok
 expect fly.prompt.value 2
 key ctrl+u
 type two
-settle 1
 click fly-prompt-ok
 expect fly.prompt none
 expect fly.quick.grid 3x2

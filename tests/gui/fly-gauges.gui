@@ -9,8 +9,11 @@
 
 screen fly
 window 1600x1200
-settle 8
+budget 10
 
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click fly-tabs-right
 click fly-tabs-right
 click fly-tabs-right
@@ -31,7 +34,6 @@ expect fly.prompt Enter Max Speed
 expect fly.prompt.value 60
 key ctrl+u
 type 25
-settle 1
 click fly-prompt-ok
 expect fly.prompt none
 expect fly.gauge.speed.max 25
@@ -41,7 +43,6 @@ doubleclick fly-gauge-speed
 expect fly.prompt.value 60
 key ctrl+u
 type fast
-settle 1
 click fly-prompt-ok
 expect status Error: Input string was not in a correct format.
 expect fly.gauge.speed.max 25

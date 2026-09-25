@@ -18,9 +18,14 @@ env MP_PLAN_DIR $WORK
 
 screen plan
 window 1600x1200
-settle 6
+budget 10
 expect mission.home true
 
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.30x0.30
 click map@0.35x0.30
 click map@0.40x0.30
@@ -44,7 +49,6 @@ expect plan.prompt.text Absolute Alt is selected are you sure?
 click plan-prompt-cancel
 expect plan.prompt none
 expect plan.frame relative
-settle 6
 expect plan.transfer mission transferred
 # `getHomePositionAsync` follows the upload, as it follows Write's.
 expect plan.write.home_requests 1
@@ -56,6 +60,5 @@ expect plan.mavftp true
 click plan-mavftp
 expect plan.mavftp false
 click plan-read
-settle 8
 expect mission.items 12
 expect mission.origin ~ vehicle

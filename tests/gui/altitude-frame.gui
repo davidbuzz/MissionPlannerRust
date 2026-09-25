@@ -7,12 +7,14 @@
 
 screen plan
 window 1600x1200
-settle 4
+budget 4
 
 expect mission.items 0
 expect plan.frame relative
 
 # A waypoint in the default frame.
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.45x0.40
 expect mission.items 1
 expect mission.frames ~ relative

@@ -16,8 +16,11 @@
 env XDG_DATA_HOME $WORK
 screen fly
 window 1600x1200
-settle 8
+budget 17
 
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click fly-tab-actions
 expect fly.tab tabActions
 expect fly.page.overflow 0
@@ -31,25 +34,24 @@ expect fly.prompt none
 expect fly.sent nothing: Bad Lat/Long
 expect status Error: Bad Lat/Long
 
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.5x0.5
 expect fly.mousedown ~ ;
 
 click fly-pointcamerahere
 key ctrl+u
 type high
-settle 1
 click fly-prompt-ok
 expect fly.sent nothing: Bad Alt
 
 click fly-pointcamerahere
 key ctrl+u
 type 20
-settle 1
 expect fly.prompt.value 20
 click fly-prompt-ok
 expect fly.sent ~ COMMAND_INT MAV_CMD_DO_SET_ROI 0,0,0,0 x=-353
 expect fly.sent ~ z=20 frame=3
-settle 3
 expect fly.ack ~ MAV_CMD_DO_SET_ROI:
 
 # Three parts: the height above sea level, each part a float.
@@ -57,7 +59,6 @@ click fly-pointcameracoords
 expect fly.prompt Please enter the coords 'lat;long;alt(abs)' or 'lat;long'
 key minus
 type 35.36;149.16;600
-settle 1
 expect fly.prompt.value -35.36;149.16;600
 click fly-prompt-ok
 expect fly.sent COMMAND_INT MAV_CMD_DO_SET_ROI 0,0,0,0 x=-353600006 y=1491600036 z=600 frame=0
@@ -66,13 +67,11 @@ expect fly.sent COMMAND_INT MAV_CMD_DO_SET_ROI 0,0,0,0 x=-353600006 y=1491600036
 click fly-pointcameracoords
 key minus
 type 35.36;149.16
-settle 1
 click fly-prompt-ok
 expect fly.sent COMMAND_INT MAV_CMD_DO_SET_ROI 0,0,0,0 x=-353600006 y=1491600036 z=0 frame=0
 
 click fly-pointcameracoords
 type nonsense
-settle 1
 click fly-prompt-ok
 expect status Error: Invalid Field
 expect fly.sent nothing: Invalid Field
@@ -80,7 +79,6 @@ expect fly.sent nothing: Invalid Field
 # Trigger Camera NOW: DO_DIGICAM_CONTROL with its shot in the fifth parameter, waited for.
 click fly-triggercamera
 expect fly.sent COMMAND_LONG MAV_CMD_DO_DIGICAM_CONTROL 0,0,0,0,1,0,0
-settle 3
 expect fly.ack ~ MAV_CMD_DO_DIGICAM_CONTROL:
 
 # Camera Overlap: dimmed, and a click says why.

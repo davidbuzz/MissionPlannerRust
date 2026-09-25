@@ -348,8 +348,10 @@ servo/RC, and the vehicle action buttons.
   proved by `tests/gui/main-connect.gui` against SITL over TCP (run owed); AUTO's port scan is not ported.
   The SIMULATION screen is `GCSViews/SITL.cs` whole (row 78, `crates/mp-gui/src/sitl/`): the models, the
   version box, the command line, and on Linux the manifest's native SITL build fetched and started,
-  the WASM probe otherwise; its launchers are tested against stubs, `tests/gui/sitl.gui` is unrun, and
-  no real launch is recorded on any OS.
+  the WASM probe otherwise; its launchers are tested against stubs, `tests/gui/sitl.gui` has run
+  (2026-09-25), and a real launch is recorded on Linux (2026-09-26, `tests/gui/sitl-launch.gui`: the
+  copter picture fetches the manifest's build and starts it, FLIGHT DATA connects, the heartbeat,
+  the parameters, a mode changed and back); Windows and macOS launches are still owed.
 - **Tests:** `crates/mp-gui/src/coverage.rs` (the crate is a binary, so its tests are inline) lists every `FlightData` wiring and fails when the report is stale or a claimed id leaves the source; the 32 `tests/gui/fly-*.gui` scripts and `crates/mp-link/tests/commands_sitl.rs` drive arm, disarm, modes, take-off, guided and the Actions page against SITL; `tests/gui/settings-persist.gui` for what survives a restart; `tests/gui/storm.gui` with `crates/mp-link/tests/telemetry_storm.rs` for the 200 Hz budget. Not yet: per-tab snapshots, a layout-persistence test beyond `config.xml`'s keys, and the storm as a criterion bench.
 
 ### D11. Flight Planner screen

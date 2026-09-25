@@ -19,11 +19,13 @@ setup cp testdata/planner/route.kml "$WORK/route.kml" && cp testdata/planner/rou
 
 screen plan
 window 1600x1200
-settle 4
+budget 17
 expect plan.kml.polygons 0
 expect plan.kml.flight false
 
 # No to the flight screen, Yes to the zoom.
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.30x0.70:right
 click menu-mapTool
 click menu-kMLOverlay
@@ -43,7 +45,6 @@ expect plan.prompt.text Zoom to the center or the loaded file?
 expect plan.kml.flight false
 click plan-prompt-ok
 expect plan.prompt none
-settle 1
 expect map.zoom > 14
 
 # The .kmz, and Yes to the flight screen this time; a new file had cleared the flight screen's copy.

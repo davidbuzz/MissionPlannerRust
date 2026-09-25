@@ -19,12 +19,11 @@ setup cp testdata/secure/unsigned.apj /tmp/mpr-gui-secure-fw.apj
 
 screen setup
 window 1600x1200
-settle 3
+budget 18
 
 expect config.secure.active false
 expect setup.pages ~ ConfigSecureAP
 click setup-page-ConfigSecureAP
-settle 1
 expect setup.page ConfigSecureAP
 expect setup.title Secure
 expect config.secure.active true
@@ -84,6 +83,5 @@ expect config.secure.written /tmp/mpr-gui-secure-fw-signed.apj
 # Another page - the Optional Hardware heading, which fetches nothing - and Secure is no longer the
 # page showing.
 click setup-page-ConfigOptional
-settle 1
 expect setup.page ConfigOptional
 expect config.secure.active false

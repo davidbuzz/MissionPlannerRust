@@ -32,9 +32,9 @@
 
 screen config
 window 1600x1200
+budget 19
 env XDG_DATA_HOME $WORK
 env MP_CONFIG_XML $WORK/config.xml
-settle 4
 
 expect config.page ConfigPlanner
 expect config.title Planner
@@ -198,7 +198,6 @@ expect config.error none
 
 # Coming back opens the page again, as it was left; CONFIG saves nothing.
 click tab-config
-settle 1
 expect config.page ConfigPlanner
 expect config.planner.active true
 expect config.planner.combo.CMB_distunits Feet
@@ -214,7 +213,6 @@ expect hud.hudon false
 
 # The close box, and the next start: its start-up save of what it read, then the page.
 restart
-settle 4
 expect config.saved startup
 expect config.saves 1
 expect config.error none

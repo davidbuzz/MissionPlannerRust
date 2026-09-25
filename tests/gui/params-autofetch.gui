@@ -16,12 +16,15 @@
 
 screen params
 window 1600x1200
+budget 4
 # A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
 # suppressed by the settings of the machine running it.
 env MP_CONFIG_XML $WORK/config.xml
-settle 12
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
@@ -36,14 +39,11 @@ expect params.value.INS_GYRO_FILTER 20
 expect params.defaults > 1000
 expect params.none_default false
 click param-none-default
-settle 1
 expect params.none_default true
 click param-none-default
-settle 1
 expect params.none_default false
 
 # The button fetches again, the same way.
 click param-download
-settle 8
 expect params.held > 1000
 expect params.fetch ~ over MAVFTP

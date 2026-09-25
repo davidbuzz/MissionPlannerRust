@@ -484,15 +484,11 @@ pub const PANELS: &[Panel] = &[
             setup(228, "Flight Modes", MANDATORY, ANY),
             config(235, "Flight Modes", "Ateryx"),
         ],
-        // C#: GCSViews/ConfigurationView/ConfigFlightModes.cs:38-467, ported whole but for the
-        // Ctrl+S shortcut (ProcessCmdKey), standardFlightModesOnly (its default only), and the
-        // message box, which is a line on the page.
-        Partial(
-            at("crates/mp-gui/src/config/flight_modes.rs", "fn page"),
-            "the six combos from the firmware's mode list, the lit PWM band, Simple and Super
-        //     Simple, Save through the retrying set; not Ctrl+S, standardFlightModesOnly beyond
-        //     its default, nor the message box",
-        ),
+        // C#: GCSViews/ConfigurationView/ConfigFlightModes.cs:38-467, ported whole: the six
+        // combos, the lit PWM band, Simple and Super Simple (hidden under the display view's
+        // standardFlightModesOnly), Save through the retrying set, Ctrl+S (ProcessCmdKey); the
+        // message box on a failed write is a line on the page, the owner's rule on boxes.
+        Ours::Done(at("crates/mp-gui/src/config/flight_modes.rs", "fn page")),
     ),
     panel(
         "ConfigFailSafe",
@@ -1915,7 +1911,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (31, 14, 2, 2, 12)
+            (32, 13, 2, 2, 12)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

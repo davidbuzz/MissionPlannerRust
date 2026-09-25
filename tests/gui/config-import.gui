@@ -18,7 +18,7 @@ setup mkdir -p "$WORK/Mission Planner/History" && printf '\357\273\277<?xml vers
 tiles offline
 screen fly
 window 1600x1200
-settle 4
+budget 3
 
 # Copied, and read from where they were copied to.
 expect config.imported config.xml, poi.txt, History
@@ -30,7 +30,6 @@ expect fly.poi.file ~ MissionPlannerRust/poi.txt
 # The second start finds the directory holding the import's marker, and imports nothing; what the
 # first one copied is still what it reads.
 restart
-settle 4
 expect config.imported none
 expect config.distunits Feet
 expect fly.poi.count 2

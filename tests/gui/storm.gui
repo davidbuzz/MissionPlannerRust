@@ -22,13 +22,18 @@
 # it gave p99 26 ms with 127 stalls in 480 frames at 200 Hz, and that is not the claim.
 
 env MP_STORM 200
+# Not against the debug build: its number is not the claim, so a suite skips this (exit 3).
+setup case "${MP_GUI_BIN:-}" in *release*) ;; *) echo 'storm needs the release build: MP_GUI_BIN=target/release/planner' >&2; exit 3;; esac
 screen fly
 window 1600x1200
+budget 21
+# A first budget, set by hand until a passing run records one.
 
-settle 10
 
 expect vehicle.connected true
 expect vehicle.count 1
+# Ten seconds of storm: a measurement window, not a wait for a fact.
+settle 10
 expect frame.count >= 100
 # For the record, before the budget: the distribution the run saw.
 expect frame.p50_us >= 0

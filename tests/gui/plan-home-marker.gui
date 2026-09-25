@@ -19,7 +19,7 @@ setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encodin
 
 screen plan
 window 1600x1200
-settle 4
+budget 9
 
 # The saved home is in the boxes, and the map draws its marker there. With nothing else to show
 # the map is fitted close round it, past GMap's zoom 16, so the "H" is written on the pin
@@ -35,29 +35,23 @@ click plan-home-lat
 click plan-prompt-ok
 key ctrl+u
 type 51.5
-settle 1
 expect map.home 51.5,149.1652374
 click plan-home-lng
 key ctrl+u
 type 7.25
-settle 1
 expect map.home 51.5,7.25
 
 # An empty box is no home, and no marker; the others still parse, so the altitude is what goes.
 click plan-home-alt
 key ctrl+u
-settle 1
 expect plan.home 51.5,7.25,
 expect map.home none
 expect map.home.label false
 type 100
-settle 1
 expect map.home 51.5,7.25
 
 # The flight screen draws the vehicle's home, and there is no vehicle.
 click tab-fly
-settle 1
 expect map.home none
 click tab-plan
-settle 1
 expect map.home 51.5,7.25

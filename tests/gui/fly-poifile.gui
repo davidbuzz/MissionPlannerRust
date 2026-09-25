@@ -13,7 +13,7 @@ env XDG_DATA_HOME $WORK
 setup mkdir -p "$WORK/MissionPlannerRust" && printf '%s\t%s\t%s\r\n' -35.3625 149.1655 gate -35.3640 149.1640 mast > "$WORK/MissionPlannerRust/extra.txt"
 screen fly
 window 1600x1200
-settle 4
+budget 14
 
 expect fly.poi.count 0
 click fly-tab-actions
@@ -24,7 +24,6 @@ click fly-poi-load
 expect fly.prompt Poi File
 expect fly.prompt.value ~ MissionPlannerRust/
 type extra.txt
-settle 1
 click fly-prompt-ok
 expect fly.prompt none
 expect fly.poi.count 2
@@ -34,7 +33,6 @@ expect fly.poi.list ~ mast -35.364;149.164
 click fly-poi-save
 expect fly.prompt Poi File
 type saved.txt
-settle 1
 click fly-prompt-ok
 expect status ~ Save File:
 expect status ~ saved.txt
@@ -42,14 +40,12 @@ expect status ~ saved.txt
 # Loaded back, its points are added to the two there are.
 click fly-poi-load
 type saved.txt
-settle 1
 click fly-prompt-ok
 expect fly.poi.count 4
 
 # A file that is not there is said, and adds nothing.
 click fly-poi-load
 type missing.txt
-settle 1
 click fly-prompt-ok
 expect status ~ missing.txt
 expect fly.poi.count 4
@@ -57,7 +53,6 @@ expect fly.poi.count 4
 # Cancel closes the box and reads nothing.
 click fly-poi-load
 type extra.txt
-settle 1
 click fly-prompt-cancel
 expect fly.prompt none
 expect fly.poi.count 4

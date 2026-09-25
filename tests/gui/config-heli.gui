@@ -19,24 +19,23 @@
 env MP_CONFIG_XML $WORK/config.xml
 screen params
 window 1600x1200
-settle 6
+budget 4
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
 click param-download
-settle 15
 expect params.held > 1000
 # The count passes before the last parameters land.
-settle 5
 expect params.value.FRAME_CLASS 1
 
 click tab-setup
-settle 1
 expect setup.pages ~ ConfigMandatory,ConfigFrameClassType
 click setup-page-ConfigMandatory
-settle 1
 expect setup.groups ~ Mandatory Hardware=ConfigFrameClassType,
 expect config.heli.active false
 expect config.heli.swash.rows 0

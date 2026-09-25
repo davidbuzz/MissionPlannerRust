@@ -18,12 +18,25 @@
 #   tiles on                    configure a tile source and fetch what the cache lacks
 #   env MP_TILE_CACHE $WORK/c   export a variable before launch; the rest of the line is the value
 #   setup tools/seed $WORK/c    run a command, from the repo root, before launch
-#   budget 5                    seconds the whole test may take from its window to its last
-#                               line; 5 unless a script says otherwise (MP_GUI_BUDGET overrides
-#                               the default). Over it is a failure: the owner's rule of
-#                               2026-09-25, "each individual GUI test is fully completed within
-#                               5 seconds". Every line is stamped `t=+1.234s` on the way, so
-#                               the log says where the time went.
+#   budget 5                    the test's expected run time in seconds, from its window to its
+#                               last line; 5 unless the script says otherwise (MP_GUI_BUDGET
+#                               overrides the default). Over it is a failure, and the hard stop
+#                               is three seconds past it: the owner's rules of 2026-09-25,
+#                               "each individual GUI test is fully completed within 5 seconds"
+#                               and "keep a record of the expected run time of each UI test, and
+#                               terminate after expected time + 3 seconds". tools/gui-budgets.py
+#                               `record` writes the times a suite run measured, `bump` adds a
+#                               second to every script a run found over its budget ("increase
+#                               budget by 1 sec for all the ones that missed"). Every line is stamped
+#                               `t=+1.234s` on the way, so the log says where the time went.
+#   (hard stop)                 a test still running its budget plus MP_GUI_HARD_STOP_MARGIN
+#                               seconds (3) after its window has a screenshot
+#                               of its window taken - <name>-hardstop.png in MP_GUI_SHOT_DIR,
+#                               /tmp by default; the suite puts it beside the logs - and is
+#                               killed, a failure (the owner's request of 2026-09-25)
+#   within 45                   the next expect may wait this many seconds for its fact, for
+#                               the few things slower than MP_GUI_EXPECT_WAIT (a page's partial
+#                               refresh reads its parameters back one by one)
 #   settle 6                    wait, for telemetry to arrive or a view to settle - rarely
 #                               needed now: `expect` waits for its fact (up to
 #                               MP_GUI_EXPECT_WAIT seconds, 10 by default) and a click waits
@@ -68,6 +81,8 @@
 # every frame. `crates/mp-gui/src/facts.rs` lists them, and an unknown key is an error rather than
 # a silent pass - a test asserting on a fact that no longer exists must fail, not succeed.
 set -uo pipefail
+# Script words are text: `set -- $LINE` must not turn `MAV[0]` into a file glob.
+set -f
 
 SCRIPT="${1:?usage: gui-test.sh <script.gui> [-- <binary args>]}"
 shift
@@ -96,12 +111,14 @@ APP_ARGS=("$@")
 # removes what it did make and nothing else. `set -u` would otherwise turn the first unset name
 # into a second error on the way out, and an empty FACTS_FILE into a relative `.facts.tmp`.
 APP_PID=""
+WATCHDOG=""
 PROBE_FILE=""
 FACTS_FILE=""
 SETTINGS_FILE=""
 POINTER_HOME=""
 WORK="$(mktemp -d -t planner-work-XXXXXX)" || { echo "cannot make a scratch directory" >&2; exit 2; }
 cleanup() {
+    [ -n "${WATCHDOG:-}" ] && kill "$WATCHDOG" 2>/dev/null
     if [ -n "$APP_PID" ]; then
         kill "$APP_PID" 2>/dev/null
         wait "$APP_PID" 2>/dev/null
@@ -113,7 +130,23 @@ cleanup() {
     # shellcheck disable=SC2086 # two words on purpose
     [ -n "$POINTER_HOME" ] && xdotool mousemove $POINTER_HOME 2>/dev/null
 }
-trap cleanup EXIT INT TERM HUP
+# A signal ends the run: a trap that only cleaned up would hand control back to the script,
+# which then went on past the hard stop, expecting against a closed application (2026-09-25).
+# An expect in progress - the usual thing a hard stop lands on, as one waits up to ten seconds
+# and the stop comes three past the budget - says what it found first, or the log would only
+# say "hard stop".
+EXPECT_WORDS=()
+# What the last expect read, so a fact that held is reported without a second read.
+LAST_VALUE=""
+on_signal() {
+    if [ "${#EXPECT_WORDS[@]}" -gt 0 ]; then
+        QUIET=""
+        expect_once "${EXPECT_WORDS[@]}" || true
+    fi
+    exit 124
+}
+trap cleanup EXIT
+trap on_signal INT TERM HUP
 
 # The text of a line after its first word, with the surrounding whitespace trimmed and nothing
 # else touched. `env` values and `setup` commands are taken from this rather than rejoined from
@@ -135,9 +168,28 @@ TEST_BUDGET_SECONDS="${MP_GUI_BUDGET:-5}"
 EXPECT_WAIT_MS=$(awk -v s="${MP_GUI_EXPECT_WAIT:-10}" 'BEGIN { printf "%d", s * 1000 }')
 # Set while an `expect` is asked quietly, in its wait loop.
 QUIET=""
+# A `within N` line: the wait for the next expect alone, in ms; empty otherwise.
+NEXT_WAIT_MS=""
 now_ms() { date +%s%3N; }
 # Milliseconds as "1.234".
 seconds() { printf '%d.%03d' $(($1 / 1000)) $(($1 % 1000)); }
+# Waits for the application to publish its facts $1 more times - $1 frames - up to a second.
+# What a key or typed text needs before it is sent: the box a click opened is drawn on the
+# next frame and takes the focus on the one after, and keys sent before that go nowhere
+# (config-battery2.gui, 2026-09-25, once the pauses after clicks were short).
+wait_publishes() {
+    local seen=0 last now
+    last=$(stat -c '%.9Y' "$FACTS_FILE" 2>/dev/null || echo "")
+    for _ in $(seq 1 20); do
+        sleep 0.05
+        now=$(stat -c '%.9Y' "$FACTS_FILE" 2>/dev/null || echo "")
+        if [ "$now" != "$last" ]; then
+            last="$now"
+            seen=$((seen + 1))
+            [ "$seen" -ge "$1" ] && return 0
+        fi
+    done
+}
 SCAN_NO=0
 
 # Read the directives that must be set before the application starts.
@@ -294,6 +346,39 @@ start_app() {
     xdotool windowactivate --sync "$WIN_ID" 2>/dev/null
     xdotool windowmove "$WIN_ID" "${SHOT_AT%%,*}" "${SHOT_AT##*,}" 2>/dev/null
     sleep 0.2
+    # The application's first tick, after its first frame, loads the SETUP and CONFIG lists and
+    # the settings' view; a click before it selects a page that the load then forgets
+    # (config-advanced.gui, 2026-09-25, once its 3-second settle was gone). So wait for the
+    # facts to be published twice - a second write after the first - up to three seconds.
+    local first now
+    for _ in $(seq 1 60); do
+        [ -s "$FACTS_FILE" ] && break
+        sleep 0.05
+    done
+    first=$(stat -c '%.9Y' "$FACTS_FILE" 2>/dev/null || echo "")
+    for _ in $(seq 1 60); do
+        sleep 0.05
+        now=$(stat -c '%.9Y' "$FACTS_FILE" 2>/dev/null || echo "")
+        [ -n "$first" ] && [ "$now" != "$first" ] && break
+    done
+    # And the layout: the probe is rewritten as the screen's controls appear over the first
+    # frames, and a map clicked before its view is there records nothing (fly-poi.gui,
+    # 2026-09-25). Wait until the probe has been still for 300 ms, up to three seconds.
+    local stamp="" same=0
+    for _ in $(seq 1 30); do
+        now=$(stat -c '%.9Y' "$PROBE_FILE" 2>/dev/null || echo "")
+        if [ -n "$stamp" ] && [ "$now" = "$stamp" ]; then
+            same=$((same + 1))
+            [ "$same" -ge 3 ] && break
+        else
+            same=0
+        fi
+        stamp="$now"
+        sleep 0.1
+    done
+    # The window this run drives, for the watchdog's screenshot: a `restart` makes a new one
+    # after the watchdog has forked with the old id.
+    printf '%s\n' "$WIN_ID" > "$WORK/window"
 }
 
 # Sends a window WM_DELETE_WINDOW, as a window manager's close box does. xdotool's windowclose
@@ -318,6 +403,51 @@ T_LAUNCH=$(now_ms)
 start_app
 T0=$(now_ms)
 echo "window after $(seconds $((T0 - T_LAUNCH))) s; budget $TEST_BUDGET_SECONDS s from here"
+
+# The application's window on top before every click, key and typed text. Another window
+# raised over it in the meantime - the owner's editor on the same display took a run's clicks
+# for twenty seconds (setup-list.gui, 2026-09-26, seen in the hard stop's screenshot) - would
+# take them instead; xdotool sends the pointer to the window's coordinates, not to it. Raised,
+# not activated: activating it before each keystroke lost the typed text of a box that had
+# just been clicked (config-battery.gui, 2026-09-26), where the run's one activation at its
+# start had not. Keys and text go to the window by id whichever window has the focus.
+raise_window() {
+    xdotool windowraise "$WIN_ID" 2>/dev/null || true
+}
+
+# The window as it is, for the hard stop: what the test was looking at when it ran out of time.
+window_shot() {
+    local out X=0 Y=0 WIDTH=0 HEIGHT=0 win
+    win=$(cat "$WORK/window" 2>/dev/null || echo "$WIN_ID")
+    eval "$(xdotool getwindowgeometry --shell "$win" 2>/dev/null | grep -E '^(X|Y|WIDTH|HEIGHT)=')"
+    [ "$X" -lt 0 ] && X=0
+    [ "$Y" -lt 0 ] && Y=0
+    [ "$WIDTH" -gt 0 ] || return 1
+    out="${MP_GUI_SHOT_DIR:-/tmp}/$(basename "$SCRIPT" .gui)-hardstop.png"
+    if timeout 5 ffmpeg -loglevel error -y -f x11grab -video_size "${WIDTH}x${HEIGHT}" \
+        -i "${DISPLAY:-:0}+${X},${Y}" -frames:v 1 "$out" 2>/dev/null; then
+        echo "screenshot: $out"
+    fi
+}
+
+# The hard stop: a watchdog that, this many seconds after the window, takes the screenshot,
+# says so and kills this run (cleanup then closes the application). The budget marks a test
+# that took too long; this one stops a test that would not end.
+HARD_STOP_S=$(awk -v b="$TEST_BUDGET_SECONDS" -v m="${MP_GUI_HARD_STOP_MARGIN:-3}" 'BEGIN { printf "%d", b + m }')
+(
+    # The sleep holds none of this run's pipes: a caller reading them (`| tail`, `$(...)`)
+    # waited the whole budget after a pass while the sleep still had them open.
+    sleep "$HARD_STOP_S" </dev/null >/dev/null 2>&1
+    echo "FAIL: hard stop - $(basename "$SCRIPT") was still running $HARD_STOP_S s after its window" >&2
+    window_shot >&2
+    # The trap runs when the script's current command ends, so a click's poll for its control
+    # (up to ten seconds) is ended too - by PID, each child of the script but this subshell.
+    for CHILD in $(pgrep -P $$); do
+        [ "$CHILD" = "$BASHPID" ] || kill -TERM "$CHILD" 2>/dev/null
+    done
+    kill -TERM $$ 2>/dev/null
+) &
+WATCHDOG=$!
 
 # Reads one fact. Empty if the key is absent, which `expect` reports as a failure rather than
 # comparing against nothing.
@@ -372,6 +502,7 @@ expect_once() {
         shift 3
         WANT="$*"
         GOT=$(fact "$KEY")
+        LAST_VALUE="$GOT"
         case "$GOT" in
             *"$WANT"*) [ -z "$QUIET" ] && echo "  ok   $KEY contains '$WANT'"; return 0 ;;
         esac
@@ -380,6 +511,7 @@ expect_once() {
     elif [ "$OP" = ">" ] || [ "$OP" = ">=" ] || [ "$OP" = "<" ]; then
         WANT="${4:-}"
         GOT=$(fact "$KEY")
+        LAST_VALUE="$GOT"
         if ! [[ "$WANT" =~ ^-?[0-9]+$ ]]; then
             [ -z "$QUIET" ] && echo "FAIL line $LINE_NO: '$OP' needs an integer to compare with, not '$WANT'" >&2
             return 1
@@ -425,6 +557,7 @@ PY
         shift 2
         WANT="$*"
         GOT=$(fact "$KEY")
+        LAST_VALUE="$GOT"
         if [ -z "$GOT" ] && ! grep -q "^$(fact_key_pattern "$KEY") = " "$FACTS_FILE" 2>/dev/null; then
             [ -z "$QUIET" ] && no_such_fact "$KEY" ""
             return 1
@@ -468,6 +601,10 @@ while IFS= read -r RAW; do
                 *:right) BUTTON=3; TARGET="${TARGET%:right}" ;;
                 *:middle) BUTTON=2; TARGET="${TARGET%:middle}" ;;
             esac
+            # A frame first: a box that has just closed is drawn once more, and a click sent in
+            # that frame lands on it (config-compass.gui's arrow after its dialog, 2026-09-25).
+            wait_publishes 1
+            raise_window
             if COORDS=$(resolve_control "$TARGET"); then
                 COORDS=$(printf '%s\n' "$COORDS" | tail -1)
                 echo "clicking '$TARGET' (button $BUTTON) at window-relative ${COORDS/ /,}"
@@ -507,8 +644,11 @@ while IFS= read -r RAW; do
             ENTRY="${3:?reveal needs an entry}"
             REVEALED=""
             # A list draws only the rows in its box, so an entry above or below it is not in the
-            # probe at all: start from the top - the wheel stops there - and walk down.
-            if COORDS=$("$ROOT/tools/gui-click.sh" --resolve "$PROBE_FILE" "$WIN_ID" "$LIST"); then
+            # probe at all: start from the top - the wheel stops there - and walk down. Not when
+            # the entry is already in the probe: then the walk starts from where the list is,
+            # which spares the 45 notches up (a tree revealed twice took 8 s each, 2026-09-25).
+            if ! grep -qF "\"$ENTRY\"" "$PROBE_FILE" 2>/dev/null \
+                && COORDS=$("$ROOT/tools/gui-click.sh" --resolve "$PROBE_FILE" "$WIN_ID" "$LIST"); then
                 # shellcheck disable=SC2086 # "x y", two words on purpose
                 xdotool mousemove --window "$WIN_ID" $COORDS
                 sleep 0.05
@@ -523,13 +663,14 @@ lst, entry = probe.get(sys.argv[2]), probe.get(sys.argv[3])
 if lst is None or entry is None:
     print("missing"); sys.exit(0)
 top, bottom = lst["y"], lst["y"] + lst["height"]
-# Inside means the whole entry, with a little to spare: an entry whose centre is in the box
-# but whose edge is at the box's edge was clicked on the box's border (2026-09-25).
-etop, ebottom = entry["y"], entry["y"] + entry["height"]
-if top + 2 <= etop and ebottom <= bottom - 2:
+# Inside means the centre, where the click lands, is in the box with 3 px to spare: an entry
+# whose centre sat on the box's edge was clicked on the border (2026-09-25). Not the whole
+# entry - a list's first row starts on its box's edge and would never count.
+cy = entry["centre_y"]
+if top + 3 <= cy <= bottom - 3:
     print("inside")
 else:
-    print("down" if ebottom > bottom - 2 else "up")
+    print("down" if cy > bottom - 3 else "up")
 PY
 )
                 case "$DIRECTION" in
@@ -596,16 +737,21 @@ PY
             ;;
         type)
             shift
+            wait_publishes 2
+            raise_window
             xdotool type --window "$WIN_ID" --clearmodifiers --delay 60 "$*"
             # Keystrokes reach the application through the input method when one is running
             # (ibus over XIM here) and come back after a round trip; a click or a key sent next
             # does not wait for them, and has overtaken typed text more than once. Give the
-            # text time to land before the next line runs; an `expect` on the field is the
-            # sure way.
-            sleep 0.3
+            # text time to land before the next line runs: a second, measured - 0.3 s let a
+            # Return overtake "LOW {batv}" on 2026-09-25 - and an `expect` on the field is the
+            # sure way when the script has one.
+            sleep 1
             sleep 0.1
             ;;
         key)
+            wait_publishes 2
+            raise_window
             xdotool key --window "$WIN_ID" --clearmodifiers "${2:?key needs a name}"
             sleep 0.1
             ;;
@@ -631,17 +777,33 @@ PY
             echo "restarted after line $((LINE_NO - 1))"
             start_app
             ;;
+        within)
+            [[ "${2:-}" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "line $LINE_NO: within wants seconds, not '${2:-}'" >&2; FAILURES=$((FAILURES + 1)); continue; }
+            NEXT_WAIT_MS=$(awk -v s="$2" 'BEGIN { printf "%d", s * 1000 }')
+            ;;
         expect)
-            # Waits for the fact, up to EXPECT_WAIT_MS, checking every 50 ms: the test takes the
-            # time the application takes. A fact that never comes fails with what was found.
+            # Waits for the fact, up to EXPECT_WAIT_MS (or the `within` before it), checking
+            # every 50 ms: the test takes the time the application takes. A fact that never
+            # comes fails with what was found.
             T_EXPECT=$(now_ms)
+            WAIT_MS="${NEXT_WAIT_MS:-$EXPECT_WAIT_MS}"
+            NEXT_WAIT_MS=""
+            EXPECT_WORDS=("$@")
             QUIET=1
+            HELD=""
             until expect_once "$@"; do
-                if [ $(($(now_ms) - T_EXPECT)) -ge "$EXPECT_WAIT_MS" ]; then break; fi
+                if [ $(($(now_ms) - T_EXPECT)) -ge "$WAIT_MS" ]; then HELD=1; break; fi
                 sleep 0.05
             done
             QUIET=""
-            expect_once "$@" || FAILURES=$((FAILURES + 1))
+            # A fact that held is reported from the read that saw it, not read again: a value
+            # that lasts a frame (a box open, a fetch running) could be gone by a second read.
+            if [ -n "$HELD" ]; then
+                expect_once "$@" || FAILURES=$((FAILURES + 1))
+            else
+                echo "  ok   $2 = $LAST_VALUE"
+            fi
+            EXPECT_WORDS=()
             WAITED=$(($(now_ms) - T_EXPECT))
             [ "$WAITED" -gt 150 ] && echo "       (held after $(seconds $WAITED) s)"
             ;;
@@ -652,6 +814,8 @@ PY
     esac
 done < "$SCRIPT"
 
+# Done in time: the watchdog is not needed.
+kill "$WATCHDOG" 2>/dev/null
 # The budget: the whole test, from its window to its last line, restarts included.
 TOTAL_MS=$(($(now_ms) - T0))
 BUDGET_MS=$(awk -v s="$TEST_BUDGET_SECONDS" 'BEGIN { printf "%d", s * 1000 }')

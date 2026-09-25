@@ -4869,7 +4869,8 @@ mod tests {
                 continue;
             };
             match (verb, rest) {
-                ("screen" | "window" | "env", _) => {}
+                // The runner's own lines: where the run starts, its budget, one expect's wait.
+                ("screen" | "window" | "env" | "budget" | "within", _) => {}
                 ("settle", seconds) => run.settle(seconds.parse().expect("seconds")),
                 // FLIGHT DATA: the page is hidden with its screen, then `SaveConfig`.
                 ("click", "tab-fly") => {
@@ -4913,18 +4914,29 @@ mod tests {
                 }
                 ("expect", rest) => {
                     let (fact, want) = rest.split_once(' ').expect("expect key value");
-                    let Some(got) = run.fact(fact) else {
+                    let Some(mut got) = run.fact(fact) else {
                         continue;
                     };
-                    if let Some(part) = want.strip_prefix("~ ") {
-                        assert!(got.contains(part), "line {at}: {fact} is {got}");
-                    } else if let Some(least) = want.strip_prefix("> ") {
-                        let got: f64 = got.parse().expect("a number");
-                        let least: f64 = least.parse().expect("a number");
-                        assert!(got > least, "line {at}: {fact} is {got}");
-                    } else {
-                        assert_eq!(got, want, "line {at}: {fact}");
+                    let holds = |got: &str| -> bool {
+                        if let Some(part) = want.strip_prefix("~ ") {
+                            got.contains(part)
+                        } else if let Some(least) = want.strip_prefix("> ") {
+                            let got: f64 = got.parse().expect("a number");
+                            let least: f64 = least.parse().expect("a number");
+                            got > least
+                        } else {
+                            got == want
+                        }
+                    };
+                    // The runner polls a fact for up to ten seconds; the model waits the same
+                    // way, a second at a time, for what the capture thread has yet to do.
+                    let mut waited = 0;
+                    while !holds(&got) && waited < 10 {
+                        run.settle(1.0);
+                        got = run.fact(fact).expect("the fact was there");
+                        waited += 1;
                     }
+                    assert!(holds(&got), "line {at}: {fact} is {got}, expected {want}");
                     checked += 1;
                 }
                 _ => panic!("line {at}: {line} is not modelled"),

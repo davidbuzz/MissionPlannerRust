@@ -30,7 +30,7 @@ setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encodin
 
 screen fly
 window 1600x1200
-settle 4
+budget 42
 
 expect vehicle.connected false
 expect link.button CONNECT
@@ -42,30 +42,25 @@ expect main-baud left-of main-connect
 
 # `CMB_serialport_Click`: the list, with the five kinds after the machine's ports.
 click main-port
-settle 1
 expect link.ports >= 5
 # The five kinds come after the machine's ports; with thirty-odd serial ports the list scrolls.
 reveal main-port-list main-port-TCP
 click main-port-TCP
-settle 1
 expect link.port TCP
 
 # `Connect` → `CommsTCPSerial.Open`: the host, then the port, each with its default.
 expect config.InputBoxremotehostEnterhostnameipensureremoteendisalreadystarted none
 expect config.InputBoxremotePortEnterremoteport none
 click main-connect
-settle 1
 expect link.prompt remote host
 key ctrl+u
 type 127.0.0.1
 key Return
-settle 1
 expect config.InputBoxremotehostEnterhostnameipensureremoteendisalreadystarted 127.0.0.1
 expect link.prompt remote Port
 key ctrl+u
 type 5760
 key Return
-settle 8
 expect link.prompt none
 expect config.InputBoxremotePortEnterremoteport 5760
 expect vehicle.connected true
@@ -74,7 +69,6 @@ expect status ~ connected to tcp:127.0.0.1:5760
 
 # `doDisconnect`, without the "still moving" question: SITL sits on the ground.
 click main-connect
-settle 3
 expect vehicle.connected false
 expect link.button CONNECT
 expect status disconnected

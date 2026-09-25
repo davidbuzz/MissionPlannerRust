@@ -20,7 +20,7 @@ setup printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.363
 
 screen plan
 window 1600x1200
-settle 4
+budget 12
 
 expect plan.srtm.cacheonly true
 expect plan.home -35.3632621,149.1652374,584.10
@@ -28,6 +28,8 @@ expect plan.frame relative
 expect plan.verifyheight false
 
 # Verify Height clear: a click is Default Alt, 100.
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.40x0.40
 expect mission.items 1
 expect mission.alts 100

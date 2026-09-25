@@ -22,7 +22,7 @@
 
 use std::collections::VecDeque;
 
-use gpui::{AnyElement, Context, SharedString, div, prelude::*, px, rgb};
+use gpui::{AnyElement, Context, FocusHandle, KeyDownEvent, MouseButton, SharedString, div, prelude::*, px, rgb};
 use mp_link::requests::RequestOutcome;
 use mp_vehicle::VehicleFamily;
 use mp_vehicle::rc::RcChannels;
@@ -221,16 +221,42 @@ pub const fn mode_parameters(firmware: Firmware) -> Option<[&'static str; POSITI
 
 /// Whether the Simple and Super Simple check boxes and their link show.
 ///
-/// Hidden on a plane, a rover and PX4; shown on a copter unless `standardFlightModesOnly`, whose
-/// default (false) this takes; never touched - so shown - for a firmware `Activate` does not
-/// branch on.
+/// Hidden on a plane, a rover and PX4; on a copter, hidden when the display view's
+/// `standardFlightModesOnly` is set (`standard_only`); never touched - so shown - for a firmware
+/// `Activate` does not branch on.
 /// `// C#: GCSViews/ConfigurationView/ConfigFlightModes.cs:43-57, 81-95, 119-136, 184-198; ExtLibs/Utilities/DisplayView.cs:216`
 #[must_use]
-pub const fn simple_shown(firmware: Firmware) -> bool {
-    !matches!(
-        firmware,
-        Firmware::ArduPlane | Firmware::Ateryx | Firmware::ArduRover | Firmware::Px4
-    )
+pub const fn simple_shown(firmware: Firmware, standard_only: bool) -> bool {
+    match firmware {
+        Firmware::ArduPlane | Firmware::Ateryx | Firmware::ArduRover | Firmware::Px4 => false,
+        Firmware::ArduCopter2 => !standard_only,
+        Firmware::ArduSub | Firmware::ArduTracker | Firmware::Other => true,
+    }
+}
+
+/// `ProcessCmdKey`'s chord: Ctrl+S alone is Save Modes.
+/// `// C#: GCSViews/ConfigurationView/ConfigFlightModes.cs:239-247`
+#[must_use]
+pub fn save_chord(event: &KeyDownEvent) -> bool {
+    let keystroke = &event.keystroke;
+    keystroke.modifiers.control
+        && !keystroke.modifiers.alt
+        && !keystroke.modifiers.shift
+        && keystroke.key.eq_ignore_ascii_case("s")
+}
+
+impl MissionPlanner {
+    /// A key on the page: Ctrl+S presses Save Modes, as `ProcessCmdKey` does. Whether the key
+    /// was the page's.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFlightModes.cs:239-247`
+    pub(crate) fn flight_modes_key(&mut self, event: &KeyDownEvent) -> bool {
+        if !self.flight_modes.is_active() || !save_chord(event) {
+            return false;
+        }
+        let view = self.telemetry.view();
+        self.flight_modes.save(&view);
+        true
+    }
 }
 
 /// What the combos offer, as (value, name): `Common.getModesList` for the firmware, with PX4's
@@ -775,13 +801,17 @@ pub fn record_facts(modes: &FlightModes, view: &TelemetryView) {
 pub fn page(
     modes: &FlightModes,
     view: &TelemetryView,
+    focus: &FocusHandle,
     cx: &mut Context<MissionPlanner>,
 ) -> Option<AnyElement> {
     if !modes.active {
         return None;
     }
     let (pwm_label, _, lit) = switch_reading(view);
-    let show_simple = simple_shown(modes.firmware);
+    let show_simple = simple_shown(
+        modes.firmware,
+        crate::display_view::flag("standardFlightModesOnly"),
+    );
 
     // "Current Mode:" and "Current PWM:", label13/lbl_currentmode and label14/LBL_flightmodepwm,
     // at x 94 and 174 above the table.
@@ -890,7 +920,23 @@ pub fn page(
     Some(
         panel(
             "flight modes",
+            // The page takes the keyboard when it is clicked, so `ProcessCmdKey`'s Ctrl+S
+            // reaches it from any of its controls.
             div()
+                .id("fm-page")
+                .track_focus(focus)
+                .on_key_down(cx.listener(|this, event: &KeyDownEvent, _window, cx| {
+                    if this.flight_modes_key(event) {
+                        cx.stop_propagation();
+                        cx.notify();
+                    }
+                }))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, _event, window, cx| {
+                        window.focus(&this.flight_modes_focus, cx);
+                    }),
+                )
                 .flex()
                 .flex_col()
                 .gap_2()
@@ -1188,11 +1234,41 @@ mod tests {
         assert_eq!(mode_parameters(Firmware::ArduSub), None);
         assert_eq!(mode_parameters(Firmware::Other), None);
 
-        assert!(simple_shown(Firmware::ArduCopter2));
-        assert!(!simple_shown(Firmware::ArduPlane));
-        assert!(!simple_shown(Firmware::ArduRover));
-        assert!(!simple_shown(Firmware::Px4));
-        assert!(simple_shown(Firmware::ArduSub), "Activate never hides them");
+        assert!(simple_shown(Firmware::ArduCopter2, false));
+        assert!(
+            !simple_shown(Firmware::ArduCopter2, true),
+            "standardFlightModesOnly hides them on a copter"
+        );
+        assert!(!simple_shown(Firmware::ArduPlane, false));
+        assert!(!simple_shown(Firmware::ArduRover, false));
+        assert!(!simple_shown(Firmware::Px4, false));
+        assert!(simple_shown(Firmware::ArduSub, true), "Activate never hides them");
+    }
+
+    /// `ProcessCmdKey`: Ctrl+S alone, whatever the letter's case; not with Shift or Alt, and
+    /// not another letter.
+    #[test]
+    fn ctrl_s_is_the_save_chord() {
+        let press = |key: &str, control: bool, shift: bool, alt: bool| KeyDownEvent {
+            keystroke: gpui::Keystroke {
+                modifiers: gpui::Modifiers {
+                    control,
+                    shift,
+                    alt,
+                    ..gpui::Modifiers::default()
+                },
+                key: key.to_owned(),
+                key_char: None,
+            },
+            is_held: false,
+            prefer_character_input: false,
+        };
+        assert!(save_chord(&press("s", true, false, false)));
+        assert!(save_chord(&press("S", true, false, false)));
+        assert!(!save_chord(&press("s", false, false, false)));
+        assert!(!save_chord(&press("s", true, true, false)));
+        assert!(!save_chord(&press("s", true, false, true)));
+        assert!(!save_chord(&press("d", true, false, false)));
     }
 
     /// The copter list is `FLTMODE1`'s documented values; a plane's gets INITIALISING on the
@@ -1566,7 +1642,7 @@ mod tests {
             modes.selected,
             [Some(0), Some(4), Some(10), Some(11), Some(15), Some(5)]
         );
-        assert!(!simple_shown(modes.firmware));
+        assert!(!simple_shown(modes.firmware, false));
         let written = save_set(
             modes.firmware,
             |name| parameter(&view, name).is_some(),

@@ -26,9 +26,9 @@
 //! answer as `InputBox` does, under `InputBox<caption><question>` (`InputBox.cs:73-84, 178-184`).
 //!
 //! What a write's failure says - the `catch`es' "Set ... Failed" after a `setParam` timed out, a
-//! combo's "Set ... Failed!" - goes on the status line, the owner's ruling of 2026-09-25; the
-//! boxes for what was typed - "Invalid number entered", a capacity that does not parse, the
-//! feature not enabled - keep their boxes.
+//! combo's "Set ... Failed!" - goes on the status line, the owner's ruling of 2026-09-25; so
+//! does what refuses what was typed - "Invalid number entered", a capacity that does not parse,
+//! the feature not enabled - since his word that evening, three times, on that box.
 //!
 //! The layout is `ConfigBatteryMonitoring2.resx`'s, every control at its `Location` in a 521 x 322
 //! page. `pictureBox5` shows `Resources.BR_APMPWRDEAN_2`, zoomed ([`crate::pictures`]).
@@ -44,7 +44,7 @@ use mp_params::param_file::invariant_double;
 
 use super::battery_monitor::{calibrate, float_text, param_text, parse_float};
 use super::optional::{
-    FEATURE_NOT_ENABLED, Focus, INVALID_NUMBER, InputBox, Job, Set, SetQueue, error,
+    FEATURE_NOT_ENABLED, Focus, INVALID_NUMBER, InputBox, Job, Set, SetQueue,
     failure_status, group, has, input_box, label, message_box, picture, text_box, value_of,
 };
 use crate::MissionPlanner;
@@ -426,36 +426,40 @@ impl BatteryMonitor2 {
 
     /// `TXT_battcapacity_Validated`.
     /// `// C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring2.cs:70-89`
-    fn capacity_validated(&self, parameters: &[(String, f64)]) -> Vec<Job> {
+    fn capacity_validated(&mut self, parameters: &[(String, f64)]) -> Vec<Job> {
         const FAILED: &str = "Set BATT2_CAPACITY Failed";
         if !self.live() {
             return Vec::new();
         }
         if !has(parameters, "BATT2_CAPACITY") {
-            return vec![Job::show("capacity", error(FEATURE_NOT_ENABLED))];
+            // The C#'s box, on the status line here: an avoidable error never gets a box (the
+            // owner's rule of 2026-09-25, and his word three times that evening on this page).
+            self.status = Some(FEATURE_NOT_ENABLED.trim().to_owned());
+            return Vec::new();
         }
-        vec![parse_float(self.capacity.value()).map_or_else(
-            || Job::show("capacity", error(FAILED)),
-            |value| {
-                Job::new(
-                    "capacity",
-                    [Set::caught("BATT2_CAPACITY", f64::from(value), FAILED)],
-                )
-            },
+        let Some(value) = parse_float(self.capacity.value()) else {
+            // `float.Parse` throwing into the `catch`'s box: text that does not parse is an
+            // avoidable error, so the status line's (the owner's rule of 2026-09-25).
+            self.status = Some(FAILED.to_owned());
+            return Vec::new();
+        };
+        vec![Job::new(
+            "capacity",
+            [Set::caught("BATT2_CAPACITY", f64::from(value), FAILED)],
         )]
     }
 
-    /// `setParam(new[] { name }, float.Parse(text))` in a `try` whose `catch` shows `failed`.
-    fn write_text(text: &str, param: &'static str, failed: String) -> Job {
-        parse_float(text).map_or_else(
-            || Job::show("write", error(failed.clone())),
-            |value| {
-                Job::new(
-                    "write",
-                    [Set::caught(param, f64::from(value), failed.clone())],
-                )
-            },
-        )
+    /// `setParam(new[] { name }, float.Parse(text))` in a `try` whose `catch` shows `failed`:
+    /// text that does not parse is the status line's, and nothing is written.
+    fn write_text(&mut self, text: &str, param: &'static str, failed: String) -> Vec<Job> {
+        let Some(value) = parse_float(text) else {
+            self.status = Some(failed);
+            return Vec::new();
+        };
+        vec![Job::new(
+            "write",
+            [Set::caught(param, f64::from(value), failed)],
+        )]
     }
 
     /// `TXT_measuredvoltage_Validated`: the divider the measured voltage gives, into its box and
@@ -470,43 +474,36 @@ impl BatteryMonitor2 {
             parse_float(&self.voltage),
             parse_float(self.divider.value()),
         ) else {
-            return vec![Job::show("measured", error(INVALID_NUMBER))];
+            // The C#'s box, on the status line here (the owner's rule of 2026-09-25).
+            self.status = Some(INVALID_NUMBER.trim().to_owned());
+            return Vec::new();
         };
         let Some(divider) = calibrate(measured, divider, voltage) else {
             return Vec::new();
         };
         self.divider.set(float_text(divider));
-        vec![Self::write_text(
-            self.divider.value(),
-            DIVIDER,
-            format!("Set {DIVIDER} Failed"),
-        )]
+        let text = self.divider.value().to_owned();
+        self.write_text(&text, DIVIDER, format!("Set {DIVIDER} Failed"))
     }
 
     /// `TXT_divider_Validated`.
     /// `// C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring2.cs:121-133`
-    fn divider_validated(&self) -> Vec<Job> {
+    fn divider_validated(&mut self) -> Vec<Job> {
         if !self.live() {
             return Vec::new();
         }
-        vec![Self::write_text(
-            self.divider.value(),
-            DIVIDER,
-            format!("Set {DIVIDER} Failed"),
-        )]
+        let text = self.divider.value().to_owned();
+        self.write_text(&text, DIVIDER, format!("Set {DIVIDER} Failed"))
     }
 
     /// `TXT_ampspervolt_Validated`.
     /// `// C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring2.cs:135-147`
-    fn amps_validated(&self) -> Vec<Job> {
+    fn amps_validated(&mut self) -> Vec<Job> {
         if !self.live() {
             return Vec::new();
         }
-        vec![Self::write_text(
-            self.amps.value(),
-            AMPS,
-            format!("Set {AMPS} Failed"),
-        )]
+        let text = self.amps.value().to_owned();
+        self.write_text(&text, AMPS, format!("Set {AMPS} Failed"))
     }
 
     /// `txt_meascurrent_Validated`: the amps-per-volt the measured current gives, into its box
@@ -521,17 +518,16 @@ impl BatteryMonitor2 {
             parse_float(&self.current),
             parse_float(self.amps.value()),
         ) else {
-            return vec![Job::show("meascurrent", error(INVALID_NUMBER))];
+            // The C#'s box, on the status line here (the owner's rule of 2026-09-25).
+            self.status = Some(INVALID_NUMBER.trim().to_owned());
+            return Vec::new();
         };
         let Some(amps) = calibrate(measured, amps, current) else {
             return Vec::new();
         };
         self.amps.set(float_text(amps));
-        vec![Self::write_text(
-            self.amps.value(),
-            AMPS,
-            format!("Set {AMPS} Failed"),
-        )]
+        let text = self.amps.value().to_owned();
+        self.write_text(&text, AMPS, format!("Set {AMPS} Failed"))
     }
 
     /// A box's `Validated`.
@@ -734,8 +730,7 @@ impl BatteryMonitor2 {
             self.timer = Some(now);
         }
         // A `catch`'s "Set ... Failed" after a timeout and a combo's "Set ... Failed!" go on the
-        // status line (the owner's ruling of 2026-09-25); a handler's own box ahead of its
-        // calls - what was typed refused - stays a box.
+        // status line (the owner's ruling of 2026-09-25), as does what was typed refused.
         // C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring2.cs:85-88, 115-118, 129-132, 143-146, 248-251
         let mut failures = Vec::new();
         self.queue
@@ -1006,6 +1001,7 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
+    use crate::config::optional::error;
     use crate::config::flight_modes::Progress;
     use crate::config::optional::tests::{Answering, drain};
     use mp_link::requests::RequestOutcome;
@@ -1107,11 +1103,13 @@ mod tests {
         page.type_into(Field::Capacity, "3000");
         let jobs = page.leave(&view.parameters);
         let link = Answering::new(&[]);
-        assert_eq!(run(jobs, &link), [error(FEATURE_NOT_ENABLED)]);
+        assert!(run(jobs, &link).is_empty());
+        assert_eq!(page.take_status().as_deref(), Some(FEATURE_NOT_ENABLED.trim()));
         assert!(link.taken().is_empty());
         // The measured voltage against no divider: not a number.
         let jobs = page.enter(Field::Measured, &view.parameters);
-        assert_eq!(run(jobs, &link), [error(INVALID_NUMBER)]);
+        assert!(run(jobs, &link).is_empty());
+        assert_eq!(page.take_status().as_deref(), Some(INVALID_NUMBER.trim()));
     }
 
     #[test]
@@ -1166,7 +1164,8 @@ mod tests {
         page.type_into(Field::MeasuredCurrent, "2.2");
         let jobs = page.validated(Field::MeasuredCurrent, &view.parameters);
         let link = Answering::new(&[]);
-        assert_eq!(run(jobs, &link), [error(INVALID_NUMBER)], "no reading yet");
+        assert!(run(jobs, &link).is_empty());
+        assert_eq!(page.take_status().as_deref(), Some(INVALID_NUMBER.trim()), "no reading yet");
         page.tick(
             &Telemetry::idle(),
             &view,
@@ -1229,13 +1228,17 @@ mod tests {
         assert_eq!(link.taken(), [("BATT2_CAPACITY".to_owned(), 4000.0)]);
         page.type_into(Field::Capacity, "lots");
         let jobs = page.validated(Field::Capacity, &view.parameters);
-        assert_eq!(run(jobs, &link), [error("Set BATT2_CAPACITY Failed")]);
+        assert!(jobs.is_empty(), "text that does not parse writes nothing");
+        assert_eq!(
+            page.take_status().as_deref(),
+            Some("Set BATT2_CAPACITY Failed")
+        );
     }
 
-    /// The owner's ruling, through the page's own loop: a write's failure is the status line's,
-    /// what was typed refused is still a box.
+    /// The owner's ruling, through the page's own loop: a write's failure and what was typed
+    /// refused are both the status line's.
     #[test]
-    fn a_failed_write_is_a_status_line_and_a_refusal_a_box() {
+    fn a_failed_write_and_a_refusal_are_status_lines() {
         let telemetry = Telemetry::idle();
         let view = configured();
         let mut page = BatteryMonitor2::default();
@@ -1250,15 +1253,17 @@ mod tests {
             page.take_status().as_deref(),
             Some("Set BATT2_MONITOR Failed!")
         );
-        // A capacity that does not parse: the `catch`'s box, for what was typed.
+        // A capacity that does not parse: the `catch`'s box, the status line's here as well.
         page.type_into(Field::Capacity, "lots");
         let jobs = page.validated(Field::Capacity, &view.parameters);
         page.push(jobs);
         page.tick(&telemetry, &view, true, false, now);
-        assert_eq!(page.message(), Some(&error("Set BATT2_CAPACITY Failed")));
-        assert!(page.take_status().is_none());
+        assert!(page.message().is_none());
+        assert_eq!(
+            page.take_status().as_deref(),
+            Some("Set BATT2_CAPACITY Failed")
+        );
         // A timeout in the `catch`: sorted out for the status line.
-        page.dismiss_message();
         let jobs = page.enter(Field::Divider, &view.parameters);
         let link = Answering::new(&[(DIVIDER, Progress::Finished(RequestOutcome::TimedOut))]);
         let mut queue = SetQueue::<usize>::default();

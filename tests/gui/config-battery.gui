@@ -27,16 +27,18 @@ env MP_CONFIG_XML $WORK/config.xml
 
 screen params
 window 1600x1200
-settle 6
+budget 26
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
 # Initial Setup lists the page once every parameter is in (isConnected && gotAllParams,
 # InitialSetup.cs:268-272), and here parameters are downloaded when asked for.
 click param-download
-settle 15
 expect params.held > 1000
 expect params.value.BATT_MONITOR 4
 
@@ -45,7 +47,6 @@ expect config.battery.open false
 # Battery Monitor is the first Optional Hardware entry of InitialSetup's list.
 click setup-page-ConfigOptional
 click setup-page-ConfigBatteryMonitoring
-settle 2
 expect config.battery.open true
 expect config.battery.enabled true
 
@@ -74,7 +75,6 @@ expect config.battery.readouts >= 1
 
 # Activate's own writes - BATT_MONITOR, BATT_AMP_PERVLT and BATT_VOLT_MULT, each with the value the
 # vehicle already holds (:172-173) - have all been answered, and nothing complained.
-settle 2
 expect config.battery.writes.pending 0
 expect config.battery.message none
 expect params.value.BATT_VOLT_MULT 10.1
@@ -85,9 +85,7 @@ expect params.value.BATT_AMP_PERVLT 17
 click battery-capacity
 key ctrl+u
 type 3400
-settle 1
 click battery-divider
-settle 3
 expect config.battery.capacity 3400
 expect config.battery.write BATT_CAPACITY 3400 accepted
 expect params.value.BATT_CAPACITY 3400
@@ -97,9 +95,7 @@ expect config.battery.message none
 click battery-capacity
 key ctrl+u
 type 3300
-settle 1
 click battery-divider
-settle 3
 expect config.battery.write BATT_CAPACITY 3300 accepted
 expect params.value.BATT_CAPACITY 3300
 expect params.value.BATT_VOLT_MULT 10.1
@@ -111,7 +107,6 @@ expect config.battery.message none
 click battery-sensor
 key BackSpace
 type Z
-settle 2
 expect config.battery.sensor.text 0: OtheZ
 expect config.battery.sensor none
 expect config.battery.list none
@@ -122,7 +117,6 @@ expect config.battery.message none
 click battery-sensor-button
 expect config.battery.list battery-sensor
 click battery-sensor-0
-settle 3
 expect config.battery.list none
 expect config.battery.sensor 0
 expect config.battery.sensor.text 0: Other
@@ -133,7 +127,6 @@ expect params.value.BATT_AMP_PERVLT 17
 # The HW Ver box takes typing the same way, and writes nothing for it.
 click battery-hw
 key BackSpace
-settle 1
 expect config.battery.hwversion.text 2: APM2.5+/ZealotF427 - 3DR Power Modul
 expect config.battery.hwversion none
 expect config.battery.writes.pending 0
@@ -146,7 +139,6 @@ expect config.battery.speech false
 expect config.speechbatteryenabled none
 expect config.saves 1
 click battery-speech
-settle 1
 expect config.battery.speech true
 expect config.speechbatteryenabled True
 expect config.speechenable True
@@ -176,13 +168,11 @@ expect config.saves 1
 
 # Choosing another page deactivates this one, as BackstageView does on every change.
 click setup-page-ConfigOptional
-settle 1
 expect config.battery.open false
 
 # The close box saves config.xml; the new process reads it back before any page shows, and the
 # page opens ticked from it.
 restart
-settle 6
 expect config.saved startup
 expect config.error none
 expect config.speechbatteryenabled True
@@ -194,11 +184,9 @@ expect config.InputBoxNotificationWhatdoyouwantittosay LOW+%7Bbatv%7D
 expect config.InputBoxBatteryLevelWhatVoltagedoyouwanttowarnat 10.8
 expect config.InputBoxBatteryLevelWhatpercentagedoyouwanttowarnat 25
 click param-download
-settle 15
 expect params.held > 1000
 click tab-setup
 click setup-page-ConfigOptional
 click setup-page-ConfigBatteryMonitoring
-settle 2
 expect config.battery.open true
 expect config.battery.speech true

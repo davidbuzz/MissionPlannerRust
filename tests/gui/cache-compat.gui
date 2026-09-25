@@ -13,7 +13,7 @@ setup tests/gui/seed-csharp-cache.py $WORK/gmapcache
 
 screen plan
 window 1600x1200
-settle 6
+budget 2
 
 expect map.source osm
 expect map.tiles.fetched 0

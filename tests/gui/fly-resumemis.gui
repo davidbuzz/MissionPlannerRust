@@ -30,10 +30,14 @@ setup cargo run -q -p mp-cli --bin headless-planner -- mission tcp:127.0.0.1:576
 
 screen fly
 window 1600x1200
-settle 8
+budget 21
+# A first budget, set by hand until a passing run records one.
 
 # The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as
 # tabControlactions.SelectedIndex = 0 has it. `GCSViews/FlightData.Designer.cs:595-611`
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click fly-tab-actions
 expect fly.tab tabActions
 
@@ -41,19 +45,15 @@ expect vehicle.armed false
 expect fly.resume idle
 
 click fly-resumemis
-settle 1
 expect fly.prompt ~ Warning this will reprogram your mission, arm and issue a takeoff command
 click fly-prompt-ok
-settle 1
 # lastautowp is -1 until the vehicle has flown in Auto, so the box offers 1.
 expect fly.prompt ~ Resume mission at waypoint
 key ctrl+u
 type 4
 # Keystrokes reach the application through the input method (ibus, over XIM) and come back
 # after a round trip; a click does not. Settle, so the click cannot overtake the typing.
-settle 1
 click fly-prompt-ok
-settle 12
 
 # Home is not a row: resuming at 4 keeps the takeoff, the speed change and waypoint 4.
 expect mission.items 3
@@ -66,11 +66,9 @@ expect fly.resume failed: The Command failed to execute
 
 # Down again.
 click land
-settle 30
 expect vehicle.armed false
 
 # Landed, the vehicle is left in Stabilize, as the next test finds a fresh SITL: Land is not a
 # mode a copter arms in, and a vehicle left there fails every later arming check.
 click Stabilize
-settle 2
 expect vehicle.mode Stabilize

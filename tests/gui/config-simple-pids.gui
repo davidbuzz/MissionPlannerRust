@@ -20,24 +20,24 @@
 env MP_CONFIG_XML $WORK/config.xml
 screen params
 window 1600x1200
-settle 6
+budget 11
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
 # CONFIG lists the tuning pages once every parameter is in (SoftwareConfig.cs:148-150), and here
 # parameters are downloaded when asked for.
 click param-download
-settle 15
 expect params.held > 1000
 # The count passes before the last parameters land.
-settle 5
 expect params.value.ATC_RAT_RLL_P 0.135
 expect params.value.ATC_RAT_PIT_P 0.135
 
 click tab-config
-settle 1
 expect screen config
 expect config.page ConfigSimplePids
 expect config.title Basic Tuning
@@ -56,7 +56,6 @@ expect config.simplepids.last none
 
 # The up arrow: one increment, written at once with the three relations, each listed.
 click simplepids-ATC_RAT_RLL_P-up
-settle 3
 expect config.simplepids.ATC_RAT_RLL_P 0.1400
 expect config.simplepids.ATC_RAT_RLL_P.track 265
 expect config.simplepids.last ATC_RAT_PIT_I 0.14 accepted
@@ -70,7 +69,6 @@ expect config.simplepids.editing ATC_RAT_RLL_P
 key ctrl+u
 type 9
 key Return
-settle 3
 expect config.simplepids.ATC_RAT_RLL_P 0.5000
 expect config.simplepids.ATC_RAT_RLL_P.track 1000
 expect config.simplepids.ATC_RAT_RLL_P.colour green
@@ -81,7 +79,6 @@ click simplepids-ATC_RAT_RLL_P
 key ctrl+u
 type 0.135
 key Return
-settle 3
 expect config.simplepids.ATC_RAT_RLL_P 0.1350
 expect config.simplepids.ATC_RAT_RLL_P.track 255
 expect config.simplepids.last ATC_RAT_PIT_I 0.135 accepted
@@ -93,10 +90,8 @@ expect params.value.ATC_RAT_PIT_I 0.135
 # Another page and back: Activate makes the controls afresh at the vehicle's values. TXT_info is
 # not in panel1, so Activate leaves it (ConfigSimplePids.cs:25-36): the set lines stay.
 click config-page-ConfigUserDefined
-settle 1
 expect config.simplepids.active false
 click config-page-ConfigSimplePids
-settle 1
 expect config.simplepids.active true
 expect config.simplepids.ATC_RAT_RLL_P 0.1350
 expect config.simplepids.info set ATC_RAT_RLL_P 0.135 | set ATC_RAT_RLL_I 0.135 | set ATC_RAT_PIT_P 0.135 | set ATC_RAT_PIT_I 0.135

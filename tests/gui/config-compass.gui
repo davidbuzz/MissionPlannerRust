@@ -28,28 +28,29 @@
 
 screen params
 window 1600x1200
+budget 16
+# A first budget, set by hand until a passing run records one.
 # A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
 # suppressed by the settings of the machine running it.
 env MP_CONFIG_XML $WORK/config.xml
-settle 6
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
 # The page is listed once every parameter is in (isConnected && gotAllParams).
 click param-download
-settle 15
 expect params.held > 1000
 expect params.value.COMPASS_USE 1
 expect params.value.COMPASS_PRIO1_ID 97539
 
 click tab-setup
-settle 1
 expect config.compass.active false
 click setup-page-ConfigMandatory
 click setup-page-ConfigHWCompass2
-settle 2
 expect setup.page ConfigHWCompass2
 expect config.compass.active true
 expect config.compass.class ConfigHWCompass2
@@ -77,13 +78,11 @@ expect config.compass.rebootrequired false
 
 # Use Compass 1 off - written, echoed - and back on.
 click compass-use1
-settle 3
 expect config.compass.use1 unchecked
 expect config.compass.write COMPASS_USE accepted
 expect params.value.COMPASS_USE 0
 expect config.compass.dialog none
 click compass-use1
-settle 3
 expect config.compass.use1 checked
 expect config.compass.write COMPASS_USE accepted
 expect params.value.COMPASS_USE 1
@@ -95,7 +94,6 @@ expect config.compass.cal.timer stopped
 
 # Start: accepted, the buttons enabled, the timer running, and the progress messages in the text box.
 click compass-cal-start
-settle 3
 expect config.compass.command DO_START_MAG_CAL accepted
 expect config.compass.cal.timer running
 expect config.compass.accept.enabled true
@@ -108,7 +106,6 @@ expect config.compass.dialog none
 
 # Accept while sampling: ArduPilot refuses it, the C# says nothing, and the timer stops.
 click compass-cal-accept
-settle 3
 expect config.compass.command DO_ACCEPT_MAG_CAL refused
 expect config.compass.cal.timer stopped
 expect config.compass.dialog none
@@ -116,12 +113,10 @@ expect config.compass.dialog none
 # Start again, then Cancel: accepted, the timer stopped, Accept and Cancel still enabled as the C#
 # leaves them.
 click compass-cal-start
-settle 3
 expect config.compass.command DO_START_MAG_CAL accepted
 expect config.compass.cal.timer running
 expect config.compass.cal.progress ~ id:0 0%
 click compass-cal-cancel
-settle 3
 expect config.compass.command DO_CANCEL_MAG_CAL accepted
 expect config.compass.cal.timer stopped
 expect config.compass.cancel.enabled true
@@ -129,28 +124,26 @@ expect config.compass.dialog none
 
 # Large Vehicle MagCal asks for the heading; Cancel sends nothing.
 click compass-largemagcal
-settle 1
 expect config.compass.dialog ~ Enter current heading in degrees
 click compass-dialog-cancel
-settle 1
 expect config.compass.dialog none
 expect config.compass.command DO_CANCEL_MAG_CAL accepted
 # OK on a heading that is no number sends nothing either - double.Parse throws first - but the
 # box has kept the answer, as InputBox keeps every titled answer (InputBox.cs:73-84, 178-184).
 click compass-largemagcal
-settle 1
 click compass-dialog-value
 key ctrl+u
 type north
 click compass-dialog-ok
-settle 1
 expect config.compass.dialog none
 expect config.compass.command DO_CANCEL_MAG_CAL accepted
 expect config.InputBoxMagCalYawEntercurrentheadingindegreesNOTEgpslockisrequiredHeadingistruenotmagnetic north
 
 # Up on the second compass: the first two swap and the first three are written as the priorities.
+# The cancel's job must be done before the arrow: when it ends the rows are read back from the
+# vehicle's priorities, which would undo a move made while it ran.
+expect config.compass.jobs 0
 click compass-row-2-up
-settle 4
 expect config.compass.devids 131874,97539,263178,97283,97795,98051
 expect config.compass.jobs 0
 expect params.value.COMPASS_PRIO1_ID 131874
@@ -161,7 +154,6 @@ expect config.compass.dialog none
 
 # And back.
 click compass-row-2-up
-settle 4
 expect config.compass.devids 97539,131874,263178,97283,97795,98051
 expect params.value.COMPASS_PRIO1_ID 97539
 expect params.value.COMPASS_PRIO2_ID 131874
@@ -169,11 +161,22 @@ expect config.compass.write COMPASS_PRIO3_ID accepted
 
 # Leaving the page runs Deactivate, whose CheckReboot asks; No leaves the vehicle as it is.
 click setup-page-ConfigMandatory
-settle 1
 expect config.compass.active false
 expect config.compass.dialog Reboot required, reboot now?
 click compass-dialog-cancel
-settle 1
 expect config.compass.dialog none
 expect params.value.COMPASS_USE 1
 expect params.value.COMPASS_PRIO1_ID 97539
+
+# And then the reboot the page asked for, so the vehicle is not left needing one: "PreArm:
+# Compass calibrated requires reboot" refused every arming in the scripts after this one until
+# it was found (2026-09-25). SITL reboots in place (execv), the same process and port.
+# The heading's click above closed Mandatory Hardware as well as leaving the page (a heading
+# toggles, BackstageView.cs:297-308), so it is opened again before its page is clicked.
+click setup-page-ConfigMandatory
+click setup-page-ConfigHWCompass2
+expect config.compass.active true
+click setup-page-ConfigMandatory
+expect config.compass.dialog Reboot required, reboot now?
+click compass-dialog-ok
+expect config.compass.dialog none

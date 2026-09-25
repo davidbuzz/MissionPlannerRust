@@ -29,24 +29,22 @@
 env MP_CONFIG_XML $WORK/config.xml
 screen params
 window 1600x1200
-settle 6
+budget 23
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
 click param-download
-settle 15
 expect params.held > 1000
-expect params.value.AVD_ENABLE 0
-expect params.value.ADSB_TYPE 0
 
 click tab-setup
-settle 1
 expect config.adsb.active false
 click setup-page-ConfigMandatory
 click setup-page-ConfigADSB
-settle 1
 expect setup.page ConfigADSB
 expect config.adsb.active true
 
@@ -64,7 +62,6 @@ expect config.adsb.write none
 # Choosing a value records it and writes nothing.
 click adsb-AVD_ENABLE
 click adsb-AVD_ENABLE-1
-settle 2
 expect config.adsb.AVD_ENABLE.text Enabled
 expect config.adsb.changed 1
 expect config.adsb.changed.AVD_ENABLE 1
@@ -73,7 +70,6 @@ expect params.value.AVD_ENABLE 0
 
 # Write Params writes it, and says so.
 click adsb-write
-settle 3
 expect config.adsb.write AVD_ENABLE 1 accepted
 expect params.value.AVD_ENABLE 1
 expect config.adsb.message Parameters successfully saved.
@@ -85,7 +81,6 @@ expect config.adsb.message none
 click adsb-AVD_ENABLE
 click adsb-AVD_ENABLE-0
 click adsb-write
-settle 3
 expect config.adsb.write AVD_ENABLE 0 accepted
 expect params.value.AVD_ENABLE 0
 expect config.adsb.message Parameters successfully saved.
@@ -96,7 +91,6 @@ expect config.InputBoxSearchForEnterasinglewordtosearchfor none
 click adsb-find
 expect config.adsb.find Enter a single word to search for
 type type
-settle 1
 expect config.adsb.visible 1
 expect config.adsb.ADSB_TYPE.visible true
 expect config.adsb.AVD_ENABLE.visible false
@@ -117,7 +111,6 @@ expect config.InputBoxSearchForEnterasinglewordtosearchfor type
 click adsb-find
 key ctrl+u
 key Return
-settle 1
 expect config.adsb.find none
 expect config.adsb.visible 2
 
@@ -138,14 +131,20 @@ expect config.SHOWAGAIN_Refresh_Params False
 click adsb-confirm-cancel
 expect config.adsb.confirm none
 expect config.SHOWAGAIN_Refresh_Params False
-# Refresh Params then fetches without asking.
+# Refresh Params then fetches without asking. The two clicks above were answered Cancel, so
+# this is the page's first fetch; over MAVFTP the list is back in well under a second, too
+# quickly for the disabled button to be seen, so the count is what says a fetch happened.
+expect config.adsb.refreshes 0
+expect config.adsb.refresh.enabled true
+expect vehicle.connected true
 click adsb-refresh
+expect config.adsb.press fetch
 expect config.adsb.confirm none
-settle 15
+expect config.adsb.refreshes 1
+within 20
 expect config.adsb.refresh.enabled true
 expect params.held > 1000
 expect config.adsb.order ADSB_TYPE,AVD_ENABLE
 
 click setup-page-ConfigMandatory
-settle 1
 expect config.adsb.active false

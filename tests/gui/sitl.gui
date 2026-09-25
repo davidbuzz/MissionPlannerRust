@@ -29,10 +29,11 @@
 
 screen simulation
 window 1600x1200
+budget 23
+# A first budget, set by hand until a passing run records one.
 env XDG_DATA_HOME $WORK
 env MP_CONFIG_XML $WORK/config.xml
 setup printf '<?xml version="1.0" encoding="utf-8"?><Config><sitl_download_version>2</sitl_download_version><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/config.xml"
-settle 4
 
 expect screen simulation
 expect sitl.active true

@@ -17,19 +17,23 @@ env MP_PLAN_DIR $WORK
 
 screen plan
 window 1600x1200
-settle 6
+budget 4
 expect mission.home true
 
 expect plan.mavftp false
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click plan-mavftp
 expect plan.mavftp true
 
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.45x0.40
 click map@0.60x0.55
 expect mission.items 2
 
 click plan-write
-settle 6
 expect plan.mavftp.state done
 expect plan.mavftp.text MAVFTP: mission written
 
@@ -37,7 +41,6 @@ click plan-clear
 expect mission.items 0
 
 click plan-read
-settle 6
 expect plan.mavftp.state done
 expect plan.mavftp.text MAVFTP: mission read
 expect mission.items 2

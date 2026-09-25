@@ -121,7 +121,7 @@ const fn ids(
 /// Standard Params: `ConfigFriendlyParams`, `ParameterMode` Standard.
 /// `// C#: GCSViews/ConfigurationView/ConfigFriendlyParams.cs:146-157`
 pub static STANDARD: Spec = Spec {
-    name: "standard",
+    name: "standardparams",
     title: STANDARD_TITLE,
     favourites: FAVOURITES,
     select: standard,
@@ -129,17 +129,17 @@ pub static STANDARD: Spec = Spec {
     list_size: LIST_SIZE,
     flow: true,
     ids: ids(
-        "standard-write",
-        "standard-refresh",
-        "standard-find",
-        "standard-find-box",
-        "standard-message",
-        "standard-message-ok",
+        "standardparams-write",
+        "standardparams-refresh",
+        "standardparams-find",
+        "standardparams-find-box",
+        "standardparams-message",
+        "standardparams-message-ok",
         [
-            "standard-confirm",
-            "standard-confirm-showagain",
-            "standard-confirm-ok",
-            "standard-confirm-cancel",
+            "standardparams-confirm",
+            "standardparams-confirm-showagain",
+            "standardparams-confirm-ok",
+            "standardparams-confirm-cancel",
         ],
     ),
 };
@@ -147,7 +147,9 @@ pub static STANDARD: Spec = Spec {
 /// Advanced Params: `ConfigFriendlyParamsAdv`, `ParameterMode` Advanced.
 /// `// C#: GCSViews/ConfigurationView/ConfigFriendlyParamsAdv.cs:5-10`
 pub static ADVANCED: Spec = Spec {
-    name: "advanced",
+    // "advancedparams", not "advanced": the Advanced page (config/advanced.rs) publishes under
+    // `config.advanced.` and this page's `active` overwrote its own (found 2026-09-25).
+    name: "advancedparams",
     title: ADVANCED_TITLE,
     favourites: FAVOURITES,
     select: advanced,
@@ -155,17 +157,17 @@ pub static ADVANCED: Spec = Spec {
     list_size: LIST_SIZE,
     flow: true,
     ids: ids(
-        "advanced-write",
-        "advanced-refresh",
-        "advanced-find",
-        "advanced-find-box",
-        "advanced-message",
-        "advanced-message-ok",
+        "advancedparams-write",
+        "advancedparams-refresh",
+        "advancedparams-find",
+        "advancedparams-find-box",
+        "advancedparams-message",
+        "advancedparams-message-ok",
         [
-            "advanced-confirm",
-            "advanced-confirm-showagain",
-            "advanced-confirm-ok",
-            "advanced-confirm-cancel",
+            "advancedparams-confirm",
+            "advancedparams-confirm-showagain",
+            "advancedparams-confirm-ok",
+            "advancedparams-confirm-cancel",
         ],
     ),
 };
@@ -473,11 +475,11 @@ mod tests {
         for (script, name) in [
             (
                 include_str!("../../../../tests/gui/config-standard-params.gui"),
-                "standard",
+                "standardparams",
             ),
             (
                 include_str!("../../../../tests/gui/config-advanced-params.gui"),
-                "advanced",
+                "advancedparams",
             ),
         ] {
             let prefix = format!("config.{name}.");

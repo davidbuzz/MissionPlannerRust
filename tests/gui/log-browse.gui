@@ -15,7 +15,8 @@ setup mkdir -p $WORK/MissionPlannerRust && cp testdata/logbrowse/LogMessagesCopt
 
 screen logs
 window 1600x1200
-settle 3
+budget 16
+# A first budget, set by hand until a passing run records one.
 
 expect log.open false
 expect log.fields 0
@@ -23,26 +24,22 @@ expect log.fields 0
 click log-name
 type flight.bin
 key Return
-settle 3
 
 expect log.open true
 expect log.fields 643
 
 click logfield-ATT.Roll
-settle 1
 expect log.plotted 1
 expect log.plotted.right 0
 expect log.axes.left 1
 
 # A right click puts a field on the other axis.
 click logfield-ATT.Pitch:right
-settle 1
 expect log.plotted 2
 expect log.plotted.right 1
 
 # And a click on a plotted field, whichever button, removes it.
 click logfield-ATT.Roll:right
-settle 1
 expect log.plotted 1
 expect log.plotted.right 1
 expect log.axes.left 0
@@ -51,23 +48,20 @@ expect log.axes.left 0
 # bitmask in LogMessages.xml, so each channel's field node has a child for each bit, collapsed
 # until its plus is clicked. A control or fact named with brackets has them escaped for `click`
 # and `expect`, which find it by a grep pattern, and not for `reveal`, which looks it up whole.
-expect log.field.MAV\[0\].flags.bits USING_SIGNING,ACTIVE,STREAMING,PRIVATE,LOCKED
-expect log.field.MAV\[0\].flags.expanded false
+expect log.field.MAV[0].flags.bits USING_SIGNING,ACTIVE,STREAMING,PRIVATE,LOCKED
+expect log.field.MAV[0].flags.expanded false
 reveal log-fields logfield-MAV[0].flags-expand
-click logfield-MAV\[0\].flags-expand
-settle 1
-expect log.field.MAV\[0\].flags.expanded true
-expect log.field.MAV\[3\].flags.expanded false
+click logfield-MAV[0].flags-expand
+expect log.field.MAV[0].flags.expanded true
+expect log.field.MAV[3].flags.expanded false
 
 # One bit graphed (Log/LogBrowse.cs:1237-1248): channel 0's STREAMING bit on the left, its curve
 # named MAV[0].flags.STREAMING; a second click, whichever button, takes it off.
 reveal log-fields logfield-MAV[0].flags.STREAMING
-click logfield-MAV\[0\].flags.STREAMING
-settle 1
+click logfield-MAV[0].flags.STREAMING
 expect log.plotted 2
 expect log.plotted.right 1
 expect log.plotted.labels ~ MAV[0].flags.STREAMING
-click logfield-MAV\[0\].flags.STREAMING:right
-settle 1
+click logfield-MAV[0].flags.STREAMING:right
 expect log.plotted 1
 expect log.plotted.right 1

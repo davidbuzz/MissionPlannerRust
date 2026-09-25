@@ -94,6 +94,12 @@ pub struct TelemetryView {
     pub parameters: Arc<[(String, f64)]>,
     /// How many the vehicle says it has, once it has said.
     pub parameters_expected: u16,
+    /// Whether a parameter download has run to its end since the link opened: `doConnect`'s
+    /// `getParamList` done, after which `MainV2` shows the SETUP or CONFIG screen again. Latched:
+    /// neither a count the vehicle raises later (a feature switched on adds its parameters) nor
+    /// a Refresh Params pressed on a page unsets it, as neither sends the C# back through
+    /// `doConnect` - the page stays.
+    pub parameters_fetched: bool,
     /// Where the parameter fetch is, in words - "MAVFTP 45%", "stream 400 of 1408", "1408 over
     /// MAVFTP" - or "none" before one has been started.
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1813-1936`
@@ -139,6 +145,7 @@ impl TelemetryView {
             transfer: None,
             parameters: Arc::default(),
             parameters_expected: 0,
+            parameters_fetched: false,
             parameters_fetch: "none".to_owned(),
             parameters_defaults: Arc::default(),
         }
@@ -277,6 +284,10 @@ pub struct Telemetry {
     awaited: Vec<Awaited>,
     /// What [`Telemetry::parameters_of`] built last, for the next frame to reuse.
     parameters: Mutex<Option<SharedParameters>>,
+    /// Whether a parameter download has run to its end since this link opened: latched, as
+    /// `doConnect`'s `getParamList` is done once and a Refresh Params afterwards does not put
+    /// the C# back through `doConnect` - the screen it is pressed on stays.
+    parameters_fetched: std::sync::atomic::AtomicBool,
     /// The Planner page's rates as last handed to [`Telemetry::hand_over_rates`].
     rates_handed: Option<StreamRates>,
     /// `cs.messages.Clear()`: the sequence number of the first message still shown - 0 until a
@@ -444,6 +455,7 @@ impl Telemetry {
             recording: None,
             awaited: Vec::new(),
             parameters: Mutex::new(None),
+            parameters_fetched: std::sync::atomic::AtomicBool::new(false),
             rates_handed: None,
             reopen: Mutex::new(None),
             messages_shown_from: std::sync::atomic::AtomicU64::new(0),
@@ -508,6 +520,21 @@ impl Telemetry {
             || (Arc::default(), 0),
             |(id, _)| self.parameters_of(link, *id),
         );
+        let fetch_complete = primary.as_ref().is_some_and(|(id, _)| {
+            link.param_fetch(*id).is_some_and(|fetch| {
+                matches!(
+                    fetch.state,
+                    mp_link::param_fetch::ParamFetchState::Complete { .. }
+                )
+            })
+        });
+        if fetch_complete {
+            self.parameters_fetched
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        let parameters_fetched = self
+            .parameters_fetched
+            .load(std::sync::atomic::Ordering::Relaxed);
         let transfer = primary
             .as_ref()
             .and_then(|(id, _)| link.mission_transfer(*id));
@@ -567,6 +594,7 @@ impl Telemetry {
             transfer,
             parameters,
             parameters_expected,
+            parameters_fetched,
             parameters_fetch,
             parameters_defaults,
         }

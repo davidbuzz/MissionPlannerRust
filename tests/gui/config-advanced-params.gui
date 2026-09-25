@@ -25,84 +25,73 @@ env MP_CONFIG_XML $WORK/config.xml
 setup printf '{\n  "displayAdvancedParams": true,\n  "isAdvancedMode": true\n}\n' > $WORK/custom.displayview
 screen params
 window 1600x1200
-settle 6
+budget 16
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
 click param-download
-settle 15
 expect params.held > 1000
 # No `params.value.BARO_FLTR_RNG` here: the parameter screen records the rows it draws, and
 # BARO_FLTR_RNG is far down its table. The Advanced Params page records it once it lists it.
 
 # The file makes the start-up view Custom, with the page.
 click tab-config
-settle 1
 expect display.view Custom
 expect display.displayAdvancedParams true
 expect config.shown ~ ConfigFriendlyParamsAdv
 
 # Basic: neither the page nor, isAdvancedMode off, any advanced page.
 click config-page-ConfigPlanner
-settle 1
 click planner-CMB_Layout
 click planner-CMB_Layout-Basic
-settle 1
 expect display.view Basic
 expect display.isAdvancedMode false
 click tab-config
-settle 2
 expect config.pages ~ ConfigArducopter,ConfigOSD
 
 # Custom again, and the page shown.
 click config-page-ConfigPlanner
-settle 1
 click planner-CMB_Layout
 click planner-CMB_Layout-Custom
-settle 1
 expect display.view Custom
 expect display.displayAdvancedParams true
 click tab-config
-settle 2
 expect config.shown ~ ConfigFriendlyParamsAdv
 expect config.titles ~ Advanced Params
 click config-page-ConfigFriendlyParamsAdv
-settle 3
 expect config.page ConfigFriendlyParamsAdv
 expect config.title Advanced Params
-expect config.advanced.active true
-expect config.advanced.controls > 100
+expect config.advancedparams.active true
+expect config.advancedparams.controls > 100
 
 # Find brings BARO_FLTR_RNG to the top.
-click advanced-find
+click advancedparams-find
 type baro_fltr_rng
 key Return
-settle 2
-expect config.advanced.visible 1
-expect config.advanced.BARO_FLTR_RNG.kind range
-expect config.advanced.BARO_FLTR_RNG.text 0
+expect config.advancedparams.visible 1
+expect config.advancedparams.BARO_FLTR_RNG.kind range
+expect config.advancedparams.BARO_FLTR_RNG.text 0
 
 # Its arrow records 1; Write Params writes it.
-click advanced-BARO_FLTR_RNG-up
-settle 2
-expect config.advanced.changed.BARO_FLTR_RNG 1
+click advancedparams-BARO_FLTR_RNG-up
+expect config.advancedparams.changed.BARO_FLTR_RNG 1
 expect params.value.BARO_FLTR_RNG 0
-click advanced-write
-settle 3
-expect config.advanced.write BARO_FLTR_RNG 1 accepted
+click advancedparams-write
+expect config.advancedparams.write BARO_FLTR_RNG 1 accepted
 expect params.value.BARO_FLTR_RNG 1
-expect config.advanced.message Parameters successfully saved.
-click advanced-message-ok
+expect config.advancedparams.message Parameters successfully saved.
+click advancedparams-message-ok
 
 # And back.
-click advanced-BARO_FLTR_RNG-down
-click advanced-write
-settle 3
+click advancedparams-BARO_FLTR_RNG-down
+click advancedparams-write
 expect params.value.BARO_FLTR_RNG 0
-click advanced-message-ok
+click advancedparams-message-ok
 
 click config-page-ConfigPlanner
-settle 1
-expect config.advanced.active false
+expect config.advancedparams.active false

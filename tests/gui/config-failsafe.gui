@@ -18,20 +18,22 @@
 
 screen params
 window 1600x1200
+budget 19
 # A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
 # suppressed by the settings of the machine running it.
 env MP_CONFIG_XML $WORK/config.xml
-settle 6
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
 # Initial Setup lists the page only once every parameter is in (gotAllParams,
-# InitialSetup.cs:120-131, 230-233), and here parameters are downloaded when asked for.
-expect config.failsafe.available false
+# InitialSetup.cs:120-131, 230-233). The connect-time download over MAVFTP is done within a
+# second here, so "not yet available" cannot be caught; the page is available once it is in.
 click param-download
-settle 15
 expect params.held > 1000
 expect config.failsafe.available true
 
@@ -80,7 +82,6 @@ expect config.failsafe.armed Disarmed
 # Change the throttle failsafe to "Enabled always Land" and prove the vehicle holds it.
 click failsafe-FS_THR_ENABLE
 click failsafe-FS_THR_ENABLE-3
-settle 3
 expect config.failsafe.throttle 3
 expect config.failsafe.throttle.text Enabled always Land
 expect config.failsafe.write FS_THR_ENABLE 3 accepted
@@ -89,7 +90,6 @@ expect config.failsafe.throttle.vehicle 3
 # And back.
 click failsafe-FS_THR_ENABLE
 click failsafe-FS_THR_ENABLE-1
-settle 3
 expect config.failsafe.throttle 1
 expect config.failsafe.write FS_THR_ENABLE 1 accepted
 expect config.failsafe.throttle.vehicle 1
@@ -104,7 +104,6 @@ expect config.failsafe.editing BATT_LOW_VOLT
 key ctrl+u
 type 10.8
 key Return
-settle 2
 expect config.failsafe.voltage 10.8
 expect config.failsafe.write ~ BATT_LOW_VOLT 10.8
 expect config.failsafe.write ~ accepted
@@ -112,7 +111,6 @@ expect config.failsafe.voltage.vehicle ~ 10.8
 
 # The arrows step by the documented 0.1: down to 10.7, and the timer writes it.
 click failsafe-BATT_LOW_VOLT-down
-settle 2
 expect config.failsafe.voltage 10.7
 expect config.failsafe.voltage.vehicle ~ 10.7
 
@@ -128,7 +126,6 @@ key Return
 expect config.failsafe.question ~ FS_THR_VALUE Value out of range
 click failsafe-question-no
 expect config.failsafe.question none
-settle 2
 expect config.failsafe.pwm 1100
 expect config.failsafe.pwm.vehicle 1100
 
@@ -141,7 +138,6 @@ click failsafe-BATT_LOW_VOLT
 key ctrl+u
 type 10.5
 key Return
-settle 2
 expect config.failsafe.pwm.vehicle 975
 expect config.failsafe.voltage.vehicle 10.5
 expect config.failsafe.message none

@@ -9,8 +9,11 @@
 
 screen fly
 window 1600x1200
-settle 8
+budget 6
 
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click fly-tab-actions
 expect fly.tab tabActions
 expect fly.page.overflow 0
@@ -18,18 +21,15 @@ expect fly.page.overflow 0
 click fly-jumptotag
 expect fly.prompt Tag Id:
 type 70000
-settle 1
 click fly-prompt-ok
 expect status Invalid Tag. Must be a number from 0 to 65535
 expect fly.prompt Tag Id:
 expect fly.sent nothing yet
 
 type 5
-settle 1
 expect fly.prompt.value 5
 click fly-prompt-ok
 expect fly.prompt none
 expect fly.sent COMMAND_LONG MAV_CMD_DO_JUMP_TAG 5,0,0,0,0,0,0
-settle 3
 # SITL answers; with no tag 5 in its mission it refuses, which is Strings.CommandFailed.
 expect fly.ack ~ MAV_CMD_DO_JUMP_TAG:

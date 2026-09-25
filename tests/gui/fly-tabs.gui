@@ -12,7 +12,7 @@
 
 screen fly
 window 1600x1200
-settle 8
+budget 21
 
 expect fly.tabs tabQuick,tabActions,tabPagemessages,tabActionsSimple,tabPagePreFlight,tabGauges,tabTransponder,tabStatus,tabServo,tabAuxFunction,tabScripts,tabPayload,tabTLogs,tablogbrowse
 expect fly.tabs.text Quick,Actions,Messages,Actions,PreFlight,Gauges,Transponder,Status,Servo/Relay,Aux Function,Scripts,Payload Control,Telemetry Logs,DataFlash Logs
@@ -21,19 +21,19 @@ expect fly.tab.text Quick
 expect fly.tabs.first 0
 expect fly.page.overflow 0
 
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click fly-tab-actions
-settle 1
 expect fly.tab tabActions
 expect fly.page.overflow 0
 
 click fly-tab-messages
-settle 1
 expect fly.tab tabPagemessages
 expect fly.page.overflow 0
 
 # The second Actions page reads the same; it is a page of its own.
 click fly-tab-actionssimple
-settle 1
 expect fly.tab tabActionsSimple
 expect fly.tab.text Actions
 expect fly.page.overflow 0
@@ -53,35 +53,30 @@ expect fly.tabs.first 3
 click fly-tabs-right
 expect fly.tabs.first 4
 click fly-tab-preflight
-settle 1
 expect fly.tab tabPagePreFlight
 expect fly.page.overflow 0
 
 click fly-tabs-right
 expect fly.tabs.first 5
 click fly-tab-gauges
-settle 1
 expect fly.tab tabGauges
 expect fly.page.overflow 0
 
 click fly-tabs-right
 expect fly.tabs.first 6
 click fly-tab-transponder
-settle 1
 expect fly.tab tabTransponder
 expect fly.page.overflow 0
 
 click fly-tabs-right
 expect fly.tabs.first 7
 click fly-tab-status
-settle 1
 expect fly.tab tabStatus
 expect fly.page.overflow 0
 
 click fly-tabs-right
 expect fly.tabs.first 8
 click fly-tab-servo
-settle 1
 expect fly.tab tabServo
 expect fly.tab.text Servo/Relay
 expect fly.page.overflow 0
@@ -89,21 +84,18 @@ expect fly.page.overflow 0
 click fly-tabs-right
 expect fly.tabs.first 9
 click fly-tab-auxfunction
-settle 1
 expect fly.tab tabAuxFunction
 expect fly.page.overflow 0
 
 click fly-tabs-right
 expect fly.tabs.first 10
 click fly-tab-scripts
-settle 1
 expect fly.tab tabScripts
 expect fly.page.overflow 0
 
 click fly-tabs-right
 expect fly.tabs.first 11
 click fly-tab-payload
-settle 1
 expect fly.tab tabPayload
 expect fly.tab.text Payload Control
 expect fly.page.overflow 0
@@ -111,14 +103,12 @@ expect fly.page.overflow 0
 click fly-tabs-right
 expect fly.tabs.first 12
 click fly-tab-tlogs
-settle 1
 expect fly.tab tabTLogs
 expect fly.page.overflow 0
 
 click fly-tabs-right
 expect fly.tabs.first 13
 click fly-tab-logbrowse
-settle 1
 expect fly.tab tablogbrowse
 expect fly.tab.text DataFlash Logs
 expect fly.page.overflow 0
@@ -143,6 +133,5 @@ click fly-tabs-left
 click fly-tabs-left
 expect fly.tabs.first 0
 click fly-tab-quick
-settle 1
 expect fly.tab tabQuick
 expect fly.page.overflow 0

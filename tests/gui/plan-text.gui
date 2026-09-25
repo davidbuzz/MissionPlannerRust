@@ -16,9 +16,11 @@ env MP_PLAN_DIR $WORK
 
 screen plan
 window 1600x1200
-settle 4
+budget 25
 expect mission.items 0
 
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.45x0.40:right
 click menu-autoWP
 click menu-text

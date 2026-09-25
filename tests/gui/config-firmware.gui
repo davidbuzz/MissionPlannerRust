@@ -29,13 +29,12 @@ setup mkdir -p "$WORK/web/firmware.ardupilot.org/Copter/stable/CubeOrange" && cp
 
 screen setup
 window 1600x1200
-settle 3
+budget 9
 
 expect config.firmware.active false
 # Install Firmware is the first entry of InitialSetup's list, outside any heading; disconnected,
 # the list shows ConfigFirmwareManifest (InitialSetup.cs:169-173).
 click setup-page-ConfigFirmwareManifest
-settle 2
 expect config.firmware.active true
 expect config.firmware.page manifest
 expect config.firmware.manifest loaded
@@ -53,19 +52,15 @@ expect config.firmware.upload disabled
 
 # Copter, official: the question first; No does nothing.
 click fw-quad
-settle 1
 expect config.firmware.question Are you sure you want to upload Copter V4.7.1 OFFICIAL?
 click fw-question-no
-settle 1
 expect config.firmware.question none
 expect config.firmware.vehicle none
 
 # Yes: three CubeOrange builds share board id 140, and FirmwareSelection opens on the board's own
 # platform, its one file selected.
 click fw-quad
-settle 1
 click fw-question-yes
-settle 1
 expect config.firmware.vehicle Copter
 expect config.firmware.candidates 3
 expect config.firmware.chosen https://firmware.ardupilot.org/Copter/stable/CubeOrange/arducopter.apj
@@ -77,7 +72,6 @@ expect config.firmware.message none
 # Upload Firmware: the download to a temporary file, read - board 140, a 3,000-byte image - and
 # stopped before the reboot into the bootloader.
 click fw-select-upload
-settle 3
 expect config.firmware.selection 0
 expect config.firmware.flow done
 expect config.firmware.flow.board pass
@@ -92,19 +86,15 @@ expect config.firmware.stopped the next step would reboot the board into its boo
 # Beta firmwares: the labels and the choice follow the release. The beta heli build is the only
 # one for the board, so it downloads at once - and it is not in the mirror: "Failed download".
 click fw-beta
-settle 1
 expect config.firmware.release BETA
 expect config.firmware.label.quad Copter V4.7.1 BETA
 expect config.firmware.vehicle none
 click fw-heli
-settle 1
 click fw-question-yes
-settle 2
 expect config.firmware.vehicle HELICOPTER
 expect config.firmware.chosen https://firmware.ardupilot.org/Copter/beta/CubeOrange-heli/arducopter-heli.apj
 expect config.firmware.message Failed download
 click fw-message-ok
-settle 1
 expect config.firmware.message none
 expect config.firmware.flow done
 expect config.firmware.download.url none
@@ -112,21 +102,17 @@ expect config.firmware.download.url none
 # All Options: every record of the catalogue, and FirmwareSelection on the board's platform - its
 # 80 CubeOrange files, none selected, so Upload Firmware waits for a choice.
 click fw-alloptions
-settle 1
 expect config.firmware.selection 80
 expect config.firmware.selection.selected none
 click fw-select-close
-settle 1
 expect config.firmware.selection 0
 
 # Choosing another entry is Deactivate: back to OFFICIAL, and reopening fetches nothing. Disconnected,
 # the Mandatory Hardware heading is not listed (InitialSetup.cs:182), so Optional Hardware is used.
 click setup-page-ConfigOptional
-settle 1
 expect config.firmware.active false
 expect config.firmware.release OFFICIAL
 click setup-page-ConfigFirmwareManifest
-settle 1
 expect config.firmware.active true
 expect config.firmware.manifest.fetches 1
 expect config.firmware.label.quad Copter V4.7.1 OFFICIAL

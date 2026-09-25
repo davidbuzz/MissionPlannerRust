@@ -7,14 +7,17 @@
 env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
-settle 4
+budget 3
+# A first budget, set by hand until a passing run records one.
 
 expect coverage.flightplanner.total 121
-expect coverage.flightplanner.done 82
-expect coverage.flightplanner.missing 27
+expect coverage.flightplanner.done 103
+expect coverage.flightplanner.missing 6
 expect plan.menu closed
 
 # The right button opens the menu, as MainMap.ContextMenuStrip does, and adds nothing.
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.30x0.40:right
 expect plan.menu open
 expect plan.menu.submenu none

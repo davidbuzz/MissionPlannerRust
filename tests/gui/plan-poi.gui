@@ -13,13 +13,14 @@ env MP_PLAN_DIR $WORK
 
 screen plan
 window 1600x1200
-settle 4
+budget 13
 expect fly.poi.count 0
 
 # Add, at the menu's position.
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.45x0.40:right
 click menu-pOI
-settle 1
 click menu-poiadd
 expect plan.prompt POI
 expect plan.prompt.text Enter ID
@@ -33,7 +34,6 @@ expect mission.items 0
 # Cancel adds nothing.
 click map@0.60x0.60:right
 click menu-pOI
-settle 1
 click menu-poiadd
 key Escape
 expect fly.poi.count 1
@@ -41,7 +41,6 @@ expect fly.poi.count 1
 # Edit and Delete act on the marker under the press: the same spot.
 click map@0.45x0.40:right
 click menu-pOI
-settle 1
 click menu-poiedit
 expect plan.poi.hit 0
 expect plan.prompt POI
@@ -54,17 +53,14 @@ expect fly.poi.list ~ Tower
 # Away from the marker, Edit and Delete do nothing.
 click map@0.60x0.60:right
 click menu-pOI
-settle 1
 click menu-poiedit
 expect plan.prompt none
 click map@0.60x0.60:right
 click menu-pOI
-settle 1
 click menu-poidelete
 expect fly.poi.count 1
 
 click map@0.45x0.40:right
 click menu-pOI
-settle 1
 click menu-poidelete
 expect fly.poi.count 0

@@ -10,10 +10,13 @@
 
 screen fly
 window 1600x1200
-settle 8
+budget 5
 
 # The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as
 # tabControlactions.SelectedIndex = 0 has it. `GCSViews/FlightData.Designer.cs:595-611`
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click fly-tab-actions
 expect fly.tab tabActions
 
@@ -22,7 +25,5 @@ key ctrl+u
 type 25.9
 # Keystrokes reach the application through the input method (ibus, over XIM) and come back
 # after a round trip; a click does not. Settle, so the click cannot overtake the typing.
-settle 1
 click fly-changealt
-settle 1
 expect fly.sent MISSION_ITEM seq=0 cmd=16 frame=3 current=3 x=0 y=0 z=25

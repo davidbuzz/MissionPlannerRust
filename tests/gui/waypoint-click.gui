@@ -7,13 +7,15 @@
 
 screen plan
 window 1600x1200
-settle 4
+budget 3
 
 # Nothing yet.
 expect screen plan
 expect mission.items 0
 
 # Three still clicks on empty map.
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.45x0.40
 click map@0.55x0.45
 click map@0.60x0.55

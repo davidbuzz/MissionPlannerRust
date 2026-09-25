@@ -13,8 +13,11 @@
 
 screen fly
 window 1600x1200
-settle 8
+budget 9
 
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click fly-tab-actions
 expect fly.tab tabActions
 expect fly.page.overflow 0
@@ -22,7 +25,6 @@ expect fly.page.overflow 0
 click fly-sendmsg
 expect fly.prompt Enter Message to be logged
 type hello log
-settle 1
 expect fly.prompt.value hello log
 click fly-prompt-ok
 expect fly.prompt none
@@ -30,7 +32,6 @@ expect fly.sent STATUSTEXT severity=5 text=hello log
 
 click fly-sendmsg
 type not sent
-settle 1
 click fly-prompt-cancel
 expect fly.prompt none
 expect fly.sent STATUSTEXT severity=5 text=hello log
@@ -39,7 +40,6 @@ expect fly.sent STATUSTEXT severity=5 text=hello log
 expect fly.mountmode ~ 0 Retract
 click fly-mountmode
 expect fly.sent COMMAND_LONG MAV_CMD_DO_MOUNT_CONTROL 0,0,0,0,0,0,0
-settle 3
 expect fly.ack ~ MAV_CMD_DO_MOUNT_CONTROL:
 
 click fly-mountmode-list
@@ -55,5 +55,4 @@ expect fly.track.cleared none
 expect fly.track > 0
 click fly-cleartrack
 expect fly.track.cleared > 0
-settle 1
 expect fly.track > 0

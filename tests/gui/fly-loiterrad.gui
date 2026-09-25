@@ -10,21 +10,22 @@
 
 screen params
 window 1600x1200
+budget 6
 # A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
 # suppressed by the settings of the machine running it.
 env MP_CONFIG_XML $WORK/config.xml
-settle 6
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
 click param-download
-settle 15
 expect params.held > 500
 
 click tab-fly
-settle 1
 
 # The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as
 # tabControlactions.SelectedIndex = 0 has it. `GCSViews/FlightData.Designer.cs:595-611`
@@ -35,6 +36,5 @@ key ctrl+u
 type 80
 # Keystrokes reach the application through the input method (ibus, over XIM) and come back
 # after a round trip; a click does not. Settle, so the click cannot overtake the typing.
-settle 1
 click fly-setloiterrad
 expect fly.sent nothing: neither LOITER_RAD nor WP_LOITER_RAD is on this vehicle

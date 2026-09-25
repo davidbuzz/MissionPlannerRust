@@ -14,7 +14,8 @@ env MP_PLAN_DIR $WORK
 
 screen plan
 window 1600x1200
-settle 4
+budget 13
+# A first budget, set by hand until a passing run records one.
 expect plan.polymenu closed
 expect survey.points 0
 expect fence.points 0
@@ -25,6 +26,8 @@ click plan-polyicon
 expect plan.polymenu open
 click menu-poly-addPolygonPoint
 expect plan.polymenu closed
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.40x0.40
 click map@0.60x0.40
 click map@0.60x0.60
@@ -34,6 +37,12 @@ expect survey.points 4
 # Not drawing the fence: no fence entries on the icon's menu, so clicking where one would be
 # lands on nothing. Drawing it: Fence Exclusion takes the polygon.
 click draw-fence
+# The first fence asks "FlightPlan Fence" with its "Show me again?" (row 92): unticked, so a
+# later Draw Fence in this run is not asked again, then OK.
+expect plan.prompt FlightPlan Fence
+click plan-prompt-again
+click plan-prompt-ok
+expect plan.prompt none
 click plan-polyicon
 expect plan.polymenu open
 click menu-fenceExclusion

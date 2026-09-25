@@ -19,25 +19,19 @@ env MP_SETTINGS $WORK/settings.conf
 
 screen setup
 window 1600x1200
-settle 8
 
 expect vehicle.connected true
 expect vehicle.count 1
 click setup-page-ConfigFirmwareDisabled
-settle 2
 expect config.firmware.active true
 expect config.firmware.page disabled
 
 click fw-bootloader
-settle 1
 expect config.firmware.question Are you sure you want to upgrade the bootloader? This can brick your board
 click fw-question-yes
-settle 1
 expect config.firmware.question Are you sure you want to upgrade the bootloader? This can brick your board, Please allow 5 mins for this process
 click fw-question-yes
-settle 1
 expect config.firmware.question none
 
 # The command's answer, up to the C#'s 25 s and one more try.
-settle 40
 expect status Upgraded bootloader

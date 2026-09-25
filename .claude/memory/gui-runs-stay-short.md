@@ -127,3 +127,20 @@ loaded before calling it a defect.
 field holds, so a box that offers a value ("50s", "578994") gets the typed text appended unless
 `key ctrl+u` comes first (46 scripts do this). A script that types over an offered value without it
 reads back "50s55S" and fails in a way that looks like a parsing bug in the application.
+
+**2026-09-25, the rule made mechanical:** Buzz asked for the runner to "keep track of a
+timestamp for each action" so that "each individual GUI test is fully completed within 5 seconds,
+ie failure to do so is an error", then "minimise all settle times to the smallest number that
+passes". `tools/gui-test.sh` now stamps every line `t=+1.234s`, fails a test over its budget
+(5 s by default, `MP_GUI_BUDGET` or a `budget N` line override it), and waits for facts and
+controls itself (`expect` polls up to 10 s, a click waits for its control), so scripts carry no
+`settle` unless nothing that follows can wait for itself. A `settle 15` before an expect is dead
+time now, not caution.
+
+**2026-09-25, later still:** every script carries its expected run time as a `budget N` line
+(tools/gui-budgets.py writes them from a suite's logs: the measured time rounded up plus one),
+a run over its budget fails, and the runner's watchdog kills a run three seconds past the budget
+after a screenshot of the window (`<name>-hardstop.png` beside the suite's logs). Buzz: "we
+must keep a record of the expected run time of each UI test, and terminate after expected
+time + 3 seconds". Never re-add a `settle` to make a slow step pass: find what the step waits
+for and `expect` it, or declare `within N` for a genuinely long wait.

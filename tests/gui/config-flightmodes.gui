@@ -13,30 +13,30 @@
 
 screen params
 window 1600x1200
+budget 14
 # A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
 # suppressed by the settings of the machine running it.
 env MP_CONFIG_XML $WORK/config.xml
-settle 6
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
 # The page is offered once every parameter has arrived, as the C# adds it only with gotAllParams.
 click param-download
-settle 12
 expect params.held > 1000
 expect params.value.FLTMODE2 9
 
 # SETUP opens with no page chosen and its headings closed (BackstageView.cs:261-343); the page is
 # under Mandatory Hardware, which choosing opens.
 click tab-setup
-settle 1
 expect setup.page none
 expect config.flightmodes.active false
 click setup-page-ConfigMandatory
 click setup-page-ConfigFlightModes
-settle 1
 expect setup.page ConfigFlightModes
 expect config.flightmodes.active true
 expect config.flightmodes.firmware ArduCopter2
@@ -65,7 +65,6 @@ expect config.flightmodes.2.name Loiter
 click fm-simple-2
 expect config.flightmodes.simple 2
 click fm-save
-settle 3
 expect config.flightmodes.save complete
 expect params.value.FLTMODE2 5
 expect params.value.SIMPLE 2
@@ -80,10 +79,25 @@ expect config.flightmodes.2 9
 click fm-simple-2
 expect config.flightmodes.simple 0
 click fm-save
-settle 3
 expect config.flightmodes.save complete
 expect params.value.FLTMODE2 9
 expect params.value.SIMPLE 0
+
+# Ctrl+S is Save Modes (ProcessCmdKey, ConfigFlightModes.cs:239-247): the page has the keyboard
+# once any of it is clicked. Mode 2 to Loiter and saved by the chord, then back to Land the
+# same way, so the vehicle is left as it was.
+click fm-mode2
+click fm-mode2-5
+expect config.flightmodes.2 5
+key ctrl+s
+expect config.flightmodes.save complete
+expect params.value.FLTMODE2 5
+click fm-mode2
+click fm-mode2-9
+expect config.flightmodes.2 9
+key ctrl+s
+expect config.flightmodes.save complete
+expect params.value.FLTMODE2 9
 
 # Choosing another page deactivates this one (BackstageView.cs:453-464).
 click setup-page-ConfigFailSafe

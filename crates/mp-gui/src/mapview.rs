@@ -132,6 +132,10 @@ pub struct MapViewport {
     /// then it is infuriating: every pan is undone on the next telemetry packet. Panning therefore
     /// takes control, and keeps it until the user gives it back.
     camera: Option<Camera>,
+    /// Where the map starts, from the settings' `maplast_lat`, `maplast_lng` and `maplast_zoom`
+    /// (`FlightData.cs:524-548`): a place and a zoom, made a camera on the first paint, when the
+    /// viewport's width is known. `None` once used or when the settings had none.
+    start: Option<(WebMercator, f64)>,
     /// Where the last drag was, in screen pixels.
     drag_from: Option<(f32, f32)>,
     /// The viewport size at the last paint, needed to convert pixel drags into world units.
@@ -292,6 +296,7 @@ impl MapViewport {
             tiles_approximate: 0,
             tiles_missing: 0,
             camera: None,
+            start: None,
             drag_from: None,
             last_viewport: (1.0, 1.0),
             last_view: None,
@@ -581,8 +586,41 @@ impl MapViewport {
         self.camera
     }
 
+    /// `gMapControl1.Position = ...; Zoomlevel.Value = ...` at start-up, from the settings'
+    /// `maplast_lat`, `maplast_lng` and `maplast_zoom`: the map opens where it was last left,
+    /// at that zoom. It is where the map rests while nothing is framed and no view has been
+    /// chosen - the vehicle, once heard, is still followed, as `CHK_autopan` (checked by
+    /// default) pans to it - so it does not become a camera. A zoom that is not a number is
+    /// the default's.
+    /// `// C#: GCSViews/FlightData.cs:524-548, 4242-4253; FlightData.Designer.cs:2859`
+    pub fn start_at(&mut self, at: LatLon, zoom: f64) {
+        let zoom = if zoom.is_finite() { zoom.clamp(1.0, 18.0) } else { 3.0 };
+        self.start = Some((at.to_web_mercator(), zoom));
+    }
+
+    /// `gMapControl1.Position` and `gMapControl1.Zoom`, for `maplast_*` when the screen is left.
+    /// `// C#: GCSViews/FlightData.cs:662-664`
+    #[must_use]
+    pub fn position_and_zoom(&self) -> Option<(LatLon, f64)> {
+        Some((self.centre()?, self.zoom_level()?))
+    }
+
+    /// The view with nothing to frame and none chosen, for a viewport `w` by `h`: the start
+    /// position at its zoom, else (0, 0) at zoom 3, where Mission Planner's map is at start
+    /// (`GCSViews/FlightData.cs:524-534`). The world is 1.0 wide; at zoom `z` it is
+    /// 256 * 2^z pixels, so the viewport spans `w / (256 * 2^z)` of it - what `gmap_zoom`
+    /// reads back as `z`.
+    fn idle_view(&self, w: f32, h: f32) -> (f64, f64, f64, f64) {
+        let (centre, zoom) = self
+            .start
+            .unwrap_or((WebMercator { x: 0.5, y: 0.5 }, 3.0));
+        let span = f64::from(w.max(1.0)) / (256.0 * 2f64.powf(zoom));
+        let height = span * f64::from(h) / f64::from(w).max(1.0);
+        (centre.x - span / 2.0, centre.y - height / 2.0, span, height)
+    }
+
     /// `GMapControl.Zoom`: GMap's zoom level of the view on screen, fractional, from its span and
-    /// the width it was last painted at. `None` before anything has framed a view.
+    /// the width it was last painted at. `None` before the map has painted with a size.
     #[must_use]
     pub fn zoom_level(&self) -> Option<f64> {
         let view = self.current_view()?;
@@ -801,6 +839,26 @@ impl MapViewport {
         best.map(|(_, seq)| seq)
     }
 
+    /// Whether the map has painted once with a size, so a window position can become a place:
+    /// what [`Self::position_at`] needs. Published as `map.ready`, which a script that clicks the
+    /// map first waits for (a press before the first paint records nothing).
+    #[must_use]
+    pub fn has_view(&self) -> bool {
+        let Some((x, y, width, height)) = self.last_view else {
+            return false;
+        };
+        if self.last_viewport.0 <= 0.0 || self.last_viewport.1 <= 0.0 {
+            return false;
+        }
+        // And the middle of the view is a place: a first paint of the whole world at zoom 0
+        // reaches past the poles, where a press converts to nothing (fly-poi.gui, 2026-09-25).
+        LatLon::from_web_mercator(WebMercator {
+            x: x + width / 2.0,
+            y: y + height / 2.0,
+        })
+        .is_ok()
+    }
+
     /// The position under a window coordinate, or `None` if the map has not painted yet.
     ///
     /// The inverse of the painter's `to_screen`. It reads the rectangle the painter recorded
@@ -826,7 +884,12 @@ impl MapViewport {
         if let Some(camera) = self.camera {
             return Some(camera);
         }
-        let (x, y, width, height) = self.view_box()?;
+        // With nothing to frame, the idle view is the view - so a wheel, a drag or the zoom
+        // bar can start from it, and a press freezes it - once a paint has given it a size.
+        let (x, y, width, height) = self.view_box().or_else(|| {
+            let (w, h) = self.last_viewport;
+            self.last_view.is_some().then(|| self.idle_view(w, h))
+        })?;
         Some(Camera {
             centre: WebMercator {
                 x: x + width / 2.0,
@@ -2636,8 +2699,13 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
     map.home_label_drawn = false;
     map.tooltips_drawn.clear();
     // A view the user chose wins over the automatic fit; that is what makes panning stick.
+    // With nothing to frame and no view chosen, the map is where Mission Planner's is at start:
+    // GMap's default position (0, 0), and zoom 3 - the "no zoom in" the C# picks when the saved
+    // position rounds to 0 (`GCSViews/FlightData.cs:524-534`). A map without a position could
+    // not turn a press into a place, and a script that pressed it recorded nothing
+    // (fly-poi.gui, plan-add-below.gui, 2026-09-25).
     let fitted = map.camera.map_or_else(
-        || map.view_box(),
+        || map.view_box().or_else(|| Some(map.idle_view(w, h))),
         |camera| {
             let height = camera.span * f64::from(h) / f64::from(w).max(1.0);
             Some((
@@ -3246,6 +3314,62 @@ pub fn map_element(map: std::rc::Rc<std::cell::RefCell<MapViewport>>) -> impl gp
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// With nothing to frame, the map starts where Mission Planner's does: the equator and the
+    /// meridian at zoom 3, so a press converts to a place from the first paint.
+    #[test]
+    fn the_start_view_is_the_origin_at_zoom_3() {
+        let (x, y, width, height) = MapViewport::new(0, 0).idle_view(1124.0, 1087.0);
+        let centre = LatLon::from_web_mercator(WebMercator {
+            x: x + width / 2.0,
+            y: y + height / 2.0,
+        })
+        .expect("a place");
+        assert!(centre.latitude().abs() < 1e-9 && centre.longitude().abs() < 1e-9);
+        assert!((width - 1124.0 / 2048.0).abs() < 1e-12);
+        assert!((height / width - 1087.0 / 1124.0).abs() < 1e-9);
+    }
+
+    /// `maplast_*`: the map rests where it was left, at that zoom, once a paint gives it a
+    /// size - the current view, so a wheel or a press starts from it - and reads the same place
+    /// and zoom back for the next `Deactivate`. It is not a chosen view: the map still follows
+    /// the vehicle, as `CHK_autopan` does, so a vehicle heard afterwards is framed.
+    /// `// C#: GCSViews/FlightData.cs:524-548, 662-664, 4242-4253`
+    #[test]
+    fn the_start_position_is_the_idle_view_and_the_map_still_follows() {
+        let mut map = MapViewport::new(0, 0);
+        assert_eq!(map.current_view(), None, "not painted yet: no view");
+        let canberra = LatLon::new(-35.3632621, 149.1652374).expect("Canberra");
+        map.start_at(canberra, 16.0);
+        map.last_viewport = (800.0, 600.0);
+        map.last_origin = (0.0, 0.0);
+        let (x, y, width, height) = map.idle_view(800.0, 600.0);
+        map.last_view = Some((x, y, width, height));
+        assert!(map.camera.is_none(), "a start position is not a chosen view: it follows");
+        let (at, zoom) = map.position_and_zoom().expect("a position and zoom");
+        assert!((zoom - 16.0).abs() < 1e-6, "zoom {zoom}");
+        assert!((at.latitude() - canberra.latitude()).abs() < 1e-6);
+        assert!((at.longitude() - canberra.longitude()).abs() < 1e-6);
+
+        // A press freezes that view: the camera is the idle view, not nothing.
+        map.begin_drag(400.0, 300.0);
+        let camera = map.camera.expect("the press took hold of the view");
+        assert!((gmap_zoom(camera.span, 800.0) - 16.0).abs() < 1e-6);
+        map.end_drag();
+        map.follow_vehicle();
+
+        // A vehicle heard: the fit frames it, ahead of the idle view.
+        map.observe(canberra, Bearing::default());
+        map.observe(LatLon::new(-35.37, 149.17).expect("near"), Bearing::default());
+        assert!(map.camera.is_none(), "still following");
+        assert!(map.view_box().is_some(), "the vehicle's track is framed");
+
+        // Not a number: the default's zoom, not a NaN span.
+        let mut other = MapViewport::new(0, 0);
+        other.start_at(canberra, f64::NAN);
+        let (_, _, width, _) = other.idle_view(800.0, 600.0);
+        assert!((gmap_zoom(width, 800.0) - 3.0).abs() < 1e-9);
+    }
 
     /// Puts a viewport into the state the painter would leave it in, so camera and projection
     /// behaviour can be tested without a window. The numbers are a 800x600 pane at the origin,

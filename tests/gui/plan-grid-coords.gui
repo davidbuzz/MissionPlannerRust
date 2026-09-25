@@ -18,7 +18,7 @@ env MP_PLAN_DIR $WORK
 
 screen plan
 window 1600x1200
-settle 4
+budget 5
 expect mission.home true
 expect map.zoom >= 10
 
@@ -26,18 +26,17 @@ expect map.zoom >= 10
 expect plan.grid false
 expect map.grid.lines 0
 click plan-grid
-settle 1
 expect plan.grid true
 expect map.grid.lines > 2
 click plan-grid
-settle 1
 expect plan.grid false
 expect map.grid.lines 0
 
 # The read-out follows the pointer over the map.
 expect plan.coords.system GEO
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 hover map@0.50x0.50
-settle 1
 expect plan.coords.lines ~ -35.
 expect plan.coords.lines ~ |149.
 click plan-coords-utm

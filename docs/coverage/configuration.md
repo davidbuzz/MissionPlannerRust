@@ -11,12 +11,12 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 31 | 14 | 2 | 2 | 12 | 569 |
+| 61 | 32 | 13 | 2 | 2 | 12 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings
         // in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 25 | 9 | 1 | 2 | 7 | 258 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 26 | 8 | 1 | 2 | 7 | 258 |
         //     15 |
 | CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 6 | 5 | 1 | 0 | 1 | 277 |
         //     0 |
@@ -91,9 +91,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
 | 215 | `ConfigRadioOutput` | Servo Output | Mandatory Hardware | any | 1 | done: `crates/mp-gui/src/config/servo_output.rs` `fn page` |
 | 220 | `ConfigSerial` | Serial Ports | Mandatory Hardware | any | 0 | done: `crates/mp-gui/src/config/serial_ports.rs` `fn page` |
 | 224 | `ConfigESCCalibration` | ESC Calibration | Mandatory Hardware | any | 1 | done: `crates/mp-gui/src/config/esc_calibration.rs` `fn page` |
-| 228 | `ConfigFlightModes` | Flight Modes | Mandatory Hardware | any | 8 | partial: `crates/mp-gui/src/config/flight_modes.rs` `fn page` - the six combos from the firmware's mode list, the lit PWM band, Simple and Super
-        //     Simple, Save through the retrying set; not Ctrl+S, standardFlightModesOnly beyond
-        //     its default, nor the message box |
+| 228 | `ConfigFlightModes` | Flight Modes | Mandatory Hardware | any | 8 | done: `crates/mp-gui/src/config/flight_modes.rs` `fn page` |
 | 232 | `ConfigFailSafe` | FailSafe | Mandatory Hardware | any | 4 | done: `crates/mp-gui/src/config/failsafe.rs` `fn page` |
 | 237 | `ConfigInitialParams` | Initial Tune Parameter | Mandatory Hardware | copter, quadplane | 3 | done: `crates/mp-gui/src/config/initial_params.rs` `fn page` |
 | 241 | `ConfigHWIDs` | HW ID | Mandatory Hardware | any | 0 | done: `crates/mp-gui/src/config/hw_ids.rs` `fn page` |

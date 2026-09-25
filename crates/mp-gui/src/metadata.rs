@@ -223,11 +223,18 @@ impl Fetch {
             self.status = Some(format!("no version in the banner: {banner}"));
             return;
         };
+        let versioned = pdef::versioned_vehicle(mav_type).map(str::to_owned);
+        let unversioned = pdef::vehicle(mav_type).map(str::to_owned);
+        if versioned.is_none() && unversioned.is_none() {
+            // The banner can be heard before the heartbeat's type is in the view (the connect is
+            // quick now): no names to fetch by yet, so ask again next frame rather than record
+            // a fetch that never was (found 2026-09-25: "no documentation for this firmware: ").
+            self.requested = None;
+            return;
+        }
         let (sender, receiver) = channel();
         self.receiver = Some(receiver);
         self.status = Some(format!("fetching documentation for {version}"));
-        let versioned = pdef::versioned_vehicle(mav_type).map(str::to_owned);
-        let unversioned = pdef::vehicle(mav_type).map(str::to_owned);
         std::thread::Builder::new()
             .name("mp-metadata".to_owned())
             .spawn(move || {

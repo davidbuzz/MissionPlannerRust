@@ -16,12 +16,11 @@ setup mkdir -p $WORK/logs && cp testdata/dataflash_damaged.bin $WORK/logs/gpsfix
 
 screen logs
 window 1600x1200
-settle 3
+budget 6
 
 click log-name
 type gpsfix.bin
 key Return
-settle 3
 
 expect log.open true
 expect log.preselect.items 378
@@ -30,10 +29,8 @@ expect log.preselect.open false
 expect log.plotted 0
 
 click log-preselect
-settle 1
 expect log.preselect.open true
 click log-preselect-item-9
-settle 3
 expect log.preselect.open false
 expect log.preselect.selected Attitude/Roll and Pitch mavgraphs
 expect log.preselect.graphed 2
@@ -43,8 +40,6 @@ expect log.plotted.right 0
 
 # Back to "a/None": the handler returns before it clears anything.
 click log-preselect
-settle 1
 click log-preselect-item-0
-settle 2
 expect log.preselect.selected a/None
 expect log.plotted 2

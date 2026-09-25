@@ -12,10 +12,10 @@
 
 screen params
 window 1600x1200
+budget 29
 # A config.xml of its own, so the "Show me again?" box this script clicks is not already
 # suppressed by the settings of the machine running it.
 env MP_CONFIG_XML $WORK/config.xml
-settle 3
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
 click raw-param-warning-again
@@ -23,33 +23,27 @@ click raw-param-warning-ok
 
 click param-search
 type BATT
-settle 1
 expect params.search BATT
 expect params.search.selection none
 
 # Select all and copy: the text stays.
 key ctrl+a
-settle 1
 expect params.search.selection 0,4
 key ctrl+c
-settle 1
 expect params.search BATT
 
 # Delete takes the selection; something typed, then the clipboard pasted after it, twice.
 key Delete
 type X
-settle 1
 expect params.search X
 key ctrl+v
 key ctrl+v
-settle 1
 expect params.search XBATTBATT
 expect params.search.selection none
 
 # The caret moves: Home, then Delete takes the character after it.
 key Home
 key Delete
-settle 1
 expect params.search BATTBATT
 
 # Shift+End selects from the caret to the end; Ctrl+X cuts it, and Ctrl+V puts it back.
@@ -58,12 +52,9 @@ key Right
 key Right
 key Right
 key shift+End
-settle 1
 expect params.search.selection 4,8
 key ctrl+x
-settle 1
 expect params.search BATT
 expect params.search.selection none
 key ctrl+v
-settle 1
 expect params.search BATTBATT

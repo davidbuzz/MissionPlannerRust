@@ -16,7 +16,7 @@
 env MP_CONFIG_XML $WORK/config.xml
 screen fly
 window 1600x1200
-settle 8
+budget 11
 expect vehicle.connected true
 
 # The strip shows a few tabs at a time; Scripts is the eleventh, reached as fly-tabs.gui reaches
@@ -33,7 +33,6 @@ click fly-tabs-right
 click fly-tabs-right
 expect fly.tabs.first 10
 click fly-tab-scripts
-settle 1
 expect fly.tab tabScripts
 expect fly.script.status Script Status: No Script Running
 expect fly.script.selected Selected Script: None
@@ -45,17 +44,14 @@ click fly-script-select
 expect fly.prompt Python script (*.py)
 type tests/gui/fixtures/hello.py
 # Keystrokes come back through the input method; settle so the click cannot overtake them.
-settle 1
 expect fly.prompt.value tests/gui/fixtures/hello.py
 click fly-prompt-ok
-settle 1
 expect fly.script.selected Selected Script: tests/gui/fixtures/hello.py
 
 # Redirect the output so the console shows, then run.
 click fly-script-redirect
 expect fly.script.redirect true
 click fly-script-run
-settle 4
 expect fly.script.status Script Status: Finished (or aborted)
 expect fly.script.running false
 expect fly.script.result ok

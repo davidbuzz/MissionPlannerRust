@@ -41,14 +41,15 @@ FRACTION=""
 [ "$TARGET" != "$NAME" ] && FRACTION="${TARGET#*@}"
 
 # The probe file is written when a control moves, so it may not exist the instant the window maps.
+# The name is text, not a pattern (-F): a log field called MAV[0].flags has brackets in it.
 # Looked for every 50 ms, up to ten seconds: a control that appears 60 ms after the click that
 # made it costs 60 ms, not a quarter second.
 for _ in $(seq 1 200); do
-    [ -s "$PROBE" ] && grep -q "\"$NAME\"" "$PROBE" && break
+    [ -s "$PROBE" ] && grep -qF "\"$NAME\"" "$PROBE" && break
     sleep 0.05
 done
 
-if ! grep -q "\"$NAME\"" "$PROBE" 2>/dev/null; then
+if ! grep -qF "\"$NAME\"" "$PROBE" 2>/dev/null; then
     echo "control '$NAME' not found in $PROBE" >&2
     echo "known controls:" >&2
     grep -o '"[a-zA-Z0-9_.-]*":' "$PROBE" 2>/dev/null | tr -d '":' | sed 's/^/  /' >&2
@@ -60,14 +61,25 @@ fi
 # a chip whose label grows reflows the row after it. Resolving the target from a file written
 # before that reflow clicks where the control was. So wait until the file has been still for
 # 100 ms (at most 1 s) before reading it - a reflow follows a click within a frame or two.
+# Nanosecond modification times: whole seconds plus the size, as this read before, could not
+# tell two writes 100 ms apart from one, so the wait was no wait at all.
+# Still for 300 ms, not 100: a page chosen from the SETUP list moved the list's rows once more
+# a few frames after the click that chose it, and a click 100 ms into the calm landed on the
+# neighbour four rows down (setup-list.gui, 2026-09-26).
 STAMP=""
-for _ in $(seq 1 10); do
-    NOW=$(stat -c '%Y%s' "$PROBE" 2>/dev/null || echo "")
-    [ -n "$STAMP" ] && [ "$NOW" = "$STAMP" ] && break
+SAME=0
+for _ in $(seq 1 12); do
+    NOW=$(stat -c '%.9Y' "$PROBE" 2>/dev/null || echo "")
+    if [ -n "$STAMP" ] && [ "$NOW" = "$STAMP" ]; then
+        SAME=$((SAME + 1))
+        [ "$SAME" -ge 3 ] && break
+    else
+        SAME=0
+    fi
     STAMP="$NOW"
     sleep 0.1
 done
-LINE=$(grep "\"$NAME\"" "$PROBE")
+LINE=$(grep -F "\"$NAME\"" "$PROBE")
 if [ -z "$FRACTION" ]; then
     COORDS=$(echo "$LINE" | sed -n 's/.*"centre_x": \([0-9.-]*\), "centre_y": \([0-9.-]*\).*/\1 \2/p')
 else

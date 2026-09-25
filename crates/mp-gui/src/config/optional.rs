@@ -713,15 +713,15 @@ pub fn input_box(
         ),
         // ---- end SITL ----
         // ---- Standard / Advanced Params, MAVFtp ----
-        "standard-find-box" => (
-            "standard-find-ok",
-            "standard-find-cancel",
-            "standard-find-value",
+        "standardparams-find-box" => (
+            "standardparams-find-ok",
+            "standardparams-find-cancel",
+            "standardparams-find-value",
         ),
-        "advanced-find-box" => (
-            "advanced-find-ok",
-            "advanced-find-cancel",
-            "advanced-find-value",
+        "advancedparams-find-box" => (
+            "advancedparams-find-ok",
+            "advancedparams-find-cancel",
+            "advancedparams-find-value",
         ),
         "mavftp-prompt-box" => (
             "mavftp-prompt-ok",

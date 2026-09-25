@@ -10,20 +10,21 @@
 
 screen fly
 window 1600x1200
-settle 8
+budget 7
 
 # The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as
 # tabControlactions.SelectedIndex = 0 has it. `GCSViews/FlightData.Designer.cs:595-611`
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click fly-tab-actions
 expect fly.tab tabActions
 
 # Out of Guided first, so the mode request is part of what is sent.
 click Stabilize
-settle 2
 expect vehicle.mode Stabilize
 
 click fly-flytocoords
-settle 1
 expect fly.prompt Please enter the coords 'lat;long;alt' or 'lat;long'
 # The minus as a key: `xdotool type -35...` would read the text as an option.
 key minus
@@ -34,10 +35,8 @@ type 35.3625;149.1657;20
 # latitude or longitude yet" - the refusal for a lat;long with no height, which flies at
 # GuidedMode.z, zero: the box held a prefix such as "-35.3625;149.1657" when the click overtook
 # the rest. So wait, and check the box holds the whole text before answering it.
-settle 2
 expect fly.prompt.value -35.3625;149.1657;20
 click fly-prompt-ok
-settle 2
 expect fly.prompt none
 expect fly.sent ~ SET_POSITION_TARGET_GLOBAL_INT frame=3 mask=0xFDF8 lat=-3536249
 expect fly.sent ~ alt=20
@@ -52,5 +51,4 @@ expect fly.sent nothing: Invalid Field
 
 # Put the mode back for whatever runs next.
 click Stabilize
-settle 2
 expect vehicle.mode Stabilize

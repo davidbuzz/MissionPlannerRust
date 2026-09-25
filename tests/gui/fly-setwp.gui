@@ -14,10 +14,13 @@ setup cargo run -q -p mp-cli --bin headless-planner -- mission tcp:127.0.0.1:576
 
 screen fly
 window 1600x1200
-settle 8
+budget 5
 
 # The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as
 # tabControlactions.SelectedIndex = 0 has it. `GCSViews/FlightData.Designer.cs:595-611`
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click fly-tab-actions
 expect fly.tab tabActions
 
@@ -31,14 +34,11 @@ expect fly.setwp.selected 0 (Home)
 # mission. Yes takes the home, as an operator would.
 click tab-plan
 click plan-read
-settle 4
 expect mission.items 4
 expect plan.prompt Reset Home Coords
 click plan-prompt-ok
-settle 1
 expect plan.prompt none
 click tab-fly
-settle 1
 
 # Five items held: "0 (Home)" and 1 to 5.
 click fly-setwp-list
@@ -47,6 +47,5 @@ click fly-setwp-2
 expect fly.setwp.selected 2
 
 click fly-setwp
-settle 2
 expect fly.sent MISSION_SET_CURRENT seq=2
 expect vehicle.mission_current 2

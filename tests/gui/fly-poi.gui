@@ -13,9 +13,13 @@
 #   tools/gui-test.sh tests/gui/fly-poi.gui -- file:testdata/mavlink/autotest.tlog
 
 env XDG_DATA_HOME $WORK
+# The map's last place in the config (maplast_*, which FlightData.Activate restores), so the
+# flight map opens on Canberra at zoom 16 and a press is a place there: with none it starts at
+# (0, 0) at zoom 3, as Mission Planner's does.
+setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config><maplast_lat>-35.3632621</maplast_lat><maplast_lng>149.1652374</maplast_lng><maplast_zoom>16</maplast_zoom></Config>' > "$WORK/MissionPlannerRust/config.xml"
 screen fly
 window 1600x1200
-settle 4
+budget 16
 
 expect fly.poi.count 0
 expect fly.poi.file ~ MissionPlannerRust/poi.txt
@@ -23,6 +27,8 @@ expect fly.poi.file ~ MissionPlannerRust/poi.txt
 expect fly.poi.file ~ planner-work-
 
 # Press the map: that is where Add Poi adds. A press freezes the view, so the point stays put.
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.5x0.5
 expect fly.mousedown ~ ;
 click fly-tab-actions
@@ -30,7 +36,6 @@ expect fly.tab tabActions
 click fly-poi-add
 expect fly.prompt Enter ID
 type tower
-settle 1
 expect fly.prompt.value tower
 click fly-prompt-ok
 expect fly.prompt none
@@ -44,12 +49,10 @@ click fly-poi-coords
 expect fly.prompt Please enter the coords 'lat;long;alt' or 'lat;long'
 key minus
 type 35.36;149.16
-settle 2
 expect fly.prompt.value -35.36;149.16
 click fly-prompt-ok
 expect fly.prompt Enter ID
 type gate
-settle 1
 click fly-prompt-ok
 expect fly.poi.count 2
 expect fly.poi.list ~ gate -35.3600006103516;149.160003662109
@@ -64,7 +67,6 @@ expect fly.poi.error none
 # Coords that are not two or three numbers are Invalid Field, and add nothing.
 click fly-poi-coords
 type nonsense
-settle 1
 click fly-prompt-ok
 expect status ~ Invalid Field
 expect fly.poi.count 1

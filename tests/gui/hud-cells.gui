@@ -15,20 +15,22 @@
 
 screen fly
 window 1600x1200
-settle 6
+budget 4
 
 # Off, as CheckBatteryShow leaves it with nothing saved: the pack alone on the lower line.
 expect hud.battery.upper none
 expect hud.battery.lower ~ Bat1 12.
 
 # On, with the count the prompt starts at.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click hud@0.5x0.4:right
 click fly-hud-batterycells
 expect fly.prompt Cell Count
 expect fly.prompt.value 4
 click fly-prompt-ok
 expect fly.prompt none
-settle 1
 expect hud.battery.lower ~ Cell 3.1
 expect hud.battery.upper ~ Bat1 12.
 
@@ -36,6 +38,5 @@ expect hud.battery.upper ~ Bat1 12.
 click hud@0.5x0.4:right
 click fly-hud-batterycells
 expect fly.prompt none
-settle 1
 expect hud.battery.upper none
 expect hud.battery.lower ~ Bat1 12.

@@ -19,7 +19,7 @@ setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encodin
 
 screen plan
 window 1600x1200
-settle 4
+budget 10
 
 # What config.xml saved; no vehicle, so no loiter radius to take.
 expect plan.wprad 12
@@ -29,6 +29,8 @@ expect plan.loiterrad.enabled false
 expect plan.spline false
 
 # A click on the map is a waypoint at Default Alt.
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.45x0.40
 expect mission.items 1
 expect mission.last.alt 120
@@ -38,12 +40,10 @@ expect mission.last.command 16
 click plan-defaultalt
 key ctrl+u
 type 7a.5
-settle 1
 expect plan.defaultalt 75
 
 # Left empty, by a click on the map, it is 100 again - and the click's waypoint is at 100.
 key ctrl+u
-settle 1
 click map@0.55x0.45
 expect plan.defaultalt 100
 expect mission.items 2
@@ -53,10 +53,8 @@ expect mission.last.alt 100
 click plan-wprad
 key ctrl+u
 type 2.5x
-settle 1
 expect plan.wprad 2.5
 key ctrl+u
-settle 1
 click plan-defaultalt
 expect plan.wprad 12
 

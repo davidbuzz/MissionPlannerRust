@@ -13,19 +13,17 @@ setup mkdir -p $WORK/logs && cp testdata/dataflash.bin $WORK/logs/flight.bin
 
 screen logs
 window 1600x1200
-settle 3
+budget 6
 
 click log-name
 type flight.bin
 key Return
-settle 3
 
 expect log.open true
 expect log.params.shown false
 expect log.check.params false
 
 click log-chk-params
-settle 1
 expect log.params.shown true
 expect log.params.count 982
 expect log.params.first ACRO_BAL_PITCH=1
@@ -36,10 +34,8 @@ expect log.check.params false
 # The wheel moves the list a row a notch; the first row is still the list's.
 expect log.params.top 0
 scroll log-params down 3
-settle 1
 expect log.params.top > 0
 expect log.params.first ACRO_BAL_PITCH=1
 
 click log-params-close
-settle 1
 expect log.params.shown false

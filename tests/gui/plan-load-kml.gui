@@ -16,9 +16,11 @@ setup cp testdata/planner/route.kml "$WORK/route.kml" && cp testdata/planner/rou
 
 screen plan
 window 1600x1200
-settle 4
+budget 13
 expect mission.items 0
 
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.30x0.70:right
 click menu-fileLoadSave
 click menu-loadKMLFile
@@ -43,11 +45,9 @@ expect mission.items 6
 
 # The POIs are the flight screen's: two Gates.
 click tab-fly
-settle 2
 expect fly.poi.count 2
 expect fly.poi.list ~ Gate -35.362;149.162
 click tab-plan
-settle 2
 
 # A file that is not KML: "Bad KML File :" and the exception.
 click map@0.30x0.70:right

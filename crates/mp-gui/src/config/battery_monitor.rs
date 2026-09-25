@@ -39,8 +39,9 @@
 //!
 //! What a write's failure says - a `catch`'s "Set ... Failed" after `setParam` timed out, the
 //! monitor combo's own "Set BATT_MONITOR Failed!" - goes on the status line, the owner's ruling of
-//! 2026-09-25; what refuses what was typed - "Invalid number entered", text that does not parse,
-//! the feature not enabled - keeps its box. Each `InputBox` OK also keeps the answer as `InputBox`
+//! 2026-09-25; so does what refuses what was typed - "Invalid number entered", text that does not
+//! parse, the feature not enabled - since his word that evening, three times, on that box (a
+//! `Job::Show` is an `Event::Status`). Each `InputBox` OK also keeps the answer as `InputBox`
 //! does, under `InputBox<caption><question>` (`ExtLibs/Controls/InputBox.cs:73-84, 178-184`).
 //!
 //! "MP Alert on Low Battery" reads and writes `Settings.Instance` - Mission Planner's `config.xml`,
@@ -79,9 +80,6 @@ use crate::ui::{action, panel, theme};
 /// `// C#: GCSViews/InitialSetup.resx:243-245`
 pub const TITLE: &str = "Battery Monitor";
 
-/// `Strings.ERROR`, every message box's caption.
-/// `// C#: ExtLibs/Strings/Strings.resx:130-132`
-const ERROR_TITLE: &str = "Error";
 
 /// `Strings.ErrorFeatureNotEnabled`.
 /// `// C#: ExtLibs/Strings/Strings.resx:143-145`
@@ -556,11 +554,13 @@ pub enum Event {
         /// The vehicle's answer.
         outcome: RequestOutcome,
     },
-    /// A handler's message box, outside its writes.
-    Message(&'static str),
     /// A step every name of which the vehicle refused - `setParam`'s false - with what
     /// `MavlinkComboBox` says of it: a link failure.
     Refused(&'static str),
+    /// A message the C# shows in a box outside any `try` ("Invalid number entered", the feature
+    /// not enabled), on the status line here: an avoidable error never gets a box - the owner's
+    /// rule of 2026-09-25, and his word again that evening on that box, three times.
+    Status(&'static str),
     /// A `float.Parse` of what was typed threw into the `catch`; its message, if it shows one
     /// for the monitor the vehicle has.
     Unparsed(OnThrow),
@@ -648,7 +648,7 @@ impl<H: Copy> Runner<H> {
                     continue;
                 }
                 &mut Job::Show(text) => {
-                    events.push(Event::Message(text));
+                    events.push(Event::Status(text));
                     self.running = None;
                     continue;
                 }
@@ -1714,10 +1714,6 @@ impl BatteryMonitor {
             OnThrow::Show(text) => Some(text),
             OnThrow::ShowIfAnalog(text) => analog.then_some(text),
         };
-        let error = |text: &str| Message {
-            title: ERROR_TITLE,
-            text: text.to_owned(),
-        };
         for event in events {
             match event {
                 Event::Written {
@@ -1733,12 +1729,14 @@ impl BatteryMonitor {
                         _ => format!("{name} {value} unchanged"),
                     });
                 }
-                Event::Message(text) => self.messages.push_back(error(text)),
+                Event::Status(text) => self.status = Some(text.trim().to_owned()),
                 Event::Refused(text) => self.status = Some(text.to_owned()),
+                // Text that does not parse is an avoidable error, and the status line's (the
+                // owner's rule of 2026-09-25, and his word on this box that evening).
                 Event::Unparsed(on_throw) => {
                     self.last_write = Some("a number that does not parse failed".to_owned());
                     if let Some(text) = shown(on_throw) {
-                        self.messages.push_back(error(text));
+                        self.status = Some(text.to_owned());
                     }
                 }
                 Event::Threw { what, on_throw } => {
@@ -2829,7 +2827,7 @@ mod tests {
         assert!(
             !events
                 .iter()
-                .any(|event| matches!(event, Event::Message(_)))
+                .any(|event| matches!(event, Event::Status(_)))
         );
     }
 
@@ -3158,12 +3156,11 @@ mod tests {
         runner.push(jobs.clone());
         let events = runner.advance(&Vehicle::holding(&[]));
         battery.absorb(events, None, &view);
+        assert!(battery.message().is_none(), "the status line, not a box");
         assert_eq!(
-            battery.message().map(|message| message.text.as_str()),
+            battery.take_status().as_deref(),
             Some("Set BATT_VOLT_MULT Failed")
         );
-        assert!(battery.take_status().is_none(), "a box, not a status line");
-        battery.dismiss_message();
 
         // With a monitor that is not analog, the same failure is silent.
         let quiet = view_with(&[("BATT_MONITOR", 7.0)]);
@@ -3304,13 +3301,14 @@ mod tests {
         battery.absorb(vec![Event::Refused(COMBO_FAILED)], None, &view);
         assert!(battery.message().is_none());
         assert_eq!(battery.take_status().as_deref(), Some(COMBO_FAILED));
-        // A handler's own box stays a box.
-        battery.absorb(vec![Event::Message(FEATURE_NOT_ENABLED)], None, &view);
+        // A handler's own box is the status line too: an error the window can show as state
+        // never gets a box (the owner's rule, 2026-09-25).
+        battery.absorb(vec![Event::Status(FEATURE_NOT_ENABLED)], None, &view);
+        assert!(battery.message().is_none());
         assert_eq!(
-            battery.message().map(|message| message.text.as_str()),
+            battery.take_status().as_deref(),
             Some(FEATURE_NOT_ENABLED)
         );
-        assert!(battery.take_status().is_none());
     }
 
     /// The Sensor and HW Ver boxes are `DropDown`s: typing changes their text and clears the

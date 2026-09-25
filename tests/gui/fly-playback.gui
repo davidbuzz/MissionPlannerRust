@@ -13,7 +13,7 @@
 
 screen fly
 window 1600x1200
-settle 2
+budget 13
 
 # Telemetry Logs is the thirteenth header: bring it to the front of the row, then show its page.
 click fly-tabs-right
@@ -42,7 +42,6 @@ expect fly.playback.speed x 1
 # 10x: what is left of the recording in under four seconds.
 click fly-speed10
 expect fly.playback.speed x 10
-settle 6
 
 # The end of the file stops it, at 100%, with the button back to Play.
 expect fly.playback.playing false

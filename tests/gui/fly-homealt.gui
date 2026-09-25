@@ -22,10 +22,13 @@ env XDG_DATA_HOME $WORK
 setup mkdir -p "$WORK/MissionPlannerRust/srtm" && python3 -c 'import sys; open(sys.argv[1], "wb").write(bytes([2, 72]) * (1201 * 1201))' "$WORK/MissionPlannerRust/srtm/S36E149.hgt"
 screen fly
 window 1600x1200
-settle 8
+budget 5
 
 # The first quick view is cs.alt, as it starts; the second is made cs.HomeAlt.
 expect fly.quick.1 alt
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 doubleclick fly-quick-2
 expect fly.quick.chooser 2
 click fly-quick-choice-HomeAlt
@@ -37,13 +40,14 @@ click fly-tab-actions
 expect fly.tab tabActions
 
 # Home asked for: the map pressed, Set Home Here, Cancel - home is not moved.
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.5x0.5
 click fly-sethome
 expect fly.prompt This will reset the onboard home position (effects RTL etc). Are you Sure?
 click fly-prompt-cancel
 expect fly.prompt none
 expect fly.sent COMMAND_LONG MAV_CMD_GET_HOME_POSITION 0,0,0,0,0,0,0
-settle 2
 expect fly.quick.2.value > 500
 expect fly.quick.1.value < 50
 

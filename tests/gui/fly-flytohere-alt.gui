@@ -11,24 +11,24 @@
 
 screen fly
 window 1600x1200
-settle 8
+budget 9
 
 # The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as
 # tabControlactions.SelectedIndex = 0 has it. `GCSViews/FlightData.Designer.cs:595-611`
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click fly-tab-actions
 expect fly.tab tabActions
 
 click Stabilize
-settle 2
 
 click fly-flytohere-alt
-settle 1
 expect fly.prompt Enter Guided Mode Alt
 key ctrl+u
 type 25
 # Keystrokes reach the application through the input method (ibus, over XIM) and come back
 # after a round trip; a click does not. Settle, so the click cannot overtake the typing.
-settle 1
 click fly-prompt-frame-relative
 click fly-prompt-ok
 expect fly.prompt none
@@ -42,18 +42,17 @@ key ctrl+u
 type 12.5
 # Keystrokes reach the application through the input method (ibus, over XIM) and come back
 # after a round trip; a click does not. Settle, so the click cannot overtake the typing.
-settle 1
 click fly-prompt-ok
 expect fly.sent nothing: Bad Alt
 expect fly.guided.alt 25
 
 # Fly To Here, now at 25 m in the relative frame.
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.55x0.45:right
-settle 2
 expect fly.sent ~ SET_POSITION_TARGET_GLOBAL_INT frame=3 mask=0xFDF8
 expect fly.sent ~ alt=25
 expect vehicle.mode Guided
 
 click Stabilize
-settle 2
 expect vehicle.mode Stabilize

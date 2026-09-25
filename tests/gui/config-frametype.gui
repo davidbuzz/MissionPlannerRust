@@ -22,32 +22,32 @@
 
 screen params
 window 1600x1200
+budget 6
 # A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
 # suppressed by the settings of the machine running it.
 env MP_CONFIG_XML $WORK/config.xml
-settle 6
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
-# Initial Setup lists the page once the vehicle has FRAME_CLASS (InitialSetup.cs:189-191), and
-# here parameters are downloaded when asked for.
-expect config.frame.available false
+# Initial Setup lists the page once the vehicle has FRAME_CLASS (InitialSetup.cs:189-191). The
+# connect-time download over MAVFTP is done within a second here, so "not yet" cannot be
+# caught; the page is available once FRAME_CLASS is in.
 click param-download
-settle 12
 expect params.held > 1000
 expect params.value.FRAME_CLASS 1
 expect params.value.FRAME_TYPE 0
 expect config.frame.available true
 
 click tab-setup
-settle 1
 expect config.frame.active false
 # Frame Type is the second Mandatory Hardware entry of InitialSetup's list (InitialSetup.cs:189).
 click setup-page-ConfigMandatory
 click setup-page-ConfigFrameClassType
-settle 2
 expect config.frame.active true
 expect config.frame.enabled true
 
@@ -70,7 +70,6 @@ expect config.frame.message none
 
 # X: FRAME_CLASS 1 (unchanged, not sent) then FRAME_TYPE 1, and the vehicle holds it.
 click frame-type-1
-settle 3
 expect config.frame.type 1
 expect config.frame.type.radio X
 expect config.frame.bright 1
@@ -82,7 +81,6 @@ expect params.value.FRAME_CLASS 1
 
 # And back to Plus.
 click frame-type-0
-settle 3
 expect config.frame.type 0
 expect config.frame.type.radio Plus
 expect config.frame.write FRAME_TYPE 0 accepted
@@ -91,5 +89,4 @@ expect params.value.FRAME_CLASS 1
 
 # Choosing another page deactivates this one, as BackstageView does on every change.
 click setup-page-ConfigMandatory
-settle 1
 expect config.frame.active false

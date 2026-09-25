@@ -27,14 +27,17 @@
 env MP_CONFIG_XML $WORK/config.xml
 screen params
 window 1600x1200
-settle 6
+budget 18
+# A first budget, set by hand until a passing run records one.
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
 click param-download
-settle 15
 expect params.held > 1000
 expect params.value.BATT2_MONITOR 0
 
@@ -42,7 +45,6 @@ click tab-setup
 expect config.battery2.active false
 click setup-page-ConfigOptional
 click setup-page-ConfigBatteryMonitoring2
-settle 2
 expect setup.page ConfigBatteryMonitoring2
 expect config.battery2.active true
 expect config.battery2.enabled true
@@ -66,23 +68,21 @@ expect config.battery2.editing battery2-capacity
 key ctrl+u
 type 3000
 click battery2-BATT2_MONITOR
-settle 1
 expect config.battery2.capacity 3000
-expect config.battery2.message This feature is not enabled in your firmware.
+# "This feature is not enabled in your firmware": the C#'s box, on the status line here (the
+# owner's rule of 2026-09-25: an avoidable error never gets a box).
+expect status ~ This feature is not enabled in your firmware.
 expect config.battery2.write none
-click battery2-message-ok
 expect config.battery2.message none
 
 # The monitor's list is down: Analog Voltage Only, then Disabled again.
 click battery2-BATT2_MONITOR-3
-settle 2
 expect config.battery2.monitor 3
 expect config.battery2.monitor.text Analog Voltage Only
 expect config.battery2.write BATT2_MONITOR 3 accepted
 expect params.value.BATT2_MONITOR 3
 click battery2-BATT2_MONITOR
 click battery2-BATT2_MONITOR-0
-settle 2
 expect config.battery2.write BATT2_MONITOR 0 accepted
 expect params.value.BATT2_MONITOR 0
 expect config.battery2.message none
@@ -90,9 +90,9 @@ expect config.battery2.message none
 # The measured voltage on Enter: no divider to scale.
 click battery2-measured
 key Return
-settle 1
-expect config.battery2.message ~ Invalid number entered
-click battery2-message-ok
+# "Invalid number entered": the C#'s box, on the status line here (the same rule).
+expect status ~ Invalid number entered
+expect config.battery2.message none
 expect config.battery2.writes.pending 0
 
 # MP Alert on Low Battery: ticked, it asks three questions, each in an InputBox that takes the
@@ -101,7 +101,6 @@ expect config.battery2.writes.pending 0
 # The script's config.xml starts with none of them.
 expect config.InputBoxNotificationWhatdoyouwantittosay none
 click battery2-speech
-settle 1
 expect config.battery2.speech true
 expect config.speechbatteryenabled True
 expect config.speechenable True
@@ -126,14 +125,12 @@ expect config.speechbatterypercent 25
 expect config.InputBoxBatteryLevelWhatpercentagedoyouwanttowarnat 25
 # Unticked: the setting False, and no question.
 click battery2-speech
-settle 1
 expect config.battery2.speech false
 expect config.speechbatteryenabled False
 expect config.battery2.prompt none
 
 # Deactivate sets _startup: the box left as the page goes writes nothing.
 click setup-page-ConfigOptional
-settle 1
 expect config.battery2.active false
 expect config.battery2.message none
 expect params.value.BATT2_MONITOR 0

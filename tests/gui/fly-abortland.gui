@@ -8,14 +8,16 @@
 
 screen fly
 window 1600x1200
-settle 8
+budget 2
 
 # The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as
 # tabControlactions.SelectedIndex = 0 has it. `GCSViews/FlightData.Designer.cs:595-611`
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click fly-tab-actions
 expect fly.tab tabActions
 
 click fly-abortland
-settle 2
 expect fly.sent COMMAND_LONG MAV_CMD_DO_GO_AROUND 0,0,0,0,0,0,0
 expect fly.ack ~ MAV_CMD_DO_GO_AROUND:

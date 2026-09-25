@@ -4518,30 +4518,41 @@ fn field_panel(
 
     panel(
         "fields",
+        // Fills the panel's height and no more: `flex_shrink_0` here was along the panel's
+        // column, so the body kept its content's height - 643 chips, reaching 500 px below
+        // the window with no way to scroll (log-browse.gui, 2026-09-25).
         div()
             .flex()
             .flex_col()
             .w(px(300.0))
-            .flex_shrink_0()
+            .flex_1()
             .gap_2()
             .min_h(px(0.0))
             .child(
-                // Measured, so a script can wheel it until a field is inside its box.
+                // Measured by its scrolling box - the rows in view, not the union of every
+                // row, which reached below the window and told `reveal` a field was in view
+                // when it was not (2026-09-25) - so a script can wheel it until a field is in.
                 crate::probe::measured("log-fields", div())
-                    .id("log-fields")
                     .flex()
                     .flex_col()
                     .flex_1()
                     .min_h(px(0.0))
-                    .gap_2()
-                    .overflow_y_scroll()
                     .child(
                         div()
-                            .text_xs()
-                            .text_color(rgb(theme::DIM))
-                            .child(format!("{total} fields")),
-                    )
-                    .child(list),
+                            .id("log-fields")
+                            .flex()
+                            .flex_col()
+                            .size_full()
+                            .gap_2()
+                            .overflow_y_scroll()
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(theme::DIM))
+                                    .child(format!("{total} fields")),
+                            )
+                            .child(list),
+                    ),
             )
             .child(info),
     )

@@ -39,7 +39,7 @@ setup printf '\357\273\277<?xml version="1.0" encoding="utf-8"?>\n<Config>\n  <r
 
 screen params
 window 1600x1200
-settle 12
+budget 84
 
 expect vehicle.connected true
 expect params.held > 1000
@@ -49,7 +49,6 @@ expect params.active true
 expect params.warning true
 expect params.config.SHOWAGAIN_Raw_Param_Warning none
 click raw-param-warning-ok
-settle 1
 expect params.warning false
 
 # The widths and the splitter as config.xml has them; the rest the .resx's.
@@ -64,11 +63,9 @@ expect params.splitter 260
 # The tree lists every group; RTL lies below a 1200-pixel window: wheeled into view.
 reveal params-tree param-group-RTL
 click param-group-RTL
-settle 1
 expect params.fav none
 expect params.rows.first RTL_ALT_FINAL_M
 click param-fav-RTL_LOIT_TIME
-settle 1
 expect params.fav RTL_LOIT_TIME
 expect params.config.fav_params RTL_LOIT_TIME
 expect params.rows.first RTL_LOIT_TIME
@@ -84,17 +81,14 @@ expect params.control.text 5000
 # The typed Value cell: out of range, asked, No - nothing written, the value kept.
 expect params.write.name none
 doubleclick param-value-RTL_LOIT_TIME
-settle 1
 expect params.editing RTL_LOIT_TIME
 key ctrl+u
 type 99999
 key Return
-settle 1
 expect params.editing none
 expect params.box Out of range
 expect params.box.text RTL_LOIT_TIME value is out of range. Do you want to continue?
 click param-box-no
-settle 1
 expect params.box none
 expect params.write.name none
 expect params.selected.value 5000
@@ -102,30 +96,25 @@ expect params.red none
 
 # The NumericUpDown's arrows: 6000 written and heard back, then 5000 again.
 click param-options-up
-settle 3
 expect params.control.text 6000
 expect params.write.name RTL_LOIT_TIME
 expect params.write.outcome accepted
 expect params.selected.value 6000
 expect params.changes 0
 click param-options-down
-settle 3
 expect params.write.outcome accepted
 expect params.selected.value 5000
 
 # Ctrl+S from the grid with nothing waiting.
 click param-value-RTL_LOIT_TIME
 key ctrl+s
-settle 1
 expect params.box No changes
 expect params.box.text No parameters were changed.
 click param-box-ok
-settle 1
 expect params.box none
 
 # Leaving is Deactivate: every width and the splitter into the settings.
 click tab-fly
-settle 2
 expect params.active false
 expect params.config.rawparam_Options_width 222
 expect params.config.rawparam_Command_width 130
@@ -135,7 +124,6 @@ expect params.config.rawparam_splitterdistance 260
 
 # The close box saves config.xml; the next start reads the widths, the splitter and the favourite.
 restart
-settle 12
 expect params.active true
 expect params.warning true
 expect params.width.Options 222
@@ -144,14 +132,10 @@ expect params.fav RTL_LOIT_TIME
 
 # "Show me again?" unticked: saved False, and the next Activate asks nothing.
 click raw-param-warning-again
-settle 1
 expect params.config.SHOWAGAIN_Raw_Param_Warning False
 click raw-param-warning-ok
-settle 1
 click tab-fly
-settle 1
 click tab-params
-settle 1
 expect params.active true
 expect params.warning false
 
@@ -159,9 +143,7 @@ expect params.warning false
 # The tree is drawn afresh on each return to the screen, unscrolled: wheeled to RTL again.
 reveal params-tree param-group-RTL
 click param-group-RTL
-settle 1
 click param-fav-RTL_LOIT_TIME
-settle 1
 expect params.fav none
 expect params.config.fav_params RTL_LOIT_TIME
 expect params.rows.first RTL_ALT_FINAL_M

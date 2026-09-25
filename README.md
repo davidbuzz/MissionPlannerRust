@@ -16,7 +16,7 @@ launcher.
 
 Measured on this tree (2026-09-25): **24 crates, 301,957 hand-written Rust LOC** (plus 91,634
 generated; `.rs` files under `crates/`, tests included), **3,201 tests** on `cargo test --workspace`
-(3,159 pass, 42 ignored: they need SITL, a window, or the network), **165 GUI scripts** under
+(3,159 pass, 42 ignored: they need SITL, a window, or the network), **166 GUI scripts** under
 `tests/gui/`, across 242 commits.
 Linux only, so far: the repository has no remote, and the three-OS CI matrix has never run.
 
@@ -53,20 +53,17 @@ Linux only, so far: the repository has no remote, and the three-OS CI matrix has
 | Configuration coverage | every one of the 61 `Config*.cs` panels listed in Mission Planner's SETUP and CONFIG order with what stands in for it here — 31 done, 14 partial, 2 missing, 2 plumbing, 12 dropped at the owner's ruling — in `docs/coverage/configuration.md`, held to the C# by tests; Flight Modes and FailSafe are ported from their `Config*.cs` and proved against SITL; the pages of PLAN.md §13.6 rows 70 and 71 and FFT Setup have scripts not yet run |
 | Planner coverage and menu | every one of `FlightPlanner`'s 121 wired actions listed the same way — 103 done, 6 missing — in `docs/coverage/flightplanner.md`; the map's right-click menu is Mission Planner's, in its order, with 63 entries working and 8 more on the polygon icon's menu, each held to its ledger row by `planner_coverage.rs`'s tests; home is its Home Location boxes written first and drawn as its green pin, the panel's radius and altitude boxes set the C#'s parameters after Write; 55 `plan-*.gui` scripts drive them, row 69's five (Write Fast, MAVFTP, Grid and coordinates, docking, prefetch) not yet run |
 
-**GUI scripts: written is not run.** `tests/gui/` holds 165 scripts. The owner runs them
-(`tools/gui-test.sh`, or `tools/gui-suite.sh` for several); they take the machine's pointer, so no agent
-does. The 133 written by the end of 2026-09-24 have been run (every script after PLAN.md §13.4 row 55,
-the pending ones again in §13.6 row 67): at their last runs `fly-resumemis` fails for a reason not yet
-found, six failed under load and are owed a quiet re-run (`config-ateryx`, `config-firmware`,
-`config-radio`, `plan-load-kml`, `plan-load-shp`, `plan-poi`), and three have had no clean run
-(`plan-polygon-tools`, `plan-rally-file`, `plan-rally-sitl`). Of the 32 written on 2026-09-25, the two
-bench scripts that flashed and asked the CubeOrange have run; the other 30 - the SETUP and CONFIG pages
-of §13.6 rows 70 and 71 and FFT Setup, `main-connect`, `params-autofetch`, `params-list-remainder`,
-`params-list-columns`, row 69's five planner scripts, `config-import`, `fly-tabs-de`, `sitl`, `config-video`,
-`textfield-clipboard`, `config-simple-pids` and `fly-scripts` - were run that evening: 11 passed and 19 failed,
-every failure traced (a script, the runner, the SITL start, or the code: the planner had never asked for
-`AUTOPILOT_VERSION`, so the MAVFtp page never listed) and fixed, and the 19 are owed a re-run. 43 older
-scripts were edited that day (the data directory's rename, row 65's pages) and have no run recorded since.
+**GUI scripts run at the application's pace.** `tests/gui/` holds 166 scripts. The owner runs them
+(`tools/gui-test.sh`, or `tools/gui-suite.sh` for several); they take the machine's pointer, so no
+agent does. No script waits a fixed time: `expect` polls its fact for up to ten seconds, a click
+waits for its control, and every script carries `budget N`, the run time it is expected to take
+(PLAN.md §13.6 row 97) - a run over it fails, and one three seconds past it is killed after a
+screenshot of the window. Results (2026-09-26): of the 166 scripts, 163 pass at their latest run on
+this machine against SITL; `storm` is skipped by a debug-build suite (its number is the release
+build's); the two `-bench` scripts flash the CubeOrange and run only on the owner's word (both ran
+on 2026-09-25). The full suite runs in about 25 minutes where the settled scripts took over 50.
+`sitl-launch.gui` (the SIMULATION tab's copter picture starting a simulator and the application
+flying it) needs port 5760 free and is skipped by a suite whose SITL holds it.
 
 **Not yet**: any run on Windows or macOS - the repository has no remote, so the three-OS CI matrix has never
 executed, and the two columns in `DELIVERABLES.md` say so; a joystick latency histogram from a real device

@@ -19,7 +19,7 @@
 
 screen fly
 window 1600x1200
-settle 8
+budget 13
 
 expect fly.hud.menu false
 expect fly.swapped false
@@ -29,6 +29,9 @@ expect fly.hud.ground hud
 expect fly.hud.items none
 
 # Russian Hud: the flag over, and the menu closed by the click.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click hud@0.5x0.4:right
 expect fly.hud.menu true
 expect fly.hud.menu.video false
@@ -77,12 +80,10 @@ expect fly.prompt.value ~ alt:
 click fly-prompt-ok
 expect fly.prompt none
 expect fly.hud.items ~ alt=alt:
-settle 1
 expect hud.custom.count 1
 # Checked again, it comes off.
 click fly-hud-item-alt
 expect fly.hud.items none
-settle 1
 expect hud.custom.count 0
 # A header cancelled leaves the box unchecked.
 click fly-hud-item-alt
@@ -95,11 +96,9 @@ expect fly.hud.items.open false
 click hud@0.5x0.4:right
 click fly-hud-swap
 expect fly.swapped true
-settle 1
 expect fly.hud.left > 400
 click hud@0.5x0.4:right
 expect fly.hud.menu true
 click fly-hud-swap
 expect fly.swapped false
-settle 1
 expect fly.hud.left < 100

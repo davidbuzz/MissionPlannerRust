@@ -24,22 +24,22 @@ env MP_CONFIG_XML $WORK/config.xml
 setup rm -rf /tmp/planner-mavftp && mkdir -p /tmp/planner-mavftp/down && printf 'hello from the mavftp page\n' > /tmp/planner-mavftp/hello.txt
 screen params
 window 1600x1200
-settle 6
+budget 23
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
 click param-download
-settle 15
 expect params.held > 1000
 
 click tab-config
-settle 1
 expect config.pages ~ MavFTPUI
 expect config.mavftp.active false
 click config-page-MavFTPUI
-settle 8
 expect config.page MavFTPUI
 expect config.title MAVFtp
 expect config.mavftp.active true
@@ -56,19 +56,15 @@ expect config.mavftp.dialog none
 
 # The root, and a folder made in it.
 click mavftp-node-/
-settle 4
 expect config.mavftp.selected /
 click mavftp-list:right
-settle 1
 expect config.mavftp.menu true
 click mavftp-menu-newfolder
-settle 1
 expect config.mavftp.menu false
 expect config.mavftp.prompt Folder Name
 expect config.InputBoxFolderNameEnterfoldername none
 type mprtest
 key Return
-settle 5
 expect config.mavftp.prompt none
 # The OK keeps the name as InputBox keeps every titled answer (InputBox.cs:73-84, 178-184).
 expect config.InputBoxFolderNameEnterfoldername mprtest
@@ -78,16 +74,13 @@ expect config.mavftp.status Ready
 
 # Into it, and a file uploaded there: its CRC agrees, or the status line would say so.
 doubleclick mavftp-item-mprtest
-settle 4
 expect config.mavftp.selected /mprtest
 expect config.mavftp.list.count 0
 click mavftp-list:right
 click mavftp-menu-upload
-settle 1
 expect config.mavftp.prompt Open
 type /tmp/planner-mavftp/hello.txt
 key Return
-settle 8
 expect config.mavftp.dialog none
 expect config.mavftp.list hello.txt
 expect config.mavftp.item.hello.txt.size 27B
@@ -96,7 +89,6 @@ expect config.mavftp.item.hello.txt.size 27B
 click mavftp-item-hello.txt
 click mavftp-item-hello.txt:right
 click mavftp-menu-crc
-settle 4
 expect config.mavftp.message ~ hello.txt: 0x
 click mavftp-message-ok
 expect config.mavftp.message none
@@ -104,44 +96,35 @@ expect config.mavftp.message none
 # Read back into a folder of its own.
 click mavftp-item-hello.txt:right
 click mavftp-menu-download
-settle 1
 expect config.mavftp.prompt Browse For Folder
 key ctrl+u
 type /tmp/planner-mavftp/down
 key Return
-settle 6
 expect config.mavftp.dialog none
 expect config.mavftp.status Ready
 
 # Renamed in place.
 click mavftp-item-hello.txt:right
 click mavftp-menu-rename
-settle 1
 expect config.mavftp.renaming hello.txt
 key ctrl+u
 type renamed.txt
 key Return
-settle 5
 expect config.mavftp.renaming none
 expect config.mavftp.list renamed.txt
 
 # Removed.
 click mavftp-item-renamed.txt:right
 click mavftp-menu-delete
-settle 5
 expect config.mavftp.list.count 0
 expect config.mavftp.status Ready
 
 # Sorting: the root's list by name, then back.
 click mavftp-node-/
-settle 4
 click mavftp-col-0
-settle 1
 click mavftp-col-0
-settle 1
 expect config.mavftp.list ~ mprtest
 
 # Choosing another page hides this one.
 click config-page-ConfigUserDefined
-settle 1
 expect config.mavftp.active false

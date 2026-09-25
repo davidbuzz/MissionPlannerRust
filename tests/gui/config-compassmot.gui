@@ -23,24 +23,25 @@
 
 screen params
 window 1600x1200
+budget 6
 # A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
 # suppressed by the settings of the machine running it.
 env MP_CONFIG_XML $WORK/config.xml
-settle 6
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
 click param-download
-settle 15
 expect params.held > 1000
 
 click tab-setup
 expect config.compassmot.active false
 click setup-page-ConfigOptional
 click setup-page-ConfigCompassMot
-settle 1
 expect setup.page ConfigCompassMot
 expect config.compassmot.active true
 expect config.compassmot.button Start
@@ -53,7 +54,6 @@ expect config.compassmot.points 0
 
 # Start: the command sent, the timer running, the box filling with the vehicle's messages.
 click compassmot-button
-settle 3
 expect config.compassmot.button Finish
 expect config.compassmot.running true
 expect config.compassmot.timer true
@@ -61,14 +61,12 @@ expect config.compassmot.starts 1
 
 # Finish: the ack, and "Start" again.
 click compassmot-button
-settle 2
 expect config.compassmot.button Start
 expect config.compassmot.running false
 expect config.compassmot.acks 1
 
 # Choosing another page is Deactivate: the ack once more, the subscription ended.
 click setup-page-ConfigOptional
-settle 1
 expect config.compassmot.active false
 expect config.compassmot.acks 2
 expect config.compassmot.subscribed false

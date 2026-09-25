@@ -19,12 +19,14 @@ setup printf '%s\n' '-35.3625 149.166' '-35.364 149.164' '-35.364 149.168' '-35.
 
 screen plan
 window 1600x1200
-settle 4
+budget 17
 
 expect survey.points 0
 expect fence.return none
 
 # Load from File: the dialog, then the file's return location and three corners.
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.30x0.70:right
 click menu-geoFence
 click menu-loadFromFile

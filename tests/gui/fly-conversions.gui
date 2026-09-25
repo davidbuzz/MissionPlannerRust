@@ -20,7 +20,7 @@ setup mkdir -p $WORK/logs && cp testdata/dataflash.bin $WORK/logs/
 
 screen fly
 window 1600x1200
-settle 2
+budget 20
 
 # DataFlash Logs is the last header: bring it to the front of the row, then show its page.
 click fly-tabs-right
@@ -48,11 +48,9 @@ click fly-bintolog
 expect fly.prompt Binary Log
 expect fly.prompt.value ~ /logs/
 type dataflash.bin
-settle 1
 expect fly.prompt.value ~ /logs/dataflash.bin
 click fly-prompt-ok
 expect fly.prompt none
-settle 5
 expect fly.logs.convert.running none
 expect fly.logs.convert.last bintolog
 expect fly.logs.convert.error none
@@ -64,9 +62,7 @@ expect status ~ /logs/dataflash.log
 click fly-dflogtokml
 expect fly.prompt Log Files
 type dataflash.bin
-settle 1
 click fly-prompt-ok
-settle 5
 expect fly.logs.convert.running none
 expect fly.logs.convert.last dflogtokml
 expect fly.logs.convert.error none
@@ -79,9 +75,7 @@ expect fly.logs.convert.files ~ dataflash.kmz:
 click fly-matlab
 expect fly.prompt Log Files
 type dataflash.bin
-settle 1
 click fly-prompt-ok
-settle 8
 expect fly.logs.convert.running none
 expect fly.logs.convert.last matlab
 expect fly.logs.convert.error none
@@ -90,9 +84,7 @@ expect fly.logs.convert.files dataflash.bin-11439.mat:1266584
 # A log that is not there is what the C#'s message box says, and nothing is written.
 click fly-matlab
 type missing.bin
-settle 1
 click fly-prompt-ok
-settle 2
 expect fly.logs.convert.last matlab
 expect fly.logs.convert.error ~ Error converting file
 expect fly.logs.convert.files none

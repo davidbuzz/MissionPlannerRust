@@ -21,11 +21,13 @@ setup printf '%s\n' '-35.3632621 149.1652374' '-35.3600 149.1600' '-35.3600 149.
 
 screen plan
 window 1600x1200
-settle 4
+budget 32
 
 expect survey.dialog closed
 
 # No polygon: the C#'s "Please define a polygon." (its "Load a file?" first is not ported).
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.50x0.50:right
 click menu-autoWP
 expect plan.menu.submenu menu-autoWP
@@ -162,7 +164,6 @@ expect mission.items 115
 # The close box saves config.xml; the next process reads it back, and the dialog over the square
 # loads the altitude from it. The polygon is not kept, so the .fen is loaded again.
 restart
-settle 4
 expect config.grid_alt 120
 expect config.grid_angle 45
 click map@0.30x0.70:right

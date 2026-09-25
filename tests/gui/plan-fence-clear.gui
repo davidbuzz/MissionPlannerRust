@@ -14,9 +14,12 @@ setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encodin
 
 screen plan
 window 1600x1200
-settle 4
+budget 10
+# A first budget, set by hand until a passing run records one.
 
 # A return location, a drawn polygon of three corners, and a geofence of three.
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.50x0.50:right
 click menu-geoFence
 click menu-setReturnLocation
@@ -28,6 +31,12 @@ click map@0.65x0.65
 expect survey.points 3
 expect survey.shown 3
 click draw-fence
+# The first fence asks "FlightPlan Fence" with its "Show me again?" (row 92): unticked, so a
+# later Draw Fence in this run is not asked again, then OK.
+expect plan.prompt FlightPlan Fence
+click plan-prompt-again
+click plan-prompt-ok
+expect plan.prompt none
 click map@0.40x0.40
 click map@0.60x0.40
 click map@0.60x0.60
@@ -38,7 +47,6 @@ click map@0.30x0.70:right
 click menu-geoFence
 click menu-clear
 expect plan.menu closed
-settle 1
 expect plan.params.busy false
 expect plan.params FENCE_ENABLE=unknown,FENCE_ACTION=unknown,FENCE_TOTAL=unknown
 expect fence.points 0

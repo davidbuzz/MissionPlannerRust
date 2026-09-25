@@ -17,24 +17,25 @@
 
 screen params
 window 1600x1200
+budget 8
 # A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
 # suppressed by the settings of the machine running it.
 env MP_CONFIG_XML $WORK/config.xml
-settle 6
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
 click param-download
-settle 15
 expect params.held > 1000
 
 click tab-setup
 expect config.osd.active false
 click setup-page-ConfigOptional
 click setup-page-ConfigHWOSD
-settle 1
 expect setup.page ConfigHWOSD
 expect config.osd.active true
 expect config.osd.enabled true
@@ -49,7 +50,6 @@ expect config.osd.presses 0
 # listed - and the C#'s try/catch, which only catches a throw, shows nothing: the button does
 # nothing on this firmware, in Mission Planner as here. The last call's false is the fact.
 click osd-enable-telemetry
-settle 12
 expect config.osd.presses 1
 expect config.osd.writes.pending 0
 expect config.osd.write SR3_RC_CHAN 2 false
@@ -57,5 +57,4 @@ expect config.osd.message none
 
 # Choosing another page hides this one; it is IActivate only.
 click setup-page-ConfigOptional
-settle 1
 expect config.osd.active false

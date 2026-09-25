@@ -21,21 +21,22 @@
 env MP_CONFIG_XML $WORK/config.xml
 screen params
 window 1600x1200
-settle 6
+budget 16
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
 click param-download
-settle 15
 expect params.held > 1000
 
 click tab-setup
 expect config.fft.active false
 click setup-page-ConfigOptional
 click setup-page-ConfigFFT
-settle 1
 expect setup.page ConfigFFT
 expect config.fft.active true
 expect config.fft.enabled true
@@ -54,19 +55,16 @@ expect config.fft.window false
 # The number's up arrow: one increment, written at once; its down arrow puts it back. The box
 # shows one decimal place, `DecimalPlaces = increment.ToString().Length - 1` (RangeControl.cs:42).
 click fft-INS_LOG_BAT_CNT-up
-settle 5
 expect config.fft.count 1056.0
 expect config.fft.writes.pending 0
 expect config.fft.write INS_LOG_BAT_CNT 1056 accepted
 expect params.value.INS_LOG_BAT_CNT 1056
 click fft-INS_LOG_BAT_CNT-down
-settle 5
 expect config.fft.write INS_LOG_BAT_CNT 1024 accepted
 expect params.value.INS_LOG_BAT_CNT 1024
 
 # FFT: the window, as the Designer makes it.
 click fft-but_fft
-settle 1
 expect config.fft.window true
 expect config.fft.opened 1
 expect config.fft.window.bins 10
@@ -82,13 +80,10 @@ expect config.fft.window.bins 8
 
 # Run all imus - IMU1-3 MSG: its file dialog, the log typed.
 click fft-but_fftimu13
-settle 1
 expect config.fft.window.prompt Run all imus - IMU1-3 MSG
 type testdata/dataflash.bin
-settle 1
 expect config.fft.window.prompt.text testdata/dataflash.bin
 click fft-open-ok
-settle 4
 expect config.fft.window.prompt none
 expect config.fft.window.running none
 expect config.fft.window.last imu13 done
@@ -107,26 +102,22 @@ expect config.fft.window.graph.5.title Title
 # rate as InputBox keeps every titled answer (fftui.cs:25-46; InputBox.cs:73-84, 178-184). The
 # log is no wav; what the run draws of it is not what this checks.
 click fft-BUT_runwav
-settle 1
+settle 0.3
 type testdata/dataflash.bin
 click fft-open-ok
-settle 1
 expect config.fft.window.prompt none
 expect config.fft.window.rate 8000
 key ctrl+u
 type 4000
 click fft-rate-ok
-settle 4
 expect config.fft.window.rate none
 expect config.InputBoxfftsampleratentersourcefilesamplerate 4000
 
 # The close box; the page stays.
 click fft-close
-settle 1
 expect config.fft.window false
 expect config.fft.active true
 
 # Choosing another page hides this one.
 click setup-page-ConfigOptional
-settle 1
 expect config.fft.active false

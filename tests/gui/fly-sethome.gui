@@ -20,8 +20,11 @@ env XDG_DATA_HOME $WORK
 setup mkdir -p "$WORK/MissionPlannerRust/srtm" && python3 -c 'import sys; open(sys.argv[1], "wb").write(bytes([2, 72]) * (1201 * 1201))' "$WORK/MissionPlannerRust/srtm/S36E149.hgt"
 screen fly
 window 1600x1200
-settle 8
+budget 9
 
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click fly-tab-actions
 expect fly.tab tabActions
 expect fly.page.overflow 0
@@ -35,6 +38,8 @@ expect fly.prompt none
 expect status Error: No SRTM data for this area
 
 # Press the map: that is where the entries act.
+# The map first: a press before its first paint records nothing.
+expect map.ready true
 click map@0.5x0.5
 expect fly.mousedown ~ ;
 
@@ -55,7 +60,6 @@ click fly-prompt-ok
 expect fly.prompt none
 expect fly.sent ~ COMMAND_INT MAV_CMD_DO_SET_HOME 0,0,0,0 x=-353
 expect fly.sent ~ z=584 frame=0; COMMAND_LONG MAV_CMD_GET_HOME_POSITION 0,0,0,0,0,0,0
-settle 3
 expect fly.mousedown.home < 2
 
 # Point Camera Coords with only a latitude and longitude takes the terrain's height there.
@@ -63,7 +67,6 @@ click fly-pointcameracoords
 expect fly.prompt Please enter the coords 'lat;long;alt(abs)' or 'lat;long'
 key minus
 type 35.36;149.16
-settle 1
 expect fly.prompt.value -35.36;149.16
 click fly-prompt-ok
 expect fly.sent COMMAND_INT MAV_CMD_DO_SET_ROI 0,0,0,0 x=-353600006 y=1491600036 z=584 frame=0

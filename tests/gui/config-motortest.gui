@@ -29,16 +29,18 @@
 env MP_CONFIG_XML $WORK/config.xml
 screen params
 window 1600x1200
-settle 6
+budget 17
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
 click raw-param-warning-again
 click raw-param-warning-ok
 
 # Initial Setup lists the page once every parameter is in (isConnected && gotAllParams,
 # InitialSetup.cs:315-318), and here parameters are downloaded when asked for.
 click param-download
-settle 15
 expect params.held > 1000
 expect params.value.FRAME_CLASS 1
 expect params.value.FRAME_TYPE 0
@@ -49,7 +51,6 @@ expect config.motortest.active false
 # Motor Test is an Optional Hardware entry of InitialSetup's list.
 click setup-page-ConfigOptional
 click setup-page-ConfigMotorTest
-settle 2
 expect setup.page ConfigMotorTest
 expect config.motortest.active true
 expect config.motortest.enabled true
@@ -70,7 +71,6 @@ expect config.motortest.link ~ connect-escs-and-motors.html
 
 # Test motor A: DO_MOTOR_TEST motor 1, throttle type 0 (percent), 5 %, 2 s, count 0.
 click motortest-motor-A
-settle 1
 expect config.motortest.press Test motor A
 expect config.motortest.last.params 1 0 5 2 0 0 0
 expect config.motortest.commands 1/5/2/0
@@ -78,11 +78,9 @@ expect config.motortest.outcomes accepted
 expect config.motortest.ack MAV_CMD_DO_MOTOR_TEST: accepted
 expect config.motortest.acks 1
 # Let the vehicle's two seconds run out.
-settle 3
 
 # Test all in Sequence: motor 1 with the count, 4.
 click motortest-sequence
-settle 1
 expect config.motortest.press Test all in Sequence
 expect config.motortest.last.params 1 0 5 2 4 0 0
 expect config.motortest.outcomes accepted
@@ -92,7 +90,6 @@ expect config.motortest.acks 1
 # Stop all motors, with the sequence still running: every motor, zero throttle, zero seconds, and
 # the vehicle acknowledges all four.
 click motortest-stop
-settle 2
 expect config.motortest.press Stop all motors
 expect config.motortest.commands 1/0/0/0,2/0/0/0,3/0/0/0,4/0/0/0
 expect config.motortest.last.params 4 0 0 0 0 0 0
@@ -107,12 +104,10 @@ key ctrl+u
 type 10
 expect config.motortest.duration 10
 click motortest-motor-B
-settle 2
 expect config.motortest.last.params 2 0 5 10 0 0 0
 expect config.motortest.outcomes accepted
 expect config.motortest.outputs 1050,1000,1000,1000
 click motortest-stop
-settle 2
 expect config.motortest.outcomes accepted,accepted,accepted,accepted
 
 # The arrows step by one: back to 2 s, then Test all motors, every motor in turn.
@@ -122,13 +117,11 @@ type 3
 click motortest-duration-down
 expect config.motortest.duration 2
 click motortest-all
-settle 2
 expect config.motortest.press Test all motors
 expect config.motortest.commands 1/5/2/0,2/5/2/0,3/5/2/0,4/5/2/0
 expect config.motortest.outcomes accepted,accepted,accepted,accepted
 expect config.motortest.acks 4
 click motortest-stop
-settle 2
 expect config.motortest.outcomes accepted,accepted,accepted,accepted
 
 # Set Motor Spin Arm: the throttle is under 20, so the InputBox asks for it plus 2, and OK writes
@@ -139,7 +132,6 @@ expect config.motortest.enabled false
 expect config.motortest.prompt Enter arm throttle % (deadzone + 2%)
 expect config.motortest.prompt.value 7
 click motortest-prompt-ok
-settle 2
 expect config.motortest.prompt none
 expect config.InputBoxChangeThrottleEnterarmthrottledeadzone2 7
 expect config.motortest.spin MOT_SPIN_ARM 0.07 accepted
@@ -151,7 +143,6 @@ click motortest-spin-arm
 key ctrl+u
 type 10
 click motortest-prompt-ok
-settle 2
 expect config.motortest.spin MOT_SPIN_ARM 0.1 accepted
 expect params.value.MOT_SPIN_ARM 0.1
 expect config.InputBoxChangeThrottleEnterarmthrottledeadzone2 10
@@ -167,5 +158,4 @@ expect config.motortest.enabled true
 
 # Choosing another page hides this one; ConfigMotorTest has no Deactivate.
 click setup-page-ConfigOptional
-settle 1
 expect config.motortest.active false
