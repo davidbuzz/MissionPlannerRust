@@ -208,8 +208,9 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
         //     view the lists read (Basic, Advanced, or the Custom file), saved as displayview;
         //     Video Device and Video Format list the V4L2 capture devices and their MJPEG and
         //     YUYV formats, Start captures (mp-video) and the HUD draws the frame under
-        //     everything, Stop ends it - Linux only, DirectShow on Windows not yet; dimmed for
-        //     want of what they drive: the HUD overlay, GDI+, language, theme, OSD colour, Vario,
+        //     everything, Stop ends it - Linux only, DirectShow on Windows not yet; Enable HUD
+        //     Overlay sets hudon, the picture alone when unticked; dimmed for
+        //     want of what they drive: GDI+, language, theme, OSD colour, Vario,
         //     password, the ADSB server, analytics, beta updates, MAVLink debug and the testing
         //     screen; the flight screen does not yet read the units, the track length, the map's
         //     rotation or the icon settings, nor the link the GCS id or the rates on connecting |

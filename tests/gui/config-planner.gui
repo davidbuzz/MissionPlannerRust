@@ -8,8 +8,9 @@
 # MainV2.cs:4247-4330), a telemetry rate sets cs.rate (config.planner.rates), Enable Speech shows
 # the speech boxes and each speech box asks for its templates in the C#'s InputBoxes
 # (ConfigPlanner.cs:380-550), Map is rotated unticks No Fly (:755-765), Load Waypoints on connect
-# sets the read on connect (MainV2.cs:1750-1759), and Joystick Setup opens the joystick page
-# (:552-555). The dimmed controls - theme, language, GDI+ and the rest - do nothing; the video
+# sets the read on connect (MainV2.cs:1750-1759), Joystick Setup opens the joystick page
+# (:552-555), and Enable HUD Overlay sets the HUD's hudon (hud.hudon), which MainV2 reads back at
+# the next start (:374-378, MainV2.cs:938-939). The dimmed controls - theme, language, GDI+ and the rest - do nothing; the video
 # controls are tests/gui/config-video.gui's.
 #
 # Settings.Instance is Mission Planner's config.xml, one dictionary: a handler puts its key in it
@@ -38,7 +39,7 @@ settle 4
 expect config.page ConfigPlanner
 expect config.title Planner
 expect config.planner.active true
-expect config.planner.dimmed CHK_hudshow,CHK_GDIPlus,CHK_Password,chk_ADSB,chk_analytics,CHK_beta,CHK_mavdebug,chk_temp,CMB_osdcolor,CMB_language,CMB_theme,BUT_themecustom,BUT_Vario
+expect config.planner.dimmed CHK_GDIPlus,CHK_Password,chk_ADSB,chk_analytics,CHK_beta,CHK_mavdebug,chk_temp,CMB_osdcolor,CMB_language,CMB_theme,BUT_themecustom,BUT_Vario
 
 # SaveConfig ran once, at start-up, before the page was activated.
 expect config.saved startup
@@ -158,6 +159,19 @@ click planner-CHK_GDIPlus
 expect config.planner.CHK_GDIPlus none
 expect config.planner.check.CHK_GDIPlus false
 
+# Enable HUD Overlay: ticked as the Designer has it, hudon true from the HUD's constructor. A click
+# sets hudon and writes CHK_hudshow (ConfigPlanner.cs:374-378). No camera runs, so the HUD draws
+# its instruments all the same (HUD.cs:1988-2013); config-video.gui unticks it over a picture.
+expect config.planner.check.CHK_hudshow true
+expect config.planner.CHK_hudshow none
+expect hud.hudon true
+expect hud.instruments true
+click planner-CHK_hudshow
+expect config.planner.check.CHK_hudshow false
+expect config.planner.CHK_hudshow False
+expect hud.hudon false
+expect hud.instruments true
+
 # Joystick Setup opens the joystick page in a window of its own, over this one.
 click planner-BUT_Joystick
 expect config.planner.joystick true
@@ -186,6 +200,10 @@ expect config.planner.units.alt ft
 expect config.planner.check.CHK_speechwaypoint true
 expect config.planner.check.CHK_maprotation true
 expect config.saves 2
+# With no capture Activate leaves the overlay box as the Designer has it, ticked, whatever hudon
+# is (ConfigPlanner.cs:136-145); hudon stays as the click left it.
+expect config.planner.check.CHK_hudshow true
+expect hud.hudon false
 
 # The close box, and the next start: its start-up save of what it read, then the page.
 restart
@@ -214,6 +232,10 @@ expect config.planner.combo.CMB_rateattitude 10
 expect config.planner.loadwpsonconnect True
 expect config.planner.readmissiononconnect true
 expect config.planner.check.CHK_loadwponconnect true
+# hudon, which MainV2 reads from CHK_hudshow (MainV2.cs:938-939); the box the Designer's.
+expect config.planner.CHK_hudshow False
+expect hud.hudon false
+expect config.planner.check.CHK_hudshow true
 
 # What Activate wrote the first time is still there.
 expect config.planner.severity 4

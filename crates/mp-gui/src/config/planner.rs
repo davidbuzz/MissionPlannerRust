@@ -24,11 +24,13 @@
 //!   device's formats; Start opens the capture (`mp_video`, V4L2 on Linux where the C# has
 //!   DirectShow and does nothing under mono) and the flight screen's HUD draws its frames under
 //!   everything, and Stop ends it. A camera that will not start says "Camera Fail: " and why on
-//!   the status line, where the C# has a message box (the owner's ruling of 2026-09-25).
+//!   the status line, where the C# has a message box (the owner's ruling of 2026-09-25). Enable
+//!   HUD Overlay sets the HUD's `hudon`, saved as `CHK_hudshow`: unticked, the HUD draws the
+//!   camera's picture alone while there is one, and everything as before while there is none
+//!   (`ConfigPlanner.cs:374-378`, `HUD.cs:1988-2009`).
 //!
 //! Dimmed, each naming what it stands for here, are the controls whose handler drives something
-//! this application does not have: the HUD overlay on video (`hudon` is not ported: the HUD is
-//! always drawn over the frame); GDI+ (gpui draws the HUD); the UI language (English only); the
+//! this application does not have: GDI+ (gpui draws the HUD); the UI language (English only); the
 //! theme and Custom (the dark palette is ratified); OSD Color (its handler's body is commented out, `ConfigPlanner.cs:432-439`);
 //! Start/Stop Vario; Password Protect Config; ADSB (no ADSB server client); OptOut Anon Stats (no
 //! analytics); Beta Updates (no updater); Mavlink Message Debug; Testing Screen.
@@ -206,6 +208,8 @@ const KEYS: &[&str] = &[
     // C#: ConfigPlanner.cs:215-232, 276-278
     "video_device",
     "video_options",
+    // `hudon`. C#: ConfigPlanner.cs:374-378; MainV2.cs:938-939
+    "CHK_hudshow",
 ];
 
 // -------------------------------------------------------------------------------------------------
@@ -320,9 +324,11 @@ pub const CHECKS: &[CheckSpec] = &[
         "CHK_hudshow",
         "Enable HUD Overlay",
         (520, 10, 133, 18),
-        None,
+        // Written by the handler; read by `MainV2` into `hudon`, which `Activate` shows while a
+        // capture runs. C#: ConfigPlanner.cs:136-145, 374-378; MainV2.cs:938-939
+        Some("CHK_hudshow"),
         true,
-        Some("no video: hudon draws the HUD over the camera image"),
+        None,
     ),
     check(
         "CHK_enablespeech",
@@ -1278,12 +1284,18 @@ pub struct Planner {
     layout_hidden: bool,
     /// The video controls.
     video: Video,
+    /// `FlightData.myhud.hudon`: whether the HUD's instruments are drawn over the camera's
+    /// picture. The HUD's property, held here as `MAVLinkInterface.gcssysid` is: `MainV2` sets it
+    /// from `CHK_hudshow` before any page shows, and Enable HUD Overlay sets it.
+    /// `// C#: ExtLibs/Controls/HUD.cs:211-212, 274; MainV2.cs:938-939; ConfigPlanner.cs:374-378`
+    hudon: bool,
 }
 
 impl Planner {
     /// What `MainV2` sets up from the settings before any page shows: `ChangeUnits`, the rates'
-    /// backups (`ResetInternals` copies them into `cs`), and `gcssysid`.
-    /// `// C#: MainV2.cs:683, 836, 981-1002; ExtLibs/ArduPilot/CurrentState.cs:199-206, 4385-4397`
+    /// backups (`ResetInternals` copies them into `cs`), `gcssysid`, and the HUD's `hudon`.
+    /// `// C#: MainV2.cs:683, 836, 938-939, 981-1002; ExtLibs/ArduPilot/CurrentState.cs:199-206,
+    /// 4385-4397`
     #[must_use]
     pub fn new(settings: &Persisted) -> Self {
         let mut rates = [0; 5];
@@ -1320,6 +1332,11 @@ impl Planner {
             sent: Vec::new(),
             layout_hidden: false,
             video: Video::new(mp_video::platform_source()),
+            // `hudon = bool.Parse(Settings.Instance["CHK_hudshow"])` when the key is there, else
+            // the HUD's own true. A value `bool.Parse` refuses throws out of `MainV2`'s
+            // constructor; here it leaves the HUD's true.
+            // C#: MainV2.cs:938-939; ExtLibs/Controls/HUD.cs:268-274
+            hudon: get_bool(settings, "CHK_hudshow", true),
         };
         planner.change_units(settings);
         planner
@@ -1525,6 +1542,13 @@ impl Planner {
         self.gcssysid
     }
 
+    /// `FlightData.myhud.hudon`, which the flight screen hands the HUD every frame.
+    /// `// C#: ExtLibs/Controls/HUD.cs:2005-2008`
+    #[must_use]
+    pub const fn hud_on(&self) -> bool {
+        self.hudon
+    }
+
     /// What the handlers have asked for since the last call.
     pub fn take_effects(&mut self) -> Vec<Effect> {
         std::mem::take(&mut self.effects)
@@ -1634,8 +1658,20 @@ impl Planner {
         // C#: ConfigPlanner.cs:106-134 - the UI culture's language; English only here.
         self.dim_text.insert("CMB_language", String::new());
         // C#: ConfigPlanner.cs:136-145 - Start disabled while a capture runs, which
-        // `Video::running` holds across activations; the overlay box as it was (`hudon` is not
-        // ported).
+        // `Video::running` holds across activations, and the overlay box set to `hudon`, its
+        // handler run when that changes it. With no capture the box is what the Designer gave
+        // the page the C# makes with the CONFIG screen - ticked, set before the handler is
+        // hooked, so nothing runs - whatever `hudon` is (ConfigPlanner.Designer.cs:487-492;
+        // BackstageView.cs:533-573 disposes the page when the screen closes). The page here
+        // lives as long as the application, so every activation is the first of a new page's.
+        if self.video.running {
+            let hudon = self.hudon;
+            if self.checks.insert("CHK_hudshow", hudon) != Some(hudon) {
+                self.checked_changed("CHK_hudshow", hudon, settings);
+            }
+        } else {
+            self.checks.insert("CHK_hudshow", true);
+        }
         // C#: ConfigPlanner.cs:148-166
         for name in [
             "CHK_enablespeech",
@@ -1835,6 +1871,13 @@ impl Planner {
                 if let Some(key) = key {
                     settings.set(key, bool_text(checked));
                 }
+            }
+            // `FlightData.myhud.hudon = CHK_hudshow.Checked`, saved as `CHK_hudshow`: the HUD
+            // draws its instruments over the camera's picture, or the picture alone.
+            // C#: ConfigPlanner.cs:374-378; ExtLibs/Controls/HUD.cs:2005-2008
+            "CHK_hudshow" => {
+                self.hudon = checked;
+                settings.set("CHK_hudshow", bool_text(checked));
             }
             // C#: ConfigPlanner.cs:693-696; MainV2.cs:1750-1759
             "CHK_loadwponconnect" => {
@@ -2482,6 +2525,13 @@ impl MissionPlanner {
         crate::facts::record(
             "hud.camera",
             camera_fact(self.video_frame.as_ref().map(|(frame, _)| frame.as_ref())),
+        );
+        // `hudon`, and whether the HUD paints its instruments with it: over the picture only
+        // while it is true, and always with no picture. `// C#: ExtLibs/Controls/HUD.cs:1988-2013`
+        crate::facts::record("hud.hudon", self.planner.hud_on());
+        crate::facts::record(
+            "hud.instruments",
+            crate::hud::draws_instruments(self.fly_data.camera.is_some(), self.planner.hud_on()),
         );
     }
 
@@ -3301,7 +3351,7 @@ mod tests {
     fn two_cameras() -> FakeSource {
         FakeSource::webcam().with_device(
             "/dev/video4",
-            "USB Capture",
+            "USB Capture (/dev/video4)",
             &[mp_video::Mode {
                 format: mp_video::PixelFormat::Mjpeg,
                 width: 1920,
@@ -3327,11 +3377,14 @@ mod tests {
         assert_eq!(planner.dropdown(), Some("CMB_videosources"));
         assert_eq!(
             planner.combo_items("CMB_videosources"),
-            ["Integrated_Webcam_HD: Integrate", "USB Capture"]
+            [
+                "Integrated_Webcam_HD: Integrate (/dev/video0)",
+                "USB Capture (/dev/video4)"
+            ]
         );
         assert_eq!(
             planner.combo_text("CMB_videosources"),
-            "Integrated_Webcam_HD: Integrate"
+            "Integrated_Webcam_HD: Integrate (/dev/video0)"
         );
         assert_eq!(
             planner.combo_items("CMB_videoresolutions"),
@@ -3372,13 +3425,16 @@ mod tests {
                 .unwrap_or_else(|| panic!("{key}"))
         };
         assert_eq!(fact("config.planner.video.devices"), "2");
-        assert_eq!(fact("config.planner.video.device"), "USB Capture");
+        assert_eq!(
+            fact("config.planner.video.device"),
+            "USB Capture (/dev/video4)"
+        );
         assert_eq!(fact("config.planner.video.modes"), "1");
         assert_eq!(fact("config.planner.video.running"), "false");
         assert_eq!(fact("config.planner.video.error"), "none");
         assert_eq!(
             fact("config.planner.combo.CMB_videosources.items"),
-            "Integrated_Webcam_HD: Integrate,USB Capture"
+            "Integrated_Webcam_HD: Integrate (/dev/video0),USB Capture (/dev/video4)"
         );
     }
 
@@ -3516,7 +3572,10 @@ mod tests {
         settings.set("video_device", "1");
         settings.set("video_options", "0");
         let planner = with_cameras(&mut settings, two_cameras());
-        assert_eq!(planner.combo_text("CMB_videosources"), "USB Capture");
+        assert_eq!(
+            planner.combo_text("CMB_videosources"),
+            "USB Capture (/dev/video4)"
+        );
         assert_eq!(
             planner.combo_text("CMB_videoresolutions"),
             "1920 x 1080 60.00 fps MJPG"
@@ -3528,7 +3587,7 @@ mod tests {
         let planner = with_cameras(&mut settings, two_cameras());
         assert_eq!(
             planner.combo_text("CMB_videosources"),
-            "Integrated_Webcam_HD: Integrate"
+            "Integrated_Webcam_HD: Integrate (/dev/video0)"
         );
         assert_eq!(
             planner.combo_text("CMB_videoresolutions"),
@@ -3542,7 +3601,7 @@ mod tests {
         let planner = with_cameras(&mut settings, two_cameras());
         assert_eq!(
             planner.combo_text("CMB_videosources"),
-            "Integrated_Webcam_HD: Integrate"
+            "Integrated_Webcam_HD: Integrate (/dev/video0)"
         );
         assert_eq!(
             planner.combo_text("CMB_videoresolutions"),
@@ -4150,13 +4209,7 @@ mod tests {
         let mut settings = Persisted::at(None);
         let mut planner = activated(&mut settings);
         let before = settings.config().clone();
-        for name in [
-            "CHK_GDIPlus",
-            "CHK_hudshow",
-            "chk_ADSB",
-            "CHK_beta",
-            "chk_temp",
-        ] {
+        for name in ["CHK_GDIPlus", "chk_ADSB", "CHK_beta", "chk_temp"] {
             let was = planner.checked(name);
             planner.click(name, &mut settings);
             assert_eq!(planner.checked(name), was, "{name}");
@@ -4175,7 +4228,6 @@ mod tests {
         assert_eq!(
             dimmed(),
             [
-                "CHK_hudshow",
                 "CHK_GDIPlus",
                 "CHK_Password",
                 "chk_ADSB",
@@ -4250,8 +4302,69 @@ mod tests {
         assert!(planner.checked("CHK_GDIPlus"));
         assert_eq!(planner.combo_text("CMB_osdcolor"), "Red");
         assert_eq!(planner.combo_text("CMB_theme"), "custom.mpsystheme");
-        // No camera: the overlay box as the Designer left it.
+    }
+
+    /// Enable HUD Overlay: `MainV2` reads `hudon` from `CHK_hudshow` before any page shows, true
+    /// without it; a click sets `hudon` and writes the key. `Activate` shows `hudon` only while a
+    /// capture runs - running the handler when that changes the box - and otherwise the
+    /// Designer's tick, whatever `hudon` is.
+    /// `// C#: ConfigPlanner.cs:136-145, 374-378; MainV2.cs:938-939; HUD.cs:274`
+    #[test]
+    fn enable_hud_overlay_sets_hudon_and_activate_shows_it_while_capturing() {
+        // Nothing saved: the HUD's own true.
+        let mut settings = Persisted::at(None);
+        let mut planner = with_cameras(&mut settings, FakeSource::webcam());
+        assert!(planner.hud_on());
         assert!(planner.checked("CHK_hudshow"));
+        assert_eq!(settings.get("CHK_hudshow"), None);
+        assert!(!dimmed().contains(&"CHK_hudshow"));
+        // Unticked: `hudon` false and saved.
+        planner.click("CHK_hudshow", &mut settings);
+        assert!(!planner.checked("CHK_hudshow"));
+        assert!(!planner.hud_on());
+        assert_eq!(settings.get("CHK_hudshow"), Some("False"));
+        assert!(planner.take_effects().is_empty());
+        // Activated again with no capture: the Designer's tick, `hudon` as it was.
+        planner.deactivate();
+        planner.activate(&mut settings, None);
+        assert!(planner.checked("CHK_hudshow"));
+        assert!(!planner.hud_on());
+        assert_eq!(settings.get("CHK_hudshow"), Some("False"));
+
+        // Read at start-up, whatever the case; a value `bool.Parse` refuses leaves true.
+        for (saved, hudon) in [("False", false), (" true ", true), ("no", true)] {
+            let mut settings = Persisted::at(None);
+            settings.set("CHK_hudshow", saved);
+            assert_eq!(Planner::new(&settings).hud_on(), hudon, "{saved:?}");
+        }
+
+        // While a capture runs, `Activate` shows `hudon`; the handler writes it again.
+        let mut settings = Persisted::at(None);
+        settings.set("CHK_hudshow", "False");
+        let mut planner = with_cameras(&mut settings, FakeSource::webcam());
+        assert!(planner.checked("CHK_hudshow"), "no capture: the Designer's");
+        planner.toggle_dropdown("CMB_videosources", &settings);
+        planner.choose("CMB_videosources", 0, &mut settings);
+        planner.press("BUT_videostart", Path::new("/"));
+        let mut capture = None;
+        for effect in planner.take_effects() {
+            run_video(&mut planner, &mut settings, &mut capture, &effect);
+        }
+        assert!(planner.video_running());
+        settings.set("CHK_hudshow", "untouched");
+        planner.deactivate();
+        planner.activate(&mut settings, None);
+        assert!(!planner.checked("CHK_hudshow"));
+        assert!(!planner.hud_on());
+        assert_eq!(settings.get("CHK_hudshow"), Some("False"));
+        // Ticked while capturing: `hudon` true, and the next Activate leaves it.
+        planner.click("CHK_hudshow", &mut settings);
+        assert!(planner.hud_on());
+        assert_eq!(settings.get("CHK_hudshow"), Some("True"));
+        planner.deactivate();
+        planner.activate(&mut settings, None);
+        assert!(planner.checked("CHK_hudshow"));
+        drop(capture);
     }
 
     #[test]
@@ -4603,6 +4716,16 @@ mod tests {
                         .and_then(mp_video::Capture::latest)
                         .as_deref(),
                 )),
+                // `video_tick`'s: `hudon`, and whether the instruments are painted with it.
+                "hud.hudon" => Some(self.planner.hud_on().to_string()),
+                "hud.instruments" => {
+                    let camera = self
+                        .capture
+                        .as_ref()
+                        .and_then(mp_video::Capture::latest)
+                        .is_some();
+                    Some(crate::hud::draws_instruments(camera, self.planner.hud_on()).to_string())
+                }
                 fact => {
                     let key = fact
                         .strip_prefix("config.")

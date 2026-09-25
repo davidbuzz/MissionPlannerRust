@@ -737,6 +737,11 @@ pub struct HudInputs {
     /// The second GPS's fix: `gpsstatus2`. 0 draws nothing for it.
     /// `// C#: GCSViews/FlightData.Designer.cs:367, ExtLibs/Controls/HUD.cs:2935-3027`
     pub gps_fix2: u8,
+    /// `hudon`, which Enable HUD Overlay sets: false draws the camera's picture alone while there
+    /// is one ([`paint_over_camera`]); with no picture it changes nothing. True from the
+    /// constructor; the flight screen hands over the Planner page's.
+    /// `// C#: ExtLibs/Controls/HUD.cs:211-212, 274, 1988-2013; ConfigPlanner.cs:374-378`
+    pub hud_on: bool,
 }
 
 impl Default for HudInputs {
@@ -789,6 +794,8 @@ impl Default for HudInputs {
             battery_current2: 0.0,
             battery_remaining2: 0,
             gps_fix2: 0,
+            // C#: ExtLibs/Controls/HUD.cs:274
+            hud_on: true,
         }
     }
 }
@@ -880,6 +887,8 @@ impl HudInputs {
             battery_current2: state.batteries[0].current,
             battery_remaining2: state.batteries[0].remaining_percent,
             gps_fix2: state.gps2.fix_type,
+            // The HUD's own setting, which the flight screen sets from the Planner page's.
+            hud_on: true,
         }
     }
 }
@@ -3081,11 +3090,13 @@ pub fn paint(scene: &Scene, bounds: Bounds<Pixels>, window: &mut Window, cx: &mu
 
 /// [`paint`] over the camera: `bgimage`, the capture's latest frame, drawn first and stretched
 /// to the control, and the scene over it without its sky and ground, which `doPaint` leaves out
-/// (`bgon = false`) while there is a picture. With no picture, [`paint`].
+/// (`bgon = false`) while there is a picture - or, with `hud_on` false, nothing over it: the
+/// picture alone. With no picture, [`paint`], whatever `hud_on` is.
 /// `// C#: ExtLibs/Controls/HUD.cs:1024-1047, 1986-2013, 2067-2099; GCSViews/FlightData.cs:1897-1900`
 pub fn paint_over_camera(
     camera: Option<&std::sync::Arc<gpui::RenderImage>>,
     scene: &Scene,
+    hud_on: bool,
     bounds: Bounds<Pixels>,
     window: &mut Window,
     cx: &mut gpui::App,
@@ -3103,14 +3114,29 @@ pub fn paint_over_camera(
         0,
         false,
     );
-    for item in over_camera(scene) {
+    for item in over_camera(scene, hud_on) {
         paint_item(item, bounds.origin, window, cx);
     }
 }
 
-/// The scene's items drawn over a camera picture: all but the sky and ground fills.
-fn over_camera(scene: &Scene) -> impl Iterator<Item = &Item> {
-    scene.items.iter().filter(|item| {
+/// Whether the instruments are drawn: always with no camera picture, and over one only while
+/// `hudon` is true - `doPaint` returns straight after drawing the picture when it is false.
+/// `// C#: ExtLibs/Controls/HUD.cs:1988-2013`
+#[must_use]
+pub const fn draws_instruments(camera: bool, hud_on: bool) -> bool {
+    !camera || hud_on
+}
+
+/// The scene's items drawn over a camera picture: all but the sky and ground fills, or none
+/// with `hud_on` false.
+/// `// C#: ExtLibs/Controls/HUD.cs:1988-2013, 2067-2099`
+fn over_camera(scene: &Scene, hud_on: bool) -> impl Iterator<Item = &Item> {
+    let drawn = if draws_instruments(true, hud_on) {
+        scene.items.as_slice()
+    } else {
+        &[]
+    };
+    drawn.iter().filter(|item| {
         !matches!(item, Item::Fill { colour: fill, .. } if *fill == colour::SKY || *fill == colour::GROUND)
     })
 }
@@ -3123,13 +3149,32 @@ mod camera_tests {
     #[test]
     fn the_camera_replaces_the_sky_and_ground_only() {
         let full = scene(&HudInputs::default(), 400.0, 260.0);
-        let over: Vec<&Item> = over_camera(&full).collect();
+        let over: Vec<&Item> = over_camera(&full, true).collect();
         assert_eq!(over.len() + 2, full.items.len());
         let sky_ground = |item: &Item| matches!(item, Item::Fill { colour: fill, .. } if *fill == colour::SKY || *fill == colour::GROUND);
         assert_eq!(full.items.iter().filter(|item| sky_ground(item)).count(), 2);
         assert!(over.iter().all(|item| !sky_ground(item)));
         let rest: Vec<&Item> = full.items.iter().filter(|item| !sky_ground(item)).collect();
         assert_eq!(over, rest);
+    }
+
+    /// `hudon` false: over a picture nothing is drawn - the picture alone - and with no picture
+    /// the instruments are drawn all the same. `// C#: ExtLibs/Controls/HUD.cs:1988-2013`
+    #[test]
+    fn hud_off_leaves_the_picture_alone_and_changes_nothing_without_one() {
+        let full = scene(&HudInputs::default(), 400.0, 260.0);
+        assert!(!full.items.is_empty());
+        assert_eq!(over_camera(&full, false).count(), 0);
+        assert!(!draws_instruments(true, false));
+        assert!(draws_instruments(true, true));
+        assert!(draws_instruments(false, false));
+        assert!(draws_instruments(false, true));
+        // The scene does not depend on it: the switch is the painter's.
+        let off = HudInputs {
+            hud_on: false,
+            ..HudInputs::default()
+        };
+        assert_eq!(scene(&off, 400.0, 260.0).items, full.items);
     }
 }
 
@@ -3406,6 +3451,7 @@ mod tests {
             battery_current2: 0.0,
             battery_remaining2: 0,
             gps_fix2: 0,
+            hud_on: true,
         }
     }
 

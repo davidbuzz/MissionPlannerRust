@@ -4,12 +4,17 @@
 #
 # The claim: with nothing saved, Activate lists no device (ConfigPlanner.cs:215-232). Clicking
 # Video Device lists the capture devices by name - the webcam's capture nodes, not its metadata
-# nodes - and binding the list selects the first, whose formats Video Format lists as the C#'s
+# nodes, each named by its card and its node, "Integrated_Webcam_HD: Integrate (/dev/video0)",
+# where DirectShow gives the bare name (the owner's ruling: two nodes share the card) - and
+# binding the list selects the first, whose formats Video Format lists as the C#'s
 # GCSBitmapInfo reads, "<w> x <h> <fps> fps <fourcc>", the first selected (:296-360, 741-750,
 # 968-989). Start opens the device in that format; once it runs, video_device and video_options
 # are written as the two combos' indexes and frames arrive (:261-285); the flight screen's HUD
-# draws the latest one under everything (HUD.cs:1986-2013, FlightData.cs:1897-1900). Stop ends
-# the capture and the HUD's picture goes with it (:287-294, Capture.cs:142-157).
+# draws the latest one under everything (HUD.cs:1986-2013, FlightData.cs:1897-1900). Enable
+# HUD Overlay unticked sets hudon false, and the HUD paints the picture alone, its instruments
+# hidden (:374-378, HUD.cs:2005-2008); Activate, while the capture runs, shows hudon in the box
+# (:136-145); ticked again, the instruments are back. Stop ends the capture and the HUD's picture
+# goes with it (:287-294, Capture.cs:142-157), and the instruments are drawn whatever hudon is.
 #
 # Needs a V4L2 webcam that offers MJPEG or YUYV, and no other program holding it. It takes the
 # camera for a few seconds; nothing else. The unit tests in crates/mp-gui/src/config/planner.rs
@@ -29,11 +34,14 @@ expect config.planner.video.devices 0
 expect config.planner.video.running false
 expect config.planner.video_device none
 expect hud.camera none
+expect hud.hudon true
+expect hud.instruments true
 
-# Click: the devices listed, the first selected and its formats listed.
+# Click: the devices listed, each with its node, the first selected and its formats listed.
 click planner-CMB_videosources
 expect config.planner.dropdown CMB_videosources
 expect config.planner.video.devices > 0
+expect config.planner.video.device ~ (/dev/video
 expect config.planner.video.modes > 0
 expect config.planner.video.mode ~ fps
 click planner-CMB_videosources-0
@@ -64,10 +72,40 @@ click tab-config
 settle 2
 expect config.planner.video.running true
 expect config.planner.video.frames > 10
+expect hud.instruments true
 
-# Stop: the capture ends and the picture with it; the settings stay.
+# Enable HUD Overlay unticked while capturing: hudon false and saved, the picture alone.
+expect config.planner.check.CHK_hudshow true
+click planner-CHK_hudshow
+expect config.planner.check.CHK_hudshow false
+expect config.planner.CHK_hudshow False
+expect hud.hudon false
+expect hud.instruments false
+click tab-fly
+settle 2
+expect hud.camera ~ x
+expect hud.instruments false
+# Back to the page: the capture runs, so Activate shows hudon, unticked.
+click tab-config
+settle 2
+expect config.planner.check.CHK_hudshow false
+expect hud.hudon false
+# Ticked again: the instruments over the picture.
+click planner-CHK_hudshow
+expect config.planner.check.CHK_hudshow true
+expect config.planner.CHK_hudshow True
+expect hud.hudon true
+expect hud.instruments true
+# Unticked, to see Stop bring them back without it.
+click planner-CHK_hudshow
+expect hud.instruments false
+
+# Stop: the capture ends and the picture with it; the settings stay; with no picture the
+# instruments are drawn though hudon is false.
 click planner-BUT_videostop
 settle 1
 expect config.planner.video.running false
 expect hud.camera none
+expect hud.hudon false
+expect hud.instruments true
 expect config.planner.video_device 0

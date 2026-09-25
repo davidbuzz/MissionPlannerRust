@@ -5796,8 +5796,19 @@ pub fn hud_panel(
                 move |laid_out, _window, _cx| bounds.set(Some(laid_out)),
                 move |bounds, (), window, cx| {
                     let height = f32::from(bounds.size.height);
+                    // Over a picture there is no sky or ground to colour (`bgon = false`), so
+                    // Ground Color's is left out and the ground fill is the one the camera
+                    // painter knows to skip. `// C#: ExtLibs/Controls/HUD.cs:1988-1990, 2067-2099`
+                    let ground = if camera.is_some() { None } else { ground };
                     let scene = hud_scene(&painted, ground, f32::from(bounds.size.width), height);
-                    crate::hud::paint_over_camera(camera.as_ref(), &scene, bounds, window, cx);
+                    crate::hud::paint_over_camera(
+                        camera.as_ref(),
+                        &scene,
+                        painted.hud_on,
+                        bounds,
+                        window,
+                        cx,
+                    );
                 },
             )
             .size_full(),

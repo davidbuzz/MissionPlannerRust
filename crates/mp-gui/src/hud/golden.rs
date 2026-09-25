@@ -17,6 +17,10 @@
 //!   straight down (the gimbal lock of a pitch of ±90°), inverted, a NaN attitude, NaN
 //!   readouts, an infinite speed, altitude and heading, a lost GPS fix as text and as its
 //!   picture, and no vehicle at all.
+//! * **Over a camera picture**, a stand-in frame drawn here: the level frame as the flight
+//!   screen paints it over a capture (`hud::paint_over_camera`, `HUD.cs:1988-2013`) with Enable
+//!   HUD Overlay ticked - the instruments without the sky and ground - and unticked, `hudon`
+//!   false: the picture alone.
 //!
 //! # When the display changes on purpose
 //!
@@ -202,6 +206,51 @@ fn hard_cases() -> Vec<(&'static str, HudInputs)> {
     ]
 }
 
+/// The cases over a camera picture, by golden name: Enable HUD Overlay ticked - the instruments
+/// over the picture, without the sky and ground (`bgon = false`) - and unticked, `hudon` false:
+/// the picture alone. `// C#: ExtLibs/Controls/HUD.cs:1988-2013, 2067-2099`
+fn camera_cases() -> Vec<(&'static str, HudInputs)> {
+    vec![
+        ("camera_overlay_on", cruising()),
+        (
+            "camera_overlay_off",
+            HudInputs {
+                hud_on: false,
+                ..cruising()
+            },
+        ),
+    ]
+}
+
+/// A stand-in for a camera frame at the hard cases' size: red across, green down, a grid every
+/// 40 pixels. Not a colour of the sky or the ground anywhere, so a pixel of either is the
+/// scene's.
+fn camera_picture() -> Image {
+    let mut pixels = Vec::with_capacity(usize::try_from(WIDTH * HEIGHT * 3).unwrap_or(0));
+    for y in 0..HEIGHT {
+        for x in 0..WIDTH {
+            let grid = x % 40 == 0 || y % 40 == 0;
+            // Within 0..=255: x < WIDTH and y < HEIGHT.
+            #[allow(clippy::cast_possible_truncation)]
+            let (r, g) = ((x * 255 / WIDTH) as u8, (y * 255 / HEIGHT) as u8);
+            pixels.extend(if grid { [255, 255, 255] } else { [r, g, 128] });
+        }
+    }
+    Image {
+        width: WIDTH,
+        height: HEIGHT,
+        pixels,
+    }
+}
+
+/// A camera case drawn as the flight screen paints it over a picture: [`camera_picture`], then
+/// what [`super::over_camera`] keeps of the scene for the case's `hudon`.
+fn over_camera_frame(inputs: &HudInputs) -> Image {
+    #[allow(clippy::cast_precision_loss)] // a few hundred pixels
+    let drawn = scene(inputs, WIDTH as f32, HEIGHT as f32);
+    raster::render_over(camera_picture(), super::over_camera(&drawn, inputs.hud_on))
+}
+
 /// One moment of a recorded flight: when, and the attitude and arming then.
 #[derive(Debug, Clone, Copy)]
 struct Moment {
@@ -361,6 +410,11 @@ fn every_case() -> Vec<(&'static str, Image)> {
         .iter()
         .map(|(name, inputs)| (*name, frame(inputs)))
         .collect();
+    all.extend(
+        camera_cases()
+            .iter()
+            .map(|(name, inputs)| (*name, over_camera_frame(inputs))),
+    );
     all.extend(recorded_sheets());
     all
 }
@@ -440,6 +494,7 @@ fn no_golden_is_left_without_a_case() {
     let names: Vec<&str> = hard_cases()
         .iter()
         .map(|(name, _)| *name)
+        .chain(camera_cases().iter().map(|(name, _)| *name))
         .chain(recorded_cases().iter().map(|(name, _)| *name))
         .collect();
     let mut unique = names.clone();
@@ -558,6 +613,41 @@ fn the_nose_straight_up_is_all_sky_and_straight_down_all_ground() {
     assert!(count(&up, SKY) > total / 3, "{}", count(&up, SKY));
     assert_eq!(count(&down, SKY), 0);
     assert!(count(&down, GROUND) > total / 3, "{}", count(&down, GROUND));
+}
+
+/// Over a camera picture the sky and ground are gone and the instruments are drawn - unless
+/// `hudon` is false, when the frame is the picture, pixel for pixel.
+/// `// C#: ExtLibs/Controls/HUD.cs:1988-2013, 2067-2099`
+#[test]
+fn over_a_picture_the_overlay_draws_the_instruments_or_nothing() {
+    let picture = camera_picture();
+    let cases = camera_cases();
+    let case = |wanted: &str| {
+        cases
+            .iter()
+            .find(|(name, _)| *name == wanted)
+            .map(|(_, inputs)| over_camera_frame(inputs))
+            .expect("the case")
+    };
+    let (on, off) = (case("camera_overlay_on"), case("camera_overlay_off"));
+    assert!(off == picture, "hudon false: the picture alone");
+    let difference = raster::compare(&picture, &on).expect("same size");
+    assert!(
+        !difference.matches(),
+        "the instruments are drawn: {difference:?}"
+    );
+    assert_eq!(count(&on, SKY), 0);
+    assert_eq!(count(&on, GROUND), 0);
+    // Without a picture the same inputs draw the sky and the ground as ever.
+    let bare = frame(&HudInputs {
+        hud_on: false,
+        ..cruising()
+    });
+    assert!(
+        bare == frame(&cruising()),
+        "no picture: hudon changes nothing"
+    );
+    assert!(count(&bare, SKY) > 1_000 && count(&bare, GROUND) > 1_000);
 }
 
 /// A lost fix changes the GPS line and nothing else on the display.

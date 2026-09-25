@@ -108,8 +108,17 @@ impl Image {
 /// Draws a scene into a `width` x `height` image. What is behind the display is black, so a
 /// shape that is not drawn - one with a corner that is not finite - shows as a hole.
 pub(super) fn render(scene: &Scene, width: u32, height: u32) -> Image {
-    let mut image = Image::new(width, height, 0x00_00_00);
-    for item in &scene.items {
+    render_over(Image::new(width, height, 0x00_00_00), &scene.items)
+}
+
+/// Draws `items` over `background`, as [`super::paint_over_camera`] draws them over the camera's
+/// picture: the picture first, then each item in order.
+pub(super) fn render_over<'a>(
+    background: Image,
+    items: impl IntoIterator<Item = &'a Item>,
+) -> Image {
+    let mut image = background;
+    for item in items {
         draw(&mut image, item);
     }
     image

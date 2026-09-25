@@ -14,7 +14,8 @@
 //!
 //! * [`v4l2::V4l2Source`] on Linux: the capture nodes under `/dev/video*` that say
 //!   `V4L2_CAP_VIDEO_CAPTURE` (a webcam's metadata node does not), named from `VIDIOC_QUERYCAP`'s
-//!   card name; a device's formats and frame sizes as the Video Format list, in MJPEG and YUYV,
+//!   card name with the node after it ([`node_name`]: two nodes of one webcam share the card);
+//!   a device's formats and frame sizes as the Video Format list, in MJPEG and YUYV,
 //!   the two this crate decodes; frames from a memory-mapped stream.
 //! * [`testing::FakeSource`], scripted devices, formats and frames, for the tests and the
 //!   screen's headless checks.
@@ -39,10 +40,24 @@ pub mod v4l2;
 /// A video input device, as the Video Device list names it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Device {
-    /// The node, `/dev/video0`.
+    /// The node, `/dev/video0`: the device's identity, which opening it uses.
     pub path: PathBuf,
-    /// `DsDevice.Name` / V4L2's card name: "Integrated_Webcam_HD: Integrate".
+    /// What the Video Device list shows: DirectShow's `DsDevice.Name`; on Linux V4L2's card
+    /// name with the node after it, [`node_name`]: "Integrated_Webcam_HD: Integrate
+    /// (/dev/video0)".
     pub name: String,
+}
+
+/// A V4L2 node's name in the Video Device list: the card name `VIDIOC_QUERYCAP` gives, then the
+/// node's path in brackets - "Integrated_Webcam_HD: Integrate (/dev/video0)".
+///
+/// Divergence, the owner's ruling of 2026-09-25 (PLAN.md §13.6 row 84): the C# lists
+/// DirectShow's bare `DsDevice.Name` (`ExtLibs/WebCamService/Capture.cs:244-258`), but a UVC
+/// webcam with a second sensor registers two capture nodes that share one card name, and the
+/// list must tell them apart, so the node is added.
+#[must_use]
+pub fn node_name(card: &str, path: &std::path::Path) -> String {
+    format!("{card} ({})", path.display())
 }
 
 /// The pixel formats this crate decodes.

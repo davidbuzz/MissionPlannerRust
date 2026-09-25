@@ -26,18 +26,22 @@ fn is_capture(caps: &v4l::Capabilities) -> bool {
     caps.capabilities.contains(Flags::VIDEO_CAPTURE) && caps.capabilities.contains(Flags::STREAMING)
 }
 
-/// One node's device entry, if it captures video.
+/// One node's device entry, if it captures video, named by its card and its node: two capture
+/// nodes of one webcam share the card. The C# lists DirectShow's bare name; the node is added
+/// by the owner's ruling (a written divergence, [`crate::node_name`]). The path stays the
+/// device's identity.
+/// `// C#: ExtLibs/WebCamService/Capture.cs:244-258`
 fn device_of(path: &Path) -> Option<Device> {
     let dev = v4l::Device::with_path(path).ok()?;
     let caps = dev.query_caps().ok()?;
     is_capture(&caps).then(|| Device {
         path: path.to_path_buf(),
-        name: caps.card,
+        name: crate::node_name(&caps.card, path),
     })
 }
 
 impl Source for V4l2Source {
-    /// `getDevices`: the capture nodes, in `/dev/video*` order, by card name.
+    /// `getDevices`: the capture nodes, in `/dev/video*` order, by card name and node.
     /// `// C#: ExtLibs/WebCamService/Capture.cs:244-258`
     fn devices(&self) -> Vec<Device> {
         let mut nodes = v4l::context::enum_devices();
@@ -203,14 +207,23 @@ mod tests {
     use super::*;
 
     /// The machine's capture nodes, whatever they are: none is fine, but each one listed must
-    /// have a name and a path that exists, and its modes must be decodable formats only.
+    /// have a path that exists and a name ending in that path that no other node has, and its
+    /// modes must be decodable formats only.
     #[test]
     fn the_machines_capture_nodes_are_named_and_decodable() {
         let source = V4l2Source;
-        for device in source.devices() {
-            assert!(!device.name.is_empty(), "{device:?}");
+        let devices = source.devices();
+        for device in &devices {
             assert!(device.path.exists(), "{device:?}");
-            if let Ok(modes) = source.modes(&device) {
+            assert!(
+                device
+                    .name
+                    .ends_with(&format!(" ({})", device.path.display())),
+                "{device:?}"
+            );
+            let same = devices.iter().filter(|other| other.name == device.name);
+            assert_eq!(same.count(), 1, "{device:?}");
+            if let Ok(modes) = source.modes(device) {
                 for mode in modes {
                     assert!(mode.width > 0 && mode.height > 0, "{mode:?}");
                     assert!(!mode.label().is_empty());
@@ -236,6 +249,17 @@ mod tests {
             ..capture
         };
         assert!(!is_capture(&meta));
+    }
+
+    /// Two capture nodes of one webcam share a card name; the list tells them apart by the
+    /// node, in brackets after the card.
+    #[test]
+    fn two_nodes_with_one_card_are_told_apart() {
+        let card = "Integrated_Webcam_HD: Integrate";
+        let first = crate::node_name(card, Path::new("/dev/video0"));
+        let second = crate::node_name(card, Path::new("/dev/video2"));
+        assert_eq!(first, "Integrated_Webcam_HD: Integrate (/dev/video0)");
+        assert_eq!(second, "Integrated_Webcam_HD: Integrate (/dev/video2)");
     }
 
     /// Padded YUYV rows are packed; unpadded ones pass as they are.

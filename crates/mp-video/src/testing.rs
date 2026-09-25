@@ -40,13 +40,13 @@ impl FakeSource {
         }
     }
 
-    /// One webcam like this machine's: MJPEG 1280x720 at 30, YUYV 640x480 at 30 and 320x240 at
-    /// 15.
+    /// One webcam like this machine's, named as the V4L2 source names it - card and node,
+    /// [`crate::node_name`]: MJPEG 1280x720 at 30, YUYV 640x480 at 30 and 320x240 at 15.
     #[must_use]
     pub fn webcam() -> Self {
         Self::empty().with_device(
             "/dev/video0",
-            "Integrated_Webcam_HD: Integrate",
+            "Integrated_Webcam_HD: Integrate (/dev/video0)",
             &[
                 Mode {
                     format: PixelFormat::Mjpeg,

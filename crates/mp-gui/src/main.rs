@@ -2558,6 +2558,9 @@ impl Render for MissionPlanner {
         let units = self.planner.units();
         self.hud.units = units;
         self.fly_data.quick.set_units(units);
+        // `hudon`, which `MainV2` read from `CHK_hudshow` and Enable HUD Overlay sets.
+        // `// C#: MainV2.cs:938-939; ConfigPlanner.cs:374-378; ExtLibs/Controls/HUD.cs:2005-2008`
+        self.hud.hud_on = self.planner.hud_on();
         // The vehicle's banner names its firmware; its parameter documentation follows from it.
         self.telemetry.tick();
         // Handed over once a frame: the shown vehicle's fence as the link has seen it, which the
