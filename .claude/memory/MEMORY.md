@@ -8,6 +8,7 @@ controlled; the per-project memory directory holds symlinks to them.
 - [Port from the C# source](port-from-the-csharp-source.md) — references/missionplanner is the spec; read the .cs, never recall it
 - [Match the original layout](match-the-original-layout.md) — Buzz is the oracle on look and feel; default to MP's arrangement, read it from the .resx
 - [No dialogs for avoidable errors](no-dialogs-for-avoidable-errors.md) — an error the main window can show as state/connectivity/colour never gets a message box (Buzz, 2026-09-25)
+- [Mute on language](mute-on-language.md) — English when `language` is empty; no i18n questions or reports until told otherwise (Buzz, 2026-09-25)
 
 - [No foreground waiting](no-foreground-waiting.md) — background long operations, poll cheaply, never block the session
 - [GUI runs stay short](gui-runs-stay-short.md) — windows live ~5s, pinned to DP-1-3; never debug by re-running the GUI

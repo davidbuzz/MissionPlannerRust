@@ -37,6 +37,13 @@
 //! misread, a line break is a continuation line, and an empty line or value is `{""}`. `\r\n`
 //! becomes `\n`. Every generated file is parsed back before it is written, and a value that does
 //! not survive the round trip is an error here, not a surprise on screen.
+//!
+//! **What a screen asks for.** [`SCREENS`] names the application's screens whose words go through
+//! Fluent, by their source files; every `fl!("<id>")` in them is a key that screen asks for
+//! ([`keys_in`]). The report ends with each screen's table: per culture, how many of its keys the
+//! culture's own files lack - English lacking one is a bug `mp-gui`'s lint fails on, any other
+//! culture lacking one is shown in English, as it is in the C#. `mp-gui`'s tests hold their
+//! count to this table, so neither can drift from the other.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -53,6 +60,179 @@ pub const BASES: &[(&str, &str)] = &[
 
 /// The culture the base file is written in.
 pub const BASE_CULTURE: &str = "en";
+
+/// A screen whose words go through Fluent: its name, and its source files relative to the
+/// repository, which `mp-gui`'s `i18n::SCREEN_SOURCES` names too.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Screen {
+    /// The name the report gives it.
+    pub name: &'static str,
+    /// Its source files.
+    pub sources: &'static [&'static str],
+}
+
+/// The screens through Fluent so far: the flight screen, whose tab pages and buttons read their
+/// words from `FlightData.resx` (PLAN.md §13.6 row 76).
+pub const SCREENS: &[Screen] = &[Screen {
+    name: "Flight Data",
+    sources: &[
+        "crates/mp-gui/src/fly.rs",
+        "crates/mp-gui/src/payload.rs",
+        "crates/mp-gui/src/transponder.rs",
+    ],
+}];
+
+/// The keys one screen asks for.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ScreenKeys {
+    /// The screen's name.
+    pub name: String,
+    /// Its source files, as [`Screen::sources`] names them.
+    pub sources: Vec<String>,
+    /// Every key its sources ask for with `fl!`, in the order found, once each.
+    pub keys: Vec<String>,
+}
+
+/// The keys a source file asks for with `fl!("<id>"...)`, in order, once each - however the call
+/// is wrapped, and with or without a path in front of the macro.
+#[must_use]
+pub fn keys_in(source: &str) -> Vec<String> {
+    let mut found: Vec<String> = Vec::new();
+    let mut rest = source;
+    while let Some(at) = rest.find("fl!(") {
+        rest = rest.get(at + "fl!(".len()..).unwrap_or_default();
+        let Some(quoted) = rest.trim_start().strip_prefix('"') else {
+            continue;
+        };
+        if let Some((key, _)) = quoted.split_once('"')
+            && !found.iter().any(|k| k == key)
+        {
+            found.push(key.to_owned());
+        }
+    }
+    found
+}
+
+/// The keys each of [`SCREENS`] asks for, read from the repository at `repo`.
+pub fn screen_keys(repo: &Path) -> Result<Vec<ScreenKeys>> {
+    let mut screens = Vec::new();
+    for screen in SCREENS {
+        let mut keys: Vec<String> = Vec::new();
+        for source in screen.sources {
+            let path = repo.join(source);
+            let text = std::fs::read_to_string(&path)
+                .with_context(|| format!("reading {}", path.display()))?;
+            for key in keys_in(&text) {
+                if !keys.contains(&key) {
+                    keys.push(key);
+                }
+            }
+        }
+        screens.push(ScreenKeys {
+            name: screen.name.to_owned(),
+            sources: screen.sources.iter().map(|&s| s.to_owned()).collect(),
+            keys,
+        });
+    }
+    Ok(screens)
+}
+
+/// The message ids a generated `.ftl` defines.
+fn message_ids(text: &str) -> BTreeSet<String> {
+    let resource = match fluent_syntax::parser::parse(text) {
+        Ok(resource) | Err((resource, _)) => resource,
+    };
+    resource
+        .body
+        .iter()
+        .filter_map(|entry| match entry {
+            fluent_syntax::ast::Entry::Message(message) => Some(message.id.name.to_owned()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The report's last section: for each screen, per culture, how many of the keys it asks for the
+/// culture's own `.ftl` files lack. `files` are the generated files, keyed `<culture>/<stem>.ftl`.
+#[must_use]
+pub fn screens_section(files: &BTreeMap<PathBuf, String>, screens: &[ScreenKeys]) -> String {
+    let mut by_culture: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for (relative, text) in files {
+        if relative.extension().and_then(|e| e.to_str()) != Some("ftl") {
+            continue;
+        }
+        let Some(culture) = relative
+            .parent()
+            .and_then(|p| p.to_str())
+            .filter(|c| !c.is_empty())
+        else {
+            continue;
+        };
+        by_culture
+            .entry(culture.to_owned())
+            .or_default()
+            .extend(message_ids(text));
+    }
+    let mut cultures: Vec<&String> = by_culture.keys().collect();
+    // English first, as the base tables have it; the rest in order.
+    cultures.sort_by_key(|c| (c.as_str() != BASE_CULTURE, c.as_str()));
+
+    let mut out = String::from(
+        "## Screens through Fluent\n\n\
+         The keys each screen asks for with `fl!` in its sources, and per culture how many of them \
+         the culture's own `.ftl` files lack. English lacking one is a bug - `mp-gui`'s lint fails \
+         on it and the screen would show the key's name in brackets; any other culture lacking one \
+         shows it in English, as the C# does. At run time a culture also falls back through its \
+         parents before English (`zh-TW` through `zh-Hant`); these counts are each culture's own \
+         files. `mp-gui`'s per-culture tests hold their counts to this table.\n\n",
+    );
+    for screen in screens {
+        let _ = writeln!(
+            out,
+            "### {}\n\n{} keys, from {}.\n",
+            screen.name,
+            screen.keys.len(),
+            screen
+                .sources
+                .iter()
+                .map(|s| format!("`{s}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        out.push_str("| culture | lacks | translated |\n|---|---:|---:|\n");
+        let mut english_lacks = Vec::new();
+        for culture in &cultures {
+            let have = by_culture.get(*culture);
+            let lacking: Vec<&String> = screen
+                .keys
+                .iter()
+                .filter(|key| !have.is_some_and(|ids| ids.contains(*key)))
+                .collect();
+            if culture.as_str() == BASE_CULTURE {
+                english_lacks.clone_from(&lacking);
+            }
+            let _ = writeln!(
+                out,
+                "| {culture} | {} | {} |",
+                lacking.len(),
+                screen.keys.len() - lacking.len()
+            );
+        }
+        out.push('\n');
+        if !english_lacks.is_empty() {
+            let _ = writeln!(
+                out,
+                "English lacks: {}.\n",
+                english_lacks
+                    .iter()
+                    .map(|k| format!("`{k}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+    }
+    out
+}
 
 /// One string entry of a `.resx`: a `<data name=... xml:space="preserve">` with no `type` or
 /// `mimetype`, and its `<value>`.
@@ -403,8 +583,9 @@ pub struct Output {
     pub bases: Vec<BaseOutput>,
 }
 
-/// Converts every base in [`BASES`] under `tree` with the keymap given, which it extends.
-pub fn convert(tree: &Path, mut keymap: Keymap) -> Result<Output> {
+/// Converts every base in [`BASES`] under `tree` with the keymap given, which it extends, and
+/// reports what each of `screens` asks for.
+pub fn convert(tree: &Path, mut keymap: Keymap, screens: &[ScreenKeys]) -> Result<Output> {
     let mut output = Output::default();
     for &(relative, stem) in BASES {
         let base_path = tree.join(relative);
@@ -536,7 +717,10 @@ pub fn convert(tree: &Path, mut keymap: Keymap) -> Result<Output> {
     output
         .files
         .insert(PathBuf::from("keymap.toml"), keymap.to_toml());
-    let report = report(&output.bases, keymap.len());
+    let mut report = report(&output.bases, keymap.len());
+    if !screens.is_empty() {
+        report.push_str(&screens_section(&output.files, screens));
+    }
     output.files.insert(PathBuf::from("report.md"), report);
     Ok(output)
 }

@@ -658,7 +658,7 @@ pub const COMBOS: &[ComboSpec] = &[
         "CMB_language",
         (107, 139, 138, 21),
         &[],
-        Some("English only: there is no other language to change to"),
+        Some("the language is config.xml's `language`, read at start-up"),
     ),
     combo("CMB_distunits", (107, 195, 138, 21), DISTANCES, None),
     combo("CMB_altunits", (320, 195, 138, 21), DISTANCES, None),

@@ -17,8 +17,8 @@ use std::path::{Path, PathBuf};
 use fluent_bundle::{FluentArgs, FluentBundle, FluentResource};
 use unic_langid::LanguageIdentifier;
 use xtask::codegen::resx::{
-    BASES, Keymap, convert, cultures_of, ftl_id, ftl_value, is_language, placeholders,
-    string_entries,
+    BASES, Keymap, SCREENS, ScreenKeys, convert, cultures_of, ftl_id, ftl_value, is_language,
+    keys_in, placeholders, screen_keys, screens_section, string_entries,
 };
 
 fn repo() -> PathBuf {
@@ -181,7 +181,7 @@ fn the_keymap_never_moves_an_id() {
 #[test]
 fn every_message_of_every_culture_formats_back_to_its_resx_value() {
     let Some(tree) = tree() else { return };
-    let output = convert(&tree, Keymap::default()).unwrap();
+    let output = convert(&tree, Keymap::default(), &[]).unwrap();
     let mut checked = 0;
     for &(relative, stem) in BASES {
         let strings_file = stem == "strings";
@@ -223,7 +223,7 @@ fn every_message_of_every_culture_formats_back_to_its_resx_value() {
 #[test]
 fn nothing_a_translator_wrote_is_lost_and_the_counts_are_the_upstream_pins() {
     let Some(tree) = tree() else { return };
-    let output = convert(&tree, Keymap::default()).unwrap();
+    let output = convert(&tree, Keymap::default(), &[]).unwrap();
     for base in &output.bases {
         for culture in &base.cultures {
             assert_eq!(
@@ -256,7 +256,8 @@ fn the_committed_assets_are_what_the_generator_writes() {
     let Some(tree) = tree() else { return };
     let dir = repo().join("assets/i18n");
     let keymap = Keymap::parse(&std::fs::read_to_string(dir.join("keymap.toml")).unwrap()).unwrap();
-    let output = convert(&tree, keymap).unwrap();
+    let screens = screen_keys(&repo()).unwrap();
+    let output = convert(&tree, keymap, &screens).unwrap();
     for (relative, text) in &output.files {
         let committed = std::fs::read_to_string(dir.join(relative)).unwrap_or_else(|e| {
             panic!(
@@ -271,4 +272,60 @@ fn the_committed_assets_are_what_the_generator_writes() {
             relative.display()
         );
     }
+}
+
+#[test]
+fn a_screens_keys_are_every_fl_call_in_its_sources() {
+    let source = "a(fl!(\"one\")); b(crate::i18n::fl!(\n    \"two\",\n)); fl!(\"one\"); \
+                  fl!(\"three\", arg0 = x); fl!(not_a_literal)";
+    assert_eq!(keys_in(source), ["one", "two", "three"]);
+
+    // The flight screen, as it is in the tree: its tab pages and buttons.
+    let screens = screen_keys(&repo()).unwrap();
+    assert_eq!(screens.len(), SCREENS.len());
+    let flight = &screens[0];
+    assert!(flight.keys.len() >= 40, "{:?}", flight.keys);
+    assert!(flight.keys.iter().all(|k| k.starts_with("flightdata-")));
+    assert!(
+        flight
+            .keys
+            .contains(&"flightdata-tabActions-Text".to_owned())
+    );
+}
+
+#[test]
+fn the_screens_section_counts_what_each_culture_lacks() {
+    let files: std::collections::BTreeMap<PathBuf, String> = [
+        ("en/s.ftl", "a = A\nb = B\nc = C\n"),
+        ("de-DE/s.ftl", "a = Ah\n"),
+        ("fr/s.ftl", "a = Ah\nb = Beh\n# orphan\nz = Z\n"),
+        ("keymap.toml", "a = b\n"),
+    ]
+    .into_iter()
+    .map(|(p, t)| (PathBuf::from(p), t.to_owned()))
+    .collect();
+    let screens = [ScreenKeys {
+        name: "Test".to_owned(),
+        sources: vec!["x.rs".to_owned()],
+        keys: vec!["a".to_owned(), "b".to_owned(), "d".to_owned()],
+    }];
+    let section = screens_section(&files, &screens);
+    assert!(
+        section.starts_with("## Screens through Fluent\n"),
+        "{section}"
+    );
+    assert!(
+        section.contains("### Test\n\n3 keys, from `x.rs`.\n"),
+        "{section}"
+    );
+    // English first, then the rest in order.
+    let rows: Vec<&str> = section
+        .lines()
+        .filter(|l| l.starts_with("| ") && !l.starts_with("| culture"))
+        .collect();
+    assert_eq!(
+        rows,
+        ["| en | 1 | 2 |", "| de-DE | 2 | 1 |", "| fr | 1 | 2 |"]
+    );
+    assert!(section.contains("English lacks: `d`."), "{section}");
 }

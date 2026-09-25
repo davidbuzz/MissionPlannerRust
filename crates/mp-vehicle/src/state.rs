@@ -627,6 +627,13 @@ pub struct VehicleState {
 
     /// Number of MAVLink messages applied to this state.
     pub messages_applied: u64,
+
+    /// When the newest frame applied to this state arrived at the link: the start of a
+    /// packet-to-pixel measurement (DELIVERABLES.md D9). Measurement scaffolding, not vehicle
+    /// state and not the C#'s: a link stamps it only when its configuration asks
+    /// (`mp_link::LinkConfig::stamp_arrivals`, which only `MP_STORM` sets), and it is `None`
+    /// otherwise.
+    pub packet_in: Option<std::time::Instant>,
 }
 
 /// `MAV_MODE_FLAG_SAFETY_ARMED`. `// C#: ExtLibs/Mavlink/Mavlink.cs:6557`

@@ -90,3 +90,33 @@ Orphans in zh-Hans: dataGridViewImageColumn1.HeaderText, dataGridViewImageColumn
 
 Orphans in zh-TW: BUT_script.Text, lbl_winddir.Text, lbl_windvel.Text.
 
+## Screens through Fluent
+
+The keys each screen asks for with `fl!` in its sources, and per culture how many of them the culture's own `.ftl` files lack. English lacking one is a bug - `mp-gui`'s lint fails on it and the screen would show the key's name in brackets; any other culture lacking one shows it in English, as the C# does. At run time a culture also falls back through its parents before English (`zh-TW` through `zh-Hant`); these counts are each culture's own files. `mp-gui`'s per-culture tests hold their counts to this table.
+
+### Flight Data
+
+46 keys, from `crates/mp-gui/src/fly.rs`, `crates/mp-gui/src/payload.rs`, `crates/mp-gui/src/transponder.rs`.
+
+| culture | lacks | translated |
+|---|---:|---:|
+| en | 0 | 46 |
+| ar | 26 | 20 |
+| az-Latn-AZ | 24 | 22 |
+| de-DE | 25 | 21 |
+| es-ES | 35 | 11 |
+| fr | 0 | 46 |
+| id-ID | 12 | 34 |
+| it-IT | 33 | 13 |
+| ja-JP | 13 | 33 |
+| ko-KR | 9 | 37 |
+| pl | 35 | 11 |
+| pt | 26 | 20 |
+| ru-KZ | 20 | 26 |
+| ru-RU | 35 | 11 |
+| tr | 26 | 20 |
+| uk | 7 | 39 |
+| zh-Hans | 20 | 26 |
+| zh-Hant | 32 | 14 |
+| zh-TW | 37 | 9 |
+

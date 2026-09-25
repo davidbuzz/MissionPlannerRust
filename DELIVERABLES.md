@@ -303,8 +303,17 @@ GPU artificial horizon, tapes, compass, gauges, warnings, with live video underl
   asserts the drawn set against the real application on SITL; the pictures of `displayicons`
   (`HUD.cs:2861-2899, 3150-3301`) as drawn stand-ins, the cell-voltage, Bat2 and GPS2 lines, and
   every readout in the display units the C#'s `CurrentState` getters multiply by, with the unit
-  names (PLAN.md §13.4 row 41). No video underlay, no golden frames, no latency measurement yet.
-- **Tests:** the coverage table in `crates/mp-gui/src/hud.rs`, held to the code by its unit tests; `tests/gui/hud.gui`, `hud-health.gui`, `hud-units.gui`, `hud-icons.gui` and `hud-cells.gui` on SITL. Not yet: `tests/hud_golden.rs`, `tests/latency.rs` (the < 16 ms packet-to-pixel figure is unmeasured; the frame's own p99 is 4.9 ms under the 200 Hz storm), `tests/video_underlay.rs`.
+  names (PLAN.md §13.4 row 41). Golden frames since PLAN.md §13.6 row 75: the scene drawn
+  headless by a software rasteriser (`hud/raster.rs`: 4 x 4 coverage samples, gpui's fill and
+  stroke rules, a fixed bitmap font) and held to 13 images in `testdata/hud/` - three six-frame
+  sheets of `autotest.tlog` played through the flight screen's own `hud::live_inputs` (hardest
+  roll, hardest pitch, arming with ARMED up and gone) and ten hard cases (level, banked, pitch
+  ±90°, inverted, NaN attitude, NaN readouts, a lost fix as text and as its picture, no vehicle);
+  `HUD_UPDATE_GOLDENS=1` redraws them. Packet-to-pixel is measured under `MP_STORM`: the storm's
+  link stamps each packet's arrival into the snapshot (`VehicleState::packet_in`, off on every
+  product link) and `storm.rs` times it to the frame's present, as `storm.latency.*`; the
+  figure itself waits for the owner's run of `tests/gui/storm.gui`. No video underlay yet.
+- **Tests:** the coverage table in `crates/mp-gui/src/hud.rs`, held to the code by its unit tests; the golden frames in `crates/mp-gui/src/hud/golden.rs` (every case against its golden, no golden without a case, and proofs that a one-pixel move, a changed digit and a changed colour each fail the comparison); the latency clock in `crates/mp-gui/src/storm.rs` and the stamp in `crates/mp-link/tests/packet_in.rs`; `tests/gui/hud.gui`, `hud-health.gui`, `hud-units.gui`, `hud-icons.gui` and `hud-cells.gui` on SITL, and `tests/gui/storm.gui` for `storm.latency.p99 < 16`. Not yet: `tests/video_underlay.rs`.
 
 ### D10. Flight Data screen
 The live operations screen: HUD + map + quick view + tuning graph + actions + messages + status tabs,

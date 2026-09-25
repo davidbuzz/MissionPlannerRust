@@ -60,6 +60,10 @@ chrono = { workspace = true }
 # The same version mp-tiles decodes with, so a tile crosses the boundary without converting.
 image.workspace = true
 
+# The screens' words (i18n.rs): the .ftl files under assets/i18n, embedded, formatted per culture.
+fluent-bundle.workspace = true
+unic-langid.workspace = true
+
 # The backend crate per platform, mirroring what gpui_platform does. Selecting it here rather
 # than depending on gpui_platform avoids an inherited-dependency resolution problem: consumed as
 # a git dependency, gpui_platform's `gpui.workspace = true` resolves against crates.io, where an

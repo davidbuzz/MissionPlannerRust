@@ -1,0 +1,34 @@
+# The flight screen in another culture: config.xml's `language` names de-DE, and the tab pages'
+# headers are FlightData.de-DE.resx's words where it has them and FlightData.resx's English where
+# it does not - .NET's ResourceManager falling back from the culture's file to the base file, here
+# Fluent's bundle for de-DE falling back to English (crate::i18n).
+# `L10N.cs:19-25, MainV2.cs:697-700, 4214-4243; GCSViews/FlightData.de-DE.resx`
+#
+# i18n.culture and i18n.chain are the culture read and the cultures tried; i18n.missing is how
+# many keys the screens asked for that neither has - shown as the key's name in brackets - and is
+# zero. The script has a config.xml of its own, so Mission Planner's is neither read nor written.
+#
+# Needs no vehicle:
+#   tools/gui-test.sh tests/gui/fly-tabs-de.gui
+
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '<?xml version="1.0" encoding="utf-8"?>\n<Config>\n  <language>de-DE</language>\n</Config>' > $WORK/config.xml
+
+screen fly
+window 1600x1200
+settle 6
+
+expect i18n.culture de-DE
+expect i18n.chain de-DE,en
+expect i18n.missing 0
+expect i18n.note none
+
+expect fly.tabs tabQuick,tabActions,tabPagemessages,tabActionsSimple,tabPagePreFlight,tabGauges,tabTransponder,tabStatus,tabServo,tabAuxFunction,tabScripts,tabPayload,tabTLogs,tablogbrowse
+expect fly.tabs.text Schnell,Aktionen,Meldungen,Aktionen,Vorflug,Instrumente,Transponder,Status,Servo/Relay,Aux Function,Scripts,Payload Control,Telemetrie-Logs,DataFlash Logs
+expect fly.tab.text Schnell
+
+click fly-tab-actions
+settle 1
+expect fly.tab tabActions
+expect fly.tab.text Aktionen
+expect i18n.missing 0

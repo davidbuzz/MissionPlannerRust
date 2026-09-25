@@ -169,6 +169,12 @@ pub struct LinkConfig {
     /// How long each protocol step waits and how often it retries: Mission Planner's numbers by
     /// default, which is the only thing to fly with. Tests shorten the waits and keep the counts.
     pub timeouts: ProtocolTimeouts,
+    /// Whether to stamp each vehicle's state with when its newest frame arrived
+    /// ([`mp_vehicle::VehicleState::packet_in`]), so a screen can measure packet-to-pixel
+    /// latency (DELIVERABLES.md D9). Measurement scaffolding: off by default and in every
+    /// product path, where it costs one untaken branch a frame; `mpr-gui`'s `MP_STORM` turns it
+    /// on. **Not the C#'s.**
+    pub stamp_arrivals: bool,
 }
 
 impl Default for LinkConfig {
@@ -182,6 +188,7 @@ impl Default for LinkConfig {
             record_path: None,
             stream_rate_hz: 4,
             timeouts: ProtocolTimeouts::default(),
+            stamp_arrivals: false,
         }
     }
 }
@@ -1186,6 +1193,12 @@ fn run_link(
                                 &msg,
                                 sent_at,
                             );
+                            // Packet-in, for a packet-to-pixel measurement; off unless asked.
+                            if config.stamp_arrivals
+                                && let Some(state) = registry.working_mut(id)
+                            {
+                                state.packet_in = Some(arrived);
+                            }
                             known
                                 .entry(id)
                                 .or_insert_with(|| current_settings::Clocks::new(arrived))

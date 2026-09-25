@@ -58,6 +58,14 @@ use gpui::{
 use mp_vehicle::VehicleState;
 use mp_vehicle::units::DisplayUnits;
 
+/// Golden frames: the scenes of recorded flights and of the hard cases, drawn by [`raster`] and
+/// held to the images committed under `testdata/hud/`.
+#[cfg(test)]
+mod golden;
+/// A software rasteriser for a [`Scene`], so a frame can be drawn and compared without a window.
+#[cfg(test)]
+mod raster;
+
 mod colour {
     /// Sky above the horizon.
     pub const SKY: u32 = 0x2f_6d_9e;
@@ -873,6 +881,48 @@ impl HudInputs {
             gps_fix2: state.gps2.fix_type,
         }
     }
+}
+
+/// What the flight screen hands the display each frame: a vehicle's state through the display's
+/// own clocks - how long ago it armed and changed mode ([`Timing::observe`]), the high-priority
+/// message ([`Timing::message`]), `displayAOASSA` ([`Timing::display_aoa_ssa`]) - with the mode
+/// by name and `cs.alt` moved by Set Home Alt. `clock` is the time the display shows.
+///
+/// `main.rs` calls this once a frame, and the golden frames (`hud/golden.rs`) call it on a
+/// recorded flight, so a golden image is drawn by the path the screen takes.
+/// `// C#: GCSViews/FlightData.Designer.cs:352-397, ExtLibs/Controls/HUD.cs:889-930,
+/// ExtLibs/ArduPilot/CurrentState.cs:325-328`
+#[must_use]
+pub fn live_inputs(
+    state: &VehicleState,
+    timing: &mut Timing,
+    now: Instant,
+    clock: String,
+    parameters: &[(String, f64)],
+) -> HudInputs {
+    let (armed_for, mode_changed_for) = timing.observe(state.armed, state.custom_mode, now);
+    let mode = mp_vehicle::flight_mode_name(state.vehicle_type, state.custom_mode)
+        .map_or_else(|| format!("mode {}", state.custom_mode), ToOwned::to_owned);
+    let message = timing.message(high_priority_message(state), now);
+    // C#: ExtLibs/Controls/HUD.cs:889-930
+    let display_aoa_ssa = timing.display_aoa_ssa(state.aoa, state.ssa);
+    // The HUD's altitude is `cs.alt`, which Set Home Alt moves to above sea level.
+    // `// C#: ExtLibs/ArduPilot/CurrentState.cs:325-328`
+    let mut shown = *state;
+    shown.altitude_relative = mp_units::Metres(crate::fly::displayed_altitude(
+        state.altitude_relative.0,
+        state.alt_offset_home,
+    ));
+    HudInputs::from_vehicle(
+        &shown,
+        mode,
+        armed_for,
+        mode_changed_for,
+        clock,
+        message,
+        display_aoa_ssa,
+        parameters,
+    )
 }
 
 /// `EKF_STATUS_FLAGS`: the three bits `ekfstatus` looks at.

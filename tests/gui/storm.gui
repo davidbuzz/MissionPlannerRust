@@ -38,3 +38,16 @@ expect frame.gap.p99_us >= 0
 expect frame.stalls 0
 expect frame.p99 < 8
 expect storm.rate >= 190
+
+# D9: packet-to-pixel under 16 ms at the 99th percentile. From the packet arriving at the link
+# (the storm's link stamps VehicleState::packet_in; no product link does) to the frame showing it
+# presented (a callback deferred from the marker's paint, run when gpui's draw-and-present update
+# ends), less the harness's work. Each packet once, at the first frame that shows it. The journey
+# includes the link's 20 ms snapshot publish interval, so this budget is not yet known to hold.
+# storm.latency.p99 is whole milliseconds rounded down, so `< 16` holds exactly when it is under.
+expect storm.latency.count >= 50
+expect storm.latency.p50_us >= 0
+expect storm.latency.p99_us >= 0
+expect storm.latency.max_us >= 0
+expect storm.latency.over >= 0
+expect storm.latency.p99 < 16

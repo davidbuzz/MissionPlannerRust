@@ -24,6 +24,7 @@ use mp_mission::MissionItem;
 use mp_vehicle::{VehicleFamily, VehicleId};
 
 use crate::MissionPlanner;
+use crate::i18n::fl;
 use crate::telemetry::{Lookup, Report, TelemetryView};
 use crate::textfield::{KeyOutcome, TextField};
 use crate::ui::{action, action_sized, field, panel, theme};
@@ -983,7 +984,7 @@ pub enum Prompt {
 impl Prompt {
     /// The dialog's title.
     #[must_use]
-    pub const fn title(self) -> &'static str {
+    pub fn title(self) -> &'static str {
         match self {
             Self::ConfirmAction(_) => "Action",
             Self::ResumeWarning => "Resume Mission",
@@ -2605,7 +2606,7 @@ fn actions_tab(
             0,
             grid_button(
                 "fly-doaction",
-                "Do Action",
+                fl!("flightdata-BUTactiondo-Text"),
                 theme::WARN,
                 has_vehicle,
                 cx.listener(|this, _event: &(), window, cx| {
@@ -2619,7 +2620,7 @@ fn actions_tab(
             0,
             grid_button(
                 "fly-homealt",
-                "Set Home Alt",
+                fl!("flightdata-BUT_Homealt-Text"),
                 if alt_offset_home(view) == 0.0 {
                     theme::TEXT
                 } else {
@@ -2665,7 +2666,7 @@ fn actions_tab(
             1,
             grid_button(
                 "fly-setwp",
-                "Set WP",
+                fl!("flightdata-BUT_setwp-Text"),
                 theme::ACCENT,
                 has_vehicle,
                 cx.listener(|this, _event: &(), _window, cx| {
@@ -2679,7 +2680,7 @@ fn actions_tab(
             1,
             grid_button(
                 "fly-restartmission",
-                "Restart Mission",
+                fl!("flightdata-BUTrestartmission-Text"),
                 theme::ACCENT,
                 has_vehicle,
                 cx.listener(|this, _event: &(), _window, cx| {
@@ -2725,7 +2726,7 @@ fn actions_tab(
             2,
             grid_button(
                 "fly-rawsensor",
-                "Raw Sensor View",
+                fl!("flightdata-BUT_RAWSensor-Text"),
                 theme::ACCENT,
                 false,
                 |_event: &(), _window, _cx| {},
@@ -2752,7 +2753,7 @@ fn actions_tab(
             3,
             grid_button(
                 "fly-mountmode",
-                "Set Mount",
+                fl!("flightdata-BUT_mountmode-Text"),
                 theme::ACCENT,
                 has_vehicle,
                 cx.listener(|this, _event: &(), _window, cx| {
@@ -2766,7 +2767,7 @@ fn actions_tab(
             3,
             grid_button(
                 "fly-cleartrack",
-                "Clear Track",
+                fl!("flightdata-BUT_clear_track-Text"),
                 theme::ACCENT,
                 true,
                 cx.listener(|this, _event: &(), _window, cx| {
@@ -2781,7 +2782,7 @@ fn actions_tab(
             4,
             grid_button(
                 "fly-sendmsg",
-                "Message",
+                fl!("flightdata-BUT_SendMSG-Text"),
                 theme::ACCENT,
                 has_vehicle,
                 cx.listener(|this, _event: &(), window, cx| {
@@ -2795,7 +2796,7 @@ fn actions_tab(
             4,
             grid_button(
                 "fly-resumemis",
-                "Resume Mission",
+                fl!("flightdata-BUT_resumemis-Text"),
                 theme::WARN,
                 has_vehicle,
                 cx.listener(|this, _event: &(), window, cx| {
@@ -2811,7 +2812,7 @@ fn actions_tab(
             4,
             grid_button(
                 "fly-abortland",
-                "Abort Landing",
+                fl!("flightdata-BUT_abortland-Text"),
                 theme::WARN,
                 has_vehicle,
                 cx.listener(|this, _event: &(), _window, cx| {
@@ -3278,25 +3279,27 @@ impl Page {
         }
     }
 
-    /// The header's words: the page's `Text` in `FlightData.resx`. Both Actions pages are
-    /// "Actions" there, and so both are here.
-    /// `// C#: GCSViews/FlightData.resx:580, 1384, 1441, 1555, 1606, 2531, 3014, 3044, 3692, 3890, 4124, 4424, 4925, 5171`
+    /// The header's words: the page's `Text` in `FlightData.resx`, in the configured culture
+    /// (`crate::i18n`) as `ComponentResourceManager` applies the culture's `.resx`. Both Actions
+    /// pages are "Actions" in English, and so both are here.
+    /// `// C#: GCSViews/FlightData.resx:580, 1384, 1441, 1555, 1606, 2531, 3014, 3044, 3692, 3890, 4124, 4424, 4925, 5171; MainV2.cs:4214-4243`
     #[must_use]
-    pub const fn text(self) -> &'static str {
+    pub fn text(self) -> &'static str {
         match self {
-            Self::Quick => "Quick",
-            Self::Actions | Self::ActionsSimple => "Actions",
-            Self::Messages => "Messages",
-            Self::PreFlight => "PreFlight",
-            Self::Gauges => "Gauges",
-            Self::Transponder => "Transponder",
-            Self::Status => "Status",
-            Self::Servo => "Servo/Relay",
-            Self::AuxFunction => "Aux Function",
-            Self::Scripts => "Scripts",
-            Self::Payload => "Payload Control",
-            Self::TLogs => "Telemetry Logs",
-            Self::LogBrowse => "DataFlash Logs",
+            Self::Quick => fl!("flightdata-tabQuick-Text"),
+            Self::Actions => fl!("flightdata-tabActions-Text"),
+            Self::Messages => fl!("flightdata-tabPagemessages-Text"),
+            Self::ActionsSimple => fl!("flightdata-tabActionsSimple-Text"),
+            Self::PreFlight => fl!("flightdata-tabPagePreFlight-Text"),
+            Self::Gauges => fl!("flightdata-tabGauges-Text"),
+            Self::Transponder => fl!("flightdata-tabTransponder-Text"),
+            Self::Status => fl!("flightdata-tabStatus-Text"),
+            Self::Servo => fl!("flightdata-tabServo-Text"),
+            Self::AuxFunction => fl!("flightdata-tabAuxFunction-Text"),
+            Self::Scripts => fl!("flightdata-tabScripts-Text"),
+            Self::Payload => fl!("flightdata-tabPayload-Text"),
+            Self::TLogs => fl!("flightdata-tabTLogs-Text"),
+            Self::LogBrowse => fl!("flightdata-tablogbrowse-Text"),
         }
     }
 
@@ -4804,17 +4807,25 @@ fn log_directory() -> Option<std::path::PathBuf> {
         .or_else(mp_settings::default_log_directory)
 }
 
-/// The speed buttons of `panel2`: each one's text, the `Tag` `BUT_speed1_Click` parses, its id,
-/// and where the Designer puts it - the first four on one row, the other three under them.
+/// A button's words, looked up when it is drawn (`crate::i18n`).
+pub type Words = fn() -> &'static str;
+
+/// The speed buttons of `panel2`: each one's text in the configured culture, the `Tag`
+/// `BUT_speed1_Click` parses, its id, and where the Designer puts it - the first four on one
+/// row, the other three under them.
 /// `// C#: GCSViews/FlightData.Designer.cs:2231-2317, GCSViews/FlightData.resx (BUT_speed*.Text)`
-pub const SPEEDS: [(&str, f64, &str); 7] = [
-    ("0.1", 0.1, "fly-speed1_10"),
-    ("0.25", 0.25, "fly-speed1_4"),
-    ("0.5", 0.5, "fly-speed1_2"),
-    ("1x", 1.0, "fly-speed1"),
-    ("2x", 2.0, "fly-speed2"),
-    ("5x", 5.0, "fly-speed5"),
-    ("10x", 10.0, "fly-speed10"),
+pub const SPEEDS: [(Words, f64, &str); 7] = [
+    (
+        || fl!("flightdata-BUT_speed1_10-Text"),
+        0.1,
+        "fly-speed1_10",
+    ),
+    (|| fl!("flightdata-BUT_speed1_4-Text"), 0.25, "fly-speed1_4"),
+    (|| fl!("flightdata-BUT_speed1_2-Text"), 0.5, "fly-speed1_2"),
+    (|| fl!("flightdata-BUT_speed1-Text"), 1.0, "fly-speed1"),
+    (|| fl!("flightdata-BUT_speed2-Text"), 2.0, "fly-speed2"),
+    (|| fl!("flightdata-BUT_speed5-Text"), 5.0, "fly-speed5"),
+    (|| fl!("flightdata-BUT_speed10-Text"), 10.0, "fly-speed10"),
 ];
 
 /// `TrackBar.LargeChange`, which the Designer leaves at its default: how far a press on the
@@ -5045,7 +5056,7 @@ pub fn playback_page(playback: &Playback, cx: &mut Context<MissionPlanner>) -> A
         .h(px(33.0))
         .child(left(action(
             "fly-loadtelem",
-            "Load Log",
+            fl!("flightdata-BUT_loadtelem-Text"),
             theme::ACCENT,
             true,
             cx.listener(|this, _event: &(), window, cx| {
@@ -5100,7 +5111,7 @@ pub fn playback_page(playback: &Playback, cx: &mut Context<MissionPlanner>) -> A
     for (index, (label, speed, id)) in SPEEDS.iter().enumerate() {
         let button = action(
             id,
-            *label,
+            label(),
             theme::TEXT,
             true,
             cx.listener(move |this, _event: &(), _window, cx| {
@@ -5253,7 +5264,7 @@ pub fn dataflash_page(data: &FlightData, cx: &mut Context<MissionPlanner>) -> An
             0,
             grid_button(
                 "fly-dfmavlink",
-                "Download DataFlash Log Via Mavlink",
+                fl!("flightdata-BUT_DFMavlink-Text"),
                 theme::ACCENT,
                 true,
                 cx.listener(|this, _event: &(), _window, cx| {
@@ -5267,7 +5278,7 @@ pub fn dataflash_page(data: &FlightData, cx: &mut Context<MissionPlanner>) -> An
             0,
             grid_button(
                 "fly-logbrowse",
-                "Review a Log",
+                fl!("flightdata-BUT_logbrowse-Text"),
                 theme::ACCENT,
                 true,
                 // `new LogBrowse().Show()`: the log browser, which is a screen of its own here.
@@ -5303,7 +5314,7 @@ pub fn dataflash_page(data: &FlightData, cx: &mut Context<MissionPlanner>) -> An
         2,
         grid_button(
             "fly-georefimage",
-            "Geo Reference Images",
+            fl!("flightdata-BUT_georefimage-Text"),
             theme::ACCENT,
             true,
             cx.listener(|this, _event: &(), _window, cx| {
@@ -5361,14 +5372,15 @@ impl Conversion {
         }
     }
 
-    /// The button's `Text` in `FlightData.resx`.
+    /// The button's `Text` in `FlightData.resx`, in the configured culture (`crate::i18n`).
+    /// `// C#: GCSViews/FlightData.resx (but_bintolog.Text, but_dflogtokml.Text, BUT_matlab.Text, BUT_loganalysis.Text)`
     #[must_use]
-    pub const fn text(self) -> &'static str {
+    pub fn text(self) -> &'static str {
         match self {
-            Self::BinToLog => "Convert .Bin to .Log",
-            Self::DflogToKml => "Create KML + gpx",
-            Self::Matlab => "Create Matlab File",
-            Self::LogAnalysis => "Auto Analysis",
+            Self::BinToLog => fl!("flightdata-but_bintolog-Text"),
+            Self::DflogToKml => fl!("flightdata-but_dflogtokml-Text"),
+            Self::Matlab => fl!("flightdata-BUT_matlab-Text"),
+            Self::LogAnalysis => fl!("flightdata-BUT_loganalysis-Text"),
         }
     }
 
@@ -9573,7 +9585,7 @@ mod tests {
         assert_eq!(playback.speed_label, "x 1.0");
         for (label, speed, _) in SPEEDS {
             playback.set_speed(speed);
-            let said = label.trim_end_matches('x');
+            let said = label().trim_end_matches('x');
             assert_eq!(playback.speed_label, format!("x {said}"));
         }
         // A log loaded afterwards plays at the speed chosen.

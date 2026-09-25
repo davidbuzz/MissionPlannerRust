@@ -3434,6 +3434,7 @@ name = "mp-gui"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "fluent-bundle",
  "gpui",
  "gpui_linux",
  "gpui_macos",
@@ -3459,6 +3460,7 @@ dependencies = [
  "mp-units",
  "mp-vehicle",
  "ttf-parser",
+ "unic-langid",
 ]
 
 [[package]]

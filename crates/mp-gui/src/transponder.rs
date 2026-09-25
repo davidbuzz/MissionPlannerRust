@@ -30,14 +30,20 @@ use mp_vehicle::VehicleId;
 use mp_vehicle::onboard::Transponder as Status;
 
 use crate::MissionPlanner;
+use crate::i18n::fl;
 use crate::textfield::{KeyOutcome, TextField};
 use crate::ui::theme;
 
 /// `MAVLINK_MSG_ID.UAVIONIX_ADSB_OUT_STATUS`, the message Connect asks for.
 pub const STATUS_MESSAGE: u16 = 10_008;
 
-/// `XPDRConnect_btn.Text` in the `.resx`, before anything has changed it.
-pub const CONNECT: &str = "Connect to Transponder";
+/// `XPDRConnect_btn.Text` in the `.resx`, before anything has changed it, in the configured
+/// culture (`crate::i18n`). What `updateTransponder` puts there later is the C#'s code, English.
+/// `// C#: GCSViews/FlightData.resx (XPDRConnect_btn.Text)`
+#[must_use]
+pub fn connect() -> &'static str {
+    fl!("flightdata-XPDRConnect_btn-Text")
+}
 
 /// What `updateTransponder` puts on the button with no status and none ever had. The C#'s own
 /// capital T, unlike the `.resx`'s.
@@ -215,14 +221,15 @@ impl Button {
         }
     }
 
-    /// Its text in the `.resx`.
+    /// Its text in the `.resx`, in the configured culture (`crate::i18n`).
+    /// `// C#: GCSViews/FlightData.resx (STBY_btn.Text, ON_btn.Text, ALT_btn.Text, IDENT_btn.Text)`
     #[must_use]
-    pub const fn text(self) -> &'static str {
+    pub fn text(self) -> &'static str {
         match self {
-            Self::Stby => "STBY",
-            Self::On => "ON",
-            Self::Alt => "ALT",
-            Self::Ident => "IDENT",
+            Self::Stby => fl!("flightdata-STBY_btn-Text"),
+            Self::On => fl!("flightdata-ON_btn-Text"),
+            Self::Alt => fl!("flightdata-ALT_btn-Text"),
+            Self::Ident => fl!("flightdata-IDENT_btn-Text"),
         }
     }
 
@@ -310,7 +317,7 @@ impl Default for Transponder {
             faults: [false; 5],
             nic: "",
             nacp: "",
-            connect_text: CONNECT,
+            connect_text: connect(),
             connect_enabled: true,
             enabled: false,
             bold: None,
@@ -961,7 +968,7 @@ mod tests {
         let mut xpdr = Transponder::default();
         // No port: nothing changes.
         assert!(!xpdr.update(None, false, (false, false), now));
-        assert_eq!(xpdr.connect_text, CONNECT);
+        assert_eq!(xpdr.connect_text, connect());
         assert!(!xpdr.update(None, true, (false, false), now));
         assert_eq!(xpdr.connect_text, "Connect To Transponder");
         assert!(xpdr.connect_enabled);

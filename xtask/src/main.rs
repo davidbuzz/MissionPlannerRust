@@ -357,7 +357,8 @@ fn codegen_resx(check_only: bool) -> Result<()> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => codegen::resx::Keymap::default(),
         Err(e) => return Err(e).context("reading assets/i18n/keymap.toml"),
     };
-    let output = codegen::resx::convert(&tree, keymap)?;
+    let screens = codegen::resx::screen_keys(&root)?;
+    let output = codegen::resx::convert(&tree, keymap, &screens)?;
 
     if check_only {
         let mut stale = Vec::new();

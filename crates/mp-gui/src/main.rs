@@ -20,6 +20,7 @@ mod georef_ui;
 mod glyph_text;
 // ---- end Geo Reference ----
 mod hud;
+mod i18n;
 mod joystick;
 mod logbrowse;
 mod logdownload;
@@ -465,15 +466,19 @@ impl MissionPlanner {
         screen: Screen,
         cx: &mut Context<Self>,
     ) -> Self {
+        // Mission Planner's config.xml, read once as `Settings.Instance` is, before anything
+        // below reads it: the map's access mode is one of its keys. `// C#: MainV2.cs:782-808`
+        let mut persisted = settings::Persisted::load();
+        // The screens' culture, from its `language`, before the first screen asks for a word -
+        // the flight screen's state below already does.
+        // `// C#: MainV2.cs:660-661, 697-700; L10N.cs:12-25`
+        i18n::init(persisted.get(i18n::SETTING));
         // A log to replay plays as the Telemetry Logs page plays one: at its own pace, under the
         // page's controls. `// C#: GCSViews/FlightData.cs:669-701`
         // MP_STORM puts a synthetic vehicle behind the screens in place of any link: storm.rs.
         let mut fly_data = fly::FlightData::new();
         // The link this start opens, which Mission Planner's Connect would save.
         let opened = target.clone().filter(|_| !storm::enabled());
-        // Mission Planner's config.xml, read once as `Settings.Instance` is, before anything
-        // below reads it: the map's access mode is one of its keys. `// C#: MainV2.cs:782-808`
-        let mut persisted = settings::Persisted::load();
         // `CurrentState`'s statics, as `MainV2`'s start-up sets them from config.xml: the
         // telemetry rates' saved defaults, the custom fields' names, the planned home put back to
         // 0,0,0 when it is off the globe, and the K-index - today's saved one, or a download on a
@@ -1728,31 +1733,12 @@ impl MissionPlanner {
         let Some(state) = view.state.as_deref() else {
             return hud::HudInputs::default();
         };
-        let now = std::time::Instant::now();
-        let (armed_for, mode_changed_for) =
-            self.hud_timing.observe(state.armed, state.custom_mode, now);
-        let mode = mp_vehicle::flight_mode_name(state.vehicle_type, state.custom_mode)
-            .map_or_else(|| format!("mode {}", state.custom_mode), ToOwned::to_owned);
-        let message = self
-            .hud_timing
-            .message(hud::high_priority_message(state), now);
-        // C#: ExtLibs/Controls/HUD.cs:889-930
-        let display_aoa_ssa = self.hud_timing.display_aoa_ssa(state.aoa, state.ssa);
-        // The HUD's altitude is `cs.alt`, which Set Home Alt moves to above sea level.
-        // `// C#: ExtLibs/ArduPilot/CurrentState.cs:325-328`
-        let mut shown = *state;
-        shown.altitude_relative = mp_units::Metres(fly::displayed_altitude(
-            state.altitude_relative.0,
-            state.alt_offset_home,
-        ));
-        hud::HudInputs::from_vehicle(
-            &shown,
-            mode,
-            armed_for,
-            mode_changed_for,
+        // One path with the golden frames, which draw a recorded flight through it.
+        hud::live_inputs(
+            state,
+            &mut self.hud_timing,
+            std::time::Instant::now(),
             chrono::Local::now().format("%H:%M:%S").to_string(),
-            message,
-            display_aoa_ssa,
             &view.parameters,
         )
     }
@@ -2687,6 +2673,7 @@ impl Render for MissionPlanner {
             let harness = std::time::Instant::now();
             facts::record("screen", self.screen.label());
             self.persisted.record_facts();
+            i18n::record_facts();
             // Where the map draws home, as `latitude,longitude`, read back from the map, and
             // whether the last paint wrote its "H".
             {
@@ -3431,7 +3418,10 @@ impl Render for MissionPlanner {
                 cx,
             ))
             // Last, so its paint ends the frame's measurement; absent without MP_STORM.
-            .children(storm::marker(view.frames))
+            .children(storm::marker(
+                view.frames,
+                view.state.as_ref().and_then(|state| state.packet_in),
+            ))
     }
 }
 

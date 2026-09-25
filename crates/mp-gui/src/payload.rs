@@ -24,6 +24,7 @@ use mp_mavlink_dialects::all::{MavCmd, MavMessage};
 use mp_vehicle::VehicleId;
 
 use crate::MissionPlanner;
+use crate::i18n::fl;
 use crate::ui::theme;
 
 /// `MAV_MOUNT_MODE.MAVLINK_TARGETING`. `// C#: ExtLibs/Mavlink/Mavlink.cs (enum MAV_MOUNT_MODE)`
@@ -554,9 +555,11 @@ pub fn page(
         .child(tilt)
         .child(pan)
         .child(roll)
+        // The buttons' words in the configured culture (`crate::i18n`).
+        // `// C#: GCSViews/FlightData.resx (BUT_resetGimbalPos.Text, BUT_GimbalVideo.Text)`
         .child(button(
             "fly-gimbal-reset",
-            "Reset Position",
+            fl!("flightdata-BUT_resetGimbalPos-Text"),
             (10.0, 134.0, 56.0, 23.0),
             true,
             cx.listener(|this, _event, _window, cx| {
@@ -566,7 +569,7 @@ pub fn page(
         ))
         .child(button(
             "fly-gimbal-video",
-            "Video Control",
+            fl!("flightdata-BUT_GimbalVideo-Text"),
             (73.0, 134.0, 56.0, 23.0),
             false,
             cx.listener(|this, _event, _window, cx| {

@@ -44,6 +44,26 @@
 //! | `frame.gap.p50_us`, `frame.gap.p99_us`, `frame.gap.max_us` | the gap, in microseconds |
 //! | `storm.rate` | the storm as it arrived, in Hz: the link's frame counter, per second, over the four frames each tick writes |
 //! | `storm.frames` | frames the link counted while the frames were measured |
+//! | `storm.latency.count` | packets whose journey to the screen was measured |
+//! | `storm.latency.p99` | packet-to-pixel, whole milliseconds rounded down, so `storm.latency.p99 < 16` holds exactly when the 99th percentile is under D9's 16 ms |
+//! | `storm.latency.p50_us`, `storm.latency.p99_us`, `storm.latency.max_us` | the same in microseconds |
+//! | `storm.latency.over` | packets that took more than [`LATENCY_BUDGET`] |
+//!
+//! # Packet to pixel
+//!
+//! DELIVERABLES.md D9's "< 16 ms packet-to-pixel at the 99th percentile" runs from a packet
+//! arriving at the link to the frame showing it being presented. The storm's link is asked to
+//! stamp arrivals (`LinkConfig::stamp_arrivals`), so the snapshot a frame reads carries when its
+//! newest packet came in (`VehicleState::packet_in`); the product's links never are, and the
+//! field stays empty. The frame hands the stamp to [`marker`], and the measurement ends when
+//! gpui has handed the frame to the platform: its `draw` and `present` run inside one update of
+//! the application, and a callback deferred from the marker's paint runs when that update ends.
+//! So the journey covers the link's read and decode, the wait for the next snapshot publish
+//! (every 20 ms), the wait for the next frame, and the frame's render, layout, paint and
+//! present. The harness's own work inside the frame is subtracted, as it is from a frame's cost.
+//!
+//! Each packet is measured once, at the first frame that shows it: a frame drawn before the
+//! next snapshot shows the same packet again, and its age then is not a packet's latency.
 //!
 //! `tests/gui/storm.gui` runs it.
 
@@ -66,6 +86,9 @@ pub const REFRESH: Duration = Duration::from_millis(16);
 
 /// A frame costing more than this is a stall: D10's figure.
 pub const STALL: Duration = Duration::from_millis(8);
+
+/// Packet-to-pixel at the 99th percentile must be under this: D9's figure.
+pub const LATENCY_BUDGET: Duration = Duration::from_millis(16);
 
 /// Frames drawn in this long after the first are not counted.
 pub const WARM_UP: Duration = Duration::from_secs(2);
@@ -121,7 +144,12 @@ pub fn enabled() -> bool {
 #[must_use]
 pub fn source(rate: u32) -> (Storm, Telemetry) {
     let (storm, end) = Storm::start(rate);
-    let link = Link::from_transport(Box::new(end), LinkConfig::default());
+    // Stamped, so a frame can tell when the packet it shows arrived.
+    let config = LinkConfig {
+        stamp_arrivals: true,
+        ..LinkConfig::default()
+    };
+    let link = Link::from_transport(Box::new(end), config);
     (storm, Telemetry::over(link, &format!("storm:{rate}")))
 }
 
@@ -214,6 +242,56 @@ impl Meter {
     }
 }
 
+/// Every measured packet's journey from the link to the screen.
+#[derive(Debug, Default, Clone)]
+pub struct Latencies {
+    samples: Vec<Duration>,
+    over: usize,
+}
+
+/// What the latencies came to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct LatencySummary {
+    /// Packets measured.
+    pub count: usize,
+    /// Median packet-to-pixel.
+    pub p50: Duration,
+    /// 99th percentile.
+    pub p99: Duration,
+    /// Slowest.
+    pub max: Duration,
+    /// Packets slower than [`LATENCY_BUDGET`].
+    pub over: usize,
+}
+
+impl Latencies {
+    /// Counts one packet's journey. Returns whether it was counted; past [`MAX_FRAMES`] it is not.
+    pub fn record(&mut self, latency: Duration) -> bool {
+        if self.samples.len() >= MAX_FRAMES {
+            return false;
+        }
+        if latency > LATENCY_BUDGET {
+            self.over += 1;
+        }
+        self.samples.push(latency);
+        true
+    }
+
+    /// The percentiles, the slowest and the count over budget.
+    #[must_use]
+    pub fn summary(&self) -> LatencySummary {
+        let mut sorted = self.samples.clone();
+        sorted.sort_unstable();
+        LatencySummary {
+            count: sorted.len(),
+            p50: percentile(&sorted, 50),
+            p99: percentile(&sorted, 99),
+            max: sorted.last().copied().unwrap_or_default(),
+            over: self.over,
+        }
+    }
+}
+
 /// The storm's rate as it arrived: `frames` counted by the link over `elapsed`, a second, over the
 /// frames in each tick. Rounded down, so `storm.rate >= 190` holds exactly when it was.
 #[must_use]
@@ -224,9 +302,17 @@ pub fn arrived_rate(frames: u64, elapsed: Duration) -> u128 {
         .unwrap_or(0)
 }
 
-/// The facts for a summary and the storm behind it.
+/// How many facts [`facts`] gives.
+const FACT_COUNT: usize = 19;
+
+/// The facts for a summary, the packets' journeys and the storm behind them.
 #[must_use]
-pub fn facts(summary: &Summary, link_frames: u64, elapsed: Duration) -> [(&'static str, u128); 13] {
+pub fn facts(
+    summary: &Summary,
+    latency: &LatencySummary,
+    link_frames: u64,
+    elapsed: Duration,
+) -> [(&'static str, u128); FACT_COUNT] {
     [
         ("frame.count", summary.count as u128),
         ("frame.p50", summary.p50.as_millis()),
@@ -241,6 +327,12 @@ pub fn facts(summary: &Summary, link_frames: u64, elapsed: Duration) -> [(&'stat
         ("frame.gap.max_us", summary.gap_max.as_micros()),
         ("storm.rate", arrived_rate(link_frames, elapsed)),
         ("storm.frames", u128::from(link_frames)),
+        ("storm.latency.count", latency.count as u128),
+        ("storm.latency.p99", latency.p99.as_millis()),
+        ("storm.latency.p50_us", latency.p50.as_micros()),
+        ("storm.latency.p99_us", latency.p99.as_micros()),
+        ("storm.latency.max_us", latency.max.as_micros()),
+        ("storm.latency.over", latency.over as u128),
     ]
 }
 
@@ -262,6 +354,13 @@ struct Clock {
     /// The last frame counted: when it began and the link's frame count.
     last: Option<(Instant, u64)>,
     meter: Meter,
+    /// The counted frame painted and waiting to be presented, if it shows a packet not measured
+    /// yet: when that packet arrived at the link, and the harness's time inside the frame.
+    presenting: Option<(Instant, Duration)>,
+    /// The packet the last presented frame showed, which a later frame showing it again does
+    /// not measure.
+    last_packet: Option<Instant>,
+    latencies: Latencies,
 }
 
 impl Clock {
@@ -283,9 +382,10 @@ impl Clock {
         }
     }
 
-    /// The frame's marker is painted, with the link's frame count as the frame read it. Returns
-    /// whether the facts are due.
-    fn end(&mut self, now: Instant, link_frames: u64) -> bool {
+    /// The frame's marker is painted, with the link's frame count and the arrival of the newest
+    /// packet in the snapshot as the frame read them. Returns whether the facts are due.
+    fn end(&mut self, now: Instant, link_frames: u64, packet_in: Option<Instant>) -> bool {
+        self.presenting = None;
         let Some(started) = self.started.take() else {
             return false;
         };
@@ -301,18 +401,42 @@ impl Clock {
         if !self.meter.record(cost, self.gap) {
             return false;
         }
+        self.presenting = packet_in
+            .filter(|packet| self.last_packet != Some(*packet))
+            .map(|packet| (packet, self.harness));
         self.baseline.get_or_insert((started, link_frames));
         self.last = Some((started, link_frames));
         let count = self.meter.count();
         count >= ENOUGH && (count - ENOUGH).is_multiple_of(PUBLISH_EVERY)
     }
 
+    /// Harness work after the frame's marker and before it is presented - the facts written as
+    /// it ends - which is not the packet's journey.
+    fn exclude_presenting(&mut self, spent: Duration) {
+        if let Some((_, harness)) = self.presenting.as_mut() {
+            *harness += spent;
+        }
+    }
+
+    /// The frame painted last has been presented: the packet it shows has reached the screen.
+    fn presented(&mut self, now: Instant) {
+        if let Some((packet, harness)) = self.presenting.take() {
+            let latency = now
+                .saturating_duration_since(packet)
+                .saturating_sub(harness);
+            if self.latencies.record(latency) {
+                self.last_packet = Some(packet);
+            }
+        }
+    }
+
     /// The facts, as of the last frame counted.
-    fn facts(&self) -> Option<[(&'static str, u128); 13]> {
+    fn facts(&self) -> Option<[(&'static str, u128); FACT_COUNT]> {
         let (since, frames_then) = self.baseline?;
         let (at, frames_now) = self.last?;
         Some(facts(
             &self.meter.summary(),
+            &self.latencies.summary(),
             frames_now.saturating_sub(frames_then),
             at.saturating_duration_since(since),
         ))
@@ -346,31 +470,45 @@ pub fn exclude(spent: Duration) {
 /// storm, so a normal run's element tree is untouched.
 ///
 /// Positioned absolutely and empty, so it takes no part in the layout it is measuring.
-/// `link_frames` is the link's frame count as this frame read it, for `storm.rate`.
+/// `link_frames` is the link's frame count as this frame read it, for `storm.rate`, and
+/// `packet_in` when the newest packet in the snapshot it read arrived at the link
+/// (`VehicleState::packet_in`), for the packet-to-pixel latency.
 #[must_use]
-pub fn marker(link_frames: u64) -> Option<impl IntoElement> {
+pub fn marker(link_frames: u64, packet_in: Option<Instant>) -> Option<impl IntoElement> {
     enabled().then(|| {
         gpui::canvas(
             |_bounds, _window, _cx| (),
-            move |_bounds, (), _window, _cx| painted(link_frames),
+            move |_bounds, (), _window, cx| painted(link_frames, packet_in, cx),
         )
         .absolute()
     })
 }
 
-/// The marker is painted: the frame's work is done.
-fn painted(link_frames: u64) {
+/// The marker is painted: the frame's work is done, and it is presented once the update that
+/// draws it ends.
+fn painted(link_frames: u64, packet_in: Option<Instant>, cx: &mut gpui::App) {
     let now = Instant::now();
-    CLOCK.with_borrow_mut(|clock| {
-        if clock.end(now, link_frames)
+    let presenting = CLOCK.with_borrow_mut(|clock| {
+        if clock.end(now, link_frames, packet_in)
             && crate::facts::enabled()
             && let Some(facts) = clock.facts()
         {
+            let writing = Instant::now();
             for (key, value) in facts {
                 crate::facts::record(key, value);
             }
+            clock.exclude_presenting(writing.elapsed());
         }
+        clock.presenting.is_some()
     });
+    // gpui draws the frame and presents it inside one update of the application, and runs what
+    // was deferred when the update ends: after the present.
+    if presenting {
+        cx.defer(|_| {
+            let now = Instant::now();
+            CLOCK.with_borrow_mut(|clock| clock.presented(now));
+        });
+    }
 }
 
 #[cfg(test)]
@@ -430,7 +568,12 @@ mod tests {
             gap_p99: ms(17),
             gap_max: ms(20),
         };
-        let facts = facts(&summary, 8_000, Duration::from_secs(10));
+        let facts = facts(
+            &summary,
+            &LatencySummary::default(),
+            8_000,
+            Duration::from_secs(10),
+        );
         let value = |key: &str| facts.iter().find(|(k, _)| *k == key).map(|(_, v)| *v);
         assert_eq!(value("frame.p99"), Some(7));
         assert_eq!(value("frame.p99_us"), Some(7_999));
@@ -455,11 +598,11 @@ mod tests {
         let mut clock = Clock::default();
         // A frame long after warm-up, whose facts file took 3 ms of its 5.
         clock.begin(t0);
-        clock.end(t0 + ms(1), 10);
+        clock.end(t0 + ms(1), 10, None);
         let start = t0 + WARM_UP;
         clock.begin(start);
         clock.exclude(ms(3));
-        clock.end(start + ms(5), 10);
+        clock.end(start + ms(5), 10, None);
         let summary = clock.meter.summary();
         assert_eq!(summary.count, 1);
         assert_eq!(summary.max, ms(2));
@@ -475,14 +618,14 @@ mod tests {
         for n in 0..10 {
             let start = t0 + ms(100 * n);
             clock.begin(start);
-            clock.end(start + ms(50), 1);
+            clock.end(start + ms(50), 1, None);
         }
         // Past the warm-up, but nothing heard from the vehicle yet.
         clock.begin(t0 + WARM_UP);
-        clock.end(t0 + WARM_UP + ms(50), 0);
+        clock.end(t0 + WARM_UP + ms(50), 0, None);
         assert_eq!(clock.meter.count(), 0);
         // A marker painted with no frame begun counts nothing either.
-        assert!(!clock.end(t0 + WARM_UP + ms(60), 5));
+        assert!(!clock.end(t0 + WARM_UP + ms(60), 5, None));
         assert_eq!(clock.meter.count(), 0);
     }
 
@@ -491,7 +634,7 @@ mod tests {
         let t0 = Instant::now();
         let mut clock = Clock::default();
         clock.begin(t0);
-        clock.end(t0, 0);
+        clock.end(t0, 0, None);
         // 60 Hz frames of 2 ms each, with the link counting 800 frames a second.
         let mut due = Vec::new();
         for n in 0..=(ENOUGH + PUBLISH_EVERY) {
@@ -499,7 +642,7 @@ mod tests {
             let start = t0 + WARM_UP + offset;
             let link_frames = 1_000 + u64::try_from(offset.as_millis() * 8 / 10).expect("small");
             clock.begin(start);
-            if clock.end(start + ms(2), link_frames) {
+            if clock.end(start + ms(2), link_frames, None) {
                 due.push(clock.meter.count());
             }
         }
@@ -533,7 +676,7 @@ mod tests {
         }
         assert!(!enabled());
         assert!(telemetry().is_none());
-        assert!(marker(1_000).is_none());
+        assert!(marker(1_000, None).is_none());
         frame_started();
         exclude(ms(1));
         CLOCK.with_borrow(|clock| assert!(clock.started.is_none() && clock.first.is_none()));
@@ -545,7 +688,7 @@ mod tests {
         // checked without one. A renamed fact would fail it only once somebody ran it.
         let script = include_str!("../../../tests/gui/storm.gui");
         let summary = Meter::default().summary();
-        let published: Vec<&str> = facts(&summary, 0, Duration::ZERO)
+        let published: Vec<&str> = facts(&summary, &LatencySummary::default(), 0, Duration::ZERO)
             .iter()
             .map(|(key, _)| *key)
             .collect();
@@ -571,6 +714,104 @@ mod tests {
         assert_eq!(STALL, ms(8));
         assert!(has(&["storm.rate", ">=", "190"]));
         assert!(has(&["frame.count", ">=", &ENOUGH.to_string()]));
+        // D9: packet-to-pixel under 16 ms at the 99th percentile, from enough packets.
+        assert!(has(&["storm.latency.p99", "<", "16"]));
+        assert_eq!(LATENCY_BUDGET, ms(16));
+        assert!(has(&["storm.latency.count", ">=", "50"]));
+    }
+
+    /// A frame long after warm-up, to measure latency on.
+    fn warm_clock(t0: Instant) -> Clock {
+        let mut clock = Clock::default();
+        clock.begin(t0);
+        clock.end(t0 + ms(1), 10, None);
+        clock
+    }
+
+    #[test]
+    fn a_packet_is_timed_from_the_link_to_the_present_less_the_harness() {
+        // The packet arrived 3 ms before the frame began; the frame took 5 ms, 1 of it the
+        // harness's; its facts took 1 ms more after the marker; it was presented 2 ms after the
+        // marker. The packet's journey: 3 + 5 + 2 less the harness's 2.
+        let t0 = Instant::now();
+        let mut clock = warm_clock(t0);
+        let start = t0 + WARM_UP;
+        clock.begin(start);
+        clock.exclude(ms(1));
+        clock.end(start + ms(5), 20, Some(start - ms(3)));
+        clock.exclude_presenting(ms(1));
+        clock.presented(start + ms(7));
+        let summary = clock.latencies.summary();
+        assert_eq!(summary.count, 1);
+        assert_eq!(summary.max, ms(8));
+        assert_eq!(summary.over, 0);
+        // Presenting again measures nothing more.
+        clock.presented(start + ms(9));
+        assert_eq!(clock.latencies.summary().count, 1);
+    }
+
+    #[test]
+    fn a_packet_is_measured_once_at_the_first_frame_that_shows_it() {
+        let t0 = Instant::now();
+        let mut clock = warm_clock(t0);
+        let packet = t0 + WARM_UP;
+        for n in 0..3 {
+            // Three frames 16 ms apart, all showing the one packet: only the first counts.
+            let start = packet + ms(1 + 16 * n);
+            clock.begin(start);
+            clock.end(start + ms(2), 20, Some(packet));
+            clock.presented(start + ms(3));
+        }
+        assert_eq!(clock.latencies.summary().count, 1);
+        assert_eq!(clock.latencies.summary().max, ms(4));
+        // A new packet is measured.
+        let start = packet + ms(60);
+        clock.begin(start);
+        clock.end(start + ms(2), 20, Some(start - ms(15)));
+        clock.presented(start + ms(3));
+        let summary = clock.latencies.summary();
+        assert_eq!(summary.count, 2);
+        assert_eq!(summary.max, ms(18));
+        assert_eq!(summary.over, 1, "18 ms is over the 16 ms budget");
+    }
+
+    #[test]
+    fn no_latency_without_a_stamp_or_before_warm_up() {
+        let t0 = Instant::now();
+        let mut clock = Clock::default();
+        // Before warm-up: not counted, though stamped.
+        clock.begin(t0);
+        clock.end(t0 + ms(2), 10, Some(t0));
+        clock.presented(t0 + ms(3));
+        // Warm, but the snapshot carries no stamp: a link that was not asked for one.
+        let start = t0 + WARM_UP;
+        clock.begin(start);
+        clock.end(start + ms(2), 10, None);
+        clock.presented(start + ms(3));
+        // A marker painted with no frame begun measures nothing either.
+        clock.end(start + ms(4), 10, Some(start));
+        clock.presented(start + ms(5));
+        assert_eq!(clock.latencies.summary().count, 0);
+    }
+
+    #[test]
+    fn the_latency_facts_round_down_so_under_sixteen_means_under_sixteen() {
+        let mut latencies = Latencies::default();
+        for micros in [2_000, 9_000, 15_999] {
+            assert!(latencies.record(Duration::from_micros(micros)));
+        }
+        let latency = latencies.summary();
+        let facts = facts(&Meter::default().summary(), &latency, 0, Duration::ZERO);
+        let value = |key: &str| facts.iter().find(|(k, _)| *k == key).map(|(_, v)| *v);
+        assert_eq!(value("storm.latency.count"), Some(3));
+        assert_eq!(value("storm.latency.p99"), Some(15));
+        assert_eq!(value("storm.latency.p99_us"), Some(15_999));
+        assert_eq!(value("storm.latency.p50_us"), Some(9_000));
+        assert_eq!(value("storm.latency.max_us"), Some(15_999));
+        assert_eq!(value("storm.latency.over"), Some(0));
+        latencies.record(LATENCY_BUDGET + Duration::from_micros(1));
+        assert_eq!(latencies.summary().over, 1);
+        assert_eq!(latencies.summary().p99.as_millis(), 16);
     }
 
     #[test]
@@ -637,5 +878,15 @@ mod tests {
             std::thread::sleep(Duration::from_millis(20));
         }
         assert!(storm.ticks() > 10);
+        // The storm's link stamps each packet's arrival into the snapshot, for the latency, and
+        // the stamp is recent: 200 Hz packets and a 20 ms publish.
+        let stamped = telemetry
+            .view()
+            .state
+            .as_ref()
+            .and_then(|state| state.packet_in)
+            .expect("the storm's link stamps arrivals");
+        let age = Instant::now().saturating_duration_since(stamped);
+        assert!(age < Duration::from_secs(1), "{age:?}");
     }
 }
