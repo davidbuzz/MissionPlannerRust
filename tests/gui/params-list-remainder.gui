@@ -1,0 +1,112 @@
+# The Full Parameter List's remainder (PLAN.md §13.6 row 82): the Modified filter, the tree's
+# collapse, Refresh Table, and Reset to Default's question answered No.
+#
+# The claims, each the C#'s (GCSViews/ConfigurationView/ConfigRawParams.cs):
+# * Modified shows only the rows in _changes, the edits not yet written (:917-931). This screen
+#   writes an edit at once, so _changes holds a name from the edit until the vehicle echoes it,
+#   and keeps one whose every retry went unanswered (:323-363) - SITL echoes everything, so here
+#   it is empty before and after a step; the kept timeout is proven against a scripted vehicle
+#   in crates/mp-gui/src/raw_params.rs, a_write_never_echoed_stays_modified.
+# * but_collapse hides the tree and drops its prefix, so every row shows (:1134-1149); the state
+#   is kept in rawparam_panel1collapsed on Deactivate and read back on Activate (:85, :113).
+# * Refresh Table shows with the Planner page's Slow Machine ticked (:62) and makes the rows again
+#   from the vehicle's table (:1119-1124). This test's own config.xml ticks it.
+# * Reset to Default asks "Reset all parameters to default / Are you sure!!" (:983); No does
+#   nothing.
+#
+# NOT RUN HERE, deliberately: Reset to Default's Yes - it zeroes FORMAT_VERSION and reboots the
+# board, which wipes every parameter (the sequence is proven against a scripted vehicle in
+# raw_params.rs, a_reset_*); Commit Params - hidden in the Advanced view, and it writes the
+# vehicle's storage (commit_sends_preflight_storage_and_says_what_the_csharp_says); and Load
+# Presaved - it reaches GitHub, and the file it loads would be written to the vehicle
+# (a_presaved_file_is_listed_fetched_saved_and_read, with a stand-in for GitHub).
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run as
+#
+#   tools/gui-test.sh tests/gui/params-list-remainder.gui -- tcp:127.0.0.1:5760
+
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '\357\273\277<?xml version="1.0" encoding="utf-8"?>\n<Config>\n  <SlowMachine>True</SlowMachine>\n</Config>' > "$WORK/config.xml"
+
+screen params
+window 1600x1200
+settle 12
+
+expect vehicle.connected true
+expect params.held > 1000
+expect params.active true
+expect params.changes 0
+expect params.collapsed false
+
+# Modified: nothing edited, nothing shown.
+expect params.modified false
+click param-modified
+settle 1
+expect params.modified true
+expect params.shown 0
+click param-modified
+settle 1
+expect params.modified false
+
+# A step is written and echoed, and leaves nothing in _changes behind it.
+# This SITL (Copter 4.7-dev) names the parameter RTL_ALT_M.
+click param-group-RTL
+click param-RTL_ALT_M
+click param-step-+
+settle 2
+expect params.write.name RTL_ALT_M
+expect params.write.outcome accepted
+expect params.changes 0
+click param-modified
+settle 1
+expect params.shown 0
+click param-modified
+click param-step--
+settle 2
+expect params.write.outcome accepted
+expect params.changes 0
+
+# The tree collapsed: its prefix dropped, every row showing.
+click param-group-RTL
+settle 1
+expect params.shown > 0
+click param-collapse
+settle 1
+expect params.collapsed true
+expect params.shown > 1000
+
+# Left and come back to: still collapsed.
+click tab-fly
+settle 1
+expect params.active false
+click tab-params
+settle 1
+expect params.active true
+expect params.collapsed true
+click param-collapse
+settle 1
+expect params.collapsed false
+# Nothing chosen in the tree again: the screen's prompt.
+expect params.shown 0
+
+# Refresh Table, shown by Slow Machine: the rows made again, the same count.
+expect params.refresh_table.visible true
+expect params.table.refreshes 0
+click param-refresh-table
+settle 1
+expect params.table.refreshes 1
+expect params.held > 1000
+
+# Commit Params is hidden in the Advanced view.
+expect params.commit.visible false
+
+# Reset to Default: the question, answered No. Nothing is sent.
+expect params.reset.question false
+click param-reset
+settle 1
+expect params.reset.question true
+click param-reset-no
+settle 1
+expect params.reset.question false
+expect params.reset.running false
+expect vehicle.connected true

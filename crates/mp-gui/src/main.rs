@@ -28,6 +28,9 @@ mod mapview;
 mod metadata;
 mod params;
 mod payload;
+// ---- row 82 ----
+mod raw_params;
+// ---- end row 82 ----
 mod plan;
 mod planner_coverage;
 mod platform;
@@ -370,6 +373,11 @@ struct MissionPlanner {
     param_writes: Vec<params::ParamWrites>,
     /// The last parameter write to end, for the facts.
     last_param_write: Option<params::Written>,
+    // ---- row 82 ----
+    /// The Full Parameter List's right-hand column: `_changes`, Modified, the tree's collapse,
+    /// Reset to Default, Load Presaved and `ParamCompare` over it.
+    raw_params: raw_params::RawParams,
+    // ---- end row 82 ----
     /// Scroll position of the flight screen's panel column, so an indicator can be drawn for it.
     fly_scroll: gpui::ScrollHandle,
     /// The flight screen's Actions tab: what its boxes and lists hold between presses.
@@ -696,6 +704,9 @@ impl MissionPlanner {
             force_arm_request: None,
             param_writes: Vec::new(),
             last_param_write: None,
+            // ---- row 82 ----
+            raw_params: raw_params::RawParams::default(),
+            // ---- end row 82 ----
             fly_scroll: gpui::ScrollHandle::new(),
             plan_scroll: gpui::ScrollHandle::new(),
             plan_docking,
@@ -2135,16 +2146,33 @@ impl MissionPlanner {
                 &self.param_search_focus,
                 self.param_search_focus.is_focused(window),
                 self.param_none_default,
+                // ---- row 82 ----
+                self.raw_params.collapsed(),
+                // ---- end row 82 ----
                 cx,
             ))
+            // ---- row 82 ----
+            .child(raw_params::controls(
+                &self.raw_params,
+                view.connected,
+                raw_params::get_boolean(self.persisted.get(raw_params::SLOW_MACHINE)),
+                cx,
+            ))
+            .children(raw_params::overlays(&self.raw_params, window, cx))
             .child(params::list_panel(
                 &parameters,
                 group.as_deref(),
                 self.param_search.value(),
                 selected.as_deref(),
-                self.param_none_default,
+                &params::Filters {
+                    none_default: self.param_none_default,
+                    modified: self.raw_params.modified(),
+                    changes: self.raw_params.changes(),
+                    collapsed: self.raw_params.collapsed(),
+                },
                 cx,
             ))
+            // ---- end row 82 ----
             .child(params::editor_panel(&parameters, selected.as_deref(), cx))
             .child(params::file_panel(
                 view,
@@ -2649,6 +2677,10 @@ impl Render for MissionPlanner {
             self.file_status = Some(said);
         }
         self.advance_param_writes();
+        // ---- row 82 ----
+        // The Full Parameter List's Activate and Deactivate, its fetches and a reset under way.
+        self.raw_params_tick();
+        // ---- end row 82 ----
 
         // Home on the map: the planner's boxes on the planning screen, the vehicle's home on the
         // flight screen once its mission is held - one map, two homes.
@@ -2800,6 +2832,9 @@ impl Render for MissionPlanner {
             facts::record("params.fetch", &view.parameters_fetch);
             facts::record("params.defaults", view.parameters_defaults.len());
             facts::record("params.none_default", self.param_none_default);
+            // ---- row 82 ----
+            self.raw_params_facts(&params::collect(&view));
+            // ---- end row 82 ----
             // The last parameter write to end: which, how the vehicle answered, and how many
             // times the link put the PARAM_SET on the wire - one, unless it had to ask again.
             let written = self.last_param_write.as_ref();

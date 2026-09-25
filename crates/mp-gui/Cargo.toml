@@ -45,6 +45,9 @@ ttf-parser.workspace = true
 # The DataFlash Logs page's Geo Reference Images: GeoRef/georefimage.cs's handlers over
 # GeoRefImageBase, which the form in georef_ui.rs calls.
 mp-georef.workspace = true
+# The Full Parameter List's Load Presaved: GitHubContent's JSON answers, and the file's base64
+# content inside one. Both already compiled for mp-firmware.
+base64.workspace = true
 # Install Firmware: the firmware catalogue and the board a USB device names, from the port list.
 # Its HTTP fetch also downloads Auto Analysis's LogAnalyzer, as the CLI's `mpr log` does with ureq.
 mp-firmware.workspace = true

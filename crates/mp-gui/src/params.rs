@@ -153,6 +153,32 @@ thread_local! {
     static COLLECTED: RefCell<Option<Collected>> = const { RefCell::new(None) };
 }
 
+thread_local! {
+    /// How many times the rows have been made from the vehicle's table, and how many Refresh
+    /// Table presses there have been: the facts `params.table.built` and `params.table.refreshes`.
+    static BUILT: std::cell::Cell<(u64, u64)> = const { std::cell::Cell::new((0, 0)) };
+}
+
+/// `BUT_refreshTable_Click`: `startup = true; processToScreen(); startup = false;` - the rows
+/// made again from the vehicle's table rather than their values updated in place. The rows here
+/// are [`collect`]'s, kept while nothing they were made from has changed; dropping them makes
+/// the next frame make them again, with the groups (the C#'s `BuildTree`, which
+/// `processToScreen` runs when the tree is showing) and the search worked out afresh.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:1119-1124, 563-686`
+pub fn refresh_table() {
+    COLLECTED.with(|held| *held.borrow_mut() = None);
+    BUILT.with(|built| {
+        let (made, refreshes) = built.get();
+        built.set((made, refreshes + 1));
+    });
+}
+
+/// How many times the rows have been made, and how many Refresh Table presses there have been.
+#[must_use]
+pub fn tables_built() -> (u64, u64) {
+    BUILT.with(std::cell::Cell::get)
+}
+
 /// [`collect`] with the documentation, and which generation of it, given.
 fn collected(
     view: &TelemetryView,
@@ -178,6 +204,10 @@ fn collected(
                 default: view.parameters_defaults.get(name).copied(),
             })
             .collect();
+        BUILT.with(|built| {
+            let (made, refreshes) = built.get();
+            built.set((made + 1, refreshes));
+        });
         *held = Some(Collected {
             from: Arc::clone(&view.parameters),
             defaults: Arc::clone(&view.parameters_defaults),
@@ -263,6 +293,7 @@ pub fn browser_panel(
     search_focus: &gpui::FocusHandle,
     focused: bool,
     none_default: bool,
+    collapsed: bool,
     cx: &mut Context<MissionPlanner>,
 ) -> impl IntoElement {
     let has_vehicle = view.vehicle.is_some();
@@ -281,8 +312,19 @@ pub fn browser_panel(
     };
     let complete = expected > 0 && held >= usize::from(expected);
 
-    let mut group_list = div().flex().flex_wrap().gap_1();
-    for (group, count) in groups_of(parameters).iter() {
+    // `but_collapse`, at the tree's edge; with the tree collapsed only the button is left.
+    // C#: GCSViews/ConfigurationView/ConfigRawParams.cs:1134-1149
+    let mut group_list = div()
+        .flex()
+        .flex_wrap()
+        .gap_1()
+        .child(crate::raw_params::collapse_button(collapsed, cx));
+    let groups: Arc<[(String, usize)]> = if collapsed {
+        Arc::from(Vec::new())
+    } else {
+        groups_of(parameters)
+    };
+    for (group, count) in groups.iter() {
         let group = group.clone();
         let chosen = selected_group == Some(group.as_str());
         let label = format!("{group} {count}");
@@ -425,37 +467,83 @@ pub fn none_default(shown: Vec<&Parameter>) -> Vec<&Parameter> {
         .collect()
 }
 
+/// The boxes and the tree's state that decide which rows show, beside the search and the group.
+#[derive(Debug, Clone, Copy)]
+pub struct Filters<'a> {
+    /// `chk_none_default.Checked`.
+    pub none_default: bool,
+    /// `chk_modified.Checked`.
+    pub modified: bool,
+    /// `_changes`: the edits not yet written (see [`crate::raw_params::RawParams::changes`]).
+    pub changes: &'a std::collections::BTreeMap<String, f64>,
+    /// `splitContainer1.Panel1Collapsed`: the tree hidden, and its prefix with it.
+    pub collapsed: bool,
+}
+
+/// `filterList`: which rows show. `None` is the screen's prompt - no group chosen, nothing
+/// typed, the tree showing and no box ticked.
+///
+/// The C#'s order, each step over every row: the search and the tree's prefix; then, with
+/// Modified ticked, every row in `_changes` and no other, whatever the search; then, with None
+/// Default ticked, every row whose Default differs from its Value, whatever came before. The
+/// tree collapsed is the prefix `""`, which is every row.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:889-944, 1134-1149`
+#[must_use]
+pub fn shown<'a>(
+    parameters: &'a [Parameter],
+    group: Option<&str>,
+    search: &str,
+    filters: &Filters<'_>,
+) -> Option<Vec<&'a Parameter>> {
+    // A search crosses groups: the point of typing is to stop having to know which group a
+    // parameter is in. With nothing typed, the chosen group is the filter instead.
+    let searching = !search.trim().is_empty();
+    let mut shown: Option<Vec<&Parameter>> = if searching {
+        Some(matching(parameters, search))
+    } else if filters.collapsed {
+        Some(parameters.iter().collect())
+    } else {
+        group.map(|group| parameters.iter().filter(|p| p.group() == group).collect())
+    };
+    // `if (chk_modified.Checked)`: every row, visible when it is in `_changes`.
+    // C#: GCSViews/ConfigurationView/ConfigRawParams.cs:917-931
+    if filters.modified {
+        shown = Some(
+            parameters
+                .iter()
+                .filter(|parameter| filters.changes.contains_key(&parameter.name))
+                .collect(),
+        );
+    }
+    // `if (chk_none_default.Checked)`: every row, visible when its Default is not its Value -
+    // the search, the prefix and Modified undone, as the C#'s loop sets every row's `Visible`.
+    // C#: GCSViews/ConfigurationView/ConfigRawParams.cs:933-939
+    if filters.none_default && has_defaults(parameters) {
+        shown = Some(none_default(parameters.iter().collect()));
+    }
+    shown
+}
+
 /// The parameters of the chosen group.
 pub fn list_panel(
     parameters: &[Parameter],
     group: Option<&str>,
     search: &str,
     selected: Option<&str>,
-    only_none_default: bool,
+    filters: &Filters<'_>,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
     let with_defaults = has_defaults(parameters);
-    // A search crosses groups: the point of typing is to stop having to know which group a
-    // parameter is in. With nothing typed, the chosen group is the filter instead.
-    let searching = !search.trim().is_empty();
-    let mut shown: Vec<&Parameter> = if searching {
-        matching(parameters, search)
-    } else {
-        let Some(group) = group else {
-            return panel(
-                "values",
-                div()
-                    .text_xs()
-                    .text_color(rgb(theme::DIM))
-                    .child("choose a group above, or type to search"),
-            )
-            .into_any_element();
-        };
-        parameters.iter().filter(|p| p.group() == group).collect()
+    let Some(shown) = shown(parameters, group, search, filters) else {
+        return panel(
+            "values",
+            div()
+                .text_xs()
+                .text_color(rgb(theme::DIM))
+                .child("choose a group above, or type to search"),
+        )
+        .into_any_element();
     };
-    if only_none_default && with_defaults {
-        shown = none_default(shown);
-    }
 
     if shown.is_empty() {
         return panel(
@@ -992,6 +1080,13 @@ impl ParamWrites {
         Self::new(writes, Finish::Apply { skipped })
     }
 
+    /// The writes not yet started, and the values they ask for.
+    pub fn queued(&self) -> impl Iterator<Item = (&str, f64)> {
+        self.queue
+            .iter()
+            .map(|write| (write.name.as_str(), write.value))
+    }
+
     /// Whether every write has ended and the summary has been said.
     #[must_use]
     pub const fn is_finished(&self) -> bool {
@@ -1135,6 +1230,10 @@ impl ParamWrites {
 impl MissionPlanner {
     /// Starts a list of parameter writes.
     pub(crate) fn start_param_writes(&mut self, writes: ParamWrites) {
+        // ---- row 82 ----
+        // Each value edited is in `_changes` until its write is heard back.
+        self.raw_params.queued(writes.queued());
+        // ---- end row 82 ----
         self.param_writes.push(writes);
         self.advance_param_writes();
     }
@@ -1149,6 +1248,9 @@ impl MissionPlanner {
                 self.file_status = Some(text);
             }
             if let Some(written) = progress.written {
+                // ---- row 82 ----
+                self.raw_params.written(&written);
+                // ---- end row 82 ----
                 self.last_param_write = Some(written);
             }
         }

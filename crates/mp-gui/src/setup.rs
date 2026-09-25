@@ -106,10 +106,13 @@ const ADVANCED_VIEW: &[(&str, bool)] = &[
     ("displayUserParam", true),
     ("displayFullParamList", true),
     ("displayPlannerSettings", true),
+    // Read by the Full Parameter List's Commit Params, not by the lists.
+    // C#: GCSViews/ConfigurationView/ConfigRawParams.cs:61
+    ("displayParamCommitButton", false),
 ];
 
-/// A display-view switch; one the lists do not read is off.
-fn display(flag: &str) -> bool {
+/// A display-view switch; one the lists do not read is off. `MainV2.DisplayConfiguration.<flag>`.
+pub(crate) fn display(flag: &str) -> bool {
     ADVANCED_VIEW
         .iter()
         .any(|(name, value)| *name == flag && *value)
