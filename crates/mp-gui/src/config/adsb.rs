@@ -2155,6 +2155,7 @@ mod tests {
             let base = bundled(name)?;
             return Some(META.get_or_init(|| mp_params::ParamMeta {
                 range: Some((0.0, 5000.0)),
+                range_text: "",
                 increment: Some(1.0),
                 ..*base
             }));

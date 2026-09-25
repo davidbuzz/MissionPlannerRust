@@ -996,8 +996,8 @@ pub const PANELS: &[Panel] = &[
         //     and parentheses; not its functions), the NumericUpDown's box typed into (through
         //     the Value cell), a compared file's values through the cells' questions, ReadOnly
         //     from the bundled ParameterMetaDataBackup.xml when the fetched file has none;
-        //     missing the SITL and AP_Periph files' ReadOnly (two more fetches) and the Options
-        //     cell's range as the file writes it (here from its two numbers)",
+        //     the Options cell's range as the file writes it; missing only the SITL and AP_Periph
+        //     files' ReadOnly (two more fetches)",
         ),
     ),
     panel(

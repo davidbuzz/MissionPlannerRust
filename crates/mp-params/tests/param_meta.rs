@@ -66,6 +66,7 @@ fn a_range_is_enforced_rather_than_decorative() {
         description: "",
         units: "",
         range: None,
+        range_text: "",
         increment: None,
         values: &[],
         bitmask: &[],

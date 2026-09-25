@@ -27,6 +27,8 @@ pub struct ParamMeta {
     pub units: String,
     /// Inclusive minimum and maximum, when the metadata gives a range.
     pub range: Option<(f64, f64)>,
+    /// The `<Range>` text as it stands.
+    pub range_text: String,
     /// Suggested step for a spinner.
     pub increment: Option<f64>,
     /// Named values, when the parameter is an enumeration.
@@ -117,6 +119,7 @@ fn parameters_in(section: &str) -> BTreeMap<String, ParamMeta> {
                 description: tag(body, "Description").map(clean).unwrap_or_default(),
                 units: tag(body, "Units").map(clean).unwrap_or_default(),
                 range,
+                range_text: tag(body, "Range").map(clean).unwrap_or_default(),
                 increment: tag(body, "Increment").and_then(|i| i.trim().parse().ok()),
                 values: tag(body, "Values").map(pairs).unwrap_or_default(),
                 bitmask: tag(body, "Bitmask")
@@ -186,6 +189,7 @@ pub fn generate(metadata_path: &Path, section_name: &str) -> Result<String> {
             }
             None => out.push_str("        range: None,\n"),
         }
+        out.push_str(&format!("        range_text: \"{}\",\n", meta.range_text));
         match meta.increment {
             Some(step) => out.push_str(&format!("        increment: Some({step:?}),\n")),
             None => out.push_str("        increment: None,\n"),

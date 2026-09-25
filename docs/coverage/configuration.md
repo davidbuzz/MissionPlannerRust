@@ -188,8 +188,8 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
         //     and parentheses; not its functions), the NumericUpDown's box typed into (through
         //     the Value cell), a compared file's values through the cells' questions, ReadOnly
         //     from the bundled ParameterMetaDataBackup.xml when the fetched file has none;
-        //     missing the SITL and AP_Periph files' ReadOnly (two more fetches) and the Options
-        //     cell's range as the file writes it (here from its two numbers) |
+        //     the Options cell's range as the file writes it; missing only the SITL and AP_Periph
+        //     files' ReadOnly (two more fetches) |
 | 235 | `ConfigFlightModes` | Flight Modes |  | Ateryx | 8 | as at `GCSViews/InitialSetup.cs:228` |
 | 236 | `ConfigAteryxSensors` | Ateryx Zero Sensors |  | Ateryx | 3 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 | 237 | `ConfigAteryx` | Ateryx Pids |  | Ateryx | 8 | done: `crates/mp-gui/src/config/ateryx.rs` `fn page` |

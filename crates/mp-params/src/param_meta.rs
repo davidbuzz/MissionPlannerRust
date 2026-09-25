@@ -39,6 +39,9 @@ pub struct ParamMeta {
     pub units: &'static str,
     /// Inclusive minimum and maximum.
     pub range: Option<(f64, f64)>,
+    /// The `Range` field's text as the file writes it - `0.0 1.0` where `range` holds the two
+    /// numbers - which is what the Options cell shows; empty without one.
+    pub range_text: &'static str,
     /// Suggested step for a spinner.
     pub increment: Option<f64>,
     /// Named values, when the parameter is an enumeration.

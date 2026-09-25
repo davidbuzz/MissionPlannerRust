@@ -167,6 +167,7 @@ fn leak(param: &PdefParam) -> &'static ParamMeta {
         description: leak_str(&param.description),
         units: leak_str(&param.units),
         range: param.range,
+        range_text: leak_str(&param.range_text),
         increment: param.increment,
         values: Box::leak(values.into_boxed_slice()),
         bitmask: Box::leak(bitmask.into_boxed_slice()),

@@ -354,6 +354,8 @@ pub struct PdefParam {
     pub units: String,
     /// `<field name="Range">`, as `low high`.
     pub range: Option<(f64, f64)>,
+    /// The same field's text as it stands, for the Options cell.
+    pub range_text: String,
     /// `<field name="Increment">`.
     pub increment: Option<f64>,
     /// `<values><value code="N">text</value>`.
@@ -486,6 +488,7 @@ fn read_param(name: &str, param: &roxmltree::Node<'_, '_>) -> PdefParam {
             .to_owned(),
         units: String::new(),
         range: None,
+        range_text: String::new(),
         increment: None,
         values: Vec::new(),
         bitmask: Vec::new(),
@@ -503,6 +506,7 @@ fn read_param(name: &str, param: &roxmltree::Node<'_, '_>) -> PdefParam {
             "field" => match child.attribute("name") {
                 Some("Units") => out.units = text.to_owned(),
                 Some("Range") => {
+                    out.range_text = text.to_owned();
                     let mut parts = text.split_whitespace();
                     if let (Some(low), Some(high)) = (parts.next(), parts.next())
                         && let (Ok(low), Ok(high)) = (low.parse(), high.parse())

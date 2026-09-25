@@ -52,8 +52,6 @@
 //!   typed shows in the Value cell, where the C# mirrors each keystroke into it (`options_cell`);
 //! * a bit clicked in Set Bitmask's window edits that window's parameter, where the C# writes
 //!   whichever row is current by then (`param_grid_click_bit`);
-//! * the Options cell's range is written from its two numbers, not the file's text
-//!   (`range_text`);
 //! * the ReadOnly box and the out-of-range question keep their boxes (questions, per the owner's
 //!   ruling of 2026-09-25); Write Params' closed-port refusals go on the status line, and its
 //!   "N parameters successfully saved." with them (`RawGrid::save`, `RawGrid::saved`).
@@ -764,10 +762,12 @@ pub struct Cells {
     pub desc: String,
 }
 
-/// The documentation's range as `GetParameterMetaData(..., Range, ...)` returns it, `low high`.
-/// The file's own text is not kept here - only the two numbers - so `0.0 1.0` in the file
-/// reads `0 1`.
+/// The documentation's range as `GetParameterMetaData(..., Range, ...)` returns it: the file's
+/// own text, `0.0 1.0` as written; from the two numbers where a table carries only those.
 fn range_text(meta: &ParamMeta) -> String {
+    if !meta.range_text.is_empty() {
+        return meta.range_text.to_owned();
+    }
     meta.range
         .map(|(low, high)| format!("{low} {high}"))
         .unwrap_or_default()
@@ -3037,6 +3037,7 @@ mod tests {
             description,
             units: "cm",
             range,
+            range_text: "",
             increment: None,
             values,
             bitmask,

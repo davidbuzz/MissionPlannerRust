@@ -1057,6 +1057,7 @@ mod tests {
             description,
             units: "",
             range,
+            range_text: "",
             increment,
             values,
             bitmask: &[],
