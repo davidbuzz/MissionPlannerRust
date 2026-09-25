@@ -1150,17 +1150,6 @@ impl Telemetry {
         }
     }
 
-    /// `doReboot(true, false)` for a firmware upload: the reboot into the bootloader, sent as
-    /// `doCommand` sends it, acknowledged and retried by the link. Whether there was a vehicle
-    /// to send it to.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2553-2567; Utilities/Firmware.cs:809`
-    pub fn reboot_to_bootloader(&mut self) -> bool {
-        let Some((_, id)) = self.target() else {
-            return false;
-        };
-        self.command_message(&commands::reboot_to_bootloader(id), Report::default())
-            .is_some()
-    }
 
     /// Which arming-check parameter this vehicle has, if we have learned it yet.
     ///

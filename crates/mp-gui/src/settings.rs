@@ -353,6 +353,12 @@ impl Persisted {
         self.config.get(key)
     }
 
+    /// `<comport>_BAUD` as the file holds it, or the default: the baud `MainV2.comPort` opens at.
+    #[must_use]
+    pub fn baud(&self) -> &str {
+        &self.baud
+    }
+
     /// `Settings.Instance[key] = value`: in the dictionary at once, and in the file at the next
     /// [`Persisted::save_config`] - a screen's handler writes nothing to disk itself.
     /// `// C#: ExtLibs/Utilities/Settings.cs:58-61`

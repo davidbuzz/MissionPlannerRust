@@ -9,3 +9,6 @@
 
 # Agent worktrees made by the coding harness; each is a checkout of this repository.
 /.claude/worktrees
+
+# The subagents' shared build directory.
+/target-agents

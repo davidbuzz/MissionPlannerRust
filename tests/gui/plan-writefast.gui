@@ -46,6 +46,8 @@ expect plan.prompt none
 expect plan.frame relative
 settle 6
 expect plan.transfer mission transferred
+# `getHomePositionAsync` follows the upload, as it follows Write's.
+expect plan.write.home_requests 1
 
 click plan-clear
 expect mission.items 0

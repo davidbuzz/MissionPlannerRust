@@ -348,6 +348,8 @@ pub struct Plan {
     coords: crate::coords::Coords,
     /// A mission going over MAVFTP, Read or Write with the box ticked.
     mission_ftp: Option<MissionFtp>,
+    /// How many times a finished Write asked for the home position: `getHomePositionAsync`.
+    home_requests: u32,
 }
 
 /// A mission transfer over MAVFTP: `saveWPs`' and `getWPs`' `chk_usemavftp.Checked` branches,
@@ -4706,6 +4708,15 @@ pub fn drive_writes(
             None => {}
             Some(false) => this.plan.pending_write = None,
             Some(true) => {
+                // `getHomePositionAsync` once the vehicle has the mission - `saveWPs` before its
+                // "Setting params", `saveWPsFast` after its ack - waited for as `getHomePosition`
+                // waits, the position landing in the vehicle's state.
+                // `// C#: GCSViews/FlightPlanner.cs:6275-6277, 6570-6571`
+                if let Some(id) = view.vehicle {
+                    this.telemetry
+                        .get_home_position(id, crate::telemetry::Report::default());
+                    this.plan.home_requests += 1;
+                }
                 let steps = this
                     .plan
                     .pending_write
@@ -5107,6 +5118,8 @@ fn continue_write(
 /// `// C#: GCSViews/FlightPlanner.cs:6237-6256, 6293-6310, 6340-6582`
 fn send_mission(this: &mut MissionPlanner, fast: bool, items: Vec<MissionItem>) {
     if fast {
+        // No parameters follow a fast write, but the home position is asked for when it ends.
+        this.plan.pending_write = Some(PendingWrite::new(items.clone(), Ok(Vec::new())));
         this.telemetry.upload_mission_fast(items);
         return;
     }
@@ -10187,6 +10200,7 @@ pub fn record_facts(plan: &Plan, menus: &PlanMenus) {
         plan.mission_ftp().map_or_else(String::new, MissionFtp::label),
     );
     record("plan.commands.minimised", plan.commands_minimised());
+    record("plan.write.home_requests", plan.home_requests);
     record("plan.coords.system", plan.coords().system.name());
     record("plan.coords.lines", plan.coords().lines().join("|"));
     record("plan.coords.source", plan.coords().alt_source);

@@ -2,28 +2,38 @@
 # run only on the owner's explicit word for that flash, never by the suite, and never with
 # propellers fitted to anything the board is wired to. (PLAN.md §13.6 row 79)
 #
-# Install Firmware on the bench: the catalogue from firmware.ardupilot.org, the board named from
-# its USB product string, Copter's picture clicked, the CubeOrange build chosen and uploaded -
-# UploadPX4 (Utilities/Firmware.cs:591-750): the MAVLink link over the board's serial port hears
-# the heartbeat and sends the reboot into the bootloader (:797-837), every port is scanned for
-# thirty seconds for a bootloader with the firmware's board id, and the image is erased,
-# programmed, verified by CRC and the board rebooted - "Upload Done".
+# Install Firmware on the bench, as the C# does it: the page shows only while nothing is
+# connected (InitialSetup.cs:169-173), so the application starts with no link - an empty
+# config.xml of its own, since a `comport` there is opened at start-up - and the board's device
+# reaches the flash host through MP_FIRMWARE_PORT, scaffolding that stands in for MainV2's port
+# box until that is ported (PLAN.md §13.6 row 80). The catalogue comes from
+# firmware.ardupilot.org, the board is named from its USB product string, Copter's picture is
+# clicked, the CubeOrange build chosen and uploaded - UploadPX4 (Utilities/Firmware.cs:591-750):
+# AttemptRebootToBootloader opens the comport, hears the heartbeat, sends the reboot into the
+# bootloader and closes (:797-837); every port is scanned for thirty seconds for a bootloader with
+# the firmware's board id; the image is erased, programmed, verified by CRC and the board rebooted
+# - "Upload Done".
 #
-# Needs the board on its MAVLink USB interface and no SITL; the data directory is the test's own
-# so no remembered link opens. Run as
+# Needs the board on its MAVLink USB interface at /dev/ttyACM0 and nothing else holding it.
+# Run as
 #
-#   tools/gui-test.sh tests/gui/setup-firmware-flash-bench.gui -- serial:/dev/ttyACM0:115200
+#   tools/gui-test.sh tests/gui/setup-firmware-flash-bench.gui
 
 env XDG_DATA_HOME $WORK
 env TMPDIR $WORK
+# No saved link of this machine's: the application's own settings file is the test's, empty.
+env MP_SETTINGS $WORK/settings.conf
+env MP_FIRMWARE_PORT /dev/ttyACM0
+setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config></Config>' > "$WORK/Mission Planner/config.xml"
 
 screen setup
 window 1600x1200
-settle 8
+settle 4
 
-expect link.frames > 0
+expect vehicle.connected false
 click setup-page-ConfigFirmwareManifest
-settle 12
+# The whole manifest, tens of megabytes, from the mirror or ardupilot.org.
+settle 45
 expect config.firmware.active true
 expect config.firmware.manifest loaded
 expect config.firmware.board ~ CubeOrange
