@@ -586,7 +586,7 @@ one of them.
   extensions are sandboxed and cannot crash the app; a migration guide plus at least one real C# plugin and
   one IronPython script reimplemented as proof; API versioned and documented.
 - **Replaces:** `Plugin/`, `Plugins/`, `plugins/` (13,289 total), `Script.cs` + `Scripts/` + IronPython.
-- **Today:** `mp-script` implements the `Script.cs` host API with the C#'s semantics - including
+- **Today:** the extension half is decided (PLAN.md §12 D22) and tried: `experiments/wasm-plugin-host` hosts a WebAssembly plugin on the C#'s `Plugin` lifecycle under wasmtime, with the write-up recommending the component model for the real host (row 95); the interpreter is decided too - RustPython, §12 D20, row 94. `mp-script` implements the `Script.cs` host API with the C#'s semantics - including
   `GetParam` returning 0.0 for a missing parameter, `ChangeMode` always returning true, `WaitFor`
   substring-matching messages that arrived before the call, channels capped at 8 and an override
   sent twice 20 ms apart - and measures what the corpus needs. **The measurement changes the
@@ -733,7 +733,7 @@ sandboxed WASM extensions are the safe default and cover most needs; this covers
   and sends a command; an ABI-version mismatch is refused with a clear message rather than a crash;
   a panicking plugin is contained at the boundary and named in the resulting report; `--safe-mode`
   loads nothing; loading is per-plugin opt-in with consent recorded on disk.
-- **Today:** nothing: no `mp-plugin-host` crate exists.
+- **Today:** no `mp-plugin-host` crate; the owner's ruling (PLAN.md §12 D22, 2026-09-25) tries WebAssembly before anything native, and `experiments/wasm-plugin-host` (PLAN.md §13.6 row 95) is that experiment: wasmtime loading, driving and sandboxing a plugin built from the C#'s FenceDist and menu examples, seven tests, 65 ms to load and under a microsecond a call, with the verdict that the real host be built on the component model - so this native host is not needed unless that fails.
 - **Tests:** none exist. Planned: `crates/mp-plugin-host/tests/load.rs` builds the sample plugin in CI and loads it;
   `tests/abi.rs` asserts a deliberately mismatched ABI version is refused; `tests/panic.rs` asserts
   a plugin that panics in each callback does not terminate the host and is reported by name;

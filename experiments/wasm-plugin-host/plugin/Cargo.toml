@@ -1,0 +1,11 @@
+[package]
+name = "fencedist"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Mission Planner's FenceDist and menu example plugins, as one WebAssembly plugin"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]

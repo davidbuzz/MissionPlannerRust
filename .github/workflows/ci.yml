@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-        with: { components: clippy, rustfmt }
+        with: { components: clippy, rustfmt, targets: wasm32-unknown-unknown }
       - uses: Swatinem/rust-cache@v2
       # gpui's X11 backend needs these to link; a machine that can run X11 software can still
       # fail to link it, because the bare .so symlinks live in the -dev packages.
@@ -89,7 +89,7 @@ jobs:
       - name: wasm
         run: cargo check --target wasm32-unknown-unknown
              -p mp-mavlink -p mp-mavlink-dialects -p mp-units -p mp-log
-             -p mp-vehicle -p mp-mission
+             -p mp-vehicle -p mp-mission -p fencedist
 
   sitl:
     name: integration against ArduPilot SITL

@@ -1,0 +1,19 @@
+[package]
+name = "wasm-plugin-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The application's side of a WebAssembly plugin host: loads, drives and sandboxes a plugin"
+
+[dependencies]
+# Cranelift compiles the module; fuel metering stops a runaway plugin.
+wasmtime = { version = "48", default-features = false, features = ["cranelift", "runtime", "std", "anyhow"] }
+anyhow = "1"
+
+[lib]
+name = "wasm_plugin_host"
+path = "src/lib.rs"
+
+[[bin]]
+name = "bench"
+path = "src/main.rs"
