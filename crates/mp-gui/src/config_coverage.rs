@@ -797,7 +797,14 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigAC_Fence"),
         Some(0),
         &[config(156, "GeoFence", "copter")],
-        Missing,
+        // ---- GeoFence / rover Basic Tuning / User Params ----
+        // C#: GCSViews/ConfigurationView/ConfigAC_Fence.cs:9-49, ported whole: the distance unit
+        // after the four labels, FENCE_ENABLE's check box with its callback downloading the
+        // parameters once ticked, FENCE_TYPE and FENCE_ACTION's combos of documented values,
+        // FENCE_ALT_MAX, FENCE_ALT_MIN, FENCE_RADIUS and RTL_ALT_M (or RTL_ALT in centimetres)
+        // scaled to the display unit, each control writing its own parameter.
+        Ours::Done(at("crates/mp-gui/src/config/geofence.rs", "fn page")),
+        // ---- end GeoFence / rover Basic Tuning / User Params ----
     ),
     panel(
         "ConfigSimplePids",
@@ -846,7 +853,15 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigArdurover"),
         Some(3),
         &[config(188, "Basic Tuning", "rover")],
-        Missing,
+        // ---- GeoFence / rover Basic Tuning / User Params ----
+        // C#: GCSViews/ConfigurationView/ConfigArdurover.cs:26-260, ported whole: the 25
+        // MavlinkNumericUpDowns and six MavlinkComboBoxes bound to the first name the vehicle
+        // has, Avoidance hidden without a sonar trigger, the tooltips, each control writing its
+        // own parameter; Write Params and Ctrl+S going through a `changes` nothing fills, and
+        // Refresh Screen activating again. Refresh Params is invisible in the .resx and not
+        // drawn.
+        Ours::Done(at("crates/mp-gui/src/config/rover_tuning.rs", "fn page")),
+        // ---- end GeoFence / rover Basic Tuning / User Params ----
     ),
     panel(
         "ConfigFriendlyParams",
@@ -891,7 +906,17 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigUserDefined"),
         Some(0),
         &[config(221, "User Params", ANY)],
-        Missing,
+        // ---- GeoFence / rover Basic Tuning / User Params ----
+        // C#: GCSViews/ConfigurationView/ConfigUserDefined.cs:11-96
+        Partial(
+            at("crates/mp-gui/src/config/user_params.rs", "fn page"),
+            "the UserParams list (or the C#'s 22 RC option names), a row for each name the \
+             vehicle has with a combo of its documented values writing it, Modify's multiline \
+             InputBox saving the list and building the page again - Cancel included, as the \
+             C#'s handler ignores the answer; a name without values is its label alone, as the \
+             C# never adds its number; missing the InputBox's remembered answers",
+        ),
+        // ---- end GeoFence / rover Basic Tuning / User Params ----
     ),
     panel(
         "ConfigRawParams",
@@ -1756,7 +1781,7 @@ mod tests {
             );
             checked += 1;
         }
-        assert_eq!(checked, 32);
+        assert_eq!(checked, 35);
     }
 
     /// The committed report matches the table.
@@ -1788,7 +1813,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (11, 20, 16, 2, 12)
+            (13, 21, 13, 2, 12)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

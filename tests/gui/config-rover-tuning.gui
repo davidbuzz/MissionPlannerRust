@@ -1,0 +1,37 @@
+# CONFIG's Basic Tuning for a rover, ported from GCSViews/ConfigurationView/ConfigArdurover.cs.
+#
+# SoftwareConfig adds ConfigArdurover as "Basic Tuning", and opens on it, only when the vehicle is
+# an ArduRover (SoftwareConfig.cs:186-189); a copter's Basic Tuning is ConfigSimplePids
+# (:160-165). The SITL these scripts run against is a copter - tools/sitl carries no rover - so the
+# page cannot be opened here: the claim this script checks is the list's condition - with every
+# parameter in, CONFIG opens on the copter's Basic Tuning, and ConfigArdurover is neither listed
+# nor shown.
+#
+# The page itself is proved against a scripted rover by the unit tests in
+# crates/mp-gui/src/config/rover_tuning.rs: every Designer control at its .resx place (Refresh
+# Params invisible), Activate's 25 numbers and six combos bound to the first name the vehicle has,
+# Avoidance hidden without a sonar trigger, the tooltips, each control's own write - a combo at
+# once, a number 300 ms after it changes - Write Params and Ctrl+S writing nothing (no control
+# fills `changes`), and Refresh Screen activating the page again.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run as
+#
+#   tools/gui-test.sh tests/gui/config-rover-tuning.gui -- tcp:127.0.0.1:5760
+
+screen params
+window 1600x1200
+settle 6
+
+# CONFIG lists the tuning pages once every parameter is in (SoftwareConfig.cs:148-150), and here
+# parameters are downloaded when asked for.
+click param-download
+settle 15
+expect params.held > 1000
+
+click tab-config
+settle 1
+expect screen config
+expect config.page ConfigSimplePids
+expect config.title Basic Tuning
+expect config.rover.listed false
+expect config.rover.active false

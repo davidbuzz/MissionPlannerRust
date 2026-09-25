@@ -1,0 +1,126 @@
+# CONFIG's GeoFence page, ported from GCSViews/ConfigurationView/ConfigAC_Fence.cs.
+#
+# The claim: SoftwareConfig lists the page for a copter once every parameter is in
+# (SoftwareConfig.cs:152-158); the constructor puts the distance unit after the four distance
+# labels (ConfigAC_Fence.cs:9-17); Activate binds Enable to FENCE_ENABLE, the two combos to
+# FENCE_TYPE and FENCE_ACTION, and the numbers to FENCE_ALT_MAX, FENCE_ALT_MIN, FENCE_RADIUS and
+# RTL_ALT_M - this SITL's name; older firmware says RTL_ALT, in centimetres (:19-49). Every control
+# writes its own parameter: a combo when it changes, a number 300 ms after it changes
+# (Controls/MavlinkComboBox.cs:133-200, Controls/MavlinkNumericUpDown.cs:154-180); Enable's
+# callback downloads the parameter list again once its write is taken, when it is ticked
+# (ConfigAC_Fence.cs:21). Each write is proved by the vehicle's echo, and put back.
+#
+# A config.xml of its own, so the distance unit is metres whatever the machine's Mission Planner
+# says. FENCE_TYPE is documented as a bitmask with no values, so its combo is enabled and empty, as
+# the C#'s is.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm (FENCE_RADIUS
+# 150, FENCE_ENABLE 0, FENCE_ACTION 1). Run as
+#
+#   tools/gui-test.sh tests/gui/config-geofence.gui -- tcp:127.0.0.1:5760
+#
+# A run that stops half way can leave FENCE_RADIUS at 200, FENCE_ACTION at 2 or FENCE_ENABLE at 1;
+# the first expectations on them then fail until a fresh SITL.
+
+env MP_CONFIG_XML $WORK/config.xml
+screen params
+window 1600x1200
+settle 6
+
+# SoftwareConfig adds the page inside `if (gotAllParams)`, and here parameters are downloaded when
+# asked for.
+click param-download
+settle 15
+expect params.held > 1000
+expect params.value.FENCE_ENABLE 0
+expect params.value.FENCE_ACTION 1
+expect params.value.FENCE_RADIUS 150
+
+click tab-config
+expect config.fence.active false
+click config-page-ConfigAC_Fence
+settle 1
+expect config.page ConfigAC_Fence
+expect config.title GeoFence
+expect config.fence.active true
+expect config.fence.heading Geo Fence
+
+# The labels, the unit after the four distances.
+expect config.fence.label3enable Enable
+expect config.fence.label6maxalt Max Alt[m]
+expect config.fence.label8minalt Min Alt[m]
+expect config.fence.label7maxrad Max Radius[m]
+expect config.fence.label2rtlalt RTL Altitude[m]
+
+# What Activate bound.
+expect config.fence.enable unchecked
+expect config.fence.enable.enabled true
+expect config.fence.mavlinkComboBox1.param FENCE_TYPE
+expect config.fence.mavlinkComboBox1.enabled true
+expect config.fence.mavlinkComboBox1.options 0
+expect config.fence.mavlinkComboBox2.param FENCE_ACTION
+expect config.fence.mavlinkComboBox2 1
+expect config.fence.mavlinkComboBox2.text RTL or Land
+expect config.fence.mavlinkNumericUpDown1.param FENCE_ALT_MAX
+expect config.fence.mavlinkNumericUpDown4.param FENCE_ALT_MIN
+expect config.fence.mavlinkNumericUpDown2.param FENCE_RADIUS
+expect config.fence.mavlinkNumericUpDown2 150
+expect config.fence.mavlinkNumericUpDown3.param RTL_ALT_M
+expect config.fence.mavlinkNumericUpDown3.enabled true
+expect config.fence.write none
+
+# The radius typed: written 300 ms later, echoed.
+click fence-mavlinkNumericUpDown2
+expect config.fence.editing mavlinkNumericUpDown2
+key ctrl+u
+type 200
+key Return
+settle 2
+expect config.fence.mavlinkNumericUpDown2 200
+expect config.fence.write FENCE_RADIUS 200 accepted
+expect params.value.FENCE_RADIUS 200
+# And back.
+click fence-mavlinkNumericUpDown2
+key ctrl+u
+type 150
+key Return
+settle 2
+expect config.fence.write FENCE_RADIUS 150 accepted
+expect params.value.FENCE_RADIUS 150
+
+# The action chosen: written at once.
+click fence-mavlinkComboBox2
+click fence-mavlinkComboBox2-2
+settle 2
+expect config.fence.mavlinkComboBox2.text Always Land
+expect config.fence.write FENCE_ACTION 2 accepted
+expect params.value.FENCE_ACTION 2
+click fence-mavlinkComboBox2
+click fence-mavlinkComboBox2-1
+settle 2
+expect config.fence.write FENCE_ACTION 1 accepted
+expect params.value.FENCE_ACTION 1
+
+# Enable ticked: FENCE_ENABLE written, then the parameter list downloaded again.
+expect config.fence.downloads 0
+click fence-mavlinkCheckBox1
+settle 15
+expect config.fence.enable checked
+expect config.fence.write FENCE_ENABLE 1 accepted
+expect params.value.FENCE_ENABLE 1
+expect config.fence.downloads 1
+expect params.held > 1000
+# Unticked: written, and no download.
+click fence-mavlinkCheckBox1
+settle 3
+expect config.fence.enable unchecked
+expect config.fence.write FENCE_ENABLE 0 accepted
+expect params.value.FENCE_ENABLE 0
+expect config.fence.downloads 1
+expect config.fence.message none
+expect config.fence.writes.pending 0
+
+# Choosing another page hides this one; it is IActivate only.
+click config-page-ConfigUserDefined
+expect config.page ConfigUserDefined
+expect config.fence.active false

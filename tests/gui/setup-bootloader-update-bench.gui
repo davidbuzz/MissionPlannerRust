@@ -1,0 +1,43 @@
+# A REAL BOOTLOADER REWRITE. This script tells the connected board to flash the bootloader its
+# firmware carries. It is run only on the owner's explicit word for that board, never by the suite.
+# (PLAN.md §13.6 row 79: the bench CubeOrange carried an experimental Zephyr bootloader that
+# presented no USB device, and the owner ruled it replaced.)
+#
+# `ConfigFirmwareDisabled` (GCSViews/ConfigurationView/ConfigFirmwareDisabled.cs:18-44): the
+# Install Firmware entry while a vehicle is connected, with Bootloader Update - two "Are you sure
+# ..." questions under "BL Update", then `doCommand(MAV_CMD.FLASH_BOOTLOADER, 0, 0, 0, 0, 290876,
+# 0, 0)`, waited for as doCommand waits (25 s, once more), and "Upgraded bootloader" or "Failed to
+# upgrade bootloader". The C# does not reboot the board afterwards.
+#
+# Run with the board's MAVLink interface as the link:
+#
+#   tools/gui-test.sh tests/gui/setup-bootloader-update-bench.gui -- serial:/dev/serial/by-id/usb-ArduPilot_CubeOrange_373532393330510F002E0019-if-mavlink:115200
+
+env XDG_DATA_HOME $WORK
+env TMPDIR $WORK
+env MP_SETTINGS $WORK/settings.conf
+
+screen setup
+window 1600x1200
+settle 8
+
+expect vehicle.connected true
+expect vehicle.count 1
+click setup-page-ConfigFirmwareDisabled
+settle 2
+expect config.firmware.active true
+expect config.firmware.page disabled
+
+click fw-bootloader
+settle 1
+expect config.firmware.question Are you sure you want to upgrade the bootloader? This can brick your board
+click fw-question-yes
+settle 1
+expect config.firmware.question Are you sure you want to upgrade the bootloader? This can brick your board, Please allow 5 mins for this process
+click fw-question-yes
+settle 1
+expect config.firmware.question none
+
+# The command's answer, up to the C#'s 25 s and one more try.
+settle 40
+expect status Upgraded bootloader

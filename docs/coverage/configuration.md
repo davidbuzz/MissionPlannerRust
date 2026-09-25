@@ -4,12 +4,12 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui c
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 11 | 20 | 16 | 2 | 12 | 569 |
+| 61 | 13 | 21 | 13 | 2 | 12 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 8 | 18 | 9 | 2 | 7 | 258 | 23 |
-| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 3 | 2 | 7 | 0 | 1 | 277 | 5 |
+| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 5 | 3 | 4 | 0 | 1 | 277 | 2 |
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 | 0 |
 
 The lists also add 4 pages that are not in `ConfigurationView/` (`Sikradio`, `JoystickSetup`, `TrackerUI`, `MavFTPUI`): 0 done, 1 partial, 3 missing, 0 plumbing, 0 dropped. They are in the lists below and not in the counts above.
@@ -19,7 +19,6 @@ The largest missing panels, by wirings:
 | panel | title | wirings |
 |---|---|---:|
 | `ConfigDroneCAN` | DroneCAN/UAVCAN | 15 |
-| `ConfigArdurover` | Basic Tuning | 3 |
 | `ConfigInitialParams` | Initial Tune Parameter | 3 |
 | `ConfigCompassMot` | Compass/Motor Calib | 2 |
 | `ConfigFriendlyParams` | Standard Params | 1 |
@@ -27,9 +26,10 @@ The largest missing panels, by wirings:
 | `ConfigHWOSD` | OSD | 1 |
 | `ConfigHWParachute` | Parachute | 1 |
 | `ConfigSimplePids` | Basic Tuning | 1 |
-| `ConfigAC_Fence` | GeoFence | 0 |
 | `ConfigFFT` | FFT Setup | no Designer |
 | `ConfigFriendlyParamsAdv` | Advanced Params | no Designer |
+| `ConfigHWIDs` | HW ID | 0 |
+| `ConfigOSD` | Onboard OSD | 0 |
 
 Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConnected && gotAllParams`); **always** is connected or not; **connected** and **disconnected** are the link alone; a named vehicle, parameter or view is what the call, or the `if` around it, checks. **Advanced view** is `DisplayView.isAdvancedMode`. A page with a `DisplayView` switch also needs it on, which it is by default unless the vehicles say otherwise. The list shows a heading as `>> title` and indents what is under it (`ExtLibs/Controls/BackstageView/BackstageView.cs:227`, `:232`).
 
@@ -89,18 +89,18 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole (`isConne
 
 | line | page | title | under | vehicles | wirings | ours |
 |---:|---|---|---|---|---:|---|
-| 156 | `ConfigAC_Fence` | GeoFence |  | copter | 0 | **missing** |
+| 156 | `ConfigAC_Fence` | GeoFence |  | copter | 0 | done: `crates/mp-gui/src/config/geofence.rs` `fn page` |
 | 164 | `ConfigSimplePids` | Basic Tuning |  | copter | 1 | **missing** |
 | 169 | `ConfigArducopter` | Extended Tuning |  | copter | 128 | done: `crates/mp-gui/src/config/extended_tuning.rs` `fn page` |
 | 177 | `ConfigArduplane` | Basic Tuning |  | plane | 47 | done: `crates/mp-gui/src/config/basic_tuning.rs` `fn page` |
 | 182 | `ConfigArducopter` | QP Extended Tuning |  | plane (enabled for a quadplane) | 128 | as at `GCSViews/SoftwareConfig.cs:169` |
-| 188 | `ConfigArdurover` | Basic Tuning |  | rover | 3 | **missing** |
+| 188 | `ConfigArdurover` | Basic Tuning |  | rover | 3 | done: `crates/mp-gui/src/config/rover_tuning.rs` `fn page` |
 | 193 | `ConfigAntennaTracker` | Extended Tuning |  | tracker | 3 | as at `GCSViews/InitialSetup.cs:313` |
 | 198 | `ConfigFriendlyParams` | Standard Params |  | any, Custom view with Standard Params | 1 | **missing** |
 | 203 | `ConfigFriendlyParamsAdv` | Advanced Params |  | any, Custom view with Advanced Params and Advanced mode | no Designer | **missing** |
 | 208 | `ConfigOSD` | Onboard OSD |  | any with OSD parameters, not on Mono | 0 | **missing** |
 | 215 | `MavFTPUI` (`Controls/MavFTPUI.cs`, not a panel) | MAVFtp |  | any reporting MAVLink FTP | 16 | **missing** |
-| 221 | `ConfigUserDefined` | User Params |  | any | 0 | **missing** |
+| 221 | `ConfigUserDefined` | User Params |  | any | 0 | partial: `crates/mp-gui/src/config/user_params.rs` `fn page` - the UserParams list (or the C#'s 22 RC option names), a row for each name the vehicle has with a combo of its documented values writing it, Modify's multiline InputBox saving the list and building the page again - Cancel included, as the C#'s handler ignores the answer; a name without values is its label alone, as the C# never adds its number; missing the InputBox's remembered answers |
 | 229 | `ConfigRawParams` | Full Parameter List |  | any, or disconnected | 22 | partial: `crates/mp-gui/src/params.rs` `fn list_panel` - the parameter screen has Refresh Params, Search, the group tree, editing a value, Save to file, Compare Params, and Load from file as compare then apply; missing Reset to Default, Load Presaved and its file list, Commit Params, the Modified and None Default filters, Refresh Table and the tree's collapse |
 | 235 | `ConfigFlightModes` | Flight Modes |  | Ateryx | 8 | as at `GCSViews/InitialSetup.cs:228` |
 | 236 | `ConfigAteryxSensors` | Ateryx Zero Sensors |  | Ateryx | 3 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |

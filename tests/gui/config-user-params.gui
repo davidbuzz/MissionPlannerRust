@@ -1,0 +1,85 @@
+# CONFIG's User Params page, ported from GCSViews/ConfigurationView/ConfigUserDefined.cs.
+#
+# The claim: SoftwareConfig lists the page once every parameter is in (SoftwareConfig.cs:219-222).
+# With no UserParams setting the list is the C#'s own - CH6_OPT to CH16_OPT and RC6_OPTION to
+# RC16_OPTION (ConfigUserDefined.cs:19-44) - and Activate adds a row for each the vehicle has, its
+# name and a combo of the documented values (:46-86). A combo writes its parameter when it changes
+# (Controls/MavlinkComboBox.cs:133-200). Modify asks for the names one to a line; the answer is the
+# list, saved as UserParams, and the page is built again (:52-60). A name whose documentation
+# lists no values is its label alone: the C# sets a number up and never adds it (:72-77). The
+# write is proved by the vehicle's echo, and put back.
+#
+# A config.xml of its own, so the machine's Mission Planner's UserParams does not change the list.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm (RC7_OPTION
+# 7, RC8_OPTION 0, and RTL_ALT_M, which this SITL has). Run as
+#
+#   tools/gui-test.sh tests/gui/config-user-params.gui -- tcp:127.0.0.1:5760
+#
+# A run that stops half way can leave RC8_OPTION at 9; the first expectation on it then fails until
+# a fresh SITL.
+
+env MP_CONFIG_XML $WORK/config.xml
+screen params
+window 1600x1200
+settle 6
+
+click param-download
+settle 15
+expect params.held > 1000
+expect params.value.RC7_OPTION 7
+expect params.value.RC8_OPTION 0
+
+click tab-config
+expect config.userparams.active false
+click config-page-ConfigUserDefined
+settle 1
+expect config.page ConfigUserDefined
+expect config.title User Params
+expect config.userparams.active true
+
+# The default list: the vehicle has the RCn_OPTION names, not the CHn_OPT ones.
+expect config.userparams.rows RC6_OPTION,RC7_OPTION,RC8_OPTION,RC9_OPTION,RC10_OPTION,RC11_OPTION,RC12_OPTION,RC13_OPTION,RC14_OPTION,RC15_OPTION,RC16_OPTION
+expect config.userparams.RC7_OPTION 7
+expect config.userparams.RC7_OPTION.enabled true
+expect config.userparams.RC8_OPTION 0
+expect config.userparams.write none
+
+# RC8's option chosen: written at once, echoed; and back.
+click userparams-RC8_OPTION
+click userparams-RC8_OPTION-9
+settle 2
+expect config.userparams.RC8_OPTION 9
+expect config.userparams.write RC8_OPTION 9 accepted
+expect params.value.RC8_OPTION 9
+click userparams-RC8_OPTION
+reveal userparams-RC8_OPTION-list userparams-RC8_OPTION-0
+click userparams-RC8_OPTION-0
+settle 2
+expect config.userparams.write RC8_OPTION 0 accepted
+expect params.value.RC8_OPTION 0
+expect config.userparams.message none
+
+# Modify: the names one to a line. Two typed; OK builds the page from them and saves them.
+click userparams-Modify
+settle 1
+expect config.userparams.input ~ RC6_OPTION|RC7_OPTION
+key ctrl+u
+type RC7_OPTION
+key Return
+type RTL_ALT_M
+click userparams-input-ok
+settle 1
+expect config.userparams.input none
+expect config.userparams.options RC7_OPTION,RTL_ALT_M
+expect config.userparams.rows RC7_OPTION,RTL_ALT_M
+expect config.userparams.RC7_OPTION 7
+# RTL_ALT_M has no documented values: its label alone.
+expect config.userparams.RTL_ALT_M label
+
+# Choosing another page hides this one; showing it again builds it from the list it has.
+click config-page-ConfigPlanner
+expect config.userparams.active false
+click config-page-ConfigUserDefined
+settle 1
+expect config.userparams.rows RC7_OPTION,RTL_ALT_M

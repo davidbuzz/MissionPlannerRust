@@ -15,7 +15,7 @@ UI covers flying, planning and the first of the setup screens.
 
 Measured on this tree: **23 crates, 252,700 hand-written Rust LOC** (plus 91,634 generated; `.rs` files
 under `crates/`, tests included), **2,746 tests** green on `cargo test --workspace` (40 ignored:
-they need SITL, a window, or the network), **139 GUI scripts** under `tests/gui/`, across 217 commits.
+they need SITL, a window, or the network), **143 GUI scripts** under `tests/gui/`, across 218 commits.
 Linux only, so far: the repository has no remote, and the three-OS CI matrix has never run.
 
 | Working today | |

@@ -33,11 +33,10 @@
 //!
 //! What is not here, and why:
 //!
-//! * the upload itself, and Force Bootloader and Bootloader Update: each is a write to a board or
-//!   a vehicle - a flash, a reboot into the bootloader (`doReboot(true)`), a connection opened on
-//!   the port and `MAV_CMD_FLASH_BOOTLOADER` - and flashing is not enabled in this build. The two
-//!   links are drawn, dimmed. `ConfigFirmwareDisabled`'s Bootloader Update, on the link already
-//!   open, asks its two "Are you sure" questions and stops before the command;
+//! * the upload itself and Bootloader Update write to the board: the upload through
+//!   `flow::upload_px4` over this machine's ports (PLAN.md §13.6 row 79), Bootloader Update as
+//!   `doCommand(FLASH_BOOTLOADER)` from the window once its two "Are you sure" questions are
+//!   answered Yes. Force Bootloader is drawn dimmed;
 //! * `Ctrl+Q` for the `DEV` release (`ProcessCmdKey`, `ConfigFirmwareManifest.cs:399-408`): the
 //!   C# sees it only while a control of the page has the keyboard, and nothing on this page takes
 //!   it; the catalogue answers for `DEV`, and `mpr firmware list --release DEV` asks it;
@@ -753,6 +752,8 @@ pub struct InstallFirmware {
     path: Option<PathBox>,
     /// `ConfigFirmwareDisabled`'s Bootloader Update: which of its two questions is showing.
     bootloader: Option<usize>,
+    /// The second Yes given: `FLASH_BOOTLOADER` is owed to the vehicle.
+    bootloader_command: bool,
 }
 
 impl Default for InstallFirmware {
@@ -779,6 +780,7 @@ impl Default for InstallFirmware {
             messages: VecDeque::new(),
             path: None,
             bootloader: None,
+            bootloader_command: false,
         }
     }
 }
@@ -1155,19 +1157,21 @@ impl InstallFirmware {
     }
 
     /// A Bootloader Update question answered: Yes to the first asks the second; Yes to the second
-    /// is where `doCommand(FLASH_BOOTLOADER)` would rewrite the board's bootloader, and it stops.
+    /// is `doCommand(FLASH_BOOTLOADER, 0, 0, 0, 0, 290876, 0, 0)`, which rewrites the board's
+    /// bootloader from the one its firmware carries - sent by the window, which owns the link,
+    /// once it sees [`InstallFirmware::take_bootloader_command`].
     /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareDisabled.cs:26-44`
     pub fn answer_bootloader(&mut self, yes: bool) {
         match (self.bootloader.take(), yes) {
             (Some(0), true) => self.bootloader = Some(1),
-            (Some(_), true) => {
-                self.reached = Some(Reached {
-                    stop: Some(flow::Stop::FlashBootloader),
-                    ..Reached::default()
-                });
-            }
+            (Some(_), true) => self.bootloader_command = true,
             _ => {}
         }
+    }
+
+    /// Whether the second Yes has been given and the command is owed, once.
+    pub fn take_bootloader_command(&mut self) -> bool {
+        std::mem::take(&mut self.bootloader_command)
     }
 
     /// The flow's box answered.
@@ -1766,8 +1770,8 @@ pub fn upload_row(id: &'static str) -> Div {
         )
 }
 
-/// `ConfigFirmwareDisabled`: the explanation, and Bootloader Update - which asks its two
-/// questions and stops before `MAV_CMD_FLASH_BOOTLOADER`, the report of it beneath.
+/// `ConfigFirmwareDisabled`: the explanation, and Bootloader Update - its two questions, then
+/// `MAV_CMD_FLASH_BOOTLOADER` sent by the window - the report of a flow beneath.
 /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareDisabled.resx:121-206; ConfigFirmwareDisabled.cs:18-45`
 fn disabled_page(firmware: &InstallFirmware, cx: &mut Context<MissionPlanner>) -> impl IntoElement {
     let body = div()
@@ -2422,7 +2426,7 @@ mod tests {
     /// Bootloader Update: nothing with the link closed; two questions, and Yes to both stops
     /// before the command; No to either ends it.
     #[test]
-    fn bootloader_update_asks_twice_and_stops_before_the_command() {
+    fn bootloader_update_asks_twice_then_owes_the_command() {
         let mut page = InstallFirmware::default();
         page.open(true);
         page.bootloader_update(false);
@@ -2437,10 +2441,9 @@ mod tests {
         assert_eq!(page.question().as_deref(), Some(BL_QUESTIONS[1]));
         page.answer_bootloader(true);
         assert!(page.question().is_none());
-        assert_eq!(
-            page.reached.as_ref().and_then(|r| r.stop.clone()),
-            Some(flow::Stop::FlashBootloader)
-        );
+        assert!(page.reached.is_none(), "no stop: the command itself is owed");
+        assert!(page.take_bootloader_command());
+        assert!(!page.take_bootloader_command(), "owed once");
         // The manifest page has no such button of its own: its link is dimmed.
         let mut manifest = InstallFirmware::default();
         manifest.open(false);

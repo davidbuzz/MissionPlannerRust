@@ -386,12 +386,6 @@ struct MissionPlanner {
     extended_tuning: config::extended_tuning::ExtendedTuning,
     extended_focus: config::extended_tuning::Focus,
     // ---- end Extended Tuning ----
-    // ---- GeoFence / rover Basic Tuning / User Params ----
-    /// CONFIG's GeoFence, rover Basic Tuning and User Params pages (`config/software_pages.rs`).
-    software_pages: config::software_pages::SoftwarePages,
-    /// Their boxes' focus.
-    software_focus: config::software_pages::Focus,
-    // ---- end GeoFence / rover Basic Tuning / User Params ----
     // ---- RTK/GPS Inject ----
     /// Initial Setup's RTK/GPS Inject page, with its statics and the thread it starts.
     rtk_inject: config::rtk_inject::RtkInject,
@@ -652,10 +646,6 @@ impl MissionPlanner {
             extended_tuning: config::extended_tuning::ExtendedTuning::default(),
             extended_focus: config::extended_tuning::Focus::new(cx),
             // ---- end Extended Tuning ----
-            // ---- GeoFence / rover Basic Tuning / User Params ----
-            software_pages: config::software_pages::SoftwarePages::default(),
-            software_focus: config::software_pages::Focus::new(cx),
-            // ---- end GeoFence / rover Basic Tuning / User Params ----
             // ---- RTK/GPS Inject ----
             rtk_inject: config::rtk_inject::RtkInject::default(),
             rtk_focus: config::rtk_inject::Focus::new(cx),
@@ -2109,10 +2099,6 @@ impl Render for MissionPlanner {
         // and Refresh Screen's calls.
         self.extended_tuning_tick(&view, window);
         // ---- end Extended Tuning ----
-        // ---- GeoFence / rover Basic Tuning / User Params ----
-        // Their page objects, the box the focus left, the timers and the writes.
-        self.software_tick(&view, window);
-        // ---- end GeoFence / rover Basic Tuning / User Params ----
         // ---- RTK/GPS Inject ----
         // The page object disposed with its screen, what its thread did, its timer, and where
         // its thread sends.
@@ -2463,16 +2449,6 @@ impl Render for MissionPlanner {
             // ---- Extended Tuning ----
             config::extended_tuning::record_facts(&self.extended_tuning, &view);
             // ---- end Extended Tuning ----
-            // ---- GeoFence / rover Basic Tuning / User Params ----
-            config::software_pages::record_facts(
-                &self.software_pages,
-                self.config_list
-                    .pages()
-                    .iter()
-                    .any(|row| row.class == config::rover_tuning::CLASS),
-                &view,
-            );
-            // ---- end GeoFence / rover Basic Tuning / User Params ----
             // ---- Firmware Legacy / Ateryx ----
             config::firmware_legacy::record_facts(
                 &self.firmware_legacy,
@@ -2825,9 +2801,6 @@ impl Render for MissionPlanner {
                 // ---- Extended Tuning ----
                 .children(self.extended_tuning_overlay(window, cx))
                 // ---- end Extended Tuning ----
-                // ---- GeoFence / rover Basic Tuning / User Params ----
-                .children(self.software_overlay(window, cx))
-                // ---- end GeoFence / rover Basic Tuning / User Params ----
                 // ---- Firmware Legacy / Ateryx ----
                 .children(config::ateryx::overlay(&self.ateryx, window, cx))
                 // ---- end Firmware Legacy / Ateryx ----

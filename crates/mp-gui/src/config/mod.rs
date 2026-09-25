@@ -34,3 +34,9 @@ pub mod rtk_inject;
 pub mod ateryx;
 pub mod firmware_legacy;
 // ---- end Firmware Legacy / Ateryx ----
+// ---- GeoFence / rover Basic Tuning / User Params ----
+pub mod geofence;
+pub mod rover_tuning;
+pub mod software_pages;
+pub mod user_params;
+// ---- end GeoFence / rover Basic Tuning / User Params ----

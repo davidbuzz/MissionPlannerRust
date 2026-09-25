@@ -136,6 +136,19 @@ fn main() -> std::process::ExitCode {
                 std::process::ExitCode::from(2)
             }
         },
+        // Development scaffolding: one `COMMAND_LONG` sent as `doCommand` sends it, and what the
+        // vehicle answered, printed - for the bench, where the GUI says only what the C# says
+        // ("Failed to upgrade bootloader") and the reason is in the acknowledgement.
+        Some("command") => match (args.get(1), args.get(2)) {
+            (Some(url), Some(command)) => send_command(url, command, args.get(3..).unwrap_or_default()),
+            _ => {
+                eprintln!(
+                    "usage: mpr command <url> <MAV_CMD number> [p1 p2 p3 p4 p5 p6 p7]\n  \
+                     sends the command to the first vehicle heard and prints its COMMAND_ACK"
+                );
+                std::process::ExitCode::from(2)
+            }
+        },
         Some("fields") => match args.get(1) {
             Some(path) => logs::fields(path),
             None => {
@@ -439,6 +452,76 @@ fn fly_config(record_path: Option<&str>) -> LinkConfig {
         record_path: record_path.map(Into::into),
         ..LinkConfig::default()
     }
+}
+
+/// `MAV_RESULT` by name, for the report.
+fn mav_result_name(result: u8) -> &'static str {
+    match result {
+        0 => "MAV_RESULT_ACCEPTED",
+        1 => "MAV_RESULT_TEMPORARILY_REJECTED",
+        2 => "MAV_RESULT_DENIED",
+        3 => "MAV_RESULT_UNSUPPORTED",
+        4 => "MAV_RESULT_FAILED",
+        5 => "MAV_RESULT_IN_PROGRESS",
+        6 => "MAV_RESULT_CANCELLED",
+        _ => "MAV_RESULT_?",
+    }
+}
+
+/// `mpr command`: the command to the first vehicle heard, waited for as `doCommand` waits (the
+/// link's retries, the slow ones for a calibration or a bootloader flash), its answer printed.
+fn send_command(url: &str, command: &str, params: &[String]) -> std::process::ExitCode {
+    let Ok(command) = command.parse::<u16>() else {
+        eprintln!("the command is a MAV_CMD number, not {command:?}");
+        return std::process::ExitCode::from(2);
+    };
+    let mut values = [0.0f32; 7];
+    for (slot, text) in values.iter_mut().zip(params) {
+        match text.parse::<f32>() {
+            Ok(value) => *slot = value,
+            Err(_) => {
+                eprintln!("a parameter is a number, not {text:?}");
+                return std::process::ExitCode::from(2);
+            }
+        }
+    }
+    let link = match Link::connect(url, LinkConfig::default()) {
+        Ok(link) => link,
+        Err(err) => {
+            eprintln!("could not open {url}: {err}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while link.primary_vehicle().is_none() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let Some((id, _)) = link.primary_vehicle() else {
+        eprintln!("no vehicle appeared");
+        return std::process::ExitCode::FAILURE;
+    };
+    println!("vehicle {id}: COMMAND_LONG {command} {values:?}");
+    let request = link.command(id, command, values, true);
+    let deadline = Instant::now() + Duration::from_secs(90);
+    while Instant::now() < deadline {
+        match link.request(request).and_then(|request| request.outcome()) {
+            Some(RequestOutcome::Accepted { .. }) => {
+                println!("COMMAND_ACK: MAV_RESULT_ACCEPTED");
+                return std::process::ExitCode::SUCCESS;
+            }
+            Some(RequestOutcome::Rejected(result)) => {
+                println!("COMMAND_ACK: {} ({result})", mav_result_name(result));
+                return std::process::ExitCode::FAILURE;
+            }
+            Some(RequestOutcome::TimedOut) => {
+                println!("no COMMAND_ACK: timed out after the link's retries");
+                return std::process::ExitCode::FAILURE;
+            }
+            Some(_) | None => std::thread::sleep(Duration::from_millis(100)),
+        }
+    }
+    println!("no COMMAND_ACK within 90 s");
+    std::process::ExitCode::FAILURE
 }
 
 /// Flies a scripted mission. Intended for a simulator: it exists to produce flight data with real

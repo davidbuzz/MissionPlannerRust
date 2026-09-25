@@ -1,0 +1,355 @@
+//! The main window's connection controls: `ConnectionControl` - the port box `cmb_Connection`
+//! and the baud box `cmb_Baud` - and the CONNECT button `MenuConnect`, with what pressing it does.
+//! Ported from `MainV2.cs` @ efb0801 (GPL-3.0-or-later): `PopulateSerialportList` (:1283-1300),
+//! `MenuConnect_Click` and `Connect` (:1841-1880), `doDisconnect` (:1389-1447), `doConnect`
+//! (:1448-1700), `CMB_serialport_SelectedIndexChanged` (:1962-1984), `CMB_baudrate_TextChanged`
+//! (:4333-4350); `Controls/ConnectionControl.cs`; the transports' `Open` prompts in
+//! `ExtLibs/Comms/CommsTCPSerial.cs:101-145`, `CommsUdpSerial.cs:100-125`,
+//! `CommsUDPSerialConnect.cs:130-150`, `CommsWebSocket.cs:100-110`.
+//!
+//! The port box lists the serial ports between `AUTO` and `TCP`, `UDP`, `UDPCl`, `WS`; the baud
+//! box holds the sixteen rates of the `.resx` and is off for the ports that have no baud. CONNECT
+//! opens what the boxes say - a serial port at its baud, or TCP, UDP, UDPCl and WS after their
+//! questions (host and port, a local port, a URL, each offering what the settings last saved) -
+//! and becomes DISCONNECT; DISCONNECT closes the link, asking first when the model is still
+//! moving. Every press saves the settings, as `MenuConnect_Click` does.
+//!
+//! What is here is the pure part: the lists, the rules, the questions and the URL the answers
+//! make. The drawing and the link itself are in `main.rs`.
+
+/// `cmb_Baud`'s items.
+/// `// C#: Controls/ConnectionControl.resx (cmb_Baud.Items..Items15)`
+pub const BAUDS: [&str; 16] = [
+    "1200", "2400", "4800", "9600", "19200", "38400", "57600", "111100", "115200", "230400",
+    "460800", "500000", "625000", "921600", "1000000", "1500000",
+];
+
+/// The port box's entries after the serial ports.
+/// `// C#: MainV2.cs:1295-1299`
+pub const NETWORK_PORTS: [&str; 4] = ["TCP", "UDP", "UDPCl", "WS"];
+
+/// `Strings.CONNECTc` and `DISCONNECTc`, the button's two texts.
+/// `// C#: ExtLibs/Strings/Strings.resx:271-279`
+pub const CONNECT: &str = "CONNECT";
+pub const DISCONNECT: &str = "DISCONNECT";
+/// `Strings.Stillmoving`, asked before disconnecting from a moving model, under `Strings.Disconnect`.
+/// `// C#: MainV2.cs:1851-1857; ExtLibs/Strings/Strings.resx:274-296`
+pub const STILL_MOVING: &str = "Your model is still moving are you sure you want to disconnect?";
+pub const DISCONNECT_TITLE: &str = "Disconnect";
+/// `Strings.InvalidBaudRate`, for a baud box that is not a number.
+/// `// C#: MainV2.cs:4335-4339; ExtLibs/Strings/Strings.resx:177-179`
+pub const INVALID_BAUD_RATE: &str = "Invalid BaudRate";
+/// `comPort.MAV.cs.groundspeed > 4`: faster than this, disconnecting is asked about.
+/// `// C#: MainV2.cs:1851`
+pub const STILL_MOVING_SPEED: f64 = 4.0;
+
+/// `PopulateSerialportList`: `AUTO`, the serial ports as the system lists them, then the network
+/// kinds. `AUTO` is listed as the C# lists it, and refused when chosen: its port scan
+/// (`CommsSerialScan`) is not ported.
+/// `// C#: MainV2.cs:1291-1300`
+#[must_use]
+pub fn port_list(serial_ports: &[String]) -> Vec<String> {
+    let mut list = vec!["AUTO".to_owned()];
+    list.extend(serial_ports.iter().cloned());
+    list.extend(NETWORK_PORTS.iter().map(|name| (*name).to_owned()));
+    list
+}
+
+/// `CMB_serialport_SelectedIndexChanged`: the baud box is off for the kinds that have no baud.
+/// `// C#: MainV2.cs:1967-1974`
+#[must_use]
+pub fn baud_enabled(port: &str) -> bool {
+    !matches!(port, "UDP" | "UDPCl" | "TCP" | "AUTO")
+}
+
+/// `CMB_baudrate_TextChanged`: the text must parse as an integer, else "Invalid BaudRate"; the
+/// digits alone are then kept.
+/// `// C#: MainV2.cs:4333-4350`
+///
+/// # Errors
+///
+/// The message box's words.
+pub fn baud_changed(text: &str) -> Result<String, &'static str> {
+    if text.trim().parse::<i32>().is_err() {
+        return Err(INVALID_BAUD_RATE);
+    }
+    Ok(text.chars().filter(char::is_ascii_digit).collect())
+}
+
+/// What the port box names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    /// A serial device.
+    Serial,
+    /// `TcpSerial`: a TCP client.
+    Tcp,
+    /// `UdpSerial`: a UDP listener.
+    Udp,
+    /// `UdpSerialConnect`: a UDP client.
+    UdpClient,
+    /// `WebSocket`.
+    WebSocket,
+    /// The serial scan, not ported.
+    Auto,
+}
+
+/// `doConnect`'s `switch (portname)`.
+/// `// C#: MainV2.cs:1452-1526`
+#[must_use]
+pub fn kind(port: &str) -> Kind {
+    match port {
+        "TCP" => Kind::Tcp,
+        "UDP" => Kind::Udp,
+        "UDPCl" => Kind::UdpClient,
+        "WS" => Kind::WebSocket,
+        "AUTO" => Kind::Auto,
+        _ => Kind::Serial,
+    }
+}
+
+/// One of the `InputBox`es a transport's `Open` shows: its title, its words, the settings key
+/// whose value it offers, and what it offers when the key is empty.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Question {
+    /// The box's title.
+    pub title: &'static str,
+    /// Its words.
+    pub text: &'static str,
+    /// The `Settings` key it reads and, once answered, writes.
+    pub key: &'static str,
+    /// The transport's own default.
+    pub default: &'static str,
+}
+
+/// The questions a kind asks before opening, in the order its `Open` asks them.
+/// `// C#: ExtLibs/Comms/CommsTCPSerial.cs:112-125; CommsUdpSerial.cs:110-115;
+/// CommsUDPSerialConnect.cs:136-146; CommsWebSocket.cs:103-106`
+#[must_use]
+pub fn questions(kind: Kind) -> Vec<Question> {
+    match kind {
+        Kind::Tcp => vec![
+            Question {
+                title: "remote host",
+                text: "Enter host name/ip (ensure remote end is already started)",
+                key: "TCP_host",
+                default: "127.0.0.1",
+            },
+            Question {
+                title: "remote Port",
+                text: "Enter remote port",
+                key: "TCP_port",
+                default: "5760",
+            },
+        ],
+        Kind::Udp => vec![Question {
+            title: "Listern Port",
+            text: "Enter Local port (ensure remote end is already sending)",
+            key: "UDP_port",
+            default: "14550",
+        }],
+        Kind::UdpClient => vec![
+            Question {
+                title: "remote host",
+                text: "Enter host name/ip (ensure remote end is already started)",
+                key: "UDP_host",
+                default: "127.0.0.1",
+            },
+            Question {
+                title: "remote Port",
+                text: "Enter remote port",
+                key: "UDP_port",
+                default: "14550",
+            },
+        ],
+        Kind::WebSocket => vec![Question {
+            title: "remote host",
+            text: "Enter url (eg http://user:pass@host:port/wspath)",
+            key: "WS_url",
+            default: "",
+        }],
+        Kind::Serial | Kind::Auto => Vec::new(),
+    }
+}
+
+/// The link URL the box and the answers make, as this application's transports spell one:
+/// `serial:<port>:<baud>`, `tcp:host:port`, `udp:0.0.0.0:port`, `udpcl:host:port`, or the URL
+/// typed for WS. `None` for AUTO, and for a network kind whose answers are not there yet.
+#[must_use]
+pub fn url(kind: Kind, port: &str, baud: &str, answers: &[String]) -> Option<String> {
+    let answer = |index: usize| answers.get(index).map(|answer| answer.trim());
+    match kind {
+        Kind::Serial => Some(format!("serial:{port}:{baud}")),
+        Kind::Tcp => Some(format!("tcp:{}:{}", answer(0)?, answer(1)?)),
+        Kind::Udp => Some(format!("udp:0.0.0.0:{}", answer(0)?)),
+        Kind::UdpClient => Some(format!("udpcl:{}:{}", answer(0)?, answer(1)?)),
+        Kind::WebSocket => Some(answer(0)?.to_owned()),
+        Kind::Auto => None,
+    }
+}
+
+/// `Connect`'s first check: a moving model is asked about before disconnecting.
+/// `// C#: MainV2.cs:1851-1857`
+#[must_use]
+pub fn asks_before_disconnecting(connected: bool, groundspeed: f64) -> bool {
+    connected && groundspeed > STILL_MOVING_SPEED
+}
+
+/// A network kind's questions on their way to being answered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Asking {
+    /// What is being opened.
+    pub kind: Kind,
+    /// The questions, in order.
+    pub questions: Vec<Question>,
+    /// The answers so far.
+    pub answers: Vec<String>,
+}
+
+impl Asking {
+    /// The question due now, if one is.
+    #[must_use]
+    pub fn current(&self) -> Option<&Question> {
+        self.questions.get(self.answers.len())
+    }
+}
+
+/// The connection controls' state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConnectBox {
+    /// `cmb_Connection.Text`, `MainV2.comPortName`.
+    pub port: String,
+    /// `cmb_Baud.Text`.
+    pub baud: String,
+    /// The port box's list, filled when the box is clicked.
+    pub ports: Vec<String>,
+    /// Whether the port list is open.
+    pub ports_open: bool,
+    /// Whether the baud list is open.
+    pub bauds_open: bool,
+    /// A network kind's questions being asked.
+    pub asking: Option<Asking>,
+    /// "Your model is still moving ..." showing.
+    pub still_moving: bool,
+    /// The last message box: "Invalid BaudRate".
+    pub message: Option<&'static str>,
+}
+
+impl ConnectBox {
+    /// The boxes as the settings left them: `comport` and its baud.
+    #[must_use]
+    pub fn new(port: &str, baud: &str) -> Self {
+        Self {
+            port: port.to_owned(),
+            baud: baud.to_owned(),
+            ports: Vec::new(),
+            ports_open: false,
+            bauds_open: false,
+            asking: None,
+            still_moving: false,
+            message: None,
+        }
+    }
+
+    /// Whether a dialog of the box's is showing.
+    #[must_use]
+    pub fn dialog_open(&self) -> bool {
+        self.asking.is_some() || self.still_moving || self.message.is_some()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_port_list_is_auto_the_ports_then_the_network_kinds() {
+        let ports = vec!["/dev/ttyACM0".to_owned(), "/dev/ttyUSB0".to_owned()];
+        assert_eq!(
+            port_list(&ports),
+            vec![
+                "AUTO",
+                "/dev/ttyACM0",
+                "/dev/ttyUSB0",
+                "TCP",
+                "UDP",
+                "UDPCl",
+                "WS"
+            ]
+        );
+        assert_eq!(port_list(&[]).len(), 5);
+    }
+
+    #[test]
+    fn the_baud_box_is_off_for_the_kinds_without_one() {
+        for port in ["UDP", "UDPCl", "TCP", "AUTO"] {
+            assert!(!baud_enabled(port), "{port}");
+        }
+        assert!(baud_enabled("/dev/ttyACM0"));
+        assert!(baud_enabled("WS"));
+    }
+
+    #[test]
+    fn a_baud_that_is_not_a_number_is_invalid_and_digits_are_kept() {
+        assert_eq!(baud_changed("115200"), Ok("115200".to_owned()));
+        assert_eq!(baud_changed(" 57600 "), Ok("57600".to_owned()));
+        assert_eq!(baud_changed("fast"), Err(INVALID_BAUD_RATE));
+        assert_eq!(baud_changed(""), Err(INVALID_BAUD_RATE));
+    }
+
+    #[test]
+    fn each_kind_asks_its_transports_questions_and_makes_its_url() {
+        assert_eq!(kind("TCP"), Kind::Tcp);
+        assert_eq!(kind("/dev/ttyACM0"), Kind::Serial);
+        assert!(questions(Kind::Serial).is_empty());
+        let tcp = questions(Kind::Tcp);
+        assert_eq!(tcp.len(), 2);
+        assert_eq!(tcp[0].title, "remote host");
+        assert_eq!(tcp[0].default, "127.0.0.1");
+        assert_eq!(tcp[1].default, "5760");
+        assert_eq!(questions(Kind::Udp)[0].title, "Listern Port");
+        assert_eq!(questions(Kind::UdpClient)[1].key, "UDP_port");
+        assert_eq!(
+            url(Kind::Serial, "/dev/ttyACM0", "115200", &[]),
+            Some("serial:/dev/ttyACM0:115200".to_owned())
+        );
+        assert_eq!(
+            url(Kind::Tcp, "TCP", "", &["127.0.0.1".to_owned(), "5760".to_owned()]),
+            Some("tcp:127.0.0.1:5760".to_owned())
+        );
+        assert_eq!(url(Kind::Tcp, "TCP", "", &["127.0.0.1".to_owned()]), None);
+        assert_eq!(
+            url(Kind::Udp, "UDP", "", &["14550".to_owned()]),
+            Some("udp:0.0.0.0:14550".to_owned())
+        );
+        assert_eq!(
+            url(Kind::UdpClient, "UDPCl", "", &["10.0.0.5".to_owned(), "14550".to_owned()]),
+            Some("udpcl:10.0.0.5:14550".to_owned())
+        );
+        assert_eq!(
+            url(Kind::WebSocket, "WS", "", &["ws://h:1/p".to_owned()]),
+            Some("ws://h:1/p".to_owned())
+        );
+        assert_eq!(url(Kind::Auto, "AUTO", "", &[]), None);
+    }
+
+    #[test]
+    fn a_moving_model_is_asked_about_before_disconnecting() {
+        assert!(asks_before_disconnecting(true, 4.5));
+        assert!(!asks_before_disconnecting(true, 4.0));
+        assert!(!asks_before_disconnecting(false, 9.0));
+    }
+
+    #[test]
+    fn asking_walks_the_questions_in_order() {
+        let mut asking = Asking {
+            kind: Kind::Tcp,
+            questions: questions(Kind::Tcp),
+            answers: Vec::new(),
+        };
+        assert_eq!(asking.current().map(|q| q.title), Some("remote host"));
+        asking.answers.push("h".to_owned());
+        assert_eq!(asking.current().map(|q| q.title), Some("remote Port"));
+        asking.answers.push("1".to_owned());
+        assert!(asking.current().is_none());
+    }
+}
