@@ -1,11 +1,11 @@
-﻿import clr
+import clr
 import MissionPlanner
 clr.AddReference("MAVLink")
 from System import Func, Action
 import MAVLink
 
 def OtherMethod(message):
-    print "got HB";
+    print("got HB")
     return True
 
 def MyMethod(message):
@@ -16,11 +16,11 @@ def MyMethod(message):
 def MyPacketHandler(o, message):
     try:
         if message.msgid == MAVLink.MAVLINK_MSG_ID.STATUSTEXT.value__:
-            print "STATUSTEXT from MyPacketHandler " + str(message.sysid) + " " + str(message.compid)
-            print dir(message)
+            print("STATUSTEXT from MyPacketHandler " + str(message.sysid) + " " + str(message.compid))
+            print(dir(message))
             print(bytes(message.data.text))
     except Exception as inst:
-        print inst
+        print(inst)
 
 sub = MAV.SubscribeToPacketType(MAVLink.MAVLINK_MSG_ID.HEARTBEAT.value__, Func[MAVLink.MAVLinkMessage, bool] (OtherMethod))
 sub2 = MAV.SubscribeToPacketType(MAVLink.MAVLINK_MSG_ID.STATUSTEXT, Func[MAVLink.MAVLinkMessage,

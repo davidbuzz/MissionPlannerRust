@@ -37,6 +37,7 @@ mod raw_params;
 // ---- end row 82 ----
 // ---- ConfigRawParams remainder ----
 mod raw_params_grid;
+mod scripts_tab;
 // ---- end ConfigRawParams remainder ----
 mod plan;
 mod planner_coverage;

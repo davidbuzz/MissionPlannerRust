@@ -31,6 +31,7 @@ mp-ftp.workspace = true
 mp-vehicle.workspace = true
 mp-units.workspace = true
 mp-settings.workspace = true
+mp-script.workspace = true
 mp-terrain.workspace = true
 mp-mission.workspace = true
 mp-tiles.workspace = true

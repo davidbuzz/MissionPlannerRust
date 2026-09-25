@@ -967,6 +967,8 @@ pub enum Prompt {
     PoiSave,
     /// The POI menu's Load File: `POILoad`'s `OpenFileDialog`. `// C#: Utilities/POI.cs:171-182`
     PoiLoad,
+    /// `openScriptDialog`: the Scripts tab's Select Script.
+    SelectScript,
     /// Set View Count's first question, `InputBox.Show("Columns", "Enter number of columns to
     /// have.", ref cols)`. `// C#: GCSViews/FlightData.cs:5088`
     ViewColumns,
@@ -1003,6 +1005,7 @@ impl Prompt {
             Self::PointCameraCoords => "Enter Coords",
             Self::PoiSave => "Save File",
             Self::PoiLoad => "Load File",
+            Self::SelectScript => "Select Script",
             Self::ViewColumns => "Columns",
             Self::ViewRows => "Rows",
             Self::CellCount => "Battery Cell Count",
@@ -1044,6 +1047,9 @@ impl Prompt {
             Self::PoiSave | Self::PoiLoad => "Poi File".to_owned(),
             Self::ViewColumns => "Enter number of columns to have.".to_owned(),
             Self::ViewRows => "Enter number of rows to have.".to_owned(),
+            // `openScriptDialog`, an `OpenFileDialog` for scripts: the path, typed.
+            // `// C#: GCSViews/FlightData.cs:1630-1641`
+            Self::SelectScript => "Python script (*.py)".to_owned(),
             Self::CellCount => "Cell Count".to_owned(),
             Self::GaugeMax => "Enter Max Speed".to_owned(),
         }
@@ -1055,6 +1061,7 @@ impl Prompt {
         matches!(
             self,
             Self::ResumeAt
+                | Self::SelectScript
                 | Self::FlyToCoords
                 | Self::FlyToHereAlt { .. }
                 | Self::PoiId
@@ -3355,8 +3362,8 @@ impl Page {
             Self::AuxFunction => "auxOptions1-7 are not ported.",
             // `// C#: GCSViews/FlightData.Designer.cs:2016-2022`
             Self::Scripts => {
-                "Select Script, Run Script, Abort Running Script and Edit Selected Script are \
-                 not ported."
+                "The script console is drawn under the buttons, not in a form of its own; MAV, \
+                 MainV2, the screens, Ports and Joystick are not handed to scripts."
             }
             // `// C#: GCSViews/FlightData.Designer.cs:2091, 2098-2103, GCSViews/FlightData.cs:6678-6700`
             Self::Payload => {
@@ -3392,6 +3399,8 @@ pub enum Panel {
     Payload,
     /// `tabGauges`' speed dial: [`gauges_page`].
     Gauges,
+    /// `tabScripts`: [`crate::scripts_tab::page`].
+    Scripts,
 }
 
 impl Page {
@@ -3428,6 +3437,7 @@ impl Page {
             Self::Transponder => &[Panel::Transponder],
             Self::Payload => &[Panel::Payload],
             Self::Gauges => &[Panel::Gauges],
+            Self::Scripts => &[Panel::Scripts],
             _ => &[],
         }
     }
@@ -3789,6 +3799,7 @@ pub fn page_content(
                 crate::transponder::page(&inputs.data.transponder, &inputs.focus.xpdr, window, cx)
             }
             Panel::Payload => crate::payload::page(&inputs.data.payload, view.state.as_deref(), cx),
+            Panel::Scripts => crate::scripts_tab::page(&inputs.data.scripts, cx),
             Panel::Gauges => gauges_page(inputs.data, view.state.as_deref(), cx),
             Panel::Playback => playback_page(&inputs.data.playback, cx),
             Panel::DataFlash => dataflash_page(inputs.data, cx),
@@ -4110,6 +4121,12 @@ impl MissionPlanner {
             }
             // Like Fly To Coords, the answer is read whether or not the box was cancelled.
             Prompt::PoiCoords => self.poi_at_coords(if accepted { &text } else { "" }, window, cx),
+            // `openScriptDialog`: OK selects, Cancel clears. `// C#: GCSViews/FlightData.cs:1630-1641`
+            Prompt::SelectScript => {
+                self.fly_data
+                    .scripts
+                    .select(if accepted { &text } else { "" });
+            }
             Prompt::LoadLog => {
                 if accepted {
                     self.fly_load_log(&text);
@@ -4355,6 +4372,10 @@ impl MissionPlanner {
     /// DataFlash Logs page's conversion finishing.
     pub(crate) fn fly_tick(&mut self, view: &TelemetryView, window: &Window) {
         self.fly_data.playback.tick();
+        // The Scripts tab: the run's output and end, and the requests its script has made.
+        if let Some(status) = self.fly_data.scripts.tick(&self.telemetry, view) {
+            self.file_status = Some(status);
+        }
         self.fly_xpdr_tick(view, window);
         // A conversion that has finished says so on the status line.
         if let Some(outcome) = self.fly_data.conversions.poll() {
@@ -4540,6 +4561,8 @@ pub struct FlightData {
     pub transponder: crate::transponder::Transponder,
     /// The Payload Control page's gimbal bars.
     pub payload: crate::payload::Payload,
+    /// The Scripts page.
+    pub scripts: crate::scripts_tab::ScriptsTab,
     /// How many points the last Clear Track took off the map.
     pub track_cleared: Option<usize>,
     /// The Gauges page's speed dial, `Gspeed`.
@@ -4579,6 +4602,7 @@ impl FlightData {
             pending_home: None,
             transponder: crate::transponder::Transponder::default(),
             payload: crate::payload::Payload::default(),
+            scripts: crate::scripts_tab::ScriptsTab::default(),
             track_cleared: None,
             speed_gauge: crate::gauge::SpeedGauge::default(),
             gauges_bounds: Rc::new(Cell::new(None)),
@@ -4747,6 +4771,7 @@ impl FlightData {
         );
         self.transponder.record_facts();
         self.payload.record_facts(state);
+        self.scripts.record_facts();
         crate::facts::record("fly.gauge.speed.max", self.speed_gauge.max);
         crate::facts::record(
             "fly.gauge.speed.size",

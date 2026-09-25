@@ -32,7 +32,7 @@ renderer with no web backend. Reference clone: [references/zed](references/zed).
 | [D13](#d13-initial-setup-calibration-and-firmware) | 2 | Setup, calibration, firmware flashing | P1 | In progress (55% completed est) | Not started | Not started | Unit + SITL + hardware |
 | [D14](#d14-log-engine-and-analysis) | 2 | Dataflash log parsing, plots | P1 | In progress (65% completed est) | Not started | Not started | Differential vs C# |
 | [D15](#d15-can-peripherals-and-outboard-features) | 2 | DroneCAN, peripherals, video, joystick | P2 | In progress (20% completed est) | Not started | Not started | Unit |
-| [D16](#d16-extension-and-scripting-system) | 2 | Python scripting, WASM extensions | P2 | In progress (15% completed est) | Not started | Not started | Unit |
+| [D16](#d16-extension-and-scripting-system) | 2 | Python scripting, WASM extensions | P2 | In progress (30% completed est) | Not started | Not started | Unit |
 | [D17](#d17-localization-settings-and-data-compatibility) | 2 | i18n, settings, data compatibility | P1 | In progress (55% completed est) | Not started | Not started | Differential vs C# |
 | [D18](#d18-translation-factory-and-porting-ledger) | 3 | Translation factory, file ledger | P0 (ledger) / P1 (factory) | In progress (30% completed est) | Not started | Not started | Unit |
 | [D19](#d19-verification-suite) | 3 | Differential, SITL, fuzz verification | P0 | In progress (50% completed est) | Not started | Not started | Differential vs C# + fuzz |
@@ -229,7 +229,7 @@ theming (`*.mpsystheme` import) and keymaps/actions.
   no widget gallery or snapshot tests; no themes or `*.mpsystheme` import (the palette is the
   owner's dark one, PLAN.md §1.2); the numeric up-down (`MavlinkNumericUpDown`, typed or stepped by its arrows) lives in `config/servo_output.rs`, shared by the pages rather than a kit; the text field (`textfield.rs`) has a caret, a selection by keyboard, click, drag and double-click, and the clipboard chords, with a multi-line `text_area` for the log browser's txt_info and User Params' Modify box, but no undo, right-click menu, sideways scrolling or blinking caret, and fourteen pages still draw their own type-at-the-end boxes (PLAN.md §13.6 row 87); HiDPI,
   multi-monitor and IME unverified; the 100,000-row grid at 120 fps unmeasured.
-- **Tests:** `crates/mp-gui/tests/layout.rs` (every screen inside the window at 1600×1200 and at a small size; `--ignored`, they need a window) and the 164 `tests/gui/*.gui` scripts through `tools/gui-test.sh` (29 of them written on 2026-09-25 and not yet run), which assert the application's own facts; the widgets' unit tests are inline in `mp-gui`. Not yet: `tests/snapshots/**` with golden images, `tests/interaction.rs` on gpui's test executor, `tests/grid.rs` and `benches/grid_scroll.rs`, `tests/theme_import.rs`, `tests/hidpi.rs`.
+- **Tests:** `crates/mp-gui/tests/layout.rs` (every screen inside the window at 1600×1200 and at a small size; `--ignored`, they need a window) and the 165 `tests/gui/*.gui` scripts through `tools/gui-test.sh` (30 of them written on 2026-09-25 and not yet run), which assert the application's own facts; the widgets' unit tests are inline in `mp-gui`. Not yet: `tests/snapshots/**` with golden images, `tests/interaction.rs` on gpui's test executor, `tests/grid.rs` and `benches/grid_scroll.rs`, `tests/theme_import.rs`, `tests/hidpi.rs`.
 
 ### D7. GPU render core
 Shared `wgpu` layer under everything visual: device/queue sharing with gpui (or offscreen render-to-texture
@@ -592,9 +592,11 @@ one of them.
   sent twice 20 ms apart - and measures what the corpus needs. **The measurement changes the
   estimate:** 15 of the 19 scripts reach .NET types directly through IronPython's assembly loading
   and cannot run unmodified on any Rust engine; only 4 stay inside the scope bindings. 11 call into
-  `MAV`, which is where a compatibility shim has to start. No interpreter is wired yet, and the
-  scan says why that was the right order.
-- **Tests:** `crates/mp-script/tests/stock_scripts.rs` runs every `testdata/scripts/*.py` through the corpus scan and asserts the file count and each script's recorded verdict. Not yet, since no interpreter is wired: `script_kill.rs` (the kill switch), `sample_extension.rs` (a wasm extension built, loaded, adding a panel and sending a command), `sandbox.rs`, `api_compat.rs`, `scripting.rs` (the reimplemented IronPython examples with identical effects).
+  `MAV`, which is where a compatibility shim has to start. The interpreter is wired (2026-09-25):
+  RustPython runs the scripts on the Scripts tab with `Script` and `cs`, the 19 shipped scripts are
+  moved to Python 3 (`testdata/scripts/CHANGES.md`) and each ends in tests as recorded - two run,
+  fourteen stop at `import clr`, wipe.py at `MAV`; the link is the next thing to hand them.
+- **Tests:** `crates/mp-script/tests/stock_scripts.rs` runs every `testdata/scripts/*.py` through the corpus scan and under the engine against a simulated vehicle, asserting the file count and each script's recorded verdict; `engine.rs`'s tests cover the objects, the console, the abort and the thread; `tests/gui/fly-scripts.gui` the tab. Not yet: `script_kill.rs` (the kill switch), `sample_extension.rs` (a wasm extension built, loaded, adding a panel and sending a command), `sandbox.rs`, `api_compat.rs`, `scripting.rs` (the reimplemented IronPython examples with identical effects).
 
 ### D17. Localization, settings and data compatibility
 All UI strings through Fluent, every existing culture migrated, Crowdin flow preserved; settings storage;
@@ -696,7 +698,7 @@ Proof that the Rust app behaves like the C# original before anyone flies behind 
   targets build and run clean (34.3 M executions at the last short pass) with committed seed
   corpora, and the 24-hour soaks of `frame_parse` and `message_decode` ended clean 2026-09-24 16:01Z; the
   same properties run bounded on stable in `cargo test --workspace`, so a target cannot rot
-  uncompiled; SITL integration tests run behind `--ignored`; 164 GUI scripts assert the
+  uncompiled; SITL integration tests run behind `--ignored`; 165 GUI scripts assert the
   application's own facts through `tools/gui-test.sh`, 26 of them written 2026-09-25 and not yet
   run (README.md says which). The mutation self-test is not written, no
   UI snapshot of a screen exists (the HUD's goldens are a software rasteriser's, not gpui's), and the perf gates are six benches whose thresholds hold in release on a

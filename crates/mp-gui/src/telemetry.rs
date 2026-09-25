@@ -279,6 +279,9 @@ pub struct Telemetry {
     parameters: Mutex<Option<SharedParameters>>,
     /// The Planner page's rates as last handed to [`Telemetry::hand_over_rates`].
     rates_handed: Option<StreamRates>,
+    /// `cs.messages.Clear()`: the sequence number of the last message cleared, so the view
+    /// shows only what came after it. A script's, through the Scripts tab.
+    messages_cleared: std::sync::atomic::AtomicU64,
     /// A plain reboot's look at a serial port afterwards, and the reopen it may lead to; see
     /// [`Telemetry::reopen_after_reboot`]. Behind a lock because [`Telemetry::reboot`] is `&self`.
     reopen: Mutex<Option<Reopen>>,
@@ -442,6 +445,7 @@ impl Telemetry {
             parameters: Mutex::new(None),
             rates_handed: None,
             reopen: Mutex::new(None),
+            messages_cleared: std::sync::atomic::AtomicU64::new(0),
         }
     }
 
@@ -549,7 +553,15 @@ impl Telemetry {
             vehicle_count: vehicles.len(),
             mission,
             mission_complete,
-            messages: link.recent_messages(MESSAGE_LINES),
+            messages: {
+                let cleared = self
+                    .messages_cleared
+                    .load(std::sync::atomic::Ordering::Relaxed);
+                link.recent_messages(MESSAGE_LINES)
+                    .into_iter()
+                    .filter(|message| message.seq > cleared)
+                    .collect()
+            },
             messages_dropped: link.messages_dropped(),
             transfer,
             parameters,
@@ -1287,6 +1299,18 @@ impl Telemetry {
             *reopen = Some(Reopen::Check(Instant::now() + REBOOT_REOPEN_WAIT));
         }
         true
+    }
+
+    /// `cs.messages.Clear()`: every message so far dropped from the view; new ones show.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs (messages)`
+    pub fn clear_messages(&self) {
+        let latest = self
+            .link
+            .as_ref()
+            .and_then(|link| link.recent_messages(1).first().map(|message| message.seq))
+            .unwrap_or(0);
+        self.messages_cleared
+            .store(latest, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Whether the link was opened on a serial port: `BaseStream is SerialPort`.

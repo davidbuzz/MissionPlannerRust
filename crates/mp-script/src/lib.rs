@@ -8,15 +8,19 @@
 //! decision that they must run unmodified, which is why the engine is Python and not something
 //! nicer.
 //!
-//! **This crate is the host half, not the engine.** It defines and implements the API surface with
-//! the C#'s semantics - including the parts that are surprising - and it measures what the shipped
-//! corpus actually needs (see [`inventory`]). Choosing and wiring an interpreter is the next step
-//! and is deliberately not bundled with this one: the compatibility question is "what surface do
-//! the scripts touch", and that is answerable, checkable and reviewable without compiling a Python
-//! VM into the build.
+//! **Two halves.** [`api`] defines and implements the API surface with the C#'s semantics -
+//! including the parts that are surprising - and [`inventory`] measures what the shipped corpus
+//! actually needs. [`engine`] is the interpreter: RustPython, embedded with its standard library
+//! frozen into the binary, running a script with `Script`, `cs` and the rest in scope and its
+//! `print` output captured for the console (the owner's ruling of 2026-09-25, PLAN.md §12 D20).
+//! The corpus is Python 2 and RustPython is Python 3, so the shipped scripts are changed to run -
+//! each change recorded per script - which D20 allows and PLAN.md §10.4's "unmodified" no longer
+//! demands.
 
 pub mod api;
+pub mod engine;
 pub mod inventory;
 
-pub use api::{Conditional, ScriptApi, ScriptHost};
+pub use api::{Conditional, CsValue, ScriptApi, ScriptHost};
+pub use engine::{ScriptRun, run_blocking};
 pub use inventory::{Requirement, ScriptRequirements, Surface};

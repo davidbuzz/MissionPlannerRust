@@ -1,6 +1,6 @@
-﻿
 
-print 'Start Script'
+
+print('Start Script')
 for chan in range(1,9):
     Script.SendRC(chan,1500,False)
 

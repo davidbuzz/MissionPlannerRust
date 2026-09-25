@@ -27,6 +27,7 @@ pub mod link_quality;
 /// Flight mode names, generated from Mission Planner's parameter metadata.
 #[path = "generated/modes.rs"]
 pub mod modes;
+pub mod mode_lookup;
 pub mod onboard;
 pub mod rc;
 pub mod registry;

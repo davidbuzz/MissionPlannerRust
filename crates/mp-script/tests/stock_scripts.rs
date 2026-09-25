@@ -1,16 +1,20 @@
 //! The nineteen scripts Mission Planner ships, and what they need to run.
 //!
-//! D16's definition of done is that all nineteen run unmodified under the embedded Python engine.
-//! That engine is not wired yet, so this file does the half that can be done first and that
-//! decides how big the other half is: it asserts the corpus is intact, and it measures the host
-//! surface the corpus touches.
+//! D16's definition of done was that all nineteen run unmodified under the embedded Python
+//! engine; the owner's ruling of 2026-09-25 (PLAN.md §12 D20) is RustPython, Python 3, with the
+//! scripts changed to run - `testdata/scripts/CHANGES.md` records each change. This file asserts
+//! the corpus is intact, measures the host surface the corpus touches, and runs every script
+//! under the engine against a simulated vehicle, recording the verdict per script.
 //!
 //! The measurement matters because the obvious plan - "port `Script.cs` and run them" - is wrong,
 //! and the corpus says so plainly. Fifteen of the nineteen reach past `Script` into the link, the
 //! vehicle state, the application root and the screens. Finding that out by running an interpreter
 //! and watching it raise would be the slow way.
 
-use mp_script::{ScriptRequirements, Surface};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+
+use mp_script::{CsValue, ScriptHost, ScriptRequirements, Surface};
 
 /// Where the shipped scripts live.
 fn corpus() -> Vec<(String, String)> {
@@ -208,4 +212,149 @@ fn the_link_is_the_surface_most_scripts_need() {
         "only {touching_link} scripts touch MAV, which contradicts the scan"
     );
     println!("{touching_link} of {} scripts call into MAV", scripts.len());
+}
+
+/// A simulated vehicle for the corpus: telemetry that reads as a copter on the ground at the
+/// SITL home, every parameter held, every `WaitFor` satisfied once two seconds of the script's
+/// own time have passed, and a clock that only the script's `Sleep`s advance - ten minutes of
+/// it and the run is stopped, which is how a script that loops for ever ends here.
+#[derive(Debug)]
+struct Simulated {
+    clock_ms: u64,
+    abort: Arc<AtomicBool>,
+    log: Vec<String>,
+}
+
+const SIMULATED_MINUTES: u64 = 10;
+
+impl ScriptHost for Simulated {
+    fn get_parameter(&self, name: &str) -> Option<f32> {
+        Some(match name {
+            n if n.ends_with("_MIN") => 1100.0,
+            n if n.ends_with("_MAX") => 1900.0,
+            n if n.ends_with("_TRIM") => 1500.0,
+            _ => 1.0,
+        })
+    }
+    fn change_param(&mut self, name: &str, value: f32) -> bool {
+        self.log.push(format!("ChangeParam {name} {value}"));
+        true
+    }
+    fn change_mode(&mut self, mode: &str) -> bool {
+        self.log.push(format!("ChangeMode {mode}"));
+        true
+    }
+    fn has_message(&self, _text: &str) -> bool {
+        self.clock_ms > 2_000
+    }
+    fn clear_messages(&mut self) {}
+    fn cs_field(&self, name: &str) -> Option<CsValue> {
+        Some(match name {
+            "lat" => CsValue::Number(-35.363_262),
+            "lng" => CsValue::Number(149.165_237),
+            "alt" | "altasl" => CsValue::Number(584.0),
+            "roll" | "pitch" | "yaw" | "groundspeed" | "airspeed" | "verticalspeed" => {
+                CsValue::Number(0.0)
+            }
+            "satcount" => CsValue::Number(10.0),
+            "gpshdop" => CsValue::Number(1.0),
+            "battery_voltage" => CsValue::Number(12.6),
+            "ber_error" | "timeInAir" => CsValue::Number(0.0),
+            "mode" => CsValue::Text("Stabilize".to_owned()),
+            "firmware" => CsValue::Text("ArduCopter2".to_owned()),
+            "armed" | "landed" | "connected" => CsValue::Flag(false),
+            _ => return None,
+        })
+    }
+    fn send_rc(&mut self, channel: u8, pwm: u16, send_now: bool) -> bool {
+        self.log.push(format!("SendRC {channel} {pwm} {send_now}"));
+        true
+    }
+    fn sleep(&mut self, milliseconds: u32) {
+        self.clock_ms += u64::from(milliseconds);
+        if self.clock_ms > SIMULATED_MINUTES * 60_000 {
+            self.abort.store(true, Ordering::Relaxed);
+        }
+    }
+}
+
+/// How a script's run ended, in the words the table below records.
+fn verdict(result: &Result<(), String>, stopped: bool) -> String {
+    match result {
+        Ok(()) if stopped => format!("ran until stopped at {SIMULATED_MINUTES} min"),
+        Ok(()) => "ran to the end".to_owned(),
+        Err(text) if text.contains("No module named 'clr'") => "needs .NET (import clr)".to_owned(),
+        Err(text) => match text.lines().rev().find(|line| !line.trim().is_empty()) {
+            Some(line) if line.contains("is not available to scripts") => {
+                let object = line.split_whitespace().nth(1).unwrap_or("?");
+                format!("needs {object}")
+            }
+            Some(line) => format!("error: {}", line.trim()),
+            None => "error".to_owned(),
+        },
+    }
+}
+
+/// Every script, run under RustPython against the simulated vehicle, ends as recorded here: the
+/// two that only need `Script` and `cs` (rc.py, example1.py) run to their end or loop until the
+/// clock stops them; the fourteen that `import clr` stop there; wipe.py reaches `MAV`; datetime.py
+/// is a C# note that IronPython trips on the same way; debugenv.py wants `distutils`, gone from
+/// Python 3.12 and RustPython's stdlib. A script that begins to run, or to fail, differently
+/// changes this table on purpose.
+/// `// C#: Script.cs:45-53, 107-123`
+#[test]
+fn every_script_runs_under_the_engine_with_the_recorded_verdict() {
+    const EXPECTED: &[(&str, &str)] = &[
+        ("PARACHUTE LANDING APPROACH.py", "needs .NET (import clr)"),
+        ("TAKEOFF.py", "needs .NET (import clr)"),
+        ("cubeorange.py", "needs .NET (import clr)"),
+        // Not Python: its first line is `c#`, which IronPython trips on the same way.
+        ("datetime.py", "error: NameError: name 'c' is not defined. Did you mean: 'cs'?"),
+        // `distutils` left Python at 3.12 and is not in RustPython's stdlib.
+        ("debugenv.py", "error: ModuleNotFoundError: No module named 'distutils'"),
+        ("example1.py", "ran until stopped at 10 min"),
+        ("example10.py", "needs .NET (import clr)"),
+        ("example2.py", "needs .NET (import clr)"),
+        ("example3.py", "needs .NET (import clr)"),
+        ("example4 wp.py", "needs .NET (import clr)"),
+        ("example5 inject data.py", "needs .NET (import clr)"),
+        ("example6.py", "needs .NET (import clr)"),
+        ("example7.py", "needs .NET (import clr)"),
+        ("example8 - speech.py", "needs .NET (import clr)"),
+        ("example9 - sitl.py", "needs .NET (import clr)"),
+        ("rc - heli.py", "needs .NET (import clr)"),
+        ("rc.py", "ran to the end"),
+        ("ui.py", "needs .NET (import clr)"),
+        ("wipe.py", "needs MAV"),
+    ];
+    let mut verdicts = Vec::new();
+    for (name, source) in corpus() {
+        let abort = Arc::new(AtomicBool::new(false));
+        let host = Simulated {
+            clock_ms: 0,
+            abort: Arc::clone(&abort),
+            log: Vec::new(),
+        };
+        let output = Arc::new(Mutex::new(String::new()));
+        let result = mp_script::engine::run_with(
+            &name,
+            &source,
+            Box::new(host),
+            Arc::clone(&output),
+            Arc::clone(&abort),
+        );
+        let stopped = abort.load(Ordering::Relaxed);
+        let verdict = verdict(&result, stopped);
+        println!("{name}: {verdict}");
+        if let Err(text) = &result {
+            println!("    {}", text.lines().last().unwrap_or(""));
+        }
+        verdicts.push((name, verdict));
+    }
+    assert_eq!(verdicts.len(), SHIPPED_SCRIPTS);
+    let actual: Vec<(&str, &str)> = verdicts
+        .iter()
+        .map(|(name, verdict)| (name.as_str(), verdict.as_str()))
+        .collect();
+    assert_eq!(actual, EXPECTED);
 }

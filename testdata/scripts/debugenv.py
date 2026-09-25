@@ -1,5 +1,5 @@
 import sys
-print (sys.version_info)
+print((sys.version_info))
 import site; 
 print(site.getsitepackages())
 import math

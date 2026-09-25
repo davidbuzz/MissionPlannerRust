@@ -59,12 +59,33 @@ pub trait ScriptHost {
     /// `// C#: Script.cs:149-153`
     fn change_mode(&mut self, mode: &str) -> bool;
 
+    /// Whether any status message received so far contains `text`: `cs.messages.Any(a =>
+    /// a.message.Contains(message))`, the test `WaitFor` polls.
+    /// `// C#: Script.cs:158`
+    fn has_message(&self, text: &str) -> bool;
+    /// `cs.messages.Clear()`: the list of status messages emptied, which the corpus does before a
+    /// `WaitFor` so an old line cannot satisfy it.
+    fn clear_messages(&mut self);
+    /// `cs.<field>`: a `CurrentState` member by its C# name - `lat`, `alt`, `mode`, `satcount` -
+    /// or `None` for a name the state does not have, which a script sees as an `AttributeError`.
+    fn cs_field(&self, name: &str) -> Option<CsValue>;
     /// Waits for a status message containing `text`, up to `timeout_ms`.
     ///
     /// A **substring** match over every message received so far, not a match on new ones - so a
     /// message that arrived before the call returns immediately, and `WaitFor("Disarm")` is
-    /// satisfied by "Disarming motors" from ten minutes ago. `// C#: Script.cs:155-167`
-    fn wait_for(&mut self, text: &str, timeout_ms: u32) -> bool;
+    /// satisfied by "Disarming motors" from ten minutes ago. Polled every 5 ms, as the C# polls;
+    /// the engine's own loop adds the abort check. `// C#: Script.cs:155-167`
+    fn wait_for(&mut self, text: &str, timeout_ms: u32) -> bool {
+        let mut waited = 0;
+        while !self.has_message(text) {
+            self.sleep(WAIT_FOR_POLL_MS);
+            waited += WAIT_FOR_POLL_MS;
+            if waited > timeout_ms {
+                return false;
+            }
+        }
+        true
+    }
 
     /// Sets one RC override channel, and optionally sends immediately.
     ///
@@ -76,6 +97,18 @@ pub trait ScriptHost {
 
     /// Sleeps. `// C#: Script.cs:102-105`
     fn sleep(&mut self, milliseconds: u32);
+}
+
+/// A `CurrentState` member's value as a script sees it: the C#'s doubles and floats as a number,
+/// its strings (`mode`, `firmware`) as text, its booleans (`armed`) as a flag.
+#[derive(Debug, Clone, PartialEq)]
+pub enum CsValue {
+    /// A numeric field.
+    Number(f64),
+    /// A string field.
+    Text(String),
+    /// A boolean field.
+    Flag(bool),
 }
 
 /// The highest RC channel `Script.SendRC` can address.

@@ -95,7 +95,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUT_abort_script_Click",
         "Abort Running Script",
-        Missing,
+        Done("fly-scripts"),
     ),
     row(
         "BUTactiondo",
@@ -151,7 +151,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUT_edit_selected_Click",
         "Edit Selected Script",
-        Missing,
+        Done("fly-scripts"),
     ),
     row(
         "BUT_georefimage",
@@ -284,14 +284,14 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUT_run_script_Click",
         "Run Script",
-        Missing,
+        Done("fly-scripts"),
     ),
     row(
         "BUT_select_script",
         "Click",
         "BUT_select_script_Click",
         "Select Script",
-        Missing,
+        Done("fly-scripts"),
     ),
     row(
         "BUT_SendMSG",
@@ -996,10 +996,6 @@ pub const FLIGHTDATA: &[Action] = &[
 /// window of its own, or the owner's call.
 #[cfg(test)]
 pub const WHY_MISSING: &[(&str, &str, &str)] = &[
-    ("BUT_abort_script", "Click", SCRIPTS),
-    ("BUT_edit_selected", "Click", SCRIPTS),
-    ("BUT_run_script", "Click", SCRIPTS),
-    ("BUT_select_script", "Click", SCRIPTS),
     (
         "BUT_RAWSensor",
         "Click",
@@ -1034,9 +1030,6 @@ pub const WHY_MISSING: &[(&str, &str, &str)] = &[
     ),
 ];
 
-/// Left for later: scripts.
-#[cfg(test)]
-const SCRIPTS: &str = "later: scripts - `mp-script` has no interpreter yet";
 
 /// Left for later: video.
 #[cfg(test)]
@@ -1257,7 +1250,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (96, 1, 19, 18, 2)
+            (100, 1, 15, 18, 2)
         );
     }
 }
