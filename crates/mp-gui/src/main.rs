@@ -30,6 +30,7 @@ mod plan;
 mod planner_coverage;
 mod platform;
 mod poi;
+mod prefetch_ui;
 mod probe;
 mod quick;
 mod settings;
@@ -54,6 +55,37 @@ use mapview::MapViewport;
 use mp_tiles::cache::TileCache;
 use mp_tiles::store::TileStore;
 use plan::Plan;
+
+/// `FP_docking`: `panelAction.Dock`, Right by default, Bottom after Switch Docking.
+/// `// C#: GCSViews/FlightPlanner.cs:6762-6778`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Docking {
+    /// `DockStyle.Right`: the panels' column beside the map, the waypoints under it.
+    Right,
+    /// `DockStyle.Bottom`: the panels along the bottom, the waypoints at the right.
+    Bottom,
+}
+
+impl Docking {
+    /// `panelAction.Dock.ToString()`, the saved text.
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Right => "Right",
+            Self::Bottom => "Bottom",
+        }
+    }
+}
+
+/// Which of the planning screen's panels to build.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PlanGroup {
+    /// Every panel, in the sidebar's order.
+    All,
+    /// `panelAction`'s.
+    Actions,
+    /// `panelWaypoints`'.
+    Waypoints,
+}
 use telemetry::{Telemetry, TelemetryView};
 use ui::{action, theme};
 
@@ -298,6 +330,8 @@ struct MissionPlanner {
     fly_data: fly::FlightData,
     /// Scroll position of the plan screen's panel column.
     plan_scroll: gpui::ScrollHandle,
+    /// `FP_docking`: where `panelAction` and `panelWaypoints` sit.
+    plan_docking: Docking,
     /// Initial Setup's FailSafe page.
     failsafe: config::failsafe::FailSafe,
     /// The SETUP screen's backstage view: `InitialSetup`'s list and the page chosen from it.
@@ -496,6 +530,13 @@ impl MissionPlanner {
         // The Planner page's keys `MainV2` sets up from before any page shows: the units, the
         // telemetry rates and the GCS id. `// C#: MainV2.cs:683, 836, 981-1002`
         let planner = config::planner::Planner::new(&persisted);
+        // `if (Settings.Instance["FP_docking"] == "Bottom") switchDockingToolStripMenuItem_Click`.
+        // `// C#: GCSViews/FlightPlanner.cs:3487-3490`
+        let plan_docking = if persisted.get("FP_docking") == Some("Bottom") {
+            Docking::Bottom
+        } else {
+            Docking::Right
+        };
         let mut this = Self {
             telemetry,
             map: std::rc::Rc::new(std::cell::RefCell::new(map)),
@@ -568,6 +609,7 @@ impl MissionPlanner {
             last_param_write: None,
             fly_scroll: gpui::ScrollHandle::new(),
             plan_scroll: gpui::ScrollHandle::new(),
+            plan_docking,
             fly_actions: fly::Actions::default(),
             fly_focus: fly::ActionsFocus::new(cx),
             fly_pages: fly::Pages::default(),
@@ -901,6 +943,18 @@ impl MissionPlanner {
     /// Remembered because Mission Planner remembers it (`FPaltmode`), and because a planner that
     /// forgets makes every session start in relative - which is the safe default and the wrong
     /// one for somebody who plans over terrain every time.
+    /// `switchDockingToolStripMenuItem_Click`: `panelAction` between the right (131 wide, the
+    /// waypoints along the bottom, 166 high) and the bottom (120 high, the waypoints at the
+    /// right, half the width), the choice kept as `FP_docking`.
+    /// `// C#: GCSViews/FlightPlanner.cs:6762-6778`
+    fn toggle_docking(&mut self) {
+        self.plan_docking = match self.plan_docking {
+            Docking::Right => Docking::Bottom,
+            Docking::Bottom => Docking::Right,
+        };
+        self.persisted.set("FP_docking", self.plan_docking.name());
+    }
+
     fn set_altitude_frame(&mut self, frame: plan::AltitudeFrame) {
         self.altitude_frame = frame;
         // `CMB_altmode_SelectedIndexChanged`'s `FPaltmode`, saved with the rest later.
@@ -1330,13 +1384,16 @@ impl MissionPlanner {
             )
     }
 
-    /// The left column on the plan screen.
-    fn plan_sidebar(
+    /// The planning screen's panels, or one of its two groups: `panelAction`'s (Read, Write,
+    /// Home Location, the drawing panel, the checks) or `panelWaypoints`' (the strip and the
+    /// grid, the row editor).
+    fn plan_panels(
         &self,
+        group: PlanGroup,
         view: &TelemetryView,
         window: &Window,
         cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    ) -> Vec<gpui::AnyElement> {
         // Copied out of the plan before building the elements: the listeners the panels install
         // take `&mut self`, so holding a borrow of `self.plan` across them would not compile.
         let items = self.plan.items().to_vec();
@@ -1352,7 +1409,90 @@ impl MissionPlanner {
             rally_points: self.plan.rally().len(),
             rally_error: rally_error.as_deref(),
         };
+        let actions = group != PlanGroup::Waypoints;
+        let waypoints = group != PlanGroup::Actions;
+        let mut out = Vec::new();
+        if actions {
+            out.push(
+                plan::actions_panel(
+                    &items,
+                    &origin,
+                    view,
+                    &plan::NameField {
+                        field: &self.plan_name,
+                        focus: &self.plan_name_focus,
+                        focused: self.plan_name_focus.is_focused(window),
+                    },
+                    self.tile_source_id(),
+                    &plan::ActionExtras {
+                        grid: self.plan.grid(),
+                        tiles_loading: {
+                            let map = self.map.borrow();
+                            map.painted().then(|| map.tile_counts().2 > 0)
+                        },
+                        coords: self.plan.coords(),
+                        mission_ftp: self.plan.mission_ftp(),
+                    },
+                    cx,
+                )
+                .into_any_element(),
+            );
+            out.push(
+                plan::home_panel(
+                    &self.plan,
+                    &plan::HomeFocus {
+                        handles: &self.plan_home_focus,
+                        focused: self
+                            .plan_home_focus
+                            .each_ref()
+                            .map(|handle| handle.is_focused(window)),
+                    },
+                    cx,
+                )
+                .into_any_element(),
+            );
+            out.push(plan::draw_panel(&draw, view, cx).into_any_element());
+        }
+        if waypoints {
+            let strip = plan::waypoint_strip(
+                &self.plan,
+                &plan::StripState {
+                    focus: &self.plan_panel_focus,
+                    focused: self
+                        .plan_panel_focus
+                        .handles
+                        .each_ref()
+                        .map(|handle| handle.is_focused(window)),
+                    frame: self.altitude_frame,
+                    spline_visible: plan::firmware_is_copter(view),
+                },
+                cx,
+            );
+            out.push(
+                plan::items_panel(
+                    &items,
+                    selected,
+                    strip,
+                    self.plan.commands_minimised(),
+                    cx,
+                )
+                .into_any_element(),
+            );
+            out.push(plan::editor_panel(&items, selected, cx).into_any_element());
+        }
+        if actions {
+            out.push(plan::checks_panel(&items, view));
+        }
+        out
+    }
 
+    /// The default docking: every panel in one column beside the map.
+    fn plan_sidebar(
+        &self,
+        view: &TelemetryView,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         div()
             .relative()
             .flex()
@@ -1371,66 +1511,96 @@ impl MissionPlanner {
                     .pr_2()
                     .overflow_y_scroll()
                     .track_scroll(&self.plan_scroll)
-                    .child(plan::actions_panel(
-                        &items,
-                        &origin,
-                        view,
-                        &plan::NameField {
-                            field: &self.plan_name,
-                            focus: &self.plan_name_focus,
-                            focused: self.plan_name_focus.is_focused(window),
-                        },
-                        self.tile_source_id(),
-                        &plan::ActionExtras {
-                            grid: self.plan.grid(),
-                            tiles_loading: {
-                                let map = self.map.borrow();
-                                map.painted().then(|| map.tile_counts().2 > 0)
-                            },
-                            coords: self.plan.coords(),
-                            mission_ftp: self.plan.mission_ftp(),
-                        },
-                        cx,
-                    ))
-                    .child(plan::home_panel(
-                        &self.plan,
-                        &plan::HomeFocus {
-                            handles: &self.plan_home_focus,
-                            focused: self
-                                .plan_home_focus
-                                .each_ref()
-                                .map(|handle| handle.is_focused(window)),
-                        },
-                        cx,
-                    ))
-                    .child(plan::draw_panel(&draw, view, cx))
-                    .child({
-                        let strip = plan::waypoint_strip(
-                            &self.plan,
-                            &plan::StripState {
-                                focus: &self.plan_panel_focus,
-                                focused: self
-                                    .plan_panel_focus
-                                    .handles
-                                    .each_ref()
-                                    .map(|handle| handle.is_focused(window)),
-                                frame: self.altitude_frame,
-                                spline_visible: plan::firmware_is_copter(view),
-                            },
-                            cx,
-                        );
-                        plan::items_panel(
-                            &items,
-                            selected,
-                            strip,
-                            self.plan.commands_minimised(),
-                            cx,
-                        )
-                    })
-                    .child(plan::editor_panel(&items, selected, cx))
-                    .child(plan::checks_panel(&items, view)),
+                    .children(self.plan_panels(PlanGroup::All, view, window, cx)),
             )
             .children(ui::scroll_indicator(&self.plan_scroll))
+    }
+
+    /// The planning screen by its docking: the panels' column beside the map (`FP_docking`
+    /// "Right"), or - after Switch Docking - `panelWaypoints` at the right, half the window wide,
+    /// and `panelAction`'s panels in a row along the bottom (120 high in the C#; these panels are
+    /// taller, so the row scrolls sideways). The menus and dialogs go over either.
+    /// `// C#: GCSViews/FlightPlanner.cs:6762-6778`
+    fn plan_screen(
+        &self,
+        view: &TelemetryView,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> gpui::AnyElement {
+        let overlays: Vec<gpui::AnyElement> = plan::overlays(
+            &self.plan_menus,
+            self.plan.draw_mode() == plan::DrawMode::Fence,
+            &self.plan_prompt_focus,
+            window,
+            cx,
+        )
+        .into_iter()
+        .chain(prefetch_ui::overlays(&self.plan_menus, cx))
+        .collect();
+        match self.plan_docking {
+            Docking::Right => div()
+                .flex()
+                .flex_1()
+                .min_h(px(0.0))
+                .gap_2()
+                .p_2()
+                .child(self.plan_sidebar(view, window, cx))
+                .child(self.map_pane(cx))
+                .children(overlays)
+                .into_any_element(),
+            Docking::Bottom => {
+                // `panelWaypoints.Width = Width / 2`.
+                let half = window.viewport_size().width * 0.5;
+                div()
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .min_h(px(0.0))
+                    .gap_2()
+                    .p_2()
+                    .child(
+                        div()
+                            .flex()
+                            .flex_1()
+                            .min_h(px(0.0))
+                            .gap_2()
+                            .child(self.map_pane(cx))
+                            .child(
+                                div()
+                                    .id("plan-waypoints")
+                                    .flex()
+                                    .flex_col()
+                                    .flex_shrink_0()
+                                    .w(half)
+                                    .min_h(px(0.0))
+                                    .gap_2()
+                                    .overflow_y_scroll()
+                                    .children(self.plan_panels(
+                                        PlanGroup::Waypoints,
+                                        view,
+                                        window,
+                                        cx,
+                                    )),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .id("plan-action")
+                            .flex()
+                            .flex_shrink_0()
+                            .h(px(240.0))
+                            .gap_2()
+                            .overflow_x_scroll()
+                            .children(
+                                self.plan_panels(PlanGroup::Actions, view, window, cx)
+                                    .into_iter()
+                                    .map(|panel| div().flex_shrink_0().w(px(400.0)).child(panel)),
+                            ),
+                    )
+                    .children(overlays)
+                    .into_any_element()
+            }
+        }
     }
 
     /// The parameter screen's panels: the Params tab, and CONFIG's Full Parameter List page.
@@ -2161,6 +2331,8 @@ impl Render for MissionPlanner {
                 facts::record(key, value);
             }
             plan::record_facts(&self.plan, &self.plan_menus);
+            prefetch_ui::record_facts(&self.plan_menus);
+            facts::record("plan.docking", self.plan_docking.name());
             // The map's zoom and centre, its radius circles and what the pointer is over, and the
             // zoom controls beside it.
             {
@@ -2502,22 +2674,7 @@ impl Render for MissionPlanner {
                 .p_2()
                 .children(survey_ui::form(self, window, cx))
                 .into_any_element(),
-            Screen::Plan => div()
-                .flex()
-                .flex_1()
-                .min_h(px(0.0))
-                .gap_2()
-                .p_2()
-                .child(self.plan_sidebar(&view, window, cx))
-                .child(self.map_pane(cx))
-                .children(plan::overlays(
-                    &self.plan_menus,
-                    self.plan.draw_mode() == plan::DrawMode::Fence,
-                    &self.plan_prompt_focus,
-                    window,
-                    cx,
-                ))
-                .into_any_element(),
+            Screen::Plan => self.plan_screen(&view, window, cx),
             Screen::Params => self.params_body(&view, window, cx),
             Screen::Logs => div()
                 .id("logs-body")

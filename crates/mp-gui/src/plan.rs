@@ -5474,6 +5474,12 @@ pub enum MenuAction {
     FenceExclusion,
     /// `textToolStripMenuItem_Click`: Auto WP > Text.
     Text,
+    /// `prefetchToolStripMenuItem_Click`: Map Tool > Prefetch.
+    Prefetch,
+    /// `prefetchWPPathToolStripMenuItem_Click`: Map Tool > Prefetch WP Path.
+    PrefetchWpPath,
+    /// `switchDockingToolStripMenuItem_Click`: Switch Docking.
+    SwitchDocking,
 }
 
 /// One entry of `contextMenuStrip1` or of one of its drop-downs.
@@ -5880,17 +5886,19 @@ pub const MAP_MENU: &[MenuEntry] = {
                     "Zoom To",
                     Some(ZoomTo),
                 ),
+                // `// C#: GCSViews/FlightPlanner.cs:5030-5080`
                 item(
                     "menu-prefetch",
                     "prefetchToolStripMenuItem",
                     "Prefetch",
-                    None,
+                    Some(MenuAction::Prefetch),
                 ),
+                // `// C#: GCSViews/FlightPlanner.cs:3305-3365`
                 item(
                     "menu-prefetchWPPath",
                     "prefetchWPPathToolStripMenuItem",
                     "Prefetch WP Path",
-                    None,
+                    Some(MenuAction::PrefetchWpPath),
                 ),
                 // `// C#: GCSViews/FlightPlanner.cs:4131-4290`
                 item(
@@ -6005,11 +6013,12 @@ pub const MAP_MENU: &[MenuEntry] = {
             "Enter UTM Coord",
             Some(EnterUtmCoord),
         ),
+        // `// C#: GCSViews/FlightPlanner.cs:6762-6778`
         item(
             "menu-switchDocking",
             "switchDockingToolStripMenuItem",
             "Switch Docking",
-            None,
+            Some(MenuAction::SwitchDocking),
         ),
         // `// C#: GCSViews/FlightPlanner.cs:6625-6632`
         item(
@@ -6720,6 +6729,10 @@ pub enum PromptKind {
     WriteAltMode,
     /// `checkZeroAlts`' warning, OK or Cancel.
     WriteZeroAlt,
+    /// Prefetch's "No ripp area defined, ripp displayed on screen?".
+    PrefetchRipArea,
+    /// Prefetch WP Path's "max zoom".
+    PrefetchMaxZoom,
     /// `TXT_homelat_Enter`'s "Click on the Map to set Home ": a message, after which the Lat box
     /// has the keyboard again, as it does when the C#'s modal box closes.
     HomeLatEnter,
@@ -6948,6 +6961,7 @@ impl Prompt {
                 | PromptKind::KmlZoomTo
                 | PromptKind::WriteAltMode
                 | PromptKind::WriteZeroAlt
+                | PromptKind::PrefetchRipArea
         )
     }
 }
@@ -7129,6 +7143,12 @@ pub struct PlanMenus {
     /// A Write or Write Fast on its way through its questions.
     pub write_flow: Option<WriteFlow>,
     write_answer: Option<WriteAnswer>,
+    /// `TilePrefetcherMenu`, while it shows.
+    pub prefetch_menu: Option<crate::prefetch_ui::PrefetchMenu>,
+    /// `TilePrefetcher`, while it runs or until its form is closed.
+    pub prefetch: Option<crate::prefetch_ui::PrefetchJob>,
+    prefetch_area_wanted: bool,
+    prefetch_path_zoom: Option<i32>,
 }
 
 /// How a page is fetched from the geocoder: its URL in, its text or why not out.
@@ -7230,6 +7250,16 @@ impl PlanMenus {
     /// What the last Write question's button meant, once.
     pub fn take_write_answer(&mut self) -> Option<WriteAnswer> {
         self.write_answer.take()
+    }
+
+    /// Whether Yes was said to ripping the view, once.
+    pub fn take_prefetch_area_wanted(&mut self) -> bool {
+        std::mem::take(&mut self.prefetch_area_wanted)
+    }
+
+    /// Prefetch WP Path's zoom, once it has been typed.
+    pub fn take_prefetch_path_zoom(&mut self) -> Option<i32> {
+        self.prefetch_path_zoom.take()
     }
 
     pub fn take_poi_request(&mut self) -> Option<PoiRequest> {
@@ -7742,6 +7772,8 @@ impl PlanMenus {
             )),
             // The zoom icon's menu is the screen's: it moves the map.
             MenuAction::ZoomToVehicle | MenuAction::ZoomToMission | MenuAction::ZoomToHome => {}
+            // Handled by the application before this is reached, as the zoom entries are.
+            MenuAction::Prefetch | MenuAction::PrefetchWpPath | MenuAction::SwitchDocking => {}
             MenuAction::ReverseWps => plan.reverse_waypoints(),
             MenuAction::ModifyAlt => self.ask(Prompt::input(
                 "Alt Change",
@@ -8134,6 +8166,14 @@ impl PlanMenus {
             PromptKind::WriteAltMode | PromptKind::WriteZeroAlt => {
                 self.write_answer = Some(WriteAnswer::Continue);
             }
+            // Yes: `area = MainMap.ViewArea`, and the menu.
+            PromptKind::PrefetchRipArea => self.prefetch_area_wanted = true,
+            // `int.TryParse(maxzoomstring)`, else "Invalid number entered".
+            // `// C#: GCSViews/FlightPlanner.cs:3309-3316`
+            PromptKind::PrefetchMaxZoom => match value.trim().parse::<i32>() {
+                Ok(zoom) => self.prefetch_path_zoom = Some(zoom),
+                Err(_) => self.tell(ERROR, INVALID_NUMBER),
+            },
             PromptKind::ResetHome(loaded) => plan.reset_home_to(loaded),
             PromptKind::FenceLoadFile => return Some(FileRequest::LoadFence(value)),
             PromptKind::FenceSaveFile => return Some(FileRequest::SaveFence(value)),
@@ -9219,6 +9259,32 @@ fn choose_entry(
             this.plan_menus.zoom_menu = None;
             zoom_menu_entry(this, action);
         }
+        // `// C#: GCSViews/FlightPlanner.cs:6762-6778`
+        MenuAction::SwitchDocking => {
+            this.plan_menus.open = None;
+            this.toggle_docking();
+        }
+        // `MainMap.SelectedArea` is always empty here - this map has no rubber band - so the
+        // question comes every time.
+        // `// C#: GCSViews/FlightPlanner.cs:5032-5043`
+        MenuAction::Prefetch => {
+            this.plan_menus.open = None;
+            this.plan_menus.ask(Prompt::question(
+                crate::prefetch_ui::RIP_TITLE,
+                crate::prefetch_ui::RIP_QUESTION,
+                PromptKind::PrefetchRipArea,
+            ));
+        }
+        // `// C#: GCSViews/FlightPlanner.cs:3305-3316`
+        MenuAction::PrefetchWpPath => {
+            this.plan_menus.open = None;
+            this.plan_menus.ask(Prompt::input(
+                crate::prefetch_ui::MAX_ZOOM_TITLE,
+                crate::prefetch_ui::MAX_ZOOM_TEXT,
+                crate::prefetch_ui::MAX_ZOOM_OFFERED,
+                PromptKind::PrefetchMaxZoom,
+            ));
+        }
         // `// C#: GCSViews/FlightPlanner.cs:6755-6760`
         MenuAction::SurveyGrid => {
             this.plan_menus.open = None;
@@ -9248,6 +9314,13 @@ fn submit_prompt(
         file_request(this, request, window, cx);
     }
     write_answered(this, window, cx);
+    // Prefetch's Yes opens the menu over the view; Prefetch WP Path's zoom starts the walks.
+    if this.plan_menus.take_prefetch_area_wanted() {
+        crate::prefetch_ui::open_menu_over_view(this);
+    }
+    if let Some(zoom) = this.plan_menus.take_prefetch_path_zoom() {
+        crate::prefetch_ui::start_path(this, zoom);
+    }
     // Yes to "Zoom to the center or the loaded file?".
     // `// C#: GCSViews/FlightPlanner.cs:4264-4271`
     if this.plan_menus.take_zoom_to_kml() {
@@ -13308,6 +13381,8 @@ mod tests {
                 "menu-surveyGrid",
                 "menu-ContextMeasure",
                 "menu-zoomTo",
+                "menu-prefetch",
+                "menu-prefetchWPPath",
                 "menu-kMLOverlay",
                 "menu-elevationGraph",
                 "menu-reverseWPs",
@@ -13322,6 +13397,7 @@ mod tests {
                 "menu-trackerHome",
                 "menu-modifyAlt",
                 "menu-enterUTMCoord",
+                "menu-switchDocking",
                 "menu-setHomeHere",
                 "menu-zoomToVehicle",
                 "menu-zoomToMission",

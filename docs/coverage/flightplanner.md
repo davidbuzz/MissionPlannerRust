@@ -4,16 +4,15 @@ Generated from `crates/mp-gui/src/planner_coverage.rs` by `cargo test -p mp-gui 
 
 | total | done | elsewhere | missing | plumbing | dropped |
 |---:|---:|---:|---:|---:|---:|
-| 121 | 100 | 0 | 9 | 12 | 0 |
+| 121 | 103 | 0 | 6 | 12 | 0 |
 
 Missing, by where the control sits:
 
 | group | missing |
 |---|---:|
-| Map Tool | 4 |
 | Geo-Fence | 2 |
+| Map Tool | 2 |
 | planning panel | 2 |
-| map menu | 1 |
 
 | control | event | handler | text | ours |
 |---|---|---|---|---|
@@ -101,8 +100,8 @@ Missing, by where the control sits:
 | `ContextMeasure` | Click | `ContextMeasure_Click` | Measure Distance | done: `menu-ContextMeasure` |
 | `rotateMapToolStripMenuItem` | Click | `rotateMapToolStripMenuItem_Click` | Rotate Map | **missing** |
 | `zoomToToolStripMenuItem` | Click | `zoomToToolStripMenuItem_Click` | Zoom To | done: `menu-zoomTo` |
-| `prefetchToolStripMenuItem` | Click | `prefetchToolStripMenuItem_Click` | Prefetch | **missing** |
-| `prefetchWPPathToolStripMenuItem` | Click | `prefetchWPPathToolStripMenuItem_Click` | Prefetch WP Path | **missing** |
+| `prefetchToolStripMenuItem` | Click | `prefetchToolStripMenuItem_Click` | Prefetch | done: `menu-prefetch` |
+| `prefetchWPPathToolStripMenuItem` | Click | `prefetchWPPathToolStripMenuItem_Click` | Prefetch WP Path | done: `menu-prefetchWPPath` |
 | `kMLOverlayToolStripMenuItem` | Click | `kMLOverlayToolStripMenuItem_Click` | KML Overlay | done: `menu-kMLOverlay` |
 | `elevationGraphToolStripMenuItem` | Click | `elevationGraphToolStripMenuItem_Click` | Elevation Graph | done: `menu-elevationGraph` |
 | `reverseWPsToolStripMenuItem` | Click | `reverseWPsToolStripMenuItem_Click` | Reverse WPs | done: `menu-reverseWPs` |
@@ -117,7 +116,7 @@ Missing, by where the control sits:
 | `trackerHomeToolStripMenuItem` | Click | `trackerHomeToolStripMenuItem_Click` | Tracker Home | done: `menu-trackerHome` |
 | `modifyAltToolStripMenuItem` | Click | `modifyAltToolStripMenuItem_Click` | Modify Alt | done: `menu-modifyAlt` |
 | `enterUTMCoordToolStripMenuItem` | Click | `enterUTMCoordToolStripMenuItem_Click` | Enter UTM Coord | done: `menu-enterUTMCoord` |
-| `switchDockingToolStripMenuItem` | Click | `switchDockingToolStripMenuItem_Click` | Switch Docking | **missing** |
+| `switchDockingToolStripMenuItem` | Click | `switchDockingToolStripMenuItem_Click` | Switch Docking | done: `menu-switchDocking` |
 | `setHomeHereToolStripMenuItem` | Click | `setHomeHereToolStripMenuItem_Click` | Set Home Here | done: `menu-setHomeHere` |
 | `addPolygonPointToolStripMenuItem` | Click | `addPolygonPointToolStripMenuItem_Click` | Draw a Polygon | done: `menu-poly-addPolygonPoint` |
 | `clearPolygonToolStripMenuItem` | Click | `clearPolygonToolStripMenuItem_Click` | Clear Polygon | done: `menu-poly-clearPolygon` |

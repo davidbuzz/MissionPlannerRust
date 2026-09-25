@@ -1,0 +1,114 @@
+# Map Tool > Prefetch and Prefetch WP Path: GMap.NET's TilePrefetcherMenu and TilePrefetcher over
+# the planning screen (GCSViews/FlightPlanner.cs:5030-5080, 3305-3365).
+#
+# Prefetch: this map has no rubber-banded SelectedArea, so "No ripp area defined, ripp displayed on
+# screen?" (Rip) comes every time; Yes takes the view. The menu offers a zoom range, 1 to 20 to
+# begin with, refusing a minimum above the maximum, and counts the tiles per zoom with an estimate
+# at 15,000 bytes a tile (TilePrefetcherMenu.cs:27-46). OK walks each zoom in turn; the form shows
+# "Fetching tile at zoom (z): i of n, complete: p%" (TilePrefetcher.cs:200). Prefetch WP Path asks
+# "max zoom" (20 offered) and walks every segment of the planned path at zooms 1 to that.
+#
+# Tiles offline: nothing is fetched, so a walk over an empty cache ends with nothing saved, which
+# is what proves the walk ran to its end. The estimate's text is the menu's arithmetic.
+#
+# Needs no link: tools/gui-test.sh tests/gui/plan-prefetch.gui
+
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
+env MP_PLAN_DIR $WORK
+tiles offline
+
+screen plan
+window 1600x1200
+settle 4
+expect mission.home true
+expect plan.prefetch.state idle
+
+# Prefetch: the question, the menu, the walk.
+click map@0.45x0.40:right
+click menu-mapTool
+settle 1
+click menu-prefetch
+expect plan.prefetch.menu.total
+expect plan.prompt Rip
+expect plan.prompt.text No ripp area defined, ripp displayed on screen?
+click plan-prompt-ok
+expect plan.prompt none
+expect plan.prefetch.menu 1-20
+expect plan.prefetch.menu.total ~ Estimated:
+expect plan.prefetch.menu.total ~ tiles for
+# The maximum cannot go under the minimum, nor the minimum over the maximum.
+click plan-prefetch-max-down
+click plan-prefetch-max-down
+expect plan.prefetch.menu 1-18
+click plan-prefetch-min-up
+click plan-prefetch-min-up
+expect plan.prefetch.menu 3-18
+click plan-prefetch-max-down
+click plan-prefetch-max-down
+click plan-prefetch-max-down
+click plan-prefetch-max-down
+click plan-prefetch-max-down
+click plan-prefetch-max-down
+click plan-prefetch-max-down
+click plan-prefetch-max-down
+click plan-prefetch-max-down
+click plan-prefetch-max-down
+click plan-prefetch-max-down
+click plan-prefetch-max-down
+click plan-prefetch-max-down
+click plan-prefetch-max-down
+click plan-prefetch-max-down
+click plan-prefetch-max-down
+expect plan.prefetch.menu 3-3
+expect plan.prefetch.menu.total Estimated: 1 tile for 14.65 KB
+click plan-prefetch-ok
+settle 2
+expect plan.prefetch.walks 1
+expect plan.prefetch.state done
+expect plan.prefetch.ok 0
+expect plan.prefetch.label ~ Fetching tile at zoom (3): 1 of 1, complete: 100%
+click plan-prefetch-cancel
+expect plan.prefetch.state idle
+
+# No to the question leaves the map alone.
+click map@0.45x0.40:right
+click menu-mapTool
+settle 1
+click menu-prefetch
+click plan-prompt-cancel
+expect plan.prompt none
+expect plan.prefetch.menu
+
+# Prefetch WP Path: two waypoints make two segments from home; zooms 1 to 4 are eight walks.
+click map@0.45x0.40
+click map@0.60x0.55
+expect mission.items 2
+click map@0.30x0.70:right
+click menu-mapTool
+settle 1
+click menu-prefetchWPPath
+expect plan.prompt max zoom
+expect plan.prompt.text Enter the max zoom to prefetch to.
+key ctrl+u
+type 4
+key Return
+expect plan.prompt none
+settle 3
+expect plan.prefetch.walks 8
+expect plan.prefetch.state done
+expect plan.prefetch.ok 0
+click plan-prefetch-cancel
+
+# A word for the zoom is "Invalid number entered".
+click map@0.30x0.70:right
+click menu-mapTool
+settle 1
+click menu-prefetchWPPath
+key ctrl+u
+type lots
+key Return
+expect plan.prompt Error
+expect plan.prompt.text Invalid number entered
+click plan-prompt-ok
+expect plan.prefetch.state idle

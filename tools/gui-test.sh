@@ -523,6 +523,34 @@ PY
                     echo "FAIL line $LINE_NO: $KEY is '$GOT', expected $OP $WANT" >&2
                     FAILURES=$((FAILURES + 1))
                 fi
+            elif [ "$OP" = "below" ] || [ "$OP" = "above" ] || [ "$OP" = "left-of" ] || [ "$OP" = "right-of" ]; then
+                # `expect a below b` (above, left-of, right-of): where two measured controls sit
+                # relative to each other, from the positions the application reports.
+                OTHER="${4:?expect $OP needs another control}"
+                VERDICT=$(python3 - "$PROBE_FILE" "$KEY" "$OTHER" "$OP" <<'PY'
+import json, sys
+probe = json.load(open(sys.argv[1]))
+a, b, op = probe.get(sys.argv[2]), probe.get(sys.argv[3]), sys.argv[4]
+if a is None or b is None:
+    print("missing " + (sys.argv[2] if a is None else sys.argv[3])); sys.exit(0)
+holds = {
+    "below": a["y"] >= b["y"] + b["height"],
+    "above": a["y"] + a["height"] <= b["y"],
+    "left-of": a["x"] + a["width"] <= b["x"],
+    "right-of": a["x"] >= b["x"] + b["width"],
+}[op]
+print("ok" if holds else "no (%s at %d,%d %dx%d; %s at %d,%d %dx%d)" % (
+    sys.argv[2], a["x"], a["y"], a["width"], a["height"],
+    sys.argv[3], b["x"], b["y"], b["width"], b["height"]))
+PY
+)
+                case "$VERDICT" in
+                    ok) echo "  ok   $KEY $OP $OTHER" ;;
+                    *)
+                        echo "FAIL line $LINE_NO: $KEY is not $OP $OTHER: $VERDICT" >&2
+                        FAILURES=$((FAILURES + 1))
+                        ;;
+                esac
             else
                 shift 2
                 WANT="$*"

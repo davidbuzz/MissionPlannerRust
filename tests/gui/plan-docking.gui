@@ -1,0 +1,31 @@
+# Switch Docking: `switchDockingToolStripMenuItem_Click` (GCSViews/FlightPlanner.cs:6762-6778)
+# moves `panelAction` from the right of the map to the bottom and `panelWaypoints` from the bottom
+# to the right, half the window wide; the choice is kept as `FP_docking` and applied when the
+# screen loads (:3487-3490).
+#
+# Proved by where the panels land: docked Bottom, the Write button sits below the map and the
+# waypoint grid to its right; docked Right again, the sidebar's column holds both.
+#
+# Needs no link: tools/gui-test.sh tests/gui/plan-docking.gui
+
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
+env MP_PLAN_DIR $WORK
+
+screen plan
+window 1600x1200
+settle 4
+expect plan.docking Right
+
+click map@0.45x0.40:right
+click menu-switchDocking
+settle 1
+expect plan.docking Bottom
+expect plan-write below map
+expect plan-mincommands right-of map
+
+click map@0.45x0.40:right
+click menu-switchDocking
+settle 1
+expect plan.docking Right
+expect plan-write left-of map

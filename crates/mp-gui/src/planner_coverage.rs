@@ -660,14 +660,14 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "Click",
         "prefetchToolStripMenuItem_Click",
         "Prefetch",
-        Missing,
+        Done("menu-prefetch"),
     ),
     row(
         "prefetchWPPathToolStripMenuItem",
         "Click",
         "prefetchWPPathToolStripMenuItem_Click",
         "Prefetch WP Path",
-        Missing,
+        Done("menu-prefetchWPPath"),
     ),
     row(
         "kMLOverlayToolStripMenuItem",
@@ -772,7 +772,7 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "Click",
         "switchDockingToolStripMenuItem_Click",
         "Switch Docking",
-        Missing,
+        Done("menu-switchDocking"),
     ),
     row(
         "setHomeHereToolStripMenuItem",
@@ -1348,7 +1348,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (100, 0, 9, 12, 0)
+            (103, 0, 6, 12, 0)
         );
     }
 }

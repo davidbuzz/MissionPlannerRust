@@ -13,6 +13,7 @@ pub mod cache;
 pub mod fetch;
 pub mod gmap;
 pub mod policy;
+pub mod prefetch;
 pub mod source;
 pub mod store;
 pub mod urlcache;

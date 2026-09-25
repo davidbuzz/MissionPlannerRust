@@ -941,6 +941,12 @@ impl MapViewport {
         self.tiles.is_some()
     }
 
+    /// Whether the tile store is cache-only: the Planner page's Map Access Mode, or `MP_OFFLINE`.
+    #[must_use]
+    pub fn tiles_offline(&self) -> bool {
+        self.tiles.as_ref().is_some_and(|store| store.is_offline())
+    }
+
     /// Whether the map has painted at all yet.
     #[must_use]
     pub const fn painted(&self) -> bool {
