@@ -120,17 +120,72 @@ fn trimmed(items: &[MissionItem], resume_at: u16) -> Vec<MissionItem> {
         .collect()
 }
 
+/// Waits until the vehicle's state passes `check`.
+fn wait(
+    link: &Link,
+    id: VehicleId,
+    what: &str,
+    secs: u64,
+    check: &dyn Fn(&mp_vehicle::VehicleState) -> bool,
+) {
+    let handle = link.vehicle(id).expect("the vehicle's state");
+    let deadline = Instant::now() + Duration::from_secs(secs);
+    while !check(&handle.load()) {
+        assert!(Instant::now() < deadline, "timed out waiting for {what}");
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// Guided until in it, arm until armed, a second between asks, as the C#'s two loops.
+/// `// C#: GCSViews/FlightData.cs:1555-1584`
+fn guided_and_armed(link: &Link, id: VehicleId) {
+    let handle = link.vehicle(id).expect("the vehicle's state");
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while handle.load().custom_mode != MODE_GUIDED {
+        assert!(
+            Instant::now() < deadline,
+            "the vehicle never entered Guided"
+        );
+        link.send(&commands::set_mode(id, MODE_GUIDED));
+        std::thread::sleep(Duration::from_secs(1));
+    }
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !handle.load().armed {
+        assert!(
+            Instant::now() < deadline,
+            "the vehicle never armed in Guided"
+        );
+        link.send(&commands::arm(id, true, false));
+        std::thread::sleep(Duration::from_secs(1));
+    }
+}
+
+/// Sends a take-off and returns the vehicle's answer to it: the first `NAV_TAKEOFF` line the
+/// log gains after the send.
+fn takeoff(link: &Link, id: VehicleId, altitude: f32) -> LogMessage {
+    let after = link.recent_messages(1).last().map_or(0, |m| m.seq);
+    assert!(link.send(&commands::takeoff(id, altitude)), "send failed");
+    await_message(link, "a take-off acknowledgement", |m| {
+        m.seq > after && m.text.contains("NAV_TAKEOFF")
+    })
+}
+
+/// Down, disarmed, and left in Stabilize for the next test.
+fn land(link: &Link, id: VehicleId) {
+    link.send(&commands::set_mode(id, MODE_LAND));
+    wait(link, id, "the vehicle to land and disarm", 120, &|s| {
+        !s.armed
+    });
+    link.send(&commands::set_mode(id, MODE_STABILIZE));
+    wait(link, id, "Stabilize", 10, &|s| {
+        s.custom_mode == MODE_STABILIZE
+    });
+}
+
 /// The sequence, with the steps chosen, ending at the take-off's answer. Lands afterwards.
 fn resume(with_upload: bool, with_set_current: bool) -> String {
     let (link, id) = connect();
     let handle = link.vehicle(id).expect("the vehicle's state");
-    let wait = |what: &str, secs: u64, check: &dyn Fn(&mp_vehicle::VehicleState) -> bool| {
-        let deadline = Instant::now() + Duration::from_secs(secs);
-        while !check(&handle.load()) {
-            assert!(Instant::now() < deadline, "timed out waiting for {what}");
-            std::thread::sleep(Duration::from_millis(100));
-        }
-    };
 
     // The script's setup: the five items on the vehicle before the button is pressed.
     link.upload_mission(id, script_mission());
@@ -171,44 +226,23 @@ fn resume(with_upload: bool, with_set_current: bool) -> String {
     }
 
     // Guided until in it, arm until armed, then the take-off, as the C#'s three loops.
-    let deadline = Instant::now() + Duration::from_secs(30);
-    while handle.load().custom_mode != MODE_GUIDED {
-        assert!(
-            Instant::now() < deadline,
-            "the vehicle never entered Guided"
-        );
-        link.send(&commands::set_mode(id, MODE_GUIDED));
-        std::thread::sleep(Duration::from_secs(1));
-    }
-    let deadline = Instant::now() + Duration::from_secs(30);
-    while !handle.load().armed {
-        assert!(
-            Instant::now() < deadline,
-            "the vehicle never armed in Guided"
-        );
-        link.send(&commands::arm(id, true, false));
-        std::thread::sleep(Duration::from_secs(1));
-    }
+    guided_and_armed(&link, id);
     let state = handle.load();
     println!(
         "armed, mode {}, {:.1} m relative, mission current {}",
         state.custom_mode, state.altitude_relative.0, state.mission_current
     );
-    assert!(link.send(&commands::takeoff(id, 10.0)), "send failed");
-    let ack = await_message(&link, "a take-off acknowledgement", |m| {
-        m.text.contains("NAV_TAKEOFF")
-    });
+    let ack = takeoff(&link, id, 10.0);
     println!(
         "upload {with_upload}, set current {with_set_current}: {}",
         ack.text
     );
     if ack.text.contains("accepted") {
-        wait("8 m of climb", 60, &|s| s.altitude_relative.0 > 8.0);
+        wait(&link, id, "8 m of climb", 60, &|s| {
+            s.altitude_relative.0 > 8.0
+        });
     }
-    link.send(&commands::set_mode(id, MODE_LAND));
-    wait("the vehicle to land and disarm", 120, &|s| !s.armed);
-    link.send(&commands::set_mode(id, MODE_STABILIZE));
-    wait("Stabilize", 10, &|s| s.custom_mode == MODE_STABILIZE);
+    land(&link, id);
     ack.text
 }
 
@@ -231,4 +265,36 @@ fn the_resume_sequence_without_set_current_takes_off() {
 fn the_resume_sequence_without_the_upload_takes_off() {
     let answer = resume(false, true);
     assert!(answer.contains("accepted"), "{answer}");
+}
+
+/// Why `tests/gui/fly-resumemis.gui` ends in "Command Failed". The C# does not send the take-off
+/// once: it sends it, sleeps a second, and sends it again until the vehicle is within 2 m of the
+/// waypoint's height, and a take-off `doCommand` returns false for is "Command Failed" and the
+/// end of the resume. ArduCopter refuses a take-off once the vehicle has left the ground
+/// (`Mode::do_user_takeoff_U_m`: "can't takeoff again!"), and a climb to 8 m takes more than a
+/// second, so the repeat is refused. The tests above send the take-off once, and it was
+/// accepted every time; this sends it as the C# does.
+/// `// C#: GCSViews/FlightData.cs:1587-1605`
+#[test]
+#[ignore = "requires ArduPilot SITL listening on tcp:127.0.0.1:5760"]
+fn the_csharps_repeated_takeoff_is_refused_once_the_vehicle_is_climbing() {
+    let (link, id) = connect();
+    guided_and_armed(&link, id);
+    let first = takeoff(&link, id, 10.0);
+    std::thread::sleep(Duration::from_secs(1));
+    let climbed = link
+        .vehicle(id)
+        .expect("the vehicle's state")
+        .load()
+        .altitude_relative
+        .0;
+    let second = takeoff(&link, id, 10.0);
+    println!(
+        "first: {}; a second later, {climbed:.1} m up: {}",
+        first.text, second.text
+    );
+    land(&link, id);
+    assert!(first.text.contains("accepted"), "{}", first.text);
+    assert!(climbed < 8.0, "within 2 m after one second: {climbed:.1} m");
+    assert!(second.text.contains("failed"), "{}", second.text);
 }

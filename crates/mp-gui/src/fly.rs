@@ -9018,6 +9018,261 @@ mod tests {
         );
     }
 
+    // --- Resume Mission against ArduCopter, as tests/gui/fly-resumemis.gui flies it ------------
+
+    /// The mission `tests/gui/fly-resumemis.gui` writes to the vehicle before it starts: home, a
+    /// take-off to 10 m, a waypoint, `DO_CHANGE_SPEED` 5, a waypoint at 10 m.
+    fn the_scripts_mission() -> Vec<MissionItem> {
+        let item = |seq: u16, frame: u8, command: u16, param2: f64, z: f64| MissionItem {
+            seq,
+            current: u8::from(seq == 0),
+            frame,
+            command,
+            param2,
+            z,
+            autocontinue: 1,
+            ..MissionItem::default()
+        };
+        vec![
+            item(0, 0, 16, 0.0, 584.09),
+            item(1, 3, 22, 0.0, 10.0),
+            item(2, 3, 16, 0.0, 10.0),
+            item(3, 3, 178, 5.0, 0.0),
+            item(4, 3, 16, 0.0, 10.0),
+        ]
+    }
+
+    /// `WPNAV_SPEED_UP`'s default, 250 cm/s: how fast ArduCopter's Guided take-off climbs.
+    const CLIMB_METRES_PER_SECOND: f64 = 2.5;
+
+    /// What one Resume Mission left behind, as the facts the script reads would have it.
+    struct Flown {
+        resume: Resume,
+        mode: &'static str,
+        armed: bool,
+        /// Each `NAV_TAKEOFF` sent, and whether it was accepted.
+        takeoffs: Vec<bool>,
+        /// `fly.sent`: the last send, as `Actions::record` describes it.
+        sent: String,
+        /// `fly.ack`: the answer to the last acknowledged command sent, as the link logs it.
+        ack: String,
+        /// `mission.items`: the planner's rows, home not among them.
+        rows: usize,
+    }
+
+    /// Resume Mission at waypoint 4 of the script's mission, a frame every 50 ms, against a
+    /// copter that answers as ArduCopter does. `Mode::do_user_takeoff_U_m` refuses a take-off
+    /// once the vehicle is no longer landed ("can't takeoff again!"), and the take-off lets go
+    /// of landed as the climb starts - `leaves_ground` after the take-off is accepted: the
+    /// motors' half-second spool, then a tenth of the climb rate (`ArduCopter/takeoff.cpp:18-47`,
+    /// `_AutoTakeoff::run`). With `refuses_airborne` false it is a vehicle that takes every
+    /// take-off it is sent.
+    fn resume_on_arducopter(leaves_ground: Duration, refuses_airborne: bool) -> Flown {
+        let mut vehicle = Vehicle::new();
+        vehicle.mission = Vec::new();
+        let mut on_board = the_scripts_mission();
+        let mut takeoff_at: Option<Instant> = None;
+        let mut transferring = false;
+        let (resume, mut steps) = Resume::start(4, vehicle.now);
+        let mut flown = Flown {
+            resume,
+            mode: "",
+            armed: false,
+            takeoffs: Vec::new(),
+            sent: String::new(),
+            ack: "none".to_owned(),
+            rows: 0,
+        };
+        let accepted = RequestState::Finished(RequestOutcome::Accepted { value: None });
+        for _ in 0..1200 {
+            for step in steps {
+                match step {
+                    ResumeStep::DownloadMission | ResumeStep::ReadIntoPlan => {
+                        vehicle.mission.clone_from(&on_board);
+                        vehicle.transfer = Some((false, false, "reading"));
+                        transferring = true;
+                    }
+                    ResumeStep::UploadMission(items) => {
+                        on_board = items;
+                        vehicle.transfer = Some((false, false, "writing"));
+                        transferring = true;
+                    }
+                    ResumeStep::Send(messages) => {
+                        flown.sent = messages.iter().map(describe).collect::<Vec<_>>().join("; ");
+                        vehicle.request = None;
+                        for message in &messages {
+                            let landed = takeoff_at.is_none_or(|at| {
+                                vehicle.now.saturating_duration_since(at) < leaves_ground
+                            });
+                            match (route(message), message) {
+                                (Route::SetCurrent { .. }, _) => vehicle.request = Some(accepted),
+                                (Route::Command { command: 400, .. }, _) => {
+                                    vehicle.armed = true;
+                                    flown.ack = "MAV_CMD_COMPONENT_ARM_DISARM: accepted".to_owned();
+                                    vehicle.request = Some(accepted);
+                                }
+                                (Route::Command { command: 22, .. }, _) => {
+                                    let accept = landed || !refuses_airborne;
+                                    flown.takeoffs.push(accept);
+                                    let result = if accept { 0 } else { 4 };
+                                    flown.ack = format!(
+                                        "MAV_CMD_NAV_TAKEOFF: {}",
+                                        mp_link::messages::command_result_name(result)
+                                    );
+                                    vehicle.request = Some(if accept {
+                                        takeoff_at.get_or_insert(vehicle.now);
+                                        accepted
+                                    } else {
+                                        RequestState::Finished(RequestOutcome::Rejected(result))
+                                    });
+                                }
+                                // `DO_SET_MODE` goes unacknowledged: no request, and the ack on
+                                // show is still the last command's.
+                                (Route::Raw, MavMessage::CommandLong(m))
+                                    if m.command == commands::CMD_DO_SET_MODE =>
+                                {
+                                    vehicle.mode = match m.param2 {
+                                        4.0 => "Guided",
+                                        3.0 => "Auto",
+                                        other => panic!("mode {other} was not asked for"),
+                                    };
+                                }
+                                (Route::Raw, _) => {}
+                                (other, _) => panic!("Resume Mission does not send {other:?}"),
+                            }
+                        }
+                    }
+                }
+            }
+            if flown.resume.finished() {
+                break;
+            }
+            vehicle.later(50);
+            // A transfer is seen in progress for a frame, then finished.
+            if transferring {
+                transferring = false;
+            } else if vehicle.transfer.is_some() {
+                vehicle.transfer = Some((true, false, "mission transferred"));
+            }
+            if let Some(at) = takeoff_at {
+                let climbing = vehicle
+                    .now
+                    .saturating_duration_since(at)
+                    .saturating_sub(leaves_ground);
+                vehicle.altitude = (climbing.as_secs_f64() * CLIMB_METRES_PER_SECOND).min(10.0);
+            }
+            steps = flown.resume.advance(&vehicle.input());
+        }
+        flown.mode = vehicle.mode;
+        flown.armed = vehicle.armed;
+        flown.rows = vehicle.mission.len().saturating_sub(1);
+        flown
+    }
+
+    /// Resume Mission on ArduCopter ends in `Strings.CommandFailed`, however quickly or slowly
+    /// the vehicle leaves the ground. The C# asks for the take-off again every second until the
+    /// vehicle is within 2 m of the waypoint's height, and `doCommand` returning false for any
+    /// of them is "Command Failed" and the end of it; ArduCopter refuses every take-off once
+    /// the vehicle has left the ground, and a climb to 8 m at 2.5 m/s outlasts three of the C#'s
+    /// seconds, so a repeat is always refused. The vehicle, armed in Guided, goes on climbing to
+    /// the first take-off's 10 m, and Auto is never asked for. A vehicle that takes every
+    /// take-off is flown into Auto by the same sequence: the sequence is the C#'s, the refusal
+    /// the firmware's.
+    /// `// C#: GCSViews/FlightData.cs:1587-1621`
+    #[test]
+    fn resume_on_arducopter_ends_in_the_csharps_command_failed() {
+        for millis in [300, 600, 900, 1200, 1500, 1900, 2500] {
+            let flown = resume_on_arducopter(Duration::from_millis(millis), true);
+            let ctx = format!("leaving the ground {millis} ms after the take-off");
+            assert_eq!(
+                flown.resume.phase(),
+                &ResumePhase::Failed(strings::COMMAND_FAILED.to_owned()),
+                "{ctx}"
+            );
+            let (last, before) = flown.takeoffs.split_last().expect("a take-off");
+            assert!(
+                !last && before.iter().all(|&accepted| accepted),
+                "{ctx}: {:?}",
+                flown.takeoffs
+            );
+            assert!(
+                (2..=4).contains(&flown.takeoffs.len()),
+                "{ctx}: {:?}",
+                flown.takeoffs
+            );
+            assert_eq!((flown.mode, flown.armed), ("Guided", true), "{ctx}");
+        }
+
+        let flown = resume_on_arducopter(Duration::from_millis(600), false);
+        assert_eq!(flown.resume.phase(), &ResumePhase::Done);
+        assert_eq!(flown.mode, "Auto");
+        assert!(flown.takeoffs.len() > 3, "{:?}", flown.takeoffs);
+    }
+
+    /// `tests/gui/fly-resumemis.gui` asserts, once the resume has run, what the C# leaves on
+    /// ArduCopter and nothing that cannot hold. Every `expect` between the waypoint's OK and the
+    /// Land click is checked against [`resume_on_arducopter`], however early or late the
+    /// vehicle leaves the ground, by `tools/gui-test.sh`'s rules: `~` is containment, otherwise
+    /// equality. Its runs of 2026-09-24 16:36 and 16:38 said `fly.resume` was
+    /// 'failed: The Command failed to execute', `fly.sent` the take-off to 10 m and `fly.ack`
+    /// 'MAV_CMD_NAV_TAKEOFF: failed' - what the model says.
+    #[test]
+    fn the_resume_script_expects_what_the_csharp_leaves_on_arducopter() {
+        let script = include_str!("../../../tests/gui/fly-resumemis.gui");
+        let lines: Vec<&str> = script
+            .lines()
+            .map(|line| line.split('#').next().unwrap_or("").trim())
+            .filter(|line| !line.is_empty())
+            .collect();
+        let asked = lines
+            .iter()
+            .position(|line| line.starts_with("expect fly.prompt ~ Resume mission at waypoint"))
+            .expect("the script answers the waypoint question");
+        let from = asked
+            + lines[asked..]
+                .iter()
+                .position(|line| *line == "click fly-prompt-ok")
+                .expect("the script accepts the waypoint");
+        let to = from
+            + lines[from..]
+                .iter()
+                .position(|line| *line == "click land")
+                .expect("the script lands afterwards");
+        let expects: Vec<&str> = lines[from..to]
+            .iter()
+            .filter_map(|line| line.strip_prefix("expect "))
+            .collect();
+        assert!(
+            expects.iter().any(|line| line.starts_with("fly.resume ")),
+            "the script says where the resume got to"
+        );
+        for millis in [300, 900, 1500, 2500] {
+            let flown = resume_on_arducopter(Duration::from_millis(millis), true);
+            let fact = |key: &str| match key {
+                "fly.resume" => flown.resume.label(),
+                "fly.sent" => flown.sent.clone(),
+                "fly.ack" => flown.ack.clone(),
+                "vehicle.mode" => flown.mode.to_owned(),
+                "vehicle.armed" => flown.armed.to_string(),
+                "mission.items" => flown.rows.to_string(),
+                other => panic!("the model does not know `{other}`"),
+            };
+            for line in &expects {
+                let (key, rest) = line.split_once(' ').expect("a key and a value");
+                let got = fact(key);
+                let holds = match rest.strip_prefix("~ ") {
+                    Some(wanted) => got.contains(wanted),
+                    None => got == rest,
+                };
+                assert!(
+                    holds,
+                    "`expect {line}` does not hold: {key} is '{got}' (leaving the ground \
+                     {millis} ms after the take-off)"
+                );
+            }
+        }
+    }
+
     // --- Which way each message goes ----------------------------------------------------------
 
     /// The calls the C# blocks on become the link's retrying requests; what it sends and forgets
