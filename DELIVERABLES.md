@@ -410,8 +410,13 @@ path: board detect, firmware catalogue, upload via px4/DFU/serial bootloaders.
   against SITL (PLAN.md §13.4 rows 25-27), and exercised on a physical MR-VMU-RT1176 earlier. `mp-firmware` ports
   the `.apj` container and the px4 bootloader protocol from `ExtLibs/px4uploader/`, with
   `tests/firmware_upload.rs` driving a complete upload against a strict in-process mock that
-  asserts every byte. **No board has been flashed**, and none will be until an owner asks: the CLI
-  offers `mpr firmware info` and `mpr firmware detect` and nothing that writes. Board detection is
+  asserts every byte, and `tests/flash_px4.rs` driving `UploadPX4`'s whole sequence - the reboot
+  into the bootloader, the thirty-second port scan, the same-firmware question, the upload and
+  its words - over a bench of pretend ports (row 79). The Install Firmware page now takes that
+  path to this machine's real ports. **No board has been flashed yet**: the owner asked for the
+  bench CubeOrange on 2026-09-25, and `tests/gui/setup-firmware-flash-bench.gui` does it on his
+  explicit go for that flash; the CLI still offers `mpr firmware info` and `mpr firmware detect`
+  and nothing that writes. Board detection is
   `Utilities/BoardDetect.cs` ported rule for rule (`crates/mp-firmware/src/detect.rs`), its probes
   proved against the px4 mock over a pty; all 16 `DetectBoardTest` calls are fixtures, and five of
   them fail against the C# itself, which the fixture records. A real Cube Orange running ArduPilot

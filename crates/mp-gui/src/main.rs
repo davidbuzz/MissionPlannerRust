@@ -2014,7 +2014,23 @@ impl Render for MissionPlanner {
             &self.persisted,
         );
         // Install Firmware's catalogue arriving, and the page closing when the screen changes.
-        self.install_firmware.tick(self.screen == Screen::Setup);
+        {
+            // `AttemptRebootToBootloader`'s turn with the link: over a serial link with a
+            // vehicle heard, `doReboot(true, false)`; anything else is "No HeartBeat found".
+            // `// C#: Utilities/Firmware.cs:797-837`
+            let telemetry = &mut self.telemetry;
+            let on_setup = self.screen == Screen::Setup;
+            self.install_firmware.tick(on_setup, &mut || {
+                let view = telemetry.view();
+                if !view.target.starts_with("serial") {
+                    mp_firmware::flow::LinkReboot::NotSerial
+                } else if view.vehicle.is_some() && telemetry.reboot_to_bootloader() {
+                    mp_firmware::flow::LinkReboot::Rebooted
+                } else {
+                    mp_firmware::flow::LinkReboot::NoHeartbeat
+                }
+            });
+        }
         // The Radio Calibration page's bars, its calibration loop, and its writes and binds.
         self.radio_input
             .tick(&mut self.telemetry, &view, self.screen == Screen::Setup);

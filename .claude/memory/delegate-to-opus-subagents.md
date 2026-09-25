@@ -1,6 +1,6 @@
 ---
 name: delegate-to-opus-subagents
-description: Buzz authorised delegating coding tasks to at most six Opus subagents at a time (three until 2026-09-24); they never open windows, never commit, and get disjoint files
+description: Buzz authorises delegating coding tasks to at most THREE Opus subagents at a time (2026-09-25, after six, after none); they never open windows, never commit, and get disjoint files
 metadata:
   type: feedback
 ---
@@ -31,3 +31,9 @@ is the bottleneck; agents with disjoint files finish that many items in the time
 allow these to finish, but run no more." The four then running (log browser remainder, Install
 Firmware Legacy/Ateryx, the Geo Reference form, terrain in the planner) finish and are
 integrated; launch none after them until he says otherwise.
+
+**2026-09-25 (~13:00 local): "pls allow at most 3 Opus subagents to work on this."** The stop of
+2026-09-24 is lifted and the cap is three, not six. Order now: three → six → none → three. Each
+agent works in its own worktree (`isolation: worktree`), on rows with disjoint files, reads the C#
+before writing, ships tests and scripts (scripts written, never run), and reports what it changed;
+I verify, merge and commit.

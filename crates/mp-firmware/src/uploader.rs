@@ -223,6 +223,50 @@ impl<T: Read + Write> Uploader<T> {
         }
     }
 
+    /// `currentChecksum`: whether the board already holds this firmware - its flash CRC over
+    /// `fw_maxsize` against the file's, and the external flash's over the file's external image
+    /// where the board has one. A bootloader before revision 3 cannot say, and the C# goes on to
+    /// upload; that is `Ok(false)` here.
+    ///
+    /// # Errors
+    ///
+    /// The port failing: the C# tells the operator it lost communication with the board.
+    /// `// C#: ExtLibs/px4uploader/Uploader.cs:806-866`
+    pub fn same_firmware(
+        &mut self,
+        firmware: &Firmware,
+        board: &Board,
+    ) -> Result<bool, UploaderError> {
+        if board.bootloader_revision < 3 {
+            return Ok(false);
+        }
+        self.sync()?;
+        let mut same = true;
+        if board.flash_size > 0 {
+            let expected = firmware.crc(board.flash_size);
+            self.send(&command(Code::GetCrc))?;
+            let reported = self.recv_u32()?;
+            self.get_sync()?;
+            if expected != reported {
+                same = false;
+            }
+        }
+        // `extf_maxsize`: `GET_DEVICE EXTF_SIZE`, which a board without external flash - or a
+        // bootloader too old for the question - answers with an error the C# reads as 0.
+        let external_size = self.info(Info::ExternalFlashSize).unwrap_or(0);
+        if external_size > 0 {
+            let length = u32::try_from(firmware.declared_external_size).unwrap_or(u32::MAX);
+            let expected = firmware.external_crc(firmware.declared_external_size);
+            self.send(&external_crc(length))?;
+            let reported = self.recv_u32()?;
+            self.get_sync()?;
+            if expected != reported {
+                same = false;
+            }
+        }
+        Ok(same)
+    }
+
     /// Leaves the bootloader and starts the firmware.
     ///
     /// The board stops answering the moment it obeys, so there is no reply to wait for - a

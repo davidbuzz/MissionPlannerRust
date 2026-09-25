@@ -68,8 +68,8 @@ use gpui::{
     AnyElement, Context, Div, FocusHandle, KeyDownEvent, SharedString, Window, div, prelude::*, px,
     rgb,
 };
-use mp_firmware::detect::{DeviceInfo, Win32SerialPort};
-use mp_firmware::flow::{self, Buttons, Dialogue, Reached};
+use mp_firmware::detect::{DeviceInfo, TransportPort, Win32SerialPort, open_serial};
+use mp_firmware::flow::{self, Buttons, Dialogue, FlashHost, LinkReboot, Reached};
 use mp_firmware::manifest::{
     self, Lookup, Manifest, MavType, NO_FIRMWARE, NO_PORT, Outcome, ReleaseType, Selection,
     icon_name,
@@ -331,6 +331,9 @@ enum Said {
     Show(Waiting),
     /// `Progress(percent, status)`.
     Progress(i32, String),
+    /// `AttemptRebootToBootloader`'s turn with the MAVLink link: the page, which owns the link,
+    /// answers what it did.
+    Reboot(Sender<LinkReboot>),
     /// The flow has ended here.
     Done(Box<Reached>),
 }
@@ -410,6 +413,53 @@ impl Progress {
     }
 }
 
+/// The flow's line to the MAVLink link, for `AttemptRebootToBootloader`: the page owns the
+/// link, so the reboot is asked of it and waited for, as a question is.
+pub struct LinkLine {
+    said: Sender<Said>,
+}
+
+impl LinkLine {
+    /// What the link did: nothing when it is not serial, the reboot when a vehicle was there,
+    /// else no heartbeat. A page that has gone counts as no heartbeat.
+    fn reboot(&self) -> LinkReboot {
+        let (reply, answer) = channel();
+        if self.said.send(Said::Reboot(reply)).is_err() {
+            return LinkReboot::NoHeartbeat;
+        }
+        answer.recv().unwrap_or(LinkReboot::NoHeartbeat)
+    }
+}
+
+/// This machine's serial ports and its link, for a px4 upload.
+/// `// C#: Utilities/Firmware.cs:591-750, 752-840`
+pub struct SerialHost {
+    line: LinkLine,
+}
+
+impl FlashHost for SerialHost {
+    type Port = TransportPort<mp_transport::SerialTransport>;
+
+    fn port_names(&mut self) -> Vec<String> {
+        mp_transport::list_ports()
+            .into_iter()
+            .map(|port| port.name)
+            .collect()
+    }
+    fn open(&mut self, port: &str, baud: u32) -> std::io::Result<Self::Port> {
+        open_serial(port, baud, false)
+    }
+    fn reboot_link(&mut self) -> LinkReboot {
+        self.line.reboot()
+    }
+    fn now(&mut self) -> std::time::Instant {
+        std::time::Instant::now()
+    }
+    fn sleep(&mut self, duration: std::time::Duration) {
+        std::thread::sleep(duration);
+    }
+}
+
 /// A flow running on its thread: what it has said, and the box it is waiting on.
 #[derive(Debug)]
 pub struct Worker {
@@ -425,14 +475,23 @@ impl Worker {
         name: &str,
         work: impl FnOnce(&mut dyn Dialogue) -> Reached + Send + 'static,
     ) -> Option<Self> {
+        Self::start_flash(name, move |dialogue, _line| work(dialogue))
+    }
+
+    /// Starts a flow that may write to a board: it also gets the line to the link.
+    pub fn start_flash(
+        name: &str,
+        work: impl FnOnce(&mut dyn Dialogue, LinkLine) -> Reached + Send + 'static,
+    ) -> Option<Self> {
         let (said, heard) = channel();
         let (answer, answers) = channel();
         let done = said.clone();
+        let line = LinkLine { said: said.clone() };
         std::thread::Builder::new()
             .name(name.to_owned())
             .spawn(move || {
                 let mut channel = Channel { said, answers };
-                let reached = work(&mut channel);
+                let reached = work(&mut channel, line);
                 let _ = done.send(Said::Done(Box::new(reached)));
             })
             .ok()?;
@@ -445,10 +504,17 @@ impl Worker {
 
     /// What the flow has said since: progress into `progress`, a box to answer into
     /// [`Worker::waiting`], and - once it has ended - where it got to.
-    pub fn poll(&mut self, progress: &mut Progress) -> Option<Reached> {
+    pub fn poll(
+        &mut self,
+        progress: &mut Progress,
+        reboot: &mut dyn FnMut() -> LinkReboot,
+    ) -> Option<Reached> {
         while self.waiting.is_none() {
             match self.said.try_recv() {
                 Ok(Said::Progress(percent, status)) => progress.set(percent, &status),
+                Ok(Said::Reboot(reply)) => {
+                    let _ = reply.send(reboot());
+                }
                 Ok(Said::Ask(waiting) | Said::Show(waiting)) => self.waiting = Some(waiting),
                 Ok(Said::Done(reached)) => return Some(*reached),
                 Err(TryRecvError::Empty) => return None,
@@ -476,6 +542,9 @@ pub struct Machine {
     pub temp_dir: PathBuf,
     /// `MainV2.comPortName`, as the settings last saved it.
     pub comport: String,
+    /// Whether a px4 upload may go to a board: not while [`DEVICE_ENV`] stands in for the
+    /// machine, so no test reaches whatever is plugged in.
+    pub flash: bool,
     /// The USB devices.
     pub devices: Vec<DeviceInfo>,
     /// WMI's `Win32_SerialPort` rows, as the ports' USB ids make them.
@@ -501,6 +570,7 @@ impl Machine {
                 .unwrap_or_else(|| std::env::temp_dir().join("Mission Planner")),
             temp_dir: std::env::temp_dir(),
             comport: settings.get("comport").unwrap_or_default().to_owned(),
+            flash: std::env::var_os(DEVICE_ENV).is_none(),
             devices: devices(),
             rows,
         }
@@ -744,7 +814,7 @@ impl InstallFirmware {
 
     /// Once a frame: takes a finished fetch, hears the flow running, and closes the page when
     /// the screen changes, as leaving Initial Setup deactivates its page.
-    pub fn tick(&mut self, on_setup: bool) {
+    pub fn tick(&mut self, on_setup: bool, reboot: &mut dyn FnMut() -> LinkReboot) {
         if let Some(receiver) = &self.receiver {
             match receiver.try_recv() {
                 Ok((manifest, errors)) => {
@@ -762,7 +832,7 @@ impl InstallFirmware {
             }
         }
         if let Some(worker) = &mut self.worker
-            && let Some(reached) = worker.poll(&mut self.progress)
+            && let Some(reached) = worker.poll(&mut self.progress, reboot)
         {
             self.worker = None;
             self.reached = Some(reached);
@@ -961,12 +1031,18 @@ impl InstallFirmware {
     /// `nothing` is set.
     fn download(&mut self, url: String, device: String, nothing: bool, settings: &Persisted) {
         let machine = Machine::here(settings);
-        self.worker = Worker::start("mp-firmware-download", move |dialogue| {
-            machine.run(dialogue, |cx, _| {
+        self.worker = Worker::start_flash("mp-firmware-download", move |dialogue, line| {
+            machine.run(dialogue, |cx, machine| {
                 if nothing {
                     cx.dialogue.show(NO_FIRMWARE, flow::ERROR);
                 }
-                flow::download_and_flash(cx, &url, &device)
+                let reached = flow::download_and_flash(cx, &url, &device);
+                if machine.flash {
+                    let mut host = SerialHost { line };
+                    flow::flash_if_stopped(cx, &mut host, reached)
+                } else {
+                    reached
+                }
             })
         });
     }
@@ -1023,9 +1099,21 @@ impl InstallFirmware {
         remember_folder(settings, &file);
         self.reached = None;
         let machine = Machine::here(settings);
-        self.worker = Worker::start("mp-firmware-custom", move |dialogue| {
+        self.worker = Worker::start_flash("mp-firmware-custom", move |dialogue, line| {
             machine.run(dialogue, |cx, machine| {
-                flow::custom_manifest(cx, &machine.comport, &file, &machine.devices, &machine.rows)
+                let reached = flow::custom_manifest(
+                    cx,
+                    &machine.comport,
+                    &file,
+                    &machine.devices,
+                    &machine.rows,
+                );
+                if machine.flash {
+                    let mut host = SerialHost { line };
+                    flow::flash_if_stopped(cx, &mut host, reached)
+                } else {
+                    reached
+                }
             })
         });
     }
@@ -1243,6 +1331,13 @@ pub fn record_facts(page: &InstallFirmware, settings: &Persisted) {
     );
     record("config.firmware.board", board);
     record("config.firmware.board.ids", ids);
+    record(
+        "config.firmware.flashed",
+        page.reached
+            .as_ref()
+            .and_then(|reached| reached.flashed)
+            .map_or_else(|| "none".to_owned(), |board| board.board_id.to_string()),
+    );
     record(
         "config.firmware.vehicle",
         page.picked
@@ -1555,6 +1650,16 @@ pub fn reached_lines(reached: &Reached) -> Vec<Div> {
     }
     if let Some(stop) = &reached.stop {
         lines.push(line("Stopped", stop.text(), theme::WARN));
+    }
+    if let Some(board) = &reached.flashed {
+        lines.push(line(
+            "Flashed",
+            format!(
+                "board id {}, revision {}, bootloader revision {}, {} bytes of flash",
+                board.board_id, board.board_revision, board.bootloader_revision, board.flash_size
+            ),
+            theme::OK,
+        ));
     }
     lines
 }
@@ -2335,7 +2440,7 @@ mod tests {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
         while page.receiver.is_some() && std::time::Instant::now() < deadline {
             std::thread::sleep(std::time::Duration::from_millis(10));
-            page.tick(true);
+            page.tick(true, &mut || LinkReboot::NotSerial);
         }
         assert_eq!(page.manifest_state(), "loaded");
         assert_eq!(page.manifest.as_ref().map(|m| m.firmware.len()), Some(240));
@@ -2357,7 +2462,7 @@ mod tests {
         assert_eq!(page.fetches, 0, "held: nothing to fetch");
         assert!(page.links_enabled);
         // Leaving the setup screen closes it, as leaving Initial Setup deactivates it.
-        page.tick(false);
+        page.tick(false, &mut || LinkReboot::NotSerial);
         assert!(!page.is_open());
     }
 
@@ -2380,6 +2485,7 @@ mod tests {
             user_data: web.join("data"),
             temp_dir: web.join("tmp"),
             comport: String::new(),
+            flash: false,
             devices: Vec::new(),
             rows: Vec::new(),
         };
@@ -2400,7 +2506,7 @@ mod tests {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         let mut done = None;
         while done.is_none() && std::time::Instant::now() < deadline {
-            done = worker.poll(&mut progress);
+            done = worker.poll(&mut progress, &mut || LinkReboot::NotSerial);
             if let Some(waiting) = worker.waiting.clone() {
                 assert_eq!(waiting.text, "Go?");
                 assert_eq!(waiting.buttons, Some(Buttons::YesNo));

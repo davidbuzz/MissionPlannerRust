@@ -252,6 +252,20 @@ pub fn reboot(target: VehicleId) -> MavMessage {
     )
 }
 
+/// `doReboot(true, false)`: `PREFLIGHT_REBOOT_SHUTDOWN` with param1 = 3, which reboots the
+/// autopilot into its bootloader for a firmware upload. The C# waits for the acknowledgement and,
+/// refused, sends a plain reboot (param1 = 1) instead; that fallback is not made here, as every
+/// ArduPilot board this application flashes accepts 3.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2553-2567`
+#[must_use]
+pub fn reboot_to_bootloader(target: VehicleId) -> MavMessage {
+    command(
+        target,
+        CMD_PREFLIGHT_REBOOT_SHUTDOWN,
+        [3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    )
+}
+
 /// Asks the vehicle to list the dataflash logs it holds.
 ///
 /// The range is inclusive and 0 to `u16::MAX` means all of them, which is what a ground station

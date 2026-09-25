@@ -26,9 +26,11 @@ use crate::detect::{
     self, Boards, DetectHost, Detected, DeviceInfo, PLEASE_UNPLUG_THE_BOARD_AND, PROBE_WINDOW,
     ProbePort, Runtime, Win32SerialPort,
 };
+use crate::detect::BOOTLOADER_BAUD;
 use crate::firmware::Firmware;
 use crate::legacy::{Software, get_url};
 use crate::manifest::Fetch;
+use crate::uploader::{Board, Uploader, UploaderError};
 
 /// What a page says in place of the upload.
 pub const NOT_ENABLED: &str = "flashing is not enabled in this build";
@@ -205,6 +207,8 @@ pub struct Reached {
     pub hex_len: Option<usize>,
     /// The step it stopped before.
     pub stop: Option<Stop>,
+    /// The board a px4 upload wrote, as its bootloader described it.
+    pub flashed: Option<Board>,
 }
 
 impl Reached {
@@ -953,6 +957,230 @@ pub fn custom_manifest(
 // ---------------------------------------------------------------------------------------------
 // The manifest page: LookForPort's download.
 // ---------------------------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------------------------
+// The px4 upload to a board: `UploadPX4` past `ProcessFirmware`.
+// ---------------------------------------------------------------------------------------------
+
+/// What `AttemptRebootToBootloader` did with the MAVLink link.
+/// `// C#: Utilities/Firmware.cs:797-837`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinkReboot {
+    /// `MainV2.comPort.BaseStream` is not a `SerialPort`: nothing is sent.
+    NotSerial,
+    /// A heartbeat was seen and `doReboot(true, false)` went out; the port is closed.
+    Rebooted,
+    /// "No HeartBeat found", or the link failed: the operator is asked to replug the board.
+    NoHeartbeat,
+}
+
+/// The machine a px4 upload runs on: its serial ports, opened at the bootloader's baud, its
+/// clock, and the MAVLink link the vehicle is on.
+pub trait FlashHost {
+    /// The ports this host opens.
+    type Port: ProbePort;
+
+    /// `SerialPort.GetPortNames()`, read afresh each time - the bootloader's port appears after
+    /// the reboot.
+    fn port_names(&mut self) -> Vec<String>;
+    /// `new Uploader(port, 115200)`: the port at `baud`.
+    fn open(&mut self, port: &str, baud: u32) -> io::Result<Self::Port>;
+    /// The link's part of `AttemptRebootToBootloader`.
+    fn reboot_link(&mut self) -> LinkReboot;
+    /// `DateTime.Now`.
+    fn now(&mut self) -> Instant;
+    /// `Thread.Sleep`.
+    fn sleep(&mut self, duration: Duration);
+}
+
+/// `Strings.NoNeedToUpload`.
+/// `// C#: ExtLibs/Strings/Strings.resx:564-566`
+pub const NO_NEED_TO_UPLOAD: &str = "No need to upload. already on the board";
+/// `Uploader.ConfirmEvent`'s question when the board already holds the firmware, and its caption.
+/// `// C#: ExtLibs/px4uploader/Uploader.cs:857-858; Utilities/Firmware.cs:657-658`
+pub const SAME_FIRMWARE_QUESTION: &str =
+    "The board already has the same firmware version.\nUpload anyway?";
+/// The question's caption.
+pub const SAME_FIRMWARE_CAPTION: &str = "Same Firmware";
+/// The words when the port fails between finding the board and uploading.
+/// `// C#: Utilities/Firmware.cs:702, 710`
+pub const LOST_COMMUNICATION: &str = "lost communication with the board.";
+/// `UploadPX4`'s last words when no bootloader answered in time.
+/// `// C#: Utilities/Firmware.cs:747`
+pub const NO_RESPONSE_FROM_BOARD: &str = "ERROR: No Response from board";
+/// How long `UploadPX4` scans for the bootloader.
+/// `// C#: Utilities/Firmware.cs:607`
+pub const SCAN_WINDOW: Duration = Duration::from_secs(30);
+
+/// `new Uploader(port, 115200)` then `identify()`: the port opened with 50 ms timeouts and its
+/// input discarded, as the C# constructor does, and the bootloader asked who it is.
+/// `// C#: ExtLibs/px4uploader/Uploader.cs:121-131, 869`
+fn identify_port<H: FlashHost>(
+    host: &mut H,
+    name: &str,
+) -> Result<(Uploader<H::Port>, Board), UploaderError> {
+    let mut port = host.open(name, BOOTLOADER_BAUD)?;
+    port.set_read_timeout(Duration::from_millis(50))?;
+    port.discard_in_buffer()?;
+    let mut uploader = Uploader::new(port);
+    let board = uploader.identify()?;
+    Ok((uploader, board))
+}
+
+/// `AttemptRebootToBootloader`: every port tried for a bootloader already answering - found,
+/// nothing more is done - else, over a serial link, the vehicle's heartbeat looked for and
+/// `doReboot(true, false)` sent, with "Please unplug the board ..." when no heartbeat came.
+/// `// C#: Utilities/Firmware.cs:752-840`
+fn attempt_reboot_to_bootloader<H: FlashHost>(cx: &mut Cx<'_>, host: &mut H) {
+    for name in host.port_names() {
+        if identify_port(host, &name).is_ok() {
+            return;
+        }
+    }
+    cx.dialogue.progress(-1, "Look for HeartBeat");
+    match host.reboot_link() {
+        LinkReboot::NotSerial => {}
+        LinkReboot::Rebooted => cx.dialogue.progress(-1, "Reboot to Bootloader"),
+        LinkReboot::NoHeartbeat => cx.dialogue.show(PLEASE_UNPLUG_THE_BOARD_AND, ""),
+    }
+}
+
+/// `UploadPX4` after the file is read: the reboot attempt, then up to thirty seconds of scanning
+/// every port for a bootloader whose board id is the firmware's (another board's is "keep
+/// looking"), then `currentChecksum` - the same firmware already there asks "Upload anyway?",
+/// and No is "No need to upload" - and the upload with its progress, "Upload Done" at the end.
+/// A port failing once the board is found is "lost communication with the board."; an upload
+/// failing is "ERROR: " and the reason; no board in time is "ERROR: No Response from board".
+///
+/// The C# scans the ports in parallel; here they are tried in turn, which on a machine with one
+/// board is the same conversation.
+/// `// C#: Utilities/Firmware.cs:591-750`
+pub fn upload_px4<H: FlashHost>(
+    cx: &mut Cx<'_>,
+    host: &mut H,
+    firmware: &Firmware,
+    reached: &mut Reached,
+) -> bool {
+    attempt_reboot_to_bootloader(cx, host);
+    let deadline = host.now() + SCAN_WINDOW;
+    cx.dialogue.progress(-1, "Scanning comports");
+    while host.now() < deadline {
+        for name in host.port_names() {
+            let Ok((mut uploader, board)) = identify_port(host, &name) else {
+                continue;
+            };
+            cx.dialogue.progress(-1, &format!("{name} Identify"));
+            if board.board_id != firmware.board_id {
+                // "Board type mismatch - keep looking".
+                continue;
+            }
+            cx.dialogue.progress(-1, "Connecting");
+            // "test if pausing here stops - System.TimeoutException: The write timed out."
+            host.sleep(Duration::from_millis(500));
+            match uploader.same_firmware(firmware, &board) {
+                Ok(true) => {
+                    if !cx.dialogue.ask(
+                        SAME_FIRMWARE_QUESTION,
+                        SAME_FIRMWARE_CAPTION,
+                        Buttons::YesNo,
+                    ) {
+                        let _ = uploader.reboot();
+                        cx.dialogue.show(NO_NEED_TO_UPLOAD, "");
+                        return true;
+                    }
+                }
+                Ok(false) => {}
+                Err(UploaderError::Io(error)) => {
+                    let caption = if error.kind() == io::ErrorKind::TimedOut {
+                        "comms timeout"
+                    } else {
+                        "lost comms"
+                    };
+                    cx.dialogue.show(LOST_COMMUNICATION, caption);
+                    return false;
+                }
+                // Any other exception in `currentChecksum` lands in the C#'s bare `catch`:
+                // the board is rebooted and "No need to upload" is said.
+                Err(_) => {
+                    let _ = uploader.reboot();
+                    cx.dialogue.show(NO_NEED_TO_UPLOAD, "");
+                    return true;
+                }
+            }
+            cx.dialogue.progress(0, "Upload");
+            let dialogue = &mut *cx.dialogue;
+            #[allow(clippy::cast_possible_truncation)] // 0 to 100
+            let outcome = uploader.upload(firmware, |fraction| {
+                dialogue.progress((fraction * 100.0) as i32, "Upload");
+            });
+            return match outcome {
+                Ok(board) => {
+                    cx.dialogue.progress(100, "Upload Done");
+                    reached.flashed = Some(board);
+                    true
+                }
+                Err(error) => {
+                    cx.dialogue.progress(0, &format!("ERROR: {error}"));
+                    false
+                }
+            };
+        }
+    }
+    cx.dialogue.progress(0, NO_RESPONSE_FROM_BOARD);
+    false
+}
+
+/// [`upload_flash`] with a board to write to: a px4-family board goes through [`upload_px4`]
+/// instead of stopping before it; every other board stops as before.
+///
+/// # Errors
+/// The step it stopped before, for the boards this application does not flash.
+pub fn upload_flash_with<H: FlashHost>(
+    cx: &mut Cx<'_>,
+    host: &mut H,
+    comport: &str,
+    filename: &Path,
+    board: Boards,
+    reached: &mut Reached,
+) -> Result<bool, Stop> {
+    match upload_flash(cx, comport, filename, board, reached) {
+        Err(Stop::RebootToBootloader) => {
+            // `UploadPX4`: the file is read (and `reached` told of it) by `upload_flash`.
+            let firmware = match Firmware::load(filename) {
+                Ok(firmware) => firmware,
+                Err(_) => return Ok(false),
+            };
+            Ok(upload_px4(cx, host, &firmware, reached))
+        }
+        other => other,
+    }
+}
+
+/// A flow that stopped before rebooting a px4-family board into its bootloader, taken on to the
+/// board: [`upload_px4`] over the file it downloaded or was given. Any other outcome is returned
+/// as it was.
+pub fn flash_if_stopped<H: FlashHost>(cx: &mut Cx<'_>, host: &mut H, mut reached: Reached) -> Reached {
+    if reached.stop == Some(Stop::RebootToBootloader)
+        && let Some(file) = reached.file.clone()
+    {
+        reached.stop = None;
+        if let Ok(firmware) = Firmware::load(&file) {
+            upload_px4(cx, host, &firmware, &mut reached);
+        }
+    }
+    reached
+}
+
+/// [`download_and_flash`] with a board to write to.
+pub fn download_and_flash_with<H: FlashHost>(
+    cx: &mut Cx<'_>,
+    host: &mut H,
+    baseurl: &str,
+    device_name: &str,
+) -> Reached {
+    let reached = download_and_flash(cx, baseurl, device_name);
+    flash_if_stopped(cx, host, reached)
+}
 
 /// `LookForPort` once it has a URL: the download to a temporary file - "Downloading from
 /// Internet" as it goes, `Strings.FailedDownload` if it fails, which includes a server that sends

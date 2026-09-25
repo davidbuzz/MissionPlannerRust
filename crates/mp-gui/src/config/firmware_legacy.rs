@@ -530,7 +530,11 @@ impl FirmwareLegacy {
             }
         }
         if let Some(worker) = &mut self.worker
-            && let Some(reached) = worker.poll(&mut self.progress)
+            // The legacy page's flows stop before the board (PLAN.md §13.6 row 79 takes the
+            // manifest page to it first), so the link is never asked to reboot from here.
+            && let Some(reached) = worker.poll(&mut self.progress, &mut || {
+                mp_firmware::flow::LinkReboot::NotSerial
+            })
         {
             self.worker = None;
             self.reached = Some(reached);

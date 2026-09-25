@@ -14,8 +14,8 @@ Early, but flyable behind SITL and a real autopilot. The protocol and telemetry 
 UI covers flying, planning and the first of the setup screens.
 
 Measured on this tree: **23 crates, 252,700 hand-written Rust LOC** (plus 91,634 generated; `.rs` files
-under `crates/`, tests included), **2,734 tests** green on `cargo test --workspace` (40 ignored:
-they need SITL, a window, or the network), **138 GUI scripts** under `tests/gui/`, across 217 commits.
+under `crates/`, tests included), **2,746 tests** green on `cargo test --workspace` (40 ignored:
+they need SITL, a window, or the network), **139 GUI scripts** under `tests/gui/`, across 217 commits.
 Linux only, so far: the repository has no remote, and the three-OS CI matrix has never run.
 
 | Working today | |
@@ -36,7 +36,7 @@ Linux only, so far: the repository has no remote, and the three-OS CI matrix has
 | Health | EKF variances and vibration with ArduPilot's own thresholds, clipping counts |
 | Calibration | accelerometer, compass, radio and motor test as Mission Planner's own pages, `ConfigHWCompass2`, `ConfigRadioInput` and `ConfigMotorTest` ported whole, in its SETUP list |
 | Joystick | axes to `RC_CHANNELS_OVERRIDE` from a thread that blocks on the device and sends on change — 0.1 ms p99 stick-to-link on a fake device — with a release-on-disconnect failsafe (Linux) |
-| Firmware | `.apj` parsing, the px4 bootloader protocol, `BoardDetect.cs`'s board detection and `APFirmware.cs`'s catalogue with the Install Firmware page, proven against a mock, a pty and a manifest excerpt; nothing flashed, nothing written, Upload disabled |
+| Firmware | `.apj` parsing, the px4 bootloader protocol, `BoardDetect.cs`'s board detection and `APFirmware.cs`'s catalogue with the Install Firmware page, proven against a mock, a pty and a manifest excerpt; `UploadPX4`'s reboot into the bootloader, port scan and upload wired to real ports and proven against the mock on a bench of pretend ports - no real board flashed yet (PLAN §13.6 row 79, on the owner's go) |
 | Scripting | the `Script.cs` host API, and a measurement of what the 19 shipped scripts need |
 | KML export | a flown path coloured by flight mode, and a mission, for Google Earth |
 | Tuning graph | eleven telemetry fields plotted live, min/max reduced so a spike cannot hide |
