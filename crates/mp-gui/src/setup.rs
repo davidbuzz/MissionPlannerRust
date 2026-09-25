@@ -1017,6 +1017,16 @@ impl MissionPlanner {
                 self.software_activate(class);
             }
             // ---- end GeoFence / rover Basic Tuning / User Params ----
+            // ---- SETUP's small pages (row 70) ----
+            // Every time, as `ActivatePage` calls it (`config/extra_setup.rs`).
+            // C#: GCSViews/ConfigurationView/ConfigHWParachute.cs:17-45; ConfigHWOSD.cs:14-21;
+            // ConfigGPSOrder.cs:21-51; ConfigHWIDs.cs:16-31; ConfigCompassMot.cs:25-30;
+            // ConfigInitialParams.cs:56-68
+            Some(
+                class @ ("ConfigHWParachute" | "ConfigHWOSD" | "ConfigGPSOrder" | "ConfigHWIDs"
+                | "ConfigCompassMot" | "ConfigInitialParams"),
+            ) => self.extra_setup_activate(class),
+            // ---- end SETUP's small pages ----
             // ---- RTK/GPS Inject ----
             // C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:81-165, 1214-1222
             Some("ConfigSerialInjectGPS") => self.rtk_inject_activate(),
@@ -1116,6 +1126,15 @@ impl MissionPlanner {
                 self.software_deactivate(class);
             }
             // ---- end GeoFence / rover Basic Tuning / User Params ----
+            // ---- SETUP's small pages (row 70) ----
+            // `ConfigCompassMot.Deactivate` stops a running calibration; the rest are `IActivate`
+            // only: hidden, a number or text being typed into read.
+            // C#: GCSViews/ConfigurationView/ConfigCompassMot.cs:32-48
+            Some(
+                class @ ("ConfigHWParachute" | "ConfigHWOSD" | "ConfigGPSOrder" | "ConfigHWIDs"
+                | "ConfigCompassMot" | "ConfigInitialParams"),
+            ) => self.extra_setup_deactivate(class),
+            // ---- end SETUP's small pages ----
             // ---- RTK/GPS Inject ----
             // C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:1224-1227
             Some("ConfigSerialInjectGPS") => self.rtk_inject_deactivate(),
@@ -1351,6 +1370,17 @@ impl MissionPlanner {
             // C#: GCSViews/ConfigurationView/ConfigUserDefined.cs:46-86
             "ConfigUserDefined" => self.software_page(class, window, cx),
             // ---- end GeoFence / rover Basic Tuning / User Params ----
+            // ---- SETUP's small pages (row 70) ----
+            // C#: GCSViews/ConfigurationView/ConfigHWParachute.Designer.cs; ConfigHWOSD.resx;
+            // ConfigGPSOrder.Designer.cs; ConfigHWIDs.Designer.cs; ConfigCompassMot.Designer.cs;
+            // ConfigInitialParams.Designer.cs
+            "ConfigHWParachute" => self.extra_setup_page(class, window, cx),
+            "ConfigHWOSD" => self.extra_setup_page(class, window, cx),
+            "ConfigGPSOrder" => self.extra_setup_page(class, window, cx),
+            "ConfigHWIDs" => self.extra_setup_page(class, window, cx),
+            "ConfigCompassMot" => self.extra_setup_page(class, window, cx),
+            "ConfigInitialParams" => self.extra_setup_page(class, window, cx),
+            // ---- end SETUP's small pages ----
             // ---- RTK/GPS Inject ----
             // C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.Designer.cs:29-783;
             // ConfigSerialInjectGPS.resx

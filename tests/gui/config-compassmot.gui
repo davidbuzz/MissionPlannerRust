@@ -1,0 +1,67 @@
+# Initial Setup's Compass/Motor Calib page, ported from GCSViews/ConfigurationView/
+# ConfigCompassMot.cs (PLAN.md §13.6 row 70).
+#
+# THIS PAGE RUNS THE MOTORS. Start sends ArduPilot's compassmot (MAV_CMD_PREFLIGHT_CALIBRATION,
+# param6 1), which spins the motors to the pilot's throttle while it measures their interference
+# on the compass. This script is for SITL only - never with propellers fitted to anything the link
+# reaches, never on a real vehicle.
+#
+# The claim: Activate sets the button to "Start" and subscribes to COMPASSMOT_STATUS
+# (ConfigCompassMot.cs:25-30); the button reads "Finish", runs DoCompassMot - the vehicle's
+# messages cleared, the curves emptied, the command sent - and starts the 100 ms timer that
+# writes the vehicle's messages into the box (:50-85, 164-173); a second press is SendAck, the
+# COMMAND_ACK that ends the calibration, and "Start" again; Deactivate sends the ack too and ends
+# the subscription (:32-48). Each COMPASSMOT_STATUS is read out and charted (:87-119).
+#
+# SITL's copter, disarmed on the ground, refuses to start compassmot ("Compass Motor
+# Calibration... not armed" or its throttle message) and sends no status, so the run proves the
+# command, the ack and the page's states, not the chart's points.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run as
+#
+#   tools/gui-test.sh tests/gui/config-compassmot.gui -- tcp:127.0.0.1:5760
+
+screen params
+window 1600x1200
+settle 6
+
+click param-download
+settle 15
+expect params.held > 1000
+
+click tab-setup
+expect config.compassmot.active false
+click setup-page-ConfigOptional
+click setup-page-ConfigCompassMot
+settle 1
+expect setup.page ConfigCompassMot
+expect config.compassmot.active true
+expect config.compassmot.button Start
+expect config.compassmot.running false
+expect config.compassmot.subscribed true
+expect config.compassmot.timer false
+expect config.compassmot.starts 0
+expect config.compassmot.acks 0
+expect config.compassmot.points 0
+
+# Start: the command sent, the timer running, the box filling with the vehicle's messages.
+click compassmot-button
+settle 3
+expect config.compassmot.button Finish
+expect config.compassmot.running true
+expect config.compassmot.timer true
+expect config.compassmot.starts 1
+
+# Finish: the ack, and "Start" again.
+click compassmot-button
+settle 2
+expect config.compassmot.button Start
+expect config.compassmot.running false
+expect config.compassmot.acks 1
+
+# Choosing another page is Deactivate: the ack once more, the subscription ended.
+click setup-page-ConfigOptional
+settle 1
+expect config.compassmot.active false
+expect config.compassmot.acks 2
+expect config.compassmot.subscribed false

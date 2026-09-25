@@ -1,0 +1,73 @@
+# Initial Setup's Parachute page, ported from GCSViews/ConfigurationView/ConfigHWParachute.cs
+# (PLAN.md §13.6 row 70).
+#
+# The claim: Activate shows the output already on function 27 in "Servo Num", sets up "Enable
+# (AC3.3+)" on CHUTE_ENABLED, the release type on CHUTE_TYPE from the page's own list of four
+# relays and a servo, and the resting, deploy and minimum-altitude numbers on CHUTE_SERVO_OFF,
+# CHUTE_SERVO_ON and CHUTE_ALT_MIN (ConfigHWParachute.cs:17-45); each Mavlink* control writes its
+# parameter when changed, a number 300 ms after; "Servo Num" runs ensureDisabled and sets the
+# chosen output's _FUNCTION to 27 (:47-74). Each write is proved by the vehicle's echo, and put
+# back.
+#
+# SITL's copter, with the parachute off, lists CHUTE_ENABLED alone: the type combo and the three
+# numbers are disabled, as a Mavlink* control without its parameter is, and "Servo Num" lists RC9
+# to RC14 - names a SERVOn firmware has not got, so it selects nothing. Enable writes 1 and, the
+# table not refreshed, the other controls stay as they were; a second click writes 0.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run as
+#
+#   tools/gui-test.sh tests/gui/config-parachute.gui -- tcp:127.0.0.1:5760
+#
+# A run that stops half way can leave CHUTE_ENABLED at 1; the first expectation on it then fails
+# until a fresh SITL.
+
+screen params
+window 1600x1200
+settle 6
+
+click param-download
+settle 15
+expect params.held > 1000
+expect params.value.CHUTE_ENABLED 0
+
+click tab-setup
+expect config.parachute.active false
+click setup-page-ConfigOptional
+click setup-page-ConfigHWParachute
+settle 1
+expect setup.page ConfigHWParachute
+expect config.parachute.active true
+expect config.parachute.heading Parachute
+
+# What Activate made of SITL's parameters.
+expect config.parachute.enable unchecked
+expect config.parachute.enable.enabled true
+expect config.parachute.type.enabled false
+expect config.parachute.type.options 5
+expect config.parachute.servo none
+expect config.parachute.servo.options 6
+expect config.parachute.chute_servo_off.enabled false
+expect config.parachute.chute_servo_on.enabled false
+expect config.parachute.chute_alt_min.enabled false
+expect config.parachute.write none
+
+# Enable: the control's write, echoed.
+click parachute-CHUTE_ENABLED
+settle 3
+expect config.parachute.enable checked
+expect params.value.CHUTE_ENABLED 1
+expect config.parachute.write ~ CHUTE_ENABLED 1
+expect config.parachute.writes.pending 0
+expect config.parachute.message none
+
+# And back.
+click parachute-CHUTE_ENABLED
+settle 3
+expect config.parachute.enable unchecked
+expect params.value.CHUTE_ENABLED 0
+expect config.parachute.message none
+
+# Choosing another page hides this one; it is IActivate only.
+click setup-page-ConfigOptional
+settle 1
+expect config.parachute.active false

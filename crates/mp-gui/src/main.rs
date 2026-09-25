@@ -425,6 +425,13 @@ struct MissionPlanner {
     /// Their boxes' focus.
     software_focus: config::software_pages::Focus,
     // ---- end GeoFence / rover Basic Tuning / User Params ----
+    // ---- SETUP's small pages (row 70) ----
+    /// SETUP's Parachute, OSD, CAN GPS Order, HW ID, Compass/Motor Calib and Initial Tune
+    /// Parameter pages (`config/extra_setup.rs`).
+    extra: config::extra_setup::ExtraSetup,
+    /// Their boxes' focus.
+    extra_focus: config::extra_setup::Focus,
+    // ---- end SETUP's small pages ----
     // ---- RTK/GPS Inject ----
     /// Initial Setup's RTK/GPS Inject page, with its statics and the thread it starts.
     rtk_inject: config::rtk_inject::RtkInject,
@@ -698,6 +705,10 @@ impl MissionPlanner {
             software_pages: config::software_pages::SoftwarePages::default(),
             software_focus: config::software_pages::Focus::new(cx),
             // ---- end GeoFence / rover Basic Tuning / User Params ----
+            // ---- SETUP's small pages (row 70) ----
+            extra: config::extra_setup::ExtraSetup::default(),
+            extra_focus: config::extra_setup::Focus::new(cx),
+            // ---- end SETUP's small pages ----
             // ---- RTK/GPS Inject ----
             rtk_inject: config::rtk_inject::RtkInject::default(),
             rtk_focus: config::rtk_inject::Focus::new(cx),
@@ -2554,6 +2565,11 @@ impl Render for MissionPlanner {
         // Their page objects, the box the focus left, the timers and the writes.
         self.software_tick(&view, window);
         // ---- end GeoFence / rover Basic Tuning / User Params ----
+        // ---- SETUP's small pages (row 70) ----
+        // Their page objects, the box the focus left, the timers, the calibration's statuses
+        // and the writes.
+        self.extra_setup_tick(&view, window);
+        // ---- end SETUP's small pages ----
         // ---- RTK/GPS Inject ----
         // The page object disposed with its screen, what its thread did, its timer, and where
         // its thread sends.
@@ -2915,6 +2931,9 @@ impl Render for MissionPlanner {
                 &view,
             );
             // ---- end GeoFence / rover Basic Tuning / User Params ----
+            // ---- SETUP's small pages (row 70) ----
+            config::extra_setup::record_facts(&self.extra, &view);
+            // ---- end SETUP's small pages ----
             // ---- Firmware Legacy / Ateryx ----
             config::firmware_legacy::record_facts(
                 &self.firmware_legacy,
@@ -3270,6 +3289,9 @@ impl Render for MissionPlanner {
                 // ---- GeoFence / rover Basic Tuning / User Params ----
                 .children(self.software_overlay(window, cx))
                 // ---- end GeoFence / rover Basic Tuning / User Params ----
+                // ---- SETUP's small pages (row 70) ----
+                .children(self.extra_setup_overlay(window, cx))
+                // ---- end SETUP's small pages ----
                 // ---- Firmware Legacy / Ateryx ----
                 .children(config::ateryx::overlay(&self.ateryx, window, cx))
                 // ---- end Firmware Legacy / Ateryx ----

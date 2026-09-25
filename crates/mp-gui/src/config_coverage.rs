@@ -236,9 +236,9 @@ pub const PANELS: &[Panel] = &[
         // at MAV_CMD_FLASH_BOOTLOADER (ConfigFirmwareDisabled.cs:18-45).
         Partial(
             at("crates/mp-gui/src/config/firmware.rs", "fn page"),
-            "the connected page's text; Bootloader Update asks its two questions and stops \
-             before MAV_CMD_FLASH_BOOTLOADER, which rewrites the board's bootloader - nothing \
-             flashes in this build",
+            "the connected page's text; Bootloader Update asks its two questions and stops
+        //     before MAV_CMD_FLASH_BOOTLOADER, which rewrites the board's bootloader - nothing
+        //     flashes in this build",
         ),
     ),
     panel(
@@ -251,14 +251,14 @@ pub const PANELS: &[Panel] = &[
         // (mp_firmware::flow::Stop).
         Partial(
             at("crates/mp-gui/src/config/firmware.rs", "fn page"),
-            "the catalogue fetched as APFirmware.GetList fetches it, each vehicle labelled with \
-             the newest firmware of the release, Beta; a vehicle's click asks, runs LookForPort, \
-             opens FirmwareSelection on the board's platform and downloads the file chosen with \
-             the progress bar and status line, and UploadFlash reads it; All Options over the \
-             whole catalogue; Load custom firmware by extension; each stops where it would write \
-             to a board - the upload, DFU, Force Bootloader and Bootloader Update are disabled, as \
-             nothing flashes in this build; not Ctrl+Q, the bootloader probe on a device's \
-             arrival, nor FirmwareSelection's filter pickers; the vehicle pictures are named boxes",
+            "the catalogue fetched as APFirmware.GetList fetches it, each vehicle labelled with
+        //     the newest firmware of the release, Beta; a vehicle's click asks, runs LookForPort,
+        //     opens FirmwareSelection on the board's platform and downloads the file chosen with
+        //     the progress bar and status line, and UploadFlash reads it; All Options over the
+        //     whole catalogue; Load custom firmware by extension; each stops where it would write
+        //     to a board - the upload, DFU, Force Bootloader and Bootloader Update are disabled, as
+        //     nothing flashes in this build; not Ctrl+Q, the bootloader probe on a device's
+        //     arrival, nor FirmwareSelection's filter pickers; the vehicle pictures are named boxes",
         ),
     ),
     panel(
@@ -272,15 +272,15 @@ pub const PANELS: &[Panel] = &[
         // (mp_firmware::flow), which stop at the board.
         Partial(
             at("crates/mp-gui/src/config/firmware_legacy.rs", "fn page"),
-            "every control at its .resx place; the firmware2.xml list loaded behind its progress \
-             dialog with each entry's git-version.txt, and each picture labelled and tagged as \
-             updateDisplayName does; a vehicle's click asks, detects the board from the device \
-             list, chooses the entry's URL for it (CubeBlack, ChibiOS), downloads firmware.hex \
-             and reads it; Pick previous firmware from FirmwareHistory.txt, Beta firmwares, Load \
-             custom firmware, and the three links; each stops where it would write to a board - \
-             the upload and Force Bootloader are disabled, as nothing flashes in this build; not \
-             Ctrl+Q or Ctrl+P, nor the bootloader probe on a device's arrival; the pictures are \
-             named boxes",
+            "every control at its .resx place; the firmware2.xml list loaded behind its progress
+        //     dialog with each entry's git-version.txt, and each picture labelled and tagged as
+        //     updateDisplayName does; a vehicle's click asks, detects the board from the device
+        //     list, chooses the entry's URL for it (CubeBlack, ChibiOS), downloads firmware.hex
+        //     and reads it; Pick previous firmware from FirmwareHistory.txt, Beta firmwares, Load
+        //     custom firmware, and the three links; each stops where it would write to a board -
+        //     the upload and Force Bootloader are disabled, as nothing flashes in this build; not
+        //     Ctrl+Q or Ctrl+P, nor the bootloader probe on a device's arrival; the pictures are
+        //     named boxes",
         ),
     ),
     panel(
@@ -293,10 +293,10 @@ pub const PANELS: &[Panel] = &[
         // here implements, so each button is disabled with that reason.
         Partial(
             at("crates/mp-gui/src/config/secure.rs", "fn page"),
-            "the two groups, four buttons and three text boxes at the Designer's places; every \
-             button disabled - Generate Key, Private Key, BootLoader and Firmware are Ed25519 key \
-             generation, key reading and signing (BouncyCastle, SignedFW.cs), which this \
-             application has no implementation of",
+            "the two groups, four buttons and three text boxes at the Designer's places; every
+        //     button disabled - Generate Key, Private Key, BootLoader and Firmware are Ed25519 key
+        //     generation, key reading and signing (BouncyCastle, SignedFW.cs), which this
+        //     application has no implementation of",
         ),
     ),
     panel(
@@ -324,12 +324,12 @@ pub const PANELS: &[Panel] = &[
         // group is Controls/DefaultSettings.cs, a control of its own.
         Partial(
             at("crates/mp-gui/src/config/frame_type_legacy.rs", "fn page"),
-            "Activate on FRAME, the six radio buttons and pictures - all 12 wirings, the radio \
-             buttons' CheckedChanged cascade in the Designer's order - and the FRAME writes \
-             through the retrying set with \"Set FRAME Failed\"; missing the Default Settings \
-             group's behaviour (Controls/DefaultSettings.cs: the Tools/Frame_params listing from \
-             GitHub's contents API as JSON, and Load Params' ParamCompare form), drawn as it is \
-             before the listing arrives; the frame pictures are named boxes",
+            "Activate on FRAME, the six radio buttons and pictures - all 12 wirings, the radio
+        //     buttons' CheckedChanged cascade in the Designer's order - and the FRAME writes
+        //     through the retrying set with \"Set FRAME Failed\"; missing the Default Settings
+        //     group's behaviour (Controls/DefaultSettings.cs: the Tools/Frame_params listing from
+        //     GitHub's contents API as JSON, and Load Params' ParamCompare form), drawn as it is
+        //     before the listing arrives; the frame pictures are named boxes",
         ),
     ),
     panel(
@@ -347,9 +347,9 @@ pub const PANELS: &[Panel] = &[
         // which has no handler. The pre-3.5 page is ConfigFrameType's row.
         Partial(
             at("crates/mp-gui/src/config/frame_type.rs", "fn page"),
-            "the eight class buttons and six type rows from Common.ValidList, each click \
-             writing FRAME_CLASS then FRAME_TYPE through the retrying set; the frame pictures \
-             are named boxes, not the C#'s images",
+            "the eight class buttons and six type rows from Common.ValidList, each click
+        //     writing FRAME_CLASS then FRAME_TYPE through the retrying set; the frame pictures
+        //     are named boxes, not the C#'s images",
         ),
     ),
     panel(
@@ -400,16 +400,16 @@ pub const PANELS: &[Panel] = &[
         // a feature of its own rather than this page's.
         Partial(
             at(COMPASS_RS, "fn page"),
-            "has the declination and its automatic box, learn, the primary compass, each \
-             compass's use, external, orientation, offsets and MOT, the three quick-configure \
-             buttons, the onboard calibration with its timer and fitness, Large Vehicle MagCal \
-             and both links - 20 of the 21 wirings; missing Live Calibration, drawn and \
-             disabled: its handler is MagCalib.DoGUIMagCalib (MagCalib.cs), Mission Planner's \
-             own calibration from RAW_IMU and SCALED_IMU2/3 samples - the ProgressReporterSphere \
-             window with three OpenGL spheres, alglib's Levenberg-Marquardt sphere and \
-             ellipsoid fits, and the offsets saved through PREFLIGHT_SET_SENSOR_OFFSETS - a \
-             feature of its own, not ported; its group shows only for ArduPlane 3.7.1 to 4.0 \
-             or a vehicle without onboard calibration",
+            "has the declination and its automatic box, learn, the primary compass, each
+        //     compass's use, external, orientation, offsets and MOT, the three quick-configure
+        //     buttons, the onboard calibration with its timer and fitness, Large Vehicle MagCal
+        //     and both links - 20 of the 21 wirings; missing Live Calibration, drawn and
+        //     disabled: its handler is MagCalib.DoGUIMagCalib (MagCalib.cs), Mission Planner's
+        //     own calibration from RAW_IMU and SCALED_IMU2/3 samples - the ProgressReporterSphere
+        //     window with three OpenGL spheres, alglib's Levenberg-Marquardt sphere and
+        //     ellipsoid fits, and the offsets saved through PREFLIGHT_SET_SENSOR_OFFSETS - a
+        //     feature of its own, not ported; its group shows only for ArduPlane 3.7.1 to 4.0
+        //     or a vehicle without onboard calibration",
         ),
     ),
     panel(
@@ -479,9 +479,9 @@ pub const PANELS: &[Panel] = &[
         // message box, which is a line on the page.
         Partial(
             at("crates/mp-gui/src/config/flight_modes.rs", "fn page"),
-            "the six combos from the firmware's mode list, the lit PWM band, Simple and Super \
-             Simple, Save through the retrying set; not Ctrl+S, standardFlightModesOnly beyond \
-             its default, nor the message box",
+            "the six combos from the firmware's mode list, the lit PWM band, Simple and Super
+        //     Simple, Save through the retrying set; not Ctrl+S, standardFlightModesOnly beyond
+        //     its default, nor the message box",
         ),
     ),
     panel(
@@ -494,9 +494,9 @@ pub const PANELS: &[Panel] = &[
         // out-of-range prompt that only typed values raise.
         Partial(
             at("crates/mp-gui/src/config/failsafe.rs", "fn page"),
-            "the channel bars, the mode/armed/GPS readouts, the throttle, battery and GCS \
-             controls writing their parameters on change through the retrying set; numbers by \
-             step arrows only, no typing",
+            "the channel bars, the mode/armed/GPS readouts, the throttle, battery and GCS
+        //     controls writing their parameters on change through the retrying set; numbers by
+        //     step arrows only, no typing",
         ),
     ),
     panel(
@@ -509,14 +509,20 @@ pub const PANELS: &[Panel] = &[
             MANDATORY,
             "copter, quadplane",
         )],
-        Missing,
+        // the four boxes with Activate's 9 and 4, the chemistry combo writing a cell's voltages, the two
+        // check boxes, Calculate working out the parameters as calc_values does and naming them for the
+        // firmware, ParamCompare over the vehicle's table with its button renamed Write to FC, and the
+        // report after; the link to the tuning instructions
+        Ours::Done(at("crates/mp-gui/src/config/initial_params.rs", "fn page")),
     ),
     panel(
         "ConfigHWIDs",
         cv!("ConfigHWIDs"),
         Some(0),
         &[setup(241, "HW ID", MANDATORY, ANY)],
-        Missing,
+        // the read-only grid of every _ID/_DEVID parameter (not _IDX, not FRSKY) in culture order, each
+        // id taken apart as DeviceInfo takes it: ParamName, DevID, BusType, Bus, Address, DevType
+        Ours::Done(at("crates/mp-gui/src/config/hw_ids.rs", "fn page")),
     ),
     panel(
         "ConfigOptional",
@@ -544,11 +550,11 @@ pub const PANELS: &[Panel] = &[
         // any serial port, not only a name with "com" in it.
         Partial(
             at("crates/mp-gui/src/config/rtk_inject.rs", "fn page"),
-            "every control and handler, the read loop, the RTCM/SBP/UBX/NMEA parsers, \
-             GPS_RTCM_DATA and GPS_INJECT_DATA injection, cs.Base, the .gpsbase log, the u-blox, \
-             Septentrio and Unicore set-up, the base positions; not DroneCAN over SLCAN \
-             (ExtLibs/DroneCAN is not ported) nor the Windows named-pipe fallback \
-             (CommsSerialPipe)",
+            "every control and handler, the read loop, the RTCM/SBP/UBX/NMEA parsers,
+        //     GPS_RTCM_DATA and GPS_INJECT_DATA injection, cs.Base, the .gpsbase log, the u-blox,
+        //     Septentrio and Unicore set-up, the base positions; not DroneCAN over SLCAN
+        //     (ExtLibs/DroneCAN is not ported) nor the Windows named-pipe fallback
+        //     (CommsSerialPipe)",
         ),
     ),
     // ---- end RTK/GPS Inject ----
@@ -570,12 +576,12 @@ pub const PANELS: &[Panel] = &[
         // registration panel disabled, as the C# leaves it.
         Partial(
             at("crates/mp-gui/src/config/adsb.rs", "fn page"),
-            "a RangeControl, bitmask or ValuesControl per documented ADSB_/AVD_ parameter, \
-             favourites first, recording changes; Write Params writing them ENABLE-first, each \
-             in its own try, then \"Parameters successfully saved.\"; Refresh Params with \
-             MessageShowAgain; Find filtering as typed; a bitmask updated on Activate writing as \
-             the C#'s does; missing Ctrl+S, dragging the track bar (a click pages it), typing \
-             into a ValuesControl, and the InputBox's remembered answers",
+            "a RangeControl, bitmask or ValuesControl per documented ADSB_/AVD_ parameter,
+        //     favourites first, recording changes; Write Params writing them ENABLE-first, each
+        //     in its own try, then \"Parameters successfully saved.\"; Refresh Params with
+        //     MessageShowAgain; Find filtering as typed; a bitmask updated on Activate writing as
+        //     the C#'s does; missing Ctrl+S, dragging the track bar (a click pages it), typing
+        //     into a ValuesControl, and the InputBox's remembered answers",
         ),
     ),
     panel(
@@ -583,7 +589,10 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigGPSOrder"),
         Some(1),
         &[setup(266, "CAN GPS Order", OPTIONAL, ANY)],
-        Missing,
+        // the grid of the overrides that are set and the detected nodes that are neither, the GPS1 and
+        // GPS2 buttons setting an override to the row's node id and running Activate again; the
+        // NullReferenceException of a name the vehicle lacks, kept for the facts
+        Ours::Done(at("crates/mp-gui/src/config/gps_order.rs", "fn page")),
     ),
     panel(
         "ConfigBatteryMonitoring",
@@ -595,10 +604,10 @@ pub const PANELS: &[Panel] = &[
         // and writes Settings.Instance (:53-60, 565-601), saved with config.xml.
         Partial(
             at("crates/mp-gui/src/config/battery_monitor.rs", "fn page"),
-            "the Monitor, Sensor and HW Ver combos with the nine presets and the pin table, the \
-             divider and amps-per-volt arithmetic in single precision, each box writing its \
-             parameter on leaving through the retrying set, the Low Battery alert and its three \
-             questions in Settings.Instance and config.xml; no photo, no typing into the combos",
+            "the Monitor, Sensor and HW Ver combos with the nine presets and the pin table, the
+        //     divider and amps-per-volt arithmetic in single precision, each box writing its
+        //     parameter on leaving through the retrying set, the Low Battery alert and its three
+        //     questions in Settings.Instance and config.xml; no photo, no typing into the combos",
         ),
     ),
     panel(
@@ -609,12 +618,12 @@ pub const PANELS: &[Panel] = &[
         // C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring2.cs:8-253
         Partial(
             at("crates/mp-gui/src/config/battery_monitor2.rs", "fn page"),
-            "the BATT2 monitor and pin combos, the capacity and calibration boxes validated on \
-             leaving and on Enter with the divider and amps-per-volt arithmetic in floats, the \
-             one-second readings of the second battery, the page disabled for good without \
-             BATT2_MONITOR, MP Alert on Low Battery with its three questions in the settings; \
-             the power module photo is a named box, and the questions' remembered answers are \
-             not kept",
+            "the BATT2 monitor and pin combos, the capacity and calibration boxes validated on
+        //     leaving and on Enter with the divider and amps-per-volt arithmetic in floats, the
+        //     one-second readings of the second battery, the page disabled for good without
+        //     BATT2_MONITOR, MP Alert on Low Battery with its three questions in the settings;
+        //     the power module photo is a named box, and the questions' remembered answers are
+        //     not kept",
         ),
     ),
     panel(
@@ -629,7 +638,10 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigCompassMot"),
         Some(2),
         &[setup(285, "Compass/Motor Calib", OPTIONAL, ANY)],
-        Missing,
+        // Start/Finish sending PREFLIGHT_CALIBRATION param6 1 and the ending COMMAND_ACK, the
+        // COMPASSMOT_STATUS subscription read out and charted (interference left, current right,
+        // against throttle), the vehicle's messages in the box while the timer runs, Deactivate's ack
+        Ours::Done(at("crates/mp-gui/src/config/compass_mot.rs", "fn page")),
     ),
     panel(
         "ConfigHWRangeFinder",
@@ -639,10 +651,10 @@ pub const PANELS: &[Panel] = &[
         // C#: GCSViews/ConfigurationView/ConfigHWRangeFinder.cs:8-59
         Partial(
             at("crates/mp-gui/src/config/rangefinder.rs", "fn page"),
-            "RNGFND_TYPE's combo (disabled on firmware that numbers its rangefinders, as in the \
-             C#), the TeraRanger limits its handler sets, the 200 ms distance and voltage \
-             readout; the sonar picture is a named box, and an unhandled timeout's error report \
-             is shown without its Send",
+            "RNGFND_TYPE's combo (disabled on firmware that numbers its rangefinders, as in the
+        //     C#), the TeraRanger limits its handler sets, the 200 ms distance and voltage
+        //     readout; the sonar picture is a named box, and an unhandled timeout's error report
+        //     is shown without its Send",
         ),
     ),
     panel(
@@ -653,9 +665,9 @@ pub const PANELS: &[Panel] = &[
         // C#: GCSViews/ConfigurationView/ConfigHWAirspeed.cs:9-85
         Partial(
             at("crates/mp-gui/src/config/airspeed.rs", "fn page"),
-            "Enable and Use Airspeed, each shown only for its parameter, Enable's handler \
-             writing before the control, the pin list and ARSPD_TYPE; the sensor picture is a \
-             named box",
+            "Enable and Use Airspeed, each shown only for its parameter, Enable's handler
+        //     writing before the control, the pin list and ARSPD_TYPE; the sensor picture is a
+        //     named box",
         ),
     ),
     panel(
@@ -674,10 +686,10 @@ pub const PANELS: &[Panel] = &[
         // C#: GCSViews/ConfigurationView/ConfigHWOptFlow.cs:8-114
         Partial(
             at("crates/mp-gui/src/config/optical_flow.rs", "fn page"),
-            "the legacy FLOW_ENABLE page or the new-style one: FLOW_TYPE, the yaw in degrees, \
-             the scalers and positions writing 300 ms after a change, the rover's height \
-             override shown by the type's handler; the sensor picture is a named box, and a yaw \
-             below -179 degrees is kept rather than written back as the C#'s Minimum does",
+            "the legacy FLOW_ENABLE page or the new-style one: FLOW_TYPE, the yaw in degrees,
+        //     the scalers and positions writing 300 ms after a change, the rover's height
+        //     override shown by the type's handler; the sensor picture is a named box, and a yaw
+        //     below -179 degrees is kept rather than written back as the C#'s Minimum does",
         ),
     ),
     panel(
@@ -685,7 +697,9 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigHWOSD"),
         Some(1),
         &[setup(305, "OSD", OPTIONAL, ANY)],
-        Missing,
+        // the heading, the MinimOSD's box, Enable Telemetry setting the 24 SR0/SR1/SR3 rates to 2 in one
+        // try; its failure on the status line, not in a box (the owner's ruling)
+        Ours::Done(at("crates/mp-gui/src/config/osd.rs", "fn page")),
     ),
     panel(
         "ConfigMount",
@@ -695,11 +709,11 @@ pub const PANELS: &[Panel] = &[
         // C#: GCSViews/ConfigurationView/ConfigMount.cs:14-480
         Partial(
             at("crates/mp-gui/src/config/mount.rs", "fn page"),
-            "the mount type, the tilt, roll, pan and shutter outputs assigned through \
-             ensureDisabled, MNT_MODE and CAM_TRIGG_TYPE, each axis's servo and angle limits, \
-             reverse and input channel, stabilise, neutral and retract angles, the shutter's \
-             pulses; the page disabled without CAM_TRIGG_TYPE, as on firmware from 4.3; the four \
-             gimbal pictures are named boxes",
+            "the mount type, the tilt, roll, pan and shutter outputs assigned through
+        //     ensureDisabled, MNT_MODE and CAM_TRIGG_TYPE, each axis's servo and angle limits,
+        //     reverse and input channel, stabilise, neutral and retract angles, the shutter's
+        //     pulses; the page disabled without CAM_TRIGG_TYPE, as on firmware from 4.3; the four
+        //     gimbal pictures are named boxes",
         ),
     ),
     panel(
@@ -737,7 +751,10 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigHWParachute"),
         Some(1),
         &[setup(325, "Parachute", OPTIONAL, ANY)],
-        Missing,
+        // Enable (CHUTE_ENABLED), the release type combo, the page's own Servo Num combo running
+        // ensureDisabled then setting _FUNCTION 27, and the resting, deploy and minimum-altitude numbers
+        // each writing its parameter 300 ms after a change
+        Ours::Done(at("crates/mp-gui/src/config/parachute.rs", "fn page")),
     ),
     panel(
         "ConfigHWESP8266",
@@ -764,10 +781,10 @@ pub const PANELS: &[Panel] = &[
         // window it would open as the reason.
         Partial(
             at("crates/mp-gui/src/config/advanced.rs", "fn page"),
-            "the text and the thirteen buttons with their labels at the table's places; every \
-             button dimmed - the Warnings Manager, MAVLink Inspector, proximity, signing keys, \
-             MAVLink mirror, NMEA output, Follow Me, parameter regeneration, moving base, log \
-             anonymiser, FFT, spectrogram and support proxy windows they open are not ported",
+            "the text and the thirteen buttons with their labels at the table's places; every
+        //     button dimmed - the Warnings Manager, MAVLink Inspector, proximity, signing keys,
+        //     MAVLink mirror, NMEA output, Follow Me, parameter regeneration, moving base, log
+        //     anonymiser, FFT, spectrogram and support proxy windows they open are not ported",
         ),
     ),
     panel(
@@ -910,11 +927,11 @@ pub const PANELS: &[Panel] = &[
         // C#: GCSViews/ConfigurationView/ConfigUserDefined.cs:11-96
         Partial(
             at("crates/mp-gui/src/config/user_params.rs", "fn page"),
-            "the UserParams list (or the C#'s 22 RC option names), a row for each name the \
-             vehicle has with a combo of its documented values writing it, Modify's multiline \
-             InputBox saving the list and building the page again - Cancel included, as the \
-             C#'s handler ignores the answer; a name without values is its label alone, as the \
-             C# never adds its number; missing the InputBox's remembered answers",
+            "the UserParams list (or the C#'s 22 RC option names), a row for each name the
+        //     vehicle has with a combo of its documented values writing it, Modify's multiline
+        //     InputBox saving the list and building the page again - Cancel included, as the
+        //     C#'s handler ignores the answer; a name without values is its label alone, as the
+        //     C# never adds its number; missing the InputBox's remembered answers",
         ),
         // ---- end GeoFence / rover Basic Tuning / User Params ----
     ),
@@ -925,10 +942,10 @@ pub const PANELS: &[Panel] = &[
         &[config(229, "Full Parameter List", "any, or disconnected")],
         Partial(
             at(PARAMS_RS, "fn list_panel"),
-            "the parameter screen has Refresh Params, Search, the group tree, editing a value, \
-             Save to file, Compare Params, and Load from file as compare then apply; missing \
-             Reset to Default, Load Presaved and its file list, Commit Params, the Modified and \
-             None Default filters, Refresh Table and the tree's collapse",
+            "the parameter screen has Refresh Params, Search, the group tree, editing a value,
+        //     Save to file, Compare Params, and Load from file as compare then apply; missing
+        //     Reset to Default, Load Presaved and its file list, Commit Params, the Modified and
+        //     None Default filters, Refresh Table and the tree's collapse",
         ),
     ),
     panel(
@@ -963,14 +980,14 @@ pub const PANELS: &[Panel] = &[
         // place, bound to the Settings key its handler writes.
         Partial(
             at("crates/mp-gui/src/config/planner.rs", "fn planner_page"),
-            "every control at its place, each bound to the Settings key its handler writes; the \
-             units (ChangeUnits), the telemetry rates and their stream requests, the speech boxes \
-             and their InputBox templates, Load Waypoints on connect, the map access mode, \
-             Joystick Setup, Browse and Open Map Cache act at once; dimmed for want of what they \
-             drive: video, the HUD overlay, GDI+, language, theme, Layout, OSD colour, Vario, \
-             password, the ADSB server, analytics, beta updates, MAVLink debug and the testing \
-             screen; the flight screen does not yet read the units, the track length, the map's \
-             rotation or the icon settings, nor the link the GCS id or the rates on connecting",
+            "every control at its place, each bound to the Settings key its handler writes; the
+        //     units (ChangeUnits), the telemetry rates and their stream requests, the speech boxes
+        //     and their InputBox templates, Load Waypoints on connect, the map access mode,
+        //     Joystick Setup, Browse and Open Map Cache act at once; dimmed for want of what they
+        //     drive: video, the HUD overlay, GDI+, language, theme, Layout, OSD colour, Vario,
+        //     password, the ADSB server, analytics, beta updates, MAVLink debug and the testing
+        //     screen; the flight screen does not yet read the units, the track length, the map's
+        //     rotation or the icon settings, nor the link the GCS id or the rates on connecting",
         ),
     ),
     // ---- Neither list adds these ----
@@ -980,8 +997,8 @@ pub const PANELS: &[Panel] = &[
         Some(6),
         &[],
         Ours::Dropped(
-            "Mission Planner never shows it: its entry is commented out at InitialSetup.cs:275, \
-             beside ConfigDroneCAN's",
+            "Mission Planner never shows it: its entry is commented out at InitialSetup.cs:275,
+        //     beside ConfigDroneCAN's",
         ),
     ),
     panel(
@@ -997,8 +1014,8 @@ pub const PANELS: &[Panel] = &[
         Some(6),
         &[],
         Ours::Dropped(
-            "Mission Planner never shows it: nothing lists or opens it; the Secure page is \
-             ConfigSecureAP",
+            "Mission Planner never shows it: nothing lists or opens it; the Secure page is
+        //     ConfigSecureAP",
         ),
     ),
     panel(
@@ -1007,8 +1024,8 @@ pub const PANELS: &[Panel] = &[
         Some(22),
         &[],
         Ours::Dropped(
-            "Mission Planner never shows it: its entry is commented out at InitialSetup.cs:186; \
-             Heli Setup is ConfigTradHeli4",
+            "Mission Planner never shows it: its entry is commented out at InitialSetup.cs:186;
+        //     Heli Setup is ConfigTradHeli4",
         ),
     ),
 ];
@@ -1030,8 +1047,8 @@ pub const OTHER_PAGES: &[Panel] = &[
         &[setup(280, "Joystick", OPTIONAL, ALWAYS)],
         Partial(
             at(JOYSTICK_RS, "fn panel_for"),
-            "has the device list and Enable; missing the per-channel axis grid, the button \
-             functions, Elevons, Save, Manual Control, Import and Export",
+            "has the device list and Enable; missing the per-channel axis grid, the button
+        //     functions, Elevons, Save, Manual Control, Import and Export",
         ),
     ),
     panel(
@@ -1180,14 +1197,14 @@ pub fn report() -> String {
     let mut out = String::new();
     out.push_str("# Configuration panel coverage\n\n");
     out.push_str(
-        "Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui \
-         config_coverage::tests::update_report -- --ignored`; a test fails when this file is \
-         stale. One \
-         row per panel in `GCSViews/ConfigurationView/` - every `Config*.cs` - in the order \
-         `GCSViews/InitialSetup.cs` (the SETUP button) and then `GCSViews/SoftwareConfig.cs` (the \
-         CONFIG button) first add it to their left-hand lists; panels neither list adds come \
-         last. Wirings are the events the panel's Designer wires, a measure of its size that \
-         undercounts a panel which builds its controls in code.\n\n",
+        "Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui
+        // config_coverage::tests::update_report -- --ignored`; a test fails when this file is
+        // stale. One
+        // row per panel in `GCSViews/ConfigurationView/` - every `Config*.cs` - in the order
+        // `GCSViews/InitialSetup.cs` (the SETUP button) and then `GCSViews/SoftwareConfig.cs` (the
+        // CONFIG button) first add it to their left-hand lists; panels neither list adds come
+        // last. Wirings are the events the panel's Designer wires, a measure of its size that
+        // undercounts a panel which builds its controls in code.\n\n",
     );
     out.push_str(&format!(
         "| panels | done | partial | missing | plumbing | dropped | wirings |\n\
@@ -1198,8 +1215,8 @@ pub fn report() -> String {
     ));
 
     out.push_str(
-        "| group | panels | done | partial | missing | plumbing | dropped | wirings | wirings \
-         in missing panels |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|\n",
+        "| group | panels | done | partial | missing | plumbing | dropped | wirings | wirings
+        // in missing panels |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|\n",
     );
     let groups = [
         (
@@ -1225,8 +1242,8 @@ pub fn report() -> String {
             .filter_map(|panel| panel.wirings)
             .sum();
         out.push_str(&format!(
-            "| {name} | {} | {done} | {partial} | {missing} | {plumbing} | {dropped} | {} | \
-             {missing_wirings} |\n",
+            "| {name} | {} | {done} | {partial} | {missing} | {plumbing} | {dropped} | {} |
+        //     {missing_wirings} |\n",
             members.len(),
             wirings_of(&members)
         ));
@@ -1239,9 +1256,9 @@ pub fn report() -> String {
         .map(|page| format!("`{}`", page.class))
         .collect();
     out.push_str(&format!(
-        "The lists also add {} pages that are not in `ConfigurationView/` ({}): {done} done, \
-         {partial} partial, {missing} missing, {plumbing} plumbing, {dropped} dropped. They are \
-         in the lists below and not in the counts above.\n\n",
+        "The lists also add {} pages that are not in `ConfigurationView/` ({}): {done} done,
+        // {partial} partial, {missing} missing, {plumbing} plumbing, {dropped} dropped. They are
+        // in the lists below and not in the counts above.\n\n",
         OTHER_PAGES.len(),
         others.join(", ")
     ));
@@ -1269,13 +1286,13 @@ pub fn report() -> String {
     out.push('\n');
 
     out.push_str(
-        "Vehicles: **any** is a connected vehicle whose parameter list is whole \
-         (`isConnected && gotAllParams`); **always** is connected or not; **connected** and \
-         **disconnected** are the link alone; a named vehicle, parameter or view is what the \
-         call, or the `if` around it, checks. **Advanced view** is `DisplayView.isAdvancedMode`. \
-         A page with a `DisplayView` switch also needs it on, which it is by default unless the \
-         vehicles say otherwise. The list shows a heading as `>> title` and indents what is \
-         under it (`ExtLibs/Controls/BackstageView/BackstageView.cs:227`, `:232`).\n\n",
+        "Vehicles: **any** is a connected vehicle whose parameter list is whole
+        // (`isConnected && gotAllParams`); **always** is connected or not; **connected** and
+        // **disconnected** are the link alone; a named vehicle, parameter or view is what the
+        // call, or the `if` around it, checks. **Advanced view** is `DisplayView.isAdvancedMode`.
+        // A page with a `DisplayView` switch also needs it on, which it is by default unless the
+        // vehicles say otherwise. The list shows a heading as `>> title` and indents what is
+        // under it (`ExtLibs/Controls/BackstageView/BackstageView.cs:227`, `:232`).\n\n",
     );
 
     for screen in Screen::ALL {
@@ -1781,7 +1798,7 @@ mod tests {
             );
             checked += 1;
         }
-        assert_eq!(checked, 35);
+        assert_eq!(checked, 41);
     }
 
     /// The committed report matches the table.
@@ -1813,7 +1830,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (13, 21, 13, 2, 12)
+            (19, 21, 7, 2, 12)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

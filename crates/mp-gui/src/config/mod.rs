@@ -40,3 +40,13 @@ pub mod rover_tuning;
 pub mod software_pages;
 pub mod user_params;
 // ---- end GeoFence / rover Basic Tuning / User Params ----
+// ---- SETUP's small pages (PLAN §13.6 row 70) ----
+pub mod compass_mot;
+pub mod extra_setup;
+pub mod gps_order;
+pub mod hw_ids;
+pub mod initial_params;
+pub mod osd;
+pub mod parachute;
+pub mod param_compare;
+// ---- end SETUP's small pages ----

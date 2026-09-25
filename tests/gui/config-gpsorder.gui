@@ -1,0 +1,47 @@
+# Initial Setup's CAN GPS Order page, ported from GCSViews/ConfigurationView/ConfigGPSOrder.cs
+# (PLAN.md §13.6 row 70).
+#
+# The claim: Activate disables the page for good on a vehicle without GPS1_CAN_OVRIDE, else reads
+# the detected node ids (GPS_CAN_NODEID1, GPS_CAN_NODEID2) and the overrides (GPS1_CAN_OVRIDE,
+# GPS2_CAN_OVRIDE) and lists each override that is set and each detected node that is neither
+# (ConfigGPSOrder.cs:21-51) in the Designer's grid - Order, Name, NodeID, GPS1, GPS2 - whose two
+# button columns set an override to the row's node id and run Activate again (:62-86).
+#
+# SITL's copter is firmware 4.5+: it lists GPS1_CAN_OVRIDE, so the page is enabled, but names the
+# detected id GPS1_CAN_NODEID, so Activate's read of GPS_CAN_NODEID1 is the C#'s
+# NullReferenceException - logged by BackstageView.ActivatePage, the grid left empty, as it is in
+# Mission Planner on this firmware. Which read threw is a fact. Nothing is written.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run as
+#
+#   tools/gui-test.sh tests/gui/config-gpsorder.gui -- tcp:127.0.0.1:5760
+
+screen params
+window 1600x1200
+settle 6
+
+click param-download
+settle 15
+expect params.held > 1000
+expect params.value.GPS1_CAN_OVRIDE 0
+
+click tab-setup
+expect config.gpsorder.active false
+click setup-page-ConfigOptional
+click setup-page-ConfigGPSOrder
+settle 1
+expect setup.page ConfigGPSOrder
+expect config.gpsorder.active true
+expect config.gpsorder.enabled true
+expect config.gpsorder.heading UAVCAN GPS Order
+expect config.gpsorder.note Set the GPS order if required
+expect config.gpsorder.columns Order,Name,NodeID,GPS1,GPS2
+expect config.gpsorder.rows 0
+expect config.gpsorder.threw NullReferenceException at GPS_CAN_NODEID1
+expect config.gpsorder.write none
+expect config.gpsorder.message none
+
+# Choosing another page hides this one; it is IActivate only.
+click setup-page-ConfigOptional
+settle 1
+expect config.gpsorder.active false

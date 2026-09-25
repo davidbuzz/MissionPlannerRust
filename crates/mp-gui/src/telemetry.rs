@@ -1003,6 +1003,42 @@ impl Telemetry {
         }
     }
 
+    /// Every `COMPASSMOT_STATUS` heard since the last call, oldest first, with the vehicle that
+    /// sent it: what the Compass/Motor Calib page's subscription is handed. Nothing without a link.
+    /// `// C#: GCSViews/ConfigurationView/ConfigCompassMot.cs:29, 87-119`
+    #[must_use]
+    pub fn take_compassmot_status(
+        &self,
+    ) -> Vec<(VehicleId, mp_mavlink_dialects::all::CompassmotStatus)> {
+        self.link
+            .as_ref()
+            .map(Link::take_compassmot_status)
+            .unwrap_or_default()
+    }
+
+    /// `SendAck`: a `COMMAND_ACK` for `MAV_CMD_PREFLIGHT_CALIBRATION`, result 0, sent twice, which
+    /// ends a running `compassmot` - to nobody in particular, as the C#'s packet has its target
+    /// fields at their defaults. Whether both went; false without a vehicle.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2956-2966`
+    pub fn send_calibration_ack(&self) -> bool {
+        let Some((link, _)) = self.target() else {
+            return false;
+        };
+        let ack = MavMessage::CommandAck(mp_mavlink_dialects::all::CommandAck {
+            command: mp_calibration::CMD_PREFLIGHT_CALIBRATION,
+            result: 0,
+            progress: 0,
+            result_param2: 0,
+            target_system: 0,
+            target_component: 0,
+        });
+        // "send twice". The C# sleeps 20 ms between the two on its UI thread; here both are
+        // handed to the link's sender at once, which puts them on the wire back to back.
+        let first = link.send(&ack);
+        let second = link.send(&ack);
+        first && second
+    }
+
     /// One `testMotor` call: `MAV_CMD_DO_MOTOR_TEST` to the vehicle being flown, through the
     /// link's retrying `doCommand` - sent again two seconds apart up to three more times until the
     /// vehicle's `COMMAND_ACK` - with a refusal said as "Command was denied by the autopilot" and a

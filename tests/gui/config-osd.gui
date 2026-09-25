@@ -1,0 +1,53 @@
+# Initial Setup's OSD page, ported from GCSViews/ConfigurationView/ConfigHWOSD.cs (PLAN.md §13.6
+# row 70).
+#
+# The claim: the page shows the heading, the MinimOSD's box, "Enable Telemetry" and the note
+# beside it at the .resx's places, and is enabled whatever the link (ConfigHWOSD.cs:14-21);
+# Enable Telemetry sets the 24 stream rates a MinimOSD needs - SR0_, SR1_ and SR3_ each of
+# EXT_STAT, EXTRA1-3, POSITION, RAW_CTRL, RAW_SENS and RC_CHAN - to 2 in one try (:23-68), each
+# write proved by the vehicle's echo. A failure is a status line, not the C#'s box (the owner's
+# ruling of 2026-09-25).
+#
+# The page has no way back: this run leaves SITL's SR0, SR1 and SR3 rates at 2, as Mission
+# Planner's would; a fresh SITL puts them back.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run as
+#
+#   tools/gui-test.sh tests/gui/config-osd.gui -- tcp:127.0.0.1:5760
+
+screen params
+window 1600x1200
+settle 6
+
+click param-download
+settle 15
+expect params.held > 1000
+
+click tab-setup
+expect config.osd.active false
+click setup-page-ConfigOptional
+click setup-page-ConfigHWOSD
+settle 1
+expect setup.page ConfigHWOSD
+expect config.osd.active true
+expect config.osd.enabled true
+expect config.osd.heading OSD
+expect config.osd.button Enable Telemetry
+expect config.osd.note You only need to use this if you are having issue with your OSD not updating
+expect config.osd.write none
+expect config.osd.presses 0
+
+click osd-enable-telemetry
+settle 12
+expect config.osd.presses 1
+expect config.osd.writes.pending 0
+expect config.osd.write SR3_RC_CHAN 2 accepted
+expect config.osd.message none
+expect params.value.SR0_EXT_STAT 2
+expect params.value.SR1_EXTRA1 2
+expect params.value.SR3_RC_CHAN 2
+
+# Choosing another page hides this one; it is IActivate only.
+click setup-page-ConfigOptional
+settle 1
+expect config.osd.active false

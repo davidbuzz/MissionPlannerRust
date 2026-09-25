@@ -87,7 +87,9 @@ use std::time::{Duration, Instant};
 
 use mission_transfer::{Action, MissionTransfer};
 use mp_mavlink::{DecodeStats, FrameDecoder, Message as _, encode_v2};
-use mp_mavlink_dialects::all::{DIALECT, Heartbeat, MavCmd, MavMessage, MissionWritePartialList};
+use mp_mavlink_dialects::all::{
+    CompassmotStatus, DIALECT, Heartbeat, MavCmd, MavMessage, MissionWritePartialList,
+};
 use mp_mission::{MISSION_TYPE_MISSION, MissionItem, WireItem};
 use mp_params::{ParamTable, ParamType, ParamValue, decode_param_id};
 use mp_transport::{OpenError, ReadTime, Transport};
@@ -124,6 +126,11 @@ const MAV_AUTOPILOT_ARDUPILOTMEGA: u8 = 3;
 /// later on a slow screen - so a finished request cannot be dropped at once. Nor can every one be
 /// kept, or a script setting parameters in a loop grows the link without bound.
 const FINISHED_REQUESTS_KEPT: usize = 256;
+
+/// How many `COMPASSMOT_STATUS` messages the link holds for the page that reads them: ArduPilot
+/// sends one per loop of `compassmot`, 50 a second, so this is some seconds' worth - more than
+/// a frame of the screen that takes them ever leaves.
+const COMPASSMOT_HELD: usize = 512;
 
 /// Minimum time the I/O loop spends per iteration when there is nothing to read.
 const IDLE_POLL: Duration = Duration::from_millis(1);
@@ -255,6 +262,12 @@ struct Shared {
     accel_calibration: Mutex<mp_calibration::AccelCalibration>,
     /// Every compass calibration message since the last clear, as the Compass page reads them.
     compass_calibration: Mutex<mp_calibration::MagCalLog>,
+    /// Every `COMPASSMOT_STATUS` since the last take, oldest first, with who sent it: what the
+    /// C#'s `SubscribeToPacketType(COMPASSMOT_STATUS, ...)` hands the Compass/Motor Calib page
+    /// (C#: GCSViews/ConfigurationView/ConfigCompassMot.cs:29, 87-119). Bounded at
+    /// [`COMPASSMOT_HELD`], the oldest dropped, so a vehicle calibrating while no page reads them
+    /// cannot grow it without end.
+    compassmot: Mutex<std::collections::VecDeque<(VehicleId, CompassmotStatus)>>,
     /// Other aircraft, from ADS-B.
     traffic: Mutex<traffic::TrafficReport>,
     /// Dataflash logs the vehicle has listed.
@@ -816,6 +829,20 @@ impl Link {
         }
     }
 
+    /// Every `COMPASSMOT_STATUS` heard since the last call, oldest first, with the vehicle that
+    /// sent it; taking them empties the list.
+    /// `// C#: GCSViews/ConfigurationView/ConfigCompassMot.cs:29, 87-119`
+    #[must_use]
+    pub fn take_compassmot_status(
+        &self,
+    ) -> Vec<(VehicleId, CompassmotStatus)> {
+        self.shared
+            .compassmot
+            .lock()
+            .map(|mut held| held.drain(..).collect())
+            .unwrap_or_default()
+    }
+
     /// Asks the vehicle to list its dataflash logs.
     ///
     /// Clears what was listed before, so a second listing does not leave logs that have since
@@ -1295,6 +1322,16 @@ fn run_link(
                                 MavMessage::MagCalReport(report) => {
                                     if let Ok(mut held) = shared.compass_calibration.lock() {
                                         held.observe_report(report);
+                                    }
+                                }
+                                // Compass/motor interference while `compassmot` runs, one
+                                // message per throttle step.
+                                MavMessage::CompassmotStatus(status) => {
+                                    if let Ok(mut held) = shared.compassmot.lock() {
+                                        if held.len() >= COMPASSMOT_HELD {
+                                            held.pop_front();
+                                        }
+                                        held.push_back((id, *status));
                                     }
                                 }
                                 // The vehicle listing what it holds. One message per log.

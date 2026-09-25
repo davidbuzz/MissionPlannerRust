@@ -1,0 +1,75 @@
+# Initial Setup's Initial Tune Parameter page, ported from GCSViews/ConfigurationView/
+# ConfigInitialParams.cs (PLAN.md §13.6 row 70).
+#
+# The claim: Activate puts 9 and 4 in the airscrew and cell-count boxes, clears both check boxes
+# and selects LiPo (ConfigInitialParams.cs:54-69); choosing a chemistry writes its cell voltages
+# into the other two boxes (:245-273); Calculate Initial Parameters reads the boxes, works out the
+# parameters as calc_values does and names them for the firmware, then opens ParamCompare over the
+# vehicle's table with its button renamed "Write to FC" (:124-241, Controls/paramcompare.cs); when
+# that closes with OK it reports "Initial Parameters succesfully updated." and what to do after the
+# test flight.
+#
+# Nothing is written to SITL: Check/Uncheck All clears every Use box before Write to FC, so the
+# form closes with OK having set nothing, and the report shows all the same, as the C#'s does.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run as
+#
+#   tools/gui-test.sh tests/gui/config-initialparams.gui -- tcp:127.0.0.1:5760
+
+screen params
+window 1600x1200
+settle 6
+
+click param-download
+settle 15
+expect params.held > 1000
+
+click tab-setup
+expect config.initialparams.active false
+click setup-page-ConfigInitialParams
+settle 1
+expect setup.page ConfigInitialParams
+expect config.initialparams.active true
+
+# Activate's values.
+expect config.initialparams.prop 9
+expect config.initialparams.cellcount 4
+expect config.initialparams.chemistry LiPo
+expect config.initialparams.cellmax 4.2
+expect config.initialparams.cellmin 3.3
+expect config.initialparams.tmotor false
+expect config.initialparams.suggested false
+expect config.initialparams.compare.open false
+
+# LiPoHV: a cell's charged voltage becomes 4.35.
+click initialparams-chemistry
+settle 1
+click initialparams-chemistry-1
+settle 1
+expect config.initialparams.chemistry LiPoHV
+expect config.initialparams.cellmax 4.35
+expect config.initialparams.cellmin 3.3
+
+click initialparams-tmotor
+settle 1
+expect config.initialparams.tmotor true
+
+# Calculate: ParamCompare over the vehicle's table.
+click initialparams-calculate
+settle 2
+expect config.initialparams.compare.open true
+
+# Nothing ticked, Write to FC: the form closes with OK, the report shows.
+click paramcompare-toggleall
+settle 1
+click paramcompare-save
+settle 3
+expect config.initialparams.compare.open false
+expect config.initialparams.writes.pending 0
+click initialparams-message-ok
+settle 1
+
+# Choosing another page hides this one; it is IActivate only.
+click setup-page-ConfigOptional
+settle 1
+expect config.initialparams.active false

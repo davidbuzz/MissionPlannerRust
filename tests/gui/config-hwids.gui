@@ -1,0 +1,44 @@
+# Initial Setup's HW ID page, ported from GCSViews/ConfigurationView/ConfigHWIDs.cs (PLAN.md §13.6
+# row 70).
+#
+# The claim: Activate lists every parameter whose name has _ID or _DEVID but neither _IDX nor
+# FRSKY, ordered by name, each device id taken apart as DeviceInfo takes it - ParamName, DevID,
+# BusType, Bus, Address, DevType (ConfigHWIDs.cs:16-31, DeviceInfo.cs, ExtLibs/Utilities/
+# Device.cs) - in a read-only grid of the Designer's six columns (ConfigHWIDs.Designer.cs:66-114).
+# The page is listed under Mandatory Hardware once every parameter is in (InitialSetup.cs:241).
+#
+# SITL's copter lists thirty such names, MOT_IDLE_SEC and SIM_MAG_SAVE_IDS among them (the test is
+# on the name alone, as in Mission Planner); its INS_ACC_ID is the SITL IMU on bus 0 at address 2,
+# its COMPASS_DEV_ID a DroneCAN node. Nothing is written.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run as
+#
+#   tools/gui-test.sh tests/gui/config-hwids.gui -- tcp:127.0.0.1:5760
+
+screen params
+window 1600x1200
+settle 6
+
+click param-download
+settle 15
+expect params.held > 1000
+
+click tab-setup
+expect config.hwids.active false
+click setup-page-ConfigHWIDs
+settle 1
+expect setup.page ConfigHWIDs
+expect config.hwids.active true
+expect config.hwids.columns ParamName,DevID,BusType,Bus,Address,DevType
+expect config.hwids.rows 30
+expect config.hwids.order ~ BARO1_DEVID,BARO2_DEVID,BARO3_DEVID
+expect config.hwids.order ~ INS_ACC_ID,INS_ACC2_ID
+expect config.hwids.row.INS_ACC_ID 2753028,SITL,0,2,SITL
+expect config.hwids.row.BARO1_DEVID 65540,SITL,0,0,BARO_SITL
+expect config.hwids.row.COMPASS_DEV_ID 97539,UAVCAN,0,125,SENSOR_ID#1
+expect config.hwids.row.MOT_IDLE_SEC 0,UNKNOWN,0,0,0
+
+# Choosing another page hides this one; it is IActivate only.
+click setup-page-ConfigOptional
+settle 1
+expect config.hwids.active false
