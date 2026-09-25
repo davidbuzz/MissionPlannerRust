@@ -4,7 +4,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 
 | total | done | elsewhere | missing | plumbing | dropped |
 |---:|---:|---:|---:|---:|---:|
-| 136 | 104 | 1 | 11 | 18 | 2 |
+| 136 | 105 | 1 | 10 | 18 | 2 |
 
 | control | event | handler | text | ours |
 |---|---|---|---|---|
@@ -113,7 +113,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `setGStreamerSourceToolStripMenuItem` | Click | `setGStreamerSourceToolStripMenuItem_Click` | Set GStreamer Source | done: `fly-hud-gstreamer` |
 | `setHomeHereToolStripMenuItem1` | Click | `setHomeHereToolStripMenuItem_Click` | Set Home Here | done: `fly-sethome` |
 | `setMJPEGSourceToolStripMenuItem` | Click | `setMJPEGSourceToolStripMenuItem_Click` | Set MJPEG source | done: `fly-hud-mjpeg` |
-| `setViewCountToolStripMenuItem` | Click | `setViewCountToolStripMenuItem_Click` | Set View Count | **missing** - the quick views' menu and both questions are there (`fly-quick-setviewcount`) and the answer is kept; the grid is `quick.rs`'s six views, which have no resize yet |
+| `setViewCountToolStripMenuItem` | Click | `setViewCountToolStripMenuItem_Click` | Set View Count | done: `fly-quick-setviewcount` |
 | `showIconsToolStripMenuItem` | Click | `showIconsToolStripMenuItem_Click` | Show icons | done: `fly-hud-showicons` |
 | `Squawk_nud` | MouseWheel | `Squawk_nud_MouseWheel` | Squawk (transponder) | done: `fly-xpdr-squawk-box` |
 | `Squawk_nud` | ValueChanged | `Squawk_nud_ValueChanged` | Squawk (transponder) | done: `fly-xpdr-squawk` |

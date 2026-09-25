@@ -4227,7 +4227,8 @@ impl MissionPlanner {
                 if accepted {
                     let rows = self
                         .fly_data
-                        .quick_grid
+                        .quick
+                        .saved_grid()
                         .map_or_else(|| "3".to_owned(), |(_, rows)| rows.to_string());
                     self.fly_data.quick_cols = Some(text);
                     self.fly_actions.ask(Prompt::ViewRows, &rows);
@@ -4593,9 +4594,6 @@ pub struct FlightData {
     pub menu: Option<(MenuKind, (f32, f32))>,
     /// Customize's list while its form is open: each page, and whether it is checked.
     pub customizing: Option<Vec<(Page, bool)>>,
-    /// `Settings.Instance["quickViewCols"]` and `["quickViewRows"]`, once Set View Count has
-    /// set them. For the session, as the quick views' own choices are.
-    pub quick_grid: Option<(i32, i32)>,
     /// Set View Count's columns, between its two questions.
     pub quick_cols: Option<String>,
     /// Set Home Here's point and terrain height, while its question is asked.
@@ -4894,7 +4892,6 @@ impl FlightData {
             swapped: false,
             menu: None,
             customizing: None,
-            quick_grid: None,
             quick_cols: None,
             pending_home: None,
             transponder: crate::transponder::Transponder::default(),
@@ -5109,13 +5106,6 @@ impl FlightData {
                         .collect::<Vec<_>>()
                         .join(",")
                 },
-            ),
-        );
-        crate::facts::record(
-            "fly.quick.grid",
-            self.quick_grid.map_or_else(
-                || "none".to_owned(),
-                |(cols, rows)| format!("{cols}x{rows}"),
             ),
         );
         // What the last Clear Track took off the map: the route starts again from the vehicle's
@@ -8152,7 +8142,8 @@ impl MissionPlanner {
             MenuEntry::SetViewCount => {
                 let cols = self
                     .fly_data
-                    .quick_grid
+                    .quick
+                    .saved_grid()
                     .map_or_else(|| "2".to_owned(), |(cols, _)| cols.to_string());
                 self.fly_actions.ask(Prompt::ViewColumns, &cols);
                 self.fly_focus.prompt.focus(window, cx);
@@ -8170,24 +8161,17 @@ impl MissionPlanner {
         }
     }
 
-    /// Set View Count, once both are given: `IsNumber` on both, then `setQuickViewRowsCols` -
-    /// the numbers kept as the settings it writes. The quick views here are the six `quick.rs`
-    /// draws in two columns of three, and it has nothing to resize them with yet, so the page
-    /// stays as it is and the status line says so.
-    /// `// C#: GCSViews/FlightData.cs:5092-5096, 4920-4935`
+    /// Set View Count, once both are given: `IsNumber` on both, then `setQuickViewRowsCols`,
+    /// which resizes the quick views' grid and keeps the numbers as the settings it writes
+    /// (`crate::quick::QuickViews::set_rows_cols`). A number `IsNumber` allows that `int.Parse`
+    /// refuses throws in the C#; here it is the error box.
+    /// `// C#: GCSViews/FlightData.cs:5092-5096, 4914-5060`
     fn fly_view_count(&mut self, cols: &str, rows: &str) {
         if !(is_number(rows) && is_number(cols)) {
             return;
         }
-        match view_count(cols, rows) {
-            Ok((cols, rows)) => {
-                self.fly_data.quick_grid = Some((cols, rows));
-                self.file_status = Some(format!(
-                    "Set View Count: {cols} x {rows} kept; the Quick page's six views are not \
-                     resized here"
-                ));
-            }
-            Err(why) => self.file_status = Some(error_box(why)),
+        if let Err(why) = self.fly_data.quick.set_rows_cols(cols, rows) {
+            self.file_status = Some(error_box(why));
         }
     }
 

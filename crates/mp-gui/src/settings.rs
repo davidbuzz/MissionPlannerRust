@@ -234,7 +234,7 @@ impl SaveEvent {
 /// write, and the display units, which that page writes too - as does the speech alert that
 /// Initial Setup's Battery Monitor writes (`config/battery_monitor.rs`). The Planner page publishes
 /// each of its own keys as `config.planner.<key>` (`config/planner.rs`), from this same dictionary.
-pub const PUBLISHED: [&str; 57] = [
+pub const PUBLISHED: [&str; 59] = [
     "TXT_homelat",
     "TXT_homelng",
     "TXT_homealt",
@@ -249,6 +249,9 @@ pub const PUBLISHED: [&str; 57] = [
     "quickView4",
     "quickView5",
     "quickView6",
+    // Set View Count's grid. C#: GCSViews/FlightData.cs:4921-4922
+    "quickViewRows",
+    "quickViewCols",
     "MapType",
     "comport",
     "TCP_host",
@@ -322,11 +325,17 @@ pub const PUBLISHED: [&str; 57] = [
 /// `// C#: MainV2.cs:771-775; Controls/ConnectionControl.resx (cmb_Baud.Items8)`
 const DEFAULT_BAUD: &str = "115200";
 
-/// The key a quick view's choice is saved under: its `Name`, `quickView1` to `quickView6`.
-/// `// C#: GCSViews/FlightData.cs:465, 2482`
-fn quick_view_key(index: usize) -> String {
-    format!("quickView{}", index + 1)
+/// The key a quick view's choice is saved under: its `Name`, `quickView<n>` - `quickView1` to
+/// `quickView6` from the Designer, and on from 7 for the views Set View Count adds.
+/// `// C#: GCSViews/FlightData.cs:465, 2482, 4964`
+fn quick_view_key(name: usize) -> String {
+    format!("quickView{name}")
 }
+
+/// `FlightData.Activate` restores the views named `quickView1` to `quickView29`: its loop runs
+/// `f` from 1 while `f < 30`, so a thirtieth view's choice is saved and never read back.
+/// `// C#: GCSViews/FlightData.cs:462`
+const QUICK_VIEWS_RESTORED: std::ops::Range<usize> = 1..30;
 
 /// Mission Planner's `config.xml`, as `Settings.Instance` holds it.
 ///
@@ -347,8 +356,11 @@ pub struct Persisted {
     comport: String,
     /// `CMB_baudrate.Text`, which every save writes as `<comport>_BAUD`.
     baud: String,
-    /// The quick views' fields as last seen, so a choice is written when it is made.
-    quick_seen: [String; 6],
+    /// How many of the quick views' choices ([`QuickViews::chosen`]) are written, so a choice is
+    /// written when it is made.
+    quick_written: usize,
+    /// The quick views' grid setting as last written.
+    quick_grid_seen: Option<(i32, i32)>,
     /// Saves made this session, the last one's event, and its error if it failed.
     saves: usize,
     last_save: Option<SaveEvent>,
@@ -391,7 +403,8 @@ impl Persisted {
             unreadable,
             comport,
             baud,
-            quick_seen: crate::quick::DEFAULTS.map(|(name, _)| name.to_owned()),
+            quick_written: 0,
+            quick_grid_seen: None,
             saves: 0,
             last_save: None,
             save_error: None,
@@ -476,32 +489,59 @@ impl Persisted {
             .find(|frame| frame.combo_text() == text)
     }
 
-    /// `FlightData.Activate`'s loop over the quick views: one whose key is saved shows that
-    /// property. Put in the view through the chooser's own calls, as a check box checked would -
-    /// the quick page has no other way in.
-    /// `// C#: GCSViews/FlightData.cs:462-494`
+    /// `FlightData.Activate`'s quick views: with `quickViewRows` saved, `setQuickViewRowsCols`
+    /// with the saved columns and rows first - which writes both back, each at least one - and
+    /// then its loop over `quickView1` to `quickView29`: the first view of a name whose key is
+    /// saved shows that property (`Controls.Find`). Put in the view through the chooser's own
+    /// calls, as a check box checked would - the quick page has no other way in.
+    ///
+    /// `int.Parse` throws in the C# on a saved count that is not a whole number, or on
+    /// `quickViewCols` missing beside `quickViewRows`; here the grid is left as the Designer
+    /// makes it and the views are restored into that.
+    /// `// C#: GCSViews/FlightData.cs:457-494, 4914-4923`
     pub fn restore_quick_views(&mut self, views: &mut QuickViews) {
-        for (index, seen) in self.quick_seen.iter_mut().enumerate() {
-            if let Some(name) = self.config.get(&quick_view_key(index)) {
+        if let Some(rows) = self.config.get("quickViewRows") {
+            let rows = rows.to_owned();
+            let cols = self.config.get("quickViewCols").map(str::to_owned);
+            if let Some(cols) = cols
+                && views.set_rows_cols(&cols, &rows).is_ok()
+                && let Some((cols, rows)) = views.saved_grid()
+            {
+                self.config.set("quickViewRows", rows.to_string());
+                self.config.set("quickViewCols", cols.to_string());
+            }
+        }
+        for name in QUICK_VIEWS_RESTORED {
+            let Some(field) = self.config.get(&quick_view_key(name)) else {
+                continue;
+            };
+            if let Some(index) = views.find(name) {
                 views.open(index);
-                views.choose(name);
+                views.choose(field);
                 views.close();
             }
-            views.field(index).clone_into(seen);
         }
+        self.quick_written = views.chosen().len();
+        self.quick_grid_seen = views.saved_grid();
     }
 
     /// `chk_box_quickview_CheckedChanged`: a view bound to another property has it saved under
-    /// the view's name. Called every frame; a field that differs from the one last seen is a
-    /// choice made since.
-    /// `// C#: GCSViews/FlightData.cs:2475-2482`
+    /// the view's name; and `setQuickViewRowsCols`'s `quickViewRows` and `quickViewCols`. Called
+    /// every frame; a choice not yet written, or a grid that differs from the one last seen, was
+    /// made since.
+    /// `// C#: GCSViews/FlightData.cs:2475-2482, 4921-4922`
     pub fn observe_quick_views(&mut self, views: &QuickViews) {
-        for (index, seen) in self.quick_seen.iter_mut().enumerate() {
-            let field = views.field(index);
-            if seen != field {
-                self.config.set(quick_view_key(index), field);
-                field.clone_into(seen);
+        let chosen = views.chosen();
+        for (name, field) in chosen.iter().skip(self.quick_written.min(chosen.len())) {
+            self.config.set(quick_view_key(*name), field.as_str());
+        }
+        self.quick_written = chosen.len();
+        if views.saved_grid() != self.quick_grid_seen {
+            if let Some((cols, rows)) = views.saved_grid() {
+                self.config.set("quickViewRows", rows.to_string());
+                self.config.set("quickViewCols", cols.to_string());
             }
+            self.quick_grid_seen = views.saved_grid();
         }
     }
 
@@ -671,6 +711,12 @@ impl Persisted {
                 format!("config.{key}"),
                 self.config.get(key).unwrap_or("none"),
             );
+        }
+        // The keys of the quick views Set View Count adds, as far as `Activate` reads them back.
+        for name in QUICK_VIEWS_RESTORED.skip(6) {
+            let key = quick_view_key(name);
+            let value = self.config.get(&key).unwrap_or("none").to_owned();
+            crate::facts::record(format!("config.{key}"), value);
         }
         crate::facts::record(
             "config.link",
@@ -1033,6 +1079,94 @@ mod tests {
         let before = restarted.config().clone();
         restarted.observe_quick_views(&views);
         assert_eq!(restarted.config(), &before);
+    }
+
+    /// Set View Count's grid is saved as `quickViewRows` and `quickViewCols`, and an added view's
+    /// choice under its own name; after a restart `setQuickViewRowsCols` runs first and the
+    /// choices go back into the views of those names.
+    #[test]
+    fn the_quick_grid_is_saved_and_comes_back_before_the_views() {
+        let scratch = Scratch::new("quickgrid");
+        let path = scratch.config();
+        let mut persisted = Persisted::at(Some(path.clone()));
+        let mut views = QuickViews::default();
+        persisted.restore_quick_views(&mut views);
+        persisted.observe_quick_views(&views);
+        assert_eq!(persisted.config().get("quickViewRows"), None);
+        assert_eq!(persisted.config().get("quickViewCols"), None);
+
+        views.set_rows_cols("3", "4").expect("whole numbers");
+        persisted.observe_quick_views(&views);
+        assert_eq!(persisted.config().get("quickViewRows"), Some("4"));
+        assert_eq!(persisted.config().get("quickViewCols"), Some("3"));
+        views.open(11);
+        views.choose("satcount");
+        views.open(1);
+        views.choose("battery_voltage");
+        persisted.observe_quick_views(&views);
+        assert_eq!(persisted.config().get("quickView12"), Some("satcount"));
+        assert_eq!(
+            persisted.config().get("quickView2"),
+            Some("battery_voltage")
+        );
+        persisted
+            .save_config(SaveEvent::FlightPlanner)
+            .expect("saved");
+
+        let mut restarted = Persisted::at(Some(path));
+        let mut views = QuickViews::default();
+        restarted.restore_quick_views(&mut views);
+        assert_eq!(views.grid(), (3, 4));
+        assert_eq!(views.count(), 12);
+        assert_eq!(views.field(11), "satcount");
+        assert_eq!(views.field(1), "battery_voltage");
+        assert_eq!(views.field(10), "");
+        let before = restarted.config().clone();
+        restarted.observe_quick_views(&views);
+        assert_eq!(restarted.config(), &before);
+    }
+
+    /// `setQuickViewRowsCols` at load writes what it made of the saved numbers back - at least
+    /// one each; `quickViewRows` alone, or a count `int.Parse` refuses, leaves the Designer's six;
+    /// a `quickView30` is never read back.
+    #[test]
+    fn the_quick_grid_restored_is_at_least_one_by_one() {
+        let mut persisted = Persisted::at(None);
+        persisted.set("quickViewRows", "0");
+        persisted.set("quickViewCols", "-2");
+        persisted.set("quickView1", "satcount");
+        let mut views = QuickViews::default();
+        persisted.restore_quick_views(&mut views);
+        assert_eq!(views.grid(), (1, 1));
+        assert_eq!(views.field(0), "satcount");
+        assert_eq!(persisted.get("quickViewRows"), Some("1"));
+        assert_eq!(persisted.get("quickViewCols"), Some("1"));
+
+        let mut persisted = Persisted::at(None);
+        persisted.set("quickViewRows", "4");
+        let mut views = QuickViews::default();
+        persisted.restore_quick_views(&mut views);
+        assert_eq!(views.grid(), (2, 3));
+        assert_eq!(views.count(), 6);
+
+        let mut persisted = Persisted::at(None);
+        persisted.set("quickViewRows", "2.5");
+        persisted.set("quickViewCols", "2");
+        let mut views = QuickViews::default();
+        persisted.restore_quick_views(&mut views);
+        assert_eq!(views.count(), 6);
+        assert_eq!(views.saved_grid(), None);
+
+        let mut persisted = Persisted::at(None);
+        persisted.set("quickViewRows", "6");
+        persisted.set("quickViewCols", "5");
+        persisted.set("quickView29", "satcount");
+        persisted.set("quickView30", "satcount");
+        let mut views = QuickViews::default();
+        persisted.restore_quick_views(&mut views);
+        assert_eq!(views.count(), 30);
+        assert_eq!(views.field(28), "satcount");
+        assert_eq!(views.field(29), "");
     }
 
     #[test]

@@ -1,0 +1,86 @@
+# Set View Count resizes the Quick grid: setQuickViewRowsCols. The columns and rows, each at least
+# one, are saved as quickViewCols and quickViewRows; views whose cell falls outside the new grid
+# go, and new ones - quickView7 on, bound to nothing and showing 0, each with a number colour of
+# the sixteen in colorsForDefaultQuickView - fill the free cells a row at a time. A new view
+# double clicks to the chooser like the Designer's six. Back to two by three, the added ones go.
+# `GCSViews/FlightData.cs:4914-5060, 5078-5096, 457-494`
+#
+# Self-contained, no link: tools/gui-test.sh tests/gui/fly-quick-viewcount.gui
+
+# Its own config.xml, empty: FlightData.Activate resizes the grid first when quickViewRows is saved,
+# and this script starts from the Designer's two by three.
+env MP_CONFIG_XML $WORK/config.xml
+
+screen fly
+window 1600x1200
+budget 15
+
+expect fly.tab tabQuick
+expect fly.quick.layout 2x3
+expect fly.quick.count 6
+expect fly.quick.grid none
+expect config.quickViewRows none
+
+# Three columns, four rows.
+click fly-quick-3:right
+expect fly.menu quick
+click fly-quick-setviewcount
+expect fly.prompt Enter number of columns to have.
+expect fly.prompt.value 2
+key ctrl+u
+type 3
+click fly-prompt-ok
+expect fly.prompt Enter number of rows to have.
+expect fly.prompt.value 3
+key ctrl+u
+type 4
+click fly-prompt-ok
+expect fly.prompt none
+expect fly.quick.grid 3x4
+expect fly.quick.layout 3x4
+expect fly.quick.count 12
+expect config.quickViewRows 4
+expect config.quickViewCols 3
+expect fly.page.overflow 0
+# The Designer's six keep their cells and bindings.
+expect fly.quick.1 alt
+expect fly.quick.1.cell 0,0
+expect fly.quick.6 DistToHome
+expect fly.quick.6.cell 1,2
+# The added six fill the third column, then the fourth row.
+expect fly.quick.7.name quickView7
+expect fly.quick.7.cell 2,0
+expect fly.quick.10.cell 0,3
+expect fly.quick.12.name quickView12
+expect fly.quick.12.cell 2,3
+expect fly.quick.12 none
+expect fly.quick.12.value 0.00
+
+# The twelfth double clicks to the chooser, and binds.
+doubleclick fly-quick-12
+expect fly.quick.chooser 12
+click fly-quick-choice-satcount
+expect fly.quick.chooser none
+expect fly.quick.12 satcount
+expect config.quickView12 satcount
+
+# Its own context menu: asked again, the questions start from the saved numbers.
+click fly-quick-12:right
+expect fly.menu quick
+click fly-quick-setviewcount
+expect fly.prompt.value 3
+key ctrl+u
+type 2
+click fly-prompt-ok
+expect fly.prompt.value 4
+key ctrl+u
+type 3
+click fly-prompt-ok
+expect fly.prompt none
+expect fly.quick.grid 2x3
+expect fly.quick.layout 2x3
+expect fly.quick.count 6
+expect config.quickViewRows 3
+expect config.quickViewCols 2
+expect fly.quick.1 alt
+expect fly.quick.6 DistToHome

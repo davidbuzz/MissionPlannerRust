@@ -53,17 +53,22 @@ Linux only, so far: the repository has no remote, and the three-OS CI matrix has
 | Configuration coverage | every one of the 61 `Config*.cs` panels listed in Mission Planner's SETUP and CONFIG order with what stands in for it here — 31 done, 14 partial, 2 missing, 2 plumbing, 12 dropped at the owner's ruling — in `docs/coverage/configuration.md`, held to the C# by tests; Flight Modes and FailSafe are ported from their `Config*.cs` and proved against SITL; the pages of PLAN.md §13.6 rows 70 and 71 and FFT Setup have scripts not yet run |
 | Planner coverage and menu | every one of `FlightPlanner`'s 121 wired actions listed the same way — 103 done, 6 missing — in `docs/coverage/flightplanner.md`; the map's right-click menu is Mission Planner's, in its order, with 63 entries working and 8 more on the polygon icon's menu, each held to its ledger row by `planner_coverage.rs`'s tests; home is its Home Location boxes written first and drawn as its green pin, the panel's radius and altitude boxes set the C#'s parameters after Write; 55 `plan-*.gui` scripts drive them, row 69's five (Write Fast, MAVFTP, Grid and coordinates, docking, prefetch) not yet run |
 
-**GUI scripts run at the application's pace.** `tests/gui/` holds 166 scripts. The owner runs them
+**GUI scripts run at the application's pace.** `tests/gui/` holds 169 scripts. The owner runs them
 (`tools/gui-test.sh`, or `tools/gui-suite.sh` for several); they take the machine's pointer, so no
 agent does. No script waits a fixed time: `expect` polls its fact for up to ten seconds, a click
 waits for its control, and every script carries `budget N`, the run time it is expected to take
 (PLAN.md §13.6 row 97) - a run over it fails, and one three seconds past it is killed after a
 screenshot of the window. Results (2026-09-26, after a full pass and its re-runs): of the 169
-scripts, 164 pass at their latest run on this machine against SITL; `storm` is skipped by a
-debug-build suite (its number is the release build's) and `config-compass-livecal` without an
+scripts, 165 pass at their latest run on this machine against SITL; `storm` is skipped by a
+debug-build suite (its number is the release build's: run in release on 2026-09-26 with nothing
+else building it passes whole - frames p99 3.8 ms with no stall in 570 at 200 Hz, packet-to-pixel p99
+14.7 ms) and `config-compass-livecal` without an
 ArduPlane 3.7.1-4.0 SITL; the two `-bench` scripts flash the CubeOrange and run only on the owner's
 word (both ran on 2026-09-25). The full suite runs in about 25 minutes where the settled scripts
-took over 50. `sitl-launch.gui` (the SIMULATION tab's copter picture starting a simulator and the
+took over 50. `tools/gui-headless.sh` runs the same scripts on a virtual X display (Xvfb, the
+application drawn by Mesa's lavapipe), so a run needs neither the desktop nor its pointer: found
+on 2026-09-26 when the desktop's session-failed screen took every click, and used since for the
+Quick page's scripts. `sitl-launch.gui` (the SIMULATION tab's copter picture starting a simulator and the
 application flying it) needs port 5760 free and is skipped by a suite whose SITL holds it.
 
 **Not yet**: a run on macOS, and any run on Windows beyond the first (2026-09-26, in the owner's Windows 10

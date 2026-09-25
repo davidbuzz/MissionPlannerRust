@@ -1,8 +1,6 @@
 | Area or filename | Functional item | Priority | Progress |
 |---|---|---|---|
-| tests/gui/storm.gui | Paint-latency claim needs a release-build run; debug suites skip it | med | 80 |
 | crates/mp-gui/src/fly.rs | Gimbal video full, mini and pop-out menu items | med | 1 |
-| crates/mp-gui/src/quick.rs | Set view count resizes the Quick grid | med | 60 |
 | crates/mp-script | Scripts handed MAV, MainV2, screens, Ports, Joystick | med | 20 |
 | crates/mp-script | Fourteen shipped scripts that import clr run | med | 10 |
 | crates/mp-gui/src/plan.rs | GeoFence upload and download menu items | med | 10 |

@@ -30,6 +30,10 @@ network services until he logs in. Installers run with `--norestart`; an exit co
 a reboot (3010) is reported to him, never acted on. A live snapshot aborted the VM once; snapshots
 only with it saved or off.
 
+**2026-09-26 04:29 local: the VM was killed by the OOM killer** (a release build beside it, see
+[[one-build-at-a-time]]) and is "aborted"; Buzz starts it and logs in - I do not start it
+(it would boot to the login screen and hold 12 GB for nothing).
+
 **Lifecycle from here:** `VBoxManage startvm tiny10 --type gui`, `controlvm tiny10 savestate`,
 `snapshot tiny10 take <name>`; `VBoxManage guestcontrol tiny10 run/copyto` works too but wants
 the password on the command line, so SSH is the way. Take a snapshot before installing

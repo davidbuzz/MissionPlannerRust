@@ -16,7 +16,20 @@ cores are not enough for that.
 **Why:** a fresh gpui build is the heaviest thing here; two of them plus the VM's fixed 12 GB
 leave nothing for the session itself.
 
+**Again on 2026-09-26 04:26-04:29 local:** one release build of `mp-gui` (`cargo build --release`,
+`CARGO_BUILD_JOBS=8`, optimised with debuginfo) beside the running VM was enough on its own:
+systemd-oomd killed gnome-shell (the session's fail screen has covered the desktop since - its
+unit runs `gnome-session-ctl --shutdown` when stopped, so it is never killed; only Buzz's log
+out clears it) and three minutes later the OOM killer killed the VirtualBox process (the VM
+"aborted"; it needs Buzz to start it and log in). Release rustc on the gpui tree takes far
+more memory per job than a debug build.
+
 **How to apply:**
+- With the VM up: no release build at all, and a debug build at `CARGO_BUILD_JOBS=4`. Release
+  builds (the storm gate needs one) wait for the VM to be saved or off, and run at 6 jobs.
+- A shared lock serialises every cargo run, mine and the agents': `flock <scratchpad>/build.lock
+  env CARGO_BUILD_JOBS=6 CARGO_TARGET_DIR=... cargo ...`; GUI runs that must be quiet (the storm)
+  hold the same lock.
 - One cargo build or test compile at a time on this machine, mine or an agent's. An agent gets
   `CARGO_BUILD_JOBS=6` in its brief and is told to build only when told the machine is free, or
   I start agents one at a time and wait for the first's build to finish before the second's.

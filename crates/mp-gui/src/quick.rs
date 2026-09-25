@@ -1,5 +1,5 @@
-//! The flight screen's Quick page: `quickView1` to `quickView6`, and the chooser a double click
-//! on one opens.
+//! The flight screen's Quick page: `quickView1` to `quickView6`, the views Set View Count adds
+//! or takes away, and the chooser a double click on one opens.
 //!
 //! `tabQuick` holds `tableLayoutPanelQuick`, two columns of three rows, each cell a `QuickView`:
 //! a description centred along the top and a number under it, the number's font as large as
@@ -13,8 +13,13 @@
 //! The C#'s chooser offers every numeric property, held or not; this one offers the ones this
 //! application has a value for, and says the count in a fact.
 //!
-//! The C# keeps the choice in its settings, `Settings.Instance["quickView" + n]`. The settings
-//! file is not this module's to extend, so a choice lasts for the session.
+//! The C# keeps the choice in its settings, `Settings.Instance["quickView" + n]`, and the grid's
+//! size in `quickViewCols` and `quickViewRows`; `settings.rs` writes and restores both from what
+//! [`QuickViews`] holds.
+//!
+//! Set View Count's `setQuickViewRowsCols` makes the grid any number of columns and rows: views
+//! whose cell falls outside are removed, and new ones, bound to nothing and showing 0, fill it up.
+//! `// C#: GCSViews/FlightData.cs:4914-5060`
 //!
 //! # Units
 //!
@@ -48,8 +53,8 @@ pub const DEFAULTS: [(&str, u32); 6] = [
     ("DistToHome", 0x00_ff_fc),
 ];
 
-/// The ids a script clicks the views by: the Designer's names.
-pub const IDS: [&str; 6] = [
+/// The Designer's six views' ids: [`view_id`]'s first six, spelt out for the coverage table.
+const IDS: [&str; 6] = [
     "fly-quick-1",
     "fly-quick-2",
     "fly-quick-3",
@@ -57,6 +62,45 @@ pub const IDS: [&str; 6] = [
     "fly-quick-5",
     "fly-quick-6",
 ];
+
+/// The id a script clicks a view by: `fly-quick-` and its place in `tableLayoutPanelQuick.Controls`
+/// from 1, which for the Designer's six is the number in their names.
+#[must_use]
+pub fn view_id(index: usize) -> String {
+    IDS.get(index)
+        .map_or_else(|| format!("fly-quick-{}", index + 1), |id| (*id).to_owned())
+}
+
+/// `colorsForDefaultQuickView`: the number colours a view Set View Count adds is given one of -
+/// `Blue`, `Yellow`, `Pink`, `LimeGreen`, `Orange`, `Aqua`, `LightCoral`, `LightSteelBlue`,
+/// `DarkKhaki`, `LightYellow`, `Violet`, `YellowGreen`, `OrangeRed`, `Tomato`, `Teal` and
+/// `CornflowerBlue`, as `System.Drawing.Color` defines them.
+/// `// C#: GCSViews/FlightData.cs:169`
+pub const COLOURS: [u32; 16] = [
+    0x0000ff, 0xffff00, 0xffc0cb, 0x32cd32, 0xffa500, 0x00ffff, 0xf08080, 0xb0c4de, 0xbdb76b,
+    0xffffe0, 0xee82ee, 0x9acd32, 0xff4500, 0xff6347, 0x008080, 0x6495ed,
+];
+
+/// The numbers `System.Random` hands `setQuickViewRowsCols`: each below the bound given.
+pub type Random<'a> = &'a mut dyn FnMut(usize) -> usize;
+
+/// `new Random()`: seeded from the clock, as .NET's parameterless constructor is. An xorshift, not
+/// .NET's generator - the sequence is not the C#'s, only its being unpredictable.
+fn clock_random() -> impl FnMut(usize) -> usize {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| since.as_nanos());
+    #[allow(clippy::cast_possible_truncation)] // any 64 bits of the clock will do
+    let mut state = (nanos as u64) | 1;
+    move |below| {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        #[allow(clippy::cast_possible_truncation)] // the bound is sixteen
+        let pick = (state % below.max(1) as u64) as usize;
+        pick
+    }
+}
 
 /// Each view's place in `tableLayoutPanelQuick`: (column, row).
 /// `// C#: GCSViews/FlightData.Designer.cs:626-631`
@@ -789,24 +833,106 @@ pub fn number_size(width: f32, height: f32, characters: usize, zero_width: f32) 
     size
 }
 
-/// The six views' properties, the view whose chooser is open, and the units they show in.
+/// One `QuickView` in `tableLayoutPanelQuick`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct View {
+    /// The `n` of its `Name`, `quickView<n>`: the key its choice is saved under. Two views can
+    /// share one - see [`QuickViews::set_rows_cols_with`].
+    name: usize,
+    /// The cell the Designer puts it in; `None` for one Set View Count added, which the table
+    /// lays out in the first free cell.
+    cell: Option<(usize, usize)>,
+    /// The property it is bound to, or empty for a view added and not yet chosen for.
+    field: String,
+    /// `numberColor`.
+    colour: u32,
+    /// `numberColorBackup`: the Designer's `Color.Empty`, a view added its own colour.
+    backup: Option<u32>,
+}
+
+/// The views in `tableLayoutPanelQuick.Controls` order, the table's size, the view whose chooser
+/// is open, and the units they show in.
 #[derive(Debug, Clone)]
 pub struct QuickViews {
-    fields: [String; 6],
+    views: Vec<View>,
+    /// `tableLayoutPanelQuick.ColumnCount` and `RowCount`: the Designer's two and three.
+    cols: usize,
+    rows: usize,
+    /// `Settings.Instance["quickViewCols"]` and `["quickViewRows"]` as `setQuickViewRowsCols` last
+    /// wrote them, or `None` before it has run.
+    saved: Option<(i32, i32)>,
+    /// `listQuickView`: the colours given in the current round of sixteen.
+    /// `// C#: GCSViews/FlightData.cs:167`
+    used: Vec<u32>,
     choosing: Option<usize>,
     /// `CurrentState`'s multipliers and unit names, as the Planner page last set them. Metres
     /// and metres per second until told otherwise: `MainV2` runs `ChangeUnits` before the
     /// flight screen first shows. `// C#: MainV2.cs:836`
     units: DisplayUnits,
+    /// Every choice made, in order - the view's name number and the property - for `settings.rs`
+    /// to save under the view's name as the C#'s handler does.
+    chosen: Vec<(usize, String)>,
 }
 
 impl Default for QuickViews {
     fn default() -> Self {
+        let views = DEFAULTS
+            .iter()
+            .zip(CELLS)
+            .enumerate()
+            .map(|(index, ((name, colour), (column, row)))| View {
+                name: index + 1,
+                cell: Some((usize::from(column), usize::from(row))),
+                field: (*name).to_owned(),
+                colour: *colour,
+                backup: None,
+            })
+            .collect();
         Self {
-            fields: DEFAULTS.map(|(name, _)| name.to_owned()),
+            views,
+            cols: 2,
+            rows: 3,
+            saved: None,
+            used: Vec::new(),
             choosing: None,
             units: DisplayUnits::default().change_units(None, None, None),
+            chosen: Vec::new(),
         }
+    }
+}
+
+/// The colour `setQuickViewRowsCols` gives the view it adds, and `listQuickView` after it.
+///
+/// A colour drawn from the sixteen that is not in the list is taken and listed. One already listed,
+/// with more than one listed, is replaced by the first of the sixteen not yet listed (the C# draws
+/// a second colour first and then, whichever it drew, takes that first one - the second draw is
+/// made and thrown away, so it is made here too). With exactly one listed the drawn colour is kept
+/// even if it is that one, and the list does not grow: the C#'s `Count() > 1` test, ported as it
+/// is. A full list is cleared first. The C#'s other clearing test, two `OrderBy` sequences compared
+/// with `==`, compares references and is never true.
+/// `// C#: GCSViews/FlightData.cs:4966-5019`
+fn next_colour(used: &mut Vec<u32>, random: Random<'_>) -> u32 {
+    if used.len() == COLOURS.len() {
+        used.clear();
+    }
+    let drawn = COLOURS
+        .get(random(COLOURS.len()) % COLOURS.len())
+        .copied()
+        .unwrap_or(COLOURS[0]);
+    if used.contains(&drawn) && used.len() > 1 {
+        let _different = random(COLOURS.len());
+        let remaining = COLOURS
+            .iter()
+            .copied()
+            .find(|colour| !used.contains(colour))
+            .unwrap_or(drawn);
+        used.push(remaining);
+        remaining
+    } else {
+        if !used.contains(&drawn) {
+            used.push(drawn);
+        }
+        drawn
     }
 }
 
@@ -822,15 +948,157 @@ impl QuickViews {
         &self.units
     }
 
-    /// The property view `index` (0 to 5) shows.
+    /// How many views there are.
+    #[cfg(test)]
+    #[must_use]
+    pub fn count(&self) -> usize {
+        self.views.len()
+    }
+
+    /// `tableLayoutPanelQuick.ColumnCount` and `RowCount`.
+    #[must_use]
+    pub const fn grid(&self) -> (usize, usize) {
+        (self.cols, self.rows)
+    }
+
+    /// `quickViewCols` and `quickViewRows` as last set, if they have been.
+    #[must_use]
+    pub const fn saved_grid(&self) -> Option<(i32, i32)> {
+        self.saved
+    }
+
+    /// The property view `index` shows; empty for a view bound to nothing.
     #[must_use]
     pub fn field(&self, index: usize) -> &str {
-        self.fields.get(index).map_or("", String::as_str)
+        self.views.get(index).map_or("", |view| view.field.as_str())
+    }
+
+    /// The `n` of view `index`'s `Name`, `quickView<n>`.
+    #[cfg(test)]
+    #[must_use]
+    pub fn name(&self, index: usize) -> Option<usize> {
+        self.views.get(index).map(|view| view.name)
+    }
+
+    /// View `index`'s `numberColor`.
+    #[must_use]
+    pub fn colour(&self, index: usize) -> Option<u32> {
+        self.views.get(index).map(|view| view.colour)
+    }
+
+    /// The first view named `quickView<name>`, as `Controls.Find` finds it.
+    #[must_use]
+    pub fn find(&self, name: usize) -> Option<usize> {
+        self.views.iter().position(|view| view.name == name)
+    }
+
+    /// Every choice made so far: the view's name number and the property.
+    #[must_use]
+    pub fn chosen(&self) -> &[(usize, String)] {
+        &self.chosen
+    }
+
+    /// Each view's cell, (column, row), as `TableLayoutPanel` lays them out in a table of `cols`:
+    /// a view with a cell of its own in that cell, the others in `Controls` order in the free
+    /// cells, a row at a time, left to right, rows added below when the table is full
+    /// (`GrowStyle.AddRows`).
+    fn cells_in(&self, cols: usize) -> Vec<(usize, usize)> {
+        let cols = cols.max(1);
+        let taken: Vec<(usize, usize)> = self.views.iter().filter_map(|view| view.cell).collect();
+        let mut next = 0;
+        self.views
+            .iter()
+            .map(|view| {
+                view.cell.unwrap_or_else(|| {
+                    loop {
+                        let cell = (next % cols, next / cols);
+                        next += 1;
+                        if !taken.contains(&cell) {
+                            break cell;
+                        }
+                    }
+                })
+            })
+            .collect()
+    }
+
+    /// Each view's cell in the table as it is.
+    #[must_use]
+    pub fn cells(&self) -> Vec<(usize, usize)> {
+        self.cells_in(self.cols)
+    }
+
+    /// `setQuickViewRowsCols(cols, rows)`, with `new Random()`'s numbers.
+    ///
+    /// # Errors
+    ///
+    /// `int.Parse`'s message, when a number `IsNumber` allowed is not whole; nothing changes.
+    pub fn set_rows_cols(&mut self, cols: &str, rows: &str) -> Result<(), &'static str> {
+        let mut random = clock_random();
+        self.set_rows_cols_with(cols, rows, &mut random)
+    }
+
+    /// `setQuickViewRowsCols(cols, rows)`: each `Math.Max(1, int.Parse(..))`, kept as the
+    /// settings; the views whose cell, as the table was last laid out, is outside the new size
+    /// removed; then views added until there are `cols * rows`, each named `quickView` and the
+    /// count so far plus one, bound to nothing, `number` 0, its colour from [`next_colour`] and
+    /// `numberColorBackup` the same. `listQuickView` is cleared before and after when its count is
+    /// a multiple of sixteen - the C#'s test before also asks whether the views are at most or at
+    /// least the total, which is always so.
+    ///
+    /// The name is from the count, not the names in use, so after 2 x 3 to 1 x 3 (which removes
+    /// `quickView2`, 4 and 6) and back, the first added is `quickView4` and the second a second
+    /// `quickView5`: the C# does this, and both then save to one key. Each added view double
+    /// clicks to the chooser (unless `lockQuickView`, [`page`]) and has the same context menu;
+    /// every column and every row gets an equal share, as the grid [`page`] draws does.
+    /// `// C#: GCSViews/FlightData.cs:4914-5060`
+    ///
+    /// # Errors
+    ///
+    /// As [`QuickViews::set_rows_cols`].
+    pub fn set_rows_cols_with(
+        &mut self,
+        cols: &str,
+        rows: &str,
+        random: Random<'_>,
+    ) -> Result<(), &'static str> {
+        let (cols, rows) = crate::fly::view_count(cols, rows)?;
+        self.saved = Some((cols, rows));
+        let new_cols = usize::try_from(cols).unwrap_or(1);
+        let new_rows = usize::try_from(rows).unwrap_or(1);
+        // `PerformLayout` before the counts change: the positions are the old table's.
+        let mut cells = self.cells_in(self.cols).into_iter();
+        self.views.retain(|_| {
+            cells
+                .next()
+                .is_some_and(|(column, row)| column < new_cols && row < new_rows)
+        });
+        self.cols = new_cols;
+        self.rows = new_rows;
+        self.choosing = None;
+        let total = new_cols.saturating_mul(new_rows);
+        if self.used.len().is_multiple_of(COLOURS.len()) {
+            self.used.clear();
+        }
+        while total > self.views.len() {
+            let colour = next_colour(&mut self.used, random);
+            self.views.push(View {
+                name: self.views.len() + 1,
+                cell: None,
+                field: String::new(),
+                colour,
+                backup: Some(colour),
+            });
+        }
+        if self.used.len().is_multiple_of(COLOURS.len()) {
+            self.used.clear();
+        }
+        Ok(())
     }
 
     /// `quickView_DoubleClick`: opens the chooser for a view.
     pub fn open(&mut self, index: usize) {
-        if index < self.fields.len() {
+        if index < self.views.len() {
             self.choosing = Some(index);
         }
     }
@@ -852,8 +1120,9 @@ impl QuickViews {
         if self.field(index) == name {
             return;
         }
-        if let Some(field) = self.fields.get_mut(index) {
-            name.clone_into(field);
+        if let Some(view) = self.views.get_mut(index) {
+            name.clone_into(&mut view.field);
+            self.chosen.push((view.name, name.to_owned()));
         }
         self.choosing = None;
     }
@@ -870,22 +1139,64 @@ impl QuickViews {
         }
     }
 
+    /// The number view `index` shows as the page paints it: a view bound to nothing the 0
+    /// `setQuickViewRowsCols` gave it; a bound one its property, or `None` with no vehicle.
+    fn number(&self, index: usize, state: Option<&VehicleState>) -> Option<String> {
+        let field = self.field(index);
+        if field.is_empty() {
+            return Some(number_text(0.0));
+        }
+        state
+            .and_then(|state| display_value(field, state, &self.units))
+            .map(number_text)
+    }
+
     /// Each view's property, description and number - the description and the number as the
-    /// page paints them, in the user's units - and the chooser.
+    /// page paints them, in the user's units - its name, cell and colours; the table's size and
+    /// the saved one; and the chooser.
     #[must_use]
     pub fn facts(&self, state: Option<&VehicleState>) -> Vec<(String, String)> {
         let mut facts = Vec::new();
-        for (index, field) in self.fields.iter().enumerate() {
+        let cells = self.cells();
+        for (index, view) in self.views.iter().enumerate() {
             let key = format!("fly.quick.{}", index + 1);
-            facts.push((format!("{key}.label"), label(field, &self.units)));
+            facts.push((format!("{key}.label"), label(&view.field, &self.units)));
             facts.push((
                 format!("{key}.value"),
-                state
-                    .and_then(|state| display_value(field, state, &self.units))
-                    .map_or_else(|| "none".to_owned(), number_text),
+                self.number(index, state)
+                    .unwrap_or_else(|| "none".to_owned()),
             ));
-            facts.push((key, field.clone()));
+            facts.push((format!("{key}.name"), format!("quickView{}", view.name)));
+            if let Some((column, row)) = cells.get(index) {
+                facts.push((format!("{key}.cell"), format!("{column},{row}")));
+            }
+            facts.push((format!("{key}.colour"), format!("{:06x}", view.colour)));
+            facts.push((
+                format!("{key}.backup"),
+                view.backup
+                    .map_or_else(|| "none".to_owned(), |colour| format!("{colour:06x}")),
+            ));
+            facts.push((
+                key,
+                if view.field.is_empty() {
+                    "none".to_owned()
+                } else {
+                    view.field.clone()
+                },
+            ));
         }
+        facts.push(("fly.quick.count".to_owned(), self.views.len().to_string()));
+        facts.push((
+            "fly.quick.layout".to_owned(),
+            format!("{}x{}", self.cols, self.rows),
+        ));
+        facts.push((
+            "fly.quick.grid".to_owned(),
+            self.saved.map_or_else(
+                || "none".to_owned(),
+                |(cols, rows)| format!("{cols}x{rows}"),
+            ),
+        ));
         facts.push((
             "fly.quick.chooser".to_owned(),
             self.choosing
@@ -896,36 +1207,45 @@ impl QuickViews {
     }
 }
 
-/// The Quick page: the six views in `tableLayoutPanelQuick`'s two columns and three rows, each
-/// a third of the page's height and half its width.
+/// The Quick page: `tableLayoutPanelQuick`'s views in its columns and rows, each column an equal
+/// share of the width and each row of the height (`ColumnStyles` and `RowStyles` in percent).
+/// `// C#: GCSViews/FlightData.cs:5036-5052`
 pub fn page(
     views: &QuickViews,
     state: Option<&VehicleState>,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
+    let (cols, rows) = views.grid();
+    let cells = views.cells();
+    // A view past the table's last row (none once `setQuickViewRowsCols` has run) adds a row.
+    let rows = cells
+        .iter()
+        .map(|(_, row)| row + 1)
+        .max()
+        .unwrap_or(rows)
+        .max(rows);
     // Named as the panels are, so a layout test finds the page's bottom edge.
     let mut grid = crate::probe::measured("panel:quick", div())
         .grid()
-        .grid_cols(2)
-        .grid_rows(3)
+        .grid_cols(u16::try_from(cols).unwrap_or(u16::MAX))
+        .grid_rows(u16::try_from(rows).unwrap_or(u16::MAX))
         .gap_1()
         .flex_1()
         .min_h(px(180.0));
-    for (index, (column, row)) in CELLS.iter().enumerate() {
+    let locked = crate::display_view::flag("lockQuickView");
+    for (index, (column, row)) in cells.into_iter().enumerate() {
         let field = views.field(index).to_owned();
-        let colour = DEFAULTS
-            .get(index)
-            .map_or(theme::TEXT, |(_, colour)| *colour);
+        let colour = views.colour(index).unwrap_or(theme::TEXT);
         let desc = label(&field, views.units());
-        let number = state
-            .and_then(|state| display_value(&field, state, views.units()))
-            .map_or_else(|| "--".to_owned(), number_text);
-        let id = IDS.get(index).copied().unwrap_or("fly-quick");
+        let number = views
+            .number(index, state)
+            .unwrap_or_else(|| "--".to_owned());
+        let id = view_id(index);
         grid = grid.child(
-            crate::probe::measured(id, div())
-                .id(id)
-                .col_start(i16::from(*column) + 1)
-                .row_start(i16::from(*row) + 1)
+            crate::probe::measured(id.clone(), div())
+                .id(gpui::SharedString::from(id))
+                .col_start(i16::try_from(column + 1).unwrap_or(i16::MAX))
+                .row_start(i16::try_from(row + 1).unwrap_or(i16::MAX))
                 .min_w(px(0.0))
                 .min_h(px(0.0))
                 .relative()
@@ -943,11 +1263,13 @@ pub fn page(
                     .absolute()
                     .inset_0(),
                 )
-                // `DoubleClick`, which Windows raises on the second press.
+                // `DoubleClick`, which Windows raises on the second press; `quickView_DoubleClick`
+                // does nothing while `lockQuickView` is set.
+                // `// C#: GCSViews/FlightData.cs:4549-4552, 5026-5027`
                 .on_mouse_down(
                     gpui::MouseButton::Left,
                     cx.listener(move |this, event: &gpui::MouseDownEvent, _window, cx| {
-                        if event.click_count == 2 {
+                        if event.click_count == 2 && !locked {
                             this.fly_data.quick.open(index);
                             cx.notify();
                         }
@@ -1486,5 +1808,228 @@ mod tests {
                 pair[1]
             );
         }
+    }
+
+    /// The facts of one view, by key.
+    fn fact(views: &QuickViews, key: &str) -> Option<String> {
+        views
+            .facts(None)
+            .into_iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, value)| value)
+    }
+
+    /// A `Random` that hands out the numbers given, then zeros.
+    fn scripted(numbers: &[usize]) -> impl FnMut(usize) -> usize + '_ {
+        let mut next = numbers.iter();
+        move |_below| next.next().copied().unwrap_or(0)
+    }
+
+    /// 2 x 3 to 3 x 4 keeps the six in their cells and adds `quickView7` to 12 in the free cells,
+    /// a row at a time; back to 2 x 3 removes the six again.
+    #[test]
+    fn set_view_count_grows_and_shrinks_the_grid() {
+        let mut views = QuickViews::default();
+        assert_eq!(views.grid(), (2, 3));
+        assert_eq!(views.saved_grid(), None);
+        assert_eq!(fact(&views, "fly.quick.grid").as_deref(), Some("none"));
+        assert_eq!(fact(&views, "fly.quick.layout").as_deref(), Some("2x3"));
+
+        views.set_rows_cols("3", "4").expect("whole numbers");
+        assert_eq!(views.grid(), (3, 4));
+        assert_eq!(views.saved_grid(), Some((3, 4)));
+        assert_eq!(views.count(), 12);
+        let names: Vec<_> = (0..12).filter_map(|index| views.name(index)).collect();
+        assert_eq!(names, (1..=12).collect::<Vec<_>>());
+        assert_eq!(
+            views.cells(),
+            vec![
+                (0, 0),
+                (1, 0),
+                (0, 1),
+                (1, 1),
+                (0, 2),
+                (1, 2),
+                (2, 0),
+                (2, 1),
+                (2, 2),
+                (0, 3),
+                (1, 3),
+                (2, 3),
+            ]
+        );
+        for (index, (name, colour)) in DEFAULTS.iter().enumerate() {
+            assert_eq!(views.field(index), *name);
+            assert_eq!(views.colour(index), Some(*colour));
+        }
+        // The added views: bound to nothing, showing 0, no description, a colour of the sixteen.
+        assert_eq!(views.field(11), "");
+        assert_eq!(view_id(11), "fly-quick-12");
+        assert_eq!(fact(&views, "fly.quick.12").as_deref(), Some("none"));
+        assert_eq!(
+            fact(&views, "fly.quick.12.name").as_deref(),
+            Some("quickView12")
+        );
+        assert_eq!(fact(&views, "fly.quick.12.cell").as_deref(), Some("2,3"));
+        assert_eq!(fact(&views, "fly.quick.12.value").as_deref(), Some("0.00"));
+        assert_eq!(fact(&views, "fly.quick.12.label").as_deref(), Some(""));
+        assert!(COLOURS.contains(&views.colour(11).expect("twelve")));
+        assert_eq!(
+            fact(&views, "fly.quick.12.backup"),
+            fact(&views, "fly.quick.12.colour")
+        );
+        assert_eq!(fact(&views, "fly.quick.1.backup").as_deref(), Some("none"));
+        assert_eq!(fact(&views, "fly.quick.count").as_deref(), Some("12"));
+        assert_eq!(fact(&views, "fly.quick.grid").as_deref(), Some("3x4"));
+        // An added view double clicks to the chooser, and binds.
+        views.open(11);
+        views.choose("satcount");
+        assert_eq!(views.field(11), "satcount");
+        assert_eq!(views.chosen(), &[(12, "satcount".to_owned())]);
+
+        views.set_rows_cols("2", "3").expect("whole numbers");
+        assert_eq!(views.count(), 6);
+        assert_eq!(views.grid(), (2, 3));
+        for (index, (name, _)) in DEFAULTS.iter().enumerate() {
+            assert_eq!(views.name(index), Some(index + 1));
+            assert_eq!(views.field(index), *name);
+        }
+        assert_eq!(fact(&views, "fly.quick.7"), None);
+    }
+
+    /// The table keeps a view whose cell, as last laid out, is inside the new size; the views then
+    /// added are named from the count, so a name can come twice - as in the C#.
+    #[test]
+    fn set_view_count_removes_by_cell_and_names_by_count() {
+        let mut views = QuickViews::default();
+        // One column: quickView2, 4 and 6, in the second, go.
+        views.set_rows_cols("1", "3").expect("whole numbers");
+        let names: Vec<_> = (0..views.count()).filter_map(|i| views.name(i)).collect();
+        assert_eq!(names, vec![1, 3, 5]);
+        views.set_rows_cols("2", "3").expect("whole numbers");
+        let names: Vec<_> = (0..views.count()).filter_map(|i| views.name(i)).collect();
+        assert_eq!(names, vec![1, 3, 5, 4, 5, 6]);
+        assert_eq!(views.cells()[3..], [(1, 0), (1, 1), (1, 2)]);
+        // `Controls.Find` finds the first.
+        assert_eq!(views.find(5), Some(2));
+        assert_eq!(views.find(2), None);
+
+        // Views laid out by the table move as the columns change: 3 x 4 then 4 x 3 keeps the
+        // added views in the cells a four-column table gives them, and removes the fourth row.
+        let mut views = QuickViews::default();
+        views.set_rows_cols("3", "4").expect("whole numbers");
+        views.set_rows_cols("4", "3").expect("whole numbers");
+        // Laid out in three columns, quickView10 to 12 were in the fourth row: gone.
+        let names: Vec<_> = (0..views.count()).filter_map(|i| views.name(i)).collect();
+        assert_eq!(names, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+        assert_eq!(views.count(), 12);
+        assert_eq!(views.cells()[6..9], [(2, 0), (3, 0), (2, 1)]);
+    }
+
+    /// `Math.Max(1, int.Parse(..))`: nought and less are one; a number that is not whole changes
+    /// nothing.
+    #[test]
+    fn set_view_count_keeps_at_least_one_view() {
+        let mut views = QuickViews::default();
+        views.set_rows_cols("0", "-3").expect("whole numbers");
+        assert_eq!(views.grid(), (1, 1));
+        assert_eq!(views.saved_grid(), Some((1, 1)));
+        assert_eq!(views.count(), 1);
+        assert_eq!(views.field(0), "alt");
+        assert!(views.set_rows_cols("2.5", "3").is_err());
+        assert_eq!(views.grid(), (1, 1));
+        assert_eq!(views.count(), 1);
+    }
+
+    /// `listQuickView`'s rules: a colour drawn not yet listed is taken; one listed, with more than
+    /// one listed, gives way to the first of the sixteen not listed (after a second draw that is
+    /// thrown away); with exactly one listed a repeat is kept; the list clears at sixteen.
+    #[test]
+    fn a_new_views_colour_is_one_not_used_this_round() {
+        let (blue, yellow, pink, lime) = (COLOURS[0], COLOURS[1], COLOURS[2], COLOURS[3]);
+        let mut views = QuickViews::default();
+        views.set_rows_cols("1", "1").expect("whole numbers");
+        // Draws: Yellow (listed); Yellow again (listed, but only one listed: kept, the list as it
+        // was); Blue (listed); Blue again (two listed: the second draw, 5, thrown away, and the
+        // first not listed is Pink); Yellow again (the draw 7 thrown away: Lime).
+        let mut random = scripted(&[1, 1, 0, 0, 5, 1, 7]);
+        views
+            .set_rows_cols_with("1", "6", &mut random)
+            .expect("whole numbers");
+        let colours: Vec<_> = (1..6).filter_map(|i| views.colour(i)).collect();
+        assert_eq!(colours, vec![yellow, yellow, blue, pink, lime]);
+        assert_eq!(views.used, vec![yellow, blue, pink, lime]);
+
+        // The C#'s `Count() > 1`: with only one listed, the same colour twice.
+        let mut views = QuickViews::default();
+        views.set_rows_cols("1", "1").expect("whole numbers");
+        let mut random = scripted(&[0, 0, 0]);
+        views
+            .set_rows_cols_with("1", "3", &mut random)
+            .expect("whole numbers");
+        let colours: Vec<_> = (1..3).filter_map(|i| views.colour(i)).collect();
+        assert_eq!(colours, vec![blue, blue]);
+
+        // Seventeen added in one go, the first two drawn apart: every one of the first sixteen a
+        // different colour, then the round starts again.
+        let mut views = QuickViews::default();
+        views.set_rows_cols("1", "1").expect("whole numbers");
+        let mut clock = super::clock_random();
+        let mut draws = vec![0, 1];
+        draws.extend((0..40).map(|_| clock(16)));
+        let mut random = scripted(&draws);
+        views
+            .set_rows_cols_with("1", "18", &mut random)
+            .expect("whole numbers");
+        let colours: Vec<_> = (1..17).filter_map(|i| views.colour(i)).collect();
+        let mut distinct = colours.clone();
+        distinct.sort_unstable();
+        distinct.dedup();
+        assert_eq!(distinct.len(), 16, "{colours:x?}");
+        assert!(COLOURS.contains(&views.colour(17).expect("eighteen")));
+        // Sixteen listed and one more: cleared at the sixteenth, one listed after.
+        assert_eq!(views.used.len(), 1);
+
+        // Sixteen exactly: cleared after the loop, ready for the next round.
+        let mut views = QuickViews::default();
+        views.set_rows_cols("1", "1").expect("whole numbers");
+        let mut random = scripted(&draws);
+        views
+            .set_rows_cols_with("1", "17", &mut random)
+            .expect("whole numbers");
+        assert!(views.used.is_empty());
+    }
+
+    /// The product's own randomiser: every colour one of the sixteen, and a run of sixteen with
+    /// its first two apart never repeats one.
+    #[test]
+    fn the_clock_randomiser_picks_from_the_sixteen() {
+        let mut random = super::clock_random();
+        for _ in 0..200 {
+            assert!(random(16) < 16);
+        }
+        let mut views = QuickViews::default();
+        views.set_rows_cols("1", "1").expect("whole numbers");
+        views.set_rows_cols("1", "11").expect("whole numbers");
+        for index in 1..11 {
+            assert!(COLOURS.contains(&views.colour(index).expect("eleven")));
+        }
+    }
+
+    /// The sixteen are `System.Drawing.Color`'s, in the C#'s order.
+    #[test]
+    fn the_sixteen_colours_are_the_csharps() {
+        let Some(source) = csharp("GCSViews/FlightData.cs") else {
+            eprintln!("skipped: the C# tree is not checked out here");
+            return;
+        };
+        assert!(source.contains(
+            "Color[] colorsForDefaultQuickView = new Color[] { Color.Blue, Color.Yellow, \
+             Color.Pink, Color.LimeGreen, Color.Orange, Color.Aqua, Color.LightCoral, \
+             Color.LightSteelBlue, Color.DarkKhaki, Color.LightYellow, Color.Violet, \
+             Color.YellowGreen, Color.OrangeRed, Color.Tomato, Color.Teal, Color.CornflowerBlue };"
+        ));
+        assert_eq!(COLOURS[0], 0x0000ff);
+        assert_eq!(COLOURS[15], 0x6495ed);
     }
 }

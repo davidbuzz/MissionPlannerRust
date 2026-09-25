@@ -51,3 +51,10 @@ kill the runner, the driver and the window by PID (pgrep with a bracketed patter
 ArduPilot's SITL exits when its parent dies (`SITL_State.cpp` checks `getppid()` every loop), so
 the wrapper now waits on it and must stay alive; two suite runs failed every script with
 "Connection refused" before this was found. The suite then runs in a separate background task.
+
+**2026-09-26, a way out:** `tools/gui-headless.sh` runs the scripts on Xvfb `:99` with lavapipe
+(`VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json`, `SHOT_AT=0,0`): xdotool drives that display,
+the real pointer and Buzz's windows are never touched, and the Quick page's three scripts passed there
+while the desktop was covered by the session-failed screen. Slower than the GPU (budgets recorded from
+the slower run); the storm gate still needs the GPU. Prefer it for every run Buzz has not asked to
+watch. See [[one-build-at-a-time]] for the screen's cause.

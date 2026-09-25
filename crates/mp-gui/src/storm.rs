@@ -59,8 +59,8 @@
 //! gpui has handed the frame to the platform: its `draw` and `present` run inside one update of
 //! the application, and a callback deferred from the marker's paint runs when that update ends.
 //! So the journey covers the link's read and decode, the wait for the next snapshot publish
-//! (every 20 ms), the wait for the next frame, and the frame's render, layout, paint and
-//! present. The harness's own work inside the frame is subtracted, as it is from a frame's cost.
+//! (every 5 ms, `mp_link::DEFAULT_PUBLISH_INTERVAL`), the wait for the next frame, and the
+//! frame's render, layout, paint and present. The harness's own work inside the frame is subtracted, as it is from a frame's cost.
 //!
 //! Each packet is measured once, at the first frame that shows it: a frame drawn before the
 //! next snapshot shows the same packet again, and its age then is not a packet's latency.
@@ -879,7 +879,7 @@ mod tests {
         }
         assert!(storm.ticks() > 10);
         // The storm's link stamps each packet's arrival into the snapshot, for the latency, and
-        // the stamp is recent: 200 Hz packets and a 20 ms publish.
+        // the stamp is recent: 200 Hz packets and a 5 ms publish.
         let stamped = telemetry
             .view()
             .state

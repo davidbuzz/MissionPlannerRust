@@ -799,7 +799,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "setViewCountToolStripMenuItem_Click",
         "Set View Count",
-        Missing,
+        Done("fly-quick-setviewcount"),
     ),
     row(
         "showIconsToolStripMenuItem",
@@ -1017,12 +1017,6 @@ pub const WHY_MISSING: &[(&str, &str, &str)] = &[
         "setAspectRatioToolStripMenuItem",
         "Click",
         "the owner's call: the C#'s 4:3 would reshape the column",
-    ),
-    (
-        "setViewCountToolStripMenuItem",
-        "Click",
-        "the quick views' menu and both questions are there (`fly-quick-setviewcount`) and the \
-         answer is kept; the grid is `quick.rs`'s six views, which have no resize yet",
     ),
 ];
 
@@ -1247,7 +1241,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (104, 1, 11, 18, 2)
+            (105, 1, 10, 18, 2)
         );
     }
 }

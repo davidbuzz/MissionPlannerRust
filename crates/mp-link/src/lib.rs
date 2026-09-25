@@ -140,6 +140,10 @@ const IDLE_POLL: Duration = Duration::from_millis(1);
 /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3863-3871`
 const AIRSPEED_MIN_PARAMS: [&str; 2] = ["AIRSPEED_MIN", "ARSPD_FBW_MIN"];
 
+/// The default snapshot cadence, [`LinkConfig::publish_interval`]: shorter than a frame of
+/// any display up to 200 Hz.
+pub const DEFAULT_PUBLISH_INTERVAL: Duration = Duration::from_millis(5);
+
 /// How the link should behave.
 #[derive(Debug, Clone)]
 pub struct LinkConfig {
@@ -147,8 +151,11 @@ pub struct LinkConfig {
     pub sysid: u8,
     /// Our own component id.
     pub compid: u8,
-    /// How often to publish state snapshots. 50 Hz is well above any display refresh while
-    /// keeping publish overhead negligible.
+    /// How often to publish state snapshots: 5 ms, so a display up to 200 Hz finds a fresh
+    /// snapshot every frame. It was 20 ms until 2026-09-26, longer than a 60 Hz frame (16.7 ms),
+    /// which showed about one frame in six the snapshot the frame before had shown
+    /// (`tests/gui/storm.gui`: 570 frames, 469 distinct snapshots). Publishing is one copy of
+    /// each vehicle's state into an `ArcSwap`, so 200 a second cost nothing that shows.
     pub publish_interval: Duration,
     /// How often to announce ourselves. Vehicles use this to detect GCS loss (failsafe).
     pub heartbeat_interval: Duration,
@@ -182,7 +189,7 @@ impl Default for LinkConfig {
         Self {
             sysid: 255,
             compid: MAV_COMP_ID_MISSIONPLANNER,
-            publish_interval: Duration::from_millis(20),
+            publish_interval: DEFAULT_PUBLISH_INTERVAL,
             heartbeat_interval: Duration::from_secs(1),
             send_heartbeat: true,
             record_path: None,
@@ -1786,7 +1793,8 @@ fn run_link(
         }
 
         // Publish snapshots on a cadence rather than per packet: no display can show more than
-        // one state per frame, so per-packet publishing is pure overhead.
+        // one state per frame, so per-packet publishing is pure overhead - and the cadence is
+        // shorter than any frame, so no frame shows a snapshot the frame before had.
         if last_publish.elapsed() >= config.publish_interval {
             // `cs.Base` from the RTK page, into the vehicle's state for this snapshot.
             // `// C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:910, 1077, 1098`

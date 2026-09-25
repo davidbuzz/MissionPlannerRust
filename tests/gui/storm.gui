@@ -26,8 +26,8 @@ env MP_STORM 200
 setup case "${MP_GUI_BIN:-}" in *release*) ;; *) echo 'storm needs the release build: MP_GUI_BIN=target/release/planner' >&2; exit 3;; esac
 screen fly
 window 1600x1200
-budget 21
-# A first budget, set by hand until a passing run records one.
+budget 12
+# Recorded from the release run of 2026-09-26 (10.2 s from its window).
 
 
 expect vehicle.connected true
@@ -48,7 +48,12 @@ expect storm.rate >= 190
 # (the storm's link stamps VehicleState::packet_in; no product link does) to the frame showing it
 # presented (a callback deferred from the marker's paint, run when gpui's draw-and-present update
 # ends), less the harness's work. Each packet once, at the first frame that shows it. The journey
-# includes the link's 20 ms snapshot publish interval, so this budget is not yet known to hold.
+# includes the wait for the link's next snapshot publish (5 ms) and for the next frame.
+# Measured 2026-09-26, release build, quiet machine (the run holds the build lock): with the
+# earlier 20 ms publish cadence p50 15.6 ms, p99 25.3 ms, max 26.2 ms, 228 of 469 over 16 ms,
+# and 101 of 570 frames showing the snapshot the frame before had; with the 5 ms cadence p50
+# 9.8 ms, p99 14.7 ms, max 18.4 ms, 2 of 569 over, 569 distinct snapshots in 570 frames.
+# Frames both runs: p50 2.6 ms, p99 3.8-3.9 ms, max 5.4-5.6 ms, 0 stalls, storm.rate 199.
 # storm.latency.p99 is whole milliseconds rounded down, so `< 16` holds exactly when it is under.
 expect storm.latency.count >= 50
 expect storm.latency.p50_us >= 0

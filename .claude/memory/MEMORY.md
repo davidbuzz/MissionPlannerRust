@@ -12,10 +12,10 @@ controlled; the per-project memory directory holds symlinks to them.
 - [Mute on language](mute-on-language.md) — English when `language` is empty; no i18n questions or reports until told otherwise (Buzz, 2026-09-25)
 - [Work the matrix in priority order](work-the-matrix-in-priority-order.md) — every "high" row of NOT_DONE_YET_MATRIX.md to 100% before any "med" row (Buzz, 2026-09-26)
 
-- [One build at a time](one-build-at-a-time.md) — 31 GB/16 cores crashed on 2026-09-26 under the VM + two agent gpui builds + my build; one cargo build at a time, none while the VM builds
+- [One build at a time](one-build-at-a-time.md) — one cargo build at a time under `flock <scratchpad>/build.lock`; with the VM up, debug at 4 jobs and NO release build (a release build beside the VM OOM-killed gnome-shell and the VM on 2026-09-26)
 - [No foreground waiting](no-foreground-waiting.md) — background long operations, poll cheaply, never block the session
 - [GUI runs stay short](gui-runs-stay-short.md) — windows live ~5s, pinned to DP-1-3; never debug by re-running the GUI
-- [GUI tests take the mouse](gui-tests-take-the-mouse.md) — scripts drive the real pointer; run them only on Buzz's word, prefer headless checks, stop means now
+- [GUI tests take the mouse](gui-tests-take-the-mouse.md) — on the desktop, scripts drive the real pointer: only on Buzz's word, stop means now; `tools/gui-headless.sh` runs them on Xvfb :99 with lavapipe and touches nothing of his
 - [Verify edits applied](verify-edits-applied.md) — a replacement that matches nothing looks like success
 - [Never stop after a commit](never-stop-after-a-commit.md) — chain to the next task; a commit is not an exit condition
 - [Verify before committing](verify-before-committing.md) — clippy is its own command, read it, then commit
