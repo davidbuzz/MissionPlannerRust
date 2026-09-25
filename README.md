@@ -16,7 +16,7 @@ launcher.
 
 Measured on this tree (2026-09-25): **24 crates, 301,957 hand-written Rust LOC** (plus 91,634
 generated; `.rs` files under `crates/`, tests included), **3,201 tests** on `cargo test --workspace`
-(3,159 pass, 42 ignored: they need SITL, a window, or the network), **163 GUI scripts** under
+(3,159 pass, 42 ignored: they need SITL, a window, or the network), **164 GUI scripts** under
 `tests/gui/`, across 242 commits.
 Linux only, so far: the repository has no remote, and the three-OS CI matrix has never run.
 
@@ -49,20 +49,20 @@ Linux only, so far: the repository has no remote, and the three-OS CI matrix has
 | GUI | fly, plan, setup, config, simulation (`SITL.cs`), params and log screens on gpui; the flight screen's lower-left is Mission Planner's fourteen-page tab control and SETUP/CONFIG are its backstage lists, every entry in the C#'s order under the C#'s conditions; `MainV2`'s port box, baud box and CONNECT/DISCONNECT at the top right, with each network kind's questions and the still-moving check (AUTO's port scan not ported; `main-connect.gui` unrun) |
 | Porting ledger | `ledger/ledger.csv`, one row per C# file with its tier and state - 68 past `ready` (59 `tested`, 9 `ported`) with their evidence and omissions, 80,431 C# lines, and 459 files with no callers `dropped` with their reasons, 93,153 lines (`xtask/tests/dead_csharp.rs` re-derives them); `cargo xtask ledger check` fails on anything unaccounted for |
 | Flight screen coverage | every one of `FlightData`'s 136 wired actions listed with what stands in for it here — 96 done, 19 missing — in `docs/coverage/flightdata.md`, kept current by a test; the lower-left is Mission Planner's own fourteen-page tab control with its Quick view, its tlog playback, its DataFlash Logs page and log downloader, and its Actions page (Set WP, Restart/Resume Mission, Change Alt/Speed/Loiter Radius, Fly To Coords, Abort Landing, Do Action, Jump To Tag) sends what the C# sends, with a script each against SITL - `fly-resumemis.gui` fails, its take-off refused for a reason not yet found (PLAN.md §13.6 row 67); the DataFlash page's conversions run on a thread against the golden files; the HUD's right-click menu has Russian HUD, Ground Color, User Items, Swap With Map, Show icons and Battery Cell Voltage; Set Home/EKF Origin, the camera and gimbal commands, the Transponder page and the speed dial are there too |
-| Configuration coverage | every one of the 61 `Config*.cs` panels listed in Mission Planner's SETUP and CONFIG order with what stands in for it here — 30 done, 14 partial, 3 missing, 2 plumbing, 12 dropped at the owner's ruling — in `docs/coverage/configuration.md`, held to the C# by tests; Flight Modes and FailSafe are ported from their `Config*.cs` and proved against SITL; the pages of PLAN.md §13.6 rows 70 and 71 and FFT Setup have scripts not yet run |
+| Configuration coverage | every one of the 61 `Config*.cs` panels listed in Mission Planner's SETUP and CONFIG order with what stands in for it here — 31 done, 14 partial, 2 missing, 2 plumbing, 12 dropped at the owner's ruling — in `docs/coverage/configuration.md`, held to the C# by tests; Flight Modes and FailSafe are ported from their `Config*.cs` and proved against SITL; the pages of PLAN.md §13.6 rows 70 and 71 and FFT Setup have scripts not yet run |
 | Planner coverage and menu | every one of `FlightPlanner`'s 121 wired actions listed the same way — 103 done, 6 missing — in `docs/coverage/flightplanner.md`; the map's right-click menu is Mission Planner's, in its order, with 63 entries working and 8 more on the polygon icon's menu, each held to its ledger row by `planner_coverage.rs`'s tests; home is its Home Location boxes written first and drawn as its green pin, the panel's radius and altitude boxes set the C#'s parameters after Write; 55 `plan-*.gui` scripts drive them, row 69's five (Write Fast, MAVFTP, Grid and coordinates, docking, prefetch) not yet run |
 
-**GUI scripts: written is not run.** `tests/gui/` holds 163 scripts. The owner runs them
+**GUI scripts: written is not run.** `tests/gui/` holds 164 scripts. The owner runs them
 (`tools/gui-test.sh`, or `tools/gui-suite.sh` for several); they take the machine's pointer, so no agent
 does. The 133 written by the end of 2026-09-24 have been run (every script after PLAN.md §13.4 row 55,
 the pending ones again in §13.6 row 67): at their last runs `fly-resumemis` fails for a reason not yet
 found, six failed under load and are owed a quiet re-run (`config-ateryx`, `config-firmware`,
 `config-radio`, `plan-load-kml`, `plan-load-shp`, `plan-poi`), and three have had no clean run
-(`plan-polygon-tools`, `plan-rally-file`, `plan-rally-sitl`). Of the 30 written on 2026-09-25, the two
-bench scripts that flashed and asked the CubeOrange have run; the other 28 are written and unrun - the
+(`plan-polygon-tools`, `plan-rally-file`, `plan-rally-sitl`). Of the 31 written on 2026-09-25, the two
+bench scripts that flashed and asked the CubeOrange have run; the other 29 are written and unrun - the
 SETUP and CONFIG pages of §13.6 rows 70 and 71 and FFT Setup, `main-connect`, `params-autofetch`,
 `params-list-remainder`, `params-list-columns`, row 69's five planner scripts, `config-import`, `fly-tabs-de`, `sitl`,
-`config-video` and `textfield-clipboard`. 43 older scripts were edited that day (the data directory's rename, row 65's pages)
+`config-video`, `textfield-clipboard` and `config-simple-pids`. 43 older scripts were edited that day (the data directory's rename, row 65's pages)
 and have no run recorded since.
 
 **Not yet**: any run on Windows or macOS - the repository has no remote, so the three-OS CI matrix has never

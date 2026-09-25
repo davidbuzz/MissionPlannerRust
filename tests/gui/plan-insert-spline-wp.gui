@@ -1,6 +1,7 @@
 # Insert Spline WP: insertSplineWPToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:4035). The
 # same question as Insert Wp, and a SPLINE_WAYPOINT (82) where the answer says.
 
+env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
 settle 4

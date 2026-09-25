@@ -4,6 +4,7 @@
 # The claims a screenshot cannot make: the menu is open or closed, the press that closed it added
 # nothing to the mission, and the counts the application reports are the table's.
 
+env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
 settle 4

@@ -1,6 +1,7 @@
 # Polygon > Clear Polygon: clearPolygonToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:2084).
 # The corners go and drawing stops (polygongridmode = false), so the next click is a waypoint.
 
+env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
 settle 4

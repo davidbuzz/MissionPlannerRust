@@ -1,6 +1,7 @@
 # Land: landToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:4302). Appends a LAND (21) at the
 # click, at 1 m: setfromMap(..., 1) writes a non-zero altitude as given.
 
+env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
 settle 4

@@ -2,6 +2,7 @@
 # LOITER_UNLIM (17) at the click, at Default Alt (TXT_DefaultAlt, 100 as the .resx has it and as
 # setfromMap takes it, FlightPlanner.cs:4758, 1164-1208), with no question asked.
 
+env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
 settle 4

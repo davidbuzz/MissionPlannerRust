@@ -2,6 +2,7 @@
 # altitude changes by what is typed: "20" adds twenty, "5.5" five and a half. (The "*2"
 # form is unit-tested: this harness word-splits its lines unquoted, so a star would be globbed.)
 
+env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
 settle 4

@@ -2,6 +2,7 @@
 # (GCSViews/FlightPlanner.cs:3619). The survey polygon becomes the WAYPOINT rows, then "Clear
 # current waypoints?" - No keeps the mission, Yes clears it.
 
+env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
 settle 4

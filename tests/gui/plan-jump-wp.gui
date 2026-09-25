@@ -1,6 +1,7 @@
 # Jump > WP #: jumpwPToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:4111). Asks "Jump to WP
 # no?", offering 1, then the repeat count, and appends a DO_JUMP (177) with both.
 
+env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
 settle 4

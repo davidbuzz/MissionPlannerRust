@@ -26,6 +26,7 @@
 # A run that stops half way can leave MOT_SPIN_ARM at 0.07; the Spin Arm expectations then fail
 # until it is set back to 0.1, by hand or by a fresh SITL.
 
+env MP_CONFIG_XML $WORK/config.xml
 screen params
 window 1600x1200
 settle 6

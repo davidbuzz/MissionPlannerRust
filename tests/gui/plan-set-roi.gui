@@ -2,6 +2,7 @@
 # (201) at the click, at Default Alt (TXT_DefaultAlt, 100). The ROI carries a position, as
 # Mavlink.cs's [hasLocation] says, so it is scaled as one on the wire.
 
+env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
 settle 4

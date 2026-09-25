@@ -11,6 +11,7 @@
 # format string; its second marker, saved with every digit a click carries, reads back as the C#
 # reads it: -35.3632621.
 
+env MP_CONFIG_XML $WORK/config.xml
 env XDG_DATA_HOME $WORK
 # A planned home, so the map has a view to project clicks through: without one a right-click
 # opens no menu and a click adds no waypoint.

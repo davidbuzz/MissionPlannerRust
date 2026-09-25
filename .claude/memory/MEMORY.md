@@ -23,3 +23,4 @@ controlled; the per-project memory directory holds symlinks to them.
 - [Drop-downs escape the page](dropdowns-escape-the-page.md) — deferred+anchored, thirty rows, wheel-scrolled; the page clips anything else
 - [Kill by PID, not pattern](kill-by-pid-not-pattern.md) — pkill -f matches the calling shell; pgrep -fa, then kill the PIDs
 - [Bench CubeOrange](bench-cubeorange.md) — its Zephyr bootloader replaced with stock via the BMP on 2026-09-25; by-id path; MP_FIRMWARE_PORT; flash only on Buzz's go
+- [Passwords remembered, plain](passwords-remembered-plain.md) — InputBox password answers are kept like any other; plain text boxes are fine for now

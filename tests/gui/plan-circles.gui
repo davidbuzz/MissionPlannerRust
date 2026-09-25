@@ -9,6 +9,7 @@
 # under the maximum (:2857-2961): 5 to 20 by 5 is five laps, the last point at 24. The positions
 # are held to the C# under mono by crates/mp-mission's circle tests.
 
+env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
 settle 4

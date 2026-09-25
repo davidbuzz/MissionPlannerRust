@@ -8,6 +8,7 @@
 # Self-contained, no link: a flat tile at 584 m for SITL's field, S36E149.hgt, a home at 584.1 in
 # config.xml, and the Map Access Mode at CacheOnly so the terrain lookup fetches nothing.
 
+env MP_CONFIG_XML $WORK/config.xml
 env XDG_DATA_HOME $WORK
 env MP_PLAN_DIR $WORK
 setup mkdir -p "$WORK/MissionPlannerRust/srtm" && python3 -c 'import sys; open(sys.argv[1], "wb").write(bytes([2, 72]) * (1201 * 1201))' "$WORK/MissionPlannerRust/srtm/S36E149.hgt"

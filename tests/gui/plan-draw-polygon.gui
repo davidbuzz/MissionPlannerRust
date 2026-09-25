@@ -2,6 +2,7 @@
 # The first choice starts drawing (polygongridmode); after that each choice adds the corner under
 # the menu, and so does a click on the map (AddWPToMap, FlightPlanner.cs:560) - not a waypoint.
 
+env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
 settle 4

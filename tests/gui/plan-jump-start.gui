@@ -2,6 +2,7 @@
 # times to Repeat", offering 5, and appends a DO_JUMP (177) to item 1 with that many repeats and
 # no position.
 
+env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
 settle 4

@@ -18,6 +18,7 @@
 #
 #   tools/gui-test.sh tests/gui/config-fft.gui -- tcp:127.0.0.1:5760
 
+env MP_CONFIG_XML $WORK/config.xml
 screen params
 window 1600x1200
 settle 6

@@ -4,6 +4,7 @@
 # answer as InputBox keeps every titled answer, before the handler reads it (InputBox.cs:73-84,
 # 178-184).
 
+env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
 settle 4

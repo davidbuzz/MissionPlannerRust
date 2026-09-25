@@ -1,6 +1,7 @@
 # Map Tool > Reverse WPs: reverseWPsToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:5840). The
 # rows turned round. Built from three different commands so the order is visible in the facts.
 
+env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
 settle 4

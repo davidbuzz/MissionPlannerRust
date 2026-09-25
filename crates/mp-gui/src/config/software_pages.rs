@@ -1,5 +1,6 @@
-//! Three of CONFIG's pages, ported together (PLAN §13.6 row 71): GeoFence (`ConfigAC_Fence.cs`,
-//! `GCSViews/SoftwareConfig.cs:156`), the rover's Basic Tuning (`ConfigArdurover.cs`, `:188`) and
+//! Four of CONFIG's pages, held together (PLAN §13.6 rows 71 and 92): GeoFence (`ConfigAC_Fence.cs`,
+//! `GCSViews/SoftwareConfig.cs:156`), the copter's Basic Tuning (`ConfigSimplePids.cs`, `:164`),
+//! the rover's Basic Tuning (`ConfigArdurover.cs`, `:188`) and
 //! User Params (`ConfigUserDefined.cs`, `:221`). Each page is its own module; this one holds
 //! their page objects, their keyboard focus, and their part in the application: the arms of
 //! `setup.rs` and the lines of `main.rs` call into `impl MissionPlanner` here.
@@ -11,16 +12,18 @@ use std::time::Instant;
 
 use gpui::{AnyElement, Context, FocusHandle, KeyDownEvent, Window, div, prelude::*};
 
-use super::{geofence, rover_tuning, user_params};
+use super::{geofence, rover_tuning, simple_pids, user_params};
 use crate::MissionPlanner;
 use crate::setup::Key;
 use crate::telemetry::TelemetryView;
 
-/// The three page objects.
+/// The four page objects.
 #[derive(Debug, Default)]
 pub struct SoftwarePages {
     /// GeoFence.
     pub geofence: geofence::GeoFence,
+    /// The copter's Basic Tuning.
+    pub simple: simple_pids::SimplePids,
     /// The rover's Basic Tuning.
     pub rover: rover_tuning::RoverTuning,
     /// User Params.
@@ -46,15 +49,16 @@ impl Focus {
     }
 }
 
-/// Facts a UI test asserts on, for the three pages.
+/// Facts a UI test asserts on, for the four pages.
 pub fn record_facts(pages: &SoftwarePages, rover_listed: bool, view: &TelemetryView) {
     geofence::record_facts(&pages.geofence, view);
+    simple_pids::record_facts(&pages.simple);
     rover_tuning::record_facts(&pages.rover, rover_listed, view);
     user_params::record_facts(&pages.user, view);
 }
 
 impl MissionPlanner {
-    /// `Activate`, when one of the three is chosen: each is `IActivate`, called every time.
+    /// `Activate`, when one of the four is chosen: each is `IActivate`, called every time.
     pub(crate) fn software_activate(&mut self, class: &str) {
         let view = self.telemetry.view();
         let key = Key::of(&view);
@@ -67,6 +71,11 @@ impl MissionPlanner {
                         .geofence
                         .activate(&view.parameters, key, units, lookup);
                 self.software_pages.geofence.push(jobs);
+            }
+            simple_pids::CLASS => {
+                self.software_pages
+                    .simple
+                    .activate(&view.parameters, key, lookup);
             }
             rover_tuning::CLASS => {
                 let vehicle = crate::setup::Vehicle::of(&view, self.telemetry.firmware_banner());
@@ -98,13 +107,14 @@ impl MissionPlanner {
         let now = Instant::now();
         match class {
             geofence::CLASS => self.software_pages.geofence.hide(now),
+            simple_pids::CLASS => self.software_pages.simple.hide(now),
             rover_tuning::CLASS => self.software_pages.rover.hide(now),
             user_params::CLASS => self.software_pages.user.deactivate(),
             _ => {}
         }
     }
 
-    /// The page, when one of the three is showing.
+    /// The page, when one of the four is showing.
     pub(crate) fn software_page(
         &self,
         class: &str,
@@ -115,6 +125,7 @@ impl MissionPlanner {
         let focus = &self.software_focus;
         match class {
             geofence::CLASS => geofence::page(&pages.geofence, &focus.number, window, cx),
+            simple_pids::CLASS => simple_pids::page(&pages.simple, &focus.number, window, cx),
             rover_tuning::CLASS => rover_tuning::page(&pages.rover, &focus.number, window, cx),
             user_params::CLASS => user_params::page(&pages.user, cx),
             _ => div().into_any_element(),
@@ -132,6 +143,7 @@ impl MissionPlanner {
         pages
             .geofence
             .tick(telemetry, view, on_config, focused, now);
+        pages.simple.tick(telemetry, view, on_config, focused, now);
         pages.rover.tick(telemetry, view, on_config, focused, now);
         pages.user.tick(telemetry, view, on_config);
         // What the pages' controls box when the link fails - "Set X Failed", "Set X Failed!" -
@@ -139,6 +151,7 @@ impl MissionPlanner {
         // those out of its boxes as its writes move on.
         let failures = [
             pages.geofence.take_status(),
+            pages.simple.take_status(),
             pages.rover.take_status(),
             pages.user.take_status(),
         ];
@@ -147,7 +160,7 @@ impl MissionPlanner {
         }
     }
 
-    /// The box or question one of the three is showing, over the whole window.
+    /// The box or question one of the four is showing, over the whole window.
     pub(crate) fn software_overlay(
         &self,
         window: &Window,

@@ -10,6 +10,7 @@
 #
 # Its own data directory, empty, so no home saved on this machine is in the boxes.
 
+env MP_CONFIG_XML $WORK/config.xml
 env XDG_DATA_HOME $WORK
 # A home in a config.xml of the test's own: the planner's map has no view without one, and a
 # click on a map without a view adds nothing.

@@ -1,0 +1,99 @@
+# CONFIG's Basic Tuning for a copter, ported from GCSViews/ConfigurationView/ConfigSimplePids.cs
+# (PLAN.md §13.6 row 92).
+#
+# SoftwareConfig adds ConfigSimplePids as "Basic Tuning", and opens on it, when the vehicle is an
+# ArduCopter and the display view shows Basic Tuning (SoftwareConfig.cs:160-165). Activate reads
+# acsimplepids.xml and makes a RangeControl for each of its six items the vehicle has a parameter
+# for (ConfigSimplePids.cs:26-36, 128-154); a copter of today has only ATC_RAT_RLL_P of the six,
+# so one control shows: "Roll/Pitch Sensitivity:", the number with the documented range's ends
+# under the bar, green inside the range.
+#
+# A change writes the parameter and then its three relations - ATC_RAT_RLL_I, ATC_RAT_PIT_P and
+# ATC_RAT_PIT_I at the same value (acsimplepids.xml, ConfigSimplePids.cs:172-209) - and TXT_info
+# lists each as "set NAME VALUE". The arrow steps by the documented increment, 0.005. On SITL the
+# four start equal (0.135), so the step down puts all four back.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run as
+#
+#   tools/gui-test.sh tests/gui/config-simple-pids.gui -- tcp:127.0.0.1:5760
+
+env MP_CONFIG_XML $WORK/config.xml
+screen params
+window 1600x1200
+settle 6
+# RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
+# again?" unticked, so no later visit asks, and OK.
+click raw-param-warning-again
+click raw-param-warning-ok
+
+# CONFIG lists the tuning pages once every parameter is in (SoftwareConfig.cs:148-150), and here
+# parameters are downloaded when asked for.
+click param-download
+settle 15
+expect params.held > 1000
+expect params.value.ATC_RAT_RLL_P 0.135
+expect params.value.ATC_RAT_PIT_P 0.135
+
+click tab-config
+settle 1
+expect screen config
+expect config.page ConfigSimplePids
+expect config.title Basic Tuning
+expect config.simplepids.active true
+expect config.simplepids.items ATC_RAT_RLL_P
+expect config.simplepids.ATC_RAT_RLL_P 0.1350
+expect config.simplepids.ATC_RAT_RLL_P.title Roll/Pitch Sensitivity:
+expect config.simplepids.ATC_RAT_RLL_P.min 0.01
+expect config.simplepids.ATC_RAT_RLL_P.max 0.5
+expect config.simplepids.ATC_RAT_RLL_P.decimals 4
+expect config.simplepids.ATC_RAT_RLL_P.track 255
+expect config.simplepids.ATC_RAT_RLL_P.colour green
+expect config.simplepids.ATC_RAT_RLL_P.relations ATC_RAT_RLL_I*1,ATC_RAT_PIT_P*1,ATC_RAT_PIT_I*1
+expect config.simplepids.info NOTE: using this interface may reset some off your custom pids.
+expect config.simplepids.last none
+
+# The up arrow: one increment, written at once with the three relations, each listed.
+click simplepids-ATC_RAT_RLL_P-up
+settle 3
+expect config.simplepids.ATC_RAT_RLL_P 0.1400
+expect config.simplepids.ATC_RAT_RLL_P.track 265
+expect config.simplepids.last ATC_RAT_PIT_I 0.14 accepted
+expect config.simplepids.info set ATC_RAT_RLL_P 0.14 | set ATC_RAT_RLL_I 0.14 | set ATC_RAT_PIT_P 0.14 | set ATC_RAT_PIT_I 0.14
+expect params.value.ATC_RAT_RLL_P 0.14
+expect params.value.ATC_RAT_PIT_I 0.14
+
+# Typed into and read on Enter: the value held to the range's maximum, no question asked.
+click simplepids-ATC_RAT_RLL_P
+expect config.simplepids.editing ATC_RAT_RLL_P
+key ctrl+u
+type 9
+key Return
+settle 3
+expect config.simplepids.ATC_RAT_RLL_P 0.5000
+expect config.simplepids.ATC_RAT_RLL_P.track 1000
+expect config.simplepids.ATC_RAT_RLL_P.colour green
+expect params.value.ATC_RAT_RLL_P 0.5
+
+# Put back by typing: all four at 0.135 again.
+click simplepids-ATC_RAT_RLL_P
+key ctrl+u
+type 0.135
+key Return
+settle 3
+expect config.simplepids.ATC_RAT_RLL_P 0.1350
+expect config.simplepids.ATC_RAT_RLL_P.track 255
+expect config.simplepids.last ATC_RAT_PIT_I 0.135 accepted
+expect params.value.ATC_RAT_RLL_P 0.135
+expect params.value.ATC_RAT_RLL_I 0.135
+expect params.value.ATC_RAT_PIT_P 0.135
+expect params.value.ATC_RAT_PIT_I 0.135
+
+# Another page and back: Activate makes the controls afresh at the vehicle's values.
+click config-page-ConfigUserDefined
+settle 1
+expect config.simplepids.active false
+click config-page-ConfigSimplePids
+settle 1
+expect config.simplepids.active true
+expect config.simplepids.ATC_RAT_RLL_P 0.1350
+expect config.simplepids.info NOTE: using this interface may reset some off your custom pids.

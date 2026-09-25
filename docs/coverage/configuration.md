@@ -11,15 +11,15 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 30 | 14 | 3 | 2 | 12 | 569 |
+| 61 | 31 | 14 | 2 | 2 | 12 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings
         // in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 25 | 9 | 1 | 2 | 7 | 258 |
         //     15 |
-| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 5 | 5 | 2 | 0 | 1 | 277 |
-        //     1 |
+| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 6 | 5 | 1 | 0 | 1 | 277 |
+        //     0 |
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 |
         //     0 |
 
@@ -32,7 +32,6 @@ The largest missing panels, by wirings:
 | panel | title | wirings |
 |---|---|---:|
 | `ConfigDroneCAN` | DroneCAN/UAVCAN | 15 |
-| `ConfigSimplePids` | Basic Tuning | 1 |
 | `ConfigOSD` | Onboard OSD | 0 |
 
 Vehicles: **any** is a connected vehicle whose parameter list is whole
@@ -148,7 +147,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
 | line | page | title | under | vehicles | wirings | ours |
 |---:|---|---|---|---|---:|---|
 | 156 | `ConfigAC_Fence` | GeoFence |  | copter | 0 | done: `crates/mp-gui/src/config/geofence.rs` `fn page` |
-| 164 | `ConfigSimplePids` | Basic Tuning |  | copter | 1 | **missing** |
+| 164 | `ConfigSimplePids` | Basic Tuning |  | copter | 1 | done: `crates/mp-gui/src/config/simple_pids.rs` `fn page` |
 | 169 | `ConfigArducopter` | Extended Tuning |  | copter | 128 | done: `crates/mp-gui/src/config/extended_tuning.rs` `fn page` |
 | 177 | `ConfigArduplane` | Basic Tuning |  | plane | 47 | done: `crates/mp-gui/src/config/basic_tuning.rs` `fn page` |
 | 182 | `ConfigArducopter` | QP Extended Tuning |  | plane (enabled for a quadplane) | 128 | as at `GCSViews/SoftwareConfig.cs:169` |

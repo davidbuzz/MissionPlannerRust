@@ -3,6 +3,7 @@
 # position. No vehicle is connected, so it is not ArduPlane and no pitch is asked. An altitude
 # int.TryParse refuses is "Bad Alt".
 
+env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
 settle 4

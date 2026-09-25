@@ -24,3 +24,5 @@ and write the divergence at the site, citing this ruling. Pin it with a test tha
 box (`person.shown.is_empty()` in the firmware bench). Questions that need an answer, and
 confirmations before something irreversible, keep their boxes. Related: [[match-the-original-layout]]
 (Buzz is the oracle on look and feel), [[bench-cubeorange]].
+
+Buzz, 2026-09-25, on the show-again boxes: questions, confirmations and warnings "aren't *errors*, so are acceptable as dialog boxes" - `MessageShowAgain`'s warnings with their "Show me again?" tick and the armed-only "Refresh Params" question stay boxes (PLAN §12 D17).

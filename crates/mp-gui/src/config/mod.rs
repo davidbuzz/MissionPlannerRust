@@ -38,6 +38,7 @@ pub mod firmware_legacy;
 // ---- GeoFence / rover Basic Tuning / User Params ----
 pub mod geofence;
 pub mod rover_tuning;
+pub mod simple_pids;
 pub mod software_pages;
 pub mod user_params;
 // ---- end GeoFence / rover Basic Tuning / User Params ----

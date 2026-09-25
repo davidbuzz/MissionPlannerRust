@@ -839,7 +839,13 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigSimplePids"),
         Some(1),
         &[config(164, "Basic Tuning", "copter")],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigSimplePids.cs:26-209, ported whole: the template
+        // acsimplepids.xml read on every Activate, a RangeControl (ExtLibs/Controls/
+        // RangeControl.cs) for each item the vehicle has - the documented range and increment,
+        // the number, the 0-1000 bar, the range's ends - each change writing the parameter and
+        // its relations at once with TXT_info's "set" lines; the divergences are at the sites in
+        // simple_pids.rs.
+        Ours::Done(at("crates/mp-gui/src/config/simple_pids.rs", "fn page")),
     ),
     panel(
         "ConfigArducopter",
@@ -1877,7 +1883,7 @@ mod tests {
             );
             checked += 1;
         }
-        assert_eq!(checked, 46);
+        assert_eq!(checked, 47);
     }
 
     /// The committed report matches the table.
@@ -1909,7 +1915,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (30, 14, 3, 2, 12)
+            (31, 14, 2, 2, 12)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

@@ -1,6 +1,7 @@
 # RTL: rTLToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:5873). Appends a RETURN_TO_LAUNCH (20)
 # and nothing else - no position, no altitude.
 
+env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
 settle 4

@@ -2,6 +2,7 @@
 # goes; home is not a row - it is the Home Location boxes' - so it stays, and so does the survey
 # polygon.
 
+env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
 settle 4

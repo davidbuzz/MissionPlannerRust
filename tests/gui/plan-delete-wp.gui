@@ -5,6 +5,7 @@
 # The first click's waypoint moves when the map frames it; the second one's does not, because the
 # second press freezes the view. So the right-click aims at the second.
 
+env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
 settle 4

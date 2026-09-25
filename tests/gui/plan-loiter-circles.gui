@@ -1,6 +1,7 @@
 # Loiter > Circles: loitercirclesToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:4743). Asks
 # "Loiter Turns", offering 3, and appends a LOITER_TURNS (18) at the click with the turns in Param1.
 
+env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
 settle 4

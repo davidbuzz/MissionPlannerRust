@@ -439,7 +439,8 @@ impl Question {
 }
 
 /// A `decimal` a float converts to, as an `f64`: seven significant digits.
-fn decimal(value: f32) -> f64 {
+/// `(decimal)value`: a float to the decimal it converts to, seven significant digits.
+pub fn decimal(value: f32) -> f64 {
     let (mantissa, places) = decimal_of(value);
     #[allow(clippy::cast_precision_loss)] // seven digits fit
     let mantissa = mantissa as f64;
@@ -607,6 +608,27 @@ impl Number {
     #[must_use]
     pub const fn increment(&self) -> f64 {
         self.increment
+    }
+
+    /// `Increment`'s setter, for a box set up by hand rather than by `setup`: a `RangeControl`'s
+    /// plain `NumericUpDown` takes the increment its owner gives it.
+    /// `// C#: ExtLibs/Controls/RangeControl.cs:31-39`
+    pub const fn set_increment(&mut self, increment: f64) {
+        self.increment = increment;
+    }
+
+    /// `Value`.
+    #[must_use]
+    pub const fn value(&self) -> f64 {
+        self.value
+    }
+
+    /// `Value`'s setter from code: held inside the bounds, the box showing it, nothing typed
+    /// over it, and no timer - the owner decides what a change does.
+    pub fn set_value(&mut self, value: f64) {
+        self.value = value.clamp(self.minimum, self.maximum);
+        self.edited = false;
+        self.field.set(self.text());
     }
 
     /// `Value` as the box shows it, to `DecimalPlaces` places.

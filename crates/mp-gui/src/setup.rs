@@ -984,7 +984,10 @@ impl MissionPlanner {
             // Every time, as `ActivatePage` calls it (`config/software_pages.rs`).
             // C#: GCSViews/ConfigurationView/ConfigAC_Fence.cs:19-49; ConfigArdurover.cs:26-114;
             // ConfigUserDefined.cs:88-91
-            Some(class @ ("ConfigAC_Fence" | "ConfigArdurover" | "ConfigUserDefined")) => {
+            Some(
+                class @ ("ConfigAC_Fence" | "ConfigSimplePids" | "ConfigArdurover"
+                | "ConfigUserDefined"),
+            ) => {
                 self.software_activate(class);
             }
             // ---- end GeoFence / rover Basic Tuning / User Params ----
@@ -1111,7 +1114,10 @@ impl MissionPlanner {
             // `ConfigAC_Fence` and `ConfigArdurover` are `IActivate` only: hidden, a number being
             // typed into read. `ConfigUserDefined.Deactivate` does nothing.
             // C#: GCSViews/ConfigurationView/ConfigUserDefined.cs:93-96
-            Some(class @ ("ConfigAC_Fence" | "ConfigArdurover" | "ConfigUserDefined")) => {
+            Some(
+                class @ ("ConfigAC_Fence" | "ConfigSimplePids" | "ConfigArdurover"
+                | "ConfigUserDefined"),
+            ) => {
                 self.software_deactivate(class);
             }
             // ---- end GeoFence / rover Basic Tuning / User Params ----
@@ -1376,6 +1382,9 @@ impl MissionPlanner {
             // ---- GeoFence / rover Basic Tuning / User Params ----
             // C#: GCSViews/ConfigurationView/ConfigAC_Fence.Designer.cs:29-220; ConfigAC_Fence.resx
             "ConfigAC_Fence" => self.software_page(class, window, cx),
+            // C#: GCSViews/ConfigurationView/ConfigSimplePids.Designer.cs:29-56; ConfigSimplePids.resx;
+            // ExtLibs/Controls/RangeControl.Designer.cs
+            "ConfigSimplePids" => self.software_page(class, window, cx),
             // C#: GCSViews/ConfigurationView/ConfigArdurover.Designer.cs:29-723; ConfigArdurover.resx
             "ConfigArdurover" => self.software_page(class, window, cx),
             // C#: GCSViews/ConfigurationView/ConfigUserDefined.cs:46-86
