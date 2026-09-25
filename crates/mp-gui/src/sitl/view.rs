@@ -21,6 +21,7 @@ use super::{Field, Spin};
 use crate::MissionPlanner;
 use crate::config::optional::{at, input_box};
 use crate::config::servo_output::dropdown;
+use crate::pictures::Layout;
 use crate::ui::theme;
 
 /// `GMarkerGoogle`'s area from its point, which `GMapMarkerWP` is: where `OnMarkerEnter` fires.
@@ -126,7 +127,7 @@ pub fn screen(this: &MissionPlanner, window: &Window, cx: &mut Context<MissionPl
                         .h(px(PANEL1.2))
                         .flex()
                         .justify_center()
-                        .child(pictures(sitl.running(), cx)),
+                        .child(pictures(sitl, sitl.running(), cx)),
                 ),
         )
         .into_any_element()
@@ -654,34 +655,53 @@ fn spin(
         .into_any_element()
 }
 
-/// `panel1`: the four pictures, a click on which starts that vehicle, and their labels. The
-/// pictures are named boxes, as Install Firmware's are; `PictureBoxMouseOver`'s second image is
-/// the highlight under the pointer. Inert while a start is on its way.
-/// `// C#: GCSViews/SITL.Designer.cs:104-179`
-fn pictures(busy: bool, cx: &mut Context<MissionPlanner>) -> AnyElement {
+/// How a vehicle's bitmap sits in its box: `SizeMode`, which the `.resx` leaves at `Normal` - at
+/// the top left, unscaled, clipped. The bitmaps are 132 high in boxes 112 high, so their bottom
+/// 20 rows are cut off, and the plane's 139 columns and the rover's and quad's are cut at the
+/// right, as in the C#.
+/// `// C#: GCSViews/SITL.resx (pictureBox*.Size; no pictureBox*.SizeMode)`
+pub const PICTURE_LAYOUT: Layout = Layout::None;
+
+/// `panel1`: the four pictures, a click on which starts that vehicle, and their labels. Each
+/// shows its `ImageNormal`, and its `ImageOver` while the pointer is on it
+/// (`PictureBoxMouseOver`); a picture not carried is the named box drawn before. Inert while a
+/// start is on its way.
+/// `// C#: GCSViews/SITL.Designer.cs:104-179; ExtLibs/Controls/PictureBoxMouseOver.cs`
+fn pictures(sitl: &super::Sitl, busy: bool, cx: &mut Context<MissionPlanner>) -> AnyElement {
     let (_, width, height) = PANEL1;
     let mut panel = div().relative().w(px(width)).h(px(height));
     for vehicle in Vehicle::ALL {
         let (x, y, w, h) = vehicle.picture();
-        let picture = crate::probe::measured(vehicle.id(), div())
+        let body = crate::probe::measured(vehicle.id(), div())
             .id(vehicle.id())
             .size_full()
-            .flex()
-            .items_center()
-            .justify_center()
-            .rounded_md()
-            .border_1()
-            .border_color(rgb(theme::BORDER))
-            .bg(rgb(if busy { theme::PANEL } else { theme::ACTION }))
-            .text_lg()
-            .text_color(rgb(if busy { theme::DIM } else { theme::TEXT }))
-            .child(vehicle.label());
+            .on_hover(cx.listener(move |this, hovered: &bool, _window, cx| {
+                this.sitl.hover(vehicle, *hovered);
+                cx.notify();
+            }));
+        let picture = match crate::pictures::image(sitl.picture(vehicle), PICTURE_LAYOUT) {
+            Some(image) => body.child(image),
+            None => body
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded_md()
+                .border_1()
+                .border_color(rgb(if sitl.picture(vehicle) == vehicle.image(true) {
+                    theme::ACCENT
+                } else {
+                    theme::BORDER
+                }))
+                .bg(rgb(if busy { theme::PANEL } else { theme::ACTION }))
+                .text_lg()
+                .text_color(rgb(if busy { theme::DIM } else { theme::TEXT }))
+                .child(vehicle.label()),
+        };
         let picture = if busy {
             picture
         } else {
             picture
                 .cursor_pointer()
-                .hover(|style| style.border_color(rgb(theme::ACCENT)).bg(rgb(theme::BORDER)))
                 .on_click(cx.listener(move |this, _event, _window, cx| {
                     this.sitl_click_picture(vehicle);
                     cx.notify();

@@ -209,6 +209,37 @@ impl Vehicle {
         }
     }
 
+    /// The `PictureBoxMouseOver`'s name in the Designer.
+    /// `// C#: GCSViews/SITL.Designer.cs:40-43`
+    #[must_use]
+    pub const fn control(self) -> &'static str {
+        match self {
+            Self::Plane => "pictureBoxplane",
+            Self::Rover => "pictureBoxrover",
+            Self::Multirotor => "pictureBoxquad",
+            Self::Helicopter => "pictureBoxheli",
+        }
+    }
+
+    /// The picture shown: `ImageOver` under the pointer, `ImageNormal` otherwise - the
+    /// `.resx`'s bitmaps, as [`crate::pictures`] carries them. `selected`, the other way to
+    /// `ImageOver`, stays false: the Designer's `selected = false` is its only assignment.
+    /// `// C#: GCSViews/SITL.Designer.cs:140-143, 151-154, 162-165, 173-176;
+    /// ExtLibs/Controls/PictureBoxMouseOver.cs:37-50`
+    #[must_use]
+    pub const fn image(self, over: bool) -> &'static str {
+        match (self, over) {
+            (Self::Plane, false) => "SITL.pictureBoxplane.ImageNormal",
+            (Self::Plane, true) => "SITL.pictureBoxplane.ImageOver",
+            (Self::Rover, false) => "SITL.pictureBoxrover.ImageNormal",
+            (Self::Rover, true) => "SITL.pictureBoxrover.ImageOver",
+            (Self::Multirotor, false) => "SITL.pictureBoxquad.ImageNormal",
+            (Self::Multirotor, true) => "SITL.pictureBoxquad.ImageOver",
+            (Self::Helicopter, false) => "SITL.pictureBoxheli.ImageNormal",
+            (Self::Helicopter, true) => "SITL.pictureBoxheli.ImageOver",
+        }
+    }
+
     /// The picture's `Location` and `Size` in `panel1`.
     /// `// C#: GCSViews/SITL.resx (pictureBox*.Location, pictureBox*.Size)`
     #[must_use]

@@ -18,7 +18,10 @@
 //!   the font gpui shapes with - no font file is read, so the frame does not depend on what the
 //!   machine has installed - but every character has its own shape, so a changed number is a
 //!   changed picture.
-//! * **Pictures** are drawn as [`super::paint`] draws them: their stand-ins, [`icon_items`].
+//! * **Pictures** are drawn as [`super::paint`] draws them: the `HUDT` bitmap, decoded and
+//!   resampled to its rectangle's size by [`crate::pictures`] as the GPU's copy is, each pixel
+//!   whose centre is inside taking the copy's pixel there, blended by its alpha ([`picture`]);
+//!   the stand-in, [`icon_items`], only for a bitmap not carried.
 //! * **A vertex that is not finite** leaves its shape undrawn. In a release build gpui's
 //!   tessellator refuses a fill with a NaN corner (lyon's `PositionIsNaN`) and
 //!   [`super::paint`] draws nothing for it; a debug build stops sooner, in lyon's path builder,
@@ -155,11 +158,69 @@ fn draw(image: &mut Image, item: &Item) {
             1.0,
         ),
         Item::Icon { icon, rect } => {
-            for part in icon_items(*icon, *rect) {
-                draw(image, &part);
+            if !picture(image, icon.resource(), *rect) {
+                for part in icon_items(*icon, *rect) {
+                    draw(image, &part);
+                }
             }
         }
     }
+}
+
+/// Draws a carried picture stretched into `rect` (left, top, width, height), as
+/// [`super::paint`] hands it to the GPU: resampled to the rectangle's size in whole pixels by
+/// [`crate::pictures::resampled`], each pixel whose centre lies in the rectangle taking the
+/// resampled pixel under that centre, blended by its alpha. `false` when the picture is not
+/// carried, for the stand-in to be drawn instead.
+// Pixel indices are small, non-negative and inside the image and the copy: the casts are checked
+// by the clamps before them.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
+fn picture(image: &mut Image, resource: &'static str, rect: (f32, f32, f32, f32)) -> bool {
+    let Some(source) = crate::pictures::pixels(resource) else {
+        return false;
+    };
+    let (left, top, width, height) = rect;
+    if ![left, top, width, height].iter().all(|v| v.is_finite()) || width <= 0.0 || height <= 0.0 {
+        return true;
+    }
+    let (columns, rows) = (
+        width.round().clamp(1.0, 16_384.0) as u32,
+        height.round().clamp(1.0, 16_384.0) as u32,
+    );
+    let copy = crate::pictures::resampled(&source, columns, rows);
+    let span = |from: f32, length: f32, limit: u32| {
+        (
+            from.floor().clamp(0.0, limit as f32) as u32,
+            (from + length).ceil().clamp(0.0, limit as f32) as u32,
+        )
+    };
+    let (x0, x1) = span(left, width, image.width);
+    let (y0, y1) = span(top, height, image.height);
+    for y in y0..y1 {
+        let v = (y as f32 + 0.5 - top) / height;
+        if !(0.0..1.0).contains(&v) {
+            continue;
+        }
+        let row = ((v * rows as f32) as u32).min(rows - 1);
+        for x in x0..x1 {
+            let u = (x as f32 + 0.5 - left) / width;
+            if !(0.0..1.0).contains(&u) {
+                continue;
+            }
+            let column = ((u * columns as f32) as u32).min(columns - 1);
+            if let Some(pixel) = copy.get_pixel_checked(column, row) {
+                let [r, g, b, a] = pixel.0;
+                if a > 0 {
+                    image.blend(x, y, [r, g, b], f32::from(a) / 255.0);
+                }
+            }
+        }
+    }
+    true
 }
 
 /// Fills the union of `shapes`, each even-odd, with `colour` at `alpha`, blended once however
@@ -592,6 +653,51 @@ mod tests {
             }],
             ..Scene::default()
         }
+    }
+
+    /// A picture is its `HUDT` bitmap stretched into its rectangle - the resampled copy's pixels,
+    /// blended by their alpha over what is behind - and nothing outside the rectangle; not the
+    /// stand-in. `// C#: ExtLibs/Controls/HUD.cs:3232, 1591`
+    #[test]
+    fn a_picture_is_its_bitmap_stretched_into_its_rectangle() {
+        use super::super::Icon;
+        let rect = (10.0, 20.0, 60.0, 20.0);
+        let scene = Scene {
+            items: vec![Item::Icon {
+                icon: Icon::EkfRed,
+                rect,
+            }],
+            ..Scene::default()
+        };
+        let image = render(&scene, 80, 50);
+        let source = crate::pictures::pixels("ekf_red").expect("carried");
+        let copy = crate::pictures::resampled(&source, 60, 20);
+        let mut opaque = 0;
+        for y in 0..50 {
+            for x in 0..80 {
+                let inside = (10..70).contains(&x) && (20..40).contains(&y);
+                let want = if inside {
+                    let [r, g, b, a] = copy.get_pixel(x - 10, y - 20).0;
+                    if a == 255 {
+                        opaque += 1;
+                    }
+                    let alpha = f32::from(a) / 255.0;
+                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                    let mix = |c: u8| (f32::from(c) * alpha).round() as u8;
+                    [mix(r), mix(g), mix(b)]
+                } else {
+                    [0, 0, 0]
+                };
+                assert_eq!(image.pixel(x, y), Some(want), "({x}, {y})");
+            }
+        }
+        assert!(opaque > 0, "the bitmap has opaque pixels");
+        // Not the stand-in: a badge fills its whole rectangle with one colour.
+        let stand_in = render_over(
+            Image::new(80, 50, 0),
+            &super::super::icon_items(Icon::EkfRed, rect),
+        );
+        assert_ne!(image, stand_in);
     }
 
     /// A square on pixel edges covers exactly its pixels, and nothing next to them.

@@ -41,10 +41,12 @@
 //!
 //! With `displayicons` on, the battery, the GPS fix, Vibe, EKF and the pre-arm line are drawn
 //! as `HUDT`'s bitmaps (`ExtLibs/Controls/Resources/*.png`) at the rectangles `doPaint()` gives
-//! `DrawImage`. The scene records which picture goes where ([`Item::Icon`]); the bitmaps are
-//! Mission Planner's artwork and not files this application ships (as `config/frame_type.rs`
-//! does not ship its frame pictures), so [`paint`] draws each as what it shows - a coloured
-//! badge with its words, or a battery with its bars - in the bitmap's colours, in its rectangle.
+//! `DrawImage` (`HUD.cs:2893, 3008, 3173-3295`). The scene records which picture goes where
+//! ([`Item::Icon`]); [`paint`] stretches the bitmap, carried by [`crate::pictures`], into its
+//! rectangle as `DrawImage` does (`HUD.cs:1502-1591`). Should a bitmap not be carried it draws
+//! the stand-in [`icon_items`]: what the picture shows - a coloured badge with its words, or a
+//! battery with its bars - in the bitmap's colours. Where `displayicons` is off the C# draws no
+//! picture, and neither does this.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -160,7 +162,7 @@ pub enum Icon {
     PrearmRed,
 }
 
-/// What a picture shows, for the stand-in [`paint`] draws.
+/// What a picture shows, for the stand-in [`paint`] draws where its bitmap is not carried.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Look {
     /// A badge of one colour at alpha 179 with white words across it.
@@ -170,6 +172,46 @@ enum Look {
 }
 
 impl Icon {
+    /// Every picture, in `HUDT.resx`'s order.
+    #[cfg(test)]
+    pub const ALL: [Self; 22] = [
+        Self::Batt1,
+        Self::Batt2,
+        Self::Batt3,
+        Self::Batt4,
+        Self::BattRed,
+        Self::BattYellow,
+        Self::EkfGreen,
+        Self::EkfRed,
+        Self::EkfYellow,
+        Self::NoFix,
+        Self::NoGps,
+        Self::PrearmGreen,
+        Self::PrearmRed,
+        Self::RtkFixed,
+        Self::RtkFloat,
+        Self::Unknown,
+        Self::VibeGreen,
+        Self::VibeRed,
+        Self::VibeYellow,
+        Self::Fix2d,
+        Self::Dgps3d,
+        Self::Fix3d,
+    ];
+
+    /// The `HUDT` property, which is the picture's name in [`crate::pictures::IMAGES`]:
+    /// [`Icon::name`] with the underscore C# puts before a name that starts with a digit.
+    /// `// C#: ExtLibs/Controls/HUDT.Designer.cs`
+    #[must_use]
+    pub const fn resource(self) -> &'static str {
+        match self {
+            Self::Fix2d => "_2dfix_wide",
+            Self::Fix3d => "_3dfix_wide",
+            Self::Dgps3d => "_3ddgps_wide",
+            other => other.name(),
+        }
+    }
+
     /// The file's name, for the facts.
     #[must_use]
     pub const fn name(self) -> &'static str {
@@ -2939,7 +2981,7 @@ const fn picture_at(zone: (f32, f32, f32, f32)) -> (f32, f32, f32, f32) {
     (zone.0, zone.1 + 2.0, zone.2, zone.3)
 }
 
-/// The stand-in [`paint`] draws for a picture in its rectangle.
+/// The stand-in [`paint`] draws for a picture in its rectangle should its bitmap not be carried.
 ///
 /// A badge is its colour at the bitmaps' alpha of 179, with its words in white across the
 /// middle, as large as the box's height allows and small enough to fit its width. A battery is
@@ -3082,9 +3124,8 @@ fn tinted(colour: u32, alpha: f32) -> Hsla {
 
 /// Paints a scene into a canvas whose top-left is `bounds.origin`.
 pub fn paint(scene: &Scene, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut gpui::App) {
-    let origin = bounds.origin;
     for item in &scene.items {
-        paint_item(item, origin, window, cx);
+        paint_item(item, bounds, window, cx);
     }
 }
 
@@ -3115,7 +3156,7 @@ pub fn paint_over_camera(
         false,
     );
     for item in over_camera(scene, hud_on) {
-        paint_item(item, bounds.origin, window, cx);
+        paint_item(item, bounds, window, cx);
     }
 }
 
@@ -3178,8 +3219,11 @@ mod camera_tests {
     }
 }
 
-/// Paints one item: a picture as its stand-in, [`icon_items`].
-fn paint_item(item: &Item, origin: Point<Pixels>, window: &mut Window, cx: &mut gpui::App) {
+/// Paints one item into the canvas at `bounds`: a picture as its `HUDT` bitmap stretched into
+/// its rectangle as `DrawImage` stretches it (`HUD.cs:1591`), clipped to the canvas; or, should
+/// the bitmap not be carried, as its stand-in, [`icon_items`].
+fn paint_item(item: &Item, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut gpui::App) {
+    let origin = bounds.origin;
     match item {
         Item::Fill {
             points,
@@ -3200,8 +3244,15 @@ fn paint_item(item: &Item, origin: Point<Pixels>, window: &mut Window, cx: &mut 
             align,
         } => label(window, cx, origin, text, *at, *size, *colour, *align),
         Item::Icon { icon, rect } => {
-            for part in icon_items(*icon, *rect) {
-                paint_item(&part, origin, window, cx);
+            let (left, top, width, height) = *rect;
+            let target = Bounds {
+                origin: to_screen(origin, (left, top)),
+                size: gpui::size(px(width), px(height)),
+            };
+            if !crate::pictures::paint_stretched(icon.resource(), bounds, target, window) {
+                for part in icon_items(*icon, *rect) {
+                    paint_item(&part, bounds, window, cx);
+                }
             }
         }
     }

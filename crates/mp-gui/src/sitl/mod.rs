@@ -20,8 +20,9 @@
 //! (`StartSwarmSeperate`, `SITL.cs:829-991`) connect one link per vehicle
 //! (`MainV2.Comports.Add`), which the application has not got - they are drawn dimmed;
 //! `SITLSEND`, the UDP port 5501 the C# opens for `rcinput`'s joystick overrides
-//! (`SITL.cs:728, 741-760`), as the joystick's RC override path through it is not ported; the
-//! vehicle pictures are named boxes, as on Install Firmware, not the `.resx`'s bitmaps.
+//! (`SITL.cs:728, 741-760`), as the joystick's RC override path through it is not ported. The
+//! vehicle pictures are the `.resx`'s bitmaps, `ImageNormal` and `ImageOver` under the pointer
+//! (`crate::pictures`).
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -239,6 +240,8 @@ pub struct Sitl {
     status: Option<String>,
     /// A link to open, once a start has given the simulator its two seconds.
     connect: Option<String>,
+    /// The picture under the pointer, which shows its `ImageOver`.
+    hovered: Option<Vehicle>,
 }
 
 /// The page's keyboard focus.
@@ -303,7 +306,25 @@ impl Sitl {
             outcome: None,
             status: None,
             connect: None,
+            hovered: None,
         }
+    }
+
+    /// The pointer entering or leaving a picture: `OnMouseEnter` and `OnMouseLeave`.
+    /// `// C#: ExtLibs/Controls/PictureBoxMouseOver.cs:19-35`
+    pub fn hover(&mut self, vehicle: Vehicle, over: bool) {
+        if over {
+            self.hovered = Some(vehicle);
+        } else if self.hovered == Some(vehicle) {
+            self.hovered = None;
+        }
+    }
+
+    /// The bitmap a picture shows: `ImageOver` while the pointer is on it, else `ImageNormal`.
+    /// `// C#: ExtLibs/Controls/PictureBoxMouseOver.cs:37-50`
+    #[must_use]
+    pub fn picture(&self, vehicle: Vehicle) -> &'static str {
+        vehicle.image(self.hovered == Some(vehicle))
     }
 
     /// The constructor, once, and then `Activate`: the home marker where the planner's home is
@@ -946,6 +967,22 @@ pub fn record_facts(sitl: &Sitl, persisted: &crate::settings::Persisted) {
     );
     record("sitl.howmany.open", sitl.how_many.is_some());
     record("sitl.multilink", view::MULTILINK_REASON);
+    // `sitl.picture.<plane|rover|quad|heli>`: the bitmap each picture shows, or `none` where it
+    // is not carried and the named box is drawn.
+    for vehicle in Vehicle::ALL {
+        let shown = sitl.picture(vehicle);
+        record(
+            format!(
+                "sitl.picture.{}",
+                vehicle.control().trim_start_matches("pictureBox")
+            ),
+            if crate::pictures::bytes(shown).is_some() {
+                shown
+            } else {
+                "none"
+            },
+        );
+    }
 }
 
 #[cfg(test)]
@@ -1030,6 +1067,41 @@ mod tests {
         }
         assert_eq!(sitl.how_many_ok(&mut settings).as_deref(), Some("some"));
         assert_eq!(settings.get(&key_name), Some("some"), "kept before the parse");
+    }
+
+    /// `PictureBoxMouseOver`: each picture shows its `ImageNormal`, and its `ImageOver` while the
+    /// pointer is on it; leaving another picture does not take it off. Every bitmap is carried.
+    /// `// C#: ExtLibs/Controls/PictureBoxMouseOver.cs:19-50`
+    #[test]
+    fn a_picture_shows_its_over_image_under_the_pointer() {
+        let mut sitl = Sitl::with_launcher(Arc::new(StubLauncher::new(Image::NotAvailable(
+            "n".to_owned(),
+        ))));
+        let shown = |sitl: &Sitl| Vehicle::ALL.map(|vehicle| sitl.picture(vehicle));
+        assert_eq!(
+            shown(&sitl),
+            [
+                "SITL.pictureBoxplane.ImageNormal",
+                "SITL.pictureBoxrover.ImageNormal",
+                "SITL.pictureBoxquad.ImageNormal",
+                "SITL.pictureBoxheli.ImageNormal",
+            ]
+        );
+        sitl.hover(Vehicle::Multirotor, true);
+        assert_eq!(sitl.picture(Vehicle::Multirotor), "SITL.pictureBoxquad.ImageOver");
+        assert_eq!(sitl.picture(Vehicle::Plane), "SITL.pictureBoxplane.ImageNormal");
+        sitl.hover(Vehicle::Plane, false);
+        assert_eq!(sitl.picture(Vehicle::Multirotor), "SITL.pictureBoxquad.ImageOver");
+        sitl.hover(Vehicle::Helicopter, true);
+        assert_eq!(sitl.picture(Vehicle::Multirotor), "SITL.pictureBoxquad.ImageNormal");
+        assert_eq!(sitl.picture(Vehicle::Helicopter), "SITL.pictureBoxheli.ImageOver");
+        sitl.hover(Vehicle::Helicopter, false);
+        assert!(shown(&sitl).iter().all(|name| name.ends_with(".ImageNormal")));
+        for vehicle in Vehicle::ALL {
+            for over in [false, true] {
+                assert!(crate::pictures::bytes(vehicle.image(over)).is_some());
+            }
+        }
     }
 
     /// The page's lists and boxes as the model uses them.

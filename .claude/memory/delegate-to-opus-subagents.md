@@ -57,3 +57,8 @@ sweep the new files too and grep for `CARGO_BIN_EXE_<old>` (an underscore before
 worktree and its branch (`git worktree remove --force`, `git branch -D`). Six agents on one
 `target-agents` dir make every GUI rebuild minutes long and they overwrite each other's builds -
 they touch `lib.rs` to recover; a per-agent target dir would cost disk but save the thrash.
+
+**2026-09-25 17:35, Buzz: "pls dont make any new subagents, and as the current ones finish their
+tasks, dont make more."** The cap is now zero for new launches until he says otherwise; the six
+running at that moment finish and are merged, and then the work is mine alone. Order so far:
+three → six → none → three → six → none (this).

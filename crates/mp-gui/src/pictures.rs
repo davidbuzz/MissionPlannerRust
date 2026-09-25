@@ -1,13 +1,18 @@
 //! Mission Planner's pictures: the `Properties.Resources` images the ported pages' `PictureBox`es,
-//! `ImageLabel`s and Frame Class buttons show, drawn in their boxes the way WinForms lays them out.
+//! `ImageLabel`s, Frame Class buttons and grid image columns show, drawn in their boxes the way
+//! WinForms lays them out; the SITL page's vehicle pictures, which live in `SITL.resx` alone; and
+//! the HUD's `HUDT` icons.
 //!
 //! The files are the C# tree's `Resources/*.png|*.jpg` (both trees are GPL-3.0), copied to
 //! `assets/images/<resource>.<ext>` under the resource's name - the `Properties.Resources` property
 //! the Designer assigns, so `global::MissionPlanner.Properties.Resources.frames_h` is
 //! `assets/images/frames_h.png` although `Properties/Resources.resx` points it at
-//! `Resources/frames-h.png`. Only the pictures a ported page shows are carried: `SITES`, the
-//! tests' table, is every assignment, each held to its Designer line, its `.resx` layout and the
-//! file's bytes.
+//! `Resources/frames-h.png`. The HUD's are `ExtLibs/Controls/Resources/*.png` under their `HUDT`
+//! property's name (`HUDT._2dfix_wide` is `2dfix_wide.png`, carried as `_2dfix_wide.png`). An
+//! image that is only a form's `.resx` base64, as SITL's are, is carried under that form and key
+//! (`SITL.pictureBoxplane.ImageNormal.png`). Only the pictures a ported page shows are carried:
+//! `SITES`, the tests' table, is every assignment, each held to its Designer line, its `.resx`
+//! layout and the file's bytes, and `hud::Icon::ALL` is every picture `HUD.cs` draws.
 //!
 //! Each image is embedded with `include_bytes!`, decoded once with the `image` crate on first use
 //! and kept; a box that scales it gets a copy resampled to its size in device pixels, also kept,
@@ -42,15 +47,15 @@ pub type Place = (f32, f32, f32, f32);
 pub enum Layout {
     /// `ImageLayout.None` and `PictureBoxSizeMode.Normal`: at the top left corner, unscaled,
     /// clipped by the box.
-    #[cfg_attr(not(test), allow(dead_code))]
     None,
     /// `ImageLayout.Tile`, the `BackgroundImageLayout` WinForms defaults to: unscaled copies
     /// from the top left corner, clipped by the box.
     #[cfg_attr(not(test), allow(dead_code))]
     Tile,
     /// `ImageLayout.Center`: unscaled, centred in each direction the box is larger in, at the
-    /// left or top edge in one it is not.
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// left or top edge in one it is not. Also a `DataGridViewImageColumn`'s cell, whose
+    /// `ImageLayout` defaults to `Normal`: "centered, original size" - in a cell at least as large
+    /// as the image, which Compass's 40 by 22 cells are for their 20 by 20 arrows.
     Center,
     /// `ImageLayout.Stretch` and `PictureBoxSizeMode.StretchImage`: the whole box. Also what
     /// `new Bitmap(image, width, height)` is, drawn in a box of that size.
@@ -88,8 +93,9 @@ macro_rules! embedded {
 
 /// Every image carried, by resource name.
 /// `// C#: Properties/Resources.resx` (the file each resource names) and `Resources.Designer.cs`
-/// (the property each resource is).
-pub const IMAGES: [Embedded; 32] = [
+/// (the property each resource is); `ExtLibs/Controls/HUDT.resx` and `HUDT.Designer.cs` for the
+/// HUD's; `GCSViews/SITL.resx` for SITL's.
+pub const IMAGES: [Embedded; 64] = [
     embedded!("APM_airframes_001", "APM_airframes_001.png"),
     embedded!("APM_airframes_08", "APM_airframes_08.png"),
     embedded!("Antenna_Tracker_01", "Antenna_Tracker_01.png"),
@@ -105,20 +111,76 @@ pub const IMAGES: [Embedded; 32] = [
     embedded!("FW_icons_2013_logos_13", "FW_icons_2013_logos_13.png"),
     embedded!("MinimOSD", "MinimOSD.jpg"),
     embedded!("Parachute", "Parachute.png"),
+    embedded!(
+        "SITL.pictureBoxheli.ImageNormal",
+        "SITL.pictureBoxheli.ImageNormal.png"
+    ),
+    embedded!(
+        "SITL.pictureBoxheli.ImageOver",
+        "SITL.pictureBoxheli.ImageOver.png"
+    ),
+    embedded!(
+        "SITL.pictureBoxplane.ImageNormal",
+        "SITL.pictureBoxplane.ImageNormal.png"
+    ),
+    embedded!(
+        "SITL.pictureBoxplane.ImageOver",
+        "SITL.pictureBoxplane.ImageOver.png"
+    ),
+    embedded!(
+        "SITL.pictureBoxquad.ImageNormal",
+        "SITL.pictureBoxquad.ImageNormal.png"
+    ),
+    embedded!(
+        "SITL.pictureBoxquad.ImageOver",
+        "SITL.pictureBoxquad.ImageOver.png"
+    ),
+    embedded!(
+        "SITL.pictureBoxrover.ImageNormal",
+        "SITL.pictureBoxrover.ImageNormal.png"
+    ),
+    embedded!(
+        "SITL.pictureBoxrover.ImageOver",
+        "SITL.pictureBoxrover.ImageOver.png"
+    ),
     embedded!("Shutter", "Shutter.png"),
+    embedded!("_2dfix_wide", "_2dfix_wide.png"),
+    embedded!("_3ddgps_wide", "_3ddgps_wide.png"),
+    embedded!("_3dfix_wide", "_3dfix_wide.png"),
     embedded!("airspeed", "airspeed.jpg"),
+    embedded!("batt_1", "batt_1.png"),
+    embedded!("batt_2", "batt_2.png"),
+    embedded!("batt_3", "batt_3.png"),
+    embedded!("batt_4", "batt_4.png"),
+    embedded!("batt_red", "batt_red.png"),
+    embedded!("batt_yellow", "batt_yellow.png"),
     embedded!("cameraGimalPitch1", "cameraGimalPitch1.png"),
     embedded!("cameraGimalRoll1", "cameraGimalRoll1.png"),
     embedded!("cameraGimalYaw", "cameraGimalYaw.png"),
+    embedded!("down", "down.png"),
+    embedded!("ekf_green", "ekf_green.png"),
+    embedded!("ekf_red", "ekf_red.png"),
+    embedded!("ekf_yellow", "ekf_yellow.png"),
     embedded!("frames_h", "frames_h.png"),
     embedded!("frames_plus", "frames_plus.png"),
     embedded!("frames_x", "frames_x.png"),
     embedded!("new_3DR_04", "new_3DR_04.png"),
+    embedded!("nofix_wide", "nofix_wide.png"),
+    embedded!("nogps_wide", "nogps_wide.png"),
     embedded!("opticalflow", "opticalflow.jpg"),
     embedded!("pixhawk2cube", "pixhawk2cube.jpg"),
+    embedded!("prearm_green", "prearm_green.png"),
+    embedded!("prearm_red", "prearm_red.png"),
     embedded!("rover_11", "rover_11.png"),
+    embedded!("rtkfixed_wide", "rtkfixed_wide.png"),
+    embedded!("rtkfloat_wide", "rtkfloat_wide.png"),
     embedded!("sonar", "sonar.jpg"),
     embedded!("sub", "sub.png"),
+    embedded!("unknown", "unknown.png"),
+    embedded!("up", "up.png"),
+    embedded!("vibe_green", "vibe_green.png"),
+    embedded!("vibe_red", "vibe_red.png"),
+    embedded!("vibe_yellow", "vibe_yellow.png"),
     embedded!("x8", "x8.png"),
     embedded!("y6a", "y6a.png"),
     embedded!("y6b", "y6b.png"),
@@ -140,7 +202,8 @@ pub enum Source {
 #[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Site {
-    /// The Designer, under `GCSViews/ConfigurationView/`.
+    /// The Designer, under `GCSViews/ConfigurationView/`, or its path in the C# tree where it
+    /// is elsewhere (`GCSViews/SITL.Designer.cs`).
     pub designer: &'static str,
     /// The control.
     pub control: &'static str,
@@ -150,8 +213,9 @@ pub struct Site {
     pub resource: &'static str,
     /// Where the Designer takes it from.
     pub from: Source,
-    /// Its layout: the `.resx`'s `BackgroundImageLayout` or `SizeMode`, `ImageLabel`'s inner
-    /// `PictureBox`'s `Zoom`, or the Frame Class buttons' 60 by 60 `Bitmap`.
+    /// Its layout: the `.resx`'s `BackgroundImageLayout` or `SizeMode` (`Normal` where it gives
+    /// none), `ImageLabel`'s inner `PictureBox`'s `Zoom`, the Frame Class buttons' 60 by 60
+    /// `Bitmap`, or a grid image column's centred cell.
     pub layout: Layout,
 }
 
@@ -192,12 +256,39 @@ const FIRMWARE: &str = "ConfigFirmwareManifest.Designer.cs";
 /// Install Firmware Legacy.
 #[cfg(test)]
 const FIRMWARE_LEGACY: &str = "ConfigFirmware.Designer.cs";
+/// Compass.
+#[cfg(test)]
+const COMPASS: &str = "ConfigHWCompass2.Designer.cs";
+/// The SITL page, which is not under `ConfigurationView`.
+#[cfg(test)]
+pub const SITL: &str = "GCSViews/SITL.Designer.cs";
+
+/// A [`Site`] whose image is base64 in its page's `.resx`, under `<control>.<property>`, and
+/// carried as `<resource>`.
+#[cfg(test)]
+const fn resx_site(
+    designer: &'static str,
+    control: &'static str,
+    property: &'static str,
+    resource: &'static str,
+    layout: Layout,
+) -> Site {
+    Site {
+        designer,
+        control,
+        property,
+        resource,
+        from: Source::Resx,
+        layout,
+    }
+}
 
 /// Every image the ported pages' Designers assign, in each Designer's order.
-/// `// C#: GCSViews/ConfigurationView/*.Designer.cs, *.resx`
+/// `// C#: GCSViews/ConfigurationView/*.Designer.cs, *.resx; GCSViews/SITL.Designer.cs:140-174,
+/// SITL.resx; ConfigHWCompass2.Designer.cs:523, 531`
 #[cfg(test)]
 #[rustfmt::skip]
-pub const SITES: [Site; 53] = [
+pub const SITES: [Site; 63] = [
     site(OSD, "pictureBox5", "BackgroundImage", "MinimOSD", Layout::Zoom),
     site(MOUNT, "pictureBox1", "BackgroundImage", "cameraGimalPitch1", Layout::Zoom),
     site(MOUNT, "pictureBox2", "BackgroundImage", "cameraGimalRoll1", Layout::Zoom),
@@ -205,7 +296,7 @@ pub const SITES: [Site; 53] = [
     site(MOUNT, "pictureBox4", "BackgroundImage", "Shutter", Layout::Zoom),
     site("ConfigHWAirspeed.Designer.cs", "pictureBox4", "BackgroundImage", "airspeed", Layout::Zoom),
     site("ConfigHWRangeFinder.Designer.cs", "pictureBox3", "BackgroundImage", "sonar", Layout::Zoom),
-    Site { designer: "ConfigBatteryMonitoring.Designer.cs", control: "pictureBox5", property: "BackgroundImage", resource: "BR_APMPWRDEAN_2", from: Source::Resx, layout: Layout::Zoom },
+    resx_site("ConfigBatteryMonitoring.Designer.cs", "pictureBox5", "BackgroundImage", "BR_APMPWRDEAN_2", Layout::Zoom),
     site("ConfigBatteryMonitoring2.Designer.cs", "pictureBox5", "BackgroundImage", "BR_APMPWRDEAN_2", Layout::Zoom),
     site("ConfigHWOptFlow.Designer.cs", "pictureBox2", "BackgroundImage", "opticalflow", Layout::Zoom),
     site("ConfigHWParachute.Designer.cs", "pictureBox3", "BackgroundImage", "sonar", Layout::Zoom),
@@ -251,6 +342,16 @@ pub const SITES: [Site; 53] = [
     site(FIRMWARE_LEGACY, "pictureAntennaTracker", "Image", "Antenna_Tracker_01", Layout::ZoomImage),
     site(FIRMWARE_LEGACY, "pictureBoxSub", "Image", "sub", Layout::ZoomImage),
     site(FIRMWARE_LEGACY, "imageLabel1", "Image", "pixhawk2cube", Layout::ZoomImage),
+    site(COMPASS, "Up", "Image", "up", Layout::Center),
+    site(COMPASS, "Down", "Image", "down", Layout::Center),
+    resx_site(SITL, "pictureBoxheli", "ImageNormal", "SITL.pictureBoxheli.ImageNormal", Layout::None),
+    resx_site(SITL, "pictureBoxheli", "ImageOver", "SITL.pictureBoxheli.ImageOver", Layout::None),
+    resx_site(SITL, "pictureBoxquad", "ImageNormal", "SITL.pictureBoxquad.ImageNormal", Layout::None),
+    resx_site(SITL, "pictureBoxquad", "ImageOver", "SITL.pictureBoxquad.ImageOver", Layout::None),
+    resx_site(SITL, "pictureBoxrover", "ImageNormal", "SITL.pictureBoxrover.ImageNormal", Layout::None),
+    resx_site(SITL, "pictureBoxrover", "ImageOver", "SITL.pictureBoxrover.ImageOver", Layout::None),
+    resx_site(SITL, "pictureBoxplane", "ImageNormal", "SITL.pictureBoxplane.ImageNormal", Layout::None),
+    resx_site(SITL, "pictureBoxplane", "ImageOver", "SITL.pictureBoxplane.ImageOver", Layout::None),
 ];
 
 /// The bytes of a resource, if it is carried.
@@ -288,10 +389,29 @@ fn scale_channel(channel: u8, numerator: u16, denominator: u16) -> u8 {
     u8::try_from(value).unwrap_or(u8::MAX)
 }
 
-/// `source` resampled to `width` by `height`, in the BGRA gpui draws. Resampled with its alpha
-/// premultiplied, so a transparent pixel's colour does not bleed into the edge beside it.
+/// A resource's pixels, straight RGBA, as [`decoded`] keeps them; for the HUD's rasteriser.
+#[cfg(test)]
+#[must_use]
+pub fn pixels(resource: &'static str) -> Option<Arc<RgbaImage>> {
+    decoded(resource)
+}
+
+/// `source` resampled to `width` by `height`, in the BGRA gpui draws.
 fn render_image(source: &RgbaImage, width: u32, height: u32) -> Arc<RenderImage> {
-    let mut pixels = if source.width() == width && source.height() == height {
+    let mut pixels = resampled(source, width, height);
+    // gpui's frames are BGRA in an `RgbaImage`, as `mapview.rs`'s tiles are.
+    for pixel in pixels.pixels_mut() {
+        pixel.0.swap(0, 2);
+    }
+    Arc::new(RenderImage::new(vec![image::Frame::new(pixels)]))
+}
+
+/// `source` resampled to `width` by `height`, straight RGBA: the copy [`paint`] hands the GPU,
+/// and the one the HUD's rasteriser draws. Resampled with its alpha premultiplied, so a
+/// transparent pixel's colour does not bleed into the edge beside it.
+#[must_use]
+pub fn resampled(source: &RgbaImage, width: u32, height: u32) -> RgbaImage {
+    if source.width() == width && source.height() == height {
         source.clone()
     } else {
         let mut premultiplied = source.clone();
@@ -322,12 +442,7 @@ fn render_image(source: &RgbaImage, width: u32, height: u32) -> Arc<RenderImage>
             ];
         }
         resized
-    };
-    // gpui's frames are BGRA in an `RgbaImage`, as `mapview.rs`'s tiles are.
-    for pixel in pixels.pixels_mut() {
-        pixel.0.swap(0, 2);
     }
-    Arc::new(RenderImage::new(vec![image::Frame::new(pixels)]))
 }
 
 /// A resource at a size in device pixels, made on first use and kept, so its `ImageId` - which
@@ -439,6 +554,26 @@ fn paint(
         };
         let _ = window.paint_image(bounds, target, Corners::default(), render, 0, false);
     }
+}
+
+/// Paints a resource stretched to `target`, as GDI+'s `DrawImage(image, x, y, width, height)`
+/// draws it, clipped to `clip`; `false`, painting nothing, when it is not carried or does not
+/// decode. For a picture drawn in a canvas rather than in a box of its own: the HUD's.
+pub fn paint_stretched(
+    resource: &'static str,
+    clip: Bounds<Pixels>,
+    target: Bounds<Pixels>,
+    window: &mut Window,
+) -> bool {
+    if decoded(resource).is_none() {
+        return false;
+    }
+    let scale = window.scale_factor();
+    let (width, height) = (f32::from(target.size.width), f32::from(target.size.height));
+    if let Some(render) = sized(resource, device(width * scale), device(height * scale)) {
+        let _ = window.paint_image(clip, target, Corners::default(), render, 0, false);
+    }
+    true
 }
 
 /// A resource drawn by its layout over the whole of its parent, which must have a size; `None`
@@ -598,7 +733,7 @@ mod tests {
         names.sort_unstable();
         names.dedup();
         assert_eq!(names.len(), IMAGES.len(), "a resource carried twice");
-        assert_eq!(total, 617_345, "the images embedded, in bytes");
+        assert_eq!(total, 817_266, "the images embedded, in bytes");
         assert!(decoded("no_such_resource").is_none());
     }
 
@@ -632,11 +767,148 @@ mod tests {
                 site.resource
             );
         }
+        for icon in crate::hud::Icon::ALL {
+            assert!(bytes(icon.resource()).is_some(), "{icon:?} is not carried");
+        }
         for embedded in IMAGES {
             assert!(
-                SITES.iter().any(|site| site.resource == embedded.resource),
-                "{} is carried but no site shows it",
+                SITES.iter().any(|site| site.resource == embedded.resource)
+                    || crate::hud::Icon::ALL
+                        .iter()
+                        .any(|icon| icon.resource() == embedded.resource),
+                "{} is carried but no site or HUD picture shows it",
                 embedded.resource
+            );
+        }
+    }
+
+    /// SITL's pictures are its Designer's: each vehicle's `ImageNormal` and `ImageOver`, drawn at
+    /// `SizeMode.Normal` as its sites have them; and the `.resx`'s `Image`, which the Designer's
+    /// `selected = false` replaces with `ImageNormal` before the page is shown, is the same bytes.
+    /// `// C#: GCSViews/SITL.Designer.cs:137-179; ExtLibs/Controls/PictureBoxMouseOver.cs:17, 37-50`
+    #[test]
+    fn sitls_pictures_are_its_designers() {
+        use crate::sitl::model::Vehicle;
+        let find = |control: &str, property: &str| {
+            SITES
+                .iter()
+                .find(|site| {
+                    site.designer == SITL && site.control == control && site.property == property
+                })
+                .map(|site| (site.resource, site.layout))
+        };
+        for vehicle in Vehicle::ALL {
+            let control = vehicle.control();
+            assert_eq!(
+                find(control, "ImageNormal"),
+                Some((vehicle.image(false), crate::sitl::view::PICTURE_LAYOUT)),
+                "{control}"
+            );
+            assert_eq!(
+                find(control, "ImageOver"),
+                Some((vehicle.image(true), crate::sitl::view::PICTURE_LAYOUT)),
+                "{control}"
+            );
+        }
+        let Some(resx) = csharp("GCSViews/SITL.resx") else {
+            eprintln!("skipped: the C# tree is not checked out here");
+            return;
+        };
+        let values = crate::config_coverage::source::resx(&resx);
+        for vehicle in Vehicle::ALL {
+            let control = vehicle.control();
+            let squeeze = |key: String| -> String {
+                values
+                    .get(&key)
+                    .map(|text| text.split_whitespace().collect())
+                    .unwrap_or_default()
+            };
+            assert_eq!(
+                squeeze(format!("{control}.Image")),
+                squeeze(format!("{control}.ImageNormal")),
+                "{control}"
+            );
+        }
+    }
+
+    /// Heli Setup's Designer assigns no picture, so the page draws none: the gauge background
+    /// and the `HS1`..`HS4` bars are the older `ConfigTradHeli`'s, which Initial Setup no longer
+    /// lists. `// C#: GCSViews/ConfigurationView/ConfigTradHeli.Designer.cs:923;
+    /// GCSViews/InitialSetup.cs:186-187`
+    #[test]
+    fn heli_setups_designer_has_no_picture() {
+        let Some(designer) = csharp("GCSViews/ConfigurationView/ConfigTradHeli4.Designer.cs")
+        else {
+            eprintln!("skipped: the C# tree is not checked out here");
+            return;
+        };
+        for line in designer.lines() {
+            assert!(
+                !line.contains("Image =") && !line.contains("Properties.Resources."),
+                "ConfigTradHeli4.Designer.cs: {line}"
+            );
+        }
+        let older =
+            csharp("GCSViews/ConfigurationView/ConfigTradHeli.Designer.cs").unwrap_or_default();
+        assert!(older.contains(
+            "this.Gservoloc.BackgroundImage = global::MissionPlanner.Properties.Resources.Gaugebg;"
+        ));
+    }
+
+    /// Every picture `HUD.cs` draws is an [`crate::hud::Icon`], carried as the `HUDT` resource
+    /// it names: its file through `HUDT.Designer.cs` and `HUDT.resx`, byte for byte.
+    /// `// C#: ExtLibs/Controls/HUD.cs:2861-2893, 2931-3008, 3173-3295`
+    #[test]
+    fn the_huds_pictures_are_hudts() {
+        let (Some(hud), Some(hudt), Some(hudt_resx)) = (
+            csharp("ExtLibs/Controls/HUD.cs"),
+            csharp("ExtLibs/Controls/HUDT.Designer.cs"),
+            csharp("ExtLibs/Controls/HUDT.resx"),
+        ) else {
+            eprintln!("skipped: the C# tree is not checked out here");
+            return;
+        };
+        let root = crate::config_coverage::source::csharp_root();
+        let resources: Vec<&str> = crate::hud::Icon::ALL
+            .iter()
+            .map(|icon| icon.resource())
+            .collect();
+        // Every `HUDT.<name>` HUD.cs hands `DrawImage` or keeps as an `icon`.
+        let mut drawn: Vec<&str> = Vec::new();
+        for (index, _) in hud.match_indices("HUDT.") {
+            let name: &str = hud
+                .get(index + "HUDT.".len()..)
+                .and_then(|rest| {
+                    let end = rest
+                        .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                        .unwrap_or(rest.len());
+                    rest.get(..end)
+                })
+                .unwrap_or_default();
+            let line_start = hud.get(..index).and_then(|before| before.rfind('\n'));
+            let line = hud
+                .get(line_start.map_or(0, |at| at + 1)..)
+                .and_then(|rest| rest.lines().next())
+                .unwrap_or_default();
+            if (line.contains("DrawImage(") || line.contains("icon = "))
+                && !line.trim_start().starts_with("//")
+                && !drawn.contains(&name)
+            {
+                drawn.push(name);
+            }
+        }
+        drawn.sort_unstable();
+        let mut ours = resources.clone();
+        ours.sort_unstable();
+        assert_eq!(drawn, ours, "HUD.cs's pictures");
+        for resource in resources {
+            let file = resource_file(&hudt, &hudt_resx, resource)
+                .unwrap_or_else(|| panic!("{resource} is not in HUDT.resx"));
+            let on_disk = std::fs::read(root.join("ExtLibs/Controls").join(&file))
+                .unwrap_or_else(|_| panic!("{file} is not in the C# tree"));
+            assert!(
+                bytes(resource) == Some(on_disk.as_slice()),
+                "the carried {resource} is not {file}"
             );
         }
     }
@@ -695,6 +967,8 @@ mod tests {
                 ("airspeed.rs", "airspeed", "Zoom"),
                 ("battery_monitor.rs", "BR_APMPWRDEAN_2", "Zoom"),
                 ("battery_monitor2.rs", "BR_APMPWRDEAN_2", "Zoom"),
+                ("compass.rs", "up", "Center"),
+                ("compass.rs", "down", "Center"),
                 ("mount.rs", "cameraGimalPitch1", "Zoom"),
                 ("mount.rs", "cameraGimalRoll1", "Zoom"),
                 ("mount.rs", "cameraGimalYaw", "Zoom"),
@@ -892,16 +1166,22 @@ mod tests {
         };
         let root = crate::config_coverage::source::csharp_root();
         let view = "GCSViews/ConfigurationView";
+        // A Designer's path in the tree: under `ConfigurationView` unless it names its own.
+        let path = |designer: &str| {
+            if designer.contains('/') {
+                designer.to_owned()
+            } else {
+                format!("{view}/{designer}")
+            }
+        };
         let image_label = csharp("ExtLibs/Controls/ImageLabel.Designer.cs").unwrap_or_default();
         let frame_class = csharp(&format!("{view}/ConfigFrameClassType.cs")).unwrap_or_default();
         for site in SITES {
-            let designer = csharp(&format!("{view}/{}", site.designer))
+            let designer = csharp(&path(site.designer))
                 .unwrap_or_else(|| panic!("{} is not in the C# tree", site.designer));
-            let stem = site
-                .designer
-                .split_once('.')
-                .map_or(site.designer, |(stem, _)| stem);
-            let resx = csharp(&format!("{view}/{stem}.resx")).unwrap_or_default();
+            let full = path(site.designer);
+            let stem = full.split_once('.').map_or(full.as_str(), |(stem, _)| stem);
+            let resx = csharp(&format!("{stem}.resx")).unwrap_or_default();
             let values = crate::config_coverage::source::resx(&resx);
             let file_bytes = match site.from {
                 Source::Resources => {
@@ -918,6 +1198,19 @@ mod tests {
                 Source::Resx => {
                     use base64::Engine as _;
                     let key = format!("{}.{}", site.control, site.property);
+                    // Assigned in the Designer from the `.resx`, or by `ApplyResources`.
+                    let line = format!(
+                        "this.{key} = ((System.Drawing.Image)(resources.GetObject(\"{key}\")));"
+                    );
+                    assert!(
+                        designer.contains(&line)
+                            || designer.contains(&format!(
+                                "resources.ApplyResources(this.{}, \"{}\");",
+                                site.control, site.control
+                            )),
+                        "{}: neither `{line}` nor ApplyResources",
+                        site.designer
+                    );
                     let text: String = values
                         .get(&key)
                         .unwrap_or_else(|| panic!("{stem}.resx has no {key}"))
@@ -950,6 +1243,17 @@ mod tests {
                     "this.PictureBox.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;"
                 ));
                 Layout::ZoomImage
+            } else if designer.contains(&format!(
+                "this.{} = new System.Windows.Forms.DataGridViewImageColumn();",
+                site.control
+            )) {
+                // `DataGridViewImageColumn.ImageLayout` left at `Normal`: centred, unscaled.
+                assert!(
+                    !designer.contains(&format!("this.{}.ImageLayout", site.control)),
+                    "{}: an ImageLayout",
+                    site.control
+                );
+                Layout::Center
             } else if site.property == "BackgroundImage" {
                 match values
                     .get(&format!("{}.BackgroundImageLayout", site.control))
@@ -968,6 +1272,9 @@ mod tests {
                 {
                     Some("Zoom") => Layout::ZoomImage,
                     Some("StretchImage") => Layout::Stretch,
+                    Some("CenterImage") => Layout::Center,
+                    // `PictureBoxSizeMode.Normal`, the default, which a `.resx` leaves out.
+                    None | Some("Normal") => Layout::None,
                     other => panic!("{}: SizeMode {other:?} is not drawn", site.control),
                 }
             };
@@ -978,24 +1285,40 @@ mod tests {
         let mut designers: Vec<&str> = SITES.iter().map(|site| site.designer).collect();
         designers.dedup();
         for name in designers {
-            let designer = csharp(&format!("{view}/{name}")).unwrap_or_default();
+            let designer = csharp(&path(name)).unwrap_or_default();
             for line in designer.lines() {
-                let Some((left, resource)) = line.trim().strip_prefix("this.").and_then(|line| {
-                    line.split_once(" = global::MissionPlanner.Properties.Resources.")
-                }) else {
+                let Some(assignment) = line.trim().strip_prefix("this.") else {
                     continue;
                 };
-                let resource = resource.trim_end_matches(';');
-                let Some((control, property)) = left.split_once('.') else {
-                    continue;
-                };
-                assert!(
-                    SITES.iter().any(|site| site.designer == name
-                        && site.control == control
-                        && site.property == property
-                        && site.resource == resource),
-                    "{name}: {control}.{property} = {resource} is not a site"
-                );
+                // `Properties.Resources.<name>`, or the page's `.resx` by its key.
+                if let Some((left, resource)) =
+                    assignment.split_once(" = global::MissionPlanner.Properties.Resources.")
+                {
+                    let resource = resource.trim_end_matches(';');
+                    let Some((control, property)) = left.split_once('.') else {
+                        continue;
+                    };
+                    assert!(
+                        SITES.iter().any(|site| site.designer == name
+                            && site.control == control
+                            && site.property == property
+                            && site.resource == resource),
+                        "{name}: {control}.{property} = {resource} is not a site"
+                    );
+                } else if let Some((left, _)) =
+                    assignment.split_once(" = ((System.Drawing.Image)(resources.GetObject(")
+                {
+                    let Some((control, property)) = left.split_once('.') else {
+                        continue;
+                    };
+                    assert!(
+                        SITES.iter().any(|site| site.designer == name
+                            && site.control == control
+                            && site.property == property
+                            && site.from == Source::Resx),
+                        "{name}: {control}.{property} from the .resx is not a site"
+                    );
+                }
             }
         }
     }

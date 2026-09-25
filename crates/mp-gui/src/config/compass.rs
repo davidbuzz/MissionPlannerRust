@@ -2873,13 +2873,23 @@ fn table(compass: &Compass, cx: &mut Context<MissionPlanner>) -> AnyElement {
             let usable = if up { place != 0 } else { place + 1 < count };
             line = line.child(
                 cell(width).justify_center().child(
+                    // The C#'s `up.png`/`down.png` image cells, centred in the 40 x 22 cell
+                    // (`ConfigHWCompass2.Designer.cs:523, 531`); the glyph stands in only when
+                    // the image is not carried. The C# draws the arrows the same in every row.
                     crate::probe::measured(id.clone(), div())
                         .id(SharedString::from(id))
                         .px_1()
                         .text_color(rgb(if usable { theme::ACCENT } else { theme::DIM }))
                         .cursor_pointer()
                         .hover(|style| style.bg(rgb(theme::BORDER)))
-                        .child(glyph)
+                        .child(
+                            if up {
+                                crate::pictures::image("up", crate::pictures::Layout::Center)
+                            } else {
+                                crate::pictures::image("down", crate::pictures::Layout::Center)
+                            }
+                            .unwrap_or_else(|| div().child(glyph).into_any_element()),
+                        )
                         .on_click(cx.listener(move |this, _event, _window, cx| {
                             this.compass.move_row(place, up);
                             cx.notify();
