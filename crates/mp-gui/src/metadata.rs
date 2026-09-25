@@ -31,10 +31,17 @@ struct Loaded {
     table: BTreeMap<String, &'static ParamMeta>,
     // ---- ConfigRawParams remainder ----
     /// `<field name="ReadOnly">`'s text, by name, for the parameters the file gives one:
-    /// [`ParamMeta`] has no such field, and the bundled table none to give.
+    /// [`ParamMeta`] has no such field.
     read_only: BTreeMap<String, String>,
     // ---- end ConfigRawParams remainder ----
 }
+
+/// The SITL and AP_Periph files' ReadOnly marks, in that order, once fetched: the C#'s
+/// `GetParameterMetaData` asks the vehicle's file, then `SITL`'s, then `AP_Periph`'s, each
+/// loaded (and fetched) on demand by `CheckLoad`; here both are fetched once the vehicle's
+/// documentation is in, so a ReadOnly question finds them ready.
+/// `// C#: ExtLibs/Utilities/ParameterMetaDataRepository.cs:42-46; ParameterMetaDataRepositoryAPMpdef.cs:46-152, 196-206`
+static FALLBACK_READ_ONLY: RwLock<Vec<(String, BTreeMap<String, String>)>> = RwLock::new(Vec::new());
 
 static LOADED: RwLock<Option<Loaded>> = RwLock::new(None);
 
@@ -82,7 +89,55 @@ pub fn read_only(name: &str) -> Option<String> {
         .read()
         .ok()
         .and_then(|guard| guard.as_ref().and_then(|loaded| loaded.read_only.get(name).cloned()));
-    fetched.or_else(|| mp_params::param_meta::read_only_backup(name).then(|| "True".to_owned()))
+    let fallbacks = FALLBACK_READ_ONLY.read().ok();
+    read_only_in(
+        fetched,
+        fallbacks.as_deref().map_or(&[], Vec::as_slice),
+        name,
+    )
+}
+
+/// [`read_only`]'s chain over given tables: the vehicle's answer, else each fallback file's
+/// in order, else the bundled file's mark.
+fn read_only_in(
+    fetched: Option<String>,
+    fallbacks: &[(String, BTreeMap<String, String>)],
+    name: &str,
+) -> Option<String> {
+    fetched
+        .or_else(|| fallbacks.iter().find_map(|(_, marks)| marks.get(name).cloned()))
+        .or_else(|| mp_params::param_meta::read_only_backup(name).then(|| "True".to_owned()))
+}
+
+/// The two fallback files' ReadOnly marks, fetched (the unversioned `SITL` and `AP_Periph`
+/// documentation, as `CheckLoad` fetches them) and kept for [`read_only`]. On a thread; a file
+/// that cannot be had is left out, as the C# logs and goes on.
+fn fetch_fallbacks() {
+    std::thread::Builder::new()
+        .name("mp-metadata-fallbacks".to_owned())
+        .spawn(|| {
+            let Some(dir) = mp_settings::data_directory() else {
+                return;
+            };
+            let mut found = Vec::new();
+            for vehicle in ["SITL", "AP_Periph"] {
+                let Ok(path) = pdef::fetch_unversioned(&dir, vehicle) else {
+                    continue;
+                };
+                let Ok(pdef) = Pdef::load(&path) else {
+                    continue;
+                };
+                let marks: BTreeMap<String, String> = pdef
+                    .params()
+                    .filter_map(|param| Some((param.name.clone(), param.read_only.clone()?)))
+                    .collect();
+                found.push((vehicle.to_owned(), marks));
+            }
+            if let Ok(mut guard) = FALLBACK_READ_ONLY.write() {
+                *guard = found;
+            }
+        })
+        .ok();
 }
 // ---- end ConfigRawParams remainder ----
 
@@ -187,6 +242,8 @@ pub struct Fetch {
     receiver: Option<Receiver<Result<(String, Pdef), String>>>,
     /// The last thing that happened, for the screen.
     pub status: Option<String>,
+    /// Whether the SITL and AP_Periph fallback files have been asked for: once a process.
+    fallbacks_asked: bool,
 }
 
 impl Fetch {
@@ -205,6 +262,10 @@ impl Fetch {
                     let count = install(source.clone(), &pdef);
                     self.status = Some(format!("{source}: {count} parameters documented"));
                     self.receiver = None;
+                    if !self.fallbacks_asked {
+                        self.fallbacks_asked = true;
+                        fetch_fallbacks();
+                    }
                 }
                 Ok(Err(why)) => {
                     self.status = Some(why);
@@ -413,5 +474,39 @@ mod tests {
             "an unparsable banner starts nothing"
         );
         assert!(fetch.status.as_deref().unwrap_or("").contains("no version"));
+    }
+
+    /// `GetParameterMetaData(name, ReadOnly, ...)`: the vehicle's file first, then SITL's, then
+    /// AP_Periph's, then the bundled file's mark.
+    /// `// C#: ExtLibs/Utilities/ParameterMetaDataRepository.cs:42-49`
+    #[test]
+    fn read_only_falls_back_through_the_files_in_order() {
+        let sitl: BTreeMap<String, String> =
+            [("SIM_ONLY".to_owned(), "True".to_owned())].into_iter().collect();
+        let periph: BTreeMap<String, String> = [
+            ("SIM_ONLY".to_owned(), "False".to_owned()),
+            ("PERIPH_ONLY".to_owned(), "True".to_owned()),
+        ]
+        .into_iter()
+        .collect();
+        let fallbacks = vec![("SITL".to_owned(), sitl), ("AP_Periph".to_owned(), periph)];
+        assert_eq!(
+            read_only_in(Some("False".to_owned()), &fallbacks, "SIM_ONLY").as_deref(),
+            Some("False"),
+            "the vehicle's file answers first"
+        );
+        assert_eq!(
+            read_only_in(None, &fallbacks, "SIM_ONLY").as_deref(),
+            Some("True"),
+            "SITL's before AP_Periph's"
+        );
+        assert_eq!(read_only_in(None, &fallbacks, "PERIPH_ONLY").as_deref(), Some("True"));
+        assert_eq!(
+            read_only_in(None, &fallbacks, "BARO1_DEVID").as_deref(),
+            Some("True"),
+            "the bundled file's mark last"
+        );
+        assert_eq!(read_only_in(None, &fallbacks, "ATC_RAT_RLL_P"), None);
+        assert_eq!(read_only_in(None, &[], "NOT_A_PARAM"), None);
     }
 }

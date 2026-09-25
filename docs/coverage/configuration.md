@@ -11,14 +11,14 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 33 | 12 | 2 | 2 | 12 | 569 |
+| 61 | 34 | 11 | 2 | 2 | 12 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings
         // in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 27 | 7 | 1 | 2 | 7 | 258 |
         //     15 |
-| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 6 | 5 | 1 | 0 | 1 | 277 |
+| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 7 | 4 | 1 | 0 | 1 | 277 |
         //     0 |
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 |
         //     0 |
@@ -165,31 +165,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
         //     C#'s handler ignores the answer; a name without values is its label alone, as the
         //     C# never adds its number; the InputBox's OK answer kept as
         //     InputBoxParamsEnterParamNames |
-| 229 | `ConfigRawParams` | Full Parameter List |  | any, or disconnected | 22 | partial: `crates/mp-gui/src/params.rs` `fn list_panel` - the parameter screen has Refresh Params (MAVFTP first), Search, the group tree and
-        //     its collapse (kept in rawparam_panel1collapsed), the Default column and the None
-        //     Default filter when the vehicle's param.pck gave defaults, the Modified filter
-        //     over _changes (the writes not yet heard back, and those that timed out - a value
-        //     is written as it is edited), editing a value, Save to file, Compare Params, Load
-        //     from file as compare then apply, Load Presaved with its GitHub Frame_params list
-        //     and ParamCompare, Reset to Default, Commit Params (under
-        //     displayParamCommitButton) and Refresh Table (under SlowMachine) - raw_params.rs;
-        //     the grid's Name, Value, Default, Units, Options, Desc and Fav columns at the .resx
-        //     widths, the Fav column kept in fav_params and the grid sorted favourites first in
-        //     NaturalStringComparer's order, the Options cell's text and the control Params_RowEnter
-        //     puts over it (Set Bitmask's window, the values' drop-down, the range's
-        //     NumericUpDown), the Desc cell's link, the typed Value cell (double click, F2 or a
-        //     key) with Params_CellValueChanged's REV fix, red cell, ReadOnly box and out-of-range
-        //     question, Ctrl+S as Write Params over _changes with its question and its ends, the
-        //     columns' widths and the splitter kept under rawparam_* on Deactivate and read on
-        //     Activate (both draggable), and RawParamWarning's MessageShowAgain box -
-        //     raw_params_grid.rs; the cells' tooltips (AddNewLinesForTooltip, the
-        //     Options list in columns past fifty), the headers' click sorting (natural order,
-        //     favourites first, the glyph), a typed value's arithmetic (mXparser's `+ - * / ^`
-        //     and parentheses; not its functions), the NumericUpDown's box typed into (through
-        //     the Value cell), a compared file's values through the cells' questions, ReadOnly
-        //     from the bundled ParameterMetaDataBackup.xml when the fetched file has none;
-        //     the Options cell's range as the file writes it; missing only the SITL and AP_Periph
-        //     files' ReadOnly (two more fetches) |
+| 229 | `ConfigRawParams` | Full Parameter List |  | any, or disconnected | 22 | done: `crates/mp-gui/src/params.rs` `fn list_panel` |
 | 235 | `ConfigFlightModes` | Flight Modes |  | Ateryx | 8 | as at `GCSViews/InitialSetup.cs:228` |
 | 236 | `ConfigAteryxSensors` | Ateryx Zero Sensors |  | Ateryx | 3 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 | 237 | `ConfigAteryx` | Ateryx Pids |  | Ateryx | 8 | done: `crates/mp-gui/src/config/ateryx.rs` `fn page` |

@@ -971,34 +971,12 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigRawParams"),
         Some(22),
         &[config(229, "Full Parameter List", "any, or disconnected")],
-        Partial(
-            at(PARAMS_RS, "fn list_panel"),
-            "the parameter screen has Refresh Params (MAVFTP first), Search, the group tree and
-        //     its collapse (kept in rawparam_panel1collapsed), the Default column and the None
-        //     Default filter when the vehicle's param.pck gave defaults, the Modified filter
-        //     over _changes (the writes not yet heard back, and those that timed out - a value
-        //     is written as it is edited), editing a value, Save to file, Compare Params, Load
-        //     from file as compare then apply, Load Presaved with its GitHub Frame_params list
-        //     and ParamCompare, Reset to Default, Commit Params (under
-        //     displayParamCommitButton) and Refresh Table (under SlowMachine) - raw_params.rs;
-        //     the grid's Name, Value, Default, Units, Options, Desc and Fav columns at the .resx
-        //     widths, the Fav column kept in fav_params and the grid sorted favourites first in
-        //     NaturalStringComparer's order, the Options cell's text and the control Params_RowEnter
-        //     puts over it (Set Bitmask's window, the values' drop-down, the range's
-        //     NumericUpDown), the Desc cell's link, the typed Value cell (double click, F2 or a
-        //     key) with Params_CellValueChanged's REV fix, red cell, ReadOnly box and out-of-range
-        //     question, Ctrl+S as Write Params over _changes with its question and its ends, the
-        //     columns' widths and the splitter kept under rawparam_* on Deactivate and read on
-        //     Activate (both draggable), and RawParamWarning's MessageShowAgain box -
-        //     raw_params_grid.rs; the cells' tooltips (AddNewLinesForTooltip, the
-        //     Options list in columns past fifty), the headers' click sorting (natural order,
-        //     favourites first, the glyph), a typed value's arithmetic (mXparser's `+ - * / ^`
-        //     and parentheses; not its functions), the NumericUpDown's box typed into (through
-        //     the Value cell), a compared file's values through the cells' questions, ReadOnly
-        //     from the bundled ParameterMetaDataBackup.xml when the fetched file has none;
-        //     the Options cell's range as the file writes it; missing only the SITL and AP_Periph
-        //     files' ReadOnly (two more fetches)",
-        ),
+        // Whole since 2026-09-26: the grid's columns, sort, tooltips, typed values, the Options
+        // control, the questions, Write Params and the warning; Refresh, Search, the tree, the
+        // filters, the files, the presets, Reset to Default, Commit Params and Refresh Table; and
+        // ReadOnly answered as GetParameterMetaData answers it - the vehicle's file, SITL's,
+        // AP_Periph's, the bundled file's marks.
+        Ours::Done(at(PARAMS_RS, "fn list_panel")),
     ),
     panel(
         "ConfigAteryxSensors",
@@ -1904,7 +1882,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (33, 12, 2, 2, 12)
+            (34, 11, 2, 2, 12)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()
