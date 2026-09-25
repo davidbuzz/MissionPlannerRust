@@ -1,0 +1,4 @@
+{
+  "type": "module",
+  "description": "ArduPilot SITL built for WebAssembly: Emscripten ES6 modules, see README.md"
+}

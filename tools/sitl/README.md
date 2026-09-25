@@ -45,3 +45,10 @@ MAVLink frame within ten seconds, restarting the simulator up to three times whe
 frame. SITL accepts one client at a time on 5760 and the next one the moment the last leaves. To
 stop it, kill by pid - `pgrep -f "sitl/arducopte[r]"` - never with a pattern the killing shell's own
 command line would match.
+
+## WebAssembly builds
+
+`wasm/` holds the owner's local builds of ArduPilot's `wasm` board (copter and plane, 2026-09-25,
+Emscripten 6.0.8) with their provenance in `wasm/README.md`. They are Emscripten ES6 modules that
+expose SERIAL0 as exports rather than a TCP port, so they run under Node or a browser and need a
+bridge to tcp:5760 before the planner can connect to them.
