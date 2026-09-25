@@ -17,7 +17,8 @@
 //!   files it names is the port and carries the §6.4 `Ported from <path>` header.
 
 mod classify;
-mod csv;
+/// Public for `tests/dead_csharp.rs`, which reads the ledger's D16 rows with this dialect.
+pub mod csv;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
