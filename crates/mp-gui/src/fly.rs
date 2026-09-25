@@ -981,6 +981,15 @@ pub enum Prompt {
     /// The speed dial's double click: `InputBox.Show("Enter Max Speed", "Enter Max Speed", ref
     /// max)`. `// C#: GCSViews/FlightData.cs:3140-3143`
     GaugeMax,
+    /// Set MJPEG source's `InputBox.Show("Mjpeg url", "Enter the url to the mjpeg source url",
+    /// ref url)`. `// C#: GCSViews/FlightData.cs:4898`
+    MjpegUrl,
+    /// Set GStreamer Source's `InputBox.Show("GStreamer url", "Enter the source pipeline\n...",
+    /// ref url)`. `// C#: GCSViews/FlightData.cs:4819-4821`
+    GStreamerUrl,
+    /// HereLink Video's `InputBox.Show("herelink ip", "Enter herelink ip address", ref ipaddr)`.
+    /// `// C#: GCSViews/FlightData.cs:3162`
+    HereLinkIp,
 }
 
 impl Prompt {
@@ -1010,6 +1019,9 @@ impl Prompt {
             Self::ViewRows => "Rows",
             Self::CellCount => "Battery Cell Count",
             Self::GaugeMax => "Enter Max Speed",
+            Self::MjpegUrl => "Mjpeg url",
+            Self::GStreamerUrl => mp_video::gstreamer::PIPELINE_TITLE,
+            Self::HereLinkIp => mp_video::gstreamer::HERELINK_TITLE,
         }
     }
 
@@ -1052,6 +1064,9 @@ impl Prompt {
             Self::SelectScript => "Python script (*.py)".to_owned(),
             Self::CellCount => "Cell Count".to_owned(),
             Self::GaugeMax => "Enter Max Speed".to_owned(),
+            Self::MjpegUrl => "Enter the url to the mjpeg source url".to_owned(),
+            Self::GStreamerUrl => mp_video::gstreamer::PIPELINE_TEXT.to_owned(),
+            Self::HereLinkIp => mp_video::gstreamer::HERELINK_TEXT.to_owned(),
         }
     }
 
@@ -1079,6 +1094,9 @@ impl Prompt {
                 | Self::ViewRows
                 | Self::CellCount
                 | Self::GaugeMax
+                | Self::MjpegUrl
+                | Self::GStreamerUrl
+                | Self::HereLinkIp
         )
     }
 
@@ -4235,6 +4253,18 @@ impl MissionPlanner {
                     self.file_status = Some(error_box(why));
                 }
             }
+            Prompt::MjpegUrl => {
+                self.fly_mjpeg_source(accepted, &text);
+                self.video_repaint_keep(cx);
+            }
+            Prompt::GStreamerUrl => {
+                self.fly_gstreamer_source(accepted, &text);
+                self.video_repaint_keep(cx);
+            }
+            Prompt::HereLinkIp => {
+                self.fly_herelink_video(accepted, &text);
+                self.video_repaint_keep(cx);
+            }
         }
     }
 
@@ -4582,6 +4612,260 @@ pub struct FlightData {
     pub speed_gauge: crate::gauge::SpeedGauge,
     /// Where the Gauges page was laid out, which places the dial as `tabPage1_Resize` does.
     pub gauges_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
+    /// `FlightData.hudGStreamer`: the pipeline Set GStreamer Source or HereLink Video plays
+    /// into the HUD. `// C#: GCSViews/FlightData.cs:46`
+    pub gstreamer: mp_video::gstreamer::GStreamer,
+    /// `CaptureMJPEG`, while Set MJPEG source has it reading.
+    /// `// C#: ExtLibs/Utilities/CaptureMJPEG.cs:13-51`
+    pub mjpeg: Option<mp_video::mjpeg::CaptureMjpeg>,
+    /// `GStreamerUI.DownloadGStreamer`, while the runtime is being fetched.
+    pub gst_download: Option<GstDownload>,
+}
+
+/// `GStreamerUI.DownloadGStreamer`'s progress dialog, on the status line: the download's thread,
+/// what it says, and the pipeline to start once the runtime is there.
+/// `// C#: Utilities/GStreamerUI.cs:8-23`
+#[derive(Debug)]
+pub struct GstDownload {
+    /// `UpdateProgressAndStatus`'s words.
+    said: std::sync::mpsc::Receiver<(i32, String)>,
+    /// The download.
+    thread: std::thread::JoinHandle<()>,
+    /// What the menu entry starts once the runtime is found.
+    then: String,
+}
+
+/// `inflate` for the runtime's zip: its deflated entries through `flate2`.
+fn inflate(data: &[u8], size: usize) -> Result<Vec<u8>, String> {
+    use std::io::Read as _;
+    let mut out = Vec::with_capacity(size);
+    flate2::read::DeflateDecoder::new(data)
+        .read_to_end(&mut out)
+        .map_err(|why| why.to_string())?;
+    Ok(out)
+}
+
+/// `GStreamer.LookForGstreamer()`, over this process's `PATH`, its program directory, the data
+/// directory and, on Windows, the fixed drives.
+/// `// C#: ExtLibs/Utilities/GStreamer.cs:1417-1485`
+fn look_for_gstreamer() -> Option<std::path::PathBuf> {
+    let path = std::env::var_os("PATH");
+    let program = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(std::path::Path::to_path_buf));
+    let data = mp_settings::data_directory();
+    let (on_path, dirs) = mp_video::gstreamer::search_dirs(
+        path.as_ref(),
+        program.as_deref(),
+        data.as_deref(),
+        &mp_video::gstreamer::drives(),
+    );
+    mp_video::gstreamer::look_for_gstreamer(&on_path, &dirs)
+}
+
+// --- The Video drop-down's sources: MJPEG, GStreamer, HereLink ------------------------------------
+
+/// Where the GStreamer launcher is looked for: [`look_for_gstreamer`], or a test's own.
+pub type LookFor<'a> = &'a dyn Fn() -> Option<std::path::PathBuf>;
+
+/// Set MJPEG source, answered: on OK the URL saved as `mjpeg_url` and the capture started over
+/// on it; on Cancel only stopped. The C#'s `CaptureMJPEG.Stop()` then `runAsync()`. Returns the
+/// status line's words, if any.
+/// `// C#: GCSViews/FlightData.cs:4898-4911`
+pub fn mjpeg_source(
+    data: &mut FlightData,
+    persisted: &mut crate::settings::Persisted,
+    accepted: bool,
+    url: &str,
+) -> Option<String> {
+    data.mjpeg = None;
+    if !accepted {
+        return None;
+    }
+    persisted.set("mjpeg_url", url);
+    match mp_video::mjpeg::CaptureMjpeg::start(url) {
+        Ok(capture) => {
+            data.mjpeg = Some(capture);
+            None
+        }
+        Err(why) => Some(error_box(why)),
+    }
+}
+
+/// Set GStreamer Source, answered: on OK the pipeline saved as `gstreamer_url` and played
+/// ([`gstreamer_play`]); on Cancel `hudGStreamer.Stop()`.
+/// `// C#: GCSViews/FlightData.cs:4819-4849`
+pub fn gstreamer_source(
+    data: &mut FlightData,
+    persisted: &mut crate::settings::Persisted,
+    accepted: bool,
+    pipeline: &str,
+    look: LookFor<'_>,
+) -> Option<String> {
+    if accepted {
+        persisted.set("gstreamer_url", pipeline);
+        gstreamer_play(data, persisted, pipeline, look)
+    } else {
+        data.gstreamer.stop();
+        None
+    }
+}
+
+/// HereLink Video, answered. The C# does not look at the answer, so Cancel plays the address
+/// the box started with. The address saved as `herelinkip`, then the air unit's RTSP stream
+/// played ([`gstreamer_play`]).
+/// `// C#: GCSViews/FlightData.cs:3155-3183`
+pub fn herelink_video(
+    data: &mut FlightData,
+    persisted: &mut crate::settings::Persisted,
+    accepted: bool,
+    typed: &str,
+    look: LookFor<'_>,
+) -> Option<String> {
+    let ip = if accepted {
+        typed.to_owned()
+    } else {
+        herelink_ip(persisted)
+    };
+    persisted.set("herelinkip", ip.as_str());
+    gstreamer_play(
+        data,
+        persisted,
+        &mp_video::gstreamer::herelink_pipeline(&ip),
+        look,
+    )
+}
+
+/// `herelinkip`, or the C#'s first address. `// C#: GCSViews/FlightData.cs:3157-3160`
+#[must_use]
+pub fn herelink_ip(persisted: &crate::settings::Persisted) -> String {
+    persisted
+        .get("herelinkip")
+        .unwrap_or(mp_video::gstreamer::HERELINK_IP)
+        .to_owned()
+}
+
+/// `GStreamer.GstLaunch = GStreamer.LookForGstreamer()`, saved as `gstlaunchexe`; then with no
+/// runtime `GStreamerUI.DownloadGStreamer()` and the pipeline started once it is there
+/// ([`gst_download_tick`]), else `hudGStreamer.Start(url)`. A refusal is said on the status
+/// line, where the C# shows a message box (the owner's rule: no dialog for what the window can
+/// show).
+/// `// C#: GCSViews/FlightData.cs:3170-3182, 4825-4844`
+fn gstreamer_play(
+    data: &mut FlightData,
+    persisted: &mut crate::settings::Persisted,
+    pipeline: &str,
+    look: LookFor<'_>,
+) -> Option<String> {
+    let gst_launch = look()
+        .map(|path| path.display().to_string())
+        .unwrap_or_default();
+    persisted.set("gstlaunchexe", gst_launch.as_str());
+    if mp_video::gstreamer::gst_launch_exists(&gst_launch) {
+        gstreamer_start(data, &gst_launch, pipeline)
+    } else if mp_video::gstreamer::can_download() {
+        gstreamer_download(data, pipeline)
+    } else {
+        // No runtime, and none to fetch for this machine: what the C#'s `Start` says when the
+        // runtime's library will not load.
+        Some(
+            mp_video::VideoError::NotFound {
+                launch: mp_video::gstreamer::LAUNCHER.to_owned(),
+                why: NO_RUNTIME.to_owned(),
+            }
+            .to_string(),
+        )
+    }
+}
+
+/// Why there is no runtime where none can be downloaded.
+const NO_RUNTIME: &str = "it is not on the PATH; install the GStreamer runtime";
+
+/// `hudGStreamer.Start(url)`, its refusal for the status line.
+/// `// C#: GCSViews/FlightData.cs:4837-4844`
+fn gstreamer_start(data: &mut FlightData, gst_launch: &str, pipeline: &str) -> Option<String> {
+    data.gstreamer
+        .start(std::path::Path::new(gst_launch), pipeline)
+        .err()
+        .map(|why| match why {
+            not_found @ mp_video::VideoError::NotFound { .. } => not_found.to_string(),
+            other => error_box(other),
+        })
+}
+
+/// `GStreamerUI.DownloadGStreamer()`: the runtime fetched into the data directory on a thread of
+/// its own, its progress on the status line, and `pipeline` started once it is found.
+/// `// C#: Utilities/GStreamerUI.cs:8-23; ExtLibs/Utilities/GStreamer.cs:1497-1547`
+fn gstreamer_download(data: &mut FlightData, pipeline: &str) -> Option<String> {
+    if data.gst_download.is_some() {
+        return None;
+    }
+    let Some(directory) = mp_settings::data_directory() else {
+        return Some(error_box("no home directory to keep GStreamer in"));
+    };
+    let (tell, said) = std::sync::mpsc::channel();
+    let spawned = std::thread::Builder::new()
+        .name("gstreamer-download".to_owned())
+        .spawn(move || {
+            let _ = std::fs::create_dir_all(&directory);
+            let mut status = |percent: i32, words: &str| {
+                let _ = tell.send((percent, words.to_owned()));
+            };
+            mp_video::gstreamer::download_gstreamer(
+                &directory,
+                cfg!(target_pointer_width = "64"),
+                &mut |url, to, status| {
+                    mp_firmware::flow::get_file_from_net(
+                        &mp_firmware::manifest::Http,
+                        url,
+                        to,
+                        status,
+                    )
+                },
+                &inflate,
+                &mut status,
+            );
+        });
+    match spawned {
+        Ok(thread) => {
+            data.gst_download = Some(GstDownload {
+                said,
+                thread,
+                then: pipeline.to_owned(),
+            });
+            None
+        }
+        Err(why) => Some(error_box(why)),
+    }
+}
+
+/// Once a frame: the runtime's download said on the status line, and once it ends the runtime
+/// looked for again and the pipeline started if it is there - or nothing, as the C# returns
+/// when `GstLaunchExists` is still false.
+/// `// C#: Utilities/GStreamerUI.cs:22; GCSViews/FlightData.cs:3172-3182, 4827-4835`
+pub fn gst_download_tick(
+    data: &mut FlightData,
+    persisted: &mut crate::settings::Persisted,
+    look: LookFor<'_>,
+) -> Option<String> {
+    let download = data.gst_download.as_ref()?;
+    let mut said = None;
+    while let Ok((_, words)) = download.said.try_recv() {
+        said = Some(words);
+    }
+    if !download.thread.is_finished() {
+        return said;
+    }
+    let download = data.gst_download.take()?;
+    let _ = download.thread.join();
+    let found = look()
+        .map(|path| path.display().to_string())
+        .unwrap_or_default();
+    persisted.set("gstlaunchexe", found.as_str());
+    if mp_video::gstreamer::gst_launch_exists(&found) {
+        return gstreamer_start(data, &found, &download.then).or(said);
+    }
+    said
 }
 
 impl FlightData {
@@ -4619,7 +4903,30 @@ impl FlightData {
             track_cleared: None,
             speed_gauge: crate::gauge::SpeedGauge::default(),
             gauges_bounds: Rc::new(Cell::new(None)),
+            gstreamer: mp_video::gstreamer::GStreamer::default(),
+            mjpeg: None,
+            gst_download: None,
         }
+    }
+
+    /// The latest frame of the HUD menu's sources: GStreamer's, else MJPEG's. The C#'s sources
+    /// all set `hud1.bgimage`, the last frame to arrive showing; two at once flicker between
+    /// their pictures there, and here one is shown, in that order before the Planner page's
+    /// camera. `// C#: MainV2.cs:3421-3486`
+    #[must_use]
+    pub fn hud_video_latest(&self) -> Option<std::sync::Arc<mp_video::Frame>> {
+        self.gstreamer.latest().or_else(|| {
+            self.mjpeg
+                .as_ref()
+                .and_then(mp_video::mjpeg::CaptureMjpeg::latest)
+        })
+    }
+
+    /// Whether a HUD menu source is playing or the runtime is being fetched: the window is
+    /// drawn at the camera's rate while it is.
+    #[must_use]
+    pub fn hud_video_running(&self) -> bool {
+        self.gstreamer.is_running() || self.mjpeg.is_some() || self.gst_download.is_some()
     }
 
     /// Publishes what a UI test asserts on. `alt_offset_home` is Set Home Alt's, which the
@@ -4723,6 +5030,42 @@ impl FlightData {
             },
         );
         crate::facts::record("fly.hud.items.open", self.hud_settings.choosing);
+        // The Video drop-down's sources: GStreamer's pipeline and frames, MJPEG's, and the
+        // runtime's download.
+        let size = |frame: Option<std::sync::Arc<mp_video::Frame>>| {
+            frame.map_or_else(
+                || "none".to_owned(),
+                |frame| format!("{}x{}", frame.width, frame.height),
+            )
+        };
+        crate::facts::record("fly.hud.gstreamer", self.gstreamer.is_running());
+        crate::facts::record(
+            "fly.hud.gstreamer.pipeline",
+            self.gstreamer.pipeline().unwrap_or("none"),
+        );
+        crate::facts::record("fly.hud.gstreamer.frames", self.gstreamer.frames());
+        crate::facts::record("fly.hud.gstreamer.frame", size(self.gstreamer.latest()));
+        crate::facts::record(
+            "fly.hud.gstreamer.error",
+            self.gstreamer.error().unwrap_or_else(|| "none".to_owned()),
+        );
+        crate::facts::record("fly.hud.gstreamer.download", self.gst_download.is_some());
+        let mjpeg = self.mjpeg.as_ref();
+        crate::facts::record("fly.hud.mjpeg", mjpeg.is_some());
+        crate::facts::record(
+            "fly.hud.mjpeg.frames",
+            mjpeg.map_or(0, mp_video::mjpeg::CaptureMjpeg::frames),
+        );
+        crate::facts::record(
+            "fly.hud.mjpeg.frame",
+            size(mjpeg.and_then(mp_video::mjpeg::CaptureMjpeg::latest)),
+        );
+        crate::facts::record(
+            "fly.hud.mjpeg.error",
+            mjpeg
+                .and_then(mp_video::mjpeg::CaptureMjpeg::error)
+                .unwrap_or_else(|| "none".to_owned()),
+        );
         crate::facts::record("fly.hud.items.choices", hud_item_choices().len());
         crate::facts::record("fly.swapped", self.swapped);
         // Where the HUD was laid out, so a swap is seen to move it: the column's left edge, or
@@ -6224,6 +6567,29 @@ pub enum HudAction {
     ShowIcons,
     /// `setBatteryCellCountToolStripMenuItem`: the cell voltage line off, or its count asked.
     BatteryCells,
+    /// `setMJPEGSourceToolStripMenuItem`: the MJPEG source's URL asked, then `CaptureMJPEG`
+    /// started on it, or stopped on Cancel.
+    MjpegSource,
+    /// `setGStreamerSourceToolStripMenuItem`: the pipeline asked, then `hudGStreamer` started
+    /// on it, or stopped on Cancel.
+    GStreamerSource,
+    /// `hereLinkVideoToolStripMenuItem`: the HereLink's address asked, then its RTSP stream
+    /// played through `hudGStreamer`.
+    HereLinkVideo,
+    /// `gStreamerStopToolStripMenuItem`: `hudGStreamer.Stop()`.
+    GStreamerStop,
+}
+
+impl HudAction {
+    /// Whether it is a row of the Video drop-down, which keeps the drop-down open while the
+    /// pointer is on it.
+    #[must_use]
+    pub const fn in_video_menu(self) -> bool {
+        matches!(
+            self,
+            Self::MjpegSource | Self::GStreamerSource | Self::HereLinkVideo | Self::GStreamerStop
+        )
+    }
 }
 
 /// A row of `contextMenuStripHud`, or of its Video drop-down.
@@ -6239,9 +6605,9 @@ pub struct HudRow {
     pub does: Result<HudAction, &'static str>,
 }
 
-/// Why the Video drop-down's sources are dimmed.
-const NO_VIDEO: &str =
-    "the HUD's video sources - MJPEG, the camera, GStreamer, HereLink - are not ported";
+/// Why Start Camera is dimmed.
+const NO_CAMERA: &str = "Start Camera, the capture opened in its default format, is not ported; \
+                         the Planner page's Start opens the camera";
 
 /// Why Record Hud to AVI and Stop Record are dimmed.
 const NO_AVI: &str = "there is no AVI encoder here, the C#'s AviWriter";
@@ -6326,31 +6692,36 @@ pub const HUD_VIDEO_MENU: [HudRow; 7] = [
         control: "setMJPEGSourceToolStripMenuItem",
         text: "Set MJPEG source",
         id: "fly-hud-mjpeg",
-        does: Err(NO_VIDEO),
+        // `// C#: GCSViews/FlightData.cs:4892-4912`
+        does: Ok(HudAction::MjpegSource),
     },
     HudRow {
         control: "startCameraToolStripMenuItem",
         text: "Start Camera",
         id: "fly-hud-startcamera",
-        does: Err(NO_VIDEO),
+        // `// C#: GCSViews/FlightData.cs:5100-5119`
+        does: Err(NO_CAMERA),
     },
     HudRow {
         control: "setGStreamerSourceToolStripMenuItem",
         text: "Set GStreamer Source",
         id: "fly-hud-gstreamer",
-        does: Err(NO_VIDEO),
+        // `// C#: GCSViews/FlightData.cs:4813-4850`
+        does: Ok(HudAction::GStreamerSource),
     },
     HudRow {
         control: "hereLinkVideoToolStripMenuItem",
         text: "HereLink Video",
         id: "fly-hud-herelink",
-        does: Err(NO_VIDEO),
+        // `// C#: GCSViews/FlightData.cs:3155-3183`
+        does: Ok(HudAction::HereLinkVideo),
     },
     HudRow {
         control: "gStreamerStopToolStripMenuItem",
         text: "GStreamer Stop",
         id: "fly-hud-gstreamerstop",
-        does: Err(NO_VIDEO),
+        // `// C#: GCSViews/FlightData.cs:3150-3153`
+        does: Ok(HudAction::GStreamerStop),
     },
 ];
 
@@ -6627,7 +6998,8 @@ fn hud_menu_row(
             // hides it, as a ToolStrip does.
             .on_hover(cx.listener(move |this, hovered: &bool, _window, cx| {
                 if *hovered && this.fly_data.hud_menu.open.is_some() {
-                    this.fly_data.hud_menu.video = action == HudAction::Video;
+                    this.fly_data.hud_menu.video =
+                        action == HudAction::Video || action.in_video_menu();
                     cx.notify();
                 }
             }))
@@ -7446,9 +7818,84 @@ impl MissionPlanner {
                     return true;
                 }
             }
+            // The saved answer, or the C#'s first.
+            // `// C#: GCSViews/FlightData.cs:4894-4896, 4815-4817, 3157-3160`
+            HudAction::MjpegSource => {
+                let url = self
+                    .persisted
+                    .get("mjpeg_url")
+                    .unwrap_or(mp_video::mjpeg::DEFAULT_URL)
+                    .to_owned();
+                return self.fly_hud_ask(Prompt::MjpegUrl, &url);
+            }
+            HudAction::GStreamerSource => {
+                let url = self
+                    .persisted
+                    .get("gstreamer_url")
+                    .unwrap_or(mp_video::gstreamer::DEFAULT_PIPELINE)
+                    .to_owned();
+                return self.fly_hud_ask(Prompt::GStreamerUrl, &url);
+            }
+            HudAction::HereLinkVideo => {
+                let ip = herelink_ip(&self.persisted);
+                return self.fly_hud_ask(Prompt::HereLinkIp, &ip);
+            }
+            // `hudGStreamer.Stop()`. `// C#: GCSViews/FlightData.cs:3150-3153`
+            HudAction::GStreamerStop => self.fly_data.gstreamer.stop(),
         }
         self.fly_data.hud_menu = HudMenu::default();
         false
+    }
+
+    /// A question asked from the HUD's menu, which closes.
+    fn fly_hud_ask(&mut self, prompt: Prompt, text: &str) -> bool {
+        self.fly_actions.ask(prompt, text);
+        self.fly_data.hud_menu = HudMenu::default();
+        true
+    }
+
+    /// Set MJPEG source, answered ([`mjpeg_source`]).
+    fn fly_mjpeg_source(&mut self, accepted: bool, url: &str) {
+        if let Some(words) = mjpeg_source(&mut self.fly_data, &mut self.persisted, accepted, url) {
+            self.file_status = Some(words);
+        }
+    }
+
+    /// Set GStreamer Source, answered ([`gstreamer_source`]).
+    fn fly_gstreamer_source(&mut self, accepted: bool, pipeline: &str) {
+        let said = gstreamer_source(
+            &mut self.fly_data,
+            &mut self.persisted,
+            accepted,
+            pipeline,
+            &look_for_gstreamer,
+        );
+        if let Some(words) = said {
+            self.file_status = Some(words);
+        }
+    }
+
+    /// HereLink Video, answered ([`herelink_video`]).
+    fn fly_herelink_video(&mut self, accepted: bool, typed: &str) {
+        let said = herelink_video(
+            &mut self.fly_data,
+            &mut self.persisted,
+            accepted,
+            typed,
+            &look_for_gstreamer,
+        );
+        if let Some(words) = said {
+            self.file_status = Some(words);
+        }
+    }
+
+    /// Once a frame: the GStreamer runtime's download ([`gst_download_tick`]).
+    pub(crate) fn hud_video_tick(&mut self) {
+        if let Some(words) =
+            gst_download_tick(&mut self.fly_data, &mut self.persisted, &look_for_gstreamer)
+        {
+            self.file_status = Some(words);
+        }
     }
 
     /// Load Log, once a path is given: the link given over to playing it - or, with a port
@@ -10378,7 +10825,26 @@ mod tests {
                 "Show icons"
             ]
         );
-        assert!(HUD_VIDEO_MENU.iter().all(|row| row.does.is_err()));
+        let live: Vec<&str> = HUD_VIDEO_MENU
+            .iter()
+            .filter(|row| row.does.is_ok())
+            .map(|row| row.text)
+            .collect();
+        assert_eq!(
+            live,
+            [
+                "Set MJPEG source",
+                "Set GStreamer Source",
+                "HereLink Video",
+                "GStreamer Stop"
+            ]
+        );
+        assert!(
+            HUD_VIDEO_MENU
+                .iter()
+                .filter_map(|row| row.does.ok())
+                .all(HudAction::in_video_menu)
+        );
     }
 
     /// Ground Color is `CheckOnClick`: the first click checks it and paints the ground brown,
@@ -10978,5 +11444,196 @@ mod tests {
             "UAVIONIX_ADSB_OUT_CONTROL state=176 squawk=1200 flight_id=QFA1 baroaltmsl=2147483647"
         );
         assert_eq!(route(&message), Route::Raw);
+    }
+
+    // --- The Video drop-down's sources -----------------------------------------------------------
+
+    /// The three questions, their first answers and HereLink's pipeline are worded as
+    /// `FlightData.cs` words them.
+    #[test]
+    fn the_video_sources_questions_are_the_csharps() {
+        assert_eq!(Prompt::MjpegUrl.title(), "Mjpeg url");
+        assert_eq!(
+            Prompt::MjpegUrl.text(),
+            "Enter the url to the mjpeg source url"
+        );
+        assert_eq!(Prompt::GStreamerUrl.title(), "GStreamer url");
+        assert!(
+            Prompt::GStreamerUrl
+                .text()
+                .starts_with("Enter the source pipeline\nEnsure")
+        );
+        assert_eq!(Prompt::HereLinkIp.title(), "herelink ip");
+        assert_eq!(Prompt::HereLinkIp.text(), "Enter herelink ip address");
+        for prompt in [Prompt::MjpegUrl, Prompt::GStreamerUrl, Prompt::HereLinkIp] {
+            assert!(prompt.takes_text());
+            assert_eq!(prompt.buttons(), ("OK", "Cancel"));
+        }
+        let Some(source) = csharp("GCSViews/FlightData.cs") else {
+            eprintln!("skipped: the C# tree is not checked out here");
+            return;
+        };
+        for prompt in [Prompt::MjpegUrl, Prompt::GStreamerUrl, Prompt::HereLinkIp] {
+            assert!(
+                source.contains(&format!("\"{}\"", prompt.title())),
+                "{prompt:?}'s title"
+            );
+            assert!(
+                source.contains(&format!("\"{}\"", prompt.text().replace('\n', "\\n"))),
+                "{prompt:?}'s text"
+            );
+        }
+        assert!(source.contains(&format!("@\"{}\"", mp_video::gstreamer::DEFAULT_PIPELINE)));
+        assert!(source.contains(&format!("@\"{}\"", mp_video::mjpeg::DEFAULT_URL)));
+        assert!(source.contains(&format!(
+            "string ipaddr = \"{}\";",
+            mp_video::gstreamer::HERELINK_IP
+        )));
+        // `String.Format`'s `{0}` where the address goes.
+        assert!(source.contains(&mp_video::gstreamer::herelink_pipeline("{0}")));
+    }
+
+    /// A flight screen with no points of interest and settings kept nowhere.
+    fn video_screen() -> (FlightData, crate::settings::Persisted) {
+        (
+            FlightData::with_pois(crate::poi::Pois::kept_in(None)),
+            crate::settings::Persisted::at(None),
+        )
+    }
+
+    /// The runtime installed here, if it is: `gst-launch-1.0` on the `PATH`.
+    fn installed_launcher() -> Option<std::path::PathBuf> {
+        let path = std::env::var_os("PATH");
+        let (on_path, _) = mp_video::gstreamer::search_dirs(path.as_ref(), None, None, &[]);
+        let found = mp_video::gstreamer::look_for_gstreamer(&on_path, &[]);
+        if found.is_none() {
+            eprintln!("skipped: no gst-launch-1.0 on the PATH - install the GStreamer runtime");
+        }
+        found
+    }
+
+    /// Set GStreamer Source's OK, through the installed runtime: `gstreamer_url` and
+    /// `gstlaunchexe` saved, the pipeline playing, its frame the HUD's picture at the caps'
+    /// size; asked again, Cancel stops it and the picture goes.
+    #[test]
+    fn set_gstreamer_source_plays_the_pipeline_into_the_hud() {
+        let Some(launcher) = installed_launcher() else {
+            return;
+        };
+        let (mut data, mut persisted) = video_screen();
+        let look = || Some(launcher.clone());
+        let pipeline = "videotestsrc pattern=green ! video/x-raw,width=64,height=48 ! videoconvert ! video/x-raw,format=BGRA ! appsink name=outsink";
+        assert_eq!(
+            gstreamer_source(&mut data, &mut persisted, true, pipeline, &look),
+            None
+        );
+        assert_eq!(persisted.get("gstreamer_url"), Some(pipeline));
+        assert_eq!(
+            persisted.get("gstlaunchexe"),
+            Some(launcher.display().to_string().as_str())
+        );
+        assert!(data.hud_video_running());
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let frame = loop {
+            if let Some(frame) = data.hud_video_latest() {
+                break frame;
+            }
+            assert!(Instant::now() < deadline, "{:?}", data.gstreamer.error());
+            std::thread::sleep(Duration::from_millis(5));
+        };
+        assert_eq!((frame.width, frame.height), (64, 48));
+        // videotestsrc's green is pure green.
+        assert_eq!(&frame.rgba[..4], &[0, 255, 0, 255]);
+        assert_eq!(
+            gstreamer_source(&mut data, &mut persisted, false, "ignored", &look),
+            None
+        );
+        assert!(!data.gstreamer.is_running());
+        assert!(data.hud_video_latest().is_none());
+        assert!(!data.hud_video_running());
+        assert_eq!(persisted.get("gstreamer_url"), Some(pipeline));
+    }
+
+    /// No runtime and none to download here: the C#'s "The file was not found at" on the status
+    /// line, `gstlaunchexe` emptied as `LookForGstreamer`'s `""` empties it, nothing playing.
+    #[test]
+    fn with_no_runtime_the_status_line_says_so() {
+        if mp_video::gstreamer::can_download() {
+            eprintln!("skipped: this machine would download the runtime");
+            return;
+        }
+        let (mut data, mut persisted) = video_screen();
+        let said = gstreamer_source(
+            &mut data,
+            &mut persisted,
+            true,
+            "videotestsrc ! appsink name=outsink",
+            &|| None,
+        );
+        assert_eq!(
+            said.as_deref(),
+            Some(
+                "The file was not found at gst-launch-1.0\nPlease verify permissions it is not on \
+                 the PATH; install the GStreamer runtime"
+            )
+        );
+        assert_eq!(persisted.get("gstlaunchexe"), Some(""));
+        assert!(!data.gstreamer.is_running());
+        assert!(data.gst_download.is_none());
+    }
+
+    /// HereLink Video saves the address typed, or on Cancel the one the box started with, and
+    /// plays the air unit's RTSP stream.
+    #[test]
+    fn herelink_video_saves_the_address_and_plays_its_stream() {
+        let (mut data, mut persisted) = video_screen();
+        assert_eq!(herelink_ip(&persisted), "192.168.43.1");
+        // A launcher that cannot run stands in, so nothing is reached over the network.
+        let missing = || Some(std::path::PathBuf::from("/nonexistent/gst-launch-1.0"));
+        let _ = herelink_video(&mut data, &mut persisted, true, "10.0.0.9", &missing);
+        assert_eq!(persisted.get("herelinkip"), Some("10.0.0.9"));
+        let _ = herelink_video(
+            &mut data,
+            &mut persisted,
+            false,
+            "typed then cancelled",
+            &missing,
+        );
+        assert_eq!(persisted.get("herelinkip"), Some("10.0.0.9"));
+        let Some(launcher) = installed_launcher() else {
+            return;
+        };
+        let look = || Some(launcher.clone());
+        assert_eq!(
+            herelink_video(&mut data, &mut persisted, true, "127.0.0.1", &look),
+            None
+        );
+        assert_eq!(
+            data.gstreamer.pipeline(),
+            Some(mp_video::gstreamer::herelink_pipeline("127.0.0.1").as_str())
+        );
+        data.gstreamer.stop();
+    }
+
+    /// Set MJPEG source: OK saves `mjpeg_url` and starts the capture over; Cancel stops it.
+    #[test]
+    fn set_mjpeg_source_starts_and_stops_the_capture() {
+        let (mut data, mut persisted) = video_screen();
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let url = format!("http://127.0.0.1:{port}/video");
+        assert_eq!(mjpeg_source(&mut data, &mut persisted, true, &url), None);
+        assert_eq!(persisted.get("mjpeg_url"), Some(url.as_str()));
+        assert_eq!(
+            data.mjpeg.as_ref().map(mp_video::mjpeg::CaptureMjpeg::url),
+            Some(url.as_str())
+        );
+        assert!(data.hud_video_running());
+        assert_eq!(mjpeg_source(&mut data, &mut persisted, false, "x"), None);
+        assert!(data.mjpeg.is_none());
+        assert_eq!(persisted.get("mjpeg_url"), Some(url.as_str()));
     }
 }

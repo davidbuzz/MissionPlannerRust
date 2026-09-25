@@ -20,6 +20,11 @@
 //! * [`testing::FakeSource`], scripted devices, formats and frames, for the tests and the
 //!   screen's headless checks.
 //!
+//! The HUD menu's other sources hand the HUD frames the same way, each on a thread of its own
+//! with the latest frame kept: [`gstreamer::GStreamer`] (Set GStreamer Source and HereLink
+//! Video, `ExtLibs/Utilities/GStreamer.cs`) and [`mjpeg::CaptureMjpeg`] (Set MJPEG source,
+//! `ExtLibs/Utilities/CaptureMJPEG.cs`).
+//!
 //! Windows' DirectShow (or Media Foundation) source is not written yet; the trait is where it
 //! goes. The label a format gets is the C#'s, with the fourcc where DirectShow had its analog
 //! video standard (`Standard`), which V4L2 has no counterpart for.
@@ -33,9 +38,13 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
 
 pub mod convert;
+pub mod gstreamer;
+pub mod mjpeg;
+pub mod multipart;
 pub mod testing;
 #[cfg(target_os = "linux")]
 pub mod v4l2;
+pub mod zip;
 
 /// A video input device, as the Video Device list names it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -186,6 +195,15 @@ pub enum VideoError {
     /// The format is one this crate does not decode.
     #[error("unsupported pixel format {0}")]
     Unsupported(String),
+    /// The GStreamer runtime would not run: the C#'s words for its `DllNotFoundException`.
+    /// `// C#: ExtLibs/Utilities/GStreamer.cs:1206-1210`
+    #[error("The file was not found at {launch}\nPlease verify permissions {why}")]
+    NotFound {
+        /// `GstLaunch`: the launcher's path.
+        launch: String,
+        /// Why it would not run, as the system says.
+        why: String,
+    },
 }
 
 /// A source of frames once a device is open: the capture graph's sample grabber.
@@ -358,6 +376,66 @@ impl Drop for Capture {
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
+    }
+}
+
+/// What a stream's reading thread hands the screen - the C#'s `OnNewImage` event, kept as the
+/// latest frame - and the flag that tells the thread to stop. [`gstreamer::GStreamer`] and
+/// [`mjpeg::CaptureMjpeg`] each own one, shared with their thread.
+#[derive(Debug, Default)]
+pub(crate) struct Feed {
+    latest: Mutex<Option<Arc<Frame>>>,
+    frames: AtomicU64,
+    error: Mutex<Option<String>>,
+    stop: AtomicBool,
+}
+
+impl Feed {
+    /// A new frame: `_onNewImage?.Invoke(null, image)`.
+    pub(crate) fn show(&self, frame: Frame) {
+        *self.latest.lock().unwrap_or_else(PoisonError::into_inner) = Some(Arc::new(frame));
+        self.frames.fetch_add(1, Ordering::Release);
+    }
+
+    /// No picture: `_onNewImage?.Invoke(null, null)`, which clears the HUD's.
+    pub(crate) fn clear(&self) {
+        *self.latest.lock().unwrap_or_else(PoisonError::into_inner) = None;
+    }
+
+    /// What went wrong, kept for the screen: the C# logs it.
+    pub(crate) fn note(&self, why: impl Into<String>) {
+        *self.error.lock().unwrap_or_else(PoisonError::into_inner) = Some(why.into());
+    }
+
+    /// Whether the thread has been told to stop.
+    pub(crate) fn stopping(&self) -> bool {
+        self.stop.load(Ordering::Acquire)
+    }
+
+    /// Tells the thread to stop.
+    pub(crate) fn tell_stop(&self) {
+        self.stop.store(true, Ordering::Release);
+    }
+
+    /// The latest frame.
+    pub(crate) fn latest(&self) -> Option<Arc<Frame>> {
+        self.latest
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    /// How many frames have arrived.
+    pub(crate) fn frames(&self) -> u64 {
+        self.frames.load(Ordering::Acquire)
+    }
+
+    /// The last failure noted.
+    pub(crate) fn error(&self) -> Option<String> {
+        self.error
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 }
 

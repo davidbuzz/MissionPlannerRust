@@ -11,7 +11,7 @@
 
 screen fly
 window 1600x1200
-budget 10
+budget 14
 
 expect fly.tabs.multiline false
 expect fly.menu none

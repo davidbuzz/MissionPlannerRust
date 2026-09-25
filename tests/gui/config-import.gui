@@ -18,7 +18,7 @@ setup mkdir -p "$WORK/Mission Planner/History" && printf '\357\273\277<?xml vers
 tiles offline
 screen fly
 window 1600x1200
-budget 3
+budget 4
 
 # Copied, and read from where they were copied to.
 expect config.imported config.xml, poi.txt, History

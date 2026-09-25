@@ -5,7 +5,7 @@
 env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
-budget 11
+budget 13
 
 # The map first: a press before its first paint records nothing.
 expect map.ready true

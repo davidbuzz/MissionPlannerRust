@@ -2496,17 +2496,7 @@ impl MissionPlanner {
                     if matches!(effect, Effect::Status(_)) {
                         continue;
                     }
-                    // Dropping the task ends the repaints; a new capture starts them again.
-                    self.video_repaint = self.video.is_some().then(|| {
-                        cx.spawn(async move |this, cx| {
-                            loop {
-                                cx.background_executor().timer(VIDEO_REPAINT).await;
-                                if this.update(cx, |_, cx| cx.notify()).is_err() {
-                                    break;
-                                }
-                            }
-                        })
-                    });
+                    self.video_repaint_keep(cx);
                 }
                 Effect::Stream(..) | Effect::ReadMissionOnConnect(_) | Effect::MapAccess => {}
             }
@@ -2519,7 +2509,13 @@ impl MissionPlanner {
     /// `// C#: ExtLibs/WebCamService/Capture.cs:142-157; GCSViews/FlightData.cs:1897-1900`
     pub(crate) fn video_tick(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.planner.video_status(self.video.as_ref());
-        let latest = self.video.as_ref().and_then(mp_video::Capture::latest);
+        // The HUD menu's sources - GStreamer, MJPEG - set the same picture, and a runtime being
+        // downloaded for GStreamer says how it goes. `// C#: MainV2.cs:3421-3486`
+        self.hud_video_tick();
+        let latest = self
+            .fly_data
+            .hud_video_latest()
+            .or_else(|| self.video.as_ref().and_then(mp_video::Capture::latest));
         let shown = match (&latest, &self.video_frame) {
             (Some(new), Some((old, _))) => Arc::ptr_eq(new, old),
             (None, None) => true,
@@ -2543,6 +2539,28 @@ impl MissionPlanner {
             "hud.instruments",
             crate::hud::draws_instruments(self.fly_data.camera.is_some(), self.planner.hud_on()),
         );
+        // A GStreamer pipeline that ended by itself stops the repaints.
+        self.video_repaint_keep(cx);
+    }
+
+    /// The repaints at the camera's rate: kept while the Planner page's capture or a HUD menu
+    /// source runs, started when one starts, dropped - which ends them - when none does.
+    pub(crate) fn video_repaint_keep(&mut self, cx: &mut Context<Self>) {
+        if self.video.is_none() && !self.fly_data.hud_video_running() {
+            self.video_repaint = None;
+            return;
+        }
+        if self.video_repaint.is_some() {
+            return;
+        }
+        self.video_repaint = Some(cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(VIDEO_REPAINT).await;
+                if this.update(cx, |_, cx| cx.notify()).is_err() {
+                    break;
+                }
+            }
+        }));
     }
 
     /// `Activate`, when the page is chosen.

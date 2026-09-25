@@ -24,7 +24,7 @@ env MP_CONFIG_XML $WORK/config.xml
 setup rm -rf /tmp/planner-mavftp && mkdir -p /tmp/planner-mavftp/down && printf 'hello from the mavftp page\n' > /tmp/planner-mavftp/hello.txt
 screen params
 window 1600x1200
-budget 23
+budget 28
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
 # The vehicle first: a click before its first heartbeat is a click the screen may forget

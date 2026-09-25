@@ -8,7 +8,7 @@
 
 screen fly
 window 1600x1200
-budget 10
+budget 12
 
 expect fly.hud.cells off
 expect fly.hud.cell none

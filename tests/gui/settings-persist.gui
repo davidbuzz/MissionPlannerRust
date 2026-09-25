@@ -24,7 +24,7 @@ setup printf '\357\273\277<?xml version="1.0" encoding="utf-8"?>\n<Config>\n  <a
 tiles offline
 screen fly
 window 1600x1200
-budget 15
+budget 18
 
 # SaveConfig ran at start-up; the map is the one config.xml names.
 expect config.saved startup

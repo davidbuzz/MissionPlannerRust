@@ -13,7 +13,7 @@ env MP_PLAN_DIR $WORK
 
 screen plan
 window 1600x1200
-budget 13
+budget 17
 expect fly.poi.count 0
 
 # Add, at the menu's position.

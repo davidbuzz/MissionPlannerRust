@@ -522,14 +522,14 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "GStreamerStopToolStripMenuItem_Click",
         "GStreamer Stop",
-        Missing,
+        Done("fly-hud-gstreamerstop"),
     ),
     row(
         "hereLinkVideoToolStripMenuItem",
         "Click",
         "HereLinkVideoToolStripMenuItem_Click",
         "HereLink Video",
-        Missing,
+        Done("fly-hud-herelink"),
     ),
     row(
         "hud1",
@@ -778,7 +778,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "setGStreamerSourceToolStripMenuItem_Click",
         "Set GStreamer Source",
-        Missing,
+        Done("fly-hud-gstreamer"),
     ),
     row(
         "setHomeHereToolStripMenuItem1",
@@ -792,7 +792,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "setMJPEGSourceToolStripMenuItem_Click",
         "Set MJPEG source",
-        Missing,
+        Done("fly-hud-mjpeg"),
     ),
     row(
         "setViewCountToolStripMenuItem",
@@ -1005,11 +1005,7 @@ pub const WHY_MISSING: &[(&str, &str, &str)] = &[
     ("gimbalVideoFullSizedToolStripMenuItem", "Click", VIDEO),
     ("gimbalVideoMiniToolStripMenuItem", "Click", VIDEO),
     ("gimbalVideoPopOutToolStripMenuItem", "Click", VIDEO),
-    ("gStreamerStopToolStripMenuItem", "Click", VIDEO),
-    ("hereLinkVideoToolStripMenuItem", "Click", VIDEO),
     ("recordHudToAVIToolStripMenuItem", "Click", VIDEO),
-    ("setGStreamerSourceToolStripMenuItem", "Click", VIDEO),
-    ("setMJPEGSourceToolStripMenuItem", "Click", VIDEO),
     ("startCameraToolStripMenuItem", "Click", VIDEO),
     ("stopRecordToolStripMenuItem", "Click", VIDEO),
     (
@@ -1033,7 +1029,7 @@ pub const WHY_MISSING: &[(&str, &str, &str)] = &[
 
 /// Left for later: video.
 #[cfg(test)]
-const VIDEO: &str = "later: video (GStreamer, HereLink, MJPEG, the camera, AVI)";
+const VIDEO: &str = "later: video (the camera, AVI, the gimbal's video)";
 
 /// How many rows are in each state: (done, elsewhere, missing, plumbing, dropped).
 #[must_use]
@@ -1251,7 +1247,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (100, 1, 15, 18, 2)
+            (104, 1, 11, 18, 2)
         );
     }
 }

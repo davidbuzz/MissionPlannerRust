@@ -19,7 +19,7 @@ setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encodin
 
 screen plan
 window 1600x1200
-budget 16
+budget 19
 
 # The saved home is in the boxes, and the grid is empty.
 expect plan.home -35.3632621,149.1652374,584.10

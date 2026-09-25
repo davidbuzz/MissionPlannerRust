@@ -19,7 +19,7 @@ env XDG_DATA_HOME $WORK
 setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config><maplast_lat>-35.3632621</maplast_lat><maplast_lng>149.1652374</maplast_lng><maplast_zoom>16</maplast_zoom></Config>' > "$WORK/MissionPlannerRust/config.xml"
 screen fly
 window 1600x1200
-budget 16
+budget 17
 
 expect fly.poi.count 0
 expect fly.poi.file ~ MissionPlannerRust/poi.txt

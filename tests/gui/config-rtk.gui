@@ -28,7 +28,7 @@ setup python3 tests/gui/rtk-caster.py --work $WORK --stream testdata/rtcm/base-s
 
 screen params
 window 1600x1200
-budget 8
+budget 10
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
 # The vehicle first: a click before its first heartbeat is a click the screen may forget

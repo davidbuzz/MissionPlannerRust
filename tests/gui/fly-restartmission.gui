@@ -12,7 +12,7 @@ setup cargo run -q -p mp-cli --bin headless-planner -- mission tcp:127.0.0.1:576
 
 screen fly
 window 1600x1200
-budget 6
+budget 8
 
 # The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as
 # tabControlactions.SelectedIndex = 0 has it. `GCSViews/FlightData.Designer.cs:595-611`

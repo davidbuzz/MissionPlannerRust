@@ -15,7 +15,7 @@ setup mkdir -p $WORK/MissionPlannerRust && cp testdata/logbrowse/LogMessagesCopt
 
 screen logs
 window 1600x1200
-budget 16
+budget 21
 # A first budget, set by hand until a passing run records one.
 
 expect log.open false

@@ -4,7 +4,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 
 | total | done | elsewhere | missing | plumbing | dropped |
 |---:|---:|---:|---:|---:|---:|
-| 136 | 100 | 1 | 15 | 18 | 2 |
+| 136 | 104 | 1 | 11 | 18 | 2 |
 
 | control | event | handler | text | ours |
 |---|---|---|---|---|
@@ -21,7 +21,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `but_disablejoystick` | Click | `but_disablejoystick_Click` | Disable Joystick | done: `joystick-enable` |
 | `BUT_edit_selected` | Click | `BUT_edit_selected_Click` | Edit Selected Script | done: `fly-script-edit` |
 | `BUT_georefimage` | Click | `BUT_georefimage_Click` | Geo Reference Images | done: `fly-georefimage` |
-| `BUT_GimbalVideo` | Click | `gimbalVideoPopOutToolStripMenuItem_Click` | Video Control | **missing** - later: video (GStreamer, HereLink, MJPEG, the camera, AVI) |
+| `BUT_GimbalVideo` | Click | `gimbalVideoPopOutToolStripMenuItem_Click` | Video Control | **missing** - later: video (the camera, AVI, the gimbal's video) |
 | `BUT_Homealt` | Click | `BUT_Homealt_Click` | Set Home Alt | done: `fly-homealt` |
 | `BUT_joystick` | Click | `BUT_joystick_Click` | Joystick | done: `joystick-refresh` |
 | `BUT_loadtelem` | Click | `BUT_loadtelem_Click` | Load Log | done: `fly-loadtelem` |
@@ -60,9 +60,9 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `flightPlannerToolStripMenuItem` | Click | `flightPlannerToolStripMenuItem_Click` | Flight Planner | done: `tab-plan` |
 | `flyToCoordsToolStripMenuItem` | Click | `flyToCoordsToolStripMenuItem_Click` | Fly To Coords | done: `fly-flytocoords` |
 | `flyToHereAltToolStripMenuItem` | Click | `flyToHereAltToolStripMenuItem_Click` | Fly To Here Alt | done: `fly-flytohere-alt` |
-| `gimbalVideoFullSizedToolStripMenuItem` | Click | `gimbalVideoFullSizedToolStripMenuItem_Click` | Full Sized | **missing** - later: video (GStreamer, HereLink, MJPEG, the camera, AVI) |
-| `gimbalVideoMiniToolStripMenuItem` | Click | `gimbalVideoMiniToolStripMenuItem_Click` | Mini | **missing** - later: video (GStreamer, HereLink, MJPEG, the camera, AVI) |
-| `gimbalVideoPopOutToolStripMenuItem` | Click | `gimbalVideoPopOutToolStripMenuItem_Click` | Pop Out | **missing** - later: video (GStreamer, HereLink, MJPEG, the camera, AVI) |
+| `gimbalVideoFullSizedToolStripMenuItem` | Click | `gimbalVideoFullSizedToolStripMenuItem_Click` | Full Sized | **missing** - later: video (the camera, AVI, the gimbal's video) |
+| `gimbalVideoMiniToolStripMenuItem` | Click | `gimbalVideoMiniToolStripMenuItem_Click` | Mini | **missing** - later: video (the camera, AVI, the gimbal's video) |
+| `gimbalVideoPopOutToolStripMenuItem` | Click | `gimbalVideoPopOutToolStripMenuItem_Click` | Pop Out | **missing** - later: video (the camera, AVI, the gimbal's video) |
 | `gMapControl1` | Click | `gMapControl1_Click` | the map | plumbing |
 | `gMapControl1` | MouseDown | `gMapControl1_MouseDown` | the map: start a drag | done: `map` |
 | `gMapControl1` | MouseLeave | `gMapControl1_MouseLeave` | the map | plumbing |
@@ -72,8 +72,8 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `goHereToolStripMenuItem` | Click | `goHereToolStripMenuItem_Click` | Fly To Here | done: `fn fly_here` |
 | `groundColorToolStripMenuItem` | Click | `groundColorToolStripMenuItem_Click` | Ground Color | done: `fly-hud-groundcolor` |
 | `Gspeed` | DoubleClick | `Gspeed_DoubleClick` | the speed gauge | done: `fly-gauge-speed` |
-| `gStreamerStopToolStripMenuItem` | Click | `GStreamerStopToolStripMenuItem_Click` | GStreamer Stop | **missing** - later: video (GStreamer, HereLink, MJPEG, the camera, AVI) |
-| `hereLinkVideoToolStripMenuItem` | Click | `HereLinkVideoToolStripMenuItem_Click` | HereLink Video | **missing** - later: video (GStreamer, HereLink, MJPEG, the camera, AVI) |
+| `gStreamerStopToolStripMenuItem` | Click | `GStreamerStopToolStripMenuItem_Click` | GStreamer Stop | done: `fly-hud-gstreamerstop` |
+| `hereLinkVideoToolStripMenuItem` | Click | `HereLinkVideoToolStripMenuItem_Click` | HereLink Video | done: `fly-hud-herelink` |
 | `hud1` | DoubleClick | `hud1_DoubleClick` | the HUD: HUD Dropout, its own window | dropped: one window: the HUD has nowhere to drop out to |
 | `hud1` | ekfclick | `hud1_ekfclick` | the HUD's EKF indicator | done: `hud-ekf` |
 | `hud1` | Load | `hud1_Load` | the HUD | plumbing |
@@ -103,23 +103,23 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `quickView4` | DoubleClick | `quickView_DoubleClick` | quick view 4: choose its field | done: `fly-quick-4` |
 | `quickView5` | DoubleClick | `quickView_DoubleClick` | quick view 5: choose its field | done: `fly-quick-5` |
 | `quickView6` | DoubleClick | `quickView_DoubleClick` | quick view 6: choose its field | done: `fly-quick-6` |
-| `recordHudToAVIToolStripMenuItem` | Click | `recordHudToAVIToolStripMenuItem_Click` | Record Hud to AVI | **missing** - later: video (GStreamer, HereLink, MJPEG, the camera, AVI) |
+| `recordHudToAVIToolStripMenuItem` | Click | `recordHudToAVIToolStripMenuItem_Click` | Record Hud to AVI | **missing** - later: video (the camera, AVI, the gimbal's video) |
 | `russianHudToolStripMenuItem` | Click | `russianHudToolStripMenuItem_Click` | Russian Hud | done: `fly-hud-russian` |
 | `saveFileToolStripMenuItem` | Click | `saveFileToolStripMenuItem_Click` | Save File | done: `fly-poi-save` |
 | `scriptChecker` | Tick | `scriptChecker_Tick` | the script status timer | plumbing |
 | `setAspectRatioToolStripMenuItem` | Click | `setAspectRatioToolStripMenuItem_Click` | Set Aspect Ratio | **missing** - the owner's call: the C#'s 4:3 would reshape the column |
 | `setBatteryCellCountToolStripMenuItem` | Click | `setBatteryCellCountToolStripMenuItem_Click` | Battery Cell Voltage | done: `fly-hud-batterycells` |
 | `setEKFHomeHereToolStripMenuItem` | Click | `setEKFHomeHereToolStripMenuItem_Click` | Set EKF Origin Here | done: `fly-setekforigin` |
-| `setGStreamerSourceToolStripMenuItem` | Click | `setGStreamerSourceToolStripMenuItem_Click` | Set GStreamer Source | **missing** - later: video (GStreamer, HereLink, MJPEG, the camera, AVI) |
+| `setGStreamerSourceToolStripMenuItem` | Click | `setGStreamerSourceToolStripMenuItem_Click` | Set GStreamer Source | done: `fly-hud-gstreamer` |
 | `setHomeHereToolStripMenuItem1` | Click | `setHomeHereToolStripMenuItem_Click` | Set Home Here | done: `fly-sethome` |
-| `setMJPEGSourceToolStripMenuItem` | Click | `setMJPEGSourceToolStripMenuItem_Click` | Set MJPEG source | **missing** - later: video (GStreamer, HereLink, MJPEG, the camera, AVI) |
+| `setMJPEGSourceToolStripMenuItem` | Click | `setMJPEGSourceToolStripMenuItem_Click` | Set MJPEG source | done: `fly-hud-mjpeg` |
 | `setViewCountToolStripMenuItem` | Click | `setViewCountToolStripMenuItem_Click` | Set View Count | **missing** - the quick views' menu and both questions are there (`fly-quick-setviewcount`) and the answer is kept; the grid is `quick.rs`'s six views, which have no resize yet |
 | `showIconsToolStripMenuItem` | Click | `showIconsToolStripMenuItem_Click` | Show icons | done: `fly-hud-showicons` |
 | `Squawk_nud` | MouseWheel | `Squawk_nud_MouseWheel` | Squawk (transponder) | done: `fly-xpdr-squawk-box` |
 | `Squawk_nud` | ValueChanged | `Squawk_nud_ValueChanged` | Squawk (transponder) | done: `fly-xpdr-squawk` |
-| `startCameraToolStripMenuItem` | Click | `startCameraToolStripMenuItem_Click` | Start Camera | **missing** - later: video (GStreamer, HereLink, MJPEG, the camera, AVI) |
+| `startCameraToolStripMenuItem` | Click | `startCameraToolStripMenuItem_Click` | Start Camera | **missing** - later: video (the camera, AVI, the gimbal's video) |
 | `STBY_btn` | Click | `STBY_btn_Click` | STBY (transponder) | done: `fly-xpdr-stby` |
-| `stopRecordToolStripMenuItem` | Click | `stopRecordToolStripMenuItem_Click` | Stop Record | **missing** - later: video (GStreamer, HereLink, MJPEG, the camera, AVI) |
+| `stopRecordToolStripMenuItem` | Click | `stopRecordToolStripMenuItem_Click` | Stop Record | **missing** - later: video (the camera, AVI, the gimbal's video) |
 | `swapWithMapToolStripMenuItem` | Click | `swapWithMapToolStripMenuItem_Click` | Swap With Map | done: `fly-hud-swap` |
 | `tabControlactions` | DrawItem | `tabControl1_DrawItem` | the actions tabs | plumbing |
 | `tabControlactions` | SelectedIndexChanged | `tabControl1_SelectedIndexChanged` | the actions tabs | done: `fly-tabs` |

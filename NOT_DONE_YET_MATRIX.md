@@ -1,7 +1,5 @@
 | Area or filename | Functional item | Priority | Progress |
 |---|---|---|---|
-| crates/mp-video, crates/mp-gui/src/fly.rs | GStreamer video into the HUD (row 93, gstreamer-rs) | high | 5 |
-| crates/mp-gui/src/fly.rs | HereLink, MJPEG and GStreamer source menu items | high | 5 |
 | experiments/wasm-plugin-host | WASM plugin host in the application (row 96, component model) | high | 10 |
 | tests/gui/storm.gui | Paint-latency claim needs a release-build run; debug suites skip it | med | 80 |
 | crates/mp-gui/src/fly.rs | Gimbal video full, mini and pop-out menu items | med | 1 |

@@ -19,7 +19,7 @@ setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encodin
 
 screen plan
 window 1600x1200
-budget 9
+budget 11
 
 # The saved home is in the boxes, and the map draws its marker there. With nothing else to show
 # the map is fitted close round it, past GMap's zoom 16, so the "H" is written on the pin

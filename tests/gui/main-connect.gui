@@ -30,7 +30,7 @@ setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encodin
 
 screen fly
 window 1600x1200
-budget 42
+budget 13
 
 expect vehicle.connected false
 expect link.button CONNECT

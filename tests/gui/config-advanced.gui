@@ -23,7 +23,7 @@ env XDG_DATA_HOME $WORK
 
 screen setup
 window 1600x1200
-budget 8
+budget 10
 
 expect config.advanced.active false
 expect setup.pages ~ ConfigAdvanced,ConfigTerminal

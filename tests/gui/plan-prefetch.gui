@@ -20,7 +20,7 @@ tiles offline
 
 screen plan
 window 1600x1200
-budget 23
+budget 32
 expect mission.home true
 expect plan.prefetch.state idle
 

@@ -20,7 +20,7 @@ setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encodin
 
 screen fly
 window 1600x1200
-budget 3
+budget 4
 
 # A vehicle, but its mission not read: no home on the flight map.
 expect vehicle.connected true

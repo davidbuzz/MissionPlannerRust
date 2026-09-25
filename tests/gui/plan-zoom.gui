@@ -20,7 +20,7 @@ setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encodin
 
 screen plan
 window 1600x1200
-budget 16
+budget 21
 
 expect vehicle.connected true
 

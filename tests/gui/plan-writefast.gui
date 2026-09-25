@@ -18,7 +18,7 @@ env MP_PLAN_DIR $WORK
 
 screen plan
 window 1600x1200
-budget 10
+budget 14
 expect mission.home true
 
 # The vehicle first: a click before its first heartbeat is a click the screen may forget

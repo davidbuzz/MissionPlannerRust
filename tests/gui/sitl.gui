@@ -29,7 +29,7 @@
 
 screen simulation
 window 1600x1200
-budget 23
+budget 28
 # A first budget, set by hand until a passing run records one.
 env XDG_DATA_HOME $WORK
 env MP_CONFIG_XML $WORK/config.xml

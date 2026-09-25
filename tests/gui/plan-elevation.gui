@@ -15,7 +15,7 @@ setup printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.363
 
 screen plan
 window 1600x1200
-budget 8
+budget 11
 
 expect plan.elevation closed
 

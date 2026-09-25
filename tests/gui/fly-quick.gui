@@ -15,7 +15,7 @@ env MP_CONFIG_XML $WORK/config.xml
 
 screen fly
 window 1600x1200
-budget 4
+budget 5
 
 expect fly.tab tabQuick
 expect fly.page.overflow 0

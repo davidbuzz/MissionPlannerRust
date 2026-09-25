@@ -18,7 +18,7 @@ env MP_PLAN_DIR $WORK
 
 screen plan
 window 1600x1200
-budget 6
+budget 8
 
 expect mission.home true
 

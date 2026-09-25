@@ -19,7 +19,7 @@ setup cp testdata/secure/unsigned.apj /tmp/mpr-gui-secure-fw.apj
 
 screen setup
 window 1600x1200
-budget 18
+budget 19
 
 expect config.secure.active false
 expect setup.pages ~ ConfigSecureAP

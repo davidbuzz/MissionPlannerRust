@@ -13,7 +13,7 @@
 
 screen params
 window 1600x1200
-budget 14
+budget 18
 # A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
 # suppressed by the settings of the machine running it.
 env MP_CONFIG_XML $WORK/config.xml

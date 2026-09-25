@@ -30,7 +30,7 @@ setup cargo run -q -p mp-cli --bin headless-planner -- mission tcp:127.0.0.1:576
 
 screen fly
 window 1600x1200
-budget 21
+budget 24
 # A first budget, set by hand until a passing run records one.
 
 # The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as

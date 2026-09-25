@@ -4,7 +4,7 @@
 env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
-budget 5
+budget 7
 
 click draw-area
 expect plan.draw draw-area

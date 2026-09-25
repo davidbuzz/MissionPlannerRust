@@ -20,7 +20,7 @@ setup printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.363
 
 screen plan
 window 1600x1200
-budget 12
+budget 16
 
 expect plan.srtm.cacheonly true
 expect plan.home -35.3632621,149.1652374,584.10

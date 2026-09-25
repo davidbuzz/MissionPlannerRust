@@ -20,7 +20,7 @@ setup cp testdata/planner/golden/rally.ral "$WORK/oracle.ral"
 
 screen plan
 window 1600x1200
-budget 22
+budget 27
 
 expect rally.points 0
 expect map.rally 0

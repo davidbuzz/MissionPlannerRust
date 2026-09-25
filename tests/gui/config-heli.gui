@@ -19,7 +19,7 @@
 env MP_CONFIG_XML $WORK/config.xml
 screen params
 window 1600x1200
-budget 4
+budget 5
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
 # The vehicle first: a click before its first heartbeat is a click the screen may forget

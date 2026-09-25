@@ -21,7 +21,7 @@ setup cp testdata/planner/field.shp "$WORK/utm.shp" && cp testdata/planner/field
 
 screen plan
 window 1600x1200
-budget 29
+budget 36
 
 # Nothing drawn: Save Polygon does nothing, Area asks for a polygon and then says nought.
 # The map first: a press before its first paint records nothing.

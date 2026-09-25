@@ -13,7 +13,7 @@
 
 screen fly
 window 1600x1200
-budget 13
+budget 16
 
 # Telemetry Logs is the thirteenth header: bring it to the front of the row, then show its page.
 click fly-tabs-right

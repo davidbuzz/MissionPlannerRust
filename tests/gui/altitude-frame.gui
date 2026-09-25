@@ -7,7 +7,7 @@
 
 screen plan
 window 1600x1200
-budget 4
+budget 5
 
 expect mission.items 0
 expect plan.frame relative

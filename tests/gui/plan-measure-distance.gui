@@ -3,9 +3,15 @@
 # and forgets the first point.
 
 env MP_CONFIG_XML $WORK/config.xml
+# A home in the config, so the map frames Canberra: two presses on one row of a local view are
+# a few hundred metres apart, due east of each other. At the world view the map opens with
+# otherwise - (0, 0) at zoom 3, and the C#'s planner map does not jump to the first waypoint -
+# the same two presses are 112 degrees of longitude apart at 45 N, and the great circle between
+# them starts at 64 degrees (2026-09-26).
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/config.xml"
 screen plan
 window 1600x1200
-budget 5
+budget 7
 
 # A waypoint first, so the map has a scale that is not the empty graticule's.
 # The map first: a press before its first paint records nothing.

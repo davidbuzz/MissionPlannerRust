@@ -33,6 +33,25 @@ pub fn mjpeg_to_frame(raw: &[u8], sequence: u64) -> Result<Frame, VideoError> {
     })
 }
 
+/// A picture of a stream's part - a JPEG from an MJPEG server, a PNG from the GStreamer
+/// pipeline - to RGBA, its format told by its first bytes: `new Bitmap(new MemoryStream(buf1))`.
+/// `// C#: ExtLibs/Utilities/CaptureMJPEG.cs:168-171`
+///
+/// # Errors
+///
+/// What the decoder says.
+pub fn picture_to_frame(raw: &[u8], sequence: u64) -> Result<Frame, VideoError> {
+    let image =
+        image::load_from_memory(raw).map_err(|why| VideoError::BadFrame(why.to_string()))?;
+    let rgba = image.to_rgba8();
+    Ok(Frame {
+        width: rgba.width(),
+        height: rgba.height(),
+        rgba: rgba.into_raw(),
+        sequence,
+    })
+}
+
 /// Packed YUYV (4:2:2) to RGBA: each four bytes are two pixels sharing one U and one V, BT.601
 /// limited range, as V4L2's `V4L2_PIX_FMT_YUYV` is defined.
 ///

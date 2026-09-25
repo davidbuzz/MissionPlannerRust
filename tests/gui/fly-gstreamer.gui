@@ -1,0 +1,71 @@
+# The HUD menu's Video drop-down: Set GStreamer Source and GStreamer Stop, played through this
+# machine's GStreamer runtime into the HUD's background.
+#
+# The claim: Set GStreamer Source asks "GStreamer url", "Enter the source pipeline ...", starting
+# at the C#'s test pipeline when gstreamer_url is not saved (FlightData.cs:4813-4821). OK saves
+# the pipeline as gstreamer_url, finds the runtime (LookForGstreamer, GStreamer.cs:1417-1485) and
+# plays it (hudGStreamer.Start, GStreamer.cs:1183-1349): here gst-launch-1.0 runs the pipeline
+# with its `appsink name=outsink` turned into PNG frames on its output, and each frame is the
+# HUD's picture as MainV2's OnNewImage makes it (MainV2.cs:3421-3440). `videotestsrc` with no
+# caps settles on 320 x 240. GStreamer Stop ends it and the picture goes (GStreamer.cs:1491-1495,
+# 1341-1343). Asked again, the box holds the saved pipeline; Cancel stops (FlightData.cs:4846-4849).
+#
+# Needs the GStreamer runtime (gst-launch-1.0 on the PATH, with the base and good plugins); no
+# vehicle. The unit tests in crates/mp-video/src/gstreamer.rs run the same pipeline headless.
+# Run as
+#
+#   tools/gui-test.sh tests/gui/fly-gstreamer.gui
+
+screen fly
+window 1600x1200
+budget 12
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+
+expect fly.hud.gstreamer false
+expect fly.hud.gstreamer.pipeline none
+expect hud.camera none
+
+# The question, at the C#'s first pipeline.
+click hud@0.5x0.4:right
+expect fly.hud.menu true
+click fly-hud-video
+expect fly.hud.menu.video true
+click fly-hud-gstreamer
+expect fly.hud.menu false
+# `fly.prompt` is the box's question, as the other scripts read it; "GStreamer url" is its title.
+expect fly.prompt ~ Enter the source pipeline
+expect fly.prompt.value ~ videotestsrc ! video/x-raw, width=1280, height=720
+key ctrl+u
+type videotestsrc pattern=red ! appsink name=outsink
+expect fly.prompt.value videotestsrc pattern=red ! appsink name=outsink
+
+# OK: the pipeline plays, its frames the HUD's picture.
+click fly-prompt-ok
+expect fly.prompt none
+expect fly.hud.gstreamer true
+expect fly.hud.gstreamer.pipeline videotestsrc pattern=red ! appsink name=outsink
+expect fly.hud.gstreamer.frames > 10
+expect fly.hud.gstreamer.frame 320x240
+expect fly.hud.gstreamer.error none
+expect hud.camera 320x240
+
+# GStreamer Stop: the launcher ended, the picture gone.
+click hud@0.5x0.4:right
+click fly-hud-video
+click fly-hud-gstreamerstop
+expect fly.hud.menu false
+expect fly.hud.gstreamer false
+expect hud.camera none
+
+# Asked again, the saved pipeline in the box; Cancel stops and plays nothing.
+click hud@0.5x0.4:right
+click fly-hud-video
+click fly-hud-gstreamer
+# `fly.prompt` is the box's question, as the other scripts read it; "GStreamer url" is its title.
+expect fly.prompt ~ Enter the source pipeline
+expect fly.prompt.value videotestsrc pattern=red ! appsink name=outsink
+click fly-prompt-cancel
+expect fly.prompt none
+expect fly.hud.gstreamer false
+expect hud.camera none

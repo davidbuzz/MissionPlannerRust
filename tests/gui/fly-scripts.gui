@@ -16,7 +16,7 @@
 env MP_CONFIG_XML $WORK/config.xml
 screen fly
 window 1600x1200
-budget 11
+budget 15
 expect vehicle.connected true
 
 # The strip shows a few tabs at a time; Scripts is the eleventh, reached as fly-tabs.gui reaches

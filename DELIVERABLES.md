@@ -570,8 +570,10 @@ config, joystick input, swarm control, warnings engine, web APIs, ADS-B / Altitu
   send budget. Since then RTK/GPS Inject (`ConfigSerialInjectGPS.cs`, `rtcm3.cs`, the `GPS_RTCM_DATA`
   injection; PLAN.md §13.4 row 48) and the NTRIP transport (row 43), the base-station half of this
   bucket. Video capture exists on Linux: `crates/mp-video` over V4L2, the Planner page's Video
-  Device, Video Format, Start and Stop, the frame under the HUD (PLAN.md §13.6 rows 83-84); no
-  GStreamer, HereLink or recording. Nothing of DroneCAN, the OSD configurator, the antenna
+  Device, Video Format, Start and Stop, the frame under the HUD (PLAN.md §13.6 rows 83-84); and
+  since 2026-09-26 the HUD menu's GStreamer, HereLink and MJPEG sources with GStreamer Stop (row
+  93), the pipeline text run in the installed runtime's launcher and its frames read back; no
+  recording. Nothing of DroneCAN, the OSD configurator, the antenna
   tracker, SiK radio, swarm, the warnings engine or the web APIs exists. Recorded as dropped:
   `ConfigAntennaTracker` (a tracker vehicle's page), Bluetooth Setup and ESP8266 Setup at the
   owner's ruling (PLAN.md §12 D13, in `docs/coverage/configuration.md`, where `TrackerUI` and Sik

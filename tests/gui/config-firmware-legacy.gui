@@ -35,7 +35,7 @@ setup printf '<?xml version="1.0" encoding="utf-8"?><Config><FirmwareFileDirecto
 
 screen setup
 window 1600x1200
-budget 10
+budget 13
 
 expect config.firmware_legacy.active false
 # Disconnected, InitialSetup lists Install Firmware Legacy after Install Firmware

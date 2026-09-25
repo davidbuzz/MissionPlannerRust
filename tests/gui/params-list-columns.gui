@@ -39,7 +39,7 @@ setup printf '\357\273\277<?xml version="1.0" encoding="utf-8"?>\n<Config>\n  <r
 
 screen params
 window 1600x1200
-budget 88
+budget 23
 
 expect vehicle.connected true
 expect params.held > 1000

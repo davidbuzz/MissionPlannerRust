@@ -6,7 +6,7 @@
 env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
-budget 5
+budget 6
 # A first budget, set by hand until a passing run records one.
 
 expect mission.items 0

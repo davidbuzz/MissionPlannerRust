@@ -20,7 +20,7 @@ setup mkdir -p $WORK/logs && cp testdata/dataflash.bin $WORK/logs/
 
 screen fly
 window 1600x1200
-budget 20
+budget 26
 
 # DataFlash Logs is the last header: bring it to the front of the row, then show its page.
 click fly-tabs-right

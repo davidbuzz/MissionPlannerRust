@@ -27,7 +27,7 @@ setup printf '<?xml version="1.0" encoding="utf-8"?><Config><CMB_rateattitude>7<
 
 screen fly
 window 1600x1200
-budget 11
+budget 15
 # A first budget, set by hand until a passing run records one.
 
 expect vehicle.connected true

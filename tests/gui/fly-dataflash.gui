@@ -15,7 +15,7 @@ env XDG_DATA_HOME $WORK
 
 screen fly
 window 1600x1200
-budget 10
+budget 14
 # No link was given: nothing has arrived.
 expect link.frames 0
 

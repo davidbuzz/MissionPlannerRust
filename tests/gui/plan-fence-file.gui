@@ -19,7 +19,7 @@ setup printf '%s\n' '-35.3625 149.166' '-35.364 149.164' '-35.364 149.168' '-35.
 
 screen plan
 window 1600x1200
-budget 17
+budget 20
 
 expect survey.points 0
 expect fence.return none

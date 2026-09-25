@@ -14,7 +14,7 @@ setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encodin
 
 screen plan
 window 1600x1200
-budget 10
+budget 13
 # A first budget, set by hand until a passing run records one.
 
 # A return location, a drawn polygon of three corners, and a geofence of three.

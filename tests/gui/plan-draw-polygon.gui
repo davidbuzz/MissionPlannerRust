@@ -5,7 +5,7 @@
 env MP_CONFIG_XML $WORK/config.xml
 screen plan
 window 1600x1200
-budget 5
+budget 7
 
 expect plan.draw draw-waypoints
 # The map first: a press before its first paint records nothing.

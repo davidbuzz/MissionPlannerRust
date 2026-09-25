@@ -32,7 +32,7 @@
 
 screen config
 window 1600x1200
-budget 19
+budget 25
 env XDG_DATA_HOME $WORK
 env MP_CONFIG_XML $WORK/config.xml
 

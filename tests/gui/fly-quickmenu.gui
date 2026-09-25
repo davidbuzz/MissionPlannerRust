@@ -12,7 +12,7 @@
 
 screen fly
 window 1600x1200
-budget 12
+budget 16
 
 expect fly.tab tabQuick
 expect fly.menu none

@@ -10,7 +10,7 @@ env XDG_DATA_HOME $WORK/data
 
 screen plan
 window 1600x1200
-budget 3
+budget 4
 
 expect map.source google-satellite
 expect map.attribution ~ Google

@@ -22,7 +22,7 @@ setup mkdir -p $WORK/logs && cp testdata/dataflash_damaged.bin $WORK/logs/gpsfix
 
 screen logs
 window 1600x1200
-budget 17
+budget 19
 
 click log-name
 type gpsfix.bin

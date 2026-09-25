@@ -15,7 +15,7 @@ env MP_PLAN_DIR $WORK
 
 screen plan
 window 1600x1200
-budget 14
+budget 15
 expect mission.items 0
 expect plan.utm.zone 50s
 

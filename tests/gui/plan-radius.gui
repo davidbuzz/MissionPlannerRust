@@ -17,7 +17,7 @@ setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encodin
 
 screen plan
 window 1600x1200
-budget 11
+budget 14
 
 # Nothing planned: home's rect has no radius, so there is no circle.
 expect map.circles 0

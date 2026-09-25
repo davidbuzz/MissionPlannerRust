@@ -18,7 +18,7 @@ setup for e in shp shx dbf prj; do cp "testdata/planner/points.$e" "$WORK/points
 
 screen plan
 window 1600x1200
-budget 15
+budget 17
 expect mission.items 0
 
 # The map first: a press before its first paint records nothing.

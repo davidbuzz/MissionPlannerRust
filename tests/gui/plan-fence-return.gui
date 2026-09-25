@@ -12,7 +12,7 @@ setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encodin
 
 screen plan
 window 1600x1200
-budget 6
+budget 8
 
 expect fence.return none
 

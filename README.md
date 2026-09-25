@@ -188,7 +188,7 @@ crates/
   mp-settings          where Mission Planner keeps things on disk, ported from Settings.cs
   mp-terrain           srtm.cs: SRTM tiles, the download queue, getAltitude, proved against the C# DLL
   mp-georef            georefimage.cs: photos matched to a log by time, CAM or TRIG, every output byte for byte to the C#
-  mp-video             V4L2 capture for the HUD's camera frame, from the Planner page's Video Device
+  mp-video             V4L2 capture, GStreamer pipelines and MJPEG streams for the HUD's camera frame
   mp-fuzz-checks       the fuzz properties, so they compile on stable too
   mp-cli               `headless-planner`
   mp-gui               `planner`, built on gpui

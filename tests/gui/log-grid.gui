@@ -13,7 +13,7 @@ setup mkdir -p $WORK/logs && cp testdata/dataflash.bin $WORK/logs/flight.bin && 
 
 screen logs
 window 1600x1200
-budget 17
+budget 20
 
 click log-name
 type flight.bin

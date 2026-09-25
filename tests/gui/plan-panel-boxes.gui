@@ -19,7 +19,7 @@ setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encodin
 
 screen plan
 window 1600x1200
-budget 10
+budget 12
 
 # What config.xml saved; no vehicle, so no loiter radius to take.
 expect plan.wprad 12

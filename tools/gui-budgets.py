@@ -3,6 +3,7 @@
 
     tools/gui-budgets.py record <logdir> [<logdir> ...]
     tools/gui-budgets.py bump <logdir> [<logdir> ...]
+    tools/gui-budgets.py retime <logdir> [<logdir> ...]
 
 `record`: for every script that passed in the given suite log directories (tools/gui-suite.sh
 -o <logdir>), the time it took from its window to its last line - the runner's "passed in N s" -
@@ -13,6 +14,12 @@ keep what they had.
 `bump`: every script the given runs failed for running past its budget ("took N s; the budget is
 B s", or a hard stop) gets one second more - the owner's rule of 2026-09-25: "increase budget by 1 sec for all
 the ones that missed".
+
+`retime`: every script the given runs failed for its time alone - every line of it passed and
+only "took N s; the budget is B s" is the failure - gets `record`'s budget from that run, the
+time rounded up plus one: the run's time is its expected time as much as a passing run's is.
+For when the runner itself got slower for every script (the click tool's wider still window,
+2026-09-26), where `bump`'s second at a time would take a pass per second.
 
 The runner fails a run past its budget and stops it three seconds after that.
 """
@@ -86,7 +93,33 @@ def bump(dirs):
     print(f'{changed} scripts bumped')
 
 
+def retime(dirs):
+    changed = 0
+    for name, text in logs(dirs):
+        fails = [l for l in text.split('\n') if l.startswith('FAIL')]
+        timing = [l for l in fails if re.search(r'took [0-9.]+ s; the budget is|hard stop -', l)]
+        if not fails or len(timing) != len(fails):
+            continue
+        m = re.search(r'took ([0-9.]+) s; the budget is [0-9.]+ s', text)
+        path = script_path(name)
+        if not os.path.exists(path):
+            continue
+        if m:
+            budget = int(math.ceil(float(m.group(1)))) + 1
+            why = f'from its {m.group(1)} s'
+        else:
+            # A hard stop alone: the run ended at its budget plus the margin with no time of its
+            # own, so it gets the margin and two more, for the next pass to record over.
+            budget = int(math.ceil(current_budget(open(path).read().split('\n')))) + 5
+            why = 'after a hard stop'
+        if write_budget(name, budget):
+            changed += 1
+            print(f'{name}: budget {budget} {why}')
+    print(f'{changed} scripts retimed')
+
+
 if __name__ == '__main__':
-    if len(sys.argv) < 3 or sys.argv[1] not in ('record', 'bump'):
+    modes = {'record': record, 'bump': bump, 'retime': retime}
+    if len(sys.argv) < 3 or sys.argv[1] not in modes:
         sys.exit(__doc__)
-    (record if sys.argv[1] == 'record' else bump)(sys.argv[2:])
+    modes[sys.argv[1]](sys.argv[2:])

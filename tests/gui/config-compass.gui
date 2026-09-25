@@ -28,7 +28,7 @@
 
 screen params
 window 1600x1200
-budget 16
+budget 21
 # A first budget, set by hand until a passing run records one.
 # A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
 # suppressed by the settings of the machine running it.

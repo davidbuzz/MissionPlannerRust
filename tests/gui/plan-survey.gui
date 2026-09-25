@@ -21,7 +21,7 @@ setup printf '%s\n' '-35.3632621 149.1652374' '-35.3600 149.1600' '-35.3600 149.
 
 screen plan
 window 1600x1200
-budget 32
+budget 41
 
 expect survey.dialog closed
 

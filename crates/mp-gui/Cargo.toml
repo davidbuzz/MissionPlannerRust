@@ -77,6 +77,11 @@ chrono = { workspace = true }
 # The same version mp-tiles decodes with, so a tile crosses the boundary without converting.
 image.workspace = true
 
+# The HUD menu's GStreamer runtime, downloaded as a zip on Windows (GStreamer.DownloadGStreamer):
+# its deflated entries inflated for mp_video::zip. The SITL page's probe tests also serve a
+# manifest gzipped with it, as ArduPilot's server sends it.
+flate2.workspace = true
+
 # The screens' words (i18n.rs): the .ftl files under assets/i18n, embedded, formatted per culture.
 fluent-bundle.workspace = true
 unic-langid.workspace = true
@@ -99,5 +104,3 @@ gpui_macos = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f
 # with. (Its transport double, mp-transport, is a dependency above.)
 [dev-dependencies]
 mp-mavlink.workspace = true
-# The SITL page's probe tests serve a manifest gzipped as ArduPilot's server sends it.
-flate2.workspace = true

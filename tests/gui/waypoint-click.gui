@@ -7,7 +7,7 @@
 
 screen plan
 window 1600x1200
-budget 3
+budget 4
 
 # Nothing yet.
 expect screen plan

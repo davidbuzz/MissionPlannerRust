@@ -16,7 +16,7 @@
 env XDG_DATA_HOME $WORK
 screen fly
 window 1600x1200
-budget 17
+budget 21
 
 # The vehicle first: a click before its first heartbeat is a click the screen may forget
 # (vehicle.connected only says the link is open).

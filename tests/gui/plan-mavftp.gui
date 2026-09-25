@@ -17,7 +17,7 @@ env MP_PLAN_DIR $WORK
 
 screen plan
 window 1600x1200
-budget 4
+budget 6
 expect mission.home true
 
 expect plan.mavftp false

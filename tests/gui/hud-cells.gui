@@ -15,7 +15,7 @@
 
 screen fly
 window 1600x1200
-budget 4
+budget 5
 
 # Off, as CheckBatteryShow leaves it with nothing saved: the pack alone on the lower line.
 expect hud.battery.upper none

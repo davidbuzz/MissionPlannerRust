@@ -42,7 +42,7 @@ setup printf '<?xml version="1.0" encoding="utf-8"?><Config><CMB_raterc>3</CMB_r
 
 screen params
 window 1600x1200
-budget 9
+budget 12
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
 # The vehicle first: a click before its first heartbeat is a click the screen may forget

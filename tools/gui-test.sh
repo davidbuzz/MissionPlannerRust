@@ -27,7 +27,8 @@
 #                               terminate after expected time + 3 seconds". tools/gui-budgets.py
 #                               `record` writes the times a suite run measured, `bump` adds a
 #                               second to every script a run found over its budget ("increase
-#                               budget by 1 sec for all the ones that missed"). Every line is stamped
+#                               budget by 1 sec for all the ones that missed"), `retime` sets the
+#                               budget from a run that failed on its time alone. Every line is stamped
 #                               `t=+1.234s` on the way, so the log says where the time went.
 #   (hard stop)                 a test still running its budget plus MP_GUI_HARD_STOP_MARGIN
 #                               seconds (3) after its window has a screenshot
