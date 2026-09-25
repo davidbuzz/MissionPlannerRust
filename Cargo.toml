@@ -51,6 +51,11 @@ flate2 = "1"
 # Local time only. Pinned to what gpui already pulls in, so it costs nothing to compile.
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 anyhow = "1"
+# `MagCalib.cs`'s fit, where the C# has alglib's `minlmcreatev` (PLAN.md §3's numerics row).
+# nalgebra at the version the solver is built against, 0.34: its matrices are the solver's
+# interface, so a second nalgebra would not do.
+levenberg-marquardt = "0.15"
+nalgebra = { version = "0.34", default-features = false, features = ["std"] }
 # Tile fetching. Blocking and small: the tile thread is a dedicated thread that is allowed to
 # block, exactly like the link's I/O thread, so an async runtime would be machinery with no user.
 # rustls rather than the system TLS, so a Windows build needs no extra toolchain and a Linux one

@@ -13,6 +13,7 @@ mod dflog;
 mod ftp;
 mod georef;
 mod logs;
+mod magcal;
 
 use mp_link::requests::RequestOutcome;
 use mp_link::{Link, LinkConfig, RequestId, commands};
@@ -156,7 +157,9 @@ fn main() -> std::process::ExitCode {
         // vehicle answered, printed - for the bench, where the GUI says only what the C# says
         // ("Failed to upgrade bootloader") and the reason is in the acknowledgement.
         Some("command") => match (args.get(1), args.get(2)) {
-            (Some(url), Some(command)) => send_command(url, command, args.get(3..).unwrap_or_default()),
+            (Some(url), Some(command)) => {
+                send_command(url, command, args.get(3..).unwrap_or_default())
+            }
             _ => {
                 eprintln!(
                     "usage: mpr command <url> <MAV_CMD number> [p1 p2 p3 p4 p5 p6 p7]\n  \
@@ -189,6 +192,7 @@ fn main() -> std::process::ExitCode {
                 std::process::ExitCode::from(2)
             }
         },
+        Some("magcal") => magcal::run(args.get(1..).unwrap_or_default()),
         Some("ftp") => ftp::run(args.get(1..).unwrap_or_default()),
         Some("georef") => georef::run(args.get(1..).unwrap_or_default()),
         Some("ports") => ports(),
@@ -227,6 +231,8 @@ fn usage() {
   mpr ftp ls|get|put|rm|crc   the vehicle's files over MAVFTP (mpr ftp for more)\n  \
          mpr fields <log.bin>        list what a dataflash log can plot
   mpr kml <log> <out.kml>     export a flown path for Google Earth
+  mpr magcal <log> [--ellipsoid] [--min-throttle N]
+                              compass offsets fitted to a log's samples (MagCalib's Log Calibration)
   mpr firmware info <file>    describe a .apj firmware file
   mpr firmware detect <port>  name the board from its USB ids
   mpr firmware list [...]     the firmware the catalogue would give a board

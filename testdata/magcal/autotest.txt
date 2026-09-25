@@ -1,0 +1,11 @@
+# MagCalib.cs samples of compass 1, as `mpr magcal` gathers them
+# regenerate: cargo test -p mp-cli -- --ignored regenerate_magcal_fixtures
+# log: testdata/mavlink/autotest.tlog
+# path: tlog
+# min-throttle: 0
+0 0 0
+-52 232 -528
+-52 232 -528
+-52 232 -528
+0 0 0
+0 0 0

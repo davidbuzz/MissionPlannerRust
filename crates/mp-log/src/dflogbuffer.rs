@@ -449,9 +449,9 @@ impl<'a> DfLogBuffer<'a> {
     }
 
     /// `GetEnumeratorType`: every line of the named types, in line order, as items - read now, in
-    /// the order the C#'s lazy enumeration reads them.
+    /// the order the C#'s lazy enumeration reads them. Each comes with its line number.
     /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:701-774`
-    fn items_of(&mut self, types: &[&str]) -> Vec<(usize, DfItem)> {
+    pub fn items_of(&mut self, types: &[&str]) -> Vec<(usize, DfItem)> {
         let mut lines = Vec::new();
         for name in types {
             if let Some(label) = self.dflog.label(name) {

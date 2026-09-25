@@ -18,6 +18,10 @@
 //! Motor tests are [`motor`]: how many motors a frame has, the letters and labels of their
 //! buttons from [`motor_layouts`], and the `MAV_CMD_DO_MOTOR_TEST` each button sends.
 //!
+//! [`magcalib`] is the one calibration done on the ground station rather than the vehicle:
+//! `MagCalib.cs`'s least-squares fit of a sphere and an ellipsoid to magnetometer samples read
+//! from a log or gathered live, and the boxes that give the offsets.
+//!
 //! The protocol half of `GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs`,
 //! `ConfigHWCompass.cs`, `ConfigMotorTest.cs` and `ConfigRadioInput.cs`, without their forms. L3
 //! in PLAN.md §5.1, beside the link rather than inside it: the link thread reads
@@ -27,6 +31,7 @@
 #![forbid(unsafe_code)]
 
 pub mod compass;
+pub mod magcalib;
 pub mod motor;
 pub mod motor_layouts;
 pub mod radio;
@@ -42,13 +47,24 @@ use mp_vehicle::VehicleId;
 
 /// Errors from this crate.
 ///
-/// None, and uninhabited so that none can be made up: building a message cannot fail, and reading
-/// one never does either - a value the vehicle sends that this crate does not know is carried as
-/// its number ([`mag_cal_status_name`]) or read as [`AccelCalibration::Idle`], never refused. This is the
-/// one enum PLAN.md §5.3 gives each crate, so the first operation that can fail has somewhere to
-/// say how.
+/// Only [`magcalib`]'s fit can fail. Building a message cannot, and reading one never does either -
+/// a value the vehicle sends that this crate does not know is carried as its number
+/// ([`mag_cal_status_name`]) or read as [`AccelCalibration::Idle`], never refused. This is the one
+/// enum PLAN.md §5.3 gives each crate.
 #[derive(Debug, thiserror::Error)]
-pub enum CalibrationError {}
+pub enum CalibrationError {
+    /// Fewer than [`magcalib::MIN_SAMPLES`] samples: the C#'s box, word for word.
+    /// `// C#: MagCalib.cs:1070-1074`
+    #[error("Log does not contain enough data")]
+    NotEnoughData {
+        /// How many there were.
+        samples: usize,
+    },
+    /// No samples at all, where alglib's `minlmcreatev` throws on an empty problem and
+    /// `ProcessLog` swallows the exception, showing nothing. `// C#: MagCalib.cs:127-130`
+    #[error("no magnetometer samples to fit")]
+    NoSamples,
+}
 
 /// A `COMMAND_LONG` to `target`.
 ///

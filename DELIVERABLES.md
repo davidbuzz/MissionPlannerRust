@@ -447,11 +447,20 @@ path: board detect, firmware catalogue, upload via px4/DFU/serial bootloaders.
   Firmware page shows what the C# would flash with its Upload button disabled (PLAN.md §13.4
   row 21). Install Firmware Legacy (`ConfigFirmware.cs` over `firmware2.xml`), the manifest page's
   remainder and the Bootloader Update questions are ported up to the point of touching a board,
-  each stop named in `mp_firmware::flow::Stop` (row 52). **Not ported:** `MagCalib.cs` - the
-  offboard ellipsoid fit behind Live Calibration on the older compass page, the one calibration
-  whose maths the DoD's 1e-6 clause is about; every calibration here is the onboard one, driven
-  as the C# drives it.
-- **Tests:** `crates/mp-firmware/tests/board_detect.rs` (all 16 `DetectBoardTest` calls, the five that fail against the C# recorded), `firmware_upload.rs` (every byte against a strict px4 mock), `manifest.rs` and `legacy.rs` (the catalogues on fixtures); the calibration pages' unit tests inline in `mp-gui` and `mp-calibration`, and `tests/gui/config-accel.gui`, `config-compass.gui`, `config-radio.gui`, `config-motortest.gui`, `config-firmware.gui` and `config-firmware-legacy.gui` on SITL. Not yet: `tests/magcal_vectors.rs` and `tests/accelcal_vectors.rs` (`MagCalib.cs` is not ported), a DFU mock, and a real-board flash on Windows or macOS (Linux: 2026-09-25, `tests/gui/setup-firmware-flash-bench.gui`).
+  each stop named in `mp_firmware::flow::Stop` (row 52). `MagCalib.cs`'s fit - the offboard
+  sphere and ellipsoid behind the older compass page's Live and Log Calibration, the one
+  calibration whose maths the DoD's 1e-6 clause is about - is ported as
+  `mp_calibration::magcalib` (2026-09-25): a telemetry log's `RAW_IMU` less `SENSOR_OFFSETS`
+  through the C#'s duplicate filter, its throttle gate, count check and outlier cut, or a
+  dataflash log's `MAG` lines less their offsets, fitted as `LeastSq`/`doLSQ` fit them, and the
+  boxes `SaveOffsets` shows; `mpr magcal <log> [--ellipsoid] [--min-throttle N]` is `ProcessLog`.
+  alglib's Levenberg-Marquardt is replaced by the `levenberg-marquardt` crate on alglib's own
+  central-difference Jacobian (`diffstep` 0.1, `epsx` 0, `maxits` 100 kept), so the fit is held
+  to PLAN.md §7.2's class D rather than 1e-6: the C# cannot run here to give its residual, and
+  alglib's path cannot be bit-matched. **Not ported:** Live Calibration's dialog (its spheres,
+  coverage test and prompts) and the offsets written to the vehicle - the pieces both call are
+  here; every calibration on the pages is still the onboard one, driven as the C# drives it.
+- **Tests:** `crates/mp-firmware/tests/board_detect.rs` (all 16 `DetectBoardTest` calls, the five that fail against the C# recorded), `firmware_upload.rs` (every byte against a strict px4 mock), `manifest.rs` and `legacy.rs` (the catalogues on fixtures); the calibration pages' unit tests inline in `mp-gui` and `mp-calibration`, and `tests/gui/config-accel.gui`, `config-compass.gui`, `config-radio.gui`, `config-motortest.gui`, `config-firmware.gui` and `config-firmware-legacy.gui` on SITL; `crates/mp-calibration/tests/magcal_vectors.rs` (class D on the sample sets `testdata`'s logs give, `testdata/magcal`, against an independent sphere fit, and synthetic offsets and scale recovered to 1%) and `crates/mp-cli/tests/magcal_verb.rs`. Not yet: `tests/accelcal_vectors.rs` (accelerometer calibration is the vehicle's), a DFU mock, and a real-board flash on Windows or macOS (Linux: 2026-09-25, `tests/gui/setup-firmware-flash-bench.gui`).
 
 ### D14. Log engine and analysis
 Dataflash (`.bin`/`.log`) and tlog parsing, log download, graphing, LogAnalyzer rules, DSP/FFT, exports
