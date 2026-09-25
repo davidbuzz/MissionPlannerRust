@@ -33,13 +33,15 @@ those exports and serves tcp:127.0.0.1:5760 is what the planner would connect to
 ## Checking them
 
 `wasm_plane_smoke_test.mjs` is ArduPilot's own check, copied from `Tools/autotest/` at the same
-commit (GPL-3.0-or-later, ArduPilot's). It loads the module, starts the vehicle with
-`--model plane --serial0 wasm`, and waits fifteen seconds for MAVLink on SERIAL0:
+commit (GPL-3.0-or-later, ArduPilot's); `wasm_copter_smoke_test.mjs` is the same with
+`--model quad`. Each loads its module, starts the vehicle with `--serial0 wasm`, and waits
+fifteen seconds for MAVLink on SERIAL0:
 
 ```sh
 node tools/sitl/wasm/wasm_plane_smoke_test.mjs tools/sitl/wasm/arduplane.js
+node tools/sitl/wasm/wasm_copter_smoke_test.mjs tools/sitl/wasm/arducopter.js
 ```
 
-`package.json` beside the modules declares them ES modules, which Node 18 needs to load a `.js`
-that uses `import.meta`; Node 22 and later work it out from the syntax. The copter module
-takes the same test with `--model quad` in place of `plane`.
+Both passed here on 2026-09-25 under Node 18.19 ("Received MAVLink data from ... WebAssembly
+SITL"). `package.json` beside the modules declares them ES modules, which Node 18 needs to load
+a `.js` that uses `import.meta`; Node 22 and later work it out from the syntax.
