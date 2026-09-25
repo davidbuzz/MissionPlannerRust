@@ -4512,6 +4512,10 @@ pub struct FlightData {
     pub mouse_down_start: Option<(mp_units::LatLon, (f32, f32))>,
     /// Where the HUD was laid out, for its click zones.
     pub hud_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
+    /// `hud1.bgimage`: the camera's latest frame, which the HUD draws under everything, set
+    /// once a frame from the Planner page's capture (`MissionPlanner::video_tick`).
+    /// `// C#: GCSViews/FlightData.cs:1897-1900`
+    pub camera: Option<std::sync::Arc<gpui::RenderImage>>,
     /// The DataFlash Logs page's conversions.
     pub conversions: Conversions,
     /// The HUD's menu.
@@ -4563,6 +4567,7 @@ impl FlightData {
             vibration_open: false,
             mouse_down_start: None,
             hud_bounds: Rc::new(Cell::new(None)),
+            camera: None,
             conversions: Conversions::default(),
             hud_menu: HudMenu::default(),
             hud_settings: HudSettings::default(),
@@ -5760,6 +5765,7 @@ pub fn hud_panel(
     // tall enough that the C#'s `Height / 30` font is legible.
     let painted = inputs.clone();
     let ground = data.hud_settings.ground_colours();
+    let camera = data.camera.clone();
     let bounds = Rc::clone(&data.hud_bounds);
     // The zones are where the last frame drew the text; before the first, the column's size.
     let (width, height) = data.hud_bounds.get().map_or((398.0, 258.0), |laid_out| {
@@ -5791,7 +5797,7 @@ pub fn hud_panel(
                 move |bounds, (), window, cx| {
                     let height = f32::from(bounds.size.height);
                     let scene = hud_scene(&painted, ground, f32::from(bounds.size.width), height);
-                    crate::hud::paint(&scene, bounds, window, cx);
+                    crate::hud::paint_over_camera(camera.as_ref(), &scene, bounds, window, cx);
                 },
             )
             .size_full(),

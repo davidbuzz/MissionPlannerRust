@@ -1,0 +1,21 @@
+[package]
+name = "mp-video"
+description = "Video capture for the HUD: the Planner page's Video Device and Video Format, Start and Stop"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+image.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# V4L2 through ioctls, no libv4l. Its `v4l2-sys-mit` runs bindgen over <linux/videodev2.h> at
+# build time, so a Linux build needs libclang and the kernel's UAPI headers (linux-libc-dev);
+# nothing links against them.
+v4l = { version = "0.14", default-features = false, features = ["v4l2"] }

@@ -94,6 +94,11 @@ const UNNAMED: &[(&str, u8, &str)] = &[
         "§5.1's mp-joystick: joysticks and gamepads mapped to RC channels",
     ),
     (
+        "mp-video",
+        3,
+        "WebCamService.Capture's part: the camera devices, their formats and the frames the HUD draws under itself",
+    ),
+    (
         "mp-log",
         4,
         "§5.1's mp-log-tlog and mp-log-dataflash, unsplit, with LogBrowse's plot extraction",

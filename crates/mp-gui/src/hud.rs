@@ -3079,6 +3079,60 @@ pub fn paint(scene: &Scene, bounds: Bounds<Pixels>, window: &mut Window, cx: &mu
     }
 }
 
+/// [`paint`] over the camera: `bgimage`, the capture's latest frame, drawn first and stretched
+/// to the control, and the scene over it without its sky and ground, which `doPaint` leaves out
+/// (`bgon = false`) while there is a picture. With no picture, [`paint`].
+/// `// C#: ExtLibs/Controls/HUD.cs:1024-1047, 1986-2013, 2067-2099; GCSViews/FlightData.cs:1897-1900`
+pub fn paint_over_camera(
+    camera: Option<&std::sync::Arc<gpui::RenderImage>>,
+    scene: &Scene,
+    bounds: Bounds<Pixels>,
+    window: &mut Window,
+    cx: &mut gpui::App,
+) {
+    let Some(image) = camera else {
+        return paint(scene, bounds, window, cx);
+    };
+    // A picture that will not paint leaves the HUD without its background, as the C#'s `catch`
+    // drops `_bgimage`.
+    let _ = window.paint_image(
+        bounds,
+        bounds,
+        gpui::Corners::default(),
+        std::sync::Arc::clone(image),
+        0,
+        false,
+    );
+    for item in over_camera(scene) {
+        paint_item(item, bounds.origin, window, cx);
+    }
+}
+
+/// The scene's items drawn over a camera picture: all but the sky and ground fills.
+fn over_camera(scene: &Scene) -> impl Iterator<Item = &Item> {
+    scene.items.iter().filter(|item| {
+        !matches!(item, Item::Fill { colour: fill, .. } if *fill == colour::SKY || *fill == colour::GROUND)
+    })
+}
+
+#[cfg(test)]
+mod camera_tests {
+    use super::*;
+
+    /// Over a picture the sky and ground go and everything else stays, in order.
+    #[test]
+    fn the_camera_replaces_the_sky_and_ground_only() {
+        let full = scene(&HudInputs::default(), 400.0, 260.0);
+        let over: Vec<&Item> = over_camera(&full).collect();
+        assert_eq!(over.len() + 2, full.items.len());
+        let sky_ground = |item: &Item| matches!(item, Item::Fill { colour: fill, .. } if *fill == colour::SKY || *fill == colour::GROUND);
+        assert_eq!(full.items.iter().filter(|item| sky_ground(item)).count(), 2);
+        assert!(over.iter().all(|item| !sky_ground(item)));
+        let rest: Vec<&Item> = full.items.iter().filter(|item| !sky_ground(item)).collect();
+        assert_eq!(over, rest);
+    }
+}
+
 /// Paints one item: a picture as its stand-in, [`icon_items`].
 fn paint_item(item: &Item, origin: Point<Pixels>, window: &mut Window, cx: &mut gpui::App) {
     match item {

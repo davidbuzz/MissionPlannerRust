@@ -9,7 +9,8 @@
 # the speech boxes and each speech box asks for its templates in the C#'s InputBoxes
 # (ConfigPlanner.cs:380-550), Map is rotated unticks No Fly (:755-765), Load Waypoints on connect
 # sets the read on connect (MainV2.cs:1750-1759), and Joystick Setup opens the joystick page
-# (:552-555). The dimmed controls - video, theme, language, GDI+ and the rest - do nothing.
+# (:552-555). The dimmed controls - theme, language, GDI+ and the rest - do nothing; the video
+# controls are tests/gui/config-video.gui's.
 #
 # Settings.Instance is Mission Planner's config.xml, one dictionary: a handler puts its key in it
 # as its control changes, and the file is written whole at the next SaveConfig - never by this
@@ -37,7 +38,7 @@ settle 4
 expect config.page ConfigPlanner
 expect config.title Planner
 expect config.planner.active true
-expect config.planner.dimmed CHK_hudshow,CHK_GDIPlus,CHK_Password,chk_ADSB,chk_analytics,CHK_beta,CHK_mavdebug,chk_temp,CMB_videosources,CMB_videoresolutions,CMB_osdcolor,CMB_language,CMB_theme,BUT_videostart,BUT_videostop,BUT_themecustom,BUT_Vario
+expect config.planner.dimmed CHK_hudshow,CHK_GDIPlus,CHK_Password,chk_ADSB,chk_analytics,CHK_beta,CHK_mavdebug,chk_temp,CMB_osdcolor,CMB_language,CMB_theme,BUT_themecustom,BUT_Vario
 
 # SaveConfig ran once, at start-up, before the page was activated.
 expect config.saved startup

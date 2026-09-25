@@ -436,6 +436,14 @@ struct MissionPlanner {
     /// CONFIG's Planner page, and its boxes' focus.
     planner: config::planner::Planner,
     planner_focus: config::planner::Focus,
+    /// `MainV2.cam`: the capture the Planner page's Start opened, until its Stop.
+    /// `// C#: MainV2.cs:514`
+    video: Option<mp_video::Capture>,
+    /// The capture's latest frame and the image made of it for the HUD, made once per frame.
+    video_frame: Option<(std::sync::Arc<mp_video::Frame>, std::sync::Arc<gpui::RenderImage>)>,
+    /// While a capture runs, a repaint at the rate `Capture`'s timer hands the HUD a picture;
+    /// dropping it stops the repaints.
+    video_repaint: Option<gpui::Task<()>>,
     // Optional Hardware pages: ADSB, Battery Monitor 2, Range Finder, Airspeed, Optical Flow and
     // Camera Gimbal (`config/optional.rs`).
     /// The six page objects.
@@ -752,6 +760,9 @@ impl MissionPlanner {
             // ---- end Mandatory Hardware pages ----
             planner,
             planner_focus: config::planner::Focus::new(cx),
+            video: None,
+            video_frame: None,
+            video_repaint: None,
             // Optional Hardware pages
             optional: config::optional::Optional::default(),
             optional_focus: config::optional::Focus::new(cx),
@@ -2606,6 +2617,8 @@ impl Render for MissionPlanner {
             .tick(&self.telemetry, self.motor_focus.focused(window));
         // The Planner page's number boxes validated as the focus leaves them.
         self.planner_tick(window);
+        // The camera's latest frame made the HUD's picture, and the capture's state for the page.
+        self.video_tick(window, cx);
         // The Compass page's writes and commands, its calibration timer, and its boxes, which
         // take the keyboard while they show.
         self.compass.tick(

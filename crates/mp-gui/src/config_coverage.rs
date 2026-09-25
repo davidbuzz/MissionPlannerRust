@@ -1026,8 +1026,10 @@ pub const PANELS: &[Panel] = &[
         //     and their InputBox templates, Load Waypoints on connect, the map access mode,
         //     Joystick Setup, Browse and Open Map Cache act at once; Layout picks the display
         //     view the lists read (Basic, Advanced, or the Custom file), saved as displayview;
-        //     dimmed for want of what they drive: video, the HUD overlay, GDI+, language, theme,
-        //     OSD colour, Vario,
+        //     Video Device and Video Format list the V4L2 capture devices and their MJPEG and
+        //     YUYV formats, Start captures (mp-video) and the HUD draws the frame under
+        //     everything, Stop ends it - Linux only, DirectShow on Windows not yet; dimmed for
+        //     want of what they drive: the HUD overlay, GDI+, language, theme, OSD colour, Vario,
         //     password, the ADSB server, analytics, beta updates, MAVLink debug and the testing
         //     screen; the flight screen does not yet read the units, the track length, the map's
         //     rotation or the icon settings, nor the link the GCS id or the rates on connecting",

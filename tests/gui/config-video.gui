@@ -1,0 +1,73 @@
+# CONFIG's Planner page: Video Device, Video Format, Start and Stop, and the camera under the HUD,
+# on this machine's webcam. Ported from GCSViews/ConfigurationView/ConfigPlanner.cs and
+# ExtLibs/WebCamService/Capture.cs, with V4L2 where the C# has DirectShow.
+#
+# The claim: with nothing saved, Activate lists no device (ConfigPlanner.cs:215-232). Clicking
+# Video Device lists the capture devices by name - the webcam's capture nodes, not its metadata
+# nodes - and binding the list selects the first, whose formats Video Format lists as the C#'s
+# GCSBitmapInfo reads, "<w> x <h> <fps> fps <fourcc>", the first selected (:296-360, 741-750,
+# 968-989). Start opens the device in that format; once it runs, video_device and video_options
+# are written as the two combos' indexes and frames arrive (:261-285); the flight screen's HUD
+# draws the latest one under everything (HUD.cs:1986-2013, FlightData.cs:1897-1900). Stop ends
+# the capture and the HUD's picture goes with it (:287-294, Capture.cs:142-157).
+#
+# Needs a V4L2 webcam that offers MJPEG or YUYV, and no other program holding it. It takes the
+# camera for a few seconds; nothing else. The unit tests in crates/mp-gui/src/config/planner.rs
+# run this script step for step against a scripted webcam laid out as this machine's. Run as
+#
+#   tools/gui-test.sh tests/gui/config-video.gui
+
+screen config
+window 1600x1200
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+settle 4
+
+expect config.page ConfigPlanner
+expect config.planner.active true
+expect config.planner.video.devices 0
+expect config.planner.video.running false
+expect config.planner.video_device none
+expect hud.camera none
+
+# Click: the devices listed, the first selected and its formats listed.
+click planner-CMB_videosources
+expect config.planner.dropdown CMB_videosources
+expect config.planner.video.devices > 0
+expect config.planner.video.modes > 0
+expect config.planner.video.mode ~ fps
+click planner-CMB_videosources-0
+expect config.planner.dropdown none
+expect config.planner.video.modes > 0
+
+# The first format, as binding the list left it.
+click planner-CMB_videoresolutions
+expect config.planner.dropdown CMB_videoresolutions
+click planner-CMB_videoresolutions-0
+expect config.planner.dropdown none
+expect config.planner.video.mode ~ fps
+
+# Start: the capture runs, the two indexes are written, the frames come.
+click planner-BUT_videostart
+settle 3
+expect config.planner.video.running true
+expect config.planner.video.frames > 10
+expect config.planner.video_device 0
+expect config.planner.video_options 0
+expect hud.camera ~ x
+
+# The HUD on the flight screen, over the picture; then back to the page, still capturing.
+click tab-fly
+settle 2
+expect hud.camera ~ x
+click tab-config
+settle 2
+expect config.planner.video.running true
+expect config.planner.video.frames > 10
+
+# Stop: the capture ends and the picture with it; the settings stay.
+click planner-BUT_videostop
+settle 1
+expect config.planner.video.running false
+expect hud.camera none
+expect config.planner.video_device 0

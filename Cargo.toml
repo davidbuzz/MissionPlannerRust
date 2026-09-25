@@ -36,6 +36,7 @@ mp-terrain = { path = "crates/mp-terrain" }
 mp-georef = { path = "crates/mp-georef" }
 mp-chart = { path = "crates/mp-chart" }
 mp-script = { path = "crates/mp-script" }
+mp-video = { path = "crates/mp-video" }
 thiserror = "2"
 sha2 = "0.10"
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
@@ -103,4 +104,9 @@ inherits = "release"
 # Dependencies compiled with optimisation even in dev: log parsing and replay rigs are
 # unusably slow otherwise, while our own crates stay fast to rebuild.
 [profile.dev.package."*"]
+opt-level = 2
+
+# The camera's per-pixel loops (YUYV to RGBA, RGBA to BGRA) run for every frame at 30 a second:
+# optimised like the dependencies, since a frame is a million pixels at 1280 x 720.
+[profile.dev.package.mp-video]
 opt-level = 2

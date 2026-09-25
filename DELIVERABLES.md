@@ -467,7 +467,7 @@ Dataflash (`.bin`/`.log`) and tlog parsing, log download, graphing, LogAnalyzer 
 (`.mat`, CSV, KML), EXIF geotagging.
 - **DoD:** memory-mapped columnar parse of a **1 GB dataflash log in < 2 s**, then scrub a **10 M-point**
   multi-series plot at **120 fps** with GPU line rendering + LOD; parsed field values match the C# parser
-  exactly across a corpus of real logs; FFT output matches `Exocortex.DSP` within float tolerance.
+  exactly across a corpus of real logs; FFT output matches `FFT2` (`ExtLibs/Utilities/fft.cs`, the one Mission Planner runs; `Exocortex.DSP` and `fft3.cs` have no callers) within float tolerance.
 - **Replaces:** `Log/` (9,971), `LogAnalyzer/`, `graphs/`, `ExtLibs/ZedGraph` (52,265),
   `ExtLibs/Exocortex.DSP`, the used subset of `ExtLibs/alglibnet` (251,616 — audit what is actually called),
   `ExtLibs/MetaDataExtractorCSharp240d` (17,800), `ExtLibs/ICSharpCode.SharpZipLib` + `zlib.net` + `7zip`.

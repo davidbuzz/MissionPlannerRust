@@ -19,11 +19,16 @@
 //! * Map is rotated and No Fly untick each other; Load Waypoints on connect sets whether the
 //!   mission is read when a vehicle connects; the map access mode rebuilds the map's tile store
 //!   (`CacheOnly` is the store's offline mode); Joystick Setup opens the joystick page over this
-//!   one; Browse asks for a folder; Open Map Cache opens the tile cache's directory.
+//!   one; Browse asks for a folder; Open Map Cache opens the tile cache's directory;
+//! * Video Device lists the capture devices when it is clicked and Video Format the chosen
+//!   device's formats; Start opens the capture (`mp_video`, V4L2 on Linux where the C# has
+//!   DirectShow and does nothing under mono) and the flight screen's HUD draws its frames under
+//!   everything, and Stop ends it. A camera that will not start says "Camera Fail: " and why on
+//!   the status line, where the C# has a message box (the owner's ruling of 2026-09-25).
 //!
 //! Dimmed, each naming what it stands for here, are the controls whose handler drives something
-//! this application does not have: the video device, format, Start and Stop and the HUD overlay
-//! on video (no video capture); GDI+ (gpui draws the HUD); the UI language (English only); the
+//! this application does not have: the HUD overlay on video (`hudon` is not ported: the HUD is
+//! always drawn over the frame); GDI+ (gpui draws the HUD); the UI language (English only); the
 //! theme and Custom (the dark palette is ratified); OSD Color (its handler's body is commented out, `ConfigPlanner.cs:432-439`);
 //! Start/Stop Vario; Password Protect Config; ADSB (no ADSB server client); OptOut Anon Stats (no
 //! analytics); Beta Updates (no updater); Mavlink Message Debug; Testing Screen.
@@ -62,6 +67,8 @@
 
 use std::collections::{BTreeMap, VecDeque};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Duration;
 
 use gpui::{
     AnyElement, Context, Div, FocusHandle, KeyDownEvent, SharedString, Window, div, prelude::*, px,
@@ -70,6 +77,7 @@ use gpui::{
 use mp_mavlink_dialects::all::{MavDataStream, MavMessage, RequestDataStream};
 use mp_vehicle::units::DisplayUnits;
 
+use super::servo_output::Combo;
 use crate::MissionPlanner;
 use crate::display_view::{DisplayName, DisplayView};
 use crate::settings::Persisted;
@@ -195,6 +203,9 @@ const KEYS: &[&str] = &[
     "gcsid",
     // `ThemeManager.thmColor.strThemeName`, which CMB_theme shows. C#: Utilities/ThemeManager.cs:287
     "theme",
+    // C#: ConfigPlanner.cs:215-232, 276-278
+    "video_device",
+    "video_options",
 ];
 
 // -------------------------------------------------------------------------------------------------
@@ -648,18 +659,10 @@ const RATES_SENSORS: &[&str] = &[
 /// Every combo box the page draws.
 /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.resx; ConfigPlanner.cs:46, 81-88, 117-118, 246`
 pub const COMBOS: &[ComboSpec] = &[
-    combo(
-        "CMB_videosources",
-        (107, 8, 245, 21),
-        &[],
-        Some("no video capture"),
-    ),
-    combo(
-        "CMB_videoresolutions",
-        (107, 35, 408, 21),
-        &[],
-        Some("no video capture"),
-    ),
+    // Bound at run time, to the devices and to a device's formats: [`Video`]'s lists.
+    // `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:352, 741-750`
+    combo("CMB_videosources", (107, 8, 245, 21), &[], None),
+    combo("CMB_videoresolutions", (107, 35, 408, 21), &[], None),
     combo(
         "CMB_osdcolor",
         (107, 62, 138, 21),
@@ -708,18 +711,8 @@ type ButtonSpec = (
 /// Every button the page draws.
 /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.resx (BUT_*)`
 pub const BUTTONS: &[ButtonSpec] = &[
-    (
-        "BUT_videostart",
-        (358, 6, 75, 23),
-        "Start",
-        Some("no video capture"),
-    ),
-    (
-        "BUT_videostop",
-        (439, 6, 75, 23),
-        "Stop",
-        Some("no video capture"),
-    ),
+    ("BUT_videostart", (358, 6, 75, 23), "Start", None),
+    ("BUT_videostop", (439, 6, 75, 23), "Stop", None),
     ("BUT_Joystick", (107, 166, 99, 23), "Joystick Setup", None),
     ("BUT_logdirbrowse", (496, 393, 75, 23), "Browse", None),
     (
@@ -1143,6 +1136,112 @@ pub enum Effect {
     OpenDirectory(PathBuf),
     /// `BUT_logdirbrowse`: the folder dialog.
     BrowseLogDirectory,
+    /// `BUT_videostart`: `new Capture(index, media)` and `Start()` for the device and format
+    /// chosen; [`run_video`] does it and, when it starts, writes the two settings.
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:261-285`
+    VideoStart {
+        /// `CMB_videosources.SelectedIndex`'s device.
+        device: mp_video::Device,
+        /// `CMB_videoresolutions.SelectedItem`'s format.
+        mode: mp_video::Mode,
+    },
+    /// `BUT_videostop`: `MainV2.cam.Dispose()`, and `MainV2.cam = null`.
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:287-294`
+    VideoStop,
+    /// Words for the status line: "Camera Fail: " and why, where the C# has a message box.
+    Status(String),
+}
+
+/// The video controls: `CMB_videosources` and `CMB_videoresolutions` with what they are bound
+/// to, and whether a capture runs, which is `MainV2.cam` being set and `BUT_videostart` disabled.
+/// The capture itself is the application's (`MissionPlanner::video`), as `MainV2.cam` is.
+/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:136-145, 215-232, 261-360, 741-750`
+pub struct Video {
+    /// Where devices come from: V4L2 on Linux (`mp_video::platform_source`). None elsewhere yet,
+    /// where the lists stay empty as the C#'s do under mono (`MainV2.MONO`).
+    source: Option<Arc<dyn mp_video::Source>>,
+    /// `CMB_videosources.DataSource`: `Capture.getDevices()`, by name.
+    devices: Vec<mp_video::Device>,
+    /// `CMB_videoresolutions.DataSource`: the device's `GCSBitmapInfo`s.
+    modes: Vec<mp_video::Mode>,
+    /// The two lists as their combos show them, each row keyed by its index.
+    device_list: Combo,
+    mode_list: Combo,
+    /// `MainV2.cam != null`: `BUT_videostart` is disabled.
+    running: bool,
+    /// The running capture's frames decoded, as the application last saw them.
+    frames: u64,
+    /// Why the last Start was refused, or the running capture's last read failure.
+    error: Option<String>,
+}
+
+impl std::fmt::Debug for Video {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Video")
+            .field("source", &self.source.is_some())
+            .field("devices", &self.devices)
+            .field("modes", &self.modes)
+            .field("running", &self.running)
+            .field("frames", &self.frames)
+            .field("error", &self.error)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Video {
+    fn new(source: Option<Arc<dyn mp_video::Source>>) -> Self {
+        Self {
+            source,
+            devices: Vec::new(),
+            modes: Vec::new(),
+            device_list: Combo::default(),
+            mode_list: Combo::default(),
+            running: false,
+            frames: 0,
+            error: None,
+        }
+    }
+
+    /// The row selected, as an index.
+    fn index(list: &Combo) -> Option<usize> {
+        list.selected.and_then(|key| usize::try_from(key).ok())
+    }
+
+    /// Binds a list, as setting `DataSource` does: its first row selected, or none for an empty
+    /// list.
+    fn bind(list: &mut Combo, texts: impl Iterator<Item = String>) {
+        list.options = (0_i64..).zip(texts).collect();
+        list.selected = (!list.options.is_empty()).then_some(0);
+        list.top_index = 0;
+        list.enabled = true;
+    }
+
+    /// `CMB_videosources.SelectedIndex`'s device.
+    fn device(&self) -> Option<&mp_video::Device> {
+        Self::index(&self.device_list).and_then(|index| self.devices.get(index))
+    }
+
+    /// `CMB_videoresolutions.SelectedItem`.
+    fn mode(&self) -> Option<&mp_video::Mode> {
+        Self::index(&self.mode_list).and_then(|index| self.modes.get(index))
+    }
+
+    /// A combo's list, for the two combos this holds.
+    fn list(&self, name: &str) -> Option<&Combo> {
+        match name {
+            "CMB_videosources" => Some(&self.device_list),
+            "CMB_videoresolutions" => Some(&self.mode_list),
+            _ => None,
+        }
+    }
+
+    fn list_mut(&mut self, name: &str) -> Option<&mut Combo> {
+        match name {
+            "CMB_videosources" => Some(&mut self.device_list),
+            "CMB_videoresolutions" => Some(&mut self.mode_list),
+            _ => None,
+        }
+    }
 }
 
 /// The Planner page: what each control holds, the box or dialog showing, and what the handlers
@@ -1177,6 +1276,8 @@ pub struct Planner {
     /// `label5.Visible` and `CMB_Layout.Visible` set false by `Activate`, which nothing sets
     /// back. `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:75-79`
     layout_hidden: bool,
+    /// The video controls.
+    video: Video,
 }
 
 impl Planner {
@@ -1218,9 +1319,18 @@ impl Planner {
             effects: Vec::new(),
             sent: Vec::new(),
             layout_hidden: false,
+            video: Video::new(mp_video::platform_source()),
         };
         planner.change_units(settings);
         planner
+    }
+
+    /// The same page with its devices from `source`: a test's scripted camera.
+    #[cfg(test)]
+    #[must_use]
+    pub fn with_video_source(mut self, source: Arc<dyn mp_video::Source>) -> Self {
+        self.video.source = Some(source);
+        self
     }
 
     /// Whether the page is showing.
@@ -1249,6 +1359,12 @@ impl Planner {
         if let Some(text) = self.dim_text.get(name) {
             return text.clone();
         }
+        if let Some(list) = self.video.list(name) {
+            return list
+                .selected
+                .and_then(|key| list.options.iter().find(|(held, _)| *held == key))
+                .map_or_else(String::new, |(_, text)| text.clone());
+        }
         let Some(spec) = COMBOS.iter().find(|spec| spec.name == name) else {
             return String::new();
         };
@@ -1260,10 +1376,101 @@ impl Planner {
             .map_or_else(String::new, |text| (*text).to_owned())
     }
 
+    /// A combo's items: the Designer's, or what a video combo is bound to.
+    #[must_use]
+    pub fn combo_items(&self, name: &str) -> Vec<String> {
+        if let Some(list) = self.video.list(name) {
+            return list.options.iter().map(|(_, text)| text.clone()).collect();
+        }
+        COMBOS
+            .iter()
+            .find(|spec| spec.name == name)
+            .map(|spec| spec.items.iter().map(|item| (*item).to_owned()).collect())
+            .unwrap_or_default()
+    }
+
     /// The combo dropped down.
     #[must_use]
     pub const fn dropdown(&self) -> Option<&'static str> {
         self.open
+    }
+
+    /// Whether a capture runs: `MainV2.cam != null`, and `BUT_videostart` disabled.
+    #[must_use]
+    pub const fn video_running(&self) -> bool {
+        self.video.running
+    }
+
+    /// What the application's capture says, once a frame: how many frames it has decoded and
+    /// its last failure. `None` once it has gone.
+    pub fn video_status(&mut self, capture: Option<&mp_video::Capture>) {
+        if let Some(capture) = capture {
+            self.video.frames = capture.frames();
+            if let Some(error) = capture.error() {
+                self.video.error = Some(error);
+            }
+        }
+    }
+
+    /// `CMB_videosources_Click`: the device list bound again, which selects its first device
+    /// and so runs `SelectedIndexChanged` for it. Under mono the C# returns at once; with no
+    /// source here the list stays as it was.
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:741-750`
+    fn video_click(&mut self, settings: &Persisted) {
+        let Some(source) = self.video.source.clone() else {
+            return;
+        };
+        self.video.devices = source.devices();
+        Video::bind(
+            &mut self.video.device_list,
+            self.video.devices.iter().map(|device| device.name.clone()),
+        );
+        if self.video.devices.is_empty() {
+            // Nothing to list the formats of: the C# indexes the empty device array and throws.
+            self.video.modes.clear();
+            Video::bind(&mut self.video.mode_list, std::iter::empty());
+        } else {
+            self.video_device_changed(settings);
+        }
+    }
+
+    /// `CMB_videosources_SelectedIndexChanged`: the device's capture pin's stream capabilities
+    /// bound to `CMB_videoresolutions` as `GCSBitmapInfo`s, then the saved `video_options`
+    /// selected when it is an index the list has. A device that will not say is the C#'s "Can
+    /// not add video source" box, and the format list is left as it was.
+    ///
+    /// Divergence: V4L2 where the C# has DirectShow's `IAMStreamConfig`, and only the MJPEG and
+    /// YUYV formats are listed - the two `mp_video` decodes.
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:296-360, 968-989`
+    fn video_device_changed(&mut self, settings: &Persisted) {
+        let (Some(source), Some(device)) =
+            (self.video.source.clone(), self.video.device().cloned())
+        else {
+            return;
+        };
+        let modes = match source.modes(&device) {
+            Ok(modes) => modes,
+            Err(why) => {
+                self.messages.push_back(Message {
+                    title: "",
+                    text: format!("Can not add video source\n{why}"),
+                });
+                return;
+            }
+        };
+        Video::bind(
+            &mut self.video.mode_list,
+            modes.iter().map(mp_video::Mode::label),
+        );
+        self.video.modes = modes;
+        // `Settings.Instance["video_options"] != ""`, which a missing key also passes; a bad
+        // entry throws in `SelectedIndex`'s setter and is ignored.
+        if settings.get("video_options") != Some("") && !device.name.is_empty() {
+            let wanted = usize::try_from(get_int(settings, "video_options", 0)).ok();
+            if let Some(index) = wanted.filter(|index| *index < self.video.modes.len()) {
+                self.video.mode_list.selected = i64::try_from(index).ok();
+            }
+        }
     }
 
     /// A number box's value.
@@ -1426,7 +1633,9 @@ impl Planner {
         }
         // C#: ConfigPlanner.cs:106-134 - the UI culture's language; English only here.
         self.dim_text.insert("CMB_language", String::new());
-        // C#: ConfigPlanner.cs:136-145 - no camera: Start enabled, the overlay box as it was.
+        // C#: ConfigPlanner.cs:136-145 - Start disabled while a capture runs, which
+        // `Video::running` holds across activations; the overlay box as it was (`hudon` is not
+        // ported).
         // C#: ConfigPlanner.cs:148-166
         for name in [
             "CHK_enablespeech",
@@ -1486,9 +1695,32 @@ impl Planner {
                 self.select_text(name, &value);
             }
         }
-        // C#: ConfigPlanner.cs:215-232 - no video device.
-        self.dim_text.insert("CMB_videosources", String::new());
-        self.dim_text.insert("CMB_videoresolutions", String::new());
+        // C#: ConfigPlanner.cs:215-232 - the saved device and format, by index. The indexes are
+        // the C#'s and as fragile as they are there: a camera plugged in before this one, or a
+        // node renumbered, selects another device (kept so, the owner not having said otherwise).
+        if settings.get("video_device").is_some() {
+            self.video_click(settings);
+            let device = get_int(settings, "video_device", 0);
+            if let Some(index) = usize::try_from(device)
+                .ok()
+                .filter(|index| *index < self.video.devices.len())
+            {
+                let key = i64::try_from(index).ok();
+                if self.video.device_list.selected != key {
+                    self.video.device_list.selected = key;
+                    self.video_device_changed(settings);
+                }
+            }
+            // Selected again as the C# does, whatever the device's handler selected.
+            if settings.get("video_options") != Some("")
+                && !self.combo_text("CMB_videosources").is_empty()
+            {
+                let wanted = usize::try_from(get_int(settings, "video_options", 0)).ok();
+                if let Some(index) = wanted.filter(|index| *index < self.video.modes.len()) {
+                    self.video.mode_list.selected = i64::try_from(index).ok();
+                }
+            }
+        }
         // C#: ConfigPlanner.cs:235, 787-794; ExtLibs/Utilities/Settings.cs:127-140
         let log_dir = settings
             .get("logdirectory")
@@ -1726,19 +1958,35 @@ impl Planner {
         self.messages.pop_front();
     }
 
-    /// A click on a combo: its list dropped down, or put away.
-    pub fn toggle_dropdown(&mut self, name: &'static str) {
+    /// A click on a combo: its list dropped down, or put away. Video Device's `Click` binds its
+    /// list first (`ConfigPlanner.cs:741-750`).
+    pub fn toggle_dropdown(&mut self, name: &'static str, settings: &Persisted) {
         let live = COMBOS
             .iter()
             .any(|spec| spec.name == name && spec.dim.is_none());
         if !live || self.blocked() {
             return;
         }
+        if name == "CMB_videosources" {
+            self.video_click(settings);
+        }
         self.open = if self.open == Some(name) {
             None
         } else {
             Some(name)
         };
+        if self.open == Some(name)
+            && let Some(list) = self.video.list_mut(name)
+        {
+            list.open_list();
+        }
+    }
+
+    /// The wheel over a video combo's list.
+    pub fn scroll_list(&mut self, name: &'static str, lines: i32) {
+        if let Some(list) = self.video.list_mut(name) {
+            list.scroll_list(lines);
+        }
     }
 
     /// An item chosen from a combo's list: its `SelectedIndexChanged`, when the selection changed.
@@ -1750,6 +1998,18 @@ impl Planner {
         else {
             return;
         };
+        if let Some(list) = self.video.list_mut(name) {
+            let key = i64::try_from(index).ok();
+            if index >= list.options.len() || list.selected == key {
+                return;
+            }
+            list.selected = key;
+            // C#: ConfigPlanner.cs:296-360 - Video Format has no handler.
+            if name == "CMB_videosources" {
+                self.video_device_changed(settings);
+            }
+            return;
+        }
         let Some(text) = spec.items.get(index).copied() else {
             return;
         };
@@ -1928,6 +2188,30 @@ impl Planner {
             return;
         }
         match name {
+            // C#: ConfigPlanner.cs:261-285 - disabled while a capture runs; else stop first,
+            // then the device and format chosen opened. The settings are written once it has
+            // started, by `run_video`.
+            "BUT_videostart" if !self.video.running => {
+                self.effects.push(Effect::VideoStop);
+                match (self.video.device(), self.video.mode()) {
+                    (Some(device), Some(mode)) => self.effects.push(Effect::VideoStart {
+                        device: device.clone(),
+                        mode: *mode,
+                    }),
+                    // The C# reads `bmp.Media` of no selected item and its `catch` shows the
+                    // NullReferenceException's words; these say what is missing.
+                    _ => {
+                        let why = "Camera Fail: no Video Device and Video Format chosen";
+                        self.video.error = Some(why.to_owned());
+                        self.effects.push(Effect::Status(why.to_owned()));
+                    }
+                }
+            }
+            // C#: ConfigPlanner.cs:287-294
+            "BUT_videostop" => {
+                self.video.running = false;
+                self.effects.push(Effect::VideoStop);
+            }
             "BUT_Joystick" => self.joystick = true,
             "BUT_logdirbrowse" => self.effects.push(Effect::BrowseLogDirectory),
             "BUT_mapCacheDir" => {
@@ -1949,6 +2233,81 @@ impl Planner {
     pub fn close_joystick(&mut self) {
         self.joystick = false;
     }
+}
+
+/// What Start and Stop ask of the application, which holds the capture as `MainV2` holds `cam`.
+/// Stop drops it: `Dispose`, which here stops the reading thread and closes the device. Start
+/// opens the device in the format and starts it; once it runs, the two settings are written as
+/// the C# writes them - `video_device` and `video_options`, the two combos' `SelectedIndex` - and
+/// Start is disabled. A refusal is "Camera Fail: " and the reason, for the status line (the
+/// owner's ruling of 2026-09-25: no message box for an error the window shows as state). Returns
+/// the status line's words, if any.
+///
+/// Divergence: `mp_video` over V4L2 where the C# builds a DirectShow graph.
+/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:261-294; ExtLibs/WebCamService/Capture.cs:
+/// 77-111, 142-157, 220-231`
+pub fn run_video(
+    planner: &mut Planner,
+    settings: &mut Persisted,
+    capture: &mut Option<mp_video::Capture>,
+    effect: &Effect,
+) -> Option<String> {
+    match effect {
+        Effect::VideoStop => {
+            *capture = None;
+            planner.video.running = false;
+            None
+        }
+        Effect::VideoStart { device, mode } => {
+            let started = planner.video.source.clone().map_or_else(
+                || Err("no video capture on this platform".to_owned()),
+                |source| {
+                    mp_video::Capture::start(source.as_ref(), device, mode)
+                        .map_err(|why| why.to_string())
+                },
+            );
+            match started {
+                Ok(started) => {
+                    *capture = Some(started);
+                    // `SelectedIndex`, -1 for none.
+                    let index = |list: &Combo| list.selected.unwrap_or(-1).to_string();
+                    settings.set("video_device", index(&planner.video.device_list));
+                    settings.set("video_options", index(&planner.video.mode_list));
+                    planner.video.running = true;
+                    planner.video.frames = 0;
+                    planner.video.error = None;
+                    None
+                }
+                Err(why) => {
+                    let words = format!("Camera Fail: {why}");
+                    planner.video.error = Some(words.clone());
+                    Some(words)
+                }
+            }
+        }
+        Effect::Status(words) => Some(words.clone()),
+        _ => None,
+    }
+}
+
+/// While a capture runs the window is drawn every 40 ms: `Capture`'s timer hands the HUD a
+/// picture 25 times a second (`Thread.Sleep(1000/25)`), faster than the 10 Hz the rest of the
+/// screen is drawn at.
+/// `// C#: ExtLibs/WebCamService/Capture.cs:114-140`
+const VIDEO_REPAINT: Duration = Duration::from_millis(40);
+
+/// The `hud.camera` fact: the size of the picture under the HUD, `<width>x<height>`, or `none`.
+fn camera_fact(frame: Option<&mp_video::Frame>) -> String {
+    frame.map_or_else(
+        || "none".to_owned(),
+        |frame| format!("{}x{}", frame.width, frame.height),
+    )
+}
+
+/// The picture the HUD draws for a frame: a gpui image, in the BGRA gpui keeps its images in.
+fn camera_image(frame: &mp_video::Frame) -> Option<Arc<gpui::RenderImage>> {
+    image::RgbaImage::from_raw(frame.width, frame.height, frame.to_bgra())
+        .map(|buffer| Arc::new(gpui::RenderImage::new(vec![image::Frame::new(buffer)])))
 }
 
 /// Whether the map reads tiles from its cache only: `mapCache` is `CacheOnly`. The map's tile
@@ -2071,9 +2430,59 @@ impl MissionPlanner {
                     })
                     .detach();
                 }
+                effect @ (Effect::VideoStart { .. } | Effect::VideoStop | Effect::Status(_)) => {
+                    let words = run_video(
+                        &mut self.planner,
+                        &mut self.persisted,
+                        &mut self.video,
+                        &effect,
+                    );
+                    if let Some(words) = words {
+                        self.file_status = Some(words);
+                    }
+                    if matches!(effect, Effect::Status(_)) {
+                        continue;
+                    }
+                    // Dropping the task ends the repaints; a new capture starts them again.
+                    self.video_repaint = self.video.is_some().then(|| {
+                        cx.spawn(async move |this, cx| {
+                            loop {
+                                cx.background_executor().timer(VIDEO_REPAINT).await;
+                                if this.update(cx, |_, cx| cx.notify()).is_err() {
+                                    break;
+                                }
+                            }
+                        })
+                    });
+                }
                 Effect::Stream(..) | Effect::ReadMissionOnConnect(_) | Effect::MapAccess => {}
             }
         }
+    }
+
+    /// Once a frame: the capture's latest frame made the HUD's picture - once per new frame, the
+    /// last one's image taken out of the window's atlas - and what the capture says handed to the
+    /// page. With no capture, no picture: `Dispose` clears the HUD's (`camimage(null)`).
+    /// `// C#: ExtLibs/WebCamService/Capture.cs:142-157; GCSViews/FlightData.cs:1897-1900`
+    pub(crate) fn video_tick(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.planner.video_status(self.video.as_ref());
+        let latest = self.video.as_ref().and_then(mp_video::Capture::latest);
+        let shown = match (&latest, &self.video_frame) {
+            (Some(new), Some((old, _))) => Arc::ptr_eq(new, old),
+            (None, None) => true,
+            _ => false,
+        };
+        if !shown {
+            let made = latest.and_then(|frame| camera_image(&frame).map(|image| (frame, image)));
+            self.fly_data.camera = made.as_ref().map(|(_, image)| Arc::clone(image));
+            if let Some((_, old)) = std::mem::replace(&mut self.video_frame, made) {
+                cx.drop_image(old, Some(window));
+            }
+        }
+        crate::facts::record(
+            "hud.camera",
+            camera_fact(self.video_frame.as_ref().map(|(frame, _)| frame.as_ref())),
+        );
     }
 
     /// `Activate`, when the page is chosen.
@@ -2128,7 +2537,9 @@ impl MissionPlanner {
             body = body.child(combo_box(planner, spec, cx));
         }
         for spec in BUTTONS {
-            body = body.child(button(spec, planner.blocked(), cx));
+            // Start is disabled while a capture runs. C#: ConfigPlanner.cs:136-145, 280
+            let disabled = spec.0 == "BUT_videostart" && planner.video_running();
+            body = body.child(button(spec, planner.blocked() || disabled, cx));
         }
         for (index, ((spec, number), handle)) in NUMBERS
             .iter()
@@ -2260,7 +2671,7 @@ fn combo_box(planner: &Planner, spec: &ComboSpec, cx: &mut Context<MissionPlanne
         base.cursor_pointer()
             .hover(|style| style.border_color(rgb(theme::ACCENT)))
             .on_click(cx.listener(move |this, _event, _window, cx| {
-                this.planner.toggle_dropdown(name);
+                this.planner.toggle_dropdown(name, &this.persisted);
                 cx.notify();
             }))
             .into_any_element()
@@ -2273,6 +2684,30 @@ fn combo_box(planner: &Planner, spec: &ComboSpec, cx: &mut Context<MissionPlanne
 fn dropdown(planner: &Planner, spec: &ComboSpec, cx: &mut Context<MissionPlanner>) -> AnyElement {
     let (x, y, width, height) = spec.at;
     let name = spec.name;
+    // The video lists are the devices' and the formats': as long as a camera makes them, so
+    // drawn over the page, thirty rows at a time, each row `planner-<combo>-<index>`.
+    if let Some(list) = planner.video.list(name) {
+        return super::servo_output::dropdown(
+            &control_id(name),
+            list,
+            (
+                f32::from(x),
+                f32::from(y) + f32::from(height),
+                f32::from(width),
+            ),
+            move |this, key| {
+                let Ok(index) = usize::try_from(key) else {
+                    return;
+                };
+                // Choosing a device or a format asks for nothing that needs the window.
+                let _ = this.planner_apply(|planner, settings| {
+                    planner.choose(name, index, settings);
+                });
+            },
+            move |this, lines| this.planner.scroll_list(name, lines),
+            cx,
+        );
+    }
     let selected = planner.selected.get(name).copied().flatten();
     let mut list = div()
         .absolute()
@@ -2693,7 +3128,7 @@ fn facts(planner: &Planner, settings: &Persisted, read_mission_on_connect: bool)
         );
         facts.record(
             format!("config.planner.combo.{}.items", spec.name),
-            spec.items.join(","),
+            planner.combo_items(spec.name).join(","),
         );
     }
     for (name, ..) in NUMBERS {
@@ -2763,6 +3198,32 @@ fn facts(planner: &Planner, settings: &Persisted, read_mission_on_connect: bool)
             .map_or_else(|| "none".to_owned(), |message| message.text.clone()),
     );
     facts.record("config.planner.joystick", planner.joystick_open());
+    // The video controls: how many devices and formats are listed and which are chosen, whether
+    // a capture runs, the frames it has decoded, and why a Start was refused or a read failed.
+    let video = &planner.video;
+    facts.record("config.planner.video.devices", video.devices.len());
+    facts.record(
+        "config.planner.video.device",
+        planner.combo_text("CMB_videosources"),
+    );
+    facts.record("config.planner.video.modes", video.modes.len());
+    facts.record(
+        "config.planner.video.mode",
+        planner.combo_text("CMB_videoresolutions"),
+    );
+    facts.record("config.planner.video.running", video.running);
+    facts.record("config.planner.video.frames", video.frames);
+    facts.record(
+        "config.planner.video.error",
+        video.error.as_deref().unwrap_or("none"),
+    );
+    facts.record(
+        "config.planner.video.list.top",
+        planner
+            .dropdown()
+            .and_then(|name| video.list(name))
+            .map_or(0, |list| list.top_index),
+    );
     facts
 }
 
@@ -2772,6 +3233,8 @@ mod tests {
     use crate::settings::SaveEvent;
     use crate::telemetry::scripted::{VEHICLE, Vehicle, until};
     use mp_link::ProtocolTimeouts;
+    use mp_video::Source as _;
+    use mp_video::testing::FakeSource;
 
     /// A file Mission Planner's `XmlTextWriter` wrote, from `mp-settings`'s fixtures.
     const CSHARP_FILE: &str = include_str!("../../../mp-settings/tests/fixtures/config.xml");
@@ -2823,9 +3286,298 @@ mod tests {
 
     /// A page activated over these settings, with no log directory on disk.
     fn activated(settings: &mut Persisted) -> Planner {
-        let mut planner = Planner::new(settings);
+        let mut planner = Planner::new(settings).with_video_source(Arc::new(FakeSource::empty()));
         planner.activate(settings, None);
         planner
+    }
+
+    /// The page over this machine's scripted webcam and a second camera, activated.
+    fn with_cameras(settings: &mut Persisted, source: FakeSource) -> Planner {
+        let mut planner = Planner::new(settings).with_video_source(Arc::new(source));
+        planner.activate(settings, None);
+        planner
+    }
+
+    fn two_cameras() -> FakeSource {
+        FakeSource::webcam().with_device(
+            "/dev/video4",
+            "USB Capture",
+            &[mp_video::Mode {
+                format: mp_video::PixelFormat::Mjpeg,
+                width: 1920,
+                height: 1080,
+                interval: (1, 60),
+            }],
+        )
+    }
+
+    /// Video Device lists the devices when it is clicked, which selects the first and lists its
+    /// formats; choosing another lists that one's; Video Format has no handler.
+    /// `// C#: ConfigPlanner.cs:296-360, 741-750, 968-989`
+    #[test]
+    fn clicking_video_device_lists_the_devices_and_the_first_ones_formats() {
+        let mut settings = Persisted::at(None);
+        let mut planner = with_cameras(&mut settings, two_cameras());
+        // Nothing saved: Activate lists nothing.
+        assert_eq!(
+            planner.combo_items("CMB_videosources"),
+            Vec::<String>::new()
+        );
+        planner.toggle_dropdown("CMB_videosources", &settings);
+        assert_eq!(planner.dropdown(), Some("CMB_videosources"));
+        assert_eq!(
+            planner.combo_items("CMB_videosources"),
+            ["Integrated_Webcam_HD: Integrate", "USB Capture"]
+        );
+        assert_eq!(
+            planner.combo_text("CMB_videosources"),
+            "Integrated_Webcam_HD: Integrate"
+        );
+        assert_eq!(
+            planner.combo_items("CMB_videoresolutions"),
+            [
+                "1280 x 720 30.00 fps MJPG",
+                "640 x 480 30.00 fps YUYV",
+                "320 x 240 15.00 fps YUYV"
+            ]
+        );
+        assert_eq!(
+            planner.combo_text("CMB_videoresolutions"),
+            "1280 x 720 30.00 fps MJPG"
+        );
+        planner.choose("CMB_videosources", 1, &mut settings);
+        assert_eq!(planner.dropdown(), None);
+        assert_eq!(
+            planner.combo_items("CMB_videoresolutions"),
+            ["1920 x 1080 60.00 fps MJPG"]
+        );
+        planner.toggle_dropdown("CMB_videoresolutions", &settings);
+        planner.choose("CMB_videoresolutions", 0, &mut settings);
+        // Out of the list: nothing.
+        planner.choose("CMB_videoresolutions", 5, &mut settings);
+        assert_eq!(
+            planner.combo_text("CMB_videoresolutions"),
+            "1920 x 1080 60.00 fps MJPG"
+        );
+        // Choosing writes nothing: only a Start that starts does.
+        assert_eq!(settings.get("video_device"), None);
+        assert_eq!(settings.get("video_options"), None);
+        assert!(planner.take_effects().is_empty());
+        let facts = facts(&planner, &settings, false).0;
+        let fact = |key: &str| {
+            facts
+                .iter()
+                .find(|(held, _)| held == key)
+                .map(|(_, value)| value.clone())
+                .unwrap_or_else(|| panic!("{key}"))
+        };
+        assert_eq!(fact("config.planner.video.devices"), "2");
+        assert_eq!(fact("config.planner.video.device"), "USB Capture");
+        assert_eq!(fact("config.planner.video.modes"), "1");
+        assert_eq!(fact("config.planner.video.running"), "false");
+        assert_eq!(fact("config.planner.video.error"), "none");
+        assert_eq!(
+            fact("config.planner.combo.CMB_videosources.items"),
+            "Integrated_Webcam_HD: Integrate,USB Capture"
+        );
+    }
+
+    /// Start stops first, opens the device in the format, and once it runs writes the two
+    /// indexes and disables itself; the frames arrive; Stop ends it and enables Start again.
+    /// `// C#: ConfigPlanner.cs:261-294`
+    #[test]
+    fn start_captures_and_writes_the_two_indexes_and_stop_ends_it() {
+        let mut settings = Persisted::at(None);
+        let source = FakeSource::webcam();
+        let mut planner = with_cameras(&mut settings, source.clone());
+        planner.toggle_dropdown("CMB_videosources", &settings);
+        planner.choose("CMB_videosources", 0, &mut settings);
+        planner.choose("CMB_videoresolutions", 2, &mut settings);
+        planner.press("BUT_videostart", Path::new("/"));
+        let device = source.devices()[0].clone();
+        let mode = source.modes(&device).unwrap()[2];
+        let effects = planner.take_effects();
+        assert_eq!(
+            effects,
+            [
+                Effect::VideoStop,
+                Effect::VideoStart {
+                    device: device.clone(),
+                    mode
+                }
+            ]
+        );
+        let mut capture = None;
+        for effect in &effects {
+            assert_eq!(
+                run_video(&mut planner, &mut settings, &mut capture, effect),
+                None
+            );
+        }
+        let running = capture.as_ref().expect("a capture");
+        assert_eq!(running.device(), &device);
+        assert_eq!(running.mode(), &mode);
+        assert_eq!(settings.get("video_device"), Some("0"));
+        assert_eq!(settings.get("video_options"), Some("2"));
+        assert!(planner.video_running());
+        // Disabled while it runs.
+        planner.press("BUT_videostart", Path::new("/"));
+        assert!(planner.take_effects().is_empty());
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while capture.as_ref().is_some_and(|c| c.frames() < 3) {
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        planner.video_status(capture.as_ref());
+        assert!(planner.video.frames >= 3);
+        let frame = capture
+            .as_ref()
+            .and_then(mp_video::Capture::latest)
+            .unwrap();
+        let image = camera_image(&frame).expect("an image");
+        let size = image.size(0);
+        assert_eq!((size.width.0, size.height.0), (320, 240));
+        assert_eq!(image.as_bytes(0).map(<[u8]>::len), Some(320 * 240 * 4));
+
+        planner.press("BUT_videostop", Path::new("/"));
+        assert!(!planner.video_running());
+        let effects = planner.take_effects();
+        assert_eq!(effects, [Effect::VideoStop]);
+        run_video(&mut planner, &mut settings, &mut capture, &effects[0]);
+        assert!(capture.is_none());
+        assert_eq!(source.streams_stopped(), 1);
+        // The settings stay: Activate selects them next time.
+        assert_eq!(settings.get("video_options"), Some("2"));
+    }
+
+    /// A camera that will not open: "Camera Fail: " and the reason, for the status line; nothing
+    /// written, Start still enabled. With nothing chosen, Start fails the same way.
+    #[test]
+    fn a_refused_start_goes_on_the_status_line() {
+        let mut settings = Persisted::at(None);
+        let mut planner = with_cameras(&mut settings, FakeSource::webcam().refusing_open("busy"));
+        planner.press("BUT_videostart", Path::new("/"));
+        let effects = planner.take_effects();
+        assert_eq!(
+            effects,
+            [
+                Effect::VideoStop,
+                Effect::Status("Camera Fail: no Video Device and Video Format chosen".to_owned())
+            ]
+        );
+        let mut capture = None;
+        assert_eq!(
+            run_video(&mut planner, &mut settings, &mut capture, &effects[1]).as_deref(),
+            Some("Camera Fail: no Video Device and Video Format chosen")
+        );
+
+        planner.toggle_dropdown("CMB_videosources", &settings);
+        planner.press("BUT_videostart", Path::new("/"));
+        let mut status = None;
+        for effect in planner.take_effects() {
+            status = status.or(run_video(
+                &mut planner,
+                &mut settings,
+                &mut capture,
+                &effect,
+            ));
+        }
+        assert_eq!(status.as_deref(), Some("Camera Fail: busy"));
+        assert!(capture.is_none());
+        assert!(!planner.video_running());
+        assert_eq!(settings.get("video_device"), None);
+        assert_eq!(planner.video.error.as_deref(), Some("Camera Fail: busy"));
+        // No message box: the words are the status line's.
+        assert!(planner.message().is_none());
+    }
+
+    /// A device that will not list its formats is the C#'s "Can not add video source" box.
+    #[test]
+    fn a_device_that_will_not_list_its_formats_says_so() {
+        let mut settings = Persisted::at(None);
+        let mut planner = with_cameras(
+            &mut settings,
+            FakeSource::webcam().refusing_modes("no such device"),
+        );
+        planner.toggle_dropdown("CMB_videosources", &settings);
+        assert_eq!(
+            planner.message().map(|m| m.text.as_str()),
+            Some("Can not add video source\nno such device")
+        );
+        assert!(planner.combo_items("CMB_videoresolutions").is_empty());
+    }
+
+    /// Activate with the two indexes saved selects the device and the format by index; an index
+    /// the lists do not have leaves the first; no key lists nothing.
+    /// `// C#: ConfigPlanner.cs:215-232`
+    #[test]
+    fn activate_selects_the_saved_device_and_format_by_index() {
+        let mut settings = Persisted::at(None);
+        settings.set("video_device", "1");
+        settings.set("video_options", "0");
+        let planner = with_cameras(&mut settings, two_cameras());
+        assert_eq!(planner.combo_text("CMB_videosources"), "USB Capture");
+        assert_eq!(
+            planner.combo_text("CMB_videoresolutions"),
+            "1920 x 1080 60.00 fps MJPG"
+        );
+
+        let mut settings = Persisted::at(None);
+        settings.set("video_device", "0");
+        settings.set("video_options", "1");
+        let planner = with_cameras(&mut settings, two_cameras());
+        assert_eq!(
+            planner.combo_text("CMB_videosources"),
+            "Integrated_Webcam_HD: Integrate"
+        );
+        assert_eq!(
+            planner.combo_text("CMB_videoresolutions"),
+            "640 x 480 30.00 fps YUYV"
+        );
+
+        // A camera gone: the index is past the list, and the first device stays selected.
+        let mut settings = Persisted::at(None);
+        settings.set("video_device", "5");
+        settings.set("video_options", "9");
+        let planner = with_cameras(&mut settings, two_cameras());
+        assert_eq!(
+            planner.combo_text("CMB_videosources"),
+            "Integrated_Webcam_HD: Integrate"
+        );
+        assert_eq!(
+            planner.combo_text("CMB_videoresolutions"),
+            "1280 x 720 30.00 fps MJPG"
+        );
+        // Activate writes neither.
+        assert_eq!(settings.get("video_device"), Some("5"));
+    }
+
+    /// A list longer than thirty rows scrolls on the wheel, as the other pages' lists do.
+    #[test]
+    fn a_long_format_list_scrolls() {
+        let modes: Vec<mp_video::Mode> = (1..=40)
+            .map(|step| mp_video::Mode {
+                format: mp_video::PixelFormat::Yuyv,
+                width: 16 * step,
+                height: 9 * step,
+                interval: (1, 30),
+            })
+            .collect();
+        let mut settings = Persisted::at(None);
+        let mut planner = with_cameras(
+            &mut settings,
+            FakeSource::empty().with_device("/dev/video0", "cam", &modes),
+        );
+        planner.toggle_dropdown("CMB_videosources", &settings);
+        planner.toggle_dropdown("CMB_videosources", &settings);
+        planner.toggle_dropdown("CMB_videoresolutions", &settings);
+        planner.scroll_list("CMB_videoresolutions", 60);
+        let facts = facts(&planner, &settings, false).0;
+        assert!(
+            facts
+                .iter()
+                .any(|(key, value)| key == "config.planner.video.list.top" && value == "10")
+        );
     }
 
     fn index_of(name: &str, text: &str) -> usize {
@@ -2959,7 +3711,7 @@ mod tests {
         let scratch = Scratch::new("units");
         let mut settings = Persisted::at(Some(scratch.config()));
         let mut planner = activated(&mut settings);
-        planner.toggle_dropdown("CMB_altunits");
+        planner.toggle_dropdown("CMB_altunits", &settings);
         assert_eq!(planner.dropdown(), Some("CMB_altunits"));
         planner.choose(
             "CMB_altunits",
@@ -3409,8 +4161,8 @@ mod tests {
             planner.click(name, &mut settings);
             assert_eq!(planner.checked(name), was, "{name}");
         }
-        for name in ["CMB_theme", "CMB_language", "CMB_videosources"] {
-            planner.toggle_dropdown(name);
+        for name in ["CMB_theme", "CMB_language"] {
+            planner.toggle_dropdown(name, &settings);
             assert_eq!(planner.dropdown(), None, "{name}");
             planner.choose(name, 0, &mut settings);
         }
@@ -3431,13 +4183,9 @@ mod tests {
                 "CHK_beta",
                 "CHK_mavdebug",
                 "chk_temp",
-                "CMB_videosources",
-                "CMB_videoresolutions",
                 "CMB_osdcolor",
                 "CMB_language",
                 "CMB_theme",
-                "BUT_videostart",
-                "BUT_videostop",
                 "BUT_themecustom",
                 "BUT_Vario",
             ]
@@ -3705,33 +4453,41 @@ mod tests {
         event
     }
 
-    /// One run of the application under `tests/gui/config-planner.gui`, as the model holds it.
+    /// One run of the application under a `tests/gui/config-*.gui` script of this page, as the
+    /// model holds it.
     struct Run {
         settings: Persisted,
         planner: Planner,
         /// `MissionPlanner::auto_read_mission`.
         read_mission: bool,
+        /// `MissionPlanner::video`: the capture Start opened.
+        capture: Option<mp_video::Capture>,
+        /// `MissionPlanner::file_status`: the status line.
+        status: Option<String>,
     }
 
     impl Run {
         /// `MissionPlanner::new` on the CONFIG screen with no link: `Settings.Instance` read, what
         /// `MainV2` takes from it, the start-up save - then the page's `Activate`, which the
-        /// first frame of the CONFIG screen runs.
-        fn start(path: &Path, logs: &Path) -> Self {
+        /// first frame of the CONFIG screen runs. The cameras are `source`'s.
+        fn start(path: &Path, logs: &Path, source: &FakeSource) -> Self {
             let mut settings = Persisted::at(Some(path.to_path_buf()));
-            let planner = Planner::new(&settings);
+            let planner = Planner::new(&settings).with_video_source(Arc::new(source.clone()));
             let read_mission = load_wps_on_connect(&settings);
             settings.save_config(SaveEvent::Startup).expect("saved");
             let mut run = Self {
                 settings,
                 planner,
                 read_mission,
+                capture: None,
+                status: None,
             };
             run.planner.activate(&mut run.settings, Some(logs));
             run
         }
 
-        /// What `planner_apply` does with a handler's effects, with no vehicle and no map.
+        /// What `planner_apply` and `planner_window_effects` do with a handler's effects, with
+        /// no vehicle and no map.
         fn effects(&mut self) {
             for effect in self.planner.take_effects() {
                 match effect {
@@ -3741,6 +4497,18 @@ mod tests {
                         self.planner.sent(stream, hz);
                     }
                     Effect::ReadMissionOnConnect(on) => self.read_mission = on,
+                    effect
+                    @ (Effect::VideoStart { .. } | Effect::VideoStop | Effect::Status(_)) => {
+                        let words = run_video(
+                            &mut self.planner,
+                            &mut self.settings,
+                            &mut self.capture,
+                            &effect,
+                        );
+                        if words.is_some() {
+                            self.status = words;
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -3760,12 +4528,21 @@ mod tests {
                 .strip_prefix("planner-")
                 .unwrap_or_else(|| panic!("{id} is not the page's"));
             if let Some(spec) = COMBOS.iter().find(|spec| spec.name == name) {
-                planner.toggle_dropdown(spec.name);
+                planner.toggle_dropdown(spec.name, settings);
             } else if let Some((spec, index)) = COMBOS.iter().find_map(|spec| {
                 let item = name.strip_prefix(spec.name)?.strip_prefix('-')?;
                 Some((spec, spec.items.iter().position(|text| *text == item)?))
             }) {
                 planner.choose(spec.name, index, settings);
+            } else if let Some((combo, index)) = ["CMB_videosources", "CMB_videoresolutions"]
+                .into_iter()
+                .find_map(|combo| {
+                    let row = name.strip_prefix(combo)?.strip_prefix('-')?;
+                    Some((combo, row.parse::<usize>().ok()?))
+                })
+            {
+                // A video list's row, `<combo>-<index>`, as `servo_output::dropdown` names it.
+                planner.choose(combo, index, settings);
             } else if let Some((index, up)) =
                 NUMBERS
                     .iter()
@@ -3783,6 +4560,21 @@ mod tests {
             } else {
                 panic!("{id} is not a control of the page");
             }
+        }
+
+        /// `settle`: the capture reads for `seconds` - here until the scripted camera has given
+        /// twenty frames more, which a 30 fps camera gives in under a second, or `seconds` have
+        /// passed - and the next frame's `video_tick` hands its state to the page.
+        fn settle(&mut self, seconds: f32) {
+            if let Some(capture) = &self.capture {
+                let wanted = capture.frames() + 20;
+                let deadline =
+                    std::time::Instant::now() + std::time::Duration::from_secs_f32(seconds);
+                while capture.frames() < wanted && std::time::Instant::now() < deadline {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+            }
+            self.planner.video_status(self.capture.as_ref());
         }
 
         /// What the facts say of `fact`, or `None` for one that is not the page's or the
@@ -3803,6 +4595,14 @@ mod tests {
                 // Every save the model made was `expect`ed to succeed.
                 "config.error" => Some("none".to_owned()),
                 "config.page" | "config.title" => None,
+                "status" => Some(self.status.clone().unwrap_or_default()),
+                // `video_tick`'s: the size of the picture under the HUD.
+                "hud.camera" => Some(camera_fact(
+                    self.capture
+                        .as_ref()
+                        .and_then(mp_video::Capture::latest)
+                        .as_deref(),
+                )),
                 fact => {
                     let key = fact
                         .strip_prefix("config.")
@@ -3814,15 +4614,9 @@ mod tests {
         }
     }
 
-    /// `tests/gui/config-planner.gui`, step for step, against the model: the page's handlers over
-    /// a `config.xml` of the script's own, the saves `main.rs` makes - at start-up, on the FLIGHT
-    /// DATA button and on the close box - and the restart. Every fact the script expects of the
-    /// page, of the dictionary and of its saves is what the model publishes at that step, so
-    /// what the script expects after the restart is what the model read back from the file. The
-    /// script runs with a window; this does not.
-    #[test]
-    fn the_gui_script_expects_what_the_model_does() {
-        let script = include_str!("../../../../tests/gui/config-planner.gui");
+    /// A script of this page, step for step, against the model, with `source`'s cameras:
+    /// returns how many facts it checked and how many restarts it made.
+    fn run_script(script: &str, source: &FakeSource) -> (usize, usize) {
         assert!(
             script
                 .lines()
@@ -3834,7 +4628,7 @@ mod tests {
         // `env XDG_DATA_HOME $WORK`: a data directory, and so a log directory, that do not exist.
         let logs = scratch.0.join("MissionPlannerRust").join("logs");
         let cache = scratch.0.join("gmapcache");
-        let mut run = Run::start(&path, &logs);
+        let mut run = Run::start(&path, &logs, source);
         let (mut checked, mut restarts) = (0, 0);
         for (number, line) in script.lines().enumerate() {
             let line = line.split('#').next().unwrap_or("").trim();
@@ -3842,7 +4636,7 @@ mod tests {
             if line == "restart" {
                 // `MainV2_FormClosing` on the CONFIG screen: `SaveConfig`, then a new process.
                 run.settings.save_config(SaveEvent::Close).expect("saved");
-                run = Run::start(&path, &logs);
+                run = Run::start(&path, &logs, source);
                 restarts += 1;
                 continue;
             }
@@ -3851,7 +4645,8 @@ mod tests {
                 continue;
             };
             match (verb, rest) {
-                ("screen" | "window" | "env" | "settle", _) => {}
+                ("screen" | "window" | "env", _) => {}
+                ("settle", seconds) => run.settle(seconds.parse().expect("seconds")),
                 // FLIGHT DATA: the page is hidden with its screen, then `SaveConfig`.
                 ("click", "tab-fly") => {
                     run.planner.deactivate();
@@ -3897,17 +4692,47 @@ mod tests {
                     let Some(got) = run.fact(fact) else {
                         continue;
                     };
-                    match want.strip_prefix("~ ") {
-                        Some(part) => assert!(got.contains(part), "line {at}: {fact} is {got}"),
-                        None => assert_eq!(got, want, "line {at}: {fact}"),
+                    if let Some(part) = want.strip_prefix("~ ") {
+                        assert!(got.contains(part), "line {at}: {fact} is {got}");
+                    } else if let Some(least) = want.strip_prefix("> ") {
+                        let got: f64 = got.parse().expect("a number");
+                        let least: f64 = least.parse().expect("a number");
+                        assert!(got > least, "line {at}: {fact} is {got}");
+                    } else {
+                        assert_eq!(got, want, "line {at}: {fact}");
                     }
                     checked += 1;
                 }
                 _ => panic!("line {at}: {line} is not modelled"),
             }
         }
+        (checked, restarts)
+    }
+
+    /// `tests/gui/config-planner.gui`, step for step, against the model: the page's handlers over
+    /// a `config.xml` of the script's own, the saves `main.rs` makes - at start-up, on the FLIGHT
+    /// DATA button and on the close box - and the restart. Every fact the script expects of the
+    /// page, of the dictionary and of its saves is what the model publishes at that step, so
+    /// what the script expects after the restart is what the model read back from the file. The
+    /// script runs with a window; this does not.
+    #[test]
+    fn the_gui_script_expects_what_the_model_does() {
+        let script = include_str!("../../../../tests/gui/config-planner.gui");
+        let (checked, restarts) = run_script(script, &FakeSource::empty());
         assert_eq!(restarts, 1);
         assert!(checked > 80, "{checked} facts checked");
+    }
+
+    /// `tests/gui/config-video.gui`, step for step, against the model with a scripted webcam
+    /// laid out as this machine's: what the script expects of the real one, the model does of
+    /// the scripted one - the lists, the capture's frames, the settings, the picture under the
+    /// HUD and its going on Stop.
+    #[test]
+    fn the_video_script_expects_what_the_model_does() {
+        let script = include_str!("../../../../tests/gui/config-video.gui");
+        let (checked, restarts) = run_script(script, &FakeSource::webcam());
+        assert_eq!(restarts, 0);
+        assert!(checked > 15, "{checked} facts checked");
     }
 
     /// The layout is the `.resx`'s: every control this page draws is one the C# page has, at
