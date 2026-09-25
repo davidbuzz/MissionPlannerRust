@@ -404,6 +404,8 @@ struct MissionPlanner {
     connect_focus: gpui::FocusHandle,
     /// Initial Setup's FailSafe page.
     failsafe: config::failsafe::FailSafe,
+    /// The keyboard focus of its number being typed into.
+    failsafe_focus: gpui::FocusHandle,
     /// The SETUP screen's backstage view: `InitialSetup`'s list and the page chosen from it.
     setup_list: setup::Backstage,
     /// The CONFIG screen's: `SoftwareConfig`'s.
@@ -427,11 +429,15 @@ struct MissionPlanner {
     esc_calibration: config::esc_calibration::EscCalibration,
     esc_focus: gpui::FocusHandle,
     // ---- Mandatory Hardware pages: Accel Calibration (ConfigAccelerometerCalibration), Frame
-    // Type before 3.5 (ConfigFrameType); Secure (ConfigSecureAP) keeps no state ----
+    // Type before 3.5 (ConfigFrameType), Secure (ConfigSecureAP) ----
     /// Initial Setup's Accel Calibration page.
     accel_calibration: config::accel_calibration::AccelCalibration,
     /// Initial Setup's Frame Type page for a copter older than 3.5.
     frame_type_legacy: config::frame_type_legacy::FrameTypeLegacy,
+    /// Initial Setup's Secure page: its key, its boxes and its file dialog.
+    secure: config::secure::Secure,
+    /// The keyboard focus of that file dialog's path.
+    secure_focus: gpui::FocusHandle,
     // ---- end Mandatory Hardware pages ----
     /// CONFIG's Planner page, and its boxes' focus.
     planner: config::planner::Planner,
@@ -741,6 +747,7 @@ impl MissionPlanner {
             fly_pages: fly::Pages::default(),
             fly_data,
             failsafe: config::failsafe::FailSafe::default(),
+            failsafe_focus: cx.focus_handle(),
             setup_list: setup::Backstage::new(setup::List::Setup),
             config_list: setup::Backstage::new(setup::List::Config),
             frame_type: config::frame_type::FrameType::default(),
@@ -757,6 +764,8 @@ impl MissionPlanner {
             // ---- Mandatory Hardware pages ----
             accel_calibration: config::accel_calibration::AccelCalibration::default(),
             frame_type_legacy: config::frame_type_legacy::FrameTypeLegacy::default(),
+            secure: config::secure::Secure::default(),
+            secure_focus: cx.focus_handle(),
             // ---- end Mandatory Hardware pages ----
             planner,
             planner_focus: config::planner::Focus::new(cx),
@@ -2573,9 +2582,17 @@ impl Render for MissionPlanner {
         self.flight_modes.tick(&self.telemetry);
         // The Frame Type page's FRAME_CLASS and FRAME_TYPE writes, in the same way.
         self.frame_type.tick(&self.telemetry);
-        // The FailSafe page's timers and writes, and closing it when the screen changes.
-        self.failsafe
-            .tick(&self.telemetry, &view, self.screen == Screen::Setup);
+        // The FailSafe page's timers and writes, a number the focus left read, and closing it
+        // when the screen changes. A write that failed is said on the status line, where the C#
+        // shows a box (the owner's ruling of 2026-09-25).
+        if let Some(status) = self.failsafe.tick(
+            &self.telemetry,
+            &view,
+            self.screen == Screen::Setup,
+            self.failsafe_focus.is_focused(window),
+        ) {
+            self.file_status = Some(status);
+        }
         // The Battery Monitor's boxes validated as the focus leaves them, its timer, its writes.
         self.battery_monitor.tick(
             &self.telemetry,
@@ -2661,9 +2678,21 @@ impl Render for MissionPlanner {
         // and its blocking commands' answers; the page object disposed with its screen.
         self.accel_calibration
             .tick(&self.telemetry, &view, on_setup);
-        // The older Frame Type page's FRAME writes, one at a time.
+        // The older Frame Type page's FRAME writes, one at a time, and its Default Settings
+        // control's fetches and ParamCompare writes; a write or fetch that failed is said on the
+        // status line (the owner's ruling of 2026-09-25).
+        self.frame_type_legacy.dispatch();
         self.frame_type_legacy
             .tick(&self.telemetry, &view, on_setup);
+        if let Some(status) = self.frame_type_legacy.take_link_errors() {
+            self.file_status = Some(status);
+        }
+        // The Secure page object let go with its screen; what its handlers threw - the C#'s
+        // unhandled-exception box - said on the status line.
+        self.secure.tick(&view, on_setup);
+        if let Some(status) = self.secure.take_thrown() {
+            self.file_status = Some(status);
+        }
         // ---- end Mandatory Hardware pages ----
         // Optional Hardware pages: their page objects, timers, boxes and writes.
         self.optional_tick(&view, window);
@@ -3032,11 +3061,7 @@ impl Render for MissionPlanner {
             // ---- Mandatory Hardware pages ----
             config::accel_calibration::record_facts(&self.accel_calibration, &view);
             config::frame_type_legacy::record_facts(&self.frame_type_legacy, &view);
-            config::secure::record_facts(
-                self.setup_list
-                    .page()
-                    .is_some_and(|entry| entry.class == "ConfigSecureAP"),
-            );
+            config::secure::record_facts(&self.secure);
             // ---- end Mandatory Hardware pages ----
             // ---- Basic Tuning / Advanced ----
             config::basic_tuning::record_facts(
@@ -3393,6 +3418,12 @@ impl Render for MissionPlanner {
                 ))
                 .children(config::frame_type_legacy::overlay(
                     &self.frame_type_legacy,
+                    window,
+                    cx,
+                ))
+                .children(config::secure::overlay(
+                    &self.secure,
+                    &self.secure_focus,
                     window,
                     cx,
                 ))

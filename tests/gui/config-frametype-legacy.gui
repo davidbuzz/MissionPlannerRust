@@ -45,6 +45,13 @@ expect config.framelegacy.checked none
 expect config.framelegacy.sent 0
 expect config.framelegacy.pending 0
 expect config.framelegacy.message none
+# Its Default Settings control (Controls/DefaultSettings.cs) loads with the page's first showing:
+# never shown, it has asked GitHub for nothing, and reads as the Designer leaves it.
+expect config.framelegacy.defaults Loading
+expect config.framelegacy.defaults.loaded false
+expect config.framelegacy.defaults.files 0
+expect config.framelegacy.defaults.enabled false
+expect config.framelegacy.defaults.compare none
 
 # Frame Type opens the newer page; the older one stays as it was.
 click setup-page-ConfigFrameClassType

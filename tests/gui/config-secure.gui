@@ -6,12 +6,16 @@
 #
 # The claims: the page is listed, shows the Designer's two groups - "Do Only Once" with Generate
 # Key, "Files" with Private Key, BootLoader and Firmware and the three text boxes beside them - and
-# every button is disabled. Each of the four handlers is Ed25519 key generation, key reading or
-# signing (ConfigSecureAP.cs:30-111, SignedFW.cs), done in the C# by BouncyCastle; this application
-# has no Ed25519 implementation, so nothing on the page can be pressed. The script clicks none of
-# them; config/secure.rs's tests hold the controls to the Designer and each handler to Ed25519.
+# each button runs its handler (ConfigSecureAP.cs:30-111, SignedFW.cs): BootLoader with no key
+# throws, which is said on the status line; Generate Key saves the key as PEM and the two .dat
+# files and warns; Private Key reads the .dat back; BootLoader and Firmware then save signed copies
+# beside the files. The file dialogs are typed paths. The files are the fixtures of
+# testdata/secure, copied to /tmp, where the signed copies and the key are written; the unit tests
+# in crates/mp-firmware/src/signed.rs hold the signing to Mission Planner's own output.
 
 env XDG_DATA_HOME $WORK
+setup cp testdata/secure/bl.bin /tmp/mpr-gui-secure-bl.bin
+setup cp testdata/secure/unsigned.apj /tmp/mpr-gui-secure-fw.apj
 
 screen setup
 window 1600x1200
@@ -27,8 +31,55 @@ expect config.secure.active true
 expect config.secure.groups Do Only Once,Files
 expect config.secure.buttons Generate Key,Private Key,BootLoader,Firmware
 expect config.secure.boxes txt_pubkey,txt_bl,txt_fwapj
-expect config.secure.buttons.enabled false
-expect config.secure.disabled ~ Ed25519
+expect config.secure.buttons.enabled true
+expect config.secure.key false
+expect config.secure.pubkey none
+
+# BootLoader with no key: the path is shown, and CreateSignedBL's NullReferenceException - the
+# C#'s unhandled-exception box - is on the status line.
+click secure-but_bootloader
+expect config.secure.dialog Open
+type /tmp/mpr-gui-secure-bl.bin
+key Return
+expect config.secure.dialog none
+expect config.secure.bl /tmp/mpr-gui-secure-bl.bin
+expect status ~ NullReferenceException
+expect config.secure.message none
+
+# Generate Key: the key made, saved where the Save As dialog says - .pem added to a name without
+# an extension - with the two .dat files beside it, the public key shown, and the warning.
+click secure-but_generatekey
+expect config.secure.dialog Save As
+expect config.secure.key true
+type /tmp/mpr-gui-secure-key
+key Return
+expect config.secure.dialog none
+expect config.secure.written ~ /tmp/mpr-gui-secure-key.pem
+expect config.secure.written ~ /tmp/mpr-gui-secure-key_private_key.dat
+expect config.secure.written ~ /tmp/mpr-gui-secure-key_public_key.dat
+expect config.secure.pubkey ~ =
+expect config.secure.message Protect your private key, if lost there is no method to get it back.
+click secure-message-ok
+expect config.secure.message none
+
+# Private Key reads the .dat back.
+click secure-but_privkey
+expect config.secure.dialog Open
+type /tmp/mpr-gui-secure-key_private_key.dat
+key Return
+expect config.secure.key true
+expect config.secure.pubkey ~ =
+
+# BootLoader and Firmware, signed beside themselves.
+click secure-but_bootloader
+type /tmp/mpr-gui-secure-bl.bin
+key Return
+expect config.secure.written /tmp/mpr-gui-secure-bl-signed.bin
+click secure-but_firmware
+type /tmp/mpr-gui-secure-fw.apj
+key Return
+expect config.secure.fwapj /tmp/mpr-gui-secure-fw.apj
+expect config.secure.written /tmp/mpr-gui-secure-fw-signed.apj
 
 # Another page - the Optional Hardware heading, which fetches nothing - and Secure is no longer the
 # page showing.

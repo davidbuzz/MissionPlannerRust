@@ -1388,8 +1388,14 @@ fading over 300 ms as `ConfigMount.cs:32-33, 330-335` does, the `InputBox` answe
 C#'s `InputBox<title><prompt>` keys, Battery Monitor's Sensor and HW Ver combos taking typing and
 the shared drop-down, its calibration boxes validating on leave as the Designer wires no `Validating`
 (a defect in finished code), write failures on the status line through `SetQueue::advance_split`;
-pictures stay named boxes as on Parachute and OSD, which the coordinator accepts for Done; FailSafe,
-Frame Type and Secure with a second agent), the calibration golden vectors beyond `MagCalib.cs` (D13; `MagCalib.cs` itself is ported,
+pictures stay named boxes as on Parachute and OSD, which the coordinator accepts for Done; FailSafe and
+Secure made whole and Frame Type's Default Settings group ported by a second agent the same day -
+FailSafe on the shared number control with typing, the out-of-range question and the `.resx` tooltips,
+its Battery numbers starting at the Designer's 13.1; `Controls/DefaultSettings.cs` over
+`mp_firmware::github` (the `Tools/Frame_params` listing) into ParamCompare; Secure's four buttons over
+`mp_firmware::signed`, the Ed25519 through `ring` 0.17 (already in the binary via ureq/rustls; a
+dependency decision the coordinator took - the key, PEM and signature match `SignedFW.cs` run under
+mono for a fixed seed, fixtures under `testdata/secure/`); Frame Type stays Partial for its pictures), the calibration golden vectors beyond `MagCalib.cs` (D13; `MagCalib.cs` itself is ported,
 2026-09-25: `crates/mp-calibration/src/magcalib.rs`, class D on `levenberg-marquardt` over alglib's
 own central-difference Jacobian, `headless-planner magcal <log>`, fixtures under `testdata/magcal/` - the
 logs here give one fittable set, from a SITL vehicle standing still; a recording of the bench

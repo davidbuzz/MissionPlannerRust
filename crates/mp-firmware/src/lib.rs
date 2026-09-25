@@ -16,9 +16,11 @@
 pub mod detect;
 pub mod firmware;
 pub mod flow;
+pub mod github;
 pub mod legacy;
 pub mod manifest;
 pub mod protocol;
+pub mod signed;
 pub mod uploader;
 
 pub use detect::{Boards, Detected, DeviceInfo, detect_board, match_ports};

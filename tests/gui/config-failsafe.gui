@@ -4,15 +4,17 @@
 # ConfigFailSafe.cs:24-89), shows what the vehicle holds, and a change to the throttle failsafe
 # combo box is written to the vehicle when it is made - MavlinkComboBox's SelectedIndexChanged
 # calls setParam (Controls/MavlinkComboBox.cs:169-199), there is no save button - and the vehicle
-# echoes the new value. The value is put back at the end.
+# echoes the new value; a number typed or stepped is written 300 ms later, and one typed above
+# its maximum asks first. The values are put back at the end.
 #
 # Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm, which sets
 # FS_THR_ENABLE 1; the battery and GCS failsafes are at the firmware's defaults (0). Run as
 #
 #   tools/gui-test.sh tests/gui/config-failsafe.gui -- tcp:127.0.0.1:5760
 #
-# A run that stops half way leaves FS_THR_ENABLE at 3; the next run's first expectations fail,
-# its restore step still writes 1, and the run after that passes.
+# A run that stops half way leaves FS_THR_ENABLE at 3, BATT_LOW_VOLT at 10.8 or 10.7 or
+# FS_THR_VALUE at 1100; the next run's first expectations fail, its restore steps still write 1,
+# 10.5 and 975, and the run after that passes.
 
 screen params
 window 1600x1200
@@ -84,6 +86,58 @@ settle 3
 expect config.failsafe.throttle 1
 expect config.failsafe.write FS_THR_ENABLE 1 accepted
 expect config.failsafe.throttle.vehicle 1
+
+# The low battery voltage, typed: a click gives the box the focus, Enter reads the text, and
+# MavlinkNumericUpDown writes it 300 ms later (Controls/MavlinkNumericUpDown.cs:133-180). The
+# write is the float, so the vehicle echoes 10.8 as 10.800000190734863.
+expect config.failsafe.voltage 10.5
+expect config.failsafe.voltage.enabled true
+click failsafe-BATT_LOW_VOLT
+expect config.failsafe.editing BATT_LOW_VOLT
+key ctrl+u
+type 10.8
+key Return
+settle 2
+expect config.failsafe.voltage 10.8
+expect config.failsafe.write ~ BATT_LOW_VOLT 10.8
+expect config.failsafe.write ~ accepted
+expect config.failsafe.voltage.vehicle ~ 10.8
+
+# The arrows step by the documented 0.1: down to 10.7, and the timer writes it.
+click failsafe-BATT_LOW_VOLT-down
+settle 2
+expect config.failsafe.voltage 10.7
+expect config.failsafe.voltage.vehicle ~ 10.7
+
+# A throttle pwm typed above FS_THR_VALUE's documented 1100 asks "Out of range" first
+# (MavlinkNumericUpDown.cs:136-145); No leaves the box held at 1100, which the handler then
+# writes.
+expect config.failsafe.pwm 975
+click failsafe-FS_THR_VALUE
+expect config.failsafe.editing FS_THR_VALUE
+key ctrl+u
+type 1150
+key Return
+expect config.failsafe.question ~ FS_THR_VALUE Value out of range
+click failsafe-question-no
+expect config.failsafe.question none
+settle 2
+expect config.failsafe.pwm 1100
+expect config.failsafe.pwm.vehicle 1100
+
+# And both back.
+click failsafe-FS_THR_VALUE
+key ctrl+u
+type 975
+key Return
+click failsafe-BATT_LOW_VOLT
+key ctrl+u
+type 10.5
+key Return
+settle 2
+expect config.failsafe.pwm.vehicle 975
+expect config.failsafe.voltage.vehicle 10.5
+expect config.failsafe.message none
 
 # Choosing another page deactivates this one (BackstageView.cs:453-464), and the page is closed.
 click setup-page-ConfigFlightModes

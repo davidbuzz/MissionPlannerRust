@@ -12,30 +12,47 @@
 //! whose parameter the vehicle does not have stays hidden, which is how one page serves a copter
 //! (`FS_THR_ENABLE`, `FS_GCS_ENABLE`) and a plane (`THR_FAILSAFE`, `FS_SHORT_ACTN`, ...) at once.
 //!
+//! The numbers are the shared `MavlinkNumericUpDown` ([`Number`]): typed into or stepped by their
+//! arrows, the typed text read when the box is left, on Enter and before an arrow, and a typed
+//! value above the maximum asking "Out of range" first (`Controls/MavlinkNumericUpDown.cs:133-161`).
+//! The `.resx`'s tooltips are on the controls that have one.
+//!
 //! The geometry is the `.resx`'s: every control at its `Location` and `Size` inside a 688 x 482
 //! page, in its group box. The colours are this application's.
 //!
+//! A write the vehicle does not take - `Strings.ErrorSetValueFailed` in an error box in the C# -
+//! goes on the status line instead, by the owner's ruling of 2026-09-25 that an error the window
+//! can show as state gets no message box; the props warning `Activate` shows and the out-of-range
+//! question keep their boxes.
+//!
 //! What is not ported, and why:
 //!
-//! * typing a number: gpui has no numeric up-down, so the up and down arrows are the parameter
-//!   editor's `-` and `+` steps, and the value cannot be typed. `MavlinkNumericUpDown`'s
-//!   out-of-range prompt only fires on a typed value, so it goes with it;
 //! * `mavlinkCheckBoxfs_gps_enable`, commented out in the C# "at randys request"
 //!   (`ConfigFailSafe.cs:75-76`), and the `FS_SHORT_TIMEOUT`/`FS_LONG_TIMEOUT` a plane has, which
-//!   the page never binds.
+//!   the page never binds;
+//! * the numbers' mouse wheel, as on every page that uses the shared control.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
 use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-use gpui::{AnyElement, Context, Div, SharedString, Window, div, prelude::*, px, rgb};
-use mp_link::requests::RequestOutcome;
+use gpui::{
+    AnyElement, AnyView, Context, Div, FocusHandle, KeyDownEvent, SharedString, Window, div,
+    prelude::*, px, rgb,
+};
 use mp_params::ParamMeta;
 use mp_vehicle::{VehicleFamily, VehicleState};
 
 use crate::MissionPlanner;
+use crate::config::basic_tuning::Tip;
+use crate::config::extra_setup::{link_error, status_words};
+use crate::config::servo_output::{
+    Designer, ERROR_TITLE, NUMERIC_DEFAULTS, Number, NumberHandlers, OUT_OF_RANGE_TITLE, Question,
+    Setup, Writes, modal, number_box,
+};
+pub use crate::config::servo_output::{Message, Write};
 use crate::telemetry::{Telemetry, TelemetryView};
 use crate::ui::{action, panel, theme};
 
@@ -49,15 +66,6 @@ pub const PROPS_WARNING: &str = "Ensure your props are not on the Plane/Quad";
 
 /// That message's title.
 const PROPS_TITLE: &str = "FailSafe";
-
-/// `Strings.ERROR`, the title of a failed write's message.
-/// `// C#: ExtLibs/Strings/Strings.resx:130-132`
-const ERROR_TITLE: &str = "Error";
-
-/// How long a number waits after its last change before it is written: `MavlinkNumericUpDown`
-/// restarts a 300 ms timer on every change and writes when it fires.
-/// `// C#: Controls/MavlinkNumericUpDown.cs:154-180`
-const WRITE_DELAY: Duration = Duration::from_millis(300);
 
 /// `lbl_currentmode`'s text until the vehicle's mode first reaches it.
 /// `// C#: GCSViews/ConfigurationView/ConfigFailSafe.resx lbl_currentmode.Text`
@@ -73,47 +81,37 @@ const BAR_MAXIMUM: i64 = 2000;
 /// `// C#: GCSViews/ConfigurationView/ConfigFailSafe.resx horizontalProgressBar1-16.Location`
 const BAR_ROWS: [f32; 8] = [19.0, 70.0, 121.0, 172.0, 222.0, 273.0, 324.0, 375.0];
 
-/// A write the page asks for: `MainV2.comPort.setParam(name, value)`, and the message the C#
-/// shows if it fails.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Write {
-    /// The parameter.
-    pub param: &'static str,
-    /// The value, as the C# computes it.
-    pub value: f64,
-    /// What the C# shows when the set fails.
-    pub failure: String,
-}
+/// The Battery box's three numbers as the Designer leaves them: `DecimalPlaces = 1`, `Value` 13.1
+/// (`new decimal(131, 0, 0, 65536)`), and `NumericUpDown`'s own `Minimum` 0 and `Maximum` 100 -
+/// the Designer's `Min` and `Max` are the control's own properties, which `setup` replaces. What
+/// a box whose parameter the vehicle lacks goes on showing.
+/// `// C#: GCSViews/ConfigurationView/ConfigFailSafe.Designer.cs:133-151, 261-277, 603-619`
+const BATTERY_BOX: Designer = Designer {
+    minimum: 0.0,
+    maximum: 100.0,
+    value: 13.1,
+    decimals: 1,
+};
 
-impl Write {
-    /// A combo box's write. Its failure text is not `Strings.ErrorSetValueFailed` but its own,
-    /// with an exclamation mark. `// C#: Controls/MavlinkComboBox.cs:180-183, 197`
-    fn combo(param: &'static str, value: f64) -> Self {
-        Self {
-            param,
-            value,
-            failure: format!("Set {param} Failed!"),
-        }
-    }
-
-    /// A check box's or a number's write, which fails with `Strings.ErrorSetValueFailed`,
-    /// "Set {0} Failed". `// C#: Controls/MavlinkCheckBox.cs:118, 134; ExtLibs/Strings/Strings.resx:171-173`
-    fn other(param: &'static str, value: f64) -> Self {
-        Self {
-            param,
-            value,
-            failure: format!("Set {param} Failed"),
-        }
-    }
-}
-
-/// A modal message box, `CustomMessageBox.Show(text, title)`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Message {
-    /// The caption.
-    pub title: &'static str,
-    /// The text.
-    pub text: String,
+/// The `.resx`'s tooltips (`toolTip1`), by control.
+/// `// C#: GCSViews/ConfigurationView/ConfigFailSafe.resx:267-268, 303-304, 342-343, 381-382,
+/// 420-422, 454-455, 487-488, 526-527, 559-560`
+pub mod tips {
+    /// `mavlinkNumericUpDownlow_voltage`.
+    pub const LOW_VOLTAGE: &str = "Low Voltage Trigger";
+    /// `mavlinkCheckBoxlong_fs` and `mavlinkCheckBoxshort_fs`.
+    pub const SHORT_LONG: &str = "Off, no Action, On, RTL";
+    /// `mavlinkCheckBoxgcs_fs`.
+    pub const PLANE_GCS: &str = "Enable Failsafe on GCS loss of communication";
+    /// `mavlinkCheckBoxthr_fs_action`.
+    pub const THROTTLE_ACTION: &str = "Arducopter Auto: Off, no Action, On, RTL\nArducopter Other: \
+                                       if have gps, RTL, Otherwise Land";
+    /// `mavlinkNumericUpDownfs_thr_value` and `mavlinkNumericUpDownthr_fs_value`.
+    pub const PWM: &str = "Trigger Throttle Pwm";
+    /// `mavlinkCheckBoxthr_fs`.
+    pub const THROTTLE: &str = "Enable Failsafe on low throttle pwm";
+    /// `mavlinkComboBox_fs_thr_enable`.
+    pub const THROTTLE_MODE: &str = "Failsafe mode on low pwm";
 }
 
 /// A `MavlinkComboBox` set up with an option list: `setup(List<KeyValuePair<int, string>>, ...)`.
@@ -305,181 +303,68 @@ pub fn decimal_of(value: f32) -> (i64, u32) {
     (mantissa, scale)
 }
 
-/// Re-expresses a mantissa at more decimal places.
-fn rescale(mantissa: i64, from: u32, to: u32) -> i64 {
-    mantissa.saturating_mul(10_i64.saturating_pow(to.saturating_sub(from)))
-}
-
-/// A `MavlinkNumericUpDown`, set up: bounds, step and value held as the C#'s `decimal`s, in units
-/// of its last decimal place.
-/// `// C#: Controls/MavlinkNumericUpDown.cs:43-122`
-#[derive(Debug, Clone, PartialEq)]
+/// One of the page's `MavlinkNumericUpDown`s: the shared control, which types, steps, asks
+/// "Out of range" and writes on its timer, and its `Visible` - which the `.resx` sets false for
+/// the two throttle numbers until `setup` finds their parameter.
+/// `// C#: Controls/MavlinkNumericUpDown.cs:43-181`
+#[derive(Debug)]
 pub struct Numeric {
-    /// `ParamName`.
-    pub param: &'static str,
+    /// The control.
+    pub number: Number,
     /// Whether the vehicle has the parameter, so `setup` bound the box to it.
     pub bound: bool,
     /// `Visible`.
     pub shown: bool,
-    /// `Enabled`.
-    pub enabled: bool,
-    /// `Minimum`.
-    pub minimum: f64,
-    /// `Maximum`.
-    pub maximum: f64,
-    /// `DecimalPlaces`.
-    pub decimals: u32,
-    /// `Increment`, in units of the last decimal place.
-    increment: i64,
-    /// `Value`, in units of the last decimal place.
-    value: i64,
-    /// `_scale`: the parameter is the shown value times this.
-    scale: f32,
-    /// When the value last changed and has not yet been written: the running timer.
-    changed: Option<Instant>,
-}
-
-/// How a number is set up, in the order `setup`'s arguments come.
-struct NumericSetup {
-    /// `Min`.
-    minimum: f32,
-    /// `Max`.
-    maximum: f32,
-    /// `Scale`.
-    scale: f32,
-    /// `Increment`.
-    increment: f32,
-    /// The designer's `DecimalPlaces`, which `setup` compares the documented increment against.
-    designer_decimals: u32,
-    /// The designer's `Visible`, which `setup` leaves alone for a parameter the vehicle lacks.
-    designer_shown: bool,
 }
 
 impl Numeric {
-    /// `setup(Min, Max, Scale, Increment, paramname, paramlist)`.
+    /// The box as the Designer leaves it, named for its parameter but never set up: what
+    /// `BATT_LOW_TIMER`'s box is on a vehicle without it (`ConfigFailSafe.cs:70-73`).
+    fn designer(designer: Designer, designer_shown: bool, param: &'static str) -> Self {
+        let mut number = Number::new(designer);
+        param.clone_into(&mut number.param);
+        Self {
+            number,
+            bound: false,
+            shown: designer_shown,
+        }
+    }
+
+    /// `setup(Min, Max, Scale, Increment, paramname, paramlist)` on the box the Designer made. A
+    /// parameter the vehicle has makes it visible and enabled; one it lacks leaves `Visible` as
+    /// the `.resx` has it and disables it.
+    /// `// C#: Controls/MavlinkNumericUpDown.cs:49-122`
     fn setup(
-        how: &NumericSetup,
+        designer: Designer,
+        designer_shown: bool,
+        how: Setup,
         param: &'static str,
         parameters: &[(String, f64)],
         lookup: Lookup,
     ) -> Self {
-        let meta = lookup(param);
-        // The documented range wins over the one passed in. `// C#: :69-75`
-        let (mut minimum, mut maximum) = meta
-            .and_then(|meta| meta.range)
-            .unwrap_or((f64::from(how.minimum), f64::from(how.maximum)));
-        // The documented increment wins only when it is larger than the designer's decimal
-        // places - a comparison of a step against a count, and it is what the C# does. `// C#: :80-84`
-        let mut increment = how.increment;
-        if let Some(documented) = meta.and_then(|meta| meta.increment)
-            && documented > f64::from(how.designer_decimals)
-        {
-            // The C# reads it as a float.
-            #[allow(clippy::cast_possible_truncation)]
-            let documented = documented as f32;
-            increment = documented;
-        }
-        let (mut step, mut decimals) = decimal_of(increment);
-        let mut units = 0;
-        let value = value_of(parameters, param);
-        let (shown, enabled) = match value {
-            Some(value) => {
-                // `(decimal)((float)paramlist[ParamName] / _scale)`. `// C#: :101-111`
-                #[allow(clippy::cast_possible_truncation)]
-                let shown_value = value as f32 / how.scale;
-                let (mantissa, places) = decimal_of(shown_value);
-                if places > decimals {
-                    step = rescale(step, decimals, places);
-                    decimals = places;
-                }
-                units = rescale(mantissa, places, decimals);
-                let exact = f64::from(shown_value);
-                if exact < minimum {
-                    minimum = exact;
-                }
-                if exact > maximum {
-                    maximum = exact;
-                }
-                (true, true)
-            }
-            None => (how.designer_shown, false),
-        };
-        Self {
-            param,
-            bound: value.is_some(),
-            shown,
-            enabled,
-            minimum,
-            maximum,
-            decimals,
-            increment: step,
-            value: units,
-            scale: how.scale,
-            changed: None,
-        }
+        let mut numeric = Self::designer(designer, designer_shown, param);
+        numeric.number.setup(how, param, parameters, lookup);
+        numeric.bound = value_of(parameters, param).is_some();
+        numeric.shown = numeric.bound || designer_shown;
+        numeric
     }
 
-    /// `Value`.
+    /// `ParamName`.
     #[must_use]
-    pub fn value(&self) -> f64 {
-        #[allow(clippy::cast_precision_loss)]
-        let units = self.value as f64;
-        units / 10_f64.powi(i32::try_from(self.decimals).unwrap_or(0))
+    pub fn param(&self) -> &str {
+        &self.number.param
     }
 
-    /// The text the box shows: `Value` to `DecimalPlaces` places.
+    /// `Value` as the box shows it.
     #[must_use]
     pub fn text(&self) -> String {
-        format!("{:.*}", self.decimals as usize, self.value())
+        self.number.text()
     }
 
-    /// The up or down arrow: one `Increment`, held to `Minimum` and `Maximum`. Returns whether
-    /// the value changed, which is when `ValueChanged` starts the write timer.
-    fn step(&mut self, up: bool, now: Instant) -> bool {
-        if !self.enabled {
-            return false;
-        }
-        let power = 10_f64.powi(i32::try_from(self.decimals).unwrap_or(0));
-        #[allow(clippy::cast_possible_truncation)]
-        let (lowest, highest) = (
-            (self.minimum * power).ceil() as i64,
-            (self.maximum * power).floor() as i64,
-        );
-        let next = if up {
-            self.value.saturating_add(self.increment).min(highest)
-        } else {
-            self.value.saturating_sub(self.increment).max(lowest)
-        };
-        if next == self.value {
-            return false;
-        }
-        self.value = next;
-        self.changed = Some(now);
-        true
-    }
-
-    /// What the timer writes: `(float)base.Value * (float)_scale`. `// C#: :169`
+    /// `Enabled`.
     #[must_use]
-    pub fn written(&self) -> f64 {
-        #[allow(clippy::cast_possible_truncation)]
-        let value = self.value() as f32;
-        f64::from(value * self.scale)
-    }
-
-    /// The write, once the timer has run out.
-    fn due(&mut self, now: Instant) -> Option<Write> {
-        let changed = self.changed?;
-        if now.duration_since(changed) < WRITE_DELAY {
-            return None;
-        }
-        self.changed = None;
-        Some(Write::other(self.param, self.written()))
-    }
-
-    /// The write, now, whatever the timer says.
-    fn flush(&mut self) -> Option<Write> {
-        self.changed.take()?;
-        Some(Write::other(self.param, self.written()))
+    pub const fn enabled(&self) -> bool {
+        self.number.enabled
     }
 }
 
@@ -487,7 +372,7 @@ impl Numeric {
 /// a label and a number. The panel is the number's `enabledisable` control, which `setup` makes
 /// visible either way and enables only for a parameter the vehicle has.
 /// `// C#: Controls/MavlinkNumericUpDown.cs:124-131`
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
 pub struct Row {
     /// The label: `label4`, `label5`, `label6`.
     pub label: &'static str,
@@ -505,7 +390,7 @@ impl Row {
         Self {
             label,
             shown: true,
-            enabled: number.enabled,
+            enabled: number.enabled(),
             number,
         }
     }
@@ -553,7 +438,7 @@ pub enum NumberId {
 }
 
 /// Every control bound to a parameter, as `Activate` leaves them.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
 pub struct Controls {
     /// `PNL_low_bat`.
     pub low_voltage: Row,
@@ -602,23 +487,23 @@ impl Controls {
             parameters,
             lookup,
         );
-        // `// C#: :43`; the designer sets no DecimalPlaces, so 0, and hides it.
+        // `// C#: :43`; the Designer gives the box `NumericUpDown`'s defaults and the `.resx`
+        // hides it (`ConfigFailSafe.Designer.cs:193-200`, `.resx:457-458`).
         let throttle_pwm = Numeric::setup(
-            &NumericSetup {
+            NUMERIC_DEFAULTS,
+            false,
+            Setup {
                 minimum: 800.0,
                 maximum: 1200.0,
                 scale: 1.0,
                 increment: 1.0,
-                designer_decimals: 0,
-                designer_shown: false,
             },
             "FS_THR_VALUE",
             parameters,
             lookup,
         );
         // The three generations of the low-voltage name, oldest first, with the newest as the
-        // name used when the vehicle has none of them. `// C#: :45-59`; designer
-        // `DecimalPlaces = 1` (`ConfigFailSafe.Designer.cs:135`).
+        // name used when the vehicle has none of them. `// C#: :45-59`
         let low_voltage_name = if has("LOW_VOLT") {
             "LOW_VOLT"
         } else if has("FS_BATT_VOLTAGE") {
@@ -629,30 +514,30 @@ impl Controls {
         let low_voltage = Row::setup(
             "Low Battery",
             Numeric::setup(
-                &NumericSetup {
+                BATTERY_BOX,
+                true,
+                Setup {
                     minimum: 6.0,
                     maximum: 99.0,
                     scale: 1.0,
                     increment: 0.1,
-                    designer_decimals: 1,
-                    designer_shown: true,
                 },
                 low_voltage_name,
                 parameters,
                 lookup,
             ),
         );
-        // `// C#: :61-68`; designer `DecimalPlaces = 1` (`ConfigFailSafe.Designer.cs:263`).
+        // `// C#: :61-68`
         let reserved_mah = Row::setup(
             "Reserved MAH",
             Numeric::setup(
-                &NumericSetup {
+                BATTERY_BOX,
+                true,
+                Setup {
                     minimum: 0.0,
                     maximum: 99999.0,
                     scale: 1.0,
                     increment: 1.0,
-                    designer_decimals: 1,
-                    designer_shown: true,
                 },
                 if has("FS_BATT_MAH") {
                     "FS_BATT_MAH"
@@ -664,28 +549,30 @@ impl Controls {
             ),
         );
         // Set up only when the vehicle has it; otherwise the row keeps the `.resx`'s hidden
-        // panel. `// C#: :70-73`; designer `DecimalPlaces = 1` (`ConfigFailSafe.Designer.cs:605`).
-        let timer = Numeric::setup(
-            &NumericSetup {
-                minimum: 0.0,
-                maximum: 120.0,
-                scale: 1.0,
-                increment: 1.0,
-                designer_decimals: 1,
-                designer_shown: true,
-            },
-            "BATT_LOW_TIMER",
-            parameters,
-            lookup,
-        );
+        // panel and the Designer's box. `// C#: :70-73`
         let low_timer = if has("BATT_LOW_TIMER") {
-            Row::setup("Low Timer", timer)
+            Row::setup(
+                "Low Timer",
+                Numeric::setup(
+                    BATTERY_BOX,
+                    true,
+                    Setup {
+                        minimum: 0.0,
+                        maximum: 120.0,
+                        scale: 1.0,
+                        increment: 1.0,
+                    },
+                    "BATT_LOW_TIMER",
+                    parameters,
+                    lookup,
+                ),
+            )
         } else {
             Row {
                 label: "Low Timer",
                 shown: false,
                 enabled: true,
-                number: timer,
+                number: Numeric::designer(BATTERY_BOX, true, "BATT_LOW_TIMER"),
             }
         };
         // `// C#: :77`
@@ -696,13 +583,13 @@ impl Controls {
         // `// C#: :79-85`
         let plane_throttle = Check::setup(1.0, 0.0, "THR_FAILSAFE", parameters);
         let plane_throttle_pwm = Numeric::setup(
-            &NumericSetup {
+            NUMERIC_DEFAULTS,
+            false,
+            Setup {
                 minimum: 800.0,
                 maximum: 1200.0,
                 scale: 1.0,
                 increment: 1.0,
-                designer_decimals: 0,
-                designer_shown: false,
             },
             "THR_FS_VALUE",
             parameters,
@@ -792,14 +679,27 @@ impl Controls {
         }
     }
 
+    /// Whether a number takes the focus and its arrows: shown, in a panel that is not hidden,
+    /// and enabled.
+    fn number_live(&self, id: NumberId) -> bool {
+        let row_shown = match id {
+            NumberId::LowVoltage => self.low_voltage.shown,
+            NumberId::ReservedMah => self.reserved_mah.shown,
+            NumberId::LowTimer => self.low_timer.shown,
+            NumberId::ThrottlePwm | NumberId::PlaneThrottlePwm => true,
+        };
+        let number = self.number(id);
+        row_shown && number.shown && number.enabled()
+    }
+
     /// Every number, for the timers.
-    fn numbers_mut(&mut self) -> [&mut Numeric; 5] {
+    fn numbers_mut(&mut self) -> [&mut Number; 5] {
         [
-            &mut self.low_voltage.number,
-            &mut self.reserved_mah.number,
-            &mut self.low_timer.number,
-            &mut self.throttle_pwm,
-            &mut self.plane_throttle_pwm,
+            &mut self.low_voltage.number.number,
+            &mut self.reserved_mah.number.number,
+            &mut self.low_timer.number.number,
+            &mut self.throttle_pwm.number,
+            &mut self.plane_throttle_pwm.number,
         ]
     }
 
@@ -943,13 +843,6 @@ impl ModeColour {
     }
 }
 
-/// A write on its way to the vehicle.
-#[derive(Debug, Clone)]
-struct InFlight {
-    id: mp_link::RequestId,
-    write: Write,
-}
-
 /// The page, and everything it keeps while it is open.
 #[derive(Debug, Default)]
 pub struct FailSafe {
@@ -957,12 +850,14 @@ pub struct FailSafe {
     controls: Option<Controls>,
     /// The combo box whose list is dropped down.
     dropdown: Option<ComboId>,
+    /// The number being typed into: the one with the keyboard focus.
+    editing: Option<NumberId>,
+    /// A number's "Out of range" question, modal until it is answered.
+    question: Option<(NumberId, Question)>,
     /// Message boxes, the first showing. Modal, as `CustomMessageBox.Show` is.
     messages: VecDeque<Message>,
-    /// Writes the link is carrying.
-    in_flight: Vec<InFlight>,
-    /// How the last write ended, for a test to read.
-    last_write: Option<String>,
+    /// Writes the link is carrying, and how the last ended.
+    writes: Writes,
     /// `lbl_currentmode.Text`, once the vehicle's mode has reached it.
     mode: Option<String>,
     /// `lbl_currentmode.ForeColor`.
@@ -988,16 +883,28 @@ impl FailSafe {
         self.messages.front()
     }
 
+    /// The "Out of range" question showing, if one is.
+    #[must_use]
+    pub fn question(&self) -> Option<&Question> {
+        self.question.as_ref().map(|(_, question)| question)
+    }
+
     /// The combo box whose list is down.
     #[must_use]
     pub const fn dropdown(&self) -> Option<ComboId> {
         self.dropdown
     }
 
+    /// The number being typed into.
+    #[must_use]
+    pub const fn editing(&self) -> Option<NumberId> {
+        self.editing
+    }
+
     /// How the last write ended.
     #[must_use]
     pub fn last_write(&self) -> Option<&str> {
-        self.last_write.as_deref()
+        self.writes.last()
     }
 
     /// `lbl_currentmode`'s text.
@@ -1017,6 +924,8 @@ impl FailSafe {
     pub fn open(&mut self, parameters: &[(String, f64)], lookup: Lookup) {
         self.controls = Some(Controls::activate(parameters, lookup));
         self.dropdown = None;
+        self.editing = None;
+        self.question = None;
         self.mode = None;
         self.mode_colour = None;
         self.messages.push_back(Message {
@@ -1026,8 +935,13 @@ impl FailSafe {
     }
 
     /// Closes the page, returning what its number timers still had to write: the C#'s timers
-    /// outlive the page, so a change made just before leaving still reaches the vehicle.
-    pub fn close(&mut self) -> Vec<Write> {
+    /// outlive the page, so a change made just before leaving still reaches the vehicle. A number
+    /// being typed into loses the focus first, which reads its text; a question that raises has
+    /// no page left to show over, and is taken as No - the value held to the maximum, which the
+    /// handler then writes.
+    pub fn close(&mut self, now: Instant) -> Vec<Write> {
+        self.leave(now);
+        self.answer(false, now);
         let pending = self
             .controls
             .as_mut()
@@ -1035,12 +949,13 @@ impl FailSafe {
                 controls
                     .numbers_mut()
                     .into_iter()
-                    .filter_map(Numeric::flush)
+                    .filter_map(Number::flush)
                     .collect()
             })
             .unwrap_or_default();
         self.controls = None;
         self.dropdown = None;
+        self.editing = None;
         self.mode = None;
         self.mode_colour = None;
         pending
@@ -1072,17 +987,89 @@ impl FailSafe {
         let controls = self.controls.as_mut()?;
         let write = controls.check_mut(id).click()?;
         if id == CheckId::PlaneThrottle {
-            controls.plane_throttle_pwm.enabled =
+            controls.plane_throttle_pwm.number.enabled =
                 controls.plane_throttle.state == CheckState::Checked;
         }
         Some(write)
     }
 
-    /// Steps a number; the write follows once its timer runs out.
-    pub fn step(&mut self, id: NumberId, up: bool, now: Instant) -> bool {
-        self.controls
+    /// A number clicked into: the one being typed into before it loses the focus, which reads
+    /// its text, and this one takes it - if it is showing and enabled.
+    pub fn begin(&mut self, id: NumberId, now: Instant) {
+        if self.editing == Some(id) {
+            return;
+        }
+        self.leave(now);
+        self.dropdown = None;
+        if self
+            .controls
+            .as_ref()
+            .is_some_and(|controls| controls.number_live(id))
+        {
+            self.editing = Some(id);
+        }
+    }
+
+    /// The number being typed into loses the focus: `ValidateEditText` reads what was typed.
+    /// `// C#: Controls/MavlinkNumericUpDown.cs:133-161`
+    pub fn leave(&mut self, now: Instant) {
+        let Some(id) = self.editing.take() else {
+            return;
+        };
+        if let Some(question) = self
+            .controls
             .as_mut()
-            .is_some_and(|controls| controls.number_mut(id).step(up, now))
+            .and_then(|controls| controls.number_mut(id).number.commit(now))
+        {
+            self.question = Some((id, question));
+        }
+    }
+
+    /// A key for the number being typed into: the arrow keys step, Enter reads the text, the rest
+    /// is typing. Whether it was taken.
+    pub fn key(&mut self, event: &KeyDownEvent, now: Instant) -> bool {
+        let Some(id) = self.editing else {
+            return false;
+        };
+        let Some(controls) = self.controls.as_mut() else {
+            return false;
+        };
+        let (handled, question) = controls.number_mut(id).number.key(event, now);
+        if let Some(question) = question {
+            self.question = Some((id, question));
+        }
+        handled
+    }
+
+    /// A number's up or down arrow: the box takes the focus, the typed text is read, and it steps
+    /// one `Increment`; the write follows once its timer runs out.
+    /// `// C#: Controls/MavlinkNumericUpDown.cs:133-161`
+    pub fn step(&mut self, id: NumberId, up: bool, now: Instant) {
+        self.begin(id, now);
+        let Some(controls) = self.controls.as_mut() else {
+            return;
+        };
+        if !controls.number_live(id) {
+            return;
+        }
+        if let Some(question) = controls.number_mut(id).number.step(up, now) {
+            self.question = Some((id, question));
+        }
+    }
+
+    /// The "Out of range" question answered: Yes takes what was typed as the new maximum and the
+    /// value; either way the handler goes on to start the write timer.
+    /// `// C#: Controls/MavlinkNumericUpDown.cs:136-160`
+    pub fn answer(&mut self, yes: bool, now: Instant) {
+        let Some((id, question)) = self.question.take() else {
+            return;
+        };
+        if let Some(controls) = self.controls.as_mut() {
+            controls
+                .number_mut(id)
+                .number
+                .answer(&question, yes, now);
+        }
     }
 
     /// The numbers whose timers have run out.
@@ -1122,85 +1109,64 @@ impl FailSafe {
     /// Sends a write through the link's retrying set. With no vehicle to send to it has failed
     /// already, and says so as the C# does.
     pub fn issue(&mut self, telemetry: &Telemetry, write: Write) {
-        match telemetry.set_parameter_confirmed(write.param, write.value) {
-            Some(id) => self.in_flight.push(InFlight { id, write }),
-            None => self.failed(&write, "no vehicle"),
-        }
+        self.writes.issue(telemetry, write, &mut self.messages);
     }
 
-    /// A failed write: the C#'s message box.
-    fn failed(&mut self, write: &Write, why: &str) {
-        self.last_write = Some(format!("{} {} failed: {why}", write.param, write.value));
-        self.messages.push_back(Message {
-            title: ERROR_TITLE,
-            text: write.failure.clone(),
-        });
-    }
-
-    /// Reads back how each write the link is carrying ended.
-    fn settle(&mut self, telemetry: &Telemetry) {
-        let mut still = Vec::new();
-        for flight in std::mem::take(&mut self.in_flight) {
-            let Some(request) = telemetry.request(flight.id) else {
-                continue;
-            };
-            match request.outcome() {
-                None => still.push(flight),
-                Some(RequestOutcome::Accepted { value }) => {
-                    let echoed = value.map_or(flight.write.value, |value| value.as_f64());
-                    self.last_write = Some(format!("{} {echoed} accepted", flight.write.param));
-                }
-                // "not modified as same": the C#'s setParam returns true.
-                Some(RequestOutcome::Unchanged | RequestOutcome::Sent) => {
-                    self.last_write = Some(format!(
-                        "{} {} unchanged",
-                        flight.write.param, flight.write.value
-                    ));
-                }
-                Some(RequestOutcome::UnknownParameter) => {
-                    self.failed(&flight.write, "not on the vehicle");
-                }
-                Some(RequestOutcome::TimedOut) => self.failed(&flight.write, "timed out"),
-                Some(RequestOutcome::Rejected(result)) => {
-                    self.failed(&flight.write, &format!("rejected {result}"));
-                }
+    /// The C#'s error boxes for writes that failed, taken out of the queue: the status line's
+    /// words for the last of them, by the owner's ruling (the module's notes). The props warning
+    /// stays a box.
+    pub fn take_link_errors(&mut self) -> Option<String> {
+        let mut status = None;
+        self.messages.retain(|message| {
+            if link_error(message) {
+                status = Some(status_words(message));
+                false
+            } else {
+                true
             }
-        }
-        self.in_flight = still;
+        });
+        status
     }
 
     /// Once a frame. Leaving the setup screen closes the page, as leaving Initial Setup disposes
-    /// it; the timers that ran out are written, the writes in flight read back, and the mode's
-    /// colour kept as `timer_Tick`'s rebinding would keep it.
+    /// it; a number the focus has left is read, the timers that ran out are written, the writes
+    /// in flight read back, and the mode's colour kept as `timer_Tick`'s rebinding would keep it.
+    /// Returns the status line's words for a write that failed.
     /// `// C#: GCSViews/ConfigurationView/ConfigFailSafe.cs:95-110`
-    pub fn tick(&mut self, telemetry: &Telemetry, view: &TelemetryView, on_setup: bool) {
+    pub fn tick(
+        &mut self,
+        telemetry: &Telemetry,
+        view: &TelemetryView,
+        on_setup: bool,
+        focused: bool,
+    ) -> Option<String> {
         let now = Instant::now();
+        if self.editing.is_some() && !focused {
+            self.leave(now);
+        }
         let mut writes = if on_setup || !self.is_open() {
             Vec::new()
         } else {
-            self.close()
+            self.close(now)
         };
         writes.extend(self.due(now));
         for write in writes {
             self.issue(telemetry, write);
         }
-        self.settle(telemetry);
+        self.writes.settle(telemetry, &mut self.messages);
         if self.is_open()
             && let Some(state) = view.state.as_deref()
         {
-            let fs_thr_value = view
-                .parameters
-                .iter()
-                .find(|(name, _)| name == "FS_THR_VALUE")
-                .map(|(_, value)| *value);
+            let fs_thr_value = value_of(&view.parameters, "FS_THR_VALUE");
             self.observe_mode(&mode_text(state), radio_in(state, 3), fs_thr_value);
         }
+        self.take_link_errors()
     }
 
     /// The page's entry on the setup screen: opens it, or closes it again.
     pub fn toggle(&mut self, telemetry: &Telemetry) {
         if self.is_open() {
-            for write in self.close() {
+            for write in self.close(Instant::now()) {
                 self.issue(telemetry, write);
             }
         } else {
@@ -1224,7 +1190,13 @@ pub fn record_facts(failsafe: &FailSafe, view: &TelemetryView) {
         "config.failsafe.write",
         failsafe.last_write().unwrap_or("none"),
     );
-    record("config.failsafe.writes.pending", failsafe.in_flight.len());
+    record("config.failsafe.writes.pending", failsafe.writes.pending());
+    record(
+        "config.failsafe.question",
+        failsafe
+            .question()
+            .map_or_else(|| "none".to_owned(), Question::text),
+    );
 
     let vehicle = |name: &str| {
         value_of(&view.parameters, name)
@@ -1263,13 +1235,33 @@ pub fn record_facts(failsafe: &FailSafe, view: &TelemetryView) {
         let shown = number.filter(|number| number.bound);
         record(
             format!("config.failsafe.{key}.param"),
-            shown.map_or("none", |number| number.param),
+            shown.map_or("none", Numeric::param),
         );
         record(
             format!("config.failsafe.{key}"),
             shown.map_or_else(|| "none".to_owned(), Numeric::text),
         );
+        // What the box shows, typed text included.
+        record(
+            format!("config.failsafe.{key}.shown"),
+            shown.map_or("none", |number| number.number.shown()),
+        );
+        record(
+            format!("config.failsafe.{key}.enabled"),
+            shown.is_some_and(Numeric::enabled),
+        );
+        record(
+            format!("config.failsafe.{key}.vehicle"),
+            shown.map_or_else(|| "none".to_owned(), |number| vehicle(number.param())),
+        );
     };
+    record(
+        "config.failsafe.editing",
+        failsafe
+            .editing()
+            .and_then(|id| controls.map(|controls| controls.number(id).param().to_owned()))
+            .unwrap_or_else(|| "none".to_owned()),
+    );
     number(
         "voltage",
         controls.map(|controls| &controls.low_voltage.number),
@@ -1350,6 +1342,21 @@ fn at(x: f32, y: f32, width: f32, height: f32) -> Div {
         .h(px(height))
 }
 
+/// A `ToolTip` over an element, as `toolTip1.SetToolTip` gives one: shown while it is enabled,
+/// as WinForms shows none over a disabled control.
+fn with_tip(
+    element: gpui::Stateful<Div>,
+    tip: Option<&'static str>,
+    enabled: bool,
+) -> gpui::Stateful<Div> {
+    match tip {
+        Some(tip) if enabled => element.tooltip(move |_window, cx| -> AnyView {
+            cx.new(|_| Tip(SharedString::from(tip))).into()
+        }),
+        _ => element,
+    }
+}
+
 /// One `HorizontalProgressBar`, with the label and the value its `drawlbl` puts under it.
 /// `// C#: ExtLibs/Controls/HorizontalProgressBar.cs:166-179`
 fn bar(x: f32, y: f32, label: String, value: i64) -> impl IntoElement {
@@ -1415,87 +1422,68 @@ fn group(x: f32, y: f32, width: f32, height: f32, title: &'static str) -> Div {
 fn combo_box(
     id: ComboId,
     combo: &Combo,
-    x: f32,
-    y: f32,
+    (x, y): (f32, f32),
+    tip: Option<&'static str>,
     cx: &mut Context<MissionPlanner>,
 ) -> Option<AnyElement> {
     if !combo.shown {
         return None;
     }
+    let base = crate::probe::measured(format!("failsafe-{}", combo.param), div())
+        .id(SharedString::from(format!("failsafe-{}", combo.param)))
+        .size_full()
+        .flex()
+        .items_center()
+        .px_1()
+        .rounded_sm()
+        .border_1()
+        .border_color(rgb(theme::BORDER))
+        .bg(rgb(theme::ACTION))
+        .text_xs()
+        .text_color(rgb(theme::TEXT))
+        .cursor_pointer()
+        .hover(|style| style.border_color(rgb(theme::ACCENT)))
+        .child(div().flex_1().child(combo.text().to_owned()))
+        .child(div().text_size(px(7.0)).child("▼"))
+        .on_click(cx.listener(move |this, _event, _window, cx| {
+            this.failsafe.toggle_dropdown(id);
+            cx.notify();
+        }));
     Some(
         at(x, y, 199.0, 20.0)
-            .child(
-                crate::probe::measured(format!("failsafe-{}", combo.param), div())
-                    .id(SharedString::from(format!("failsafe-{}", combo.param)))
-                    .size_full()
-                    .flex()
-                    .items_center()
-                    .px_1()
-                    .rounded_sm()
-                    .border_1()
-                    .border_color(rgb(theme::BORDER))
-                    .bg(rgb(theme::ACTION))
-                    .text_xs()
-                    .text_color(rgb(theme::TEXT))
-                    .cursor_pointer()
-                    .hover(|style| style.border_color(rgb(theme::ACCENT)))
-                    .child(combo.text().to_owned())
-                    .on_click(cx.listener(move |this, _event, _window, cx| {
-                        this.failsafe.toggle_dropdown(id);
-                        cx.notify();
-                    })),
-            )
+            .child(with_tip(base, tip, true))
             .into_any_element(),
     )
 }
 
-/// A combo box's list, dropped down over whatever is under it as a WinForms list is.
+/// A combo box's list, dropped down over the page: the shared list, drawn deferred and anchored
+/// at the box so the page's scrolling area does not clip it. Each list here is a few rows, so it
+/// never scrolls.
 fn dropdown(
     id: ComboId,
     combo: &Combo,
-    x: f32,
-    y: f32,
+    (x, y): (f32, f32),
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
-    let mut list = div()
-        .absolute()
-        .left(px(x))
-        .top(px(y))
-        .w(px(199.0))
-        .flex()
-        .flex_col()
-        .bg(rgb(theme::PANEL))
-        .border_1()
-        .border_color(rgb(theme::ACCENT))
-        .occlude();
-    for (key, text) in &combo.options {
-        let key = *key;
-        let selected = combo.selected == Some(key);
-        let name = format!("failsafe-{}-{key}", combo.param);
-        list = list.child(
-            crate::probe::measured(name.clone(), div())
-                .id(SharedString::from(name))
-                .px_1()
-                .py(px(1.0))
-                .text_xs()
-                .bg(rgb(if selected {
-                    theme::BORDER
-                } else {
-                    theme::PANEL
-                }))
-                .text_color(rgb(theme::TEXT))
-                .cursor_pointer()
-                .hover(|style| style.bg(rgb(theme::ACTION)))
-                .child(text.clone())
-                .on_click(cx.listener(move |this, _event, _window, cx| {
-                    if let Some(write) = this.failsafe.choose(id, key) {
-                        this.failsafe.issue(&this.telemetry, write);
-                    }
-                    cx.notify();
-                })),
-        );
-    }
-    list.into_any_element()
+    let shared = crate::config::servo_output::Combo {
+        param: combo.param.to_owned(),
+        options: combo.options.clone(),
+        selected: combo.selected,
+        enabled: combo.shown,
+        top_index: 0,
+    };
+    crate::config::servo_output::dropdown(
+        &format!("failsafe-{}", combo.param),
+        &shared,
+        (x, y, 199.0),
+        move |this, key| {
+            if let Some(write) = this.failsafe.choose(id, key) {
+                this.failsafe.issue(&this.telemetry, write);
+            }
+        },
+        |_this, _lines| {},
+        cx,
+    )
 }
 
 /// A check box and its text.
@@ -1503,8 +1491,8 @@ fn check_box(
     id: CheckId,
     check: &Check,
     text: &'static str,
-    x: f32,
-    y: f32,
+    (x, y): (f32, f32),
+    tip: Option<&'static str>,
     cx: &mut Context<MissionPlanner>,
 ) -> Option<AnyElement> {
     if !check.shown {
@@ -1515,144 +1503,143 @@ fn check_box(
         CheckState::Checked => Some(div().size(px(6.0)).bg(rgb(theme::ACCENT))),
         CheckState::Indeterminate => Some(div().w(px(6.0)).h(px(2.0)).bg(rgb(theme::ACCENT))),
     };
+    let base = crate::probe::measured(format!("failsafe-{}", check.param), div())
+        .id(SharedString::from(format!("failsafe-{}", check.param)))
+        .flex()
+        .items_center()
+        .gap_1()
+        .cursor_pointer()
+        .child(
+            div()
+                .size(px(12.0))
+                .flex()
+                .items_center()
+                .justify_center()
+                .border_1()
+                .border_color(rgb(theme::DIM))
+                .bg(rgb(theme::BG))
+                .children(mark),
+        )
+        .child(div().text_xs().text_color(rgb(theme::TEXT)).child(text))
+        .on_click(cx.listener(move |this, _event, _window, cx| {
+            if let Some(write) = this.failsafe.click(id) {
+                this.failsafe.issue(&this.telemetry, write);
+            }
+            cx.notify();
+        }));
     Some(
         div()
             .absolute()
             .left(px(x))
             .top(px(y))
-            .child(
-                crate::probe::measured(format!("failsafe-{}", check.param), div())
-                    .id(SharedString::from(format!("failsafe-{}", check.param)))
-                    .flex()
-                    .items_center()
-                    .gap_1()
-                    .cursor_pointer()
-                    .child(
-                        div()
-                            .size(px(12.0))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .border_1()
-                            .border_color(rgb(theme::DIM))
-                            .bg(rgb(theme::BG))
-                            .children(mark),
-                    )
-                    .child(div().text_xs().text_color(rgb(theme::TEXT)).child(text))
-                    .on_click(cx.listener(move |this, _event, _window, cx| {
-                        if let Some(write) = this.failsafe.click(id) {
-                            this.failsafe.issue(&this.telemetry, write);
-                        }
-                        cx.notify();
-                    })),
-            )
+            .child(with_tip(base, tip, true))
             .into_any_element(),
     )
 }
 
-/// A number with its arrows: the value, and a step down and a step up.
-fn number_box(
-    id: NumberId,
-    number: &Numeric,
-    width: f32,
-    cx: &mut Context<MissionPlanner>,
-) -> AnyElement {
-    let arrow = |up: bool, cx: &mut Context<MissionPlanner>| {
-        let name = format!(
-            "failsafe-{}-{}",
-            number.param,
-            if up { "up" } else { "down" }
-        );
-        let base = crate::probe::measured(name.clone(), div())
-            .id(SharedString::from(name))
-            .w(px(14.0))
-            .h_full()
-            .flex()
-            .items_center()
-            .justify_center()
-            .border_l_1()
-            .border_color(rgb(theme::BORDER))
-            .text_xs()
-            .child(if up { "+" } else { "-" });
-        if number.enabled {
-            base.text_color(rgb(theme::TEXT))
-                .cursor_pointer()
-                .hover(|style| style.bg(rgb(theme::BORDER)))
-                .on_click(cx.listener(move |this, _event, _window, cx| {
-                    this.failsafe.step(id, up, Instant::now());
-                    cx.notify();
-                }))
-                .into_any_element()
-        } else {
-            base.text_color(rgb(theme::DIM)).into_any_element()
+/// Where a page's number boxes take the keyboard and send their events.
+struct Numbers<'a> {
+    failsafe: &'a FailSafe,
+    focus: &'a FocusHandle,
+    window: &'a Window,
+}
+
+impl Numbers<'_> {
+    /// A number at its place in its parent: the shared box - its text typed into while it has
+    /// the focus, its arrows at its right, `failsafe-<param>`, `-up` and `-down` - under its
+    /// tooltip.
+    fn number(
+        &self,
+        id: NumberId,
+        (x, y, width, height): (f32, f32, f32, f32),
+        tip: Option<&'static str>,
+        cx: &mut Context<MissionPlanner>,
+    ) -> Option<AnyElement> {
+        let numeric = self.failsafe.controls()?.number(id);
+        if !numeric.shown {
+            return None;
         }
-    };
-    div()
-        .w(px(width))
-        .h(px(19.0))
-        .flex()
-        .items_center()
-        .rounded_sm()
-        .border_1()
-        .border_color(rgb(theme::BORDER))
-        .bg(rgb(theme::BG))
-        .child(
-            crate::probe::measured(format!("failsafe-{}", number.param), div())
-                .flex_1()
-                .px_1()
-                .text_xs()
-                .text_color(rgb(if number.enabled {
-                    theme::TEXT
-                } else {
-                    theme::DIM
-                }))
-                .child(number.text()),
+        let name = format!("failsafe-{}", numeric.param());
+        let wrapper = div()
+            .id(SharedString::from(format!("{name}-tip")))
+            .absolute()
+            .left(px(x))
+            .top(px(y))
+            .w(px(width))
+            .h(px(height));
+        let wrapper = with_tip(wrapper, tip, numeric.enabled());
+        Some(
+            wrapper
+                .child(number_box(
+                    name,
+                    &numeric.number,
+                    self.failsafe.editing() == Some(id),
+                    self.focus,
+                    (0.0, 0.0, width, height),
+                    NumberHandlers {
+                        begin: move |this: &mut MissionPlanner| {
+                            this.failsafe.begin(id, Instant::now());
+                        },
+                        key: |this: &mut MissionPlanner, event: &KeyDownEvent| {
+                            this.failsafe.key(event, Instant::now())
+                        },
+                        step: move |this: &mut MissionPlanner, up: bool| {
+                            this.failsafe.step(id, up, Instant::now());
+                        },
+                    },
+                    self.window,
+                    cx,
+                ))
+                .into_any_element(),
         )
-        .child(arrow(false, cx))
-        .child(arrow(true, cx))
-        .into_any_element()
-}
-
-/// One of the Battery box's rows: its label, and its number at x 114.
-fn battery_row(
-    id: NumberId,
-    row: &Row,
-    y: f32,
-    cx: &mut Context<MissionPlanner>,
-) -> Option<AnyElement> {
-    if !row.shown {
-        return None;
     }
-    Some(
-        at(6.0, y, 199.0, 21.0)
-            .child(
-                div()
-                    .absolute()
-                    .left(px(4.0))
-                    .top(px(3.0))
-                    .text_xs()
-                    .text_color(rgb(if row.enabled { theme::TEXT } else { theme::DIM }))
-                    .child(row.label),
-            )
-            .child(
-                div()
-                    .absolute()
-                    .left(px(114.0))
-                    .top(px(0.0))
-                    .child(number_box(id, &row.number, 85.0, cx)),
-            )
-            .into_any_element(),
-    )
+
+    /// One of the Battery box's rows: its label at (4, 3), and its number at (114, 0), 85 by 19.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFailSafe.resx label4-6, PNL_low_bat, pnlmah,
+    /// pnltimer and their numbers' Location and Size`
+    fn battery_row(
+        &self,
+        id: NumberId,
+        row: &Row,
+        y: f32,
+        tip: Option<&'static str>,
+        cx: &mut Context<MissionPlanner>,
+    ) -> Option<AnyElement> {
+        if !row.shown {
+            return None;
+        }
+        Some(
+            at(6.0, y, 199.0, 21.0)
+                .child(
+                    div()
+                        .absolute()
+                        .left(px(4.0))
+                        .top(px(3.0))
+                        .text_xs()
+                        .text_color(rgb(if row.enabled { theme::TEXT } else { theme::DIM }))
+                        .child(row.label),
+                )
+                .children(self.number(id, (114.0, 0.0, 85.0, 19.0), tip, cx))
+                .into_any_element(),
+        )
+    }
 }
 
 /// The page, laid out as `ConfigFailSafe.resx` lays it out.
 pub fn page(
     failsafe: &FailSafe,
+    focus: &FocusHandle,
     view: &TelemetryView,
+    window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
     let Some(controls) = failsafe.controls() else {
         return div().into_any_element();
+    };
+    let numbers = Numbers {
+        failsafe,
+        focus,
+        window,
     };
     let state = view.state.as_deref();
     let family = state.and_then(|state| VehicleFamily::from_mav_type(state.vehicle_type));
@@ -1742,83 +1729,87 @@ pub fn page(
             ),
         );
 
-    // groupBox4, "Battery".
+    // groupBox4, "Battery", its controls in the Designer's order: `pnltimer`,
+    // `mavlinkComboBoxfs_batt_enable`, `PNL_low_bat`, `pnlmah`.
+    // `// C#: GCSViews/ConfigurationView/ConfigFailSafe.Designer.cs:583-591`
     let battery = group(477.0, 146.0, 208.0, 121.0, "Battery")
-        .children(battery_row(
+        .children(numbers.battery_row(
             NumberId::LowTimer,
             &controls.low_timer,
             68.0,
+            None,
             cx,
         ))
         .children(combo_box(
             ComboId::Battery,
             &controls.battery,
-            6.0,
-            92.0,
+            (6.0, 92.0),
+            None,
             cx,
         ))
-        .children(battery_row(
+        .children(numbers.battery_row(
             NumberId::LowVoltage,
             &controls.low_voltage,
             18.0,
+            Some(tips::LOW_VOLTAGE),
             cx,
         ))
-        .children(battery_row(
+        .children(numbers.battery_row(
             NumberId::ReservedMah,
             &controls.reserved_mah,
             43.0,
+            None,
             cx,
         ));
 
-    // groupBox2, "Radio". `PNL_thr_fs_value` docks its label left and whichever number shows
-    // right.
-    let mut pwm = div().flex();
-    if controls.throttle_pwm.shown {
-        pwm = pwm.child(number_box(
+    // groupBox2, "Radio". `PNL_thr_fs_value` (6, 35, 199 x 23) docks `label3` left and each
+    // number right: `FS_THR_VALUE`'s 93 wide, `THR_FS_VALUE`'s 103; only one shows.
+    // `// C#: GCSViews/ConfigurationView/ConfigFailSafe.Designer.cs:292-305, 561-569; .resx:439-449, 472-482, 779-812`
+    let pwm = at(6.0, 35.0, 199.0, 23.0)
+        .child(
+            div()
+                .absolute()
+                .left(px(0.0))
+                .top(px(0.0))
+                .text_xs()
+                .text_color(rgb(theme::TEXT))
+                .child("FS Pwm"),
+        )
+        .children(numbers.number(
             NumberId::ThrottlePwm,
-            controls.number(NumberId::ThrottlePwm),
-            93.0,
+            (199.0 - 93.0, 0.0, 93.0, 19.0),
+            Some(tips::PWM),
             cx,
-        ));
-    }
-    if controls.plane_throttle_pwm.shown {
-        pwm = pwm.child(number_box(
+        ))
+        .children(numbers.number(
             NumberId::PlaneThrottlePwm,
-            controls.number(NumberId::PlaneThrottlePwm),
-            103.0,
+            (199.0 - 103.0, 0.0, 103.0, 19.0),
+            Some(tips::PWM),
             cx,
         ));
-    }
     let radio = group(477.0, 273.0, 208.0, 96.0, "Radio")
         .children(combo_box(
             ComboId::Throttle,
             &controls.throttle,
-            6.0,
-            13.0,
+            (6.0, 13.0),
+            Some(tips::THROTTLE_MODE),
             cx,
         ))
-        .child(
-            at(6.0, 35.0, 199.0, 23.0)
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(div().text_xs().text_color(rgb(theme::TEXT)).child("FS Pwm"))
-                .child(pwm),
-        )
+        .child(pwm)
         .children(check_box(
             CheckId::PlaneThrottle,
             controls.check(CheckId::PlaneThrottle),
             "Throttle FailSafe",
-            6.0,
-            60.0,
+            (6.0, 60.0),
+            Some(tips::THROTTLE),
             cx,
         ))
         .children(check_box(
             CheckId::PlaneThrottleAction,
             controls.check(CheckId::PlaneThrottleAction),
             "Throttle Failsafe Action",
-            6.0,
-            77.0,
+            (6.0, 77.0),
+            Some(tips::THROTTLE_ACTION),
             cx,
         ));
 
@@ -1828,120 +1819,116 @@ pub fn page(
             CheckId::Gcs,
             controls.check(CheckId::Gcs),
             "GCS FS Enable",
-            6.0,
-            14.0,
+            (6.0, 14.0),
+            None,
             cx,
         ))
         .children(check_box(
             CheckId::PlaneGcs,
             controls.check(CheckId::PlaneGcs),
             "GCS FailSafe",
-            6.0,
-            29.0,
+            (6.0, 29.0),
+            Some(tips::PLANE_GCS),
             cx,
         ))
         .children(check_box(
             CheckId::PlaneShort,
             controls.check(CheckId::PlaneShort),
             "FailSafe Short (1 sec)",
-            6.0,
-            43.0,
+            (6.0, 43.0),
+            Some(tips::SHORT_LONG),
             cx,
         ))
         .children(check_box(
             CheckId::PlaneLong,
             controls.check(CheckId::PlaneLong),
             "FailSafe Long (20 sec)",
-            6.0,
-            58.0,
+            (6.0, 58.0),
+            Some(tips::SHORT_LONG),
             cx,
         ));
 
     body = body.child(battery).child(radio).child(gcs);
 
-    // A dropped-down list goes last, so it draws over the boxes below it.
+    // A dropped-down list, anchored under its box.
     if let Some(id) = failsafe.dropdown() {
         let combo = controls.combo(id);
-        let (x, y) = match id {
+        let at = match id {
             ComboId::Battery => (477.0 + 6.0, 146.0 + 92.0 + 20.0),
             ComboId::Throttle => (477.0 + 6.0, 273.0 + 13.0 + 20.0),
         };
         if combo.shown {
-            body = body.child(dropdown(id, combo, x, y, cx));
+            body = body.child(dropdown(id, combo, at, cx));
         }
     }
 
     panel("FailSafe", body).into_any_element()
 }
 
-/// The message box showing, drawn over the whole window as `CustomMessageBox.Show` is modal.
+/// The question or message box showing, drawn over the whole window as `CustomMessageBox.Show`
+/// is modal: "Out of range" first, as it is asked over whatever else is showing.
 pub fn overlay(
     failsafe: &FailSafe,
     window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> Option<AnyElement> {
+    if let Some(question) = failsafe.question() {
+        let buttons = vec![
+            action(
+                "failsafe-question-yes",
+                "Yes",
+                theme::ACCENT,
+                true,
+                cx.listener(|this, _event: &(), _window, cx| {
+                    this.failsafe.answer(true, Instant::now());
+                    cx.notify();
+                }),
+            ),
+            action(
+                "failsafe-question-no",
+                "No",
+                theme::ACCENT,
+                true,
+                cx.listener(|this, _event: &(), _window, cx| {
+                    this.failsafe.answer(false, Instant::now());
+                    cx.notify();
+                }),
+            ),
+        ];
+        return Some(modal(
+            "failsafe-question",
+            OUT_OF_RANGE_TITLE,
+            &question.text(),
+            false,
+            buttons,
+            window,
+        ));
+    }
     let message = failsafe.message()?;
-    let size = window.viewport_size();
-    let dialog = crate::probe::measured("failsafe-message", div())
-        .flex()
-        .flex_col()
-        .gap_2()
-        .w(px(340.0))
-        .p_3()
-        .bg(rgb(theme::PANEL))
-        .border_1()
-        .border_color(rgb(if message.title == ERROR_TITLE {
-            theme::ALERT
-        } else {
-            theme::WARN
-        }))
-        .rounded_md()
-        .child(
-            div()
-                .text_xs()
-                .text_color(rgb(theme::DIM))
-                .child(message.title),
-        )
-        .child(
-            div()
-                .text_sm()
-                .text_color(rgb(theme::TEXT))
-                .child(message.text.clone()),
-        )
-        .child(div().flex().justify_end().child(action(
-            "failsafe-message-ok",
-            "OK",
-            theme::ACCENT,
-            true,
-            cx.listener(|this, _event: &(), _window, cx| {
-                this.failsafe.dismiss_message();
-                cx.notify();
-            }),
-        )));
-    Some(
-        gpui::deferred(
-            gpui::anchored()
-                .position(gpui::point(px(0.0), px(0.0)))
-                .child(
-                    div()
-                        .id("failsafe-message-backdrop")
-                        .w(size.width)
-                        .h(size.height)
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .occlude()
-                        .child(dialog),
-                ),
-        )
-        .with_priority(2)
-        .into_any_element(),
-    )
+    let ok = action(
+        "failsafe-message-ok",
+        "OK",
+        theme::ACCENT,
+        true,
+        cx.listener(|this, _event: &(), _window, cx| {
+            this.failsafe.dismiss_message();
+            cx.notify();
+        }),
+    );
+    Some(modal(
+        "failsafe-message",
+        message.title,
+        &message.text,
+        message.title == ERROR_TITLE,
+        vec![ok],
+        window,
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::servo_output::WRITE_DELAY;
 
     /// The bundled documentation, so no test depends on what another has installed.
     fn bundled(name: &str) -> Option<&'static ParamMeta> {
@@ -2002,13 +1989,13 @@ mod tests {
         assert!(controls.throttle.shown);
         assert_eq!(controls.battery.param, "BATT_FS_LOW_ACT");
         assert!(controls.battery.shown);
-        assert_eq!(controls.low_voltage.number.param, "BATT_LOW_VOLT");
-        assert_eq!(controls.reserved_mah.number.param, "BATT_LOW_MAH");
-        assert_eq!(controls.low_timer.number.param, "BATT_LOW_TIMER");
+        assert_eq!(controls.low_voltage.number.param(), "BATT_LOW_VOLT");
+        assert_eq!(controls.reserved_mah.number.param(), "BATT_LOW_MAH");
+        assert_eq!(controls.low_timer.number.param(), "BATT_LOW_TIMER");
         assert!(controls.low_timer.shown, "BATT_LOW_TIMER's row shows");
         assert_eq!(controls.gcs.param, "FS_GCS_ENABLE");
         assert!(controls.gcs.shown);
-        assert_eq!(controls.pwm().map(|pwm| pwm.param), Some("FS_THR_VALUE"));
+        assert_eq!(controls.pwm().map(Numeric::param), Some("FS_THR_VALUE"));
         // None of a plane's controls.
         for check in [
             controls.plane_throttle,
@@ -2039,9 +2026,9 @@ mod tests {
         assert_eq!(controls.throttle.text(), "Enabled always RTL");
         assert_eq!(controls.battery.param, "BATT_FS_LOW_ACT");
         assert_eq!(controls.battery.text(), "None");
-        assert_eq!(controls.low_voltage.number.param, "BATT_LOW_VOLT");
+        assert_eq!(controls.low_voltage.number.param(), "BATT_LOW_VOLT");
         assert_eq!(controls.low_voltage.number.text(), "10.5");
-        assert_eq!(controls.reserved_mah.number.param, "BATT_LOW_MAH");
+        assert_eq!(controls.reserved_mah.number.param(), "BATT_LOW_MAH");
         assert!(controls.low_timer.shown);
         assert_eq!(controls.low_timer.number.text(), "10");
         assert_eq!(controls.pwm().map(Numeric::text), Some("975".to_owned()));
@@ -2052,8 +2039,8 @@ mod tests {
     fn an_older_copter_binds_the_first_names() {
         let controls = Controls::activate(&old_copter(), bundled);
         assert_eq!(controls.battery.param, "FS_BATT_ENABLE");
-        assert_eq!(controls.low_voltage.number.param, "FS_BATT_VOLTAGE");
-        assert_eq!(controls.reserved_mah.number.param, "FS_BATT_MAH");
+        assert_eq!(controls.low_voltage.number.param(), "FS_BATT_VOLTAGE");
+        assert_eq!(controls.reserved_mah.number.param(), "FS_BATT_MAH");
         // No BATT_LOW_TIMER: setup is never called, and the panel keeps the .resx's Visible=False.
         assert!(!controls.low_timer.shown);
     }
@@ -2066,7 +2053,7 @@ mod tests {
             ("BATT_LOW_VOLT", 10.5),
         ]);
         let controls = Controls::activate(&parameters, bundled);
-        assert_eq!(controls.low_voltage.number.param, "LOW_VOLT");
+        assert_eq!(controls.low_voltage.number.param(), "LOW_VOLT");
         assert_eq!(controls.low_voltage.number.text(), "9.9");
     }
 
@@ -2074,11 +2061,11 @@ mod tests {
     fn with_no_battery_names_the_rows_show_disabled_under_the_newest_names() {
         // MavlinkNumericUpDown.enableControl(false) makes the panel visible and disabled.
         let controls = Controls::activate(&table(&[("FS_THR_ENABLE", 1.0)]), bundled);
-        assert_eq!(controls.low_voltage.number.param, "BATT_LOW_VOLT");
-        assert_eq!(controls.reserved_mah.number.param, "BATT_LOW_MAH");
+        assert_eq!(controls.low_voltage.number.param(), "BATT_LOW_VOLT");
+        assert_eq!(controls.reserved_mah.number.param(), "BATT_LOW_MAH");
         assert!(controls.low_voltage.shown && !controls.low_voltage.enabled);
         assert!(controls.reserved_mah.shown && !controls.reserved_mah.enabled);
-        assert!(!controls.low_voltage.number.enabled);
+        assert!(!controls.low_voltage.number.enabled());
         // The combo boxes stay hidden without their parameter.
         assert_eq!(controls.battery.param, "FS_BATT_ENABLE");
         assert!(!controls.battery.shown);
@@ -2090,14 +2077,14 @@ mod tests {
         let controls = Controls::activate(&plane(), bundled);
         assert!(!controls.throttle.shown, "no FS_THR_ENABLE on a plane");
         assert!(!controls.gcs.shown, "no FS_GCS_ENABLE on a plane");
-        assert_eq!(controls.pwm().map(|pwm| pwm.param), Some("THR_FS_VALUE"));
+        assert_eq!(controls.pwm().map(Numeric::param), Some("THR_FS_VALUE"));
         assert_eq!(controls.plane_throttle.state, CheckState::Checked);
         assert_eq!(controls.plane_throttle_action.state, CheckState::Unchecked);
         // FS_GCS_ENABL is 2: neither on nor off.
         assert_eq!(controls.plane_gcs.state, CheckState::Indeterminate);
         assert_eq!(controls.plane_short.state, CheckState::Unchecked);
         assert_eq!(controls.plane_long.state, CheckState::Checked);
-        assert!(controls.plane_throttle_pwm.enabled);
+        assert!(controls.plane_throttle_pwm.enabled());
     }
 
     #[test]
@@ -2211,13 +2198,22 @@ mod tests {
         let enabled = |failsafe: &FailSafe| {
             failsafe
                 .controls()
-                .is_some_and(|controls| controls.plane_throttle_pwm.enabled)
+                .is_some_and(|controls| controls.plane_throttle_pwm.enabled())
+        };
+        let text = |failsafe: &FailSafe| {
+            failsafe
+                .controls()
+                .map(|controls| controls.plane_throttle_pwm.text())
         };
         assert!(!enabled(&failsafe));
-        assert!(
-            !failsafe.step(NumberId::PlaneThrottlePwm, true, Instant::now()),
+        failsafe.step(NumberId::PlaneThrottlePwm, true, Instant::now());
+        assert_eq!(
+            text(&failsafe).as_deref(),
+            Some("950"),
             "a disabled number does not step"
         );
+        failsafe.begin(NumberId::PlaneThrottlePwm, Instant::now());
+        assert_eq!(failsafe.editing(), None, "nor takes the focus");
         failsafe.click(CheckId::PlaneThrottle);
         assert!(enabled(&failsafe));
     }
@@ -2242,28 +2238,27 @@ mod tests {
         let controls = Controls::activate(&copter(), bundled);
         let pwm = &controls.throttle_pwm;
         // The documentation says 910 to 1100 in steps of 1, over setup's 800 to 1200.
-        assert!((pwm.minimum - 910.0).abs() < f64::EPSILON);
-        assert!((pwm.maximum - 1100.0).abs() < f64::EPSILON);
-        assert_eq!(pwm.decimals, 0);
+        assert!((pwm.number.minimum - 910.0).abs() < f64::EPSILON);
+        assert!((pwm.number.maximum - 1100.0).abs() < f64::EPSILON);
+        assert_eq!(pwm.number.decimals, 0);
         assert_eq!(pwm.text(), "975");
-        assert!(pwm.shown && pwm.enabled);
+        assert!(pwm.shown && pwm.enabled());
     }
 
     #[test]
     fn the_low_voltage_shows_one_place_and_steps_by_a_tenth() {
         let mut failsafe = FailSafe::default();
         failsafe.open(&copter(), bundled);
-        let number = |failsafe: &FailSafe| {
+        let text = |failsafe: &FailSafe| {
             failsafe
                 .controls()
-                .map(|controls| controls.number(NumberId::LowVoltage).clone())
+                .map(|controls| controls.number(NumberId::LowVoltage).text())
                 .expect("open")
         };
-        assert_eq!(number(&failsafe).text(), "10.5");
-        assert_eq!(number(&failsafe).decimals, 1);
+        assert_eq!(text(&failsafe), "10.5");
         let start = Instant::now();
-        assert!(failsafe.step(NumberId::LowVoltage, true, start));
-        assert_eq!(number(&failsafe).text(), "10.6");
+        failsafe.step(NumberId::LowVoltage, true, start);
+        assert_eq!(text(&failsafe), "10.6");
         // The write waits for the timer, and goes as a float.
         assert!(failsafe.due(start).is_empty());
         let writes = failsafe.due(start + WRITE_DELAY);
@@ -2279,31 +2274,31 @@ mod tests {
     #[test]
     fn a_documented_step_larger_than_the_designer_places_is_taken() {
         // BATT_LOW_MAH documents 50, which is more than the designer's one decimal place.
-        let controls = Controls::activate(&copter(), bundled);
-        let mah = &controls.reserved_mah.number;
+        let mut controls = Controls::activate(&copter(), bundled);
+        let mah = &mut controls.reserved_mah.number.number;
         assert_eq!(mah.decimals, 0);
         assert_eq!(mah.text(), "0");
-        let mut mah = mah.clone();
-        assert!(mah.step(true, Instant::now()));
+        assert!(mah.step(true, Instant::now()).is_none());
         assert_eq!(mah.text(), "50");
         // And the voltage's 0.1 is not more than one decimal place, so setup's 0.1 stands.
-        assert_eq!(controls.low_voltage.number.increment, 1);
+        assert!((controls.low_voltage.number.number.increment() - 0.1).abs() < 1e-9);
     }
 
     #[test]
     fn a_value_outside_the_range_widens_it() {
         // FS_THR_VALUE 850 is under the documented 910.
         let controls = Controls::activate(&table(&[("FS_THR_VALUE", 850.0)]), bundled);
-        assert!((controls.throttle_pwm.minimum - 850.0).abs() < f64::EPSILON);
+        assert!((controls.throttle_pwm.number.minimum - 850.0).abs() < f64::EPSILON);
         assert_eq!(controls.throttle_pwm.text(), "850");
     }
 
     #[test]
     fn stepping_stops_at_the_bounds() {
         let controls = Controls::activate(&table(&[("FS_THR_VALUE", 1100.0)]), bundled);
-        let mut pwm = controls.throttle_pwm;
-        assert!(!pwm.step(true, Instant::now()), "already at the maximum");
-        assert!(pwm.step(false, Instant::now()));
+        let mut pwm = controls.throttle_pwm.number;
+        pwm.step(true, Instant::now());
+        assert_eq!(pwm.text(), "1100", "already at the maximum");
+        pwm.step(false, Instant::now());
         assert_eq!(pwm.text(), "1099");
     }
 
@@ -2312,10 +2307,11 @@ mod tests {
         // 10.25 has two places; the box shows both, and steps by 0.1 in them.
         let mut number = Controls::activate(&table(&[("BATT_LOW_VOLT", 10.25)]), bundled)
             .low_voltage
+            .number
             .number;
         assert_eq!(number.decimals, 2);
         assert_eq!(number.text(), "10.25");
-        assert!(number.step(true, Instant::now()));
+        number.step(true, Instant::now());
         assert_eq!(number.text(), "10.35");
     }
 
@@ -2324,7 +2320,7 @@ mod tests {
         let mut failsafe = FailSafe::default();
         failsafe.open(&copter(), bundled);
         failsafe.step(NumberId::ThrottlePwm, true, Instant::now());
-        let pending = failsafe.close();
+        let pending = failsafe.close(Instant::now());
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].param, "FS_THR_VALUE");
         assert!((pending[0].value - 976.0).abs() < f64::EPSILON);
@@ -2345,26 +2341,45 @@ mod tests {
         );
         failsafe.dismiss_message();
         assert!(failsafe.message().is_none());
-        failsafe.close();
+        failsafe.close(Instant::now());
         failsafe.open(&copter(), bundled);
         assert!(failsafe.message().is_some());
     }
 
+    /// A write that fails is the C#'s "Set FS_THR_ENABLE Failed!", on the status line rather than
+    /// in a box (the owner's ruling); the props warning keeps its box.
     #[test]
-    fn a_write_with_no_vehicle_fails_with_the_csharp_message() {
+    fn a_write_with_no_vehicle_fails_on_the_status_line() {
         let telemetry = Telemetry::idle();
+        let view = telemetry.view();
         let mut failsafe = FailSafe::default();
         failsafe.open(&copter(), bundled);
-        failsafe.dismiss_message();
         let write = failsafe.choose(ComboId::Throttle, 3).expect("a change");
         failsafe.issue(&telemetry, write);
-        let message = failsafe.message().expect("a message box");
-        assert_eq!(message.title, "Error");
-        assert_eq!(message.text, "Set FS_THR_ENABLE Failed!");
+        assert_eq!(
+            failsafe.tick(&telemetry, &view, true, false).as_deref(),
+            Some("Set FS_THR_ENABLE Failed!")
+        );
+        assert_eq!(
+            failsafe.message().map(|message| message.text.as_str()),
+            Some(PROPS_WARNING),
+            "no error box, and the warning is left showing"
+        );
+        failsafe.dismiss_message();
+        assert!(failsafe.message().is_none());
         assert!(
             failsafe
                 .last_write()
                 .is_some_and(|text| text.contains("failed"))
+        );
+        // A number's write fails with `Strings.ErrorSetValueFailed`.
+        failsafe.step(NumberId::ThrottlePwm, true, Instant::now());
+        for write in failsafe.close(Instant::now()) {
+            failsafe.issue(&telemetry, write);
+        }
+        assert_eq!(
+            failsafe.take_link_errors().as_deref(),
+            Some("Set FS_THR_VALUE Failed")
         );
     }
 
@@ -2374,9 +2389,9 @@ mod tests {
         let view = telemetry.view();
         let mut failsafe = FailSafe::default();
         failsafe.open(&copter(), bundled);
-        failsafe.tick(&telemetry, &view, true);
+        failsafe.tick(&telemetry, &view, true, false);
         assert!(failsafe.is_open());
-        failsafe.tick(&telemetry, &view, false);
+        failsafe.tick(&telemetry, &view, false, false);
         assert!(!failsafe.is_open());
     }
 
@@ -2464,5 +2479,243 @@ mod tests {
         assert!(wiki_url(Some(VehicleFamily::Copter)).contains("/copter/"));
         assert!(wiki_url(Some(VehicleFamily::Plane)).contains("/plane/"));
         assert!(wiki_url(None).contains("/plane/"));
+    }
+
+    /// Types into a number as the keyboard would: the box takes the focus, and its text is
+    /// replaced.
+    fn type_into(failsafe: &mut FailSafe, id: NumberId, text: &str) {
+        failsafe.begin(id, Instant::now());
+        assert_eq!(failsafe.editing(), Some(id), "the box takes the focus");
+        let controls = failsafe.controls.as_mut().expect("open");
+        controls.number_mut(id).number.type_text(text);
+    }
+
+    fn shown(failsafe: &FailSafe, id: NumberId) -> String {
+        failsafe
+            .controls()
+            .map(|controls| controls.number(id).text())
+            .expect("open")
+    }
+
+    /// A typed low voltage is read when the box is left and written 300 ms later, as a float -
+    /// `BATT_LOW_VOLT` read and written on a current copter.
+    #[test]
+    fn a_typed_low_voltage_is_written_when_the_box_is_left() {
+        let mut failsafe = FailSafe::default();
+        failsafe.open(&copter(), bundled);
+        type_into(&mut failsafe, NumberId::LowVoltage, "11.2");
+        assert_eq!(shown(&failsafe, NumberId::LowVoltage), "10.5", "not read yet");
+        let start = Instant::now();
+        failsafe.leave(start);
+        assert_eq!(failsafe.editing(), None);
+        assert_eq!(shown(&failsafe, NumberId::LowVoltage), "11.2");
+        assert!(failsafe.question().is_none());
+        assert!(failsafe.due(start).is_empty(), "the timer runs first");
+        let writes = failsafe.due(start + WRITE_DELAY);
+        assert_eq!(writes.len(), 1);
+        assert_eq!(writes[0].param, "BATT_LOW_VOLT");
+        assert!((writes[0].value - f64::from(11.2_f32)).abs() < f64::EPSILON);
+        assert_eq!(writes[0].failure, "Set BATT_LOW_VOLT Failed");
+    }
+
+    /// The pwm typed on an older copter, `FS_THR_VALUE`, read by an arrow: the arrow reads the
+    /// text first and then steps from it.
+    #[test]
+    fn an_arrow_reads_the_typed_text_before_it_steps() {
+        let mut failsafe = FailSafe::default();
+        failsafe.open(&old_copter(), bundled);
+        type_into(&mut failsafe, NumberId::ThrottlePwm, "1000");
+        let start = Instant::now();
+        failsafe.step(NumberId::ThrottlePwm, true, start);
+        assert_eq!(shown(&failsafe, NumberId::ThrottlePwm), "1001");
+        let writes = failsafe.due(start + WRITE_DELAY);
+        assert_eq!(writes.len(), 1, "one timer for both changes");
+        assert_eq!(writes[0].param, "FS_THR_VALUE");
+        assert!((writes[0].value - 1001.0).abs() < f64::EPSILON);
+    }
+
+    /// A typed value above the maximum - `FS_THR_VALUE`'s documented 1100 - asks "Out of range";
+    /// Yes takes it as the new maximum and writes it, No leaves the box at the maximum it was held
+    /// to, and writes that.
+    #[test]
+    fn a_typed_value_above_the_maximum_asks_first() {
+        let mut failsafe = FailSafe::default();
+        failsafe.open(&copter(), bundled);
+        type_into(&mut failsafe, NumberId::ThrottlePwm, "1150");
+        let start = Instant::now();
+        failsafe.leave(start);
+        assert_eq!(
+            failsafe.question().map(Question::text).as_deref(),
+            Some("FS_THR_VALUE Value out of range\nDo you want to accept the new value?")
+        );
+        assert!(
+            failsafe.due(start + WRITE_DELAY).is_empty(),
+            "nothing is written while it asks"
+        );
+        failsafe.answer(true, start);
+        assert!(failsafe.question().is_none());
+        assert_eq!(shown(&failsafe, NumberId::ThrottlePwm), "1150");
+        let writes = failsafe.due(start + WRITE_DELAY);
+        assert!((writes.first().map_or(0.0, |write| write.value) - 1150.0).abs() < f64::EPSILON);
+
+        let mut failsafe = FailSafe::default();
+        failsafe.open(&copter(), bundled);
+        type_into(&mut failsafe, NumberId::ThrottlePwm, "1150");
+        failsafe.leave(start);
+        failsafe.answer(false, start);
+        assert_eq!(shown(&failsafe, NumberId::ThrottlePwm), "1100");
+        let writes = failsafe.due(start + WRITE_DELAY);
+        assert!((writes.first().map_or(0.0, |write| write.value) - 1100.0).abs() < f64::EPSILON);
+    }
+
+    /// A typed value below the minimum is held to it without a question: the C#'s handler asks
+    /// only about the maximum.
+    #[test]
+    fn a_typed_value_below_the_minimum_is_held_to_it() {
+        let mut failsafe = FailSafe::default();
+        failsafe.open(&copter(), bundled);
+        type_into(&mut failsafe, NumberId::ThrottlePwm, "5");
+        failsafe.leave(Instant::now());
+        assert!(failsafe.question().is_none());
+        assert_eq!(shown(&failsafe, NumberId::ThrottlePwm), "910");
+    }
+
+    /// Text that is not a number is dropped, and the box shows its value again.
+    #[test]
+    fn text_that_does_not_parse_changes_nothing() {
+        let mut failsafe = FailSafe::default();
+        failsafe.open(&copter(), bundled);
+        type_into(&mut failsafe, NumberId::ReservedMah, "lots");
+        let start = Instant::now();
+        failsafe.leave(start);
+        assert_eq!(shown(&failsafe, NumberId::ReservedMah), "0");
+        assert!(failsafe.due(start + WRITE_DELAY).is_empty());
+    }
+
+    /// Closing the page with a number typed into reads it and writes it at once.
+    #[test]
+    fn closing_reads_the_box_being_typed_into() {
+        let mut failsafe = FailSafe::default();
+        failsafe.open(&copter(), bundled);
+        type_into(&mut failsafe, NumberId::LowTimer, "20");
+        let pending = failsafe.close(Instant::now());
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].param, "BATT_LOW_TIMER");
+        assert!((pending[0].value - 20.0).abs() < f64::EPSILON);
+    }
+
+    /// A number whose parameter the vehicle lacks keeps the Designer's 13.1, disabled, to the
+    /// places `setup`'s increment gives it; it takes no focus and no arrow.
+    #[test]
+    fn a_number_the_vehicle_lacks_shows_the_designer_value() {
+        let mut failsafe = FailSafe::default();
+        failsafe.open(&table(&[("FS_THR_ENABLE", 1.0)]), bundled);
+        assert_eq!(shown(&failsafe, NumberId::LowVoltage), "13.1");
+        // BATT_LOW_MAH's documented step of 50 leaves no decimal places.
+        assert_eq!(shown(&failsafe, NumberId::ReservedMah), "13");
+        // BATT_LOW_TIMER's box is never set up, and its row is hidden.
+        assert_eq!(shown(&failsafe, NumberId::LowTimer), "13.1");
+        failsafe.begin(NumberId::LowVoltage, Instant::now());
+        assert_eq!(failsafe.editing(), None);
+        failsafe.begin(NumberId::LowTimer, Instant::now());
+        assert_eq!(failsafe.editing(), None);
+        failsafe.step(NumberId::LowVoltage, true, Instant::now());
+        assert_eq!(shown(&failsafe, NumberId::LowVoltage), "13.1");
+    }
+
+    /// The tooltips are the `.resx`'s, and the Battery box's Designer values its.
+    #[test]
+    fn the_tooltips_and_designer_values_are_the_csharps() {
+        let (Some(resx), Some(designer)) = (
+            crate::config_coverage::source::csharp(
+                "GCSViews/ConfigurationView/ConfigFailSafe.resx",
+            ),
+            crate::config_coverage::source::csharp(
+                "GCSViews/ConfigurationView/ConfigFailSafe.Designer.cs",
+            ),
+        ) else {
+            eprintln!("skipped: the C# tree is not checked out");
+            return;
+        };
+        let values = crate::config_coverage::source::resx(&resx);
+        let tip = |name: &str| values.get(&format!("{name}.ToolTip")).cloned();
+        for (name, text) in [
+            ("mavlinkNumericUpDownlow_voltage", tips::LOW_VOLTAGE),
+            ("mavlinkCheckBoxlong_fs", tips::SHORT_LONG),
+            ("mavlinkCheckBoxshort_fs", tips::SHORT_LONG),
+            ("mavlinkCheckBoxgcs_fs", tips::PLANE_GCS),
+            ("mavlinkCheckBoxthr_fs_action", tips::THROTTLE_ACTION),
+            ("mavlinkNumericUpDownfs_thr_value", tips::PWM),
+            ("mavlinkNumericUpDownthr_fs_value", tips::PWM),
+            ("mavlinkCheckBoxthr_fs", tips::THROTTLE),
+            ("mavlinkComboBox_fs_thr_enable", tips::THROTTLE_MODE),
+        ] {
+            assert_eq!(tip(name).as_deref(), Some(text), "{name}");
+        }
+        let with_tips = values.keys().filter(|key| key.ends_with(".ToolTip")).count();
+        assert_eq!(with_tips, 9, "every tooltip the page has");
+        // `Value = new decimal(new int[] { 131, 0, 0, 65536 })` and `DecimalPlaces = 1` on each of
+        // the Battery box's numbers.
+        for name in [
+            "mavlinkNumericUpDownlow_voltage",
+            "mavlinkNumericUpDownFS_BATT_MAH",
+            "mavlinkNumericUpDownBATT_LOW_TIMER",
+        ] {
+            assert!(
+                designer.contains(&format!("this.{name}.DecimalPlaces = 1;")),
+                "{name}"
+            );
+            let value = designer
+                .split(&format!("this.{name}.Value = new decimal(new int[] {{"))
+                .nth(1)
+                .and_then(|rest| rest.split("});").next())
+                .map(|numbers| numbers.split_whitespace().collect::<String>());
+            assert_eq!(value.as_deref(), Some("131,0,0,65536"), "{name}");
+        }
+        assert!((BATTERY_BOX.value - 13.1).abs() < f64::EPSILON);
+        assert_eq!(BATTERY_BOX.decimals, 1);
+    }
+
+    /// The GUI script asserts facts this page records: each named whole, or made by the
+    /// per-control `format!("config.failsafe.{key}...")` with a control this page names.
+    #[test]
+    fn the_gui_script_names_facts_this_page_has() {
+        let script = include_str!("../../../../tests/gui/config-failsafe.gui");
+        let source = include_str!("failsafe.rs");
+        let mut facts = 0;
+        for line in script.lines() {
+            let line = line.split('#').next().unwrap_or("");
+            let mut words = line.split_whitespace();
+            if let (Some("expect"), Some(key)) = (words.next(), words.next())
+                && let Some(rest) = key.strip_prefix("config.failsafe.")
+            {
+                let known = source.contains(&format!("\"{key}\""))
+                    || match rest.split_once('.') {
+                        Some((control, field)) => {
+                            source.contains(&format!("\"config.failsafe.{{key}}.{field}\""))
+                                && source.contains(&format!("\"{control}\""))
+                        }
+                        None => {
+                            // `ch<n>` and `out<n>`: the bars, one fact each.
+                            let bar = ["ch", "out"].into_iter().find(|prefix| {
+                                rest.strip_prefix(prefix).is_some_and(|digits| {
+                                    !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
+                                })
+                            });
+                            match bar {
+                                Some(prefix) => source
+                                    .contains(&format!("\"config.failsafe.{prefix}{{channel}}\"")),
+                                None => {
+                                    source.contains("\"config.failsafe.{key}\"")
+                                        && source.contains(&format!("\"{rest}\""))
+                                }
+                            }
+                        }
+                    };
+                assert!(known, "{key}");
+                facts += 1;
+            }
+        }
+        assert!(facts >= 20, "{facts} facts");
     }
 }

@@ -28,6 +28,15 @@
 //! What the C# does on the UI thread - `setParam`, blocking until the vehicle echoes the value -
 //! is a queue here, advanced once a frame, one write at a time in the same order.
 //!
+//! The Default Settings group is `Controls/DefaultSettings.cs`, a control of its own
+//! ([`super::default_settings`]): on `Load` it lists ArduPilot's `Tools/Frame_params` from GitHub,
+//! and Load Params fetches the file chosen and opens `ParamCompare` over it; the form closed, the
+//! control's `OnChange` runs this page's `Activate` again (`ConfigFrameType.cs:22, 41-44`).
+//!
+//! "Set FRAME Failed", the C#'s error box for a write that throws, is said on the status line
+//! instead, by the owner's ruling of 2026-09-25 that an error the window can show as state gets
+//! no message box.
+//!
 //! What is not ported, and why:
 //!
 //! * the pictures. Each is a PNG in the C# tree (`Resources/`, named in [`ROWS`]); this
@@ -35,14 +44,6 @@
 //!   frame's name in it, at the opacity the C# gives it - as on [`crate::config::frame_type`];
 //! * the fade, a 400 ms linear `Transition` (`ConfigFrameType.cs:169-174`): drawn at the opacity
 //!   it ends on;
-//! * the Default Settings group's behaviour. `DefaultSettings` (`Controls/DefaultSettings.cs`) is
-//!   a control of its own: on `Load` it disables its combo and button and asks GitHub's contents
-//!   API for `Tools/Frame_params`, a JSON listing; when the answer comes it lists the `.param`
-//!   files and enables both; Load Params fetches the file chosen, again as JSON with the file in
-//!   base64, and opens `ParamCompare`, whose Continue writes the parameters ticked, and then runs
-//!   this page's `Activate` again. This crate has neither a JSON reader nor the `ParamCompare`
-//!   form, so the group is drawn as the C# draws it until the listing arrives - its text, the
-//!   combo reading "Loading", Load Params disabled - and does nothing;
 //! * `MainV2.comPort.giveComport = false` in `Deactivate`: the flag that stops the C#'s own reader
 //!   while a blocking call reads the port; this application's link reads on its own thread.
 //!
@@ -57,8 +58,13 @@ use gpui::{AnyElement, Context, Div, SharedString, Window, div, prelude::*, px, 
 use mp_link::requests::RequestOutcome;
 
 use crate::MissionPlanner;
+use crate::config::default_settings::DefaultSettings;
 use crate::config::flight_modes::{ParamWriter, Progress};
-use crate::config::servo_output::{ERROR_TITLE, Message, modal, value_of};
+use crate::config::optional::{button, message_box};
+use crate::config::param_compare;
+use crate::config::servo_output::{
+    Combo, ERROR_TITLE, Message, combo_box, dropdown, modal, value_of,
+};
 use crate::setup::Key;
 use crate::telemetry::TelemetryView;
 use crate::ui::{action, panel, theme};
@@ -351,6 +357,8 @@ pub struct FrameTypeLegacy<H = mp_link::RequestId> {
     writes: Writes<H>,
     /// Message boxes, the first showing.
     messages: VecDeque<Message>,
+    /// `configDefaultSettings1`, the Default Settings group's control.
+    defaults: DefaultSettings<H>,
 }
 
 impl<H> Default for FrameTypeLegacy<H> {
@@ -366,6 +374,7 @@ impl<H> Default for FrameTypeLegacy<H> {
             in_do_change: false,
             writes: Writes::default(),
             messages: VecDeque::new(),
+            defaults: DefaultSettings::default(),
         }
     }
 }
@@ -420,6 +429,37 @@ impl<H: Copy> FrameTypeLegacy<H> {
         self.messages.pop_front();
     }
 
+    /// The Default Settings control.
+    #[must_use]
+    pub const fn defaults(&self) -> &DefaultSettings<H> {
+        &self.defaults
+    }
+
+    /// The Default Settings control, for its clicks.
+    pub const fn defaults_mut(&mut self) -> &mut DefaultSettings<H> {
+        &mut self.defaults
+    }
+
+    /// The C#'s error boxes - "Set FRAME Failed", and the Default Settings control's - taken out
+    /// of their queues: the status line's words for the last of them (the module's notes).
+    pub fn take_link_errors(&mut self) -> Option<String> {
+        let mut status = None;
+        self.messages.retain(|message| {
+            if message.title == ERROR_TITLE {
+                status = Some(message.text.clone());
+                false
+            } else {
+                true
+            }
+        });
+        self.defaults.take_link_errors().or(status)
+    }
+
+    /// Starts the fetch the Default Settings control has asked for.
+    pub fn dispatch(&mut self) {
+        self.defaults.dispatch();
+    }
+
     /// `Activate`, on a new page object if this screen has none: disables the page for a vehicle
     /// without `FRAME`; otherwise `DoChange` on its value. A value that is not a whole number stops
     /// it where `Enum.Parse` throws, and `BackstageView` shows the page as it is.
@@ -434,6 +474,9 @@ impl<H: Copy> FrameTypeLegacy<H> {
             self.made_for = Some(key);
         }
         self.active = true;
+        // The Default Settings control's `Load`, the first time the page shows - whether or not
+        // the page is then disabled. `// C#: Controls/DefaultSettings.cs:103-106`
+        self.defaults.load();
         let Some(value) = value_of(parameters, PARAM) else {
             self.enabled = false;
             return;
@@ -535,6 +578,16 @@ impl<H: Copy> FrameTypeLegacy<H> {
             };
         }
         self.writes.advance(writer, &mut self.messages);
+        // `configDefaultSettings1_OnChange`: `Activate` again, which reads `FRAME` as the form
+        // left it. `// C#: GCSViews/ConfigurationView/ConfigFrameType.cs:41-44`
+        self.defaults.tick(writer, &view.parameters);
+        if self.defaults.take_changed()
+            && self.active
+            && let Some(key) = self.made_for
+        {
+            self.activate(&view.parameters, key);
+            self.writes.advance(writer, &mut self.messages);
+        }
     }
 }
 
@@ -575,7 +628,46 @@ pub fn record_facts(frame: &FrameTypeLegacy, view: &TelemetryView) {
             .message()
             .map_or("none", |message| message.text.as_str()),
     );
-    record("config.framelegacy.defaults", DEFAULTS_LOADING);
+    // The Default Settings control: the combo box's text - "Loading" until the listing comes -
+    // how many files it lists, whether its controls take clicks, `ParamCompare` and its writes.
+    let defaults = frame.defaults();
+    record(
+        "config.framelegacy.defaults",
+        if defaults.listed() {
+            defaults.combo().text()
+        } else {
+            DEFAULTS_LOADING
+        },
+    );
+    record("config.framelegacy.defaults.loaded", defaults.loaded());
+    record(
+        "config.framelegacy.defaults.files",
+        defaults.combo().options.len(),
+    );
+    record(
+        "config.framelegacy.defaults.enabled",
+        frame.enabled() && defaults.button_enabled(),
+    );
+    record(
+        "config.framelegacy.defaults.error",
+        defaults.listing_error().unwrap_or("none"),
+    );
+    record(
+        "config.framelegacy.defaults.compare",
+        defaults
+            .compare()
+            .map_or_else(|| "none".to_owned(), |form| form.rows().len().to_string()),
+    );
+    record(
+        "config.framelegacy.defaults.write",
+        defaults.last_write().unwrap_or("none"),
+    );
+    record(
+        "config.framelegacy.defaults.message",
+        defaults
+            .message()
+            .map_or("none", |message| message.text.as_str()),
+    );
     if let Some(value) = value_of(&view.parameters, PARAM) {
         record(format!("params.value.{PARAM}"), value);
     }
@@ -732,11 +824,42 @@ pub fn page(frame: &FrameTypeLegacy, cx: &mut Context<MissionPlanner>) -> Option
             .child(text(NOTE_H_AT, NOTE_H, enabled))
             .child(text(NOTE_Y6B_AT, NOTE_Y6B, enabled));
 
-    // `DefaultSettings`, as it is until its listing arrives: `Load` has disabled the combo and the
-    // button, and the combo reads "Loading". The listing is not fetched here; see the module's
-    // notes.
+    // `DefaultSettings`: its note, the combo box - "Loading", disabled, until the listing comes,
+    // then the names listed - and Load Params; all disabled with the page.
+    // `// C#: Controls/DefaultSettings.Designer.cs:29-66; Controls/DefaultSettings.resx`
+    let settings = frame.defaults();
     let (combo_x, combo_y, combo_w, combo_h) = DEFAULTS_COMBO_AT;
-    let defaults = at(DEFAULTS_AT)
+    let combo = if settings.listed() {
+        let shown = Combo {
+            enabled: enabled && settings.combo().enabled,
+            ..settings.combo().clone()
+        };
+        combo_box(
+            "framelegacy-defaults-combo".to_owned(),
+            &shown,
+            DEFAULTS_COMBO_AT,
+            |this| this.frame_type_legacy.defaults_mut().toggle_dropdown(),
+            cx,
+        )
+    } else {
+        crate::probe::measured(
+            "framelegacy-defaults-combo",
+            at((combo_x, combo_y, combo_w, combo_h)),
+        )
+        .flex()
+        .items_center()
+        .px_1()
+        .rounded_sm()
+        .border_1()
+        .border_color(rgb(theme::BORDER))
+        .bg(rgb(theme::PANEL))
+        .text_xs()
+        .text_color(rgb(theme::DIM))
+        .child(div().flex_1().child(DEFAULTS_LOADING))
+        .child(div().text_size(px(7.0)).child("▼"))
+        .into_any_element()
+    };
+    let mut defaults = at(DEFAULTS_AT)
         .child(
             crate::probe::measured("framelegacy-defaults-text", at(DEFAULTS_TEXT_AT))
                 .p(px(2.0))
@@ -747,66 +870,96 @@ pub fn page(frame: &FrameTypeLegacy, cx: &mut Context<MissionPlanner>) -> Option
                 .text_color(rgb(theme::DIM))
                 .child(DEFAULTS_TEXT),
         )
-        .child(
-            crate::probe::measured(
-                "framelegacy-defaults-combo",
-                at((combo_x, combo_y, combo_w, combo_h)),
-            )
-            .flex()
-            .items_center()
-            .px_1()
-            .rounded_sm()
-            .border_1()
-            .border_color(rgb(theme::BORDER))
-            .bg(rgb(theme::PANEL))
-            .text_xs()
-            .text_color(rgb(theme::DIM))
-            .child(div().flex_1().child(DEFAULTS_LOADING))
-            .child(div().text_size(px(7.0)).child("▼")),
-        )
-        .child(
-            crate::probe::measured("framelegacy-defaults-load", at(DEFAULTS_BUTTON_AT))
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded_sm()
-                .border_1()
-                .border_color(rgb(theme::BORDER))
-                .bg(rgb(theme::PANEL))
-                .text_xs()
-                .text_color(rgb(theme::DIM))
-                .child(DEFAULTS_LOAD),
-        );
+        .child(combo)
+        .child(button(
+            "framelegacy-defaults-load",
+            DEFAULTS_LOAD,
+            DEFAULTS_BUTTON_AT,
+            enabled && settings.button_enabled() && !settings.busy(),
+            |this, _window, _cx| {
+                // `Settings.GetUserDataDirectory()`.
+                let user_data = mp_settings::user_data_directory()
+                    .unwrap_or_else(|| std::env::temp_dir().join("MissionPlannerRust"));
+                let _ = std::fs::create_dir_all(&user_data);
+                this.frame_type_legacy
+                    .defaults_mut()
+                    .click_load(&user_data);
+            },
+            cx,
+        ));
+    if enabled && settings.dropdown() {
+        defaults = defaults.child(dropdown(
+            "framelegacy-defaults-combo",
+            settings.combo(),
+            (combo_x, combo_y + combo_h, combo_w),
+            |this, index| this.frame_type_legacy.defaults_mut().choose(index),
+            |this, lines| this.frame_type_legacy.defaults_mut().scroll_list(lines),
+            cx,
+        ));
+    }
     let defaults = group(DEFAULTS_GROUP_AT, DEFAULTS_GROUP, enabled).child(defaults);
 
     body = body.child(types).child(defaults);
     Some(panel(TITLE, body).into_any_element())
 }
 
-/// The message box showing, drawn over the whole window.
+/// The box or form showing, drawn over the whole window: the page's own box, the Default
+/// Settings control's, and `ParamCompare` under them, as the C#'s boxes show over the dialog
+/// they came from.
 pub fn overlay(
     frame: &FrameTypeLegacy,
     window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> Option<AnyElement> {
-    let message = frame.message()?;
-    let ok = action(
-        "framelegacy-message-ok",
-        "OK",
-        theme::ACCENT,
-        true,
-        cx.listener(|this, _event: &(), _window, cx| {
-            this.frame_type_legacy.dismiss_message();
-            cx.notify();
-        }),
-    );
-    Some(modal(
-        "framelegacy-message",
-        message.title,
-        &message.text,
-        true,
-        vec![ok],
+    if let Some(message) = frame.message() {
+        let ok = action(
+            "framelegacy-message-ok",
+            "OK",
+            theme::ACCENT,
+            true,
+            cx.listener(|this, _event: &(), _window, cx| {
+                this.frame_type_legacy.dismiss_message();
+                cx.notify();
+            }),
+        );
+        return Some(modal(
+            "framelegacy-message",
+            message.title,
+            &message.text,
+            message.title == ERROR_TITLE,
+            vec![ok],
+            window,
+        ));
+    }
+    let defaults = frame.defaults();
+    if let Some(message) = defaults.message() {
+        return Some(message_box(
+            "framelegacy-defaults-message",
+            "framelegacy-defaults-message-ok",
+            message,
+            window,
+            |this| this.frame_type_legacy.defaults_mut().dismiss_message(),
+            cx,
+        ));
+    }
+    let form = defaults.compare()?;
+    Some(param_compare::dialog(
+        form,
+        defaults.writing(),
+        param_compare::Handlers {
+            toggle_all: |this: &mut MissionPlanner| {
+                this.frame_type_legacy.defaults_mut().toggle_all();
+            },
+            toggle_row: |this: &mut MissionPlanner, index: usize| {
+                this.frame_type_legacy.defaults_mut().toggle_row(index);
+            },
+            save: |this: &mut MissionPlanner| this.frame_type_legacy.defaults_mut().click_save(),
+            close: |this: &mut MissionPlanner| {
+                this.frame_type_legacy.defaults_mut().close_compare();
+            },
+        },
         window,
+        cx,
     ))
 }
 
@@ -1204,5 +1357,88 @@ mod tests {
             );
         }
         assert!(facts >= 4, "{facts} facts");
+    }
+
+    /// The Default Settings control's `Load` runs with the page's first `Activate`, disabled page
+    /// or not, and asks for the listing once.
+    #[test]
+    fn the_default_settings_load_with_the_page() {
+        let frame = opened(1.0);
+        assert!(frame.defaults().loaded());
+        assert!(frame.defaults().busy(), "the listing is asked for");
+        assert!(!frame.defaults().button_enabled());
+
+        let mut frame: FrameTypeLegacy<usize> = FrameTypeLegacy::default();
+        frame.activate(&[], key());
+        assert!(!frame.enabled());
+        assert!(frame.defaults().loaded(), "Load fires on a disabled page too");
+    }
+
+    /// `ParamCompare` over a `.param` from `Tools/Frame_params`, closed: the control's `OnChange`
+    /// runs the page's `Activate` again, which reads `FRAME` as the vehicle now holds it and
+    /// writes it back - through the real `FRAME` of the vehicle's table.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFrameType.cs:22, 41-44`
+    #[test]
+    fn a_default_settings_change_runs_activate_again() {
+        use crate::config::default_settings::Arrived;
+        use mp_firmware::github::FileInfo;
+
+        let dir = std::env::temp_dir().join(format!(
+            "mp-gui-framelegacy-defaults-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("a scratch directory");
+        let mut view = view();
+        view.parameters = vec![(PARAM.to_owned(), 1.0)].into();
+        let mut frame = opened(1.0);
+        let answers = Answers::default();
+        for _ in 0..5 {
+            frame.tick(&answers, &view, true);
+        }
+        assert_eq!(answers.values(), [1.0], "Activate's own write");
+
+        let defaults = frame.defaults_mut();
+        defaults.arrive(
+            Arrived::Listing(Ok(vec![FileInfo {
+                name: "Y6B.param".into(),
+                path: "Tools/Frame_params/Y6B.param".into(),
+                size: 8,
+            }])),
+            &[],
+        );
+        defaults.arrive(
+            Arrived::File {
+                save_as: dir.join("Y6B.param"),
+                bytes: Ok(Some(b"FRAME 10\n".to_vec())),
+            },
+            &view.parameters,
+        );
+        assert_eq!(
+            frame
+                .defaults()
+                .compare()
+                .map(|form| form.rows().len()),
+            Some(1),
+            "FRAME differs"
+        );
+        frame.defaults_mut().close_compare();
+        for _ in 0..5 {
+            frame.tick(&answers, &view, true);
+        }
+        assert_eq!(answers.values(), [1.0, 1.0], "Activate ran again");
+        assert_eq!(frame.checked(), [1]);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// "Set FRAME Failed" goes on the status line rather than in a box (the owner's ruling).
+    #[test]
+    fn a_failed_frame_write_is_a_status_line() {
+        let mut frame = opened(0.0);
+        let answers = Answers::with(&[Progress::Finished(RequestOutcome::TimedOut)]);
+        frame.tick(&answers, &view(), true);
+        frame.tick(&answers, &view(), true);
+        assert_eq!(frame.take_link_errors().as_deref(), Some(FAILED));
+        assert!(frame.message().is_none());
+        assert_eq!(frame.take_link_errors(), None);
     }
 }

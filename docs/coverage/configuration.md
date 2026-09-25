@@ -11,12 +11,12 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 24 | 19 | 4 | 2 | 12 | 569 |
+| 61 | 26 | 17 | 4 | 2 | 12 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings
         // in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 19 | 14 | 2 | 2 | 7 | 258 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 21 | 12 | 2 | 2 | 7 | 258 |
         //     15 |
 | CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 5 | 5 | 2 | 0 | 1 | 277 |
         //     1 |
@@ -69,18 +69,15 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
         //     the upload and Force Bootloader are disabled, as nothing flashes in this build; not
         //     Ctrl+Q or Ctrl+P, nor the bootloader probe on a device's arrival; the pictures are
         //     named boxes |
-| 178 | `ConfigSecureAP` | Secure |  | disconnected | 4 | partial: `crates/mp-gui/src/config/secure.rs` `fn page` - the two groups, four buttons and three text boxes at the Designer's places; every
-        //     button disabled - Generate Key, Private Key, BootLoader and Firmware are Ed25519 key
-        //     generation, key reading and signing (BouncyCastle, SignedFW.cs), which this
-        //     application has no implementation of |
+| 178 | `ConfigSecureAP` | Secure |  | disconnected | 4 | done: `crates/mp-gui/src/config/secure.rs` `fn page` |
 | 182 | `ConfigMandatory` | Mandatory Hardware |  | any | 0 | plumbing: the Mandatory Hardware heading of the list: one sentence, no controls |
 | 187 | `ConfigTradHeli4` | Heli Setup | Mandatory Hardware | heli | 0 | done: `crates/mp-gui/src/config/trad_heli.rs` `fn page` |
 | 188 | `ConfigFrameType` | Frame Type | Mandatory Hardware | copter before 3.5 | 12 | partial: `crates/mp-gui/src/config/frame_type_legacy.rs` `fn page` - Activate on FRAME, the six radio buttons and pictures - all 12 wirings, the radio
-        //     buttons' CheckedChanged cascade in the Designer's order - and the FRAME writes
-        //     through the retrying set with "Set FRAME Failed"; missing the Default Settings
-        //     group's behaviour (Controls/DefaultSettings.cs: the Tools/Frame_params listing from
-        //     GitHub's contents API as JSON, and Load Params' ParamCompare form), drawn as it is
-        //     before the listing arrives; the frame pictures are named boxes |
+        //     buttons' CheckedChanged cascade in the Designer's order - the FRAME writes through
+        //     the retrying set, "Set FRAME Failed" on the status line; Default Settings listing
+        //     Tools/Frame_params from GitHub on Load, Load Params fetching the file into
+        //     ParamCompare and OnChange running Activate again; missing only the frame pictures,
+        //     named boxes rather than the C#'s PNGs, drawn at the opacity the 400 ms fade ends on |
 | 189 | `ConfigFrameClassType` | Frame Type | Mandatory Hardware | any with FRAME_CLASS; copter 3.5 and later | 19 | partial: `crates/mp-gui/src/config/frame_type.rs` `fn page` - the eight class buttons and six type rows from Common.ValidList, each click
         //     writing FRAME_CLASS then FRAME_TYPE through the retrying set; the frame pictures
         //     are named boxes, not the C#'s images |
@@ -103,9 +100,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
 | 228 | `ConfigFlightModes` | Flight Modes | Mandatory Hardware | any | 8 | partial: `crates/mp-gui/src/config/flight_modes.rs` `fn page` - the six combos from the firmware's mode list, the lit PWM band, Simple and Super
         //     Simple, Save through the retrying set; not Ctrl+S, standardFlightModesOnly beyond
         //     its default, nor the message box |
-| 232 | `ConfigFailSafe` | FailSafe | Mandatory Hardware | any | 4 | partial: `crates/mp-gui/src/config/failsafe.rs` `fn page` - the channel bars, the mode/armed/GPS readouts, the throttle, battery and GCS
-        //     controls writing their parameters on change through the retrying set; numbers by
-        //     step arrows only, no typing |
+| 232 | `ConfigFailSafe` | FailSafe | Mandatory Hardware | any | 4 | done: `crates/mp-gui/src/config/failsafe.rs` `fn page` |
 | 237 | `ConfigInitialParams` | Initial Tune Parameter | Mandatory Hardware | copter, quadplane | 3 | done: `crates/mp-gui/src/config/initial_params.rs` `fn page` |
 | 241 | `ConfigHWIDs` | HW ID | Mandatory Hardware | any | 0 | done: `crates/mp-gui/src/config/hw_ids.rs` `fn page` |
 | 243 | `ConfigOptional` | Optional Hardware |  | always | 0 | plumbing: the Optional Hardware heading of the list: one sentence, no controls |

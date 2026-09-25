@@ -288,16 +288,14 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigSecureAP"),
         Some(4),
         &[setup(178, "Secure", TOP, DISCONNECTED)],
-        // C#: GCSViews/ConfigurationView/ConfigSecureAP.cs:30-111 and its Designer - drawn whole;
-        // each of the four handlers is Ed25519 through BouncyCastle (SignedFW.cs), which no crate
-        // here implements, so each button is disabled with that reason.
-        Partial(
-            at("crates/mp-gui/src/config/secure.rs", "fn page"),
-            "the two groups, four buttons and three text boxes at the Designer's places; every
-        //     button disabled - Generate Key, Private Key, BootLoader and Firmware are Ed25519 key
-        //     generation, key reading and signing (BouncyCastle, SignedFW.cs), which this
-        //     application has no implementation of",
-        ),
+        // C#: GCSViews/ConfigurationView/ConfigSecureAP.cs:30-111 and its Designer, with
+        // ExtLibs/Utilities/SignedFW.cs as mp_firmware::signed (Ed25519 by ring, which rustls
+        // already compiles in): Generate Key saving the PEM and the two .dat files and warning,
+        // Private Key reading either back, BootLoader writing ArduPilot's three keys and the
+        // user's into the key table, Firmware signing the .apj's image - byte for byte Mission
+        // Planner's own output but for the image's deflate; the dialogs typed paths, a throw on
+        // the status line
+        Ours::Done(at("crates/mp-gui/src/config/secure.rs", "fn page")),
     ),
     panel(
         "ConfigMandatory",
@@ -329,16 +327,16 @@ pub const PANELS: &[Panel] = &[
         Some(12),
         &[setup(188, "Frame Type", MANDATORY, "copter before 3.5")],
         // C#: GCSViews/ConfigurationView/ConfigFrameType.cs:25-234 - Activate, DoChange, the 12
-        // wirings with WinForms' CheckedChanged cascade, and SetFrameParam. The Default Settings
-        // group is Controls/DefaultSettings.cs, a control of its own.
+        // wirings with WinForms' CheckedChanged cascade, and SetFrameParam - and the Default
+        // Settings group, Controls/DefaultSettings.cs:25-106, ported as config/default_settings.rs.
         Partial(
             at("crates/mp-gui/src/config/frame_type_legacy.rs", "fn page"),
             "Activate on FRAME, the six radio buttons and pictures - all 12 wirings, the radio
-        //     buttons' CheckedChanged cascade in the Designer's order - and the FRAME writes
-        //     through the retrying set with \"Set FRAME Failed\"; missing the Default Settings
-        //     group's behaviour (Controls/DefaultSettings.cs: the Tools/Frame_params listing from
-        //     GitHub's contents API as JSON, and Load Params' ParamCompare form), drawn as it is
-        //     before the listing arrives; the frame pictures are named boxes",
+        //     buttons' CheckedChanged cascade in the Designer's order - the FRAME writes through
+        //     the retrying set, \"Set FRAME Failed\" on the status line; Default Settings listing
+        //     Tools/Frame_params from GitHub on Load, Load Params fetching the file into
+        //     ParamCompare and OnChange running Activate again; missing only the frame pictures,
+        //     named boxes rather than the C#'s PNGs, drawn at the opacity the 400 ms fade ends on",
         ),
     ),
     panel(
@@ -498,15 +496,12 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigFailSafe"),
         Some(4),
         &[setup(232, "FailSafe", MANDATORY, ANY)],
-        // C#: GCSViews/ConfigurationView/ConfigFailSafe.cs:24-192, ported whole but for typed
-        // numbers - gpui has no numeric up-down, so the step arrows stand in - and the
-        // out-of-range prompt that only typed values raise.
-        Partial(
-            at("crates/mp-gui/src/config/failsafe.rs", "fn page"),
-            "the channel bars, the mode/armed/GPS readouts, the throttle, battery and GCS
-        //     controls writing their parameters on change through the retrying set; numbers by
-        //     step arrows only, no typing",
-        ),
+        // C#: GCSViews/ConfigurationView/ConfigFailSafe.cs:24-192 and its .resx: the sixteen
+        // channel bars, the mode (red below FS_THR_VALUE), armed and GPS readouts, the wiki link,
+        // Activate binding each control to the name the vehicle has, the combo and check boxes
+        // writing on change and the numbers - typed or stepped, "Out of range" asked above the
+        // maximum - 300 ms after; the .resx's tooltips; a failed write on the status line
+        Ours::Done(at("crates/mp-gui/src/config/failsafe.rs", "fn page")),
     ),
     panel(
         "ConfigInitialParams",
@@ -1888,7 +1883,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (24, 19, 4, 2, 12)
+            (26, 17, 4, 2, 12)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

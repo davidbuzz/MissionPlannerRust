@@ -14,9 +14,14 @@ workspace = true
 thiserror.workspace = true
 # The .apj/.px4 container is JSON holding a base64 zlib stream. All three are already compiled in
 # this workspace's dependency closure, so none of them costs a new build.
-serde_json.workspace = true
+# `preserve_order`: a signed `.apj` is written back in the order its keys were read, as
+# Newtonsoft's JObject keeps them (signed.rs).
+serde_json = { workspace = true, features = ["preserve_order"] }
 base64.workspace = true
 flate2.workspace = true
+# Ed25519 and SHA-512 for the Secure page's signing (signed.rs, SignedFW.cs's BouncyCastle):
+# already compiled into this crate as rustls' cryptography, under ureq, so it adds no build.
+ring = "0.17"
 # Board detection probes ports through the same transport the link uses, and reads its PortInfo.
 mp-transport.workspace = true
 # The firmware catalogue (manifest.rs): fetched as mp-params fetches parameter documentation,

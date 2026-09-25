@@ -951,6 +951,11 @@ impl MissionPlanner {
                 self.frame_type_legacy
                     .activate(&view.parameters, Key::of(&view));
             }
+            // `ConfigSecureAP` is a plain `UserControl`: shown, on the page object of this screen.
+            Some("ConfigSecureAP") => {
+                let key = Key::of(&self.telemetry.view());
+                self.secure.show(key);
+            }
             // ---- end Mandatory Hardware pages ----
             // Optional Hardware pages (`config/optional.rs`), each `Activate` every time.
             // C#: GCSViews/ConfigurationView/ConfigADSB.cs:253-305; ConfigBatteryMonitoring2.cs:17-62;
@@ -1075,6 +1080,7 @@ impl MissionPlanner {
             Some("ConfigAccelerometerCalibration") => self.accel_calibration.deactivate(),
             // C#: GCSViews/ConfigurationView/ConfigFrameType.cs:36-39
             Some("ConfigFrameType") => self.frame_type_legacy.deactivate(),
+            Some("ConfigSecureAP") => self.secure.hide(),
             // ---- end Mandatory Hardware pages ----
             // Optional Hardware pages: `Deactivate` where the page has one, else hidden.
             // C#: GCSViews/ConfigurationView/ConfigADSB.cs:667-671; ConfigBatteryMonitoring2.cs:64-68;
@@ -1223,12 +1229,11 @@ impl MissionPlanner {
                     cx,
                 ))
                 .into_any_element(),
-            // `ConfigSecureAP` is a plain `UserControl`: nothing to activate.
             // C#: GCSViews/ConfigurationView/ConfigSecureAP.Designer.cs:29-143
             "ConfigSecureAP" => div()
                 .flex()
                 .flex_col()
-                .child(crate::config::secure::page())
+                .child(crate::config::secure::page(&self.secure, cx))
                 .into_any_element(),
             // ---- end Mandatory Hardware pages ----
             // C#: GCSViews/ConfigurationView/ConfigHWCompass2.Designer.cs:84-571;
@@ -1273,7 +1278,13 @@ impl MissionPlanner {
                 ))
                 .into_any_element(),
             "ConfigFailSafe" => column()
-                .child(crate::config::failsafe::page(&self.failsafe, view, cx))
+                .child(crate::config::failsafe::page(
+                    &self.failsafe,
+                    &self.failsafe_focus,
+                    view,
+                    window,
+                    cx,
+                ))
                 .into_any_element(),
             "ConfigBatteryMonitoring" => column()
                 .child(crate::config::battery_monitor::page(

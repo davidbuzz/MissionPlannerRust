@@ -628,6 +628,8 @@ pub struct PathBox {
     pub field: TextField,
     /// The dialog's filter, shown under the box.
     pub filter: &'static str,
+    /// The dialog's caption: [`OPEN_FILE`], or "Save As" for a `SaveFileDialog`.
+    pub caption: &'static str,
 }
 
 impl PathBox {
@@ -642,7 +644,11 @@ impl PathBox {
                 directory.trim_end_matches(separator)
             ));
         }
-        Self { field, filter }
+        Self {
+            field,
+            filter,
+            caption: OPEN_FILE,
+        }
     }
 
     /// The file chosen, if the path names one that exists.
@@ -1966,7 +1972,7 @@ pub fn path_box(
         .border_1()
         .border_color(rgb(theme::ACCENT))
         .rounded_md()
-        .child(div().text_xs().text_color(rgb(theme::DIM)).child(OPEN_FILE))
+        .child(div().text_xs().text_color(rgb(theme::DIM)).child(path.caption))
         .child(crate::textfield::text_field(
             ids.path_value,
             &path.field,

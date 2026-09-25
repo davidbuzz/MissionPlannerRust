@@ -1,6 +1,7 @@
 pub mod accel_calibration;
 pub mod battery_monitor;
 pub mod compass;
+pub mod default_settings;
 pub mod esc_calibration;
 pub mod failsafe;
 pub mod firmware;

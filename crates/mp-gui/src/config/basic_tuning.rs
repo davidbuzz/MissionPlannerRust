@@ -935,8 +935,8 @@ pub fn record_facts<H: Copy>(tuning: &BasicTuning<H>, listed: bool) {
 // Drawing.
 // ---------------------------------------------------------------------------------------------
 
-/// A box's tooltip.
-struct Tip(SharedString);
+/// A box's tooltip: a `ToolTip`'s text in a small panel. Also the FailSafe page's.
+pub(crate) struct Tip(pub(crate) SharedString);
 
 impl Render for Tip {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {

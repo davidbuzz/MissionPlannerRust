@@ -3582,6 +3582,7 @@ dependencies = [
  "flate2",
  "mp-transport",
  "regex",
+ "ring",
  "roxmltree 0.20.0",
  "serde",
  "serde_json",

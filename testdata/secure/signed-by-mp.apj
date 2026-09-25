@@ -1,0 +1,20 @@
+{
+  "board_id": 9,
+  "magic": "APJFWv1",
+  "description": "Firmware for a STM32F427xx board",
+  "image": "eNpjV3NNaV508MF/OduY6lk7b3wXMw0pnrTxwns+XZ/srpUnnrOpuiQ3LTxw/5+sTXTVzB3Xv4maBBdN3HD+Ha+Od1bniuPPWFWckxoX7L/3V8Y6qnLG9mtfRYyDCiesP/eWR9srs2P5sacsyk6JDfP33f0jbRVZMX3b1S/CRoEF/evOvuHW8sxoX3b0CbOSY0L9vL13fktZRpRP23rls5BhQH7f2jOvuTQ90tuWHnnMpOgQXzd3z+1fkhbhZVO3XP4kaOCf17vm9CtODfe01iWHHzEqOC5++ik1cxK7eVjplM2XPgro++X2rD71ksODgYHhaRkDGHBuP7gi8FVVpceTN0//nxVXf3p464zHPFee7+1XXffE3n1d+pzrEpPvRy7iP7X+qef90IKfq4JOdz3m4linP73bXM2KZTD73z6uds7uWz8l0P2v7pbasvjQQwZ5u9ia2btu/hA3Cy2ZvOniB34935zuVSdfsNMo/gGPHSmB",
+  "extf_image": "",
+  "summary": "Pixhawk1",
+  "version": "0.1",
+  "image_size": 600,
+  "flash_total": 2080768,
+  "image_maxsize": 2080768,
+  "flash_free": 2080168,
+  "extflash_total": 0,
+  "extflash_free": 0,
+  "git_identity": "abcdef12",
+  "board_revision": 0,
+  "USBID": "0x1209/0x5741",
+  "signed_firmware": true,
+  "sha": "sCo8bfoU8CUmFFq66J9jOjXiewd4dTgynzxoqZYt6vbJ4FfoQNxR0CeA1hWAF/752GwuqEzU/wR4TyJ4EdivUg=="
+}
