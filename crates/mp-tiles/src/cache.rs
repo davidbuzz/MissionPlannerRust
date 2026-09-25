@@ -122,12 +122,14 @@ impl TileCache {
         Self { root: root.into() }
     }
 
-    /// Where the C# application keeps its cache on this machine, which is where ours goes too.
+    /// Where the C#'s rules put the cache, under this application's own directory name (PLAN.md
+    /// section 12, D11): the layout is the C#'s, so a copy of its cache reads here, but the
+    /// directory is not the C#'s and the one-shot import does not copy it.
     ///
-    /// `%ProgramData%\Mission Planner\gmapcache` on Windows and, under mono,
-    /// `~/.local/share/Mission Planner/gmapcache` (or `~/Mission Planner/gmapcache` on an
-    /// installation old enough to predate that). `MP_TILE_CACHE` overrides it, for tests and for
-    /// a screenshot that must not depend on what is cached here.
+    /// `%ProgramData%\MissionPlannerRust\gmapcache` on Windows and, on Linux,
+    /// `$XDG_DATA_HOME/MissionPlannerRust/gmapcache` (by default under `~/.local/share`), never
+    /// `~/MissionPlannerRust`. `MP_TILE_CACHE` overrides it, for tests and for a screenshot that
+    /// must not depend on what is cached here.
     #[must_use]
     pub fn default_root() -> PathBuf {
         if let Some(explicit) = std::env::var_os("MP_TILE_CACHE") {

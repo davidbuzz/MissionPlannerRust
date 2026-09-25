@@ -10,12 +10,12 @@
 # :1164-1208), and with Spline ticked a click adds a SPLINE_WAYPOINT, 82 (:588-592, 2059-2062).
 # With no vehicle setWPParams finds no loiter radius parameter and disables that box (:6726-6745).
 #
-# Self-contained: its own Mission Planner data directory, holding the boxes config(true) saved
+# Self-contained: its own data directory, holding the boxes config(true) saved
 # last time and a home, so the map has something to show without a vehicle.
 
 env XDG_DATA_HOME $WORK
 env MP_PLAN_DIR $WORK
-setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt><TXT_WPRad>12</TXT_WPRad><TXT_loiterrad>80</TXT_loiterrad><TXT_DefaultAlt>120</TXT_DefaultAlt></Config>' > "$WORK/Mission Planner/config.xml"
+setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt><TXT_WPRad>12</TXT_WPRad><TXT_loiterrad>80</TXT_loiterrad><TXT_DefaultAlt>120</TXT_DefaultAlt></Config>' > "$WORK/MissionPlannerRust/config.xml"
 
 screen plan
 window 1600x1200

@@ -2744,7 +2744,7 @@ mod tests {
 
         /// Where `config.xml` goes, under a data directory that does not exist yet.
         fn config(&self) -> PathBuf {
-            self.0.join("Mission Planner").join("config.xml")
+            self.0.join("MissionPlannerRust").join("config.xml")
         }
 
         fn seed(&self, text: &str) -> PathBuf {
@@ -3579,7 +3579,7 @@ mod tests {
     /// and a save - every key the page does not have is written back as it was read.
     #[test]
     fn the_real_config_keeps_every_key_the_page_does_not_have() {
-        let Some(real) = mp_settings::Config::default_path() else {
+        let Some(real) = mp_settings::Config::csharp_path() else {
             eprintln!("skipped: no home directory");
             return;
         };
@@ -3742,7 +3742,7 @@ mod tests {
         let scratch = Scratch::new("script");
         let path = scratch.config();
         // `env XDG_DATA_HOME $WORK`: a data directory, and so a log directory, that do not exist.
-        let logs = scratch.0.join("Mission Planner").join("logs");
+        let logs = scratch.0.join("MissionPlannerRust").join("logs");
         let cache = scratch.0.join("gmapcache");
         let mut run = Run::start(&path, &logs);
         let (mut checked, mut restarts) = (0, 0);

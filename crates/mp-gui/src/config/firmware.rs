@@ -582,7 +582,7 @@ impl Machine {
         Self {
             fetch: manifest::fetcher(),
             user_data: mp_settings::user_data_directory()
-                .unwrap_or_else(|| std::env::temp_dir().join("Mission Planner")),
+                .unwrap_or_else(|| std::env::temp_dir().join("MissionPlannerRust")),
             temp_dir: std::env::temp_dir(),
             comport: std::env::var(PORT_ENV)
                 .unwrap_or_else(|_| settings.get("comport").unwrap_or_default().to_owned()),

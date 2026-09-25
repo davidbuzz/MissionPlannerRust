@@ -156,7 +156,9 @@ fn the_real_mission_planner_cache_on_this_machine_reads_back() {
     // to read bytes the C# wrote through this crate's layout, without touching the real cache -
     // `read` deletes what it cannot decode, and a test has no business deleting an operator's
     // tiles even when they are corrupt.
-    let Some(real) = mp_settings::map_cache_directory() else {
+    let Some(real) =
+        mp_settings::Folders::from_environment().map(|f| f.csharp_map_cache_directory())
+    else {
         eprintln!("skipped: no home directory");
         return;
     };
@@ -193,7 +195,9 @@ fn the_real_mission_planner_cache_on_this_machine_reads_back() {
 fn google_imagery_the_csharp_cached_on_this_machine_is_shown_with_the_network_off() {
     // Mission Planner's default map, from its own cache, through the store the map draws from.
     // As above, the tile is copied out first: the store deletes what it cannot decode.
-    let Some(real) = mp_settings::map_cache_directory() else {
+    let Some(real) =
+        mp_settings::Folders::from_environment().map(|f| f.csharp_map_cache_directory())
+    else {
         eprintln!("skipped: no home directory");
         return;
     };

@@ -1,29 +1,45 @@
 //! Where Mission Planner keeps things on disk.
 //!
 //! Ported from `ExtLibs/Utilities/Settings.cs` (GPL-3.0-or-later): the directory rules only,
-//! because they are what every file format shared with the C# application hangs off. A recording,
-//! a parameter file or a map tile in the right format in the wrong directory is one the other
-//! application never finds, and "a user can run both apps against the same data directory"
-//! (DELIVERABLES.md D17) is a promise about paths before it is one about bytes.
+//! because they are what every file this application keeps hangs off.
+//!
+//! The rules are the C#'s; the name is not. The C# calls its directory `Mission Planner`
+//! (`Settings.AppConfigName`), and this application calls its own [`APP_CONFIG_NAME`],
+//! `MissionPlannerRust` - the owner's ruling of 2026-09-25 (PLAN.md section 12, D11): a user
+//! running both applications must not lose data to the other one's writes. The formats stay the
+//! C#'s, so a file copied from one directory to the other reads the same; [`migrate`] copies the
+//! C#'s files into this application's directory once, on the first start that finds it empty, and
+//! leaves the C#'s copies as they were.
 //!
 //! The rules are not what a Linux user would guess. `GetUserDataDirectory` asks .NET for
 //! `MyDocuments`, and under mono that is `$HOME`, not `~/Documents` - so the C# application on
 //! Linux looks for `~/Mission Planner`, does not find it, and settles in
 //! `~/.local/share/Mission Planner`. That is where a real installation on this machine keeps its
-//! logs, its parameter metadata and its map cache. Measured by asking mono itself
-//! (`Environment.GetFolderPath(SpecialFolder.MyDocuments)` printed the home directory), not
-//! inferred from the enum's name - which is how this crate's predecessor came to record flights
-//! under `~/Documents/Mission Planner/logs`, a directory the C# application never reads.
+//! logs, its parameter metadata and its map cache. This application settles in
+//! `~/.local/share/MissionPlannerRust` (`$XDG_DATA_HOME/MissionPlannerRust`) on Linux, and never
+//! in `~/MissionPlannerRust`: see [`Folders::user_data_directory`] for why its rule departs from
+//! the C#'s there. Measured by asking mono itself (`Environment.GetFolderPath(SpecialFolder.MyDocuments)` printed
+//! the home directory), not inferred from the enum's name - which is how this crate's predecessor
+//! came to record flights under `~/Documents/Mission Planner/logs`, a directory the C#
+//! application never reads.
 
 pub mod config;
+pub mod migrate;
 
 pub use config::{Config, ConfigError};
 
 use std::path::{Path, PathBuf};
 
-/// `Settings.AppConfigName`: the directory name under every base the C# uses. With the space.
+/// This application's `Settings.AppConfigName`: the directory name under every base the C# rules
+/// use. Not the C#'s `Mission Planner` ([`CSHARP_APP_CONFIG_NAME`]): the owner's ruling of
+/// 2026-09-25 (PLAN.md section 12, D11) gives this application a directory of its own.
 /// `// C#: ExtLibs/Utilities/Settings.cs:20`
-pub const APP_CONFIG_NAME: &str = "Mission Planner";
+pub const APP_CONFIG_NAME: &str = "MissionPlannerRust";
+
+/// The C#'s `Settings.AppConfigName`, with the space: the directory [`migrate`] imports from, and
+/// never writes to.
+/// `// C#: ExtLibs/Utilities/Settings.cs:20`
+pub const CSHARP_APP_CONFIG_NAME: &str = "Mission Planner";
 
 /// The special folders the C# rules are written in terms of, resolved once.
 ///
@@ -82,28 +98,53 @@ impl Folders {
         }
     }
 
-    /// `Settings.GetUserDataDirectory`: user-specific data.
+    /// `Settings.GetUserDataDirectory`: user-specific data, this application's.
     ///
-    /// The `MyDocuments` location if it already holds a `Mission Planner` directory, otherwise
-    /// on unix only, local application data. The C# comment on the check reads "do not migrate
-    /// to new approach if directory exists", so an installation that started life under the old
-    /// rule stays there for good. That has to be honoured here too, or a user with a decade of
-    /// logs in the old place gets a second, empty data directory and both applications disagree
-    /// about which one is real.
+    /// On unix, local application data - `$XDG_DATA_HOME/MissionPlannerRust`, by default
+    /// `~/.local/share/MissionPlannerRust` - always; on Windows, `Documents\MissionPlannerRust`.
+    ///
+    /// A departure from the C#, by the owner's ruling of 2026-09-25 (PLAN.md section 12, D11).
+    /// The C# first tries `MyDocuments/<AppConfigName>` and keeps to it if that directory exists
+    /// ("do not migrate to new approach if directory exists"), and mono maps `MyDocuments` to
+    /// `$HOME`. Under this application's name that is `~/MissionPlannerRust` - which is where this
+    /// repository's checkout lives, so the rule would put config, logs and tiles into the source
+    /// tree. The check is dropped for this application's directories on unix; the C#'s own keep
+    /// it ([`Folders::csharp_user_data_directory`]), because the import must find
+    /// `~/Mission Planner` where mono put it.
     /// `// C#: ExtLibs/Utilities/Settings.cs:340-365`
     #[must_use]
     pub fn user_data_directory(&self) -> PathBuf {
-        let old_approach = self.my_documents.join(APP_CONFIG_NAME);
-        if self.unix && !old_approach.is_dir() {
+        if self.unix {
+            // Not `MyDocuments/<name>` first, as the C# has it: PLAN.md section 12, D11.
             self.local_application_data.join(APP_CONFIG_NAME)
+        } else {
+            self.my_documents.join(APP_CONFIG_NAME)
+        }
+    }
+
+    /// The C#'s `Settings.GetUserDataDirectory`: the same rule under the C#'s name, which is
+    /// where [`migrate`] finds the files it imports.
+    /// `// C#: ExtLibs/Utilities/Settings.cs:344-363`
+    #[must_use]
+    pub fn csharp_user_data_directory(&self) -> PathBuf {
+        self.csharp_user_data_directory_named(CSHARP_APP_CONFIG_NAME)
+    }
+
+    /// `GetUserDataDirectory` as the C# has it, old-approach test and all, for a given
+    /// `AppConfigName`. Only the C#'s own directories are resolved this way.
+    /// `// C#: ExtLibs/Utilities/Settings.cs:344-363`
+    fn csharp_user_data_directory_named(&self, name: &str) -> PathBuf {
+        let old_approach = self.my_documents.join(name);
+        if self.unix && !old_approach.is_dir() {
+            self.local_application_data.join(name)
         } else {
             old_approach
         }
     }
 
-    /// `Settings.GetDataDirectory`: data shared between users of a machine.
+    /// `Settings.GetDataDirectory`: data shared between users of a machine, this application's.
     ///
-    /// Only Windows actually shares it - `%ProgramData%\Mission Planner`. Under mono it is the
+    /// Only Windows actually shares it - `%ProgramData%\MissionPlannerRust`. Under mono it is the
     /// user data directory, so the map cache and the logs sit side by side.
     /// `// C#: ExtLibs/Utilities/Settings.cs:325-336`
     #[must_use]
@@ -112,6 +153,17 @@ impl Folders {
             self.user_data_directory()
         } else {
             self.common_application_data.join(APP_CONFIG_NAME)
+        }
+    }
+
+    /// The C#'s `Settings.GetDataDirectory`: the same rule under the C#'s name.
+    /// `// C#: ExtLibs/Utilities/Settings.cs:325-336`
+    #[must_use]
+    pub fn csharp_data_directory(&self) -> PathBuf {
+        if self.unix {
+            self.csharp_user_data_directory()
+        } else {
+            self.common_application_data.join(CSHARP_APP_CONFIG_NAME)
         }
     }
 
@@ -131,6 +183,14 @@ impl Folders {
     #[must_use]
     pub fn map_cache_directory(&self) -> PathBuf {
         self.data_directory().join("gmapcache")
+    }
+
+    /// The C#'s `MyImageCache.CacheLocation`: its map tiles, which [`migrate`] leaves where they
+    /// are. Read by the tests that hold this application's cache layout to tiles the C# wrote.
+    /// `// C#: ExtLibs/Maps/MyImageCache.cs:27-28`
+    #[must_use]
+    pub fn csharp_map_cache_directory(&self) -> PathBuf {
+        self.csharp_data_directory().join("gmapcache")
     }
 }
 
@@ -216,41 +276,77 @@ mod tests {
 
     #[test]
     fn on_linux_a_fresh_installation_lives_under_local_share() {
-        // The rule that is not what anyone would guess: MyDocuments is $HOME under mono, so the
+        // The C#'s rule is not what anyone would guess: MyDocuments is $HOME under mono, so its
         // "old approach" path is ~/Mission Planner, and a machine that never had one gets
-        // ~/.local/share/Mission Planner - which is where the real installation on the machine
-        // this was written on keeps its logs and its map cache.
+        // ~/.local/share/Mission Planner - where the real C# installation on the machine this
+        // was written on keeps its logs and its map cache. This application is always beside it,
+        // in ~/.local/share/MissionPlannerRust.
         let scratch = Scratch::new("fresh-linux");
         let folders = mono(&scratch);
         assert_eq!(
             folders.user_data_directory(),
-            scratch.0.join("home/.local/share/Mission Planner")
+            scratch.0.join("home/.local/share/MissionPlannerRust")
         );
         assert_eq!(folders.data_directory(), folders.user_data_directory());
+        assert_eq!(
+            folders.csharp_user_data_directory(),
+            scratch.0.join("home/.local/share/Mission Planner")
+        );
+        assert_eq!(
+            folders.csharp_data_directory(),
+            folders.csharp_user_data_directory()
+        );
     }
 
     #[test]
-    fn on_linux_an_old_installation_is_never_migrated() {
+    fn on_linux_an_old_csharp_installation_is_found_where_mono_put_it() {
         // "Do not use new AppData path if old path already exists" - the C# comment. A decade
-        // of logs in ~/Mission Planner stays there.
+        // of logs in ~/Mission Planner stays there, and the import looks for it there.
         let scratch = Scratch::new("old-linux");
         let folders = mono(&scratch);
-        let old = folders.my_documents.join(APP_CONFIG_NAME);
+        let old = folders.my_documents.join(CSHARP_APP_CONFIG_NAME);
         std::fs::create_dir_all(&old).expect("create the old directory");
-        assert_eq!(folders.user_data_directory(), old);
-        assert_eq!(folders.data_directory(), old);
+        assert_eq!(folders.csharp_user_data_directory(), old);
+        assert_eq!(folders.csharp_data_directory(), old);
+        // And this application stays where it always is.
+        assert_eq!(
+            folders.user_data_directory(),
+            folders.local_application_data.join(APP_CONFIG_NAME)
+        );
     }
 
     #[test]
-    fn on_linux_a_file_named_like_the_old_directory_does_not_count() {
+    fn on_linux_a_mission_planner_rust_directory_in_home_changes_nothing() {
+        // ~/MissionPlannerRust is this repository's checkout on the machine it is written on.
+        // The C#'s old-approach rule would settle there; this application never does (PLAN.md
+        // section 12, D11).
+        let scratch = Scratch::new("checkout-in-home");
+        let folders = mono(&scratch);
+        let checkout = folders.my_documents.join(APP_CONFIG_NAME);
+        std::fs::create_dir_all(checkout.join("crates")).expect("a checkout");
+        std::fs::write(checkout.join("Cargo.toml"), b"[workspace]").expect("a manifest");
+        let ours = folders.local_application_data.join(APP_CONFIG_NAME);
+        assert_eq!(folders.user_data_directory(), ours);
+        assert_eq!(folders.data_directory(), ours);
+        assert_eq!(folders.default_log_directory(), ours.join("logs"));
+        assert_eq!(folders.map_cache_directory(), ours.join("gmapcache"));
+        assert_eq!(
+            migrate::Directories::of(&folders).to_user,
+            ours,
+            "the import writes there too"
+        );
+    }
+
+    #[test]
+    fn on_linux_a_file_named_like_the_csharps_old_directory_does_not_count() {
         // Directory.Exists is false for a file.
         let scratch = Scratch::new("file-not-dir");
         let folders = mono(&scratch);
         std::fs::create_dir_all(&folders.my_documents).expect("home");
-        std::fs::write(folders.my_documents.join(APP_CONFIG_NAME), b"").expect("a file");
+        std::fs::write(folders.my_documents.join(CSHARP_APP_CONFIG_NAME), b"").expect("a file");
         assert!(
             folders
-                .user_data_directory()
+                .csharp_user_data_directory()
                 .starts_with(&folders.local_application_data)
         );
     }
@@ -261,22 +357,31 @@ mod tests {
         let folders = windows(&scratch);
         assert_eq!(
             folders.user_data_directory(),
+            folders.my_documents.join("MissionPlannerRust")
+        );
+        assert_eq!(
+            folders.csharp_user_data_directory(),
             folders.my_documents.join("Mission Planner")
         );
     }
 
     #[test]
     fn on_windows_shared_data_is_under_program_data() {
-        // Which is where the C# keeps gmapcache on Windows: C:\ProgramData\Mission Planner.
+        // Which is where the C# keeps gmapcache on Windows: C:\ProgramData\Mission Planner; and
+        // this application, under its own name, C:\ProgramData\MissionPlannerRust.
         let scratch = Scratch::new("windows-shared");
         let folders = windows(&scratch);
         assert_eq!(
             folders.data_directory(),
-            scratch.0.join("ProgramData").join("Mission Planner")
+            scratch.0.join("ProgramData").join("MissionPlannerRust")
         );
         assert_eq!(
             folders.map_cache_directory(),
-            scratch.0.join("ProgramData/Mission Planner/gmapcache")
+            scratch.0.join("ProgramData/MissionPlannerRust/gmapcache")
+        );
+        assert_eq!(
+            folders.csharp_data_directory(),
+            scratch.0.join("ProgramData").join("Mission Planner")
         );
     }
 
@@ -292,10 +397,13 @@ mod tests {
     }
 
     #[test]
-    fn the_directory_name_is_the_one_with_the_space_in_it() {
-        // "MissionPlanner", "mission-planner" and "mission_planner" all look reasonable and are
-        // all a different directory from the one the C# application uses.
-        assert_eq!(APP_CONFIG_NAME, "Mission Planner");
+    fn the_directory_names_are_the_owners_and_the_csharps() {
+        // Ours is the owner's name for it (PLAN.md section 12, D11). The C#'s is the one with the
+        // space in it: "MissionPlanner", "mission-planner" and "mission_planner" all look
+        // reasonable and are all a different directory from the one the C# application uses, and
+        // an import from any of them would find nothing.
+        assert_eq!(APP_CONFIG_NAME, "MissionPlannerRust");
+        assert_eq!(CSHARP_APP_CONFIG_NAME, "Mission Planner");
     }
 
     #[test]
@@ -305,6 +413,12 @@ mod tests {
         assert_eq!(
             folders.map_cache_directory(),
             folders.data_directory().join("gmapcache")
+        );
+        assert_eq!(
+            folders.csharp_map_cache_directory(),
+            scratch
+                .0
+                .join("home/.local/share/Mission Planner/gmapcache")
         );
     }
 
@@ -328,7 +442,7 @@ mod tests {
         assert!(
             default_log_directory()
                 .expect("same environment")
-                .ends_with("Mission Planner/logs"),
+                .ends_with("MissionPlannerRust/logs"),
             "{:?}",
             default_log_directory()
         );

@@ -66,11 +66,7 @@ fi
 # screenshot must not rewrite the settings of the Mission Planner installed on this machine, so it
 # gets a copy of the file it would have read, as tools/gui-test.sh gives its tests.
 if [ -z "${MP_CONFIG_XML:-}" ]; then
-    if [ -d "$HOME/Mission Planner" ]; then
-        DATA_DIR="$HOME/Mission Planner"
-    else
-        DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/Mission Planner"
-    fi
+    DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/MissionPlannerRust"
     export MP_CONFIG_XML="$(mktemp -t mpr-config-XXXXXX.xml)"
     [ -f "$DATA_DIR/config.xml" ] && cp "$DATA_DIR/config.xml" "$MP_CONFIG_XML"
 fi

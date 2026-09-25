@@ -31,8 +31,8 @@ Linux only, so far: the repository has no remote, and the three-OS CI matrix has
 | Missions | upload and download, `.waypoints` files, 129-file corpus |
 | Survey grids | `Grid.CreateGrid`, `CreateCorridor` and `CreateRotary` transliterated over a port of ProjNet's UTM and the C#'s Clipper, bit-identical to the C# on 284 golden cases the real code generated under mono; the Survey (Grid) dialog is `GridUI.cs` whole, its Accept held to GridUI's own code under mono over 40 cases (5,656 Accept calls) bit for bit |
 | Logs | `.tlog` read and write; ArduPilot `.BIN` dataflash parsing; the log browser with `LogBrowse.cs`'s two axes, data grid, map, double-click cursor, mode/error/message overlays, Show Params, the preselected graph sets, the five routes, point values, zoom and pan and the grid's export menu, opening a 1 GB log to its first plot in about 0.6 s; `.BIN → .log`, KML+GPX and `.mat` conversions byte-identical to `BinaryLog`, `LogOutput` and `MatLab` run under mono |
-| Flight recording | every connection recorded to a `.tlog`, both directions, into Mission Planner's own logs directory |
-| Data directory | `Settings.cs`'s rules ported, mono quirks included, so files land where the C# application looks; its `config.xml` is read for the last link, map type, log directory, planner home and quick views, and written whole on the C#'s events (start-up, the screen buttons, Connect, the close box), byte for byte what the C# writes for the same keys |
+| Flight recording | every connection recorded to a `.tlog`, both directions, into the `logs` directory of this application's own data directory |
+| Data directory | a directory of its own, `~/.local/share/MissionPlannerRust` on Linux (`$XDG_DATA_HOME/MissionPlannerRust`, never `~/MissionPlannerRust`) and `Documents\MissionPlannerRust` on Windows, so neither application writes over the other's files; the C#'s is found by `Settings.cs`'s rules, mono quirks included; the first start with that directory missing or empty imports the C#'s `config.xml`, `poi.txt`, `cameras.xml` and its other user files once, leaving them as they were; `config.xml` is read for the last link, map type, log directory, planner home and quick views, and written whole on the C#'s events (start-up, the screen buttons, Connect, the close box), byte for byte what the C# writes for the same keys |
 | Health | EKF variances and vibration with ArduPilot's own thresholds, clipping counts |
 | Calibration | accelerometer, compass, radio and motor test as Mission Planner's own pages, `ConfigHWCompass2`, `ConfigRadioInput` and `ConfigMotorTest` ported whole, in its SETUP list |
 | Joystick | axes to `RC_CHANNELS_OVERRIDE` from a thread that blocks on the device and sends on change — 0.1 ms p99 stick-to-link on a fake device — with a release-on-disconnect failsafe (Linux) |
@@ -130,11 +130,16 @@ mpr kml flight.tlog flight.kml
 mpr-gui                          # the graphical front end
 ```
 
-The GUI records every flight without being asked, into Mission Planner's own logs directory —
-`~/.local/share/Mission Planner/logs` on Linux, `Documents\Mission Planner\logs` on Windows, by
-the same rules `Settings.cs` uses (which are not the obvious ones: see `crates/mp-settings`) — so
-a flight recorded by either application is found by both. Map tiles go to the same place's
-`gmapcache`. `MP_NO_RECORD` turns recording off.
+The GUI records every flight without being asked, into its own data directory's `logs` —
+`~/.local/share/MissionPlannerRust/logs` on Linux (`$XDG_DATA_HOME` when set, and never
+`~/MissionPlannerRust`), `Documents\MissionPlannerRust\logs` on Windows - a directory of its own
+rather than the C#'s `Mission Planner`, so a user running both loses nothing to the other (see
+`crates/mp-settings`). On the first start that finds that directory
+missing or empty, Mission Planner's `config.xml`, `poi.txt`, `cameras.xml`, `checklist.xml`,
+`warnings.xml`, `UserAlerts.json`, `authkeys.xml`, `logo.png`, `logo.txt` and `History` are
+copied into it once and left untouched where they were; the tile cache, terrain, logs and
+parameter metadata are not copied, and are fetched or recorded again. Map tiles go to the same
+place's `gmapcache`. `MP_NO_RECORD` turns recording off.
 
 Requires a recent stable Rust (see `rust-toolchain.toml`).
 

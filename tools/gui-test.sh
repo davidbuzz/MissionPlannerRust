@@ -200,14 +200,10 @@ done
 # on the FLIGHT DATA and FLIGHT PLAN buttons, and on closing. A test that gave it neither a data
 # directory of its own (`env XDG_DATA_HOME $WORK`) nor a file (`env MP_CONFIG_XML ...`) gets a copy
 # of the file it would have read, in $WORK: it reads what it always read, and the settings of the
-# Mission Planner installed on the machine running it are never rewritten by a test. The directory
-# is found as the application finds it - ~/Mission Planner if that exists, else the XDG data one.
+# application on the machine running it are never rewritten by a test. The directory is found as
+# the application finds it: the XDG data one, never ~/MissionPlannerRust (PLAN.md section 12, D11).
 if [ -z "${MP_CONFIG_XML:-}" ]; then
-    if [ -d "$HOME/Mission Planner" ]; then
-        DATA_DIR="$HOME/Mission Planner"
-    else
-        DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/Mission Planner"
-    fi
+    DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/MissionPlannerRust"
     case "$DATA_DIR" in
         "$WORK"/*) ;;
         *)

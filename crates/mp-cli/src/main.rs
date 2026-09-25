@@ -23,6 +23,22 @@ use mp_vehicle::{StateHandle, VehicleId};
 
 fn main() -> std::process::ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    // The data directory is this application's own (PLAN.md section 12, D11), and several
+    // commands write into it - the log analyzer, the parameter metadata, the terrain tiles. The
+    // one-shot import of Mission Planner's files runs first, as the GUI's does: a directory this
+    // command made non-empty would never be imported into.
+    match mp_settings::migrate::import_at_start() {
+        imported @ mp_settings::migrate::Import::Imported { .. } => {
+            eprintln!(
+                "mpr: imported Mission Planner's files (left as they were): {}",
+                imported.summary()
+            );
+        }
+        mp_settings::migrate::Import::Failed(why) => {
+            eprintln!("mpr: importing Mission Planner's files: {why}");
+        }
+        _ => {}
+    }
     match args.first().map(String::as_str) {
         Some("watch") => match args.get(1) {
             Some(url) => watch(url, args.get(2).and_then(|s| s.parse().ok())),

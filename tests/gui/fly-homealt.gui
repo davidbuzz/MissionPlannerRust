@@ -19,7 +19,7 @@
 # Needs SITL (a copter): tools/gui-test.sh tests/gui/fly-homealt.gui -- tcp:127.0.0.1:5760
 
 env XDG_DATA_HOME $WORK
-setup mkdir -p "$WORK/Mission Planner/srtm" && python3 -c 'import sys; open(sys.argv[1], "wb").write(bytes([2, 72]) * (1201 * 1201))' "$WORK/Mission Planner/srtm/S36E149.hgt"
+setup mkdir -p "$WORK/MissionPlannerRust/srtm" && python3 -c 'import sys; open(sys.argv[1], "wb").write(bytes([2, 72]) * (1201 * 1201))' "$WORK/MissionPlannerRust/srtm/S36E149.hgt"
 screen fly
 window 1600x1200
 settle 8

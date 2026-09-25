@@ -31,6 +31,13 @@ fn mpr(args: &[&Path]) -> std::process::Output {
         .env("ALL_PROXY", "http://127.0.0.1:1")
         .env_remove("NO_PROXY")
         .env_remove("no_proxy")
+        // `mpr` imports Mission Planner's files into its own data directory on the first start
+        // that finds it empty (`mp_settings::migrate`); a test is not that start. A data
+        // directory that does not exist, with no C# directory beside it, imports nothing.
+        .env(
+            "XDG_DATA_HOME",
+            std::env::temp_dir().join(format!("mpr-log-data-{}", std::process::id())),
+        )
         .output()
         .unwrap()
 }

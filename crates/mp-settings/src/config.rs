@@ -1,13 +1,14 @@
-//! Mission Planner's `config.xml`: the settings file both applications can share.
+//! Mission Planner's `config.xml`: the settings file, in a format both applications read.
 //!
 //! Ported from `ExtLibs/Utilities/Settings.cs` `Load()` (427-505) and `Save()` (507-550). The
 //! format is as plain as a settings file gets - a `Config` root and one element per key, the
 //! element's text being the value - and [`Config::render`] writes it byte for byte as
 //! `XmlTextWriter` does under mono, so a file this crate writes is one the C# reads back unchanged
-//! and vice versa: the promise DELIVERABLES.md D17 makes about running both applications on one
-//! data directory. Measured, not guessed: `tests/fixtures/config-saved.xml` is what Mission
-//! Planner's own `Settings.Save` wrote, under mono, for the keys in `config-saved.txt`
-//! (`tests/fixtures/SettingsOracle.cs` drives it), and the tests render the same keys and compare.
+//! and vice versa (DELIVERABLES.md D17) - which is what lets [`crate::migrate`] import the C#'s
+//! file into this application's own directory by copying it. Measured, not guessed:
+//! `tests/fixtures/config-saved.xml` is what Mission Planner's own `Settings.Save` wrote, under
+//! mono, for the keys in `config-saved.txt` (`tests/fixtures/SettingsOracle.cs` drives it), and
+//! the tests render the same keys and compare.
 //!
 //! What the writer does that is easy to get wrong:
 //!
@@ -83,6 +84,15 @@ impl Config {
             std::env::var_os(PATH_VARIABLE),
             crate::user_data_directory(),
         )
+    }
+
+    /// Where the C# application keeps its own `config.xml`: its user data directory, under its
+    /// name. [`crate::migrate`] imports it from there once; nothing here writes it.
+    /// `// C#: ExtLibs/Utilities/Settings.cs:370-411`
+    #[must_use]
+    pub fn csharp_path() -> Option<PathBuf> {
+        crate::Folders::from_environment()
+            .map(|folders| folders.csharp_user_data_directory().join(FILE_NAME))
     }
 
     /// Reads a file.
@@ -629,7 +639,7 @@ mod tests {
 
     #[test]
     fn the_variable_names_the_file_when_it_names_anything() {
-        let data = PathBuf::from("/home/pilot/.local/share/Mission Planner");
+        let data = PathBuf::from("/home/pilot/.local/share/MissionPlannerRust");
         assert_eq!(
             path_from(None, Some(data.clone())),
             Some(data.join("config.xml"))
@@ -650,7 +660,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mp-settings-config-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         // GetConfigFullPath creates the user data directory; so does this.
-        let path = dir.join("Mission Planner").join("config.xml");
+        let path = dir.join("MissionPlannerRust").join("config.xml");
         let config = Config::parse(FIXTURE).expect("parses");
         config.save(&path).expect("save");
         let back = Config::load(&path).expect("load");
@@ -659,11 +669,11 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// The real file on this machine, when there is one: it reads, it says what it says, and it
-    /// renders back to the same bytes.
+    /// The C#'s real file on this machine, when there is one: it reads, it says what it says, and
+    /// it renders back to the same bytes.
     #[test]
     fn the_real_config_on_this_machine_round_trips() {
-        let Some(path) = Config::default_path() else {
+        let Some(path) = Config::csharp_path() else {
             eprintln!("skipped: no home directory");
             return;
         };
@@ -692,7 +702,7 @@ mod tests {
     /// changes no byte, and a new value changes that element and nothing else.
     #[test]
     fn each_persisted_key_round_trips_through_the_real_config() {
-        let Some(path) = Config::default_path() else {
+        let Some(path) = Config::csharp_path() else {
             eprintln!("skipped: no home directory");
             return;
         };

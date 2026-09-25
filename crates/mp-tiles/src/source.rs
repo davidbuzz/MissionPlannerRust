@@ -24,10 +24,10 @@ pub struct TileSource {
     pub id: &'static str,
     /// The directory this provider's tiles are cached under, which is the C# provider's `Name`.
     ///
-    /// Not `id`. The cache is shared with the C# application, and it files tiles under
-    /// `GMapProviders.TryGetProvider(type).Name` - so this must be that string exactly, or the two
-    /// applications keep two caches of the same imagery side by side and neither finds the
-    /// other's. Stable for the same reason `id` is, and more so: changing it orphans gigabytes.
+    /// Not `id`. The cache is laid out as the C# application lays out its own, which files tiles
+    /// under `GMapProviders.TryGetProvider(type).Name` - so this must be that string exactly, or a
+    /// copy of the C#'s cache is a second cache of the same imagery that nothing here finds.
+    /// Stable for the same reason `id` is, and more so: changing it orphans gigabytes.
     /// It is also the name `config.xml`'s `MapType` holds.
     /// `// C#: ExtLibs/Maps/MyImageCache.cs:72; GCSViews/FlightPlanner.cs:2237`
     pub cache_name: &'static str,
@@ -763,7 +763,7 @@ mod tests {
         assert!(ESRI_WORLD_IMAGERY.attribution.contains("Esri"));
     }
 
-    /// Cache names are directories in a tree shared with the C# application, so a collision
+    /// Cache names are directories in a tree laid out as the C# application's is, so a collision
     /// mixes two providers' tiles - and one that differs from the C# name by a character keeps
     /// a second copy of everything.
     #[test]

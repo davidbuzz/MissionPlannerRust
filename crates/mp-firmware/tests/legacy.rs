@@ -127,7 +127,7 @@ fn cx<'a>(person: &'a mut Person, fetch: &'a dyn Fetch, scratch: &Scratch) -> Cx
     Cx {
         dialogue: person,
         fetch,
-        user_data: scratch.0.join("Mission Planner"),
+        user_data: scratch.0.join("MissionPlannerRust"),
         temp_dir: scratch.0.join("tmp"),
     }
 }
@@ -303,7 +303,7 @@ fn a_cube_orange_downloads_its_build_and_stops_at_the_reboot() {
         reached.url.as_deref(),
         Some("http://firmware.ardupilot.org/Copter/stable/CubeOrange/arducopter.apj")
     );
-    let saved = scratch.0.join("Mission Planner").join("firmware.hex");
+    let saved = scratch.0.join("MissionPlannerRust").join("firmware.hex");
     assert_eq!(reached.file.as_deref(), Some(saved.as_path()));
     let size = std::fs::metadata(fixture("arducopter.apj")).unwrap().len();
     assert_eq!(reached.size, Some(size));

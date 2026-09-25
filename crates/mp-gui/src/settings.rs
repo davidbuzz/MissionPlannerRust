@@ -297,6 +297,8 @@ pub struct Persisted {
     saves: usize,
     last_save: Option<SaveEvent>,
     save_error: Option<String>,
+    /// What this start's one-shot import copied from Mission Planner's directory, or `none`.
+    imported: String,
 }
 
 impl Persisted {
@@ -337,7 +339,14 @@ impl Persisted {
             saves: 0,
             last_save: None,
             save_error: None,
+            imported: "none".to_owned(),
         }
+    }
+
+    /// Remembers what this start's one-shot import copied (`mp_settings::migrate`), for the
+    /// `config.imported` fact.
+    pub fn set_imported(&mut self, summary: String) {
+        self.imported = summary;
     }
 
     /// The dictionary.
@@ -543,6 +552,7 @@ impl Persisted {
             self.last_save.map_or("none", SaveEvent::label),
         );
         crate::facts::record("config.error", self.save_error.as_deref().unwrap_or("none"));
+        crate::facts::record("config.imported", &self.imported);
     }
 }
 
@@ -764,7 +774,7 @@ mod tests {
         /// Where `config.xml` goes, under a data directory that does not exist yet - the C#
         /// makes it, and so does a save here.
         fn config(&self) -> PathBuf {
-            self.0.join("Mission Planner").join("config.xml")
+            self.0.join("MissionPlannerRust").join("config.xml")
         }
 
         fn seed(&self, text: &str) -> PathBuf {
@@ -976,7 +986,7 @@ mod tests {
         // The real file on this machine, copied: Load, the start-up save, byte for byte - comport
         // a device path whose baud key the C# never writes, and 70-odd keys this application
         // does not know.
-        let Some(real) = mp_settings::Config::default_path() else {
+        let Some(real) = mp_settings::Config::csharp_path() else {
             eprintln!("skipped: no home directory");
             return;
         };
@@ -1045,6 +1055,56 @@ mod tests {
         );
         // Which names no link.
         assert_eq!(reload(&path).last_link(), None);
+    }
+
+    /// `tests/gui/config-import.gui` against the model: the C#'s directory seeded as the script
+    /// seeds it, the import `main` runs before anything reads the directory, and the files then
+    /// read from this application's own directory - twice, as the script's restart does. What
+    /// the script expects of `config.imported` is what each start's import reports.
+    #[test]
+    fn the_import_script_expects_what_the_import_copies() {
+        let script = include_str!("../../../tests/gui/config-import.gui");
+        let expected: Vec<&str> = script
+            .lines()
+            .filter_map(|line| line.strip_prefix("expect config.imported "))
+            .collect();
+        assert_eq!(expected, ["config.xml, poi.txt, History", "none"]);
+
+        let scratch = Scratch::new("import");
+        // `env XDG_DATA_HOME $WORK`, on a machine with neither application's old directory.
+        let folders = mp_settings::Folders {
+            my_documents: scratch.0.join("home"),
+            local_application_data: scratch.0.clone(),
+            common_application_data: PathBuf::from("/usr/share"),
+            unix: true,
+        };
+        let directories = mp_settings::migrate::Directories::of(&folders);
+        let theirs = scratch.0.join("Mission Planner");
+        assert_eq!(directories.from_user, theirs);
+        assert_eq!(directories.to_user, scratch.0.join("MissionPlannerRust"));
+        std::fs::create_dir_all(theirs.join("History")).expect("the C#'s directory");
+        std::fs::write(
+            theirs.join("config.xml"),
+            "\u{feff}<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<Config>\n  <distunits>Feet</distunits>\n  <MapType>OpenStreetMap</MapType>\n</Config>",
+        )
+        .expect("config.xml");
+        std::fs::write(
+            theirs.join("poi.txt"),
+            "-35.3625\t149.1655\tgate\r\n-35.3640\t149.1640\tmast\r\n",
+        )
+        .expect("poi.txt");
+        std::fs::write(theirs.join("History").join("firmware.hex"), "fw").expect("History");
+
+        for expect in expected {
+            let imported = mp_settings::migrate::import(&directories);
+            let mut persisted = Persisted::at(Some(directories.to_user.join("config.xml")));
+            persisted.set_imported(imported.summary());
+            assert_eq!(persisted.imported, expect);
+            assert_eq!(persisted.get("distunits"), Some("Feet"));
+            assert_eq!(persisted.get("MapType"), Some("OpenStreetMap"));
+            let poi = crate::poi::Pois::kept_in(Some(directories.to_user.join("poi.txt")));
+            assert_eq!(poi.points().len(), 2);
+        }
     }
 
     /// `tests/gui/settings-persist.gui`, step for step, against the model: the same changes at
@@ -1209,7 +1269,7 @@ mod tests {
     /// shown, if that provider is ported.
     #[test]
     fn the_map_the_real_mission_planner_last_showed_is_taken() {
-        let Some(path) = mp_settings::Config::default_path() else {
+        let Some(path) = mp_settings::Config::csharp_path() else {
             eprintln!("skipped: no home directory");
             return;
         };

@@ -8,12 +8,12 @@
 # waypoints 1 and 2, not as home and waypoint 1. A blank home is latitude 0, which is never
 # offered to the boxes, so nothing is asked.
 #
-# Its own Mission Planner data directory, empty, so no home saved on this machine is in the boxes.
+# Its own data directory, empty, so no home saved on this machine is in the boxes.
 
 env XDG_DATA_HOME $WORK
 # A home in a config.xml of the test's own: the planner's map has no view without one, and a
 # click on a map without a view adds nothing.
-setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
+setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/MissionPlannerRust/config.xml"
 env MP_PLAN_DIR $WORK
 
 screen plan

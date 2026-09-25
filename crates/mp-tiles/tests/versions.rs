@@ -141,7 +141,9 @@ fn the_fixture_is_what_the_csharp_found() {
 fn the_page_the_csharp_cached_on_this_machine_yields_a_version() {
     // Read in place and never through `urlcache::get`, which deletes a page it finds too old - a
     // test has no business deleting the C# application's files.
-    let Some(root) = mp_settings::map_cache_directory() else {
+    let Some(root) =
+        mp_settings::Folders::from_environment().map(|f| f.csharp_map_cache_directory())
+    else {
         eprintln!("skipped: no home directory");
         return;
     };

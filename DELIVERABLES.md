@@ -537,12 +537,22 @@ and strict backward compatibility with the C# app's user data.
 - **DoD:** automated `.resx` → `.ftl` conversion with a zero-string-loss report for every culture present in
   the repo; missing-translation lint in CI; the Rust app **reads and writes the existing** `config.xml`,
   `.waypoints`, `.param`, `.tlog`, mission/fence/rally files and map cache without conversion; a user can
-  run both apps against the same data directory.
+  run both apps side by side, each in its own data directory - the Rust app's is
+  `~/.local/share/MissionPlannerRust` on Linux, which imports the C#'s user files once on its first
+  start (owner's ruling, PLAN.md §12 D11).
 - **Replaces:** `L10N.cs`, `ExtLibs/Strings`, the per-culture `.resx` sprawl, `crowdin.bat`, settings code.
 - **Today:** `mp-settings` ports the data-directory rules from `ExtLibs/Utilities/Settings.cs`,
-  including the mono quirk that puts a Linux installation under `~/.local/share/Mission Planner`
-  rather than `~/Documents`; flight recordings and the map cache use them, so both applications
-  find each other's files. `mp_settings::Config` reads and writes `config.xml` exactly as
+  including the mono quirk that puts a Linux installation under `~/.local/share` rather than
+  `~/Documents`, which is how it finds the C#'s `Mission Planner` directory - only ever read. This
+  application's own is `~/.local/share/MissionPlannerRust` on Linux (`$XDG_DATA_HOME` when set;
+  never `~/MissionPlannerRust`, where the C#'s old-approach rule would look) and
+  `Documents\MissionPlannerRust` on Windows (PLAN.md §12 D11, §13.6 row 77). On the first start that finds its
+  own directory missing or empty, `mp_settings::migrate` copies the C#'s `config.xml`, `poi.txt`,
+  `cameras.xml`, `checklist.xml`, `warnings.xml`, `UserAlerts.json`, `authkeys.xml`, `logo.png`,
+  `logo.txt` and `History` across by name, once, recording them in a marker file and leaving the
+  C#'s copies as they were; the tile cache, terrain, logs and parameter metadata are left behind
+  to be re-created. The GUI publishes what a start imported as `config.imported`
+  (`tests/gui/config-import.gui`). `mp_settings::Config` reads and writes `config.xml` exactly as
   `Settings.Load`/`Save` do - keys sorted case-insensitively, `/` spelled `____`, a UTF-8 BOM,
   no final newline - and a test renders this machine's real file back byte for byte. The GUI
   reads the recording directory, the last link and the map type from it. The GUI holds the
@@ -566,7 +576,7 @@ and strict backward compatibility with the C# app's user data.
   the exact .NET string, placeholders filled. **Not yet:** Fluent in `mp-gui` and a screen's
   strings through `fl!()` - a change to what the screens show, for a run on the owner's word - and
   the missing-translation lint beyond the report's *missing* column.
-- **Tests:** `crates/mp-settings`'s unit tests over `tests/fixtures/` (this machine's real `config.xml` rendered back byte for byte, and `config-saved.xml` from `SettingsOracle.cs` under mono), `tests/gui/settings-persist.gui` (a restart through the close box) and `config-planner.gui` (forty keys read back); the data formats are proved in their own crates - `.waypoints` in `mp-mission`, `.param` in `mp-params`, `.tlog` in `mp-mavlink` and `mp-log`, the map cache in `mp-tiles`. `xtask/tests/resx.rs` is `resx_conversion.rs` and `placeholders.rs` together: every message of every culture's `.ftl` formatted back through a `FluentBundle` to its `.resx` value (2,900-odd), nothing lost, the ids immutable, the committed assets current, and the placeholder mismatches counted in the report. Not yet: `pseudolocale.rs` (no screen reads a `.ftl` yet), and a single `data_compat.rs` over every format at once.
+- **Tests:** `crates/mp-settings`'s unit tests over `tests/fixtures/` (this machine's real `config.xml` rendered back byte for byte, and `config-saved.xml` from `SettingsOracle.cs` under mono) and `migrate.rs`'s over scratch directories (each artefact copied with the C#'s copy byte-identical afterwards, a second start importing nothing, a non-empty directory left alone, no C# directory), `tests/gui/settings-persist.gui` (a restart through the close box) and `config-planner.gui` (forty keys read back); the data formats are proved in their own crates - `.waypoints` in `mp-mission`, `.param` in `mp-params`, `.tlog` in `mp-mavlink` and `mp-log`, the map cache in `mp-tiles`. `xtask/tests/resx.rs` is `resx_conversion.rs` and `placeholders.rs` together: every message of every culture's `.ftl` formatted back through a `FluentBundle` to its `.resx` value (2,900-odd), nothing lost, the ids immutable, the committed assets current, and the placeholder mismatches counted in the report. Not yet: `pseudolocale.rs` (no screen reads a `.ftl` yet), and a single `data_compat.rs` over every format at once.
 
 ---
 

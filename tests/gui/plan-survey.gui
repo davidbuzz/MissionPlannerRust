@@ -14,7 +14,7 @@
 
 env XDG_DATA_HOME $WORK
 env MP_PLAN_DIR $WORK
-setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
+setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/MissionPlannerRust/config.xml"
 setup printf '%s\n' '-35.3632621 149.1652374' '-35.3600 149.1600' '-35.3600 149.1710' '-35.3690 149.1710' '-35.3690 149.1600' '-35.3600 149.1600' > "$WORK/square.fen"
 
 screen plan

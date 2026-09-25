@@ -25,13 +25,13 @@ env XDG_DATA_HOME $WORK
 env TMPDIR $WORK
 env MP_FIRMWARE_MIRROR $WORK/web
 env MP_FIRMWARE_DEVICE CubeOrange-BL|USB\VID_2DAE&PID_1016
-setup mkdir -p "$WORK/web/github.com/ArduPilot/binary/raw/master/Firmware" "$WORK/web/github.com/diydrones/binary/raw/e94e833a5628f19137d297822343f6282af6d9cc/History" "$WORK/web/firmware.ardupilot.org/Copter/stable/fmuv3" "$WORK/web/firmware.ardupilot.org/Copter/stable/CubeOrange" "$WORK/fw" "$WORK/Mission Planner"
+setup mkdir -p "$WORK/web/github.com/ArduPilot/binary/raw/master/Firmware" "$WORK/web/github.com/diydrones/binary/raw/e94e833a5628f19137d297822343f6282af6d9cc/History" "$WORK/web/firmware.ardupilot.org/Copter/stable/fmuv3" "$WORK/web/firmware.ardupilot.org/Copter/stable/CubeOrange" "$WORK/fw" "$WORK/MissionPlannerRust"
 setup cp crates/mp-firmware/testdata/legacy/firmware2.xml "$WORK/web/github.com/ArduPilot/binary/raw/master/Firmware/firmware2.xml"
 setup cp crates/mp-firmware/testdata/legacy/firmware2.xml "$WORK/web/github.com/diydrones/binary/raw/e94e833a5628f19137d297822343f6282af6d9cc/History/firmware2.xml"
 setup cp crates/mp-firmware/testdata/legacy/git-version.txt crates/mp-firmware/testdata/legacy/arducopter.apj "$WORK/web/firmware.ardupilot.org/Copter/stable/fmuv3/"
 setup cp crates/mp-firmware/testdata/legacy/arducopter.apj "$WORK/web/firmware.ardupilot.org/Copter/stable/CubeOrange/arducopter.apj"
 setup cp crates/mp-firmware/testdata/legacy/arducopter.apj "$WORK/fw/custom.apj"
-setup printf '<?xml version="1.0" encoding="utf-8"?><Config><FirmwareFileDirectory>%s</FirmwareFileDirectory></Config>' "$WORK/fw" > "$WORK/Mission Planner/config.xml"
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><FirmwareFileDirectory>%s</FirmwareFileDirectory></Config>' "$WORK/fw" > "$WORK/MissionPlannerRust/config.xml"
 
 screen setup
 window 1600x1200

@@ -3223,7 +3223,7 @@ mod tests {
         let dir =
             std::env::temp_dir().join(format!("mp-gui-battery-speech-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        let path = dir.join("Mission Planner").join("config.xml");
+        let path = dir.join("MissionPlannerRust").join("config.xml");
         let mut settings = Persisted::at(Some(path.clone()));
         let view = view_with(&SITL);
         let mut battery = BatteryMonitor::default();

@@ -3058,7 +3058,7 @@ ENVIRONMENT:
     MP_PROBE     write control positions to this file, for UI tests
     MP_FACTS     write what the application believes to this file, for UI tests to assert on
     MP_SMOKE     exit 0 once the window has painted, non-zero if it does not
-    MP_LOG_DIR   where flights are recorded (default: Mission Planner's own logs directory)
+    MP_LOG_DIR   where flights are recorded (default: logs in the MissionPlannerRust directory)
     MP_NO_RECORD do not record this flight
     MP_NO_TILES  do not fetch map imagery
     MP_CONFIG_XML  read and write Mission Planner's config.xml here rather than in its data
@@ -3103,6 +3103,26 @@ fn parse_arguments(arguments: impl IntoIterator<Item = String>) -> Result<Argume
     Ok(parsed)
 }
 
+/// Says on stderr what the start's one-shot import copied, when it copied or failed anything.
+fn report_import(imported: &mp_settings::migrate::Import) {
+    match imported {
+        mp_settings::migrate::Import::Imported { from, failed, .. } => {
+            eprintln!(
+                "mpr-gui: imported from {} (left as it was): {}",
+                from.display(),
+                imported.summary()
+            );
+            for failure in failed {
+                eprintln!("mpr-gui: not imported: {failure}");
+            }
+        }
+        mp_settings::migrate::Import::Failed(why) => {
+            eprintln!("mpr-gui: importing Mission Planner's files: {why}");
+        }
+        _ => {}
+    }
+}
+
 fn main() {
     let raw: Vec<String> = std::env::args().skip(1).collect();
 
@@ -3123,6 +3143,13 @@ fn main() {
             std::process::exit(2);
         }
     };
+
+    // This application's own data directory, `MissionPlannerRust` (PLAN.md section 12, D11): on
+    // the first start that finds it missing or empty, Mission Planner's files are copied into it
+    // once, by name, before anything below reads the directory or writes to it. The C#'s copies
+    // are left as they were.
+    let imported = mp_settings::migrate::import_at_start();
+    report_import(&imported);
 
     // A flag beats its environment variable: the variable is the standing preference and the flag
     // is this run. Passed down as values rather than written back into the environment, which
@@ -3155,7 +3182,11 @@ fn main() {
         };
 
         let opened = cx.open_window(options, |window, cx| {
-            let app = cx.new(|cx| MissionPlanner::new(target, read_mission, screen, cx));
+            let app = cx.new(|cx| {
+                let mut app = MissionPlanner::new(target, read_mission, screen, cx);
+                app.persisted.set_imported(imported.summary());
+                app
+            });
             // The close box is `MainV2_FormClosing`, which saves Mission Planner's config.xml.
             // A kill is not, and saves nothing, in either application.
             let closing = app.downgrade();

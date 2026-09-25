@@ -294,11 +294,11 @@ impl Telemetry {
 
     /// Where flights are recorded when nothing says otherwise.
     ///
-    /// The directory Mission Planner itself records into and browses, `Settings.GetDefaultLogDir`:
-    /// the user data directory plus `logs`. Sharing it is the point - the two programs see one set
-    /// of flights, and a recording made by either is found by both. That matters more than it
-    /// sounds: the reason to open a tlog is usually to answer a question about a flight, and a
-    /// pilot who has both installed should not have to remember which one was connected.
+    /// Mission Planner's `Settings.GetDefaultLogDir`: the user data directory plus `logs` - this
+    /// application's own user data directory, `MissionPlannerRust`, not the C#'s (PLAN.md
+    /// section 12, D11), so neither program's recordings are in the other's way. A pilot who
+    /// pointed Mission Planner's `logdirectory` at a folder of their own still shares that one,
+    /// through the imported `config.xml`.
     ///
     /// The user data directory is not where a Linux user would guess, and guessing it is how this
     /// function once recorded into a directory the C# application never reads. The rule and how
@@ -2038,15 +2038,19 @@ mod tests {
         let _ = std::fs::remove_dir_all(&directory);
     }
 
-    /// Recordings go where Mission Planner looks for them, whichever rule this platform takes.
+    /// Recordings go in this application's own data directory's `logs` (PLAN.md section 12, D11).
     ///
     /// Asserted through `mp_settings` rather than against a spelled-out path, because the right
-    /// answer differs by platform and by whether an old installation exists - what cannot differ
-    /// is that it is the C# application's own `logs` directory. The previous default,
-    /// `~/Documents/Mission Planner/logs`, ends the same way; the equality is what catches it.
+    /// answer differs by platform and by `XDG_DATA_HOME` - what cannot differ
+    /// is that it is the `logs` directory under the user data directory. A default of
+    /// `~/Documents/MissionPlannerRust/logs` would end the same way; the equality is what catches
+    /// it.
     #[test]
     fn flights_are_recorded_where_mission_planner_looks_for_them() {
-        let directory = Telemetry::log_directory();
+        // With no `logdirectory` in config.xml. The real file on the machine running this can
+        // name one - the C#'s Planner page writes the key when a pilot picks a folder
+        // (`ConfigPlanner.cs:792`) - and that one wins, as the next test proves.
+        let directory = Telemetry::log_directory_from(None);
         let Some(expected) = mp_settings::default_log_directory() else {
             // No home directory: the fallback, which must still not be the working directory.
             assert!(directory.is_absolute(), "{}", directory.display());
@@ -2054,7 +2058,7 @@ mod tests {
         };
         assert_eq!(directory, expected);
         assert!(
-            directory.ends_with("Mission Planner/logs"),
+            directory.ends_with("MissionPlannerRust/logs"),
             "{}",
             directory.display()
         );

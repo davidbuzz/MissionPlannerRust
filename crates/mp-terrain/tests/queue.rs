@@ -346,7 +346,7 @@ fn the_cache_is_the_data_directorys_srtm() {
     };
     assert_eq!(
         mp_terrain::srtm_directory_in(&unix),
-        PathBuf::from("/nonexistent-home/.local/share/Mission Planner/srtm")
+        PathBuf::from("/nonexistent-home/.local/share/MissionPlannerRust/srtm")
     );
     let windows = mp_settings::Folders {
         my_documents: PathBuf::from("C:/Users/u/Documents"),
@@ -356,7 +356,7 @@ fn the_cache_is_the_data_directorys_srtm() {
     };
     assert_eq!(
         mp_terrain::srtm_directory_in(&windows),
-        PathBuf::from("C:/ProgramData/Mission Planner/srtm")
+        PathBuf::from("C:/ProgramData/MissionPlannerRust/srtm")
     );
 }
 

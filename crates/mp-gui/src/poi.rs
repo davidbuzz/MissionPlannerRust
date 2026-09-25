@@ -347,7 +347,7 @@ mod tests {
             std::process::id(),
             std::time::SystemTime::now()
         ));
-        dir.join("Mission Planner").join(FILE_NAME)
+        dir.join("MissionPlannerRust").join(FILE_NAME)
     }
 
     #[test]

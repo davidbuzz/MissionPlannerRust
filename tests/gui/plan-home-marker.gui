@@ -10,12 +10,12 @@
 # (FlightData.cs:3808-3845): with no vehicle there is none. plan-home-marker-vehicle.gui has the
 # vehicle's.
 #
-# Self-contained: its own Mission Planner data directory, holding a config.xml with the home the
+# Self-contained: its own data directory, holding a config.xml with the home the
 # planning screen saved last time, which Activate puts in the boxes (FlightPlanner.cs:7208-7216).
 
 env XDG_DATA_HOME $WORK
 env MP_PLAN_DIR $WORK
-setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/Mission Planner/config.xml"
+setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/MissionPlannerRust/config.xml"
 
 screen plan
 window 1600x1200
