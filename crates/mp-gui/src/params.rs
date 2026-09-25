@@ -35,9 +35,35 @@ pub struct Parameter {
     pub value: f64,
     /// Documentation, when this firmware's parameters are ones we have metadata for.
     pub meta: Option<&'static ParamMeta>,
+    /// `MAVLinkParam.default_value`: the default the vehicle's `param.pck` carried, when it did.
+    pub default: Option<f64>,
+}
+
+/// `default_value_to_string`'s number, and `shown`'s: a whole number as such, else four places.
+fn number_text(value: f64) -> String {
+    if (value - value.round()).abs() < f64::EPSILON {
+        format!("{value:.0}")
+    } else {
+        format!("{value:.4}")
+    }
 }
 
 impl Parameter {
+    /// The Default column's text: `default_value_to_string`, "NaN" when the vehicle gave none.
+    /// `// C#: ExtLibs/Mavlink/MAVLinkParam.cs:226-233`
+    #[must_use]
+    pub fn default_shown(&self) -> String {
+        self.default.map_or_else(|| "NaN".to_owned(), number_text)
+    }
+
+    /// `chk_none_default`'s test: the Default cell's text differs from the Value cell's. A
+    /// parameter without a default ("NaN") always differs, as it does in the C#.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:933-938`
+    #[must_use]
+    pub fn differs_from_default(&self) -> bool {
+        self.default_shown() != number_text(self.value)
+    }
+
     /// The group this belongs to: everything before the first underscore.
     ///
     /// `ATC_RAT_RLL_P` groups under `ATC`, not `ATC_RAT_RLL`. A deeper split makes groups of one,
@@ -62,11 +88,7 @@ impl Parameter {
         {
             return format!("{as_integer}  {name}");
         }
-        if (self.value - self.value.round()).abs() < f64::EPSILON {
-            format!("{:.0}", self.value)
-        } else {
-            format!("{:.4}", self.value)
-        }
+        number_text(self.value)
     }
 }
 
@@ -115,6 +137,8 @@ struct Collected {
     /// The view's list it was made from, held so the allocation cannot be reused by another list
     /// and mistaken for this one.
     from: Arc<[(String, f64)]>,
+    /// The view's defaults it was made from.
+    defaults: Arc<std::collections::BTreeMap<String, f64>>,
     /// The documentation's generation at the time.
     documentation: u64,
     parameters: Arc<[Parameter]>,
@@ -139,6 +163,7 @@ fn collected(
         let mut held = held.borrow_mut();
         if let Some(held) = held.as_ref()
             && Arc::ptr_eq(&held.from, &view.parameters)
+            && Arc::ptr_eq(&held.defaults, &view.parameters_defaults)
             && held.documentation == documentation
         {
             return Arc::clone(&held.parameters);
@@ -150,10 +175,12 @@ fn collected(
                 name: name.clone(),
                 value: *value,
                 meta: lookup(name),
+                default: view.parameters_defaults.get(name).copied(),
             })
             .collect();
         *held = Some(Collected {
             from: Arc::clone(&view.parameters),
+            defaults: Arc::clone(&view.parameters_defaults),
             documentation,
             parameters: Arc::clone(&parameters),
             groups: None,
@@ -227,6 +254,7 @@ pub fn groups(parameters: &[Parameter]) -> Vec<(String, usize)> {
 }
 
 /// Download progress and the group list.
+#[allow(clippy::too_many_arguments)] // the screen's state, handed in as the C#'s controls read it
 pub fn browser_panel(
     view: &TelemetryView,
     parameters: &[Parameter],
@@ -234,9 +262,13 @@ pub fn browser_panel(
     search: &crate::textfield::TextField,
     search_focus: &gpui::FocusHandle,
     focused: bool,
+    none_default: bool,
     cx: &mut Context<MissionPlanner>,
 ) -> impl IntoElement {
     let has_vehicle = view.vehicle.is_some();
+    // `Default_value.Visible = has_defaults; chk_none_default.Visible = has_defaults;`
+    // C#: GCSViews/ConfigurationView/ConfigRawParams.cs:653-654
+    let has_defaults = has_defaults(parameters);
     let expected = view.parameters_expected;
     let held = parameters.len();
     let fraction = if expected > 0 {
@@ -331,11 +363,66 @@ pub fn browser_panel(
                             } else {
                                 format!("{held} of {expected}")
                             }),
-                    ),
+                    )
+                    // `chk_none_default`: only the parameters off their defaults.
+                    // C#: ConfigRawParams.resx chk_none_default.Text; ConfigRawParams.cs:933-938
+                    .children(has_defaults.then(|| {
+                        crate::probe::measured("param-none-default", div())
+                            .id("param-none-default")
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .text_xs()
+                            .cursor_pointer()
+                            .text_color(rgb(if none_default { theme::ACCENT } else { theme::TEXT }))
+                            .child(
+                                div()
+                                    .size(px(13.0))
+                                    .border_1()
+                                    .border_color(rgb(theme::BORDER))
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .children(none_default.then(|| div().size(px(7.0)).bg(rgb(theme::ACCENT)))),
+                            )
+                            .child(NONE_DEFAULT)
+                            .on_click(cx.listener(|this, _event, _window, cx| {
+                                this.param_none_default = !this.param_none_default;
+                                cx.notify();
+                            }))
+                    })),
             )
             .children((expected > 0 && !complete).then(|| progress(fraction, theme::ACCENT)))
             .child(group_list),
     )
+}
+
+/// `chk_none_default.Text`.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.resx`
+pub const NONE_DEFAULT: &str = "None Default";
+
+/// The grid's headers, `Command.HeaderText`, `Value.HeaderText`, `Default_value.HeaderText`,
+/// `Units.HeaderText`.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.resx`
+pub const HEADERS: [&str; 4] = ["Command", "Value", "Default", "Units"];
+
+/// `has_defaults`: whether any parameter came with a default - the Default column and the None
+/// Default box show only then.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:598-599, 653-654`
+#[must_use]
+pub fn has_defaults(parameters: &[Parameter]) -> bool {
+    parameters.iter().any(|parameter| parameter.default.is_some())
+}
+
+/// The rows the None Default box leaves: those whose Default cell reads differently from their
+/// Value cell.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:933-938`
+#[must_use]
+pub fn none_default(shown: Vec<&Parameter>) -> Vec<&Parameter> {
+    shown
+        .into_iter()
+        .filter(|parameter| parameter.differs_from_default())
+        .collect()
 }
 
 /// The parameters of the chosen group.
@@ -344,12 +431,14 @@ pub fn list_panel(
     group: Option<&str>,
     search: &str,
     selected: Option<&str>,
+    only_none_default: bool,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
+    let with_defaults = has_defaults(parameters);
     // A search crosses groups: the point of typing is to stop having to know which group a
     // parameter is in. With nothing typed, the chosen group is the filter instead.
     let searching = !search.trim().is_empty();
-    let shown: Vec<&Parameter> = if searching {
+    let mut shown: Vec<&Parameter> = if searching {
         matching(parameters, search)
     } else {
         let Some(group) = group else {
@@ -364,6 +453,9 @@ pub fn list_panel(
         };
         parameters.iter().filter(|p| p.group() == group).collect()
     };
+    if only_none_default && with_defaults {
+        shown = none_default(shown);
+    }
 
     if shown.is_empty() {
         return panel(
@@ -377,6 +469,19 @@ pub fn list_panel(
     }
 
     let mut rows = div().flex().flex_col();
+    // The grid's header row, the Default column only when the vehicle gave defaults.
+    let mut header = div()
+        .flex()
+        .gap_2()
+        .py(px(1.0))
+        .text_xs()
+        .text_color(rgb(theme::DIM))
+        .child(div().w(px(150.0)).child(HEADERS[0]))
+        .child(div().w(px(130.0)).child(HEADERS[1]));
+    if with_defaults {
+        header = header.child(div().w(px(90.0)).child(HEADERS[2]));
+    }
+    rows = rows.child(header.child(div().flex_1().min_w(px(0.0)).child(HEADERS[3])));
     for parameter in shown {
         let chosen = selected == Some(parameter.name.as_str());
         let name = parameter.name.clone();
@@ -394,6 +499,18 @@ pub fn list_panel(
                 .hover(|style| style.bg(rgb(theme::BORDER)))
                 .child(div().w(px(150.0)).child(parameter.name.clone()))
                 .child(div().w(px(130.0)).child(parameter.shown()))
+                // `Default_value`: `default_value_to_string`, "NaN" without one.
+                // C#: ConfigRawParams.cs:598-603
+                .children(with_defaults.then(|| {
+                    div()
+                        .w(px(90.0))
+                        .text_color(rgb(if parameter.differs_from_default() {
+                            theme::WARN
+                        } else {
+                            theme::DIM
+                        }))
+                        .child(parameter.default_shown())
+                }))
                 .child(
                     div()
                         .flex_1()
@@ -1210,7 +1327,47 @@ mod tests {
             name: name.to_owned(),
             value,
             meta: mp_params::param_meta::lookup(name),
+            default: None,
         }
+    }
+
+    /// `default_value_to_string`: "NaN" without a default, the number with; the None Default
+    /// filter keeps what reads differently from its default, "NaN" included.
+    /// `// C#: ExtLibs/Mavlink/MAVLinkParam.cs:226-233; ConfigRawParams.cs:933-938`
+    #[test]
+    fn defaults_are_shown_as_the_csharp_shows_them_and_filtered_by_their_text() {
+        let mut off = parameter("MOT_THST_EXPO", 0.65);
+        off.default = Some(0.5);
+        let mut at = parameter("INS_GYRO_FILTER", 20.0);
+        at.default = Some(20.0);
+        let none = parameter("SIM_SPEEDUP", 1.0);
+        assert_eq!(off.default_shown(), "0.5000");
+        assert_eq!(at.default_shown(), "20");
+        assert_eq!(none.default_shown(), "NaN");
+        assert!(off.differs_from_default());
+        assert!(!at.differs_from_default());
+        assert!(none.differs_from_default(), "NaN != 1, as the C# compares the cells' text");
+        let all = vec![&off, &at, &none];
+        assert!(has_defaults(&[off.clone(), at.clone()]));
+        assert!(!has_defaults(std::slice::from_ref(&none)));
+        let kept: Vec<&str> = none_default(all).iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(kept, ["MOT_THST_EXPO", "SIM_SPEEDUP"]);
+    }
+
+    /// The defaults the view carries reach the collected list, and a view with new defaults is
+    /// collected again.
+    #[test]
+    fn collected_parameters_carry_the_views_defaults() {
+        let mut view = sitl_view();
+        let first = collected(&view, 7, bundled);
+        assert!(first.iter().all(|p| p.default.is_none()));
+        let mut defaults = std::collections::BTreeMap::new();
+        defaults.insert("INS_GYRO_FILTER".to_owned(), 20.0);
+        view.parameters_defaults = Arc::new(defaults);
+        let second = collected(&view, 7, bundled);
+        assert!(!Arc::ptr_eq(&first, &second), "new defaults, a new collection");
+        let filter = second.iter().find(|p| p.name == "INS_GYRO_FILTER").expect("SITL has it");
+        assert_eq!(filter.default, Some(20.0));
     }
 
     #[test]
@@ -1257,6 +1414,7 @@ mod tests {
             name: "NOT_A_REAL_PARAM".to_owned(),
             value: 50.0,
             meta: None,
+            default: None,
         };
         assert_eq!(whole.shown(), "50");
 
@@ -1264,6 +1422,7 @@ mod tests {
             name: "NOT_A_REAL_PARAM".to_owned(),
             value: 0.2234,
             meta: None,
+            default: None,
         };
         assert!(
             fractional.shown().starts_with("0.22"),
@@ -1321,6 +1480,7 @@ mod tests {
             name: "ZZ_NOT_IN_METADATA".to_owned(),
             value: 7.0,
             meta: None,
+            default: None,
         };
         assert_eq!(unknown.group(), "ZZ");
         assert_eq!(unknown.shown(), "7");

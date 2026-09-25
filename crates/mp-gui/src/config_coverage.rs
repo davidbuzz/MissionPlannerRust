@@ -942,10 +942,11 @@ pub const PANELS: &[Panel] = &[
         &[config(229, "Full Parameter List", "any, or disconnected")],
         Partial(
             at(PARAMS_RS, "fn list_panel"),
-            "the parameter screen has Refresh Params, Search, the group tree, editing a value,
-        //     Save to file, Compare Params, and Load from file as compare then apply; missing
-        //     Reset to Default, Load Presaved and its file list, Commit Params, the Modified and
-        //     None Default filters, Refresh Table and the tree's collapse",
+            "the parameter screen has Refresh Params (MAVFTP first), Search, the group tree, the
+        //     Default column and the None Default filter when the vehicle's param.pck gave
+        //     defaults, editing a value, Save to file, Compare Params, and Load from file as
+        //     compare then apply; missing Reset to Default, Load Presaved and its file list,
+        //     Commit Params, the Modified filter, Refresh Table and the tree's collapse",
         ),
     ),
     panel(

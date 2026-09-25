@@ -24,6 +24,17 @@ expect params.expected > 1000
 expect params.fetch ~ over MAVFTP
 expect params.value.INS_GYRO_FILTER 20
 
+# The file carried the defaults, so the Default column and the None Default box show
+# (ConfigRawParams.cs:598-603, 653-654); the box leaves the parameters off their defaults.
+expect params.defaults > 1000
+expect params.none_default false
+click param-none-default
+settle 1
+expect params.none_default true
+click param-none-default
+settle 1
+expect params.none_default false
+
 # The button fetches again, the same way.
 click param-download
 settle 8

@@ -285,6 +285,8 @@ struct MissionPlanner {
     selected_param_group: Option<String>,
     /// The parameter being looked at.
     selected_param: Option<String>,
+    /// `chk_none_default`: only the parameters off their defaults listed.
+    param_none_default: bool,
     /// The `.param` file name to save to, load from or compare against.
     param_file_name: textfield::TextField,
     /// Focus for that field.
@@ -635,6 +637,7 @@ impl MissionPlanner {
             param_search_focus: cx.focus_handle(),
             selected_param_group: None,
             selected_param: None,
+            param_none_default: false,
             param_file_name: {
                 let mut field = textfield::TextField::new(DEFAULT_PARAM_FILE);
                 field.set(DEFAULT_PARAM_FILE);
@@ -2097,6 +2100,7 @@ impl MissionPlanner {
                 &self.param_search,
                 &self.param_search_focus,
                 self.param_search_focus.is_focused(window),
+                self.param_none_default,
                 cx,
             ))
             .child(params::list_panel(
@@ -2104,6 +2108,7 @@ impl MissionPlanner {
                 group.as_deref(),
                 self.param_search.value(),
                 selected.as_deref(),
+                self.param_none_default,
                 cx,
             ))
             .child(params::editor_panel(&parameters, selected.as_deref(), cx))
@@ -2754,6 +2759,8 @@ impl Render for MissionPlanner {
             facts::record("params.held", view.parameters.len());
             facts::record("params.expected", view.parameters_expected);
             facts::record("params.fetch", &view.parameters_fetch);
+            facts::record("params.defaults", view.parameters_defaults.len());
+            facts::record("params.none_default", self.param_none_default);
             // The last parameter write to end: which, how the vehicle answered, and how many
             // times the link put the PARAM_SET on the wire - one, unless it had to ask again.
             let written = self.last_param_write.as_ref();

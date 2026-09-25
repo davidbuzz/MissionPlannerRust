@@ -1,6 +1,6 @@
 ---
 name: delegate-to-opus-subagents
-description: Buzz authorises delegating coding tasks to at most THREE Opus subagents at a time (2026-09-25, after six, after none); they never open windows, never commit, and get disjoint files
+description: Buzz authorises delegating coding tasks to at most SIX Opus subagents at a time (2026-09-25 afternoon; the order was three, six, none, three, six); they never open windows, never commit, and get disjoint files
 metadata:
   type: feedback
 ---
@@ -43,3 +43,5 @@ at 13:40), that is not a ban on subagents. I read the harness's "only launch a n
 user explicitly asks" as one and did the next five rows by hand; Buzz asked "why aren't we using
 subagents?" Keep three running whenever there is disjoint work; a stopped agent means review its
 worktree and start a fresh one on what is left.
+
+**2026-09-25, later:** Buzz raised the cap to **six** open subagents at once ("allow the use of 6 open subagents"). Keep six running whenever there is disjoint work.

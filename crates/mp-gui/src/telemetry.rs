@@ -98,6 +98,10 @@ pub struct TelemetryView {
     /// MAVFTP" - or "none" before one has been started.
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1813-1936`
     pub parameters_fetch: String,
+    /// The defaults `@PARAM/param.pck?withdefaults=1` carried, by name; empty when the parameters
+    /// came over the stream, which has none to give. Shared between frames, as `parameters` is.
+    /// `// C#: ExtLibs/Mavlink/MAVLinkParam.cs:36 (default_value)`
+    pub parameters_defaults: Arc<std::collections::BTreeMap<String, f64>>,
 }
 
 /// A mission transfer, as the UI needs to describe it.
@@ -136,6 +140,7 @@ impl TelemetryView {
             parameters: Arc::default(),
             parameters_expected: 0,
             parameters_fetch: "none".to_owned(),
+            parameters_defaults: Arc::default(),
         }
     }
 }
@@ -443,6 +448,11 @@ impl Telemetry {
         let parameters_fetch = primary
             .as_ref()
             .map_or_else(|| "none".to_owned(), |(id, _)| Self::fetch_words(link, *id));
+        let parameters_defaults = primary
+            .as_ref()
+            .and_then(|(id, _)| link.param_fetch(*id))
+            .map(|fetch| fetch.defaults)
+            .unwrap_or_default();
         let (parameters, parameters_expected) = primary.as_ref().map_or_else(
             || (Arc::default(), 0),
             |(id, _)| self.parameters_of(link, *id),
@@ -499,6 +509,7 @@ impl Telemetry {
             parameters,
             parameters_expected,
             parameters_fetch,
+            parameters_defaults,
         }
     }
 

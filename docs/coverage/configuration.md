@@ -192,10 +192,11 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
         //     InputBox saving the list and building the page again - Cancel included, as the
         //     C#'s handler ignores the answer; a name without values is its label alone, as the
         //     C# never adds its number; missing the InputBox's remembered answers |
-| 229 | `ConfigRawParams` | Full Parameter List |  | any, or disconnected | 22 | partial: `crates/mp-gui/src/params.rs` `fn list_panel` - the parameter screen has Refresh Params, Search, the group tree, editing a value,
-        //     Save to file, Compare Params, and Load from file as compare then apply; missing
-        //     Reset to Default, Load Presaved and its file list, Commit Params, the Modified and
-        //     None Default filters, Refresh Table and the tree's collapse |
+| 229 | `ConfigRawParams` | Full Parameter List |  | any, or disconnected | 22 | partial: `crates/mp-gui/src/params.rs` `fn list_panel` - the parameter screen has Refresh Params (MAVFTP first), Search, the group tree, the
+        //     Default column and the None Default filter when the vehicle's param.pck gave
+        //     defaults, editing a value, Save to file, Compare Params, and Load from file as
+        //     compare then apply; missing Reset to Default, Load Presaved and its file list,
+        //     Commit Params, the Modified filter, Refresh Table and the tree's collapse |
 | 235 | `ConfigFlightModes` | Flight Modes |  | Ateryx | 8 | as at `GCSViews/InitialSetup.cs:228` |
 | 236 | `ConfigAteryxSensors` | Ateryx Zero Sensors |  | Ateryx | 3 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 | 237 | `ConfigAteryx` | Ateryx Pids |  | Ateryx | 8 | done: `crates/mp-gui/src/config/ateryx.rs` `fn page` |
