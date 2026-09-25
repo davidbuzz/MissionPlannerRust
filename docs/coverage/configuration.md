@@ -11,12 +11,12 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 32 | 13 | 2 | 2 | 12 | 569 |
+| 61 | 33 | 12 | 2 | 2 | 12 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings
         // in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 26 | 8 | 1 | 2 | 7 | 258 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 27 | 7 | 1 | 2 | 7 | 258 |
         //     15 |
 | CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 6 | 5 | 1 | 0 | 1 | 277 |
         //     0 |
@@ -75,18 +75,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
 | 189 | `ConfigFrameClassType` | Frame Type | Mandatory Hardware | any with FRAME_CLASS; copter 3.5 and later | 19 | done: `crates/mp-gui/src/config/frame_type.rs` `fn page` |
 | 196 | `ConfigAccelerometerCalibration` | Accel Calibration | Mandatory Hardware | any | 3 | done: `crates/mp-gui/src/config/accel_calibration.rs` `fn page` |
 | 203 | `ConfigHWCompass2` | Compass | Mandatory Hardware | any with COMPASS_PRIO1_ID | 11 | done: `crates/mp-gui/src/config/compass.rs` `fn page` |
-| 206 | `ConfigHWCompass` | Compass | Mandatory Hardware | any without COMPASS_PRIO1_ID | 21 | partial: `crates/mp-gui/src/config/compass.rs` `fn page` - has the declination and its automatic box, learn, the primary compass, each
-        //     compass's use, external, orientation, offsets and MOT, the three quick-configure
-        //     buttons, the onboard calibration with its timer and fitness, Large Vehicle MagCal
-        //     and both links - 20 of the 21 wirings; missing Live Calibration, drawn and
-        //     disabled: its handler is MagCalib.DoGUIMagCalib (MagCalib.cs), Mission Planner's
-        //     own calibration from RAW_IMU and SCALED_IMU2/3 samples - the ProgressReporterSphere
-        //     window with three OpenGL spheres, the sphere and ellipsoid fits (ported, in
-        //     mp_calibration::magcalib), and the offsets saved through
-        //     PREFLIGHT_SET_SENSOR_OFFSETS - a feature of its own, its window not ported; its
-        //     group shows only for ArduPlane 3.7.1 to 4.0 or a vehicle without onboard
-        //     calibration. No Log Calibration button: BUT_MagCalibrationLog_Click has no caller
-        //     (PLAN §12 D16) |
+| 206 | `ConfigHWCompass` | Compass | Mandatory Hardware | any without COMPASS_PRIO1_ID | 21 | done: `crates/mp-gui/src/config/compass.rs` `fn page` |
 | 211 | `ConfigRadioInput` | Radio Calibration | Mandatory Hardware | any | 8 | done: `crates/mp-gui/src/config/radio.rs` `fn page` |
 | 215 | `ConfigRadioOutput` | Servo Output | Mandatory Hardware | any | 1 | done: `crates/mp-gui/src/config/servo_output.rs` `fn page` |
 | 220 | `ConfigSerial` | Serial Ports | Mandatory Hardware | any | 0 | done: `crates/mp-gui/src/config/serial_ports.rs` `fn page` |

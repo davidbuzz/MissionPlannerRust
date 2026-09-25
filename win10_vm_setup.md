@@ -112,23 +112,33 @@ means a reboot is wanted).
 
 ## Building the port in the VM
 
-Not yet done at the time of writing; this is the plan, to be corrected by the first run.
+Done on 2026-09-26. The repository reaches the VM as a git bundle through the share
+(`git bundle create /home/buzz/vmshare/mpr.bundle HEAD main` on the laptop, then in the VM
+`git clone -b main \\VBOXSVR\vmshare\mpr.bundle C:\src\MissionPlannerRust`; later commits
+come the same way, as a bundle to `git pull` from). `rust-toolchain.toml` pins 1.95.0, which
+rustup installed on first use (`rustup toolchain install 1.95.0-x86_64-pc-windows-msvc -c
+rustfmt -c clippy -c rust-src` ahead of time saves the wait).
 
-```powershell
-git clone <this repository> C:\src\MissionPlannerRust   # over SSH from the laptop, or a copy through S:
-cd C:\src\MissionPlannerRust
-cargo build -p mp-gui                    # the planner, target\debug\planner.exe
-cargo test --workspace
-```
+`tools/win10/build-planner.ps1`, started detached by `start-build-task.ps1`, runs
+`cargo build -p mp-gui` with `CARGO_BUILD_JOBS=5`, logging to `C:\setup\build.log` and the
+compiler's output to `C:\setup\cargo-build.log`. The first build took 31 minutes on the VM's
+six cores (the zed checkout for gpui is the long download) and produced
+`target\debug\planner.exe`, 88.9 MB, with one warning - a joystick field the Windows build
+never reads, since the stick reader is Linux's; annotated with the reason.
 
-The build needs the `x86_64-pc-windows-msvc` target that rustup installed and the Build Tools
-on the path, which rustup's `cargo` finds through `vswhere`. Crates with C dependencies want
-CMake, which the VS component above provides.
+## Running it against the laptop's SITL
 
-Running it against the Linux SITL: start SITL on the laptop (`tools/sitl/start-sitl.sh`), then
-in the VM `planner.exe tcp:10.0.2.2:5760`. The GUI test runner (`tools/gui-test.sh`) is Linux
-only (xdotool, X11); on Windows the first check is the application's own facts file (the
-`MP_FACTS` publishing works on any OS) and a screenshot into `S:\`.
+`tools/win10/run-planner.ps1`, started by `start-run-task.ps1` as a task in the logged-in
+session (so its window is on the VM's desktop), runs `planner.exe tcp:10.0.2.2:5760` with
+`MP_FACTS=C:\setup\planner.facts` and `MP_NO_TILES=1`, waits twenty seconds, takes a screenshot of
+the desktop to `S:\win10-planner.png`, copies the facts to `S:\win10-planner.facts` and closes
+the planner. The first run, 2026-09-26: the window came up on the VirtualBox WDDM adapter
+(gpui's Direct3D 11 path), the link opened, 1,400 frames were heard, `vehicle.count` 1,
+`params.held` 1408, the flight screen with the HUD reading "Ready to Arm" and the SITL's
+banner in the Messages panel; 2,921 fact lines. That is the first Windows run of the
+application. The GUI test runner (`tools/gui-test.sh`) is Linux only (xdotool, X11), so the
+facts file and the screenshot are what a Windows run is judged by until a Windows driver of
+the same scripts exists.
 
 ## Where the VM tooling lives
 

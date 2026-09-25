@@ -8,10 +8,9 @@
 //! or a dataflash log's `MAG` lines with their `OfsX/Y/Z` taken back off ([`DataflashSamples`],
 //! `getOffsetsLog`) - fits them ([`fit_tlog`], [`fit_dataflash`]) and shows the offsets in a box
 //! ([`manual_message`] when it cannot write them, [`saved_message`] when it did).
-//! **Live calibration** (`DoGUIMagCalib`, the "Live Calibration" button) gathers the same samples
-//! from the link while the operator turns the vehicle, draws them on three spheres and runs the
-//! same fit. This module is the maths and the words both share; the pages come later (PLAN.md
-//! §13.4 row 44 records Live Calibration as the compass page's one missing wiring):
+//! **Live calibration** (`DoGUIMagCalib`, the older Compass page's "Live Calibration" button)
+//! gathers the same samples from the link while the operator turns the vehicle, draws them on
+//! three spheres and runs the same fit:
 //!
 //! - Log calibration reads the chosen file the way `headless-planner magcal` does -
 //!   [`TlogSamples`] or [`DataflashSamples`], then [`fit_tlog`] or [`fit_dataflash`] - and then
@@ -20,11 +19,11 @@
 //!   `BUT_MagCalibrationLog_Click` (`ConfigHWCompass.cs:362-373`, asking "Min Throttle") is wired
 //!   to no button by its Designer - dead C#, recorded rather than ported (PLAN.md §12 D16) - and
 //!   the Temp screen is not ported.
-//! - "Live Calibration" will feed `RAW_IMU`/`SCALED_IMU2`/`SCALED_IMU3` through [`SampleFilter`],
-//!   run [`least_sq`] each second past 100 samples for the sphere centres and [`live_error`] for
-//!   its status text, then [`remove_outliers`] and [`least_sq`] with the ellipsoid when the vehicle
-//!   has `COMPASS_DIA_X`. Its sphere-coverage test (`:625-693`), `GetColour` and the "Bad compass
-//!   raw values" sign check (`:728-735`) are the page's and are not here.
+//! - Live Calibration is [`crate::live_magcal`]: `RAW_IMU`/`SCALED_IMU2`/`SCALED_IMU3` through
+//!   [`SampleFilter`], [`least_sq`] each second past 100 samples for the sphere centres and
+//!   [`live_error`] for its status text, the sphere-coverage test and `GetColour`, then
+//!   [`remove_outliers`] and [`least_sq`] with the ellipsoid when the vehicle has `COMPASS_DIA_X`.
+//!   Its window and its requests are the Compass page's (`mp-gui`'s `config/live_magcal.rs`).
 //!
 //! # The fit, and what differs from alglib
 //!
@@ -577,7 +576,7 @@ impl TlogSamples {
 }
 
 /// `setMinorMax`. `// C#: MagCalib.cs:1431-1437`
-fn set_min_or_max(value: f32, min: &mut f32, max: &mut f32) {
+pub(crate) fn set_min_or_max(value: f32, min: &mut f32, max: &mut f32) {
     if value > *max {
         *max = value;
     }

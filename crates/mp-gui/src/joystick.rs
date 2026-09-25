@@ -45,7 +45,9 @@ pub struct Sticks {
     /// The open device and its threads, if one is open.
     #[cfg(target_os = "linux")]
     reader: Option<mp_input::StickReader>,
-    /// How stick positions become channels.
+    /// How stick positions become channels. Read where the reader opens, which is Linux's; the
+    /// Windows build (2026-09-26, the first) has no reader yet and warns of the field otherwise.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     mapping: Mapping,
     /// Where the send thread puts its frames. Shared with it; set from the screen every frame.
     target: Arc<Mutex<Target>>,

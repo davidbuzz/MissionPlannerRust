@@ -1,0 +1,104 @@
+# Live Calibration on Initial Setup's older Compass page, ported from MagCalib.DoGUIMagCalib
+# (MagCalib.cs:136-790, 1271-1430) behind ConfigHWCompass's BUT_MagCalibrationLive
+# (ConfigHWCompass.cs:257-261), with its window ProgressReporterSphere.
+#
+# The claims: the button shows Strings.MagCalibMsg, then the window; prd_DoWork turns learning off
+# and zeroes the offsets (forced), asks for RAW_SENSORS at 50 Hz and takes each compass's readings
+# through the near-duplicate filter onto the spheres, with "Got + N samples" and each compass's
+# error in the label; Done ends the loop, "run the calibration anyway?" is asked while the coverage
+# test still wants a point, Yes fits, the window closes, and SaveOffsets sends the offsets as
+# PREFLIGHT_SET_SENSOR_OFFSETS, reads them back and says "These have been saved for you.", a box
+# per compass, before Activate() shows the new offsets on the page.
+#
+# THE BUNDLED SITL CANNOT RUN THIS SCRIPT. InitialSetup lists ConfigHWCompass only for a vehicle
+# without COMPASS_PRIO1_ID - ArduPilot 4.0 and earlier (InitialSetup.cs:200-207) - and the page's
+# Mission Planner group only for ArduPlane 3.7.1 and later or a vehicle without onboard
+# calibration (ConfigHWCompass.cs:51-70). tools/sitl holds ArduPilot 4.6, which lists
+# ConfigHWCompass2, the page without Live Calibration. So this needs an ArduPlane 3.7.1-4.0 SITL,
+# built from ArduPilot's Plane-4.0 branch and started through run-sitl.sh's SITL_BINARY, on
+# tcp:127.0.0.1:5760 with SIM_MAG_RND 100: a simulated vehicle sits still, and without noise its
+# readings fall in one filter bucket, three samples in all, which the fit's ten-sample floor
+# refuses ("Log does not contain enough data"). With the noise the readings spread over a blob
+# - not a sphere - so the coverage test asks the question and the offsets the fit finds are the
+# blob's, not a real calibration: the SITL's offsets are rewritten, and a fresh SITL (or its
+# eeprom.bin removed) puts them back. The same path runs on every build without a SITL in
+# crates/mp-gui/src/config/compass.rs's live_calibration_talks_to_the_vehicle_through_the_link,
+# which sends RAW_IMU readings on a sphere through the real link to a scripted autopilot.
+#
+#   SITL_BINARY=/path/to/arduplane-4.0 tools/sitl/run-sitl.sh plane   # with SIM_MAG_RND 100
+#   tools/gui-test.sh tests/gui/config-compass-livecal.gui -- tcp:127.0.0.1:5760
+
+screen params
+window 1600x1200
+# A first budget, set by hand until a passing run records one.
+budget 40
+# A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
+# suppressed by the settings of the machine running it.
+env MP_CONFIG_XML $WORK/config.xml
+# The vehicle first: a click before its first heartbeat is a click the screen may forget.
+expect vehicle.count > 0
+# RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92).
+click raw-param-warning-again
+click raw-param-warning-ok
+
+# The page is listed once every parameter is in.
+click param-download
+expect params.held > 500
+expect params.value.COMPASS_USE 1
+
+click tab-setup
+click setup-page-ConfigMandatory
+click setup-page-ConfigHWCompass
+expect setup.page ConfigHWCompass
+expect config.compass.active true
+expect config.compass.class ConfigHWCompass
+expect config.compass.legacy.enabled true
+expect config.compass.legacy.mpcalib true
+expect config.compass.livecal.open false
+
+# The button: Strings.MagCalibMsg first, the window after it.
+click compass-livecal
+expect config.compass.dialog Please click ok and move the autopilot around all axises in a circular motion
+expect config.compass.livecal.open false
+click compass-dialog-ok
+expect config.compass.dialog none
+expect config.compass.livecal.open true
+
+# prd_DoWork's writes, then the loop: learning off, the offsets zeroed, the samples arriving.
+expect config.compass.livecal.phase sampling
+expect params.value.COMPASS_LEARN 0
+expect params.value.COMPASS_OFS_X 0
+expect params.value.COMPASS_OFS_Y 0
+expect params.value.COMPASS_OFS_Z 0
+expect config.compass.livecal.samples1 > 20
+expect config.compass.livecal.points1 > 20
+expect config.compass.livecal.status ~ Got +
+expect config.compass.livecal.status ~ Compass 1 error:
+expect config.compass.livecal.done true
+# A noise blob misses most of the sphere's twenty points: the aim points are drawn.
+expect config.compass.livecal.aims > 0
+expect config.compass.livecal.status ~ more data needed Aim For
+
+# Auto accept off, then Done: the question, since points are still wanted.
+click magcal-auto
+click magcal-done
+expect config.compass.livecal.phase asking
+expect config.compass.dialog You are missing data points. do you want to run the calibration anyway?
+click compass-dialog-ok
+
+# The fit, the window closed, and the first compass's offsets sent, read back and said.
+expect config.compass.livecal.open false
+expect config.compass.dialog ~ New offsets for compass #1 are
+expect config.compass.dialog ~ These have been saved for you.
+expect config.compass.command PREFLIGHT_SET_SENSOR_OFFSETS accepted
+click compass-dialog-ok
+# A box for each further compass whose SCALED_IMU2 or SCALED_IMU3 carried readings, the second
+# through PREFLIGHT_SET_SENSOR_OFFSETS as well, the third through its parameters. Written for a
+# SITL simulating two compasses; one with a third shows its box here too, and one with a single
+# compass none - adjust on the first run.
+expect config.compass.dialog ~ New offsets for compass #2 are
+click compass-dialog-ok
+expect config.compass.jobs 0
+expect config.compass.dialog none
+# Activate() after the boxes: the page reads the vehicle's offsets again.
+expect config.compass.legacy.1.offsets ~ OFFSETS

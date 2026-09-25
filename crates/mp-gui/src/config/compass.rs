@@ -37,17 +37,15 @@
 //! bars and gpui has none, so the table is rows of cells at the columns' widths, a check box is a
 //! square, and a bar is a filled box. The colours are this application's.
 //!
+//! Live Calibration, the older page's Mission Planner group, is `MagCalib.DoGUIMagCalib`: the
+//! intro box, then `ProgressReporterSphere` (`live_magcal.rs`), then a box per compass saved. Its
+//! requests are jobs here like the page's own, and its boxes are this page's boxes.
+//!
 //! What is not ported, and why:
 //!
-//! * `ConfigHWCompass`'s Live Calibration button, `MagCalib.DoGUIMagCalib`: Mission Planner's own
-//!   calibration from raw magnetometer samples, with its sphere display, is `MagCalib.cs`, not this
-//!   page. The button is drawn and does nothing. Its group shows only for a plane from 3.7.1 or a
-//!   vehicle without onboard calibration. Its fit is ported (`mp_calibration::magcalib`); what it
-//!   still needs is its window - `ProgressReporterSphere`, three OpenTK `Sphere` controls
-//!   (`ExtLibs/Controls/Sphere.cs`) drawing the samples in 3D as the vehicle is turned - and the
-//!   live half of `MagCalib.cs:136-790`: the `RAW_IMU`/`SCALED_IMU2`/`SCALED_IMU3` subscriptions,
-//!   the stream rates it sets and restores, the offsets zeroed first, the sphere-coverage test
-//!   and `SaveOffsets` through `PREFLIGHT_SET_SENSOR_OFFSETS`;
+//! * of Live Calibration (`live_magcal.rs`), the OpenGL of its spheres, which are drawn flat,
+//!   and its subscription to every packet: its samples are read from the vehicle's state once a
+//!   frame (both said there);
 //! * a "Log Calibration" button: neither page has one. `ConfigHWCompass.cs:362-373` still holds
 //!   `BUT_MagCalibrationLog_Click` - "Min Throttle" asked, then `MagCalib.ProcessLog` - but its
 //!   Designer makes no such button and wires nothing to it (only stale translations keep its
@@ -85,6 +83,7 @@ use mp_link::requests::RequestOutcome;
 use super::battery_monitor::{float_text, param_text, parse_float};
 use super::failsafe::{Lookup, options};
 use super::flight_modes::{Firmware, Progress, firmware_of};
+use super::live_magcal::LiveMagCal;
 use crate::MissionPlanner;
 use crate::setup::Key;
 use crate::telemetry::{Telemetry, TelemetryView};
@@ -155,7 +154,7 @@ const TIMER_INTERVAL: Duration = Duration::from_millis(100);
 const TIMER_SLOW: Duration = Duration::from_millis(1000);
 
 /// The parameters the page reads or writes, for the facts.
-const WATCHED: [&str; 12] = [
+const WATCHED: [&str; 15] = [
     "COMPASS_USE",
     "COMPASS_USE2",
     "COMPASS_USE3",
@@ -168,6 +167,10 @@ const WATCHED: [&str; 12] = [
     "COMPASS_ORIENT",
     "COMPASS_DEV_ID",
     "COMPASS_DEV_ID2",
+    // Live Calibration zeroes and then saves them.
+    "COMPASS_OFS_X",
+    "COMPASS_OFS_Y",
+    "COMPASS_OFS_Z",
 ];
 
 // ---------------------------------------------------------------------------------------------
@@ -797,6 +800,9 @@ pub enum Then {
     Nothing,
     /// Carry on with Start: `CheckReboot` returned true.
     Start,
+    /// Open Live Calibration's window: the box was `Strings.MagCalibMsg`, and `DoGUIMagCalib`
+    /// shows its window whichever way the box closed. `// C#: MagCalib.cs:148-159`
+    LiveCalibration,
 }
 
 /// A modal box the page is showing.
@@ -822,6 +828,9 @@ pub enum Dialog {
     MagCalYaw(TextField),
     /// `buttonQuickPixhawk_Click`'s Yes/No question about the firmware.
     QuickFirmware,
+    /// Live Calibration's "run the calibration anyway?", asked after Done while the coverage test
+    /// still wants a point. `// C#: MagCalib.cs:737-748`
+    LiveMissing,
 }
 
 impl Dialog {
@@ -843,6 +852,10 @@ impl Dialog {
             Self::RebootQuestion => ("", REBOOT_QUESTION),
             Self::MagCalYaw(_) => (MAGCAL_YAW_TITLE, MAGCAL_YAW_PROMPT),
             Self::QuickFirmware => ("", QUICK_FIRMWARE),
+            Self::LiveMissing => (
+                mp_calibration::live_magcal::RUN_ANYWAY,
+                mp_calibration::live_magcal::MISSING_DATA_POINTS,
+            ),
         }
     }
 
@@ -851,7 +864,7 @@ impl Dialog {
     pub const fn buttons(&self) -> (&'static str, &'static str) {
         match self {
             Self::Message { .. } => ("OK", ""),
-            Self::RebootRequired { .. } | Self::QuickFirmware => ("Yes", "No"),
+            Self::RebootRequired { .. } | Self::QuickFirmware | Self::LiveMissing => ("Yes", "No"),
             Self::RebootQuestion | Self::MagCalYaw(_) => ("OK", "Cancel"),
         }
     }
@@ -891,6 +904,47 @@ pub enum Step {
     AskFirmware,
     /// `Activate()`, which the quick-configure handlers end with.
     Activate,
+    /// Live Calibration's `setParam`s, named at run time: a `false` is ignored and a throw ends
+    /// the handler - in `prd_DoWork` (`work`) the window then says the exception, in
+    /// `SaveOffsets` its `catch` shows the failure box (the job's `on_abort`).
+    /// `// C#: MagCalib.cs:398-435, 1271-1430`
+    Write {
+        /// The parameter.
+        param: String,
+        /// The value.
+        value: f64,
+        /// `setParam`'s `force`: sent even when the vehicle holds the value.
+        force: bool,
+        /// Whether `prd_DoWork` makes it, rather than `SaveOffsets`.
+        work: bool,
+    },
+    /// `SetSensorOffsets`: accepted, the three offsets read back with `GetParam`; refused, set
+    /// with `setParam`; a throw ends the handler. `// C#: MagCalib.cs:1277-1295, 1333-1350`
+    SensorOffsets {
+        /// `sensoroffsetsenum`: 2 for the first compass, 5 for the second.
+        sensor: u8,
+        /// The offsets, `(float)ofs[0..3]`.
+        offsets: [f32; 3],
+        /// The compass's `COMPASS_OFS*_X/Y/Z`.
+        names: [String; 3],
+    },
+    /// `GetParam`: a throw ends the handler. `// C#: MagCalib.cs:1290-1294`
+    ReadParam(String),
+    /// A `CustomMessageBox.Show` the handler waits on: the next step runs once it is closed.
+    Say {
+        /// The caption.
+        title: &'static str,
+        /// The text.
+        text: String,
+    },
+    /// Live Calibration's loop begins: the rates set, the streams asked for, the subscriptions
+    /// made. `// C#: MagCalib.cs:437-472`
+    LiveStart {
+        /// `havecompass2`.
+        have2: bool,
+        /// `havecompass3`.
+        have3: bool,
+    },
 }
 
 /// A handler's steps, run when every earlier handler's have finished; `on_abort` runs when a step
@@ -926,6 +980,102 @@ impl Job {
     pub fn steps(&self) -> Vec<Step> {
         self.steps.iter().cloned().collect()
     }
+}
+
+/// `prd_DoWork`'s writes before its loop: learning off, then each compass's offsets zeroed and its
+/// ellipsoid made a sphere - forced, so each goes out whatever the vehicle holds - for each compass
+/// whose `COMPASS_OFS*_X` the vehicle lists; then the loop. A diagonal or off-diagonal the vehicle
+/// does not list is refused unsent, which the C# ignores as it ignores every `false` here.
+/// `// C#: MagCalib.cs:382-435`
+pub fn work_job(parameters: &[(String, f64)]) -> Job {
+    use mp_calibration::magcalib::{ellipsoid_params, offset_params};
+    let write = |param: String, value: f64, force: bool| Step::Write {
+        param,
+        value,
+        force,
+        work: true,
+    };
+    let mut steps = vec![write("COMPASS_LEARN".to_owned(), 0.0, false)];
+    let mut have = [false; 3];
+    for (compass, have) in (1..=3).zip(&mut have) {
+        let offsets = offset_params(compass);
+        if value_of(parameters, &offsets[0]).is_none() {
+            continue;
+        }
+        *have = true;
+        steps.extend(offsets.into_iter().map(|name| write(name, 0.0, true)));
+        let [dx, dy, dz, ox, oy, oz] = ellipsoid_params(compass);
+        steps.extend([dx, dy, dz].map(|name| write(name, 1.0, true)));
+        steps.extend([ox, oy, oz].map(|name| write(name, 0.0, true)));
+    }
+    steps.push(Step::LiveStart {
+        have2: have[1],
+        have3: have[2],
+    });
+    Job::of(steps)
+}
+
+/// `SaveOffsets`, `SaveOffsets2` or `SaveOffsets3` for compass `compass` with the answer `ofs`:
+/// with the vehicle's `COMPASS_OFS*_X` and the link open, learning off, then the offsets -
+/// through `SetSensorOffsets` for the first two, falling back to the parameters, and straight to
+/// the parameters for the third - then the ellipsoid's six when the answer has them and the
+/// vehicle lists them, then "These have been saved for you."; a throw anywhere is the failure
+/// box. Without them, the offsets to write down. Every value is `(float)ofs[i]`.
+/// `// C#: MagCalib.cs:1271-1430`
+pub fn save_job(compass: u8, ofs: &[f64], parameters: &[(String, f64)], open: bool) -> Job {
+    use mp_calibration::live_magcal::{SENSOR_MAGNETOMETER, SENSOR_SECOND_MAGNETOMETER};
+    use mp_calibration::magcalib::{
+        TITLE, ellipsoid_params, failed_message, manual_message, offset_params, saved_message,
+    };
+    let names = offset_params(compass);
+    if value_of(parameters, &names[0]).is_none() || !open {
+        return Job::of([Step::Say {
+            title: TITLE,
+            text: manual_message(compass, ofs),
+        }]);
+    }
+    #[allow(clippy::cast_possible_truncation)] // `(float)ofs[i]`
+    let single = |i: usize| ofs.get(i).copied().unwrap_or(0.0) as f32;
+    let write = |param: String, value: f32| Step::Write {
+        param,
+        value: f64::from(value),
+        force: false,
+        work: false,
+    };
+    let mut steps = vec![write("COMPASS_LEARN".to_owned(), 0.0)];
+    let offsets = [single(0), single(1), single(2)];
+    if compass == 3 {
+        steps.extend(names.into_iter().zip(offsets).map(|(n, v)| write(n, v)));
+    } else {
+        steps.push(Step::SensorOffsets {
+            sensor: if compass == 1 {
+                SENSOR_MAGNETOMETER
+            } else {
+                SENSOR_SECOND_MAGNETOMETER
+            },
+            offsets,
+            names,
+        });
+    }
+    let ellipsoid = ellipsoid_params(compass);
+    if ofs.len() > 5 && value_of(parameters, &ellipsoid[0]).is_some() {
+        steps.extend(
+            ellipsoid
+                .into_iter()
+                .enumerate()
+                .map(|(i, name)| write(name, single(3 + i))),
+        );
+    }
+    steps.push(Step::Say {
+        title: TITLE,
+        text: saved_message(compass, ofs),
+    });
+    let mut job = Job::of(steps);
+    job.on_abort = vec![Step::Say {
+        title: "",
+        text: failed_message(compass),
+    }];
+    job
 }
 
 /// How a request ended, as the C# sees it.
@@ -993,6 +1143,18 @@ pub trait Autopilot {
     fn mag_cal(&self) -> MagCalLog;
     /// `MAV.param`, for an `Activate()` a handler calls.
     fn parameters(&self) -> Vec<(String, f64)>;
+    /// `setParam(..., force: true)`: sent even when the vehicle already holds the value.
+    fn write_forced(&mut self, name: &str, value: f64) -> Option<Self::Handle>;
+    /// `GetParam`.
+    fn read_back(&mut self, name: &str) -> Option<Self::Handle>;
+    /// `SetSensorOffsets(sensor, x, y, z)`.
+    fn sensor_offsets(&mut self, sensor: u8, offsets: [f32; 3]) -> Option<Self::Handle>;
+    /// `requestDatastream(stream, hz)`, sent and not waited for.
+    fn request_stream(&mut self, stream: u8, hz: i32);
+    /// `MAV.cs.rateattitude` to `raterc`.
+    fn rates(&self) -> mp_vehicle::StreamRates;
+    /// Sets them, as `MAV.cs.rateX = ...` does.
+    fn set_rates(&mut self, rates: mp_vehicle::StreamRates);
 }
 
 impl Autopilot for Telemetry {
@@ -1042,6 +1204,34 @@ impl Autopilot for Telemetry {
     fn parameters(&self) -> Vec<(String, f64)> {
         self.view().parameters.to_vec()
     }
+
+    fn write_forced(&mut self, name: &str, value: f64) -> Option<Self::Handle> {
+        self.write_parameter(name, value, true)
+    }
+
+    fn read_back(&mut self, name: &str) -> Option<Self::Handle> {
+        self.read_parameter(name)
+    }
+
+    fn sensor_offsets(&mut self, sensor: u8, offsets: [f32; 3]) -> Option<Self::Handle> {
+        let (_, id) = self.send_handle()?;
+        self.command_message(
+            &mp_calibration::live_magcal::set_sensor_offsets(id, sensor, offsets),
+            crate::telemetry::Report::default(),
+        )
+    }
+
+    fn request_stream(&mut self, stream: u8, hz: i32) {
+        super::planner::request_datastream(self, stream, hz);
+    }
+
+    fn rates(&self) -> mp_vehicle::StreamRates {
+        super::radio::vehicle_rates(&self.view())
+    }
+
+    fn set_rates(&mut self, rates: mp_vehicle::StreamRates) {
+        Telemetry::set_stream_rates(self, rates);
+    }
 }
 
 /// The job being run.
@@ -1050,6 +1240,8 @@ struct Running<H> {
     job: Job,
     /// The step whose request is out, and the request.
     out: Option<(Step, H)>,
+    /// Waiting for the boxes to close: a [`Step::Say`] was shown.
+    held: bool,
 }
 
 /// The last request a job made to end, for the facts: what, and the answer.
@@ -1504,6 +1696,8 @@ pub struct Compass<H = mp_link::RequestId> {
     last_command: Option<Ended>,
     /// The last parameter write to end.
     last_write: Option<Ended>,
+    /// Live Calibration: `MagCalib`'s statics and its window.
+    live: LiveMagCal,
 }
 
 impl<H> Default for Compass<H> {
@@ -1530,6 +1724,7 @@ impl<H> Default for Compass<H> {
             running: None,
             last_command: None,
             last_write: None,
+            live: LiveMagCal::default(),
         }
     }
 }
@@ -1561,12 +1756,15 @@ impl<H: Copy> Compass<H> {
         let jobs = std::mem::take(&mut self.jobs);
         let running = self.running.take();
         let (last_command, last_write) = (self.last_command.take(), self.last_write.take());
+        // `MagCalib`'s state is static, and its window modal: both outlive the page.
+        let live = std::mem::take(&mut self.live);
         *self = Self {
             dialogs,
             jobs,
             running,
             last_command,
             last_write,
+            live,
             ..Self::default()
         };
     }
@@ -2083,6 +2281,45 @@ impl<H: Copy> Compass<H> {
         self.jobs.push_back(job);
     }
 
+    /// Live Calibration, `BUT_MagCalibration_Click`: `MagCalib.DoGUIMagCalib()` - its state reset
+    /// and `Strings.MagCalibMsg` shown, the window after it - then `Activate()` once its boxes are
+    /// done (queued when the window closes).
+    /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass.cs:257-261; MagCalib.cs:136-150`
+    pub fn click_live_calibration(&mut self) {
+        if self.class != Class::Legacy || !self.legacy.enabled || self.live.is_open() {
+            return;
+        }
+        self.live.begin();
+        self.dialogs.push_back(Dialog::Message {
+            title: "",
+            text: mp_calibration::live_magcal::INTRO.to_owned(),
+            then: Then::LiveCalibration,
+        });
+    }
+
+    /// Live Calibration's window and state.
+    #[cfg(test)]
+    #[must_use]
+    pub const fn live(&self) -> &LiveMagCal {
+        &self.live
+    }
+
+    /// The same, for its controls.
+    pub const fn live_mut(&mut self) -> &mut LiveMagCal {
+        &mut self.live
+    }
+
+    /// The window's "Details..." link: the exception's words in a box, as
+    /// `CustomMessageBox.ShowTextBox` shows them - without the stack trace, which this port has
+    /// none of. `// C#: ExtLibs/Controls/ProgressReporterDialogue.cs:291-299`
+    pub fn show_live_details(&mut self) {
+        if let Some(details) = self.live.details() {
+            let text = details.to_owned();
+            self.dialogs
+                .push_back(Dialog::message("Exception Details", text));
+        }
+    }
+
     /// Start: on the newer page `CheckReboot` first when a reboot is required, then the command.
     /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:264-269; ConfigHWCompass.cs:453-458`
     pub fn click_start(&mut self, open: bool) {
@@ -2160,10 +2397,17 @@ impl<H: Copy> Compass<H> {
             return;
         };
         match dialog {
-            Dialog::Message { then, .. } => {
-                if then == Then::Start {
-                    self.jobs.push_back(Job::of([Step::Start]));
+            Dialog::Message { then, .. } => match then {
+                Then::Start => self.jobs.push_back(Job::of([Step::Start])),
+                Then::LiveCalibration => {
+                    self.live.open();
+                    self.jobs.push_back(work_job(&autopilot.parameters()));
                 }
+                Then::Nothing => {}
+            },
+            // `// C#: MagCalib.cs:737-748`
+            Dialog::LiveMissing => {
+                self.live.missing_answered(yes, &autopilot.parameters());
             }
             // `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:159-178`
             Dialog::RebootRequired { then_start } => {
@@ -2265,6 +2509,25 @@ impl<H: Copy> Compass<H> {
             self.declination_validated(&view.parameters);
         }
         self.run_jobs(autopilot, now);
+        if self.live.tick(autopilot, view, now) {
+            self.dialogs.push_back(Dialog::LiveMissing);
+        }
+        if let Some(answers) = self.live.take_closed() {
+            // After the window: `SaveOffsets`, `SaveOffsets2`, `SaveOffsets3` for each answer
+            // there is, each waiting on its box, then the handler's `Activate()`.
+            // `// C#: MagCalib.cs:161-169; ConfigHWCompass.cs:259-260`
+            for (compass, answer) in (1..=3).zip(answers) {
+                if let Some(ofs) = answer {
+                    self.jobs.push_back(save_job(
+                        compass,
+                        &ofs,
+                        &view.parameters,
+                        view.connected,
+                    ));
+                }
+            }
+            self.jobs.push_back(Job::of([Step::Activate]));
+        }
         if self.onboard.timer && self.onboard.next.is_some_and(|next| now >= next) {
             self.onboard.next = Some(now + self.onboard.interval);
             self.timer_tick(&autopilot.mag_cal());
@@ -2296,9 +2559,20 @@ impl<H: Copy> Compass<H> {
                 let Some(job) = self.jobs.pop_front() else {
                     return;
                 };
-                self.running = Some(Running { job, out: None });
+                self.running = Some(Running {
+                    job,
+                    out: None,
+                    held: false,
+                });
                 continue;
             };
+            if running.held {
+                if !self.dialogs.is_empty() {
+                    self.running = Some(running);
+                    return;
+                }
+                running.held = false;
+            }
             let (step, answer) = match running.out.take() {
                 Some((step, handle)) => match Answer::of(autopilot.progress(handle)) {
                     Some(answer) => (step, answer),
@@ -2319,6 +2593,33 @@ impl<H: Copy> Compass<H> {
                         Step::Accept => autopilot.accept(),
                         Step::Cancel => autopilot.cancel(),
                         Step::FixedYaw(yaw) => autopilot.fixed_yaw(*yaw),
+                        Step::Write {
+                            param,
+                            value,
+                            force,
+                            ..
+                        } => {
+                            if *force {
+                                autopilot.write_forced(param, *value)
+                            } else {
+                                autopilot.set_param(param, *value)
+                            }
+                        }
+                        Step::SensorOffsets {
+                            sensor, offsets, ..
+                        } => autopilot.sensor_offsets(*sensor, *offsets),
+                        Step::ReadParam(name) => autopilot.read_back(name),
+                        Step::Say { title, text } => {
+                            self.dialogs.push_back(Dialog::message(title, text.clone()));
+                            running.held = true;
+                            self.running = Some(running);
+                            continue;
+                        }
+                        Step::LiveStart { have2, have3 } => {
+                            self.live.start(autopilot, *have2, *have3, now);
+                            self.running = Some(running);
+                            continue;
+                        }
                         Step::RebootRequired => {
                             self.reboot_required = true;
                             self.running = Some(running);
@@ -2350,7 +2651,7 @@ impl<H: Copy> Compass<H> {
                     }
                 }
             };
-            if self.answered(&step, answer, autopilot, now) {
+            if self.answered(&step, answer, &mut running.job, autopilot, now) {
                 self.running = Some(running);
             } else {
                 // The handler ends here; what follows its `try` still runs.
@@ -2359,6 +2660,7 @@ impl<H: Copy> Compass<H> {
                     self.running = Some(Running {
                         job: Job::of(rest),
                         out: None,
+                        held: false,
                     });
                 }
             }
@@ -2370,6 +2672,7 @@ impl<H: Copy> Compass<H> {
         &mut self,
         step: &Step,
         answer: Answer,
+        job: &mut Job,
         autopilot: &mut A,
         now: Instant,
     ) -> bool {
@@ -2378,6 +2681,7 @@ impl<H: Copy> Compass<H> {
             Step::Accept => Some("DO_ACCEPT_MAG_CAL"),
             Step::Cancel => Some("DO_CANCEL_MAG_CAL"),
             Step::FixedYaw(_) => Some("FIXED_MAG_CAL_YAW"),
+            Step::SensorOffsets { .. } => Some("PREFLIGHT_SET_SENSOR_OFFSETS"),
             _ => None,
         };
         if let Some(name) = command {
@@ -2445,7 +2749,51 @@ impl<H: Copy> Compass<H> {
                 });
                 true
             }
-            Step::RebootRequired | Step::AskFirmware | Step::Activate => true,
+            // A `false` goes unremarked; a throw leaves the handler. In `prd_DoWork` that is the
+            // exception the window shows. `// C#: MagCalib.cs:398-435;
+            // ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1757-1762;
+            // ExtLibs/Controls/ProgressReporterDialogue.cs:120-133, 215-223`
+            Step::Write { param, work, .. } => {
+                self.last_write = Some(Ended {
+                    what: param.clone(),
+                    answer,
+                });
+                if answer == Answer::Threw {
+                    if *work {
+                        self.live
+                            .fail_exception(&format!("Timeout on read - setParam {param}"));
+                    }
+                    return false;
+                }
+                true
+            }
+            // `// C#: MagCalib.cs:1277-1295, 1333-1350`
+            Step::SensorOffsets { offsets, names, .. } => {
+                let branch: Vec<Step> = match answer {
+                    Answer::Threw => return false,
+                    Answer::True => names.iter().cloned().map(Step::ReadParam).collect(),
+                    Answer::False => names
+                        .iter()
+                        .zip(offsets)
+                        .map(|(name, value)| Step::Write {
+                            param: name.clone(),
+                            value: f64::from(*value),
+                            force: false,
+                            work: false,
+                        })
+                        .collect(),
+                };
+                for step in branch.into_iter().rev() {
+                    job.steps.push_front(step);
+                }
+                true
+            }
+            Step::ReadParam(_) => answer != Answer::Threw,
+            Step::RebootRequired
+            | Step::AskFirmware
+            | Step::Activate
+            | Step::Say { .. }
+            | Step::LiveStart { .. } => true,
         }
     }
 }
@@ -2589,6 +2937,8 @@ pub fn record_facts<H: Copy>(compass: &Compass<H>, view: &TelemetryView) {
         record(format!("{key}.mot"), group.mot.as_deref().unwrap_or("MOT"));
     }
 
+    super::live_magcal::record_facts(&compass.live);
+
     for name in WATCHED {
         if let Some(value) = value_of(&view.parameters, name) {
             record(format!("params.value.{name}"), value);
@@ -2622,7 +2972,7 @@ const ROW_HEADER: f32 = 20.0;
 const ROW_HEIGHT: f32 = 22.0;
 
 /// An absolutely placed box, at a Designer `Location` and `Size`.
-fn at(x: f32, y: f32, width: f32, height: f32) -> Div {
+pub(super) fn at(x: f32, y: f32, width: f32, height: f32) -> Div {
     div()
         .absolute()
         .left(px(x))
@@ -2632,7 +2982,7 @@ fn at(x: f32, y: f32, width: f32, height: f32) -> Div {
 }
 
 /// A label at its `Location`.
-fn label(x: f32, y: f32, text: impl Into<SharedString>, enabled: bool) -> Div {
+pub(super) fn label(x: f32, y: f32, text: impl Into<SharedString>, enabled: bool) -> Div {
     div()
         .absolute()
         .left(px(x))
@@ -2663,7 +3013,7 @@ fn group_box(place: (f32, f32, f32, f32), text: &'static str) -> Div {
 }
 
 /// A button at its `Location`, its `Size`'s width at least.
-fn button(
+pub(super) fn button(
     (x, y, width): (f32, f32, f32),
     id: &'static str,
     text: &'static str,
@@ -2715,7 +3065,7 @@ fn square(state: CheckState, enabled: bool) -> Div {
 }
 
 /// A check box at its `Location` and `Size`, with its text: dimmed and inert while disabled.
-fn check_box(
+pub(super) fn check_box(
     (x, y, width, height): (f32, f32, f32, f32),
     id: SharedString,
     text: &'static str,
@@ -3546,9 +3896,9 @@ fn legacy_page(compass: &Compass, focus: &Focus, cx: &mut Context<MissionPlanner
     }
     if legacy.mpcalib_visible {
         // `BUT_MagCalibrationLive` runs `MagCalib.DoGUIMagCalib`, Mission Planner's own
-        // calibration from raw magnetometer samples, whose sphere window is not ported: the
-        // button is drawn, and inert. The group holds nothing else - no Log Calibration: the
-        // Designer makes none, and `BUT_MagCalibrationLog_Click` (`:362-373`) has no caller.
+        // calibration from raw magnetometer samples (`live_magcal.rs`). The group holds nothing
+        // else - no Log Calibration: the Designer makes none, and `BUT_MagCalibrationLog_Click`
+        // (`:362-373`) has no caller.
         // `// C#: GCSViews/ConfigurationView/ConfigHWCompass.cs:257-261;
         // ConfigHWCompass.Designer.cs:266-279`
         body = body.child(
@@ -3558,10 +3908,13 @@ fn legacy_page(compass: &Compass, focus: &Focus, cx: &mut Context<MissionPlanner
             )
             .child(button(
                 (6.0, 20.0, 66.0),
-                "compass-live-calibration",
+                "compass-livecal",
                 "Live Calibration",
-                false,
-                |_event: &(), _window, _cx| {},
+                enabled,
+                cx.listener(|this, _event: &(), _window, cx| {
+                    this.compass.click_live_calibration();
+                    cx.notify();
+                }),
             ))
             .child(link(
                 76.0,
@@ -3621,8 +3974,25 @@ fn keep_magcal_answer(this: &mut MissionPlanner) {
     }
 }
 
-/// The box showing, drawn over the whole window: every one is modal.
+/// Live Calibration's window while it shows, and over it the box showing, each drawn over the
+/// whole window: every one is modal.
 pub fn overlay(
+    compass: &Compass,
+    focus: &Focus,
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> Vec<AnyElement> {
+    let mut out: Vec<AnyElement> = super::live_magcal::window(&compass.live, window, cx)
+        .into_iter()
+        .collect();
+    if let Some(dialog) = dialog_box(compass, focus, window, cx) {
+        out.push(dialog);
+    }
+    out
+}
+
+/// The box showing, drawn over the whole window.
+fn dialog_box(
     compass: &Compass,
     focus: &Focus,
     window: &Window,
@@ -3811,6 +4181,10 @@ mod tests {
         reboots: usize,
         cleared: usize,
         log: MagCalLog,
+        /// Every `requestDatastream`, stream and rate.
+        streams: Vec<(u8, i32)>,
+        /// `MAV.cs.rateX`.
+        rates: mp_vehicle::StreamRates,
     }
 
     impl Fake {
@@ -3887,6 +4261,37 @@ mod tests {
 
         fn parameters(&self) -> Vec<(String, f64)> {
             self.params.clone()
+        }
+
+        fn write_forced(&mut self, name: &str, value: f64) -> Option<usize> {
+            let key = self
+                .answers
+                .keys()
+                .find(|key| **key == name)
+                .copied()
+                .unwrap_or("");
+            self.request(&format!("{name}:={value}"), key)
+        }
+
+        fn read_back(&mut self, name: &str) -> Option<usize> {
+            self.request(&format!("read {name}"), "read")
+        }
+
+        fn sensor_offsets(&mut self, sensor: u8, offsets: [f32; 3]) -> Option<usize> {
+            let [x, y, z] = offsets;
+            self.request(&format!("offsets {sensor} {x} {y} {z}"), "offsets")
+        }
+
+        fn request_stream(&mut self, stream: u8, hz: i32) {
+            self.streams.push((stream, hz));
+        }
+
+        fn rates(&self) -> mp_vehicle::StreamRates {
+            self.rates
+        }
+
+        fn set_rates(&mut self, rates: mp_vehicle::StreamRates) {
+            self.rates = rates;
         }
     }
 
@@ -4800,6 +5205,418 @@ mod tests {
         );
     }
 
+
+    // --- Live Calibration ------------------------------------------------------------------------
+
+    use std::sync::Arc;
+
+    use crate::config::live_magcal::Phase;
+
+    /// An ArduPlane 4.0: the older page with Mission Planner's group (a plane from 3.7.1), and a
+    /// first compass with an ellipsoid.
+    fn plane_40() -> Vec<(String, f64)> {
+        let mut list = copter_40();
+        list.extend(params(&[
+            ("COMPASS_DIA_X", 1.0),
+            ("COMPASS_DIA_Y", 1.0),
+            ("COMPASS_DIA_Z", 1.0),
+            ("COMPASS_ODI_X", 0.0),
+            ("COMPASS_ODI_Y", 0.0),
+            ("COMPASS_ODI_Z", 0.0),
+        ]));
+        list
+    }
+
+    fn plane_40_info() -> VehicleInfo {
+        VehicleInfo {
+            firmware: Firmware::ArduPlane,
+            version: (4, 0, 9),
+            ..info()
+        }
+    }
+
+    /// Raw readings spread over a sphere about `centre` (a Fibonacci lattice), as a turned
+    /// vehicle's magnetometer gives them.
+    fn sphere_readings(count: usize, centre: [f64; 3], radius: f64) -> Vec<[i16; 3]> {
+        let golden = std::f64::consts::PI * (3.0 - 5.0_f64.sqrt());
+        (0..count)
+            .map(|i| {
+                #[allow(clippy::cast_precision_loss)]
+                let (i, n) = (i as f64, count as f64);
+                let y = 1.0 - 2.0 * (i + 0.5) / n;
+                let r = (1.0 - y * y).sqrt();
+                let theta = golden * i;
+                let u = [r * theta.cos(), y, r * theta.sin()];
+                #[allow(clippy::cast_possible_truncation)]
+                let s = |k: usize| (centre[k] + radius * u[k]).round() as i16;
+                [s(0), s(1), s(2)]
+            })
+            .collect()
+    }
+
+    /// A frame's view: a new snapshot holding the three compasses' readings.
+    fn mags(readings: [[i16; 3]; 3]) -> TelemetryView {
+        let mut view = TelemetryView::disconnected("test");
+        let mut state = mp_vehicle::VehicleState::new(1, 1);
+        for (imu, mag) in state.imu.iter_mut().zip(readings) {
+            imu.mag = mag.map(f32::from);
+        }
+        view.state = Some(Arc::new(state));
+        view.connected = true;
+        view.parameters = plane_40().into();
+        view
+    }
+
+    /// The page through the intro box and `prd_DoWork`'s writes to the loop.
+    fn live_sampling(fake: &mut Fake, start: Instant) -> Compass<usize> {
+        let mut compass = legacy_page(&plane_40(), plane_40_info());
+        assert!(compass.legacy.mpcalib_visible);
+        fake.params = plane_40();
+        fake.rates = mp_vehicle::StreamRates {
+            attitude: 4,
+            position: 3,
+            status: 2,
+            sensors: 5,
+            rc: 6,
+        };
+        compass.click_live_calibration();
+        assert_eq!(
+            dialog_text(&compass).as_deref(),
+            Some(mp_calibration::live_magcal::INTRO)
+        );
+        assert!(!compass.live().is_open());
+        compass.answer(true, fake);
+        assert!(compass.live().is_open());
+        let view = mags([[0; 3]; 3]);
+        compass.tick(fake, &view, true, [false; 2], start);
+        assert_eq!(compass.live().phase(), Some(&Phase::Sampling));
+        compass
+    }
+
+    /// `prd_DoWork`: learning off unforced, then each compass's offsets, diagonals and
+    /// off-diagonals forced to a sphere, the rates set and the streams asked for, then the samples
+    /// through the filter onto the spheres, the text, and the fit each second.
+    /// `// C#: MagCalib.cs:382-620`
+    #[test]
+    fn live_calibration_zeroes_the_offsets_then_samples() {
+        let mut fake = Fake::default();
+        let start = Instant::now();
+        let mut compass = live_sampling(&mut fake, start);
+        let names = fake.names();
+        assert_eq!(names[0], "COMPASS_LEARN=0");
+        assert_eq!(
+            names[1..10],
+            [
+                "COMPASS_OFS_X:=0",
+                "COMPASS_OFS_Y:=0",
+                "COMPASS_OFS_Z:=0",
+                "COMPASS_DIA_X:=1",
+                "COMPASS_DIA_Y:=1",
+                "COMPASS_DIA_Z:=1",
+                "COMPASS_ODI_X:=0",
+                "COMPASS_ODI_Y:=0",
+                "COMPASS_ODI_Z:=0",
+            ]
+        );
+        // Compasses 2 and 3 as well: the 4.0 copter lists COMPASS_OFS2_X and OFS3_X.
+        assert_eq!(names.len(), 28);
+        assert!(names.contains(&"COMPASS_OFS3_Z:=0"));
+        assert_eq!(fake.streams, vec![(0, 0), (1, 50)]);
+        assert_eq!(
+            (fake.rates.sensors, fake.rates.attitude, fake.rates.position, fake.rates.rc),
+            (2, 0, 0, 6)
+        );
+
+        // Auto accept off, so the loop runs until Done.
+        compass.live_mut().toggle_auto();
+        let first = sphere_readings(300, [-120.0, 85.0, 230.0], 450.0);
+        let second = sphere_readings(300, [40.0, -60.0, 10.0], 380.0);
+        for (i, (one, two)) in first.iter().zip(&second).enumerate() {
+            let now = start + Duration::from_millis(20 * (i as u64 + 1));
+            compass.tick(&mut fake, &mags([*one, *two, [0, 0, 0]]), true, [false; 2], now);
+        }
+        let live = compass.live().live();
+        // The snapshot that began the loop was the subscription's moment, not a sample; each after
+        // it gave one reading, all in buckets of their own.
+        assert_eq!(live.samples[0].len(), 300);
+        assert!(live.samples[1].len() > 100);
+        assert!(live.samples[2].is_empty(), "zeros are no reading");
+        assert!(live.errors[0] < mp_calibration::live_magcal::START_ERROR);
+        let spheres = compass.live().spheres().unwrap();
+        assert_eq!(spheres[0].points.len(), live.samples[0].len());
+        // The first sphere's centre is the running fit's offsets: minus the readings' centre.
+        assert!((spheres[0].centre[0] - 120.0).abs() < 3.0, "{:?}", spheres[0].centre);
+        assert!(compass.live().label().unwrap().starts_with("Got + "));
+        // Each second's fit asked for RAW_SENSORS at 50 again.
+        assert!(fake.streams.iter().filter(|s| **s == (1, 50)).count() > 2);
+        assert!(spheres[2].points.is_empty());
+    }
+
+    /// Done ends the loop: the rates put back and the seven streams asked for at them, then the
+    /// fit; the window closes 100 ms later and each compass's offsets are saved - through
+    /// PREFLIGHT_SET_SENSOR_OFFSETS, read back, the ellipsoid written - a box each, then
+    /// `Activate()`. `// C#: MagCalib.cs:695-790, 1271-1378`
+    #[test]
+    fn done_fits_and_saves_through_set_sensor_offsets() {
+        let mut fake = Fake::default();
+        let start = Instant::now();
+        let mut compass = live_sampling(&mut fake, start);
+        compass.live_mut().toggle_auto();
+        let first = sphere_readings(400, [-120.0, 85.0, 230.0], 450.0);
+        let second = sphere_readings(200, [40.0, -60.0, 10.0], 380.0);
+        let mut now = start;
+        for (i, one) in first.iter().enumerate() {
+            now = start + Duration::from_millis(20 * (i as u64 + 1));
+            let two = second.get(i).copied().unwrap_or([0, 0, 0]);
+            compass.tick(&mut fake, &mags([*one, two, [0, 0, 0]]), true, [false; 2], now);
+        }
+        let before = fake.made.len();
+        fake.streams.clear();
+        compass.live_mut().click_done();
+        assert_eq!(compass.live().label(), Some("Cancelling..."));
+        now += Duration::from_millis(20);
+        compass.tick(&mut fake, &mags([[0; 3]; 3]), true, [false; 2], now);
+        // The rates back, and asked for as the C# asks: sensors 5, position 3, attitude 4, rc 6.
+        assert_eq!(fake.rates.sensors, 5);
+        assert_eq!(
+            fake.streams,
+            vec![(1, 5), (6, 3), (10, 4), (11, 4), (12, 5), (1, 5), (3, 6)]
+        );
+        // The whole sphere was covered, so nothing is asked: the fit, and the window closing.
+        assert!(compass.dialog().is_none(), "{:?}", dialog_text(&compass));
+        assert!(matches!(
+            compass.live().phase(),
+            Some(Phase::Closing { .. })
+        ));
+        let answers = compass.live().live().answers.clone();
+        let ofs = answers[0].clone().unwrap();
+        assert_eq!(ofs.len(), 9, "the vehicle has COMPASS_DIA_X: the ellipsoid");
+        assert!((ofs[0] - 120.0).abs() < 3.0 && (ofs[2] + 230.0).abs() < 3.0, "{ofs:?}");
+        assert!(answers[1].is_some() && answers[2].is_none());
+
+        now += Duration::from_millis(20);
+        compass.tick(&mut fake, &mags([[0; 3]; 3]), true, [false; 2], now);
+        assert!(compass.live().is_open(), "ShowDone waits 100 ms");
+        now += Duration::from_millis(150);
+        compass.tick(&mut fake, &mags([[0; 3]; 3]), true, [false; 2], now);
+        assert!(!compass.live().is_open());
+        compass.tick(&mut fake, &mags([[0; 3]; 3]), true, [false; 2], now);
+        #[allow(clippy::cast_possible_truncation)]
+        let single = |v: f64| v as f32;
+        let names: Vec<String> = fake.made[before..].iter().map(|(n, _)| n.clone()).collect();
+        assert_eq!(names[0], "COMPASS_LEARN=0");
+        assert_eq!(
+            names[1],
+            format!(
+                "offsets 2 {} {} {}",
+                single(ofs[0]),
+                single(ofs[1]),
+                single(ofs[2])
+            )
+        );
+        assert_eq!(
+            names[2..5],
+            ["read COMPASS_OFS_X", "read COMPASS_OFS_Y", "read COMPASS_OFS_Z"]
+        );
+        assert_eq!(names[5], format!("COMPASS_DIA_X={}", f64::from(single(ofs[3]))));
+        assert_eq!(names.len(), 11);
+        assert_eq!(
+            dialog_text(&compass),
+            Some(mp_calibration::magcalib::saved_message(1, &ofs))
+        );
+        assert_eq!(compass.dialog().unwrap().words().0, "New Mag Offsets");
+        // The second compass waits for the box.
+        compass.tick(&mut fake, &mags([[0; 3]; 3]), true, [false; 2], now);
+        assert_eq!(fake.made.len(), before + 11);
+        compass.answer(true, &mut fake);
+        compass.tick(&mut fake, &mags([[0; 3]; 3]), true, [false; 2], now);
+        let ofs2 = answers[1].clone().unwrap();
+        assert_eq!(
+            fake.made[before + 12].0,
+            format!(
+                "offsets 5 {} {} {}",
+                single(ofs2[0]),
+                single(ofs2[1]),
+                single(ofs2[2])
+            )
+        );
+        // No COMPASS_DIA2_X on this vehicle: the offsets only.
+        assert_eq!(
+            dialog_text(&compass),
+            Some(mp_calibration::magcalib::saved_message(2, &ofs2))
+        );
+        compass.answer(true, &mut fake);
+        compass.tick(&mut fake, &mags([[0; 3]; 3]), true, [false; 2], now);
+        assert_eq!(compass.pending(), 0);
+        assert!(compass.dialog().is_none());
+    }
+
+    /// A vehicle that refuses PREFLIGHT_SET_SENSOR_OFFSETS gets the offsets as parameters; one
+    /// that does not answer a write gets "Setting new offsets for compass #1 failed" and no
+    /// "saved". Without the link, the offsets to write down. `// C#: MagCalib.cs:1277-1324`
+    #[test]
+    fn save_falls_back_to_the_parameters_and_says_a_failure() {
+        let parameters = plane_40();
+        let ofs = [12.4, -3.6, 40.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0];
+        let run_save = |fake: &mut Fake, open: bool| {
+            let mut compass = legacy_page(&parameters, plane_40_info());
+            compass.jobs.push_back(save_job(1, &ofs, &parameters, open));
+            run(&mut compass, fake, Instant::now());
+            compass
+        };
+        let mut refused = Fake::answering(&[("offsets", REFUSED)]);
+        let compass = run_save(&mut refused, true);
+        let names = refused.names();
+        assert_eq!(
+            names[..5],
+            [
+                "COMPASS_LEARN=0",
+                "offsets 2 12.4 -3.6 40",
+                "COMPASS_OFS_X=12.399999618530273",
+                "COMPASS_OFS_Y=-3.5999999046325684",
+                "COMPASS_OFS_Z=40",
+            ]
+        );
+        assert_eq!(
+            dialog_text(&compass).as_deref(),
+            Some("New offsets for compass #1 are 12 -4 40\nThese have been saved for you.")
+        );
+
+        let mut silent = Fake::answering(&[("COMPASS_LEARN", TIMED_OUT)]);
+        let compass = run_save(&mut silent, true);
+        assert_eq!(silent.names(), ["COMPASS_LEARN=0"]);
+        assert_eq!(
+            dialog_text(&compass).as_deref(),
+            Some("Setting new offsets for compass #1 failed")
+        );
+
+        let mut none = Fake::default();
+        let compass = run_save(&mut none, false);
+        assert!(none.made.is_empty());
+        assert_eq!(
+            dialog_text(&compass).as_deref(),
+            Some("New offsets for compass #1 are 12 -4 40\n\nPlease write these down for manual entry")
+        );
+    }
+
+    /// Done with the sphere half covered asks "run the calibration anyway?"; No forgets the
+    /// answers and closes the window, and only `Activate()` follows. Done with no samples at all
+    /// asks nothing and fails the count: the window says "Log does not contain enough data" and
+    /// waits for Close. A write the vehicle never answers in `prd_DoWork` is the exception.
+    /// `// C#: MagCalib.cs:737-766; ExtLibs/Controls/ProgressReporterDialogue.cs:120-176`
+    #[test]
+    fn done_early_asks_or_fails() {
+        let mut fake = Fake::default();
+        let start = Instant::now();
+        let mut compass = live_sampling(&mut fake, start);
+        compass.live_mut().toggle_auto();
+        let top: Vec<[i16; 3]> = sphere_readings(200, [0.0, 0.0, 0.0], 400.0)
+            .into_iter()
+            .filter(|r| r[2] > 100)
+            .collect();
+        let mut now = start;
+        for (i, one) in top.iter().enumerate() {
+            now = start + Duration::from_millis(20 * (i as u64 + 1));
+            compass.tick(&mut fake, &mags([*one, [0; 3], [0; 3]]), true, [false; 2], now);
+        }
+        compass.live_mut().click_done();
+        now += Duration::from_millis(20);
+        compass.tick(&mut fake, &mags([[0; 3]; 3]), true, [false; 2], now);
+        assert_eq!(
+            dialog_text(&compass).as_deref(),
+            Some(mp_calibration::live_magcal::MISSING_DATA_POINTS)
+        );
+        assert_eq!(compass.dialog().unwrap().buttons(), ("Yes", "No"));
+        let made = fake.made.len();
+        compass.answer(false, &mut fake);
+        compass.tick(&mut fake, &mags([[0; 3]; 3]), true, [false; 2], now);
+        assert!(!compass.live().is_open());
+        compass.tick(&mut fake, &mags([[0; 3]; 3]), true, [false; 2], now);
+        assert_eq!(compass.live().live().answers, [None, None, None]);
+        assert_eq!(fake.made.len(), made, "nothing saved");
+        assert_eq!(compass.pending(), 0);
+
+        // Again, Done before any sample.
+        let mut compass = live_sampling(&mut fake, start);
+        compass.live_mut().click_done();
+        compass.tick(&mut fake, &mags([[0; 3]; 3]), true, [false; 2], start);
+        assert_eq!(
+            compass.live().phase(),
+            Some(&Phase::Failed {
+                message: "Log does not contain enough data".to_owned(),
+                details: None
+            })
+        );
+        assert!(compass.live().details().is_none());
+        compass.live_mut().click_close();
+        assert!(!compass.live().is_open());
+
+        // A write in prd_DoWork unanswered: the exception, with Details, and no loop.
+        let mut silent = Fake::answering(&[("COMPASS_OFS_Y", TIMED_OUT)]);
+        let mut compass = legacy_page(&plane_40(), plane_40_info());
+        silent.params = plane_40();
+        compass.click_live_calibration();
+        compass.answer(true, &mut silent);
+        run(&mut compass, &mut silent, start);
+        assert_eq!(
+            compass.live().label(),
+            Some("There was an unexpected error (Timeout on read - setParam COMPASS_OFS_Y)")
+        );
+        assert_eq!(
+            compass.live().details(),
+            Some("Timeout on read - setParam COMPASS_OFS_Y")
+        );
+        assert!(silent.streams.is_empty(), "the loop never began");
+        compass.show_live_details();
+        assert_eq!(compass.dialog().unwrap().words().0, "Exception Details");
+    }
+
+    /// The first sphere's projection: its six axes in `Sphere.cs`'s colours, each point coloured
+    /// by its place in the extremes, the newest point last; the view turns with each point while
+    /// "Rotate with each data point" is ticked, and not after it is unticked.
+    /// `// C#: ExtLibs/Controls/Sphere.cs:115-253; ProgressReporterSphere.cs:111-115`
+    #[test]
+    fn the_spheres_project_as_sphere_cs_draws() {
+        use crate::config::live_magcal::Sphere;
+        let mut sphere = Sphere::default();
+        let empty = sphere.project(263.0);
+        assert_eq!(empty.axes.len(), 6);
+        assert_eq!(
+            empty.axes.iter().map(|a| a.2).collect::<Vec<_>>(),
+            [0x00_00_ff, 0x00_ff_00, 0xff_00_00, 0xff_ff_00, 0xff_00_ff, 0x00_ff_ff]
+        );
+        // The origin in the middle: the eye looks at it.
+        let (x, y) = empty.axes[0].0;
+        assert!((x - 131.5).abs() < 0.01 && (y - 131.5).abs() < 0.01);
+        sphere.add([400.0, -200.0, 100.0]);
+        sphere.add([-400.0, 200.0, -100.0]);
+        let two = sphere.project(263.0);
+        assert_eq!(two.points.len(), 2);
+        // x 400 of a range of 800: 127; y -200 of 400: 127; z 100 of 200: 127.
+        assert_eq!(two.points[0].2, 0x7f_7f_7f);
+        assert!(two.last.is_some());
+        let turned = sphere.project(263.0).points[0];
+        sphere.rotate = false;
+        sphere.add([0.0, 0.0, 0.0]);
+        assert_eq!(sphere.project(263.0).points[0], turned);
+        sphere.rotate = true;
+        sphere.add([0.0, 0.0, 0.0]);
+        assert_ne!(sphere.project(263.0).points[0], turned);
+    }
+
+    /// The Live Calibration button is drawn enabled and wired, with its id, and the window's
+    /// Done has its own.
+    #[test]
+    fn the_live_calibration_button_is_wired() {
+        let (page, _) = include_str!("compass.rs")
+            .split_once(concat!("#[cfg(test)]\n", "mod tests {"))
+            .expect("the tests");
+        assert!(page.contains("\"compass-livecal\",\n                \"Live Calibration\",\n                enabled,"));
+        assert!(page.contains("this.compass.click_live_calibration();"));
+        let window = include_str!("live_magcal.rs");
+        assert!(window.contains("\"magcal-done\","));
+    }
+
     // --- Through the real link ---------------------------------------------------------------------
 
     use crate::telemetry::scripted::{Vehicle, ack, param, until};
@@ -4928,6 +5745,171 @@ mod tests {
                 answer: Answer::True
             })
         );
+    }
+
+
+    /// Live Calibration on the real link, to a scripted autopilot: the offsets zeroed, the
+    /// streams asked for, `RAW_IMU` readings on a sphere taken from the vehicle's state, Done,
+    /// and the offsets the fit found sent as PREFLIGHT_SET_SENSOR_OFFSETS and read back - the
+    /// path the SETUP screen takes, but for the drawing.
+    #[test]
+    fn live_calibration_talks_to_the_vehicle_through_the_link() {
+        use std::collections::HashMap;
+
+        use mp_mavlink_dialects::all::RawImu;
+
+        /// `MAV_PARAM_TYPE_REAL32`.
+        const REAL32: u8 = 9;
+        let (mut telemetry, mut vehicle) =
+            Vehicle::connect(mp_link::ProtocolTimeouts::default().faster(20));
+        let listed = [
+            ("COMPASS_LEARN", 1.0),
+            ("COMPASS_OFS_X", 5.0),
+            ("COMPASS_OFS_Y", 13.0),
+            ("COMPASS_OFS_Z", -18.0),
+            ("COMPASS_DIA_X", 1.0),
+            ("COMPASS_DIA_Y", 1.0),
+            ("COMPASS_DIA_Z", 1.0),
+            ("COMPASS_ODI_X", 0.0),
+            ("COMPASS_ODI_Y", 0.0),
+            ("COMPASS_ODI_Z", 0.0),
+        ];
+        let mut values: HashMap<String, f32> = HashMap::new();
+        for (name, value) in listed {
+            vehicle.send(&param(name, value, REAL32));
+            values.insert(name.to_owned(), value);
+        }
+        until("the parameters to be listed", || {
+            listed
+                .iter()
+                .all(|(name, _)| telemetry.holds_parameter(name))
+        });
+        let view = telemetry.view();
+        let mut compass: Compass = Compass::default();
+        compass.activate(Class::Legacy, &view.parameters, Key::of(&view), plane_40_info(), bundled);
+
+        // ArduPilot's answers: a PARAM_SET echoed, a read answered, a command accepted - and
+        // PREFLIGHT_SET_SENSOR_OFFSETS for the first compass stored as its offsets.
+        let serve = |vehicle: &mut Vehicle, values: &mut HashMap<String, f32>| {
+            for message in vehicle.read() {
+                let reply = |name: &str, value: f32| {
+                    MavMessage::ParamValue(ParamValue {
+                        param_value: value,
+                        param_count: 1,
+                        param_index: 0,
+                        param_id: mp_params::encode_param_id(name),
+                        param_type: REAL32,
+                    })
+                };
+                let name_of = |id: &[u8; 16]| {
+                    String::from_utf8_lossy(id).trim_end_matches('\0').to_owned()
+                };
+                match message {
+                    MavMessage::ParamSet(set) => {
+                        let name = name_of(&set.param_id);
+                        values.insert(name.clone(), set.param_value);
+                        vehicle.send(&reply(&name, set.param_value));
+                    }
+                    MavMessage::ParamRequestRead(read) => {
+                        let name = name_of(&read.param_id);
+                        let value = values.get(&name).copied().unwrap_or(0.0);
+                        vehicle.send(&reply(&name, value));
+                    }
+                    MavMessage::CommandLong(long) => {
+                        if long.command == 242 && long.param1 == 2.0 {
+                            for (axis, value) in ["X", "Y", "Z"]
+                                .iter()
+                                .zip([long.param2, long.param3, long.param4])
+                            {
+                                values.insert(format!("COMPASS_OFS_{axis}"), value);
+                            }
+                        }
+                        vehicle.send(&ack(long.command, ACCEPTED));
+                    }
+                    _ => {}
+                }
+            }
+        };
+        let tick = |compass: &mut Compass, telemetry: &mut crate::telemetry::Telemetry| {
+            let view = telemetry.view();
+            compass.tick(telemetry, &view, true, [false; 2], Instant::now());
+        };
+
+        compass.click_live_calibration();
+        compass.answer(true, &mut telemetry);
+        until("the loop to begin", || {
+            serve(&mut vehicle, &mut values);
+            tick(&mut compass, &mut telemetry);
+            compass.live().phase() == Some(&Phase::Sampling)
+        });
+        compass.live_mut().toggle_auto();
+        let centre = [-120.0, 85.0, 230.0];
+        let readings = sphere_readings(40, centre, 450.0);
+        for reading in &readings {
+            vehicle.send(&MavMessage::RawImu(RawImu {
+                time_usec: 0,
+                xacc: 0,
+                yacc: 0,
+                zacc: 0,
+                xgyro: 0,
+                ygyro: 0,
+                zgyro: 0,
+                xmag: reading[0],
+                ymag: reading[1],
+                zmag: reading[2],
+                id: 0,
+                temperature: 0,
+            }));
+            until("the reading to reach the state", || {
+                telemetry
+                    .view()
+                    .state
+                    .is_some_and(|state| state.imu[0].mag == reading.map(f32::from))
+            });
+            tick(&mut compass, &mut telemetry);
+        }
+        assert_eq!(compass.live().live().samples[0].len(), 40);
+        compass.live_mut().click_done();
+        until("the offsets to be saved", || {
+            serve(&mut vehicle, &mut values);
+            tick(&mut compass, &mut telemetry);
+            if matches!(compass.dialog(), Some(Dialog::LiveMissing)) {
+                compass.answer(true, &mut telemetry);
+            }
+            compass
+                .dialog()
+                .is_some_and(|dialog| dialog.words().1.starts_with("New offsets for compass #1"))
+        });
+
+        let zeroed = vehicle.heard.iter().any(|message| {
+            matches!(message, MavMessage::ParamSet(set)
+                if set.param_id == mp_params::encode_param_id("COMPASS_OFS_X") && set.param_value == 0.0)
+        });
+        assert!(zeroed, "the offsets zeroed before the loop");
+        let streamed = vehicle.heard.iter().any(|message| {
+            matches!(message, MavMessage::RequestDataStream(request)
+                if request.req_stream_id == 1 && request.req_message_rate == 50)
+        });
+        assert!(streamed, "RAW_SENSORS asked for at 50");
+        let sent = vehicle.heard.iter().find_map(|message| match message {
+            MavMessage::CommandLong(long) if long.command == 242 => {
+                Some([long.param1, long.param2, long.param3, long.param4])
+            }
+            _ => None,
+        });
+        let [sensor, x, y, z] = sent.expect("PREFLIGHT_SET_SENSOR_OFFSETS");
+        assert_eq!(sensor, 2.0);
+        for (found, want) in [x, y, z].iter().zip(centre) {
+            assert!((f64::from(*found) + want).abs() < 5.0, "{x} {y} {z}");
+        }
+        let read_back = vehicle.heard.iter().any(|message| {
+            matches!(message, MavMessage::ParamRequestRead(read)
+                if read.param_id == mp_params::encode_param_id("COMPASS_OFS_Z"))
+        });
+        assert!(read_back, "the offsets read back with GetParam");
+        assert!(compass
+            .dialog()
+            .is_some_and(|dialog| dialog.words().1.ends_with("These have been saved for you.")));
     }
 
     /// The SETUP screen draws this module's page for both entries, and activates and deactivates

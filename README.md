@@ -65,8 +65,10 @@ on 2026-09-25). The full suite runs in about 25 minutes where the settled script
 `sitl-launch.gui` (the SIMULATION tab's copter picture starting a simulator and the application
 flying it) needs port 5760 free and is skipped by a suite whose SITL holds it.
 
-**Not yet**: any run on Windows or macOS - the repository has no remote, so the three-OS CI matrix has never
-executed, and the two columns in `DELIVERABLES.md` say so; a joystick latency histogram from a real device
+**Not yet**: a run on macOS, and any run on Windows beyond the first (2026-09-26, in the owner's Windows 10
+VM: built in 31 minutes, run against the laptop's SITL, the heartbeat and 1,408 parameters heard, the flight
+screen drawn through Direct3D 11 - `win10_vm_setup.md`) - the repository has no remote, so the three-OS CI
+matrix has never executed, and the columns in `DELIVERABLES.md` say so; a joystick latency histogram from a real device
 (none is attached to this machine); i18n beyond the flight screen (its 46 tab and button texts read the
 `.ftl` files generated from the `.resx`, in the culture that config.xml's `language` names; every other screen's
 words are still in the code); packaging. `PLAN.md` §13.6 is the queue, re-prioritised on 2026-09-24, and says what

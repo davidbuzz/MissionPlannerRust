@@ -401,26 +401,19 @@ pub const PANELS: &[Panel] = &[
             "any without COMPASS_PRIO1_ID",
         )],
         // C#: GCSViews/ConfigurationView/ConfigHWCompass.cs:31-780. Shown for ArduPilot before
-        // 4.1, which has no COMPASS_PRIO1_ID. 20 of the 21 wirings: all but
-        // BUT_MagCalibrationLive's, whose handler is MagCalib.DoGUIMagCalib (MagCalib.cs:136-790),
-        // a feature of its own rather than this page's. BUT_MagCalibrationLog_Click (:362-373,
-        // "Min Throttle" then MagCalib.ProcessLog) is not among the 21: the Designer makes no
-        // such button and wires nothing to it - dead C#, recorded and not ported (PLAN §12 D16).
-        Partial(
-            at(COMPASS_RS, "fn page"),
-            "has the declination and its automatic box, learn, the primary compass, each
-        //     compass's use, external, orientation, offsets and MOT, the three quick-configure
-        //     buttons, the onboard calibration with its timer and fitness, Large Vehicle MagCal
-        //     and both links - 20 of the 21 wirings; missing Live Calibration, drawn and
-        //     disabled: its handler is MagCalib.DoGUIMagCalib (MagCalib.cs), Mission Planner's
-        //     own calibration from RAW_IMU and SCALED_IMU2/3 samples - the ProgressReporterSphere
-        //     window with three OpenGL spheres, the sphere and ellipsoid fits (ported, in
-        //     mp_calibration::magcalib), and the offsets saved through
-        //     PREFLIGHT_SET_SENSOR_OFFSETS - a feature of its own, its window not ported; its
-        //     group shows only for ArduPlane 3.7.1 to 4.0 or a vehicle without onboard
-        //     calibration. No Log Calibration button: BUT_MagCalibrationLog_Click has no caller
-        //     (PLAN §12 D16)",
-        ),
+        // 4.1, which has no COMPASS_PRIO1_ID. All 21 wirings: the declination and its automatic
+        // box, learn, the primary compass, each compass's use, external, orientation, offsets and
+        // MOT, the three quick-configure buttons, the onboard calibration with its timer and
+        // fitness, Large Vehicle MagCal, both links, and BUT_MagCalibrationLive, whose handler is
+        // MagCalib.DoGUIMagCalib (MagCalib.cs:136-790, 1271-1430): the intro box, the
+        // ProgressReporterSphere window with its three spheres (drawn flat: no OpenGL), the loop
+        // over RAW_IMU and SCALED_IMU2/3 (read from the vehicle's state once a frame), the fits,
+        // and SaveOffsets through PREFLIGHT_SET_SENSOR_OFFSETS - config/live_magcal.rs and
+        // mp_calibration::live_magcal. Its group shows only for ArduPlane 3.7.1 to 4.0 or a
+        // vehicle without onboard calibration. BUT_MagCalibrationLog_Click (:362-373, "Min
+        // Throttle" then MagCalib.ProcessLog) is not among the 21: the Designer makes no such
+        // button and wires nothing to it - dead C#, recorded and not ported (PLAN §12 D16).
+        Ours::Done(at(COMPASS_RS, "fn page")),
     ),
     panel(
         "ConfigRadioInput",
@@ -1911,7 +1904,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (32, 13, 2, 2, 12)
+            (33, 12, 2, 2, 12)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

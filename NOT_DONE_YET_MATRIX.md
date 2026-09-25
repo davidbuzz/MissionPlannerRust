@@ -3,9 +3,7 @@
 | crates/mp-video, crates/mp-gui/src/fly.rs | GStreamer video into the HUD (row 93, gstreamer-rs) | high | 5 |
 | crates/mp-gui/src/fly.rs | HereLink, MJPEG and GStreamer source menu items | high | 5 |
 | crates/mp-gui/src/params.rs | Full Parameter List: range text as the file writes it; SITL/AP_Periph ReadOnly files | high | 95 |
-| crates/mp-gui/src/config/compass.rs | Compass page: remaining wirings of 21 | high | 60 |
 | experiments/wasm-plugin-host | WASM plugin host in the application (row 96, component model) | high | 10 |
-| CI, Windows | First Windows run of the application: VM reached, toolchain in, repo cloned, build next | high | 30 |
 | tests/gui/storm.gui | Paint-latency claim needs a release-build run; debug suites skip it | med | 80 |
 | crates/mp-gui/src/fly.rs | Gimbal video full, mini and pop-out menu items | med | 1 |
 | crates/mp-gui/src/quick.rs | Set view count resizes the Quick grid | med | 60 |
@@ -27,7 +25,7 @@
 | crates/mp-log | Log analysis (loganalysis) reachable from the DataFlash Logs page | med | 60 |
 | crates/mp-gui/src/sitl | SITL screen: a real launch on Windows and macOS | med | 90 |
 | DELIVERABLES D20 | Installers, updates, crash reporting | med | 5 |
-| DELIVERABLES D19 | Per-message decoder fuzzing and Windows/macOS graphics smoke | med | 50 |
+| DELIVERABLES D19 | Per-message decoder fuzzing; macOS graphics smoke; Windows GUI scripts (the runner is Linux only) | med | 60 |
 | crates/mp-gui/src/fly.rs | Record HUD to AVI, and stop recording | low | 1 |
 | crates/mp-gui/src/fly.rs | RAW_Sensor window from the Actions grid | low | 1 |
 | crates/mp-gui/src/fly.rs | Camera overlap toggle: CAMERA_FEEDBACK photo markers on map | low | 1 |

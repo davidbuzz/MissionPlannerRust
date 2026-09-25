@@ -17,7 +17,7 @@ renderer with no web backend. Reference clone: [references/zed](references/zed).
 
 | # | Layer | Deliverable | Priority | Linux | Windows | macOS | Testing |
 |---|---|---|---|---|---|---|---|
-| [D1](#d1-workspace-crate-graph-and-build-system) | 0 | Cargo workspace and crate graph | P0 | In progress (55% completed est) | Not started | Not started | Unit |
+| [D1](#d1-workspace-crate-graph-and-build-system) | 0 | Cargo workspace and crate graph | P0 | In progress (55% completed est) | Ran once (VM, 2026-09-26) | Not started | Unit |
 | [D2](#d2-mavlink-protocol-crate) | 0 | MAVLink protocol codec crate | P0 | In progress (85% completed est) | Not started | Not started | Differential vs C# |
 | [D3](#d3-transport-layer) | 0 | Serial, TCP, UDP, BLE transports | P0 | In progress (70% completed est) | Not started | Not started | Differential vs C# |
 | [D4](#d4-link-engine-the-mavlinkinterface-equivalent) | 0 | Link engine, protocol machines | P0 | In progress (80% completed est) | Not started | Not started | Differential vs C# |
@@ -25,8 +25,8 @@ renderer with no web backend. Reference clone: [references/zed](references/zed).
 | [D6](#d6-ui-kit-on-gpui) | 1 | gpui widget kit | P0 | In progress (30% completed est) | Not started | Not started | Unit + layout |
 | [D7](#d7-gpu-render-core) | 1 | Shared wgpu render core | P0 | In progress (35% completed est) | Not started | Not started | Unit + Linux paint smoke |
 | [D8](#d8-map-engine) | 2 | GPU slippy map engine | P0 | In progress (60% completed est) | Not started | Not started | Differential vs C# |
-| [D9](#d9-hud--primary-flight-display) | 2 | GPU HUD with video | P0 | In progress (75% completed est) | Not started | Not started | Unit + SITL |
-| [D10](#d10-flight-data-screen) | 2 | Flight Data operations screen | P0 | In progress (80% completed est) | Not started | Not started | Unit + SITL + hardware |
+| [D9](#d9-hud--primary-flight-display) | 2 | GPU HUD with video | P0 | In progress (75% completed est) | Ran once (VM, 2026-09-26) | Not started | Unit + SITL |
+| [D10](#d10-flight-data-screen) | 2 | Flight Data operations screen | P0 | In progress (80% completed est) | Ran once (VM, 2026-09-26) | Not started | Unit + SITL + hardware |
 | [D11](#d11-flight-planner-screen) | 2 | Mission and survey planner | P0 | In progress (80% completed est) | Not started | Not started | Differential vs C# |
 | [D12](#d12-configuration--tuning-screens) | 2 | Parameter config and tuning | P1 | In progress (45% completed est) | Not started | Not started | Unit + SITL |
 | [D13](#d13-initial-setup-calibration-and-firmware) | 2 | Setup, calibration, firmware flashing | P1 | In progress (55% completed est) | Not started | Not started | Unit + SITL + hardware |
@@ -49,7 +49,9 @@ for nothing: the workflow exists and has never run.
 clause against each row's DoD and `Tests:` line, and the `Tests:` lines now name the artefacts that exist
 under the names they have, with *not yet* for the rest. Two things changed in the priorities:
 
-- **Windows and macOS have never run anything.** The repository has no remote, so the three-OS matrix in
+- **macOS has never run anything, and Windows ran once** (2026-09-26, in the owner's Windows 10 VM: the
+  planner built in 31 minutes and ran against the laptop's SITL - a heartbeat, 1,408 parameters, the flight
+  screen through Direct3D 11; `win10_vm_setup.md`). The repository has no remote, so the three-OS matrix in
   `.github/workflows/ci.yml` has never executed, and the paint smoke it describes for Direct3D 11 and Metal
   (`docs/adr/0002`) is a workflow, not a result. Creating the remote is the cheapest single act that moves
   those two columns, and it is the owner's.
@@ -474,9 +476,12 @@ path: board detect, firmware catalogue, upload via px4/DFU/serial bootloaders.
   alglib's Levenberg-Marquardt is replaced by the `levenberg-marquardt` crate on alglib's own
   central-difference Jacobian (`diffstep` 0.1, `epsx` 0, `maxits` 100 kept), so the fit is held
   to PLAN.md §7.2's class D rather than 1e-6: the C# cannot run here to give its residual, and
-  alglib's path cannot be bit-matched. **Not ported:** Live Calibration's dialog (its spheres,
-  coverage test and prompts) and the offsets written to the vehicle - the pieces both call are
-  here; every calibration on the pages is still the onboard one, driven as the C# drives it.
+  alglib's path cannot be bit-matched. Live Calibration's dialog (its spheres, drawn flat, the
+  coverage test and prompts) and the offsets written to the vehicle through
+  `PREFLIGHT_SET_SENSOR_OFFSETS` are ported (2026-09-26, `mp_calibration::live_magcal`,
+  `crates/mp-gui/src/config/live_magcal.rs`), proved by unit tests and one run of the loop
+  through the real link against a scripted autopilot; its GUI script needs an ArduPlane
+  3.7.1-4.0 SITL, which is not bundled, so it is written and unrun.
 - **Tests:** `crates/mp-firmware/tests/board_detect.rs` (all 16 `DetectBoardTest` calls, the five that fail against the C# recorded), `firmware_upload.rs` (every byte against a strict px4 mock), `flash_px4.rs` (`UploadPX4`'s whole sequence over a bench of pretend ports), `manifest.rs` and `legacy.rs` (the catalogues on fixtures); the calibration pages' unit tests inline in `mp-gui` and `mp-calibration`, and `tests/gui/config-accel.gui`, `config-compass.gui`, `config-radio.gui`, `config-motortest.gui`, `config-firmware.gui` and `config-firmware-legacy.gui` on SITL, `config-compassmot.gui` (unrun) with `crates/mp-link/tests/compassmot.rs`, and `setup-firmware-flash-bench.gui` on the bench board; `crates/mp-calibration/tests/magcal_vectors.rs` (class D on the sample sets `testdata`'s logs give, `testdata/magcal`, against an independent sphere fit, and synthetic offsets and scale recovered to 1%) and `crates/mp-cli/tests/magcal_verb.rs`. Not yet: `tests/accelcal_vectors.rs` (accelerometer calibration is the vehicle's), a DFU mock, and a real-board flash on Windows or macOS (Linux: 2026-09-25, `tests/gui/setup-firmware-flash-bench.gui`).
 
 ### D14. Log engine and analysis

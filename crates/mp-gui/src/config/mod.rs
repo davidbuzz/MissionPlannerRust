@@ -1,6 +1,8 @@
 pub mod accel_calibration;
 pub mod battery_monitor;
 pub mod compass;
+// Live Calibration, the older Compass page's `MagCalib.DoGUIMagCalib`.
+pub mod live_magcal;
 pub mod default_settings;
 pub mod esc_calibration;
 pub mod failsafe;
