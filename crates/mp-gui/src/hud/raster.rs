@@ -19,10 +19,12 @@
 //!   machine has installed - but every character has its own shape, so a changed number is a
 //!   changed picture.
 //! * **Pictures** are drawn as [`super::paint`] draws them: their stand-ins, [`icon_items`].
-//! * **A vertex that is not finite** - an attitude of NaN - leaves its shape undrawn. In a
-//!   release build gpui's tessellator refuses a fill with a NaN corner (lyon's
-//!   `PositionIsNaN`) and [`super::paint`] draws nothing for it; a debug build stops sooner, in
-//!   lyon's path builder, which asserts every point is finite.
+//! * **A vertex that is not finite** leaves its shape undrawn. In a release build gpui's
+//!   tessellator refuses a fill with a NaN corner (lyon's `PositionIsNaN`) and
+//!   [`super::paint`] draws nothing for it; a debug build stops sooner, in lyon's path builder,
+//!   which asserts every point is finite. The scene no longer hands over such a shape - a NaN
+//!   attitude is drawn as 0, as the C# draws it, and any other is left out of the scene - so
+//!   this is the rasteriser's own guard, not a picture a golden holds.
 //!
 //! [`compare`] is the perceptual difference: a pixel differs when a channel is more than
 //! [`CHANNEL_TOLERANCE`] away, and two frames match while no more than [`PIXELS_TOLERATED`]
@@ -104,7 +106,7 @@ impl Image {
 }
 
 /// Draws a scene into a `width` x `height` image. What is behind the display is black, so a
-/// shape that is not drawn - the sky of a NaN attitude - shows as a hole rather than as sky.
+/// shape that is not drawn - one with a corner that is not finite - shows as a hole.
 pub(super) fn render(scene: &Scene, width: u32, height: u32) -> Image {
     let mut image = Image::new(width, height, 0x00_00_00);
     for item in &scene.items {

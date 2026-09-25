@@ -45,3 +45,15 @@ subagents?" Keep three running whenever there is disjoint work; a stopped agent 
 worktree and start a fresh one on what is left.
 
 **2026-09-25, later:** Buzz raised the cap to **six** open subagents at once ("allow the use of 6 open subagents"). Keep six running whenever there is disjoint work.
+
+**Merging an agent's worktree (learned 2026-09-25, seven merges in one afternoon):**
+`git -C <worktree> diff --binary -- . ':!Cargo.lock' > patch` plus the `??` files copied by hand;
+`git apply --3way` needs a CLEAN INDEX (`git add -A` anything of mine first, or it says "does not
+match index" and applies nothing); never take an agent's `Cargo.lock` - drop it and let cargo
+re-resolve offline; two agents adding the same dependency leave a duplicate key in `Cargo.toml`
+(check `grep -n "^serde_json" crates/mp-gui/Cargo.toml` before building); after a rename sweep,
+sweep the new files too and grep for `CARGO_BIN_EXE_<old>` (an underscore before the name defeats
+`\b`); one workspace test run per merge, in the background, then commit, then remove the
+worktree and its branch (`git worktree remove --force`, `git branch -D`). Six agents on one
+`target-agents` dir make every GUI rebuild minutes long and they overwrite each other's builds -
+they touch `lib.rs` to recover; a per-agent target dir would cost disk but save the thrash.

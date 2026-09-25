@@ -15,7 +15,8 @@
 //!   arming, where ARMED shows and then goes after its eight seconds (`HUD.cs:3084-3119`).
 //! * **Hard cases**, from inputs written here: level flight, a bank, the nose straight up and
 //!   straight down (the gimbal lock of a pitch of ±90°), inverted, a NaN attitude, NaN
-//!   readouts, a lost GPS fix as text and as its picture, and no vehicle at all.
+//!   readouts, an infinite speed, altitude and heading, a lost GPS fix as text and as its
+//!   picture, and no vehicle at all.
 //!
 //! # When the display changes on purpose
 //!
@@ -133,7 +134,8 @@ fn hard_cases() -> Vec<(&'static str, HudInputs)> {
                 ..cruising()
             },
         ),
-        // An ATTITUDE of NaNs, which the wire can carry.
+        // An ATTITUDE of NaNs, which the wire can carry: drawn level, heading 0, with the red
+        // "NaN Error" line (HUD.cs:2018-2025, 3025-3027).
         (
             "nan_attitude",
             HudInputs {
@@ -153,6 +155,30 @@ fn hard_cases() -> Vec<(&'static str, HudInputs)> {
                 wp_distance: nan,
                 battery_voltage: nan,
                 ekf_status: nan,
+                ..cruising()
+            },
+        ),
+        // A `VFR_HUD` of infinities, which a float on the wire can carry: the tapes' loops,
+        // which never end for one in the C#, end, and the frame is drawn.
+        (
+            "infinite_speed",
+            HudInputs {
+                airspeed: f32::INFINITY,
+                ground_speed: f32::INFINITY,
+                ..cruising()
+            },
+        ),
+        (
+            "infinite_altitude",
+            HudInputs {
+                altitude: f32::INFINITY,
+                ..cruising()
+            },
+        ),
+        (
+            "infinite_heading",
+            HudInputs {
+                heading: f32::INFINITY,
                 ..cruising()
             },
         ),
@@ -580,29 +606,143 @@ fn a_lost_fix_changes_only_the_gps_line() {
     );
 }
 
-/// A NaN attitude: the rest of the display still draws, but the sky and the ground do not,
-/// because gpui cannot draw a shape with a NaN corner - which is why the rasteriser leaves one
-/// out. **Not the C#'s:** `doPaint()` draws a NaN roll, pitch or heading as 0 and
-/// writes "NaN Error" and the time in red at (50, 50). The golden `nan_attitude.png` holds what
-/// this port draws today.
+/// Every shape's corners, for the tests that no shape is one gpui cannot draw.
+fn corners(drawn: &super::Scene) -> Vec<(f32, f32)> {
+    drawn
+        .items
+        .iter()
+        .flat_map(|item| match item {
+            Item::Fill { points, .. } | Item::Stroke { points, .. } => points.clone(),
+            _ => Vec::new(),
+        })
+        .collect()
+}
+
+/// A NaN roll, pitch or heading - any one - is drawn as the C# draws it: all three as 0, the
+/// horizon level and the tape at north, and "NaN Error" with the time in red at (50, 50), at
+/// `Height / 30 + 10`. The frame is the level frame at heading 0 but for that line: every pixel
+/// that differs lies within the line's glyphs. No shape has a corner gpui cannot draw.
 /// `// C#: ExtLibs/Controls/HUD.cs:2018-2025, 3025-3027`
 #[test]
-fn a_nan_attitude_draws_no_sky_or_ground_but_the_readouts() {
-    let inputs = HudInputs {
-        roll: f32::NAN,
-        pitch: f32::NAN,
-        heading: f32::NAN,
+fn a_nan_attitude_is_drawn_level_with_the_nan_error_line() {
+    let level = HudInputs {
+        roll: 0.0,
+        pitch: 0.0,
+        heading: 0.0,
         ..cruising()
     };
-    let image = frame(&inputs);
-    assert_eq!(count(&image, SKY) + count(&image, GROUND), 0);
+    let level_frame = frame(&level);
+    let nan = f32::NAN;
+    for inputs in [
+        HudInputs {
+            roll: nan,
+            pitch: 25.0,
+            heading: 200.0,
+            ..cruising()
+        },
+        HudInputs {
+            roll: -40.0,
+            pitch: nan,
+            heading: 200.0,
+            ..cruising()
+        },
+        HudInputs {
+            roll: -40.0,
+            pitch: 25.0,
+            heading: nan,
+            ..cruising()
+        },
+        HudInputs {
+            roll: nan,
+            pitch: nan,
+            heading: nan,
+            ..cruising()
+        },
+    ] {
+        let what = (inputs.roll, inputs.pitch, inputs.heading);
+        #[allow(clippy::cast_precision_loss)]
+        let drawn = scene(&inputs, WIDTH as f32, HEIGHT as f32);
+        assert!(
+            corners(&drawn)
+                .iter()
+                .all(|(x, y)| x.is_finite() && y.is_finite()),
+            "{what:?}: a corner that is not finite"
+        );
+        let line = drawn.items.iter().find_map(|item| match item {
+            Item::Label {
+                text,
+                at,
+                size,
+                colour,
+                align,
+            } if text.starts_with("NaN Error") => Some((text.clone(), *at, *size, *colour, *align)),
+            _ => None,
+        });
+        let (text, at, size, colour, align) = line.expect("the NaN Error line");
+        assert_eq!(text, "NaN Error 12:34:56", "{what:?}: the display's clock");
+        assert_eq!(at, (50.0, 50.0));
+        assert!((size - 22.0).abs() < f32::EPSILON, "360 / 30 + 10: {size}");
+        assert_eq!(colour, super::colour::ALERT);
+        let image = frame(&inputs);
+        assert!(count(&image, SKY) > 1_000 && count(&image, GROUND) > 1_000);
+        let difference = raster::compare(&level_frame, &image).expect("same size");
+        let (left, top, right, bottom) = difference.region.expect("the NaN Error line is drawn");
+        let outline = raster::label_outline(&text, at, size, align).concat();
+        let (x0, y0, x1, y1) = outline.iter().fold(
+            (f32::MAX, f32::MAX, f32::MIN, f32::MIN),
+            |(x0, y0, x1, y1), (x, y)| (x0.min(*x), y0.min(*y), x1.max(*x), y1.max(*y)),
+        );
+        #[allow(clippy::cast_precision_loss)]
+        let inside = x0 - 1.0 <= left as f32
+            && right as f32 <= x1 + 1.0
+            && y0 - 1.0 <= top as f32
+            && bottom as f32 <= y1 + 1.0;
+        assert!(
+            inside,
+            "{what:?}: changed ({left}, {top})-({right}, {bottom}), the line ({x0}, {y0})-({x1}, {y1})"
+        );
+    }
+    // A finite attitude writes no such line.
+    #[allow(clippy::cast_precision_loss)]
+    let drawn = scene(&level, WIDTH as f32, HEIGHT as f32);
+    assert!(!drawn.labels().iter().any(|text| text.starts_with("NaN")));
+}
+
+/// A read-out of NaN - the vertical speed, the cross-track error, the rate of turn, the angles -
+/// or an infinite roll still makes a shape with a corner that is not finite, which the C# hands
+/// to GDI+; the scene leaves it out, because gpui cannot draw it: a debug build stops in lyon's
+/// path builder, which asserts every point is finite, and a release build's tessellator refuses
+/// the fill (`PositionIsNaN`).
+#[test]
+fn a_shape_gpui_cannot_draw_is_left_out_of_the_scene() {
+    let nan = f32::NAN;
+    let inputs = HudInputs {
+        vertical_speed: nan,
+        xtrack_error: nan,
+        turn_rate: nan,
+        aoa_ssa: Some(super::AoaSsa {
+            aoa: nan,
+            ssa: nan,
+            crit_aoa: 25.0,
+        }),
+        roll: f32::INFINITY,
+        ..hard_cases()
+            .into_iter()
+            .find(|(name, _)| *name == "nan_readouts")
+            .map(|(_, inputs)| inputs)
+            .expect("the case")
+    };
     #[allow(clippy::cast_precision_loss)]
     let drawn = scene(&inputs, WIDTH as f32, HEIGHT as f32);
-    assert!(!drawn.labels_of(Element::Battery).is_empty());
-    assert!(count(&image, 0xff_ff_ff) > 100, "the white readouts");
-    // gpui cannot draw the shape either, which is what the rasteriser stands in for: a debug
-    // build stops in lyon's path builder, which asserts every point is finite, and a release
-    // build's tessellator refuses the fill (`PositionIsNaN`), which `paint` then skips.
+    assert!(
+        corners(&drawn)
+            .iter()
+            .all(|(x, y)| x.is_finite() && y.is_finite())
+    );
+    assert!(
+        !drawn.labels_of(Element::Battery).is_empty(),
+        "the rest is drawn"
+    );
     let built = std::panic::catch_unwind(|| {
         let mut builder = gpui::PathBuilder::fill();
         builder.move_to(gpui::point(gpui::px(0.0), gpui::px(0.0)));
@@ -614,6 +754,68 @@ fn a_nan_attitude_draws_no_sky_or_ground_but_the_readouts() {
         assert!(built.is_err(), "lyon no longer asserts on a NaN point");
     } else {
         assert_eq!(built.ok(), Some(false), "gpui tessellated a NaN fill");
+    }
+}
+
+/// The heading tape and the speed and altitude tapes end for every value: the infinities and
+/// NaN, which the C#'s loops never end for or never start, a value past 2^24 where adding 1 to
+/// a `float` changes nothing, and values past `int`'s and `long`'s range, where the C#'s casts
+/// give their minimum. Each frame is drawn - scene and pixels - on another thread, which must
+/// finish in time, and none draws more than the level frame, whose tapes are at their fullest.
+/// `// C#: ExtLibs/Controls/HUD.cs:2268-2285, 2509-2531, 2605-2628`
+#[test]
+fn the_tapes_end_for_any_value() {
+    let values = [
+        f32::INFINITY,
+        f32::NEG_INFINITY,
+        f32::NAN,
+        16_777_217.0,
+        -16_777_217.0,
+        3.0e9,
+        -3.0e9,
+        1.0e19,
+        f32::MAX,
+        f32::MIN,
+    ];
+    let mut cases = Vec::new();
+    for value in values {
+        cases.push(HudInputs {
+            airspeed: value,
+            ground_speed: value,
+            ..cruising()
+        });
+        cases.push(HudInputs {
+            altitude: value,
+            ..cruising()
+        });
+        cases.push(HudInputs {
+            heading: value,
+            ..cruising()
+        });
+    }
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let total = cases.len();
+    std::thread::spawn(move || {
+        for inputs in cases {
+            #[allow(clippy::cast_precision_loss)]
+            let drawn = scene(&inputs, WIDTH as f32, HEIGHT as f32);
+            let image = raster::render(&drawn, WIDTH, HEIGHT);
+            let _ = sender.send((inputs, drawn, image));
+        }
+    });
+    #[allow(clippy::cast_precision_loss)]
+    let normal = scene(&cruising(), WIDTH as f32, HEIGHT as f32).items.len();
+    for _ in 0..total {
+        let (inputs, drawn, image) = receiver
+            .recv_timeout(Duration::from_secs(60))
+            .expect("a frame with an extreme value never finished: a tape's loop did not end");
+        let what = (inputs.airspeed, inputs.altitude, inputs.heading);
+        assert!(
+            drawn.items.len() <= normal + 10,
+            "{what:?}: {} items, {normal} normally",
+            drawn.items.len()
+        );
+        assert!(count(&image, SKY) > 1_000, "{what:?}: the frame is drawn");
     }
 }
 

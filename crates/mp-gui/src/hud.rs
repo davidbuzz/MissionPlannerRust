@@ -55,6 +55,7 @@ use gpui::{
     Bounds, Hsla, PathBuilder, Pixels, Point, SharedString, TextAlign, TextRun, Window, point, px,
     rgb,
 };
+use mp_mission::dotnet::to_int;
 use mp_vehicle::VehicleState;
 use mp_vehicle::units::DisplayUnits;
 
@@ -1456,7 +1457,21 @@ pub struct Scene {
 }
 
 impl Scene {
+    /// A shape with a corner that is not finite is left out of the scene. A NaN attitude no
+    /// longer makes one (see [`scene`]), but a NaN read-out still can - the vertical speed, the
+    /// cross-track error, the rate of turn, the angles - and gpui cannot draw it: a release
+    /// build's tessellator refuses it (lyon's `PositionIsNaN`) and draws nothing, a debug build
+    /// stops in lyon's path builder, which asserts every point is finite. Leaving it out here is
+    /// the release build's picture in both. What GDI+ does with such a polygon the C# does not
+    /// say (`doPaint()` catches whatever it throws, HUD.cs:3327-3330).
+    fn finite(points: &[(f32, f32)]) -> bool {
+        points.iter().all(|(x, y)| x.is_finite() && y.is_finite())
+    }
+
     fn fill(&mut self, points: Vec<(f32, f32)>, colour: u32, alpha: f32) {
+        if !Self::finite(&points) {
+            return;
+        }
         self.items.push(Item::Fill {
             points,
             colour,
@@ -1465,6 +1480,9 @@ impl Scene {
     }
 
     fn stroke(&mut self, points: Vec<(f32, f32)>, width: f32, colour: u32, alpha: f32) {
+        if !Self::finite(&points) {
+            return;
+        }
         self.items.push(Item::Stroke {
             points,
             width,
@@ -1603,15 +1621,24 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     let (halfwidth, halfheight) = (w / 2.0, h / 2.0);
     let centre = (halfwidth, halfheight);
 
+    // A NaN roll, pitch or heading - any one of them - draws all three as 0, and the frame is
+    // marked for the red "NaN Error" line drawn after the GPS line. The C# writes the 0s over
+    // its `_pitch` and `_heading` fields, so everything after this reads them, the heading
+    // box's `heading % 360` included; here every later use reads these three instead of
+    // `inputs`. Only NaN: an infinite angle is not caught by the C# either.
+    // C#: ExtLibs/Controls/HUD.cs:2018-2025
+    let nan_error = inputs.roll.is_nan() || inputs.pitch.is_nan() || inputs.heading.is_nan();
+    let (roll, pitch, heading) = if nan_error {
+        (0.0, 0.0, 0.0)
+    } else {
+        (inputs.roll, inputs.pitch, inputs.heading)
+    };
+
     // `Russian`: the sky and ground are not turned, and the roll is negated for everything drawn
     // after them - the ladder, the roll pointer - while the aircraft symbol and the flight path
     // vector, which are otherwise fixed, are turned by it. C#: HUD.cs:2029-2036, 2107-2110,
     // 2176-2182, 2210-2211
-    let roll = if inputs.russian {
-        -inputs.roll
-    } else {
-        inputs.roll
-    };
+    let roll = if inputs.russian { -roll } else { roll };
     // Sky and ground, then the horizon geometry everything attitude-relative hangs off.
     let geometry = horizon_geometry(
         if inputs.russian {
@@ -1619,14 +1646,14 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
         } else {
             roll.to_radians()
         },
-        inputs.pitch.to_radians(),
+        pitch.to_radians(),
         centre,
         w,
         h,
     );
     // The ladder is turned by the roll as it stands after the negation.
     let ladder = if inputs.russian {
-        horizon_geometry(roll.to_radians(), inputs.pitch.to_radians(), centre, w, h)
+        horizon_geometry(roll.to_radians(), pitch.to_radians(), centre, w, h)
     } else {
         geometry
     };
@@ -1656,10 +1683,10 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     for degrees in (-90..=90).step_by(5) {
         #[allow(clippy::cast_precision_loss)]
         let a = degrees as f32;
-        if a < inputs.pitch - 29.0 || a > inputs.pitch + 20.0 {
+        if a < pitch - 29.0 || a > pitch + 20.0 {
             continue;
         }
-        let rung = offset(centre, ladder.up, (a - inputs.pitch) * ppd);
+        let rung = offset(centre, ladder.up, (a - pitch) * ppd);
         if rung.1 < tape_bottom {
             continue;
         }
@@ -1799,28 +1826,51 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
         colour::INK,
     );
     let space = (tape.width - 10.0) / 120.0;
-    let start = (inputs.heading - 60.0).round();
-    let end = inputs.heading + 60.0;
+    // `int start = (int) Math.Round((_heading - 60), 1)`: rounded to a tenth - to even, as
+    // `Math.Round(double, int)` rounds - and then cut toward zero by the cast, so a heading of
+    // 90.7 starts the tape at 30, not 31. C#: HUD.cs:2268
+    let start = heading_tape_start(heading);
+    let end = heading + 60.0;
     let target = inputs.target_heading.rem_euclid(360.0).trunc();
     let course = inputs.ground_course.rem_euclid(360.0).trunc();
     // A target outside the tape sits at the edge nearest to it. The C# draws the right-hand
     // case at `space * 60`, which is the middle of the tape, not its edge - a slip of the pen
     // that puts the bug where the current heading is; the edge is what was meant.
     // C#: HUD.cs:2270-2285
-    if target < start.rem_euclid(360.0) && inputs.target_heading < inputs.heading - 60.0 {
+    #[allow(clippy::cast_precision_loss)] // the C#'s int compared with a float
+    let start_shown = start.rem_euclid(360) as f32;
+    if target < start_shown && inputs.target_heading < heading - 60.0 {
         let x = tape.left + 5.0;
         scene.line((x, tape.bottom()), (x, tape.top), 6.0, colour::TARGET);
         scene.drew(Element::HeadingBugs);
     }
-    if inputs.target_heading > inputs.heading + 60.0 {
+    if inputs.target_heading > heading + 60.0 {
         let x = tape.left + 5.0 + space * 120.0;
         scene.line((x, tape.bottom()), (x, tape.top), 6.0, colour::TARGET);
         scene.drew(Element::HeadingBugs);
     }
-    let mut a = start;
-    while a <= end {
-        let x = tape.left + 5.0 + space * (a - start);
-        let shown = (a + 360.0).rem_euclid(360.0).trunc();
+    // `for (int a = start; a <= _heading + 60; a += 1)`: 121 degrees at most, since `start` is
+    // within half a degree of `_heading - 60`. C#: HUD.cs:2285
+    //
+    // **Not the C#'s loop, on purpose.** The C# counts in an `int` against a `float`, so a
+    // heading of +infinity never ends it (every `int` is below infinity, and `a` wraps), nor
+    // does one past `int`'s range - a corrupt packet would hang the UI thread. This counts the
+    // 121 steps by index and stops at the C#'s end, which is the same tape for every heading the
+    // C#'s loop ends for; a heading that is not finite draws no ticks, as the C#'s loop draws
+    // none for -infinity (`a <= -inf` is false at once). The position comes from the index, not
+    // from `a - start`, so it stays exact where a huge `a` would not.
+    let steps: i64 = if heading.is_finite() { 121 } else { 0 };
+    for index in 0..steps {
+        let a = start.saturating_add(index);
+        #[allow(clippy::cast_precision_loss)] // the C#'s comparison, in `float`
+        if a as f32 > end {
+            break;
+        }
+        #[allow(clippy::cast_precision_loss)] // 0..=120
+        let offset_by = space * index as f32;
+        let x = tape.left + 5.0 + offset_by;
+        #[allow(clippy::cast_precision_loss)] // 0..360
+        let shown = (a.saturating_add(360)).rem_euclid(360) as f32;
         if (shown - target).abs() < 0.5 {
             scene.line((x, tape.bottom()), (x, tape.top), 6.0, colour::TARGET);
             scene.drew(Element::HeadingBugs);
@@ -1829,16 +1879,16 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
             scene.line((x, tape.bottom()), (x, tape.top), 6.0, colour::BLACK);
             scene.drew(Element::HeadingBugs);
         }
-        #[allow(clippy::cast_possible_truncation)]
-        let degrees = a.round() as i32;
-        if degrees % 15 == 0 {
+        if a % 15 == 0 {
             scene.line(
                 (x, tape.bottom() - 5.0),
                 (x, tape.bottom() - 10.0),
                 1.5,
                 colour::INK,
             );
-            let disp = degrees.rem_euclid(360);
+            // `disp = (int) a; if (disp < 0) disp += 360; disp = disp % 360`: one turn added,
+            // so a degree below -360 keeps its sign. C#: HUD.cs:2309-2312
+            let disp = if a < 0 { a.saturating_add(360) } else { a } % 360;
             let (text, size) = match disp {
                 0 => (" N".to_owned(), fontsize + 4.0),
                 45 => ("NE".to_owned(), fontsize + 4.0),
@@ -1853,14 +1903,14 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
             scene.label(
                 text,
                 (
-                    tape.left - 5.0 + space * (a - start) - fontoffset,
+                    tape.left - 5.0 + offset_by - fontoffset,
                     tape.bottom() - 24.0 - fontoffset * 1.7,
                 ),
                 size,
                 colour::INK,
                 Align::Left,
             );
-        } else if degrees % 5 == 0 {
+        } else if a % 5 == 0 {
             scene.line(
                 (x, tape.bottom() - 5.0),
                 (x, tape.bottom() - 10.0),
@@ -1868,7 +1918,6 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
                 colour::INK,
             );
         }
-        a += 1.0;
     }
     // The centre box with the heading in it.
     let box_w = fontsize * 2.4;
@@ -1883,8 +1932,11 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
         colour::READOUT,
         0.5,
     );
+    // `String.Format("{0,3}", (int) (heading % 360))`: the remainder keeps the heading's sign,
+    // and the cast is the x64 runtime's, so an infinite heading - whose remainder is NaN - reads
+    // `int.MinValue`. C#: HUD.cs:2381-2391
     scene.label(
-        format!("{:3}", inputs.heading.rem_euclid(360.0).trunc()),
+        format!("{:3}", to_int(f64::from(heading % 360.0))),
         (
             tape.width / 2.0 - fontsize,
             tape.bottom() - 24.0 - fontoffset * 1.7,
@@ -2052,9 +2104,9 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
         fontoffset,
         halfheight,
     );
-    // `((int) _alt).ToString("0 ") + altunit`: cut toward zero, not rounded. C#: HUD.cs:2733
-    #[allow(clippy::cast_possible_truncation)] // the C#'s (int)
-    let whole = altitude as i32;
+    // `((int) _alt).ToString("0 ") + altunit`: cut toward zero, not rounded, and the x64
+    // runtime's cast, so a NaN or infinite altitude reads `int.MinValue`. C#: HUD.cs:2733
+    let whole = to_int(f64::from(altitude));
     scene.owned_label(
         Element::AltitudeTape,
         format!("{whole} {}", units.alt_unit),
@@ -2416,6 +2468,21 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     }
     scene.drew(Element::Gps);
 
+    // The attitude was NaN: "NaN Error " and the time, in red, at (50, 50) with no transform
+    // in force, at `Height / 30 + 10` - `int` arithmetic, so the height's thirtieth cut down.
+    // The C# writes `DateTime.Now` in the machine's regional format; this writes the clock the
+    // display already shows, `HH:MM:SS`, as the time. C#: ExtLibs/Controls/HUD.cs:3025-3027,
+    // and 2018-2025 for the flag
+    if nan_error {
+        scene.label(
+            format!("NaN Error {}", inputs.clock),
+            (50.0, 50.0),
+            (h / 30.0).trunc() + 10.0,
+            colour::ALERT,
+            Align::Left,
+        );
+    }
+
     // The user's extra fields, header then value, from above the battery line upward, an
     // eighth of the way across; a field whose value cannot be read leaves no gap.
     // C#: HUD.cs:3029-3077
@@ -2637,7 +2704,8 @@ enum Side {
 ///
 /// 26 units visible, a tick and a number every five, the target as a green line across it (or
 /// a faded line at the edge it is beyond), and for the altitude tape the ground filled in below
-/// ground level. C#: HUD.cs:2484-2559 and 2583-2659, which are the same code twice.
+/// ground level. C#: HUD.cs:2484-2559 and 2583-2659, which are the same code twice but for the
+/// casts that find the tape's start and end and the target's step.
 #[allow(clippy::too_many_arguments)] // the C#'s own variables, named the same
 fn scroller(
     scene: &mut Scene,
@@ -2654,11 +2722,37 @@ fn scroller(
 ) {
     scene.fill(bx.corners(), colour::READOUT, 0.33);
     scene.stroke(bx.outline(), 1.5, colour::INK, 1.0);
-    let start = (value - viewrange / 2.0).floor();
-    // The tape's y for a value: the box's top is `start + viewrange`, its bottom `start`, and
-    // the C# draws it translated to the middle of the display.
-    let y_for = |a: f32| halfheight + bx.top - space * (a - start);
-    if start > target {
+    // Where the tape starts, and the last value it reaches, as the two tapes write them:
+    //
+    // * speed: `float start = (long) (speed - viewrange / 2)`, `long end = (long) (speed +
+    //   viewrange / 2)`, `for (long a = (long) start; a <= end; a += 1)` (HUD.cs:2510, 2530-2531);
+    // * altitude: `long start = ((int) _alt - viewrange / 2)` in `int` arithmetic, `for (long a =
+    //   start; a <= (_alt + viewrange / 2); a += 1)` against the `float` (HUD.cs:2606, 2628).
+    //
+    // Cut toward zero, not floored: a speed of 5.5 starts the tape at -7. The casts are the x64
+    // runtime's, `int.MinValue` or `long.MinValue` for a NaN, an infinity or a value past the
+    // type, as [`mp_mission::dotnet::to_int`] says; so a NaN or infinite speed runs its loop once,
+    // at `long.MinValue`, which is no multiple of five and draws nothing, and a NaN altitude
+    // starts at `int.MinValue - 13`, wrapped to 2147483635 - above any target, so its faded
+    // bottom line shows - and never enters its loop.
+    #[allow(clippy::cast_possible_truncation)] // viewrange is 26
+    let half = (viewrange / 2.0) as i32;
+    let start = match side {
+        Side::Left => to_long(value - viewrange / 2.0),
+        Side::Right => i64::from(to_int(f64::from(value)).wrapping_sub(half)),
+    };
+    let end = to_long(value + viewrange / 2.0);
+    #[allow(clippy::cast_precision_loss)] // the C#'s `long` compared with a `float`
+    let within = |a: i64| match side {
+        Side::Left => a <= end,
+        Side::Right => a as f32 <= value + viewrange / 2.0,
+    };
+    // The tape's y for a step from its start: the box's top is `start + viewrange`, its bottom
+    // `start`, and the C# draws it translated to the middle of the display.
+    #[allow(clippy::cast_precision_loss)] // 0..=26
+    let y_for = |index: i64| halfheight + bx.top - space * index as f32;
+    #[allow(clippy::cast_precision_loss)] // the C#'s `start > _targetspeed`, in `float`
+    if start as f32 > target {
         scene.stroke(
             vec![
                 (bx.left, halfheight + bx.top),
@@ -2678,49 +2772,76 @@ fn scroller(
             0.5,
         );
     }
+    // The target's line where `a` is it: the speed's cut toward zero, `a == (long) _targetspeed`
+    // (HUD.cs:2533), the altitude's rounded to even, `a == Math.Round(_targetalt)` (HUD.cs:2630),
+    // as is the ground's, `a == Math.Round(groundalt)` (HUD.cs:2639).
+    #[allow(clippy::cast_precision_loss, clippy::float_cmp)] // the C#'s exact comparisons
+    let is_at = |a: i64, level: f32| match side {
+        Side::Left => a == to_long(level),
+        Side::Right => a as f64 == f64::from(level).round_ties_even(),
+    };
+    // **Not the C#'s loop, on purpose.** Both loops count `a` up to a `float` bound, so neither
+    // ends for +infinity, and the altitude's does not for a value past `int`'s range (it starts
+    // at 2147483635 and counts to the value) - a corrupt `VFR_HUD` would hang the UI thread.
+    // This counts steps by index, at most the 27 (`viewrange + 1`) either loop takes for a value
+    // it ends for, stops at the C#'s end, and draws no ticks for a value that is not finite: the
+    // same tape wherever the C#'s loop ends, and the speed's NaN and infinities, which the C#
+    // draws no tick for, included. Past 2^24 the C#'s `float` comparison can run a step or two
+    // more, above the box; the index stops at its top. The position comes from the index, not
+    // from `a - start` in `float`, so it stays exact where a huge `a` would not.
+    #[allow(clippy::cast_possible_truncation)] // viewrange is 26
+    let steps = if value.is_finite() {
+        viewrange as i64 + 1
+    } else {
+        0
+    };
     let mut ground_drawn = false;
-    let mut a = start;
-    while a <= value + viewrange / 2.0 {
-        if (a - target.round()).abs() < 0.5 && target != 0.0 {
+    for index in 0..steps {
+        let a = start.saturating_add(index);
+        if !within(a) {
+            break;
+        }
+        if is_at(a, target) && target != 0.0 {
             scene.line(
-                (bx.left, y_for(a)),
-                (bx.right(), y_for(a)),
+                (bx.left, y_for(index)),
+                (bx.right(), y_for(index)),
                 6.0,
                 colour::TARGET,
             );
         }
         if let Some(ground_level) = ground
-            && (a - ground_level.round()).abs() < 0.5
+            && is_at(a, ground_level)
             && !ground_drawn
         {
             // From ground level down to the bottom of the tape.
             scene.fill(
                 vec![
-                    (bx.left, y_for(a)),
-                    (bx.right(), y_for(a)),
-                    (bx.right(), y_for(start)),
-                    (bx.left, y_for(start)),
+                    (bx.left, y_for(index)),
+                    (bx.right(), y_for(index)),
+                    (bx.right(), y_for(0)),
+                    (bx.left, y_for(0)),
                 ],
                 colour::GROUND_TAPE,
                 0.4,
             );
             ground_drawn = true;
         }
-        if a.rem_euclid(5.0) < 0.5 {
+        if a % 5 == 0 {
             let (tick_from, tick_to, label_x) = match side {
                 Side::Left => (bx.right(), bx.right() - 10.0, 0.0),
                 Side::Right => (bx.left, bx.left + 10.0, bx.left),
             };
-            scene.line((tick_from, y_for(a)), (tick_to, y_for(a)), 1.5, colour::INK);
+            let y = y_for(index);
+            scene.line((tick_from, y), (tick_to, y), 1.5, colour::INK);
+            // `String.Format("{0,5}", a)`: the whole number, right-aligned in five.
             scene.label(
-                format!("{:5}", a.trunc()),
-                (label_x, y_for(a) - 6.0 - fontoffset),
+                format!("{a:5}"),
+                (label_x, y - 6.0 - fontoffset),
                 fontsize,
                 colour::INK,
                 Align::Left,
             );
         }
-        a += 1.0;
     }
     // The arrow at the middle, pointing into the display, with the value drawn over it by the
     // caller. C#: HUD.cs:2491-2496 (left), 2590-2595 and 2719-2722 (right, rotated 180°)
@@ -2741,6 +2862,32 @@ fn scroller(
         ],
     };
     scene.fill(arrow, colour::BLACK, 1.0);
+}
+
+/// Where the heading tape starts: `(int) Math.Round((_heading - 60), 1)` - the `float`
+/// difference taken to a `double`, rounded to a tenth as `Math.Round(double, int)` rounds (times
+/// ten, to even, over ten), then cut toward zero by the cast, `int.MinValue` past its range.
+/// `// C#: ExtLibs/Controls/HUD.cs:2268`
+fn heading_tape_start(heading: f32) -> i64 {
+    let tenths = (f64::from(heading - 60.0) * 10.0).round_ties_even() / 10.0;
+    i64::from(to_int(tenths))
+}
+
+/// `(long) x` of a `float` on the x86 and x64 runtimes Mission Planner runs on: cut toward zero,
+/// and `long.MinValue` for a NaN, an infinity or a value past `long`'s range - `cvttss2si`'s
+/// "integer indefinite" - where Rust's `as` saturates. The `long` twin of
+/// [`mp_mission::dotnet::to_int`]. `// C#: ExtLibs/Controls/HUD.cs:2510, 2530, 2533`
+fn to_long(value: f32) -> i64 {
+    // 2^63, which a `float` holds exactly; -2^63 itself is `long.MinValue` either way.
+    const LIMIT: f32 = 9_223_372_036_854_775_808.0;
+    // A NaN is in no range.
+    if (-LIMIT..LIMIT).contains(&value) {
+        #[allow(clippy::cast_possible_truncation)] // in range: the cut toward zero
+        let cut = value as i64;
+        cut
+    } else {
+        i64::MIN
+    }
 }
 
 /// An axis-aligned rectangle, as the C# uses `Rectangle`.
@@ -4123,6 +4270,103 @@ mod tests {
         );
         assert!(labels.contains(&"23m/s"), "{labels:?}");
         assert!(labels.contains(&"AS 23.0m/s"), "{labels:?}");
+    }
+
+    /// The tapes start where the C#'s casts put them - cut toward zero, not floored or rounded -
+    /// and mark the target where its own cast or rounding does: the speed's `(long)`, the
+    /// altitude's `Math.Round`, to even. A speed of 5.5 starts at `(long) -7.5`, -7; an altitude
+    /// of -35.5 at `(int) -35.5 - 13`, -48; a heading of 90.7 at `(int) Math.Round(30.7, 1)`, 30.
+    /// `// C#: ExtLibs/Controls/HUD.cs:2268, 2510, 2533, 2606, 2630`
+    #[test]
+    fn the_tapes_start_where_the_csharps_casts_put_them() {
+        // H = 300: the scrollers' box from 75 to 225, 26 units in it; fontoffset 0.
+        let space = (H / 2.0) / 26.0;
+        let tape_y = |index: f32| H / 2.0 + H / 4.0 - space * index;
+        let inputs = HudInputs {
+            airspeed: 5.5,
+            target_speed: 0.0,
+            altitude: -35.5,
+            target_altitude: 0.0,
+            heading: 90.7,
+            ..flying()
+        };
+        let drawn = scene(&inputs, W, H);
+        let (at, _, _) = label_at(&drawn, "    0").expect("the speed tape's 0");
+        assert!(
+            close(at, (0.0, tape_y(7.0) - 6.0)),
+            "0 is 7 above -7: {at:?}"
+        );
+        let (at, _, _) = label_at(&drawn, "  -35").expect("the altitude tape's -35");
+        assert!(
+            close(at, (W - W / 10.0, tape_y(13.0) - 6.0)),
+            "-35 is 13 above -48: {at:?}"
+        );
+        let (at, _, _) = label_at(&drawn, " E").expect("the heading tape's E");
+        let heading_space = (W - 10.0) / 120.0;
+        assert!(
+            close(at, (-5.0 + heading_space * 60.0, H / 14.0 - 24.0)),
+            "90 is 60 right of 30: {at:?}"
+        );
+
+        // The targets: 19.6 knots marks 19, cut; 102.5 metres marks 102, to even.
+        let inputs = HudInputs {
+            airspeed: 23.0,
+            target_speed: 19.6,
+            altitude: 100.0,
+            target_altitude: 102.5,
+            ..flying()
+        };
+        let drawn = scene(&inputs, W, H);
+        let marks: Vec<(f32, f32)> = drawn
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                Item::Stroke {
+                    points,
+                    width,
+                    colour,
+                    alpha,
+                } if *colour == colour::TARGET
+                    && (*width - 6.0).abs() < f32::EPSILON
+                    && (*alpha - 1.0).abs() < f32::EPSILON
+                    && points.len() == 2 =>
+                {
+                    points.first().copied()
+                }
+                _ => None,
+            })
+            // Below the heading tape, whose target mark is a stroke of the same pen.
+            .filter(|(_, y)| *y > H / 14.0 + 1.0)
+            .collect();
+        // Speed from (long) 10: 19 is 9 up. Altitude from 87: 102 is 15 up.
+        assert!(
+            marks.iter().any(|p| close(*p, (0.0, tape_y(9.0)))),
+            "{marks:?}"
+        );
+        assert!(
+            marks
+                .iter()
+                .any(|p| close(*p, (W - W / 10.0, tape_y(15.0)))),
+            "{marks:?}"
+        );
+        assert_eq!(marks.len(), 2, "{marks:?}");
+    }
+
+    /// The casts themselves: `(long)` of a `float` as the x64 runtime makes it, and the heading
+    /// tape's `(int) Math.Round(x, 1)`. `// C#: ExtLibs/Controls/HUD.cs:2268, 2510`
+    #[test]
+    fn the_casts_are_the_x64_runtimes() {
+        assert_eq!(to_long(-7.5), -7);
+        assert_eq!(to_long(18.9), 18);
+        for gone in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, 1.0e19, -1.0e19] {
+            assert_eq!(to_long(gone), i64::MIN, "{gone}");
+        }
+        assert_eq!(to_long(-9_223_372_036_854_775_808.0), i64::MIN);
+        // 30.7 to a tenth is 30.7, cut to 30; 30.96 is 31.0; -30.7 is cut up to -30.
+        assert_eq!(heading_tape_start(90.7), 30);
+        assert_eq!(heading_tape_start(90.96), 31);
+        assert_eq!(heading_tape_start(29.3), -30);
+        assert_eq!(heading_tape_start(f32::INFINITY), i64::from(i32::MIN));
     }
 
     /// `Russian`: the sky and ground stay level; the ladder, the aircraft symbol and the flight
