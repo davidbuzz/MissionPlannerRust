@@ -262,7 +262,7 @@ pub const LOGBROWSE: &[Action] = &[
         "NodeMouseHover",
         "treeView1_TreeNodeMouseHover",
         "a field's description in `txt_info`",
-        Missing,
+        Done("fn hover_field"),
     ),
     row(
         "treeView1",
@@ -413,13 +413,7 @@ pub const BEYOND: &[Action] = &[
 
 /// Why each row still missing is missing, rendered beside it in the report.
 #[cfg(test)]
-pub const WHY_MISSING: &[(&str, &str, &str)] = &[(
-    "treeView1",
-    "NodeMouseHover",
-    "later: the descriptions are `LogMetaData`, which Mission Planner downloads as \
-         `LogMessages.xml.xz` from autotest.ardupilot.org at start-up; there is no fetcher or xz \
-         decoder for it here yet, and the field list has no `txt_info` to show one in",
-)];
+pub const WHY_MISSING: &[(&str, &str, &str)] = &[];
 
 /// How many rows of a table are in each state: (done, elsewhere, missing, plumbing, dropped).
 #[must_use]
@@ -632,7 +626,7 @@ mod tests {
         let designer = counts(LOGBROWSE);
         let beyond = counts(BEYOND);
         eprintln!("LogBrowse designer: {designer:?}; beyond: {beyond:?}");
-        assert_eq!(designer, (28, 0, 1, 6, 2));
+        assert_eq!(designer, (29, 0, 0, 6, 2));
         assert_eq!(beyond, (10, 0, 0, 3, 2));
     }
 }

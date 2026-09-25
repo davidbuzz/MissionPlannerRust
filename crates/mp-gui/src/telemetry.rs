@@ -776,23 +776,8 @@ impl Telemetry {
     /// The builders in `mp_link::commands` and `mp_calibration` stay the one place a command's
     /// parameters are written down; this only reads them back out.
     pub fn command_message(&mut self, message: &MavMessage, report: Report) -> Option<RequestId> {
-        let MavMessage::CommandLong(long) = message else {
-            return None;
-        };
-        self.command(
-            VehicleId::new(long.target_system, long.target_component),
-            long.command,
-            [
-                long.param1,
-                long.param2,
-                long.param3,
-                long.param4,
-                long.param5,
-                long.param6,
-                long.param7,
-            ],
-            report,
-        )
+        let (target, command, params) = command_long_parts(message)?;
+        self.command(target, command, params, report)
     }
 
     /// `setWPCurrent`: `MISSION_SET_CURRENT` until a `MISSION_CURRENT` arrives, sent again every
@@ -1220,24 +1205,29 @@ impl Telemetry {
         self.write_parameter(name, value, false)
     }
 
-    /// Reboots the autopilot.
+    /// Reboots the autopilot: `doReboot(false, true)`.
     ///
     /// The link drops when the vehicle obeys, which is what success looks like. Useful after a
     /// calibration, and the usual first thing to try when a board is behaving oddly.
     ///
-    /// Sent and not waited for: `doReboot`'s `doCommand` puts `PREFLIGHT_REBOOT_SHUTDOWN` on the
-    /// wire and returns without an acknowledgement, because a vehicle that obeys has no time to
-    /// send one.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2553-2567, 2758-2763`
+    /// `doReboot` calls `doCommand` with its acknowledgement required, and `doCommand` writes
+    /// the `COMMAND_LONG` once, then for `PREFLIGHT_REBOOT_SHUTDOWN` writes it again at once -
+    /// no gap - and returns true without waiting, because a vehicle that obeys has no time to
+    /// answer. So it goes through the link's `doCommand` ([`Link::command`], acknowledgement
+    /// required), which makes the same two sends and ends the request `Sent`. As the answer is
+    /// always true, `doReboot`'s fallback second `doCommand` never runs.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2553-2589, 2717, 2758-2763`
     ///
     /// Whether there was a vehicle to send it to: `doReboot`'s return.
     pub fn reboot(&self) -> bool {
-        if let Some((link, id)) = self.target() {
-            link.send(&commands::reboot(id));
-            true
-        } else {
-            false
-        }
+        let Some((link, id)) = self.target() else {
+            return false;
+        };
+        let Some((target, command, params)) = command_long_parts(&commands::reboot(id)) else {
+            return false;
+        };
+        link.command(target, command, params, true);
+        true
     }
 
 
@@ -1565,6 +1555,27 @@ impl Telemetry {
     }
 }
 
+/// A `COMMAND_LONG` a builder made, read back as `doCommand`'s arguments: the vehicle it names,
+/// the command and its seven parameters. `None` for any other message.
+fn command_long_parts(message: &MavMessage) -> Option<(VehicleId, u16, [f32; 7])> {
+    let MavMessage::CommandLong(long) = message else {
+        return None;
+    };
+    Some((
+        VehicleId::new(long.target_system, long.target_component),
+        long.command,
+        [
+            long.param1,
+            long.param2,
+            long.param3,
+            long.param4,
+            long.param5,
+            long.param6,
+            long.param7,
+        ],
+    ))
+}
+
 /// A scripted vehicle on the far end of an in-memory link, for driving a screen's sets and
 /// commands through the real link - its thread, its request machines, their retries - in a test.
 ///
@@ -1847,6 +1858,44 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    /// A reboot is `doReboot(false, true)`: `doCommand` writes `PREFLIGHT_REBOOT_SHUTDOWN`
+    /// with param1 = 1 and, for a reboot, writes it again at once and returns without waiting.
+    /// Two frames on the wire, both at confirmation 0, the request ended `Sent`, and nothing
+    /// more however long the vehicle stays quiet.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2553-2567, 2717, 2758-2763`
+    #[test]
+    fn a_reboot_is_sent_twice_and_not_waited_for() {
+        let (telemetry, mut vehicle) = Vehicle::connect(fast());
+        assert!(telemetry.reboot());
+        let reboot = |m: &MavMessage| {
+            matches!(m, MavMessage::CommandLong(l)
+                if l.command == mp_link::requests::CMD_PREFLIGHT_REBOOT_SHUTDOWN
+                    && l.param1 == 1.0
+                    && l.target_system == VEHICLE.sysid
+                    && l.target_component == VEHICLE.compid)
+        };
+        until("the reboot to be sent twice", || {
+            vehicle.read();
+            vehicle.count(reboot) == 2
+        });
+        // The link's retry would come after `command.timeout`; there is none.
+        std::thread::sleep(fast().command.timeout * 3);
+        vehicle.read();
+        assert_eq!(
+            longs(&vehicle),
+            [
+                (mp_link::requests::CMD_PREFLIGHT_REBOOT_SHUTDOWN, 0),
+                (mp_link::requests::CMD_PREFLIGHT_REBOOT_SHUTDOWN, 0)
+            ]
+        );
+    }
+
+    /// No vehicle: nothing to reboot, `doReboot`'s false.
+    #[test]
+    fn a_reboot_without_a_link_is_false() {
+        assert!(!Telemetry::idle().reboot());
     }
 
     /// Change Speed's `DO_CHANGE_SPEED`, the way the flight screen sends it: through [`route`]

@@ -765,6 +765,19 @@ pub enum Refused {
     Exception(Vec<Step>, &'static str),
 }
 
+/// `BUT_save_Click`'s box for a Camera Config box that is not a number.
+/// `// C#: Grid/GridUI.cs:1597`
+pub const NOT_A_NUMBER: &str = "One of your entries is not a valid number";
+
+/// `BUT_save_Click`'s `InputBox`: its title, its prompt (the C#'s words, typo and all) and the
+/// name it offers.
+/// `// C#: Grid/GridUI.cs:1571-1573`
+pub const CAMERA_NAME_TITLE: &str = "Camera Name";
+/// See [`CAMERA_NAME_TITLE`].
+pub const CAMERA_NAME_PROMPT: &str = "Please and a camera name";
+/// See [`CAMERA_NAME_TITLE`].
+pub const CAMERA_NAME_DEFAULT: &str = "Default";
+
 /// `FormatException`'s message, for a heading `Convert.ToInt32` cannot read.
 pub const FORMAT_EXCEPTION: &str = "Input string was not in a correct format.";
 
@@ -1047,6 +1060,77 @@ impl Dialog {
         }
         name.clone_into(&mut self.camera);
         self.camera_selected();
+    }
+
+    /// `BUT_save_Click` after its `InputBox` ("Camera Name", default "Default") has said OK with
+    /// `name`: `CMB_camera.Text = name`, then the camera of that name - the one held, or a new
+    /// one added - takes the name, `NUM_focallength` and the four boxes in that order, each box
+    /// through `float.Parse`. A box that will not parse stops it there with the message box;
+    /// what was set before it stays set, in memory, and nothing is written. Ok is the dictionary
+    /// to write to `cameras.xml` ([`Cameras::write`]). `CMB_camera`'s list is not changed.
+    /// `// C#: Grid/GridUI.cs:1567-1602`
+    ///
+    /// # Errors
+    /// A box that is not a number: "One of your entries is not a valid number".
+    pub fn save_camera(&mut self, name: &str) -> Result<&Cameras, Refused> {
+        self.set_camera_text(name);
+        let focallen = self.num(Num::FocalLength).to_f32();
+        let boxes = [
+            parse_f32(self.text(Text::ImgHeight)),
+            parse_f32(self.text(Text::ImgWidth)),
+            parse_f32(self.text(Text::SensHeight)),
+            parse_f32(self.text(Text::SensWidth)),
+        ];
+        let Some(camera) = self.cameras.entry(&self.camera) else {
+            return Ok(&self.cameras);
+        };
+        camera.name.clone_from(&self.camera);
+        camera.focallen = focallen;
+        let fields = [
+            &mut camera.imageheight,
+            &mut camera.imagewidth,
+            &mut camera.sensorheight,
+            &mut camera.sensorwidth,
+        ];
+        for (field, parsed) in fields.into_iter().zip(boxes) {
+            let Some(value) = parsed else {
+                return Err(Refused::Message(NOT_A_NUMBER, ""));
+            };
+            *field = value;
+        }
+        Ok(&self.cameras)
+    }
+
+    /// `CMB_camera.Text = value` on a `DropDown` combo box: the text is set; then, unless it is
+    /// the selected item's text already, the item it names ignoring case is selected - and a
+    /// selection that changes raises `SelectedIndexChanged`, whose handler loads that camera over
+    /// the boxes, with the text becoming the item's. Here the selected item is the one the text
+    /// names exactly.
+    /// `// C#: Grid/GridUI.cs:1576, 1344-1362`
+    fn set_camera_text(&mut self, value: &str) {
+        let selected = self
+            .cameras
+            .items()
+            .iter()
+            .find(|item| **item == self.camera)
+            .cloned();
+        value.clone_into(&mut self.camera);
+        if selected.as_deref() == Some(value) {
+            return;
+        }
+        let lower = value.to_lowercase();
+        let found = self
+            .cameras
+            .items()
+            .iter()
+            .find(|item| item.to_lowercase() == lower)
+            .cloned();
+        if let Some(item) = found
+            && selected.as_ref() != Some(&item)
+        {
+            self.camera = item;
+            self.camera_selected();
+        }
     }
 
     /// `CMB_camera_SelectedIndexChanged`: the camera's lens and sensor into the Camera Config
@@ -2359,6 +2443,69 @@ mod tests {
         assert_eq!(dialog.grid().len(), 80);
         assert_eq!(dialog.stat(Stat::Strips), "20");
         assert_eq!(dialog.camera_items().len(), 31);
+    }
+
+    /// Save under a new name: the camera added at the end of the dictionary with the boxes'
+    /// values, `CMB_camera` showing the name, its list unchanged, and the file to write holding
+    /// it - which the next dialog reads back.
+    /// `// C#: Grid/GridUI.cs:1567-1602`
+    #[test]
+    fn save_adds_a_camera_under_a_new_name() {
+        let mut dialog = open(&Context::default());
+        dialog.type_num(Num::FocalLength, "8.8");
+        dialog.set_text(Text::ImgWidth, "5472");
+        dialog.set_text(Text::ImgHeight, "3648");
+        dialog.set_text(Text::SensWidth, "13.2");
+        dialog.set_text(Text::SensHeight, "8.8");
+        let held = dialog.save_camera("Mine").expect("numbers").clone();
+        assert_eq!(dialog.camera(), "Mine");
+        assert_eq!(dialog.camera_items().len(), 31, "the list is filled only on reading");
+        assert_eq!(
+            held.get("Mine"),
+            Some(&CameraInfo {
+                name: "Mine".to_owned(),
+                focallen: 8.8,
+                sensorwidth: 13.2,
+                sensorheight: 8.8,
+                imagewidth: 5472.0,
+                imageheight: 3648.0,
+            })
+        );
+        let mut reread = Cameras::builtin();
+        reread.read(&String::from_utf8(held.to_xml()).unwrap());
+        assert_eq!(reread.items().last().map(String::as_str), Some("Mine"));
+        assert_eq!(reread.get("Mine"), held.get("Mine"));
+    }
+
+    /// A box that is not a number: the message box, and nothing to write - though the camera
+    /// was added and the values before the bad box were set, as the C#'s are.
+    #[test]
+    fn save_with_a_bad_box_says_so() {
+        let mut dialog = open(&Context::default());
+        dialog.type_num(Num::FocalLength, "8.8");
+        dialog.set_text(Text::ImgHeight, "3648");
+        dialog.set_text(Text::ImgWidth, "wide");
+        assert!(matches!(
+            dialog.save_camera("Mine"),
+            Err(Refused::Message(NOT_A_NUMBER, ""))
+        ));
+        let held = dialog.cameras.get("Mine").expect("added before the parse");
+        assert_eq!((held.focallen, held.imageheight, held.imagewidth), (8.8, 3648.0, 0.0));
+    }
+
+    /// Save under a listed camera's name, in another case: `CMB_camera.Text = name` selects that
+    /// camera, whose `SelectedIndexChanged` loads it over the boxes - so what is saved is the
+    /// listed camera as it was, under its own name.
+    /// `// C#: Grid/GridUI.cs:1576-1582, 1344-1362`
+    #[test]
+    fn save_under_a_listed_name_reloads_that_camera_first() {
+        let mut dialog = open(&Context::default());
+        dialog.type_num(Num::FocalLength, "8.8");
+        let held = dialog.save_camera("canon sx230 hs").expect("numbers").clone();
+        assert_eq!(dialog.camera(), "Canon SX230 HS");
+        assert_eq!(held.get("Canon SX230 HS"), Cameras::builtin().get("Canon SX230 HS"));
+        assert_eq!(dialog.text(Text::ImgWidth), "4000");
+        assert!(held.get("canon sx230 hs").is_none());
     }
 
     #[test]

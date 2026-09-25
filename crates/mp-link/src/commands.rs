@@ -252,11 +252,15 @@ pub fn reboot(target: VehicleId) -> MavMessage {
     )
 }
 
-/// `doReboot(true, false)`: `PREFLIGHT_REBOOT_SHUTDOWN` with param1 = 3, which reboots the
-/// autopilot into its bootloader for a firmware upload. The C# waits for the acknowledgement and,
-/// refused, sends a plain reboot (param1 = 1) instead; that fallback is not made here, as every
-/// ArduPilot board this application flashes accepts 3.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2553-2567`
+/// `PREFLIGHT_REBOOT_SHUTDOWN` with param1 = 3, which reboots the autopilot into its bootloader
+/// for a firmware upload: the first command of `doReboot(true, false)`.
+///
+/// That call - the firmware page's, with `currentvehicle` false - waits for a heartbeat and then
+/// calls `doCommand` twice, with param1 = 3 and then param1 = 1, each unconditionally; and
+/// `doCommand` writes a `PREFLIGHT_REBOOT_SHUTDOWN` twice and waits for no acknowledgement. So
+/// the C# puts four frames on the wire - 3, 3, 1, 1 - not one; a caller sending this once sends
+/// a quarter of them. [`Link::command`](crate::Link::command) makes the two writes per command.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2553-2559, 2591-2614, 2758-2763`
 #[must_use]
 pub fn reboot_to_bootloader(target: VehicleId) -> MavMessage {
     command(

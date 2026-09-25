@@ -62,6 +62,8 @@ serde_json = { workspace = true, features = ["preserve_order"] }
 # The display view: `custom.displayview` and the `displayview` setting are Json.NET's JSON or
 # XmlSerializer's XML (ExtLibs/Utilities/DisplayView.cs:227-265).
 roxmltree.workspace = true
+# The log browser's field descriptions (LogMetaData.cs): LogMessages<Vehicle>.xml.xz unpacked.
+lzma-rs.workspace = true
 
 # Local time, for naming a flight recording the way the pilot's own clock reads. std has no
 # timezone support at all, and the alternatives are worse: libc's localtime_r needs unsafe, which

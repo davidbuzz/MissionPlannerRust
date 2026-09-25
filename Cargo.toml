@@ -73,6 +73,9 @@ unic-langid = "0.9"
 # D14's FFT: the log FFT window's transform (`ExtLibs/Utilities/fft.cs`'s `FFT2`). PLAN.md's
 # numerics row pins it.
 rustfft = "6.4.1"
+# The log browser's field descriptions: autotest's LogMessages.xml.xz, which LogMetaData.cs
+# unpacks with SharpCompress's XZStream. Pure Rust, so no liblzma to build or link.
+lzma-rs = "0.3"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

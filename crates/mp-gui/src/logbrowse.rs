@@ -30,6 +30,7 @@
 pub mod coverage;
 mod export;
 mod grid;
+pub mod metadata;
 mod modifier;
 #[cfg(test)]
 mod ported_tests;
@@ -248,6 +249,8 @@ pub struct Plotted {
     pub field: Option<PlottableField>,
     /// Its samples, scaled into its unit.
     pub series: Series,
+    /// Its samples' order along x, for Show Point Values' search.
+    pub order: view::TimeOrder,
     /// Which axis it is drawn against.
     pub axis: Axis,
     /// The unit the left axis groups by; empty when the log declares none.
@@ -310,6 +313,7 @@ impl Plotted {
         }
         Self {
             field: Some(field),
+            order: view::TimeOrder::of(&series),
             series,
             axis,
             unit: unit.unit.clone(),
@@ -343,6 +347,7 @@ impl Plotted {
         }
         Self {
             field: None,
+            order: view::TimeOrder::of(&series),
             series,
             axis: if item.left { Axis::Left } else { Axis::Right },
             unit: String::new(),
@@ -448,6 +453,8 @@ pub struct LogBrowse {
     /// The time of the record the cursor was last put on from the grid, which need not be a
     /// position record.
     cursor_time: Option<f64>,
+    /// `txt_info.Text`: the description of the field the pointer last rested on.
+    info: String,
 }
 
 /// Pixels a wheel notch is taken as, over the chart.
@@ -565,6 +572,7 @@ impl LogBrowse {
             modifiers: BTreeMap::new(),
             exported: None,
             cursor_time: None,
+            info: String::new(),
         }
     }
 
@@ -1035,6 +1043,24 @@ impl LogBrowse {
         }
     }
 
+    /// `treeView1_TreeNodeMouseHover`: the pointer resting on a field's node. Its path is
+    /// `MSG\field`, or `MSG\instance\field`; a message and field `LogMetaData` knows puts
+    /// the field's description in `txt_info`, and anything else leaves the box as it was. The
+    /// list here has a node for each field and none for a message, so the C#'s other branch -
+    /// a message's own description, for the pointer on its node - has no node to rest on.
+    /// `// C#: Log/LogBrowse.cs:3778-3803`
+    pub fn hover_field(&mut self, field: &PlottableField, meta: Option<&metadata::MetaData>) {
+        if let Some(known) = meta.and_then(|meta| meta.field(&field.message, &field.field)) {
+            known.description.clone_into(&mut self.info);
+        }
+    }
+
+    /// `txt_info.Text`.
+    #[must_use]
+    pub fn info(&self) -> &str {
+        &self.info
+    }
+
     /// Whether Show Point Values is on.
     #[must_use]
     pub const fn point_values(&self) -> bool {
@@ -1060,6 +1086,7 @@ impl LogBrowse {
             .filter_map(|shown| {
                 axes.range_for(shown).map(|range| view::Curve {
                     series: &shown.series,
+                    order: &shown.order,
                     range,
                 })
             })
@@ -1139,6 +1166,7 @@ impl LogBrowse {
     ///
     /// - `log.check.<box>`: each box, `true` when ticked - `map`, `time`, `datagrid`, `mode`,
     ///   `errors`, `msg`, `events`;
+    /// - `log.info`: `txt_info`'s text, the description of the field last hovered;
     /// - `log.axis`: `time` or `line`;
     /// - `log.overlays.<kind>`: how many labels of each kind the chart carries now;
     /// - `log.cursor.line`, `log.cursor.x`: the line the cursor is on and where on the axis it is
@@ -1156,6 +1184,7 @@ impl LogBrowse {
                 self.strip.get(check).to_string(),
             ));
         }
+        facts.push(("log.info".to_owned(), self.info.clone()));
         facts.push((
             "log.axis".to_owned(),
             match self.x_axis() {
@@ -4032,6 +4061,7 @@ fn field_panel(browse: &LogBrowse, search: &str, cx: &mut Context<MissionPlanner
         };
         let chosen_left = field.clone();
         let chosen_right = field.clone();
+        let hovered = field.clone();
         list = list.child(
             crate::probe::measured(format!("logfield-{label}"), div())
                 .id(gpui::SharedString::from(format!("logfield-{label}")))
@@ -4045,6 +4075,14 @@ fn field_panel(browse: &LogBrowse, search: &str, cx: &mut Context<MissionPlanner
                 .cursor_pointer()
                 .hover(|style| style.bg(rgb(theme::BORDER)))
                 .child(text)
+                // `treeView1.NodeMouseHover`. `// C#: Log/LogBrowse.designer.cs:375`
+                .on_hover(cx.listener(move |this, over: &bool, _window, cx| {
+                    if *over {
+                        this.log_browse
+                            .hover_field(&hovered, metadata::shared());
+                        cx.notify();
+                    }
+                }))
                 .on_click(
                     cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
                         // The first press of a double click ticked or unticked the field; the
@@ -4073,27 +4111,54 @@ fn field_panel(browse: &LogBrowse, search: &str, cx: &mut Context<MissionPlanner
         );
     }
 
+    // `txt_info`: docked along the bottom of the tree's panel, 40 pixels tall, multiline.
+    // `// C#: Log/LogBrowse.designer.cs:391-396; Log/LogBrowse.resx (txt_info)`
+    let info = crate::probe::measured("log-txt-info", div())
+        .id("log-txt-info")
+        .h(px(40.0))
+        .flex_shrink_0()
+        .px_1()
+        .border_1()
+        .border_color(rgb(theme::BORDER))
+        .text_xs()
+        .text_color(rgb(theme::TEXT))
+        .overflow_hidden()
+        .child(browse.info().to_owned());
+
     panel(
         "fields",
         div()
-            .id("log-fields")
             .flex()
             .flex_col()
             .w(px(300.0))
             .flex_shrink_0()
             .gap_2()
-            .overflow_y_scroll()
+            .min_h(px(0.0))
             .child(
                 div()
-                    .text_xs()
-                    .text_color(rgb(theme::DIM))
-                    .child(if total > SHOWN_FIELDS {
-                        format!("{total} fields, showing {SHOWN_FIELDS} - type in the box above to narrow")
-                    } else {
-                        format!("{total} fields")
-                    }),
+                    .id("log-fields")
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .min_h(px(0.0))
+                    .gap_2()
+                    .overflow_y_scroll()
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(theme::DIM))
+                            .child(if total > SHOWN_FIELDS {
+                                format!(
+                                    "{total} fields, showing {SHOWN_FIELDS} - type in the box \
+                                     above to narrow"
+                                )
+                            } else {
+                                format!("{total} fields")
+                            }),
+                    )
+                    .child(list),
             )
-            .child(list),
+            .child(info),
     )
     // The list scrolls inside the window rather than making the screen as tall as itself: a
     // flex item's automatic minimum height is its content's, and two hundred chips are taller
@@ -4137,6 +4202,40 @@ mod tests {
             unit: name.to_owned(),
             multiplier,
         }
+    }
+
+    /// `treeView1_TreeNodeMouseHover`: the pointer resting on a field puts the description
+    /// `LogMetaData` has for its message and field in `txt_info`, instance or not; a field it
+    /// does not know, or no metadata yet, leaves the box as it was.
+    /// `// C#: Log/LogBrowse.cs:3778-3803`
+    #[test]
+    fn resting_on_a_field_shows_its_description() {
+        let mut meta = metadata::MetaData::default();
+        meta.parse(
+            "<loggermessagefile><logformat name=\"ATT\">\
+             <description>Canonical vehicle attitude</description><fields>\
+             <field name=\"Roll\"><description>achieved vehicle roll</description></field>\
+             </fields></logformat><logformat name=\"IMU\"><description>Inertial</description>\
+             <fields><field name=\"AccX\"><description>acceleration along X axis</description>\
+             </field></fields></logformat></loggermessagefile>",
+        );
+        let mut browse = LogBrowse::new();
+        browse.hover_field(&field("ATT", "Roll"), None);
+        assert_eq!(browse.info(), "");
+        browse.hover_field(&field("ATT", "Roll"), Some(&meta));
+        assert_eq!(browse.info(), "achieved vehicle roll");
+        browse.hover_field(&field("ATT", "Pitch"), Some(&meta));
+        browse.hover_field(&field("GPS", "Roll"), Some(&meta));
+        assert_eq!(browse.info(), "achieved vehicle roll");
+        let mut second = field("IMU", "AccX");
+        second.instance = Some(1);
+        browse.hover_field(&second, Some(&meta));
+        assert_eq!(browse.info(), "acceleration along X axis");
+        assert!(
+            browse
+                .facts()
+                .contains(&("log.info".to_owned(), "acceleration along X axis".to_owned()))
+        );
     }
 
     /// The label is `MSG.Field (unit)`, and ` R` marks the right axis, as the C# names a curve.

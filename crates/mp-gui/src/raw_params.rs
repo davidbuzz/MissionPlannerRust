@@ -62,9 +62,9 @@ pub const RESET_NAMES: [&str; 2] = ["FORMAT_VERSION", "SYSID_SW_MREV"];
 /// `Thread.Sleep(1000)` between the write and the reboot.
 /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:989`
 pub const RESET_WAIT: Duration = Duration::from_secs(1);
-/// How long the port stays open after the reboot is queued. `doCommand` has written the frame
-/// before `BaseStream.Close()` runs; here the link thread writes it on its next pass, and a link
-/// closed before then drops it with the queue.
+/// How long the port stays open after the reboot is queued. `doCommand` has written both of its
+/// frames before `BaseStream.Close()` runs; here the link thread writes them on its next pass,
+/// and a link closed before then drops them with the queue.
 pub const CLOSE_GRACE: Duration = Duration::from_millis(250);
 
 /// `BUT_commitToFlash.Text`. `// C#: GCSViews/ConfigurationView/ConfigRawParams.resx`
@@ -1166,8 +1166,8 @@ mod tests {
     }
 
     /// Yes: `FORMAT_VERSION` set to 0 and echoed, the wait, `PREFLIGHT_REBOOT_SHUTDOWN` with 1 on
-    /// the wire, and then the port to close.
-    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:986-995`
+    /// the wire twice - `doCommand`'s second send for a reboot - and then the port to close.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:986-995; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2758-2763`
     #[test]
     fn a_reset_zeroes_format_version_waits_and_reboots() {
         let (telemetry, mut vehicle) = Vehicle::connect(fast());
@@ -1185,7 +1185,7 @@ mod tests {
 
         assert_eq!(end, ResetProgress::Close);
         assert_eq!(sets(&vehicle), [("FORMAT_VERSION".to_owned(), 0.0)]);
-        assert_eq!(commands(&vehicle), [(246, 1.0)]);
+        assert_eq!(commands(&vehicle), [(246, 1.0), (246, 1.0)]);
     }
 
     /// A vehicle without `FORMAT_VERSION` has `SYSID_SW_MREV` written: the overload's second name.
@@ -1207,7 +1207,7 @@ mod tests {
 
         assert_eq!(end, ResetProgress::Close);
         assert_eq!(sets(&vehicle), [("SYSID_SW_MREV".to_owned(), 0.0)]);
-        assert_eq!(commands(&vehicle), [(246, 1.0)]);
+        assert_eq!(commands(&vehicle), [(246, 1.0), (246, 1.0)]);
     }
 
     /// Neither name listed: `setParam` returns false twice, which is no exception, and the
@@ -1219,7 +1219,7 @@ mod tests {
         let end = run_reset(&mut reset, &telemetry, &mut vehicle, |_, _| {});
         assert_eq!(end, ResetProgress::Close);
         assert!(sets(&vehicle).is_empty());
-        assert_eq!(commands(&vehicle), [(246, 1.0)]);
+        assert_eq!(commands(&vehicle), [(246, 1.0), (246, 1.0)]);
     }
 
     /// A write never echoed is `setParam`'s `TimeoutException`: the `catch`'s words, and no

@@ -86,6 +86,12 @@ impl Series {
         self.samples.iter()
     }
 
+    /// The sample at `index`, oldest first: the `index`-th of [`Series::samples`].
+    #[must_use]
+    pub fn get(&self, index: usize) -> Option<&Sample> {
+        self.samples.get(index)
+    }
+
     /// How many samples are held.
     #[must_use]
     pub fn len(&self) -> usize {
@@ -399,6 +405,19 @@ mod tests {
         assert_eq!(series.latest(), Some(4.0));
         let times: Vec<f64> = series.samples().map(|s| s.at).collect();
         assert_eq!(times, vec![2.0, 3.0, 4.0]);
+    }
+
+    /// `get` counts from the oldest sample held, as `samples` does, after the oldest is dropped.
+    #[test]
+    fn get_is_the_nth_of_samples() {
+        let mut series = Series::new("s", 3);
+        for index in 0..5 {
+            #[allow(clippy::cast_precision_loss)]
+            series.push(index as f64, index as f64);
+        }
+        assert_eq!(series.get(0).map(|s| s.at), Some(2.0));
+        assert_eq!(series.get(2).map(|s| s.at), Some(4.0));
+        assert_eq!(series.get(3), None);
     }
 
     /// A NaN cannot be drawn and poisons every min and max it touches.

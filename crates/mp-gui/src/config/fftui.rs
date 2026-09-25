@@ -1315,10 +1315,18 @@ impl FftUi {
             .iter()
             .filter_map(|curve| Some((curve.series(), graph.y_range(curve.y2)?)))
             .collect();
+        // A spectrum's bins are in frequency order, so the point search's order is the series'
+        // own (`TimeOrder::of` finds nothing to sort).
+        let orders: Vec<crate::logbrowse::view::TimeOrder> = series
+            .iter()
+            .map(|(series, _)| crate::logbrowse::view::TimeOrder::of(series))
+            .collect();
         let curves: Vec<crate::logbrowse::view::Curve<'_>> = series
             .iter()
-            .map(|(series, range)| crate::logbrowse::view::Curve {
+            .zip(orders.iter())
+            .map(|((series, range), order)| crate::logbrowse::view::Curve {
                 series,
+                order,
                 range: *range,
             })
             .collect();

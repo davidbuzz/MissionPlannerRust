@@ -21,12 +21,12 @@
 //!
 //! Not ported, each for a reason the C# gives: `TRK_zoom` (the map zooms with the wheel);
 //! dragging the polygon's corners on the dialog's map; the camera footprints (`CHK_footprints` is
-//! kept and saved, nothing is drawn); `BUT_samplephoto` (a JPEG's EXIF), `BUT_save` and the
-//! `cameras.xml` the constructor writes when there is none (this application does not write
-//! Mission Planner's data directory); Control-S and Control-O with `label38`, their hint (the
+//! kept and saved, nothing is drawn); `BUT_samplephoto` (a JPEG's EXIF); Control-S and Control-O with `label38`, their hint (the
 //! `.grid` files are `XmlSerializer` output); "No polygon defined. Load a file?", whose Yes is
 //! that `.grid` loader - with fewer than three corners this says its No, "Please define a
-//! polygon.". The settings Accept saves are kept for the session, over what `config.xml` holds:
+//! polygon.". `BUT_save` asks for a camera name and writes `cameras.xml`, and the constructor
+//! writes it when there is none, both in this application's user data directory
+//! (`mp_mission::cameras`). The settings Accept saves are kept for the session, over what `config.xml` holds:
 //! this application does not write `config.xml`.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
@@ -39,7 +39,7 @@ use gpui::{
     rgb,
 };
 use mp_mission::MissionItem;
-use mp_mission::cameras::Cameras;
+use mp_mission::cameras::{self, Cameras};
 use mp_mission::dotnet::{bool_text, format_f64, parse_f64, to_int};
 use mp_mission::grid::{GridTag, StartPosition};
 use mp_mission::gridui::{
@@ -121,6 +121,8 @@ enum Prompt {
     Point(TextField),
     /// `CustomMessageBox.Show(text, caption)`.
     Message(String, &'static str),
+    /// `InputBox.Show("Camera Name", "Please and a camera name", ref camname)`: `BUT_save`'s.
+    CameraName(TextField),
 }
 
 impl SurveyUi {
@@ -218,14 +220,16 @@ pub fn open(this: &mut MissionPlanner, window: &mut Window, cx: &mut Context<Mis
                 .map(ToOwned::to_owned)
         })
     };
-    let cameras = Cameras::load(mp_settings::user_data_directory().as_deref());
+    // `xmlcamera`'s write `catch`: `CustomMessageBox.Show(ex.ToString())`.
+    // `// C#: Grid/GridUI.cs:122-124, 497`
+    let (cameras, unwritten) = Cameras::load(mp_settings::user_data_directory().as_deref());
     let dialog = Dialog::open(&polygon, cameras, &context, &saved);
     this.survey.open = Some(Open {
         dialog,
         tab: Tab::Simple,
         editing: None,
         dropdown: None,
-        prompt: None,
+        prompt: unwritten.map(|error| Prompt::Message(error.to_string(), "")),
     });
     this.survey.added = 0;
     changed(this, window, cx);
@@ -392,6 +396,60 @@ fn accept(this: &mut MissionPlanner) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// The boxes over the dialog.
+// ---------------------------------------------------------------------------------------------
+
+/// `BUT_save_Click`'s first line: the `InputBox`, offering "Default". Whatever was being typed is
+/// committed first, as the button takes the focus.
+/// `// C#: Grid/GridUI.cs:1571-1574`
+fn ask_camera_name(open: &mut Open) {
+    commit_edit(open);
+    open.dropdown = None;
+    let mut field = TextField::new("");
+    field.set(gridui::CAMERA_NAME_DEFAULT);
+    open.prompt = Some(Prompt::CameraName(field));
+}
+
+/// OK (`ok` true) or Cancel on the box showing: "Enter point #" goes to the dialog; the camera
+/// name, on OK, saves the camera ([`save_camera`]); a message just goes.
+fn answer_prompt(open: &mut Open, ok: bool) {
+    match open.prompt.take() {
+        Some(Prompt::Point(field)) => open.dialog.answer_point(ok.then_some(field.value())),
+        Some(Prompt::CameraName(field)) if ok => {
+            save_camera(
+                open,
+                field.value(),
+                mp_settings::user_data_directory().as_deref(),
+            );
+        }
+        Some(Prompt::CameraName(_) | Prompt::Message(..)) | None => {}
+    }
+}
+
+/// The rest of `BUT_save_Click` once its `InputBox` has said OK: the camera saved in the
+/// dialog's list, then `xmlcamera(true, GetUserDataDirectory() + "cameras.xml")`. A box that is
+/// not a number is the handler's message box and nothing is written; a file that cannot be
+/// written is `xmlcamera`'s `catch`, a box of the error.
+/// `// C#: Grid/GridUI.cs:1576-1602, 462-497`
+fn save_camera(open: &mut Open, name: &str, directory: Option<&std::path::Path>) {
+    match open.dialog.save_camera(name) {
+        Ok(held) => {
+            if let Some(directory) = directory
+                && let Err(error) = held.write(&directory.join(cameras::USER_FILE))
+            {
+                open.prompt = Some(Prompt::Message(error.to_string(), ""));
+            }
+        }
+        Err(Refused::Message(text, caption)) => {
+            open.prompt = Some(Prompt::Message(text.to_owned(), caption));
+        }
+        Err(Refused::Exception(_, text)) => {
+            open.prompt = Some(Prompt::Message(text.to_owned(), ""));
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
 // Typing.
 // ---------------------------------------------------------------------------------------------
 
@@ -457,17 +515,10 @@ fn key(
     let Some(open) = this.survey.open.as_mut() else {
         return;
     };
-    if let Some(Prompt::Point(field)) = open.prompt.as_mut() {
+    if let Some(Prompt::Point(field) | Prompt::CameraName(field)) = open.prompt.as_mut() {
         match field.key(event) {
-            KeyOutcome::Submitted => {
-                let answer = field.value().to_owned();
-                open.prompt = None;
-                open.dialog.answer_point(Some(&answer));
-            }
-            KeyOutcome::Cancelled => {
-                open.prompt = None;
-                open.dialog.answer_point(None);
-            }
+            KeyOutcome::Submitted => answer_prompt(open, true),
+            KeyOutcome::Cancelled => answer_prompt(open, false),
             KeyOutcome::Changed | KeyOutcome::Ignored => {}
         }
         changed(this, window, cx);
@@ -1299,7 +1350,7 @@ fn camera_page(
                     focus,
                     cx,
                 ),
-                // Not ported: a JPEG's EXIF, and writing cameras.xml.
+                // Not ported: a JPEG's EXIF.
                 button(
                     "BUT_samplephoto",
                     "Load Sample Photo",
@@ -1318,8 +1369,14 @@ fn camera_page(
                     178.0,
                     64.0,
                     23.0,
-                    false,
-                    |_, _, _| {},
+                    true,
+                    |this, window, cx| {
+                        if let Some(open) = this.survey.open.as_mut() {
+                            ask_camera_name(open);
+                            this.survey.focus.focus(window, cx);
+                        }
+                        changed(this, window, cx);
+                    },
                     cx,
                 ),
                 label(55.0, 204.0, "Calculated Values"),
@@ -1490,6 +1547,11 @@ fn prompt_box(
             "Please enter a boundary point number".to_owned(),
             Some(field),
         ),
+        Prompt::CameraName(field) => (
+            gridui::CAMERA_NAME_TITLE,
+            gridui::CAMERA_NAME_PROMPT.to_owned(),
+            Some(field),
+        ),
         Prompt::Message(text, caption) => (*caption, text.clone(), None),
     };
     let ok = crate::ui::action(
@@ -1499,10 +1561,7 @@ fn prompt_box(
         true,
         cx.listener(|this, _event: &(), window, cx| {
             if let Some(open) = this.survey.open.as_mut() {
-                match open.prompt.take() {
-                    Some(Prompt::Point(field)) => open.dialog.answer_point(Some(field.value())),
-                    Some(Prompt::Message(..)) | None => {}
-                }
+                answer_prompt(open, true);
             }
             changed(this, window, cx);
         }),
@@ -1515,10 +1574,8 @@ fn prompt_box(
             theme::TEXT,
             true,
             cx.listener(|this, _event: &(), window, cx| {
-                if let Some(open) = this.survey.open.as_mut()
-                    && let Some(Prompt::Point(_)) = open.prompt.take()
-                {
-                    open.dialog.answer_point(None);
+                if let Some(open) = this.survey.open.as_mut() {
+                    answer_prompt(open, false);
                 }
                 changed(this, window, cx);
             }),
@@ -1834,6 +1891,7 @@ pub fn record_facts(survey: &SurveyUi) {
     let (prompt, text) = match &open.prompt {
         None => ("none", String::new()),
         Some(Prompt::Point(field)) => ("Enter point #", field.value().to_owned()),
+        Some(Prompt::CameraName(field)) => (gridui::CAMERA_NAME_TITLE, field.value().to_owned()),
         Some(Prompt::Message(text, caption)) => (
             if caption.is_empty() {
                 "message"
@@ -1883,6 +1941,63 @@ mod tests {
         copter: true,
         plane: false,
     };
+
+    fn opened(dialog: Dialog) -> Open {
+        Open {
+            dialog,
+            tab: Tab::Camera,
+            editing: None,
+            dropdown: None,
+            prompt: None,
+        }
+    }
+
+    /// Save: the `InputBox` offering "Default", its OK saving the camera and writing
+    /// `cameras.xml` to the user data directory - the file the next dialog reads it back from.
+    /// `// C#: Grid/GridUI.cs:1567-1602`
+    #[test]
+    fn save_asks_a_name_and_writes_cameras_xml() {
+        let dir = std::env::temp_dir().join(format!("mp-gui-survey-save-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut open = opened(gui_dialog());
+        open.dialog.type_num(Num::FocalLength, "8.8");
+        ask_camera_name(&mut open);
+        let Some(Prompt::CameraName(field)) = &open.prompt else {
+            panic!("the InputBox");
+        };
+        assert_eq!(field.value(), "Default");
+        open.prompt = None;
+        save_camera(&mut open, "Default", Some(&dir));
+        assert!(open.prompt.is_none());
+        let written = std::fs::read(dir.join(cameras::USER_FILE)).expect("cameras.xml written");
+        let (reread, error) = Cameras::load(Some(&dir));
+        assert!(error.is_none());
+        assert_eq!(written, reread.to_xml());
+        assert_eq!(reread.items().last().map(String::as_str), Some("Default"));
+        assert_eq!(reread.get("Default").map(|c| c.focallen), Some(8.8));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A box that is not a number is the handler's message box, and a file that cannot be
+    /// written is `xmlcamera`'s `catch`: each a box over the dialog.
+    #[test]
+    fn save_says_what_stopped_it() {
+        let mut open = opened(gui_dialog());
+        open.dialog.set_text(Text::ImgWidth, "wide");
+        save_camera(&mut open, "Mine", None);
+        assert!(matches!(
+            &open.prompt,
+            Some(Prompt::Message(text, "")) if text == gridui::NOT_A_NUMBER
+        ));
+
+        let blocked =
+            std::env::temp_dir().join(format!("mp-gui-survey-blocked-{}", std::process::id()));
+        std::fs::write(&blocked, b"a file where the directory would be").unwrap();
+        let mut open = opened(gui_dialog());
+        save_camera(&mut open, "Mine", Some(&blocked.join("inner")));
+        assert!(matches!(&open.prompt, Some(Prompt::Message(_, ""))));
+        let _ = std::fs::remove_file(&blocked);
+    }
 
     /// The script's path: the angle and the altitude typed, Accept, and the rows in the plan -
     /// the golden `accept_gui_angle_alt`'s commands, filled as the planner fills them.

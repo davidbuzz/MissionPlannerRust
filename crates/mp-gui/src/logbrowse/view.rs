@@ -271,13 +271,95 @@ fn clamp_unit((x, y): (f64, f64)) -> (f64, f64) {
     (x.clamp(0.0, 1.0), y.clamp(0.0, 1.0))
 }
 
-/// One curve as the point search sees it: its samples, and the y range it is drawn against.
+/// One curve as the point search sees it: its samples, their time order, and the y range it is
+/// drawn against.
 #[derive(Debug, Clone, Copy)]
 pub struct Curve<'a> {
     /// The samples, `(x, y)`.
     pub series: &'a mp_chart::Series,
+    /// The samples' order along x, built with the series.
+    pub order: &'a TimeOrder,
     /// The range of the axis it is on.
     pub range: Range,
+}
+
+/// A series' samples in order along x, so the point search reads only those within reach of the
+/// pointer instead of every sample on every frame.
+///
+/// A log's samples are in time order but for a clock that restarts part way through, and in line
+/// order always; so this is nothing - the series' own order - unless the series is out of order,
+/// when it is the samples sorted, built once when the curve is plotted. A sample whose x is not a
+/// number is in no range, so it is left out.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TimeOrder {
+    /// The samples' indices, least x first; `None` when that is the series' own order.
+    sorted: Option<Vec<usize>>,
+}
+
+impl TimeOrder {
+    /// The order of `series`: checked in one pass, and sorted only when it has to be.
+    #[must_use]
+    pub fn of(series: &mp_chart::Series) -> Self {
+        let mut previous = f64::NEG_INFINITY;
+        let in_order = series.samples().all(|sample| {
+            let ok = sample.at >= previous;
+            previous = sample.at;
+            ok
+        });
+        if in_order {
+            return Self { sorted: None };
+        }
+        let mut sorted: Vec<usize> = series
+            .samples()
+            .enumerate()
+            .filter(|(_, sample)| !sample.at.is_nan())
+            .map(|(index, _)| index)
+            .collect();
+        let at = |index: &usize| series.get(*index).map_or(f64::NAN, |sample| sample.at);
+        sorted.sort_by(|a, b| at(a).total_cmp(&at(b)));
+        Self {
+            sorted: Some(sorted),
+        }
+    }
+
+    /// How many samples are in the order.
+    fn len(&self, series: &mp_chart::Series) -> usize {
+        self.sorted.as_ref().map_or(series.len(), Vec::len)
+    }
+
+    /// The index in the series of the `position`-th sample along x.
+    fn index(&self, position: usize) -> usize {
+        self.sorted
+            .as_ref()
+            .map_or(position, |sorted| sorted.get(position).copied().unwrap_or(usize::MAX))
+    }
+
+    /// The positions along x of the samples with `low <= x <= high`: two binary searches.
+    fn within(&self, series: &mp_chart::Series, low: f64, high: f64) -> std::ops::Range<usize> {
+        let at = |position: usize| {
+            series
+                .get(self.index(position))
+                .map_or(f64::NAN, |sample| sample.at)
+        };
+        let len = self.len(series);
+        let first = partition_point(len, |position| at(position) < low);
+        let end = partition_point(len, |position| at(position) <= high);
+        first..end.max(first)
+    }
+}
+
+/// The first of `0..len` for which `before` is false, `before` being true then false along it.
+fn partition_point(len: usize, before: impl Fn(usize) -> bool) -> usize {
+    let (mut low, mut high) = (0, len);
+    while low < high {
+        let middle = low + (high - low) / 2;
+        if before(middle) {
+            low = middle + 1;
+        } else {
+            high = middle;
+        }
+    }
+    low
 }
 
 /// The point nearest the pointer, within `NearestTol` pixels: `FindNearestPoint`.
@@ -285,6 +367,12 @@ pub struct Curve<'a> {
 /// The pointer is a fraction of the plotting area across and down; the area is `width` by
 /// `height` pixels. Only points inside every range count. Returns the curve's index and the
 /// point.
+///
+/// ZedGraph measures every point of every curve; this measures only the points within a pixel
+/// more than `NearestTol` of the pointer across, found through each curve's [`TimeOrder`] - a
+/// point further across is further than `NearestTol` whatever its height, so it could never be
+/// the answer. The answer is the same, ties included: the first curve's point, and within a curve
+/// the earliest sample, as ZedGraph's `dist >= minDist` keeps the first it met.
 /// `// C#: ExtLibs/ZedGraph/ZedGraph/GraphPane.cs:2019-2180`
 #[must_use]
 pub fn nearest_point(
@@ -293,20 +381,44 @@ pub fn nearest_point(
     pointer: (f64, f64),
     size: (f32, f32),
 ) -> Option<(usize, mp_chart::Sample)> {
+    search(curves, x, pointer, size, &mut 0)
+}
+
+/// [`nearest_point`], counting in `measured` the points it measured.
+fn search(
+    curves: &[Curve<'_>],
+    x: (f64, f64),
+    pointer: (f64, f64),
+    size: (f32, f32),
+    measured: &mut usize,
+) -> Option<(usize, mp_chart::Sample)> {
     let (width, height) = (f64::from(size.0), f64::from(size.1));
     let x_span = x.1 - x.0;
     if !(x_span > 0.0 && width > 0.0 && height > 0.0) {
         return None;
     }
     let pointer_x = pointer.0.mul_add(x_span, x.0);
-    let mut best: Option<(f64, usize, mp_chart::Sample)> = None;
-    for (index, curve) in curves.iter().enumerate() {
+    // A pixel's margin over the tolerance, so rounding cannot leave out a point just inside it.
+    let reach = (NEAREST_TOLERANCE + 1.0) * x_span / width;
+    // (distance, curve, sample index, sample)
+    let mut best: Option<(f64, usize, usize, mp_chart::Sample)> = None;
+    for (curve_index, curve) in curves.iter().enumerate() {
         let y_span = curve.range.high - curve.range.low;
         if y_span <= 0.0 {
             continue;
         }
         let pointer_y = (1.0 - pointer.1).mul_add(y_span, curve.range.low);
-        for sample in curve.series.samples() {
+        let low = (pointer_x - reach).max(x.0);
+        let high = (pointer_x + reach).min(x.1);
+        if low > high {
+            continue;
+        }
+        for position in curve.order.within(curve.series, low, high) {
+            let index = curve.order.index(position);
+            let Some(sample) = curve.series.get(index) else {
+                continue;
+            };
+            *measured += 1;
             if !(x.0..=x.1).contains(&sample.at)
                 || !(curve.range.low..=curve.range.high).contains(&sample.value)
             {
@@ -315,13 +427,17 @@ pub fn nearest_point(
             let dx = (sample.at - pointer_x) * width / x_span;
             let dy = (sample.value - pointer_y) * height / y_span;
             let distance = dx.mul_add(dx, dy * dy);
-            if best.is_none_or(|(least, _, _)| distance < least) {
-                best = Some((distance, index, *sample));
+            let nearer = best.is_none_or(|(least, held_curve, held_index, _)| {
+                distance < least
+                    || (distance == least && held_curve == curve_index && index < held_index)
+            });
+            if nearer {
+                best = Some((distance, curve_index, index, *sample));
             }
         }
     }
-    best.filter(|(distance, _, _)| *distance < NEAREST_TOLERANCE * NEAREST_TOLERANCE)
-        .map(|(_, index, sample)| (index, sample))
+    best.filter(|(distance, ..)| *distance < NEAREST_TOLERANCE * NEAREST_TOLERANCE)
+        .map(|(_, index, _, sample)| (index, sample))
 }
 
 /// The tooltip ZedGraph shows for a point: `"( " + x + ", " + y + " )"`, each written by
@@ -454,13 +570,16 @@ mod tests {
         near.push(50.0, 5.0);
         let mut far = mp_chart::Series::new("b", 8);
         far.push(52.0, 900.0);
+        let (near_order, far_order) = (TimeOrder::of(&near), TimeOrder::of(&far));
         let curves = [
             Curve {
                 series: &near,
+                order: &near_order,
                 range: automatic().left["deg"],
             },
             Curve {
                 series: &far,
+                order: &far_order,
                 range: automatic().right.unwrap_or(Range {
                     low: 0.0,
                     high: 1.0,
@@ -481,6 +600,160 @@ mod tests {
             nearest_point(&curves, (0.0, 100.0), (0.3, 0.5), (400.0, 200.0)),
             None
         );
+    }
+
+    /// ZedGraph's walk, every point of every curve, as `nearest_point` was: what the search
+    /// through the time order must answer.
+    /// `// C#: ExtLibs/ZedGraph/ZedGraph/GraphPane.cs:2089-2170`
+    fn walk(
+        curves: &[Curve<'_>],
+        x: (f64, f64),
+        pointer: (f64, f64),
+        size: (f32, f32),
+    ) -> Option<(usize, mp_chart::Sample)> {
+        let (width, height) = (f64::from(size.0), f64::from(size.1));
+        let x_span = x.1 - x.0;
+        let pointer_x = pointer.0.mul_add(x_span, x.0);
+        let mut best: Option<(f64, usize, mp_chart::Sample)> = None;
+        for (index, curve) in curves.iter().enumerate() {
+            let y_span = curve.range.high - curve.range.low;
+            if y_span <= 0.0 {
+                continue;
+            }
+            let pointer_y = (1.0 - pointer.1).mul_add(y_span, curve.range.low);
+            for sample in curve.series.samples() {
+                if !(x.0..=x.1).contains(&sample.at)
+                    || !(curve.range.low..=curve.range.high).contains(&sample.value)
+                {
+                    continue;
+                }
+                let dx = (sample.at - pointer_x) * width / x_span;
+                let dy = (sample.value - pointer_y) * height / y_span;
+                let distance = dx.mul_add(dx, dy * dy);
+                if best.is_none_or(|(least, _, _)| distance < least) {
+                    best = Some((distance, index, *sample));
+                }
+            }
+        }
+        best.filter(|(distance, _, _)| *distance < NEAREST_TOLERANCE * NEAREST_TOLERANCE)
+            .map(|(_, index, sample)| (index, sample))
+    }
+
+    /// A deterministic scatter of numbers in 0..1, so the test needs no random crate.
+    fn scatter(seed: &mut u64) -> f64 {
+        *seed = seed
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        #[allow(clippy::cast_precision_loss)] // 53 bits of a 64-bit state
+        let fraction = (*seed >> 11) as f64 / (1_u64 << 53) as f64;
+        fraction
+    }
+
+    /// Two large curves - one in time order, one whose clock restarts twice, with repeated times
+    /// and repeated values for ties - and the search answers what the walk answers for a
+    /// nine hundred pointers, over the whole log and zoomed in.
+    #[test]
+    fn the_search_answers_what_the_walk_answers() {
+        let mut seed = 7;
+        let mut ordered = mp_chart::Series::new("ordered", 60_000);
+        for index in 0..60_000_u32 {
+            let value = (scatter(&mut seed) * 20.0).round();
+            ordered.push(f64::from(index / 2) * 0.01, value);
+        }
+        let mut restarted = mp_chart::Series::new("restarted", 45_000);
+        for index in 0..45_000_u32 {
+            let at = f64::from(index % 18_000) * 0.02;
+            restarted.push(at, scatter(&mut seed) * 20.0);
+        }
+        let orders = [TimeOrder::of(&ordered), TimeOrder::of(&restarted)];
+        assert!(orders[0].sorted.is_none());
+        assert!(orders[1].sorted.is_some());
+        let range = Range {
+            low: 0.0,
+            high: 20.0,
+        };
+        let curves = [
+            Curve {
+                series: &ordered,
+                order: &orders[0],
+                range,
+            },
+            Curve {
+                series: &restarted,
+                order: &orders[1],
+                range,
+            },
+        ];
+        let mut found = 0;
+        for x in [(0.0, 400.0), (150.0, 151.0), (-5.0, 3.0)] {
+            for _ in 0..300 {
+                let pointer = (scatter(&mut seed), scatter(&mut seed));
+                let ours = nearest_point(&curves, x, pointer, (800.0, 300.0));
+                assert_eq!(ours, walk(&curves, x, pointer, (800.0, 300.0)), "{x:?} {pointer:?}");
+                found += usize::from(ours.is_some());
+            }
+        }
+        assert!(found > 300, "the pointers find points: {found}");
+    }
+
+    /// What it costs: the points within reach across, not the log. A million samples over 800
+    /// pixels is 1250 a pixel; the search measures the sixteen pixels around the pointer.
+    #[test]
+    fn the_search_measures_only_the_points_within_reach() {
+        let mut series = mp_chart::Series::new("big", 1_000_000);
+        for index in 0..1_000_000_u32 {
+            series.push(f64::from(index) * 0.001, f64::from(index % 100));
+        }
+        let order = TimeOrder::of(&series);
+        let curves = [Curve {
+            series: &series,
+            order: &order,
+            range: Range {
+                low: 0.0,
+                high: 100.0,
+            },
+        }];
+        let mut measured = 0;
+        let found = search(&curves, (0.0, 1_000.0), (0.5, 0.5), (800.0, 300.0), &mut measured);
+        assert_eq!(found, walk(&curves, (0.0, 1_000.0), (0.5, 0.5), (800.0, 300.0)));
+        assert!(found.is_some());
+        // Eight pixels either side, 1.25 x-units a pixel, samples a thousandth apart: about
+        // 20,001 of the million.
+        assert!((19_999..=20_001).contains(&measured), "{measured}");
+
+        // Zoomed in to a second, the reach is a hundredth of a second: 21 samples.
+        let mut measured = 0;
+        search(&curves, (500.0, 501.0), (0.5, 0.5), (800.0, 300.0), &mut measured);
+        assert!((19..=22).contains(&measured), "{measured}");
+    }
+
+    /// The order checked and built: a series in order needs none; a restart sorts it, leaving
+    /// out a time that is not a number; the window is inclusive at both ends.
+    #[test]
+    fn the_time_order_is_the_series_sorted() {
+        let mut series = mp_chart::Series::new("s", 8);
+        for at in [0.0, 1.0, 1.0, 2.0] {
+            series.push(at, 1.0);
+        }
+        let order = TimeOrder::of(&series);
+        assert_eq!(order, TimeOrder::default());
+        assert_eq!(order.within(&series, 1.0, 1.0), 1..3);
+        assert_eq!(order.within(&series, 2.5, 3.0), 4..4);
+
+        // `Series::push` drops a sample whose time is not a number (mp-chart's index cannot
+        // place it), so the NaN never reaches the order; four samples remain, out of order.
+        let mut series = mp_chart::Series::new("s", 8);
+        for at in [5.0, 6.0, f64::NAN, 1.0, 2.0] {
+            series.push(at, 1.0);
+        }
+        assert_eq!(series.len(), 4);
+        let order = TimeOrder::of(&series);
+        assert_eq!(order.sorted, Some(vec![2, 3, 0, 1]));
+        let within: Vec<usize> = order
+            .within(&series, 2.0, 5.0)
+            .map(|position| order.index(position))
+            .collect();
+        assert_eq!(within, [3, 0]);
     }
 
     /// `( x, y )`, the value in .NET's general format.

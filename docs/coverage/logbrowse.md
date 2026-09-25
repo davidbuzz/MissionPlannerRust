@@ -4,7 +4,7 @@ Generated from `crates/mp-gui/src/logbrowse/coverage.rs` by `cargo test -p mp-gu
 
 | table | total | done | elsewhere | missing | plumbing | dropped |
 |---|---:|---:|---:|---:|---:|---:|
-| designer | 37 | 28 | 0 | 1 | 6 | 2 |
+| designer | 37 | 29 | 0 | 0 | 6 | 2 |
 | beyond the designer | 15 | 10 | 0 | 0 | 3 | 2 |
 
 ## `Log/LogBrowse.designer.cs`
@@ -42,7 +42,7 @@ Generated from `crates/mp-gui/src/logbrowse/coverage.rs` by `cargo test -p mp-gu
 | `dataGridView1` | RowEnter | `dataGridView1_RowEnter` | the headers named for the current row | done: `fn headers` |
 | `treeView1` | AfterCheck | `treeView1_AfterCheck` | a field ticked: graphed, or unticked: removed | done: `fn graph` |
 | `treeView1` | DrawNode | `treeView1_DrawNode` | the tree's text, owner-drawn | plumbing |
-| `treeView1` | NodeMouseHover | `treeView1_TreeNodeMouseHover` | a field's description in `txt_info` | **missing** - later: the descriptions are `LogMetaData`, which Mission Planner downloads as `LogMessages.xml.xz` from autotest.ardupilot.org at start-up; there is no fetcher or xz decoder for it here yet, and the field list has no `txt_info` to show one in |
+| `treeView1` | NodeMouseHover | `treeView1_TreeNodeMouseHover` | a field's description in `txt_info` | done: `fn hover_field` |
 | `treeView1` | DoubleClick | `treeView1_DoubleClick` | a field's scaler and offset | done: `fn ask_modifier` |
 | `treeView1` | MouseDown | `treeView1_MouseDown` | a right click: the right axis | done: `fn graph` |
 | `LogBrowse` | FormClosed | `LogBrowse_FormClosed` | the log let go | plumbing |

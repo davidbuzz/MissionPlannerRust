@@ -3817,6 +3817,10 @@ fn main() {
     let imported = mp_settings::migrate::import_at_start();
     report_import(&imported);
 
+    // `ThreadPool.QueueUserWorkItem(BGLogMessagesMetaData)`: the log browser's field
+    // descriptions, fetched and read in the background. `// C#: MainV2.cs:3299`
+    logbrowse::metadata::start();
+
     // A flag beats its environment variable: the variable is the standing preference and the flag
     // is this run. Passed down as values rather than written back into the environment, which
     // would mean mutating a process-global from one thread and is why this crate forbids unsafe.
