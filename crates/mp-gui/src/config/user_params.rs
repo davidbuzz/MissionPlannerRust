@@ -215,6 +215,12 @@ impl<H: Copy> UserParams<H> {
         self.input.as_ref().map(|(field, _)| field.value())
     }
 
+    /// The `InputBox`'s text box, while it shows.
+    #[must_use]
+    pub fn input_field(&self) -> Option<&TextField> {
+        self.input.as_ref().map(|(field, _)| field)
+    }
+
     /// The message box showing.
     #[must_use]
     pub fn message(&self) -> Option<&Message> {
@@ -364,12 +370,14 @@ impl<H: Copy> UserParams<H> {
             .iter()
             .fold(first.clone(), |total, name| format!("{total}\r\n{name}"));
         let mut field = TextField::new("");
+        field.set_multiline(true);
         field.set(text.clone());
         self.input = Some((field, text));
     }
 
     /// A key for the `InputBox`'s text box: multiline, so Enter is a new line and Tab a tab
-    /// (`AcceptsReturn`, `AcceptsTab`); Escape is Cancel. Returns whether the box closed.
+    /// (`AcceptsReturn`, `AcceptsTab`), each at the caret; Escape is Cancel. Returns whether the
+    /// box closed.
     /// `// C#: ExtLibs/Controls/InputBox.cs:84-91, 145-146`
     pub fn input_key(&mut self, event: &KeyDownEvent) -> Option<bool> {
         let (field, _) = self.input.as_mut()?;
@@ -377,13 +385,11 @@ impl<H: Copy> UserParams<H> {
         let plain = !keystroke.modifiers.control && !keystroke.modifiers.platform;
         match keystroke.key.as_str() {
             "enter" if plain => {
-                let text = format!("{}\r\n", field.value());
-                field.set(text);
+                field.insert("\r\n");
                 None
             }
             "tab" if plain => {
-                let text = format!("{}\t", field.value());
-                field.set(text);
+                field.insert("\t");
                 None
             }
             _ => match field.key(event) {
@@ -523,6 +529,11 @@ pub fn record_facts<H: Copy>(page: &UserParams<H>, view: &TelemetryView) {
             .map_or_else(|| "none".to_owned(), |text| text.replace("\r\n", "|")),
     );
     record(
+        "config.userparams.input.selection",
+        page.input_field()
+            .map_or_else(|| "none".to_owned(), TextField::selection_fact),
+    );
+    record(
         "config.userparams.message",
         page.message()
             .map_or("none", |message| message.text.as_str()),
@@ -610,7 +621,7 @@ pub fn overlay(
     window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> Option<AnyElement> {
-    if let Some(text) = user.input() {
+    if let Some(input) = user.input_field() {
         let focused = handle.is_focused(window);
         let close = |ok: bool| {
             move |this: &mut MissionPlanner,
@@ -637,52 +648,19 @@ pub fn overlay(
                 cx.listener(close(false)),
             ),
         ];
-        // The text box: multiline, 372 x 400, a line of the text to a line of the box.
-        let lines: Vec<String> = text
-            .split('\n')
-            .map(|line| line.trim_end_matches('\r').to_owned())
-            .collect();
-        let last = lines.len().saturating_sub(1);
-        let box_lines = lines.into_iter().enumerate().map(|(index, line)| {
-            div()
-                .flex()
-                .items_center()
-                .min_h(px(14.0))
-                .whitespace_nowrap()
-                .child(line)
-                .children(
-                    (focused && index == last)
-                        .then(|| div().w(px(1.0)).h(px(12.0)).bg(rgb(theme::ACCENT))),
-                )
-        });
-        let refocus = handle.clone();
-        let field = crate::probe::measured("userparams-input-value", div())
-            .id("userparams-input-value")
-            .track_focus(handle)
-            .on_click(move |_event, window, cx| refocus.focus(window, cx))
-            .key_context("TextField")
-            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _window, cx| {
+        // The text box: multiline, 372 x 400, word-wrapped, a `TextBox` like any other.
+        let field = crate::textfield::text_area(
+            "userparams-input-value",
+            input,
+            handle,
+            focused,
+            px(372.0),
+            px(400.0),
+            cx.listener(|this, event: &KeyDownEvent, _window, cx| {
                 this.user_params_input_key(event);
                 cx.notify();
-            }))
-            .w(px(372.0))
-            .h(px(400.0))
-            .p_1()
-            .overflow_hidden()
-            .flex()
-            .flex_col()
-            .rounded_sm()
-            .border_1()
-            .border_color(rgb(if focused {
-                theme::ACCENT
-            } else {
-                theme::BORDER
-            }))
-            .bg(rgb(theme::ACTION))
-            .text_xs()
-            .text_color(rgb(theme::TEXT))
-            .cursor_text()
-            .children(box_lines);
+            }),
+        );
         let dialog = crate::probe::measured("userparams-input", div())
             .flex()
             .flex_col()

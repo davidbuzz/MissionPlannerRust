@@ -453,8 +453,9 @@ pub struct LogBrowse {
     /// The time of the record the cursor was last put on from the grid, which need not be a
     /// position record.
     cursor_time: Option<f64>,
-    /// `txt_info.Text`: the description of the field the pointer last rested on.
-    info: String,
+    /// `txt_info`: the description of the field the pointer last rested on, in a multi-line box
+    /// that can be selected, copied from and typed in - the C# never reads it back.
+    info: crate::textfield::TextField,
 }
 
 /// Pixels a wheel notch is taken as, over the chart.
@@ -572,7 +573,11 @@ impl LogBrowse {
             modifiers: BTreeMap::new(),
             exported: None,
             cursor_time: None,
-            info: String::new(),
+            info: {
+                let mut info = crate::textfield::TextField::new("");
+                info.set_multiline(true);
+                info
+            },
         }
     }
 
@@ -1051,14 +1056,28 @@ impl LogBrowse {
     /// `// C#: Log/LogBrowse.cs:3778-3803`
     pub fn hover_field(&mut self, field: &PlottableField, meta: Option<&metadata::MetaData>) {
         if let Some(known) = meta.and_then(|meta| meta.field(&field.message, &field.field)) {
-            known.description.clone_into(&mut self.info);
+            self.info.set(known.description.clone());
         }
     }
 
     /// `txt_info.Text`.
+    #[cfg(test)]
     #[must_use]
     pub fn info(&self) -> &str {
+        self.info.value()
+    }
+
+    /// `txt_info` itself, for drawing.
+    #[must_use]
+    pub const fn info_field(&self) -> &crate::textfield::TextField {
         &self.info
+    }
+
+    /// A key in `txt_info`: an ordinary multi-line `TextBox`, so a key moves, selects, copies,
+    /// pastes or types; Escape does nothing there. Returns whether the box changed.
+    /// `// C#: Log/LogBrowse.designer.cs:391-396; Log/LogBrowse.resx (txt_info.Multiline)`
+    pub fn info_key(&mut self, event: &gpui::KeyDownEvent) -> bool {
+        self.info.key(event) == crate::textfield::KeyOutcome::Changed
     }
 
     /// Whether Show Point Values is on.
@@ -1167,6 +1186,7 @@ impl LogBrowse {
     /// - `log.check.<box>`: each box, `true` when ticked - `map`, `time`, `datagrid`, `mode`,
     ///   `errors`, `msg`, `events`;
     /// - `log.info`: `txt_info`'s text, the description of the field last hovered;
+    /// - `log.info.selection`: what is selected in it, `start,end` in characters, or `none`;
     /// - `log.axis`: `time` or `line`;
     /// - `log.overlays.<kind>`: how many labels of each kind the chart carries now;
     /// - `log.cursor.line`, `log.cursor.x`: the line the cursor is on and where on the axis it is
@@ -1184,7 +1204,8 @@ impl LogBrowse {
                 self.strip.get(check).to_string(),
             ));
         }
-        facts.push(("log.info".to_owned(), self.info.clone()));
+        facts.push(("log.info".to_owned(), self.info.value().to_owned()));
+        facts.push(("log.info.selection".to_owned(), self.info.selection_fact()));
         facts.push((
             "log.axis".to_owned(),
             match self.x_axis() {
@@ -2405,7 +2426,7 @@ pub fn screen(
                 ),
         )
         // Right: the field tree, which is where LogBrowse puts it.
-        .children(browse.is_open().then(|| field_panel(browse, search, cx)))
+        .children(browse.is_open().then(|| field_panel(browse, search, focus, cx)))
         .into_any_element()
 }
 
@@ -2421,6 +2442,10 @@ pub struct Focus<'a> {
     pub prompt_focused: bool,
     /// The screen itself, for Ctrl+G.
     pub screen: &'a gpui::FocusHandle,
+    /// `txt_info`.
+    pub info: &'a gpui::FocusHandle,
+    /// Whether `txt_info` has it.
+    pub info_focused: bool,
 }
 
 /// A dialog in the window: `InputBox`, `SaveFileDialog` or `FolderBrowserDialog`, as a title,
@@ -4041,7 +4066,12 @@ fn grid_panel(grid: &Grid, menu_open: bool, cx: &mut Context<MissionPlanner>) ->
 /// A left click graphs a field on the left axis and a right click on the right, as the tree in
 /// `LogBrowse` does; either click on a plotted field removes it. A field on the right axis shows
 /// ` R` after its name, which is how the C# marks the curve too.
-fn field_panel(browse: &LogBrowse, search: &str, cx: &mut Context<MissionPlanner>) -> AnyElement {
+fn field_panel(
+    browse: &LogBrowse,
+    search: &str,
+    focus: &Focus<'_>,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
     let needle = search.trim().to_uppercase();
     let matching: Vec<&PlottableField> = browse
         .fields()
@@ -4111,19 +4141,24 @@ fn field_panel(browse: &LogBrowse, search: &str, cx: &mut Context<MissionPlanner
         );
     }
 
-    // `txt_info`: docked along the bottom of the tree's panel, 40 pixels tall, multiline.
+    // `txt_info`: docked along the bottom of the tree's panel, 40 pixels tall, multiline, a
+    // `TextBox` like any other - selectable, copyable, editable.
     // `// C#: Log/LogBrowse.designer.cs:391-396; Log/LogBrowse.resx (txt_info)`
-    let info = crate::probe::measured("log-txt-info", div())
-        .id("log-txt-info")
-        .h(px(40.0))
+    let info = div()
         .flex_shrink_0()
-        .px_1()
-        .border_1()
-        .border_color(rgb(theme::BORDER))
-        .text_xs()
-        .text_color(rgb(theme::TEXT))
-        .overflow_hidden()
-        .child(browse.info().to_owned());
+        .child(crate::textfield::text_area(
+            "log-txt-info",
+            browse.info_field(),
+            focus.info,
+            focus.info_focused,
+            gpui::relative(1.0),
+            px(40.0),
+            cx.listener(|this, event: &gpui::KeyDownEvent, _window, cx| {
+                if this.log_browse.info_key(event) {
+                    cx.notify();
+                }
+            }),
+        ));
 
     panel(
         "fields",
@@ -4236,6 +4271,57 @@ mod tests {
                 .facts()
                 .contains(&("log.info".to_owned(), "acceleration along X axis".to_owned()))
         );
+    }
+
+    /// `txt_info` is a multi-line `TextBox`: the description in it can be selected and copied,
+    /// and typed over, which the C# never reads back. The selection is a fact.
+    /// `// C#: Log/LogBrowse.designer.cs:391-396; Log/LogBrowse.resx (txt_info.Multiline)`
+    #[test]
+    fn the_description_box_selects_copies_and_takes_typing() {
+        fn key(name: &str, character: Option<&str>, control: bool, shift: bool) -> gpui::KeyDownEvent {
+            let mut event = gpui::KeyDownEvent {
+                keystroke: gpui::Keystroke {
+                    modifiers: gpui::Modifiers::default(),
+                    key: name.to_owned(),
+                    key_char: character.map(ToOwned::to_owned),
+                },
+                is_held: false,
+                prefer_character_input: false,
+            };
+            event.keystroke.modifiers.control = control;
+            event.keystroke.modifiers.shift = shift;
+            event
+        }
+        let mut meta = metadata::MetaData::default();
+        meta.parse(
+            "<loggermessagefile><logformat name=\"ATT\"><description>Attitude</description>\
+             <fields><field name=\"Roll\"><description>achieved vehicle roll</description>\
+             </field></fields></logformat></loggermessagefile>",
+        );
+        let mut browse = LogBrowse::new();
+        browse.hover_field(&field("ATT", "Roll"), Some(&meta));
+        assert!(browse.info_field().is_multiline());
+        // Drawn, as the screen draws it.
+        browse.info_field().show_caret();
+        let selection = |browse: &LogBrowse| {
+            browse
+                .facts()
+                .into_iter()
+                .find(|(name, _)| name == "log.info.selection")
+                .map(|(_, value)| value)
+        };
+        assert_eq!(selection(&browse).as_deref(), Some("none"));
+        assert!(!browse.info_key(&key("a", Some("a"), true, false)), "select all");
+        assert_eq!(selection(&browse).as_deref(), Some("0,21"));
+        assert_eq!(browse.info_field().selected_text(), "achieved vehicle roll");
+        // A word, from the end, with Ctrl+Shift+Left.
+        assert!(!browse.info_key(&key("end", None, true, false)));
+        assert!(!browse.info_key(&key("left", None, true, true)));
+        assert_eq!(browse.info_field().selected_text(), "roll");
+        assert!(browse.info_key(&key("p", Some("p"), false, false)), "typed over");
+        assert_eq!(browse.info(), "achieved vehicle p");
+        assert!(!browse.info_key(&key("escape", None, false, false)));
+        assert_eq!(browse.info(), "achieved vehicle p");
     }
 
     /// The label is `MSG.Field (unit)`, and ` R` marks the right axis, as the C# names a curve.

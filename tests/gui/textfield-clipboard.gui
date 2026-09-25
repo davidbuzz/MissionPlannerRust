@@ -1,0 +1,62 @@
+# A text box's caret, selection and clipboard, as WinForms' TextBox has them.
+#
+# The parameter search box, because it shows with no vehicle: typed into, Ctrl+A selects all of
+# it, Ctrl+C copies it to the system clipboard, Delete takes the selection, and Ctrl+V pastes it
+# back - twice, at the caret. Home and Delete prove the caret moves and a key acts where it is;
+# Shift+End and Ctrl+X cut through the clipboard too. params.search is the box's text,
+# params.search.selection what is selected in it, `start,end` in characters, or `none`.
+#
+# Every key path is also a unit test without a window: crates/mp-gui/src/textfield.rs.
+#
+# Self-contained: tools/gui-test.sh tests/gui/textfield-clipboard.gui
+
+screen params
+window 1600x1200
+settle 3
+
+click param-search
+type BATT
+settle 1
+expect params.search BATT
+expect params.search.selection none
+
+# Select all and copy: the text stays.
+key ctrl+a
+settle 1
+expect params.search.selection 0,4
+key ctrl+c
+settle 1
+expect params.search BATT
+
+# Delete takes the selection; something typed, then the clipboard pasted after it, twice.
+key Delete
+type X
+settle 1
+expect params.search X
+key ctrl+v
+key ctrl+v
+settle 1
+expect params.search XBATTBATT
+expect params.search.selection none
+
+# The caret moves: Home, then Delete takes the character after it.
+key Home
+key Delete
+settle 1
+expect params.search BATTBATT
+
+# Shift+End selects from the caret to the end; Ctrl+X cuts it, and Ctrl+V puts it back.
+key Right
+key Right
+key Right
+key Right
+key shift+End
+settle 1
+expect params.search.selection 4,8
+key ctrl+x
+settle 1
+expect params.search BATT
+expect params.search.selection none
+key ctrl+v
+settle 1
+expect params.search BATTBATT

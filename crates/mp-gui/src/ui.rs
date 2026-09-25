@@ -31,6 +31,8 @@ pub mod theme {
     pub const ACCENT: u32 = 0x58a6ff;
     /// Background of a control that commits something to the aircraft.
     pub const ACTION: u32 = 0x2d333b;
+    /// Behind the selected text of a text box: the accent, darkened so the text stays legible.
+    pub const SELECTION: u32 = 0x1f4f82;
 }
 
 /// A labelled value, the unit this UI is mostly made of.

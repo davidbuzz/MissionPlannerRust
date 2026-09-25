@@ -343,6 +343,8 @@ struct MissionPlanner {
     log_prompt_focus: gpui::FocusHandle,
     /// Focus for the log browser itself, which Ctrl+G is heard through.
     log_screen_focus: gpui::FocusHandle,
+    /// The log browser's `txt_info`.
+    log_info_focus: gpui::FocusHandle,
     /// What has been typed into the log field search.
     log_search: textfield::TextField,
     /// The result of the last comparison against a file, newest first.
@@ -735,6 +737,7 @@ impl MissionPlanner {
             log_name_focus: cx.focus_handle(),
             log_prompt_focus: cx.focus_handle(),
             log_screen_focus: cx.focus_handle(),
+            log_info_focus: cx.focus_handle(),
             log_search: textfield::TextField::new("filter fields"),
             param_differences: Vec::new(),
             radio_input: config::radio::RadioInput::default(),
@@ -2955,6 +2958,9 @@ impl Render for MissionPlanner {
             facts::record("params.fetch", &view.parameters_fetch);
             facts::record("params.defaults", view.parameters_defaults.len());
             facts::record("params.none_default", self.param_none_default);
+            // The search box, and what is selected in it: `start,end` in characters, or `none`.
+            facts::record("params.search", self.param_search.value());
+            facts::record("params.search.selection", self.param_search.selection_fact());
             // ---- row 82 ----
             self.raw_params_facts(&params::collect(&view));
             // ---- end row 82 ----
@@ -3424,6 +3430,8 @@ impl Render for MissionPlanner {
                         prompt: &self.log_prompt_focus,
                         prompt_focused: self.log_prompt_focus.is_focused(window),
                         screen: &self.log_screen_focus,
+                        info: &self.log_info_focus,
+                        info_focused: self.log_info_focus.is_focused(window),
                     },
                     self.log_search.value(),
                     cx,
