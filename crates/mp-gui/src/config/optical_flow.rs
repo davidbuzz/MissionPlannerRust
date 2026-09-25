@@ -32,14 +32,16 @@ use super::optional::{
     Focus, Job, Set, SetQueue, has, heading, label, message_box, picture, plain, rule, value_of,
 };
 use crate::MissionPlanner;
+use crate::config::extra_setup::{link_error, take_link_errors};
 use crate::config::failsafe::{CheckState, Lookup, options};
 use crate::config::flight_modes::Firmware;
+use crate::config::flight_modes::ParamWriter;
 use crate::config::servo_output::{
     Check, Combo, Message, NUMERIC_DEFAULTS, Number, NumberHandlers, OUT_OF_RANGE_TITLE, Question,
     Setup, Write, check_box, combo_box, dropdown, modal, number_box,
 };
 use crate::setup::Key;
-use crate::telemetry::{Telemetry, TelemetryView};
+use crate::telemetry::TelemetryView;
 use crate::ui::{action, panel, theme};
 
 /// The page's title in Initial Setup's list, `backstageViewPageoptflow.Text`.
@@ -163,14 +165,18 @@ const HEIGHT_LABELS: [(f32, f32, &str); 2] = [
     (332.0, 330.0, "metres from ground"),
 ];
 
+/// `CHK_enableoptflow_CheckedChanged`'s `catch`, a box with no caption.
+/// `// C#: GCSViews/ConfigurationView/ConfigHWOptFlow.cs:94`
+pub const FLOW_ENABLE_FAILED: &str = "Set FLOW_ENABLE Failed";
+
 /// No documentation, for the yaw, whose bounds and step the page sets itself.
 fn undocumented(_: &str) -> Option<&'static mp_params::ParamMeta> {
     None
 }
 
-/// The page object.
+/// The page object. `H` is what the link knows a write by: the vehicle's request, or a test's.
 #[derive(Debug)]
-pub struct OpticalFlow {
+pub struct OpticalFlow<H = mp_link::RequestId> {
     made_for: Option<Key>,
     active: bool,
     /// The page's `Enabled`.
@@ -196,13 +202,24 @@ pub struct OpticalFlow {
     editing: Option<usize>,
     question: Option<(usize, Question)>,
     messages: VecDeque<Message>,
-    queue: SetQueue,
+    /// The last link failure the C# boxes, for the status line (the owner's ruling of
+    /// 2026-09-25), until the holder takes it.
+    status: Option<String>,
+    queue: SetQueue<H>,
 }
 
 impl Default for OpticalFlow {
     /// `InitializeComponent`: every control disabled and showing; the numbers at `NumericUpDown`'s
     /// defaults.
     fn default() -> Self {
+        Self::blank()
+    }
+}
+
+impl<H: Copy> OpticalFlow<H> {
+    /// `InitializeComponent`, for any link.
+    #[must_use]
+    pub fn blank() -> Self {
         Self {
             made_for: None,
             active: false,
@@ -221,12 +238,11 @@ impl Default for OpticalFlow {
             editing: None,
             question: None,
             messages: VecDeque::new(),
+            status: None,
             queue: SetQueue::default(),
         }
     }
-}
 
-impl OpticalFlow {
     /// Whether the page is showing.
     #[must_use]
     pub const fn is_active(&self) -> bool {
@@ -274,15 +290,22 @@ impl OpticalFlow {
         self.messages.pop_front();
     }
 
+    /// The words of the last link failure since the holder last asked, for the status line.
+    pub fn take_status(&mut self) -> Option<String> {
+        self.status.take()
+    }
+
     /// The page object disposed, returning what its numbers' timers held.
     fn dispose(&mut self) -> Vec<Write> {
         let pending = self.numbers.iter_mut().filter_map(Number::flush).collect();
         let messages = std::mem::take(&mut self.messages);
+        let status = self.status.take();
         let queue = std::mem::take(&mut self.queue);
         *self = Self {
             messages,
+            status,
             queue,
-            ..Self::default()
+            ..Self::blank()
         };
         pending
     }
@@ -380,6 +403,8 @@ impl OpticalFlow {
         let mut jobs = Vec::new();
         if !self.startup {
             if value_of(parameters, "FLOW_ENABLE").is_none() {
+                // Kept a box: not the link failing but the firmware lacking the parameter, which
+                // nothing else in the window shows (see `tick`).
                 jobs.push(Job::show(
                     "enable",
                     plain(format!("Not Available on {}", self.firmware.label())),
@@ -389,7 +414,7 @@ impl OpticalFlow {
                 jobs.push(Job::new(
                     "enable",
                     [Set {
-                        on_throw: Some(plain("Set FLOW_ENABLE Failed")),
+                        on_throw: Some(plain(FLOW_ENABLE_FAILED)),
                         ..Set::plain("FLOW_ENABLE", if checked { 1.0 } else { 0.0 })
                     }],
                 ));
@@ -517,9 +542,9 @@ impl OpticalFlow {
 
     /// Once a frame: a page object whose screen has gone is disposed, a number that lost the
     /// focus is read, the timers write, and the writes move on.
-    pub fn tick(
+    pub fn tick<W: ParamWriter<Handle = H>>(
         &mut self,
-        telemetry: &Telemetry,
+        writer: &W,
         view: &TelemetryView,
         on_setup: bool,
         focused: bool,
@@ -542,7 +567,19 @@ impl OpticalFlow {
             .map(Job::control)
             .collect();
         self.queue.push(due);
-        self.queue.advance(telemetry, &mut self.messages);
+        self.queue.advance(writer, &mut self.messages);
+        // The owner's ruling of 2026-09-25 (PLAN.md §12): the C#'s boxes for the link failing go
+        // on the status line - the handler's `catch`, "Set FLOW_ENABLE Failed", a box with no
+        // caption (`ConfigHWOptFlow.cs:94`), and the controls' own `Strings.ERROR` boxes, "Set X
+        // Failed" / "Set X Failed!" (`Controls/MavlinkCheckBox.cs:118, 124, 134, 140`,
+        // `Controls/MavlinkComboBox.cs:182, 197`, `Controls/MavlinkNumericUpDown.cs:171, 175`).
+        // "Not Available on" the firmware (`ConfigHWOptFlow.cs:85`) says why the click did
+        // nothing on this vehicle, not that the link failed, and a number's out-of-range question
+        // (`Controls/MavlinkNumericUpDown.cs:139`) is a question: they keep their boxes.
+        let failure = |message: &Message| link_error(message) || message.text == FLOW_ENABLE_FAILED;
+        if let Some(words) = take_link_errors(&mut self.messages, failure) {
+            self.status = Some(words);
+        }
     }
 }
 
@@ -762,6 +799,7 @@ mod tests {
     use super::*;
     use crate::config::optional::tests::{Answering, drain};
     use crate::config::servo_output::WRITE_DELAY;
+    use crate::telemetry::Telemetry;
 
     fn bundled(name: &str) -> Option<&'static mp_params::ParamMeta> {
         mp_params::param_meta::lookup(name)
@@ -1020,11 +1058,63 @@ mod tests {
         page.step(1, true, now);
         page.hide(now);
         page.tick(&telemetry, &view, false, false, now);
-        // No vehicle: the control's write finds no such name, and says so.
+        // No vehicle: the control's write finds no such name, and says so - on the status line,
+        // not in a box (the owner's ruling of 2026-09-25).
+        assert!(page.message().is_none(), "no box: {:?}", page.message());
         assert_eq!(
-            page.message().map(|message| message.text.as_str()),
+            page.take_status().as_deref(),
             Some("Set FLOW_FXSCALER Failed")
         );
+    }
+
+    /// A timeout, through the page's own tick as the application runs it: the handler's
+    /// captionless "Set FLOW_ENABLE Failed" (`ConfigHWOptFlow.cs:94`) and the check box's own
+    /// box are the status line's, not boxes - the owner's ruling of 2026-09-25.
+    #[test]
+    fn a_timeout_is_a_status_line_not_a_box() {
+        use crate::config::flight_modes::Progress;
+        use mp_link::requests::RequestOutcome;
+        let view = TelemetryView::disconnected("test");
+        let mut page = OpticalFlow::<usize>::blank();
+        let parameters = table(&[("FLOW_ENABLE", 0.0)]);
+        page.activate(
+            &parameters,
+            key(),
+            true,
+            COPTER,
+            Firmware::ArduCopter2,
+            bundled,
+        );
+        let now = Instant::now();
+        let jobs = page.click_enable(&parameters, now);
+        page.push(jobs);
+        let link = Answering::new(&[("FLOW_ENABLE", Progress::Finished(RequestOutcome::TimedOut))]);
+        for _ in 0..10 {
+            page.tick(&link, &view, true, false, now);
+        }
+        assert_eq!(page.queue.pending(), 0);
+        assert_eq!(
+            link.taken().len(),
+            2,
+            "the handler's write, then the control's"
+        );
+        assert!(page.message().is_none(), "no box: {:?}", page.message());
+        // The control's box came last; the handler's was on the line before it.
+        assert_eq!(
+            page.take_status().as_deref(),
+            Some("Set FLOW_ENABLE Failed")
+        );
+        assert_eq!(page.take_status(), None, "taken once");
+
+        // "Not Available on" is no failure of the link: it keeps its box.
+        let jobs = page.click_enable(&[], now);
+        page.push(jobs);
+        let link = Answering::new(&[]);
+        for _ in 0..10 {
+            page.tick(&link, &view, true, false, now);
+        }
+        assert_eq!(page.message(), Some(&plain("Not Available on ArduCopter2")));
+        assert_eq!(page.take_status(), None);
     }
 
     #[test]

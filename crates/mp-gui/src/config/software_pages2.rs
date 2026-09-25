@@ -189,12 +189,11 @@ impl MissionPlanner {
         pages
             .heli
             .tick(telemetry, view, on_setup, number_focused, now);
-        let mut status = None;
-        for list in [&mut pages.standard, &mut pages.advanced] {
-            while let Some(message) = list.message().filter(|m| link_error(m)) {
-                status = Some(status_words(message));
-                list.dismiss_message();
-            }
+        // The two parameter pages move their link failures out of their boxes themselves, in
+        // their tick (`adsb.rs`); the words are taken here.
+        let mut status = pages.standard.take_status();
+        if let Some(words) = pages.advanced.take_status() {
+            status = Some(words);
         }
         while let Some(message) = pages.heli.message().filter(|m| link_error(m)) {
             status = Some(status_words(message));

@@ -69,12 +69,14 @@ use super::optional::{
     set_failed, text_box,
 };
 use crate::MissionPlanner;
+use crate::config::extra_setup::{link_error, take_link_errors};
 use crate::config::failsafe::{CheckState, Lookup, decimal_of};
+use crate::config::flight_modes::ParamWriter;
 use crate::config::servo_output::{
     Check, Combo, Message, check_box, combo_box, decimal_text, dropdown,
 };
 use crate::setup::Key;
-use crate::telemetry::{Telemetry, TelemetryView};
+use crate::telemetry::TelemetryView;
 use crate::textfield::{KeyOutcome, TextField};
 use crate::ui::{action, panel, theme};
 use mp_params::ParamMeta;
@@ -848,9 +850,10 @@ struct Find {
     before: String,
 }
 
-/// The page object: ADSB's, and Standard and Advanced Params', whose code it is.
+/// The page object: ADSB's, and Standard and Advanced Params', whose code it is. `H` is what the
+/// link knows a write by: the vehicle's request, or a test's.
 #[derive(Debug)]
-pub struct Adsb {
+pub struct Adsb<H = mp_link::RequestId> {
     /// Which page it is.
     spec: &'static Spec,
     made_for: Option<Key>,
@@ -876,7 +879,10 @@ pub struct Adsb {
     /// The number being typed into, by the control's index.
     editing: Option<usize>,
     messages: VecDeque<Message>,
-    queue: SetQueue,
+    /// The last link failure the C# boxes, for the status line (the owner's ruling of
+    /// 2026-09-25), until the holder takes it.
+    status: Option<String>,
+    queue: SetQueue<H>,
 }
 
 impl Default for Adsb {
@@ -926,7 +932,7 @@ fn url_decode(text: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-impl Adsb {
+impl<H: Copy> Adsb<H> {
     /// A page object as nothing has shown it.
     #[must_use]
     pub fn new(spec: &'static Spec) -> Self {
@@ -945,6 +951,7 @@ impl Adsb {
             dropdown: None,
             editing: None,
             messages: VecDeque::new(),
+            status: None,
             queue: SetQueue::default(),
         }
     }
@@ -1003,6 +1010,11 @@ impl Adsb {
         self.messages.pop_front();
     }
 
+    /// The words of the last link failure since the holder last asked, for the status line.
+    pub fn take_status(&mut self) -> Option<String> {
+        self.status.take()
+    }
+
     /// Whether Refresh Params can be pressed: not while it is fetching.
     #[must_use]
     pub fn refresh_enabled(&self) -> bool {
@@ -1021,11 +1033,13 @@ impl Adsb {
     ) -> Vec<Job> {
         if self.made_for != Some(key) {
             let messages = std::mem::take(&mut self.messages);
+            let status = self.status.take();
             let queue = std::mem::take(&mut self.queue);
             let show_again = self.show_again;
             *self = Self {
                 made_for: Some(key),
                 messages,
+                status,
                 queue,
                 show_again,
                 ..Self::new(self.spec)
@@ -1411,9 +1425,9 @@ impl Adsb {
     /// Once a frame: a page object whose screen has gone is let go, Find's timer, the fetch's
     /// end, and the writes, with Write Params' box when they are done. `on_screen` is whether the
     /// page's screen - SETUP for ADSB, CONFIG for the others - is showing.
-    pub fn tick(
+    pub fn tick<W: ParamWriter<Handle = H>>(
         &mut self,
-        telemetry: &Telemetry,
+        writer: &W,
         view: &TelemetryView,
         on_screen: bool,
         now: Instant,
@@ -1442,6 +1456,8 @@ impl Adsb {
                 && view.parameters.len() >= usize::from(view.parameters_expected);
             if !view.connected {
                 self.refreshing = None;
+                // `Strings.ErrorReceivingParams` in an error box: a status line instead, below.
+                // `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:228; ConfigFriendlyParams.cs:228`
                 self.messages.push_back(error(ERROR_RECEIVING));
             } else if whole && !Arc::ptr_eq(before, &view.parameters) {
                 self.refreshing = None;
@@ -1452,7 +1468,7 @@ impl Adsb {
                 }
             }
         }
-        for event in self.queue.advance(telemetry, &mut self.messages) {
+        for event in self.queue.advance(writer, &mut self.messages) {
             if let Event::Done {
                 tag: "write",
                 threw,
@@ -1460,6 +1476,17 @@ impl Adsb {
             {
                 self.written(threw);
             }
+        }
+        // The C#'s boxes for the link failing go on the status line, never in a box: the owner's
+        // ruling of 2026-09-25 (PLAN.md §12) - the link's state is always at the top right.
+        // Write Params' `catch`, "Set X Failed" (`ConfigADSB.cs:197`, `ConfigFriendlyParams.cs:197`),
+        // a bitmask's own write (`Controls/MavlinkCheckBoxBitMask.cs:154, 158`) and the fetch's "Error
+        // receiving list" (`:228`) are all `Strings.ERROR` boxes, and every `Strings.ERROR` box
+        // this page puts up is one of them. Write Params' "Parameters successfully saved." (`:203`)
+        // is a report of success, and Refresh Params' question and Find's `InputBox` are
+        // questions: they keep their boxes.
+        if let Some(words) = take_link_errors(&mut self.messages, link_error) {
+            self.status = Some(words);
         }
     }
 
@@ -2029,6 +2056,7 @@ mod tests {
     use super::*;
     use crate::config::flight_modes::Progress;
     use crate::config::optional::tests::Answering;
+    use crate::telemetry::Telemetry;
     use mp_link::requests::RequestOutcome;
 
     fn bundled(name: &str) -> Option<&'static mp_params::ParamMeta> {
@@ -2293,6 +2321,45 @@ mod tests {
         assert!(page.message().is_none());
     }
 
+    /// The owner's ruling of 2026-09-25: Write Params' "Set X Failed" (`ConfigADSB.cs:197`) is
+    /// the status line's, not a box - through the page's own tick, as the application runs it -
+    /// and with a write failed there is no "saved" either. Standard and Advanced Params are this
+    /// page object, so this holds for them too.
+    #[test]
+    fn a_timed_out_write_is_a_status_line_not_a_box() {
+        let view = TelemetryView::disconnected("test");
+        let mut page = Adsb::<usize>::new(&ADSB);
+        page.activate(&configured(), key(), bundled, &[]);
+        let avd_index = page
+            .controls()
+            .iter()
+            .position(|c| c.name == "AVD_ENABLE")
+            .unwrap_or(0);
+        page.choose(avd_index, 1);
+        let jobs = page.write_params();
+        page.push(jobs);
+        let link = Answering::new(&[("AVD_ENABLE", Progress::Finished(RequestOutcome::TimedOut))]);
+        let now = Instant::now();
+        for _ in 0..10 {
+            page.tick(&link, &view, true, now);
+        }
+        assert_eq!(page.queue.pending(), 0);
+        assert!(page.message().is_none(), "no box: {:?}", page.message());
+        assert_eq!(page.take_status().as_deref(), Some("Set AVD_ENABLE Failed"));
+        assert_eq!(page.take_status(), None, "taken once");
+        assert_eq!(page.changed().len(), 1, "the record kept");
+
+        // Written, the report of success is still a box.
+        let link = Answering::new(&[]);
+        let jobs = page.write_params();
+        page.push(jobs);
+        for _ in 0..10 {
+            page.tick(&link, &view, true, now);
+        }
+        assert_eq!(page.message().map(|m| m.text.as_str()), Some(SAVED));
+        assert_eq!(page.take_status(), None);
+    }
+
     /// The range: arrows step by the increment, the track bar pages by five thousandths, typing
     /// is held to the bounds, and each is recorded as the float the value makes.
     #[test]
@@ -2461,12 +2528,14 @@ mod tests {
         assert_eq!(page.show_again, Some(false));
         assert!(page.answer_refresh(true, &view), "OK fetches");
         assert!(!page.refresh_enabled(), "fetching");
-        // The link went: the fetch fails with the C#'s box.
+        // The link went: the fetch fails, and says so on the status line, not in the C#'s box
+        // (`ConfigADSB.cs:228`; the owner's ruling of 2026-09-25).
         page.tick(&telemetry, &view, true, Instant::now());
         assert!(page.refresh_enabled());
+        assert!(page.message().is_none());
         assert_eq!(
-            page.message().map(|m| m.text.as_str()),
-            Some(ERROR_RECEIVING)
+            page.take_status().as_deref(),
+            Some(ERROR_RECEIVING.trim_end())
         );
     }
 

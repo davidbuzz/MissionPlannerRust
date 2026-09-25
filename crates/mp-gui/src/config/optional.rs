@@ -1050,13 +1050,17 @@ impl MissionPlanner {
         optional
             .mount
             .tick(telemetry, view, on_setup, number_focused, now);
-        // What the C#'s boxes say when a write fails - a `setParam` returning false or timing out,
-        // "Failed to set Param", the unhandled-exception box - goes on the status line instead:
-        // the owner's ruling of 2026-09-25. The pages never queue those boxes.
+        // What the C#'s boxes say when a write or a list fails - a `setParam` returning false or
+        // timing out, "Failed to set Param", "Set X Failed", "Error receiving list", the
+        // unhandled-exception box - goes on the status line instead: the owner's ruling of
+        // 2026-09-25. Each page moves those out of its boxes in its own tick.
         let failures = [
             optional.battery2.take_status(),
             optional.rangefinder.take_status(),
             optional.mount.take_status(),
+            optional.adsb.take_status(),
+            optional.airspeed.take_status(),
+            optional.optflow.take_status(),
         ];
         for status in failures.into_iter().flatten() {
             self.file_status = Some(status);

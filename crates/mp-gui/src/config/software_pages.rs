@@ -134,6 +134,17 @@ impl MissionPlanner {
             .tick(telemetry, view, on_config, focused, now);
         pages.rover.tick(telemetry, view, on_config, focused, now);
         pages.user.tick(telemetry, view, on_config);
+        // What the pages' controls box when the link fails - "Set X Failed", "Set X Failed!" -
+        // goes on the status line instead: the owner's ruling of 2026-09-25. Each page moves
+        // those out of its boxes as its writes move on.
+        let failures = [
+            pages.geofence.take_status(),
+            pages.rover.take_status(),
+            pages.user.take_status(),
+        ];
+        for status in failures.into_iter().flatten() {
+            self.file_status = Some(status);
+        }
     }
 
     /// The box or question one of the three is showing, over the whole window.

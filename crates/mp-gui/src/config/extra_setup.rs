@@ -9,6 +9,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use std::collections::VecDeque;
 use std::time::Instant;
 
 use gpui::{AnyElement, Context, FocusHandle, Window, div, prelude::*};
@@ -43,6 +44,26 @@ pub fn status_words(message: &Message) -> String {
     } else {
         message.text.replace('\n', " ")
     }
+}
+
+/// Moves the link errors - those `is_link` picks out - from a page's queue of boxes, for the
+/// status line: the words of the last of them, on one trimmed line, or `None` when there were
+/// none. The boxes left
+/// keep their order. A page calls this after its writes move on, so a failure never reaches its
+/// `message()` and never draws; the holder's tick hands the words to the status line.
+pub fn take_link_errors(
+    messages: &mut VecDeque<Message>,
+    is_link: impl Fn(&Message) -> bool,
+) -> Option<String> {
+    let mut last = None;
+    messages.retain(|message| {
+        let link = is_link(message);
+        if link {
+            last = Some(status_words(message).trim().to_owned());
+        }
+        !link
+    });
+    last
 }
 
 /// The six page objects.
@@ -244,6 +265,22 @@ mod tests {
             text: initial_params::DONE.to_owned(),
         }));
         assert_eq!(status_words(&plain(osd::FAILED)), osd::FAILED);
+        let refused = Message {
+            title: initial_params::REFUSAL_TITLE,
+            text: initial_params::PROP_TOO_SMALL.to_owned(),
+        };
+        let mut queue = VecDeque::from([
+            error("Set A Failed"),
+            refused.clone(),
+            error("Set B\nFailed"),
+        ]);
+        assert_eq!(
+            take_link_errors(&mut queue, link_error).as_deref(),
+            Some("Set B Failed"),
+            "the last failure's words, on one line"
+        );
+        assert_eq!(queue, [refused]);
+        assert_eq!(take_link_errors(&mut queue, link_error), None);
         assert_eq!(
             status_words(&Message {
                 title: gps_order::FAILED_ACTIVATE,

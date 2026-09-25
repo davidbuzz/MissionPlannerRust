@@ -40,6 +40,7 @@ use gpui::{
 
 use super::optional::{Job, SetQueue, at, button, label, message_box};
 use crate::MissionPlanner;
+use crate::config::extra_setup::{link_error, take_link_errors};
 use crate::config::failsafe::{Lookup, options};
 use crate::config::flight_modes::ParamWriter;
 use crate::config::servo_output::{Combo, Message, combo_box, dropdown, value_of};
@@ -142,6 +143,9 @@ pub struct UserParams<H = mp_link::RequestId> {
     input: Option<(TextField, String)>,
     /// Message boxes, the first showing.
     messages: VecDeque<Message>,
+    /// The last link failure the C# boxes, for the status line (the owner's ruling of
+    /// 2026-09-25), until the holder takes it.
+    status: Option<String>,
     /// The combos' writes.
     queue: SetQueue<H>,
 }
@@ -159,6 +163,7 @@ impl<H> Default for UserParams<H> {
             dropdown: None,
             input: None,
             messages: VecDeque::new(),
+            status: None,
             queue: SetQueue::default(),
         }
     }
@@ -219,6 +224,11 @@ impl<H: Copy> UserParams<H> {
     /// Dismisses it.
     pub fn dismiss_message(&mut self) {
         self.messages.pop_front();
+    }
+
+    /// The words of the last link failure since the holder last asked, for the status line.
+    pub fn take_status(&mut self) -> Option<String> {
+        self.status.take()
     }
 
     /// How the last write ended.
@@ -300,6 +310,7 @@ impl<H: Copy> UserParams<H> {
         if self.made_for != Some(key) {
             *self = Self {
                 messages: std::mem::take(&mut self.messages),
+                status: self.status.take(),
                 queue: std::mem::take(&mut self.queue),
                 ..Self::default()
             };
@@ -451,6 +462,14 @@ impl<H: Copy> UserParams<H> {
     /// The writes, as far as the link's answers allow.
     pub fn advance<W: ParamWriter<Handle = H>>(&mut self, writer: &W) {
         self.queue.advance(writer, &mut self.messages);
+        // The owner's ruling of 2026-09-25 (PLAN.md §12): the combos' boxes for the link failing,
+        // "Set X Failed!" in a `Strings.ERROR` box (`Controls/MavlinkComboBox.cs:182, 191, 197`),
+        // go on the status line. The page shows no box of its own (`ConfigUserDefined.cs`); an
+        // empty Modify's `Aggregate` throw is dropped by `Program.handleException`, as the
+        // module's notes say, and Modify's `InputBox` is a question.
+        if let Some(words) = take_link_errors(&mut self.messages, link_error) {
+            self.status = Some(words);
+        }
     }
 }
 
@@ -463,6 +482,7 @@ impl UserParams {
         {
             *self = Self {
                 messages: std::mem::take(&mut self.messages),
+                status: self.status.take(),
                 queue: std::mem::take(&mut self.queue),
                 ..Self::default()
             };
@@ -716,7 +736,6 @@ mod tests {
 
     use super::*;
     use crate::config::flight_modes::Progress;
-    use crate::config::optional::error;
     use crate::config::optional::tests::Answering;
     use crate::config_coverage::source::csharp;
 
@@ -866,7 +885,13 @@ mod tests {
         let jobs = page.choose(2, 0);
         page.push(jobs);
         page.advance(&timed_out);
-        assert_eq!(page.message(), Some(&error("Set RC8_OPTION Failed!")));
+        // On the status line, not in the C#'s box (`Controls/MavlinkComboBox.cs:197`; the
+        // owner's ruling of 2026-09-25).
+        assert!(page.message().is_none(), "no box: {:?}", page.message());
+        assert_eq!(
+            page.take_status().as_deref(),
+            Some("Set RC8_OPTION Failed!")
+        );
     }
 
     /// Modify: the names one to a line; OK makes the list what was typed, saves it and builds

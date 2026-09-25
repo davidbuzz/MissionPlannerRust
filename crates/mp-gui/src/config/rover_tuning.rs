@@ -46,6 +46,7 @@ use gpui::{
 
 use super::optional::{Job, SetQueue, button, group, label, message_box};
 use crate::MissionPlanner;
+use crate::config::extra_setup::{link_error, take_link_errors};
 use crate::config::failsafe::{Lookup, options};
 use crate::config::flight_modes::{Firmware, ParamWriter};
 use crate::config::servo_output::{
@@ -262,6 +263,9 @@ pub struct RoverTuning<H = mp_link::RequestId> {
     question: Option<(usize, Question)>,
     /// Message boxes, the first showing.
     messages: VecDeque<Message>,
+    /// The last link failure the C# boxes, for the status line (the owner's ruling of
+    /// 2026-09-25), until the holder takes it.
+    status: Option<String>,
     /// The controls' writes.
     queue: SetQueue<H>,
 }
@@ -285,6 +289,7 @@ impl<H> Default for RoverTuning<H> {
             editing: None,
             question: None,
             messages: VecDeque::new(),
+            status: None,
             queue: SetQueue::default(),
         }
     }
@@ -358,6 +363,11 @@ impl<H: Copy> RoverTuning<H> {
         self.messages.pop_front();
     }
 
+    /// The words of the last link failure since the holder last asked, for the status line.
+    pub fn take_status(&mut self) -> Option<String> {
+        self.status.take()
+    }
+
     /// How the last write ended.
     #[must_use]
     pub fn last_write(&self) -> Option<&str> {
@@ -381,6 +391,7 @@ impl<H: Copy> RoverTuning<H> {
         let pending = self.numbers.iter_mut().filter_map(Number::flush).collect();
         *self = Self {
             messages: std::mem::take(&mut self.messages),
+            status: self.status.take(),
             queue: std::mem::take(&mut self.queue),
             ..Self::default()
         };
@@ -652,6 +663,18 @@ impl<H: Copy> RoverTuning<H> {
             .collect();
         self.queue.push(due);
         self.queue.advance(writer, &mut self.messages);
+        // The owner's ruling of 2026-09-25 (PLAN.md §12): the controls' boxes for the link
+        // failing - "Set X Failed" / "Set X Failed!" in `Strings.ERROR` boxes
+        // (`Controls/MavlinkComboBox.cs:182, 197`, `Controls/MavlinkNumericUpDown.cs:171, 175`) -
+        // go on the status line. A number's out-of-range question
+        // (`Controls/MavlinkNumericUpDown.cs:139`) is a question and keeps its box. The page's
+        // own boxes are never reached: Write Params' "Large Value" question, "Your are not
+        // connected" and "Set X Failed" (`ConfigArdurover.cs:165, 171, 192`) are inside its loop
+        // over `changes`, which nothing fills, and "Error receiving list" (`:215`) is Refresh
+        // Params', which is invisible (see the module's notes).
+        if let Some(words) = take_link_errors(&mut self.messages, link_error) {
+            self.status = Some(words);
+        }
     }
 }
 
@@ -1016,7 +1039,6 @@ mod tests {
 
     use super::*;
     use crate::config::flight_modes::Progress;
-    use crate::config::optional::error;
     use crate::config::optional::tests::Answering;
     use crate::config::servo_output::WRITE_DELAY;
     use crate::config_coverage::source::{csharp, resx};
@@ -1441,7 +1463,7 @@ mod tests {
     }
 
     /// A number writes itself 300 ms after it changes; a combo at once; "Set NAME Failed" and
-    /// "Set NAME Failed!" when they cannot.
+    /// "Set NAME Failed!" on the status line when they cannot.
     #[test]
     fn every_control_writes_its_own_parameter() {
         let mut page = shown();
@@ -1471,9 +1493,14 @@ mod tests {
         page.push(jobs);
         page.step(index("THR_MAX"), false, now);
         run(&mut page, &failing, now + WRITE_DELAY);
-        assert_eq!(page.message(), Some(&error("Set MOT_PWM_TYPE Failed!")));
-        page.dismiss_message();
-        assert_eq!(page.message(), Some(&error("Set MOT_THR_MAX Failed")));
+        // Both on the status line, the last showing, and neither a box (the owner's ruling of
+        // 2026-09-25).
+        assert!(page.message().is_none(), "no box: {:?}", page.message());
+        assert_eq!(
+            page.take_status().as_deref(),
+            Some("Set MOT_THR_MAX Failed")
+        );
+        assert_eq!(page.take_status(), None, "taken once");
     }
 
     /// Write Params, and Ctrl+S, write nothing: nothing fills `changes`. The number being typed

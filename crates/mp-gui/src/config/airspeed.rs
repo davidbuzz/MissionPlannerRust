@@ -25,10 +25,12 @@ use super::optional::{
     rule, set_failed, value_of,
 };
 use crate::MissionPlanner;
+use crate::config::extra_setup::{link_error, take_link_errors};
 use crate::config::failsafe::{Lookup, options};
+use crate::config::flight_modes::ParamWriter;
 use crate::config::servo_output::{Check, Combo, Message, check_box, combo_box, dropdown};
 use crate::setup::Key;
-use crate::telemetry::{Telemetry, TelemetryView};
+use crate::telemetry::TelemetryView;
 use crate::ui::panel;
 
 /// The page's title in Initial Setup's list, `backstageViewPageairspeed.Text`.
@@ -67,9 +69,9 @@ pub enum Which {
     Type,
 }
 
-/// The page object.
+/// The page object. `H` is what the link knows a write by: the vehicle's request, or a test's.
 #[derive(Debug)]
-pub struct Airspeed {
+pub struct Airspeed<H = mp_link::RequestId> {
     /// The screen the page object belongs to.
     made_for: Option<Key>,
     /// Whether the page is showing.
@@ -92,13 +94,24 @@ pub struct Airspeed {
     dropdown: Option<Which>,
     /// Message boxes, the first showing.
     messages: VecDeque<Message>,
+    /// The last link failure the C# boxes, for the status line (the owner's ruling of
+    /// 2026-09-25), until the holder takes it.
+    status: Option<String>,
     /// The writes.
-    queue: SetQueue,
+    queue: SetQueue<H>,
 }
 
 impl Default for Airspeed {
     /// `InitializeComponent`: every control disabled (`.resx` `Enabled = False`) and visible.
     fn default() -> Self {
+        Self::blank()
+    }
+}
+
+impl<H: Copy> Airspeed<H> {
+    /// `InitializeComponent`, for any link.
+    #[must_use]
+    pub fn blank() -> Self {
         Self {
             made_for: None,
             active: false,
@@ -112,12 +125,11 @@ impl Default for Airspeed {
             kind: Combo::default(),
             dropdown: None,
             messages: VecDeque::new(),
+            status: None,
             queue: SetQueue::default(),
         }
     }
-}
 
-impl Airspeed {
     /// Whether the page is showing.
     #[must_use]
     pub const fn is_active(&self) -> bool {
@@ -162,6 +174,11 @@ impl Airspeed {
         self.messages.pop_front();
     }
 
+    /// The words of the last link failure since the holder last asked, for the status line.
+    pub fn take_status(&mut self) -> Option<String> {
+        self.status.take()
+    }
+
     /// Shows the page: a new page object for a new screen, then `Activate`.
     /// `// C#: GCSViews/ConfigurationView/ConfigHWAirspeed.cs:18-63`
     pub fn activate(
@@ -173,12 +190,14 @@ impl Airspeed {
     ) {
         if self.made_for != Some(key) {
             let messages = std::mem::take(&mut self.messages);
+            let status = self.status.take();
             let queue = std::mem::take(&mut self.queue);
             *self = Self {
                 made_for: Some(key),
                 messages,
+                status,
                 queue,
-                ..Self::default()
+                ..Self::blank()
             };
         }
         self.active = true;
@@ -230,6 +249,8 @@ impl Airspeed {
         let mut jobs = Vec::new();
         if !self.startup {
             if value_of(parameters, "ARSPD_ENABLE").is_none() {
+                // Kept a box: not the link failing but the firmware lacking the feature, which
+                // nothing else in the window shows (see `tick`).
                 jobs.push(Job::show("enable", error(FEATURE_NOT_ENABLED)));
             } else {
                 let checked = self.enable.state == crate::config::failsafe::CheckState::Checked;
@@ -303,14 +324,31 @@ impl Airspeed {
     }
 
     /// Once a frame: a page object whose screen has gone is let go, and the writes move on.
-    pub fn tick(&mut self, telemetry: &Telemetry, view: &TelemetryView, on_setup: bool) {
+    pub fn tick<W: ParamWriter<Handle = H>>(
+        &mut self,
+        writer: &W,
+        view: &TelemetryView,
+        on_setup: bool,
+    ) {
         if !self.active
             && self.made_for.is_some()
             && (!on_setup || self.made_for != Some(Key::of(view)))
         {
             self.made_for = None;
         }
-        self.queue.advance(telemetry, &mut self.messages);
+        self.queue.advance(writer, &mut self.messages);
+        // The owner's ruling of 2026-09-25 (PLAN.md §12): the C#'s boxes for the link failing go
+        // on the status line - the handler's `catch`, "Set ARSPD_ENABLE Failed"
+        // (`ConfigHWAirspeed.cs:82`), and the controls' own "Set X Failed" / "Set X Failed!"
+        // (`Controls/MavlinkCheckBox.cs:118, 124, 134, 140`, `Controls/MavlinkComboBox.cs:182,
+        // 197`). "This feature is not enabled in your firmware." (`ConfigHWAirspeed.cs:73`) is
+        // also a `Strings.ERROR` box, but it says why the click did nothing on this vehicle, not
+        // that the link failed: it keeps its box.
+        let failure =
+            |message: &Message| link_error(message) && message.text != FEATURE_NOT_ENABLED;
+        if let Some(words) = take_link_errors(&mut self.messages, failure) {
+            self.status = Some(words);
+        }
     }
 }
 
@@ -580,9 +618,54 @@ mod tests {
         assert_eq!(link.taken().last(), Some(&("ARSPD_ENABLE".to_owned(), 0.0)));
     }
 
-    /// A timeout: the page's `catch` box, then the control's own.
+    /// A timeout, through the page's own tick as the application runs it: the page's `catch`
+    /// (`ConfigHWAirspeed.cs:82`) and the control's own box are the status line's, not boxes -
+    /// the owner's ruling of 2026-09-25.
     #[test]
-    fn a_timeout_shows_both_boxes() {
+    fn a_timeout_is_a_status_line_not_a_box() {
+        use crate::config::flight_modes::Progress;
+        use mp_link::requests::RequestOutcome;
+        let view = TelemetryView::disconnected("test");
+        let mut page = Airspeed::<usize>::blank();
+        let parameters = table(&[("ARSPD_ENABLE", 0.0)]);
+        page.activate(&parameters, key(), true, bundled);
+        let jobs = page.click_enable(&parameters);
+        page.push(jobs);
+        let link =
+            Answering::new(&[("ARSPD_ENABLE", Progress::Finished(RequestOutcome::TimedOut))]);
+        for _ in 0..10 {
+            page.tick(&link, &view, true);
+        }
+        assert_eq!(page.queue.pending(), 0);
+        assert!(page.message().is_none(), "no box: {:?}", page.message());
+        assert_eq!(
+            page.take_status().as_deref(),
+            Some("Set ARSPD_ENABLE Failed")
+        );
+        assert_eq!(page.take_status(), None, "taken once");
+    }
+
+    /// "This feature is not enabled in your firmware." (`ConfigHWAirspeed.cs:73`) is not the link
+    /// failing: it keeps its box, and the control's write after it, accepted, says nothing.
+    #[test]
+    fn a_missing_feature_keeps_its_box() {
+        let view = TelemetryView::disconnected("test");
+        let mut page = Airspeed::<usize>::blank();
+        page.activate(&table(&[("ARSPD_ENABLE", 0.0)]), key(), true, bundled);
+        let jobs = page.click_enable(&[]);
+        page.push(jobs);
+        let link = Answering::new(&[]);
+        for _ in 0..10 {
+            page.tick(&link, &view, true);
+        }
+        assert_eq!(page.message(), Some(&error(FEATURE_NOT_ENABLED)));
+        assert_eq!(page.take_status(), None);
+    }
+
+    /// A timeout, the queue alone: the page's `catch` box, then the control's own, as the C#
+    /// raises them; the page's tick moves both to the status line.
+    #[test]
+    fn a_timeout_raises_both_boxes() {
         use crate::config::flight_modes::Progress;
         use mp_link::requests::RequestOutcome;
         let mut page = Airspeed::default();

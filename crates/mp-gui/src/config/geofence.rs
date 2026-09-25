@@ -36,6 +36,7 @@ use mp_vehicle::units::DisplayUnits;
 
 use super::optional::{Event, Job, Outcome, Set, SetQueue, at, heading, label, message_box};
 use crate::MissionPlanner;
+use crate::config::extra_setup::{link_error, take_link_errors};
 use crate::config::failsafe::{CheckState, Lookup, options};
 use crate::config::flight_modes::ParamWriter;
 use crate::config::servo_output::{
@@ -230,6 +231,9 @@ pub struct GeoFence<H = mp_link::RequestId> {
     question: Option<(usize, Question)>,
     /// Message boxes, the first showing.
     messages: VecDeque<Message>,
+    /// The last link failure the C# boxes, for the status line (the owner's ruling of
+    /// 2026-09-25), until the holder takes it.
+    status: Option<String>,
     /// The controls' writes.
     queue: SetQueue<H>,
     /// How many times Enable's callback has downloaded the parameters.
@@ -256,6 +260,7 @@ impl<H> Default for GeoFence<H> {
             editing: None,
             question: None,
             messages: VecDeque::new(),
+            status: None,
             queue: SetQueue::default(),
             downloads: 0,
         }
@@ -333,6 +338,11 @@ impl<H: Copy> GeoFence<H> {
         self.messages.pop_front();
     }
 
+    /// The words of the last link failure since the holder last asked, for the status line.
+    pub fn take_status(&mut self) -> Option<String> {
+        self.status.take()
+    }
+
     /// How the last write ended.
     #[must_use]
     pub fn last_write(&self) -> Option<&str> {
@@ -363,6 +373,7 @@ impl<H: Copy> GeoFence<H> {
         let pending = self.numbers.iter_mut().filter_map(Number::flush).collect();
         *self = Self {
             messages: std::mem::take(&mut self.messages),
+            status: self.status.take(),
             queue: std::mem::take(&mut self.queue),
             downloads: self.downloads,
             ..Self::default()
@@ -592,6 +603,15 @@ impl<H: Copy> GeoFence<H> {
             {
                 download = true;
             }
+        }
+        // The owner's ruling of 2026-09-25 (PLAN.md §12): the page has no box of its own
+        // (`ConfigAC_Fence.cs`), and its controls' boxes for the link failing - "Set X Failed" /
+        // "Set X Failed!" in `Strings.ERROR` boxes (`Controls/MavlinkCheckBox.cs:118, 124, 134,
+        // 140`, `Controls/MavlinkComboBox.cs:182, 197`, `Controls/MavlinkNumericUpDown.cs:171,
+        // 175`) - go on the status line. A number's out-of-range question
+        // (`Controls/MavlinkNumericUpDown.cs:139`) is a question and keeps its box.
+        if let Some(words) = take_link_errors(&mut self.messages, link_error) {
+            self.status = Some(words);
         }
         if download {
             self.downloads += 1;
@@ -830,7 +850,6 @@ mod tests {
 
     use super::*;
     use crate::config::flight_modes::Progress;
-    use crate::config::optional::error;
     use crate::config::optional::tests::Answering;
     use crate::config::servo_output::WRITE_DELAY;
     use crate::config_coverage::source::{csharp, resx};
@@ -1150,11 +1169,18 @@ mod tests {
         let jobs = page.click_enable(now);
         page.push(jobs);
         assert!(!run(&mut page, &refused, now), "false: no callback");
-        assert_eq!(page.message(), Some(&error("Set FENCE_ENABLE Failed")));
+        // The check box's box is the status line's (the owner's ruling of 2026-09-25).
+        assert!(page.message().is_none(), "no box: {:?}", page.message());
+        assert_eq!(
+            page.take_status().as_deref(),
+            Some("Set FENCE_ENABLE Failed")
+        );
         assert_eq!(page.downloads(), 1);
     }
 
-    /// Choosing an action writes it, as `MavlinkComboBox` does, "Set NAME Failed!" on a timeout.
+    /// Choosing an action writes it, as `MavlinkComboBox` does; "Set NAME Failed!" on a timeout,
+    /// on the status line and not in the C#'s box (`Controls/MavlinkComboBox.cs:197`; the
+    /// owner's ruling of 2026-09-25).
     #[test]
     fn choosing_an_action_writes_it() {
         let mut page = shown(&sitl(), metres());
@@ -1173,7 +1199,12 @@ mod tests {
         let jobs = page.choose(Which::Action, 1);
         page.push(jobs);
         run(&mut page, &timed_out, now);
-        assert_eq!(page.message(), Some(&error("Set FENCE_ACTION Failed!")));
+        assert!(page.message().is_none(), "no box: {:?}", page.message());
+        assert_eq!(
+            page.take_status().as_deref(),
+            Some("Set FENCE_ACTION Failed!")
+        );
+        assert_eq!(page.take_status(), None, "taken once");
     }
 
     /// A radius typed is written 300 ms later, times the scale; in feet, the metres the vehicle
