@@ -155,7 +155,9 @@ pub struct NumericUpDown {
 }
 
 impl NumericUpDown {
-    fn new((value, minimum, maximum): (f64, f64, f64)) -> Self {
+    /// A box holding `value`, bounded by `minimum` and `maximum`.
+    #[must_use]
+    pub fn new((value, minimum, maximum): (f64, f64, f64)) -> Self {
         let mut field = TextField::new("");
         field.set(number_text(value));
         Self {

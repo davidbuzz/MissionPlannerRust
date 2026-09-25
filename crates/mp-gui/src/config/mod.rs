@@ -57,3 +57,7 @@ pub mod mavftp;
 pub mod software_pages2;
 pub mod trad_heli;
 // ---- end Standard / Advanced Params, MAVFtp, Heli Setup ----
+// ---- FFT Setup ----
+pub mod fft;
+pub mod fftui;
+// ---- end FFT Setup ----

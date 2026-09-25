@@ -635,7 +635,8 @@ pub struct Bitmask {
 
 impl Bitmask {
     /// `setup`: each bit ticked as the vehicle's value has it.
-    fn new(bits: &'static [(u32, &'static str)], value: f64) -> Self {
+    #[must_use]
+    pub fn new(bits: &'static [(u32, &'static str)], value: f64) -> Self {
         let mut mask = Self {
             bits: bits
                 .iter()
@@ -679,7 +680,8 @@ impl Bitmask {
     /// five more along, a new row, 22 lower, past 500. A check box's width is its text's at six
     /// pixels a character and the box's eighteen.
     /// `// C#: Controls/MavlinkCheckBoxBitMask.cs:93-130`
-    fn layout(&self) -> (Vec<(f32, f32)>, f32) {
+    #[must_use]
+    pub fn layout(&self) -> (Vec<(f32, f32)>, f32) {
         let (mut left, mut top, mut bottom) = (9.0_f32, 9.0_f32, 0.0_f32);
         let mut places = Vec::new();
         for (_, name, _) in &self.bits {
@@ -1564,6 +1566,37 @@ pub fn record_facts(page: &Adsb, view: &TelemetryView) {
 // Drawing.
 // ---------------------------------------------------------------------------------------------
 
+/// A page whose `RangeControl`s [`range_number`] and [`trackbar`] drive: ADSB's list, and FFT
+/// Setup's one (`fft.rs`).
+pub trait RangeHost {
+    /// A key for the number being typed into; whether it was handled.
+    fn key(&mut self, event: &KeyDownEvent) -> bool;
+    /// A number clicked into.
+    fn begin(&mut self, index: usize);
+    /// A number's arrow.
+    fn step(&mut self, index: usize, up: bool);
+    /// A click on a track bar's channel, above or below its thumb.
+    fn page_trackbar(&mut self, index: usize, up: bool);
+}
+
+impl RangeHost for Adsb {
+    fn key(&mut self, event: &KeyDownEvent) -> bool {
+        Self::key(self, event)
+    }
+
+    fn begin(&mut self, index: usize) {
+        Self::begin(self, index);
+    }
+
+    fn step(&mut self, index: usize, up: bool) {
+        Self::step(self, index, up);
+    }
+
+    fn page_trackbar(&mut self, index: usize, up: bool) {
+        Self::page_trackbar(self, index, up);
+    }
+}
+
 /// A control's name and description, as `RangeControl` paints them and the others label them.
 fn texts(control: &Control, width: f32, x: f32, y: f32) -> AnyElement {
     div()
@@ -1593,12 +1626,12 @@ fn texts(control: &Control, width: f32, x: f32, y: f32) -> AnyElement {
 
 /// A `RangeControl`'s number: its text, the arrows, orange outside the documented range.
 #[allow(clippy::too_many_arguments)]
-fn range_number(
+pub fn range_number<H: RangeHost + 'static>(
     id: String,
     range: &RangeControl,
     index: usize,
     editing: bool,
-    access: Access,
+    access: fn(&mut MissionPlanner) -> &mut H,
     handle: &FocusHandle,
     window: &Window,
     cx: &mut Context<MissionPlanner>,
@@ -1687,12 +1720,12 @@ fn range_number(
 /// left and right, it keeps the Designer's margins as the control is made wider: 69 in from the
 /// left, 3 from the right.
 /// `// C#: ExtLibs/Controls/RangeControl.Designer.cs:48-58`
-fn trackbar(
+pub fn trackbar<H: RangeHost + 'static>(
     id: &str,
     range: &RangeControl,
     index: usize,
     width: f32,
-    access: Access,
+    access: fn(&mut MissionPlanner) -> &mut H,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
     #[allow(clippy::cast_precision_loss)]

@@ -14,7 +14,7 @@ use std::time::Instant;
 
 use gpui::{AnyElement, Context, FocusHandle, Window, div, prelude::*};
 
-use super::{compass_mot, gps_order, hw_ids, initial_params, osd, parachute};
+use super::{compass_mot, fft, gps_order, hw_ids, initial_params, osd, parachute};
 use crate::MissionPlanner;
 use crate::config::servo_output::{ERROR_TITLE, Message};
 use crate::setup::Key;
@@ -81,6 +81,8 @@ pub struct ExtraSetup {
     pub compass_mot: compass_mot::CompassMot,
     /// Initial Tune Parameter.
     pub initial_params: initial_params::InitialParams,
+    /// FFT Setup, and the FFT window it opens.
+    pub fft: fft::Fft,
 }
 
 /// The keyboard focus of the pages' boxes: Parachute's number being typed into, and Initial
@@ -90,6 +92,10 @@ pub struct Focus {
     pub number: FocusHandle,
     /// The `TextBox` being typed into.
     pub text: FocusHandle,
+    /// The FFT window's Bins or Start Freq box being typed into.
+    pub fft_number: FocusHandle,
+    /// The FFT window's file dialog or rate question.
+    pub fft_prompt: FocusHandle,
 }
 
 impl Focus {
@@ -98,6 +104,8 @@ impl Focus {
         Self {
             number: cx.focus_handle(),
             text: cx.focus_handle(),
+            fft_number: cx.focus_handle(),
+            fft_prompt: cx.focus_handle(),
         }
     }
 }
@@ -110,6 +118,7 @@ pub fn record_facts(pages: &ExtraSetup, view: &TelemetryView) {
     hw_ids::record_facts(&pages.hw_ids);
     compass_mot::record_facts(&pages.compass_mot);
     initial_params::record_facts(&pages.initial_params);
+    fft::record_facts(&pages.fft, view);
 }
 
 impl MissionPlanner {
@@ -136,6 +145,12 @@ impl MissionPlanner {
             "ConfigCompassMot" => self.extra.compass_mot.activate(key, view.vehicle),
             // C#: GCSViews/ConfigurationView/ConfigInitialParams.cs:56-68
             "ConfigInitialParams" => self.extra.initial_params.activate(key),
+            // C#: GCSViews/ConfigurationView/ConfigFFT.cs:26-64
+            "ConfigFFT" => {
+                self.extra
+                    .fft
+                    .activate(&view.parameters, key, crate::metadata::lookup);
+            }
             _ => {}
         }
     }
@@ -152,6 +167,8 @@ impl MissionPlanner {
             // C#: GCSViews/ConfigurationView/ConfigCompassMot.cs:32-48
             "ConfigCompassMot" => self.extra.compass_mot.deactivate(&self.telemetry),
             "ConfigInitialParams" => self.extra.initial_params.hide(),
+            // C#: GCSViews/ConfigurationView/ConfigFFT.cs:66-69
+            "ConfigFFT" => self.extra.fft.hide(),
             _ => {}
         }
     }
@@ -174,6 +191,7 @@ impl MissionPlanner {
             "ConfigInitialParams" => {
                 initial_params::page(&pages.initial_params, focus, window, cx)
             }
+            "ConfigFFT" => fft::page(&pages.fft, &focus.number, window, cx),
             _ => div().into_any_element(),
         }
     }
@@ -184,6 +202,7 @@ impl MissionPlanner {
         let on_setup = self.screen == crate::Screen::Setup;
         let now = Instant::now();
         let number_focused = self.extra_focus.number.is_focused(window);
+        let fft_number_focused = self.extra_focus.fft_number.is_focused(window);
         let text_focused = self.extra_focus.text.is_focused(window);
         let telemetry = &self.telemetry;
         let pages = &mut self.extra;
@@ -197,6 +216,14 @@ impl MissionPlanner {
         pages
             .initial_params
             .tick(telemetry, view, on_setup, text_focused);
+        // The FFT window's run, when it ended in what the C# throws, is a status line too.
+        let fft_error = pages.fft.tick(telemetry, view, on_setup, number_focused);
+        if let Some(ui) = pages.fft.window.as_mut()
+            && ui.editing.is_some()
+            && !fft_number_focused
+        {
+            ui.leave();
+        }
         // The link errors the C# boxes go on the status line instead (the owner's ruling); the
         // page never draws them, since they leave its queue in the tick before the frame.
         let mut status = None;
@@ -220,6 +247,13 @@ impl MissionPlanner {
             status = Some(status_words(message));
             pages.initial_params.dismiss_message();
         }
+        while let Some(message) = pages.fft.message().filter(|m| link_error(m)) {
+            status = Some(status_words(message));
+            pages.fft.dismiss_message();
+        }
+        if fft_error.is_some() {
+            status = fft_error;
+        }
         if status.is_some() {
             self.file_status = status;
         }
@@ -232,7 +266,9 @@ impl MissionPlanner {
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let pages = &self.extra;
-        parachute::overlay(&pages.parachute, window, cx)
+        let focus = &self.extra_focus;
+        fft::overlay(&pages.fft, &focus.fft_number, &focus.fft_prompt, window, cx)
+            .or_else(|| parachute::overlay(&pages.parachute, window, cx))
             .or_else(|| osd::overlay(&pages.osd, window, cx))
             .or_else(|| gps_order::overlay(&pages.gps_order, window, cx))
             .or_else(|| compass_mot::overlay(&pages.compass_mot, window, cx))

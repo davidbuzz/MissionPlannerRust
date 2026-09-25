@@ -11,12 +11,12 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 26 | 17 | 4 | 2 | 12 | 569 |
+| 61 | 27 | 17 | 3 | 2 | 12 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings
         // in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 21 | 12 | 2 | 2 | 7 | 258 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 22 | 12 | 1 | 2 | 7 | 258 |
         //     15 |
 | CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 5 | 5 | 2 | 0 | 1 | 277 |
         //     1 |
@@ -33,7 +33,6 @@ The largest missing panels, by wirings:
 |---|---|---:|
 | `ConfigDroneCAN` | DroneCAN/UAVCAN | 15 |
 | `ConfigSimplePids` | Basic Tuning | 1 |
-| `ConfigFFT` | FFT Setup | no Designer |
 | `ConfigOSD` | Onboard OSD | 0 |
 
 Vehicles: **any** is a connected vehicle whose parameter list is whole
@@ -141,7 +140,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
 | 325 | `ConfigHWParachute` | Parachute | Optional Hardware | any | 1 | done: `crates/mp-gui/src/config/parachute.rs` `fn page` |
 | 329 | `ConfigHWESP8266` (`ConfigHWesp8266.cs`) | ESP8266 Setup | Optional Hardware | any | 3 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 | 333 | `TrackerUI` (`Antenna/TrackerUI.cs`, not a panel) | Antenna Tracker | Optional Hardware | always | 0 | **missing** |
-| 337 | `ConfigFFT` | FFT Setup | Optional Hardware | any | no Designer | **missing** |
+| 337 | `ConfigFFT` | FFT Setup | Optional Hardware | any | no Designer | done: `crates/mp-gui/src/config/fft.rs` `fn page` |
 | 342 | `ConfigAdvanced` | Advanced |  | always, Advanced view | 13 | partial: `crates/mp-gui/src/config/advanced.rs` `fn page` - the text and the thirteen buttons with their labels at the table's places; every
         //     button dimmed - the Warnings Manager, MAVLink Inspector, proximity, signing keys,
         //     MAVLink mirror, NMEA output, Follow Me, parameter regeneration, moving base, log

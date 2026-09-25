@@ -770,7 +770,13 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigFFT"),
         None,
         &[setup(337, "FFT Setup", OPTIONAL, ANY)],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigFFT.cs:26-162 - INS_LOG_BAT_CNT's RangeControl
+        // (32 to 4096, the documented increment) and the INS_LOG_BAT_MASK and LOG_BITMASK bitmasks,
+        // each change written at once, the page disabled without INS_LOG_BAT_CNT; FFT opens the
+        // FFT window (Controls/fftui.cs, config/fftui.rs), modal over SETUP with a typed path for
+        // its file dialogs: Bins, Start Freq, Magnitude, all five buttons and the graphs with
+        // their "{0} hz/{1} rpm" tooltip; its failures on the status line (the owner's ruling)
+        Ours::Done(at("crates/mp-gui/src/config/fft.rs", "fn page")),
     ),
     panel(
         "ConfigAdvanced",
@@ -1852,7 +1858,7 @@ mod tests {
             );
             checked += 1;
         }
-        assert_eq!(checked, 45);
+        assert_eq!(checked, 46);
     }
 
     /// The committed report matches the table.
@@ -1884,7 +1890,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (26, 17, 4, 2, 12)
+            (27, 17, 3, 2, 12)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

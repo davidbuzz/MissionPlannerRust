@@ -33,7 +33,8 @@ mod grid;
 mod modifier;
 #[cfg(test)]
 mod ported_tests;
-mod view;
+// The point search and its tooltip, which the FFT window's graphs use too.
+pub(crate) mod view;
 
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;

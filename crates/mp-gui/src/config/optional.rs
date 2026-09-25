@@ -739,6 +739,9 @@ pub fn input_box(
             "mavftp-prompt-value",
         ),
         // ---- end Standard / Advanced Params, MAVFtp ----
+        // ---- FFT Setup ----
+        "fft-rate-box" => ("fft-rate-ok", "fft-rate-cancel", "fft-rate-value"),
+        // ---- end FFT Setup ----
         _ => (
             "battery2-prompt-ok",
             "battery2-prompt-cancel",

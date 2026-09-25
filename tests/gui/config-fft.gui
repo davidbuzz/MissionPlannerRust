@@ -1,0 +1,109 @@
+# Initial Setup's FFT Setup page and the FFT window it opens, ported from
+# GCSViews/ConfigurationView/ConfigFFT.cs and Controls/fftui.cs (PLAN.md §12 D14).
+#
+# The claim: the page binds INS_LOG_BAT_CNT (a RangeControl from 32 to 4096 in the documented
+# increment of 32) and the INS_LOG_BAT_MASK and LOG_BITMASK bitmasks, each change written at once
+# (ConfigFFT.cs:26-55; MavlinkCheckBoxBitMask.cs:143-160); FFT opens the window with the
+# Designer's Bins 10, Start Freq 5 and Magnitude unticked (fftui.Designer.cs:84-137); "Run all
+# imus - IMU1-3 MSG" on testdata/dataflash.bin - three IMUs logged as IMU[0..2], which the C#
+# reads all under the one name IMU - estimates the rate from TimeUS and draws the GYR and ACC
+# graphs with x, y and z, then blank graphs to six (fftui.cs:602-769). A failure is a status
+# line, not the C#'s box (the owner's ruling of 2026-09-25).
+#
+# The number goes up a step and back, so SITL's INS_LOG_BAT_CNT is left at 1024.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run from
+# the repository root, where the log's path is typed relative to, as
+#
+#   tools/gui-test.sh tests/gui/config-fft.gui -- tcp:127.0.0.1:5760
+
+screen params
+window 1600x1200
+settle 6
+
+click param-download
+settle 15
+expect params.held > 1000
+
+click tab-setup
+expect config.fft.active false
+click setup-page-ConfigOptional
+click setup-page-ConfigFFT
+settle 1
+expect setup.page ConfigFFT
+expect config.fft.active true
+expect config.fft.enabled true
+expect config.fft.group FFT Setup
+expect config.fft.note Please ensure IMU_RAW and IMU_FAST are turned off to use FFT
+expect config.fft.button FFT
+expect config.fft.count.label sample count per batch
+expect config.fft.count 1024.0
+expect config.fft.mask.enabled true
+expect config.fft.mask.label Sensor Bitmask
+expect config.fft.mask.bits 3
+expect config.fft.log_bitmask.enabled true
+expect config.fft.write none
+expect config.fft.window false
+
+# The number's up arrow: one increment, written at once; its down arrow puts it back. The box
+# shows one decimal place, `DecimalPlaces = increment.ToString().Length - 1` (RangeControl.cs:42).
+click fft-INS_LOG_BAT_CNT-up
+settle 5
+expect config.fft.count 1056.0
+expect config.fft.writes.pending 0
+expect config.fft.write INS_LOG_BAT_CNT 1056 accepted
+expect params.value.INS_LOG_BAT_CNT 1056
+click fft-INS_LOG_BAT_CNT-down
+settle 5
+expect config.fft.write INS_LOG_BAT_CNT 1024 accepted
+expect params.value.INS_LOG_BAT_CNT 1024
+
+# FFT: the window, as the Designer makes it.
+click fft-but_fft
+settle 1
+expect config.fft.window true
+expect config.fft.opened 1
+expect config.fft.window.bins 10
+expect config.fft.window.startfreq 5
+expect config.fft.window.magnitude false
+expect config.fft.window.graphs 0
+expect config.fft.window.prompt none
+
+# Bins down to 8 (256 samples), so the fixture's 1365 IMU records make five slices.
+click fft-NUM_bins-down
+click fft-NUM_bins-down
+expect config.fft.window.bins 8
+
+# Run all imus - IMU1-3 MSG: its file dialog, the log typed.
+click fft-but_fftimu13
+settle 1
+expect config.fft.window.prompt Run all imus - IMU1-3 MSG
+type testdata/dataflash.bin
+settle 1
+expect config.fft.window.prompt.text testdata/dataflash.bin
+click fft-open-ok
+settle 4
+expect config.fft.window.prompt none
+expect config.fft.window.running none
+expect config.fft.window.last imu13 done
+expect config.fft.window.graphs 6
+expect config.fft.window.graph.0.title FFT IMU GYR - dataflash.bin - 22.2hz input
+expect config.fft.window.graph.0.curves IMU GYR x,IMU GYR y,IMU GYR z
+# The highest peak of the gyro's x: a third of the rate, where the three IMUs read in turn as
+# one series differ.
+expect config.fft.window.graph.0.peak 7 hz/420 rpm
+expect config.fft.window.graph.1.title FFT IMU ACC - dataflash.bin - 22.2hz input
+expect config.fft.window.graph.1.curves IMU ACC x,IMU ACC y,IMU ACC z
+expect config.fft.window.graph.2.title Title
+expect config.fft.window.graph.5.title Title
+
+# The close box; the page stays.
+click fft-close
+settle 1
+expect config.fft.window false
+expect config.fft.active true
+
+# Choosing another page hides this one.
+click setup-page-ConfigOptional
+settle 1
+expect config.fft.active false

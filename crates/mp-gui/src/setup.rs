@@ -1007,7 +1007,7 @@ impl MissionPlanner {
             // ConfigInitialParams.cs:56-68
             Some(
                 class @ ("ConfigHWParachute" | "ConfigHWOSD" | "ConfigGPSOrder" | "ConfigHWIDs"
-                | "ConfigCompassMot" | "ConfigInitialParams"),
+                | "ConfigCompassMot" | "ConfigInitialParams" | "ConfigFFT"),
             ) => self.extra_setup_activate(class),
             // ---- end SETUP's small pages ----
             // ---- RTK/GPS Inject ----
@@ -1127,7 +1127,7 @@ impl MissionPlanner {
             // C#: GCSViews/ConfigurationView/ConfigCompassMot.cs:32-48
             Some(
                 class @ ("ConfigHWParachute" | "ConfigHWOSD" | "ConfigGPSOrder" | "ConfigHWIDs"
-                | "ConfigCompassMot" | "ConfigInitialParams"),
+                | "ConfigCompassMot" | "ConfigInitialParams" | "ConfigFFT"),
             ) => self.extra_setup_deactivate(class),
             // ---- end SETUP's small pages ----
             // ---- RTK/GPS Inject ----
@@ -1390,6 +1390,8 @@ impl MissionPlanner {
             "ConfigHWIDs" => self.extra_setup_page(class, window, cx),
             "ConfigCompassMot" => self.extra_setup_page(class, window, cx),
             "ConfigInitialParams" => self.extra_setup_page(class, window, cx),
+            // C#: GCSViews/ConfigurationView/ConfigFFT.cs:71-157
+            "ConfigFFT" => self.extra_setup_page(class, window, cx),
             // ---- end SETUP's small pages ----
             // ---- RTK/GPS Inject ----
             // C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.Designer.cs:29-783;
