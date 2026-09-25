@@ -1,0 +1,31 @@
+# The parameters fetched on connecting, MAVFTP first (PLAN.md §13.6 row 81).
+#
+# The claim: once a vehicle is heard and no parameters are held, the application fetches them
+# without being asked, as MAVLinkInterface.Open does (MAVLinkInterface.cs:930-939) - reading
+# @PARAM/param.pck?withdefaults=1 over MAVFTP in 110-byte bursts and unpacking it
+# (getParamListMavftp, :1813-1936; parampck.cs), the PARAM_REQUEST_LIST stream only if that will
+# not do. The fact params.fetch says which way they came. The screen's download button runs the
+# same fetch (getParamList, :1781-1799).
+#
+# SITL's copter serves the file, so its 1,400-odd parameters arrive in a few seconds over MAVFTP
+# and the stream is never asked for. Nothing is written.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run as
+#
+#   tools/gui-test.sh tests/gui/params-autofetch.gui -- tcp:127.0.0.1:5760
+
+screen params
+window 1600x1200
+settle 12
+
+expect vehicle.connected true
+expect params.held > 1000
+expect params.expected > 1000
+expect params.fetch ~ over MAVFTP
+expect params.value.INS_GYRO_FILTER 20
+
+# The button fetches again, the same way.
+click param-download
+settle 8
+expect params.held > 1000
+expect params.fetch ~ over MAVFTP

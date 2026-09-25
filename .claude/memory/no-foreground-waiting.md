@@ -19,3 +19,10 @@ instead of surfacing the error.
 poll with a single cheap non-blocking check (`ss -tln | grep -q 5760`, `ls target/debug/x`) rather
 than a loop; or use Monitor when repeated notifications are genuinely needed. Read the background
 task's output file to diagnose failures instead of waiting for success.
+
+**2026-09-25, Buzz: "do not foreground wait."** An `until grep -q done log; do sleep 3; done` in
+a foreground Bash call is a foreground wait, however short each call is, and I did it a dozen
+times in one session. The only allowed shape: start the long job with `run_in_background`, or put
+the `until` loop itself in a `run_in_background` call so the harness notifies me when it ends,
+and do other work in the meantime. Never a foreground `sleep` or poll loop, not even for a
+30-second build.

@@ -74,6 +74,7 @@ pub mod inject;
 pub mod messages;
 pub mod mission_transfer;
 pub mod param_download;
+pub mod param_fetch;
 pub mod requests;
 pub mod testing;
 pub mod timeouts;
@@ -242,6 +243,9 @@ struct Shared {
     /// parameter set - carries the vehicle's full count, and treating that as a download with a
     /// thousand holes would flood the link with requests nobody made.
     param_downloads: Mutex<BTreeMap<VehicleId, ParamDownload>>,
+    /// Parameter fetches - MAVFTP first, the stream after - the caller has started, finished ones
+    /// included so their outcome can be read (`param_fetch`).
+    param_fetches: Mutex<BTreeMap<VehicleId, param_fetch::ParamFetch>>,
     /// Requests the link thread has picked up, finished ones included.
     requests: Mutex<BTreeMap<RequestId, Request>>,
     /// Requests the link thread has yet to pick up.
@@ -1678,6 +1682,8 @@ fn run_link(
                 }
             }
         }
+        // Parameter fetches: the file read watched, the stream started when it fails.
+        param_fetch::tick(shared, config.timeouts, Instant::now(), &mut param_actions);
         for (id, action) in param_actions.drain(..) {
             match action {
                 ParamAction::Nothing => {}

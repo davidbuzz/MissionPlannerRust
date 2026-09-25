@@ -224,6 +224,9 @@ struct MissionPlanner {
     /// mission on connect makes it impossible to tell whether what is on screen came from the
     /// vehicle or from the operator, which is exactly the confusion that loses a flight plan.
     auto_read_mission: bool,
+    /// Whether the parameters have been asked for on this connection: `MAVLinkInterface.Open`'s
+    /// `getParamListMavftp` (`:938`), run here once a vehicle is heard and nothing is held.
+    params_requested: bool,
     /// Whether that automatic read has already happened.
     mission_requested: bool,
     /// Which screen is showing.
@@ -596,6 +599,7 @@ impl MissionPlanner {
             // `// C#: MainV2.cs:1750-1759`
             auto_read_mission: read_mission || config::planner::load_wps_on_connect(&persisted),
             mission_requested: false,
+            params_requested: false,
             screen,
             plan,
             adopt_vehicle_mission: false,
@@ -1199,6 +1203,7 @@ impl MissionPlanner {
     fn do_disconnect(&mut self) {
         self.telemetry = Telemetry::idle();
         self.mission_requested = false;
+        self.params_requested = false;
         self.file_status = Some("disconnected".to_owned());
         self.save_config(settings::SaveEvent::Connect);
     }
@@ -1243,6 +1248,7 @@ impl MissionPlanner {
     fn open_link(&mut self, url: &str) {
         self.telemetry = Telemetry::connect(url);
         self.mission_requested = false;
+        self.params_requested = false;
         if let Some(err) = self.telemetry.error() {
             self.file_status = Some(format!("could not open {url}: {err}"));
         } else {
@@ -2747,6 +2753,7 @@ impl Render for MissionPlanner {
             facts::record("link.frames", view.frames);
             facts::record("params.held", view.parameters.len());
             facts::record("params.expected", view.parameters_expected);
+            facts::record("params.fetch", &view.parameters_fetch);
             // The last parameter write to end: which, how the vehicle answered, and how many
             // times the link put the PARAM_SET on the wire - one, unless it had to ask again.
             let written = self.last_param_write.as_ref();
@@ -3094,6 +3101,16 @@ impl Render for MissionPlanner {
             self.mission_requested = true;
             self.adopt_vehicle_mission = true;
             self.telemetry.request_mission();
+        }
+
+        // `Open`'s `getParamListMavftp` (`MAVLinkInterface.cs:930-939`): the parameters fetched
+        // as soon as a vehicle is heard - MAVFTP first, the stream after - unless a copy is
+        // already held (the owner's rule, 2026-09-25: only when we have none).
+        if !self.params_requested && view.vehicle.is_some() && !view.target.starts_with("file:") {
+            self.params_requested = true;
+            if view.parameters.is_empty() {
+                self.telemetry.download_parameters();
+            }
         }
 
         let (status, status_colour) = if let Some(err) = self.telemetry.error() {

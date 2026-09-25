@@ -38,6 +38,7 @@
 
 pub mod param_file;
 pub mod param_meta;
+pub mod parampck;
 pub mod pdef;
 
 pub use param_meta::{ParamMeta, UserLevel};

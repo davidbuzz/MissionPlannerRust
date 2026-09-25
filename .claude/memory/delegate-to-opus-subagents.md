@@ -37,3 +37,9 @@ integrated; launch none after them until he says otherwise.
 agent works in its own worktree (`isolation: worktree`), on rows with disjoint files, reads the C#
 before writing, ships tests and scripts (scripts written, never run), and reports what it changed;
 I verify, merge and commit.
+
+**2026-09-25, a correction:** when Buzz stops one agent mid-run (as he did the first row 70 agent
+at 13:40), that is not a ban on subagents. I read the harness's "only launch a new agent if the
+user explicitly asks" as one and did the next five rows by hand; Buzz asked "why aren't we using
+subagents?" Keep three running whenever there is disjoint work; a stopped agent means review its
+worktree and start a fresh one on what is left.

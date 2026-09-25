@@ -372,7 +372,7 @@ The full parameter system — tree/list/advanced editors driven by parameter met
   `apm.pdef.xml` at build time; every C# config panel enumerated with a checked-in coverage ledger at 100 %;
   param save/restore round-trips against SITL; `.param` files interoperate with the C# app.
 - **Replaces:** `GCSViews/ConfigurationView/*` (the bulk of 67,553 LOC in `GCSViews/`).
-- **Today:** full parameter download with gap recovery (1,408 from SITL), a searchable browser, and
+- **Today:** parameters fetched as `getParamListMavftp` fetches them (2026-09-25, PLAN.md §13.6 row 81): `@PARAM/param.pck?withdefaults=1` read over MAVFTP and unpacked (`mp_params::parampck`, the C#'s `parampck.cs`), the classic stream with gap recovery as the fallback, and the fetch started on its own once a vehicle is heard with nothing held, as `MAVLinkInterface.Open` starts it; proved through the real link thread against a vehicle serving the file and one without it. Before that: full parameter download with gap recovery (1,408 from SITL), a searchable browser, and
   `.param` save/load/compare in both the GUI and `mpr param save|load|diff`. The load-time skip-list
   is ported from `ExtLibs/Utilities/ParamFile.cs:50-76` (all 16 entries, on the load side as the C#
   has it), and numbers are written through a `G15` formatter matching

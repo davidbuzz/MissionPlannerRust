@@ -94,6 +94,10 @@ pub struct TelemetryView {
     pub parameters: Arc<[(String, f64)]>,
     /// How many the vehicle says it has, once it has said.
     pub parameters_expected: u16,
+    /// Where the parameter fetch is, in words - "MAVFTP 45%", "stream 400 of 1408", "1408 over
+    /// MAVFTP" - or "none" before one has been started.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1813-1936`
+    pub parameters_fetch: String,
 }
 
 /// A mission transfer, as the UI needs to describe it.
@@ -131,6 +135,7 @@ impl TelemetryView {
             transfer: None,
             parameters: Arc::default(),
             parameters_expected: 0,
+            parameters_fetch: "none".to_owned(),
         }
     }
 }
@@ -435,6 +440,9 @@ impl Telemetry {
         // Fetch the mission the link holds, if a download has finished. The UI never triggers
         // one itself: a ground station that silently pulls a mission whenever it connects makes
         // it impossible to tell whether what is on screen came from the vehicle or the operator.
+        let parameters_fetch = primary
+            .as_ref()
+            .map_or_else(|| "none".to_owned(), |(id, _)| Self::fetch_words(link, *id));
         let (parameters, parameters_expected) = primary.as_ref().map_or_else(
             || (Arc::default(), 0),
             |(id, _)| self.parameters_of(link, *id),
@@ -490,6 +498,38 @@ impl Telemetry {
             transfer,
             parameters,
             parameters_expected,
+            parameters_fetch,
+        }
+    }
+
+    /// The fetch's state in words, for the status line and the facts.
+    fn fetch_words(link: &Link, id: VehicleId) -> String {
+        use mp_link::param_fetch::{FetchVia, ParamFetchState};
+        let Some(fetch) = link.param_fetch(id) else {
+            return "none".to_owned();
+        };
+        match fetch.state {
+            ParamFetchState::Ftp => {
+                let percent = link
+                    .ftp_progress(id)
+                    .map_or(-1, |(_, progress)| progress.percent);
+                if percent < 0 {
+                    "MAVFTP".to_owned()
+                } else {
+                    format!("MAVFTP {percent}%")
+                }
+            }
+            ParamFetchState::Stream { .. } => {
+                let download = link.param_download(id);
+                let received = download.as_ref().map_or(0, mp_link::param_download::ParamDownload::received);
+                let expected = download.and_then(|d| d.expected()).unwrap_or(0);
+                format!("stream {received} of {expected}")
+            }
+            ParamFetchState::Complete { via, count } => match via {
+                FetchVia::MavFtp => format!("{count} over MAVFTP"),
+                FetchVia::Stream => format!("{count} over the stream"),
+            },
+            ParamFetchState::Cancelled => "cancelled".to_owned(),
         }
     }
 
@@ -1150,10 +1190,13 @@ impl Telemetry {
         self.link.as_ref().map(Link::traffic).unwrap_or_default()
     }
 
-    /// Starts a parameter download.
+    /// `getParamList`: the parameters fetched over MAVFTP first (`@PARAM/param.pck?withdefaults=1`)
+    /// and over the `PARAM_REQUEST_LIST` stream when that will not do - the parameter screen's
+    /// button, and the fetch on connecting.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1781-1799`
     pub fn download_parameters(&self) {
         if let Some((link, id)) = self.target() {
-            link.download_params(id);
+            link.fetch_params(id);
         }
     }
 
