@@ -10,18 +10,27 @@
 //! Each button opens a window of its own (`ConfigAdvanced.cs:22-127`): the Warnings Manager, the
 //! MAVLink Inspector, the proximity radar, the signing keys, the MAVLink mirror, the NMEA output,
 //! Follow Me, the parameter documentation regenerated from ArduPilot's source, the moving base, a
-//! log anonymised, the FFT and spectrogram plots, and the support proxy. None of those windows is
-//! in this application - each is a form of its own in the C# (`Warnings/WarningsManager.cs`,
-//! `Controls/MAVLinkInspector.cs` and the rest, named at [`ROWS`]), a port of its own - so every
-//! button is drawn dimmed, with the window it would open as the reason.
+//! log anonymised, the FFT and spectrogram plots, and the support proxy. Each is a form of its own
+//! in the C# (`Warnings/WarningsManager.cs`, `Controls/MAVLinkInspector.cs` and the rest, named at
+//! [`ROWS`]), a port of its own. FFT's, `Controls/fftui.cs`, is ported (`config/fftui.rs`), and
+//! its button opens it: the same window the FFT Setup page's FFT opens, held with that page
+//! (`config/fft.rs`), since both handlers are the one line `new fftui().Show()`. The others are
+//! not in this application, so their buttons are drawn dimmed, with the window each would open as
+//! the reason.
+//!
+//! What differs: `Show()` makes a modeless form, and a second click a second form beside the
+//! first; the window here is drawn over SETUP, modal, and a second click - of this FFT or the FFT
+//! Setup page's - replaces it with a fresh one, as `config/fft.rs` has it.
 //!
 //! The colours are this application's.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
-use gpui::{AnyElement, Div, div, prelude::*, px, rgb};
+use gpui::{AnyElement, Context, Div, SharedString, div, prelude::*, px, rgb};
 
+use super::fft::Fft;
+use crate::MissionPlanner;
 use crate::ui::{panel, theme};
 
 /// The page's title in Initial Setup's list: the call's literal.
@@ -72,11 +81,29 @@ pub struct Row {
     pub label_text: &'static str,
     /// The label's `Size`: the text wraps to it.
     pub label_size: (f32, f32),
-    /// What the handler opens, and where it is in the C# - the reason the button is dimmed.
+    /// What the handler opens, and where it is in the C#.
     pub opens: &'static str,
+    /// Where it is ported, under `crates/mp-gui/src/`, for the button that opens it; `None` for
+    /// a window this application has not got, whose button is dimmed with `opens` as the reason.
+    pub port: Option<&'static str>,
+}
+
+impl Row {
+    /// Whether the button does anything here.
+    #[must_use]
+    pub const fn enabled(&self) -> bool {
+        self.port.is_some()
+    }
+
+    /// Why a dimmed button is dimmed.
+    #[must_use]
+    pub fn reason(&self) -> String {
+        format!("{} is not ported", self.opens)
+    }
 }
 
 /// A row, as the table below writes one.
+#[allow(clippy::too_many_arguments)] // one per field of the row, in the table's order
 const fn row(
     button: &'static str,
     text: &'static str,
@@ -85,6 +112,7 @@ const fn row(
     label_text: &'static str,
     label_size: (f32, f32),
     opens: &'static str,
+    port: Option<&'static str>,
 ) -> Row {
     Row {
         button,
@@ -94,6 +122,7 @@ const fn row(
         label_text,
         label_size,
         opens,
+        port,
     }
 }
 
@@ -104,49 +133,49 @@ const fn row(
 pub const ROWS: [Row; 13] = [
     row("but_warningmanager", "Warning Manager", "but_warningmanager_Click", "label2",
         "Enable custom warnings based on a set of conditions", (263.0, 18.0),
-        "the Warnings Manager window (Warnings/WarningsManager.cs) is not ported"),
+        "the Warnings Manager window (Warnings/WarningsManager.cs)", None),
     row("but_mavinspector", "MAVLink Inspector", "but_mavinspector_Click", "label3",
         "View decoded mavlink data being sent and received", (260.0, 18.0),
-        "the MAVLink Inspector window (Controls/MAVLinkInspector.cs) is not ported"),
+        "the MAVLink Inspector window (Controls/MAVLinkInspector.cs)", None),
     row("but_proximity", "Proximity", "but_proximity_Click", "label4",
         "View the data from a 360 lidar", (152.0, 18.0),
-        "the proximity window (Controls/ProximityControl.cs) is not ported"),
+        "the proximity window (Controls/ProximityControl.cs)", None),
     row("but_signkey", "Mavlink Signing", "but_signkey_Click", "label5",
         "Enable mavlink signing to secure communication with the MAV", (307.0, 18.0),
-        "the signing keys window (Controls/AuthKeys.cs) is not ported"),
+        "the signing keys window (Controls/AuthKeys.cs)", None),
     row("BUT_outputMavlink", "Mavlink Mirror", "BUT_outputMavlink_Click", "label6",
         "Mavlink mirror to an external location. For Monitoring or control", (304.0, 18.0),
-        "the MAVLink mirror window (Controls/SerialOutputPass.cs) is not ported"),
+        "the MAVLink mirror window (Controls/SerialOutputPass.cs)", None),
     row("BUT_outputnmea", "NMEA", "BUT_outputnmea_Click", "label7",
         "Output the MAV location as a NMEA string", (213.0, 18.0),
-        "the NMEA output window (Controls/SerialOutputNMEA.cs) is not ported"),
+        "the NMEA output window (Controls/SerialOutputNMEA.cs)", None),
     row("BUT_follow_me", "Follow Me", "BUT_follow_me_Click", "label8",
         "Use an external NMEA gps and send guided mode waypoints to the MAV based on that location",
         (304.0, 31.0),
-        "the Follow Me window (Controls/FollowMe.cs) is not ported"),
+        "the Follow Me window (Controls/FollowMe.cs)", None),
     row("BUT_paramgen", "Param gen", "BUT_paramgen_Click", "label9",
         "Regenerage the param info used inside mp", (214.0, 18.0),
         "regenerating the parameter documentation from ArduPilot's source \
-         (ExtLibs/Utilities/ParameterMetaDataParser.cs) is not ported"),
+         (ExtLibs/Utilities/ParameterMetaDataParser.cs)", None),
     row("BUT_movingbase", "Moving Base", "BUT_movingbase_Click", "label10",
         "Show an extra icon on the map of your current location.", (273.0, 18.0),
-        "the moving base window (Controls/MovingBase.cs) is not ported"),
+        "the moving base window (Controls/MovingBase.cs)", None),
     row("but_anonlog", "Anon Log", "but_anonlog_Click", "label11",
         "Scramble lat/lng in bin or tlog", (149.0, 18.0),
-        "anonymising a log (ExtLibs/Utilities/Privacy.cs) is not ported"),
+        "anonymising a log (ExtLibs/Utilities/Privacy.cs)", None),
     row("but_fft", "FFT", "but_fft_Click", "label12",
         "Plot a FFT from a log", (110.0, 18.0),
-        "the FFT window (Controls/fftui.cs) is not ported"),
+        "the FFT window (Controls/fftui.cs)", Some("config/fftui.rs")),
     row("BUT_spect", "Spectrogram", "BUT_spect_Click", "label13",
         "Plot a FFT from a log", (110.0, 18.0),
-        "the spectrogram window (Controls/SpectrogramUI.cs) is not ported"),
+        "the spectrogram window (Controls/SpectrogramUI.cs)", None),
     row("BUT_supportproxy", "Support Proxy", "BUT_supportproxy_Click", "label14",
         "Share connection with support engineer", (200.0, 18.0),
-        "the support proxy window (Controls/SerialSupportProxy.cs) is not ported"),
+        "the support proxy window (Controls/SerialSupportProxy.cs)", None),
 ];
 
 /// Facts a UI test asserts on: whether the page shows, its text, the buttons and their labels in
-/// the table's order, and that every button is dimmed and why.
+/// the table's order, which buttons do something, and each dimmed one and why.
 pub fn record_facts(showing: bool) {
     use crate::facts::record;
     record("config.advanced.active", showing);
@@ -165,14 +194,35 @@ pub fn record_facts(showing: bool) {
             .collect::<Vec<_>>()
             .join("|"),
     );
-    record("config.advanced.buttons.enabled", false);
+    record(
+        "config.advanced.buttons.enabled",
+        ROWS.iter()
+            .filter(|row| row.enabled())
+            .map(|row| row.text)
+            .collect::<Vec<_>>()
+            .join(","),
+    );
     record(
         "config.advanced.dimmed",
         ROWS.iter()
-            .map(|row| format!("{}: {}", row.button, row.opens))
+            .filter(|row| !row.enabled())
+            .map(|row| format!("{}: {}", row.button, row.reason()))
             .collect::<Vec<_>>()
             .join("; "),
     );
+}
+
+/// A button clicked: what its handler does, for the one whose window is here - `but_fft_Click`,
+/// `new fftui().Show()`, with nothing asked of the vehicle first. True when it did something.
+/// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:114-117`
+pub fn click(button: &str, fft: &mut Fft) -> bool {
+    match button {
+        "but_fft" => {
+            fft.show_window();
+            true
+        }
+        _ => false,
+    }
 }
 
 /// An absolutely placed box.
@@ -185,45 +235,60 @@ fn at((x, y, width, height): (f32, f32, f32, f32)) -> Div {
         .h(px(height))
 }
 
-/// The page, as the `.resx` lays it out, every button dimmed.
+/// A button in its cell: FFT's opening its window, the others dimmed - the window each opens is
+/// not in this application (see `opens`).
+/// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:22-127`
+fn button(row: Row, y: f32, cx: &mut Context<MissionPlanner>) -> AnyElement {
+    let (bx, by, bw, bh) = BUTTON_IN_CELL;
+    let id = format!("advanced-{}", row.button);
+    let base = crate::probe::measured(id.clone(), at((bx, y + by, bw, bh)))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded_sm()
+        .border_1()
+        .border_color(rgb(theme::BORDER))
+        .text_xs()
+        .child(row.text);
+    if row.enabled() {
+        base.id(SharedString::from(id))
+            .bg(rgb(theme::ACTION))
+            .text_color(rgb(theme::TEXT))
+            .cursor_pointer()
+            .hover(|style| style.border_color(rgb(theme::ACCENT)))
+            .on_click(cx.listener(move |this, _event, window, cx| {
+                window.blur(cx);
+                if click(row.button, &mut this.extra.fft) {
+                    cx.notify();
+                }
+            }))
+            .into_any_element()
+    } else {
+        base.bg(rgb(theme::PANEL))
+            .text_color(rgb(theme::DIM))
+            .into_any_element()
+    }
+}
+
+/// The page, as the `.resx` lays it out: FFT opening the FFT window, every other button dimmed.
 /// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.Designer.cs:29-266; ConfigAdvanced.resx`
-pub fn page() -> AnyElement {
+pub fn page(cx: &mut Context<MissionPlanner>) -> AnyElement {
     let mut table = at(TABLE);
     let mut y = 0.0;
     for row in ROWS {
-        let (bx, by, bw, bh) = BUTTON_IN_CELL;
-        // Dimmed: the window it opens is not in this application (see `opens`).
-        // `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:22-127`
-        table = table
-            .child(
-                crate::probe::measured(
-                    format!("advanced-{}", row.button),
-                    at((bx, y + by, bw, bh)),
-                )
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded_sm()
-                .border_1()
-                .border_color(rgb(theme::BORDER))
-                .bg(rgb(theme::PANEL))
+        table = table.child(button(row, y, cx)).child(
+            // `Padding` 5, 5, 0, 0.
+            crate::probe::measured(format!("advanced-{}", row.label), div())
+                .absolute()
+                .left(px(LABEL_X))
+                .top(px(y))
+                .w(px(row.label_size.0))
+                .pl(px(5.0))
+                .pt(px(5.0))
                 .text_xs()
-                .text_color(rgb(theme::DIM))
-                .child(row.text),
-            )
-            .child(
-                // `Padding` 5, 5, 0, 0.
-                crate::probe::measured(format!("advanced-{}", row.label), div())
-                    .absolute()
-                    .left(px(LABEL_X))
-                    .top(px(y))
-                    .w(px(row.label_size.0))
-                    .pl(px(5.0))
-                    .pt(px(5.0))
-                    .text_xs()
-                    .text_color(rgb(theme::TEXT))
-                    .child(row.label_text),
-            );
+                .text_color(rgb(theme::TEXT))
+                .child(row.label_text),
+        );
         y += ROW_HEIGHT;
     }
     let body = div()
@@ -383,12 +448,14 @@ mod tests {
         assert_eq!(activate.trim(), "{");
     }
 
-    /// Every fact the GUI script asserts on is recorded here, and it clicks no button.
+    /// Every fact the GUI script asserts on is recorded here, and the only button of this page it
+    /// clicks is one that does something - FFT - and it does click it.
     #[test]
     fn the_gui_script_names_facts_this_page_has() {
         let script = include_str!("../../../../tests/gui/config-advanced.gui");
         let source = include_str!("advanced.rs");
         let mut facts = 0;
+        let mut clicked = Vec::new();
         for line in script.lines() {
             let line = line.split('#').next().unwrap_or("");
             let mut words = line.split_whitespace();
@@ -398,11 +465,77 @@ mod tests {
                     facts += 1;
                 }
                 (Some("click"), Some(id)) => {
-                    assert!(!id.starts_with("advanced-"), "the buttons are dimmed");
+                    if let Some(button) = id.strip_prefix("advanced-") {
+                        let row = ROWS.iter().find(|row| row.button == button);
+                        assert!(row.is_some_and(Row::enabled), "{id} is dimmed");
+                        clicked.push(button);
+                    }
                 }
                 _ => {}
             }
         }
         assert!(facts >= 5, "{facts} facts");
+        assert_eq!(clicked, ["but_fft"]);
+    }
+
+    /// FFT is `new fftui().Show()` - the FFT Setup page's handler word for word - so it opens the
+    /// window that page opens, with no vehicle and no page shown first; every other button does
+    /// nothing.
+    /// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:114-117; ConfigFFT.cs:162-165`
+    #[test]
+    fn fft_opens_the_fft_window_and_the_others_nothing() {
+        for row in ROWS {
+            let mut fft = Fft::default();
+            assert_eq!(click(row.button, &mut fft), row.enabled(), "{}", row.button);
+            assert_eq!(fft.window.is_some(), row.enabled(), "{}", row.button);
+            assert_eq!(fft.opened, usize::from(row.enabled()));
+            assert!(!fft.is_active(), "the FFT Setup page is not shown by it");
+        }
+        // A second click, a fresh window: the Designer's Magnitude unticked again.
+        let mut fft = Fft::default();
+        click("but_fft", &mut fft);
+        if let Some(window) = fft.window.as_mut() {
+            window.toggle_magnitude();
+        }
+        click("but_fft", &mut fft);
+        assert_eq!(fft.opened, 2);
+        assert!(fft.window.as_ref().is_some_and(|window| !window.magnitude));
+        let enabled: Vec<&str> = ROWS
+            .iter()
+            .filter(|row| row.enabled())
+            .map(|row| row.button)
+            .collect();
+        assert_eq!(enabled, ["but_fft"]);
+    }
+
+    /// Each enabled row's port is where it says, and its handler is the same `Show()` as the one
+    /// the port was made for.
+    #[test]
+    fn every_port_is_the_window_its_handler_shows() {
+        for row in ROWS {
+            let Some(port) = row.port else {
+                continue;
+            };
+            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("src")
+                .join(port);
+            assert!(path.exists(), "{}", path.display());
+        }
+        let (Some(advanced), Some(setup)) = (
+            csharp("GCSViews/ConfigurationView/ConfigAdvanced.cs"),
+            csharp("GCSViews/ConfigurationView/ConfigFFT.cs"),
+        ) else {
+            eprintln!("skipped: the C# tree is not checked out");
+            return;
+        };
+        let body = |source: &str| {
+            let start = source.find("void but_fft_Click(").expect("but_fft_Click");
+            let rest = &source[start..];
+            rest[rest.find('{').expect("{")..rest.find('}').expect("}")]
+                .trim_matches(|c: char| c == '{' || c.is_whitespace())
+                .to_owned()
+        };
+        assert_eq!(body(&advanced), "new fftui().Show();");
+        assert_eq!(body(&advanced), body(&setup));
     }
 }

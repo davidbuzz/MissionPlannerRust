@@ -325,4 +325,23 @@ mod tests {
             gps_order::FAILED_ACTIVATE
         );
     }
+
+    /// The seven pages are SETUP's, so their boxes and the FFT window - which FFT Setup's FFT and
+    /// Advanced's FFT open - are drawn over the SETUP screen, and over it only.
+    /// `// C#: GCSViews/InitialSetup.cs:237-342`
+    #[test]
+    fn the_boxes_and_the_fft_window_draw_over_setup() {
+        let main = include_str!("../main.rs");
+        let setup = main
+            .find("Screen::Setup => probe::measured(\"setup-body\"")
+            .expect("the SETUP screen");
+        let config = main
+            .find("Screen::Config => probe::measured(\"config-body\"")
+            .expect("the CONFIG screen");
+        assert!(setup < config);
+        let overlay = ".children(self.extra_setup_overlay(window, cx))";
+        assert_eq!(main.matches(overlay).count(), 1);
+        let at = main.find(overlay).expect("drawn");
+        assert!(setup < at && at < config, "drawn over SETUP");
+    }
 }

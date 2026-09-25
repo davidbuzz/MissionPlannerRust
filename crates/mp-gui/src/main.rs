@@ -3488,6 +3488,11 @@ impl Render for MissionPlanner {
                     cx,
                 ))
                 // ---- end RTK/GPS Inject ----
+                // ---- SETUP's small pages (row 70) ----
+                // Their boxes, and the FFT window that FFT Setup's and Advanced's FFT open: all
+                // of them SETUP's pages (`GCSViews/InitialSetup.cs:237-342`).
+                .children(self.extra_setup_overlay(window, cx))
+                // ---- end SETUP's small pages ----
                 // ---- Firmware Legacy / Ateryx ----
                 .children(config::firmware::overlay(
                     &self.install_firmware,
@@ -3524,9 +3529,6 @@ impl Render for MissionPlanner {
                 // ---- Standard / Advanced Params, MAVFtp, Heli Setup (row 71) ----
                 .children(self.software2_overlay(window, cx))
                 // ---- end Standard / Advanced Params, MAVFtp, Heli Setup ----
-                // ---- SETUP's small pages (row 70) ----
-                .children(self.extra_setup_overlay(window, cx))
-                // ---- end SETUP's small pages ----
                 // ---- Firmware Legacy / Ateryx ----
                 .children(config::ateryx::overlay(&self.ateryx, window, cx))
                 // ---- end Firmware Legacy / Ateryx ----

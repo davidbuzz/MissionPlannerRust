@@ -42,7 +42,18 @@
 //! * `ConfigHWCompass`'s Live Calibration button, `MagCalib.DoGUIMagCalib`: Mission Planner's own
 //!   calibration from raw magnetometer samples, with its sphere display, is `MagCalib.cs`, not this
 //!   page. The button is drawn and does nothing. Its group shows only for a plane from 3.7.1 or a
-//!   vehicle without onboard calibration;
+//!   vehicle without onboard calibration. Its fit is ported (`mp_calibration::magcalib`); what it
+//!   still needs is its window - `ProgressReporterSphere`, three OpenTK `Sphere` controls
+//!   (`ExtLibs/Controls/Sphere.cs`) drawing the samples in 3D as the vehicle is turned - and the
+//!   live half of `MagCalib.cs:136-790`: the `RAW_IMU`/`SCALED_IMU2`/`SCALED_IMU3` subscriptions,
+//!   the stream rates it sets and restores, the offsets zeroed first, the sphere-coverage test
+//!   and `SaveOffsets` through `PREFLIGHT_SET_SENSOR_OFFSETS`;
+//! * a "Log Calibration" button: neither page has one. `ConfigHWCompass.cs:362-373` still holds
+//!   `BUT_MagCalibrationLog_Click` - "Min Throttle" asked, then `MagCalib.ProcessLog` - but its
+//!   Designer makes no such button and wires nothing to it (only stale translations keep its
+//!   text), so nothing calls it: dead C#, recorded and not ported (PLAN.md §12 D16).
+//!   `ProcessLog`'s one live caller is the hidden Temp screen's `BUT_magfit2` ("mag calb log",
+//!   `temp.cs:410-413`), which is not this page; its fit is `headless-planner magcal`;
 //! * the table's row selection and its row headers' current-row arrow: WinForms' grid behaviour,
 //!   not the page's - nothing the page does reads the selection;
 //! * `HorizontalProgressBar.DrawLabel`'s value label, drawn 15 pixels below each bar where the
@@ -3502,8 +3513,11 @@ fn legacy_page(compass: &Compass, focus: &Focus, cx: &mut Context<MissionPlanner
     }
     if legacy.mpcalib_visible {
         // `BUT_MagCalibrationLive` runs `MagCalib.DoGUIMagCalib`, Mission Planner's own
-        // calibration from raw magnetometer samples, which is not ported: the button is drawn,
-        // and inert. `// C#: GCSViews/ConfigurationView/ConfigHWCompass.cs:257-261`
+        // calibration from raw magnetometer samples, whose sphere window is not ported: the
+        // button is drawn, and inert. The group holds nothing else - no Log Calibration: the
+        // Designer makes none, and `BUT_MagCalibrationLog_Click` (`:362-373`) has no caller.
+        // `// C#: GCSViews/ConfigurationView/ConfigHWCompass.cs:257-261;
+        // ConfigHWCompass.Designer.cs:266-279`
         body = body.child(
             group_box(
                 (460.0, 309.0, 172.0, 57.0),
@@ -4846,5 +4860,70 @@ mod tests {
         assert!(main.contains("config::compass::record_facts(&self.compass, &view)"));
         assert!(main.contains("config::compass::overlay("));
         assert!(main.contains("self.compass.tick("));
+    }
+
+    /// Log Calibration is dead C#: `ConfigHWCompass.cs` holds `BUT_MagCalibrationLog_Click`, but
+    /// neither page's Designer makes the button or wires the handler, so it is recorded, not
+    /// ported (PLAN.md §12 D16), and neither page draws it. Mission Planner's group holds Live
+    /// Calibration and the link, as this page draws it. If the C# ever wires the button, this
+    /// fails and the button is to be ported.
+    /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass.cs:362-373;
+    /// ConfigHWCompass.Designer.cs:266-279`
+    #[test]
+    fn log_calibration_has_no_button_to_port() {
+        use crate::config_coverage::source::csharp;
+        // No line of the page's code - comments and these tests aside - names the button, its
+        // text or its handler.
+        let names = [
+            ["Log", "Calibration"].join(" "),
+            ["MagCalibration", "Log"].concat(),
+            ["log", "calibration"].join("-"),
+        ];
+        let (page, _) = include_str!("compass.rs")
+            .split_once(concat!("#[cfg(test)]\n", "mod tests {"))
+            .expect("the tests");
+        for line in page.lines() {
+            let code = line.trim_start();
+            if code.starts_with("//") {
+                continue;
+            }
+            for name in &names {
+                assert!(!code.contains(name.as_str()), "{line}");
+            }
+        }
+        let dir = "GCSViews/ConfigurationView";
+        let (Some(cs), Some(designer), Some(resx), Some(designer2), Some(cs2)) = (
+            csharp(&format!("{dir}/ConfigHWCompass.cs")),
+            csharp(&format!("{dir}/ConfigHWCompass.Designer.cs")),
+            csharp(&format!("{dir}/ConfigHWCompass.resx")),
+            csharp(&format!("{dir}/ConfigHWCompass2.Designer.cs")),
+            csharp(&format!("{dir}/ConfigHWCompass2.cs")),
+        ) else {
+            eprintln!("skipped: the C# tree is not checked out");
+            return;
+        };
+        assert!(cs.contains("private async void BUT_MagCalibrationLog_Click("));
+        assert!(cs.contains("await MagCalib.ProcessLog(ans)"));
+        for (name, text) in [
+            ("ConfigHWCompass.Designer.cs", &designer),
+            ("ConfigHWCompass.resx", &resx),
+            ("ConfigHWCompass2.Designer.cs", &designer2),
+            ("ConfigHWCompass2.cs", &cs2),
+        ] {
+            assert!(
+                !text.contains("MagCalibrationLog"),
+                "{name} makes the button"
+            );
+            assert!(!text.contains("ProcessLog"), "{name} calls ProcessLog");
+        }
+        assert!(
+            designer.contains("this.groupBoxmpcalib.Controls.Add(this.BUT_MagCalibrationLive);")
+        );
+        assert_eq!(
+            designer
+                .matches("this.groupBoxmpcalib.Controls.Add(")
+                .count(),
+            2
+        );
     }
 }

@@ -386,6 +386,8 @@ pub const PANELS: &[Panel] = &[
         // up and down writes of COMPASS_PRIO1_ID to PRIO3_ID, Remove Missing, the Use and learn
         // boxes, Reboot and its CheckReboot, the onboard calibration's Start, Accept and Cancel
         // with the timer's bars, lights and text, the fitness combo, and Large Vehicle MagCal.
+        // It has no Log Calibration and no Live Calibration: MagCalib.cs is called from neither
+        // this .cs nor its Designer.
         Ours::Done(at(COMPASS_RS, "fn page")),
     ),
     panel(
@@ -401,7 +403,9 @@ pub const PANELS: &[Panel] = &[
         // C#: GCSViews/ConfigurationView/ConfigHWCompass.cs:31-780. Shown for ArduPilot before
         // 4.1, which has no COMPASS_PRIO1_ID. 20 of the 21 wirings: all but
         // BUT_MagCalibrationLive's, whose handler is MagCalib.DoGUIMagCalib (MagCalib.cs:136-790),
-        // a feature of its own rather than this page's.
+        // a feature of its own rather than this page's. BUT_MagCalibrationLog_Click (:362-373,
+        // "Min Throttle" then MagCalib.ProcessLog) is not among the 21: the Designer makes no
+        // such button and wires nothing to it - dead C#, recorded and not ported (PLAN §12 D16).
         Partial(
             at(COMPASS_RS, "fn page"),
             "has the declination and its automatic box, learn, the primary compass, each
@@ -410,10 +414,12 @@ pub const PANELS: &[Panel] = &[
         //     and both links - 20 of the 21 wirings; missing Live Calibration, drawn and
         //     disabled: its handler is MagCalib.DoGUIMagCalib (MagCalib.cs), Mission Planner's
         //     own calibration from RAW_IMU and SCALED_IMU2/3 samples - the ProgressReporterSphere
-        //     window with three OpenGL spheres, alglib's Levenberg-Marquardt sphere and
-        //     ellipsoid fits, and the offsets saved through PREFLIGHT_SET_SENSOR_OFFSETS - a
-        //     feature of its own, not ported; its group shows only for ArduPlane 3.7.1 to 4.0
-        //     or a vehicle without onboard calibration",
+        //     window with three OpenGL spheres, the sphere and ellipsoid fits (ported, in
+        //     mp_calibration::magcalib), and the offsets saved through
+        //     PREFLIGHT_SET_SENSOR_OFFSETS - a feature of its own, its window not ported; its
+        //     group shows only for ArduPlane 3.7.1 to 4.0 or a vehicle without onboard
+        //     calibration. No Log Calibration button: BUT_MagCalibrationLog_Click has no caller
+        //     (PLAN §12 D16)",
         ),
     ),
     panel(
@@ -781,14 +787,15 @@ pub const PANELS: &[Panel] = &[
         Some(13),
         &[setup(342, "Advanced", TOP, "always, Advanced view")],
         // C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:18-127 and its .resx - drawn whole;
-        // every button opens a window of its own that is not ported, so each is dimmed with the
-        // window it would open as the reason.
+        // every button opens a window of its own. FFT's (Controls/fftui.cs) is ported, and FFT
+        // opens it (:114-117); each other is dimmed with the window it would open as the reason.
         Partial(
             at("crates/mp-gui/src/config/advanced.rs", "fn page"),
-            "the text and the thirteen buttons with their labels at the table's places; every
-        //     button dimmed - the Warnings Manager, MAVLink Inspector, proximity, signing keys,
-        //     MAVLink mirror, NMEA output, Follow Me, parameter regeneration, moving base, log
-        //     anonymiser, FFT, spectrogram and support proxy windows they open are not ported",
+            "the text and the thirteen buttons with their labels at the table's places; FFT
+        //     opens the FFT window (config/fftui.rs), 1 of the 13 wirings; the other twelve
+        //     dimmed - the Warnings Manager, MAVLink Inspector, proximity, signing keys, MAVLink
+        //     mirror, NMEA output, Follow Me, parameter regeneration, moving base, log
+        //     anonymiser, spectrogram and support proxy windows they open are not ported",
         ),
     ),
     panel(

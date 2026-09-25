@@ -1,5 +1,6 @@
 //! `headless-planner magcal <log> [--ellipsoid] [--min-throttle N]`: `MagCalib.ProcessLog` without its file
-//! dialog - the older compass page's "Log Calibration" and the Temp screen's `BUT_magfit2`.
+//! dialog - the Temp screen's `BUT_magfit2`, and the older compass page's
+//! `BUT_MagCalibrationLog_Click`, which its Designer wires to no button (PLAN.md §12 D16).
 //!
 //! A file whose name ends in `tlog` is read as `getOffsets` reads it: every `RAW_IMU` taken while
 //! the throttle is at least `--min-throttle` percent (the page asks "Min Throttle", offering 30;

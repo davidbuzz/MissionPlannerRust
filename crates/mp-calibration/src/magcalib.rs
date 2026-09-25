@@ -2,8 +2,8 @@
 //! fitted to magnetometer samples on the ground station, rather than by the vehicle's onboard
 //! calibrator.
 //!
-//! The C# file has two users. **Log calibration** (`ProcessLog`, behind the older compass page's
-//! "Log Calibration" button and the hidden Temp screen's `BUT_magfit2`) reads a log's samples - a
+//! The C# file has two users. **Log calibration** (`ProcessLog`, behind the hidden Temp screen's
+//! `BUT_magfit2`, "mag calb log", `temp.cs:410-413`) reads a log's samples - a
 //! telemetry log's `RAW_IMU` with `SENSOR_OFFSETS` taken back off ([`TlogSamples`], `getOffsets`),
 //! or a dataflash log's `MAG` lines with their `OfsX/Y/Z` taken back off ([`DataflashSamples`],
 //! `getOffsetsLog`) - fits them ([`fit_tlog`], [`fit_dataflash`]) and shows the offsets in a box
@@ -13,10 +13,13 @@
 //! same fit. This module is the maths and the words both share; the pages come later (PLAN.md
 //! §13.4 row 44 records Live Calibration as the compass page's one missing wiring):
 //!
-//! - "Log Calibration" (`ConfigHWCompass.BUT_MagCalibrationLog_Click`) will ask "Min Throttle" and
-//!   read the chosen file the way `headless-planner magcal` does - [`TlogSamples`] or [`DataflashSamples`], then
-//!   [`fit_tlog`] or [`fit_dataflash`] - and then write [`offset_params`] through the link and show
-//!   [`saved_message`], or show [`manual_message`] when not connected.
+//! - Log calibration reads the chosen file the way `headless-planner magcal` does -
+//!   [`TlogSamples`] or [`DataflashSamples`], then [`fit_tlog`] or [`fit_dataflash`] - and then
+//!   writes [`offset_params`] through the link and shows [`saved_message`], or shows
+//!   [`manual_message`] when not connected. No compass page calls it: the older page's
+//!   `BUT_MagCalibrationLog_Click` (`ConfigHWCompass.cs:362-373`, asking "Min Throttle") is wired
+//!   to no button by its Designer - dead C#, recorded rather than ported (PLAN.md §12 D16) - and
+//!   the Temp screen is not ported.
 //! - "Live Calibration" will feed `RAW_IMU`/`SCALED_IMU2`/`SCALED_IMU3` through [`SampleFilter`],
 //!   run [`least_sq`] each second past 100 samples for the sphere centres and [`live_error`] for
 //!   its status text, then [`remove_outliers`] and [`least_sq`] with the ellipsoid when the vehicle

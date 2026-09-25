@@ -340,12 +340,20 @@ impl Fft {
     }
 
     /// FFT: `new fftui().Show()`.
-    /// `// C#: GCSViews/ConfigurationView/ConfigFFT.cs:159-162`
+    /// `// C#: GCSViews/ConfigurationView/ConfigFFT.cs:162-165`
     pub fn open_window(&mut self) {
         if !self.enabled || !self.active {
             return;
         }
         self.leave();
+        self.show_window();
+    }
+
+    /// `new fftui().Show()` itself: a fresh window, whichever button asked - this page's FFT, or
+    /// the Advanced page's, which asks nothing of the vehicle first. The window lives here, with
+    /// the one FFT window this application draws.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFFT.cs:162-165; ConfigAdvanced.cs:114-117`
+    pub fn show_window(&mut self) {
         self.opened += 1;
         self.window = Some(FftUi::new());
     }

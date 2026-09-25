@@ -1357,7 +1357,7 @@ impl MissionPlanner {
                 cx,
             ),
             // C#: GCSViews/ConfigurationView/ConfigAdvanced.Designer.cs:29-266; ConfigAdvanced.resx
-            "ConfigAdvanced" => crate::config::advanced::page(),
+            "ConfigAdvanced" => crate::config::advanced::page(cx),
             // ---- end Basic Tuning / Advanced ----
             // ---- Extended Tuning ----
             // C#: GCSViews/ConfigurationView/ConfigArducopter.Designer.cs; ConfigArducopter.resx

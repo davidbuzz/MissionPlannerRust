@@ -82,10 +82,12 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
         //     and both links - 20 of the 21 wirings; missing Live Calibration, drawn and
         //     disabled: its handler is MagCalib.DoGUIMagCalib (MagCalib.cs), Mission Planner's
         //     own calibration from RAW_IMU and SCALED_IMU2/3 samples - the ProgressReporterSphere
-        //     window with three OpenGL spheres, alglib's Levenberg-Marquardt sphere and
-        //     ellipsoid fits, and the offsets saved through PREFLIGHT_SET_SENSOR_OFFSETS - a
-        //     feature of its own, not ported; its group shows only for ArduPlane 3.7.1 to 4.0
-        //     or a vehicle without onboard calibration |
+        //     window with three OpenGL spheres, the sphere and ellipsoid fits (ported, in
+        //     mp_calibration::magcalib), and the offsets saved through
+        //     PREFLIGHT_SET_SENSOR_OFFSETS - a feature of its own, its window not ported; its
+        //     group shows only for ArduPlane 3.7.1 to 4.0 or a vehicle without onboard
+        //     calibration. No Log Calibration button: BUT_MagCalibrationLog_Click has no caller
+        //     (PLAN §12 D16) |
 | 211 | `ConfigRadioInput` | Radio Calibration | Mandatory Hardware | any | 8 | done: `crates/mp-gui/src/config/radio.rs` `fn page` |
 | 215 | `ConfigRadioOutput` | Servo Output | Mandatory Hardware | any | 1 | done: `crates/mp-gui/src/config/servo_output.rs` `fn page` |
 | 220 | `ConfigSerial` | Serial Ports | Mandatory Hardware | any | 0 | done: `crates/mp-gui/src/config/serial_ports.rs` `fn page` |
@@ -133,10 +135,11 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
 | 329 | `ConfigHWESP8266` (`ConfigHWesp8266.cs`) | ESP8266 Setup | Optional Hardware | any | 3 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 | 333 | `TrackerUI` (`Antenna/TrackerUI.cs`, not a panel) | Antenna Tracker | Optional Hardware | always | 0 | **missing** |
 | 337 | `ConfigFFT` | FFT Setup | Optional Hardware | any | no Designer | done: `crates/mp-gui/src/config/fft.rs` `fn page` |
-| 342 | `ConfigAdvanced` | Advanced |  | always, Advanced view | 13 | partial: `crates/mp-gui/src/config/advanced.rs` `fn page` - the text and the thirteen buttons with their labels at the table's places; every
-        //     button dimmed - the Warnings Manager, MAVLink Inspector, proximity, signing keys,
-        //     MAVLink mirror, NMEA output, Follow Me, parameter regeneration, moving base, log
-        //     anonymiser, FFT, spectrogram and support proxy windows they open are not ported |
+| 342 | `ConfigAdvanced` | Advanced |  | always, Advanced view | 13 | partial: `crates/mp-gui/src/config/advanced.rs` `fn page` - the text and the thirteen buttons with their labels at the table's places; FFT
+        //     opens the FFT window (config/fftui.rs), 1 of the 13 wirings; the other twelve
+        //     dimmed - the Warnings Manager, MAVLink Inspector, proximity, signing keys, MAVLink
+        //     mirror, NMEA output, Follow Me, parameter regeneration, moving base, log
+        //     anonymiser, spectrogram and support proxy windows they open are not ported |
 | 346 | `ConfigTerminal` | Terminal | Advanced | always, Advanced view | 12 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 | 351 | `ConfigREPL` | Script REPL | Advanced | connected, Advanced view | 4 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 

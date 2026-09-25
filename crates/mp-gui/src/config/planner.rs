@@ -4740,13 +4740,19 @@ mod tests {
     /// A script of this page, step for step, against the model, with `source`'s cameras:
     /// returns how many facts it checked and how many restarts it made.
     fn run_script(script: &str, source: &FakeSource) -> (usize, usize) {
+        // Two script tests run at once; each needs a scratch directory of its own, or one
+        // removes the other's config.xml between its write and its read.
+        run_script_in(script, source, if source.devices().is_empty() { "script-planner" } else { "script-video" })
+    }
+
+    fn run_script_in(script: &str, source: &FakeSource, scratch: &str) -> (usize, usize) {
         assert!(
             script
                 .lines()
                 .any(|line| line == "env MP_CONFIG_XML $WORK/config.xml"),
             "the script has a config.xml of its own"
         );
-        let scratch = Scratch::new("script");
+        let scratch = Scratch::new(scratch);
         let path = scratch.config();
         // `env XDG_DATA_HOME $WORK`: a data directory, and so a log directory, that do not exist.
         let logs = scratch.0.join("MissionPlannerRust").join("logs");

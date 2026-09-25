@@ -7,12 +7,17 @@
 # no SITL, and there is no parameter on the page to write.
 #
 # The claims: the page shows label1's text and the table's thirteen buttons with the label beside
-# each, in the .resx's order, and every button is dimmed - each opens a window of its own
-# (ConfigAdvanced.cs:22-127: the Warnings Manager, MAVLink Inspector, proximity, signing keys,
-# MAVLink mirror, NMEA output, Follow Me, parameter regeneration, moving base, log anonymiser, FFT,
-# spectrogram, support proxy) that this application does not have. The script clicks none of
-# them; config/advanced.rs's tests hold the controls to the Designer and the .resx and each
-# handler to the window its row names.
+# each, in the .resx's order. Each opens a window of its own (ConfigAdvanced.cs:22-127). FFT's,
+# Controls/fftui.cs, is ported: FFT opens it with no vehicle (`new fftui().Show()`,
+# ConfigAdvanced.cs:114-117), and "Run all imus - IMU1-3 MSG" on testdata/dataflash.bin draws
+# the GYR and ACC graphs, as tests/gui/config-fft.gui has it from the FFT Setup page. The other
+# twelve are dimmed - the Warnings Manager, MAVLink Inspector, proximity, signing keys, MAVLink
+# mirror, NMEA output, Follow Me, parameter regeneration, moving base, log anonymiser,
+# spectrogram and support proxy windows are not in this application - and the script clicks
+# none of them; config/advanced.rs's tests hold the controls to the Designer and the .resx and
+# each handler to the window its row names.
+#
+# Run from the repository root, where the log's path is typed relative to.
 
 env XDG_DATA_HOME $WORK
 
@@ -33,8 +38,52 @@ expect config.advanced.text The following pages are for advanced configutation o
 expect config.advanced.buttons Warning Manager,MAVLink Inspector,Proximity,Mavlink Signing,Mavlink Mirror,NMEA,Follow Me,Param gen,Moving Base,Anon Log,FFT,Spectrogram,Support Proxy
 expect config.advanced.labels ~ Enable custom warnings based on a set of conditions|View decoded mavlink data
 expect config.advanced.labels ~ |Share connection with support engineer
-expect config.advanced.buttons.enabled false
+expect config.advanced.buttons.enabled FFT
 expect config.advanced.dimmed ~ but_mavinspector: the MAVLink Inspector window (Controls/MAVLinkInspector.cs) is not ported
+expect config.advanced.dimmed ~ but_anonlog: anonymising a log (ExtLibs/Utilities/Privacy.cs) is not ported; BUT_spect:
+expect config.fft.window false
+
+# FFT: the window, as the Designer makes it, with no vehicle and the FFT Setup page never shown.
+click advanced-but_fft
+settle 1
+expect config.fft.window true
+expect config.fft.opened 1
+expect config.fft.active false
+expect config.fft.window.bins 10
+expect config.fft.window.startfreq 5
+expect config.fft.window.magnitude false
+expect config.fft.window.graphs 0
+expect config.fft.window.prompt none
+
+# Bins down to 8 (256 samples), so the fixture's 1365 IMU records make five slices.
+click fft-NUM_bins-down
+click fft-NUM_bins-down
+expect config.fft.window.bins 8
+
+# Run all imus - IMU1-3 MSG: its file dialog, the log typed.
+click fft-but_fftimu13
+settle 1
+expect config.fft.window.prompt Run all imus - IMU1-3 MSG
+type testdata/dataflash.bin
+settle 1
+expect config.fft.window.prompt.text testdata/dataflash.bin
+click fft-open-ok
+settle 4
+expect config.fft.window.prompt none
+expect config.fft.window.running none
+expect config.fft.window.last imu13 done
+expect config.fft.window.graphs 6
+expect config.fft.window.graph.0.title FFT IMU GYR - dataflash.bin - 22.2hz input
+expect config.fft.window.graph.0.curves IMU GYR x,IMU GYR y,IMU GYR z
+expect config.fft.window.graph.0.peak 7 hz/420 rpm
+expect config.fft.window.graph.1.title FFT IMU ACC - dataflash.bin - 22.2hz input
+
+# The close box; the page stays.
+click fft-close
+settle 1
+expect config.fft.window false
+expect setup.page ConfigAdvanced
+expect config.advanced.active true
 
 # The heading again closes it, and Advanced is still the page showing; another page and it is not.
 click setup-page-ConfigAdvanced
