@@ -54,8 +54,8 @@ expect params.modified false
 
 # A step is written and echoed, and leaves nothing in _changes behind it.
 # This SITL (Copter 4.7-dev) names the parameter RTL_ALT_M.
-# The tree lists every group; RTL lies below a 1200-pixel window, so the wheel brings it up.
-scroll params-tree down 12
+# The tree lists every group; RTL lies below a 1200-pixel window: wheeled into view.
+reveal params-tree param-group-RTL
 click param-group-RTL
 click param-RTL_ALT_M
 click param-step-+
@@ -73,6 +73,8 @@ expect params.write.outcome accepted
 expect params.changes 0
 
 # The tree collapsed: its prefix dropped, every row showing.
+# The tree is drawn afresh on each return to the screen, unscrolled: wheeled to RTL again.
+reveal params-tree param-group-RTL
 click param-group-RTL
 settle 1
 expect params.shown > 0

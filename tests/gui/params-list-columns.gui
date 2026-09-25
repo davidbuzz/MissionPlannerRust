@@ -61,8 +61,8 @@ expect params.width.Fav 30
 expect params.splitter 260
 
 # RTL's rows in natural order; RTL_LOIT_TIME made a favourite goes first.
-# The tree lists every group; RTL lies below a 1200-pixel window, so the wheel brings it up.
-scroll params-tree down 12
+# The tree lists every group; RTL lies below a 1200-pixel window: wheeled into view.
+reveal params-tree param-group-RTL
 click param-group-RTL
 settle 1
 expect params.fav none
@@ -156,6 +156,8 @@ expect params.active true
 expect params.warning false
 
 # The last favourite unticked: the cell unticks, the setting keeps it (SetList of nothing).
+# The tree is drawn afresh on each return to the screen, unscrolled: wheeled to RTL again.
+reveal params-tree param-group-RTL
 click param-group-RTL
 settle 1
 click param-fav-RTL_LOIT_TIME

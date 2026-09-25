@@ -61,7 +61,7 @@ expect fly.script.running false
 expect fly.script.result ok
 expect fly.script.console ~ hello from the Scripts tab
 expect fly.script.console ~ lat -35.36
-expect fly.script.console ~ param 1100.0
+expect fly.script.console ~ param 1000.0
 expect fly.script.console ~ mode True
 expect fly.script.console ~ done
 

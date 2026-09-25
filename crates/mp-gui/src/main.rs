@@ -96,21 +96,25 @@ impl Docking {
 /// scrolls, as this application draws every drop-down. Measured under `id`, so a script can
 /// wheel it to an entry past the rows it shows (`reveal main-port-list main-port-TCP`).
 fn dropdown(id: &'static str, rows: Vec<gpui::AnyElement>) -> gpui::AnyElement {
+    // The measured box is the scrolling container's, the rows it shows - not the union of every
+    // row, which reached below the window and told `reveal` an entry was in view when it was not.
     gpui::deferred(
         gpui::anchored().snap_to_window().child(
-            probe::measured(id, div())
-                .id(id)
-                .mt(px(22.0))
-                .flex()
-                .flex_col()
-                .max_h(px(30.0 * 20.0))
-                .overflow_y_scroll()
-                .bg(rgb(theme::PANEL))
-                .border_1()
-                .border_color(rgb(theme::BORDER))
-                .rounded_sm()
-                .occlude()
-                .children(rows),
+            probe::measured(id, div()).child(
+                div()
+                    .id(id)
+                    .mt(px(22.0))
+                    .flex()
+                    .flex_col()
+                    .max_h(px(30.0 * 20.0))
+                    .overflow_y_scroll()
+                    .bg(rgb(theme::PANEL))
+                    .border_1()
+                    .border_color(rgb(theme::BORDER))
+                    .rounded_sm()
+                    .occlude()
+                    .children(rows),
+            ),
         ),
     )
     .with_priority(2)
@@ -2129,7 +2133,7 @@ impl MissionPlanner {
             cx,
         )
         .into_iter()
-        .chain(prefetch_ui::overlays(&self.plan_menus, cx))
+        .chain(prefetch_ui::overlays(&self.plan_menus, window, cx))
         .collect();
         match self.plan_docking {
             Docking::Right => div()

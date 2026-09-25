@@ -2281,15 +2281,20 @@ pub fn split(
             }),
         )
         .children(tree.map(|tree| {
-            // Measured, so a script can wheel it to a group below the window.
+            // Measured by its scrolling box - the rows in view, not the union of every row,
+            // which reached below the window - so a script can `reveal` a group below it.
             crate::probe::measured("params-tree", div())
-                .id("params-tree")
                 .w(px(distance))
                 .flex_shrink_0()
                 .h_full()
-                .p_2()
-                .overflow_y_scroll()
-                .child(tree)
+                .child(
+                    div()
+                        .id("params-tree")
+                        .size_full()
+                        .p_2()
+                        .overflow_y_scroll()
+                        .child(tree),
+                )
         }))
         .children(showing_tree.then(|| {
             crate::probe::measured("param-splitter", div())
@@ -2332,7 +2337,10 @@ fn check(
         .flex()
         .items_center()
         .gap_1()
-        .mr_auto()
+        // Takes the row's free space so OK sits at the right edge. Not `mr_auto`: under the
+        // row's `justify_end` the layout counted the free space twice - once as the margin and
+        // once as the end offset - and drew OK 140 px outside the box (the owner, 2026-09-25).
+        .flex_grow(1.0)
         .text_xs()
         .cursor_pointer()
         .text_color(rgb(theme::TEXT))

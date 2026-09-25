@@ -18,7 +18,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use gpui::{AnyElement, Context, div, prelude::*, px, rgb};
+use gpui::{AnyElement, Context, Window, div, prelude::*, px, rgb};
 use mp_tiles::TileCache;
 use mp_tiles::prefetch::{self, Area, Progress};
 use mp_tiles::source::TileSource;
@@ -272,7 +272,11 @@ pub(crate) fn path_walks(points: &[LatLon], max_zoom: i32) -> Vec<(Area, u8)> {
 
 /// The menu form, over the screen, while a range is being chosen.
 /// `// C#: TilePrefetcherMenu.Designer.cs`
-pub(crate) fn menu_form(menu: &PrefetchMenu, cx: &mut Context<MissionPlanner>) -> AnyElement {
+pub(crate) fn menu_form(
+    menu: &PrefetchMenu,
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
     let (lines, total) = menu.text();
     let spinner = |label: &'static str,
                    value: u8,
@@ -409,13 +413,17 @@ pub(crate) fn menu_form(menu: &PrefetchMenu, cx: &mut Context<MissionPlanner>) -
                     }),
                 )),
         );
-    backdrop("plan-prefetch-menu-backdrop", form.into_any_element())
+    backdrop("plan-prefetch-menu-backdrop", form.into_any_element(), window)
 }
 
 /// The prefetcher form while a job runs or has just ended: the progress line, the bar, the
 /// cache's words, and Cancel.
 /// `// C#: TilePrefetcher.Designer.cs`
-pub(crate) fn job_form(job: &PrefetchJob, cx: &mut Context<MissionPlanner>) -> AnyElement {
+pub(crate) fn job_form(
+    job: &PrefetchJob,
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
     let ended = job.finished() || job.cancelled();
     let form = crate::probe::measured("plan-prefetch", div())
         .flex()
@@ -453,19 +461,22 @@ pub(crate) fn job_form(job: &PrefetchJob, cx: &mut Context<MissionPlanner>) -> A
                 cx.notify();
             }),
         )));
-    backdrop("plan-prefetch-backdrop", form.into_any_element())
+    backdrop("plan-prefetch-backdrop", form.into_any_element(), window)
 }
 
-/// A form over the whole window, centred, taking the clicks around it as a modal does.
-fn backdrop(id: &'static str, form: AnyElement) -> AnyElement {
+/// A form over the whole window, centred, taking the clicks around it as a modal does. The
+/// backdrop is the viewport's size: a 100,000-pixel one centred the form at (50,000, 50,000),
+/// which is where plan-prefetch.gui found its buttons on 2026-09-25.
+fn backdrop(id: &'static str, form: AnyElement, window: &Window) -> AnyElement {
+    let size = window.viewport_size();
     gpui::deferred(
         gpui::anchored()
             .position(gpui::point(px(0.0), px(0.0)))
             .child(
                 div()
                     .id(id)
-                    .w(px(100_000.0))
-                    .h(px(100_000.0))
+                    .w(size.width)
+                    .h(size.height)
                     .flex()
                     .items_center()
                     .justify_center()
@@ -480,13 +491,14 @@ fn backdrop(id: &'static str, form: AnyElement) -> AnyElement {
 /// The forms to draw, if any: the job's over the menu's.
 pub(crate) fn overlays(
     menus: &crate::plan::PlanMenus,
+    window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> Vec<AnyElement> {
     let mut out = Vec::new();
     if let Some(job) = menus.prefetch.as_ref() {
-        out.push(job_form(job, cx));
+        out.push(job_form(job, window, cx));
     } else if let Some(menu) = menus.prefetch_menu.as_ref() {
-        out.push(menu_form(menu, cx));
+        out.push(menu_form(menu, window, cx));
     }
     out
 }

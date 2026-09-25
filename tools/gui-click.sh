@@ -41,9 +41,11 @@ FRACTION=""
 [ "$TARGET" != "$NAME" ] && FRACTION="${TARGET#*@}"
 
 # The probe file is written when a control moves, so it may not exist the instant the window maps.
-for _ in $(seq 1 40); do
+# Looked for every 50 ms, up to ten seconds: a control that appears 60 ms after the click that
+# made it costs 60 ms, not a quarter second.
+for _ in $(seq 1 200); do
     [ -s "$PROBE" ] && grep -q "\"$NAME\"" "$PROBE" && break
-    sleep 0.25
+    sleep 0.05
 done
 
 if ! grep -q "\"$NAME\"" "$PROBE" 2>/dev/null; then
@@ -57,13 +59,13 @@ fi
 # The application rewrites the probe file whenever a control moves, and a click can move things:
 # a chip whose label grows reflows the row after it. Resolving the target from a file written
 # before that reflow clicks where the control was. So wait until the file has been still for
-# 300 ms (at most 3 s) before reading it.
+# 100 ms (at most 1 s) before reading it - a reflow follows a click within a frame or two.
 STAMP=""
 for _ in $(seq 1 10); do
     NOW=$(stat -c '%Y%s' "$PROBE" 2>/dev/null || echo "")
     [ -n "$STAMP" ] && [ "$NOW" = "$STAMP" ] && break
     STAMP="$NOW"
-    sleep 0.3
+    sleep 0.1
 done
 LINE=$(grep "\"$NAME\"" "$PROBE")
 if [ -z "$FRACTION" ]; then

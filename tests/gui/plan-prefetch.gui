@@ -60,7 +60,8 @@ click plan-prefetch-max-down
 click plan-prefetch-max-down
 click plan-prefetch-max-down
 expect plan.prefetch.menu 3-3
-expect plan.prefetch.menu.total Estimated: 1 tile for 14.65 KB
+# The C#'s size text ends with a space (sizeConverter), which a value here cannot carry.
+expect plan.prefetch.menu.total ~ Estimated: 1 tile for 14.65 KB
 click plan-prefetch-ok
 settle 2
 expect plan.prefetch.walks 1

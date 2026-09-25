@@ -28,8 +28,8 @@ expect params.held > 500
 # Nothing written yet.
 expect params.write.outcome none
 # This SITL (Copter 4.7-dev) names the parameter RTL_ALT_M; older firmware says RTL_ALT.
-# The tree lists every group; RTL lies below a 1200-pixel window, so the wheel brings it up.
-scroll params-tree down 12
+# The tree lists every group; RTL lies below a 1200-pixel window: wheeled into view.
+reveal params-tree param-group-RTL
 click param-group-RTL
 click param-RTL_ALT_M
 click param-step-+

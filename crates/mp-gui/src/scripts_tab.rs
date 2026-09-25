@@ -583,8 +583,11 @@ pub fn page(tab: &ScriptsTab, cx: &mut Context<MissionPlanner>) -> AnyElement {
         SELECT_TEXT,
         SELECT_AT,
         !running,
-        |this, _window, _cx| {
+        |this, window, cx| {
             this.fly_actions.ask(crate::fly::Prompt::SelectScript, "");
+            // The box takes the typed path: the field has the focus, as the other typed
+            // questions give it (found by fly-scripts.gui, 2026-09-25).
+            this.fly_focus.prompt.focus(window, cx);
         },
         cx,
     ));

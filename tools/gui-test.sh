@@ -18,7 +18,18 @@
 #   tiles on                    configure a tile source and fetch what the cache lacks
 #   env MP_TILE_CACHE $WORK/c   export a variable before launch; the rest of the line is the value
 #   setup tools/seed $WORK/c    run a command, from the repo root, before launch
-#   settle 6                    wait, for telemetry to arrive or a view to settle
+#   budget 5                    seconds the whole test may take from its window to its last
+#                               line; 5 unless a script says otherwise (MP_GUI_BUDGET overrides
+#                               the default). Over it is a failure: the owner's rule of
+#                               2026-09-25, "each individual GUI test is fully completed within
+#                               5 seconds". Every line is stamped `t=+1.234s` on the way, so
+#                               the log says where the time went.
+#   settle 6                    wait, for telemetry to arrive or a view to settle - rarely
+#                               needed now: `expect` waits for its fact (up to
+#                               MP_GUI_EXPECT_WAIT seconds, 10 by default) and a click waits
+#                               for its control, so a test takes the time the application
+#                               takes and no more (the owner's rule of 2026-09-25: the
+#                               smallest waits that pass)
 #   click map@0.45x0.40         click a named control, as tools/gui-click.sh addresses them
 #   click tab-plan:right        a right-click
 #   doubleclick log-chart@0.5x0.5  a double click: two left presses at one point, 80 ms apart
@@ -118,6 +129,15 @@ ENV_NAMES=()
 ENV_VALUES=()
 SETUP_COMMANDS=()
 SETUP_LINES=()
+# The time a test may take, from its window to its last line: 5 s, the owner's rule.
+TEST_BUDGET_SECONDS="${MP_GUI_BUDGET:-5}"
+# How long an `expect` waits for its fact, and a click for its control, before it is a failure.
+EXPECT_WAIT_MS=$(awk -v s="${MP_GUI_EXPECT_WAIT:-10}" 'BEGIN { printf "%d", s * 1000 }')
+# Set while an `expect` is asked quietly, in its wait loop.
+QUIET=""
+now_ms() { date +%s%3N; }
+# Milliseconds as "1.234".
+seconds() { printf '%d.%03d' $(($1 / 1000)) $(($1 % 1000)); }
 SCAN_NO=0
 
 # Read the directives that must be set before the application starts.
@@ -144,6 +164,10 @@ while IFS= read -r LINE; do
             [ -n "$COMMAND" ] || { echo "line $SCAN_NO: setup needs a command" >&2; exit 2; }
             SETUP_COMMANDS+=("${COMMAND//\$WORK/$WORK}")
             SETUP_LINES+=("$SCAN_NO")
+            ;;
+        budget)
+            [[ "${2:-}" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "line $SCAN_NO: budget wants seconds, not '${2:-}'" >&2; exit 2; }
+            TEST_BUDGET_SECONDS="$2"
             ;;
     esac
 done < "$SCRIPT"
@@ -237,6 +261,18 @@ find_window() {
     done
 }
 
+# A control resolved with patience: the probe is written a frame after the layout that put the
+# control there, so a click straight after the action that made it would miss. Tries again
+# every 50 ms up to EXPECT_WAIT_MS, and prints what it waited when it waited at all.
+resolve_control() {
+    local started coords waited
+    started=$(now_ms)
+    coords=$("$ROOT/tools/gui-click.sh" --resolve "$PROBE_FILE" "$WIN_ID" "$1") || return 1
+    waited=$(($(now_ms) - started))
+    [ "$waited" -gt 150 ] && echo "       ($1 resolved after $(seconds $waited) s)"
+    echo "$coords"
+}
+
 # Before a step drives the window: the id it holds must still be a window. Once in sixty runs an
 # id went stale between steps (xdotool answered BadWindow and the click landed nowhere, so a
 # script clicked into the wrong screen); the window is found again by the application's pid.
@@ -254,10 +290,10 @@ start_app() {
     find_window 60
     [ -n "$WIN_ID" ] || { echo "no window owned by pid $APP_PID appeared" >&2; exit 1; }
 
-    sleep 1
+    sleep 0.3
     xdotool windowactivate --sync "$WIN_ID" 2>/dev/null
     xdotool windowmove "$WIN_ID" "${SHOT_AT%%,*}" "${SHOT_AT##*,}" 2>/dev/null
-    sleep 0.5
+    sleep 0.2
 }
 
 # Sends a window WM_DELETE_WINDOW, as a window manager's close box does. xdotool's windowclose
@@ -278,7 +314,10 @@ d.flush()
 PY
 }
 
+T_LAUNCH=$(now_ms)
 start_app
+T0=$(now_ms)
+echo "window after $(seconds $((T0 - T_LAUNCH))) s; budget $TEST_BUDGET_SECONDS s from here"
 
 # Reads one fact. Empty if the key is absent, which `expect` reports as a failure rather than
 # comparing against nothing.
@@ -320,6 +359,85 @@ holds() {
     esac
 }
 
+# One check of an `expect` line, its words as the arguments. Prints its verdict and returns 0
+# when the expectation holds, 1 when it does not; under QUIET it prints nothing, so the wait
+# loop can ask again. `no_such_fact`'s listing of the known facts is for the final verdict only.
+expect_once() {
+    local KEY OP WANT GOT OTHER VERDICT
+    KEY="${2:?expect needs a key}"
+    OP="${3:?expect needs a value}"
+    # `expect key value` is equality; `expect key ~ value` is containment; `expect key > n`,
+    # `expect key >= n` and `expect key < n` compare numbers, decimals included.
+    if [ "$OP" = "~" ]; then
+        shift 3
+        WANT="$*"
+        GOT=$(fact "$KEY")
+        case "$GOT" in
+            *"$WANT"*) [ -z "$QUIET" ] && echo "  ok   $KEY contains '$WANT'"; return 0 ;;
+        esac
+        [ -z "$QUIET" ] && echo "FAIL line $LINE_NO: $KEY is '$GOT', expected to contain '$WANT'" >&2
+        return 1
+    elif [ "$OP" = ">" ] || [ "$OP" = ">=" ] || [ "$OP" = "<" ]; then
+        WANT="${4:-}"
+        GOT=$(fact "$KEY")
+        if ! [[ "$WANT" =~ ^-?[0-9]+$ ]]; then
+            [ -z "$QUIET" ] && echo "FAIL line $LINE_NO: '$OP' needs an integer to compare with, not '$WANT'" >&2
+            return 1
+        fi
+        if [ -z "$GOT" ] && ! grep -q "^$(fact_key_pattern "$KEY") = " "$FACTS_FILE" 2>/dev/null; then
+            [ -z "$QUIET" ] && no_such_fact "$KEY" ""
+            return 1
+        fi
+        if holds "$GOT" "$OP" "$WANT"; then
+            [ -z "$QUIET" ] && echo "  ok   $KEY = $GOT $OP $WANT"
+            return 0
+        fi
+        [ -z "$QUIET" ] && echo "FAIL line $LINE_NO: $KEY is '$GOT', expected $OP $WANT" >&2
+        return 1
+    elif [ "$OP" = "below" ] || [ "$OP" = "above" ] || [ "$OP" = "left-of" ] || [ "$OP" = "right-of" ]; then
+        # `expect a below b` (above, left-of, right-of): where two measured controls sit
+        # relative to each other, from the positions the application reports.
+        OTHER="${4:?expect $OP needs another control}"
+        VERDICT=$(python3 - "$PROBE_FILE" "$KEY" "$OTHER" "$OP" <<'PY'
+import json, sys
+probe = json.load(open(sys.argv[1]))
+a, b, op = probe.get(sys.argv[2]), probe.get(sys.argv[3]), sys.argv[4]
+if a is None or b is None:
+    print("missing " + (sys.argv[2] if a is None else sys.argv[3])); sys.exit(0)
+holds = {
+    "below": a["y"] >= b["y"] + b["height"],
+    "above": a["y"] + a["height"] <= b["y"],
+    "left-of": a["x"] + a["width"] <= b["x"],
+    "right-of": a["x"] >= b["x"] + b["width"],
+}[op]
+print("ok" if holds else "no (%s at %d,%d %dx%d; %s at %d,%d %dx%d)" % (
+    sys.argv[2], a["x"], a["y"], a["width"], a["height"],
+    sys.argv[3], b["x"], b["y"], b["width"], b["height"]))
+PY
+)
+        if [ "$VERDICT" = "ok" ]; then
+            [ -z "$QUIET" ] && echo "  ok   $KEY $OP $OTHER"
+            return 0
+        fi
+        [ -z "$QUIET" ] && echo "FAIL line $LINE_NO: $KEY is not $OP $OTHER: $VERDICT" >&2
+        return 1
+    else
+        shift 2
+        WANT="$*"
+        GOT=$(fact "$KEY")
+        if [ -z "$GOT" ] && ! grep -q "^$(fact_key_pattern "$KEY") = " "$FACTS_FILE" 2>/dev/null; then
+            [ -z "$QUIET" ] && no_such_fact "$KEY" ""
+            return 1
+        fi
+        if [ "$GOT" = "$WANT" ]; then
+            [ -z "$QUIET" ] && echo "  ok   $KEY = $WANT"
+            return 0
+        fi
+        [ -z "$QUIET" ] && echo "FAIL line $LINE_NO: $KEY is '$GOT', expected '$WANT'" >&2
+        return 1
+    fi
+}
+
 FAILURES=0
 LINE_NO=0
 while IFS= read -r RAW; do
@@ -331,12 +449,15 @@ while IFS= read -r RAW; do
     # shellcheck disable=SC2086 # deliberate word splitting into positional parameters
     set -- $LINE
     [ $# -eq 0 ] && continue
+    # Every line stamped with the time since the window appeared, so the log says where a
+    # test's seconds went.
+    echo "t=+$(seconds $(($(now_ms) - T0)))s line $LINE_NO: $LINE"
 
     case "$1" in
         click|doubleclick|hover|scroll|reveal|type|key) ensure_window ;;
     esac
     case "$1" in
-        screen|window|tiles|env|setup) ;;  # already applied before launch
+        screen|window|tiles|env|setup|budget) ;;  # already applied before launch
         settle)
             sleep "${2:-1}"
             ;;
@@ -347,11 +468,19 @@ while IFS= read -r RAW; do
                 *:right) BUTTON=3; TARGET="${TARGET%:right}" ;;
                 *:middle) BUTTON=2; TARGET="${TARGET%:middle}" ;;
             esac
-            if ! "$ROOT/tools/gui-click.sh" "$PROBE_FILE" "$WIN_ID" "$TARGET" "$BUTTON"; then
+            if COORDS=$(resolve_control "$TARGET"); then
+                COORDS=$(printf '%s\n' "$COORDS" | tail -1)
+                echo "clicking '$TARGET' (button $BUTTON) at window-relative ${COORDS/ /,}"
+                # shellcheck disable=SC2086 # "x y", two words on purpose
+                xdotool mousemove --window "$WIN_ID" $COORDS
+                sleep 0.03
+                xdotool click "$BUTTON"
+            else
                 echo "line $LINE_NO: could not click '$TARGET'" >&2
                 FAILURES=$((FAILURES + 1))
             fi
-            sleep 0.6
+            # A frame for the click to land; what follows waits for its own fact or control.
+            sleep 0.1
             ;;
         doubleclick)
             # Two `click`s cannot make one: each waits for the probe file to settle and then
@@ -368,7 +497,7 @@ while IFS= read -r RAW; do
                 echo "line $LINE_NO: could not double-click '$TARGET'" >&2
                 FAILURES=$((FAILURES + 1))
             fi
-            sleep 0.6
+            sleep 0.1
             ;;
         reveal)
             # Scrolls a drop-down list until one of its entries lies inside the list's box, a
@@ -384,7 +513,7 @@ while IFS= read -r RAW; do
                 xdotool mousemove --window "$WIN_ID" $COORDS
                 sleep 0.05
                 xdotool click --repeat 45 --delay 60 4
-                sleep 0.6
+                sleep 0.1
             fi
             for _ in $(seq 1 45); do
                 DIRECTION=$(python3 - "$PROBE_FILE" "$LIST" "$ENTRY" <<'PY'
@@ -394,8 +523,13 @@ lst, entry = probe.get(sys.argv[2]), probe.get(sys.argv[3])
 if lst is None or entry is None:
     print("missing"); sys.exit(0)
 top, bottom = lst["y"], lst["y"] + lst["height"]
-cy = entry["centre_y"]
-print("inside" if top <= cy < bottom else ("down" if cy >= bottom else "up"))
+# Inside means the whole entry, with a little to spare: an entry whose centre is in the box
+# but whose edge is at the box's edge was clicked on the box's border (2026-09-25).
+etop, ebottom = entry["y"], entry["y"] + entry["height"]
+if top + 2 <= etop and ebottom <= bottom - 2:
+    print("inside")
+else:
+    print("down" if ebottom > bottom - 2 else "up")
 PY
 )
                 case "$DIRECTION" in
@@ -409,7 +543,7 @@ PY
                     xdotool mousemove --window "$WIN_ID" $COORDS
                     sleep 0.05
                     xdotool click "$WHEEL"
-                    sleep 0.4
+                    sleep 0.12
                 else
                     break
                 fi
@@ -420,7 +554,7 @@ PY
                 echo "line $LINE_NO: could not reveal '$ENTRY' in '$LIST' ($DIRECTION)" >&2
                 FAILURES=$((FAILURES + 1))
             fi
-            sleep 0.6
+            sleep 0.1
             ;;
         hover)
             # The pointer moved onto a control, no button: what a marker's hover shows.
@@ -433,7 +567,7 @@ PY
                 echo "line $LINE_NO: could not hover '$TARGET'" >&2
                 FAILURES=$((FAILURES + 1))
             fi
-            sleep 0.6
+            sleep 0.1
             ;;
         scroll)
             # The wheel, N notches, over a control: what brings a drop-down list's later rows into
@@ -458,7 +592,7 @@ PY
                 echo "line $LINE_NO: could not scroll '$TARGET'" >&2
                 FAILURES=$((FAILURES + 1))
             fi
-            sleep 0.6
+            sleep 0.1
             ;;
         type)
             shift
@@ -466,13 +600,14 @@ PY
             # Keystrokes reach the application through the input method when one is running
             # (ibus over XIM here) and come back after a round trip; a click or a key sent next
             # does not wait for them, and has overtaken typed text more than once. Give the
-            # text time to land before the next line runs.
-            sleep 1
-            sleep 0.6
+            # text time to land before the next line runs; an `expect` on the field is the
+            # sure way.
+            sleep 0.3
+            sleep 0.1
             ;;
         key)
             xdotool key --window "$WIN_ID" --clearmodifiers "${2:?key needs a name}"
-            sleep 0.6
+            sleep 0.1
             ;;
         restart)
             if ! close_window "$WIN_ID"; then
@@ -497,76 +632,18 @@ PY
             start_app
             ;;
         expect)
-            KEY="${2:?expect needs a key}"
-            OP="${3:?expect needs a value}"
-            # `expect key value` is equality; `expect key ~ value` is containment; `expect key > n`,
-            # `expect key >= n` and `expect key < n` compare numbers, decimals included.
-            if [ "$OP" = "~" ]; then
-                shift 3
-                WANT="$*"
-                GOT=$(fact "$KEY")
-                case "$GOT" in
-                    *"$WANT"*) echo "  ok   $KEY contains '$WANT'" ;;
-                    *)
-                        echo "FAIL line $LINE_NO: $KEY is '$GOT', expected to contain '$WANT'" >&2
-                        FAILURES=$((FAILURES + 1))
-                        ;;
-                esac
-            elif [ "$OP" = ">" ] || [ "$OP" = ">=" ] || [ "$OP" = "<" ]; then
-                WANT="${4:-}"
-                GOT=$(fact "$KEY")
-                if ! [[ "$WANT" =~ ^-?[0-9]+$ ]]; then
-                    echo "FAIL line $LINE_NO: '$OP' needs an integer to compare with, not '$WANT'" >&2
-                    FAILURES=$((FAILURES + 1))
-                elif no_such_fact "$KEY" "$GOT"; then
-                    FAILURES=$((FAILURES + 1))
-                elif holds "$GOT" "$OP" "$WANT"; then
-                    echo "  ok   $KEY = $GOT $OP $WANT"
-                else
-                    echo "FAIL line $LINE_NO: $KEY is '$GOT', expected $OP $WANT" >&2
-                    FAILURES=$((FAILURES + 1))
-                fi
-            elif [ "$OP" = "below" ] || [ "$OP" = "above" ] || [ "$OP" = "left-of" ] || [ "$OP" = "right-of" ]; then
-                # `expect a below b` (above, left-of, right-of): where two measured controls sit
-                # relative to each other, from the positions the application reports.
-                OTHER="${4:?expect $OP needs another control}"
-                VERDICT=$(python3 - "$PROBE_FILE" "$KEY" "$OTHER" "$OP" <<'PY'
-import json, sys
-probe = json.load(open(sys.argv[1]))
-a, b, op = probe.get(sys.argv[2]), probe.get(sys.argv[3]), sys.argv[4]
-if a is None or b is None:
-    print("missing " + (sys.argv[2] if a is None else sys.argv[3])); sys.exit(0)
-holds = {
-    "below": a["y"] >= b["y"] + b["height"],
-    "above": a["y"] + a["height"] <= b["y"],
-    "left-of": a["x"] + a["width"] <= b["x"],
-    "right-of": a["x"] >= b["x"] + b["width"],
-}[op]
-print("ok" if holds else "no (%s at %d,%d %dx%d; %s at %d,%d %dx%d)" % (
-    sys.argv[2], a["x"], a["y"], a["width"], a["height"],
-    sys.argv[3], b["x"], b["y"], b["width"], b["height"]))
-PY
-)
-                case "$VERDICT" in
-                    ok) echo "  ok   $KEY $OP $OTHER" ;;
-                    *)
-                        echo "FAIL line $LINE_NO: $KEY is not $OP $OTHER: $VERDICT" >&2
-                        FAILURES=$((FAILURES + 1))
-                        ;;
-                esac
-            else
-                shift 2
-                WANT="$*"
-                GOT=$(fact "$KEY")
-                if no_such_fact "$KEY" "$GOT"; then
-                    FAILURES=$((FAILURES + 1))
-                elif [ "$GOT" = "$WANT" ]; then
-                    echo "  ok   $KEY = $WANT"
-                else
-                    echo "FAIL line $LINE_NO: $KEY is '$GOT', expected '$WANT'" >&2
-                    FAILURES=$((FAILURES + 1))
-                fi
-            fi
+            # Waits for the fact, up to EXPECT_WAIT_MS, checking every 50 ms: the test takes the
+            # time the application takes. A fact that never comes fails with what was found.
+            T_EXPECT=$(now_ms)
+            QUIET=1
+            until expect_once "$@"; do
+                if [ $(($(now_ms) - T_EXPECT)) -ge "$EXPECT_WAIT_MS" ]; then break; fi
+                sleep 0.05
+            done
+            QUIET=""
+            expect_once "$@" || FAILURES=$((FAILURES + 1))
+            WAITED=$(($(now_ms) - T_EXPECT))
+            [ "$WAITED" -gt 150 ] && echo "       (held after $(seconds $WAITED) s)"
             ;;
         *)
             echo "line $LINE_NO: unknown directive '$1'" >&2
@@ -575,8 +652,17 @@ PY
     esac
 done < "$SCRIPT"
 
+# The budget: the whole test, from its window to its last line, restarts included.
+TOTAL_MS=$(($(now_ms) - T0))
+BUDGET_MS=$(awk -v s="$TEST_BUDGET_SECONDS" 'BEGIN { printf "%d", s * 1000 }')
+echo "took $(seconds $TOTAL_MS) s from its window (launch $(seconds $((T0 - T_LAUNCH))) s)"
+if [ "$TOTAL_MS" -gt "$BUDGET_MS" ]; then
+    echo "FAIL: $(basename "$SCRIPT") took $(seconds $TOTAL_MS) s; the budget is $TEST_BUDGET_SECONDS s" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
 if [ "$FAILURES" -gt 0 ]; then
     echo "$(basename "$SCRIPT"): $FAILURES failure(s)" >&2
     exit 1
 fi
-echo "$(basename "$SCRIPT"): passed"
+echo "$(basename "$SCRIPT"): passed in $(seconds $TOTAL_MS) s"
