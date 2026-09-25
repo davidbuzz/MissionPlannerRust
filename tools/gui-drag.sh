@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Drags between two named positions in a running mpr-gui window.
+# Drags between two named positions in a running planner window.
 #
 # The companion to gui-click.sh, and addressed the same way: by control name, optionally with a
 # position inside it. Dragging is how a map is panned and how a waypoint is moved, so a test suite

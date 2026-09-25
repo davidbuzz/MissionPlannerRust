@@ -11,7 +11,7 @@ metadata:
 # CRITICAL — READ BEFORE BUILDING ANYTHING
 
 **"ITS NOT IN SCOPE IF ITS NOT PART OF MISSION PLANNER C#."** Buzz, 2026-09-23, after I added an
-ASCII terminal plot to `mpr` for dataflash logs.
+ASCII terminal plot to `headless-planner` for dataflash logs.
 
 Mission Planner plots logs with ZedGraph in `Log/LogBrowse.cs` — a WinForms chart. There is no
 terminal plotting anywhere in the 1.2M lines, and D14's definition of done is explicitly a GPU

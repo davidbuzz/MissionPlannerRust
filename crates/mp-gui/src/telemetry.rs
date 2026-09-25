@@ -2113,7 +2113,7 @@ mod tests {
     #[test]
     fn a_taken_name_is_not_reused() {
         let directory =
-            std::env::temp_dir().join(format!("mpr-record-test-{}", std::process::id()));
+            std::env::temp_dir().join(format!("headless-planner-record-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&directory);
         std::fs::create_dir_all(&directory).expect("a writable temp directory");
 
@@ -2175,7 +2175,7 @@ mod tests {
     #[test]
     fn the_search_for_a_free_name_is_bounded() {
         let directory =
-            std::env::temp_dir().join(format!("mpr-record-full-{}", std::process::id()));
+            std::env::temp_dir().join(format!("headless-planner-record-full-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&directory);
         std::fs::create_dir_all(&directory).expect("a writable temp directory");
 

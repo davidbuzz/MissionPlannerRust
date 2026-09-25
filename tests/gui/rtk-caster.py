@@ -94,7 +94,7 @@ def main():
 
     logs = os.path.join(args.work, "logs")
     os.makedirs(logs, exist_ok=True)
-    url = f"ntrip://mpr:rtk@127.0.0.1:{port}/{MOUNT}"
+    url = f"ntrip://headless-planner:rtk@127.0.0.1:{port}/{MOUNT}"
     with open(os.path.join(args.work, "config.xml"), "w", encoding="utf-8") as f:
         f.write(config_xml(url, logs))
 

@@ -8,7 +8,7 @@ license.workspace = true
 repository.workspace = true
 
 [[bin]]
-name = "mpr"
+name = "headless-planner"
 path = "src/main.rs"
 
 [lints]
@@ -24,14 +24,14 @@ mp-vehicle.workspace = true
 mp-firmware.workspace = true
 mp-kml.workspace = true
 mp-log.workspace = true
-# `mpr magcal`: MagCalib.cs's fit.
+# `headless-planner magcal`: MagCalib.cs's fit.
 mp-calibration.workspace = true
 mp-mission.workspace = true
 mp-units.workspace = true
-# `mpr log loganalysis`: where the analyzer lives, and the download of it.
+# `headless-planner log loganalysis`: where the analyzer lives, and the download of it.
 mp-settings.workspace = true
 ureq.workspace = true
-# `mpr terrain`: srtm.getAltitude over the planner's terrain cache.
+# `headless-planner terrain`: srtm.getAltitude over the planner's terrain cache.
 mp-terrain.workspace = true
-# `mpr georef`: the Geo Reference Images form's buttons.
+# `headless-planner georef`: the Geo Reference Images form's buttons.
 mp-georef.workspace = true

@@ -1,4 +1,4 @@
-//! `mpr magcal <log>`: `MagCalib.ProcessLog` run as a user runs it - the built binary on the
+//! `headless-planner magcal <log>`: `MagCalib.ProcessLog` run as a user runs it - the built binary on the
 //! checked-in logs - printing the C#'s console lines and its box.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
@@ -12,14 +12,14 @@ fn testdata(name: &str) -> PathBuf {
         .join(name)
 }
 
-fn mpr(args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_mpr"))
+fn headless_planner(args: &[&str]) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_headless-planner"))
         .arg("magcal")
         .args(args)
         // A data directory that does not exist imports nothing (`mp_settings::migrate`).
         .env(
             "XDG_DATA_HOME",
-            std::env::temp_dir().join(format!("mpr-magcal-data-{}", std::process::id())),
+            std::env::temp_dir().join(format!("headless-planner-magcal-data-{}", std::process::id())),
         )
         .output()
         .unwrap()
@@ -28,7 +28,7 @@ fn mpr(args: &[&str]) -> std::process::Output {
 #[test]
 fn a_dataflash_log_gives_the_offsets_box() {
     let log = testdata("dataflash.bin");
-    let output = mpr(&[log.to_str().unwrap()]);
+    let output = headless_planner(&[log.to_str().unwrap()]);
     assert!(output.status.success(), "{output:?}");
     // The fit is `mp-calibration`'s golden (`tests/magcal_vectors.rs`): offsets -292.5 122.1 552.4.
     assert_eq!(
@@ -41,7 +41,7 @@ fn a_dataflash_log_gives_the_offsets_box() {
 #[test]
 fn ellipsoid_prints_the_fits_log_lines_first() {
     let log = testdata("dataflash.bin");
-    let output = mpr(&[log.to_str().unwrap(), "--ellipsoid"]);
+    let output = headless_planner(&[log.to_str().unwrap(), "--ellipsoid"]);
     assert!(output.status.success(), "{output:?}");
     let text = String::from_utf8(output.stdout).unwrap();
     let lines: Vec<&str> = text.lines().collect();
@@ -55,7 +55,7 @@ fn ellipsoid_prints_the_fits_log_lines_first() {
 #[test]
 fn a_still_telemetry_log_is_not_enough_data() {
     let log = testdata("mavlink/autotest.tlog");
-    let output = mpr(&[log.to_str().unwrap()]);
+    let output = headless_planner(&[log.to_str().unwrap()]);
     assert!(!output.status.success());
     assert_eq!(
         String::from_utf8(output.stdout).unwrap(),
@@ -65,6 +65,6 @@ fn a_still_telemetry_log_is_not_enough_data() {
 
 #[test]
 fn a_missing_throttle_value_is_a_usage_error() {
-    let output = mpr(&["x.tlog", "--min-throttle"]);
+    let output = headless_planner(&["x.tlog", "--min-throttle"]);
     assert_eq!(output.status.code(), Some(2));
 }

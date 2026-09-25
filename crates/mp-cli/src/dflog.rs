@@ -1,4 +1,4 @@
-//! `mpr log <verb> <file> [out]`: the four buttons of the flight screen's DataFlash Logs page,
+//! `headless-planner log <verb> <file> [out]`: the four buttons of the flight screen's DataFlash Logs page,
 //! without the screen.
 //!
 //! Each verb is one button run on one file, writing what the button writes where the button
@@ -23,7 +23,7 @@ use std::process::ExitCode;
 
 use mp_log::convert::flight_mode_name;
 
-/// The verbs `mpr log` takes before a file.
+/// The verbs `headless-planner log` takes before a file.
 pub(crate) const VERBS: [&str; 4] = ["bintolog", "dflogtokml", "matlab", "loganalysis"];
 
 /// `Download.getFilefromNet(url, saveto)`: whether the file arrived.

@@ -20,7 +20,7 @@ settle 4
 expect fly.poi.count 0
 expect fly.poi.file ~ MissionPlannerRust/poi.txt
 # In the scratch directory, not the user's own.
-expect fly.poi.file ~ mpr-work-
+expect fly.poi.file ~ planner-work-
 
 # Press the map: that is where Add Poi adds. A press freezes the view, so the point stays put.
 click map@0.5x0.5

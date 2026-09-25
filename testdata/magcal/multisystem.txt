@@ -1,4 +1,4 @@
-# MagCalib.cs samples of compass 1, as `mpr magcal` gathers them
+# MagCalib.cs samples of compass 1, as `headless-planner magcal` gathers them
 # regenerate: cargo test -p mp-cli -- --ignored regenerate_magcal_fixtures
 # log: testdata/mavlink/multisystem.tlog
 # path: tlog

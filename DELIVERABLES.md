@@ -146,7 +146,7 @@ OSes, plus bootloader/flashing transports (px4uploader, DFU, ADB).
   the reference tree and run against peers on 127.0.0.1 (`tools/csharp-reference/MpComms.cs`,
   `testdata/comms/golden/`: the exact request bytes, 13 GGA sentences, the whole websocket
   conversation, the UDP client's reads, writes and counts) - PLAN.md §13.4 row 43. Serial on real hardware:
-  a Cube Orange on `/dev/ttyACM0` (`27B1:0004`, listed by `mpr ports` under its by-id name) gave
+  a Cube Orange on `/dev/ttyACM0` (`27B1:0004`, listed by `headless-planner ports` under its by-id name) gave
   341 frames in 8 s with no CRC error on 2026-09-24. **Not yet:**
   BLE, TLS (`wss://`, NTRIP over https), the flashing transports, Windows friendly names via WMI,
   and TLS; the ≤ 1 ms latency is measured (below).
@@ -168,7 +168,7 @@ mission/rally/fence up- and download, MAVFTP, log download, command_long/ack, re
   counts every send on the wire under timeouts, reordering, duplicates and seeded bad links (40 tests);
   `tests/routing.rs` runs 50 systems and 56 components through one link. The GUI's and the CLI's
   sets and commands go through those requests, with the C#'s message texts on the status line
-  (PLAN.md §13.4 row 11). MAVFTP is `MAVFtp.cs` whole (row 36): the burst read with its gap filling, list, upload, remove, rename, CRC32, the C#'s retry table, as a state machine in `mp-ftp` the link drives, with `mpr ftp`; the C#'s own `MAVFtp` under mono gives the same request bytes and the same `param.pck` from SITL. On a real Cube Orange over USB
+  (PLAN.md §13.4 row 11). MAVFTP is `MAVFtp.cs` whole (row 36): the burst read with its gap filling, list, upload, remove, rename, CRC32, the C#'s retry table, as a state machine in `mp-ftp` the link drives, with `headless-planner ftp`; the C#'s own `MAVFtp` under mono gives the same request bytes and the same `param.pck` from SITL. On a real Cube Orange over USB
   (2026-09-24): 929 parameters downloaded and reported complete, `@SYS` listed over MAVFTP, six
   logs listed. `doCommandInt`, `setWP` for one item and `getHomePosition` are requests too
   (PLAN.md §13.6 row 74): a `COMMAND_INT` waits for its ack with `doCommandAsync`'s three retries
@@ -325,7 +325,7 @@ servo/RC, and the vehicle action buttons.
   per event wiring in `FlightData.Designer.cs` (136), naming the control, its text, its handler
   and what this application has for it. 27 are on the flight screen (arm/disarm, modes, take-off,
   fly-to-here, auto-pan, the map, the tuning graph, the joystick, the HUD's health indicators),
-  2 are elsewhere (tlog replay as a link URL, `mpr kml`), 19 are WinForms plumbing, 1 is dropped
+  2 are elsewhere (tlog replay as a link URL, `headless-planner kml`), 19 are WinForms plumbing, 1 is dropped
   (undock, in a single window), and 87 are missing - the transponder, gimbal and camera, video,
   scripts, tlog playback controls, POIs, set-home/EKF-origin, change alt/speed/loiter, set WP,
   quick-view field choice, HUD menu items, log conversions. `docs/coverage/flightdata.md` is the
@@ -382,7 +382,7 @@ The full parameter system — tree/list/advanced editors driven by parameter met
   param save/restore round-trips against SITL; `.param` files interoperate with the C# app.
 - **Replaces:** `GCSViews/ConfigurationView/*` (the bulk of 67,553 LOC in `GCSViews/`).
 - **Today:** parameters fetched as `getParamListMavftp` fetches them (2026-09-25, PLAN.md §13.6 row 81): `@PARAM/param.pck?withdefaults=1` read over MAVFTP and unpacked (`mp_params::parampck`, the C#'s `parampck.cs`), the classic stream with gap recovery as the fallback, and the fetch started on its own once a vehicle is heard with nothing held, as `MAVLinkInterface.Open` starts it; proved through the real link thread against a vehicle serving the file and one without it. Before that: full parameter download with gap recovery (1,408 from SITL), a searchable browser, and
-  `.param` save/load/compare in both the GUI and `mpr param save|load|diff`. The load-time skip-list
+  `.param` save/load/compare in both the GUI and `headless-planner param save|load|diff`. The load-time skip-list
   is ported from `ExtLibs/Utilities/ParamFile.cs:50-76` (all 16 entries, on the load side as the C#
   has it), and numbers are written through a `G15` formatter matching
   `double.ToString(InvariantCulture)` — shortest representation, scientific below 1e-4, which is
@@ -433,14 +433,14 @@ path: board detect, firmware catalogue, upload via px4/DFU/serial bootloaders.
   row 79 has every attempt, including the experimental bootloader that had to be replaced through
   the owner's debugger first). Linux only so far; Windows and macOS remain. A port failing during
   the flash is a status line, never a message box (the owner's ruling of the same day, a written
-  divergence from `Firmware.cs:702, 710`). The CLI still offers `mpr firmware info` and
-  `mpr firmware detect` and nothing that writes. Board detection is
+  divergence from `Firmware.cs:702, 710`). The CLI still offers `headless-planner firmware info` and
+  `headless-planner firmware detect` and nothing that writes. Board detection is
   `Utilities/BoardDetect.cs` ported rule for rule (`crates/mp-firmware/src/detect.rs`), its probes
   proved against the px4 mock over a pty; all 16 `DetectBoardTest` calls are fixtures, and five of
   them fail against the C# itself, which the fixture records. A real Cube Orange running ArduPilot
   (2026-09-24) presents `27B1:0004`, ArduPilot's application-mode id, which `BoardDetect.cs` does
   not know either - the C# identifies a Cube by its bootloader id after a reboot, or by a WMI
-  name on Windows - so `mpr firmware detect` says what the C# would do next: ask, then probe for
+  name on Windows - so `headless-planner firmware detect` says what the C# would do next: ask, then probe for
   an STK500 bootloader. The firmware catalogue is
   `APFirmware.cs` ported - the manifest, its mirror-then-ardupilot.org order, the board and
   release selection - proved on a 240-record excerpt of the real manifest, and the Install
@@ -453,7 +453,7 @@ path: board detect, firmware catalogue, upload via px4/DFU/serial bootloaders.
   `mp_calibration::magcalib` (2026-09-25): a telemetry log's `RAW_IMU` less `SENSOR_OFFSETS`
   through the C#'s duplicate filter, its throttle gate, count check and outlier cut, or a
   dataflash log's `MAG` lines less their offsets, fitted as `LeastSq`/`doLSQ` fit them, and the
-  boxes `SaveOffsets` shows; `mpr magcal <log> [--ellipsoid] [--min-throttle N]` is `ProcessLog`.
+  boxes `SaveOffsets` shows; `headless-planner magcal <log> [--ellipsoid] [--min-throttle N]` is `ProcessLog`.
   alglib's Levenberg-Marquardt is replaced by the `levenberg-marquardt` crate on alglib's own
   central-difference Jacobian (`diffstep` 0.1, `epsx` 0, `maxits` 100 kept), so the fit is held
   to PLAN.md §7.2's class D rather than 1e-6: the C# cannot run here to give its residual, and

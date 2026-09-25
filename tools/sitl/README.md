@@ -21,7 +21,7 @@ redistributing a binary.
 tools/sitl/run-sitl.sh copter      # listens on tcp:127.0.0.1:5760
 tools/sitl/run-sitl.sh plane
 
-mpr watch tcp:127.0.0.1:5760
+headless-planner watch tcp:127.0.0.1:5760
 cargo test -p mp-link -- --ignored   # the live-vehicle test
 ```
 

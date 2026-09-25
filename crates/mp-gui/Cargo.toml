@@ -8,7 +8,7 @@ license.workspace = true
 publish = false
 
 [[bin]]
-name = "mpr-gui"
+name = "planner"
 path = "src/main.rs"
 
 [lints]
@@ -49,7 +49,7 @@ mp-georef.workspace = true
 # content inside one. Both already compiled for mp-firmware.
 base64.workspace = true
 # Install Firmware: the firmware catalogue and the board a USB device names, from the port list.
-# Its HTTP fetch also downloads Auto Analysis's LogAnalyzer, as the CLI's `mpr log` does with ureq.
+# Its HTTP fetch also downloads Auto Analysis's LogAnalyzer, as the CLI's `headless-planner log` does with ureq.
 mp-firmware.workspace = true
 # The SITL page's GetDefaultConfig: `default_params_regex` over sim_vehicle.py, and vehicleinfo.py
 # read as the JSON tree Newtonsoft makes of it - in the file's order, which decides the vehicle

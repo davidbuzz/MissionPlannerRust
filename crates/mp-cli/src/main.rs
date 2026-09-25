@@ -1,7 +1,7 @@
-//! `mpr` - a command line front end for the Mission Planner port.
+//! `headless-planner` - a command line front end for the Mission Planner port.
 //!
 //! Exists so the stack can be exercised against a real vehicle long before there is a UI:
-//! `mpr watch udp:14550` against SITL is the fastest way to find out whether the link, the
+//! `headless-planner watch udp:14550` against SITL is the fastest way to find out whether the link, the
 //! decoder and the state model actually work.
 
 // A CLI prints; that is its job.
@@ -31,12 +31,12 @@ fn main() -> std::process::ExitCode {
     match mp_settings::migrate::import_at_start() {
         imported @ mp_settings::migrate::Import::Imported { .. } => {
             eprintln!(
-                "mpr: imported Mission Planner's files (left as they were): {}",
+                "headless-planner: imported Mission Planner's files (left as they were): {}",
                 imported.summary()
             );
         }
         mp_settings::migrate::Import::Failed(why) => {
-            eprintln!("mpr: importing Mission Planner's files: {why}");
+            eprintln!("headless-planner: importing Mission Planner's files: {why}");
         }
         _ => {}
     }
@@ -44,28 +44,28 @@ fn main() -> std::process::ExitCode {
         Some("watch") => match args.get(1) {
             Some(url) => watch(url, args.get(2).and_then(|s| s.parse().ok())),
             None => {
-                eprintln!("usage: mpr watch <url> [seconds]");
+                eprintln!("usage: headless-planner watch <url> [seconds]");
                 std::process::ExitCode::from(2)
             }
         },
         Some("record") => match (args.get(1), args.get(2)) {
             (Some(url), Some(path)) => record(url, path, args.get(3).and_then(|s| s.parse().ok())),
             _ => {
-                eprintln!("usage: mpr record <url> <out.tlog> [seconds]");
+                eprintln!("usage: headless-planner record <url> <out.tlog> [seconds]");
                 std::process::ExitCode::from(2)
             }
         },
         Some("fly") => match args.get(1) {
             Some(url) => fly(url, args.get(2).map(String::as_str)),
             None => {
-                eprintln!("usage: mpr fly <url> [out.tlog]");
+                eprintln!("usage: headless-planner fly <url> [out.tlog]");
                 std::process::ExitCode::from(2)
             }
         },
         Some("params") => match args.get(1) {
             Some(url) => params(url, args.get(2).map(String::as_str)),
             None => {
-                eprintln!("usage: mpr params <url> [NAME]");
+                eprintln!("usage: headless-planner params <url> [NAME]");
                 std::process::ExitCode::from(2)
             }
         },
@@ -76,7 +76,7 @@ fn main() -> std::process::ExitCode {
                 args.get(3).map_or(".", String::as_str),
             ),
             None => {
-                eprintln!("usage: mpr logs <url> [ID] [OUT_DIR]");
+                eprintln!("usage: headless-planner logs <url> [ID] [OUT_DIR]");
                 std::process::ExitCode::from(2)
             }
         },
@@ -93,10 +93,10 @@ fn main() -> std::process::ExitCode {
             _ => {
                 eprintln!(
                     "usage:\n  \
-                     mpr param set  <url> <NAME> <VALUE>\n  \
-                     mpr param save <url> <file.param>\n  \
-                     mpr param load <url> <file.param>\n  \
-                     mpr param diff <url|file.param> <file.param>"
+                     headless-planner param set  <url> <NAME> <VALUE>\n  \
+                     headless-planner param save <url> <file.param>\n  \
+                     headless-planner param load <url> <file.param>\n  \
+                     headless-planner param diff <url|file.param> <file.param>"
                 );
                 std::process::ExitCode::from(2)
             }
@@ -104,14 +104,14 @@ fn main() -> std::process::ExitCode {
         Some("mission") => match (args.get(1), args.get(2)) {
             (Some(url), file) => mission(url, file.map(String::as_str)),
             _ => {
-                eprintln!("usage: mpr mission <url> [file.waypoints]");
+                eprintln!("usage: headless-planner mission <url> [file.waypoints]");
                 std::process::ExitCode::from(2)
             }
         },
         Some("survey") => match (args.get(1), args.get(2)) {
             (Some(url), Some(out)) => survey(url, out, args.get(3).and_then(|s| s.parse().ok())),
             _ => {
-                eprintln!("usage: mpr survey <url> <out.waypoints> [spacing_m]");
+                eprintln!("usage: headless-planner survey <url> <out.waypoints> [spacing_m]");
                 std::process::ExitCode::from(2)
             }
         },
@@ -120,18 +120,18 @@ fn main() -> std::process::ExitCode {
                 dflog::run(verb, file, args.get(3).map(String::as_str))
             }
             (Some(verb), None) if dflog::VERBS.contains(&verb) => {
-                eprintln!("usage: mpr log {verb} <file> [out]");
+                eprintln!("usage: headless-planner log {verb} <file> [out]");
                 std::process::ExitCode::from(2)
             }
             (Some(path), _) => logs::summarise(path),
             (None, _) => {
                 eprintln!(
                     "usage:\n  \
-                     mpr log <file.tlog|file.bin>              summarise a log\n  \
-                     mpr log bintolog <file.bin> [out.log]     Convert .Bin to .Log\n  \
-                     mpr log dflogtokml <file> [dir]           Create KML + gpx\n  \
-                     mpr log matlab <file> [out.mat]           Create Matlab file\n  \
-                     mpr log loganalysis <file> [dir]          Auto Analysis"
+                     headless-planner log <file.tlog|file.bin>              summarise a log\n  \
+                     headless-planner log bintolog <file.bin> [out.log]     Convert .Bin to .Log\n  \
+                     headless-planner log dflogtokml <file> [dir]           Create KML + gpx\n  \
+                     headless-planner log matlab <file> [out.mat]           Create Matlab file\n  \
+                     headless-planner log loganalysis <file> [dir]          Auto Analysis"
                 );
                 std::process::ExitCode::from(2)
             }
@@ -143,9 +143,9 @@ fn main() -> std::process::ExitCode {
             _ => {
                 eprintln!(
                     "usage:\n  \
-                     mpr firmware info <file.apj>   describe a firmware file and its CRC\n  \
-                     mpr firmware detect <port>     name the board from its USB ids, opening nothing\n  \
-                     mpr firmware list [--board <id|name>] [--vehicle <type>] [--release <type>]\n    \
+                     headless-planner firmware info <file.apj>   describe a firmware file and its CRC\n  \
+                     headless-planner firmware detect <port>     name the board from its USB ids, opening nothing\n  \
+                     headless-planner firmware list [--board <id|name>] [--vehicle <type>] [--release <type>]\n    \
                      the firmware Mission Planner's catalogue would give a board\n\n\
                      Flashing is not offered here. It can brick a board and has no simulator, so\n\
                      it goes through the GUI where the board it is about to write to is on screen."
@@ -162,7 +162,7 @@ fn main() -> std::process::ExitCode {
             }
             _ => {
                 eprintln!(
-                    "usage: mpr command <url> <MAV_CMD number> [p1 p2 p3 p4 p5 p6 p7]\n  \
+                    "usage: headless-planner command <url> <MAV_CMD number> [p1 p2 p3 p4 p5 p6 p7]\n  \
                      sends the command to the first vehicle heard and prints its COMMAND_ACK"
                 );
                 std::process::ExitCode::from(2)
@@ -171,14 +171,14 @@ fn main() -> std::process::ExitCode {
         Some("fields") => match args.get(1) {
             Some(path) => logs::fields(path),
             None => {
-                eprintln!("usage: mpr fields <log.bin>");
+                eprintln!("usage: headless-planner fields <log.bin>");
                 std::process::ExitCode::from(2)
             }
         },
         Some("kml") => match (args.get(1), args.get(2)) {
             (Some(input), Some(out)) => logs::to_kml(input, out),
             _ => {
-                eprintln!("usage: mpr kml <flight.tlog> <out.kml>");
+                eprintln!("usage: headless-planner kml <flight.tlog> <out.kml>");
                 std::process::ExitCode::from(2)
             }
         },
@@ -188,7 +188,7 @@ fn main() -> std::process::ExitCode {
         ) {
             (Some(lat), Some(lng)) => terrain(lat, lng),
             _ => {
-                eprintln!("usage: mpr terrain <lat> <lng>");
+                eprintln!("usage: headless-planner terrain <lat> <lng>");
                 std::process::ExitCode::from(2)
             }
         },
@@ -210,35 +210,35 @@ fn main() -> std::process::ExitCode {
 
 fn usage() {
     println!(
-        "mpr - Mission Planner (Rust)\n\n\
+        "headless-planner - Mission Planner (Rust)\n\n\
          usage:\n  \
-         mpr watch <url> [seconds]   connect and display live telemetry\n  \
-         mpr record <url> <file> [s] record telemetry to a .tlog\n  \
-         mpr fly <url> [file]        fly a scripted mission (simulator only)\n  \
-         mpr params <url> [NAME]     download the parameter set, or show one parameter
-  mpr param set <url> N V     set one parameter and read it back
-  mpr param save <url> <file> save the parameter set to a .param file
-  mpr param load <url> <file> write a .param file to the vehicle
-  mpr param diff <a> <b>      compare a vehicle or file against a file\n  \
-         mpr mission <url> [file]    download the mission, or upload one from a file\n  \
-         mpr survey <url> <file>     generate a survey grid around the vehicle\n  \
-         mpr log <file>              summarise a telemetry or dataflash log
-  mpr log bintolog <bin> [out]   Convert .Bin to .Log, as the DataFlash Logs page does
-  mpr log dflogtokml <log> [dir] Create KML + gpx (.kmz, .gpx, waypoints, .param, RINEX)
-  mpr log matlab <log> [out]     Create Matlab file (.mat)
-  mpr log loganalysis <log> [dir] Auto Analysis: run ArduPilot's LogAnalyzer, print its report
-  mpr logs <url> [ID] [DIR]   list the vehicle's logs, or download one
-  mpr ftp ls|get|put|rm|crc   the vehicle's files over MAVFTP (mpr ftp for more)\n  \
-         mpr fields <log.bin>        list what a dataflash log can plot
-  mpr kml <log> <out.kml>     export a flown path for Google Earth
-  mpr magcal <log> [--ellipsoid] [--min-throttle N]
+         headless-planner watch <url> [seconds]   connect and display live telemetry\n  \
+         headless-planner record <url> <file> [s] record telemetry to a .tlog\n  \
+         headless-planner fly <url> [file]        fly a scripted mission (simulator only)\n  \
+         headless-planner params <url> [NAME]     download the parameter set, or show one parameter
+  headless-planner param set <url> N V     set one parameter and read it back
+  headless-planner param save <url> <file> save the parameter set to a .param file
+  headless-planner param load <url> <file> write a .param file to the vehicle
+  headless-planner param diff <a> <b>      compare a vehicle or file against a file\n  \
+         headless-planner mission <url> [file]    download the mission, or upload one from a file\n  \
+         headless-planner survey <url> <file>     generate a survey grid around the vehicle\n  \
+         headless-planner log <file>              summarise a telemetry or dataflash log
+  headless-planner log bintolog <bin> [out]   Convert .Bin to .Log, as the DataFlash Logs page does
+  headless-planner log dflogtokml <log> [dir] Create KML + gpx (.kmz, .gpx, waypoints, .param, RINEX)
+  headless-planner log matlab <log> [out]     Create Matlab file (.mat)
+  headless-planner log loganalysis <log> [dir] Auto Analysis: run ArduPilot's LogAnalyzer, print its report
+  headless-planner logs <url> [ID] [DIR]   list the vehicle's logs, or download one
+  headless-planner ftp ls|get|put|rm|crc   the vehicle's files over MAVFTP (headless-planner ftp for more)\n  \
+         headless-planner fields <log.bin>        list what a dataflash log can plot
+  headless-planner kml <log> <out.kml>     export a flown path for Google Earth
+  headless-planner magcal <log> [--ellipsoid] [--min-throttle N]
                               compass offsets fitted to a log's samples (MagCalib's Log Calibration)
-  mpr firmware info <file>    describe a .apj firmware file
-  mpr firmware detect <port>  name the board from its USB ids
-  mpr firmware list [...]     the firmware the catalogue would give a board
-  mpr terrain <lat> <lng>     the ground there, from the SRTM tiles the planner uses
+  headless-planner firmware info <file>    describe a .apj firmware file
+  headless-planner firmware detect <port>  name the board from its USB ids
+  headless-planner firmware list [...]     the firmware the catalogue would give a board
+  headless-planner terrain <lat> <lng>     the ground there, from the SRTM tiles the planner uses
   {}
-  mpr ports                   list serial ports\n\n\
+  headless-planner ports                   list serial ports\n\n\
          url forms:\n  \
          serial:/dev/ttyACM0:115200\n  \
          tcp:127.0.0.1:5760          (ArduPilot SITL)\n  \
@@ -251,11 +251,11 @@ fn usage() {
     );
 }
 
-/// How long `mpr terrain` waits for a tile it had to queue: `HttpClient`'s 100 seconds for each of
+/// How long `headless-planner terrain` waits for a tile it had to queue: `HttpClient`'s 100 seconds for each of
 /// the three requests a found tile takes, and the queue thread's pauses.
 const TERRAIN_WAIT: Duration = Duration::from_secs(330);
 
-/// `mpr terrain <lat> <lng>`: `srtm.getAltitude` at a point, over the terrain cache Mission Planner
+/// `headless-planner terrain <lat> <lng>`: `srtm.getAltitude` at a point, over the terrain cache Mission Planner
 /// keeps (`MainV2.cs:737`), swept as `MainV2` sweeps it at startup (`MainV2.cs:739-750`).
 fn terrain(lat: f64, lng: f64) -> std::process::ExitCode {
     let Some(dir) = mp_terrain::srtm_directory() else {
@@ -461,7 +461,7 @@ fn await_state(
     false
 }
 
-/// `mpr fly`'s link: recording where asked, and asking the vehicle for its telemetry at the rates
+/// `headless-planner fly`'s link: recording where asked, and asking the vehicle for its telemetry at the rates
 /// Mission Planner asks every vehicle for - the vehicle state's own `cs.rateX`, which start from
 /// `CurrentState`'s defaults, attitude 4 Hz and position, status, sensors and RC 2 Hz. Mission
 /// Planner has no command line; its flight screen asks for these, and for more only once its
@@ -490,7 +490,7 @@ fn mav_result_name(result: u8) -> &'static str {
     }
 }
 
-/// `mpr command`: the command to the first vehicle heard, waited for as `doCommand` waits (the
+/// `headless-planner command`: the command to the first vehicle heard, waited for as `doCommand` waits (the
 /// link's retries, the slow ones for a calibration or a bootloader flash), its answer printed.
 fn send_command(url: &str, command: &str, params: &[String]) -> std::process::ExitCode {
     let Ok(command) = command.parse::<u16>() else {
@@ -723,7 +723,7 @@ enum Written {
 
 /// `setParam`: `PARAM_SET` until the vehicle echoes the parameter, sent again every 700 ms up to
 /// three times by the link. `setParam` sends only a name the vehicle has listed, and the C#
-/// holds the whole list by the time anything writes; `mpr` connects and writes at once, so a
+/// holds the whole list by the time anything writes; `headless-planner` connects and writes at once, so a
 /// name not yet heard of is read first - `GetParam`, retried the same way - and one the vehicle
 /// never reports is not on it.
 /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1638-1770, 2296-2380`
@@ -1614,7 +1614,7 @@ fn firmware_detect(port: &str) -> std::process::ExitCode {
     std::process::ExitCode::SUCCESS
 }
 
-/// The text `mpr firmware detect` prints for an enumeration.
+/// The text `headless-planner firmware detect` prints for an enumeration.
 fn detect_report(port: &str, ports: &[mp_transport::PortInfo]) -> String {
     use mp_firmware::detect::{DeviceInfo, Probe, Verdict, match_ports};
     use std::fmt::Write as _;
@@ -1657,7 +1657,7 @@ fn detect_report(port: &str, ports: &[mp_transport::PortInfo]) -> String {
     out
 }
 
-/// `mpr firmware list`: what the Install Firmware page would offer, from the same catalogue.
+/// `headless-planner firmware list`: what the Install Firmware page would offer, from the same catalogue.
 ///
 /// The catalogue is fetched as the page fetches it - the mirror, then ardupilot.org, then
 /// CubePilot's peripherals appended - on every run, because Mission Planner keeps it in memory
@@ -1695,8 +1695,8 @@ fn firmware_list(options: &[String]) -> std::process::ExitCode {
     std::process::ExitCode::SUCCESS
 }
 
-/// `mpr firmware list`'s options, for a message about a wrong one.
-const LIST_USAGE: &str = "usage: mpr firmware list [--board <id|name>] [--vehicle <type>] \
+/// `headless-planner firmware list`'s options, for a message about a wrong one.
+const LIST_USAGE: &str = "usage: headless-planner firmware list [--board <id|name>] [--vehicle <type>] \
 [--release <type>]
   --board    a board id, as a bootloader reports it, or a USB product string
              (default: the USB devices on this machine)
@@ -1713,7 +1713,7 @@ enum BoardArgument {
     Name(String),
 }
 
-/// `mpr firmware list`'s options.
+/// `headless-planner firmware list`'s options.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ListRequest {
     board: Option<BoardArgument>,
@@ -1760,7 +1760,7 @@ impl ListRequest {
     }
 }
 
-/// The text `mpr firmware list` prints for a catalogue, a request and the devices.
+/// The text `headless-planner firmware list` prints for a catalogue, a request and the devices.
 fn list_report(
     manifest: &mp_firmware::manifest::Manifest,
     request: &ListRequest,
@@ -2075,7 +2075,7 @@ mod tests {
     }
 }
 
-/// `mpr`'s sets and commands through the real link and its retries, against a scripted vehicle
+/// `headless-planner`'s sets and commands through the real link and its retries, against a scripted vehicle
 /// on an in-memory transport: the arrangement of `mp-link`'s `tests/retries.rs`, where a send the
 /// script does not answer is a send lost on the way.
 #[cfg(test)]
@@ -2119,7 +2119,7 @@ mod retries {
         frame[..n].to_vec()
     }
 
-    /// The vehicle, on a thread of its own because `mpr` blocks while it waits: it announces
+    /// The vehicle, on a thread of its own because `headless-planner` blocks while it waits: it announces
     /// itself as ArduPilot, then hands everything the link sends to `script` and sends back
     /// whatever that returns, until stopped. Returns everything it heard.
     fn vehicle(
@@ -2198,9 +2198,9 @@ mod retries {
         })
     }
 
-    /// `mpr param set` on a vehicle whose list was never downloaded: `RTL_ALT` is read first,
+    /// `headless-planner param set` on a vehicle whose list was never downloaded: `RTL_ALT` is read first,
     /// since `setParam` sends only a listed name; the first `PARAM_SET` is lost, the link sends it
-    /// again, and the vehicle's echo of the second is what `mpr` reports it holds.
+    /// again, and the vehicle's echo of the second is what `headless-planner` reports it holds.
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1640-1644, 1748-1770`
     #[test]
     fn a_parameter_is_read_then_written_and_a_lost_set_is_sent_again() {
@@ -2237,7 +2237,7 @@ mod retries {
         assert_eq!(names, ["read", "set", "set"]);
     }
 
-    /// `mpr fly`'s link asks for the vehicle's telemetry at Mission Planner's rates - the vehicle
+    /// `headless-planner fly`'s link asks for the vehicle's telemetry at Mission Planner's rates - the vehicle
     /// state's `cs.rateX`, `CurrentState`'s 4 Hz attitude and 2 Hz the rest - in
     /// `UpdateCurrentSettings`' order, each twice as `getDatastream` sends it, and at nothing
     /// faster.
@@ -2305,7 +2305,7 @@ mod retries {
         );
     }
 
-    /// `mpr fly`'s arm, whose first `COMMAND_LONG` is lost: sent again with its confirmation
+    /// `headless-planner fly`'s arm, whose first `COMMAND_LONG` is lost: sent again with its confirmation
     /// counted up, and accepted.
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2783-2834`
     #[test]
@@ -2346,7 +2346,7 @@ mod retries {
     }
 }
 
-/// `mpr terrain`: the lookup and its wait, against a server this test serves.
+/// `headless-planner terrain`: the lookup and its wait, against a server this test serves.
 #[cfg(test)]
 mod terrain {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
@@ -2403,7 +2403,7 @@ mod terrain {
     }
 
     fn scratch(test: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("mpr-terrain-{test}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("headless-planner-terrain-{test}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         dir
     }

@@ -3363,7 +3363,7 @@ impl Page {
                 "Video Control, the gimbal's video in a window of its own, is not ported."
             }
             // `// C#: GCSViews/FlightData.Designer.cs:2208`
-            Self::TLogs => "Tlog > Kml or Graph is mpr kml, on the command line.",
+            Self::TLogs => "Tlog > Kml or Graph is headless-planner kml, on the command line.",
             // The conversions' and Geo Reference Images' file dialogs are boxes.
             // `// C#: GCSViews/FlightData.cs:1084-1089, 1137-1151, 1313-1317; GeoRef/georefimage.cs:87-138`
             Self::LogBrowse => "A log is named by typing it, from the log directory.",
@@ -5036,7 +5036,7 @@ fn percent(control: &mp_transport::replay::Playback) -> String {
 /// The Telemetry Logs page: `tableLayoutPaneltlogs`, three columns - 91 pixels, what is left, 36
 /// pixels - of three rows. Load Log beside the log's name; Play/Pause beside the track bar and the
 /// percentage; under them the speed buttons and the speed. Tlog > Kml or Graph's cell is empty:
-/// that tool is `mpr kml` here.
+/// that tool is `headless-planner kml` here.
 /// `// C#: GCSViews/FlightData.Designer.cs:2193-2320, GCSViews/FlightData.resx (tableLayoutPaneltlogs.LayoutSettings)`
 pub fn playback_page(playback: &Playback, cx: &mut Context<MissionPlanner>) -> AnyElement {
     let left = |content: AnyElement| div().w(px(91.0)).flex_shrink_0().child(content);
@@ -10436,7 +10436,7 @@ mod tests {
     /// height Set Home Here sends.
     #[test]
     fn set_home_here_sends_the_height_of_the_tile_under_the_press() {
-        let dir = std::env::temp_dir().join(format!("mpr-fly-srtm-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("headless-planner-fly-srtm-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("scratch folder");
         let mut tile = Vec::with_capacity(1201 * 1201 * 2);
         for _ in 0..1201 * 1201 {

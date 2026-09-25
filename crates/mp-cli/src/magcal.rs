@@ -1,4 +1,4 @@
-//! `mpr magcal <log> [--ellipsoid] [--min-throttle N]`: `MagCalib.ProcessLog` without its file
+//! `headless-planner magcal <log> [--ellipsoid] [--min-throttle N]`: `MagCalib.ProcessLog` without its file
 //! dialog - the older compass page's "Log Calibration" and the Temp screen's `BUT_magfit2`.
 //!
 //! A file whose name ends in `tlog` is read as `getOffsets` reads it: every `RAW_IMU` taken while
@@ -29,7 +29,7 @@ use mp_log::dflogbuffer::DfLogBuffer;
 use mp_mavlink_dialects::all::{DIALECT, MavMessage};
 
 /// The usage line.
-pub(crate) const USAGE: &str = "mpr magcal <log> [--ellipsoid] [--min-throttle N]";
+pub(crate) const USAGE: &str = "headless-planner magcal <log> [--ellipsoid] [--min-throttle N]";
 
 /// What a pass over a log gathered.
 #[derive(Debug, Clone)]
@@ -146,7 +146,7 @@ fn ellipsoid_line(label: &str, x: &[f64], rad: f64) -> String {
     )
 }
 
-/// What `mpr magcal` prints for what was gathered, and whether it ended in a box of offsets.
+/// What `headless-planner magcal` prints for what was gathered, and whether it ended in a box of offsets.
 pub(crate) fn report(gathered: &Gathered, ellipsoid: bool) -> (String, bool) {
     let mut out = String::new();
     let fit = match gathered {
@@ -234,7 +234,7 @@ fn dataflash_log_lines(out: &mut String, samples: &DataflashSamples) {
     }
 }
 
-/// `mpr magcal`.
+/// `headless-planner magcal`.
 pub(crate) fn run(args: &[String]) -> ExitCode {
     let mut path = None;
     let mut ellipsoid = false;
@@ -322,7 +322,7 @@ mod tests {
         };
         let _ = writeln!(
             text,
-            "# MagCalib.cs samples of compass 1, as `mpr magcal` gathers them"
+            "# MagCalib.cs samples of compass 1, as `headless-planner magcal` gathers them"
         );
         let _ = writeln!(
             text,

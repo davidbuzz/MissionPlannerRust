@@ -1,4 +1,4 @@
-//! `mpr log <verb> <file> [out]`: the DataFlash Logs page's four buttons from the command line,
+//! `headless-planner log <verb> <file> [out]`: the DataFlash Logs page's four buttons from the command line,
 //! run as a user runs them - the built binary, on copies of the checked-in logs - and held to what
 //! Mission Planner writes (`testdata/dataflash/golden`, from
 //! `tools/csharp-reference/regen-log.sh`).
@@ -16,14 +16,14 @@ fn testdata(name: &str) -> PathBuf {
 
 /// A fresh directory for one test.
 fn scratch(test: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("mpr-log-{test}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("headless-planner-log-{test}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir
 }
 
-fn mpr(args: &[&Path]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_mpr"))
+fn headless_planner(args: &[&Path]) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_headless-planner"))
         .arg("log")
         .args(args)
         // "Auto Analysis" downloads the analyzer first; through a proxy that refuses, it fails at
@@ -31,12 +31,12 @@ fn mpr(args: &[&Path]) -> std::process::Output {
         .env("ALL_PROXY", "http://127.0.0.1:1")
         .env_remove("NO_PROXY")
         .env_remove("no_proxy")
-        // `mpr` imports Mission Planner's files into its own data directory on the first start
+        // `headless-planner` imports Mission Planner's files into its own data directory on the first start
         // that finds it empty (`mp_settings::migrate`); a test is not that start. A data
         // directory that does not exist, with no C# directory beside it, imports nothing.
         .env(
             "XDG_DATA_HOME",
-            std::env::temp_dir().join(format!("mpr-log-data-{}", std::process::id())),
+            std::env::temp_dir().join(format!("headless-planner-log-data-{}", std::process::id())),
         )
         .output()
         .unwrap()
@@ -47,14 +47,14 @@ fn bintolog_writes_mission_planners_text_beside_the_bin() {
     let dir = scratch("bintolog");
     let bin = dir.join("flight.bin");
     std::fs::copy(testdata("dataflash.bin"), &bin).unwrap();
-    let output = mpr(&[Path::new("bintolog"), &bin]);
+    let output = headless_planner(&[Path::new("bintolog"), &bin]);
     assert!(output.status.success(), "{output:?}");
     assert_eq!(
         std::fs::read(dir.join("flight.log")).unwrap(),
         std::fs::read(testdata("dataflash/golden/dataflash.log")).unwrap()
     );
     let elsewhere = dir.join("elsewhere.txt");
-    let output = mpr(&[Path::new("bintolog"), &bin, &elsewhere]);
+    let output = headless_planner(&[Path::new("bintolog"), &bin, &elsewhere]);
     assert!(output.status.success(), "{output:?}");
     assert!(elsewhere.exists());
     std::fs::remove_dir_all(&dir).unwrap();
@@ -65,7 +65,7 @@ fn dflogtokml_writes_every_file_into_the_directory() {
     let dir = scratch("dflogtokml");
     let out = dir.join("out");
     std::fs::create_dir_all(&out).unwrap();
-    let output = mpr(&[Path::new("dflogtokml"), &testdata("dataflash.bin"), &out]);
+    let output = headless_planner(&[Path::new("dflogtokml"), &testdata("dataflash.bin"), &out]);
     assert!(output.status.success(), "{output:?}");
     for file in [
         "dataflash.bin.gpx",
@@ -87,7 +87,7 @@ fn matlab_names_the_file_for_its_lines() {
     let dir = scratch("matlab");
     let log = dir.join("flight.bin");
     std::fs::copy(testdata("dataflash.bin"), &log).unwrap();
-    let output = mpr(&[Path::new("matlab"), &log]);
+    let output = headless_planner(&[Path::new("matlab"), &log]);
     assert!(output.status.success(), "{output:?}");
     let written = std::fs::read(dir.join("flight.bin-11439.mat")).unwrap();
     let golden =
@@ -124,7 +124,7 @@ fn loganalysis_prints_the_analyzers_report() {
     )
     .unwrap();
 
-    let output = mpr(&[Path::new("loganalysis"), &log, &analyzer]);
+    let output = headless_planner(&[Path::new("loganalysis"), &log, &analyzer]);
     assert!(output.status.success(), "{output:?}");
     let golden =
         std::fs::read_to_string(testdata("dataflash/golden/loganalysis/example_output.txt"))
@@ -136,6 +136,6 @@ fn loganalysis_prints_the_analyzers_report() {
 
 #[test]
 fn a_verb_without_a_file_is_a_usage_error() {
-    let output = mpr(&[Path::new("matlab")]);
+    let output = headless_planner(&[Path::new("matlab")]);
     assert_eq!(output.status.code(), Some(2));
 }

@@ -29,7 +29,7 @@ empty `config.xml` of its own, and `MP_FIRMWARE_PORT` (test scaffolding until Ma
 ported, PLAN §13.6 row 80) naming the board's by-id device. It runs only on Buzz's explicit go.
 
 **Lessons.** `tools/gui-test.sh` deletes `$WORK` when the run ends, so the run's `.tlog` is gone
-with it; to see a vehicle's `COMMAND_ACK` use `mpr command <url> <MAV_CMD> [p1..p7]` (development
+with it; to see a vehicle's `COMMAND_ACK` use `headless-planner command <url> <MAV_CMD> [p1..p7]` (development
 scaffolding in the CLI). A GUI click on the SETUP list can land before the list is laid out
 (run 4 of the flash: the page never activated); give the list a settle before clicking.
 

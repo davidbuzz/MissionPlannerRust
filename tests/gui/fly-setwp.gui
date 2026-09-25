@@ -10,7 +10,7 @@
 # opens, so the list and the index are known.
 
 setup printf 'QGC WPL 110\n0\t1\t0\t16\t0\t0\t0\t0\t-35.363262\t149.165237\t584.09\t1\n1\t0\t3\t22\t0\t0\t0\t0\t0\t0\t10\t1\n2\t0\t3\t16\t0\t0\t0\t0\t-35.3629\t149.165237\t10\t1\n3\t0\t3\t178\t0\t5\t0\t0\t0\t0\t0\t1\n4\t0\t3\t16\t0\t0\t0\t0\t-35.3625\t149.1657\t10\t1\n' > $WORK/mission.waypoints
-setup cargo run -q -p mp-cli --bin mpr -- mission tcp:127.0.0.1:5762 $WORK/mission.waypoints
+setup cargo run -q -p mp-cli --bin headless-planner -- mission tcp:127.0.0.1:5762 $WORK/mission.waypoints
 
 screen fly
 window 1600x1200

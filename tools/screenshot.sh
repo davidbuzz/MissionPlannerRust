@@ -42,7 +42,7 @@ shift 2 2>/dev/null || shift 1
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/docs/progress/$NAME.png"
-BIN="$ROOT/target/debug/mpr-gui"
+BIN="$ROOT/target/debug/planner"
 WINDOW_TITLE="Mission Planner"
 
 [ -x "$BIN" ] || { echo "binary not built: $BIN" >&2; exit 1; }
@@ -58,7 +58,7 @@ pkill -f "$(basename "$BIN")" 2>/dev/null && sleep 1
 # whenever a click is asked for. It writes nothing otherwise.
 PROBE_FILE=""
 if [ -n "${CLICK:-}" ] || [ -n "${CLICK_AFTER:-}" ] || [ -n "${DRAG:-}" ]; then
-    PROBE_FILE="$(mktemp -t mpr-probe-XXXXXX.json)"
+    PROBE_FILE="$(mktemp -t planner-probe-XXXXXX.json)"
     export MP_PROBE="$PROBE_FILE"
 fi
 
@@ -67,7 +67,7 @@ fi
 # gets a copy of the file it would have read, as tools/gui-test.sh gives its tests.
 if [ -z "${MP_CONFIG_XML:-}" ]; then
     DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/MissionPlannerRust"
-    export MP_CONFIG_XML="$(mktemp -t mpr-config-XXXXXX.xml)"
+    export MP_CONFIG_XML="$(mktemp -t planner-config-XXXXXX.xml)"
     [ -f "$DATA_DIR/config.xml" ] && cp "$DATA_DIR/config.xml" "$MP_CONFIG_XML"
 fi
 

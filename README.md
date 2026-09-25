@@ -23,7 +23,7 @@ Linux only, so far: the repository has no remote, and the three-OS CI matrix has
 | MAVLink v1/v2 codec | zero-copy parse, allocation-free encode, v2 signing |
 | Generated dialect | 349 messages, 206 enums, generated from the upstream XML |
 | Transports | serial, TCP, UDP, a UDP client, websocket and NTRIP (the last three held to the C# classes run under mono), file replay, in-memory test doubles; port enumeration by `CommsSerialPort.GetPortNames`'s rules, held to per-OS fixtures; faults and a real pty unplug rehearsed in tests |
-| Link engine | I/O thread, multi-vehicle routing (50 systems in one test), stream requests; parameter sets, reads, commands and `COMMAND_INT`s, set-current, single mission items, the home-position ask and mission transfer with Mission Planner's own retry counts and waits, proved by counting sends under dropped, delayed and duplicated frames; every set and command the screens and `mpr` send goes through them |
+| Link engine | I/O thread, multi-vehicle routing (50 systems in one test), stream requests; parameter sets, reads, commands and `COMMAND_INT`s, set-current, single mission items, the home-position ask and mission transfer with Mission Planner's own retry counts and waits, proved by counting sends under dropped, delayed and duplicated frames; every set and command the screens and `headless-planner` send goes through them |
 | Vehicle state | lock-free snapshot bus, packet-loss tracking; all 550 of `CurrentState`'s members accounted for (471 held with the C#'s rules, 48 derived, 30 plumbing, 1 dropped), the last 55 matched per packet to the C#'s own `UpdateCurrentSettings` under mono |
 | Parameters | fetched as Mission Planner fetches them: `@PARAM/param.pck?withdefaults=1` over MAVFTP first, the `PARAM_REQUEST_LIST` stream with gap recovery when that will not do; started on its own once a vehicle is heard and nothing is held; typed values, 1,408 from SITL |
 | `.param` files | save, load and compare against a vehicle, honouring the C# skip-list |
@@ -43,7 +43,7 @@ Linux only, so far: the repository has no remote, and the three-OS CI matrix has
 | Geodesy | typed units, Web Mercator, slippy-map tile arithmetic; pixel, inverse, distance, bearing, `newpos` and UTM match the C# under mono bit for bit over 676 points |
 | HUD | all 24 elements `HUD.cs` paints, from a pure scene builder with a coverage table: horizon and ladder, heading tape with target and course marks, cross-track and turn rate, speed and altitude scrollers, VSI, mode and waypoint, link, battery, GPS, ARMED/DISARMED/SAFE/FAILSAFE, the message line, Vibe and EKF with the C#'s thresholds, Ready/Not Ready to Arm, custom items, flight-path vector and AOA scale |
 | Maps | GPU tile rendering; Mission Planner's default `GoogleSatelliteMap` and six of its providers with its URL schemes and version checks, proved against its own `GMap.NET.Core.dll`; overlays; the on-disk cache is Mission Planner's own, so a cache filled by either application is read by both, and it is served by a thread that never waits on the network, with GMap.NET's five fetch threads behind it, so a cached view is on screen at start-up whatever the network is doing |
-| CLI | `mpr watch \| record \| fly \| params \| param set\|save\|load\|diff \| mission \| survey \| log [bintolog\|dflogtokml\|matlab\|loganalysis] \| logs \| ftp \| fields \| kml \| firmware info\|detect\|list \| terrain \| georef \| ports` |
+| CLI | `headless-planner watch \| record \| fly \| params \| param set\|save\|load\|diff \| mission \| survey \| log [bintolog\|dflogtokml\|matlab\|loganalysis] \| logs \| ftp \| fields \| kml \| firmware info\|detect\|list \| terrain \| georef \| ports` |
 | GUI | fly, plan, setup, config, params and log screens on gpui; the flight screen's lower-left is Mission Planner's fourteen-page tab control and SETUP/CONFIG are its backstage lists, every entry in the C#'s order under the C#'s conditions; `MainV2`'s port box, baud box and CONNECT/DISCONNECT at the top right, with each network kind's questions and the still-moving check (AUTO's port scan not ported) |
 | Porting ledger | `ledger/ledger.csv`, one row per C# file with its tier and state - 63 past `ready` with their evidence and omissions, 76,375 C# lines; `cargo xtask ledger check` fails on anything unaccounted for |
 | Flight screen coverage | every one of `FlightData`'s 136 wired actions listed with what stands in for it here — 96 done, 19 missing — in `docs/coverage/flightdata.md`, kept current by a test; the lower-left is Mission Planner's own fourteen-page tab control with its Quick view, its tlog playback, its DataFlash Logs page and log downloader, and its Actions page (Set WP, Restart/Resume Mission, Change Alt/Speed/Loiter Radius, Fly To Coords, Abort Landing, Do Action, Jump To Tag) sends what the C# sends, proved against SITL by a script each; the DataFlash page's conversions run on a thread against the golden files; the HUD's right-click menu has Russian HUD, Ground Color, User Items, Swap With Map, Show icons and Battery Cell Voltage; Set Home/EKF Origin, the camera and gimbal commands, the Transponder page and the speed dial are there too |
@@ -120,14 +120,14 @@ to look at. An expectation naming a fact that no longer exists is an error, not 
 cargo build --workspace
 cargo test --workspace
 
-mpr watch tcp:127.0.0.1:5760     # ArduPilot SITL
-mpr watch udp:14550              # bind and wait for a vehicle
-mpr watch file:flight.tlog       # replay a recording
-mpr record udp:14550 flight.tlog
-mpr param save tcp:127.0.0.1:5760 backup.param
-mpr param diff backup.param proposed.param
-mpr kml flight.tlog flight.kml
-mpr-gui                          # the graphical front end
+headless-planner watch tcp:127.0.0.1:5760     # ArduPilot SITL
+headless-planner watch udp:14550              # bind and wait for a vehicle
+headless-planner watch file:flight.tlog       # replay a recording
+headless-planner record udp:14550 flight.tlog
+headless-planner param save tcp:127.0.0.1:5760 backup.param
+headless-planner param diff backup.param proposed.param
+headless-planner kml flight.tlog flight.kml
+planner                          # the graphical front end
 ```
 
 The GUI records every flight without being asked, into its own data directory's `logs` —
@@ -168,8 +168,8 @@ crates/
   mp-terrain           srtm.cs: SRTM tiles, the download queue, getAltitude, proved against the C# DLL
   mp-georef            georefimage.cs: photos matched to a log by time, CAM or TRIG, every output byte for byte to the C#
   mp-fuzz-checks       the fuzz properties, so they compile on stable too
-  mp-cli               `mpr`
-  mp-gui               `mpr-gui`, built on gpui
+  mp-cli               `headless-planner`
+  mp-gui               `planner`, built on gpui
 xtask/                 codegen and repository invariants
 assets/i18n/           the .ftl per culture, generated from Mission Planner's .resx, with the key map and the zero-loss report
 fuzz/                  libfuzzer targets and their committed seed corpora

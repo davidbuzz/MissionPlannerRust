@@ -24,13 +24,13 @@ down is a suite he will kill, and its results are lost either way.
 - **Do not start a GUI script or suite while Buzz is at the machine unless he has just said to**
   (a "go" that names the scripts). An earlier "go" does not carry to a later batch; a suite he
   asked for and then stopped is stopped.
-- **Prefer the headless route first**: `mpr` verbs, `cargo test -p <crate>` in a second target
+- **Prefer the headless route first**: `headless-planner` verbs, `cargo test -p <crate>` in a second target
   directory, the facts and logs a previous run left. A GUI script is the last check, not the
   first probe.
 - **When a suite is authorised, say how long it will take and that the pointer is not his
   until it ends**, so he can choose the moment; offer to run it when he steps away.
 - **Stop means now**: kill by PID, wrapper first so nothing else spawns ([[kill-by-pid-not-pattern]]),
-  confirm no `mpr-gui` or `xdotool` remains, and report what ran and what did not.
+  confirm no `planner` or `xdotool` remains, and report what ran and what did not.
 - A one-script diagnostic run is still a run of the pointer: ask, or wait for the go.
 
 See [[gui-runs-stay-short]] for the window's lifetime and the quiet-machine rule, and

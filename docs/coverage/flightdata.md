@@ -25,7 +25,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `BUT_Homealt` | Click | `BUT_Homealt_Click` | Set Home Alt | done: `fly-homealt` |
 | `BUT_joystick` | Click | `BUT_joystick_Click` | Joystick | done: `joystick-refresh` |
 | `BUT_loadtelem` | Click | `BUT_loadtelem_Click` | Load Log | done: `fly-loadtelem` |
-| `BUT_log2kml` | Click | `BUT_log2kml_Click` | Tlog > Kml or Graph | elsewhere: mpr kml |
+| `BUT_log2kml` | Click | `BUT_log2kml_Click` | Tlog > Kml or Graph | elsewhere: headless-planner kml |
 | `BUT_loganalysis` | Click | `BUT_loganalysis_Click` | Auto Analysis | done: `fly-loganalysis` |
 | `BUT_logbrowse` | Click | `BUT_logbrowse_Click` | Review a Log | done: `fly-logbrowse` |
 | `BUT_matlab` | Click | `BUT_matlab_Click` | Create Matlab File | done: `fly-matlab` |

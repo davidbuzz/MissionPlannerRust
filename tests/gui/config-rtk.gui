@@ -52,7 +52,7 @@ expect config.rtk.bars 0
 # Connect: CommsNTRIP.Open's question, the saved URL in it.
 click rtk-BUT_connect
 expect config.rtk.prompt remote host
-expect config.rtk.prompt.value ~ ntrip://mpr:rtk@127.0.0.1:
+expect config.rtk.prompt.value ~ ntrip://headless-planner:rtk@127.0.0.1:
 click rtk-prompt-ok
 settle 3
 expect config.rtk.prompt none
@@ -62,7 +62,7 @@ expect config.rtk.running true
 expect config.rtk.button Stop
 expect config.rtk.baud 2400
 expect config.rtk.sendgga.enabled false
-expect config.rtk.setting.url ~ ntrip://mpr:rtk@127.0.0.1:
+expect config.rtk.setting.url ~ ntrip://headless-planner:rtk@127.0.0.1:
 expect config.rtk.setting.port NTRIP
 
 # The counts climbing, every message injected, the base found.

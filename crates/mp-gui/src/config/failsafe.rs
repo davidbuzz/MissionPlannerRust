@@ -2022,7 +2022,7 @@ mod tests {
         assert!(!controls.plane_throttle_pwm.shown);
     }
 
-    /// The whole of a real SITL copter's parameters, as `mpr param save` wrote them: the page
+    /// The whole of a real SITL copter's parameters, as `headless-planner param save` wrote them: the page
     /// binds what `config-failsafe.gui` expects to find on the live vehicle.
     #[test]
     fn the_sitl_copter_dump_binds_the_names_the_gui_script_expects() {

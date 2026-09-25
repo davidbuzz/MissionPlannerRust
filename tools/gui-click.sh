@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Clicks a named control in a running mpr-gui window.
+# Clicks a named control in a running planner window.
 #
 # Screenshots prove what the application looks like when it starts. They cannot show anything that
 # only exists after an interaction - a tab that is not the default, a panel that appears once an

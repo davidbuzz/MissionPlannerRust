@@ -2178,7 +2178,7 @@ mod tests {
         assert!(serial.rows().is_empty());
     }
 
-    /// `@SYS/uarts.txt` as SITL copter serves it, read with `mpr ftp get tcp:127.0.0.1:5763
+    /// `@SYS/uarts.txt` as SITL copter serves it, read with `headless-planner ftp get tcp:127.0.0.1:5763
     /// @SYS/uarts.txt` on 2026-09-24: 712 bytes. SITL's UARTs have no names, so each line's
     /// second word is "TX=".
     const SITL_UARTS: &str = "UARTV1\n\

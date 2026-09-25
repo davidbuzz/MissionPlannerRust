@@ -55,10 +55,10 @@ impl Drop for Running {
 /// Runs the GUI at a given size on a given screen and returns what it measured.
 fn measure(width: u32, height: u32, screen: &str) -> BTreeMap<String, Rect> {
     let probe: PathBuf =
-        std::env::temp_dir().join(format!("mpr-layout-{width}x{height}-{screen}.json"));
+        std::env::temp_dir().join(format!("headless-planner-layout-{width}x{height}-{screen}.json"));
     let _ = std::fs::remove_file(&probe);
 
-    let child = Command::new(env!("CARGO_BIN_EXE_mpr-gui"))
+    let child = Command::new(env!("CARGO_BIN_EXE_planner"))
         .env("MP_PROBE", &probe)
         .env("MP_WINDOW", format!("{width}x{height}"))
         .env("MP_SCREEN", screen)
@@ -66,7 +66,7 @@ fn measure(width: u32, height: u32, screen: &str) -> BTreeMap<String, Rect> {
         // rewrite the settings of the Mission Planner installed on this machine.
         .env(
             "MP_CONFIG_XML",
-            std::env::temp_dir().join("mpr-layout-config.xml"),
+            std::env::temp_dir().join("headless-planner-layout-config.xml"),
         )
         .env(
             "DISPLAY",
@@ -75,7 +75,7 @@ fn measure(width: u32, height: u32, screen: &str) -> BTreeMap<String, Rect> {
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
-        .expect("mpr-gui should start; this test needs a display and is ignored by default");
+        .expect("planner should start; this test needs a display and is ignored by default");
     let _running = Running(child);
 
     // Wait for the layout to settle. The probe is rewritten whenever anything moves, so a stable

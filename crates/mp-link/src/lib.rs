@@ -172,7 +172,7 @@ pub struct LinkConfig {
     /// Whether to stamp each vehicle's state with when its newest frame arrived
     /// ([`mp_vehicle::VehicleState::packet_in`]), so a screen can measure packet-to-pixel
     /// latency (DELIVERABLES.md D9). Measurement scaffolding: off by default and in every
-    /// product path, where it costs one untaken branch a frame; `mpr-gui`'s `MP_STORM` turns it
+    /// product path, where it costs one untaken branch a frame; `planner`'s `MP_STORM` turns it
     /// on. **Not the C#'s.**
     pub stamp_arrivals: bool,
 }

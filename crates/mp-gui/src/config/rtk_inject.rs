@@ -6115,7 +6115,7 @@ mod tests {
     fn a_connection_reads_logs_and_counts_until_stopped() {
         let (mut base, port) = Loopback::pair();
         let shared = Arc::new(Shared::default());
-        let dir = std::env::temp_dir().join(format!("mpr-rtk-{}-{}", std::process::id(), line!()));
+        let dir = std::env::temp_dir().join(format!("headless-planner-rtk-{}-{}", std::process::id(), line!()));
         std::fs::create_dir_all(&dir).expect("the log directory");
         let spec = OpenSpec {
             kind: Kind::TcpClient,
@@ -6798,7 +6798,7 @@ mod tests {
     }
 
     fn scratch(tag: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("mpr-rtk-{}-{tag}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("headless-planner-rtk-{}-{tag}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("scratch");
         dir
     }

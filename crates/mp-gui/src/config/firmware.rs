@@ -39,7 +39,7 @@
 //!   answered Yes. Force Bootloader is drawn dimmed;
 //! * `Ctrl+Q` for the `DEV` release (`ProcessCmdKey`, `ConfigFirmwareManifest.cs:399-408`): the
 //!   C# sees it only while a control of the page has the keyboard, and nothing on this page takes
-//!   it; the catalogue answers for `DEV`, and `mpr firmware list --release DEV` asks it;
+//!   it; the catalogue answers for `DEV`, and `headless-planner firmware list --release DEV` asks it;
 //! * the board id a bootloader reports when a device is plugged in while the page shows
 //!   (`Instance_DeviceChanged`, `:134-180`): reading it means opening every port and sending the
 //!   bootloader's identify. The board is found from the USB product string and ids alone, as

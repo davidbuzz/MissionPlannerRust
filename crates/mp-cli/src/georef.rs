@@ -1,4 +1,4 @@
-//! `mpr georef <log> <photo folder> [options]`: the Geo Reference Images form's "Process" button
+//! `headless-planner georef <log> <photo folder> [options]`: the Geo Reference Images form's "Process" button
 //! without the form, and with `--geotag` its "GeoTag Images" button, with `--estimate` its
 //! "Estimate Offset". The report files go into the photo folder and the geotagged copies into its
 //! `geotagged` folder, as the form writes them; the lines the form's output box shows are printed.
@@ -16,13 +16,13 @@ use mp_georef::georef::ProcessingMode;
 use mp_georef::time::{DateTime, Kind, TICKS_PER_DAY, UNIX_EPOCH_TICKS};
 use mp_georef::{FormSettings, GeoRefImageBase, Terrain};
 
-/// The usage line `mpr help` shows.
+/// The usage line `headless-planner help` shows.
 pub(crate) const USAGE: &str =
-    "mpr georef <log> <dir> [...]  Geo Reference Images (mpr georef for more)";
+    "headless-planner georef <log> <dir> [...]  Geo Reference Images (headless-planner georef for more)";
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage: mpr georef <log .bin|.log|.tlog> <photo folder> [options]\n\n\
+        "usage: headless-planner georef <log .bin|.log|.tlog> <photo folder> [options]\n\n\
          Matches the photos to the log as the Geo Reference Images form does, writes location.txt,\n\
          .csv, .kml, .gpx, .jxl, .geo, .tel into the folder, and prints the form's lines.\n\n\
          options (the form's defaults in brackets):\n  \
@@ -142,7 +142,7 @@ fn run_with(args: &[String], terrain: &dyn Terrain, out: &mut dyn FnMut(&str)) -
     let request = match parse(args) {
         Ok(request) => request,
         Err(message) => {
-            eprintln!("mpr georef: {message}\n");
+            eprintln!("headless-planner georef: {message}\n");
             return usage();
         }
     };
@@ -168,18 +168,18 @@ fn run_with(args: &[String], terrain: &dyn Terrain, out: &mut dyn FnMut(&str)) -
                 ExitCode::SUCCESS
             }
             Err(e) => {
-                eprintln!("mpr georef: {e}");
+                eprintln!("headless-planner georef: {e}");
                 ExitCode::FAILURE
             }
         };
     }
 
     if !std::path::Path::new(&request.log).is_file() {
-        eprintln!("mpr georef: no log at {}", request.log);
+        eprintln!("headless-planner georef: no log at {}", request.log);
         return ExitCode::FAILURE;
     }
     if !std::path::Path::new(&request.dir).is_dir() {
-        eprintln!("mpr georef: no folder at {}", request.dir);
+        eprintln!("headless-planner georef: no folder at {}", request.dir);
         return ExitCode::FAILURE;
     }
     let report = georef.process(
@@ -192,7 +192,7 @@ fn run_with(args: &[String], terrain: &dyn Terrain, out: &mut dyn FnMut(&str)) -
     if request.geotag
         && let Err(e) = georef.geotag_images(&request.dir, &request.settings, &mut *out)
     {
-        eprintln!("mpr georef: {e}");
+        eprintln!("headless-planner georef: {e}");
         return ExitCode::FAILURE;
     }
     if report.is_some() {
@@ -202,14 +202,14 @@ fn run_with(args: &[String], terrain: &dyn Terrain, out: &mut dyn FnMut(&str)) -
     }
 }
 
-/// `mpr georef ...`.
+/// `headless-planner georef ...`.
 #[must_use]
 pub(crate) fn run(args: &[String]) -> ExitCode {
     if args.is_empty() {
         return usage();
     }
     let Some(srtm_dir) = mp_terrain::srtm_directory() else {
-        eprintln!("mpr georef: no home directory to find the terrain cache under");
+        eprintln!("headless-planner georef: no home directory to find the terrain cache under");
         return ExitCode::FAILURE;
     };
     let srtm = mp_terrain::Srtm::new(srtm_dir);
@@ -239,7 +239,7 @@ mod tests {
     }
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("mpr-georef-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("headless-planner-georef-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

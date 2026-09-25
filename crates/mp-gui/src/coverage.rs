@@ -193,7 +193,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUT_log2kml_Click",
         "Tlog > Kml or Graph",
-        Elsewhere("mpr kml"),
+        Elsewhere("headless-planner kml"),
     ),
     row(
         "BUT_loganalysis",

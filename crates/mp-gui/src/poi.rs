@@ -343,7 +343,7 @@ mod tests {
 
     fn scratch(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "mpr-poi-{}-{name}-{:?}",
+            "headless-planner-poi-{}-{name}-{:?}",
             std::process::id(),
             std::time::SystemTime::now()
         ));

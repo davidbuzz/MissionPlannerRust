@@ -18,7 +18,7 @@ is the bottleneck; agents with disjoint files finish that many items in the time
   scope, read the `.cs` first, autotests mandatory, workspace lints, comment style.
 - **Disjoint file sets, stated explicitly in each prompt.** Concurrent agents on one file is a
   merge nobody asked for.
-- **Agents never open a window** — no `mpr-gui`, `gui-test.sh`, `screenshot.sh`; the coordinator
+- **Agents never open a window** — no `planner`, `gui-test.sh`, `screenshot.sh`; the coordinator
   runs GUI tests, one short run each. See [[gui-runs-stay-short]].
 - **Agents never `git add` or `git commit`.** The coordinator integrates, runs clippy and the
   full test suite, reads both, and commits. See [[verify-before-committing]].

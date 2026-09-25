@@ -2233,7 +2233,7 @@ mod tests {
             .collect()
     }
 
-    /// The whole of a real SITL copter's parameters, as `mpr param save` wrote them.
+    /// The whole of a real SITL copter's parameters, as `headless-planner param save` wrote them.
     fn sitl() -> Vec<(String, f64)> {
         let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../testdata/params/sitl-copter.param");

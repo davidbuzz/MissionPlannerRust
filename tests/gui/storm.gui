@@ -17,7 +17,7 @@
 #
 # The budget is the product's, so the number that counts is the release build's:
 #   cargo build --release -p mp-gui
-#   MP_GUI_BIN=target/release/mpr-gui tools/gui-test.sh tests/gui/storm.gui
+#   MP_GUI_BIN=target/release/planner tools/gui-test.sh tests/gui/storm.gui
 # The debug build the other scripts use runs our own crates unoptimised; measured on 2026-09-24
 # it gave p99 26 ms with 127 stalls in 480 frames at 200 Hz, and that is not the claim.
 

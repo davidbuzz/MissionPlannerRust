@@ -33,7 +33,7 @@ built differently from the one users get, which is a worse thing to trust than n
 
 Add a smoke mode to the real binary and run it on all three platforms in CI.
 
-`MP_SMOKE=1` makes `mpr-gui` exit 0 once it has painted three frames, and exit non-zero if it has
+`MP_SMOKE=1` makes `planner` exit 0 once it has painted three frames, and exit non-zero if it has
 not painted them within thirty seconds. Three specific choices:
 
 **Frames are counted in `Render::render`**, which gpui calls once per painted frame. Every earlier

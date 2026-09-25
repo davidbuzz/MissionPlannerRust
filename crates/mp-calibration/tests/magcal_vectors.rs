@@ -1,7 +1,7 @@
 //! `MagCalib.cs`'s fit held to PLAN.md §7.2's class D.
 //!
 //! The C# cannot be run here (PLAN.md §7.1: `MagCalib.cs` does not build under mono), so the
-//! golden is the sample sets `mpr magcal` extracts from the logs under `testdata` - committed as
+//! golden is the sample sets `headless-planner magcal` extracts from the logs under `testdata` - committed as
 //! `testdata/magcal/*.txt` by `mp-cli`'s ignored `regenerate_magcal_fixtures` - fitted by the port
 //! and held to what any correct run of the C#'s fit must satisfy:
 //!

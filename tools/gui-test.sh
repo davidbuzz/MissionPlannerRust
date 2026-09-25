@@ -67,7 +67,7 @@ shift
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # The debug binary, as every script runs against; MP_GUI_BIN names another, such as a release
 # build for a measurement whose number the debug build cannot stand for (tests/gui/storm.gui).
-BIN="${MP_GUI_BIN:-$ROOT/target/debug/mpr-gui}"
+BIN="${MP_GUI_BIN:-$ROOT/target/debug/planner}"
 WINDOW_TITLE="Mission Planner"
 [ -x "$BIN" ] || { echo "binary not built: $BIN" >&2; exit 1; }
 : "${DISPLAY:=:0}"
@@ -89,7 +89,7 @@ PROBE_FILE=""
 FACTS_FILE=""
 SETTINGS_FILE=""
 POINTER_HOME=""
-WORK="$(mktemp -d -t mpr-work-XXXXXX)" || { echo "cannot make a scratch directory" >&2; exit 2; }
+WORK="$(mktemp -d -t planner-work-XXXXXX)" || { echo "cannot make a scratch directory" >&2; exit 2; }
 cleanup() {
     if [ -n "$APP_PID" ]; then
         kill "$APP_PID" 2>/dev/null
@@ -168,8 +168,8 @@ case "${TILES:-off}" in
     *)       export MP_NO_TILES=1 ;;
 esac
 
-PROBE_FILE="$(mktemp -t mpr-probe-XXXXXX.json)"
-FACTS_FILE="$(mktemp -t mpr-facts-XXXXXX.conf)"
+PROBE_FILE="$(mktemp -t planner-probe-XXXXXX.json)"
+FACTS_FILE="$(mktemp -t planner-facts-XXXXXX.conf)"
 export MP_PROBE="$PROBE_FILE"
 export MP_FACTS="$FACTS_FILE"
 
@@ -180,7 +180,7 @@ export MP_FACTS="$FACTS_FILE"
 # test did: the altitude-frame test passed, wrote "terrain" to the real settings file, and the
 # next run of the same test started in terrain and failed its first expectation. Tests that must
 # be run in a particular order, once, are not tests.
-SETTINGS_FILE="$(mktemp -t mpr-settings-XXXXXX.conf)"
+SETTINGS_FILE="$(mktemp -t planner-settings-XXXXXX.conf)"
 export MP_SETTINGS="$SETTINGS_FILE"
 
 for I in "${!ENV_NAMES[@]}"; do

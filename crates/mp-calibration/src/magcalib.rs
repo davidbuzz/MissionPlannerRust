@@ -14,7 +14,7 @@
 //! §13.4 row 44 records Live Calibration as the compass page's one missing wiring):
 //!
 //! - "Log Calibration" (`ConfigHWCompass.BUT_MagCalibrationLog_Click`) will ask "Min Throttle" and
-//!   read the chosen file the way `mpr magcal` does - [`TlogSamples`] or [`DataflashSamples`], then
+//!   read the chosen file the way `headless-planner magcal` does - [`TlogSamples`] or [`DataflashSamples`], then
 //!   [`fit_tlog`] or [`fit_dataflash`] - and then write [`offset_params`] through the link and show
 //!   [`saved_message`], or show [`manual_message`] when not connected.
 //! - "Live Calibration" will feed `RAW_IMU`/`SCALED_IMU2`/`SCALED_IMU3` through [`SampleFilter`],

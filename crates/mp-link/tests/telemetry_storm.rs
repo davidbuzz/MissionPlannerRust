@@ -16,7 +16,7 @@
 //! sample that failed at load 30 and passed alone a minute later).
 //!
 //! The frame itself - render, layout and paint under the same storm - is measured in the window,
-//! by `mpr-gui` with `MP_STORM` set (`crates/mp-gui/src/storm.rs`, `tests/gui/storm.gui`), from
+//! by `planner` with `MP_STORM` set (`crates/mp-gui/src/storm.rs`, `tests/gui/storm.gui`), from
 //! the storm [`mp_link::testing::Storm`] writes; the last test here holds that storm to its rate.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
@@ -142,7 +142,7 @@ fn snapshots_keep_arriving_while_the_link_is_saturated() {
 
 #[test]
 fn a_paced_storm_arrives_through_the_link_at_its_rate() {
-    // What `mpr-gui` reports as `storm.rate`: frames the link counted, a second, over the frames
+    // What `planner` reports as `storm.rate`: frames the link counted, a second, over the frames
     // in each tick. A storm that fell short would make the frame measurement a measurement of a
     // lighter load than D10 names; one that ran unthrottled, of a heavier one.
     let (storm, end) = Storm::start(200);

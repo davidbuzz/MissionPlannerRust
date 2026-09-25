@@ -1,4 +1,4 @@
-//! `mpr ftp`: the vehicle's file system over MAVFTP, as Mission Planner's MAVFtp page
+//! `headless-planner ftp`: the vehicle's file system over MAVFTP, as Mission Planner's MAVFtp page
 //! (Controls/MavFTPUI.cs) drives it.
 //!
 //! * `ls` - a listing, directories then files, as the page's list shows them (:151-194).
@@ -21,18 +21,18 @@ use mp_link::{FtpError, Link, LinkConfig};
 use mp_vehicle::VehicleId;
 
 const USAGE: &str = "usage:\n  \
-    mpr ftp ls  <url> [path]            list a directory (default /)\n  \
-    mpr ftp get <url> <remote> [local]  download a file (burst read)\n  \
-    mpr ftp put <url> <local> <remote>  upload a file and check its CRC\n  \
-    mpr ftp rm  <url> <path>            remove a file\n  \
-    mpr ftp crc <url> <path>            the vehicle's CRC32 of a file";
+    headless-planner ftp ls  <url> [path]            list a directory (default /)\n  \
+    headless-planner ftp get <url> <remote> [local]  download a file (burst read)\n  \
+    headless-planner ftp put <url> <local> <remote>  upload a file and check its CRC\n  \
+    headless-planner ftp rm  <url> <path>            remove a file\n  \
+    headless-planner ftp crc <url> <path>            the vehicle's CRC32 of a file";
 
-/// How long any one request may run before `mpr` gives up on it. Longer than any of the C#'s own
+/// How long any one request may run before `headless-planner` gives up on it. Longer than any of the C#'s own
 /// ladders (thirty one-second retries, or three thirty-second CRC waits), so the client's own
 /// timeouts always end a request first; this only guards against a link that died under it.
 const REQUEST_LIMIT: Duration = Duration::from_secs(600);
 
-/// `mpr ftp <verb> ...`, with `args` the words after `ftp`.
+/// `headless-planner ftp <verb> ...`, with `args` the words after `ftp`.
 pub(crate) fn run(args: &[String]) -> ExitCode {
     let word = |i: usize| args.get(i).map(String::as_str);
     let result = match (word(0), word(1), word(2), word(3)) {
@@ -108,7 +108,7 @@ fn request(link: &Link, id: VehicleId, request: FtpRequest) -> Result<FtpOutcome
     }
 }
 
-/// `mpr ftp ls`: directories, then files, as MavFTPUI.cs:151-194 lists them. The nameless
+/// `headless-planner ftp ls`: directories, then files, as MavFTPUI.cs:151-194 lists them. The nameless
 /// placeholders for skipped entries and `.`/`..` are left out, as `GetDirectories` leaves them
 /// out (:248); a file's size is in bytes, and its time, when the vehicle gives one, in seconds
 /// since the epoch.
@@ -148,7 +148,7 @@ fn line(kind: &str, size: &str, entry: &FtpFileInfo) -> String {
     format!("{kind:<9}  {size:>10}  {}{when}\n", entry.name)
 }
 
-/// `mpr ftp get`: `GetFile(remote, cancel)` with its defaults, burst and 80 bytes a chunk
+/// `headless-planner ftp get`: `GetFile(remote, cancel)` with its defaults, burst and 80 bytes a chunk
 /// (MAVFtp.cs:560), then the bytes to `local`.
 fn get(link: &Link, id: VehicleId, remote: &str, local: Option<&Path>) -> Result<String, String> {
     let outcome = request(
@@ -201,7 +201,7 @@ fn unused_name(dir: &Path, remote: &str) -> PathBuf {
     path
 }
 
-/// `mpr ftp put`: `UploadFile(remote, local)`, then the page's check: the vehicle's CRC of the
+/// `headless-planner ftp put`: `UploadFile(remote, local)`, then the page's check: the vehicle's CRC of the
 /// file against `crc_crc32(0, local bytes)`, a mismatch being `BadCrcException`
 /// (MavFTPUI.cs:428-442).
 fn put(link: &Link, id: VehicleId, remote: &str, data: Vec<u8>) -> Result<String, String> {
@@ -233,7 +233,7 @@ fn put(link: &Link, id: VehicleId, remote: &str, data: Vec<u8>) -> Result<String
     Ok(format!("{remote}: {len} bytes, CRC 0x{crc:X}\n"))
 }
 
-/// `mpr ftp rm`: `kCmdRemoveFile`; false is the page's "Failed to delete file" (MavFTPUI.cs:470).
+/// `headless-planner ftp rm`: `kCmdRemoveFile`; false is the page's "Failed to delete file" (MavFTPUI.cs:470).
 fn rm(link: &Link, id: VehicleId, path: &str) -> Result<String, String> {
     match request(
         link,
@@ -247,7 +247,7 @@ fn rm(link: &Link, id: VehicleId, path: &str) -> Result<String, String> {
     }
 }
 
-/// `mpr ftp crc`: `kCmdCalcFileCRC32`, as the page shows it: the name, ": 0x", the CRC in
+/// `headless-planner ftp crc`: `kCmdCalcFileCRC32`, as the page shows it: the name, ": 0x", the CRC in
 /// hexadecimal (MavFTPUI.cs:571). Unanswered, the C#'s CRC is `UInt32.MaxValue` (MAVFtp.cs:929),
 /// which is printed too, and the command fails.
 fn crc(link: &Link, id: VehicleId, path: &str) -> Result<String, String> {
@@ -373,7 +373,7 @@ mod tests {
     }
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("mpr-ftp-{}-{name}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("headless-planner-ftp-{}-{name}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }

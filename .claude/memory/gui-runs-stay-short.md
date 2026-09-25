@@ -105,7 +105,7 @@ silently. Seed the home as `plan-radius.gui`'s `setup` line does (a `config.xml`
 `TXT_homelat/lng/alt`) before clicking the map (2026-09-24, an hour lost to it).
 
 **The suite reads the runner and the binary live.** `gui-suite.sh` starts `tools/gui-test.sh` afresh
-for every script and each script launches `target/debug/mpr-gui`, so while a suite runs: do not edit
+for every script and each script launches `target/debug/planner`, so while a suite runs: do not edit
 `tools/gui-test.sh` (a script that started mid-write died with a bash syntax error, 2026-09-24) and
 do not `cargo build` into the main target (a half-written binary fails to launch, and the suite
 would then test a mix). Edit sources freely - cargo is not invoked by the suite - but build and
