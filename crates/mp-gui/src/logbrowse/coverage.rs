@@ -403,6 +403,13 @@ pub const BEYOND: &[Action] = &[
         Done("log-chart-menu-set_default"),
     ),
     row(
+        "treeView1",
+        "AfterCheck (a bit's node)",
+        "add_field_node; GraphItem(..., bitmask)",
+        "a bitmask field's bits as child nodes, each graphed through its mask as MSG.Field.BIT",
+        Done("fn graph_bit"),
+    ),
+    row(
         "zg1",
         "Scroll",
         "(ZedGraph) hScrollBar1",
@@ -627,6 +634,6 @@ mod tests {
         let beyond = counts(BEYOND);
         eprintln!("LogBrowse designer: {designer:?}; beyond: {beyond:?}");
         assert_eq!(designer, (29, 0, 0, 6, 2));
-        assert_eq!(beyond, (10, 0, 0, 3, 2));
+        assert_eq!(beyond, (11, 0, 0, 3, 2));
     }
 }

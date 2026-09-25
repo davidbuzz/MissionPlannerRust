@@ -1,12 +1,17 @@
 # Opening a dataflash log reads its fields; a left click plots one on the left axis and a right
 # click on the right, as the tree in Log/LogBrowse.cs does.
 #
-# Self-contained: it lays out a plan directory of its own holding the healthy fixture as flight.bin.
+# Self-contained: it lays out a plan directory of its own holding the healthy fixture as flight.bin,
+# and a data directory holding ArduPilot's LogMessages.xml for two of its messages, MAV and POWR.
 
 env MP_PLAN_DIR $WORK/logs
 # A config.xml of its own: the boxes the log browser remembers start as the designer has them.
 env MP_CONFIG_XML $WORK/config.xml
+# The log metadata is read from the data directory; offline, so the download does not replace it.
+env XDG_DATA_HOME $WORK
+env MP_OFFLINE 1
 setup mkdir -p $WORK/logs && cp testdata/dataflash.bin $WORK/logs/flight.bin
+setup mkdir -p $WORK/MissionPlannerRust && cp testdata/logbrowse/LogMessagesCopter.xml $WORK/MissionPlannerRust/
 
 screen logs
 window 1600x1200
@@ -41,3 +46,28 @@ settle 1
 expect log.plotted 1
 expect log.plotted.right 1
 expect log.axes.left 0
+
+# A bitmask field's bits, as add_field_node adds them (Log/LogBrowse.cs:687-696): MAV.flags is a
+# bitmask in LogMessages.xml, so each channel's field node has a child for each bit, collapsed
+# until its plus is clicked. A control or fact named with brackets has them escaped for `click`
+# and `expect`, which find it by a grep pattern, and not for `reveal`, which looks it up whole.
+expect log.field.MAV\[0\].flags.bits USING_SIGNING,ACTIVE,STREAMING,PRIVATE,LOCKED
+expect log.field.MAV\[0\].flags.expanded false
+reveal log-fields logfield-MAV[0].flags-expand
+click logfield-MAV\[0\].flags-expand
+settle 1
+expect log.field.MAV\[0\].flags.expanded true
+expect log.field.MAV\[3\].flags.expanded false
+
+# One bit graphed (Log/LogBrowse.cs:1237-1248): channel 0's STREAMING bit on the left, its curve
+# named MAV[0].flags.STREAMING; a second click, whichever button, takes it off.
+reveal log-fields logfield-MAV[0].flags.STREAMING
+click logfield-MAV\[0\].flags.STREAMING
+settle 1
+expect log.plotted 2
+expect log.plotted.right 1
+expect log.plotted.labels ~ MAV[0].flags.STREAMING
+click logfield-MAV\[0\].flags.STREAMING:right
+settle 1
+expect log.plotted 1
+expect log.plotted.right 1

@@ -5,7 +5,7 @@ Generated from `crates/mp-gui/src/logbrowse/coverage.rs` by `cargo test -p mp-gu
 | table | total | done | elsewhere | missing | plumbing | dropped |
 |---|---:|---:|---:|---:|---:|---:|
 | designer | 37 | 29 | 0 | 0 | 6 | 2 |
-| beyond the designer | 15 | 10 | 0 | 0 | 3 | 2 |
+| beyond the designer | 16 | 11 | 0 | 0 | 3 | 2 |
 
 ## `Log/LogBrowse.designer.cs`
 
@@ -67,4 +67,5 @@ Generated from `crates/mp-gui/src/logbrowse/coverage.rs` by `cargo test -p mp-gu
 | `zg1 menu` | Click | `(ZedGraph) MenuClick_ZoomOut` | Un-Zoom / Un-Pan | done: `log-chart-menu-unzoom` |
 | `zg1 menu` | Click | `(ZedGraph) MenuClick_ZoomOutAll` | Undo All Zoom/Pan | done: `log-chart-menu-undo_all` |
 | `zg1 menu` | Click | `(ZedGraph) MenuClick_RestoreScale` | Set Scale to Default | done: `log-chart-menu-set_default` |
+| `treeView1` | AfterCheck (a bit's node) | `add_field_node; GraphItem(..., bitmask)` | a bitmask field's bits as child nodes, each graphed through its mask as MSG.Field.BIT | done: `fn graph_bit` |
 | `zg1` | Scroll | `(ZedGraph) hScrollBar1` | the scroll bars: hidden, `IsShowHScrollBar` is false | plumbing |

@@ -106,6 +106,20 @@ impl Modifier {
         Some(modifier)
     }
 
+    /// `new DataModifer(mask)`: a bitmask field's bit, as `GraphItem` makes one for a bit node -
+    /// valid, a mask, and no text for the label.
+    /// `// C#: Log/LogBrowse.cs:90-96, 1237-1248`
+    #[must_use]
+    pub fn mask(mask: u32) -> Self {
+        Self {
+            command: String::new(),
+            offset: 0.0,
+            scalar: 1.0,
+            offset_first: false,
+            mask: Some(mask),
+        }
+    }
+
     /// Applies the modifier to a value as `GraphItem_GetList` does.
     /// `// C#: Log/LogBrowse.cs:1530-1556`
     #[must_use]
@@ -165,6 +179,21 @@ mod tests {
         assert!((modifier.apply(13.0) - 3.0).abs() < 1e-9);
         assert!((modifier.apply(4.0) - 1.0).abs() < 1e-9);
         assert!(Modifier::parse("&-1").is_none());
+    }
+
+    /// A bit's modifier: its mask, shifted to its lowest bit, and nothing in the label; a mask
+    /// with no bits set gives nothing, as `>> 32` on a `uint` in C# shifts by nothing of nothing.
+    /// `// C#: Log/LogBrowse.cs:90-96, 1528-1538`
+    #[test]
+    fn a_bits_modifier_is_its_mask_with_no_text() {
+        let usb = Modifier::mask(4);
+        assert_eq!(usb.command, "");
+        assert!((usb.apply(4.0) - 1.0).abs() < 1e-9);
+        assert!((usb.apply(7.0) - 1.0).abs() < 1e-9);
+        assert!(usb.apply(3.0).abs() < 1e-9);
+        let two_bits = Modifier::mask(0b1100);
+        assert!((two_bits.apply(13.0) - 3.0).abs() < 1e-9);
+        assert!(Modifier::mask(0).apply(255.0).abs() < 1e-9);
     }
 
     /// Only two commands: a third is part of the second, which then does not parse.

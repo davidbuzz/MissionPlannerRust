@@ -257,6 +257,49 @@ pub struct Plotted {
     pub unit: String,
     /// What the legend calls it: `ATT.Roll (deg)`, with ` R` appended on the right axis.
     pub label: String,
+    /// The bit of a bitmask field it is, by its node's text: `None` for the field itself.
+    pub bit: Option<String>,
+}
+
+/// One child node of a bitmask field in the tree: `add_field_node`'s `new_bit_node`.
+/// `// C#: Log/LogBrowse.cs:687-696`
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BitNode {
+    /// `Text`: `bit.name`, which is null - an empty node - for a bit without one.
+    pub text: String,
+    /// `ToolTipText`: `bit.description`, empty without one.
+    pub tip: String,
+    /// The mask `GraphItem` finds for the node: the first of the field's bits whose `name` is
+    /// the node's text. `None` for a nameless bit, whose empty text no null name equals - the C#
+    /// then graphs the field's raw value under the bit's label.
+    /// `// C#: Log/LogBrowse.cs:1237-1248`
+    pub mask: Option<u32>,
+}
+
+/// The bits of a field whose metadata is a bitmask, as `add_field_node` adds them: one node for
+/// each bit, in the metadata's order; nothing for a field that is not a bitmask.
+/// `// C#: Log/LogBrowse.cs:687-696, 1237-1248`
+#[must_use]
+pub fn bit_nodes(meta: &metadata::MetaData, message: &str, field: &str) -> Vec<BitNode> {
+    let Some(bits) = meta
+        .field(message, field)
+        .and_then(|known| known.bitmask.as_ref())
+    else {
+        return Vec::new();
+    };
+    bits.iter()
+        .map(|bit| {
+            let text = bit.name.clone().unwrap_or_default();
+            BitNode {
+                mask: bits
+                    .iter()
+                    .find(|item| item.name.as_deref() == Some(text.as_str()))
+                    .map(|item| item.mask),
+                tip: bit.description.clone().unwrap_or_default(),
+                text,
+            }
+        })
+        .collect()
 }
 
 impl Plotted {
@@ -291,13 +334,62 @@ impl Plotted {
         x_axis: XAxis,
         modifier: Option<&Modifier>,
     ) -> Self {
+        let extra = modifier.map_or("", |modifier| modifier.command.as_str());
+        Self::built(field, points, unit, axis, x_axis, modifier, extra, None)
+    }
+
+    /// A bit of a bitmask field: its raw values through the bit's mask, `DataModifer(mask)` -
+    /// shifted down to the mask's lowest bit, so a one-bit mask graphs 0 or 1 - then the unit's
+    /// multiplier as for any field; labelled `MSG.Field (unit)` then `extra_label`, which for a
+    /// bit is `"." + bitmask` and the node's tooltip after a space.
+    ///
+    /// Divergence: the C#'s label ends in that space when the bit has no description; ours
+    /// does not, as a field's label here drops the space before its own empty tooltip.
+    /// `// C#: Log/LogBrowse.cs:1210-1224, 1237-1248, 1528-1538, 1616-1627`
+    fn of_bit(
+        field: PlottableField,
+        points: &[mp_log::plot::Point],
+        unit: &FieldUnit,
+        axis: Axis,
+        x_axis: XAxis,
+        node: &BitNode,
+    ) -> Self {
+        let mut extra = format!(".{}", node.text);
+        if !node.tip.is_empty() {
+            extra.push(' ');
+            extra.push_str(&node.tip);
+        }
+        let modifier = node.mask.map(Modifier::mask);
+        Self::built(
+            field,
+            points,
+            unit,
+            axis,
+            x_axis,
+            modifier.as_ref(),
+            &extra,
+            Some(node.text.clone()),
+        )
+    }
+
+    /// The curve, with `extra_label` after the unit and before the right axis's ` R`.
+    /// `// C#: Log/LogBrowse.cs:1530-1556, 1605-1630, 2786-2792`
+    #[allow(clippy::too_many_arguments)] // `GraphItem_AddCurve`'s own seven, and the bit
+    fn built(
+        field: PlottableField,
+        points: &[mp_log::plot::Point],
+        unit: &FieldUnit,
+        axis: Axis,
+        x_axis: XAxis,
+        modifier: Option<&Modifier>,
+        extra: &str,
+        bit: Option<String>,
+    ) -> Self {
         let mut label = field.to_string();
         if !unit.unit.is_empty() {
             label.push_str(&format!(" ({})", unit.unit));
         }
-        if let Some(modifier) = modifier {
-            label.push_str(&modifier.command);
-        }
+        label.push_str(extra);
         if axis == Axis::Right {
             label.push_str(" R");
         }
@@ -318,6 +410,7 @@ impl Plotted {
             axis,
             unit: unit.unit.clone(),
             label,
+            bit,
         }
     }
 
@@ -352,6 +445,7 @@ impl Plotted {
             axis: if item.left { Axis::Left } else { Axis::Right },
             unit: String::new(),
             label,
+            bit: None,
         }
     }
 }
@@ -456,6 +550,12 @@ pub struct LogBrowse {
     /// `txt_info`: the description of the field the pointer last rested on, in a multi-line box
     /// that can be selected, copied from and typed in - the C# never reads it back.
     info: crate::textfield::TextField,
+    /// The child nodes `add_field_node` gave each bitmask field when the tree was built, by
+    /// message and field: the same for every instance's node of the field.
+    bits: BTreeMap<(String, String), Vec<BitNode>>,
+    /// The field nodes expanded to show their bits, by the field's name (`MSG.Field` or
+    /// `MSG[i].Field`): none when the tree is built, as a `TreeView`'s nodes start collapsed.
+    expanded: std::collections::BTreeSet<String>,
 }
 
 /// Pixels a wheel notch is taken as, over the chart.
@@ -578,6 +678,8 @@ impl LogBrowse {
                 info.set_multiline(true);
                 info
             },
+            bits: BTreeMap::new(),
+            expanded: std::collections::BTreeSet::new(),
         }
     }
 
@@ -599,6 +701,10 @@ impl LogBrowse {
         };
         self.fields = log.plottable();
         self.units = log.units();
+        // `ResetTreeView`: the tree built again, each bitmask field with its bits, from the
+        // metadata as it is now - a log opened before `LogMetaData` was read has no bits.
+        // `// C#: Log/LogBrowse.cs:440, 699-764`
+        self.add_bit_nodes(metadata::shared());
         self.path = Some(path.to_path_buf());
         self.refused = None;
         // `LogBrowse_Load` empties the map's marker; `LoadLog2` clears the chart through
@@ -681,7 +787,7 @@ impl LogBrowse {
         if let Some(position) = self
             .plotted
             .iter()
-            .position(|shown| shown.field.as_ref() == Some(field))
+            .position(|shown| shown.field.as_ref() == Some(field) && shown.bit.is_none())
         {
             self.plotted.remove(position);
             return;
@@ -715,8 +821,118 @@ impl LogBrowse {
     pub fn axis_of(&self, field: &PlottableField) -> Option<Axis> {
         self.plotted
             .iter()
-            .find(|shown| shown.field.as_ref() == Some(field))
+            .find(|shown| shown.field.as_ref() == Some(field) && shown.bit.is_none())
             .map(|shown| shown.axis)
+    }
+
+    /// `add_field_node`'s bit nodes for every field of the log, from `LogMetaData`: a field
+    /// whose metadata is a bitmask gets a node for each of its bits, and with no metadata
+    /// nothing does. Every field node starts collapsed.
+    /// `// C#: Log/LogBrowse.cs:682-696`
+    pub fn add_bit_nodes(&mut self, meta: Option<&metadata::MetaData>) {
+        self.bits.clear();
+        self.expanded.clear();
+        let Some(meta) = meta else {
+            return;
+        };
+        for field in &self.fields {
+            let key = (field.message.clone(), field.field.clone());
+            if self.bits.contains_key(&key) {
+                continue;
+            }
+            let nodes = bit_nodes(meta, &field.message, &field.field);
+            if !nodes.is_empty() {
+                self.bits.insert(key, nodes);
+            }
+        }
+    }
+
+    /// A field's bit nodes: empty unless its metadata is a bitmask.
+    #[must_use]
+    pub fn bits_of(&self, field: &PlottableField) -> &[BitNode] {
+        self.bits
+            .get(&(field.message.clone(), field.field.clone()))
+            .map_or(&[], Vec::as_slice)
+    }
+
+    /// Whether a field's node is expanded to show its bits.
+    #[must_use]
+    pub fn is_expanded(&self, field: &PlottableField) -> bool {
+        self.expanded.contains(&field.to_string())
+    }
+
+    /// The node's plus or minus: a field with bits expanded or collapsed, as a `TreeView` node
+    /// with children is. A field with none has no plus to click.
+    pub fn toggle_expanded(&mut self, field: &PlottableField) {
+        if self.bits_of(field).is_empty() {
+            return;
+        }
+        let name = field.to_string();
+        if !self.expanded.remove(&name) {
+            self.expanded.insert(name);
+        }
+    }
+
+    /// Which axis a bit of a field is plotted on, if it is.
+    #[must_use]
+    pub fn axis_of_bit(&self, field: &PlottableField, bit: &str) -> Option<Axis> {
+        self.plotted
+            .iter()
+            .find(|shown| shown.field.as_ref() == Some(field) && shown.bit.as_deref() == Some(bit))
+            .map(|shown| shown.axis)
+    }
+
+    /// A bit's node ticked or unticked: `treeView1_AfterCheck` on a node tagged `"bitmask"`,
+    /// which is `GraphItem(type, field, left, ..., instance, bit)`. Ticked, the field's values
+    /// are read and each goes through the bit's mask - `(value & mask) >> lowest set bit` - and
+    /// is drawn on the axis the click says, labelled `MSG.Field.BIT` and the bit's description;
+    /// unticked, that curve comes off whichever axis it is on.
+    ///
+    /// `GraphItem` first gives up on any curve whose label starts with the field's node name and
+    /// a space. A curve of the field itself always does - its label ends in the space before its
+    /// tooltip, which ours drops, so the name alone stands for it - and so does a bit of a field
+    /// with a unit, whose label is `MSG.Field (unit).BIT`: then the bit is not graphed, and the
+    /// status line says so where the C# says nothing.
+    /// `// C#: Log/LogBrowse.cs:1129-1152, 1210-1248, 1488-1595, 3079-3128`
+    pub fn graph_bit(&mut self, field: &PlottableField, bit: &str, axis: Axis) {
+        if let Some(position) = self.plotted.iter().position(|shown| {
+            shown.field.as_ref() == Some(field) && shown.bit.as_deref() == Some(bit)
+        }) {
+            self.plotted.remove(position);
+            return;
+        }
+        let Some(node) = self
+            .bits_of(field)
+            .iter()
+            .find(|node| node.text == bit)
+            .cloned()
+        else {
+            return;
+        };
+        let Some(log) = self.log.as_ref() else {
+            return;
+        };
+        let name = modifier::node_name(&field.message, field.instance, &field.field);
+        let spaced = format!("{name} ");
+        if self
+            .plotted
+            .iter()
+            .any(|shown| shown.label == name || shown.label.starts_with(&spaced))
+        {
+            self.status = Some(format!("{name} is already on the graph"));
+            return;
+        }
+        // `GraphItem_GetList`: the type's records, through the index, as for the field.
+        // `// C#: Log/LogBrowse.cs:1488-1595`
+        let points = log.extract_instance(&field.message, field.instance, &field.field);
+        let unit = self.units.get(&field.message, &field.field);
+        let plotted = Plotted::of_bit(field.clone(), &points, &unit, axis, self.x_axis(), &node);
+        self.status = Some(format!("{}: {} samples", plotted.label, points.len()));
+        self.plotted.push(plotted);
+        // `GraphItem_AddCurve` zooms out all the way before it labels the chart.
+        // `// C#: Log/LogBrowse.cs:1685-1690`
+        self.zoom.reset();
+        self.zoom_event();
     }
 
     /// The fields the open log declares.
@@ -1060,6 +1276,22 @@ impl LogBrowse {
         }
     }
 
+    /// `treeView1_TreeNodeMouseHover` on a bit's node: its path is `MSG\field\bit`, or with the
+    /// instance, and the C# looks its last part up as a field of the message - so a bit's node
+    /// puts nothing in `txt_info` unless the message has a field of the bit's name. The bit's
+    /// own description is its node's tooltip.
+    /// `// C#: Log/LogBrowse.cs:3778-3803`
+    pub fn hover_bit(
+        &mut self,
+        field: &PlottableField,
+        bit: &str,
+        meta: Option<&metadata::MetaData>,
+    ) {
+        if let Some(known) = meta.and_then(|meta| meta.field(&field.message, bit)) {
+            self.info.set(known.description.clone());
+        }
+    }
+
     /// `txt_info.Text`.
     #[cfg(test)]
     #[must_use]
@@ -1262,11 +1494,32 @@ impl LogBrowse {
     /// - `log.zoom.depth`, `log.zoom.x` (`auto` or `min,max`), `log.zoom.undo` (`Un-Zoom`,
     ///   `Un-Pan` or `none`), `log.zoom.dragging`;
     /// - `log.chart.pointvalues`, `log.chart.tooltip`, `log.chart.menu`, `log.grid.menu`;
-    /// - `log.prompt`: the open prompt's title, or `none`; `log.exported`; `log.modifiers`.
+    /// - `log.prompt`: the open prompt's title, or `none`; `log.exported`; `log.modifiers`;
+    /// - `log.field.<MSG.Field>.bits`: a bitmask field's bit nodes, their texts in order and
+    ///   comma separated, and `.expanded`, whether its node shows them;
+    /// - `log.plotted.labels`: every curve's label, in the order drawn, ` | ` between them.
     #[must_use]
     pub fn more_facts(&self) -> Vec<(String, String)> {
         let none = || "none".to_owned();
         let mut facts = vec![("log.check.params".to_owned(), "false".to_owned())];
+        for field in &self.fields {
+            let bits = self.bits_of(field);
+            if bits.is_empty() {
+                continue;
+            }
+            let texts: Vec<&str> = bits.iter().map(|bit| bit.text.as_str()).collect();
+            facts.push((format!("log.field.{field}.bits"), texts.join(",")));
+            facts.push((
+                format!("log.field.{field}.expanded"),
+                self.is_expanded(field).to_string(),
+            ));
+        }
+        let labels: Vec<&str> = self
+            .plotted
+            .iter()
+            .map(|shown| shown.label.as_str())
+            .collect();
+        facts.push(("log.plotted.labels".to_owned(), labels.join(" | ")));
         let view = self.params_view.as_ref();
         facts.push(("log.params.shown".to_owned(), view.is_some().to_string()));
         facts.push((
@@ -4086,62 +4339,48 @@ fn field_panel(
 
     let mut list = div().flex().flex_wrap().gap_1();
     for field in matching.into_iter().take(SHOWN_FIELDS) {
-        let axis = browse.axis_of(field);
-        let shown = axis.is_some();
+        let bits = browse.bits_of(field);
+        if bits.is_empty() {
+            list = list.child(field_chip(browse, field, cx));
+            continue;
+        }
+        // A bitmask field's node, with its plus or minus and, expanded, its bits under it on a
+        // line of their own, indented as a `TreeView` indents a child.
+        // `// C#: Log/LogBrowse.cs:687-696`
         let label = field.to_string();
-        let text = match axis {
-            Some(Axis::Right) => format!("{label} R"),
-            _ => label.clone(),
-        };
-        let chosen_left = field.clone();
-        let chosen_right = field.clone();
-        let hovered = field.clone();
-        list = list.child(
-            crate::probe::measured(format!("logfield-{label}"), div())
-                .id(gpui::SharedString::from(format!("logfield-{label}")))
-                .px_2()
-                .py(px(1.0))
-                .rounded_sm()
-                .border_1()
-                .border_color(rgb(if shown { theme::ACCENT } else { theme::BORDER }))
-                .text_xs()
-                .text_color(rgb(if shown { theme::ACCENT } else { theme::TEXT }))
-                .cursor_pointer()
-                .hover(|style| style.bg(rgb(theme::BORDER)))
-                .child(text)
-                // `treeView1.NodeMouseHover`. `// C#: Log/LogBrowse.designer.cs:375`
-                .on_hover(cx.listener(move |this, over: &bool, _window, cx| {
-                    if *over {
-                        this.log_browse.hover_field(&hovered, metadata::shared());
-                        cx.notify();
-                    }
-                }))
-                .on_click(
-                    cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
-                        // The first press of a double click ticked or unticked the field; the
-                        // second undoes that and asks for its scaler and offset, as a double click
-                        // on a node's text in the C#'s tree changes no tick.
-                        // `// C#: Log/LogBrowse.cs:3037-3077`
-                        this.log_browse.toggle(&chosen_left);
-                        if event.click_count() == 2 {
-                            this.log_browse.ask_modifier(&chosen_left);
-                            window.focus(&this.log_prompt_focus, cx);
-                        }
-                        cx.notify();
-                    }),
-                )
-                // gpui's `on_click` is the primary button only; the others arrive here. Only the
-                // right one means anything, as in the C# tree, where `wasrightclick` is what
-                // decides the axis.
-                .on_aux_click(
-                    cx.listener(move |this, event: &gpui::ClickEvent, _window, cx| {
-                        if event.is_right_click() {
-                            this.log_browse.graph(&chosen_right, Axis::Right);
-                            cx.notify();
-                        }
-                    }),
-                ),
+        let expanded = browse.is_expanded(field);
+        let toggled = field.clone();
+        let expander = crate::probe::measured(format!("logfield-{label}-expand"), div())
+            .id(gpui::SharedString::from(format!("logfield-{label}-expand")))
+            .w(px(14.0))
+            .flex()
+            .justify_center()
+            .text_xs()
+            .text_color(rgb(theme::DIM))
+            .cursor_pointer()
+            .child(if expanded { "-" } else { "+" })
+            .on_click(
+                cx.listener(move |this, _event: &gpui::ClickEvent, _window, cx| {
+                    this.log_browse.toggle_expanded(&toggled);
+                    cx.notify();
+                }),
+            );
+        let mut node = div().w_full().flex().flex_col().gap_1().child(
+            div()
+                .flex()
+                .items_center()
+                .gap_1()
+                .child(expander)
+                .child(field_chip(browse, field, cx)),
         );
+        if expanded {
+            let mut children = div().pl(px(16.0)).flex().flex_wrap().gap_1();
+            for bit in bits {
+                children = children.child(bit_chip(browse, field, bit, cx));
+            }
+            node = node.child(children);
+        }
+        list = list.child(node);
     }
 
     // `txt_info`: docked along the bottom of the tree's panel, 40 pixels tall, multiline, a
@@ -4171,7 +4410,8 @@ fn field_panel(
             .gap_2()
             .min_h(px(0.0))
             .child(
-                div()
+                // Measured, so a script can wheel it until a field is inside its box.
+                crate::probe::measured("log-fields", div())
                     .id("log-fields")
                     .flex()
                     .flex_col()
@@ -4197,6 +4437,138 @@ fn field_panel(
     // flex item's automatic minimum height is its content's, and two hundred chips are taller
     // than any window, which stretched the whole row and put the scroll bar out of reach.
     .min_h(px(0.0))
+    .into_any_element()
+}
+
+/// One field's chip in the list: a node of the C#'s tree. A left click graphs it on the left
+/// axis and a right click on the right, and either removes it when it is plotted.
+fn field_chip(
+    browse: &LogBrowse,
+    field: &PlottableField,
+    cx: &mut Context<MissionPlanner>,
+) -> gpui::Stateful<gpui::Div> {
+    let axis = browse.axis_of(field);
+    let shown = axis.is_some();
+    let label = field.to_string();
+    let text = match axis {
+        Some(Axis::Right) => format!("{label} R"),
+        _ => label.clone(),
+    };
+    let chosen_left = field.clone();
+    let chosen_right = field.clone();
+    let hovered = field.clone();
+    crate::probe::measured(format!("logfield-{label}"), div())
+        .id(gpui::SharedString::from(format!("logfield-{label}")))
+        .px_2()
+        .py(px(1.0))
+        .rounded_sm()
+        .border_1()
+        .border_color(rgb(if shown { theme::ACCENT } else { theme::BORDER }))
+        .text_xs()
+        .text_color(rgb(if shown { theme::ACCENT } else { theme::TEXT }))
+        .cursor_pointer()
+        .hover(|style| style.bg(rgb(theme::BORDER)))
+        .child(text)
+        // `treeView1.NodeMouseHover`. `// C#: Log/LogBrowse.designer.cs:375`
+        .on_hover(cx.listener(move |this, over: &bool, _window, cx| {
+            if *over {
+                this.log_browse.hover_field(&hovered, metadata::shared());
+                cx.notify();
+            }
+        }))
+        .on_click(
+            cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                // The first press of a double click ticked or unticked the field; the
+                // second undoes that and asks for its scaler and offset, as a double click
+                // on a node's text in the C#'s tree changes no tick.
+                // `// C#: Log/LogBrowse.cs:3037-3077`
+                this.log_browse.toggle(&chosen_left);
+                if event.click_count() == 2 {
+                    this.log_browse.ask_modifier(&chosen_left);
+                    window.focus(&this.log_prompt_focus, cx);
+                }
+                cx.notify();
+            }),
+        )
+        // gpui's `on_click` is the primary button only; the others arrive here. Only the
+        // right one means anything, as in the C# tree, where `wasrightclick` is what
+        // decides the axis.
+        .on_aux_click(
+            cx.listener(move |this, event: &gpui::ClickEvent, _window, cx| {
+                if event.is_right_click() {
+                    this.log_browse.graph(&chosen_right, Axis::Right);
+                    cx.notify();
+                }
+            }),
+        )
+}
+
+/// A bit's chip under its field: `add_field_node`'s `new_bit_node`, its text the bit's name and
+/// its tooltip the bit's description. A left click graphs the bit on the left axis and a right
+/// click on the right, and either removes it when it is plotted, as ticking and unticking the
+/// C#'s node does.
+///
+/// A double click asks nothing: `treeView1_DoubleClick` on a bit's node reads the field's name
+/// as an instance number, `int.Parse`, which throws.
+/// `// C#: Log/LogBrowse.cs:687-696, 3037-3077, 3079-3128`
+fn bit_chip(
+    browse: &LogBrowse,
+    field: &PlottableField,
+    bit: &BitNode,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    let axis = browse.axis_of_bit(field, &bit.text);
+    let shown = axis.is_some();
+    let id = format!("logfield-{field}.{}", bit.text);
+    let text = match axis {
+        Some(Axis::Right) => format!("{} R", bit.text),
+        _ => bit.text.clone(),
+    };
+    let (left, right, hovered) = (field.clone(), field.clone(), field.clone());
+    let (left_bit, right_bit, hovered_bit) = (bit.text.clone(), bit.text.clone(), bit.text.clone());
+    let chip = crate::probe::measured(id.clone(), div())
+        .id(gpui::SharedString::from(id))
+        .px_2()
+        .py(px(1.0))
+        .rounded_sm()
+        .border_1()
+        .border_color(rgb(if shown { theme::ACCENT } else { theme::BORDER }))
+        .text_xs()
+        .text_color(rgb(if shown { theme::ACCENT } else { theme::TEXT }))
+        .cursor_pointer()
+        .hover(|style| style.bg(rgb(theme::BORDER)))
+        .child(text)
+        // `treeView1.NodeMouseHover`. `// C#: Log/LogBrowse.designer.cs:375`
+        .on_hover(cx.listener(move |this, over: &bool, _window, cx| {
+            if *over {
+                this.log_browse
+                    .hover_bit(&hovered, &hovered_bit, metadata::shared());
+                cx.notify();
+            }
+        }))
+        .on_click(
+            cx.listener(move |this, _event: &gpui::ClickEvent, _window, cx| {
+                this.log_browse.graph_bit(&left, &left_bit, Axis::Left);
+                cx.notify();
+            }),
+        )
+        .on_aux_click(
+            cx.listener(move |this, event: &gpui::ClickEvent, _window, cx| {
+                if event.is_right_click() {
+                    this.log_browse.graph_bit(&right, &right_bit, Axis::Right);
+                    cx.notify();
+                }
+            }),
+        );
+    if bit.tip.is_empty() {
+        return chip.into_any_element();
+    }
+    // `treeView1.ShowNodeToolTips = true`: the node's `ToolTipText`. `// C#: Log/LogBrowse.cs:702`
+    let tip = gpui::SharedString::from(bit.tip.clone());
+    chip.tooltip(move |_window, cx| -> gpui::AnyView {
+        let tip = tip.clone();
+        cx.new(|_| crate::config::rover_tuning::Tip(tip)).into()
+    })
     .into_any_element()
 }
 
@@ -5225,5 +5597,342 @@ mod tests {
             Some("Loiter")
         );
         assert_eq!(flight_mode_name(Firmware::Tracker, 3), None);
+    }
+
+    /// `MAV` and `POWR` from ArduPilot's `LogMessagesCopter.xml`, as autotest publishes it:
+    /// `MAV.flags` and `POWR.Flags` are bitmasks, and both are in the healthy fixture.
+    const LOG_MESSAGES: &str = include_str!("../../../testdata/logbrowse/LogMessagesCopter.xml");
+
+    fn powr_meta() -> metadata::MetaData {
+        let mut meta = metadata::MetaData::default();
+        meta.parse(LOG_MESSAGES);
+        meta
+    }
+
+    fn named(browse: &LogBrowse, message: &str, name: &str) -> PlottableField {
+        browse
+            .fields()
+            .iter()
+            .find(|field| field.message == message && field.field == name)
+            .unwrap_or_else(|| panic!("{message}.{name}"))
+            .clone()
+    }
+
+    fn maybe_fact(browse: &LogBrowse, key: &str) -> Option<String> {
+        browse
+            .facts()
+            .into_iter()
+            .find(|(name, _)| name == key)
+            .map(|(_, value)| value)
+    }
+
+    /// A field whose metadata is a bitmask gets a child node for each bit, its text the bit's
+    /// name and its tooltip the bit's description, in the metadata's order; a field that is not
+    /// a bitmask gets none; with no metadata no field does. Each instance's field has the bits,
+    /// and expands on its own. The nodes start collapsed and the plus opens them.
+    /// `// C#: Log/LogBrowse.cs:682-696, 1237-1248`
+    #[test]
+    fn a_bitmask_fields_bits_are_its_child_nodes() {
+        let mut browse = LogBrowse::new();
+        browse.open(&fixture());
+        let flags = named(&browse, "POWR", "Flags");
+        let vcc = named(&browse, "POWR", "Vcc");
+        assert!(browse.bits_of(&flags).is_empty(), "no metadata, no bits");
+
+        browse.add_bit_nodes(Some(&powr_meta()));
+        let texts: Vec<&str> = browse
+            .bits_of(&flags)
+            .iter()
+            .map(|b| b.text.as_str())
+            .collect();
+        assert_eq!(
+            texts,
+            [
+                "BRICK_VALID",
+                "SERVO_VALID",
+                "USB_CONNECTED",
+                "PERIPH_OVERCURRENT",
+                "PERIPH_HIPOWER_OVERCURRENT",
+                "CHANGED"
+            ]
+        );
+        let bits = browse.bits_of(&flags);
+        assert_eq!(bits[0].tip, "main brick power supply valid");
+        assert_eq!(bits[2].mask, Some(4));
+        assert_eq!(bits[5].mask, Some(32));
+        assert!(browse.bits_of(&vcc).is_empty());
+
+        assert_eq!(
+            maybe_fact(&browse, "log.field.POWR.Flags.bits").as_deref(),
+            Some(
+                "BRICK_VALID,SERVO_VALID,USB_CONNECTED,PERIPH_OVERCURRENT,\
+                  PERIPH_HIPOWER_OVERCURRENT,CHANGED"
+            )
+        );
+        let mav_flags = named(&browse, "MAV", "flags");
+        let channel = |instance| PlottableField {
+            instance: Some(instance),
+            ..mav_flags.clone()
+        };
+        let mav: Vec<&str> = browse
+            .bits_of(&channel(0))
+            .iter()
+            .map(|b| b.text.as_str())
+            .collect();
+        assert_eq!(
+            mav,
+            ["USING_SIGNING", "ACTIVE", "STREAMING", "PRIVATE", "LOCKED"]
+        );
+        assert_eq!(
+            browse.bits_of(&channel(3)).len(),
+            5,
+            "every instance's node has them"
+        );
+        assert_eq!(
+            browse.bits_of(&channel(0))[0].tip,
+            "",
+            "no description, no tooltip"
+        );
+        assert_eq!(
+            maybe_fact(&browse, "log.field.MAV[3].flags.bits").as_deref(),
+            Some("USING_SIGNING,ACTIVE,STREAMING,PRIVATE,LOCKED")
+        );
+        assert_eq!(maybe_fact(&browse, "log.field.POWR.Vcc.bits"), None);
+        assert_eq!(
+            maybe_fact(&browse, "log.field.POWR.Flags.expanded").as_deref(),
+            Some("false")
+        );
+        browse.toggle_expanded(&flags);
+        assert!(browse.is_expanded(&flags));
+        assert_eq!(
+            maybe_fact(&browse, "log.field.POWR.Flags.expanded").as_deref(),
+            Some("true")
+        );
+        browse.toggle_expanded(&vcc);
+        assert!(
+            !browse.is_expanded(&vcc),
+            "a field with no bits has nothing to expand"
+        );
+        browse.toggle_expanded(&channel(0));
+        assert!(browse.is_expanded(&channel(0)));
+        assert!(
+            !browse.is_expanded(&channel(3)),
+            "an instance expands on its own"
+        );
+        browse.toggle_expanded(&flags);
+        assert!(!browse.is_expanded(&flags));
+
+        browse.add_bit_nodes(None);
+        assert!(browse.bits_of(&flags).is_empty());
+    }
+
+    /// The real log's `POWR.Flags` is 4 throughout - USB connected, nothing else - so its USB
+    /// bit graphs 1 at every record and its brick bit 0, labelled `POWR.Flags.BIT` and the
+    /// bit's description; `MAV.flags` is 6 on channel 0 and 2 on channel 3, so STREAMING is 1
+    /// on the one and 0 on the other, labelled with the instance and no description.
+    /// `// C#: Log/LogBrowse.cs:1237-1248, 1528-1538, 1616-1627`
+    #[test]
+    fn a_bit_of_the_fixtures_flags_is_graphed_as_its_bit() {
+        let mut browse = LogBrowse::new();
+        browse.open(&fixture());
+        browse.add_bit_nodes(Some(&powr_meta()));
+        let flags = named(&browse, "POWR", "Flags");
+        browse.graph_bit(&flags, "USB_CONNECTED", Axis::Left);
+        browse.graph_bit(&flags, "BRICK_VALID", Axis::Right);
+        let plotted = browse.plotted();
+        assert_eq!(plotted.len(), 2);
+        assert_eq!(
+            plotted[0].label,
+            "POWR.Flags.USB_CONNECTED USB power is connected"
+        );
+        assert_eq!(
+            plotted[1].label,
+            "POWR.Flags.BRICK_VALID main brick power supply valid R"
+        );
+        let usb: Vec<f64> = plotted[0].series.samples().map(|s| s.value).collect();
+        let brick: Vec<f64> = plotted[1].series.samples().map(|s| s.value).collect();
+        assert_eq!(usb.len(), 182);
+        assert!(usb.iter().all(|value| (*value - 1.0).abs() < 1e-9));
+        assert_eq!(brick.len(), 182);
+        assert!(brick.iter().all(|value| value.abs() < 1e-9));
+        assert_eq!(browse.axis_of_bit(&flags, "BRICK_VALID"), Some(Axis::Right));
+        assert_eq!(browse.axis_of(&flags), None, "a bit is not its field");
+        assert_eq!(
+            maybe_fact(&browse, "log.plotted.labels").as_deref(),
+            Some(
+                "POWR.Flags.USB_CONNECTED USB power is connected | \
+                 POWR.Flags.BRICK_VALID main brick power supply valid R"
+            )
+        );
+
+        let mav_flags = named(&browse, "MAV", "flags");
+        let channel = |instance| PlottableField {
+            instance: Some(instance),
+            ..mav_flags.clone()
+        };
+        let (zero, three) = (channel(0), channel(3));
+        browse.clear();
+        browse.graph_bit(&zero, "STREAMING", Axis::Left);
+        browse.graph_bit(&three, "STREAMING", Axis::Left);
+        let plotted = browse.plotted();
+        assert_eq!(plotted[0].label, "MAV[0].flags.STREAMING");
+        assert_eq!(plotted[1].label, "MAV[3].flags.STREAMING");
+        let streaming: Vec<f64> = plotted[0].series.samples().map(|s| s.value).collect();
+        let idle: Vec<f64> = plotted[1].series.samples().map(|s| s.value).collect();
+        assert_eq!((streaming.len(), idle.len()), (18, 18));
+        assert!(streaming.iter().all(|value| (*value - 1.0).abs() < 1e-9));
+        assert!(idle.iter().all(|value| value.abs() < 1e-9));
+    }
+
+    /// A log written for the test: `TEST` is `QI`, `TimeUS` and `Flags`, one record for each
+    /// value.
+    fn flags_log(values: &[u32]) -> std::path::PathBuf {
+        let mut log = Vec::new();
+        let mut payload = vec![150, 15];
+        for (text, width) in [("TEST", 4), ("QI", 16), ("TimeUS,Flags", 64)] {
+            let mut field = text.as_bytes().to_vec();
+            field.resize(width, 0);
+            payload.extend(field);
+        }
+        log.extend([0xA3, 0x95, 0x80]);
+        log.extend(payload);
+        for (index, value) in (1u64..).zip(values) {
+            log.extend([0xA3, 0x95, 150]);
+            log.extend((index * 1_000_000).to_le_bytes());
+            log.extend(value.to_le_bytes());
+        }
+        let path = std::env::temp_dir().join(format!(
+            "mp-gui-logbits-{}-{}.bin",
+            std::process::id(),
+            values.len()
+        ));
+        std::fs::write(&path, log).expect("write the log");
+        path
+    }
+
+    /// Each value goes through the bit's mask, `(value & mask) >> lowest set bit`: a one-bit
+    /// mask graphs 0 or 1, a mask of two bits their value; a nameless bit finds no mask and
+    /// graphs the field's raw value. A second click takes the bit off, whichever button.
+    /// `// C#: Log/LogBrowse.cs:1237-1248, 1528-1538, 3079-3128`
+    #[test]
+    fn a_bit_graphs_each_value_through_its_mask() {
+        let path = flags_log(&[0, 1, 4, 5, 6, 7, 12]);
+        let mut browse = LogBrowse::new();
+        browse.open(&path);
+        let _ = std::fs::remove_file(&path);
+        let mut meta = metadata::MetaData::default();
+        meta.parse(
+            "<loggermessagefile><logformat name=\"TEST\"><description>t</description><fields>\
+             <field name=\"Flags\"><description>f</description><bitmask name=\"M\">\
+             <bit name=\"FOUR\"><value>4</value></bit>\
+             <bit name=\"TWO_BITS\"><description>four and eight</description><value>12</value></bit>\
+             <bit><value>1</value></bit>\
+             </bitmask></field></fields></logformat></loggermessagefile>",
+        );
+        browse.add_bit_nodes(Some(&meta));
+        let flags = named(&browse, "TEST", "Flags");
+        let nameless = &browse.bits_of(&flags)[2];
+        assert_eq!(nameless.text, "", "a bit with no name is an empty node");
+        assert_eq!(nameless.mask, None, "no name is equal to a null one");
+        let values = |browse: &LogBrowse, index: usize| -> Vec<f64> {
+            browse.plotted()[index]
+                .series
+                .samples()
+                .map(|s| s.value)
+                .collect()
+        };
+
+        browse.graph_bit(&flags, "FOUR", Axis::Left);
+        assert_eq!(values(&browse, 0), [0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0]);
+        assert_eq!(browse.plotted()[0].label, "TEST.Flags.FOUR");
+        browse.graph_bit(&flags, "TWO_BITS", Axis::Left);
+        assert_eq!(values(&browse, 1), [0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 3.0]);
+        assert_eq!(
+            browse.plotted()[1].label,
+            "TEST.Flags.TWO_BITS four and eight"
+        );
+        browse.graph_bit(&flags, "", Axis::Left);
+        assert_eq!(values(&browse, 2), [0.0, 1.0, 4.0, 5.0, 6.0, 7.0, 12.0]);
+        assert_eq!(browse.plotted()[2].label, "TEST.Flags.");
+
+        browse.graph_bit(&flags, "FOUR", Axis::Right);
+        assert_eq!(browse.plotted().len(), 2, "a plotted bit comes off");
+        assert_eq!(browse.axis_of_bit(&flags, "FOUR"), None);
+        browse.graph_bit(&flags, "NOT_A_BIT", Axis::Left);
+        assert_eq!(browse.plotted().len(), 2, "no node, nothing graphed");
+    }
+
+    /// `GraphItem` gives up when a curve's label starts with the field's name and a space: the
+    /// field's own curve does, so with the field plotted none of its bits is graphed - the
+    /// status line says why - and the field is still toggled on its own.
+    /// `// C#: Log/LogBrowse.cs:1135-1147`
+    #[test]
+    fn with_its_field_plotted_a_bit_is_not_graphed() {
+        let path = flags_log(&[0, 4]);
+        let mut browse = LogBrowse::new();
+        browse.open(&path);
+        let _ = std::fs::remove_file(&path);
+        let mut meta = metadata::MetaData::default();
+        meta.parse(
+            "<loggermessagefile><logformat name=\"TEST\"><description>t</description><fields>\
+             <field name=\"Flags\"><description>f</description><bitmask name=\"M\">\
+             <bit name=\"FOUR\"><value>4</value></bit></bitmask></field></fields></logformat>\
+             </loggermessagefile>",
+        );
+        browse.add_bit_nodes(Some(&meta));
+        let flags = named(&browse, "TEST", "Flags");
+        browse.graph_bit(&flags, "FOUR", Axis::Left);
+        browse.graph(&flags, Axis::Right);
+        assert_eq!(
+            browse.plotted().len(),
+            2,
+            "a bit's curve does not stop its field"
+        );
+        browse.graph_bit(&flags, "FOUR", Axis::Left);
+        assert_eq!(browse.plotted().len(), 1, "the bit comes off");
+        browse.graph_bit(&flags, "FOUR", Axis::Left);
+        assert_eq!(browse.plotted().len(), 1, "the field's curve stops the bit");
+        assert_eq!(browse.status(), Some("TEST.Flags is already on the graph"));
+        assert_eq!(browse.axis_of(&flags), Some(Axis::Right));
+    }
+
+    /// A bit of a field with a unit: `MSG.Field (unit).BIT` and its description, the bit's
+    /// value then the unit's multiplier, as `GraphItem_AddCurve` scales any curve.
+    /// `// C#: Log/LogBrowse.cs:1237-1248, 1597-1627`
+    #[test]
+    fn a_bits_label_follows_its_fields_unit() {
+        let node = BitNode {
+            text: "B".to_owned(),
+            tip: "the b bit".to_owned(),
+            mask: Some(2),
+        };
+        let shown = Plotted::of_bit(
+            field("X", "Y"),
+            &points(&[2.0, 1.0]),
+            &unit("V", 0.5),
+            Axis::Right,
+            XAxis::Time,
+            &node,
+        );
+        assert_eq!(shown.label, "X.Y (V).B the b bit R");
+        assert_eq!(shown.bit.as_deref(), Some("B"));
+        let values: Vec<f64> = shown.series.samples().map(|s| s.value).collect();
+        assert_eq!(values, [0.5, 0.0]);
+    }
+
+    /// A bit's node on hover: the C# looks its text up as a field of the message, which it
+    /// is not, so `txt_info` keeps what it had.
+    /// `// C#: Log/LogBrowse.cs:3778-3803`
+    #[test]
+    fn resting_on_a_bit_looks_it_up_as_a_field() {
+        let meta = powr_meta();
+        let mut browse = LogBrowse::new();
+        let flags = field("POWR", "Flags");
+        browse.hover_field(&flags, Some(&meta));
+        assert_eq!(browse.info(), "System power flags");
+        browse.hover_bit(&flags, "USB_CONNECTED", Some(&meta));
+        assert_eq!(browse.info(), "System power flags");
+        browse.hover_bit(&flags, "Vcc", Some(&meta));
+        assert_eq!(browse.info(), "Flight board voltage");
     }
 }
