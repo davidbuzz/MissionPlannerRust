@@ -65,10 +65,13 @@ click mavftp-menu-newfolder
 settle 1
 expect config.mavftp.menu false
 expect config.mavftp.prompt Folder Name
+expect config.InputBoxFolderNameEnterfoldername none
 type mprtest
 key Return
 settle 5
 expect config.mavftp.prompt none
+# The OK keeps the name as InputBox keeps every titled answer (InputBox.cs:73-84, 178-184).
+expect config.InputBoxFolderNameEnterfoldername mprtest
 expect config.mavftp.list ~ mprtest
 expect config.mavftp.item.mprtest.type Directory
 expect config.mavftp.status Ready

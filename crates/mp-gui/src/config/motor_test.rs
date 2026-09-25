@@ -587,14 +587,22 @@ impl MotorTest {
         }
     }
 
-    /// OK on the question: `int.Parse` of the answer, and `setParamAsync` of it over 100 as a
-    /// `float`. Text that is not a whole number is `int.Parse`'s `FormatException`, which escapes
-    /// the `async void` handler to `Program.handleException`'s box and leaves the page disabled.
-    /// `// C#: GCSViews/ConfigurationView/ConfigMotorTest.cs:354-358, 382-387; ExtLibs/Controls/InputBox.cs:21-27; Program.cs:791-793`
-    pub fn answer(&mut self, telemetry: &Telemetry) {
+    /// OK on the question: the answer kept in `settings` as `InputBox` keeps every titled answer,
+    /// then `int.Parse` of it, and `setParamAsync` of it over 100 as a `float`. Text that is not a
+    /// whole number - kept all the same, the box keeping it before the `ref int` overload parses
+    /// it - is `int.Parse`'s `FormatException`, which escapes the `async void` handler to
+    /// `Program.handleException`'s box and leaves the page disabled.
+    /// `// C#: GCSViews/ConfigurationView/ConfigMotorTest.cs:354-358, 382-387; ExtLibs/Controls/InputBox.cs:21-27, 73-84, 178-184; Program.cs:791-793`
+    pub fn answer(&mut self, telemetry: &Telemetry, settings: &mut crate::settings::Persisted) {
         let Some(prompt) = self.prompt.take() else {
             return;
         };
+        super::optional::remember_answer(
+            settings,
+            CHANGE_THROTTLE,
+            prompt.spin.question(),
+            prompt.field.value(),
+        );
         let Some(percent) = int_parse(prompt.field.value()) else {
             self.messages.push_back(Message {
                 title: UNHANDLED.0,
@@ -623,12 +631,17 @@ impl MotorTest {
     }
 
     /// A key in the question's box.
-    pub fn prompt_key(&mut self, event: &KeyDownEvent, telemetry: &Telemetry) -> bool {
+    pub fn prompt_key(
+        &mut self,
+        event: &KeyDownEvent,
+        telemetry: &Telemetry,
+        settings: &mut crate::settings::Persisted,
+    ) -> bool {
         let Some(prompt) = self.prompt.as_mut() else {
             return false;
         };
         match prompt.field.key(event) {
-            KeyOutcome::Submitted => self.answer(telemetry),
+            KeyOutcome::Submitted => self.answer(telemetry, settings),
             KeyOutcome::Cancelled => self.cancel(),
             KeyOutcome::Changed => {}
             KeyOutcome::Ignored => return false,
@@ -1332,7 +1345,10 @@ fn dialog(
                 focused,
                 px(310.0),
                 cx.listener(|this, event: &KeyDownEvent, _window, cx| {
-                    if this.motor_test.prompt_key(event, &this.telemetry) {
+                    if this
+                        .motor_test
+                        .prompt_key(event, &this.telemetry, &mut this.persisted)
+                    {
                         cx.notify();
                     }
                 }),
@@ -1348,7 +1364,7 @@ fn dialog(
                         theme::ACCENT,
                         true,
                         cx.listener(|this, _event: &(), _window, cx| {
-                            this.motor_test.answer(&this.telemetry);
+                            this.motor_test.answer(&this.telemetry, &mut this.persisted);
                             cx.notify();
                         }),
                     ))
@@ -1561,6 +1577,36 @@ mod tests {
         assert!(test.prompt().is_none());
     }
 
+    /// Each Spin question's OK keeps its answer as `InputBox` keeps every titled answer - under
+    /// `Strings.ChangeThrottle` and the question with all but letters and digits taken out,
+    /// before `int.Parse`, so "7.5" is kept too - and Cancel keeps nothing.
+    /// `// C#: GCSViews/ConfigurationView/ConfigMotorTest.cs:354, 382; ExtLibs/Controls/InputBox.cs:21-27, 73-84, 178-184`
+    #[test]
+    fn a_spin_ok_keeps_the_answer_under_the_input_box_key() {
+        let arm = crate::config::optional::answers_key(CHANGE_THROTTLE, Spin::Arm.question());
+        let min = crate::config::optional::answers_key(CHANGE_THROTTLE, Spin::Min.question());
+        assert_eq!(arm, "InputBoxChangeThrottleEnterarmthrottledeadzone2");
+        assert_eq!(min, "InputBoxChangeThrottleEnterminspinthrottlearmmin3");
+        for key in [&arm, &min] {
+            assert!(crate::settings::PUBLISHED.contains(&key.as_str()), "{key}");
+        }
+        let mut settings = crate::settings::Persisted::at(None);
+        let mut test = MotorTest::default();
+        test.activate(&sitl(), bundled);
+        test.click_spin(Spin::Arm, &sitl());
+        test.cancel();
+        assert_eq!(settings.get(&arm), None, "Cancel keeps nothing");
+        test.click_spin(Spin::Arm, &sitl());
+        test.prompt.as_mut().expect("the InputBox").field.set("7.5");
+        test.answer(&Telemetry::idle(), &mut settings);
+        assert_eq!(settings.get(&arm), Some("7.5"), "kept before int.Parse");
+        let mut test = MotorTest::default();
+        test.activate(&sitl(), bundled);
+        test.click_spin(Spin::Min, &sitl());
+        test.answer(&Telemetry::idle(), &mut settings);
+        assert_eq!(settings.get(&min), Some("3"));
+    }
+
     #[test]
     fn spin_min_asks_for_the_parameter_cast_to_int_plus_three() {
         // (int)0.15 + 3: the fraction truncates to 0.
@@ -1609,7 +1655,10 @@ mod tests {
         test.activate(&sitl(), bundled);
         test.click_spin(Spin::Arm, &sitl());
         test.prompt.as_mut().unwrap().field.set("7.5");
-        test.answer(&Telemetry::idle());
+        test.answer(
+            &Telemetry::idle(),
+            &mut crate::settings::Persisted::at(None),
+        );
         let message = test.message().expect("the unhandled exception's box");
         assert_eq!(message.title, "Send Error");
         assert!(message.text.contains("FormatException"), "{}", message.text);
@@ -1748,7 +1797,7 @@ mod tests {
         let mut test = MotorTest::default();
         test.activate(&sitl(), bundled);
         test.click_spin(Spin::Arm, &sitl());
-        test.answer(&telemetry);
+        test.answer(&telemetry, &mut crate::settings::Persisted::at(None));
         assert!(!test.enabled(), "disabled until the write ends");
         let mut written = None;
         until("the PARAM_SET", || {

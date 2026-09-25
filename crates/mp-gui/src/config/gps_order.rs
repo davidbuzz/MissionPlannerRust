@@ -371,15 +371,16 @@ pub fn record_facts(page: &GpsOrder, view: &TelemetryView) {
     }
     record(
         "config.gpsorder.threw",
-        page.threw_at
-            .map_or_else(|| "none".to_owned(), |name| format!("NullReferenceException at {name}")),
+        page.threw_at.map_or_else(
+            || "none".to_owned(),
+            |name| format!("NullReferenceException at {name}"),
+        ),
     );
     record("config.gpsorder.write", page.queue.last().unwrap_or("none"));
     record("config.gpsorder.writes.pending", page.queue.pending());
     record(
         "config.gpsorder.message",
-        page.message()
-            .map_or("none", |message| message.title),
+        page.message().map_or("none", |message| message.title),
     );
     for name in [OVERRIDE_1, OVERRIDE_2, DETECTED_1, DETECTED_2] {
         if let Some(value) = value_of(&view.parameters, name) {
@@ -417,18 +418,39 @@ pub fn page(order: &GpsOrder, cx: &mut Context<MissionPlanner>) -> AnyElement {
         .border_1()
         .border_color(rgb(theme::BORDER))
         .bg(rgb(theme::PANEL))
-        .child(cell(0.0, 0.0, ROW_HEADER, HEADER_HEIGHT, String::new(), true));
+        .child(cell(
+            0.0,
+            0.0,
+            ROW_HEADER,
+            HEADER_HEIGHT,
+            String::new(),
+            true,
+        ));
     for (index, name) in COLUMNS.iter().enumerate() {
         #[allow(clippy::cast_precision_loss)]
         let x = ROW_HEADER + COLUMN * index as f32;
-        grid = grid.child(cell(x, 0.0, COLUMN, HEADER_HEIGHT, (*name).to_owned(), true));
+        grid = grid.child(cell(
+            x,
+            0.0,
+            COLUMN,
+            HEADER_HEIGHT,
+            (*name).to_owned(),
+            true,
+        ));
     }
     for (row, gps) in order.rows().iter().enumerate() {
         #[allow(clippy::cast_precision_loss)]
         let y = HEADER_HEIGHT + ROW_HEIGHT * row as f32;
         grid = grid
             .child(cell(0.0, y, ROW_HEADER, ROW_HEIGHT, String::new(), true))
-            .child(cell(ROW_HEADER, y, COLUMN, ROW_HEIGHT, gps.order.to_string(), false))
+            .child(cell(
+                ROW_HEADER,
+                y,
+                COLUMN,
+                ROW_HEIGHT,
+                gps.order.to_string(),
+                false,
+            ))
             .child(cell(
                 ROW_HEADER + COLUMN,
                 y,
@@ -557,9 +579,14 @@ mod tests {
         assert!(designer.contains(&format!("this.label6.Text = \"{HEADING}\";")));
         assert!(designer.contains(&format!("this.label1.Text = \"{NOTE}\\r\\n\";")));
         for name in COLUMNS {
-            assert!(designer.contains(&format!(".HeaderText = \"{name}\";")), "{name}");
+            assert!(
+                designer.contains(&format!(".HeaderText = \"{name}\";")),
+                "{name}"
+            );
         }
-        assert!(designer.contains("this.myDataGridView1.Location = new System.Drawing.Point(3, 49);"));
+        assert!(
+            designer.contains("this.myDataGridView1.Location = new System.Drawing.Point(3, 49);")
+        );
         assert!(designer.contains("this.myDataGridView1.RowHeadersWidth = 20;"));
         assert!(designer.contains("this.Size = new System.Drawing.Size(530, 262);"));
         // The buttons' text is set, and never shown: no UseColumnTextForButtonValue.
@@ -627,7 +654,10 @@ mod tests {
         let mut page = GpsOrder::<usize>::default();
         page.activate(&two_gps(), key());
         page.hide();
-        page.activate(&table(&[("GPS1_CAN_OVRIDE", 7.0), ("GPS2_CAN_OVRIDE", 0.0)]), key());
+        page.activate(
+            &table(&[("GPS1_CAN_OVRIDE", 7.0), ("GPS2_CAN_OVRIDE", 0.0)]),
+            key(),
+        );
         assert_eq!(page.threw_at, Some(DETECTED_1));
         assert_eq!(page.rows().len(), 2, "the last list");
     }
@@ -700,7 +730,10 @@ mod tests {
         page.push(jobs);
         let link = Answering::new(&[]);
         drain(&mut page, &link, &table(&[("GPS1_CAN_OVRIDE", 125.0)]));
-        assert_eq!(page.message().map(|message| message.title), Some(FAILED_ACTIVATE));
+        assert_eq!(
+            page.message().map(|message| message.title),
+            Some(FAILED_ACTIVATE)
+        );
     }
 
     /// Every fact the GUI script asserts on is one this page records.
@@ -715,7 +748,10 @@ mod tests {
             if let (Some("expect"), Some(key)) = (words.next(), words.next())
                 && key.starts_with("config.gpsorder.")
             {
-                assert!(source.contains(&format!("\"{key}\"")), "{key} is not recorded");
+                assert!(
+                    source.contains(&format!("\"{key}\"")),
+                    "{key} is not recorded"
+                );
                 facts += 1;
             }
         }

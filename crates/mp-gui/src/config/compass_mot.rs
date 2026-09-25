@@ -260,7 +260,9 @@ impl CompassMot {
         }
         let (low, high) = current
             .iter()
-            .fold((f64::MAX, f64::MIN), |(low, high), (_, y)| (low.min(*y), high.max(*y)));
+            .fold((f64::MAX, f64::MIN), |(low, high), (_, y)| {
+                (low.min(*y), high.max(*y))
+            });
         Scale::pick(low, high, None)
     }
 
@@ -486,16 +488,22 @@ fn chart(page: &CompassMot) -> AnyElement {
                 .flex()
                 .justify_center()
                 .gap_4()
-                .children([(INTERFERENCE, RED), (CURRENT, GREEN)].map(|(label, colour)| {
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_1()
-                        .child(div().w(px(24.0)).h(px(2.0)).bg(rgb(colour)))
-                        .child(div().text_xs().text_color(rgb(theme::TEXT)).child(label))
-                })),
+                .children(
+                    [(INTERFERENCE, RED), (CURRENT, GREEN)].map(|(label, colour)| {
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .child(div().w(px(24.0)).h(px(2.0)).bg(rgb(colour)))
+                            .child(div().text_xs().text_color(rgb(theme::TEXT)).child(label))
+                    }),
+                ),
         )
-        .child(text(Y_TITLE.to_owned(), theme::TEXT).left(px(4.0)).top(px(top - 14.0)))
+        .child(
+            text(Y_TITLE.to_owned(), theme::TEXT)
+                .left(px(4.0))
+                .top(px(top - 14.0)),
+        )
         .child(
             text(y2.title(Y2_TITLE), theme::TEXT)
                 .right(px(4.0))
@@ -655,7 +663,9 @@ pub fn page(mot: &CompassMot, cx: &mut Context<MissionPlanner>) -> AnyElement {
             true,
             |this, _window, _cx| {
                 let view = this.telemetry.view();
-                this.extra.compass_mot.click(&mut this.telemetry, &view.messages);
+                this.extra
+                    .compass_mot
+                    .click(&mut this.telemetry, &view.messages);
             },
             cx,
         ))
@@ -755,16 +765,28 @@ mod tests {
         assert!(designer.contains(&format!("this.lbl_start.Text = \"{START}\";")));
         assert!(designer.contains(&format!("this.lbl_finish.Text = \"{FINISH}\";")));
         assert!(designer.contains(&format!("this.lbl_status.Text = \"{STATUS}\";")));
-        assert!(designer.contains("this.BUT_compassmot.Location = new System.Drawing.Point(193, 9);"));
+        assert!(
+            designer.contains("this.BUT_compassmot.Location = new System.Drawing.Point(193, 9);")
+        );
         assert!(designer.contains("this.txt_status.Location = new System.Drawing.Point(55, 38);"));
-        assert!(designer.contains("this.zedGraphControl1.Location = new System.Drawing.Point(3, 168);"));
+        assert!(
+            designer.contains("this.zedGraphControl1.Location = new System.Drawing.Point(3, 168);")
+        );
         assert!(designer.contains("this.Size = new System.Drawing.Size(634, 400);"));
         let Some(cs) = crate::config_coverage::source::csharp(
             "GCSViews/ConfigurationView/ConfigCompassMot.cs",
         ) else {
             return;
         };
-        for text in [NEEDS_AC_3_2, CHART_TITLE, X_TITLE, Y_TITLE, Y2_TITLE, INTERFERENCE, CURRENT] {
+        for text in [
+            NEEDS_AC_3_2,
+            CHART_TITLE,
+            X_TITLE,
+            Y_TITLE,
+            Y2_TITLE,
+            INTERFERENCE,
+            CURRENT,
+        ] {
             assert!(cs.contains(&format!("\"{text}\"")), "{text}");
         }
         assert!(cs.contains("MAV_CMD.PREFLIGHT_CALIBRATION, 0, 0, 0, 0, 0, 1, 0"));
@@ -925,7 +947,10 @@ mod tests {
             let mut words = line.split_whitespace();
             match (words.next(), words.next()) {
                 (Some("expect"), Some(key)) if key.starts_with("config.compassmot.") => {
-                    assert!(source.contains(&format!("\"{key}\"")), "{key} is not recorded");
+                    assert!(
+                        source.contains(&format!("\"{key}\"")),
+                        "{key} is not recorded"
+                    );
                     facts += 1;
                 }
                 (Some("click"), Some(id)) if id.starts_with("compassmot-") => {

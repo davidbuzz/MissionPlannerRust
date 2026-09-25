@@ -17,8 +17,7 @@ use mp_georef::time::{DateTime, Kind, TICKS_PER_DAY, UNIX_EPOCH_TICKS};
 use mp_georef::{FormSettings, GeoRefImageBase, Terrain};
 
 /// The usage line `headless-planner help` shows.
-pub(crate) const USAGE: &str =
-    "headless-planner georef <log> <dir> [...]  Geo Reference Images (headless-planner georef for more)";
+pub(crate) const USAGE: &str = "headless-planner georef <log> <dir> [...]  Geo Reference Images (headless-planner georef for more)";
 
 fn usage() -> ExitCode {
     eprintln!(
@@ -239,7 +238,10 @@ mod tests {
     }
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("headless-planner-georef-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "headless-planner-georef-{name}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

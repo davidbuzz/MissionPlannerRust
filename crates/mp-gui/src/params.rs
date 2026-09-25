@@ -376,7 +376,11 @@ pub fn browser_panel(
                             .gap_1()
                             .text_xs()
                             .cursor_pointer()
-                            .text_color(rgb(if none_default { theme::ACCENT } else { theme::TEXT }))
+                            .text_color(rgb(if none_default {
+                                theme::ACCENT
+                            } else {
+                                theme::TEXT
+                            }))
                             .child(
                                 div()
                                     .size(px(13.0))
@@ -385,7 +389,10 @@ pub fn browser_panel(
                                     .flex()
                                     .items_center()
                                     .justify_center()
-                                    .children(none_default.then(|| div().size(px(7.0)).bg(rgb(theme::ACCENT)))),
+                                    .children(
+                                        none_default
+                                            .then(|| div().size(px(7.0)).bg(rgb(theme::ACCENT))),
+                                    ),
                             )
                             .child(NONE_DEFAULT)
                             .on_click(cx.listener(|this, _event, _window, cx| {
@@ -448,7 +455,9 @@ pub const NONE_DEFAULT: &str = "None Default";
 /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:598-599, 653-654`
 #[must_use]
 pub fn has_defaults(parameters: &[Parameter]) -> bool {
-    parameters.iter().any(|parameter| parameter.default.is_some())
+    parameters
+        .iter()
+        .any(|parameter| parameter.default.is_some())
 }
 
 /// The rows the None Default box leaves: those whose Default cell reads differently from their
@@ -1418,7 +1427,10 @@ mod tests {
         assert_eq!(none.default_shown(), "NaN");
         assert!(off.differs_from_default());
         assert!(!at.differs_from_default());
-        assert!(none.differs_from_default(), "NaN != 1, as the C# compares the cells' text");
+        assert!(
+            none.differs_from_default(),
+            "NaN != 1, as the C# compares the cells' text"
+        );
         let all = vec![&off, &at, &none];
         assert!(has_defaults(&[off.clone(), at.clone()]));
         assert!(!has_defaults(std::slice::from_ref(&none)));
@@ -1437,8 +1449,14 @@ mod tests {
         defaults.insert("INS_GYRO_FILTER".to_owned(), 20.0);
         view.parameters_defaults = Arc::new(defaults);
         let second = collected(&view, 7, bundled);
-        assert!(!Arc::ptr_eq(&first, &second), "new defaults, a new collection");
-        let filter = second.iter().find(|p| p.name == "INS_GYRO_FILTER").expect("SITL has it");
+        assert!(
+            !Arc::ptr_eq(&first, &second),
+            "new defaults, a new collection"
+        );
+        let filter = second
+            .iter()
+            .find(|p| p.name == "INS_GYRO_FILTER")
+            .expect("SITL has it");
         assert_eq!(filter.default, Some(20.0));
     }
 

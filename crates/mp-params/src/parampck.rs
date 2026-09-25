@@ -310,7 +310,11 @@ fn encode_value(nibble: u8, value: f64) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::cast_possible_truncation)]
+    #![allow(
+        clippy::unwrap_used,
+        clippy::indexing_slicing,
+        clippy::cast_possible_truncation
+    )]
 
     use super::*;
 
@@ -378,7 +382,12 @@ mod tests {
             entry("ACRO_BAL_PITCH", 1.0, ParamType::Real32, Some(1.0)),
             entry("ACRO_BAL_ROLL", 1.5, ParamType::Real32, Some(1.0)),
             entry("ACRO_OPTIONS", 0.0, ParamType::Int8, Some(0.0)),
-            entry("ATC_ACCEL_P_MAX", 110_000.0, ParamType::Real32, Some(110_000.0)),
+            entry(
+                "ATC_ACCEL_P_MAX",
+                110_000.0,
+                ParamType::Real32,
+                Some(110_000.0),
+            ),
             entry("BATT_CAPACITY", 3300.0, ParamType::Int32, Some(3300.0)),
             entry("SERVO1_FUNCTION", 33.0, ParamType::Int16, Some(0.0)),
             entry("SIM_SPEEDUP", -1.0, ParamType::Real32, Some(-1.0)),

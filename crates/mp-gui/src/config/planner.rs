@@ -15,7 +15,9 @@
 //! * the five telemetry rate combos set `cs.rateX` and its backup and put `REQUEST_DATA_STREAM`
 //!   on the link for their streams, twice each as `getDatastream` sends it;
 //! * the speech boxes show and hide with Enable Speech, and each one ticked asks, in the
-//!   `InputBox`es the C# asks in, for its text templates and levels;
+//!   `InputBox`es the C# asks in, for its text templates and levels, each OK keeping its answer
+//!   as `InputBox` keeps every titled answer, under `"InputBox"` and the caption and question
+//!   with all but letters and digits taken out (`InputBox.cs:73-84, 178-184`);
 //! * Map is rotated and No Fly untick each other; Load Waypoints on connect sets whether the
 //!   mission is read when a vehicle connects; the map access mode rebuilds the map's tile store
 //!   (`CacheOnly` is the store's offline mode); Joystick Setup opens the joystick page over this
@@ -53,7 +55,6 @@
 //! * `requestDatastream`'s `hzratecheck`, which skips a request when the vehicle already sends at
 //!   about that rate: this application does not count packets per message, so every rate but -1
 //!   is sent (`MAVLinkInterface.cs:3061-3239`);
-//! * the `InputBox`'s remembered answers (`InputBox.cs:74-83, 177-181`);
 //! * `GetDefaultLogDir` creating the log directory when the Log Path box is filled
 //!   (`Settings.cs:146-158`): a settings page does not make directories here.
 //!
@@ -1943,12 +1944,21 @@ impl Planner {
         });
     }
 
-    /// OK on the `InputBox`: the answer written, and the handler's next box shown.
+    /// OK on the `InputBox`: the answer kept as `InputBox` keeps it, then written by the handler,
+    /// and the handler's next box shown. The box keeps it before the handler parses it, so an
+    /// altitude that is not a number is kept too.
+    /// `// C#: ExtLibs/Controls/InputBox.cs:73-84, 178-184; GCSViews/ConfigurationView/ConfigPlanner.cs:680-683`
     pub fn answer(&mut self, settings: &mut Persisted) {
         let Some(prompt) = self.prompt.take() else {
             return;
         };
         let answer = prompt.field.value().to_owned();
+        super::optional::remember_answer(
+            settings,
+            prompt.step.title,
+            prompt.step.question,
+            &answer,
+        );
         match prompt.step.store {
             Store::Text => settings.set(prompt.step.key, answer),
             // C#: ConfigPlanner.cs:683 - saved in metres.
@@ -4121,6 +4131,77 @@ mod tests {
         assert_eq!(planner.take_effects(), [Effect::ReadMissionOnConnect(true)]);
     }
 
+    /// Each of the page's questions keeps its OK's answer as `InputBox` keeps every titled answer:
+    /// under `"InputBox"` and the caption and question with all but letters and digits taken
+    /// out, URL-encoded, before the handler looks at it - so an altitude that is not a number is
+    /// kept too. Cancel keeps nothing.
+    /// `// C#: ExtLibs/Controls/InputBox.cs:73-84, 178-184; GCSViews/ConfigurationView/ConfigPlanner.cs:454-546, 672-683, 822-829, 889-912, 1121`
+    #[test]
+    fn each_question_keeps_its_ok_answer_under_the_input_box_key() {
+        let mut keys: Vec<String> = SPEECH_BOXES
+            .iter()
+            .chain(&["chk_displaytooltip"])
+            .flat_map(|name| steps(name))
+            .map(|step| crate::config::optional::answers_key(step.title, step.question))
+            .collect();
+        keys.sort();
+        keys.dedup();
+        assert_eq!(
+            keys,
+            [
+                "InputBoxAirSpeedWhatdoyouwantittosay",
+                "InputBoxArmWhatdoyouwantittosay",
+                "InputBoxBatteryLevelWhatVoltagedoyouwanttowarnat",
+                "InputBoxBatteryLevelWhatpercentagedoyouwanttowarnat",
+                "InputBoxDescriptionWhatdoyouwantittoshow",
+                "InputBoxDisarmedWhatdoyouwantittosay",
+                "InputBoxGroundSpeedWhatdoyouwantittosay",
+                "InputBoxMinAltWhataltitudedoyouwanttowarnatrelativetohome",
+                "InputBoxNotificationWhatdoyouwantittosay",
+                "InputBoxspeedtriggerWhatspeeddoyouwanttowarnatms",
+            ]
+        );
+        for key in &keys {
+            assert!(crate::settings::PUBLISHED.contains(&key.as_str()), "{key}");
+        }
+        let mut settings = Persisted::at(None);
+        let mut planner = activated(&mut settings);
+        planner.click("CHK_enablespeech", &mut settings);
+        // Cancel on Arm: nothing kept.
+        planner.click("CHK_speecharmdisarm", &mut settings);
+        planner.cancel();
+        assert_eq!(settings.get("InputBoxArmWhatdoyouwantittosay"), None);
+        // OK on both: each kept under its own caption.
+        planner.click("CHK_speecharmdisarm", &mut settings);
+        planner.click("CHK_speecharmdisarm", &mut settings);
+        planner.prompt.as_mut().expect("Arm").field.set("Armed, go");
+        planner.answer(&mut settings);
+        planner.answer(&mut settings);
+        assert_eq!(
+            settings.get("InputBoxArmWhatdoyouwantittosay"),
+            Some("Armed%2C+go")
+        );
+        assert_eq!(
+            settings.get("InputBoxDisarmedWhatdoyouwantittosay"),
+            Some("Disarmed")
+        );
+        // The altitude is kept before `double.Parse` refuses it.
+        planner.click("CHK_speechaltwarning", &mut settings);
+        planner.answer(&mut settings);
+        assert_eq!(
+            settings.get("InputBoxNotificationWhatdoyouwantittosay"),
+            Some("WARNING%2C+low+altitude+%7Balt%7D")
+        );
+        planner.prompt.as_mut().expect("Min Alt").field.set("low");
+        planner.answer(&mut settings);
+        assert!(planner.message().is_some(), "the FormatException's box");
+        assert_eq!(
+            settings.get("InputBoxMinAltWhataltitudedoyouwanttowarnatrelativetohome"),
+            Some("low")
+        );
+        assert_eq!(settings.get("speechaltheight"), None);
+    }
+
     #[test]
     fn the_tooltip_box_asks_for_the_description_or_clears_it() {
         let mut settings = Persisted::at(None);
@@ -4436,8 +4517,9 @@ mod tests {
         assert!(!planner.joystick_open());
     }
 
-    /// Every key the page writes is one it publishes as `config.planner.<key>`, so a script can
-    /// assert on each - and the dictionary holds nothing else the page did not put there.
+    /// Every key the page writes is one it publishes as `config.planner.<key>` - or, for the
+    /// lists its `InputBox`es keep, as `config.<key>` - so a script can assert on each, and the
+    /// dictionary holds nothing else the page did not put there.
     #[test]
     fn every_key_written_is_one_the_page_publishes() {
         let mut settings = Persisted::at(None);
@@ -4463,8 +4545,13 @@ mod tests {
         for index in 0..NUMBERS.len() {
             planner.step(index, true, &mut settings);
         }
+        // The lists `InputBox` keeps are published as `config.<key>`, with the other screens'.
         for key in settings.config().keys() {
-            assert!(KEYS.contains(&key), "{key} is written but not published");
+            assert!(
+                KEYS.contains(&key)
+                    || (key.starts_with("InputBox") && crate::settings::PUBLISHED.contains(&key)),
+                "{key} is written but not published"
+            );
         }
         assert!(settings.config().len() > 50, "{}", settings.config().len());
     }
@@ -4742,7 +4829,15 @@ mod tests {
     fn run_script(script: &str, source: &FakeSource) -> (usize, usize) {
         // Two script tests run at once; each needs a scratch directory of its own, or one
         // removes the other's config.xml between its write and its read.
-        run_script_in(script, source, if source.devices().is_empty() { "script-planner" } else { "script-video" })
+        run_script_in(
+            script,
+            source,
+            if source.devices().is_empty() {
+                "script-planner"
+            } else {
+                "script-video"
+            },
+        )
     }
 
     fn run_script_in(script: &str, source: &FakeSource, scratch: &str) -> (usize, usize) {

@@ -1,6 +1,8 @@
 # Insert Wp: insertWpToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:4070). Asks "Insert WP
 # after wp#", offering the row after the selected one, and puts a WAYPOINT there at the click.
-# A number Rows.Insert would throw on is refused with "Invalid insert position".
+# A number Rows.Insert would throw on is refused with "Invalid insert position". Each OK keeps the
+# answer as InputBox keeps every titled answer, before the handler reads it (InputBox.cs:73-84,
+# 178-184).
 
 screen plan
 window 1600x1200
@@ -22,6 +24,7 @@ key ctrl+u
 type 1
 key Return
 expect plan.prompt none
+expect config.InputBoxInsertWPInsertWPafterwp 1
 expect mission.items 3
 expect mission.commands 16,16,16
 expect mission.selected 2
@@ -34,6 +37,7 @@ type 9
 key Return
 expect plan.prompt Error
 expect plan.prompt.text Invalid insert position
+expect config.InputBoxInsertWPInsertWPafterwp 9
 expect mission.items 3
 key Return
 expect plan.prompt none

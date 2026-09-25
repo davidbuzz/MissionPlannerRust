@@ -7,8 +7,9 @@
 # Designer's Bins 10, Start Freq 5 and Magnitude unticked (fftui.Designer.cs:84-137); "Run all
 # imus - IMU1-3 MSG" on testdata/dataflash.bin - three IMUs logged as IMU[0..2], which the C#
 # reads all under the one name IMU - estimates the rate from TimeUS and draws the GYR and ACC
-# graphs with x, y and z, then blank graphs to six (fftui.cs:602-769). A failure is a status
-# line, not the C#'s box (the owner's ruling of 2026-09-25).
+# graphs with x, y and z, then blank graphs to six (fftui.cs:602-769); Run 16bit Mono Wav's rate
+# question keeps its OK's answer in config.xml as InputBox does. A failure is a status line, not
+# the C#'s box (the owner's ruling of 2026-09-25).
 #
 # The number goes up a step and back, so SITL's INS_LOG_BAT_CNT is left at 1024.
 #
@@ -96,6 +97,23 @@ expect config.fft.window.graph.1.title FFT IMU ACC - dataflash.bin - 22.2hz inpu
 expect config.fft.window.graph.1.curves IMU ACC x,IMU ACC y,IMU ACC z
 expect config.fft.window.graph.2.title Title
 expect config.fft.window.graph.5.title Title
+
+# Run 16bit Mono Wav: the file, then its rate question, offering 8000; the question's OK keeps the
+# rate as InputBox keeps every titled answer (fftui.cs:25-46; InputBox.cs:73-84, 178-184). The
+# log is no wav; what the run draws of it is not what this checks.
+click fft-BUT_runwav
+settle 1
+type testdata/dataflash.bin
+click fft-open-ok
+settle 1
+expect config.fft.window.prompt none
+expect config.fft.window.rate 8000
+key ctrl+u
+type 4000
+click fft-rate-ok
+settle 4
+expect config.fft.window.rate none
+expect config.InputBoxfftsampleratentersourcefilesamplerate 4000
 
 # The close box; the page stays.
 click fft-close

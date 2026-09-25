@@ -3940,12 +3940,17 @@ impl RtkInject {
         }
     }
 
-    /// A question answered: OK with its text, or Cancel.
+    /// A question answered: OK with its text, which `InputBox` keeps in `persisted` as it keeps
+    /// every titled answer before the handler looks at it, or Cancel, which keeps nothing.
+    /// `// C#: Program.cs:564-566; ExtLibs/Controls/InputBox.cs:73-84, 178-184`
     pub fn answer(&mut self, ok: bool, persisted: &mut Persisted, cs_base: LatLngAlt) {
         let Some(prompt) = self.prompt.take() else {
             return;
         };
         let text = prompt.field.value().to_owned();
+        if ok {
+            super::optional::remember_answer(persisted, prompt.title, prompt.prompt, &text);
+        }
         if prompt.purpose == Purpose::Location {
             if ok && let Some(page) = self.page.as_mut() {
                 page.save_base_pos(&text, cs_base, persisted);
@@ -6115,7 +6120,11 @@ mod tests {
     fn a_connection_reads_logs_and_counts_until_stopped() {
         let (mut base, port) = Loopback::pair();
         let shared = Arc::new(Shared::default());
-        let dir = std::env::temp_dir().join(format!("headless-planner-rtk-{}-{}", std::process::id(), line!()));
+        let dir = std::env::temp_dir().join(format!(
+            "headless-planner-rtk-{}-{}",
+            std::process::id(),
+            line!()
+        ));
         std::fs::create_dir_all(&dir).expect("the log directory");
         let spec = OpenSpec {
             kind: Kind::TcpClient,
@@ -6798,7 +6807,8 @@ mod tests {
     }
 
     fn scratch(tag: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("headless-planner-rtk-{}-{tag}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("headless-planner-rtk-{}-{tag}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("scratch");
         dir
     }
@@ -6903,6 +6913,11 @@ mod tests {
             Some(error_connecting(CANCELED))
         );
         assert!(rtk.worker.is_none());
+        // `InputBox` keeps an answer on OK only (InputBox.cs:178-184).
+        assert_eq!(
+            persisted.get("InputBoxremotehostEnterurleghttpuserpasshostportmount"),
+            None
+        );
 
         // TCP: host, then port; the port's cancel is the same box.
         if let Some(page) = rtk.page.as_mut() {
@@ -6914,6 +6929,11 @@ mod tests {
             Some("127.0.0.1")
         );
         rtk.answer(true, &mut persisted, LatLngAlt::ZERO);
+        // The host's OK kept, as `InputBox` keeps every titled answer, before the port is asked.
+        assert_eq!(
+            persisted.get("InputBoxremotehostEnterhostnameipensureremoteendisalreadystarted"),
+            Some("127.0.0.1")
+        );
         assert_eq!(rtk.prompt.as_ref().map(|p| p.title), Some("remote Port"));
         assert_eq!(rtk.prompt.as_ref().map(|p| p.field.value()), Some("5760"));
         rtk.answer(false, &mut persisted, LatLngAlt::ZERO);
@@ -6926,6 +6946,7 @@ mod tests {
             None,
             "saved only once both are answered"
         );
+        assert_eq!(persisted.get("InputBoxremotePortEnterremoteport"), None);
 
         // UDP Host's cancel opens nothing and carries on: the thread runs with no port.
         if let Some(page) = rtk.page.as_mut() {
@@ -6969,6 +6990,59 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Every question the page asks keeps its OK's answer under `InputBox`'s key for it: the
+    /// caption and question with all but letters and digits taken out. The facts publish each.
+    /// `// C#: Program.cs:564-566; ExtLibs/Controls/InputBox.cs:73-84, 178-184`
+    #[test]
+    fn each_question_keeps_its_ok_answer_under_the_input_box_key() {
+        let questions = [
+            (
+                "remote host",
+                "Enter url (eg http://user:pass@host:port/mount)",
+                "InputBoxremotehostEnterurleghttpuserpasshostportmount",
+            ),
+            (
+                "remote host",
+                "Enter host name/ip (ensure remote end is already started)",
+                "InputBoxremotehostEnterhostnameipensureremoteendisalreadystarted",
+            ),
+            (
+                "remote Port",
+                "Enter remote port",
+                "InputBoxremotePortEnterremoteport",
+            ),
+            (
+                "Listern Port",
+                "Enter Local port (ensure remote end is already sending)",
+                "InputBoxListernPortEnterLocalportensureremoteendisalreadysending",
+            ),
+            (
+                "Enter Location",
+                "Enter a friendly name for this location.",
+                "InputBoxEnterLocationEnterafriendlynameforthislocation",
+            ),
+        ];
+        let source = include_str!("rtk_inject.rs");
+        for (title, question, key) in questions {
+            assert!(source.contains(&format!("{question:?}")), "{question}");
+            assert_eq!(crate::config::optional::answers_key(title, question), key);
+            assert!(crate::settings::PUBLISHED.contains(&key), "{key}");
+        }
+        let dir = scratch("answers");
+        let mut persisted = Persisted::at(None);
+        let mut rtk = page_on(&mut persisted, dir.join("list.xml"));
+        rtk.save_click();
+        rtk.answer(false, &mut persisted, LatLngAlt::ZERO);
+        assert_eq!(persisted.get(questions[4].2), None, "Cancel keeps nothing");
+        rtk.save_click();
+        if let Some(prompt) = rtk.prompt.as_mut() {
+            prompt.field.set("a, b");
+        }
+        rtk.answer(true, &mut persisted, LatLngAlt::ZERO);
+        assert_eq!(persisted.get(questions[4].2), Some("a%2C+b"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// The grid: Save Current Position asks for a name and adds `cs.Base`; Use makes a row the
     /// base position; an edited cell goes into the list, a number that does not parse does
     /// not; Delete removes a row; and the list is saved as the C#'s `XmlSerializer` writes it.
@@ -6992,6 +7066,12 @@ mod tests {
         assert_eq!(
             persisted.get("base_pos"),
             Some("-35.363261,149.16523,584,roof")
+        );
+        // The name kept as `InputBox` keeps every titled answer.
+        // C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:1269; InputBox.cs:178-184
+        assert_eq!(
+            persisted.get("InputBoxEnterLocationEnterafriendlynameforthislocation"),
+            Some("roof")
         );
         let saved = std::fs::read_to_string(&list).expect("saved");
         assert_eq!(

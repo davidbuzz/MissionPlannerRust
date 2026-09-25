@@ -2,7 +2,12 @@
 //! MAVFTP first, the `PARAM_REQUEST_LIST` stream when the vehicle has no such file.
 //! `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1813-1936`
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, clippy::cast_possible_truncation)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::cast_possible_truncation
+)]
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -110,7 +115,8 @@ fn run_vehicle(
                         let head = Header::decode(&ftp.payload);
                         for reply in files.answer(&head) {
                             seq = seq.wrapping_add(1);
-                            end.write_all(&frame(seq, &ftp_message(GCS, &reply))).unwrap();
+                            end.write_all(&frame(seq, &ftp_message(GCS, &reply)))
+                                .unwrap();
                         }
                     }
                     MavMessage::ParamRequestList(_) => {
@@ -159,7 +165,10 @@ fn wait_until_finished(link: &Link) -> ParamFetchState {
         if fetch.is_finished() {
             return fetch.state;
         }
-        assert!(Instant::now() < deadline, "the fetch never finished: {fetch:?}");
+        assert!(
+            Instant::now() < deadline,
+            "the fetch never finished: {fetch:?}"
+        );
         std::thread::sleep(Duration::from_millis(2));
     }
 }

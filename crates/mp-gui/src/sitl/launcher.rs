@@ -454,8 +454,7 @@ pub fn for_this_desktop() -> Box<dyn Launcher> {
         Box::new(Cygwin::default())
     } else if cfg!(target_os = "linux") && cfg!(any(target_arch = "x86_64", target_arch = "x86")) {
         Box::new(ManifestSitl::new(LINUX_X64_PLATFORM))
-    } else if cfg!(target_os = "linux") && cfg!(any(target_arch = "arm", target_arch = "aarch64"))
-    {
+    } else if cfg!(target_os = "linux") && cfg!(any(target_arch = "arm", target_arch = "aarch64")) {
         Box::new(ManifestSitl::new(ARM_PLATFORM))
     } else {
         Box::new(NotAvailable)
@@ -671,7 +670,10 @@ pub mod tests {
 
         /// The URLs asked for so far.
         pub fn asked(&self) -> Vec<String> {
-            self.asked.lock().map(|asked| asked.clone()).unwrap_or_default()
+            self.asked
+                .lock()
+                .map(|asked| asked.clone())
+                .unwrap_or_default()
         }
     }
 
@@ -813,11 +815,27 @@ pub mod tests {
             ))
         );
         let cases = [
-            ("ArduPlane.elf", ReleaseType::Official, "sitl/PlaneStable/ArduPlane.elf"),
-            ("ArduRover.elf", ReleaseType::Official, "sitl/RoverStable/ArduRover.elf"),
-            ("ArduHeli.elf", ReleaseType::Official, "sitl/CopterStable/ArduHeli.elf"),
+            (
+                "ArduPlane.elf",
+                ReleaseType::Official,
+                "sitl/PlaneStable/ArduPlane.elf",
+            ),
+            (
+                "ArduRover.elf",
+                ReleaseType::Official,
+                "sitl/RoverStable/ArduRover.elf",
+            ),
+            (
+                "ArduHeli.elf",
+                ReleaseType::Official,
+                "sitl/CopterStable/ArduHeli.elf",
+            ),
             ("ArduHeli.elf", ReleaseType::Dev, "sitl/ArduHeli.elf"),
-            ("ArduCopter.elf", ReleaseType::Beta, "sitl/Beta/ArduCopter.elf"),
+            (
+                "ArduCopter.elf",
+                ReleaseType::Beta,
+                "sitl/Beta/ArduCopter.elf",
+            ),
             ("ArduPlane.elf", ReleaseType::Dev, "sitl/ArduPlane.elf"),
         ];
         for (file, release, tail) in cases {
@@ -827,7 +845,9 @@ pub mod tests {
                 .map(|(url, _)| url);
             assert_eq!(
                 first,
-                Some(format!("https://firmware.ardupilot.org/Tools/MissionPlanner/{tail}")),
+                Some(format!(
+                    "https://firmware.ardupilot.org/Tools/MissionPlanner/{tail}"
+                )),
                 "{file} {release}"
             );
         }
@@ -859,7 +879,10 @@ pub mod tests {
         assert_eq!(web.asked().len(), 11);
         assert_eq!(
             std::fs::read(dir.join("ArduRover.exe")).ok(),
-            Some(b"https://firmware.ardupilot.org/Tools/MissionPlanner/sitl/Beta/ArduRover.elf".to_vec())
+            Some(
+                b"https://firmware.ardupilot.org/Tools/MissionPlanner/sitl/Beta/ArduRover.elf"
+                    .to_vec()
+            )
         );
         assert!(dir.join("cygstdc++-6.dll").is_file());
         assert_eq!(*said.lock().expect("lock"), [model::DOWNLOADING]);
@@ -916,7 +939,10 @@ pub mod tests {
             )
         );
         assert!(dir.join("+").is_dir());
-        assert_eq!(std::fs::read(&defaults).ok(), Some(b"FRAME_CLASS 1\n".to_vec()));
+        assert_eq!(
+            std::fs::read(&defaults).ok(),
+            Some(b"FRAME_CLASS 1\n".to_vec())
+        );
         assert_eq!(launcher.kills.load(Ordering::Relaxed), 1);
         assert_eq!(*waited.lock().expect("lock"), [Duration::from_secs(2)]);
         // sim_vehicle.py first, then vehicleinfo.py, then the file it names.
@@ -960,7 +986,10 @@ pub mod tests {
             Some("\r\nFRAME_CLASS 1\n\r\nFRAME_CLASS 2\n")
         );
         assert_eq!(
-            launcher.spawns().first().map(|s| s.working_directory.clone()),
+            launcher
+                .spawns()
+                .first()
+                .map(|s| s.working_directory.clone()),
             Some(dir.join("hexa"))
         );
         let _ = std::fs::remove_dir_all(dir);
@@ -1038,14 +1067,17 @@ pub mod tests {
         };
         assert!(note.contains("WebAssembly"), "{note}");
         assert!(note.contains("127.0.0.1"), "{note}");
-        assert!(NotAvailable.spawn(&Spawn {
-            program: PathBuf::new(),
-            arguments: String::new(),
-            working_directory: PathBuf::new(),
-            path: String::new(),
-            home: PathBuf::new(),
-        })
-        .is_err());
+        assert!(
+            NotAvailable
+                .spawn(&Spawn {
+                    program: PathBuf::new(),
+                    arguments: String::new(),
+                    working_directory: PathBuf::new(),
+                    path: String::new(),
+                    home: PathBuf::new(),
+                })
+                .is_err()
+        );
         assert_eq!(NotAvailable.note().as_deref(), Some(note.as_str()));
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -1090,11 +1122,9 @@ pub mod tests {
             spawns.first().map(|s| s.working_directory.clone()),
             Some(dir.join("+2"))
         );
-        assert!(
-            spawns
-                .last()
-                .is_some_and(|s| s.arguments.contains("--home A --instance 0 --serial0 tcp:0 --serial2 tcpclient:127.0.0.1:5772 "))
-        );
+        assert!(spawns.last().is_some_and(|s| s.arguments.contains(
+            "--home A --instance 0 --serial0 tcp:0 --serial2 tcpclient:127.0.0.1:5772 "
+        )));
         assert!(
             std::fs::read_to_string(dir.join("+1").join("identity.parm"))
                 .is_ok_and(|text| text.contains("SYSID_THISMAV=1\r\n"))

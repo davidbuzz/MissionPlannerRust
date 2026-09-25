@@ -188,9 +188,7 @@ impl MissionPlanner {
             "ConfigGPSOrder" => gps_order::page(&pages.gps_order, cx),
             "ConfigHWIDs" => hw_ids::page(&pages.hw_ids, cx),
             "ConfigCompassMot" => compass_mot::page(&pages.compass_mot, cx),
-            "ConfigInitialParams" => {
-                initial_params::page(&pages.initial_params, focus, window, cx)
-            }
+            "ConfigInitialParams" => initial_params::page(&pages.initial_params, focus, window, cx),
             "ConfigFFT" => fft::page(&pages.fft, &focus.number, window, cx),
             _ => div().into_any_element(),
         }
@@ -287,7 +285,9 @@ mod tests {
     fn link_failures_are_status_lines_and_the_rest_are_boxes() {
         assert!(link_error(&plain(osd::FAILED)));
         assert!(link_error(&error(compass_mot::NEEDS_AC_3_2)));
-        assert!(link_error(&super::super::rangefinder::unhandled("RC10_FUNCTION")));
+        assert!(link_error(&super::super::rangefinder::unhandled(
+            "RC10_FUNCTION"
+        )));
         assert!(link_error(&Message {
             title: gps_order::FAILED_ACTIVATE,
             text: gps_order::ERROR_TEXT.to_owned(),

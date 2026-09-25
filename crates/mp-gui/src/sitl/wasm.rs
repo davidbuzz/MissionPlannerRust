@@ -147,10 +147,8 @@ mod tests {
     /// URL asked for is the manifest's.
     #[test]
     fn a_published_wasm_sitl_is_found_with_its_url() {
-        let web = StubWeb::default().serve(
-            PROBE_URL,
-            &gzipped(&format!("{SITL_LINUX}, {SITL_WASM}")),
-        );
+        let web =
+            StubWeb::default().serve(PROBE_URL, &gzipped(&format!("{SITL_LINUX}, {SITL_WASM}")));
         let found = probe(&web);
         assert_eq!(
             found,
@@ -168,7 +166,14 @@ mod tests {
         let catalogue =
             Manifest::decode(&gzipped(&format!("{SITL_LINUX}, {SITL_WASM}")), true).expect("ok");
         assert!(published(&catalogue, Some(MavType::Copter), Some(ReleaseType::Dev)).is_some());
-        assert!(published(&catalogue, Some(MavType::Copter), Some(ReleaseType::Official)).is_none());
+        assert!(
+            published(
+                &catalogue,
+                Some(MavType::Copter),
+                Some(ReleaseType::Official)
+            )
+            .is_none()
+        );
         assert!(published(&catalogue, Some(MavType::FixedWing), None).is_none());
     }
 
@@ -225,7 +230,10 @@ mod tests {
             &|_| {},
         );
         assert_eq!(image, Image::Found(dir.join("ArduCopter")));
-        assert_eq!(std::fs::read(dir.join("ArduCopter")).ok(), Some(b"\x7fELF".to_vec()));
+        assert_eq!(
+            std::fs::read(dir.join("ArduCopter")).ok(),
+            Some(b"\x7fELF".to_vec())
+        );
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt as _;

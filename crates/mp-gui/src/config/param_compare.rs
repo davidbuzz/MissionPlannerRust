@@ -254,7 +254,12 @@ where
         .border_color(rgb(theme::BORDER))
         .bg(rgb(theme::PANEL))
         .child(header);
-    let [(_, name_width), (_, value_width), (_, new_width), (_, use_width)] = COLUMNS;
+    let [
+        (_, name_width),
+        (_, value_width),
+        (_, new_width),
+        (_, use_width),
+    ] = COLUMNS;
     for (index, row) in form.rows().iter().enumerate() {
         let id = format!("paramcompare-use-{}", row.name);
         let toggle_row = toggle_row.clone();
@@ -347,12 +352,7 @@ where
         .py_1()
         .border_b_1()
         .border_color(rgb(theme::BORDER))
-        .child(
-            div()
-                .text_xs()
-                .text_color(rgb(theme::DIM))
-                .child(FORM_TEXT),
-        )
+        .child(div().text_xs().text_color(rgb(theme::DIM)).child(FORM_TEXT))
         .child(crate::ui::action(
             "paramcompare-close",
             "X",
@@ -423,7 +423,10 @@ mod tests {
             return;
         };
         for (name, _) in COLUMNS {
-            assert!(designer.contains(&format!(".HeaderText = \"{name}\";")), "{name}");
+            assert!(
+                designer.contains(&format!(".HeaderText = \"{name}\";")),
+                "{name}"
+            );
         }
         assert!(designer.contains("this.Use.Width = 50;"));
         assert!(designer.contains(&format!("this.CHK_toggleall.Text = \"{TOGGLE_ALL}\";")));
@@ -456,7 +459,12 @@ mod tests {
         let names: Vec<&str> = form.rows().iter().map(|row| row.name.as_str()).collect();
         assert_eq!(
             names,
-            ["BATT_ARM_VOLT", "INS_ACC_X", "INS_ACC2_X", "INS_GYRO_FILTER"]
+            [
+                "BATT_ARM_VOLT",
+                "INS_ACC_X",
+                "INS_ACC2_X",
+                "INS_GYRO_FILTER"
+            ]
         );
         // Fifteen digits: 14.700000000000001 is "14.7".
         assert_eq!(form.rows()[0].new_value, "14.7");

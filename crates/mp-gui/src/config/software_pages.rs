@@ -166,16 +166,18 @@ impl MissionPlanner {
         }
     }
 
-    /// User Params' `InputBox` closed: the list it leaves, saved to `Settings.Instance` - in
-    /// memory, written to config.xml at the next save, as every page's keys are.
-    /// `// C#: GCSViews/ConfigurationView/ConfigUserDefined.cs:56-59`
+    /// User Params' `InputBox` closed: OK's answer kept as `InputBox` keeps it, and the list it
+    /// leaves, saved to `Settings.Instance` - in memory, written to config.xml at the next save,
+    /// as every page's keys are.
+    /// `// C#: GCSViews/ConfigurationView/ConfigUserDefined.cs:56-59; ExtLibs/Controls/InputBox.cs:178-184`
     pub(crate) fn user_params_close_input(&mut self, ok: bool) {
         let view = self.telemetry.view();
-        if let Some(setting) =
-            self.software_pages
-                .user
-                .close_input(ok, &view.parameters, crate::metadata::lookup)
-        {
+        if let Some(setting) = self.software_pages.user.close_input(
+            ok,
+            &view.parameters,
+            crate::metadata::lookup,
+            &mut self.persisted,
+        ) {
             self.persisted.set(user_params::SETTING, setting);
         }
     }

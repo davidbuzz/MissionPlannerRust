@@ -499,9 +499,15 @@ pub fn record_facts(secure: &Secure) {
             .join(","),
     );
     let [pubkey, bl, fwapj] = secure.boxes();
-    record("config.secure.pubkey", if pubkey.is_empty() { "none" } else { pubkey });
+    record(
+        "config.secure.pubkey",
+        if pubkey.is_empty() { "none" } else { pubkey },
+    );
     record("config.secure.bl", if bl.is_empty() { "none" } else { bl });
-    record("config.secure.fwapj", if fwapj.is_empty() { "none" } else { fwapj });
+    record(
+        "config.secure.fwapj",
+        if fwapj.is_empty() { "none" } else { fwapj },
+    );
     record("config.secure.key", secure.has_key());
     record(
         "config.secure.dialog",
@@ -711,7 +717,10 @@ mod tests {
             return;
         };
         for filter in [KEY_FILTER, BL_FILTER, APJ_FILTER, PEM_FILTER] {
-            assert!(source.contains(&format!("Filter = \"{filter}\"")), "{filter}");
+            assert!(
+                source.contains(&format!("Filter = \"{filter}\"")),
+                "{filter}"
+            );
         }
         assert!(source.contains(&format!("CustomMessageBox.Show(\"{PROTECT}\")")));
         for button in BUTTONS {
@@ -759,13 +768,19 @@ mod tests {
         let mut secure = shown();
         secure.click(Pick::SaveKey);
         assert!(secure.has_key(), "the key is made before the dialog");
-        assert_eq!(secure.dialog().map(|(_, path)| path.caption), Some(SAVE_FILE));
+        assert_eq!(
+            secure.dialog().map(|(_, path)| path.caption),
+            Some(SAVE_FILE)
+        );
         secure.type_path(&dir.join("mine").display().to_string());
         secure.path_done(true);
         let pem = dir.join("mine.pem");
         let private = dir.join("mine_private_key.dat");
         let public = dir.join("mine_public_key.dat");
-        assert_eq!(secure.written(), [pem.clone(), private.clone(), public.clone()]);
+        assert_eq!(
+            secure.written(),
+            [pem.clone(), private.clone(), public.clone()]
+        );
         let pubkey = secure.boxes()[0].to_owned();
         assert_eq!(pubkey.len(), 44, "32 bytes in base64");
         assert_eq!(
@@ -854,7 +869,11 @@ mod tests {
         secure.click(Pick::Bootloader);
         secure.type_path("/nonexistent/bl.bin");
         secure.path_done(true);
-        assert_eq!(secure.boxes()[1], "", "OpenFileDialog checks the file exists");
+        assert_eq!(
+            secure.boxes()[1],
+            "",
+            "OpenFileDialog checks the file exists"
+        );
         secure.click(Pick::SaveKey);
         secure.path_done(false);
         assert!(secure.written().is_empty());

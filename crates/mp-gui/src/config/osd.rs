@@ -247,11 +247,7 @@ pub fn page(osd: &Osd, cx: &mut Context<MissionPlanner>) -> AnyElement {
 }
 
 /// The message box showing, over the whole window.
-pub fn overlay(
-    osd: &Osd,
-    window: &Window,
-    cx: &mut Context<MissionPlanner>,
-) -> Option<AnyElement> {
+pub fn overlay(osd: &Osd, window: &Window, cx: &mut Context<MissionPlanner>) -> Option<AnyElement> {
     let message = osd.message()?;
     Some(message_box(
         "osd-message",
@@ -340,7 +336,11 @@ mod tests {
         let messages = drain(&mut queue, &link);
         let written: Vec<String> = link.taken().into_iter().map(|(name, _)| name).collect();
         assert_eq!(written, RATES);
-        assert!(link.taken().iter().all(|(_, value)| (*value - RATE).abs() < 1e-12));
+        assert!(
+            link.taken()
+                .iter()
+                .all(|(_, value)| (*value - RATE).abs() < 1e-12)
+        );
         assert!(messages.is_empty(), "{messages:?}");
         assert_eq!(queue.last(), Some("SR3_RC_CHAN 2 accepted"));
     }
@@ -351,14 +351,15 @@ mod tests {
         let mut page = Osd::default();
         page.activate(key());
         let jobs = page.click_enable_telemetry();
-        let link = Answering::new(&[(
-            "SR1_EXTRA2",
-            Progress::Finished(RequestOutcome::TimedOut),
-        )]);
+        let link = Answering::new(&[("SR1_EXTRA2", Progress::Finished(RequestOutcome::TimedOut))]);
         let mut queue = SetQueue::<usize>::default();
         queue.push(jobs);
         let messages = drain(&mut queue, &link);
-        assert_eq!(link.taken().len(), 11, "SR0's eight, SR1_EXT_STAT to SR1_EXTRA2");
+        assert_eq!(
+            link.taken().len(),
+            11,
+            "SR0's eight, SR1_EXT_STAT to SR1_EXTRA2"
+        );
         assert_eq!(messages, [plain(FAILED)]);
     }
 
@@ -385,7 +386,10 @@ mod tests {
             let mut words = line.split_whitespace();
             match (words.next(), words.next()) {
                 (Some("expect"), Some(key)) if key.starts_with("config.osd.") => {
-                    assert!(source.contains(&format!("\"{key}\"")), "{key} is not recorded");
+                    assert!(
+                        source.contains(&format!("\"{key}\"")),
+                        "{key} is not recorded"
+                    );
                     facts += 1;
                 }
                 (Some("click"), Some(id)) if id.starts_with("osd-") => {

@@ -5,7 +5,9 @@
 # RC16_OPTION (ConfigUserDefined.cs:19-44) - and Activate adds a row for each the vehicle has, its
 # name and a combo of the documented values (:46-86). A combo writes its parameter when it changes
 # (Controls/MavlinkComboBox.cs:133-200). Modify asks for the names one to a line; the answer is the
-# list, saved as UserParams, and the page is built again (:52-60). A name whose documentation
+# list, saved as UserParams, and the page is built again (:52-60); the box's OK keeps the text as
+# InputBox keeps every titled answer, URL-encoded under InputBoxParamsEnterParamNames
+# (InputBox.cs:73-84, 178-184), and its Cancel keeps nothing there. A name whose documentation
 # lists no values is its label alone: the C# sets a number up and never adds it (:72-77). The
 # write is proved by the vehicle's echo, and put back.
 #
@@ -65,6 +67,7 @@ expect params.value.RC8_OPTION 0
 expect config.userparams.message none
 
 # Modify: the names one to a line. Two typed; OK builds the page from them and saves them.
+expect config.InputBoxParamsEnterParamNames none
 click userparams-Modify
 settle 1
 expect config.userparams.input ~ RC6_OPTION|RC7_OPTION
@@ -77,6 +80,7 @@ settle 1
 expect config.userparams.input none
 expect config.userparams.options RC7_OPTION,RTL_ALT_M
 expect config.userparams.rows RC7_OPTION,RTL_ALT_M
+expect config.InputBoxParamsEnterParamNames RC7_OPTION%0D%0ARTL_ALT_M
 expect config.userparams.RC7_OPTION 7
 # RTL_ALT_M has no documented values: its label alone.
 expect config.userparams.RTL_ALT_M label
@@ -87,3 +91,15 @@ expect config.userparams.active false
 click config-page-ConfigUserDefined
 settle 1
 expect config.userparams.rows RC7_OPTION,RTL_ALT_M
+
+# Modify again, typed over and cancelled: the list is the one the box opened with, saved again,
+# and the kept answer is still the OK's.
+click userparams-Modify
+settle 1
+key ctrl+u
+type RC9_OPTION
+click userparams-input-cancel
+settle 1
+expect config.userparams.input none
+expect config.userparams.rows RC7_OPTION,RTL_ALT_M
+expect config.InputBoxParamsEnterParamNames RC7_OPTION%0D%0ARTL_ALT_M

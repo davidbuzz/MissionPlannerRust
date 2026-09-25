@@ -2426,7 +2426,11 @@ pub fn screen(
                 ),
         )
         // Right: the field tree, which is where LogBrowse puts it.
-        .children(browse.is_open().then(|| field_panel(browse, search, focus, cx)))
+        .children(
+            browse
+                .is_open()
+                .then(|| field_panel(browse, search, focus, cx)),
+        )
         .into_any_element()
 }
 
@@ -4108,8 +4112,7 @@ fn field_panel(
                 // `treeView1.NodeMouseHover`. `// C#: Log/LogBrowse.designer.cs:375`
                 .on_hover(cx.listener(move |this, over: &bool, _window, cx| {
                     if *over {
-                        this.log_browse
-                            .hover_field(&hovered, metadata::shared());
+                        this.log_browse.hover_field(&hovered, metadata::shared());
                         cx.notify();
                     }
                 }))
@@ -4144,21 +4147,19 @@ fn field_panel(
     // `txt_info`: docked along the bottom of the tree's panel, 40 pixels tall, multiline, a
     // `TextBox` like any other - selectable, copyable, editable.
     // `// C#: Log/LogBrowse.designer.cs:391-396; Log/LogBrowse.resx (txt_info)`
-    let info = div()
-        .flex_shrink_0()
-        .child(crate::textfield::text_area(
-            "log-txt-info",
-            browse.info_field(),
-            focus.info,
-            focus.info_focused,
-            gpui::relative(1.0),
-            px(40.0),
-            cx.listener(|this, event: &gpui::KeyDownEvent, _window, cx| {
-                if this.log_browse.info_key(event) {
-                    cx.notify();
-                }
-            }),
-        ));
+    let info = div().flex_shrink_0().child(crate::textfield::text_area(
+        "log-txt-info",
+        browse.info_field(),
+        focus.info,
+        focus.info_focused,
+        gpui::relative(1.0),
+        px(40.0),
+        cx.listener(|this, event: &gpui::KeyDownEvent, _window, cx| {
+            if this.log_browse.info_key(event) {
+                cx.notify();
+            }
+        }),
+    ));
 
     panel(
         "fields",
@@ -4178,19 +4179,16 @@ fn field_panel(
                     .min_h(px(0.0))
                     .gap_2()
                     .overflow_y_scroll()
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(rgb(theme::DIM))
-                            .child(if total > SHOWN_FIELDS {
-                                format!(
-                                    "{total} fields, showing {SHOWN_FIELDS} - type in the box \
+                    .child(div().text_xs().text_color(rgb(theme::DIM)).child(
+                        if total > SHOWN_FIELDS {
+                            format!(
+                                "{total} fields, showing {SHOWN_FIELDS} - type in the box \
                                      above to narrow"
-                                )
-                            } else {
-                                format!("{total} fields")
-                            }),
-                    )
+                            )
+                        } else {
+                            format!("{total} fields")
+                        },
+                    ))
                     .child(list),
             )
             .child(info),
@@ -4266,11 +4264,10 @@ mod tests {
         second.instance = Some(1);
         browse.hover_field(&second, Some(&meta));
         assert_eq!(browse.info(), "acceleration along X axis");
-        assert!(
-            browse
-                .facts()
-                .contains(&("log.info".to_owned(), "acceleration along X axis".to_owned()))
-        );
+        assert!(browse.facts().contains(&(
+            "log.info".to_owned(),
+            "acceleration along X axis".to_owned()
+        )));
     }
 
     /// `txt_info` is a multi-line `TextBox`: the description in it can be selected and copied,
@@ -4278,7 +4275,12 @@ mod tests {
     /// `// C#: Log/LogBrowse.designer.cs:391-396; Log/LogBrowse.resx (txt_info.Multiline)`
     #[test]
     fn the_description_box_selects_copies_and_takes_typing() {
-        fn key(name: &str, character: Option<&str>, control: bool, shift: bool) -> gpui::KeyDownEvent {
+        fn key(
+            name: &str,
+            character: Option<&str>,
+            control: bool,
+            shift: bool,
+        ) -> gpui::KeyDownEvent {
             let mut event = gpui::KeyDownEvent {
                 keystroke: gpui::Keystroke {
                     modifiers: gpui::Modifiers::default(),
@@ -4311,14 +4313,20 @@ mod tests {
                 .map(|(_, value)| value)
         };
         assert_eq!(selection(&browse).as_deref(), Some("none"));
-        assert!(!browse.info_key(&key("a", Some("a"), true, false)), "select all");
+        assert!(
+            !browse.info_key(&key("a", Some("a"), true, false)),
+            "select all"
+        );
         assert_eq!(selection(&browse).as_deref(), Some("0,21"));
         assert_eq!(browse.info_field().selected_text(), "achieved vehicle roll");
         // A word, from the end, with Ctrl+Shift+Left.
         assert!(!browse.info_key(&key("end", None, true, false)));
         assert!(!browse.info_key(&key("left", None, true, true)));
         assert_eq!(browse.info_field().selected_text(), "roll");
-        assert!(browse.info_key(&key("p", Some("p"), false, false)), "typed over");
+        assert!(
+            browse.info_key(&key("p", Some("p"), false, false)),
+            "typed over"
+        );
         assert_eq!(browse.info(), "achieved vehicle p");
         assert!(!browse.info_key(&key("escape", None, false, false)));
         assert_eq!(browse.info(), "achieved vehicle p");

@@ -492,7 +492,8 @@ pub const VEHICLEINFO_URL: &str =
 
 /// `default_params_regex`, over `sim_vehicle.py`: a frame's name and its first defaults file.
 /// `// C#: GCSViews/SITL.cs:30-32`
-const DEFAULT_PARAMS_PATTERN: &str = r#""([^"]+)"\s*:\s*\{\s*[^\{}]+"default_params_filename"\s*:\s*\[*"([^"]+)"\s*[^\}]*\}"#;
+const DEFAULT_PARAMS_PATTERN: &str =
+    r#""([^"]+)"\s*:\s*\{\s*[^\{}]+"default_params_filename"\s*:\s*\[*"([^"]+)"\s*[^\}]*\}"#;
 
 /// `Download.getFilefromNet(url, saveto)`, as the firmware pages have it.
 fn download(fetch: &dyn Fetch, url: &str, to: &Path) -> bool {
@@ -768,7 +769,12 @@ mod tests {
         let files: Vec<&str> = Vehicle::ALL.iter().map(|v| v.file()).collect();
         assert_eq!(
             files,
-            ["ArduPlane.elf", "ArduRover.elf", "ArduCopter.elf", "ArduHeli.elf"]
+            [
+                "ArduPlane.elf",
+                "ArduRover.elf",
+                "ArduCopter.elf",
+                "ArduHeli.elf"
+            ]
         );
         assert_eq!(MODELS.len(), 34);
         assert_eq!(MODELS.first(), Some(&""));
@@ -813,7 +819,10 @@ mod tests {
             home_location(-35.363_351_512_345_67, 149.1, 0.0, 359),
             "-35.3633515123457,149.1,0,359"
         );
-        assert_eq!(home_location(0.00001, 1e-5, -12.5, 0), "1E-05,1E-05,-12.5,0");
+        assert_eq!(
+            home_location(0.00001, 1e-5, -12.5, 0),
+            "1E-05,1E-05,-12.5,0"
+        );
     }
 
     /// The saved index, else the first; one past the list is the first too.
@@ -857,7 +866,11 @@ mod tests {
         );
         assert_eq!(
             last.bat,
-            format!("mkdir 1\ncd 1\n\"{}\" {} &\n", exe.display(), last.arguments)
+            format!(
+                "mkdir 1\ncd 1\n\"{}\" {} &\n",
+                exe.display(),
+                last.arguments
+            )
         );
         let middle = instances.get(1).expect("three");
         assert!(middle.arguments.contains("tcpclient:127.0.0.1:5782 "));
@@ -873,7 +886,9 @@ mod tests {
         let bare = chain(1, "+", "", &exe, &homes);
         assert_eq!(
             bare.first().map(|i| i.arguments.as_str()),
-            Some("  --defaults \"identity.parm\"  -M+ -s1 --home H0 --instance 0 --serial0 tcp:0  ")
+            Some(
+                "  --defaults \"identity.parm\"  -M+ -s1 --home H0 --instance 0 --serial0 tcp:0  "
+            )
         );
         // "how many?" answered 0: nothing is started.
         assert!(chain(0, "+", "", &exe, &homes).is_empty());

@@ -1,5 +1,7 @@
 # Loiter > Time: loitertimeToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:4776). Asks "Loiter
-# Time", offering 5, and appends a LOITER_TIME (19) at the click with the answer in Param1.
+# Time", offering 5, and appends a LOITER_TIME (19) at the click with the answer in Param1. The OK
+# keeps the answer as InputBox keeps every titled answer (InputBox.cs:73-84, 178-184); Cancel
+# keeps nothing.
 
 screen plan
 window 1600x1200
@@ -15,6 +17,7 @@ key ctrl+u
 type 12
 key Return
 expect plan.prompt none
+expect config.InputBoxLoiterTimeLoiterTime 12
 expect mission.items 1
 expect mission.last.command 19
 expect mission.last.p1 12
@@ -27,3 +30,4 @@ click menu-loitertime
 key Escape
 expect plan.prompt none
 expect mission.items 1
+expect config.InputBoxLoiterTimeLoiterTime 12

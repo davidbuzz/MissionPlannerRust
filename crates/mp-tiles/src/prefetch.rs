@@ -140,10 +140,7 @@ pub fn size_text(bytes: f32) -> String {
     } else {
         (whole, hundredths)
     };
-    format!(
-        "{}.{hundredths:02}{unit}",
-        grouped(whole).replace(' ', ",")
-    )
+    format!("{}.{hundredths:02}{unit}", grouped(whole).replace(' ', ","))
 }
 
 /// `UpdateTilesCount`: the "Zoom i : n" line per zoom from `min` to `max`, and the total's line.
@@ -357,7 +354,10 @@ mod tests {
         let png = {
             let mut bytes = Vec::new();
             image::RgbaImage::new(4, 4)
-                .write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png)
+                .write_to(
+                    &mut std::io::Cursor::new(&mut bytes),
+                    image::ImageFormat::Png,
+                )
                 .expect("png");
             bytes
         };
@@ -380,7 +380,11 @@ mod tests {
             7,
             &mut |progress: &Progress| reports.push(progress.clone()),
         );
-        assert_eq!(fetched.get(), tiles.len() - 1, "the cached one is not fetched");
+        assert_eq!(
+            fetched.get(),
+            tiles.len() - 1,
+            "the cached one is not fetched"
+        );
         assert_eq!(reports.len(), tiles.len() + 1);
         assert_eq!(reports.last().map(|p| p.percent), Some(100));
         assert_eq!(reports.last().map(|p| p.done), Some(tiles.len()));
@@ -393,7 +397,11 @@ mod tests {
         assert_eq!(held, ok);
         assert_eq!(
             reports[3].label(),
-            format!("Fetching tile at zoom (18): 3 of {}, complete: {}%", tiles.len(), 300 / tiles.len())
+            format!(
+                "Fetching tile at zoom (18): 3 of {}, complete: {}%",
+                tiles.len(),
+                300 / tiles.len()
+            )
         );
     }
 

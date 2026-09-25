@@ -12,8 +12,8 @@
 #![allow(unreachable_pub)]
 
 use gpui::{
-    AnyElement, Context, Div, KeyDownEvent, MouseButton, SharedString, Window, div, prelude::*,
-    px, rgb,
+    AnyElement, Context, Div, KeyDownEvent, MouseButton, SharedString, Window, div, prelude::*, px,
+    rgb,
 };
 
 use super::model::{self, Vehicle};
@@ -51,7 +51,11 @@ const PANEL1: (f32, f32, f32) = (12.0, 716.0, 137.0);
 const FONT: f32 = 11.0;
 
 /// The page.
-pub fn screen(this: &MissionPlanner, window: &Window, cx: &mut Context<MissionPlanner>) -> AnyElement {
+pub fn screen(
+    this: &MissionPlanner,
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
     let sitl = &this.sitl;
     let (left, top, right, bottom) = MARGIN;
     crate::probe::measured("sitl-body", div())
@@ -222,13 +226,15 @@ fn map_view(sitl: &super::Sitl, cx: &mut Context<MissionPlanner>) -> AnyElement 
                 cx.notify();
             }),
         )
-        .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, window, _cx| {
-            if event.pressed_button == Some(MouseButton::Left) {
-                this.sitl
-                    .map_move(f32::from(event.position.x), f32::from(event.position.y));
-                window.refresh();
-            }
-        }))
+        .on_mouse_move(
+            cx.listener(|this, event: &gpui::MouseMoveEvent, window, _cx| {
+                if event.pressed_button == Some(MouseButton::Left) {
+                    this.sitl
+                        .map_move(f32::from(event.position.x), f32::from(event.position.y));
+                    window.refresh();
+                }
+            }),
+        )
         .on_mouse_up(
             MouseButton::Left,
             cx.listener(|this, _event, _window, cx| {
@@ -361,7 +367,11 @@ fn arrow_cell() -> Div {
 
 /// `groupBox4`: Sim Speed, Model, the extra command line, Wipe and the swarm buttons.
 /// `// C#: GCSViews/SITL.Designer.cs:219-348`
-fn advanced(this: &MissionPlanner, window: &Window, cx: &mut Context<MissionPlanner>) -> AnyElement {
+fn advanced(
+    this: &MissionPlanner,
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
     let sitl = &this.sitl;
     let (_, left) = OPTIONS;
     let field = &this.sitl_focus.field;
@@ -708,9 +718,11 @@ fn pictures(sitl: &super::Sitl, busy: bool, cx: &mut Context<MissionPlanner>) ->
                 }))
         };
         let (label_x, label_y) = vehicle.label_at();
-        panel = panel
-            .child(at(x, y, w, h).child(picture))
-            .child(label(label_x, label_y, vehicle.label()));
+        panel = panel.child(at(x, y, w, h).child(picture)).child(label(
+            label_x,
+            label_y,
+            vehicle.label(),
+        ));
     }
     panel.into_any_element()
 }

@@ -175,7 +175,9 @@ impl std::fmt::Display for GeoError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::OutsideUtm => f.write_str("GeoUtility.ErrorProvider.GeoException: ERROR_GEO2UTM"),
-            Self::OutsideMgrs => f.write_str("GeoUtility.ErrorProvider.GeoException: ERROR_UTM_ZONE"),
+            Self::OutsideMgrs => {
+                f.write_str("GeoUtility.ErrorProvider.GeoException: ERROR_UTM_ZONE")
+            }
         }
     }
 }
@@ -286,8 +288,14 @@ pub fn utm_to_mgrs(utm: &Utm) -> Result<Mgrs, GeoError> {
     // numbers before their decimal point.
     let east_whole = format!("{}", utm.east.trunc());
     let north_whole = format!("{}", utm.north.trunc());
-    let east_plan: i32 = east_whole.get(..1).and_then(|d| d.parse().ok()).unwrap_or(0);
-    let north_plan: i32 = north_whole.get(..2).and_then(|d| d.parse().ok()).unwrap_or(0);
+    let east_plan: i32 = east_whole
+        .get(..1)
+        .and_then(|d| d.parse().ok())
+        .unwrap_or(0);
+    let north_plan: i32 = north_whole
+        .get(..2)
+        .and_then(|d| d.parse().ok())
+        .unwrap_or(0);
     let mut east = format!("{}", utm.east.round() as i64);
     if east.len() > 2 {
         east.remove(0);
@@ -428,7 +436,12 @@ mod tests {
     fn mgrs_letters_and_digits_follow_the_scheme() {
         // 55H, 695400 E: column 6 in set 1 (zone 55 % 3 == 1) is F; 6084100 N: 60 - 3*20 = 0,
         // zone odd so no offset: A.
-        let utm = Utm { zone: 55, band: 'H', east: 695_400.0, north: 6_084_100.0 };
+        let utm = Utm {
+            zone: 55,
+            band: 'H',
+            east: 695_400.0,
+            north: 6_084_100.0,
+        };
         let mgrs = utm_to_mgrs(&utm).expect("55HFA");
         assert_eq!(mgrs.grid, "FA");
         assert!((mgrs.east - 95_400.0).abs() < f64::EPSILON);
@@ -438,18 +451,33 @@ mod tests {
         assert_eq!(mgrs.text(), "55HFA954841");
         // 32U, 412345 E: column 4 in set 2 (32 % 3 == 2) is 4 + 7 = 11 -> M; 5567890 N: 55 - 40
         // = 15, zone even so + 5 = 20 -> wraps to 0 -> A.
-        let utm = Utm { zone: 32, band: 'U', east: 412_345.0, north: 5_567_890.0 };
+        let utm = Utm {
+            zone: 32,
+            band: 'U',
+            east: 412_345.0,
+            north: 5_567_890.0,
+        };
         let mgrs = utm_to_mgrs(&utm).expect("32UMA");
         assert_eq!(mgrs.text(), "32UMA1234567890");
         assert_eq!(
-            utm_to_mgrs(&Utm { zone: 61, band: 'U', east: 0.0, north: 0.0 }),
+            utm_to_mgrs(&Utm {
+                zone: 61,
+                band: 'U',
+                east: 0.0,
+                north: 0.0
+            }),
             Err(GeoError::OutsideMgrs)
         );
     }
 
     #[test]
     fn mgrs_pads_to_five_digits_each() {
-        let utm = Utm { zone: 55, band: 'H', east: 600_007.0, north: 6_000_003.0 };
+        let utm = Utm {
+            zone: 55,
+            band: 'H',
+            east: 600_007.0,
+            north: 6_000_003.0,
+        };
         let mgrs = utm_to_mgrs(&utm).expect("mgrs");
         assert!((mgrs.east - 7.0).abs() < f64::EPSILON);
         assert!((mgrs.north - 3.0).abs() < f64::EPSILON);

@@ -1700,7 +1700,8 @@ fn firmware_list(options: &[String]) -> std::process::ExitCode {
 }
 
 /// `headless-planner firmware list`'s options, for a message about a wrong one.
-const LIST_USAGE: &str = "usage: headless-planner firmware list [--board <id|name>] [--vehicle <type>] \
+const LIST_USAGE: &str =
+    "usage: headless-planner firmware list [--board <id|name>] [--vehicle <type>] \
 [--release <type>]
   --board    a board id, as a bootloader reports it, or a USB product string
              (default: the USB devices on this machine)
@@ -2407,7 +2408,10 @@ mod terrain {
     }
 
     fn scratch(test: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("headless-planner-terrain-{test}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "headless-planner-terrain-{test}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         dir
     }

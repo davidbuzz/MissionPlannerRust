@@ -54,8 +54,9 @@ impl Drop for Running {
 
 /// Runs the GUI at a given size on a given screen and returns what it measured.
 fn measure(width: u32, height: u32, screen: &str) -> BTreeMap<String, Rect> {
-    let probe: PathBuf =
-        std::env::temp_dir().join(format!("headless-planner-layout-{width}x{height}-{screen}.json"));
+    let probe: PathBuf = std::env::temp_dir().join(format!(
+        "headless-planner-layout-{width}x{height}-{screen}.json"
+    ));
     let _ = std::fs::remove_file(&probe);
 
     let child = Command::new(env!("CARGO_BIN_EXE_planner"))

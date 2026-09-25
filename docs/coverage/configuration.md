@@ -109,8 +109,8 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
 | 263 | `ConfigADSB` | ADSB | Mandatory Hardware | any | 5 | partial: `crates/mp-gui/src/config/adsb.rs` `fn page` - a RangeControl, bitmask or ValuesControl per documented ADSB_/AVD_ parameter,
         //     favourites first, recording changes; Write Params writing them ENABLE-first, each
         //     in its own try, then "Parameters successfully saved."; Refresh Params with
-        //     MessageShowAgain; Find filtering as typed, its OK's word kept as InputBox keeps
-        //     it; a bitmask updated on Activate writing as the C#'s does; missing Ctrl+S,
+        //     MessageShowAgain, its unticked box kept as SHOWAGAIN_Refresh_Params; Find
+        //     filtering as typed, its OK's word kept as InputBox keeps it; a bitmask updated on Activate writing as the C#'s does; missing Ctrl+S,
         //     dragging the track bar (a click pages it) and typing into a ValuesControl |
 | 266 | `ConfigGPSOrder` | CAN GPS Order | Optional Hardware | any | 1 | done: `crates/mp-gui/src/config/gps_order.rs` `fn page` |
 | 270 | `ConfigBatteryMonitoring` | Battery Monitor | Optional Hardware | any | 13 | done: `crates/mp-gui/src/config/battery_monitor.rs` `fn page` |
@@ -157,10 +157,10 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
 | 198 | `ConfigFriendlyParams` | Standard Params |  | any, Custom view with Standard Params | 1 | partial: `crates/mp-gui/src/config/friendly_params.rs` `fn page` - a RangeControl, bitmask or ValuesControl per parameter documented @User: Standard
         //     with a display name, fav_params first; changes recorded; Write Params ENABLE-first,
         //     each in its own try, then "Parameters successfully saved."; Refresh Params with
-        //     MessageShowAgain; Find filtering as typed; the flow panel's layout; a failed write or
-        //     fetch on the status line (the owner's ruling); missing Ctrl+S, dragging the track
-        //     bar (a click pages it), typing into a ValuesControl, and the InputBox's remembered
-        //     answers |
+        //     MessageShowAgain, its unticked box kept as SHOWAGAIN_Refresh_Params; Find
+        //     filtering as typed, its OK's word kept as InputBox keeps it; the flow panel's
+        //     layout; a failed write or fetch on the status line (the owner's ruling); missing
+        //     Ctrl+S, dragging the track bar (a click pages it) and typing into a ValuesControl |
 | 203 | `ConfigFriendlyParamsAdv` | Advanced Params |  | any, Custom view with Advanced Params and Advanced mode | no Designer | partial: `crates/mp-gui/src/config/friendly_params.rs` `fn page` - Standard Params' page over the parameters documented @User: Advanced or not at all;
         //     missing what it misses |
 | 208 | `ConfigOSD` | Onboard OSD |  | any with OSD parameters, not on Mono | 0 | **missing** |
@@ -177,7 +177,8 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
         //     vehicle has with a combo of its documented values writing it, Modify's multiline
         //     InputBox saving the list and building the page again - Cancel included, as the
         //     C#'s handler ignores the answer; a name without values is its label alone, as the
-        //     C# never adds its number; missing the InputBox's remembered answers |
+        //     C# never adds its number; the InputBox's OK answer kept as
+        //     InputBoxParamsEnterParamNames |
 | 229 | `ConfigRawParams` | Full Parameter List |  | any, or disconnected | 22 | partial: `crates/mp-gui/src/params.rs` `fn list_panel` - the parameter screen has Refresh Params (MAVFTP first), Search, the group tree and
         //     its collapse (kept in rawparam_panel1collapsed), the Default column and the None
         //     Default filter when the vehicle's param.pck gave defaults, the Modified filter
@@ -210,8 +211,9 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
 | 245 | `ConfigParamLoading` | Loading |  | connected, parameters still arriving | 2 | as at `GCSViews/InitialSetup.cs:162` |
 | 250 | `ConfigPlanner` | Planner |  | connected | 64 | partial: `crates/mp-gui/src/config/planner.rs` `fn planner_page` - every control at its place, each bound to the Settings key its handler writes; the
         //     units (ChangeUnits), the telemetry rates and their stream requests, the speech boxes
-        //     and their InputBox templates, Load Waypoints on connect, the map access mode,
-        //     Joystick Setup, Browse and Open Map Cache act at once; Layout picks the display
+        //     and their InputBox templates (each OK's answer kept as InputBox keeps it), Load
+        //     Waypoints on connect, the map access mode, Joystick Setup, Browse and Open Map
+        //     Cache act at once; Layout picks the display
         //     view the lists read (Basic, Advanced, or the Custom file), saved as displayview;
         //     Video Device and Video Format list the V4L2 capture devices and their MJPEG and
         //     YUYV formats, Start captures (mp-video) and the HUD draws the frame under

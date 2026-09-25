@@ -10708,7 +10708,8 @@ mod tests {
     /// height Set Home Here sends.
     #[test]
     fn set_home_here_sends_the_height_of_the_tile_under_the_press() {
-        let dir = std::env::temp_dir().join(format!("headless-planner-fly-srtm-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("headless-planner-fly-srtm-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("scratch folder");
         let mut tile = Vec::with_capacity(1201 * 1201 * 2);
         for _ in 0..1201 * 1201 {

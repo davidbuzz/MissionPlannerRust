@@ -1027,6 +1027,9 @@ pub struct FftUi {
     pub editing: Option<NumberBox>,
     /// The file dialog or the question, while it is up.
     asking: Option<Asking>,
+    /// The rate question as its OK closed it, until the holder keeps the answer in
+    /// `Settings.Instance`.
+    answered: Option<InputBox>,
     /// The run the thread is doing.
     running: Option<(Run, Receiver<Result<Outcome, String>>)>,
     /// The last run and how it ended, for the facts.
@@ -1058,6 +1061,7 @@ impl FftUi {
             panel: vec![Slot::Designer],
             editing: None,
             asking: None,
+            answered: None,
             running: None,
             last: None,
             hover: None,
@@ -1177,7 +1181,10 @@ impl FftUi {
             }
             Some(Asking::Rate(file, input)) => {
                 let answer = if ok {
-                    input.field.value().trim().to_owned()
+                    let answer = input.field.value().trim().to_owned();
+                    // `InputBox` keeps the text before the `ref int` overload parses it.
+                    self.answered = Some(input);
+                    answer
                 } else {
                     RATE_DEFAULT.to_string()
                 };
@@ -1191,6 +1198,15 @@ impl FftUi {
             }
             None => Ok(None),
         }
+    }
+
+    /// The rate question as its OK closed it, once: the answer `InputBox` keeps in
+    /// `Settings.Instance` under `InputBoxfftsampleratentersourcefilesamplerate`, which the
+    /// window writes - kept before `int.Parse` looks at it, so text that is no number is kept
+    /// too.
+    /// `// C#: Controls/fftui.cs:45-46; ExtLibs/Controls/InputBox.cs:21-27, 73-84, 178-184`
+    pub fn take_answered(&mut self) -> Option<InputBox> {
+        self.answered.take()
     }
 
     /// Starts a job on a thread of its own.
@@ -1906,6 +1922,7 @@ pub fn prompt_box(
             move |this, event| {
                 let (handled, result) =
                     access(this).map_or((false, Ok(None)), |ui| ui.prompt_key(event));
+                keep_rate_answer(this, access);
                 after_prompt(this, result);
                 handled
             },
@@ -1923,7 +1940,17 @@ fn finish_prompt(this: &mut MissionPlanner, access: Access, ok: bool) {
         return;
     };
     let result = ui.prompt_done(ok);
+    keep_rate_answer(this, access);
     after_prompt(this, result);
+}
+
+/// The rate question's answer kept as `InputBox` keeps it, after a key or a button that may have
+/// closed it with OK: the window object holds no settings, the application does.
+/// `// C#: Controls/fftui.cs:46; ExtLibs/Controls/InputBox.cs:178-184`
+fn keep_rate_answer(this: &mut MissionPlanner, access: Access) {
+    if let Some(input) = access(this).and_then(FftUi::take_answered) {
+        input.remember(&mut this.persisted);
+    }
 }
 
 /// What a closed dialog asked for: a job started, or the error the C# throws on the status line.
@@ -2501,6 +2528,39 @@ mod tests {
         let _ = ui.prompt_done(true);
         ui.type_prompt("fast");
         assert_eq!(ui.prompt_done(true), Err(NOT_A_NUMBER.to_owned()));
+    }
+
+    /// The rate question's OK keeps its text as `InputBox` keeps every titled answer - before
+    /// `int.Parse`, so a word is kept too - and Cancel keeps nothing.
+    /// `// C#: Controls/fftui.cs:45-46; ExtLibs/Controls/InputBox.cs:21-27, 73-84, 178-184`
+    #[test]
+    fn the_rate_ok_keeps_the_answer_under_the_input_box_key() {
+        let key = crate::config::optional::answers_key(RATE_TITLE, RATE_PROMPT);
+        assert_eq!(key, "InputBoxfftsampleratentersourcefilesamplerate");
+        assert!(crate::settings::PUBLISHED.contains(&key.as_str()));
+        let file = fixture("dataflash.bin");
+        let mut ui = FftUi::new();
+        let ask = |ui: &mut FftUi| {
+            ui.press(Run::Wav);
+            ui.type_prompt(&file.display().to_string());
+            assert_eq!(ui.prompt_done(true), Ok(None));
+            assert!(
+                ui.take_answered().is_none(),
+                "the file dialog keeps nothing"
+            );
+        };
+        ask(&mut ui);
+        let _ = ui.prompt_done(false);
+        assert!(ui.take_answered().is_none(), "Cancel keeps nothing");
+        ask(&mut ui);
+        ui.type_prompt("fast");
+        let _ = ui.prompt_done(true);
+        let mut settings = crate::settings::Persisted::at(None);
+        ui.take_answered()
+            .expect("OK's box")
+            .remember(&mut settings);
+        assert!(ui.take_answered().is_none(), "kept once");
+        assert_eq!(settings.get(&key), Some("fast"));
     }
 
     /// A job on the thread: the fixture's IMUs through the button's handler, and a file that

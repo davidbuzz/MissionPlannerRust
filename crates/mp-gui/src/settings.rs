@@ -233,7 +233,7 @@ impl SaveEvent {
 /// write, and the display units, which that page writes too - as does the speech alert that
 /// Initial Setup's Battery Monitor writes (`config/battery_monitor.rs`). The Planner page publishes
 /// each of its own keys as `config.planner.<key>` (`config/planner.rs`), from this same dictionary.
-pub const PUBLISHED: [&str; 34] = [
+pub const PUBLISHED: [&str; 57] = [
     "TXT_homelat",
     "TXT_homelng",
     "TXT_homealt",
@@ -276,6 +276,45 @@ pub const PUBLISHED: [&str; 34] = [
     // C#: Grid/GridUI.cs:409-447, 1882
     "grid_alt",
     "grid_angle",
+    // User Params' Modify, and the Planner page's questions beyond Notification and Battery
+    // Level above.
+    // C#: GCSViews/ConfigurationView/ConfigUserDefined.cs:56;
+    // ConfigPlanner.cs:680, 822, 829, 889, 897, 904, 912, 1121
+    "InputBoxParamsEnterParamNames",
+    "InputBoxMinAltWhataltitudedoyouwanttowarnatrelativetohome",
+    "InputBoxArmWhatdoyouwantittosay",
+    "InputBoxDisarmedWhatdoyouwantittosay",
+    "InputBoxGroundSpeedWhatdoyouwantittosay",
+    "InputBoxspeedtriggerWhatspeeddoyouwanttowarnatms",
+    "InputBoxAirSpeedWhatdoyouwantittosay",
+    "InputBoxDescriptionWhatdoyouwantittoshow",
+    // Refresh Params' "Show me again?", on ADSB, Standard Params and Advanced Params.
+    // C#: GCSViews/ConfigurationView/ConfigADSB.cs:217; ConfigFriendlyParams.cs:217;
+    // Common.cs:264-268, 445-448
+    "SHOWAGAIN_Refresh_Params",
+    // The other `InputBox`es' lists: FFT's rate, MAVFtp's New Folder and Mount, Motor Test's
+    // Spin Arm and Spin Min, Large Vehicle MagCal, the transports' questions (on CONNECT and on
+    // RTK/GPS Inject) and the base position's name, and the planning screen's Insert WP and
+    // Loiter Time.
+    // C#: Controls/fftui.cs:46; Controls/MavFTPUI.cs:518, 693; ConfigMotorTest.cs:354, 382;
+    // ConfigHWCompass2.cs:479; Program.cs:564-566; ExtLibs/Comms/CommsTCPSerial.cs:125-128,
+    // CommsUdpSerial.cs:114, CommsUDPSerialConnect.cs:142-145, CommsWebSocket.cs:105,
+    // CommsNTRIP.cs:108;
+    // ConfigSerialInjectGPS.cs:1269; GCSViews/FlightPlanner.cs:4073, 4779
+    "InputBoxfftsampleratentersourcefilesamplerate",
+    "InputBoxFolderNameEnterfoldername",
+    "InputBoxMountPointEnterdriveletterorpathegM",
+    "InputBoxChangeThrottleEnterarmthrottledeadzone2",
+    "InputBoxChangeThrottleEnterminspinthrottlearmmin3",
+    "InputBoxMagCalYawEntercurrentheadingindegreesNOTEgpslockisrequiredHeadingistruenotmagnetic",
+    "InputBoxremotehostEnterhostnameipensureremoteendisalreadystarted",
+    "InputBoxremotePortEnterremoteport",
+    "InputBoxListernPortEnterLocalportensureremoteendisalreadysending",
+    "InputBoxremotehostEnterurleghttpuserpasshostportwspath",
+    "InputBoxremotehostEnterurleghttpuserpasshostportmount",
+    "InputBoxEnterLocationEnterafriendlynameforthislocation",
+    "InputBoxInsertWPInsertWPafterwp",
+    "InputBoxLoiterTimeLoiterTime",
 ];
 
 /// `CMB_baudrate`'s ninth item, which `MainV2` selects before anything is loaded.

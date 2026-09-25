@@ -6,7 +6,9 @@
 # "Parameters successfully saved." (:179-205); Find shows only the controls whose name or
 # description has the word (:21-116), and its OK keeps the word as InputBox keeps every titled
 # answer, under InputBoxSearchForEnterasinglewordtosearchfor (InputBox.cs:73-84, 178-184); Refresh
-# Params asks first (:212-218). The write is proved by the vehicle's echo, and put back.
+# Params asks first (:212-218), and its "Show me again?" unticked is kept as
+# SHOWAGAIN_Refresh_Params False at the click (Common.cs:260-270, 445-448), after which Refresh
+# Params fetches without asking. The write is proved by the vehicle's echo, and put back.
 #
 # SITL's copter, with ADS-B and avoidance off, lists two of them: ADSB_TYPE and AVD_ENABLE, each a
 # list of values. The other kinds - a RangeControl, a bitmask - and a bitmask's writes on showing
@@ -120,11 +122,29 @@ expect config.adsb.find none
 expect config.adsb.visible 2
 
 # Refresh Params asks first; Cancel fetches nothing.
+expect config.SHOWAGAIN_Refresh_Params none
 click adsb-refresh
 expect config.adsb.confirm Update Params
 click adsb-confirm-cancel
 expect config.adsb.confirm none
 expect config.adsb.refresh.enabled true
+expect config.SHOWAGAIN_Refresh_Params none
+
+# "Show me again?" unticked: kept at the click, whichever button closes the box.
+click adsb-refresh
+expect config.adsb.confirm Update Params
+click adsb-confirm-showagain
+expect config.SHOWAGAIN_Refresh_Params False
+click adsb-confirm-cancel
+expect config.adsb.confirm none
+expect config.SHOWAGAIN_Refresh_Params False
+# Refresh Params then fetches without asking.
+click adsb-refresh
+expect config.adsb.confirm none
+settle 15
+expect config.adsb.refresh.enabled true
+expect params.held > 1000
+expect config.adsb.order ADSB_TYPE,AVD_ENABLE
 
 click setup-page-ConfigMandatory
 settle 1

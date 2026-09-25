@@ -844,7 +844,13 @@ mod tests {
     #[test]
     fn the_gui_script_names_facts_and_controls_this_page_has() {
         let script = include_str!("../../../../tests/gui/config-fft.gui");
-        let source = [include_str!("fft.rs"), include_str!("fftui.rs")].concat();
+        // The rate question's OK and Cancel are the shared `InputBox`'s, named in its table.
+        let source = [
+            include_str!("fft.rs"),
+            include_str!("fftui.rs"),
+            include_str!("optional.rs"),
+        ]
+        .concat();
         let mut facts = 0;
         let mut clicks = 0;
         for line in script.lines() {

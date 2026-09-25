@@ -22,11 +22,11 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use crate::detect::BOOTLOADER_BAUD;
 use crate::detect::{
     self, Boards, DetectHost, Detected, DeviceInfo, PLEASE_UNPLUG_THE_BOARD_AND, PROBE_WINDOW,
     ProbePort, Runtime, Win32SerialPort,
 };
-use crate::detect::BOOTLOADER_BAUD;
 use crate::firmware::Firmware;
 use crate::legacy::{Software, get_url};
 use crate::manifest::Fetch;
@@ -1177,7 +1177,11 @@ pub fn upload_flash_with<H: FlashHost>(
 /// A flow that stopped before rebooting a px4-family board into its bootloader, taken on to the
 /// board: [`upload_px4`] over the file it downloaded or was given. Any other outcome is returned
 /// as it was.
-pub fn flash_if_stopped<H: FlashHost>(cx: &mut Cx<'_>, host: &mut H, mut reached: Reached) -> Reached {
+pub fn flash_if_stopped<H: FlashHost>(
+    cx: &mut Cx<'_>,
+    host: &mut H,
+    mut reached: Reached,
+) -> Reached {
     if reached.stop == Some(Stop::RebootToBootloader)
         && let Some(file) = reached.file.clone()
     {

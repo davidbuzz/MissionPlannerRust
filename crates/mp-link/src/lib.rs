@@ -844,9 +844,7 @@ impl Link {
     /// sent it; taking them empties the list.
     /// `// C#: GCSViews/ConfigurationView/ConfigCompassMot.cs:29, 87-119`
     #[must_use]
-    pub fn take_compassmot_status(
-        &self,
-    ) -> Vec<(VehicleId, CompassmotStatus)> {
+    pub fn take_compassmot_status(&self) -> Vec<(VehicleId, CompassmotStatus)> {
         self.shared
             .compassmot
             .lock()

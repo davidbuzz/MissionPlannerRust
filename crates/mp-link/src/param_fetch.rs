@@ -154,12 +154,7 @@ impl Link {
     /// Where a vehicle's fetch is, if one has been started.
     #[must_use]
     pub fn param_fetch(&self, target: VehicleId) -> Option<ParamFetch> {
-        self.shared
-            .param_fetches
-            .lock()
-            .ok()?
-            .get(&target)
-            .cloned()
+        self.shared.param_fetches.lock().ok()?.get(&target).cloned()
     }
 
     /// Stops a fetch: the file read cancelled, or the stream, as the progress dialog's Cancel

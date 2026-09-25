@@ -1065,10 +1065,7 @@ impl FailSafe {
             return;
         };
         if let Some(controls) = self.controls.as_mut() {
-            controls
-                .number_mut(id)
-                .number
-                .answer(&question, yes, now);
+            controls.number_mut(id).number.answer(&question, yes, now);
         }
     }
 
@@ -1733,13 +1730,7 @@ pub fn page(
     // `mavlinkComboBoxfs_batt_enable`, `PNL_low_bat`, `pnlmah`.
     // `// C#: GCSViews/ConfigurationView/ConfigFailSafe.Designer.cs:583-591`
     let battery = group(477.0, 146.0, 208.0, 121.0, "Battery")
-        .children(numbers.battery_row(
-            NumberId::LowTimer,
-            &controls.low_timer,
-            68.0,
-            None,
-            cx,
-        ))
+        .children(numbers.battery_row(NumberId::LowTimer, &controls.low_timer, 68.0, None, cx))
         .children(combo_box(
             ComboId::Battery,
             &controls.battery,
@@ -2504,7 +2495,11 @@ mod tests {
         let mut failsafe = FailSafe::default();
         failsafe.open(&copter(), bundled);
         type_into(&mut failsafe, NumberId::LowVoltage, "11.2");
-        assert_eq!(shown(&failsafe, NumberId::LowVoltage), "10.5", "not read yet");
+        assert_eq!(
+            shown(&failsafe, NumberId::LowVoltage),
+            "10.5",
+            "not read yet"
+        );
         let start = Instant::now();
         failsafe.leave(start);
         assert_eq!(failsafe.editing(), None);
@@ -2652,7 +2647,10 @@ mod tests {
         ] {
             assert_eq!(tip(name).as_deref(), Some(text), "{name}");
         }
-        let with_tips = values.keys().filter(|key| key.ends_with(".ToolTip")).count();
+        let with_tips = values
+            .keys()
+            .filter(|key| key.ends_with(".ToolTip"))
+            .count();
         assert_eq!(with_tips, 9, "every tooltip the page has");
         // `Value = new decimal(new int[] { 131, 0, 0, 65536 })` and `DecimalPlaces = 1` on each of
         // the Battery box's numbers.

@@ -34,7 +34,8 @@ pub(crate) const CONNECT: &str = "CONNECT";
 pub(crate) const DISCONNECT: &str = "DISCONNECT";
 /// `Strings.Stillmoving`, asked before disconnecting from a moving model, under `Strings.Disconnect`.
 /// `// C#: MainV2.cs:1851-1857; ExtLibs/Strings/Strings.resx:274-296`
-pub(crate) const STILL_MOVING: &str = "Your model is still moving are you sure you want to disconnect?";
+pub(crate) const STILL_MOVING: &str =
+    "Your model is still moving are you sure you want to disconnect?";
 pub(crate) const DISCONNECT_TITLE: &str = "Disconnect";
 /// `Strings.InvalidBaudRate`, for a baud box that is not a number.
 /// `// C#: MainV2.cs:4335-4339; ExtLibs/Strings/Strings.resx:177-179`
@@ -171,6 +172,21 @@ pub(crate) fn questions(kind: Kind) -> Vec<Question> {
     }
 }
 
+/// A question's OK: the box's text kept as `InputBox` keeps every titled answer - the transports'
+/// `OnInputBoxShow` is `Program.CommsBaseOnInputBoxShow`, an `InputBox.Show` - and the answer,
+/// trimmed, under the question's settings key. Returns the answer.
+/// `// C#: Program.cs:312, 564-566; ExtLibs/Comms/CommsBase.cs:33-39; ExtLibs/Controls/InputBox.cs:73-84, 178-184`
+pub(crate) fn answered(
+    settings: &mut crate::settings::Persisted,
+    question: &Question,
+    text: &str,
+) -> String {
+    crate::config::optional::remember_answer(settings, question.title, question.text, text);
+    let answer = text.trim().to_owned();
+    settings.set(question.key, answer.clone());
+    answer
+}
+
 /// The link URL the box and the answers make, as this application's transports spell one:
 /// `serial:<port>:<baud>`, `tcp:host:port`, `udp:0.0.0.0:port`, `udpcl:host:port`, or the URL
 /// typed for WS. `None` for AUTO, and for a network kind whose answers are not there yet.
@@ -253,26 +269,19 @@ pub(crate) fn record_facts(state: &ConnectBox, connected: bool) {
     use crate::facts::record;
     record("link.port", &state.port);
     record("link.baud", &state.baud);
-    record(
-        "link.button",
-        if connected { DISCONNECT } else { CONNECT },
-    );
+    record("link.button", if connected { DISCONNECT } else { CONNECT });
     record(
         "link.prompt",
-        state
-            .asking
-            .as_ref()
-            .and_then(Asking::current)
-            .map_or_else(
-                || {
-                    if state.still_moving {
-                        DISCONNECT_TITLE.to_owned()
-                    } else {
-                        "none".to_owned()
-                    }
-                },
-                |question| question.title.to_owned(),
-            ),
+        state.asking.as_ref().and_then(Asking::current).map_or_else(
+            || {
+                if state.still_moving {
+                    DISCONNECT_TITLE.to_owned()
+                } else {
+                    "none".to_owned()
+                }
+            },
+            |question| question.title.to_owned(),
+        ),
     );
     record("link.ports", state.ports.len());
 }
@@ -333,7 +342,12 @@ mod tests {
             Some("serial:/dev/ttyACM0:115200".to_owned())
         );
         assert_eq!(
-            url(Kind::Tcp, "TCP", "", &["127.0.0.1".to_owned(), "5760".to_owned()]),
+            url(
+                Kind::Tcp,
+                "TCP",
+                "",
+                &["127.0.0.1".to_owned(), "5760".to_owned()]
+            ),
             Some("tcp:127.0.0.1:5760".to_owned())
         );
         assert_eq!(url(Kind::Tcp, "TCP", "", &["127.0.0.1".to_owned()]), None);
@@ -342,7 +356,12 @@ mod tests {
             Some("udp:0.0.0.0:14550".to_owned())
         );
         assert_eq!(
-            url(Kind::UdpClient, "UDPCl", "", &["10.0.0.5".to_owned(), "14550".to_owned()]),
+            url(
+                Kind::UdpClient,
+                "UDPCl",
+                "",
+                &["10.0.0.5".to_owned(), "14550".to_owned()]
+            ),
             Some("udpcl:10.0.0.5:14550".to_owned())
         );
         assert_eq!(
@@ -357,6 +376,40 @@ mod tests {
         assert!(asks_before_disconnecting(true, 4.5));
         assert!(!asks_before_disconnecting(true, 4.0));
         assert!(!asks_before_disconnecting(false, 9.0));
+    }
+
+    /// A question's OK keeps the text under `InputBox`'s key for it - the caption and question
+    /// with all but letters and digits taken out - and the trimmed answer under its own key.
+    /// Cancel calls nothing, so keeps nothing. The facts publish every key.
+    /// `// C#: Program.cs:564-566; ExtLibs/Controls/InputBox.cs:73-84, 178-184`
+    #[test]
+    fn an_answer_is_kept_under_the_input_box_key() {
+        let mut keys: Vec<String> = [Kind::Tcp, Kind::Udp, Kind::UdpClient, Kind::WebSocket]
+            .into_iter()
+            .flat_map(questions)
+            .map(|q| crate::config::optional::answers_key(q.title, q.text))
+            .collect();
+        keys.sort();
+        keys.dedup();
+        assert_eq!(
+            keys,
+            [
+                "InputBoxListernPortEnterLocalportensureremoteendisalreadysending",
+                "InputBoxremotePortEnterremoteport",
+                "InputBoxremotehostEnterhostnameipensureremoteendisalreadystarted",
+                "InputBoxremotehostEnterurleghttpuserpasshostportwspath",
+            ]
+        );
+        for key in &keys {
+            assert!(crate::settings::PUBLISHED.contains(&key.as_str()), "{key}");
+        }
+        let mut settings = crate::settings::Persisted::at(None);
+        let tcp = questions(Kind::Tcp);
+        assert_eq!(answered(&mut settings, &tcp[0], " 10.0.0.5 "), "10.0.0.5");
+        assert_eq!(settings.get("TCP_host"), Some("10.0.0.5"));
+        assert_eq!(settings.get(&keys[2]), Some("+10.0.0.5+"));
+        assert_eq!(answered(&mut settings, &tcp[1], "5760"), "5760");
+        assert_eq!(settings.get(&keys[1]), Some("5760"));
     }
 
     #[test]

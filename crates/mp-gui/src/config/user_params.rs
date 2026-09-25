@@ -26,8 +26,11 @@
 //! The layout is the table's: every added control is a new cell, two to a row, the button across
 //! both; each cell sized by WinForms' defaults for what it holds (a `Label` 100 x 23, a `ComboBox`
 //! 121 x 21, a `MyButton` 75 x 23, each with a margin of 3), the columns and rows sized to their
-//! largest. What is not ported: the `InputBox`'s remembered answers (`InputBox.cs:177-181`), which
-//! the other ported pages do not carry either.
+//! largest.
+//!
+//! The `InputBox`'s OK keeps the typed text in `Settings.Instance`, as it keeps every titled
+//! answer, under `InputBoxParamsEnterParamNames` (`InputBox.cs:73-84, 178-184`); Cancel keeps
+//! nothing there, though the handler still saves `UserParams` from the text the box opened with.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -38,7 +41,7 @@ use gpui::{
     AnyElement, Context, FocusHandle, KeyDownEvent, SharedString, Window, div, prelude::*, px, rgb,
 };
 
-use super::optional::{Job, SetQueue, at, button, label, message_box};
+use super::optional::{Job, SetQueue, at, button, label, message_box, remember_answer};
 use crate::MissionPlanner;
 use crate::config::extra_setup::{link_error, take_link_errors};
 use crate::config::failsafe::{Lookup, options};
@@ -399,18 +402,22 @@ impl<H: Copy> UserParams<H> {
         }
     }
 
-    /// The `InputBox` closed: OK gives its text, Cancel the text it opened with. The names split
-    /// out of it become `Options`; the setting is saved and the page built again - unless there
-    /// are none, when `Aggregate` throws first. Returns the setting to save.
-    /// `// C#: GCSViews/ConfigurationView/ConfigUserDefined.cs:56-59; ExtLibs/Controls/InputBox.cs:37-60, 173-185`
+    /// The `InputBox` closed: OK gives its text, and `InputBox` keeps it in `settings` under
+    /// `InputBoxParamsEnterParamNames` before the handler looks at it; Cancel gives the text it
+    /// opened with and keeps nothing. The names split out of it become `Options`; the setting is
+    /// saved and the page built again - unless there are none, when `Aggregate` throws first,
+    /// after the box has kept the answer. Returns the setting to save.
+    /// `// C#: GCSViews/ConfigurationView/ConfigUserDefined.cs:56-59; ExtLibs/Controls/InputBox.cs:37-60, 73-84, 173-185`
     pub fn close_input(
         &mut self,
         ok: bool,
         parameters: &[(String, f64)],
         lookup: Lookup,
+        settings: &mut crate::settings::Persisted,
     ) -> Option<String> {
         let (field, opened_with) = self.input.take()?;
         let text = if ok {
+            remember_answer(settings, INPUT.0, INPUT.1, field.value());
             field.value().to_owned()
         } else {
             opened_with
@@ -717,6 +724,11 @@ mod tests {
     use crate::config::optional::tests::Answering;
     use crate::config_coverage::source::csharp;
 
+    /// The setting `InputBox` keeps the box's answers under: `"InputBox" + title.CleanString() +
+    /// promptText.CleanString()`.
+    /// `// C#: ExtLibs/Controls/InputBox.cs:75, 183; GCSViews/ConfigurationView/ConfigUserDefined.cs:56`
+    const ANSWERS_KEY: &str = "InputBoxParamsEnterParamNames";
+
     fn bundled(name: &str) -> Option<&'static mp_params::ParamMeta> {
         mp_params::param_meta::lookup(name)
     }
@@ -884,7 +896,8 @@ mod tests {
         assert_eq!(page.input_key(&press("enter", None)), None, "a new line");
         type_text(&mut page, "RC7_OPTION,RTL_ALT_M");
         assert_eq!(page.input(), Some("RC9_OPTION\r\nRC7_OPTION,RTL_ALT_M"));
-        let setting = page.close_input(true, &sitl(), bundled);
+        let mut settings = crate::settings::Persisted::at(None);
+        let setting = page.close_input(true, &sitl(), bundled, &mut settings);
         assert_eq!(setting.as_deref(), Some("RC9_OPTION,RC7_OPTION,RTL_ALT_M"));
         assert_eq!(page.options(), ["RC9_OPTION", "RC7_OPTION", "RTL_ALT_M"]);
         let rows: Vec<&str> = page.rows().iter().map(|row| row.name.as_str()).collect();
@@ -900,9 +913,44 @@ mod tests {
         page.modify();
         type_text(&mut page, "RC9_OPTION");
         assert_eq!(page.input_key(&press("escape", None)), Some(false));
-        let setting = page.close_input(false, &sitl(), bundled);
+        let mut settings = crate::settings::Persisted::at(None);
+        let setting = page.close_input(false, &sitl(), bundled, &mut settings);
         assert_eq!(setting.as_deref(), Some("RC7_OPTION,RC8_OPTION"));
         assert_eq!(page.options(), ["RC7_OPTION ", " RC8_OPTION"]);
+    }
+
+    /// Modify's OK keeps the typed text as `InputBox` keeps every titled answer - under the
+    /// caption and question with all but letters and digits taken out, URL-encoded - before the
+    /// handler splits it; Cancel keeps nothing, though the handler saves `UserParams` either way.
+    /// `// C#: GCSViews/ConfigurationView/ConfigUserDefined.cs:56; ExtLibs/Controls/InputBox.cs:73-84, 178-184`
+    #[test]
+    fn modify_ok_keeps_the_answer_under_the_input_box_key() {
+        assert_eq!(
+            crate::config::optional::answers_key(INPUT.0, INPUT.1),
+            ANSWERS_KEY
+        );
+        assert!(crate::settings::PUBLISHED.contains(&ANSWERS_KEY));
+        let mut settings = crate::settings::Persisted::at(None);
+        let mut page = shown(Some("RC7_OPTION,RC8_OPTION"));
+        page.modify();
+        clear(&mut page);
+        type_text(&mut page, "RC9_OPTION");
+        assert!(
+            page.close_input(false, &sitl(), bundled, &mut settings)
+                .is_some()
+        );
+        assert_eq!(settings.get(ANSWERS_KEY), None, "Cancel keeps nothing");
+        page.modify();
+        clear(&mut page);
+        type_text(&mut page, "RC9_OPTION");
+        page.input_key(&press("enter", None));
+        type_text(&mut page, "RTL_ALT_M");
+        assert!(
+            page.close_input(true, &sitl(), bundled, &mut settings)
+                .is_some()
+        );
+        assert_eq!(settings.get(ANSWERS_KEY), Some("RC9_OPTION%0D%0ARTL_ALT_M"));
+        assert_eq!(settings.get(SETTING), None, "the window saves UserParams");
     }
 
     /// A lone name is saved untrimmed, as `Aggregate` leaves one element.
@@ -927,7 +975,13 @@ mod tests {
         let mut page = shown(None);
         page.modify();
         clear(&mut page);
-        assert_eq!(page.close_input(true, &sitl(), bundled), None);
+        let mut settings = crate::settings::Persisted::at(None);
+        assert_eq!(
+            page.close_input(true, &sitl(), bundled, &mut settings),
+            None
+        );
+        // The box kept its empty answer before `Aggregate` threw.
+        assert_eq!(settings.get(ANSWERS_KEY), Some(""));
         assert!(page.options().is_empty());
         assert_eq!(page.rows().len(), 11, "not built again");
         page.modify();

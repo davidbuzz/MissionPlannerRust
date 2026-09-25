@@ -2077,7 +2077,12 @@ pub fn path_box(
         .border_1()
         .border_color(rgb(theme::ACCENT))
         .rounded_md()
-        .child(div().text_xs().text_color(rgb(theme::DIM)).child(path.caption))
+        .child(
+            div()
+                .text_xs()
+                .text_color(rgb(theme::DIM))
+                .child(path.caption),
+        )
         .child(crate::textfield::text_field(
             ids.path_value,
             &path.field,
@@ -2552,7 +2557,10 @@ mod tests {
         assert_eq!(page.question().as_deref(), Some(BL_QUESTIONS[1]));
         page.answer_bootloader(true);
         assert!(page.question().is_none());
-        assert!(page.reached.is_none(), "no stop: the command itself is owed");
+        assert!(
+            page.reached.is_none(),
+            "no stop: the command itself is owed"
+        );
         assert!(page.take_bootloader_command());
         assert!(!page.take_bootloader_command(), "owed once");
         // The manifest page has no such button of its own: its link is dimmed.

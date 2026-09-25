@@ -1006,8 +1006,13 @@ impl MissionPlanner {
             // ConfigGPSOrder.cs:21-51; ConfigHWIDs.cs:16-31; ConfigCompassMot.cs:25-30;
             // ConfigInitialParams.cs:56-68
             Some(
-                class @ ("ConfigHWParachute" | "ConfigHWOSD" | "ConfigGPSOrder" | "ConfigHWIDs"
-                | "ConfigCompassMot" | "ConfigInitialParams" | "ConfigFFT"),
+                class @ ("ConfigHWParachute"
+                | "ConfigHWOSD"
+                | "ConfigGPSOrder"
+                | "ConfigHWIDs"
+                | "ConfigCompassMot"
+                | "ConfigInitialParams"
+                | "ConfigFFT"),
             ) => self.extra_setup_activate(class),
             // ---- end SETUP's small pages ----
             // ---- RTK/GPS Inject ----
@@ -1126,8 +1131,13 @@ impl MissionPlanner {
             // only: hidden, a number or text being typed into read.
             // C#: GCSViews/ConfigurationView/ConfigCompassMot.cs:32-48
             Some(
-                class @ ("ConfigHWParachute" | "ConfigHWOSD" | "ConfigGPSOrder" | "ConfigHWIDs"
-                | "ConfigCompassMot" | "ConfigInitialParams" | "ConfigFFT"),
+                class @ ("ConfigHWParachute"
+                | "ConfigHWOSD"
+                | "ConfigGPSOrder"
+                | "ConfigHWIDs"
+                | "ConfigCompassMot"
+                | "ConfigInitialParams"
+                | "ConfigFFT"),
             ) => self.extra_setup_deactivate(class),
             // ---- end SETUP's small pages ----
             // ---- RTK/GPS Inject ----
@@ -1853,7 +1863,10 @@ mod tests {
     fn a_custom_view_lists_the_parameter_pages() {
         let params = parameters(&["OSD_TYPE"]);
         let vehicle = copter(&params);
-        let dir = std::env::temp_dir().join(format!("headless-planner-setup-view-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "headless-planner-setup-view-{}",
+            std::process::id()
+        ));
         let _ = std::fs::create_dir_all(&dir);
         let mut settings = crate::settings::Persisted::at(Some(dir.join("config.xml")));
         let file = dir.join(crate::display_view::CUSTOM_FILE);

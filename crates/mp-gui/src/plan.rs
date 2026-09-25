@@ -465,7 +465,13 @@ const MAV_CMD_LAST: u16 = 95;
 /// `// C#: GCSViews/FlightPlanner.cs:1783-1815`
 pub fn write_row_checks(item: &MissionItem, index: usize, alt_warn: &str) -> Result<(), String> {
     let numbers = [
-        item.param1, item.param2, item.param3, item.param4, item.x, item.y, item.z,
+        item.param1,
+        item.param2,
+        item.param3,
+        item.param4,
+        item.x,
+        item.y,
+        item.z,
     ];
     if numbers.iter().any(|number| !number.is_finite()) {
         return Err(MISSION_ERRORS.to_owned());
@@ -478,10 +484,7 @@ pub fn write_row_checks(item: &MissionItem, index: usize, alt_warn: &str) -> Res
     let Some(warn) = mp_mission::dotnet::parse_f64(alt_warn) else {
         return Err(format_exception(alt_warn));
     };
-    if item.command < MAV_CMD_LAST
-        && item.z < warn
-        && !matches!(item.command, 20..=22)
-    {
+    if item.command < MAV_CMD_LAST && item.z < warn && !matches!(item.command, 20..=22) {
         return Err(format!(
             "Low alt on WP#{}\nPlease reduce the alt warning, or increase the altitude",
             index + 1
@@ -508,7 +511,11 @@ pub fn zero_alt_warning(
     if item.z != 0.0 || !matches!(item.command, 16 | 19 | 17 | 18 | 31) {
         return None;
     }
-    let warning = if plane { ZERO_ALT_PLANE } else { ZERO_ALT_COPTER };
+    let warning = if plane {
+        ZERO_ALT_PLANE
+    } else {
+        ZERO_ALT_COPTER
+    };
     // `SHOWAGAIN_` + the tag with its spaces made underscores.
     let key = if plane {
         "SHOWAGAIN_Zero_Altitude_Warning_Plane"
@@ -3112,11 +3119,7 @@ pub fn waypoint_strip(
 }
 
 /// The strip's first row: the boxes with their labels, Add Below, then Alt Warn.
-fn strip_boxes(
-    plan: &Plan,
-    state: &StripState<'_>,
-    cx: &mut Context<MissionPlanner>,
-) -> gpui::Div {
+fn strip_boxes(plan: &Plan, state: &StripState<'_>, cx: &mut Context<MissionPlanner>) -> gpui::Div {
     let mut boxes = div().flex().items_end().gap_2();
     for (index, which) in PanelBox::ALL.into_iter().enumerate() {
         // Alt Warn sits right of Add Below in the `.resx` (479 to its 398).
@@ -4059,7 +4062,6 @@ fn coords_panel(coords: &crate::coords::Coords, cx: &mut Context<MissionPlanner>
         .into_any_element()
 }
 
-
 pub fn actions_panel(
     plan_items: &[MissionItem],
     origin: &Origin,
@@ -4143,26 +4145,26 @@ pub fn actions_panel(
         div().text_xs().text_color(rgb(colour)).child(ftp.label())
     } else {
         view.transfer.as_ref().map_or_else(
-        || {
-            div()
-                .text_xs()
-                .text_color(rgb(theme::DIM))
-                .child(origin.label())
-        },
-        |status| {
-            let colour = if status.failed {
-                theme::ALERT
-            } else if status.finished {
-                theme::OK
-            } else {
-                theme::ACCENT
-            };
-            div()
-                .text_xs()
-                .text_color(rgb(colour))
-                .child(status.label.clone())
-        },
-    )
+            || {
+                div()
+                    .text_xs()
+                    .text_color(rgb(theme::DIM))
+                    .child(origin.label())
+            },
+            |status| {
+                let colour = if status.failed {
+                    theme::ALERT
+                } else if status.finished {
+                    theme::OK
+                } else {
+                    theme::ACCENT
+                };
+                div()
+                    .text_xs()
+                    .text_color(rgb(colour))
+                    .child(status.label.clone())
+            },
+        )
     };
 
     panel(
@@ -6963,6 +6965,26 @@ impl Prompt {
         self.field.as_ref().map_or("", TextField::value)
     }
 
+    /// Whether this stands for an `OpenFileDialog` or a `SaveFileDialog`, not an `InputBox`: its
+    /// answer is a path, and nothing keeps it.
+    #[must_use]
+    pub const fn is_file_dialog(&self) -> bool {
+        matches!(
+            self.kind,
+            PromptKind::FenceLoadFile
+                | PromptKind::FenceSaveFile
+                | PromptKind::PolygonSaveFile
+                | PromptKind::PolygonLoadFile
+                | PromptKind::ShpLoadFile
+                | PromptKind::RallySaveFile
+                | PromptKind::RallyLoadFile
+                | PromptKind::AppendLoadFile
+                | PromptKind::KmlLoadFile
+                | PromptKind::ShpMissionLoadFile
+                | PromptKind::KmlOverlayFile
+        )
+    }
+
     /// Whether this asks Yes or No.
     #[must_use]
     pub const fn is_question(&self) -> bool {
@@ -7162,6 +7184,9 @@ pub struct PlanMenus {
     pub prefetch: Option<crate::prefetch_ui::PrefetchJob>,
     prefetch_area_wanted: bool,
     prefetch_path_zoom: Option<i32>,
+    /// An `InputBox`'s caption, question and text as its OK closed it, until the screen keeps
+    /// the answer in `Settings.Instance`.
+    answered: Option<(&'static str, String, String)>,
 }
 
 /// How a page is fetched from the geocoder: its URL in, its text or why not out.
@@ -8069,6 +8094,13 @@ impl PlanMenus {
         }
     }
 
+    /// An `InputBox`'s OK, once: its caption, question and text, for the screen to keep as
+    /// `InputBox` keeps every titled answer. A file dialog's stand-in and a question keep nothing.
+    /// `// C#: ExtLibs/Controls/InputBox.cs:73-84, 178-184`
+    pub fn take_answered(&mut self) -> Option<(&'static str, String, String)> {
+        self.answered.take()
+    }
+
     /// OK, or Yes: the rest of the handler, with what was typed.
     ///
     /// A value the C# would refuse is refused with its message. The loiter and jump handlers put
@@ -8078,6 +8110,11 @@ impl PlanMenus {
     pub fn submit(&mut self, plan: &mut Plan, context: &MenuContext) -> Option<FileRequest> {
         let prompt = self.prompt.take()?;
         let value = prompt.value().to_owned();
+        // `InputBox.Show`'s OK keeps the answer before the handler reads it.
+        // `// C#: ExtLibs/Controls/InputBox.cs:73-84, 178-184`
+        if prompt.field.is_some() && !prompt.is_file_dialog() {
+            self.answered = Some((prompt.title, prompt.text.clone(), value.clone()));
+        }
         let frame = context.frame.mav_frame();
         // Default Alt, read once the answer is in, as the handlers read it after `InputBox`.
         let altitude = match prompt.kind {
@@ -9323,7 +9360,13 @@ fn submit_prompt(
 ) {
     let context = menu_context(this);
     let home_hint = home_hint_showing(this);
-    if let Some(request) = this.plan_menus.submit(&mut this.plan, &context) {
+    let request = this.plan_menus.submit(&mut this.plan, &context);
+    // The answer kept as `InputBox` keeps it: the menus hold no settings, the window does.
+    // `// C#: ExtLibs/Controls/InputBox.cs:178-184`
+    if let Some((title, question, answer)) = this.plan_menus.take_answered() {
+        crate::config::optional::remember_answer(&mut this.persisted, title, &question, &answer);
+    }
+    if let Some(request) = request {
         file_request(this, request, window, cx);
     }
     write_answered(this, window, cx);
@@ -10197,7 +10240,8 @@ pub fn record_facts(plan: &Plan, menus: &PlanMenus) {
     );
     record(
         "plan.mavftp.text",
-        plan.mission_ftp().map_or_else(String::new, MissionFtp::label),
+        plan.mission_ftp()
+            .map_or_else(String::new, MissionFtp::label),
     );
     record("plan.commands.minimised", plan.commands_minimised());
     record("plan.write.home_requests", plan.home_requests);
@@ -15160,6 +15204,68 @@ mod terrain_tests {
         menus.choose(&mut plan, MenuAction::InsertWp, &context);
         menus.submit(&mut plan, &context);
         assert_eq!(plan.items().first().map(|item| item.z), Some(128.0));
+    }
+
+    /// An `InputBox`'s OK hands its caption, question and text over to be kept as `InputBox`
+    /// keeps every titled answer - Insert WP's even when the handler then refuses the number -
+    /// once; Cancel, a file dialog's stand-in and an untitled box keep nothing.
+    /// `// C#: ExtLibs/Controls/InputBox.cs:73-84, 178-184; GCSViews/FlightPlanner.cs:4073, 4779`
+    #[test]
+    fn an_input_box_ok_keeps_its_answer_under_the_input_box_key() {
+        use crate::config::optional::{answers_key, remember_answer};
+        let insert = answers_key("Insert WP", "Insert WP after wp#");
+        let loiter = answers_key("Loiter Time", "Loiter Time");
+        assert_eq!(insert, "InputBoxInsertWPInsertWPafterwp");
+        assert_eq!(loiter, "InputBoxLoiterTimeLoiterTime");
+        for key in [&insert, &loiter] {
+            assert!(crate::settings::PUBLISHED.contains(&key.as_str()), "{key}");
+        }
+        let mut plan = plan_over(plateaus);
+        let mut menus = PlanMenus::default();
+        let context = MenuContext {
+            frame: AltitudeFrame::Relative,
+            vehicle: None,
+            takeoff_pitch: false,
+            copter: false,
+            tracker_alt: 0.0,
+        };
+        let mut settings = crate::settings::Persisted::at(None);
+        let mut keep = |menus: &mut PlanMenus| {
+            let (title, question, answer) = menus.take_answered()?;
+            remember_answer(&mut settings, title, &question, &answer);
+            Some(answer)
+        };
+        menus.open_at((10.0, 10.0), at(-35.38, 149.16), None);
+        menus.choose(&mut plan, MenuAction::LoiterTime, &context);
+        menus.cancel(&mut plan);
+        assert_eq!(keep(&mut menus), None, "Cancel keeps nothing");
+        menus.open_at((10.0, 10.0), at(-35.38, 149.16), None);
+        menus.choose(&mut plan, MenuAction::LoiterTime, &context);
+        menus.submit(&mut plan, &context);
+        assert_eq!(keep(&mut menus).as_deref(), Some("5"));
+        assert_eq!(keep(&mut menus), None, "kept once");
+        menus.open_at((10.0, 10.0), at(-35.38, 149.16), None);
+        menus.choose(&mut plan, MenuAction::InsertWp, &context);
+        if let Some(field) = menus.prompt.as_mut().and_then(|p| p.field.as_mut()) {
+            field.set("9");
+        }
+        menus.submit(&mut plan, &context);
+        assert_eq!(
+            keep(&mut menus).as_deref(),
+            Some("9"),
+            "kept before the refusal"
+        );
+        menus.prompt = None;
+        menus.open_at((10.0, 10.0), at(-35.38, 149.16), None);
+        menus.choose(&mut plan, MenuAction::LoadPolygon, &context);
+        assert!(menus.prompt.as_ref().is_some_and(Prompt::is_file_dialog));
+        menus.submit(&mut plan, &context);
+        assert_eq!(keep(&mut menus), None, "a file dialog keeps nothing");
+        assert_eq!(settings.get(&insert), Some("9"));
+        assert_eq!(settings.get(&loiter), Some("5"));
+        // An untitled box - Create Circle Survey's - has no list to keep.
+        remember_answer(&mut settings, "", "startalt", "10");
+        assert_eq!(settings.get(&answers_key("", "startalt")), None);
     }
 
     // ---- A drag, `callMeDrag(..., -2)` ----

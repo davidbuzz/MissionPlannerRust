@@ -578,7 +578,9 @@ impl Telemetry {
             }
             ParamFetchState::Stream { .. } => {
                 let download = link.param_download(id);
-                let received = download.as_ref().map_or(0, mp_link::param_download::ParamDownload::received);
+                let received = download
+                    .as_ref()
+                    .map_or(0, mp_link::param_download::ParamDownload::received);
                 let expected = download.and_then(|d| d.expected()).unwrap_or(0);
                 format!("stream {received} of {expected}")
             }
@@ -2419,8 +2421,10 @@ mod tests {
     /// Two connections in the same second must not have one silently lose its recording.
     #[test]
     fn a_taken_name_is_not_reused() {
-        let directory =
-            std::env::temp_dir().join(format!("headless-planner-record-test-{}", std::process::id()));
+        let directory = std::env::temp_dir().join(format!(
+            "headless-planner-record-test-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&directory);
         std::fs::create_dir_all(&directory).expect("a writable temp directory");
 
@@ -2481,8 +2485,10 @@ mod tests {
     /// Ninety-nine is the cap, and past it the answer is "no recording" rather than a hang.
     #[test]
     fn the_search_for_a_free_name_is_bounded() {
-        let directory =
-            std::env::temp_dir().join(format!("headless-planner-record-full-{}", std::process::id()));
+        let directory = std::env::temp_dir().join(format!(
+            "headless-planner-record-full-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&directory);
         std::fs::create_dir_all(&directory).expect("a writable temp directory");
 

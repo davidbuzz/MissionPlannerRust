@@ -101,7 +101,10 @@ expect config.planner.check.CHK_speechwaypoint hidden
 click planner-CHK_enablespeech
 expect config.planner.speechenable True
 expect config.planner.check.CHK_speechwaypoint false
-# Waypoint asks for its template, starting from the C#'s; OK writes it.
+# Waypoint asks for its template, starting from the C#'s; OK writes it. The OK also keeps the
+# answer as InputBox keeps every titled answer, URL-encoded under "InputBox" and the caption and
+# question with all but letters and digits taken out (InputBox.cs:73-84, 178-184).
+expect config.InputBoxNotificationWhatdoyouwantittosay none
 click planner-CHK_speechwaypoint
 expect config.planner.speechwaypointenabled True
 expect config.planner.prompt ~ Notification: What do you want it to say
@@ -109,22 +112,26 @@ expect config.planner.prompt.text Heading to Waypoint {wpn}
 key Return
 expect config.planner.prompt none
 expect config.planner.speechwaypoint Heading to Waypoint {wpn}
-# Mode, typed over.
+expect config.InputBoxNotificationWhatdoyouwantittosay Heading+to+Waypoint+%7Bwpn%7D
+# Mode, typed over. The same caption and question: the kept answer is the new one alone.
 click planner-CHK_speechmode
 expect config.planner.prompt.text Mode changed to {mode}
 key ctrl+u
 type Now in {mode}
 key Return
 expect config.planner.speechmode Now in {mode}
-# Battery Warning asks three times; a Cancel on the second ends the handler.
+expect config.InputBoxNotificationWhatdoyouwantittosay Now+in+%7Bmode%7D
+# Battery Warning asks three times; a Cancel on the second ends the handler, and keeps nothing.
 click planner-CHK_speechbattery
 key Return
 expect config.planner.speechbattery WARNING, Battery at {batv} Volt, {batp} percent
+expect config.InputBoxNotificationWhatdoyouwantittosay WARNING%2C+Battery+at+%7Bbatv%7D+Volt%2C+%7Bbatp%7D+percent
 expect config.planner.prompt ~ Battery Level: What Voltage do you want to warn at
 expect config.planner.prompt.text 9.6
 click planner-prompt-cancel
 expect config.planner.prompt none
 expect config.planner.speechbatteryvolt none
+expect config.InputBoxBatteryLevelWhatVoltagedoyouwanttowarnat none
 expect config.planner.check.CHK_speechbattery true
 
 # Map is rotated to follow the plane unticks No Fly, and both are written.
@@ -253,6 +260,8 @@ expect config.planner.speechbatteryenabled True
 expect config.planner.check.CHK_speechbattery true
 expect config.planner.speechbattery WARNING, Battery at {batv} Volt, {batp} percent
 expect config.planner.speechbatteryvolt none
+expect config.InputBoxNotificationWhatdoyouwantittosay WARNING%2C+Battery+at+%7Bbatv%7D+Volt%2C+%7Bbatp%7D+percent
+expect config.InputBoxBatteryLevelWhatVoltagedoyouwanttowarnat none
 
 # The map boxes, the track length, the inactive style and the access mode.
 expect config.planner.CHK_maprotation True

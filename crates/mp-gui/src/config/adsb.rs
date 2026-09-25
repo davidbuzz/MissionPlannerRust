@@ -15,7 +15,9 @@
 //! and Write Params writes every recorded value, `ENABLE` parameters first, each in its own `try`,
 //! then says "Parameters successfully saved." when none failed (`:179-205`). Refresh Params asks
 //! "Update Params" with its "Show me again?" box, fetches the parameters again and rebuilds
-//! (`:212-236`). Find asks for a word and shows only the controls whose name or description has
+//! (`:212-236`); the box, unticked, is kept in `Settings.Instance` as `SHOWAGAIN_Refresh_Params`
+//! "False" - on the click, whichever button then closes it - and the question is not asked again
+//! (`Common.cs:260-270, 445-448`). Find asks for a word and shows only the controls whose name or description has
 //! it, filtering as it is typed, half a second after the last key (`:21-116`).
 //!
 //! Showing the page again updates the controls it has from the vehicle's values. A bitmask whose
@@ -43,7 +45,6 @@
 //!   `LargeChange`, five of its thousand, as a click on a WinForms track bar's channel does;
 //! * a bitmask value's narrowing to the parameter's integer type (`TypeAP`): the vehicle's table
 //!   here carries values, not types; it matters only for a mask with its type's top bit set;
-//! * a "Show me again?" answer beyond the session: this application writes no `config.xml`.
 //!
 //! Where the C# is wrong and this is not: a control added by a later `Activate` - a parameter
 //! the vehicle has begun listing - is placed at the top, over the first, because `y` starts again
@@ -92,8 +93,9 @@ pub const REFRESH_WARNING: &str = "Update Params\nDON'T DO THIS IF YOU ARE IN TH
 /// `// C#: ExtLibs/Strings/Strings.resx:441-443`
 pub const SHOW_ME_AGAIN: &str = "Show me again?";
 
-/// The setting `MessageShowAgain` keeps the answer under: `SHOWAGAIN_` and the title.
-/// `// C#: Common.cs:268`
+/// The setting `MessageShowAgain` keeps the answer under: `SHOWAGAIN_` and the title, "Refresh
+/// Params", with its spaces made underscores.
+/// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:217; Common.cs:264-268`
 pub const SHOW_AGAIN_KEY: &str = "SHOWAGAIN_Refresh_Params";
 
 /// Write Params' box when every write went.
@@ -873,8 +875,6 @@ pub struct Adsb<H = mp_link::RequestId> {
     filter_due: Option<Instant>,
     /// Refresh Params' question, while it is asked, and its "Show me again?".
     confirm: Option<bool>,
-    /// The session's `SHOWAGAIN_Refresh_Params`: `None` until read from `config.xml`.
-    show_again: Option<bool>,
     /// While the parameters are being fetched again: the table they were fetched over.
     refreshing: Option<Arc<[(String, f64)]>>,
     /// The combo whose list is down, by the control's index.
@@ -950,7 +950,6 @@ impl<H: Copy> Adsb<H> {
             answered: None,
             filter_due: None,
             confirm: None,
-            show_again: None,
             refreshing: None,
             dropdown: None,
             editing: None,
@@ -1039,13 +1038,11 @@ impl<H: Copy> Adsb<H> {
             let messages = std::mem::take(&mut self.messages);
             let status = self.status.take();
             let queue = std::mem::take(&mut self.queue);
-            let show_again = self.show_again;
             *self = Self {
                 made_for: Some(key),
                 messages,
                 status,
                 queue,
-                show_again,
                 ..Self::new(self.spec)
             };
         }
@@ -1306,35 +1303,40 @@ impl<H: Copy> Adsb<H> {
     }
 
     /// Refresh Params, before its question: with no link, nothing; with "Show me again?" turned
-    /// off, straight to the fetch.
+    /// off - `shown_again`, the `SHOWAGAIN_Refresh_Params` setting, there and not `GetBoolean`'s
+    /// true - straight to the fetch, as `MessageShowAgain`'s OK.
     /// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:212-218; Common.cs:260-270`
     /// Returns whether to fetch the parameters now: `getParamList`, which the caller starts.
-    pub fn press_refresh(&mut self, connected: bool, view: &TelemetryView) -> bool {
+    pub fn press_refresh(
+        &mut self,
+        connected: bool,
+        view: &TelemetryView,
+        shown_again: Option<&str>,
+    ) -> bool {
         self.leave();
         self.dropdown = None;
         if !connected || !self.refresh_enabled() {
             return false;
         }
-        let show_again = *self.show_again.get_or_insert_with(|| {
-            mp_settings::Config::default_path()
-                .and_then(|path| mp_settings::Config::load(&path).ok())
-                .and_then(|config| config.get(SHOW_AGAIN_KEY).map(str::to_owned))
-                .is_none_or(|value| !value.trim().eq_ignore_ascii_case("false"))
-        });
-        if show_again {
+        // `ContainsKey(key) && GetBoolean(key) == false`: a value `bool.TryParse` refuses is
+        // false too.
+        let suppressed =
+            shown_again.is_some_and(|value| !crate::raw_params::get_boolean(Some(value)));
+        if suppressed {
+            self.refresh(view)
+        } else {
             self.confirm = Some(true);
             false
-        } else {
-            self.refresh(view)
         }
     }
 
-    /// The question's "Show me again?" box clicked.
-    pub fn toggle_show_again(&mut self) {
-        if let Some(checked) = self.confirm.as_mut() {
-            *checked = !*checked;
-            self.show_again = Some(*checked);
-        }
+    /// The question's "Show me again?" box clicked: the value `chk_CheckStateChanged` writes
+    /// under [`SHOW_AGAIN_KEY`] at once, `Checked.ToString()`, for the holder to write.
+    /// `// C#: Common.cs:388-399, 445-448`
+    pub fn toggle_show_again(&mut self) -> Option<&'static str> {
+        let checked = self.confirm.as_mut()?;
+        *checked = !*checked;
+        Some(if *checked { "True" } else { "False" })
     }
 
     /// The question answered: OK fetches, Cancel does nothing. Returns whether to fetch.
@@ -1814,7 +1816,8 @@ pub fn list_body(
             move |this, _window, _cx| {
                 let view = this.telemetry.view();
                 let connected = view.connected && view.vehicle.is_some();
-                if access(this).press_refresh(connected, &view) {
+                let shown_again = this.persisted.get(SHOW_AGAIN_KEY).map(str::to_owned);
+                if access(this).press_refresh(connected, &view, shown_again.as_deref()) {
                     this.telemetry.download_parameters();
                 }
             },
@@ -2053,7 +2056,11 @@ pub fn list_overlay(
                 &check,
                 SHOW_ME_AGAIN,
                 (0.0, 2.0),
-                move |this| access(this).toggle_show_again(),
+                move |this| {
+                    if let Some(value) = access(this).toggle_show_again() {
+                        this.persisted.set(SHOW_AGAIN_KEY, value);
+                    }
+                },
                 cx,
             ))
             .into_any_element(),
@@ -2611,19 +2618,17 @@ mod tests {
         let view = TelemetryView::disconnected("test");
         let mut page = Adsb::default();
         page.activate(&configured(), key(), bundled, &[]);
-        assert!(!page.press_refresh(false, &view));
+        assert!(!page.press_refresh(false, &view, None));
         assert!(page.confirm.is_none(), "no link, no question");
-        page.show_again = Some(true);
-        assert!(!page.press_refresh(true, &view), "asks first");
+        assert!(!page.press_refresh(true, &view, None), "asks first");
         assert_eq!(page.confirm, Some(true));
         assert!(!page.answer_refresh(false, &view));
         assert!(
             page.confirm.is_none() && page.refresh_enabled(),
             "Cancel does nothing"
         );
-        assert!(!page.press_refresh(true, &view));
-        page.toggle_show_again();
-        assert_eq!(page.show_again, Some(false));
+        assert!(!page.press_refresh(true, &view, Some("True")));
+        assert_eq!(page.toggle_show_again(), Some("False"));
         assert!(page.answer_refresh(true, &view), "OK fetches");
         assert!(!page.refresh_enabled(), "fetching");
         // The link went: the fetch fails, and says so on the status line, not in the C#'s box
@@ -2635,6 +2640,60 @@ mod tests {
             page.take_status().as_deref(),
             Some(ERROR_RECEIVING.trim_end())
         );
+    }
+
+    /// "Show me again?" unticked is kept in `Settings.Instance` at the click, "False" - whichever
+    /// button then closes the box - and Refresh Params then fetches without asking, on every
+    /// page that shares the key; ticked again it is "True" and the question is asked. A value
+    /// `bool.TryParse` refuses is false; no value at all asks.
+    /// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:217; ConfigFriendlyParams.cs:217;
+    /// Common.cs:260-270, 388-399, 445-448`
+    #[test]
+    fn show_again_unticked_is_kept_and_the_question_is_not_asked_again() {
+        assert_eq!(SHOW_AGAIN_KEY, "SHOWAGAIN_Refresh_Params");
+        assert!(crate::settings::PUBLISHED.contains(&SHOW_AGAIN_KEY));
+        let view = TelemetryView::disconnected("test");
+        let mut settings = crate::settings::Persisted::at(None);
+        let mut page = Adsb::default();
+        page.activate(&configured(), key(), bundled, &[]);
+        assert!(!page.press_refresh(true, &view, settings.get(SHOW_AGAIN_KEY)));
+        assert!(page.confirming(), "asked while nothing is kept");
+        if let Some(value) = page.toggle_show_again() {
+            settings.set(SHOW_AGAIN_KEY, value);
+        }
+        assert_eq!(
+            settings.get(SHOW_AGAIN_KEY),
+            Some("False"),
+            "kept at the click"
+        );
+        assert!(!page.answer_refresh(false, &view), "Cancel fetches nothing");
+        assert_eq!(settings.get(SHOW_AGAIN_KEY), Some("False"), "and keeps it");
+        for spec in [
+            &ADSB,
+            &crate::config::friendly_params::STANDARD,
+            &crate::config::friendly_params::ADVANCED,
+        ] {
+            let mut next: Adsb = Adsb::new(spec);
+            next.activate(&configured(), key(), bundled, &[]);
+            assert!(
+                next.press_refresh(true, &view, settings.get(SHOW_AGAIN_KEY)),
+                "fetches at once"
+            );
+            assert!(!next.confirming(), "not asked: {}", spec.ids.refresh);
+        }
+        // Ticked again: "True", and asked.
+        let mut page = Adsb::default();
+        page.activate(&configured(), key(), bundled, &[]);
+        assert!(
+            page.press_refresh(true, &view, Some("maybe")),
+            "not a bool: false"
+        );
+        let mut page = Adsb::default();
+        page.activate(&configured(), key(), bundled, &[]);
+        settings.set(SHOW_AGAIN_KEY, "True");
+        assert!(!page.press_refresh(true, &view, settings.get(SHOW_AGAIN_KEY)));
+        assert_eq!(page.toggle_show_again(), Some("False"));
+        assert_eq!(page.toggle_show_again(), Some("True"));
     }
 
     #[test]

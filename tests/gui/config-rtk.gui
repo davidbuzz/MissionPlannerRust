@@ -53,13 +53,16 @@ expect config.rtk.open false
 expect config.rtk.lights base=Red,gps=Red,glonass=Red,beidou=Red,galileo=Red
 expect config.rtk.bars 0
 
-# Connect: CommsNTRIP.Open's question, the saved URL in it.
+# Connect: CommsNTRIP.Open's question, the saved URL in it. Its OK keeps the URL as InputBox
+# keeps every titled answer, URL-encoded (Program.cs:564-566; InputBox.cs:73-84, 178-184).
+expect config.InputBoxremotehostEnterurleghttpuserpasshostportmount none
 click rtk-BUT_connect
 expect config.rtk.prompt remote host
 expect config.rtk.prompt.value ~ ntrip://headless-planner:rtk@127.0.0.1:
 click rtk-prompt-ok
 settle 3
 expect config.rtk.prompt none
+expect config.InputBoxremotehostEnterurleghttpuserpasshostportmount ~ ntrip%3A%2F%2Fheadless-planner%3Artk%40127.0.0.1%3A
 expect config.rtk.message none
 expect config.rtk.open true
 expect config.rtk.running true

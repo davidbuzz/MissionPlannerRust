@@ -95,23 +95,21 @@ impl Docking {
 /// scrolls, as this application draws every drop-down.
 fn dropdown(rows: Vec<gpui::AnyElement>) -> gpui::AnyElement {
     gpui::deferred(
-        gpui::anchored()
-            .snap_to_window()
-            .child(
-                div()
-                    .id("main-dropdown")
-                    .mt(px(22.0))
-                    .flex()
-                    .flex_col()
-                    .max_h(px(30.0 * 20.0))
-                    .overflow_y_scroll()
-                    .bg(rgb(theme::PANEL))
-                    .border_1()
-                    .border_color(rgb(theme::BORDER))
-                    .rounded_sm()
-                    .occlude()
-                    .children(rows),
-            ),
+        gpui::anchored().snap_to_window().child(
+            div()
+                .id("main-dropdown")
+                .mt(px(22.0))
+                .flex()
+                .flex_col()
+                .max_h(px(30.0 * 20.0))
+                .overflow_y_scroll()
+                .bg(rgb(theme::PANEL))
+                .border_1()
+                .border_color(rgb(theme::BORDER))
+                .rounded_sm()
+                .occlude()
+                .children(rows),
+        ),
     )
     .with_priority(2)
     .into_any_element()
@@ -461,7 +459,10 @@ struct MissionPlanner {
     /// `// C#: MainV2.cs:514`
     video: Option<mp_video::Capture>,
     /// The capture's latest frame and the image made of it for the HUD, made once per frame.
-    video_frame: Option<(std::sync::Arc<mp_video::Frame>, std::sync::Arc<gpui::RenderImage>)>,
+    video_frame: Option<(
+        std::sync::Arc<mp_video::Frame>,
+        std::sync::Arc<gpui::RenderImage>,
+    )>,
     /// While a capture runs, a repaint at the rate `Capture`'s timer hands the HUD a picture;
     /// dropping it stops the repaints.
     video_repaint: Option<gpui::Task<()>>,
@@ -1139,7 +1140,11 @@ impl MissionPlanner {
     /// baud box (off for the kinds without one, and both off while connected, as `IsConnected`
     /// sets them), and the button, CONNECT or DISCONNECT by the link.
     /// `// C#: MainV2.Designer.cs:176-190; Controls/ConnectionControl.Designer.cs; Controls/ConnectionControl.cs:24-30`
-    fn connection_controls(&self, view: &TelemetryView, cx: &mut Context<Self>) -> impl IntoElement {
+    fn connection_controls(
+        &self,
+        view: &TelemetryView,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let connected = view.connected && !view.target.starts_with("file:");
         let port = self.connect_box.port.clone();
         let baud_on = connect::baud_enabled(&port) && !connected;
@@ -1159,7 +1164,11 @@ impl MissionPlanner {
                 .text_color(rgb(if connected { theme::DIM } else { theme::TEXT }))
                 .cursor_pointer()
                 .hover(|style| style.bg(rgb(theme::BORDER)))
-                .child(if port.is_empty() { "port".to_owned() } else { port.clone() })
+                .child(if port.is_empty() {
+                    "port".to_owned()
+                } else {
+                    port.clone()
+                })
                 .on_click(cx.listener(|this, _event, _window, cx| {
                     // `CMB_serialport_Click`: the list filled afresh, the old choice kept if
                     // it is still there.
@@ -1351,7 +1360,8 @@ impl MissionPlanner {
             questions,
             answers: Vec::new(),
         });
-        self.connect_field.set(self.persisted.get(first.key).unwrap_or(first.default));
+        self.connect_field
+            .set(self.persisted.get(first.key).unwrap_or(first.default));
         self.connect_focus.focus(window, cx);
     }
 
@@ -1372,8 +1382,8 @@ impl MissionPlanner {
         self.save_config(settings::SaveEvent::Connect);
     }
 
-    /// A question's OK (or Enter): the answer kept under its settings key, the next question
-    /// asked, and the link opened after the last.
+    /// A question's OK (or Enter): the answer kept under its settings key and as `InputBox`
+    /// keeps it, the next question asked, and the link opened after the last.
     fn connect_answered(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(mut asking) = self.connect_box.asking.take() else {
             return;
@@ -1381,8 +1391,7 @@ impl MissionPlanner {
         let Some(question) = asking.current().cloned() else {
             return;
         };
-        let answer = self.connect_field.value().trim().to_owned();
-        self.persisted.set(question.key, answer.clone());
+        let answer = connect::answered(&mut self.persisted, &question, self.connect_field.value());
         asking.answers.push(answer);
         if let Some(next) = asking.current().cloned() {
             self.connect_field
@@ -1401,17 +1410,18 @@ impl MissionPlanner {
     /// The dialogs of the connection box: a network kind's question with its box, and "Your
     /// model is still moving ..." with Yes and No - each modal over the window, as the C#'s
     /// are. (`Strings.InvalidBaudRate`'s box is a status line here, the owner's ruling.)
-    fn connect_dialogs(
-        &self,
-        window: &Window,
-        cx: &mut Context<Self>,
-    ) -> Option<gpui::AnyElement> {
+    fn connect_dialogs(&self, window: &Window, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
         let focus = &self.connect_focus;
         let (title, text, has_box, yes_no) = if let Some(asking) = &self.connect_box.asking {
             let question = asking.current()?;
             (question.title, question.text, true, false)
         } else if self.connect_box.still_moving {
-            (connect::DISCONNECT_TITLE, connect::STILL_MOVING, false, true)
+            (
+                connect::DISCONNECT_TITLE,
+                connect::STILL_MOVING,
+                false,
+                true,
+            )
         } else {
             return None;
         };
@@ -2054,14 +2064,8 @@ impl MissionPlanner {
                 cx,
             );
             out.push(
-                plan::items_panel(
-                    &items,
-                    selected,
-                    strip,
-                    self.plan.commands_minimised(),
-                    cx,
-                )
-                .into_any_element(),
+                plan::items_panel(&items, selected, strip, self.plan.commands_minimised(), cx)
+                    .into_any_element(),
             );
             out.push(plan::editor_panel(&items, selected, cx).into_any_element());
         }
@@ -2357,9 +2361,7 @@ impl MissionPlanner {
                                 // `MainMap_MouseMove` → `SetMouseDisplay`: the planner's
                                 // pointer read-out follows the mouse.
                                 // `// C#: GCSViews/FlightPlanner.cs:2778-2797`
-                                if planning
-                                    && let Some(at) = this.map.borrow().position_at(x, y)
-                                {
+                                if planning && let Some(at) = this.map.borrow().position_at(x, y) {
                                     this.plan.set_mouse_display(at);
                                     cx.notify();
                                 }
@@ -2977,7 +2979,10 @@ impl Render for MissionPlanner {
             facts::record("params.none_default", self.param_none_default);
             // The search box, and what is selected in it: `start,end` in characters, or `none`.
             facts::record("params.search", self.param_search.value());
-            facts::record("params.search.selection", self.param_search.selection_fact());
+            facts::record(
+                "params.search.selection",
+                self.param_search.selection_fact(),
+            );
             // ---- row 82 ----
             self.raw_params_facts(&params::collect(&view));
             // ---- end row 82 ----

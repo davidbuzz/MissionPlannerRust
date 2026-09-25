@@ -329,9 +329,9 @@ impl TimeOrder {
 
     /// The index in the series of the `position`-th sample along x.
     fn index(&self, position: usize) -> usize {
-        self.sorted
-            .as_ref()
-            .map_or(position, |sorted| sorted.get(position).copied().unwrap_or(usize::MAX))
+        self.sorted.as_ref().map_or(position, |sorted| {
+            sorted.get(position).copied().unwrap_or(usize::MAX)
+        })
     }
 
     /// The positions along x of the samples with `low <= x <= high`: two binary searches.
@@ -689,7 +689,11 @@ mod tests {
             for _ in 0..300 {
                 let pointer = (scatter(&mut seed), scatter(&mut seed));
                 let ours = nearest_point(&curves, x, pointer, (800.0, 300.0));
-                assert_eq!(ours, walk(&curves, x, pointer, (800.0, 300.0)), "{x:?} {pointer:?}");
+                assert_eq!(
+                    ours,
+                    walk(&curves, x, pointer, (800.0, 300.0)),
+                    "{x:?} {pointer:?}"
+                );
                 found += usize::from(ours.is_some());
             }
         }
@@ -714,8 +718,17 @@ mod tests {
             },
         }];
         let mut measured = 0;
-        let found = search(&curves, (0.0, 1_000.0), (0.5, 0.5), (800.0, 300.0), &mut measured);
-        assert_eq!(found, walk(&curves, (0.0, 1_000.0), (0.5, 0.5), (800.0, 300.0)));
+        let found = search(
+            &curves,
+            (0.0, 1_000.0),
+            (0.5, 0.5),
+            (800.0, 300.0),
+            &mut measured,
+        );
+        assert_eq!(
+            found,
+            walk(&curves, (0.0, 1_000.0), (0.5, 0.5), (800.0, 300.0))
+        );
         assert!(found.is_some());
         // Eight pixels either side, 1.25 x-units a pixel, samples a thousandth apart: about
         // 20,001 of the million.
@@ -723,7 +736,13 @@ mod tests {
 
         // Zoomed in to a second, the reach is a hundredth of a second: 21 samples.
         let mut measured = 0;
-        search(&curves, (500.0, 501.0), (0.5, 0.5), (800.0, 300.0), &mut measured);
+        search(
+            &curves,
+            (500.0, 501.0),
+            (0.5, 0.5),
+            (800.0, 300.0),
+            &mut measured,
+        );
         assert!((19..=22).contains(&measured), "{measured}");
     }
 

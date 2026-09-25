@@ -9,7 +9,8 @@
 # link; the button reads DISCONNECT while connected and both boxes go dim (MainV2.cs:2459-2482);
 # DISCONNECT closes the link, and a model at rest is not asked about (MainV2.cs:1841-1880,
 # 1389-1447). The settings are saved after each (MenuConnect_Click: comport TCP, TCP_host,
-# TCP_port).
+# TCP_port), and each question's OK keeps its answer as InputBox keeps every titled answer - the
+# transports' OnInputBoxShow is an InputBox.Show (Program.cs:564-566; InputBox.cs:73-84, 178-184).
 #
 # Divergences, written at their sites in crates/mp-gui/src/main.rs and connect.rs: AUTO's port
 # scan (CommsSerialScan) is not ported and is refused on the status line; "Invalid BaudRate" is a
@@ -48,6 +49,8 @@ settle 1
 expect link.port TCP
 
 # `Connect` → `CommsTCPSerial.Open`: the host, then the port, each with its default.
+expect config.InputBoxremotehostEnterhostnameipensureremoteendisalreadystarted none
+expect config.InputBoxremotePortEnterremoteport none
 click main-connect
 settle 1
 expect link.prompt remote host
@@ -55,12 +58,14 @@ key ctrl+u
 type 127.0.0.1
 key Return
 settle 1
+expect config.InputBoxremotehostEnterhostnameipensureremoteendisalreadystarted 127.0.0.1
 expect link.prompt remote Port
 key ctrl+u
 type 5760
 key Return
 settle 8
 expect link.prompt none
+expect config.InputBoxremotePortEnterremoteport 5760
 expect vehicle.connected true
 expect link.button DISCONNECT
 expect status ~ connected to tcp:127.0.0.1:5760

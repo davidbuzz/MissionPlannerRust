@@ -586,8 +586,8 @@ pub const PANELS: &[Panel] = &[
             "a RangeControl, bitmask or ValuesControl per documented ADSB_/AVD_ parameter,
         //     favourites first, recording changes; Write Params writing them ENABLE-first, each
         //     in its own try, then \"Parameters successfully saved.\"; Refresh Params with
-        //     MessageShowAgain; Find filtering as typed, its OK's word kept as InputBox keeps
-        //     it; a bitmask updated on Activate writing as the C#'s does; missing Ctrl+S,
+        //     MessageShowAgain, its unticked box kept as SHOWAGAIN_Refresh_Params; Find
+        //     filtering as typed, its OK's word kept as InputBox keeps it; a bitmask updated on Activate writing as the C#'s does; missing Ctrl+S,
         //     dragging the track bar (a click pages it) and typing into a ValuesControl",
         ),
     ),
@@ -911,10 +911,10 @@ pub const PANELS: &[Panel] = &[
             "a RangeControl, bitmask or ValuesControl per parameter documented @User: Standard
         //     with a display name, fav_params first; changes recorded; Write Params ENABLE-first,
         //     each in its own try, then \"Parameters successfully saved.\"; Refresh Params with
-        //     MessageShowAgain; Find filtering as typed; the flow panel's layout; a failed write or
-        //     fetch on the status line (the owner's ruling); missing Ctrl+S, dragging the track
-        //     bar (a click pages it), typing into a ValuesControl, and the InputBox's remembered
-        //     answers",
+        //     MessageShowAgain, its unticked box kept as SHOWAGAIN_Refresh_Params; Find
+        //     filtering as typed, its OK's word kept as InputBox keeps it; the flow panel's
+        //     layout; a failed write or fetch on the status line (the owner's ruling); missing
+        //     Ctrl+S, dragging the track bar (a click pages it) and typing into a ValuesControl",
         ),
         // ---- end Standard / Advanced Params, MAVFtp, Heli Setup ----
     ),
@@ -966,7 +966,8 @@ pub const PANELS: &[Panel] = &[
         //     vehicle has with a combo of its documented values writing it, Modify's multiline
         //     InputBox saving the list and building the page again - Cancel included, as the
         //     C#'s handler ignores the answer; a name without values is its label alone, as the
-        //     C# never adds its number; missing the InputBox's remembered answers",
+        //     C# never adds its number; the InputBox's OK answer kept as
+        //     InputBoxParamsEnterParamNames",
         ),
         // ---- end GeoFence / rover Basic Tuning / User Params ----
     ),
@@ -1038,8 +1039,9 @@ pub const PANELS: &[Panel] = &[
             at("crates/mp-gui/src/config/planner.rs", "fn planner_page"),
             "every control at its place, each bound to the Settings key its handler writes; the
         //     units (ChangeUnits), the telemetry rates and their stream requests, the speech boxes
-        //     and their InputBox templates, Load Waypoints on connect, the map access mode,
-        //     Joystick Setup, Browse and Open Map Cache act at once; Layout picks the display
+        //     and their InputBox templates (each OK's answer kept as InputBox keeps it), Load
+        //     Waypoints on connect, the map access mode, Joystick Setup, Browse and Open Map
+        //     Cache act at once; Layout picks the display
         //     view the lists read (Basic, Advanced, or the Custom file), saved as displayview;
         //     Video Device and Video Format list the V4L2 capture devices and their MJPEG and
         //     YUYV formats, Start captures (mp-video) and the HUD draws the frame under

@@ -1493,6 +1493,9 @@ pub struct Compass<H = mp_link::RequestId> {
     focused: [bool; 2],
     /// The boxes showing, the front one on top.
     dialogs: VecDeque<Dialog>,
+    /// Large Vehicle MagCal's heading as its OK closed the box, until the holder keeps it in
+    /// `Settings.Instance`.
+    answered: Option<String>,
     /// Handlers' steps waiting their turn.
     jobs: VecDeque<Job>,
     /// The one being run.
@@ -1522,6 +1525,7 @@ impl<H> Default for Compass<H> {
             legacy: Legacy::default(),
             focused: [false; 2],
             dialogs: VecDeque::new(),
+            answered: None,
             jobs: VecDeque::new(),
             running: None,
             last_command: None,
@@ -2122,6 +2126,14 @@ impl<H: Copy> Compass<H> {
         self.dialogs.push_back(Dialog::MagCalYaw(field));
     }
 
+    /// Large Vehicle MagCal's heading as its OK closed the box, once: the answer `InputBox` keeps
+    /// in `Settings.Instance` under [`MAGCAL_YAW_TITLE`] and [`MAGCAL_YAW_PROMPT`], which the
+    /// window writes.
+    /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:479; ExtLibs/Controls/InputBox.cs:29-35, 73-84, 178-184`
+    pub fn take_answered(&mut self) -> Option<String> {
+        self.answered.take()
+    }
+
     /// A key for the box showing. Enter is its first button and Escape its second.
     pub fn dialog_key<A: Autopilot<Handle = H>>(
         &mut self,
@@ -2187,9 +2199,13 @@ impl<H: Copy> Compass<H> {
             // `double.Parse(answer)` runs whichever button was pressed - on the text only OK
             // keeps - and a heading that does not parse throws out of the handler.
             // `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:478-481; ExtLibs/Controls/InputBox.cs:29-35, 185-192`
+            // OK keeps the text, as `InputBox` keeps every titled answer, before the parse.
             Dialog::MagCalYaw(field) => {
-                if yes && let Some(yaw) = parse_float(field.value()) {
-                    self.jobs.push_back(Job::of([Step::FixedYaw(yaw)]));
+                if yes {
+                    self.answered = Some(field.value().to_owned());
+                    if let Some(yaw) = parse_float(field.value()) {
+                        self.jobs.push_back(Job::of([Step::FixedYaw(yaw)]));
+                    }
                 }
             }
             // The first orientation set by index - which writes it - and, for an older firmware,
@@ -3583,6 +3599,21 @@ impl Focus {
     }
 }
 
+/// Large Vehicle MagCal's heading kept as `InputBox` keeps every titled answer, after a key or a
+/// button that may have closed its box with OK: the page object holds no settings, the window
+/// does.
+/// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:479; ExtLibs/Controls/InputBox.cs:178-184`
+fn keep_magcal_answer(this: &mut MissionPlanner) {
+    if let Some(answer) = this.compass.take_answered() {
+        super::optional::remember_answer(
+            &mut this.persisted,
+            MAGCAL_YAW_TITLE,
+            MAGCAL_YAW_PROMPT,
+            &answer,
+        );
+    }
+}
+
 /// The box showing, drawn over the whole window: every one is modal.
 pub fn overlay(
     compass: &Compass,
@@ -3595,6 +3626,7 @@ pub fn overlay(
     let (first, second) = dialog.buttons();
     let on_key = cx.listener(|this, event: &KeyDownEvent, _window, cx| {
         if this.compass.dialog_key(event, &mut this.telemetry) {
+            keep_magcal_answer(this);
             cx.notify();
         }
     });
@@ -3644,6 +3676,7 @@ pub fn overlay(
         Some(px(75.0)),
         cx.listener(|this, _event: &(), _window, cx| {
             this.compass.answer(true, &mut this.telemetry);
+            keep_magcal_answer(this);
             cx.notify();
         }),
     ));
@@ -4413,6 +4446,39 @@ mod tests {
         run(&mut compass, &mut fake, Instant::now());
         assert!(fake.made.is_empty());
         assert!(compass.dialog().is_none());
+    }
+
+    /// Large Vehicle MagCal's OK keeps the heading as `InputBox` keeps every titled answer -
+    /// before the parse, so a word is kept too - and Cancel keeps nothing.
+    /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:479; ExtLibs/Controls/InputBox.cs:29-35, 73-84, 178-184`
+    #[test]
+    fn large_vehicle_magcal_ok_keeps_the_answer_under_the_input_box_key() {
+        let key = crate::config::optional::answers_key(MAGCAL_YAW_TITLE, MAGCAL_YAW_PROMPT);
+        assert_eq!(
+            key,
+            "InputBoxMagCalYawEntercurrentheadingindegreesNOTEgpslockisrequiredHeadingistruenotmagnetic"
+        );
+        assert!(crate::settings::PUBLISHED.contains(&key.as_str()));
+        let mut compass = priority(&sitl());
+        let mut fake = Fake::default();
+        compass.click_large_magcal();
+        compass.answer(false, &mut fake);
+        assert!(compass.take_answered().is_none(), "Cancel keeps nothing");
+        compass.click_large_magcal();
+        if let Some(Dialog::MagCalYaw(field)) = compass.dialogs.front_mut() {
+            field.set("north");
+        }
+        compass.answer(true, &mut fake);
+        assert_eq!(compass.take_answered().as_deref(), Some("north"));
+        assert!(compass.take_answered().is_none(), "kept once");
+        let mut settings = crate::settings::Persisted::at(None);
+        crate::config::optional::remember_answer(
+            &mut settings,
+            MAGCAL_YAW_TITLE,
+            MAGCAL_YAW_PROMPT,
+            "272.5",
+        );
+        assert_eq!(settings.get(&key), Some("272.5"));
     }
 
     /// The instance lives as long as SETUP: another page and back keeps `rebootrequired`;

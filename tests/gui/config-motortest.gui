@@ -131,7 +131,8 @@ settle 2
 expect config.motortest.outcomes accepted,accepted,accepted,accepted
 
 # Set Motor Spin Arm: the throttle is under 20, so the InputBox asks for it plus 2, and OK writes
-# 7 / 100 to MOT_SPIN_ARM; the vehicle echoes it and the page is enabled again (:341-367).
+# 7 / 100 to MOT_SPIN_ARM; the vehicle echoes it and the page is enabled again (:341-367). The
+# OK keeps the answer as InputBox keeps every titled answer (InputBox.cs:73-84, 178-184).
 click motortest-spin-arm
 expect config.motortest.enabled false
 expect config.motortest.prompt Enter arm throttle % (deadzone + 2%)
@@ -139,6 +140,7 @@ expect config.motortest.prompt.value 7
 click motortest-prompt-ok
 settle 2
 expect config.motortest.prompt none
+expect config.InputBoxChangeThrottleEnterarmthrottledeadzone2 7
 expect config.motortest.spin MOT_SPIN_ARM 0.07 accepted
 expect params.value.MOT_SPIN_ARM 0.07
 expect config.motortest.enabled true
@@ -151,6 +153,7 @@ click motortest-prompt-ok
 settle 2
 expect config.motortest.spin MOT_SPIN_ARM 0.1 accepted
 expect params.value.MOT_SPIN_ARM 0.1
+expect config.InputBoxChangeThrottleEnterarmthrottledeadzone2 10
 
 # Set Motor Spin Min asks for (int)MOT_SPIN_MIN + 3: the fraction truncates, so 3. Cancel writes
 # nothing and enables the page.

@@ -892,9 +892,7 @@ pub fn page(frame: &FrameTypeLegacy, cx: &mut Context<MissionPlanner>) -> Option
                 let user_data = mp_settings::user_data_directory()
                     .unwrap_or_else(|| std::env::temp_dir().join("MissionPlannerRust"));
                 let _ = std::fs::create_dir_all(&user_data);
-                this.frame_type_legacy
-                    .defaults_mut()
-                    .click_load(&user_data);
+                this.frame_type_legacy.defaults_mut().click_load(&user_data);
             },
             cx,
         ));
@@ -1382,7 +1380,10 @@ mod tests {
         let mut frame: FrameTypeLegacy<usize> = FrameTypeLegacy::default();
         frame.activate(&[], key());
         assert!(!frame.enabled());
-        assert!(frame.defaults().loaded(), "Load fires on a disabled page too");
+        assert!(
+            frame.defaults().loaded(),
+            "Load fires on a disabled page too"
+        );
     }
 
     /// `ParamCompare` over a `.param` from `Tools/Frame_params`, closed: the control's `OnChange`
@@ -1425,10 +1426,7 @@ mod tests {
             &view.parameters,
         );
         assert_eq!(
-            frame
-                .defaults()
-                .compare()
-                .map(|form| form.rows().len()),
+            frame.defaults().compare().map(|form| form.rows().len()),
             Some(1),
             "FRAME differs"
         );

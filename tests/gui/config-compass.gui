@@ -132,6 +132,18 @@ click compass-dialog-cancel
 settle 1
 expect config.compass.dialog none
 expect config.compass.command DO_CANCEL_MAG_CAL accepted
+# OK on a heading that is no number sends nothing either - double.Parse throws first - but the
+# box has kept the answer, as InputBox keeps every titled answer (InputBox.cs:73-84, 178-184).
+click compass-largemagcal
+settle 1
+click compass-dialog-value
+key ctrl+u
+type north
+click compass-dialog-ok
+settle 1
+expect config.compass.dialog none
+expect config.compass.command DO_CANCEL_MAG_CAL accepted
+expect config.InputBoxMagCalYawEntercurrentheadingindegreesNOTEgpslockisrequiredHeadingistruenotmagnetic north
 
 # Up on the second compass: the first two swap and the first three are written as the priorities.
 click compass-row-2-up

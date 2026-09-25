@@ -243,7 +243,9 @@ impl Drop for PrefetchJob {
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// `FetchPath`'s walks: every zoom from 1 to the lesser of `max_zoom` and the map's maximum,
@@ -296,7 +298,13 @@ pub(crate) fn menu_form(menu: &PrefetchMenu, cx: &mut Context<MissionPlanner>) -
             .flex()
             .items_center()
             .gap_2()
-            .child(div().text_xs().text_color(rgb(theme::DIM)).w(px(70.0)).child(label))
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(theme::DIM))
+                    .w(px(70.0))
+                    .child(label),
+            )
             .child(action(
                 down,
                 "-",
@@ -501,14 +509,20 @@ pub(crate) fn menu_ok(this: &mut MissionPlanner) {
     let Some(menu) = this.plan_menus.prefetch_menu.take() else {
         return;
     };
-    let walks: Vec<(Area, u8)> = menu.zooms().into_iter().map(|zoom| (menu.area, zoom)).collect();
+    let walks: Vec<(Area, u8)> = menu
+        .zooms()
+        .into_iter()
+        .map(|zoom| (menu.area, zoom))
+        .collect();
     start(this, walks);
 }
 
 /// Prefetch WP Path's answer: the walks over the planned path.
 /// `// C#: GCSViews/FlightPlanner.cs:3305-3365`
 pub(crate) fn start_path(this: &mut MissionPlanner, max_zoom: i32) {
-    let mut points: Vec<LatLon> = crate::plan::planner_map_home(&this.plan).into_iter().collect();
+    let mut points: Vec<LatLon> = crate::plan::planner_map_home(&this.plan)
+        .into_iter()
+        .collect();
     for item in this.plan.items() {
         if let Ok(Some(position)) = item.position() {
             points.push(position);
@@ -522,7 +536,10 @@ pub(crate) fn start_path(this: &mut MissionPlanner, max_zoom: i32) {
 }
 
 fn start(this: &mut MissionPlanner, walks: Vec<(Area, u8)>) {
-    let Some(source) = this.tile_source_id().and_then(mp_tiles::source::source_by_id) else {
+    let Some(source) = this
+        .tile_source_id()
+        .and_then(mp_tiles::source::source_by_id)
+    else {
         return;
     };
     let cache = TileCache::new(TileCache::default_root());
@@ -535,7 +552,10 @@ pub(crate) fn record_facts(menus: &crate::plan::PlanMenus) {
     use crate::facts::record;
     record(
         "plan.prefetch.state",
-        menus.prefetch.as_ref().map_or("idle", PrefetchJob::state_name),
+        menus
+            .prefetch
+            .as_ref()
+            .map_or("idle", PrefetchJob::state_name),
     );
     record(
         "plan.prefetch.label",

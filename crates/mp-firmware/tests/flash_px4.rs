@@ -91,7 +91,9 @@ impl ProbePort for BenchPort {
     }
     fn bytes_to_read(&mut self) -> io::Result<usize> {
         Ok(match self {
-            Self::Board(mock) | Self::Flaky(mock, _) => mock.lock().expect("the bench").outgoing.len(),
+            Self::Board(mock) | Self::Flaky(mock, _) => {
+                mock.lock().expect("the bench").outgoing.len()
+            }
             Self::Silent => 0,
         })
     }
@@ -278,13 +280,23 @@ fn a_board_on_the_second_port_is_found_after_the_reboot_and_flashed() {
     // The reboot went out once no bootloader answered the first pass.
     assert_eq!(bench.reboots, 1);
     let seen = statuses(&person);
-    assert_eq!(&seen[..3], &["Look for HeartBeat", "Reboot to Bootloader", "Scanning comports"]);
+    assert_eq!(
+        &seen[..3],
+        &[
+            "Look for HeartBeat",
+            "Reboot to Bootloader",
+            "Scanning comports"
+        ]
+    );
     assert!(seen.contains(&"/dev/ttyACM0 Identify"), "{seen:?}");
     assert!(seen.contains(&"Connecting"), "{seen:?}");
     assert!(seen.contains(&"Upload"), "{seen:?}");
     assert_eq!(seen.last(), Some(&"Upload Done"));
     assert_eq!(person.progress.last().map(|(p, _)| *p), Some(100));
-    assert!(person.asked.is_empty(), "nothing to ask: the board held other firmware");
+    assert!(
+        person.asked.is_empty(),
+        "nothing to ask: the board held other firmware"
+    );
     assert!(person.shown.is_empty());
     let flashed = reached.flashed.expect("the board");
     assert_eq!(flashed.board_id, 140);
@@ -309,9 +321,15 @@ fn a_board_already_holding_the_firmware_asks_and_no_is_no_need_to_upload() {
     assert!(ok);
     assert_eq!(
         person.asked,
-        vec![(SAME_FIRMWARE_QUESTION.to_owned(), "Same Firmware".to_owned())]
+        vec![(
+            SAME_FIRMWARE_QUESTION.to_owned(),
+            "Same Firmware".to_owned()
+        )]
     );
-    assert_eq!(person.shown, vec![(NO_NEED_TO_UPLOAD.to_owned(), String::new())]);
+    assert_eq!(
+        person.shown,
+        vec![(NO_NEED_TO_UPLOAD.to_owned(), String::new())]
+    );
     assert!(reached.flashed.is_none());
     let mock = bench.board_at("/dev/ttyACM0");
     assert!(!mock.lock().expect("bench").erased, "nothing was erased");
@@ -324,7 +342,12 @@ fn a_board_already_holding_the_firmware_asks_and_no_is_no_need_to_upload() {
         ..Person::default()
     };
     let mut reached = Reached::default();
-    assert!(flow::upload_px4(&mut cx(&mut person), &mut bench, &fw, &mut reached));
+    assert!(flow::upload_px4(
+        &mut cx(&mut person),
+        &mut bench,
+        &fw,
+        &mut reached
+    ));
     assert!(reached.flashed.is_some());
     assert_eq!(statuses(&person).last(), Some(&"Upload Done"));
 }
@@ -347,7 +370,10 @@ fn another_boards_bootloader_is_passed_over_and_no_answer_in_thirty_seconds_is_a
     );
     let seen = statuses(&person);
     assert!(seen.contains(&"/dev/ttyACM1 Identify"), "{seen:?}");
-    assert!(!seen.contains(&"Connecting"), "a board of another type is never connected to");
+    assert!(
+        !seen.contains(&"Connecting"),
+        "a board of another type is never connected to"
+    );
     assert_eq!(seen.last(), Some(&NO_RESPONSE_FROM_BOARD));
     assert_eq!(person.progress.last().map(|(p, _)| *p), Some(0));
     assert!(reached.flashed.is_none());
@@ -377,11 +403,16 @@ fn a_port_that_breaks_after_the_identify_is_a_status_line_not_a_box() {
 #[test]
 fn a_bootloader_already_answering_is_not_rebooted() {
     let fw = firmware(140, &[1u8; 1024]);
-    let mut bench = Bench::new(LinkReboot::Rebooted)
-        .board("/dev/ttyACM0", MockBootloader::new(140, 2_080_768));
+    let mut bench =
+        Bench::new(LinkReboot::Rebooted).board("/dev/ttyACM0", MockBootloader::new(140, 2_080_768));
     let mut person = Person::default();
     let mut reached = Reached::default();
-    assert!(flow::upload_px4(&mut cx(&mut person), &mut bench, &fw, &mut reached));
+    assert!(flow::upload_px4(
+        &mut cx(&mut person),
+        &mut bench,
+        &fw,
+        &mut reached
+    ));
     assert_eq!(bench.reboots, 0, "a board in its bootloader is left there");
     assert_eq!(statuses(&person).first(), Some(&"Scanning comports"));
 }

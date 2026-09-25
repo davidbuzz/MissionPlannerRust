@@ -1057,7 +1057,10 @@ mod tests {
         transfer.on_request(6);
         // MAV_MISSION_UNSUPPORTED.
         transfer.on_ack(3);
-        assert_eq!(failure(&transfer), "Upload wps failed 6 MAV_MISSION_UNSUPPORTED");
+        assert_eq!(
+            failure(&transfer),
+            "Upload wps failed 6 MAV_MISSION_UNSUPPORTED"
+        );
         assert!(transfer.is_finished());
     }
 

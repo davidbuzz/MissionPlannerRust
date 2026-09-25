@@ -44,8 +44,8 @@ use super::rangefinder::unhandled;
 use crate::MissionPlanner;
 use crate::config::failsafe::Lookup;
 use crate::config::servo_output::{
-    Check, Combo, Message, NUMERIC_DEFAULTS, Number, NumberHandlers, OUT_OF_RANGE_TITLE,
-    Question, Setup, Write, check_box, combo_box, dropdown, modal, number_box,
+    Check, Combo, Message, NUMERIC_DEFAULTS, Number, NumberHandlers, OUT_OF_RANGE_TITLE, Question,
+    Setup, Write, check_box, combo_box, dropdown, modal, number_box,
 };
 use crate::setup::Key;
 use crate::telemetry::{Telemetry, TelemetryView};
@@ -364,11 +364,7 @@ impl Parachute {
     pub fn click_enable(&mut self, now: Instant) -> Vec<Job> {
         self.leave(now);
         self.dropdown = None;
-        self.enable
-            .click()
-            .map(Job::control)
-            .into_iter()
-            .collect()
+        self.enable.click().map(Job::control).into_iter().collect()
     }
 
     /// Drops a combo's list down, or back up.
@@ -807,9 +803,15 @@ mod tests {
         ]) {
             assert_eq!(get(&format!("{label}.Text")), Some(row.label));
             let (x, y) = row.label_at;
-            assert_eq!(get(&format!("{label}.Location")), Some(format!("{x}, {y}").as_str()));
+            assert_eq!(
+                get(&format!("{label}.Location")),
+                Some(format!("{x}, {y}").as_str())
+            );
             let (x, y) = row.at;
-            assert_eq!(get(&format!("{number}.Location")), Some(format!("{x}, {y}").as_str()));
+            assert_eq!(
+                get(&format!("{number}.Location")),
+                Some(format!("{x}, {y}").as_str())
+            );
         }
         assert_eq!(get("pictureBox3.Location"), Some("11, 32"));
         assert_eq!(get("$this.Size"), Some("650, 212"));

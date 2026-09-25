@@ -17,17 +17,7 @@ fn frame<M: mp_mavlink::Message>(seq: u8, message: &M, len: usize) -> Vec<u8> {
     let mut payload = vec![0u8; len];
     message.encode(&mut payload);
     let mut frame = [0u8; 128];
-    let n = encode_v2(
-        &mut frame,
-        seq,
-        1,
-        1,
-        M::ID,
-        &payload,
-        M::CRC_EXTRA,
-        0,
-    )
-    .unwrap();
+    let n = encode_v2(&mut frame, seq, 1, 1, M::ID, &payload, M::CRC_EXTRA, 0).unwrap();
     frame[..n].to_vec()
 }
 

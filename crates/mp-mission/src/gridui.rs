@@ -2459,7 +2459,11 @@ mod tests {
         dialog.set_text(Text::SensHeight, "8.8");
         let held = dialog.save_camera("Mine").expect("numbers").clone();
         assert_eq!(dialog.camera(), "Mine");
-        assert_eq!(dialog.camera_items().len(), 31, "the list is filled only on reading");
+        assert_eq!(
+            dialog.camera_items().len(),
+            31,
+            "the list is filled only on reading"
+        );
         assert_eq!(
             held.get("Mine"),
             Some(&CameraInfo {
@@ -2490,7 +2494,10 @@ mod tests {
             Err(Refused::Message(NOT_A_NUMBER, ""))
         ));
         let held = dialog.cameras.get("Mine").expect("added before the parse");
-        assert_eq!((held.focallen, held.imageheight, held.imagewidth), (8.8, 3648.0, 0.0));
+        assert_eq!(
+            (held.focallen, held.imageheight, held.imagewidth),
+            (8.8, 3648.0, 0.0)
+        );
     }
 
     /// Save under a listed camera's name, in another case: `CMB_camera.Text = name` selects that
@@ -2501,9 +2508,15 @@ mod tests {
     fn save_under_a_listed_name_reloads_that_camera_first() {
         let mut dialog = open(&Context::default());
         dialog.type_num(Num::FocalLength, "8.8");
-        let held = dialog.save_camera("canon sx230 hs").expect("numbers").clone();
+        let held = dialog
+            .save_camera("canon sx230 hs")
+            .expect("numbers")
+            .clone();
         assert_eq!(dialog.camera(), "Canon SX230 HS");
-        assert_eq!(held.get("Canon SX230 HS"), Cameras::builtin().get("Canon SX230 HS"));
+        assert_eq!(
+            held.get("Canon SX230 HS"),
+            Cameras::builtin().get("Canon SX230 HS")
+        );
         assert_eq!(dialog.text(Text::ImgWidth), "4000");
         assert!(held.get("canon sx230 hs").is_none());
     }

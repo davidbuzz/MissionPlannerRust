@@ -373,7 +373,10 @@ mod tests {
     }
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("headless-planner-ftp-{}-{name}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "headless-planner-ftp-{}-{name}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }

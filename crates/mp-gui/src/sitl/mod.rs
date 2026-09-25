@@ -711,7 +711,10 @@ fn use_imagery(map: &Rc<RefCell<MapViewport>>, source: Option<&str>) {
 impl MissionPlanner {
     /// The page shown: `Activate`, with the planner's home and the flight map's imagery.
     pub(crate) fn sitl_activate(&mut self) {
-        let setting = self.persisted.get(model::VERSION_SETTING).map(str::to_owned);
+        let setting = self
+            .persisted
+            .get(model::VERSION_SETTING)
+            .map(str::to_owned);
         let planned = mp_vehicle::VehicleState::planned_home();
         let imagery = self.map.borrow().source_id();
         self.sitl
@@ -933,8 +936,10 @@ pub fn record_facts(sitl: &Sitl, persisted: &crate::settings::Persisted) {
     record("sitl.wipe", sitl.wipe);
     record(
         "sitl.typing",
-        sitl.typing
-            .map_or_else(|| "none".to_owned(), |field| format!("{field:?}").to_lowercase()),
+        sitl.typing.map_or_else(
+            || "none".to_owned(),
+            |field| format!("{field:?}").to_lowercase(),
+        ),
     );
     record(
         "sitl.home",
@@ -1045,7 +1050,11 @@ mod tests {
         let mut sitl = Sitl::with_launcher(Arc::new(StubLauncher::new(Image::NotAvailable(
             "n".to_owned(),
         ))));
-        assert_eq!(sitl.how_many_ok(&mut settings), None, "no box, nothing kept");
+        assert_eq!(
+            sitl.how_many_ok(&mut settings),
+            None,
+            "no box, nothing kept"
+        );
         let ask = |sitl: &mut Sitl| {
             sitl.how_many = Some(InputBox::new(
                 model::HOW_MANY,
@@ -1057,7 +1066,10 @@ mod tests {
         sitl.how_many_cancel();
         assert_eq!(settings.get(&key_name), None, "Cancel keeps nothing");
         ask(&mut sitl);
-        assert_eq!(sitl.how_many_key(&key("backspace", None)), KeyOutcome::Changed);
+        assert_eq!(
+            sitl.how_many_key(&key("backspace", None)),
+            KeyOutcome::Changed
+        );
         assert_eq!(sitl.how_many_ok(&mut settings).as_deref(), Some("1"));
         assert!(sitl.how_many().is_none(), "OK closes the box");
         assert_eq!(settings.get(&key_name), Some("1"));
@@ -1066,7 +1078,11 @@ mod tests {
             input.field.set("some");
         }
         assert_eq!(sitl.how_many_ok(&mut settings).as_deref(), Some("some"));
-        assert_eq!(settings.get(&key_name), Some("some"), "kept before the parse");
+        assert_eq!(
+            settings.get(&key_name),
+            Some("some"),
+            "kept before the parse"
+        );
     }
 
     /// `PictureBoxMouseOver`: each picture shows its `ImageNormal`, and its `ImageOver` while the
@@ -1088,15 +1104,34 @@ mod tests {
             ]
         );
         sitl.hover(Vehicle::Multirotor, true);
-        assert_eq!(sitl.picture(Vehicle::Multirotor), "SITL.pictureBoxquad.ImageOver");
-        assert_eq!(sitl.picture(Vehicle::Plane), "SITL.pictureBoxplane.ImageNormal");
+        assert_eq!(
+            sitl.picture(Vehicle::Multirotor),
+            "SITL.pictureBoxquad.ImageOver"
+        );
+        assert_eq!(
+            sitl.picture(Vehicle::Plane),
+            "SITL.pictureBoxplane.ImageNormal"
+        );
         sitl.hover(Vehicle::Plane, false);
-        assert_eq!(sitl.picture(Vehicle::Multirotor), "SITL.pictureBoxquad.ImageOver");
+        assert_eq!(
+            sitl.picture(Vehicle::Multirotor),
+            "SITL.pictureBoxquad.ImageOver"
+        );
         sitl.hover(Vehicle::Helicopter, true);
-        assert_eq!(sitl.picture(Vehicle::Multirotor), "SITL.pictureBoxquad.ImageNormal");
-        assert_eq!(sitl.picture(Vehicle::Helicopter), "SITL.pictureBoxheli.ImageOver");
+        assert_eq!(
+            sitl.picture(Vehicle::Multirotor),
+            "SITL.pictureBoxquad.ImageNormal"
+        );
+        assert_eq!(
+            sitl.picture(Vehicle::Helicopter),
+            "SITL.pictureBoxheli.ImageOver"
+        );
         sitl.hover(Vehicle::Helicopter, false);
-        assert!(shown(&sitl).iter().all(|name| name.ends_with(".ImageNormal")));
+        assert!(
+            shown(&sitl)
+                .iter()
+                .all(|name| name.ends_with(".ImageNormal"))
+        );
         for vehicle in Vehicle::ALL {
             for over in [false, true] {
                 assert!(crate::pictures::bytes(vehicle.image(over)).is_some());
@@ -1111,7 +1146,10 @@ mod tests {
             "n".to_owned(),
         ))));
         sitl.activate(Some("2"), (0.0, 0.0), None);
-        assert_eq!(sitl.release(), Some(mp_firmware::manifest::ReleaseType::Official));
+        assert_eq!(
+            sitl.release(),
+            Some(mp_firmware::manifest::ReleaseType::Official)
+        );
         assert_eq!(
             (sitl.home.latitude(), sitl.home.longitude()),
             model::DEFAULT_HOME
@@ -1146,7 +1184,9 @@ mod tests {
         assert_eq!(sitl.note, None);
         sitl.finished(Outcome::NotAvailable("n".to_owned()));
         assert_eq!(sitl.note.as_deref(), Some("n"));
-        sitl.finished(Outcome::Failed("Failed to start the simulator\nx".to_owned()));
+        sitl.finished(Outcome::Failed(
+            "Failed to start the simulator\nx".to_owned(),
+        ));
         assert_eq!(
             sitl.status.as_deref(),
             Some("Failed to start the simulator x")

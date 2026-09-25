@@ -37,8 +37,8 @@
 //!
 //! Not ported, as on the ADSB page and for its reasons: Ctrl+S (`ProcessCmdKey`, `:159-168`),
 //! dragging the track bar's thumb (a click beside it pages it), typing into a `ValuesControl`'s
-//! box, a bitmask's narrowing to the parameter's integer type, and the `InputBox`'s remembered
-//! answers.
+//! box, and a bitmask's narrowing to the parameter's integer type. Find's answer and Refresh
+//! Params' "Show me again?" are kept in `Settings.Instance` as ADSB's are, under the same keys.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]

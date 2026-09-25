@@ -524,7 +524,8 @@ mod tests {
 
     /// A directory of the test's own under the system's temporary one, empty.
     fn scratch(test: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("mp-mission-cameras-{test}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("mp-mission-cameras-{test}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         dir
     }
@@ -583,7 +584,8 @@ mod tests {
         cameras.entry("");
         assert_eq!(
             cameras.to_xml(),
-            format!("<?xml version=\"1.0\" encoding=\"us-ascii\"?>{NEW_LINE}<Cameras />").into_bytes()
+            format!("<?xml version=\"1.0\" encoding=\"us-ascii\"?>{NEW_LINE}<Cameras />")
+                .into_bytes()
         );
     }
 
@@ -617,8 +619,14 @@ mod tests {
         let (read, error) = Cameras::load(Some(&dir));
         assert!(error.is_none(), "{error:?}");
         assert_eq!(read.items().len(), 32);
-        assert_eq!(read.items().get(1).map(String::as_str), Some("Canon SX230 HS"));
-        assert_eq!(read.items().last().map(String::as_str), Some("Mine & yours"));
+        assert_eq!(
+            read.items().get(1).map(String::as_str),
+            Some("Canon SX230 HS")
+        );
+        assert_eq!(
+            read.items().last().map(String::as_str),
+            Some("Mine & yours")
+        );
         assert_eq!(read.get("Canon SX230 HS").map(|c| c.focallen), Some(6.5));
         assert_eq!(
             read.get("Mine & yours"),

@@ -622,6 +622,9 @@ pub struct MavFtp {
     renaming: Option<(usize, TextField)>,
     /// The box asking for a name, a folder or a file.
     prompt: Option<Prompt>,
+    /// New Folder's or "Mount as Drive"'s box as its OK closed it, until the holder keeps the
+    /// answer in `Settings.Instance`.
+    answered: Option<InputBox>,
     /// What the handlers have yet to do.
     steps: VecDeque<Step>,
     /// The request on the link.
@@ -655,6 +658,7 @@ impl Default for MavFtp {
             menu: None,
             renaming: None,
             prompt: None,
+            answered: None,
             steps: VecDeque::new(),
             running: None,
             crc: 0,
@@ -1037,6 +1041,13 @@ impl MavFtp {
         }
     }
 
+    /// New Folder's or "Mount as Drive"'s box as its OK closed it, once: the answer `InputBox`
+    /// keeps in `Settings.Instance`, which [`keep_answer`] writes.
+    /// `// C#: Controls/MavFTPUI.cs:518, 693; ExtLibs/Controls/InputBox.cs:73-84, 178-184`
+    pub fn take_answered(&mut self) -> Option<InputBox> {
+        self.answered.take()
+    }
+
     /// The box asking closed with OK or Cancel.
     pub fn close_prompt(&mut self, ok: bool) {
         let Some(prompt) = self.prompt.take() else {
@@ -1044,14 +1055,20 @@ impl MavFtp {
         };
         let answer = prompt.input().field.value().to_owned();
         match prompt {
-            Prompt::NewFolder(_) => self.new_folder(ok.then_some(answer)),
-            Prompt::Mount(_) => {
-                if ok {
-                    // `MavFtpDokan.Mount` throws: no Dokan here. The C#'s box is the status line's,
-                    // by the owner's ruling. `// C#: Controls/MavFTPUI.cs:698-708`
+            // `InputBox.Show`'s OK keeps the answer; the two dialogs' stand-ins keep nothing.
+            Prompt::NewFolder(input) | Prompt::Mount(input) if ok => {
+                let mount = input.title == MOUNT_TITLE;
+                self.answered = Some(input);
+                if mount {
+                    // `MavFtpDokan.Mount` throws: no Dokan here. The C#'s box is the status
+                    // line's, by the owner's ruling. `// C#: Controls/MavFTPUI.cs:698-708`
                     self.status_line.push_back(mount_failed(DOKAN_MISSING));
+                } else {
+                    self.new_folder(Some(answer));
                 }
             }
+            Prompt::NewFolder(_) => self.new_folder(None),
+            Prompt::Mount(_) => {}
             Prompt::Folder(_, burst) => self.download(ok.then(|| PathBuf::from(answer)), burst),
             Prompt::Open(_) => {
                 if ok {
@@ -2266,11 +2283,27 @@ pub fn overlay(
         asking.input(),
         prompt,
         window,
-        |this, event| this.software_pages2.mavftp.prompt_key(event),
-        |this| this.software_pages2.mavftp.close_prompt(true),
+        |this, event| {
+            let used = this.software_pages2.mavftp.prompt_key(event);
+            keep_answer(this);
+            used
+        },
+        |this| {
+            this.software_pages2.mavftp.close_prompt(true);
+            keep_answer(this);
+        },
         |this| this.software_pages2.mavftp.close_prompt(false),
         cx,
     ))
+}
+
+/// New Folder's or "Mount as Drive"'s answer kept as `InputBox` keeps it, after a key or a button
+/// that may have closed the box with OK: the page object holds no settings, the window does.
+/// `// C#: Controls/MavFTPUI.cs:518, 693; ExtLibs/Controls/InputBox.cs:178-184`
+fn keep_answer(this: &mut MissionPlanner) {
+    if let Some(input) = this.software_pages2.mavftp.take_answered() {
+        input.remember(&mut this.persisted);
+    }
 }
 
 #[cfg(test)]
@@ -2423,7 +2456,10 @@ mod tests {
     }
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("headless-planner-mavftp-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "headless-planner-mavftp-{name}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("a scratch folder");
         dir
@@ -2759,6 +2795,51 @@ mod tests {
         page.close_prompt(true);
         assert!(page.message().is_none(), "no box");
         assert_eq!(page.take_status_line(), Some(mount_failed(DOKAN_MISSING)));
+    }
+
+    /// New Folder's and "Mount as Drive"'s OK keep the answer as `InputBox` keeps every titled
+    /// answer; Cancel keeps nothing, and neither do the two dialogs' stand-ins.
+    /// `// C#: Controls/MavFTPUI.cs:518, 693; ExtLibs/Controls/InputBox.cs:73-84, 178-184`
+    #[test]
+    fn the_input_boxes_ok_keeps_the_answer_under_the_input_box_key() {
+        let folder_key = crate::config::optional::answers_key(FOLDER_TITLE, FOLDER_PROMPT);
+        let mount_key = crate::config::optional::answers_key(MOUNT_TITLE, MOUNT_PROMPT);
+        assert_eq!(folder_key, "InputBoxFolderNameEnterfoldername");
+        assert_eq!(mount_key, "InputBoxMountPointEnterdriveletterorpathegM");
+        for key in [&folder_key, &mount_key] {
+            assert!(crate::settings::PUBLISHED.contains(&key.as_str()), "{key}");
+        }
+        let bench = Bench::new(vehicle());
+        let mut page = loaded(&bench);
+        page.click_node("/APM");
+        settle(&mut page, &bench);
+        page.choose(Menu::NewFolder);
+        page.type_prompt("gone");
+        page.close_prompt(false);
+        assert!(page.take_answered().is_none(), "Cancel keeps nothing");
+        page.choose(Menu::NewFolder);
+        page.type_prompt("fresh");
+        page.close_prompt(true);
+        settle(&mut page, &bench);
+        let mut settings = crate::settings::Persisted::at(None);
+        page.take_answered()
+            .expect("OK's box")
+            .remember(&mut settings);
+        assert!(page.take_answered().is_none(), "kept once");
+        assert_eq!(settings.get(&folder_key), Some("fresh"));
+        page.press_mount();
+        page.close_prompt(true);
+        page.take_answered()
+            .expect("OK's box")
+            .remember(&mut settings);
+        assert_eq!(settings.get(&mount_key), Some("M%3A%5C"));
+        select(&mut page, "param.pck");
+        page.open_menu(None, (0.0, 0.0));
+        page.choose(Menu::Download);
+        page.type_prompt(&scratch("answered").display().to_string());
+        page.close_prompt(true);
+        settle(&mut page, &bench);
+        assert!(page.take_answered().is_none(), "a dialog keeps nothing");
     }
 
     /// Cancel on a transfer: "Cancelling...", the command stopped quietly, the sessions reset.

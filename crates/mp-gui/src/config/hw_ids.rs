@@ -340,10 +340,11 @@ pub fn page(ids: &HwIds, _cx: &mut Context<MissionPlanner>) -> AnyElement {
     if !ids.is_active() {
         return div().into_any_element();
     }
-    let mut header = div()
-        .flex()
-        .flex_shrink_0()
-        .child(cell(ROW_HEADER, HEADER_HEIGHT, String::new(), true));
+    let mut header =
+        div()
+            .flex()
+            .flex_shrink_0()
+            .child(cell(ROW_HEADER, HEADER_HEIGHT, String::new(), true));
     for (name, width) in COLUMNS {
         header = header.child(cell(width, HEADER_HEIGHT, name.to_owned(), true));
     }
@@ -367,10 +368,11 @@ pub fn page(ids: &HwIds, _cx: &mut Context<MissionPlanner>) -> AnyElement {
             row.address.to_string(),
             row.dev_type.clone(),
         ];
-        let mut line = div()
-            .flex()
-            .flex_shrink_0()
-            .child(cell(ROW_HEADER, ROW_HEIGHT, String::new(), true));
+        let mut line =
+            div()
+                .flex()
+                .flex_shrink_0()
+                .child(cell(ROW_HEADER, ROW_HEIGHT, String::new(), true));
         for ((_, width), text) in COLUMNS.iter().zip(texts) {
             line = line.child(cell(*width, ROW_HEIGHT, text, false));
         }
@@ -408,7 +410,10 @@ mod tests {
             return;
         };
         for (name, _) in COLUMNS {
-            assert!(designer.contains(&format!(".HeaderText = \"{name}\";")), "{name}");
+            assert!(
+                designer.contains(&format!(".HeaderText = \"{name}\";")),
+                "{name}"
+            );
         }
         assert!(designer.contains("this.paramNameDataGridViewTextBoxColumn.Width = 150;"));
         assert!(designer.contains("this.Size = new System.Drawing.Size(856, 496);"));
@@ -536,7 +541,10 @@ mod tests {
                 } else {
                     key
                 };
-                assert!(source.contains(&format!("\"{generic}\"")), "{key} is not recorded");
+                assert!(
+                    source.contains(&format!("\"{generic}\"")),
+                    "{key} is not recorded"
+                );
                 facts += 1;
             }
         }

@@ -349,7 +349,11 @@ pub fn calculate(texts: [&str; 4], options: Options, target: Target<'_>) -> Calc
         values.mot_thst_expo = 0.2;
     }
     let plane = target.firmware == Firmware::ArduPlane;
-    let (atc, mot) = if plane { ("Q_A", "Q_M") } else { ("ATC", "MOT") };
+    let (atc, mot) = if plane {
+        ("Q_A", "Q_M")
+    } else {
+        ("ATC", "MOT")
+    };
     let mut params: Vec<(String, f64)> = Vec::new();
     let mut add = |name: String, value: f64| params.push((name, value));
     add("ACRO_YAW_P".to_owned(), values.acro_yaw_p);
@@ -496,9 +500,7 @@ impl<H: Copy> InitialParams<H> {
     /// A box's text.
     #[must_use]
     pub fn text(&self, field: Field) -> &str {
-        self.fields
-            .get(field.index())
-            .map_or("", TextField::value)
+        self.fields.get(field.index()).map_or("", TextField::value)
     }
 
     /// `cb_tmotor.Checked`.
@@ -663,9 +665,8 @@ impl<H: Copy> InitialParams<H> {
         match calculate(texts, options, target) {
             Calculated::Refused(message) => self.messages.push_back(message),
             Calculated::Params(params) => {
-                self.compare = Some(
-                    ParamCompare::new(target.parameters, &params).with_save_text(WRITE_TO_FC),
-                );
+                self.compare =
+                    Some(ParamCompare::new(target.parameters, &params).with_save_text(WRITE_TO_FC));
             }
         }
     }
@@ -721,7 +722,6 @@ impl<H: Copy> InitialParams<H> {
             }
         }
     }
-
 }
 
 /// Facts a UI test asserts on.
@@ -729,13 +729,19 @@ pub fn record_facts(page: &InitialParams) {
     use crate::facts::record;
     record("config.initialparams.active", page.is_active());
     record("config.initialparams.prop", page.text(Field::Prop));
-    record("config.initialparams.cellcount", page.text(Field::CellCount));
+    record(
+        "config.initialparams.cellcount",
+        page.text(Field::CellCount),
+    );
     record("config.initialparams.cellmax", page.text(Field::CellMax));
     record("config.initialparams.cellmin", page.text(Field::CellMin));
     record("config.initialparams.chemistry", page.chemistry().text());
     record("config.initialparams.tmotor", page.tmotor());
     record("config.initialparams.suggested", page.suggested());
-    record("config.initialparams.compare.open", page.compare().is_some());
+    record(
+        "config.initialparams.compare.open",
+        page.compare().is_some(),
+    );
     record(
         "config.initialparams.compare.rows",
         page.compare().map_or(0, |form| form.rows().len()),
@@ -1007,7 +1013,9 @@ mod tests {
         };
         let values = crate::config_coverage::source::resx(&resx);
         assert_eq!(
-            values.get("textBox1.Text").map(|text| text.replace("\r\n", "\n")),
+            values
+                .get("textBox1.Text")
+                .map(|text| text.replace("\r\n", "\n")),
             Some(INSTRUCTIONS.to_owned())
         );
         let Some(cs) = crate::config_coverage::source::csharp(
@@ -1050,11 +1058,19 @@ mod tests {
         page.set_text(Field::CellMax, "4.15");
         page.hide();
         page.activate(key());
-        assert_eq!(page.text(Field::CellMax), "4.15", "no change of selection, no handler");
+        assert_eq!(
+            page.text(Field::CellMax),
+            "4.15",
+            "no change of selection, no handler"
+        );
         page.choose(1);
         page.hide();
         page.activate(key());
-        assert_eq!(page.text(Field::CellMax), "4.2", "back to LiPo: its handler");
+        assert_eq!(
+            page.text(Field::CellMax),
+            "4.2",
+            "back to LiPo: its handler"
+        );
     }
 
     /// `RoundTo` to hundreds, and `calc_values` for the page's own 9-inch, four-cell LiPo.
@@ -1160,7 +1176,10 @@ mod tests {
         assert!((value(&params, "MOT_THST_EXPO") - 0.2).abs() < 1e-12);
         assert!((value(&params, "MOT_PWM_MIN") - 1100.0).abs() < 1e-9);
         assert!((value(&params, "MOT_PWM_MAX") - 1940.0).abs() < 1e-9);
-        assert!(!params.iter().any(|(name, _)| name == "FENCE_ENABLE"), "3.x");
+        assert!(
+            !params.iter().any(|(name, _)| name == "FENCE_ENABLE"),
+            "3.x"
+        );
 
         let copter = params_of(calculate(["9", "4", "4.2", "3.3"], options, copter(&none)));
         assert!((value(&copter, "FENCE_TYPE") - 7.0).abs() < 1e-9);
@@ -1174,7 +1193,10 @@ mod tests {
         let quadplane = params_of(calculate(["9", "4", "4.2", "3.3"], options, plane));
         assert!(quadplane.iter().any(|(name, _)| name == "Q_A_RAT_PIT_FLTD"));
         assert!(quadplane.iter().any(|(name, _)| name == "Q_M_THST_HOVER"));
-        assert!(!quadplane.iter().any(|(name, _)| name == "FENCE_ENABLE"), "a plane");
+        assert!(
+            !quadplane.iter().any(|(name, _)| name == "FENCE_ENABLE"),
+            "a plane"
+        );
     }
 
     /// The refusals, and text that does not parse - `ConvertToDouble`'s unhandled exception.
@@ -1203,9 +1225,11 @@ mod tests {
         assert_eq!(form.save_text(), WRITE_TO_FC);
         let names: Vec<&str> = form.rows().iter().map(|row| row.name.as_str()).collect();
         assert!(names.contains(&"INS_GYRO_FILTER"), "{names:?}");
-        assert!(names.windows(2).all(|pair| {
-            mp_log::netfmt::culture_compare(pair[0], pair[1]).is_lt()
-        }));
+        assert!(
+            names
+                .windows(2)
+                .all(|pair| { mp_log::netfmt::culture_compare(pair[0], pair[1]).is_lt() })
+        );
         let rows = form.rows().len();
         page.click_save();
         assert!(page.writing());
@@ -1221,7 +1245,10 @@ mod tests {
         page.messages.extend(messages);
         assert_eq!(link.taken().len(), rows);
         assert!(page.compare().is_none());
-        assert_eq!(page.message().map(|message| message.title), Some(DONE_TITLE));
+        assert_eq!(
+            page.message().map(|message| message.title),
+            Some(DONE_TITLE)
+        );
     }
 
     /// A timeout keeps the form open under `Strings.ErrorSettingParameter`.
@@ -1280,7 +1307,10 @@ mod tests {
                     } else {
                         key
                     };
-                    assert!(source.contains(&format!("\"{generic}\"")), "{key} is not recorded");
+                    assert!(
+                        source.contains(&format!("\"{generic}\"")),
+                        "{key} is not recorded"
+                    );
                     facts += 1;
                 }
                 (Some("click"), Some(id))

@@ -25,8 +25,8 @@
 #![allow(unreachable_pub)]
 
 use std::cell::RefCell;
-use std::sync::{Arc, OnceLock};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, OnceLock};
 
 use gpui::{
     Bounds, ClipboardItem, FocusHandle, HighlightStyle, KeyDownEvent, Keystroke, MouseButton,
@@ -233,8 +233,10 @@ impl TextField {
     /// The selection as a fact: `start,end` in characters, or `none`.
     #[must_use]
     pub fn selection_fact(&self) -> String {
-        self.selection()
-            .map_or_else(|| "none".to_owned(), |(start, end)| format!("{start},{end}"))
+        self.selection().map_or_else(
+            || "none".to_owned(),
+            |(start, end)| format!("{start},{end}"),
+        )
     }
 
     /// `TextBox.Select(start, length)`, as the two ends: the caret goes to `caret`.
@@ -270,7 +272,8 @@ impl TextField {
     /// Moves the caret to `target`, the anchor with it unless the selection is being extended.
     fn move_to(&self, target: usize, extend: bool) {
         let (anchor, _) = self.ends();
-        self.cursor().put(if extend { anchor } else { target }, target);
+        self.cursor()
+            .put(if extend { anchor } else { target }, target);
     }
 
     /// A click in the drawn box at character `index`, `count` being the click count: the caret
@@ -871,7 +874,9 @@ fn field_box(
         })
         .on_mouse_down(MouseButton::Left, down)
         .on_mouse_move(moved)
-        .on_mouse_up(MouseButton::Left, move |_event, _window, _cx| released.release())
+        .on_mouse_up(MouseButton::Left, move |_event, _window, _cx| {
+            released.release()
+        })
         .on_mouse_up_out(MouseButton::Left, move |_event, _window, _cx| {
             released_out.release();
         })
@@ -1267,7 +1272,10 @@ mod tests {
         assert!(field.cursor().drag(&chars, 4));
         assert_eq!(field.selected_text(), "BATT");
         field.cursor().release();
-        assert!(!field.cursor().drag(&chars, 8), "released, a move selects nothing");
+        assert!(
+            !field.cursor().drag(&chars, 8),
+            "released, a move selects nothing"
+        );
         assert_eq!(field.selected_text(), "BATT");
     }
 
@@ -1279,7 +1287,11 @@ mod tests {
         field.click(12, false, 2);
         assert_eq!(field.selected_text(), ",");
         field.click(17, false, 2);
-        assert_eq!(field.selected_text(), "now", "at the very end, the last word");
+        assert_eq!(
+            field.selected_text(),
+            "now",
+            "at the very end, the last word"
+        );
         let mut empty = drawn("");
         empty.click(0, false, 2);
         assert_eq!(empty.selection(), None);
@@ -1291,10 +1303,16 @@ mod tests {
     fn copy_puts_the_selection_on_the_clipboard_and_leaves_the_text() {
         let mut field = drawn("BATT_CAPACITY");
         let mut clipboard = Fake::default();
-        assert_eq!(field.key_with(&chord("c"), &mut clipboard), KeyOutcome::Ignored);
+        assert_eq!(
+            field.key_with(&chord("c"), &mut clipboard),
+            KeyOutcome::Ignored
+        );
         assert_eq!(clipboard.0, None, "nothing selected, nothing copied");
         field.select(0, 4);
-        assert_eq!(field.key_with(&chord("c"), &mut clipboard), KeyOutcome::Ignored);
+        assert_eq!(
+            field.key_with(&chord("c"), &mut clipboard),
+            KeyOutcome::Ignored
+        );
         assert_eq!(clipboard.0.as_deref(), Some("BATT"));
         assert_eq!(field.value(), "BATT_CAPACITY");
         clipboard.0 = None;
@@ -1302,16 +1320,26 @@ mod tests {
             field.key_with(&control("insert"), &mut clipboard),
             KeyOutcome::Ignored
         );
-        assert_eq!(clipboard.0.as_deref(), Some("BATT"), "Ctrl+Insert copies too");
+        assert_eq!(
+            clipboard.0.as_deref(),
+            Some("BATT"),
+            "Ctrl+Insert copies too"
+        );
     }
 
     #[test]
     fn cut_copies_then_removes() {
         let mut field = drawn("BATT_CAPACITY");
         let mut clipboard = Fake::default();
-        assert_eq!(field.key_with(&chord("x"), &mut clipboard), KeyOutcome::Ignored);
+        assert_eq!(
+            field.key_with(&chord("x"), &mut clipboard),
+            KeyOutcome::Ignored
+        );
         field.select(4, 13);
-        assert_eq!(field.key_with(&chord("x"), &mut clipboard), KeyOutcome::Changed);
+        assert_eq!(
+            field.key_with(&chord("x"), &mut clipboard),
+            KeyOutcome::Changed
+        );
         assert_eq!(clipboard.0.as_deref(), Some("_CAPACITY"));
         assert_eq!(field.value(), "BATT");
         field.select(0, 1);
@@ -1328,7 +1356,10 @@ mod tests {
         let mut field = drawn("BATT_CAPACITY");
         let mut clipboard = Fake(Some("MON".to_owned()));
         field.select(5, 13);
-        assert_eq!(field.key_with(&chord("v"), &mut clipboard), KeyOutcome::Changed);
+        assert_eq!(
+            field.key_with(&chord("v"), &mut clipboard),
+            KeyOutcome::Changed
+        );
         assert_eq!(field.value(), "BATT_MON");
         assert_eq!(field.caret(), 8);
         keys(&mut field, &[press("home", None)]);
@@ -1358,7 +1389,10 @@ mod tests {
         let mut field = drawn("");
         let mut clipboard = Fake::default();
         for character in ["B", "A", "T", "T"] {
-            field.key_with(&press(&character.to_lowercase(), Some(character)), &mut clipboard);
+            field.key_with(
+                &press(&character.to_lowercase(), Some(character)),
+                &mut clipboard,
+            );
         }
         field.key_with(&chord("a"), &mut clipboard);
         field.key_with(&chord("c"), &mut clipboard);

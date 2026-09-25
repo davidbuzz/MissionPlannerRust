@@ -192,10 +192,7 @@ pub fn xml_file(data_directory: &Path, vehicle: &str) -> PathBuf {
 fn fresh(path: &Path, now: std::time::SystemTime) -> bool {
     std::fs::metadata(path)
         .and_then(|meta| meta.modified())
-        .is_ok_and(|written| {
-            now.duration_since(written)
-                .map_or(true, |age| age < FRESH)
-        })
+        .is_ok_and(|written| now.duration_since(written).map_or(true, |age| age < FRESH))
 }
 
 /// `XZStream.IsXZStream`: the six bytes an xz stream starts with.
@@ -214,11 +211,15 @@ pub fn get_meta_data(data_directory: &Path, fetch: Option<&dyn mp_firmware::mani
             if fresh(&file, now) {
                 continue;
             }
-            let _ = mp_firmware::flow::get_file_from_net(fetch, &url(vehicle), &file, &mut |_, _| {});
+            let _ =
+                mp_firmware::flow::get_file_from_net(fetch, &url(vehicle), &file, &mut |_, _| {});
         }
     }
     for vehicle in VEHICLES {
-        let _ = unpack(&xz_file(data_directory, vehicle), &xml_file(data_directory, vehicle));
+        let _ = unpack(
+            &xz_file(data_directory, vehicle),
+            &xml_file(data_directory, vehicle),
+        );
     }
 }
 
@@ -301,7 +302,8 @@ mod tests {
 </loggermessagefile>"#;
 
     fn scratch(test: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("mp-gui-logmeta-{test}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("mp-gui-logmeta-{test}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("scratch");
         dir
@@ -315,14 +317,18 @@ mod tests {
         let mut meta = MetaData::default();
         meta.parse(SAMPLE);
         assert_eq!(
-            meta.field("ACC", DESCRIPTION).map(|f| f.description.as_str()),
+            meta.field("ACC", DESCRIPTION)
+                .map(|f| f.description.as_str()),
             Some("IMU accelerometer data")
         );
         assert_eq!(
             meta.field("ACC", "AccX").map(|f| f.description.as_str()),
             Some("acceleration along X axis")
         );
-        assert_eq!(meta.field("ACC", "AccX").and_then(|f| f.bitmask.as_ref()), None);
+        assert_eq!(
+            meta.field("ACC", "AccX").and_then(|f| f.bitmask.as_ref()),
+            None
+        );
         let checks = meta.field("ARM", "ArmChecks").expect("the field");
         assert_eq!(
             checks.bitmask,
@@ -368,15 +374,14 @@ mod tests {
     fn a_later_vehicle_wins() {
         let dir = scratch("order");
         let one = |text: &str| {
-            format!(
-                "<f><logformat name=\"GPS\"><description>{text}</description></logformat></f>"
-            )
+            format!("<f><logformat name=\"GPS\"><description>{text}</description></logformat></f>")
         };
         std::fs::write(xml_file(&dir, "Copter"), one("copter")).unwrap();
         std::fs::write(xml_file(&dir, "Rover"), one("rover")).unwrap();
         let meta = MetaData::load(&dir);
         assert_eq!(
-            meta.field("GPS", DESCRIPTION).map(|f| f.description.as_str()),
+            meta.field("GPS", DESCRIPTION)
+                .map(|f| f.description.as_str()),
             Some("rover")
         );
         let _ = std::fs::remove_dir_all(&dir);
@@ -393,7 +398,10 @@ mod tests {
         std::fs::write(xz_file(&dir, "Plane"), &packed).unwrap();
         std::fs::write(xz_file(&dir, "Rover"), b"not xz").unwrap();
         get_meta_data(&dir, None);
-        assert_eq!(std::fs::read_to_string(xml_file(&dir, "Plane")).unwrap(), SAMPLE);
+        assert_eq!(
+            std::fs::read_to_string(xml_file(&dir, "Plane")).unwrap(),
+            SAMPLE
+        );
         assert!(!xml_file(&dir, "Rover").exists());
         let meta = MetaData::load(&dir);
         assert_eq!(
