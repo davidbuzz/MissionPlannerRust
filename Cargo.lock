@@ -3434,6 +3434,7 @@ name = "mp-gui"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "flate2",
  "fluent-bundle",
  "gpui",
  "gpui_linux",
@@ -3459,6 +3460,8 @@ dependencies = [
  "mp-transport",
  "mp-units",
  "mp-vehicle",
+ "regex",
+ "serde_json",
  "ttf-parser",
  "unic-langid",
 ]

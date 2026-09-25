@@ -120,7 +120,7 @@ pub fn cultures() -> Vec<&'static str> {
 /// The system's UI culture as .NET finds it on Linux: the first of `LC_ALL`, `LC_MESSAGES` and
 /// `LANG` that is set, made a culture name - or the invariant culture, `""`. Not consulted while
 /// the owner's ruling stands (see [`configured`]); kept, and tested, for when it does not.
-#[cfg_attr(not(test), allow(dead_code))]
+#[allow(dead_code)] // kept for the day the ruling changes
 fn system_culture() -> String {
     ["LC_ALL", "LC_MESSAGES", "LANG"]
         .iter()

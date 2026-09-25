@@ -37,6 +37,9 @@ mod probe;
 mod quick;
 mod settings;
 mod setup;
+// ---- SITL ----
+mod sitl;
+// ---- end SITL ----
 mod smoke;
 mod srtm;
 mod storm;
@@ -147,6 +150,11 @@ enum Screen {
     /// Configuration and tuning: `MainV2`'s CONFIG button, beside SETUP, `SoftwareConfig`.
     /// `// C#: MainV2.cs:3180; MainV2.Designer.cs:150, 158`
     Config,
+    // ---- SITL ----
+    /// Simulation: `MainV2`'s SIMULATION button, beside CONFIG, `GCSViews/SITL.cs`.
+    /// `// C#: MainV2.cs:583, 872; MainV2.Designer.cs (MenuSimulation)`
+    Sitl,
+    // ---- end SITL ----
     /// The vehicle's parameters.
     Params,
     /// Reviewing a dataflash log.
@@ -160,11 +168,14 @@ enum Screen {
 
 impl Screen {
     /// The tabs, in order.
-    const ALL: [Self; 6] = [
+    const ALL: [Self; 7] = [
         Self::Fly,
         Self::Plan,
         Self::Setup,
         Self::Config,
+        // ---- SITL ----
+        Self::Sitl,
+        // ---- end SITL ----
         Self::Params,
         Self::Logs,
     ];
@@ -185,6 +196,9 @@ impl Screen {
             "plan" => Self::Plan,
             "setup" => Self::Setup,
             "config" => Self::Config,
+            // ---- SITL ----
+            "simulation" => Self::Sitl,
+            // ---- end SITL ----
             "params" => Self::Params,
             "logs" => Self::Logs,
             // Anything else, including nothing and a typo, opens on the flight screen. An operator
@@ -199,6 +213,9 @@ impl Screen {
             Self::Plan => "plan",
             Self::Setup => "setup",
             Self::Config => "config",
+            // ---- SITL ----
+            Self::Sitl => "simulation",
+            // ---- end SITL ----
             Self::Params => "params",
             Self::Logs => "logs",
         }
@@ -210,6 +227,9 @@ impl Screen {
             Self::Plan => "tab-plan",
             Self::Setup => "tab-setup",
             Self::Config => "tab-config",
+            // ---- SITL ----
+            Self::Sitl => "tab-simulation",
+            // ---- end SITL ----
             Self::Params => "tab-params",
             Self::Logs => "tab-logs",
         }
@@ -457,6 +477,11 @@ struct MissionPlanner {
     /// The Geo Reference Images form (`GeoRef/georefimage.cs`) the DataFlash Logs page opens.
     georef: georef_ui::GeorefUi,
     // ---- end Geo Reference ----
+    // ---- SITL ----
+    /// The SIMULATION screen's page object (`GCSViews/SITL.cs`), and its keyboard focus.
+    sitl: sitl::Sitl,
+    sitl_focus: sitl::Focus,
+    // ---- end SITL ----
 }
 
 impl MissionPlanner {
@@ -734,11 +759,20 @@ impl MissionPlanner {
             // ---- Geo Reference ----
             georef: georef_ui::GeorefUi::new(cx),
             // ---- end Geo Reference ----
+            // ---- SITL ----
+            sitl: sitl::Sitl::new(),
+            sitl_focus: sitl::Focus::new(cx),
+            // ---- end SITL ----
         };
         // Opening on the planning screen activates it, as switching to it does.
         if this.screen == Screen::Plan {
             plan::activate(&mut this);
         }
+        // ---- SITL ----
+        if this.screen == Screen::Sitl {
+            this.sitl_activate();
+        }
+        // ---- end SITL ----
         // `SaveConfig` at the end of `MainV2`'s constructor, "to test we have write access" - and
         // Connect's, for the link opened above.
         // `// C#: MainV2.cs:1106-1107, 1841-1847`
@@ -1697,10 +1731,20 @@ impl MissionPlanner {
                             this.persisted
                                 .planner_deactivated(&this.plan, this.altitude_frame);
                         }
+                        // ---- SITL ----
+                        if this.screen == Screen::Sitl {
+                            this.sitl.deactivate();
+                        }
+                        // ---- end SITL ----
                         this.screen = screen;
                         if screen == Screen::Plan {
                             plan::activate(this);
                         }
+                        // ---- SITL ----
+                        if screen == Screen::Sitl {
+                            this.sitl_activate();
+                        }
+                        // ---- end SITL ----
                         // Remembered here rather than at exit: gpui gives no reliable hook for a
                         // window closing, and a ground station is as likely to be killed as
                         // closed.
@@ -1711,7 +1755,11 @@ impl MissionPlanner {
                         match screen {
                             Screen::Fly => this.save_config(settings::SaveEvent::FlightData),
                             Screen::Plan => this.save_config(settings::SaveEvent::FlightPlanner),
-                            Screen::Setup | Screen::Config | Screen::Params | Screen::Logs => {}
+                            Screen::Setup
+                            | Screen::Config
+                            | Screen::Sitl
+                            | Screen::Params
+                            | Screen::Logs => {}
                         }
                         cx.notify();
                     })),
@@ -2584,6 +2632,10 @@ impl Render for MissionPlanner {
         // dialog's hold on the keyboard.
         self.georef.tick(window, cx);
         // ---- end Geo Reference ----
+        // ---- SITL ----
+        // The SITL page: a box the focus left, a start's news and its connection, the probe.
+        self.sitl_tick(window);
+        // ---- end SITL ----
         let banner = self.telemetry.firmware_banner().map(str::to_owned);
         let mav_type = view.state.as_ref().map_or(0, |state| state.vehicle_type);
         self.metadata.advance(banner.as_deref(), mav_type);
@@ -2955,6 +3007,9 @@ impl Render for MissionPlanner {
             // ---- Geo Reference ----
             georef_ui::record_facts(&self.georef);
             // ---- end Geo Reference ----
+            // ---- SITL ----
+            sitl::record_facts(&self.sitl, &self.persisted);
+            // ---- end SITL ----
             facts::publish();
             // The harness's work, which a normal run does not do, is not the frame's.
             storm::exclude(harness.elapsed());
@@ -3307,6 +3362,15 @@ impl Render for MissionPlanner {
                 .children(config::ateryx::overlay(&self.ateryx, window, cx))
                 // ---- end Firmware Legacy / Ateryx ----
                 .into_any_element(),
+            // ---- SITL ----
+            Screen::Sitl => div()
+                .flex()
+                .flex_1()
+                .min_h(px(0.0))
+                .child(sitl::view::screen(self, window, cx))
+                .children(sitl::view::overlay(self, window, cx))
+                .into_any_element(),
+            // ---- end SITL ----
         };
 
         probe::measured("root", div())

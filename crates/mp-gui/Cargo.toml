@@ -48,6 +48,11 @@ mp-georef.workspace = true
 # Install Firmware: the firmware catalogue and the board a USB device names, from the port list.
 # Its HTTP fetch also downloads Auto Analysis's LogAnalyzer, as the CLI's `mpr log` does with ureq.
 mp-firmware.workspace = true
+# The SITL page's GetDefaultConfig: `default_params_regex` over sim_vehicle.py, and vehicleinfo.py
+# read as the JSON tree Newtonsoft makes of it - in the file's order, which decides the vehicle
+# a frame is found under. Both already compiled for mp-firmware.
+regex.workspace = true
+serde_json = { workspace = true, features = ["preserve_order"] }
 
 # Local time, for naming a flight recording the way the pilot's own clock reads. std has no
 # timezone support at all, and the alternatives are worse: libc's localtime_r needs unsafe, which
@@ -82,3 +87,5 @@ gpui_macos = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f
 # with. (Its transport double, mp-transport, is a dependency above.)
 [dev-dependencies]
 mp-mavlink.workspace = true
+# The SITL page's probe tests serve a manifest gzipped as ArduPilot's server sends it.
+flate2.workspace = true

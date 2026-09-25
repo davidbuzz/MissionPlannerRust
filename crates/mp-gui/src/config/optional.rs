@@ -598,6 +598,9 @@ pub fn input_box(
     let focused = handle.is_focused(window);
     let (ok_id, cancel_id, field_id) = match id {
         "adsb-find-box" => ("adsb-find-ok", "adsb-find-cancel", "adsb-find-value"),
+        // ---- SITL ----
+        "sitl-howmany" => ("sitl-howmany-ok", "sitl-howmany-cancel", "sitl-howmany-value"),
+        // ---- end SITL ----
         _ => (
             "battery2-prompt-ok",
             "battery2-prompt-cancel",

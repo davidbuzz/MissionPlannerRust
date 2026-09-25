@@ -1,0 +1,139 @@
+# The SIMULATION screen, ported from GCSViews/SITL.cs, SITL.Designer.cs and SITL.resx (PLAN.md
+# §13.6 row 78, under the owner's ruling D14).
+#
+# The claim: the page shows the Designer's four groups with the .resx's texts - the map "Home
+# Location - Drag Me", "Options" with Heading and the version, "Advanced users only" with Sim
+# Speed, Model, the extra command line, Wipe and the four swarm buttons, and "Please select a
+# firmware to run" with the Plane, Rover, Multirotor and Helicopter pictures; the constructor
+# takes the version from sitl_download_version (SITL.cs:125) and Activate puts the home marker
+# where the planner's home is (:128-135). Each control holds what the start is built from: the
+# version list, the model list (34 rows, the first blank, scrolled on the wheel), the number
+# boxes within their ranges, the extra line, Wipe. The Multilink buttons are dimmed - one link per
+# vehicle is not ported - and Single link asks "how many?" first. Choosing a version is not
+# remembering it: the setting is written when a picture is pressed (:272). Leaving the page and
+# coming back keeps every choice (the page object is made once, as MainV2 makes it).
+#
+# This script NEVER presses a vehicle picture and never answers "how many?" with OK: either
+# downloads a simulator and starts it. What a start does - the URLs, the command line, the spawn
+# and the link to tcp:127.0.0.1:5760 - is proved against a stub web and a stub launcher by the
+# unit tests in crates/mp-gui/src/sitl/.
+#
+# On Linux x64 the launcher is the C#'s manifest source (SITL.cs:302-338), so no note shows until
+# a start finds no record; on macOS the page shows the WebAssembly note from the start.
+#
+# No link is needed. The user data directory and config.xml are the run's own. Run as
+#
+#   tools/gui-test.sh tests/gui/sitl.gui
+
+screen simulation
+window 1600x1200
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><sitl_download_version>2</sitl_download_version><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/config.xml"
+settle 4
+
+expect screen simulation
+expect sitl.active true
+expect sitl.group.home Home Location - Drag Me
+expect sitl.group.options Options
+expect sitl.group.advanced Advanced users only
+expect sitl.group.firmware Please select a firmware to run
+expect sitl.pictures Plane,Rover,Multirotor,Helicopter
+
+# The constructor's version, and Activate's home: the planner's, on the map.
+expect sitl.version Stable
+expect sitl.version.setting 2
+expect sitl.home -35.3632621,149.1652374
+expect sitl.map.home -35.3632621,149.1652374
+
+# The Designer's values.
+expect sitl.models 34
+expect sitl.model none
+expect sitl.heading 0
+expect sitl.speedup 1
+expect sitl.cmdline none
+expect sitl.wipe false
+expect sitl.running false
+expect sitl.outcome none
+expect sitl.arguments none
+expect sitl.launcher manifest SITL_x86_64_linux_gnu
+expect sitl.note none
+expect sitl.multilink ~ not ported
+
+# cmb_version: its list escapes the group, a row chosen closes it; nothing is saved yet.
+click sitl-version
+expect sitl.version.open true
+click sitl-version-1
+expect sitl.version Beta
+expect sitl.version.open false
+expect sitl.version.setting 2
+
+# cmb_model: thirty rows show of 34, the last reached on the wheel.
+click sitl-model-arrow
+expect sitl.model.open true
+reveal sitl-model-list sitl-model-33
+click sitl-model-33
+expect sitl.model plane-3d
+expect sitl.model.open false
+click sitl-model-arrow
+scroll sitl-model-list up 5
+click sitl-model-13
+expect sitl.model heli
+
+# NUM_heading and num_simspeed: the arrows, and a number typed and taken on Enter.
+click sitl-heading-up
+click sitl-heading-up
+expect sitl.heading 2
+click sitl-heading-down
+expect sitl.heading 1
+click sitl-speed
+expect sitl.typing speed
+type 0
+key Return
+expect sitl.speedup 10
+click sitl-speed-down
+expect sitl.speedup 9
+expect sitl.typing none
+# The minimum holds.
+click sitl-heading-down
+click sitl-heading-down
+expect sitl.heading 0
+
+# txt_cmdline and chk_wipe.
+click sitl-cmdline
+expect sitl.typing cmdline
+type foo 1
+expect sitl.cmdline foo 1
+click sitl-wipe
+expect sitl.typing none
+expect sitl.wipe true
+expect sitl.cmdline foo 1
+
+# The Multilink buttons are dimmed: a press starts nothing and asks nothing.
+click sitl-swarm-link
+click sitl-swarm-plane
+click sitl-swarm-rover
+expect sitl.howmany.open false
+expect sitl.running false
+
+# Single link asks "how many?"; Cancel starts nothing.
+click sitl-swarm-seq
+expect sitl.howmany.open true
+click sitl-howmany-cancel
+expect sitl.howmany.open false
+expect sitl.running false
+expect sitl.outcome none
+
+# Another screen and back: Activate again, every choice kept, still nothing saved.
+click tab-fly
+expect screen fly
+expect sitl.active false
+click tab-simulation
+expect screen simulation
+expect sitl.active true
+expect sitl.version Beta
+expect sitl.model heli
+expect sitl.speedup 9
+expect sitl.wipe true
+expect sitl.cmdline foo 1
+expect sitl.version.setting 2
