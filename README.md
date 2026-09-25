@@ -16,7 +16,7 @@ launcher.
 
 Measured on this tree (2026-09-25): **24 crates, 301,957 hand-written Rust LOC** (plus 91,634
 generated; `.rs` files under `crates/`, tests included), **3,201 tests** on `cargo test --workspace`
-(3,159 pass, 42 ignored: they need SITL, a window, or the network), **161 GUI scripts** under
+(3,159 pass, 42 ignored: they need SITL, a window, or the network), **163 GUI scripts** under
 `tests/gui/`, across 242 commits.
 Linux only, so far: the repository has no remote, and the three-OS CI matrix has never run.
 
@@ -38,7 +38,7 @@ Linux only, so far: the repository has no remote, and the three-OS CI matrix has
 | Health | EKF variances and vibration with ArduPilot's own thresholds, clipping counts |
 | Calibration | accelerometer, compass, radio and motor test as Mission Planner's own pages, `ConfigHWCompass2`, `ConfigRadioInput` and `ConfigMotorTest` ported whole, in its SETUP list, with Compass/Motor Calib; `MagCalib.cs`'s offboard sphere and ellipsoid fit over a log (`headless-planner magcal`), held to class D rather than 1e-6 because alglib's path cannot be bit-matched |
 | Joystick | axes to `RC_CHANNELS_OVERRIDE` from a thread that blocks on the device and sends on change — 0.152 ms p99 stick-to-link on a fake device — with a release-on-disconnect failsafe (Linux) |
-| Firmware | `.apj` parsing, the px4 bootloader protocol, `BoardDetect.cs`'s board detection and `APFirmware.cs`'s catalogue with the Install Firmware page, proven against a mock, a pty and a manifest excerpt; `UploadPX4`'s reboot into the bootloader, port scan and upload wired to real ports and proven against the mock on a bench of pretend ports, and on 2026-09-25 against the bench CubeOrange: ArduCopter 4.7.1 stable flashed from the Install Firmware page, "Upload Done" (PLAN §13.6 row 79). Port failures during a flash go on the status line, never in a box (the owner's ruling) |
+| Firmware | `.apj` parsing, the px4 bootloader protocol, `BoardDetect.cs`'s board detection and `APFirmware.cs`'s catalogue with the Install Firmware page, proven against a mock, a pty and a manifest excerpt; `UploadPX4`'s reboot into the bootloader, port scan and upload wired to real ports and proven against the mock on a bench of pretend ports, and on 2026-09-25 against the bench CubeOrange: ArduCopter 4.7.1 stable flashed from the Install Firmware page, "Upload Done" (PLAN §13.6 row 79). Port failures during a flash go on the status line, never in a box (the owner's ruling). The reboot into the bootloader sends the C#'s four frames (3, 3, 1, 1) after two heartbeat waits, and a plain reboot on a serial port looks at the port half a second on and reopens it, "Connect Failed" on the status line when it will not (row 87) |
 | Scripting | the `Script.cs` host API, and a measurement of what the 19 shipped scripts need |
 | KML export | a flown path coloured by flight mode, and a mission, for Google Earth |
 | Tuning graph | eleven telemetry fields plotted live, min/max reduced so a spike cannot hide |
@@ -52,17 +52,17 @@ Linux only, so far: the repository has no remote, and the three-OS CI matrix has
 | Configuration coverage | every one of the 61 `Config*.cs` panels listed in Mission Planner's SETUP and CONFIG order with what stands in for it here — 30 done, 14 partial, 3 missing, 2 plumbing, 12 dropped at the owner's ruling — in `docs/coverage/configuration.md`, held to the C# by tests; Flight Modes and FailSafe are ported from their `Config*.cs` and proved against SITL; the pages of PLAN.md §13.6 rows 70 and 71 and FFT Setup have scripts not yet run |
 | Planner coverage and menu | every one of `FlightPlanner`'s 121 wired actions listed the same way — 103 done, 6 missing — in `docs/coverage/flightplanner.md`; the map's right-click menu is Mission Planner's, in its order, with 63 entries working and 8 more on the polygon icon's menu, each held to its ledger row by `planner_coverage.rs`'s tests; home is its Home Location boxes written first and drawn as its green pin, the panel's radius and altitude boxes set the C#'s parameters after Write; 55 `plan-*.gui` scripts drive them, row 69's five (Write Fast, MAVFTP, Grid and coordinates, docking, prefetch) not yet run |
 
-**GUI scripts: written is not run.** `tests/gui/` holds 161 scripts. The owner runs them
+**GUI scripts: written is not run.** `tests/gui/` holds 163 scripts. The owner runs them
 (`tools/gui-test.sh`, or `tools/gui-suite.sh` for several); they take the machine's pointer, so no agent
 does. The 133 written by the end of 2026-09-24 have been run (every script after PLAN.md §13.4 row 55,
 the pending ones again in §13.6 row 67): at their last runs `fly-resumemis` fails for a reason not yet
 found, six failed under load and are owed a quiet re-run (`config-ateryx`, `config-firmware`,
 `config-radio`, `plan-load-kml`, `plan-load-shp`, `plan-poi`), and three have had no clean run
-(`plan-polygon-tools`, `plan-rally-file`, `plan-rally-sitl`). Of the 28 written on 2026-09-25, the two
-bench scripts that flashed and asked the CubeOrange have run; the other 26 are written and unrun - the
+(`plan-polygon-tools`, `plan-rally-file`, `plan-rally-sitl`). Of the 30 written on 2026-09-25, the two
+bench scripts that flashed and asked the CubeOrange have run; the other 28 are written and unrun - the
 SETUP and CONFIG pages of §13.6 rows 70 and 71 and FFT Setup, `main-connect`, `params-autofetch`,
-`params-list-remainder`, row 69's five planner scripts, `config-import`, `fly-tabs-de`, `sitl` and
-`config-video`. 43 older scripts were edited that day (the data directory's rename, row 65's pages)
+`params-list-remainder`, `params-list-columns`, row 69's five planner scripts, `config-import`, `fly-tabs-de`, `sitl`,
+`config-video` and `textfield-clipboard`. 43 older scripts were edited that day (the data directory's rename, row 65's pages)
 and have no run recorded since.
 
 **Not yet**: any run on Windows or macOS - the repository has no remote, so the three-OS CI matrix has never

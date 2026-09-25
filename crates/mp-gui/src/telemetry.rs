@@ -279,6 +279,51 @@ pub struct Telemetry {
     parameters: Mutex<Option<SharedParameters>>,
     /// The Planner page's rates as last handed to [`Telemetry::hand_over_rates`].
     rates_handed: Option<StreamRates>,
+    /// A plain reboot's look at a serial port afterwards, and the reopen it may lead to; see
+    /// [`Telemetry::reopen_after_reboot`]. Behind a lock because [`Telemetry::reboot`] is `&self`.
+    reopen: Mutex<Option<Reopen>>,
+}
+
+/// `doReboot(false, true)` on a serial port: "Direct USB will disconnect after a reboot, wait and
+/// see if we should re-connect".
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2573-2583`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reopen {
+    /// `Thread.Sleep(500)` running out at this instant, then `if (!BaseStream.IsOpen)`.
+    Check(Instant),
+    /// The port was gone: `Open(true)`, whose `OpenBg` lets a serial port settle for a second
+    /// ("allow settings to settle - previous dtr") before it opens it at this instant.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:668-700, 711-723, 747`
+    Open(Instant),
+}
+
+/// How long `doReboot` sleeps after a plain reboot on a serial port before it looks at the port.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2578`
+pub const REBOOT_REOPEN_WAIT: Duration = Duration::from_millis(500);
+
+/// `OpenBg`'s "SerialPort Sleep 1" before it opens a serial port.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:717-722`
+pub const SERIAL_SETTLE: Duration = Duration::from_secs(1);
+
+/// `Strings.ConnectingMavlink`: the title of `Open`'s progress box, on the status line here.
+/// `// C#: ExtLibs/Strings/Strings.resx:303-305; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:676`
+pub const CONNECTING_MAVLINK: &str = "Connecting Mavlink";
+
+/// `Strings.ConnectFailed`: `OpenBg`'s error for its progress box, on the status line here (the
+/// owner's ruling: a failure goes on the status line, never in a box).
+/// `// C#: ExtLibs/Strings/Strings.resx:300-302; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:960-961`
+pub const CONNECT_FAILED: &str = "Connect Failed";
+
+/// What [`Telemetry::reopen_after_reboot`] did this frame.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Reopened {
+    /// The port was gone at the look: `Open(true)` is under way, the port to be opened after
+    /// `OpenBg`'s settle.
+    Connecting,
+    /// The port opened again, as `Open(true)`: the parameters are to be fetched afresh.
+    Opened,
+    /// It would not open: what goes on the status line.
+    Failed(String),
 }
 
 impl Telemetry {
@@ -396,6 +441,7 @@ impl Telemetry {
             awaited: Vec::new(),
             parameters: Mutex::new(None),
             rates_handed: None,
+            reopen: Mutex::new(None),
         }
     }
 
@@ -1219,6 +1265,11 @@ impl Telemetry {
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2553-2589, 2717, 2758-2763`
     ///
     /// Whether there was a vehicle to send it to: `doReboot`'s return.
+    ///
+    /// On a serial port the C# then sleeps half a second and reopens the port if the reboot
+    /// took it away; that is [`Telemetry::reopen_after_reboot`], driven by the window's frames
+    /// rather than a sleep on the thread that draws them.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2573-2583`
     pub fn reboot(&self) -> bool {
         let Some((link, id)) = self.target() else {
             return false;
@@ -1227,9 +1278,69 @@ impl Telemetry {
             return false;
         };
         link.command(target, command, params, true);
+        // `if (!bootloadermode && (BaseStream is SerialPort))`.
+        if self.is_serial()
+            && let Ok(mut reopen) = self.reopen.lock()
+        {
+            *reopen = Some(Reopen::Check(Instant::now() + REBOOT_REOPEN_WAIT));
+        }
         true
     }
 
+    /// Whether the link was opened on a serial port: `BaseStream is SerialPort`.
+    fn is_serial(&self) -> bool {
+        matches!(
+            self.target.parse::<mp_transport::LinkUrl>(),
+            Ok(mp_transport::LinkUrl::Serial { .. })
+        )
+    }
+
+    /// Once a frame: the rest of a plain reboot on a serial port. Half a second after it
+    /// ([`REBOOT_REOPEN_WAIT`]) the port is looked at once; still open, nothing more is done.
+    /// Gone (a board on direct USB drops its port as it reboots, and the link stops at its next
+    /// read), it is `Open(true)`: after `OpenBg`'s settle ([`SERIAL_SETTLE`]) the same port is
+    /// opened again by `open` ([`Telemetry::connect`] in the application, as the connect
+    /// button opens it) and this `Telemetry` becomes the new one, its parameters to be fetched
+    /// as on any connect. A port that will not open is [`CONNECT_FAILED`] for the status line.
+    ///
+    /// **Not the C#'s:** the new link records to a new `.tlog`, where the C#'s reopen goes on
+    /// writing the file `MainV2` opened, and `OpenBg`'s second second ("SerialPort Sleep 2",
+    /// after the open, before any traffic) is not slept: the link writes as soon as it opens,
+    /// as it does on the connect button.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2573-2583, 668-700, 711-760, 949-963`
+    pub fn reopen_after_reboot(
+        &mut self,
+        now: Instant,
+        open: impl FnOnce(&str) -> Self,
+    ) -> Option<Reopened> {
+        let reopen = self
+            .reopen
+            .get_mut()
+            .unwrap_or_else(PoisonError::into_inner);
+        match *reopen {
+            None => None,
+            Some(Reopen::Check(at) | Reopen::Open(at)) if now < at => None,
+            Some(Reopen::Check(_)) => {
+                // `if (!BaseStream.IsOpen)`.
+                if self.link.as_ref().is_some_and(Link::is_running) {
+                    *reopen = None;
+                    None
+                } else {
+                    *reopen = Some(Reopen::Open(now + SERIAL_SETTLE));
+                    Some(Reopened::Connecting)
+                }
+            }
+            Some(Reopen::Open(_)) => {
+                *reopen = None;
+                let url = self.target.clone();
+                *self = open(&url);
+                Some(match self.error() {
+                    Some(err) => Reopened::Failed(format!("{CONNECT_FAILED}: {url}: {err}")),
+                    None => Reopened::Opened,
+                })
+            }
+        }
+    }
 
     /// Which arming-check parameter this vehicle has, if we have learned it yet.
     ///
@@ -1557,7 +1668,7 @@ impl Telemetry {
 
 /// A `COMMAND_LONG` a builder made, read back as `doCommand`'s arguments: the vehicle it names,
 /// the command and its seven parameters. `None` for any other message.
-fn command_long_parts(message: &MavMessage) -> Option<(VehicleId, u16, [f32; 7])> {
+pub(crate) fn command_long_parts(message: &MavMessage) -> Option<(VehicleId, u16, [f32; 7])> {
     let MavMessage::CommandLong(long) = message else {
         return None;
     };
@@ -1618,6 +1729,19 @@ pub mod scripted {
         /// A link with Mission Planner's retry counts and these waits, the screens' telemetry
         /// over it, and an ArduPilot copter on the other end that has announced itself.
         pub fn connect(timeouts: ProtocolTimeouts) -> (Telemetry, Self) {
+            Self::connect_as(timeouts, "loopback")
+        }
+
+        /// [`Vehicle::connect`], the screens told the link was opened from `url`: a serial
+        /// port's, for what is done only on a serial link. Nothing is opened from it.
+        pub fn connect_as(timeouts: ProtocolTimeouts, url: &str) -> (Telemetry, Self) {
+            let (link, vehicle) = Self::link(timeouts);
+            (Telemetry::over(link, url), vehicle)
+        }
+
+        /// The link alone, with the copter on its far end announced and seen: for what runs
+        /// over a link without the screens, the firmware page's reboot.
+        pub fn link(timeouts: ProtocolTimeouts) -> (Link, Self) {
             let (vehicle_side, gcs_side) = Loopback::pair();
             let config = LinkConfig {
                 send_heartbeat: false,
@@ -1625,15 +1749,23 @@ pub mod scripted {
                 timeouts,
                 ..LinkConfig::default()
             };
-            let telemetry =
-                Telemetry::over(Link::from_transport(Box::new(gcs_side), config), "loopback");
+            let link = Link::from_transport(Box::new(gcs_side), config);
             let mut vehicle = Self {
                 end: vehicle_side,
                 decoder: FrameDecoder::new(),
                 seq: 0,
                 heard: Vec::new(),
             };
-            vehicle.send(&MavMessage::Heartbeat(Heartbeat {
+            vehicle.heartbeat();
+            until("the vehicle to be seen", || {
+                link.vehicles().contains(&VEHICLE)
+            });
+            (link, vehicle)
+        }
+
+        /// The copter's `HEARTBEAT`.
+        pub fn heartbeat(&mut self) {
+            self.send(&MavMessage::Heartbeat(Heartbeat {
                 custom_mode: 0,
                 r#type: 2,
                 autopilot: 3,
@@ -1641,10 +1773,12 @@ pub mod scripted {
                 system_status: 3,
                 mavlink_version: 3,
             }));
-            until("the vehicle to be seen", || {
-                telemetry.vehicles().contains(&VEHICLE)
-            });
-            (telemetry, vehicle)
+        }
+
+        /// The cable pulled, as a board rebooting drops its USB port: the link learns it at its
+        /// next read.
+        pub fn unplug(&self) {
+            self.end.plug().pull();
         }
 
         /// Sends a message as the autopilot.
@@ -1842,6 +1976,10 @@ mod tests {
     /// `MAV_RESULT_DENIED`.
     const DENIED: u8 = 2;
 
+    /// What the screens are told a loopback link was opened from, for what is done only on a
+    /// serial port. Never opened: the tests hand their own link to the reopen.
+    const SERIAL: &str = "serial:/nonexistent/mp-test-port:115200";
+
     /// The link's waits, divided so a test runs the C#'s full retry ladder in a blink; every
     /// count stays the C#'s.
     fn fast() -> ProtocolTimeouts {
@@ -1890,6 +2028,126 @@ mod tests {
                 (mp_link::requests::CMD_PREFLIGHT_REBOOT_SHUTDOWN, 0)
             ]
         );
+    }
+
+    /// A board on a serial port drops the port as it reboots: half a second on, the port is
+    /// found gone and, after `OpenBg`'s second, opened again - here onto a second copter - and
+    /// the screens run over the new link.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2573-2583, 717-722`
+    #[test]
+    fn a_serial_port_the_reboot_took_away_is_opened_again() {
+        let (mut telemetry, vehicle) = Vehicle::connect_as(fast(), SERIAL);
+        let before = Instant::now();
+        assert!(telemetry.reboot());
+        let rebooted = Instant::now();
+        vehicle.unplug();
+        until("the link to see the port go", || {
+            !telemetry.link.as_ref().is_some_and(Link::is_running)
+        });
+        let never = |_: &str| -> Telemetry { panic!("opened early") };
+        // Before the half second: nothing.
+        let early = before + REBOOT_REOPEN_WAIT - Duration::from_millis(1);
+        assert_eq!(telemetry.reopen_after_reboot(early, never), None);
+        // At it: the port is gone, and `Open(true)` begins.
+        let looked = rebooted + REBOOT_REOPEN_WAIT;
+        assert_eq!(
+            telemetry.reopen_after_reboot(looked, never),
+            Some(Reopened::Connecting)
+        );
+        // Not before `OpenBg`'s settle.
+        let settling = looked + SERIAL_SETTLE - Duration::from_millis(1);
+        assert_eq!(telemetry.reopen_after_reboot(settling, never), None);
+        let mut opened_on = None;
+        let mut second = None;
+        let reopened = telemetry.reopen_after_reboot(looked + SERIAL_SETTLE, |url| {
+            opened_on = Some(url.to_owned());
+            let (telemetry, vehicle) = Vehicle::connect_as(fast(), url);
+            second = Some(vehicle);
+            telemetry
+        });
+        assert_eq!(reopened, Some(Reopened::Opened));
+        assert_eq!(opened_on.as_deref(), Some(SERIAL));
+        assert!(telemetry.vehicles().contains(&VEHICLE));
+        // Once: the reopen is over.
+        assert_eq!(
+            telemetry.reopen_after_reboot(looked + SERIAL_SETTLE * 10, never),
+            None
+        );
+        // The new link carries the screens' commands.
+        let mut second = second.expect("the second copter");
+        assert!(telemetry.reboot());
+        until("the reboot on the new link", || {
+            second.read();
+            second.count(|m| matches!(m, MavMessage::CommandLong(_))) == 2
+        });
+    }
+
+    /// The port still open half a second on: `doReboot` does nothing more, and nothing is
+    /// looked at again.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2579-2582`
+    #[test]
+    fn a_serial_port_still_open_after_the_reboot_is_left_alone() {
+        let (mut telemetry, _vehicle) = Vehicle::connect_as(fast(), SERIAL);
+        assert!(telemetry.reboot());
+        let rebooted = Instant::now();
+        let never = |_: &str| -> Telemetry { panic!("reopened an open port") };
+        let looked = rebooted + REBOOT_REOPEN_WAIT;
+        assert_eq!(telemetry.reopen_after_reboot(looked, never), None);
+        assert_eq!(
+            telemetry.reopen_after_reboot(looked + SERIAL_SETTLE * 10, never),
+            None
+        );
+        assert!(telemetry.link.as_ref().is_some_and(Link::is_running));
+    }
+
+    /// A port that will not open again is `Strings.ConnectFailed` for the status line, and the
+    /// screens are left disconnected with the reason, as a failed connect leaves them.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:949-963`
+    #[test]
+    fn a_serial_port_that_will_not_reopen_is_connect_failed_on_the_status_line() {
+        let (mut telemetry, vehicle) = Vehicle::connect_as(fast(), SERIAL);
+        assert!(telemetry.reboot());
+        let rebooted = Instant::now();
+        vehicle.unplug();
+        until("the link to see the port go", || {
+            !telemetry.link.as_ref().is_some_and(Link::is_running)
+        });
+        let looked = rebooted + REBOOT_REOPEN_WAIT;
+        assert_eq!(
+            telemetry.reopen_after_reboot(looked, |_| panic!("opened early")),
+            Some(Reopened::Connecting)
+        );
+        let failed = telemetry.reopen_after_reboot(looked + SERIAL_SETTLE, |url| Telemetry {
+            error: Some("No such file or directory".to_owned()),
+            target: url.to_owned(),
+            ..Telemetry::idle()
+        });
+        assert_eq!(
+            failed,
+            Some(Reopened::Failed(format!(
+                "Connect Failed: {SERIAL}: No such file or directory"
+            )))
+        );
+        assert!(telemetry.link.is_none());
+        assert_eq!(telemetry.error(), Some("No such file or directory"));
+    }
+
+    /// Only a serial port is looked at again: a network link that stops after a reboot is not
+    /// reopened.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2576`
+    #[test]
+    fn a_network_link_is_not_reopened_after_a_reboot() {
+        let (mut telemetry, vehicle) = Vehicle::connect_as(fast(), "tcp:127.0.0.1:5760");
+        assert!(telemetry.reboot());
+        let rebooted = Instant::now();
+        vehicle.unplug();
+        until("the link to see the port go", || {
+            !telemetry.link.as_ref().is_some_and(Link::is_running)
+        });
+        let never = |_: &str| -> Telemetry { panic!("reopened a network link") };
+        for after in [REBOOT_REOPEN_WAIT, REBOOT_REOPEN_WAIT + SERIAL_SETTLE * 2] {
+            assert_eq!(telemetry.reopen_after_reboot(rebooted + after, never), None);
+        }
     }
 
     /// No vehicle: nothing to reboot, `doReboot`'s false.

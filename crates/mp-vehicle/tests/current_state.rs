@@ -893,3 +893,22 @@ fn high_latency2_scales_its_compressed_fields() {
     assert_eq!(state.climb_rate.0, -30.0, "climb_rate * 10");
     assert_eq!(state.battery.remaining_percent, 80);
 }
+
+/// Every `HEARTBEAT` and `HIGH_LATENCY2` is counted, and nothing else is: the two messages
+/// `getHeartBeat` returns on, so the firmware page's `doReboot(true, false)` can wait for the
+/// next heartbeat as it does.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1166-1203, 2591-2603`
+#[test]
+fn heartbeats_and_high_latency_reports_are_counted_as_getheartbeat_takes_them() {
+    let mut state = VehicleState::default();
+    assert_eq!(state.heartbeats, 0);
+    state.apply(&message!(Heartbeat, |m| m.r#type = 2));
+    assert_eq!(state.heartbeats, 1);
+    state.apply(&message!(SysStatus, |m| m.load = 1));
+    state.apply(&message!(HighLatency, |m| m.heading = 1));
+    assert_eq!(state.heartbeats, 1);
+    state.apply(&message!(HighLatency2, |m| m.r#type = 2));
+    assert_eq!(state.heartbeats, 2);
+    state.apply(&message!(Heartbeat, |m| m.r#type = 2));
+    assert_eq!(state.heartbeats, 3);
+}

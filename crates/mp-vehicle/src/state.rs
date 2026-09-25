@@ -628,6 +628,12 @@ pub struct VehicleState {
     /// Number of MAVLink messages applied to this state.
     pub messages_applied: u64,
 
+    /// Heartbeats applied to this state - `HEARTBEAT`s and `HIGH_LATENCY2`s, the two
+    /// `getHeartBeat` returns on - so a caller can wait for the next one as `getHeartBeat` does:
+    /// the firmware page's `doReboot(true, false)` waits for a heartbeat before its reboot.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1153-1203, 2591-2603`
+    pub heartbeats: u64,
+
     /// When the newest frame applied to this state arrived at the link: the start of a
     /// packet-to-pixel measurement (DELIVERABLES.md D9). Measurement scaffolding, not vehicle
     /// state and not the C#'s: a link stamps it only when its configuration asks
@@ -682,6 +688,7 @@ impl VehicleState {
         self.messages_applied += 1;
         match message {
             MavMessage::Heartbeat(m) => {
+                self.heartbeats += 1;
                 self.vehicle_type = m.r#type;
                 self.autopilot = m.autopilot;
                 self.base_mode = m.base_mode;
@@ -937,6 +944,7 @@ impl VehicleState {
                 true
             }
             MavMessage::HighLatency2(m) => {
+                self.heartbeats += 1;
                 self.apply_high_latency2(m);
                 true
             }

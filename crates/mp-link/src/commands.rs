@@ -258,8 +258,10 @@ pub fn reboot(target: VehicleId) -> MavMessage {
 /// That call - the firmware page's, with `currentvehicle` false - waits for a heartbeat and then
 /// calls `doCommand` twice, with param1 = 3 and then param1 = 1, each unconditionally; and
 /// `doCommand` writes a `PREFLIGHT_REBOOT_SHUTDOWN` twice and waits for no acknowledgement. So
-/// the C# puts four frames on the wire - 3, 3, 1, 1 - not one; a caller sending this once sends
-/// a quarter of them. [`Link::command`](crate::Link::command) makes the two writes per command.
+/// the C# puts four frames on the wire - 3, 3, 1, 1 - with no gap between them. The firmware
+/// page (`mp-gui`'s `config/firmware.rs`, `reboot_to_bootloader`) sends this and then
+/// [`reboot`] through [`Link::command`](crate::Link::command), which makes the two writes per
+/// command; a caller sending this once with `Link::send` sends a quarter of them.
 /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2553-2559, 2591-2614, 2758-2763`
 #[must_use]
 pub fn reboot_to_bootloader(target: VehicleId) -> MavMessage {

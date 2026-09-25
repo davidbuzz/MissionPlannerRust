@@ -456,6 +456,103 @@ impl SerialHost {
 /// `// C#: Utilities/Firmware.cs:823`
 const REBOOT_WINDOW: std::time::Duration = std::time::Duration::from_secs(3);
 
+/// How long `getHeartBeat` reads for a vehicle's heartbeat before it gives up: 2.2 s (or 200
+/// packets read, which a board sending only heartbeats never reaches).
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1197`
+const HEARTBEAT_WAIT: std::time::Duration = std::time::Duration::from_millis(2200);
+
+/// How long the link thread may take to write the reboots before the port is closed under them:
+/// not the C#'s, whose writes are on the calling thread and done when `doCommand` returns; ours
+/// are queued for the link thread, and closing the port before it takes them would lose them.
+/// A thread that takes this long is wedged.
+const WRITE_WAIT: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// The waits of `AttemptRebootToBootloader`'s task: `task.Wait`'s window, and `getHeartBeat`'s
+/// own limit. The tests shorten them.
+#[derive(Debug, Clone, Copy)]
+struct RebootWaits {
+    /// `task.Wait(TimeSpan.FromSeconds(3))`.
+    window: std::time::Duration,
+    /// `getHeartBeat`'s 2.2 s.
+    heartbeat: std::time::Duration,
+}
+
+/// Mission Planner's waits.
+const REBOOT_WAITS: RebootWaits = RebootWaits {
+    window: REBOOT_WINDOW,
+    heartbeat: HEARTBEAT_WAIT,
+};
+
+/// The task `AttemptRebootToBootloader` runs over the opened link, and what `task.Wait` then
+/// makes of it. The link is opened and closed by the caller.
+///
+/// `getHeartBeat` first: no vehicle heartbeat within its 2.2 s is "No HeartBeat found". Then
+/// `doReboot(true, false)` - "scan for hb on unknown mav" - which reads for a heartbeat again,
+/// the next one, up to another 2.2 s, and whether one comes or not (the first already set the
+/// vehicle's ids) calls `doCommand` with `PREFLIGHT_REBOOT_SHUTDOWN` param1 3 and then with
+/// param1 1, both unconditionally. `doCommand` writes a reboot twice back to back and returns
+/// without waiting for an answer, so four frames go out, 3, 3, 1, 1, with no gap between any of
+/// them: through [`mp_link::Link::command`], acknowledgement required as `doCommand` is called,
+/// which the link sends as `Outgoing::Twice` and ends `Sent`. `MainV2.comPort.Close()` follows
+/// at once.
+///
+/// All of it inside `task.Wait`'s 3 s is "Reboot to Bootloader"; a task still running then is
+/// "Please unplug the board" - the task goes on, and its reboots still go out, as here.
+/// `// C#: Utilities/Firmware.cs:797-837; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1153-1203, 2553-2559, 2591-2618, 2717, 2758-2763`
+fn reboot_to_bootloader(
+    link: &mp_link::Link,
+    started: std::time::Instant,
+    waits: RebootWaits,
+) -> LinkReboot {
+    use std::time::{Duration, Instant};
+    let poll = Duration::from_millis(10);
+    // `MainV2.comPort.getHeartBeat().Length > 0`, else "No HeartBeat found".
+    let first = started + waits.heartbeat;
+    let (id, handle) = loop {
+        if let Some(vehicle) = link.primary_vehicle() {
+            break vehicle;
+        }
+        if Instant::now() >= first {
+            return LinkReboot::NoHeartbeat;
+        }
+        std::thread::sleep(poll);
+    };
+    // `doReboot(true, false)`: `getHeartBeat` again, the heartbeat after the one seen.
+    let seen = handle.load().heartbeats;
+    let again = Instant::now() + waits.heartbeat;
+    while handle.load().heartbeats <= seen && Instant::now() < again {
+        std::thread::sleep(poll);
+    }
+    // `if (MAV.sysid != 0 && MAV.compid != 0)`: 3 twice, then 1 twice.
+    if id.sysid != 0 && id.compid != 0 {
+        let mut last = None;
+        for message in [
+            mp_link::commands::reboot_to_bootloader(id),
+            mp_link::commands::reboot(id),
+        ] {
+            if let Some((target, command, params)) = crate::telemetry::command_long_parts(&message)
+            {
+                last = Some(link.command(target, command, params, true));
+            }
+        }
+        // Written before the port closes: the link ends a reboot `Sent` in the pass that
+        // writes it.
+        let written = Instant::now() + WRITE_WAIT;
+        while let Some(request) = last
+            && link.is_running()
+            && Instant::now() < written
+            && link.request(request).is_none_or(|r| r.outcome().is_none())
+        {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+    if started.elapsed() <= waits.window {
+        LinkReboot::Rebooted
+    } else {
+        LinkReboot::NoHeartbeat
+    }
+}
+
 impl FlashHost for SerialHost {
     type Port = TransportPort<mp_transport::SerialTransport>;
 
@@ -468,32 +565,23 @@ impl FlashHost for SerialHost {
     fn open(&mut self, port: &str, baud: u32) -> std::io::Result<Self::Port> {
         open_serial(port, baud, false)
     }
-    /// `if (MainV2.comPort.BaseStream is SerialPort)`: the comport opened as a MAVLink link, a
-    /// heartbeat waited for, `doReboot(true, false)` sent and the port closed; no heartbeat in
-    /// three seconds - or a port that will not open - is "No HeartBeat found". The C# waits for
-    /// the reboot's acknowledgement; here the command goes out and the port is closed half a
-    /// second later, which is as long as a rebooting board can answer.
+    /// `if (MainV2.comPort.BaseStream is SerialPort)`: the comport opened as a MAVLink link,
+    /// [`reboot_to_bootloader`]'s heartbeats and four reboots, and the port closed; a port that
+    /// will not open is the task's exception, "Please unplug the board".
     /// `// C#: Utilities/Firmware.cs:797-837`
     fn reboot_link(&mut self) -> LinkReboot {
         if !self.is_serial() {
             return LinkReboot::NotSerial;
         }
+        let started = std::time::Instant::now();
         let url = format!("serial:{}:{}", self.comport, self.baud);
         let Ok(link) = mp_link::Link::connect(&url, mp_link::LinkConfig::default()) else {
             return LinkReboot::NoHeartbeat;
         };
-        let deadline = std::time::Instant::now() + REBOOT_WINDOW;
-        while std::time::Instant::now() < deadline {
-            if let Some((id, _)) = link.primary_vehicle() {
-                link.send(&mp_link::commands::reboot_to_bootloader(id));
-                std::thread::sleep(std::time::Duration::from_millis(500));
-                drop(link);
-                return LinkReboot::Rebooted;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(50));
-        }
+        let reached = reboot_to_bootloader(&link, started, REBOOT_WAITS);
+        // `MainV2.comPort.Close()`.
         drop(link);
-        LinkReboot::NoHeartbeat
+        reached
     }
     fn now(&mut self) -> std::time::Instant {
         std::time::Instant::now()
@@ -2615,5 +2703,144 @@ mod tests {
             Some(dir.display().to_string().as_str())
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+/// The firmware page's reboot into the bootloader, over the real link to a scripted copter.
+#[cfg(test)]
+mod reboot_to_bootloader_tests {
+    use std::time::{Duration, Instant};
+
+    use mp_link::ProtocolTimeouts;
+    use mp_link::requests::CMD_PREFLIGHT_REBOOT_SHUTDOWN;
+    use mp_mavlink_dialects::all::MavMessage;
+
+    use super::{LinkReboot, RebootWaits, reboot_to_bootloader};
+    use crate::telemetry::scripted::{VEHICLE, Vehicle, until};
+
+    fn fast() -> ProtocolTimeouts {
+        ProtocolTimeouts::default().faster(20)
+    }
+
+    /// Each `PREFLIGHT_REBOOT_SHUTDOWN` the copter heard, in order: param1 and confirmation,
+    /// each checked to be addressed to it.
+    fn reboots(vehicle: &Vehicle) -> Vec<(f32, u8)> {
+        vehicle
+            .heard
+            .iter()
+            .filter_map(|message| match message {
+                MavMessage::CommandLong(long) if long.command == CMD_PREFLIGHT_REBOOT_SHUTDOWN => {
+                    assert_eq!(
+                        (long.target_system, long.target_component),
+                        (VEHICLE.sysid, VEHICLE.compid)
+                    );
+                    Some((long.param1, long.confirmation))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `doReboot(true, false)`'s four frames: 3, 3, 1, 1, all at confirmation 0.
+    const FOUR: [(f32, u8); 4] = [(3.0, 0), (3.0, 0), (1.0, 0), (1.0, 0)];
+
+    /// Seen, then the next heartbeat waited for, then `doCommand` 3 and `doCommand` 1, each
+    /// written twice and neither waited on: four frames, 3, 3, 1, 1, and nothing after them
+    /// however long the copter stays quiet.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2591-2618, 2717, 2758-2763`
+    #[test]
+    fn four_frames_3_3_1_1_go_out_after_the_next_heartbeat() {
+        let (link, mut vehicle) = Vehicle::link(fast());
+        let waits = RebootWaits {
+            window: Duration::from_secs(5),
+            heartbeat: Duration::from_secs(4),
+        };
+        let reached = std::thread::scope(|scope| {
+            let task = scope.spawn(|| reboot_to_bootloader(&link, Instant::now(), waits));
+            // `doReboot`'s own `getHeartBeat` holds the reboots until the next heartbeat.
+            std::thread::sleep(Duration::from_millis(200));
+            vehicle.read();
+            assert_eq!(reboots(&vehicle), [], "sent before the second heartbeat");
+            vehicle.heartbeat();
+            let reached = task.join().expect("the task");
+            until("the four reboots", || {
+                vehicle.read();
+                reboots(&vehicle).len() >= 4
+            });
+            reached
+        });
+        assert_eq!(reached, LinkReboot::Rebooted);
+        std::thread::sleep(fast().command.timeout * 3);
+        vehicle.read();
+        assert_eq!(reboots(&vehicle), FOUR);
+    }
+
+    /// No second heartbeat: `getHeartBeat` gives up after its 2.2 s, and the ids the first one
+    /// set still send the four frames.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1197-1201, 2594-2614`
+    #[test]
+    fn the_four_frames_go_out_when_the_next_heartbeat_never_comes() {
+        let (link, mut vehicle) = Vehicle::link(fast());
+        let waits = RebootWaits {
+            window: Duration::from_secs(5),
+            heartbeat: Duration::from_millis(300),
+        };
+        let started = Instant::now();
+        assert_eq!(
+            reboot_to_bootloader(&link, started, waits),
+            LinkReboot::Rebooted
+        );
+        assert!(started.elapsed() >= waits.heartbeat);
+        until("the four reboots", || {
+            vehicle.read();
+            reboots(&vehicle).len() >= 4
+        });
+        assert_eq!(reboots(&vehicle), FOUR);
+    }
+
+    /// Longer than `task.Wait`'s window is "Please unplug the board", though the task goes on
+    /// and its reboots still go out.
+    /// `// C#: Utilities/Firmware.cs:803-828`
+    #[test]
+    fn past_the_window_is_please_unplug_though_the_reboots_went_out() {
+        let (link, mut vehicle) = Vehicle::link(fast());
+        let waits = RebootWaits {
+            window: Duration::from_millis(100),
+            heartbeat: Duration::from_millis(300),
+        };
+        assert_eq!(
+            reboot_to_bootloader(&link, Instant::now(), waits),
+            LinkReboot::NoHeartbeat
+        );
+        until("the four reboots", || {
+            vehicle.read();
+            reboots(&vehicle).len() >= 4
+        });
+        assert_eq!(reboots(&vehicle), FOUR);
+    }
+
+    /// No heartbeat at all: "No HeartBeat found", and nothing sent.
+    /// `// C#: Utilities/Firmware.cs:810-819`
+    #[test]
+    fn no_heartbeat_sends_nothing() {
+        let (_vehicle_side, gcs_side) = mp_transport::testing::Loopback::pair();
+        let link = mp_link::Link::from_transport(
+            Box::new(gcs_side),
+            mp_link::LinkConfig {
+                send_heartbeat: false,
+                stream_rate_hz: 0,
+                timeouts: fast(),
+                ..mp_link::LinkConfig::default()
+            },
+        );
+        let waits = RebootWaits {
+            window: Duration::from_secs(5),
+            heartbeat: Duration::from_millis(200),
+        };
+        assert_eq!(
+            reboot_to_bootloader(&link, Instant::now(), waits),
+            LinkReboot::NoHeartbeat
+        );
+        assert_eq!(link.stats().frames_sent, 0);
     }
 }

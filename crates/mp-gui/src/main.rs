@@ -2802,6 +2802,23 @@ impl Render for MissionPlanner {
         for said in self.telemetry.take_reports() {
             self.file_status = Some(said);
         }
+        // A plain reboot on a serial port: the port looked at half a second on and, gone,
+        // opened again as the connect button opens it, its parameters fetched afresh; a port
+        // that will not open is said on the status line. `// C#: MAVLinkInterface.cs:2573-2583`
+        match self
+            .telemetry
+            .reopen_after_reboot(std::time::Instant::now(), Telemetry::connect)
+        {
+            None => {}
+            Some(telemetry::Reopened::Connecting) => {
+                self.file_status = Some(telemetry::CONNECTING_MAVLINK.to_owned());
+            }
+            Some(telemetry::Reopened::Opened) => {
+                self.params_requested = false;
+                self.file_status = Some(format!("connected to {}", self.telemetry.view().target));
+            }
+            Some(telemetry::Reopened::Failed(text)) => self.file_status = Some(text),
+        }
         self.advance_param_writes();
         // ---- row 82 ----
         // The Full Parameter List's Activate and Deactivate, its fetches and a reset under way.

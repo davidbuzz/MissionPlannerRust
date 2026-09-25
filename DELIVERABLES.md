@@ -227,9 +227,9 @@ theming (`*.mpsystheme` import) and keymaps/actions.
   holds every screen inside the window. **Not yet:** no `mp-ui` crate or facade - `mp-gui` is
   170,000 lines in one crate and names gpui's platform crates directly, §5.1's one pinned exception;
   no widget gallery or snapshot tests; no themes or `*.mpsystheme` import (the palette is the
-  owner's dark one, PLAN.md §1.2); the numeric up-down (`MavlinkNumericUpDown`, typed or stepped by its arrows) lives in `config/servo_output.rs`, shared by the pages rather than a kit; the text field has no selection or clipboard (PLAN.md §13.6 row 87, in progress); HiDPI,
+  owner's dark one, PLAN.md §1.2); the numeric up-down (`MavlinkNumericUpDown`, typed or stepped by its arrows) lives in `config/servo_output.rs`, shared by the pages rather than a kit; the text field (`textfield.rs`) has a caret, a selection by keyboard, click, drag and double-click, and the clipboard chords, with a multi-line `text_area` for the log browser's txt_info and User Params' Modify box, but no undo, right-click menu, sideways scrolling or blinking caret, and fourteen pages still draw their own type-at-the-end boxes (PLAN.md §13.6 row 87); HiDPI,
   multi-monitor and IME unverified; the 100,000-row grid at 120 fps unmeasured.
-- **Tests:** `crates/mp-gui/tests/layout.rs` (every screen inside the window at 1600×1200 and at a small size; `--ignored`, they need a window) and the 161 `tests/gui/*.gui` scripts through `tools/gui-test.sh` (26 of them written on 2026-09-25 and not yet run), which assert the application's own facts; the widgets' unit tests are inline in `mp-gui`. Not yet: `tests/snapshots/**` with golden images, `tests/interaction.rs` on gpui's test executor, `tests/grid.rs` and `benches/grid_scroll.rs`, `tests/theme_import.rs`, `tests/hidpi.rs`.
+- **Tests:** `crates/mp-gui/tests/layout.rs` (every screen inside the window at 1600×1200 and at a small size; `--ignored`, they need a window) and the 163 `tests/gui/*.gui` scripts through `tools/gui-test.sh` (28 of them written on 2026-09-25 and not yet run), which assert the application's own facts; the widgets' unit tests are inline in `mp-gui`. Not yet: `tests/snapshots/**` with golden images, `tests/interaction.rs` on gpui's test executor, `tests/grid.rs` and `benches/grid_scroll.rs`, `tests/theme_import.rs`, `tests/hidpi.rs`.
 
 ### D7. GPU render core
 Shared `wgpu` layer under everything visual: device/queue sharing with gpui (or offscreen render-to-texture
@@ -696,7 +696,7 @@ Proof that the Rust app behaves like the C# original before anyone flies behind 
   targets build and run clean (34.3 M executions at the last short pass) with committed seed
   corpora, and the 24-hour soaks of `frame_parse` and `message_decode` ended clean 2026-09-24 16:01Z; the
   same properties run bounded on stable in `cargo test --workspace`, so a target cannot rot
-  uncompiled; SITL integration tests run behind `--ignored`; 161 GUI scripts assert the
+  uncompiled; SITL integration tests run behind `--ignored`; 163 GUI scripts assert the
   application's own facts through `tools/gui-test.sh`, 26 of them written 2026-09-25 and not yet
   run (README.md says which). The mutation self-test is not written, no
   UI snapshot of a screen exists (the HUD's goldens are a software rasteriser's, not gpui's), and the perf gates are six benches whose thresholds hold in release on a
