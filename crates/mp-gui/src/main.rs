@@ -35,6 +35,9 @@ mod pictures;
 // ---- row 82 ----
 mod raw_params;
 // ---- end row 82 ----
+// ---- ConfigRawParams remainder ----
+mod raw_params_grid;
+// ---- end ConfigRawParams remainder ----
 mod plan;
 mod planner_coverage;
 mod platform;
@@ -382,6 +385,15 @@ struct MissionPlanner {
     /// Reset to Default, Load Presaved and `ParamCompare` over it.
     raw_params: raw_params::RawParams,
     // ---- end row 82 ----
+    // ---- ConfigRawParams remainder ----
+    /// The Full Parameter List's grid: Fav, the Options control, the typed Value cell and its
+    /// questions, Write Params under way, the widths and the splitter, RawParamWarning.
+    param_grid: raw_params_grid::RawGrid,
+    /// The grid's keyboard focus, for F2, a key that begins typing, and Ctrl+S.
+    param_grid_focus: gpui::FocusHandle,
+    /// The Value cell's being typed into.
+    param_edit_focus: gpui::FocusHandle,
+    // ---- end ConfigRawParams remainder ----
     /// Scroll position of the flight screen's panel column, so an indicator can be drawn for it.
     fly_scroll: gpui::ScrollHandle,
     /// The flight screen's Actions tab: what its boxes and lists hold between presses.
@@ -737,6 +749,11 @@ impl MissionPlanner {
             // ---- row 82 ----
             raw_params: raw_params::RawParams::default(),
             // ---- end row 82 ----
+            // ---- ConfigRawParams remainder ----
+            param_grid: raw_params_grid::RawGrid::default(),
+            param_grid_focus: cx.focus_handle(),
+            param_edit_focus: cx.focus_handle(),
+            // ---- end ConfigRawParams remainder ----
             fly_scroll: gpui::ScrollHandle::new(),
             plan_scroll: gpui::ScrollHandle::new(),
             plan_docking,
@@ -1627,8 +1644,11 @@ impl MissionPlanner {
         {
             next = next.clamp(low, high);
         }
-        self.file_status = Some(format!("{name} = {next}"));
-        self.start_param_writes(params::ParamWrites::nudge(name, next));
+        // ---- ConfigRawParams remainder ----
+        // The step is an edit of the Value cell like any other, and meets its ReadOnly box.
+        // C#: GCSViews/ConfigurationView/ConfigRawParams.cs:454-533
+        self.param_grid_edit(name, &next.to_string());
+        // ---- end ConfigRawParams remainder ----
     }
 
     /// Pushes the plan to the map after an edit.
@@ -2175,11 +2195,21 @@ impl MissionPlanner {
         let parameters = params::collect(view);
         let group = self.selected_param_group.clone();
         let selected = self.selected_param.clone();
-        div()
+        // ---- ConfigRawParams remainder ----
+        let grid = raw_params_grid::GridView {
+            grid: &self.param_grid,
+            changes: self.raw_params.changes(),
+            grid_focus: &self.param_grid_focus,
+            edit_focus: &self.param_edit_focus,
+            edit_focused: self.param_edit_focus.is_focused(window),
+        };
+        // ---- end ConfigRawParams remainder ----
+        let main = div()
             .id("params-body")
             .flex()
             .flex_col()
             .flex_1()
+            .min_w(px(0.0))
             .min_h(px(0.0))
             .gap_2()
             .p_2()
@@ -2187,14 +2217,10 @@ impl MissionPlanner {
             .child(params::browser_panel(
                 view,
                 &parameters,
-                group.as_deref(),
                 &self.param_search,
                 &self.param_search_focus,
                 self.param_search_focus.is_focused(window),
                 self.param_none_default,
-                // ---- row 82 ----
-                self.raw_params.collapsed(),
-                // ---- end row 82 ----
                 cx,
             ))
             // ---- row 82 ----
@@ -2205,6 +2231,9 @@ impl MissionPlanner {
                 cx,
             ))
             .children(raw_params::overlays(&self.raw_params, window, cx))
+            // ---- ConfigRawParams remainder ----
+            .children(raw_params_grid::overlays(&self.param_grid, window, cx))
+            // ---- end ConfigRawParams remainder ----
             .child(params::list_panel(
                 &parameters,
                 group.as_deref(),
@@ -2216,6 +2245,7 @@ impl MissionPlanner {
                     changes: self.raw_params.changes(),
                     collapsed: self.raw_params.collapsed(),
                 },
+                &grid,
                 cx,
             ))
             // ---- end row 82 ----
@@ -2228,9 +2258,22 @@ impl MissionPlanner {
                 &self.param_differences,
                 cx,
             ))
-            .into_any_element()
+            .into_any_element();
+        // ---- ConfigRawParams remainder ----
+        // `splitContainer1`: the tree at the splitter's distance, `but_collapse` at the grid's
+        // left, and the rest; the tree gone while it is collapsed.
+        // C#: GCSViews/ConfigurationView/ConfigRawParams.resx (splitContainer1, but_collapse)
+        let collapsed = self.raw_params.collapsed();
+        let tree = (!collapsed).then(|| params::tree_panel(&parameters, group.as_deref(), cx));
+        raw_params_grid::split(
+            tree,
+            raw_params::collapse_button(collapsed, cx),
+            main,
+            self.param_grid.layout(),
+            cx,
+        )
+        // ---- end ConfigRawParams remainder ----
     }
-
     /// The map, with the handlers that make it a map rather than a picture.
     fn map_pane(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let following = self.map.borrow().is_following();
@@ -2915,6 +2958,9 @@ impl Render for MissionPlanner {
             // ---- row 82 ----
             self.raw_params_facts(&params::collect(&view));
             // ---- end row 82 ----
+            // ---- ConfigRawParams remainder ----
+            self.param_grid_facts(&params::collect(&view));
+            // ---- end ConfigRawParams remainder ----
             // The last parameter write to end: which, how the vehicle answered, and how many
             // times the link put the PARAM_SET on the wire - one, unless it had to ask again.
             let written = self.last_param_write.as_ref();

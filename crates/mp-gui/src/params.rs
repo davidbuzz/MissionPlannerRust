@@ -283,17 +283,15 @@ pub fn groups(parameters: &[Parameter]) -> Vec<(String, usize)> {
     counted.into_iter().collect()
 }
 
-/// Download progress and the group list.
-#[allow(clippy::too_many_arguments)] // the screen's state, handed in as the C#'s controls read it
+/// Download progress, the search and the None Default box. The group list is [`tree_panel`],
+/// in the splitter's left panel.
 pub fn browser_panel(
     view: &TelemetryView,
     parameters: &[Parameter],
-    selected_group: Option<&str>,
     search: &crate::textfield::TextField,
     search_focus: &gpui::FocusHandle,
     focused: bool,
     none_default: bool,
-    collapsed: bool,
     cx: &mut Context<MissionPlanner>,
 ) -> impl IntoElement {
     let has_vehicle = view.vehicle.is_some();
@@ -311,44 +309,6 @@ pub fn browser_panel(
         0.0
     };
     let complete = expected > 0 && held >= usize::from(expected);
-
-    // `but_collapse`, at the tree's edge; with the tree collapsed only the button is left.
-    // C#: GCSViews/ConfigurationView/ConfigRawParams.cs:1134-1149
-    let mut group_list = div()
-        .flex()
-        .flex_wrap()
-        .gap_1()
-        .child(crate::raw_params::collapse_button(collapsed, cx));
-    let groups: Arc<[(String, usize)]> = if collapsed {
-        Arc::from(Vec::new())
-    } else {
-        groups_of(parameters)
-    };
-    for (group, count) in groups.iter() {
-        let group = group.clone();
-        let chosen = selected_group == Some(group.as_str());
-        let label = format!("{group} {count}");
-        group_list = group_list.child(
-            crate::probe::measured(format!("param-group-{group}"), div())
-                .id(gpui::SharedString::from(format!("group-{group}")))
-                .px_2()
-                .py(px(1.0))
-                .rounded_sm()
-                .border_1()
-                .border_color(rgb(if chosen { theme::ACCENT } else { theme::BORDER }))
-                .bg(rgb(if chosen { theme::ACTION } else { theme::PANEL }))
-                .text_xs()
-                .text_color(rgb(if chosen { theme::ACCENT } else { theme::TEXT }))
-                .cursor_pointer()
-                .hover(|style| style.bg(rgb(theme::BORDER)))
-                .child(label)
-                .on_click(cx.listener(move |this, _event, _window, cx| {
-                    this.selected_param_group = Some(group.clone());
-                    this.selected_param = None;
-                    cx.notify();
-                })),
-        );
-    }
 
     panel(
         "parameters",
@@ -434,19 +394,54 @@ pub fn browser_panel(
                             }))
                     })),
             )
-            .children((expected > 0 && !complete).then(|| progress(fraction, theme::ACCENT)))
-            .child(group_list),
+            .children((expected > 0 && !complete).then(|| progress(fraction, theme::ACCENT))),
     )
+}
+
+// ---- ConfigRawParams remainder ----
+/// `treeView1`, `splitContainer1.Panel1`: the groups, each chosen as the tree's node is. It sits
+/// in the splitter's left panel, as wide as the splitter's distance; `but_collapse`, at the
+/// grid's left edge, hides it (`raw_params_grid::split`).
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.resx (treeView1, splitContainer1); ConfigRawParams.cs:688-740, 1126-1132`
+pub fn tree_panel(
+    parameters: &[Parameter],
+    selected_group: Option<&str>,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    let mut group_list = div().flex().flex_wrap().gap_1();
+    let groups: Arc<[(String, usize)]> = groups_of(parameters);
+    // ---- end ConfigRawParams remainder ----
+    for (group, count) in groups.iter() {
+        let group = group.clone();
+        let chosen = selected_group == Some(group.as_str());
+        let label = format!("{group} {count}");
+        group_list = group_list.child(
+            crate::probe::measured(format!("param-group-{group}"), div())
+                .id(gpui::SharedString::from(format!("group-{group}")))
+                .px_2()
+                .py(px(1.0))
+                .rounded_sm()
+                .border_1()
+                .border_color(rgb(if chosen { theme::ACCENT } else { theme::BORDER }))
+                .bg(rgb(if chosen { theme::ACTION } else { theme::PANEL }))
+                .text_xs()
+                .text_color(rgb(if chosen { theme::ACCENT } else { theme::TEXT }))
+                .cursor_pointer()
+                .hover(|style| style.bg(rgb(theme::BORDER)))
+                .child(label)
+                .on_click(cx.listener(move |this, _event, _window, cx| {
+                    this.selected_param_group = Some(group.clone());
+                    this.selected_param = None;
+                    cx.notify();
+                })),
+        );
+    }
+    group_list.into_any_element()
 }
 
 /// `chk_none_default.Text`.
 /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.resx`
 pub const NONE_DEFAULT: &str = "None Default";
-
-/// The grid's headers, `Command.HeaderText`, `Value.HeaderText`, `Default_value.HeaderText`,
-/// `Units.HeaderText`.
-/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.resx`
-pub const HEADERS: [&str; 4] = ["Command", "Value", "Default", "Units"];
 
 /// `has_defaults`: whether any parameter came with a default - the Default column and the None
 /// Default box show only then.
@@ -531,10 +526,13 @@ pub fn list_panel(
     search: &str,
     selected: Option<&str>,
     filters: &Filters<'_>,
+    // ---- ConfigRawParams remainder ----
+    grid: &crate::raw_params_grid::GridView<'_>,
+    // ---- end ConfigRawParams remainder ----
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
     let with_defaults = has_defaults(parameters);
-    let Some(shown) = shown(parameters, group, search, filters) else {
+    let Some(mut shown) = shown(parameters, group, search, filters) else {
         return panel(
             "values",
             div()
@@ -556,68 +554,36 @@ pub fn list_panel(
         .into_any_element();
     }
 
-    let mut rows = div().flex().flex_col();
-    // The grid's header row, the Default column only when the vehicle gave defaults.
-    let mut header = div()
+    // ---- ConfigRawParams remainder ----
+    // `Params.Sort(Command, Ascending)` with `OnParamsOnSortCompare`: favourites first, then by
+    // name in natural order. The grid's columns - Name, Value, Default (with defaults), Units,
+    // Options, Desc and Fav - at their widths, each row 36 high.
+    // C#: GCSViews/ConfigurationView/ConfigRawParams.cs:589-645, 674-676, 833-858
+    crate::raw_params_grid::sort_rows(&mut shown, grid.grid.favourites());
+    let mut rows = div()
         .flex()
-        .gap_2()
-        .py(px(1.0))
-        .text_xs()
-        .text_color(rgb(theme::DIM))
-        .child(div().w(px(150.0)).child(HEADERS[0]))
-        .child(div().w(px(130.0)).child(HEADERS[1]));
-    if with_defaults {
-        header = header.child(div().w(px(90.0)).child(HEADERS[2]));
-    }
-    rows = rows.child(header.child(div().flex_1().min_w(px(0.0)).child(HEADERS[3])));
+        .flex_col()
+        .child(crate::raw_params_grid::header(
+            grid.grid.layout(),
+            with_defaults,
+            cx,
+        ));
     for parameter in shown {
         let chosen = selected == Some(parameter.name.as_str());
-        let name = parameter.name.clone();
-        let units = parameter.meta.map_or("", |meta| meta.units);
-        rows = rows.child(
-            crate::probe::measured(format!("param-{name}"), div())
-                .id(gpui::SharedString::from(format!("row-{name}")))
-                .flex()
-                .gap_2()
-                .py(px(1.0))
-                .text_xs()
-                .cursor_pointer()
-                .bg(rgb(if chosen { theme::ACTION } else { theme::PANEL }))
-                .text_color(rgb(if chosen { theme::ACCENT } else { theme::TEXT }))
-                .hover(|style| style.bg(rgb(theme::BORDER)))
-                .child(div().w(px(150.0)).child(parameter.name.clone()))
-                .child(div().w(px(130.0)).child(parameter.shown()))
-                // `Default_value`: `default_value_to_string`, "NaN" without one.
-                // C#: ConfigRawParams.cs:598-603
-                .children(with_defaults.then(|| {
-                    div()
-                        .w(px(90.0))
-                        .text_color(rgb(if parameter.differs_from_default() {
-                            theme::WARN
-                        } else {
-                            theme::DIM
-                        }))
-                        .child(parameter.default_shown())
-                }))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w(px(0.0))
-                        .text_color(rgb(theme::DIM))
-                        .child(units.to_owned()),
-                )
-                .on_click(cx.listener(move |this, _event, _window, cx| {
-                    let already = this.selected_param.as_deref() == Some(name.as_str());
-                    this.selected_param = (!already).then(|| name.clone());
-                    cx.notify();
-                })),
-        );
+        rows = rows.child(crate::raw_params_grid::row(
+            parameter,
+            grid,
+            with_defaults,
+            chosen,
+            cx,
+        ));
     }
 
     panel(
         "values",
         div()
             .id("param-values")
+            .track_focus(grid.grid_focus)
             .flex()
             .flex_col()
             .max_h(px(420.0))
@@ -625,8 +591,8 @@ pub fn list_panel(
             .child(rows),
     )
     .into_any_element()
+    // ---- end ConfigRawParams remainder ----
 }
-
 /// What the selected parameter is, and controls to change it.
 pub fn editor_panel(
     parameters: &[Parameter],
@@ -1251,6 +1217,10 @@ impl MissionPlanner {
                 // ---- row 82 ----
                 self.raw_params.written(&written);
                 // ---- end row 82 ----
+                // ---- ConfigRawParams remainder ----
+                // Write Params' count of what is still to hear back.
+                self.param_grid.written(&written);
+                // ---- end ConfigRawParams remainder ----
                 self.last_param_write = Some(written);
             }
         }

@@ -23,6 +23,10 @@
 screen params
 window 1600x1200
 settle 6
+# RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
+# again?" unticked, so no later visit asks, and OK.
+click raw-param-warning-again
+click raw-param-warning-ok
 
 # Initial Setup lists the page once the vehicle has FRAME_CLASS (InitialSetup.cs:189-191), and
 # here parameters are downloaded when asked for.

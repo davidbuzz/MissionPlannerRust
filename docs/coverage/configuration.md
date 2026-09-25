@@ -183,10 +183,23 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
         //     from file as compare then apply, Load Presaved with its GitHub Frame_params list
         //     and ParamCompare, Reset to Default, Commit Params (under
         //     displayParamCommitButton) and Refresh Table (under SlowMachine) - raw_params.rs;
-        //     missing the Fav column and its sort, the Options column's in-row combo,
-        //     NumericUpDown and Set Bitmask, the Desc column and its link, the ReadOnly and
-        //     out-of-range questions on an edit, Ctrl+S, the columns' remembered widths and the
-        //     splitter's distance, and the RawParamWarning box |
+        //     the grid's Name, Value, Default, Units, Options, Desc and Fav columns at the .resx
+        //     widths, the Fav column kept in fav_params and the grid sorted favourites first in
+        //     NaturalStringComparer's order, the Options cell's text and the control Params_RowEnter
+        //     puts over it (Set Bitmask's window, the values' drop-down, the range's
+        //     NumericUpDown), the Desc cell's link, the typed Value cell (double click, F2 or a
+        //     key) with Params_CellValueChanged's REV fix, red cell, ReadOnly box and out-of-range
+        //     question, Ctrl+S as Write Params over _changes with its question and its ends, the
+        //     columns' widths and the splitter kept under rawparam_* on Deactivate and read on
+        //     Activate (both draggable), and RawParamWarning's MessageShowAgain box -
+        //     raw_params_grid.rs; missing the cells' tooltips (AddNewLinesForTooltip), the
+        //     headers' click sorting (a text column's automatic SortMode through
+        //     OnParamsOnSortCompare), mXparser's expressions in a typed value (read as a number
+        //     here), typing into the NumericUpDown's own box, the questions on a file's or a
+        //     presaved file's values (the C#'s ParamCompare puts them through the grid's
+        //     CellValueChanged), ReadOnly from anything but the fetched apm.pdef.xml (the C#'s
+        //     SITL, AP_Periph and ParameterMetaData.xml fallbacks), and the Options cell's range
+        //     as the file writes it (here from its two numbers) |
 | 235 | `ConfigFlightModes` | Flight Modes |  | Ateryx | 8 | as at `GCSViews/InitialSetup.cs:228` |
 | 236 | `ConfigAteryxSensors` | Ateryx Zero Sensors |  | Ateryx | 3 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 | 237 | `ConfigAteryx` | Ateryx Pids |  | Ateryx | 8 | done: `crates/mp-gui/src/config/ateryx.rs` `fn page` |

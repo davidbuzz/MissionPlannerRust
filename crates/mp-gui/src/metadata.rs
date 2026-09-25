@@ -29,6 +29,11 @@ struct Loaded {
     /// What it is: `Copter4.5.7` or `ArduCopter`, the file's stem.
     source: String,
     table: BTreeMap<String, &'static ParamMeta>,
+    // ---- ConfigRawParams remainder ----
+    /// `<field name="ReadOnly">`'s text, by name, for the parameters the file gives one:
+    /// [`ParamMeta`] has no such field, and the bundled table none to give.
+    read_only: BTreeMap<String, String>,
+    // ---- end ConfigRawParams remainder ----
 }
 
 static LOADED: RwLock<Option<Loaded>> = RwLock::new(None);
@@ -63,6 +68,19 @@ fn lookup_in(
         .and_then(|table| table.get(name).copied())
         .or_else(|| mp_params::param_meta::lookup(name))
 }
+
+// ---- ConfigRawParams remainder ----
+/// `GetParameterMetaData(name, ParameterMetaDataConstants.ReadOnly, firmware)`: the fetched
+/// file's `<field name="ReadOnly">` text for the parameter, or `None`, which is the C#'s empty
+/// string. The C# goes on to the SITL and AP_Periph files and the old `ParameterMetaData.xml`
+/// for a name its vehicle's file lacks; here there is only the one fetched file, and the bundled
+/// table carries no ReadOnly, so a parameter read before the file arrives is not read-only.
+/// `// C#: ExtLibs/Utilities/ParameterMetaDataRepository.cs:27-67; GCSViews/ConfigurationView/ConfigRawParams.cs:480-483`
+#[must_use]
+pub fn read_only(name: &str) -> Option<String> {
+    LOADED.read().ok()?.as_ref()?.read_only.get(name).cloned()
+}
+// ---- end ConfigRawParams remainder ----
 
 /// Which documentation [`lookup`] is answering from: a number that moves each time a fetched
 /// file is installed, and only then.
@@ -103,6 +121,12 @@ pub fn install(source: impl Into<String>, pdef: &Pdef) -> usize {
         *guard = Some(Loaded {
             source: source.into(),
             table,
+            // ---- ConfigRawParams remainder ----
+            read_only: pdef
+                .params()
+                .filter_map(|param| Some((param.name.clone(), param.read_only.clone()?)))
+                .collect(),
+            // ---- end ConfigRawParams remainder ----
         });
     }
     // After the table is in place, never before: a reader that sees the new number must find

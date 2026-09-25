@@ -653,10 +653,19 @@ impl MissionPlanner {
             let collapsed = self.persisted.get(COLLAPSED_KEY).map(str::to_owned);
             self.raw_params
                 .activate(collapsed.as_deref(), &view.parameters);
+            // ---- ConfigRawParams remainder ----
+            self.param_grid_activate();
+            // ---- end ConfigRawParams remainder ----
         } else if !showing && self.raw_params.is_active() {
             let (key, value) = self.raw_params.deactivate();
             self.persisted.set(key, value);
+            // ---- ConfigRawParams remainder ----
+            self.param_grid_deactivate();
+            // ---- end ConfigRawParams remainder ----
         }
+        // ---- ConfigRawParams remainder ----
+        self.param_grid_tick();
+        // ---- end ConfigRawParams remainder ----
 
         let presets = &mut self.raw_params.presets;
         if let Some(listing) = &presets.listing {
@@ -1664,6 +1673,9 @@ mod tests {
             include_str!("raw_params.rs"),
             include_str!("params.rs"),
             include_str!("main.rs"),
+            // ---- ConfigRawParams remainder ----
+            include_str!("raw_params_grid.rs"),
+            // ---- end ConfigRawParams remainder ----
         ];
         for line in script.lines() {
             let line = line.split('#').next().unwrap_or_default().trim();

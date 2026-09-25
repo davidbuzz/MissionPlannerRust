@@ -167,6 +167,10 @@ expect config.pages ~ ConfigUserDefined,ConfigRawParams,ConfigPlanner
 click config-page-ConfigRawParams
 expect config.page ConfigRawParams
 expect config.title Full Parameter List
+# RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
+# again?" unticked, so no later visit asks, and OK.
+click raw-param-warning-again
+click raw-param-warning-ok
 click config-page-ConfigAC_Fence
 expect config.page ConfigAC_Fence
 click config-page-ConfigArducopter

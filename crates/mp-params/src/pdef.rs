@@ -364,6 +364,10 @@ pub struct PdefParam {
     pub user_level: UserLevel,
     /// `<field name="RebootRequired">True</field>`.
     pub reboot_required: bool,
+    /// `<field name="ReadOnly">`'s text, as the C# reads it before its `bool.Parse`; `None`
+    /// without the field.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:480-486; ExtLibs/Utilities/ParameterMetaDataConstants.cs:28`
+    pub read_only: Option<String>,
 }
 
 /// A parsed `apm.pdef.xml`.
@@ -491,6 +495,7 @@ fn read_param(name: &str, param: &roxmltree::Node<'_, '_>) -> PdefParam {
             _ => UserLevel::Unspecified,
         },
         reboot_required: false,
+        read_only: None,
     };
     for child in param.children().filter(roxmltree::Node::is_element) {
         let text = child.text().unwrap_or_default().trim();
@@ -507,6 +512,11 @@ fn read_param(name: &str, param: &roxmltree::Node<'_, '_>) -> PdefParam {
                 }
                 Some("Increment") => out.increment = text.parse().ok(),
                 Some("RebootRequired") => out.reboot_required = text.eq_ignore_ascii_case("true"),
+                // `xElement.Value`: the element's text as it stands.
+                // C#: ExtLibs/Utilities/ParameterMetaDataRepositoryAPMpdef.cs:250-258
+                Some("ReadOnly") => {
+                    out.read_only = Some(child.text().unwrap_or_default().to_owned());
+                }
                 Some("Bitmask") if out.bitmask.is_empty() => {
                     out.bitmask = text
                         .split(',')
@@ -578,6 +588,7 @@ mod tests {
       <param humanName="Acro Roll/Pitch Expo" name="ACRO_RP_EXPO" documentation="the library's" user="Advanced">
         <field name="Range">-0.5 0.95</field>
         <field name="RebootRequired">True</field>
+        <field name="ReadOnly">True</field>
         <values>
           <value code="0">Disabled</value>
           <value code="1">Enabled</value>
@@ -606,6 +617,23 @@ mod tests {
             ]
         );
         assert_eq!(pdef.get("NOPE"), None);
+        assert_eq!(filt.read_only, None);
+    }
+
+    /// `<field name="ReadOnly">`'s text is kept for the Full Parameter List's edit check.
+    #[test]
+    fn a_read_only_field_is_kept_as_its_text() {
+        let pdef = Pdef::parse(SAMPLE).expect("parses");
+        let lib = Pdef::parse(&SAMPLE.replace("ArduCopter:ACRO_RP_EXPO", "ArduCopter:ACRO_OTHER"))
+            .expect("parses");
+        assert_eq!(
+            pdef.get("ACRO_RP_EXPO").and_then(|p| p.read_only.clone()),
+            None
+        );
+        assert_eq!(
+            lib.get("ACRO_RP_EXPO").and_then(|p| p.read_only.clone()),
+            Some("True".to_owned())
+        );
     }
 
     /// The vehicle's block comes before the libraries, and the C# returns the first match.

@@ -31,6 +31,10 @@ setup printf '\357\273\277<?xml version="1.0" encoding="utf-8"?>\n<Config>\n  <S
 screen params
 window 1600x1200
 settle 12
+# RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
+# again?" unticked, so no later visit asks, and OK.
+click raw-param-warning-again
+click raw-param-warning-ok
 
 expect vehicle.connected true
 expect params.held > 1000

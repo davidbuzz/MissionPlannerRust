@@ -10,6 +10,10 @@
 screen params
 window 1600x1200
 settle 10
+# RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
+# again?" unticked, so no later visit asks, and OK.
+click raw-param-warning-again
+click raw-param-warning-ok
 
 expect params.metadata.source ~ Copter
 expect params.metadata.documented > 1000

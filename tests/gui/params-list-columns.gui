@@ -1,0 +1,163 @@
+# The Full Parameter List's grid (the ConfigRawParams remainder, after rows 81 and 82): the
+# RawParamWarning box, the columns' widths and the splitter kept in config.xml, the Fav column and
+# its sort, the Desc column, the Options column's NumericUpDown, the typed Value cell's
+# out-of-range question answered No, and Ctrl+S with nothing to write.
+#
+# The claims, each the C#'s (GCSViews/ConfigurationView/ConfigRawParams.cs):
+# * Activate shows Common.MessageShowAgain(Strings.RawParamWarning, ...) (:92) every time, until
+#   its "Show me again?" is unticked, which is saved as SHOWAGAIN_Raw_Param_Warning False
+#   (Common.cs:260-270, 446-449).
+# * Activate sets each resizable column's width from rawparam_<column>_width and the splitter
+#   from rawparam_splitterdistance (:70-84); Deactivate writes them all back (:99-112). This test's
+#   config.xml gives the Options column 222 and the splitter 260; the rest are the .resx's.
+# * The Fav cell ticked appends the name to fav_params and sorts the grid, favourites first, by
+#   name in natural order (:1045-1063, :833-858). Unticking the last favourite calls SetList with
+#   an empty list, which returns without touching the setting (ExtLibs/Utilities/Settings.cs:171-
+#   176): the cell unticks and fav_params keeps the name.
+# * Desc, Units and Options come from the documentation (:604-645). RTL_LOIT_TIME's bundled
+#   documentation: "Time (in milliseconds) to loiter above home before beginning final descent",
+#   ms, 0 to 60000 in steps of 1000 - so the row entered gets a NumericUpDown (:1270-1316) whose
+#   arrows put their text in the Value cell, which is an edit, written here as it is made.
+# * A typed value outside the range asks "RTL_LOIT_TIME value is out of range. Do you want to
+#   continue?" under "Out of range"; No keeps the old value (:499-516).
+# * Ctrl+S is Write Params (:116-125); with nothing waiting it says "No parameters were changed."
+#   under "No changes" (:370-371).
+#
+# NOT RUN HERE: dragging a header's edge or the splitter - the runner has no drag; the drag is
+# proven in crates/mp-gui/src/raw_params_grid.rs (a_drag_moves_a_width_and_the_splitter), and
+# the widths here are the settings' and the restart's. The ReadOnly box needs the fetched
+# apm.pdef.xml's ReadOnly field (an_edit_writes_or_asks); Ctrl+S's writes and the reboot's box
+# need a write never echoed (write_params_writes_and_says_a_reboot_is_required).
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm, with
+# RTL_LOIT_TIME at its default 5000. Run as
+#
+#   tools/gui-test.sh tests/gui/params-list-columns.gui -- tcp:127.0.0.1:5760
+
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '\357\273\277<?xml version="1.0" encoding="utf-8"?>\n<Config>\n  <rawparam_Options_width>222</rawparam_Options_width>\n  <rawparam_splitterdistance>260</rawparam_splitterdistance>\n</Config>' > "$WORK/config.xml"
+
+screen params
+window 1600x1200
+settle 12
+
+expect vehicle.connected true
+expect params.held > 1000
+expect params.active true
+
+# RawParamWarning, "Show me again?" ticked; OK closes it.
+expect params.warning true
+expect params.config.SHOWAGAIN_Raw_Param_Warning none
+click raw-param-warning-ok
+settle 1
+expect params.warning false
+
+# The widths and the splitter as config.xml has them; the rest the .resx's.
+expect params.width.Options 222
+expect params.width.Command 130
+expect params.width.Value 70
+expect params.width.Units 60
+expect params.width.Fav 30
+expect params.splitter 260
+
+# RTL's rows in natural order; RTL_LOIT_TIME made a favourite goes first.
+click param-group-RTL
+settle 1
+expect params.fav none
+expect params.rows.first RTL_ALT_FINAL_M
+click param-fav-RTL_LOIT_TIME
+settle 1
+expect params.fav RTL_LOIT_TIME
+expect params.config.fav_params RTL_LOIT_TIME
+expect params.rows.first RTL_LOIT_TIME
+
+# The Fav click entered the row: its documentation, and the NumericUpDown over its range.
+expect params.selected.desc ~ loiter above home
+expect params.selected.units ms
+expect params.selected.options 0 60000
+expect params.selected.value 5000
+expect params.control range
+expect params.control.text 5000
+
+# The typed Value cell: out of range, asked, No - nothing written, the value kept.
+expect params.write.name none
+doubleclick param-value-RTL_LOIT_TIME
+settle 1
+expect params.editing RTL_LOIT_TIME
+key ctrl+u
+type 99999
+key Return
+settle 1
+expect params.editing none
+expect params.box Out of range
+expect params.box.text RTL_LOIT_TIME value is out of range. Do you want to continue?
+click param-box-no
+settle 1
+expect params.box none
+expect params.write.name none
+expect params.selected.value 5000
+expect params.red none
+
+# The NumericUpDown's arrows: 6000 written and heard back, then 5000 again.
+click param-options-up
+settle 3
+expect params.control.text 6000
+expect params.write.name RTL_LOIT_TIME
+expect params.write.outcome accepted
+expect params.selected.value 6000
+expect params.changes 0
+click param-options-down
+settle 3
+expect params.write.outcome accepted
+expect params.selected.value 5000
+
+# Ctrl+S from the grid with nothing waiting.
+click param-value-RTL_LOIT_TIME
+key ctrl+s
+settle 1
+expect params.box No changes
+expect params.box.text No parameters were changed.
+click param-box-ok
+settle 1
+expect params.box none
+
+# Leaving is Deactivate: every width and the splitter into the settings.
+click tab-fly
+settle 2
+expect params.active false
+expect params.config.rawparam_Options_width 222
+expect params.config.rawparam_Command_width 130
+expect params.config.rawparam_Default_value_width 70
+expect params.config.rawparam_Fav_width 30
+expect params.config.rawparam_splitterdistance 260
+
+# The close box saves config.xml; the next start reads the widths, the splitter and the favourite.
+restart
+settle 12
+expect params.active true
+expect params.warning true
+expect params.width.Options 222
+expect params.splitter 260
+expect params.fav RTL_LOIT_TIME
+
+# "Show me again?" unticked: saved False, and the next Activate asks nothing.
+click raw-param-warning-again
+settle 1
+expect params.config.SHOWAGAIN_Raw_Param_Warning False
+click raw-param-warning-ok
+settle 1
+click tab-fly
+settle 1
+click tab-params
+settle 1
+expect params.active true
+expect params.warning false
+
+# The last favourite unticked: the cell unticks, the setting keeps it (SetList of nothing).
+click param-group-RTL
+settle 1
+click param-fav-RTL_LOIT_TIME
+settle 1
+expect params.fav none
+expect params.config.fav_params RTL_LOIT_TIME
+expect params.rows.first RTL_ALT_FINAL_M
