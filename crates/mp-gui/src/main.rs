@@ -93,12 +93,13 @@ impl Docking {
 }
 
 /// A combo's open list: below its box, above everything else, thirty rows at most before it
-/// scrolls, as this application draws every drop-down.
-fn dropdown(rows: Vec<gpui::AnyElement>) -> gpui::AnyElement {
+/// scrolls, as this application draws every drop-down. Measured under `id`, so a script can
+/// wheel it to an entry past the rows it shows (`reveal main-port-list main-port-TCP`).
+fn dropdown(id: &'static str, rows: Vec<gpui::AnyElement>) -> gpui::AnyElement {
     gpui::deferred(
         gpui::anchored().snap_to_window().child(
-            div()
-                .id("main-dropdown")
+            probe::measured(id, div())
+                .id(id)
                 .mt(px(22.0))
                 .flex()
                 .flex_col()
@@ -1214,7 +1215,7 @@ impl MissionPlanner {
                                 .into_any_element()
                         })
                         .collect();
-                    dropdown(rows)
+                    dropdown("main-port-list", rows)
                 })),
         );
         // `cmb_Baud`: its text, and the sixteen rates below it when clicked.
@@ -1274,7 +1275,7 @@ impl MissionPlanner {
                                 .into_any_element()
                         })
                         .collect();
-                    dropdown(rows)
+                    dropdown("main-baud-list", rows)
                 })),
         );
         // `MenuConnect`: CONNECT, or DISCONNECT while the link is open.

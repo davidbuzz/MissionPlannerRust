@@ -309,7 +309,7 @@ fn init_types() {
     fn make<T: PyClassImpl + StaticType>() {
         if T::static_cell().get().is_none() {
             T::init_builtin_type();
-            let ctx: &'static Context = &**Context::genesis();
+            let ctx: &'static Context = Context::genesis();
             T::extend_class(ctx, T::static_type());
         }
     }
@@ -346,7 +346,7 @@ pub fn run_with(
         .settings(settings)
         .init_stdlib()
         .build();
-    let outcome = interpreter.enter(|vm| -> Result<(), String> {
+    interpreter.enter(|vm| -> Result<(), String> {
         // After genesis: the classes derive from `object`, which the context makes.
         init_types();
         let describe = |exc: PyBaseExceptionRef| -> String {
@@ -413,8 +413,7 @@ pub fn run_with(
                 Err(describe(exc))
             }
         }
-    });
-    outcome
+    })
 }
 
 /// Runs `source` on this thread and returns what came of it and everything it printed.

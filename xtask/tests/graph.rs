@@ -64,6 +64,10 @@ const LAYERS: &[(u8, &[&str])] = &[
             "mp-ftp",
             "mp-firmware",
             "mp-calibration",
+            // Script.cs's Python host: a service the flight screen's Scripts tab runs, not a
+            // plugin layer above the application (moved down from L11 on 2026-09-25, when
+            // mp-gui began to depend on it; PLAN.md section 5.1).
+            "mp-script",
         ],
     ),
     // L4. Not yet, by these names: mp-log-dataflash, mp-log-tlog, mp-log-analysis, mp-logstore.
@@ -81,7 +85,6 @@ const LAYERS: &[(u8, &[&str])] = &[
     // L9. Not yet: mp-app (mp-gui, below, is it). L10. Not yet: mission-planner.
     //
     // L11. Not yet: mp-plugin-api, mp-plugin-host.
-    (11, &["mp-script"]),
     // L12. Not yet: mp-codegen (xtask holds the generators).
     (12, &["xtask"]),
 ];

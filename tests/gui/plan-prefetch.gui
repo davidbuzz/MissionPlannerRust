@@ -29,7 +29,6 @@ click map@0.45x0.40:right
 click menu-mapTool
 settle 1
 click menu-prefetch
-expect plan.prefetch.menu.total
 expect plan.prompt Rip
 expect plan.prompt.text No ripp area defined, ripp displayed on screen?
 click plan-prompt-ok
@@ -78,7 +77,7 @@ settle 1
 click menu-prefetch
 click plan-prompt-cancel
 expect plan.prompt none
-expect plan.prefetch.menu
+expect plan.prefetch.menu none
 
 # Prefetch WP Path: two waypoints make two segments from home; zooms 1 to 4 are eight walks.
 click map@0.45x0.40

@@ -34,9 +34,8 @@ click raw-param-warning-ok
 click param-download
 settle 15
 expect params.held > 1000
-# The count passes before the last parameters land; BARO_FLTR_RNG is among the later ones.
-settle 5
-expect params.value.BARO_FLTR_RNG 0
+# No `params.value.BARO_FLTR_RNG` here: the parameter screen records the rows it draws, and
+# BARO_FLTR_RNG is far down its table. The Advanced Params page records it once it lists it.
 
 # The file makes the start-up view Custom, with the page.
 click tab-config

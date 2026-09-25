@@ -4,14 +4,14 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 
 | total | done | elsewhere | missing | plumbing | dropped |
 |---:|---:|---:|---:|---:|---:|
-| 136 | 96 | 1 | 19 | 18 | 2 |
+| 136 | 100 | 1 | 15 | 18 | 2 |
 
 | control | event | handler | text | ours |
 |---|---|---|---|---|
 | `addPoiToolStripMenuItem` | Click | `addPoiToolStripMenuItem_Click` | Add Poi | done: `fly-poi-add` |
 | `ALT_btn` | Click | `ALT_btn_Click` | ALT (transponder) | done: `fly-xpdr-alt` |
 | `BUT_abortland` | Click | `BUT_abortland_Click` | Abort Landing | done: `fly-abortland` |
-| `BUT_abort_script` | Click | `BUT_abort_script_Click` | Abort Running Script | **missing** - later: scripts - `mp-script` has no interpreter yet |
+| `BUT_abort_script` | Click | `BUT_abort_script_Click` | Abort Running Script | done: `fly-script-abort` |
 | `BUTactiondo` | Click | `BUTactiondo_Click` | Do Action | done: `fly-doaction` |
 | `BUT_ARM` | Click | `BUT_ARM_Click` | Arm/ Disarm | done: `arm` |
 | `but_bintolog` | Click | `but_bintolog_Click` | Convert .Bin to .Log | done: `fly-bintolog` |
@@ -19,7 +19,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `but_dflogtokml` | Click | `but_dflogtokml_Click` | Create KML + gpx | done: `fly-dflogtokml` |
 | `BUT_DFMavlink` | Click | `BUT_DFMavlink_Click` | Download DataFlash Log Via Mavlink | done: `fly-dfmavlink` |
 | `but_disablejoystick` | Click | `but_disablejoystick_Click` | Disable Joystick | done: `joystick-enable` |
-| `BUT_edit_selected` | Click | `BUT_edit_selected_Click` | Edit Selected Script | **missing** - later: scripts - `mp-script` has no interpreter yet |
+| `BUT_edit_selected` | Click | `BUT_edit_selected_Click` | Edit Selected Script | done: `fly-script-edit` |
 | `BUT_georefimage` | Click | `BUT_georefimage_Click` | Geo Reference Images | done: `fly-georefimage` |
 | `BUT_GimbalVideo` | Click | `gimbalVideoPopOutToolStripMenuItem_Click` | Video Control | **missing** - later: video (GStreamer, HereLink, MJPEG, the camera, AVI) |
 | `BUT_Homealt` | Click | `BUT_Homealt_Click` | Set Home Alt | done: `fly-homealt` |
@@ -38,8 +38,8 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `BUT_resetGimbalPos` | Click | `BUT_resetGimbalPos_Click` | Reset Position | done: `fly-gimbal-reset` |
 | `BUTrestartmission` | Click | `BUTrestartmission_Click` | Restart Mission | done: `fly-restartmission` |
 | `BUT_resumemis` | Click | `BUT_resumemis_Click` | Resume Mission | done: `fly-resumemis` |
-| `BUT_run_script` | Click | `BUT_run_script_Click` | Run Script | **missing** - later: scripts - `mp-script` has no interpreter yet |
-| `BUT_select_script` | Click | `BUT_select_script_Click` | Select Script | **missing** - later: scripts - `mp-script` has no interpreter yet |
+| `BUT_run_script` | Click | `BUT_run_script_Click` | Run Script | done: `fly-script-run` |
+| `BUT_select_script` | Click | `BUT_select_script_Click` | Select Script | done: `fly-script-select` |
 | `BUT_SendMSG` | Click | `BUT_SendMSG_Click` | Message | done: `fly-sendmsg` |
 | `BUT_setmode` | Click | `BUT_setmode_Click` | Set Mode | done: `mode` |
 | `BUT_setwp` | Click | `BUT_setwp_Click` | Set WP | done: `fly-setwp` |

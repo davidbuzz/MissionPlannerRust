@@ -577,9 +577,10 @@ pub(crate) fn record_facts(menus: &crate::plan::PlanMenus) {
         menus.prefetch.as_ref().map_or(0, |job| job.walks),
     );
     let menu = menus.prefetch_menu.as_ref();
+    // "none" while closed: a script cannot expect an empty value.
     record(
         "plan.prefetch.menu",
-        menu.map_or_else(String::new, |menu| format!("{}-{}", menu.min, menu.max)),
+        menu.map_or_else(|| "none".to_owned(), |menu| format!("{}-{}", menu.min, menu.max)),
     );
     record(
         "plan.prefetch.menu.total",

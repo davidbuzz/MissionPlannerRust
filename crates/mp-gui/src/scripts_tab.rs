@@ -240,6 +240,8 @@ pub fn cs_field(state: &VehicleState, name: &str) -> Option<CsValue> {
 pub fn service(request: &Request, answers: &Answers<'_>) -> (Option<Reply>, Option<Effect>) {
     match request {
         Request::GetParam(name) => {
+            // `(float)MainV2.comPort.MAV.param[param].Value`: the C#'s own narrowing.
+            #[allow(clippy::cast_possible_truncation)]
             let value = answers
                 .parameters
                 .iter()
@@ -490,7 +492,15 @@ impl ScriptsTab {
         record("fly.script.selected", self.selected_text());
         record("fly.script.running", self.is_running());
         record("fly.script.redirect", self.redirect);
-        record("fly.script.console", self.console.replace('\n', " | "));
+        // "none" while empty: a script cannot expect an empty value.
+        record(
+            "fly.script.console",
+            if self.console.is_empty() {
+                "none".to_owned()
+            } else {
+                self.console.replace('\n', " | ")
+            },
+        );
         record(
             "fly.script.result",
             match &self.result {
@@ -771,8 +781,10 @@ mod tests {
     fn a_run_from_the_tab_fills_the_console_and_ends() {
         let telemetry = Telemetry::idle();
         let view = TelemetryView::disconnected("");
-        let mut tab = ScriptsTab::default();
-        tab.redirect = true;
+        let mut tab = ScriptsTab {
+            redirect: true,
+            ..Default::default()
+        };
         tab.start(
             Path::new("/scripts/ok.py"),
             "print('hello')\nprint(Script.SendRC(3, 1500, True))\n".to_owned(),

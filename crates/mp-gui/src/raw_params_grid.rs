@@ -2281,7 +2281,8 @@ pub fn split(
             }),
         )
         .children(tree.map(|tree| {
-            div()
+            // Measured, so a script can wheel it to a group below the window.
+            crate::probe::measured("params-tree", div())
                 .id("params-tree")
                 .w(px(distance))
                 .flex_shrink_0()

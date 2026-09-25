@@ -364,7 +364,7 @@ L0  mp-units  mp-math  mp-time  mp-bus  mp-settings
 L1  mp-mavlink  mp-mavlink-dialects  mp-dronecan  mp-gnss  mp-adsb  mp-cot
 L2  mp-transport  mp-transport-ble  mp-platform{,-linux,-windows,-macos}
 L3  mp-link  mp-vehicle  mp-params  mp-mission  mp-ftp  mp-firmware
-    mp-calibration  mp-joystick  mp-swarm  mp-antenna  mp-hil
+    mp-calibration  mp-joystick  mp-swarm  mp-antenna  mp-hil  mp-script
 L4  mp-log-dataflash  mp-log-tlog  mp-log-ulog  mp-log-analysis  mp-logstore
 L5  mp-geo  mp-terrain  mp-survey  mp-georef  mp-kml  mp-nofly
 --------------------------- gpui boundary -----------------------------
@@ -372,7 +372,7 @@ L6  mp-render  mp-map  mp-hud  mp-chart  mp-video  mp-terrain3d  mp-icons
 L7  mp-ui  mp-theme  mp-l10n
 L8  mp-screen-*  (one crate per GCSView; never depend on each other)
 L9  mp-app                        L10  mission-planner (bin, <200 LOC)
-L11 mp-plugin-api  mp-plugin-host  mp-script       L12 xtask  mp-codegen
+L11 mp-plugin-api  mp-plugin-host                  L12 xtask  mp-codegen
 ```
 
 **Mechanically enforced by CI over `cargo metadata`:**
@@ -420,7 +420,7 @@ LOC** (every `.rs` under `crates/`, tests included) plus **91,634 generated**, *
 | `mp-mavlink` | 1,184 | — | framing, checksums, signing |
 | `mp-settings` | 1,101 | — | `Settings.cs`: directories and `config.xml` |
 | `mp-units` | 978 | — | typed units and geodesy |
-| `mp-script` | 539 | — | the `Script.cs` host API and the corpus scan |
+| `mp-script` | 539 | — | the `Script.cs` host API, the RustPython engine and the corpus scan; L3 since 2026-09-25, when the flight screen's Scripts tab began to run it (it was drawn at L11 beside the plugin host, which it is not) |
 | `mp-chart` | 383 | — | the min/max reduction |
 | `mp-fuzz-checks` | 191 | — | the fuzz properties on stable |
 | `mp-mavlink-dialects` | 16 | 44,658 | |

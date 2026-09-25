@@ -95,7 +95,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUT_abort_script_Click",
         "Abort Running Script",
-        Done("fly-scripts"),
+        Done("fly-script-abort"),
     ),
     row(
         "BUTactiondo",
@@ -151,7 +151,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUT_edit_selected_Click",
         "Edit Selected Script",
-        Done("fly-scripts"),
+        Done("fly-script-edit"),
     ),
     row(
         "BUT_georefimage",
@@ -284,14 +284,14 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUT_run_script_Click",
         "Run Script",
-        Done("fly-scripts"),
+        Done("fly-script-run"),
     ),
     row(
         "BUT_select_script",
         "Click",
         "BUT_select_script_Click",
         "Select Script",
-        Done("fly-scripts"),
+        Done("fly-script-select"),
     ),
     row(
         "BUT_SendMSG",
@@ -1100,6 +1100,7 @@ mod tests {
     /// This crate's source, for checking that a claimed id or function exists.
     const SOURCES: &[&str] = &[
         include_str!("fly.rs"),
+        include_str!("scripts_tab.rs"),
         include_str!("main.rs"),
         include_str!("telemetry.rs"),
         include_str!("tuning.rs"),

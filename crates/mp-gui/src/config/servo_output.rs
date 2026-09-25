@@ -1751,13 +1751,26 @@ pub fn modal(
                 .text_color(rgb(theme::DIM))
                 .child(title.to_owned()),
         )
+        // Each line and the button row are held to the box's width: a flex item's minimum
+        // width is its content's, and a long line let the row grow past the border, which put
+        // Raw Param Warning's OK 140 px outside the box (the owner, 2026-09-25).
         .children(text.lines().map(|line| {
             div()
+                .w_full()
+                .min_w_0()
                 .text_sm()
                 .text_color(rgb(theme::TEXT))
                 .child(line.to_owned())
         }))
-        .child(div().flex().gap_2().justify_end().children(buttons));
+        .child(
+            div()
+                .w_full()
+                .min_w_0()
+                .flex()
+                .gap_2()
+                .justify_end()
+                .children(buttons),
+        );
     gpui::deferred(
         gpui::anchored()
             .position(gpui::point(px(0.0), px(0.0)))

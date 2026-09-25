@@ -44,6 +44,8 @@ expect main-baud left-of main-connect
 click main-port
 settle 1
 expect link.ports >= 5
+# The five kinds come after the machine's ports; with thirty-odd serial ports the list scrolls.
+reveal main-port-list main-port-TCP
 click main-port-TCP
 settle 1
 expect link.port TCP

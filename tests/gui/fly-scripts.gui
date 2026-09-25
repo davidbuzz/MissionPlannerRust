@@ -44,7 +44,10 @@ expect fly.script.redirect false
 click fly-script-select
 expect fly.prompt Python script (*.py)
 type tests/gui/fixtures/hello.py
-key Return
+# Keystrokes come back through the input method; settle so the click cannot overtake them.
+settle 1
+expect fly.prompt.value tests/gui/fixtures/hello.py
+click fly-prompt-ok
 settle 1
 expect fly.script.selected Selected Script: tests/gui/fixtures/hello.py
 
@@ -64,4 +67,4 @@ expect fly.script.console ~ done
 
 # Clear empties the console.
 click fly-script-console-clear
-expect fly.script.console 
+expect fly.script.console none

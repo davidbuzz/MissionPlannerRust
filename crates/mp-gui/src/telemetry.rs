@@ -279,9 +279,10 @@ pub struct Telemetry {
     parameters: Mutex<Option<SharedParameters>>,
     /// The Planner page's rates as last handed to [`Telemetry::hand_over_rates`].
     rates_handed: Option<StreamRates>,
-    /// `cs.messages.Clear()`: the sequence number of the last message cleared, so the view
-    /// shows only what came after it. A script's, through the Scripts tab.
-    messages_cleared: std::sync::atomic::AtomicU64,
+    /// `cs.messages.Clear()`: the sequence number of the first message still shown - 0 until a
+    /// script clears, then one past the last message there was. Sequence numbers start at 0, so
+    /// this is a bound, not a last-cleared number: the first version hid message 0 for good.
+    messages_shown_from: std::sync::atomic::AtomicU64,
     /// A plain reboot's look at a serial port afterwards, and the reopen it may lead to; see
     /// [`Telemetry::reopen_after_reboot`]. Behind a lock because [`Telemetry::reboot`] is `&self`.
     reopen: Mutex<Option<Reopen>>,
@@ -445,7 +446,7 @@ impl Telemetry {
             parameters: Mutex::new(None),
             rates_handed: None,
             reopen: Mutex::new(None),
-            messages_cleared: std::sync::atomic::AtomicU64::new(0),
+            messages_shown_from: std::sync::atomic::AtomicU64::new(0),
         }
     }
 
@@ -554,12 +555,12 @@ impl Telemetry {
             mission,
             mission_complete,
             messages: {
-                let cleared = self
-                    .messages_cleared
+                let from = self
+                    .messages_shown_from
                     .load(std::sync::atomic::Ordering::Relaxed);
                 link.recent_messages(MESSAGE_LINES)
                     .into_iter()
-                    .filter(|message| message.seq > cleared)
+                    .filter(|message| message.seq >= from)
                     .collect()
             },
             messages_dropped: link.messages_dropped(),
@@ -1304,13 +1305,13 @@ impl Telemetry {
     /// `cs.messages.Clear()`: every message so far dropped from the view; new ones show.
     /// `// C#: ExtLibs/ArduPilot/CurrentState.cs (messages)`
     pub fn clear_messages(&self) {
-        let latest = self
+        let next = self
             .link
             .as_ref()
-            .and_then(|link| link.recent_messages(1).first().map(|message| message.seq))
+            .and_then(|link| link.recent_messages(1).first().map(|message| message.seq + 1))
             .unwrap_or(0);
-        self.messages_cleared
-            .store(latest, std::sync::atomic::Ordering::Relaxed);
+        self.messages_shown_from
+            .store(next, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Whether the link was opened on a serial port: `BaseStream is SerialPort`.
@@ -2015,6 +2016,48 @@ mod tests {
     /// count stays the C#'s.
     fn fast() -> ProtocolTimeouts {
         ProtocolTimeouts::default().faster(20)
+    }
+
+    /// Message sequence numbers start at 0 and that message shows; `cs.messages.Clear()` drops
+    /// what is there and the next message shows. The first version of the clear hid message 0
+    /// for good, which the accelerometer page's failure test caught on 2026-09-25.
+    #[test]
+    fn the_first_message_shows_and_a_clear_drops_only_what_came_before() {
+        let (telemetry, mut vehicle) = Vehicle::connect(fast());
+        vehicle.send(&crate::fly::statustext(6, "first"));
+        until("the first message", || {
+            telemetry
+                .view()
+                .messages
+                .iter()
+                .any(|message| message.text == "first")
+        });
+        assert!(
+            telemetry
+                .view()
+                .messages
+                .iter()
+                .any(|message| message.seq == 0),
+            "message 0 is shown"
+        );
+        telemetry.clear_messages();
+        assert!(telemetry.view().messages.is_empty(), "cleared");
+        vehicle.send(&crate::fly::statustext(6, "second"));
+        until("the second message", || {
+            telemetry
+                .view()
+                .messages
+                .iter()
+                .any(|message| message.text == "second")
+        });
+        assert!(
+            !telemetry
+                .view()
+                .messages
+                .iter()
+                .any(|message| message.text == "first"),
+            "what was cleared stays cleared"
+        );
     }
 
     /// The `COMMAND_LONG`s the vehicle heard, as (command, confirmation).
