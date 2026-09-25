@@ -12,7 +12,6 @@
 #
 # The shapefile is testdata/planner/field: one ring in UTM zone 55S, near CMAC, with its .prj.
 
-env MP_CONFIG_XML $WORK/config.xml
 env XDG_DATA_HOME $WORK
 # A planned home, so the map has a view to project clicks through: without one a right-click
 # opens no menu and a click adds no waypoint.

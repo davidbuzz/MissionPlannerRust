@@ -43,3 +43,11 @@ moment it is given, and a suite runs only when Buzz says he has left the machine
 kill the runner, the driver and the window by PID (pgrep with a bracketed pattern, e.g.
 `gui-suite.s[h]`, so the pattern does not match the killing shell), and confirm with
 `xdotool search --name`.
+
+**2026-09-25, later:** Buzz re-enabled UI testing ("please re-enable the UI testing that was suspended earlier"). The go is again a standing one until he says stop; a suite runs on DP-1-3 with SITL from `tools/sitl/start-sitl.sh`, and the machine is kept free of builds while it runs.
+
+**SITL for a suite, 2026-09-25 evening:** start it as its own background Bash task
+(`tools/sitl/start-sitl.sh`, `run_in_background`), never as `bash -c "start-sitl.sh && suite"`:
+ArduPilot's SITL exits when its parent dies (`SITL_State.cpp` checks `getppid()` every loop), so
+the wrapper now waits on it and must stay alive; two suite runs failed every script with
+"Connection refused" before this was found. The suite then runs in a separate background task.

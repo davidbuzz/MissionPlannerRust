@@ -17,6 +17,9 @@
 
 screen params
 window 1600x1200
+# A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
+# suppressed by the settings of the machine running it.
+env MP_CONFIG_XML $WORK/config.xml
 settle 6
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
@@ -41,15 +44,16 @@ expect config.osd.note You only need to use this if you are having issue with yo
 expect config.osd.write none
 expect config.osd.presses 0
 
+# ArduPilot from 4.6 has no SRn_ parameters (ArduCopter/Parameters.cpp: "SR0 through SR6 was
+# here"; SITL's 1408 names hold none), so each setParam returns false - a name the vehicle has not
+# listed - and the C#'s try/catch, which only catches a throw, shows nothing: the button does
+# nothing on this firmware, in Mission Planner as here. The last call's false is the fact.
 click osd-enable-telemetry
 settle 12
 expect config.osd.presses 1
 expect config.osd.writes.pending 0
-expect config.osd.write SR3_RC_CHAN 2 accepted
+expect config.osd.write SR3_RC_CHAN 2 false
 expect config.osd.message none
-expect params.value.SR0_EXT_STAT 2
-expect params.value.SR1_EXTRA1 2
-expect params.value.SR3_RC_CHAN 2
 
 # Choosing another page hides this one; it is IActivate only.
 click setup-page-ConfigOptional

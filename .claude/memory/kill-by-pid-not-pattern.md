@@ -33,3 +33,9 @@ loop killed itself before reaching its targets; one such loop also killed the SI
 diagnosing, which then looked like a SITL crash. Write the pattern so it cannot match its own
 text: a bracketed last letter, `pgrep -f "sitl/arducopte[r]"`, matches the process and not the
 shell whose command line contains `arducopte[r]`.
+
+**The bracket trick has a limit (2026-09-25):** `pgrep -f 'sleep 30[0]'` still matched the calling
+shell when the same tool call had *started* `sleep 300` — the literal text was in that shell's
+command line too (exit 144 again). When start and kill share a command, keep the pid from `$!`
+and kill that; the pattern is only safe against the shell's own text when the target's literal
+command line is not written anywhere in the command that runs the pgrep.

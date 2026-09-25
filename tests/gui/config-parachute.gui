@@ -23,6 +23,9 @@
 
 screen params
 window 1600x1200
+# A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
+# suppressed by the settings of the machine running it.
+env MP_CONFIG_XML $WORK/config.xml
 settle 6
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
@@ -32,6 +35,8 @@ click raw-param-warning-ok
 click param-download
 settle 15
 expect params.held > 1000
+# The count passes before the last parameters land.
+settle 5
 expect params.value.CHUTE_ENABLED 0
 
 click tab-setup

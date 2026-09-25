@@ -31,6 +31,8 @@ click raw-param-warning-ok
 click param-download
 settle 15
 expect params.held > 1000
+# The count passes before the last parameters land.
+settle 5
 expect params.value.ATC_RAT_RLL_P 0.135
 expect params.value.ATC_RAT_PIT_P 0.135
 
@@ -88,7 +90,8 @@ expect params.value.ATC_RAT_RLL_I 0.135
 expect params.value.ATC_RAT_PIT_P 0.135
 expect params.value.ATC_RAT_PIT_I 0.135
 
-# Another page and back: Activate makes the controls afresh at the vehicle's values.
+# Another page and back: Activate makes the controls afresh at the vehicle's values. TXT_info is
+# not in panel1, so Activate leaves it (ConfigSimplePids.cs:25-36): the set lines stay.
 click config-page-ConfigUserDefined
 settle 1
 expect config.simplepids.active false
@@ -96,4 +99,4 @@ click config-page-ConfigSimplePids
 settle 1
 expect config.simplepids.active true
 expect config.simplepids.ATC_RAT_RLL_P 0.1350
-expect config.simplepids.info NOTE: using this interface may reset some off your custom pids.
+expect config.simplepids.info set ATC_RAT_RLL_P 0.135 | set ATC_RAT_RLL_I 0.135 | set ATC_RAT_PIT_P 0.135 | set ATC_RAT_PIT_I 0.135

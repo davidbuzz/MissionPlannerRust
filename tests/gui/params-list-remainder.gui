@@ -54,6 +54,8 @@ expect params.modified false
 
 # A step is written and echoed, and leaves nothing in _changes behind it.
 # This SITL (Copter 4.7-dev) names the parameter RTL_ALT_M.
+# The tree lists every group; RTL lies below a 1200-pixel window, so the wheel brings it up.
+scroll params-tree down 12
 click param-group-RTL
 click param-RTL_ALT_M
 click param-step-+

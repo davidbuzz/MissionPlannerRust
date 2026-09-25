@@ -1549,11 +1549,13 @@ impl Telemetry {
 impl Telemetry {
     /// Once a frame: asks a newly seen vehicle for its banner, and notices the banner arriving.
     ///
-    /// Mission Planner sends `DO_SEND_BANNER` at connect and for each new vehicle, and takes the
-    /// firmware version from the `STATUSTEXT` that names the vehicle; the parameter
-    /// documentation for that release is fetched from it. Sent and not waited for: the C#'s
-    /// `doCommand` passes `requireack` false.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:930-931, 1822-1830, 1856-1857`
+    /// Mission Planner asks for `AUTOPILOT_VERSION` (`getVersion`, three ways) and then sends
+    /// `DO_SEND_BANNER` at connect and for each new vehicle, and takes the firmware version from
+    /// the `STATUSTEXT` that names the vehicle; the parameter documentation for that release is
+    /// fetched from it. Sent and not waited for: the C#'s `doCommand` passes `requireack` false.
+    /// Without the version request ArduPilot never sends `AUTOPILOT_VERSION`, its capabilities
+    /// stay 0 and the MAVFtp page never lists (found by `config-mavftp.gui`, 2026-09-25).
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:928-931, 1822-1830, 1856-1857`
     pub fn tick(&mut self) {
         let Some(link) = &self.link else {
             return;
@@ -1561,6 +1563,9 @@ impl Telemetry {
         if let Some((id, _)) = link.primary_vehicle()
             && !self.banner_requested.contains(&id)
         {
+            for request in commands::get_version(id) {
+                link.send(&request);
+            }
             link.send(&commands::send_banner(id));
             self.banner_requested.insert(id);
         }

@@ -7,10 +7,13 @@
 # (ConfigGPSOrder.cs:21-51) in the Designer's grid - Order, Name, NodeID, GPS1, GPS2 - whose two
 # button columns set an override to the row's node id and run Activate again (:62-86).
 #
-# SITL's copter is firmware 4.5+: it lists GPS1_CAN_OVRIDE, so the page is enabled, but names the
-# detected id GPS1_CAN_NODEID, so Activate's read of GPS_CAN_NODEID1 is the C#'s
-# NullReferenceException - logged by BackstageView.ActivatePage, the grid left empty, as it is in
-# Mission Planner on this firmware. Which read threw is a fact. Nothing is written.
+# SITL's copter is firmware 4.5+: it lists GPS1_CAN_OVRIDE, so the page is enabled, but with one
+# GPS it has no GPS2_CAN_OVRIDE (and names the detected ids GPS1_CAN_NODEID, not GPS_CAN_NODEID1).
+# The indexer hands back null for a missing name and Activate reads the overrides' .Value first
+# (ConfigGPSOrder.cs:38-41), so id2ovr.Value is the C#'s NullReferenceException - logged by
+# BackstageView.ActivatePage, the grid left empty, as it is in Mission Planner on this firmware.
+# Which read threw is a fact; the columns are the Designer's order (Order, NodeID, Name).
+# Nothing is written.
 #
 # Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run as
 #
@@ -18,6 +21,9 @@
 
 screen params
 window 1600x1200
+# A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
+# suppressed by the settings of the machine running it.
+env MP_CONFIG_XML $WORK/config.xml
 settle 6
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
@@ -27,6 +33,8 @@ click raw-param-warning-ok
 click param-download
 settle 15
 expect params.held > 1000
+# The count passes before the last parameters land.
+settle 5
 expect params.value.GPS1_CAN_OVRIDE 0
 
 click tab-setup
@@ -39,9 +47,9 @@ expect config.gpsorder.active true
 expect config.gpsorder.enabled true
 expect config.gpsorder.heading UAVCAN GPS Order
 expect config.gpsorder.note Set the GPS order if required
-expect config.gpsorder.columns Order,Name,NodeID,GPS1,GPS2
+expect config.gpsorder.columns Order,NodeID,Name,GPS1,GPS2
 expect config.gpsorder.rows 0
-expect config.gpsorder.threw NullReferenceException at GPS_CAN_NODEID1
+expect config.gpsorder.threw NullReferenceException at GPS2_CAN_OVRIDE
 expect config.gpsorder.write none
 expect config.gpsorder.message none
 

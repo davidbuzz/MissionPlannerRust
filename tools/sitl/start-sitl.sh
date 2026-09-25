@@ -3,6 +3,15 @@
 #
 # usage: tools/sitl/start-sitl.sh [copter|plane]      prints "sitl ready pid N" or fails
 #
+# It then stays in the foreground as SITL's parent until SITL exits or it is stopped (Ctrl-C or
+# SIGTERM stop both). SITL exits when its parent dies: ArduPilot's SITL_State keeps getppid() at
+# start-up and checks it every loop (libraries/AP_HAL_SITL/SITL_State.cpp:44 and :105), so the
+# first version of this wrapper, which started SITL and returned, took it down within a second of
+# returning - two suite runs on 2026-09-25 then saw "Connection refused" from every script. To
+# script it, start it in the background and wait for the ready line:
+#   tools/sitl/start-sitl.sh > sitl.out 2>&1 &
+#   until grep -q "sitl ready" sitl.out; do sleep 1; done
+#
 # On 2026-09-25 one start in about a dozen of the bundled binary stopped after "Smoothing reset
 # at 0.001": its first client was accepted, SERIAL1 was never bound, and not one MAVLink frame
 # was ever sent, so a GUI suite run against it failed every script with "params.held is '0'".
@@ -53,11 +62,14 @@ EOF
 for attempt in 1 2 3; do
     stop_ours
     SITL_WORKDIR="${SITL_WORKDIR:-$(mktemp -d -t mp-sitl-XXXXXX)}" nohup "$HERE/run-sitl.sh" "$VEHICLE" > "$LOG" 2>&1 &
+    SITL=$!
     sleep 2
     if streams; then
-        PID=$(pgrep -f "$HERE/arducopte[r]" | head -1)
-        [ -z "$PID" ] && PID=$(pgrep -f "$HERE/arduplan[e]" | head -1)
-        echo "sitl ready pid $PID, log $LOG"
+        # run-sitl.sh execs the binary, so $SITL is the simulator's own pid.
+        echo "sitl ready pid $SITL, log $LOG"
+        trap 'kill "$SITL" 2>/dev/null; wait "$SITL" 2>/dev/null; echo "sitl stopped"; exit 0' INT TERM HUP
+        wait "$SITL"
+        echo "sitl exited with $?"
         exit 0
     fi
     echo "sitl start $attempt did not stream; last lines:" >&2

@@ -19,6 +19,9 @@
 
 screen setup
 window 1600x1200
+# A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
+# suppressed by the settings of the machine running it.
+env MP_CONFIG_XML $WORK/config.xml
 settle 6
 
 # With the parameters still to come, SETUP lists the Loading page and the pages that need none,

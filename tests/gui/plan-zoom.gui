@@ -14,7 +14,6 @@
 #
 # Needs SITL (a copter): tools/gui-test.sh tests/gui/plan-zoom.gui -- tcp:127.0.0.1:5760
 
-env MP_CONFIG_XML $WORK/config.xml
 env XDG_DATA_HOME $WORK
 env MP_PLAN_DIR $WORK
 setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/MissionPlannerRust/config.xml"

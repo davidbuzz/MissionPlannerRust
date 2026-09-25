@@ -34,6 +34,8 @@ click raw-param-warning-ok
 click param-download
 settle 15
 expect params.held > 1000
+# The count passes before the last parameters land; BARO_FLTR_RNG is among the later ones.
+settle 5
 expect params.value.BARO_FLTR_RNG 0
 
 # The file makes the start-up view Custom, with the page.
@@ -78,14 +80,14 @@ expect config.advanced.controls > 100
 click advanced-find
 type baro_fltr_rng
 key Return
-settle 1
+settle 2
 expect config.advanced.visible 1
 expect config.advanced.BARO_FLTR_RNG.kind range
 expect config.advanced.BARO_FLTR_RNG.text 0
 
 # Its arrow records 1; Write Params writes it.
 click advanced-BARO_FLTR_RNG-up
-settle 1
+settle 2
 expect config.advanced.changed.BARO_FLTR_RNG 1
 expect params.value.BARO_FLTR_RNG 0
 click advanced-write

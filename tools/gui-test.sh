@@ -282,15 +282,22 @@ start_app
 
 # Reads one fact. Empty if the key is absent, which `expect` reports as a failure rather than
 # comparing against nothing.
+# A key is text, not a pattern: its dots are escaped, or `video.device` would also match
+# `video_device` (which sorts after it and won the `tail`) - a video script failed on that on
+# 2026-09-25 while the page was right.
+fact_key_pattern() {
+    printf '%s' "$1" | sed 's/[][\.*^$]/\\&/g'
+}
+
 fact() {
     [ -s "$FACTS_FILE" ] || return 1
-    sed -n "s/^$1 = \(.*\)$/\1/p" "$FACTS_FILE" | tail -1
+    sed -n "s/^$(fact_key_pattern "$1") = \(.*\)$/\1/p" "$FACTS_FILE" | tail -1
 }
 
 # Reports a fact the application never published. Returns 0 - "yes, it is missing" - after
 # printing what was published instead, so a typo in a key reads as one rather than as a mismatch.
 no_such_fact() {
-    if [ -z "$2" ] && ! grep -q "^$1 = " "$FACTS_FILE" 2>/dev/null; then
+    if [ -z "$2" ] && ! grep -q "^$(fact_key_pattern "$1") = " "$FACTS_FILE" 2>/dev/null; then
         echo "FAIL line $LINE_NO: no such fact '$1'" >&2
         echo "       known facts:" >&2
         sed 's/^/         /' "$FACTS_FILE" >&2 2>/dev/null

@@ -28,6 +28,8 @@ click raw-param-warning-ok
 click param-download
 settle 15
 expect params.held > 1000
+# The count passes before the last parameters land.
+settle 5
 expect params.value.FRAME_CLASS 1
 
 click tab-setup

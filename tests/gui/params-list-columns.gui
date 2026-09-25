@@ -61,6 +61,8 @@ expect params.width.Fav 30
 expect params.splitter 260
 
 # RTL's rows in natural order; RTL_LOIT_TIME made a favourite goes first.
+# The tree lists every group; RTL lies below a 1200-pixel window, so the wheel brings it up.
+scroll params-tree down 12
 click param-group-RTL
 settle 1
 expect params.fav none

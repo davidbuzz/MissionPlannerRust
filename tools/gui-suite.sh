@@ -37,7 +37,12 @@ for NAME in "$@"; do
     # The header's command line names the argument; a header that only says which SITL port or
     # which file it needs names it that way.
     ARG=$(grep -m1 -oE "gui-test\.sh tests/gui/$NAME\.gui -- [^ ]+" "$SCRIPT" | awk '{print $NF}')
-    [ -z "$ARG" ] && ARG=$(grep -m1 -oE "(tcp:127\.0\.0\.1:5760|file:[^ ,]+\.tlog)" "$SCRIPT" | head -1)
+    # A "Run as" line with no argument is a script that starts without a link on purpose
+    # (main-connect needs SITL running and connects to it itself), so the port named elsewhere in
+    # its header is not passed to it.
+    if [ -z "$ARG" ] && ! grep -qE "gui-test\.sh tests/gui/$NAME\.gui[[:space:]]*$" "$SCRIPT"; then
+        ARG=$(grep -m1 -oE "(tcp:127\.0\.0\.1:5760|file:[^ ,]+\.tlog)" "$SCRIPT" | head -1)
+    fi
     for _ in $(seq 1 60); do
         LOAD=$(cut -d' ' -f1 /proc/loadavg | cut -d. -f1)
         [ "$LOAD" -lt "$MAX_LOAD" ] && break

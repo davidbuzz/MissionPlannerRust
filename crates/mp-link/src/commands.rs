@@ -7,8 +7,8 @@
 use mp_mavlink_dialects::all::{
     CommandInt, CommandLong, MavMessage, MissionAck, MissionCount, MissionItem as FloatItem,
     MissionItemInt, MissionRequestInt, MissionRequestList, MissionSetCurrent, ParamRequestList,
-    ParamRequestRead, ParamSet, RcChannelsOverride, SetGpsGlobalOrigin, SetMode,
-    SetPositionTargetGlobalInt, SystemTime,
+    AutopilotVersionRequest, ParamRequestRead, ParamSet, RcChannelsOverride, SetGpsGlobalOrigin,
+    SetMode, SetPositionTargetGlobalInt, SystemTime,
 };
 use mp_mission::MissionItem;
 use mp_vehicle::VehicleId;
@@ -110,6 +110,36 @@ pub fn land(target: VehicleId) -> MavMessage {
 
 /// `MAV_CMD_DO_SEND_BANNER`.
 pub const CMD_DO_SEND_BANNER: u16 = 42_428;
+
+/// `MAV_CMD_REQUEST_MESSAGE`.
+pub const CMD_REQUEST_MESSAGE: u16 = 512;
+/// `MAV_CMD_REQUEST_AUTOPILOT_CAPABILITIES`, deprecated but still sent.
+pub const CMD_REQUEST_AUTOPILOT_CAPABILITIES: u16 = 520;
+/// `AUTOPILOT_VERSION`'s message id, `MAV_CMD_REQUEST_MESSAGE`'s param1.
+pub const MSG_ID_AUTOPILOT_VERSION: f32 = 148.0;
+
+/// `getVersion`: asks the vehicle for its `AUTOPILOT_VERSION` - its capabilities (FTP among
+/// them, which decides the MAVFtp page and the parameter download's path), its flight software
+/// version and its ids - "using all three methods", in the C#'s words: `MAV_CMD_REQUEST_MESSAGE`
+/// for message 148, the deprecated `MAV_CMD_REQUEST_AUTOPILOT_CAPABILITIES`, and the deprecated
+/// `AUTOPILOT_VERSION_REQUEST` message. Mission Planner sends them at connect, before the banner
+/// request, and does not wait for the answer there.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:928, 5847-5861`
+#[must_use]
+pub fn get_version(target: VehicleId) -> [MavMessage; 3] {
+    [
+        command(
+            target,
+            CMD_REQUEST_MESSAGE,
+            [MSG_ID_AUTOPILOT_VERSION, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        ),
+        command(target, CMD_REQUEST_AUTOPILOT_CAPABILITIES, [0.0; 7]),
+        MavMessage::AutopilotVersionRequest(AutopilotVersionRequest {
+            target_system: target.sysid,
+            target_component: target.compid,
+        }),
+    ]
+}
 
 /// Asks the vehicle to say what it is.
 ///
@@ -946,6 +976,31 @@ mod tests {
             "channels 9-18 release with UINT16_MAX-1, not 0"
         );
         assert_eq!(message.chan18_raw, u16::MAX - 1);
+    }
+
+    /// `getVersion` sends all three requests for `AUTOPILOT_VERSION`, each addressed to the
+    /// vehicle: without them ArduPilot never sends the message, so the capabilities stay 0 and
+    /// the MAVFtp page never lists. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5847-5861`
+    #[test]
+    fn the_version_request_asks_all_three_ways() {
+        let target = VehicleId::new(7, 42);
+        let [request_message, request_capabilities, version_request] = get_version(target);
+        let (command, params) = long(&request_message);
+        assert_eq!(command, 512, "MAV_CMD_REQUEST_MESSAGE");
+        assert_eq!(params[0], 148.0, "AUTOPILOT_VERSION is message 148");
+        assert_eq!(&params[1..], &[0.0; 6]);
+        let (command, params) = long(&request_capabilities);
+        assert_eq!(command, 520, "MAV_CMD_REQUEST_AUTOPILOT_CAPABILITIES");
+        assert_eq!(params, [0.0; 7]);
+        let MavMessage::AutopilotVersionRequest(message) = version_request else {
+            panic!("the third is AUTOPILOT_VERSION_REQUEST");
+        };
+        assert_eq!((message.target_system, message.target_component), (7, 42));
+        for message in get_version(target) {
+            if let MavMessage::CommandLong(command) = message {
+                assert_eq!((command.target_system, command.target_component), (7, 42));
+            }
+        }
     }
 
     #[test]
