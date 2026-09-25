@@ -32,7 +32,7 @@ renderer with no web backend. Reference clone: [references/zed](references/zed).
 | [D13](#d13-initial-setup-calibration-and-firmware) | 2 | Setup, calibration, firmware flashing | P1 | In progress (55% completed est) | Not started | Not started | Unit + SITL + hardware |
 | [D14](#d14-log-engine-and-analysis) | 2 | Dataflash log parsing, plots | P1 | In progress (65% completed est) | Not started | Not started | Differential vs C# |
 | [D15](#d15-can-peripherals-and-outboard-features) | 2 | DroneCAN, peripherals, video, joystick | P2 | In progress (20% completed est) | Not started | Not started | Unit |
-| [D16](#d16-extension-and-scripting-system) | 2 | Python scripting, WASM extensions | P2 | In progress (30% completed est) | Not started | Not started | Unit |
+| [D16](#d16-extension-and-scripting-system) | 2 | Python scripting, WASM extensions | P2 | In progress (60% completed est) | Not started | Not started | Unit |
 | [D17](#d17-localization-settings-and-data-compatibility) | 2 | i18n, settings, data compatibility | P1 | In progress (55% completed est) | Not started | Not started | Differential vs C# |
 | [D18](#d18-translation-factory-and-porting-ledger) | 3 | Translation factory, file ledger | P0 (ledger) / P1 (factory) | In progress (30% completed est) | Not started | Not started | Unit |
 | [D19](#d19-verification-suite) | 3 | Differential, SITL, fuzz verification | P0 | In progress (50% completed est) | Not started | Not started | Differential vs C# + fuzz |
@@ -595,7 +595,7 @@ one of them.
   extensions are sandboxed and cannot crash the app; a migration guide plus at least one real C# plugin and
   one IronPython script reimplemented as proof; API versioned and documented.
 - **Replaces:** `Plugin/`, `Plugins/`, `plugins/` (13,289 total), `Script.cs` + `Scripts/` + IronPython.
-- **Today:** the extension half is decided (PLAN.md §12 D22) and tried: `experiments/wasm-plugin-host` hosts a WebAssembly plugin on the C#'s `Plugin` lifecycle under wasmtime, with the write-up recommending the component model for the real host (row 95); the interpreter is decided too - RustPython, §12 D20, row 94. `mp-script` implements the `Script.cs` host API with the C#'s semantics - including
+- **Today:** the extension half is built (2026-09-26, PLAN.md §13.6 row 96): `crates/mp-plugin-host` hosts `*.wasm` plugins from `plugins/` beside the executable on wasmtime's component model, the C#'s `Plugin` lifecycle and `PluginHost` surface as a WIT world, each plugin on its thread at its `loopratehz` under fuel; the four shipped plugins and seven examples are ported to it and driven through the host in tests, and the planner draws a plugin's described form and its menu entries. Not reachable from a plugin, listed at the site: packet subscription, sockets, the main window's members. It was decided (PLAN.md §12 D22) and tried first: `experiments/wasm-plugin-host` hosts a WebAssembly plugin on the C#'s `Plugin` lifecycle under wasmtime, with the write-up recommending the component model for the real host (row 95); the interpreter is decided too - RustPython, §12 D20, row 94. `mp-script` implements the `Script.cs` host API with the C#'s semantics - including
   `GetParam` returning 0.0 for a missing parameter, `ChangeMode` always returning true, `WaitFor`
   substring-matching messages that arrived before the call, channels capped at 8 and an override
   sent twice 20 ms apart - and measures what the corpus needs. **The measurement changes the

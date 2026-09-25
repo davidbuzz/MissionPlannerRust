@@ -1,8 +1,9 @@
 [workspace]
 resolver = "3"
 # `experiments/*` are spikes the owner asked for, in the workspace so they build and test with it:
-# the WebAssembly plugin host (PLAN.md §13.6 row 95, §12 D22).
-members = ["crates/*", "xtask", "experiments/wasm-plugin-host/host", "experiments/wasm-plugin-host/plugin"]
+# the WebAssembly plugin host (PLAN.md §13.6 row 95, §12 D22). `crates/mp-plugin-host/plugins` is
+# the real host's plugins (row 96), a member so they type-check and test natively.
+members = ["crates/*", "crates/mp-plugin-host/plugins", "xtask", "experiments/wasm-plugin-host/host", "experiments/wasm-plugin-host/plugin"]
 # `fuzz` is deliberately excluded: it needs a nightly toolchain and cargo-fuzz, and a normal
 # `cargo build --workspace` must not require either.
 exclude = ["fuzz"]
@@ -39,6 +40,7 @@ mp-georef = { path = "crates/mp-georef" }
 mp-chart = { path = "crates/mp-chart" }
 mp-script = { path = "crates/mp-script" }
 mp-video = { path = "crates/mp-video" }
+mp-plugin-host = { path = "crates/mp-plugin-host" }
 thiserror = "2"
 sha2 = "0.10"
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }

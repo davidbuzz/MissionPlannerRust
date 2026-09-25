@@ -1,0 +1,55 @@
+# The WebAssembly plugin host in the application (PLAN.md §13.6 row 96): PluginLoader.LoadAll at
+# start over the plugins folder (Plugin/PluginLoader.cs:203-311), each plugin on its own thread,
+# its map menu entries in the map menus and its questions over the window.
+#
+# The claim: two of the C#'s example plugins, ported to the WIT world and built for WebAssembly,
+# are laid in the plugins folder before start - FenceDist (plugins/example3-fencedist.cs) and
+# "Small stuff" (plugins/example2-menu.cs). Both load and run, and the status line carries the
+# loader's "Plugin Init <name> <version> by <author>"; "Draw Fence Dist" is on the flight map's
+# plugin entries and "Fix mission top/bottom" at the end of the planning map's right-click menu.
+# Choosing the latter shows the example's message box, then its "Enter Angle" input box; 90 and
+# Enter put two DO_SET_SERVOs at the top of the empty mission and two at the bottom - four rows
+# made through the plan's own AddCommand.
+#
+# The folder is the run's own through MP_PLUGINS, so no plugin is left beside the shared binary.
+# The setup builds the two plugins (cargo, wasm32-unknown-unknown; a machine without that target
+# does not run this test) and copies them there. Run as
+#
+#   tools/gui-test.sh tests/gui/plugins.gui
+
+screen fly
+window 1600x1200
+budget 8
+# A first budget, set by hand until a passing run records one.
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+env MP_PLUGINS $WORK/plugins
+setup cargo build -q --release -p mp-plugins --target wasm32-unknown-unknown --example fencedist --example menu
+setup mkdir -p $WORK/plugins && cp "${CARGO_TARGET_DIR:-target}/wasm32-unknown-unknown/release/examples/fencedist.wasm" "${CARGO_TARGET_DIR:-target}/wasm32-unknown-unknown/release/examples/menu.wasm" $WORK/plugins/
+
+# Loaded, in the folder's name order: fencedist.wasm is plugin 0, menu.wasm plugin 1.
+expect plugins.count 2
+expect plugins.FenceDist.state running
+expect plugins.FenceDist.version 0.10
+expect plugins.FenceDist.author Michael Oborne
+expect plugins.Small_stuff.state running
+expect status ~ Plugin Init
+expect plugins.menu.flight-data Draw Fence Dist
+expect plugins.menu.flight-planner Fix mission top/bottom
+expect plugins.question none
+
+# The planning map's menu, the plugin's entry at its end.
+click tab-plan
+expect map.ready true
+expect mission.items 0
+click map@0.40x0.50:right
+click plugin-menu-1-0
+expect plan.menu closed
+expect plugins.question ~ This is a sample plugin
+click plugin-question-ok
+expect plugins.question ~ Enter Angle
+type 90
+key Return
+expect plugins.question none
+expect mission.items 4
+expect mission.commands 183,183,183,183

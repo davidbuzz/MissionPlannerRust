@@ -1,0 +1,213 @@
+// Mission Planner's plugin interface, for WebAssembly plugins.
+//
+// C#: Plugin/Plugin.cs:13-72 is the `Plugin` base class a plugin derives - `Name`, `Version`,
+// `Author`, `Init`, `Loaded`, `Loop` at `loopratehz`, `Exit` - and here they are the world's
+// exports. C#: Plugin/Plugin.cs:74-248 is `PluginHost`, what a plugin may reach of the
+// application, and here it is the `host` interface a plugin imports. A .NET plugin reaches the
+// whole application through `Host.MainForm` and `Host.comPort`; a WebAssembly plugin reaches
+// exactly this and nothing else - no files, sockets or clock of its own.
+package missionplanner:plugin@0.1.0;
+
+/// `PluginHost`, member by member, and the statics the shipped plugins call beside it
+/// (`CustomMessageBox.Show`, `InputBox.Show`, `Settings.Instance`, `srtm.getAltitude`, the file
+/// dialogs).
+interface host {
+    /// One field of `CurrentState`, typed as the C# types it: a number, a string (`mode`), a
+    /// flag (`armed`, `connected`).
+    variant cs-value {
+        number(f64),
+        text(string),
+        flag(bool),
+    }
+
+    /// `Host.cs.<name>`: a field of the current vehicle's state by its C# name (`lat`, `alt`,
+    /// `groundspeed`, `mode`, `armed`...), none for a name the state does not have.
+    cs: func(name: string) -> option<cs-value>;
+
+    /// `Host.comPort.MAV.param[name]`: the vehicle's parameter as last read, none when the
+    /// vehicle has no such parameter or the list is not loaded.
+    get-param: func(name: string) -> option<f64>;
+
+    /// `ParameterMetaDataRepository.GetParameterOptionsInt(name, firmware)`: the values the
+    /// parameter's documentation lists for the connected vehicle's firmware, with their names.
+    param-options: func(name: string) -> list<tuple<s32, string>>;
+
+    /// `Host.comPort.setParam(name, value)`: true when the write went to the vehicle.
+    set-param: func(name: string, value: f64) -> bool;
+
+    /// `Host.comPort.setMode(mode)`: true when the mode change went to the vehicle.
+    set-mode: func(mode: string) -> bool;
+
+    /// `Host.comPort.sendPacket(packet, sysid, compid)`: a MAVLink message by its id and its
+    /// payload as the wire carries it; false when the message is unknown or there is no link.
+    send-packet: func(message-id: u32, payload: list<u8>) -> bool;
+
+    /// The two map menus a plugin adds entries to: `Host.FDMenuMap`, the flight screen's map,
+    /// and `Host.FPMenuMap`, the planning screen's.
+    enum map-menu {
+        flight-data,
+        flight-planner,
+    }
+
+    /// `Host.FDMenuMap.Items.Add(new ToolStripMenuItem(text))`, or, with a parent, that entry's
+    /// `DropDownItems.Add`: returns the entry's id, which `menu-click` names when it is chosen.
+    menu-add: func(menu: map-menu, parent: option<u32>, text: string) -> u32;
+
+    /// `CustomMessageBox.Show`'s buttons.
+    enum message-buttons {
+        ok,
+        yes-no,
+    }
+
+    /// What a message box was closed with.
+    enum dialog-result {
+        ok,
+        yes,
+        no,
+        cancel,
+    }
+
+    /// `CustomMessageBox.Show(text, caption, buttons)`: waits for the answer.
+    message-box: func(text: string, caption: string, buttons: message-buttons) -> dialog-result;
+
+    /// `InputBox.Show(title, prompt, ref value)`: the text entered, none when cancelled.
+    input-box: func(title: string, prompt: string, value: string) -> option<string>;
+
+    /// The status line: a line of text the application shows for the plugin.
+    status: func(text: string);
+
+    /// `log.Info`: a line for the application's log.
+    log: func(text: string);
+
+    /// A mission item as `AddWPtoList` and `InsertWP` take it: the `MAV_CMD`, its four params,
+    /// and x, y, z as `FlightPlanner.AddCommand` reads them - longitude, latitude, altitude.
+    record waypoint {
+        command: u16,
+        p1: f64,
+        p2: f64,
+        p3: f64,
+        p4: f64,
+        x: f64,
+        y: f64,
+        z: f64,
+    }
+
+    /// `Host.AddWPtoList`: appends to the planning screen's list, not to the vehicle; returns
+    /// the new row's index.
+    add-wp: func(wp: waypoint) -> s32;
+
+    /// `Host.InsertWP`: inserts at `index` in the planning screen's list.
+    insert-wp: func(index: s32, wp: waypoint);
+
+    /// `Host.GetWPs`: the planning screen's Read, the mission read from the vehicle.
+    get-wps: func();
+
+    /// One of `MAV.fencepoints`: the fence item's command (`MAV_CMD_NAV_FENCE_*`), its param1
+    /// (the vertex count or the circle's radius) and its position in degrees.
+    record fence-point {
+        command: u16,
+        param1: f32,
+        lat: f64,
+        lng: f64,
+    }
+
+    /// `Host.comPort.MAV.fencepoints`, in order.
+    fence-points: func() -> list<fence-point>;
+
+    /// `Host.config[key]`: the setting's value, none when it is not set.
+    config-get: func(key: string) -> option<string>;
+
+    /// `Host.config[key] = value`.
+    config-set: func(key: string, value: string);
+
+    /// A map area in degrees: `RectLatLng`.
+    record area {
+        top: f64,
+        bottom: f64,
+        left: f64,
+        right: f64,
+    }
+
+    /// `Host.FPGMapControl.SelectedArea`, none when it is empty.
+    fp-selected-area: func() -> option<area>;
+
+    /// `Host.FPGMapControl.ViewArea`: the planning screen's map as last drawn.
+    fp-view-area: func() -> option<area>;
+
+    /// `srtm.getAltitude(lat, lng)`: the terrain's height in metres, none where the elevation
+    /// data has nothing valid.
+    terrain-altitude: func(lat: f64, lng: f64) -> option<f64>;
+
+    /// A file the user chose to open: its name and contents.
+    record opened-file {
+        name: string,
+        data: list<u8>,
+    }
+
+    /// `OpenFileDialog` and the read after it: the file the user chose; none when cancelled or
+    /// unreadable. `filter` is the dialog's, `BIN logs (*.bin)|*.bin|All files (*.*)|*.*`.
+    open-file: func(title: string, filter: string) -> option<opened-file>;
+
+    /// `SaveFileDialog` and the write after it: `data` written where the user chose, starting
+    /// from `name`; the path written, none when cancelled or the write failed.
+    save-file: func(title: string, filter: string, name: string, data: list<u8>) -> option<string>;
+
+    /// A file written under `Settings.GetUserDataDirectory()`, at `path` relative to it: the
+    /// full path written, or why it was not.
+    write-user-data: func(path: string, data: list<u8>) -> result<string, string>;
+
+    /// The kinds of control a plugin's form holds: what the C#'s plugin panels are built of.
+    enum control-kind {
+        label,
+        text-box,
+        check-box,
+        combo-box,
+        button,
+    }
+
+    /// One control of a plugin's form: its id (which `form-event` names), its kind, the label
+    /// beside it, its value (the text, "true"/"false" for a check box, the chosen option for a
+    /// combo box) and a combo box's options.
+    record control {
+        id: string,
+        kind: control-kind,
+        label: string,
+        value: string,
+        options: list<string>,
+    }
+
+    /// A plugin's form, drawn by the application: a WebAssembly plugin cannot draw a Windows
+    /// Forms panel, so it describes one and the host draws it. Shown again, it replaces itself.
+    form-show: func(title: string, controls: list<control>);
+
+    /// Closes the plugin's form.
+    form-close: func();
+}
+
+/// A plugin: `MissionPlanner.Plugin.Plugin`.
+world plugin {
+    import host;
+
+    /// `Name`.
+    export name: func() -> string;
+    /// `Version`.
+    export version: func() -> string;
+    /// `Author`.
+    export author: func() -> string;
+    /// `loopratehz`, read after every call: a plugin may change it in `loop`.
+    export loop-rate-hz: func() -> f32;
+    /// `Init`: false and the plugin is not loaded.
+    export init: func() -> bool;
+    /// `Loaded`: false and the plugin's `loop` never runs.
+    export loaded: func() -> bool;
+    /// `Loop`, on the plugin's thread at `loopratehz` (named so because `loop` is a keyword of
+    /// the languages plugins are written in).
+    export run-loop: func() -> bool;
+    /// `Exit`, when the plugin is unloaded.
+    export exit: func() -> bool;
+    /// An entry `menu-add` added was chosen, with the map position the menu was opened at
+    /// (`Host.FDMenuMapPosition`, `Host.FPMenuMapPosition`).
+    export menu-click: func(id: u32, lat: f64, lng: f64);
+    /// A control of the plugin's form changed or was clicked: its id and its value now.
+    export form-event: func(id: string, value: string);
+}

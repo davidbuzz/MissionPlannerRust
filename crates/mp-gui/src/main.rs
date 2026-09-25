@@ -41,6 +41,9 @@ mod scripts_tab;
 // ---- end ConfigRawParams remainder ----
 mod plan;
 mod planner_coverage;
+// ---- row 96 ----
+mod plugins_ui;
+// ---- end row 96 ----
 mod platform;
 mod poi;
 mod prefetch_ui;
@@ -537,6 +540,10 @@ struct MissionPlanner {
     /// The Flight Modes page, for its Ctrl+S (`ProcessCmdKey`).
     flight_modes_focus: gpui::FocusHandle,
     // ---- end SITL ----
+    // ---- row 96 ----
+    /// The WebAssembly plugins (`PluginLoader.Plugins`) and what the window shows of them.
+    plugins: plugins_ui::Plugins,
+    // ---- end row 96 ----
 }
 
 impl MissionPlanner {
@@ -689,6 +696,10 @@ impl MissionPlanner {
             persisted.get("comport").unwrap_or_default(),
             persisted.baud(),
         );
+        // ---- row 96 ----
+        // `PluginLoader.LoadAll`, less `DisabledPlugins`. `// C#: MainV2.cs:3185-3196`
+        let plugins = plugins_ui::Plugins::start(&persisted, cx);
+        // ---- end row 96 ----
         let mut this = Self {
             telemetry,
             map: std::rc::Rc::new(std::cell::RefCell::new(map)),
@@ -847,6 +858,9 @@ impl MissionPlanner {
             sitl_focus: sitl::Focus::new(cx),
             flight_modes_focus: cx.focus_handle(),
             // ---- end SITL ----
+            // ---- row 96 ----
+            plugins,
+            // ---- end row 96 ----
         };
         // Opening on the planning screen activates it, as switching to it does.
         if this.screen == Screen::Plan {
@@ -2825,6 +2839,10 @@ impl Render for MissionPlanner {
         // The flight screen's clock: `cs.lastautowp`, a Resume Mission moved on a step, and the
         // Transponder page's look for a status.
         self.fly_tick(&view, window);
+        // ---- row 96 ----
+        // The plugins' snapshot, and what they did and asked since the last frame.
+        self.plugins_tick(&view, window, cx);
+        // ---- end row 96 ----
         // The sets and commands the link is retrying: what those that ended say goes on the
         // status line, where this application says what the C# puts in a message box, and
         // parameter writes move on to their next.
@@ -3716,6 +3734,15 @@ impl Render for MissionPlanner {
                 window,
                 cx,
             ))
+            // ---- row 96 ----
+            // The plugins' questions and forms, and the flight map's plugin entries.
+            .children(plugins_ui::overlay(
+                self,
+                self.screen == Screen::Fly,
+                window,
+                cx,
+            ))
+            // ---- end row 96 ----
             // Last, so its paint ends the frame's measurement; absent without MP_STORM.
             .children(storm::marker(
                 view.frames,
@@ -3844,6 +3871,8 @@ ENVIRONMENT:
                  directory (tests: the application saves it as Mission Planner does)
     MP_STORM     development only: replace the link with a synthetic vehicle sending this many
                  Hz of telemetry, and measure each frame (see crates/mp-gui/src/storm.rs)
+    MP_PLUGINS   load the WebAssembly plugins from this folder rather than plugins/ beside the
+                 executable (tests)
 ";
 
 /// Parses the command line.

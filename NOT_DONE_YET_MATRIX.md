@@ -1,6 +1,5 @@
 | Area or filename | Functional item | Priority | Progress |
 |---|---|---|---|
-| experiments/wasm-plugin-host | WASM plugin host in the application (row 96, component model) | high | 10 |
 | tests/gui/storm.gui | Paint-latency claim needs a release-build run; debug suites skip it | med | 80 |
 | crates/mp-gui/src/fly.rs | Gimbal video full, mini and pop-out menu items | med | 1 |
 | crates/mp-gui/src/quick.rs | Set view count resizes the Quick grid | med | 60 |

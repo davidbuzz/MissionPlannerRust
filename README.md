@@ -16,7 +16,7 @@ launcher.
 
 Measured on this tree (2026-09-25): **24 crates, 301,957 hand-written Rust LOC** (plus 91,634
 generated; `.rs` files under `crates/`, tests included), **3,201 tests** on `cargo test --workspace`
-(3,159 pass, 42 ignored: they need SITL, a window, or the network), **166 GUI scripts** under
+(3,159 pass, 42 ignored: they need SITL, a window, or the network), **169 GUI scripts** under
 `tests/gui/`, across 242 commits.
 Linux only, so far: the repository has no remote, and the three-OS CI matrix has never run.
 
@@ -39,7 +39,7 @@ Linux only, so far: the repository has no remote, and the three-OS CI matrix has
 | Calibration | accelerometer, compass, radio and motor test as Mission Planner's own pages, `ConfigHWCompass2`, `ConfigRadioInput` and `ConfigMotorTest` ported whole, in its SETUP list, with Compass/Motor Calib; `MagCalib.cs`'s offboard sphere and ellipsoid fit over a log (`headless-planner magcal`), held to class D rather than 1e-6 because alglib's path cannot be bit-matched |
 | Joystick | axes to `RC_CHANNELS_OVERRIDE` from a thread that blocks on the device and sends on change — 0.152 ms p99 stick-to-link on a fake device — with a release-on-disconnect failsafe (Linux) |
 | Firmware | `.apj` parsing, the px4 bootloader protocol, `BoardDetect.cs`'s board detection and `APFirmware.cs`'s catalogue with the Install Firmware page, proven against a mock, a pty and a manifest excerpt; `UploadPX4`'s reboot into the bootloader, port scan and upload wired to real ports and proven against the mock on a bench of pretend ports, and on 2026-09-25 against the bench CubeOrange: ArduCopter 4.7.1 stable flashed from the Install Firmware page, "Upload Done" (PLAN §13.6 row 79). Port failures during a flash go on the status line, never in a box (the owner's ruling). The reboot into the bootloader sends the C#'s four frames (3, 3, 1, 1) after two heartbeat waits, and a plain reboot on a serial port looks at the port half a second on and reopens it, "Connect Failed" on the status line when it will not (row 87) |
-| Plugins, an experiment | `experiments/wasm-plugin-host`: a WebAssembly plugin built from the C#'s FenceDist and menu examples, loaded, driven at `loopratehz` and sandboxed under wasmtime - a panicking plugin is an error line, a runaway one is stopped by fuel; 65 ms to load, under a microsecond a call; the write-up recommends the component model for the real host (PLAN.md §13.6 row 95) |
+| Plugins | `crates/mp-plugin-host`: the C#'s `Plugin` lifecycle and `PluginHost` surface as a WIT world on wasmtime's component model; `*.wasm` in `plugins/` beside the executable loaded at start, each on its thread at its `loopratehz`, fuel-limited (a panic or a spin is a status line and an unload); the four shipped plugins and seven examples ported as `mp-plugins` and driven through the host in tests; packet subscription, sockets and the main window's members are not reachable, listed at the site (PLAN.md §13.6 rows 95-96) |
 | Scripting | the Scripts tab on RustPython (Python 3): `Script.cs`'s `Script` and `cs` objects, Select, Run, Abort and Edit with the console under them; the 19 shipped scripts moved to Python 3 (`testdata/scripts/CHANGES.md`) and run under the engine in tests with a verdict each - two run, fourteen stop at `import clr`, one at `MAV`; `MAV` and the screens are not handed to scripts yet |
 | KML export | a flown path coloured by flight mode, and a mission, for Google Earth |
 | Tuning graph | eleven telemetry fields plotted live, min/max reduced so a spike cannot hide |
@@ -58,12 +58,13 @@ Linux only, so far: the repository has no remote, and the three-OS CI matrix has
 agent does. No script waits a fixed time: `expect` polls its fact for up to ten seconds, a click
 waits for its control, and every script carries `budget N`, the run time it is expected to take
 (PLAN.md §13.6 row 97) - a run over it fails, and one three seconds past it is killed after a
-screenshot of the window. Results (2026-09-26): of the 166 scripts, 163 pass at their latest run on
-this machine against SITL; `storm` is skipped by a debug-build suite (its number is the release
-build's); the two `-bench` scripts flash the CubeOrange and run only on the owner's word (both ran
-on 2026-09-25). The full suite runs in about 25 minutes where the settled scripts took over 50.
-`sitl-launch.gui` (the SIMULATION tab's copter picture starting a simulator and the application
-flying it) needs port 5760 free and is skipped by a suite whose SITL holds it.
+screenshot of the window. Results (2026-09-26, after a full pass and its re-runs): of the 169
+scripts, 164 pass at their latest run on this machine against SITL; `storm` is skipped by a
+debug-build suite (its number is the release build's) and `config-compass-livecal` without an
+ArduPlane 3.7.1-4.0 SITL; the two `-bench` scripts flash the CubeOrange and run only on the owner's
+word (both ran on 2026-09-25). The full suite runs in about 25 minutes where the settled scripts
+took over 50. `sitl-launch.gui` (the SIMULATION tab's copter picture starting a simulator and the
+application flying it) needs port 5760 free and is skipped by a suite whose SITL holds it.
 
 **Not yet**: a run on macOS, and any run on Windows beyond the first (2026-09-26, in the owner's Windows 10
 VM: built in 31 minutes, run against the laptop's SITL, the heartbeat and 1,408 parameters heard, the flight

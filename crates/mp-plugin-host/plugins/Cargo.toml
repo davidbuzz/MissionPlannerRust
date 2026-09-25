@@ -1,0 +1,76 @@
+[package]
+name = "mp-plugins"
+description = "Mission Planner's shipped plugins and plugin examples, ported to the WebAssembly plugin world"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+# The guest side of `../wit/plugin.wit`: the bindings every plugin here is built on. At the
+# wit-parser wasmtime 48 builds (0.254), so the two sides read the WIT with the same parser.
+[dependencies]
+wit-bindgen = { version = "0.60", default-features = false, features = ["macros", "realloc"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+# The OpenDroneID port's messages, decoded by the dialect the link uses; natively only, so the
+# plugins' own WebAssembly builds do not carry it.
+mp-mavlink-dialects.workspace = true
+
+# Each plugin is an example built as its own WebAssembly module:
+#   cargo build -p mp-plugins --release --target wasm32-unknown-unknown --examples
+# The host's tests build them so and load each one (crates/mp-plugin-host/tests/plugins.rs).
+# The C#'s file each one ports is named in its header.
+
+[[example]]
+name = "example"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "menu"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "fencedist"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "mapicondesc"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "modechange"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "persistentsimple"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "payloadconfig"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "misbehave"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "anonymizebinlog"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "terrainmaker"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "opendroneid"
+crate-type = ["cdylib"]
+# Its messages are checked against the dialect's decoder, natively.
+test = true
+
+[[example]]
+name = "dowding"
+crate-type = ["cdylib"]

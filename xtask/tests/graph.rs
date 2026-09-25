@@ -68,6 +68,10 @@ const LAYERS: &[(u8, &[&str])] = &[
             // plugin layer above the application (moved down from L11 on 2026-09-25, when
             // mp-gui began to depend on it; PLAN.md section 5.1).
             "mp-script",
+            // §5.1's mp-plugin-host, placed as mp-script is: a service mp-gui runs - the
+            // plugins' threads and the requests they make - with no UI of its own (PLAN.md
+            // §13.6 row 96). The plugins it loads are L11 (`mp-plugins`, below).
+            "mp-plugin-host",
         ],
     ),
     // L4. Not yet, by these names: mp-log-dataflash, mp-log-tlog, mp-log-analysis, mp-logstore.
@@ -84,7 +88,8 @@ const LAYERS: &[(u8, &[&str])] = &[
     //
     // L9. Not yet: mp-app (mp-gui, below, is it). L10. Not yet: mission-planner.
     //
-    // L11. Not yet: mp-plugin-api, mp-plugin-host.
+    // L11. Not yet: mp-plugin-api (its WIT world lives in mp-plugin-host's `wit/`). mp-plugin-host
+    // itself is placed at L3 above, as mp-script is, since mp-gui depends on it.
     // L12. Not yet: mp-codegen (xtask holds the generators).
     (12, &["xtask"]),
 ];
@@ -110,6 +115,11 @@ const UNNAMED: &[(&str, u8, &str)] = &[
         "fencedist",
         11,
         "the experiment's plugin: the C#'s FenceDist and menu examples built for wasm32, a member so it type-checks natively",
+    ),
+    (
+        "mp-plugins",
+        11,
+        "the plugins the host loads (PLAN.md §13.6 row 96): the C#'s four real plugins and its examples on the WIT world, built for wasm32, a member so they type-check natively",
     ),
     (
         "mp-log",

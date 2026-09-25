@@ -5187,7 +5187,7 @@ fn send_mission(this: &mut MissionPlanner, fast: bool, items: Vec<MissionItem>) 
 /// `BUT_read_Click` → `getWPs`: the MAVFTP file while the box is ticked, else the mission
 /// protocol's download, adopted when it completes.
 /// `// C#: GCSViews/FlightPlanner.cs:3977-4014`
-fn read_from_vehicle(this: &mut MissionPlanner) {
+pub(crate) fn read_from_vehicle(this: &mut MissionPlanner) {
     if this.plan.use_mavftp() {
         let request = FtpRequest::Get {
             path: MissionFtp::MISSION_FILE.to_owned(),
@@ -7261,6 +7261,13 @@ pub struct PlanMenus {
     /// An `InputBox`'s caption, question and text as its OK closed it, until the screen keeps
     /// the answer in `Settings.Instance`.
     answered: Option<(&'static str, String, String)>,
+    // ---- row 96 ----
+    /// `Host.FPMenuMap.Items` a plugin added, drawn after the menu's own entries.
+    pub plugin_entries: Vec<crate::plugins_ui::Entry>,
+    /// A plugin's entry chosen - the plugin, its id and `FPMenuMapPosition` - until the
+    /// plugins' tick passes it on.
+    pub plugin_click: Option<(usize, u32, LatLon)>,
+    // ---- end row 96 ----
 }
 
 /// How a page is fetched from the geocoder: its URL in, its text or why not out.
@@ -8487,7 +8494,7 @@ impl PlanMenus {
 }
 
 /// The context the menu needs, from what the application knows right now.
-fn menu_context(this: &MissionPlanner) -> MenuContext {
+pub(crate) fn menu_context(this: &MissionPlanner) -> MenuContext {
     let view = this.telemetry.view();
     let state = view.state.as_ref();
     MenuContext {
@@ -9718,7 +9725,11 @@ fn map_menu(
     // left just enough to fit, which with fixed sizes is this arithmetic.
     let viewport = window.viewport_size();
     let (viewport_width, viewport_height) = (f32::from(viewport.width), f32::from(viewport.height));
-    let menu_height = column_height(MAP_MENU);
+    // ---- row 96 ----
+    #[allow(clippy::cast_precision_loss)]
+    let plugin_height = MENU_ROW * menus.plugin_entries.len() as f32;
+    let menu_height = column_height(MAP_MENU) + plugin_height;
+    // ---- end row 96 ----
     let menu_left = menu.at.0.min(viewport_width - MENU_WIDTH).max(0.0);
     let menu_top = menu.at.1.min(viewport_height - menu_height).max(0.0);
     // The drop-down's rectangle in window coordinates, so a press on it is not a press outside
@@ -9738,7 +9749,7 @@ fn map_menu(
             (left..=left + MENU_WIDTH).contains(&x) && (above..=above + height).contains(&y)
         })
     };
-    let rows = MAP_MENU
+    let mut rows: Vec<AnyElement> = MAP_MENU
         .iter()
         .enumerate()
         .map(|(index, entry)| {
@@ -9747,6 +9758,30 @@ fn map_menu(
             menu_row(entry, Some(index), enabled, menu.submenu == Some(index), cx)
         })
         .collect();
+    // ---- row 96 ----
+    // `Host.FPMenuMap.Items.Add`: a plugin's entries at the end, as `Items.Add` puts them.
+    rows.extend(menus.plugin_entries.iter().map(|entry| {
+        let (plugin, id, position) = (entry.plugin, entry.id, menu.position);
+        crate::probe::measured(entry.probe_id(), div())
+            .id(entry.probe_id())
+            .h(px(MENU_ROW))
+            .px_3()
+            .flex()
+            .items_center()
+            .text_xs()
+            .text_color(rgb(theme::TEXT))
+            .bg(rgb(theme::PANEL))
+            .cursor_pointer()
+            .hover(|style| style.bg(rgb(theme::BORDER)))
+            .child(entry.label())
+            .on_click(cx.listener(move |this, _event, _window, cx| {
+                this.plan_menus.open = None;
+                this.plan_menus.plugin_click = Some((plugin, id, position));
+                cx.notify();
+            }))
+            .into_any_element()
+    }));
+    // ---- end row 96 ----
     let mut body = div()
         .id("plan-menu")
         .flex()
