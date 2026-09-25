@@ -1,0 +1,140 @@
+file,type,method,line,lines,reason
+Controls/SpectrogramUI.cs,ImageSharpExtensions,ToImageSharpImage,167,11,named nowhere outside its own body
+ExtLibs/ArduPilot/Camera.cs,Camera,CameraInfo,37,13,named nowhere outside its own body
+ExtLibs/ArduPilot/Fence.cs,Fence,DownloadFence,16,7,named nowhere outside its own body
+ExtLibs/ArduPilot/Fence.cs,Fence,LocationToFence,24,65,named only in methods that are themselves dead: Fence.DownloadFence (ExtLibs/ArduPilot/Fence.cs:16)
+ExtLibs/ArduPilot/Fence.cs,Fence,UploadFence,90,6,named nowhere outside its own body
+ExtLibs/ArduPilot/Fence.cs,Fence,FenceToLocation,97,44,named only in methods that are themselves dead: Fence.UploadFence (ExtLibs/ArduPilot/Fence.cs:90)
+ExtLibs/ArduPilot/Joystick/JoystickBase.cs,JoystickBase,getRawValueForChannel,1162,11,"named nowhere outside its own body; public on JoystickBase, which Script.cs:46-54 hands to Python scripts as `Joystick`, so a user's script could call it"
+ExtLibs/ArduPilot/Mavlink/CameraProtocol.cs,CameraProtocol,StartIntervalCaptureAsync,416,13,named nowhere outside its own body
+ExtLibs/ArduPilot/Mavlink/CameraProtocol.cs,CameraProtocol,StopIntervalCaptureAsync,434,11,named nowhere outside its own body
+ExtLibs/ArduPilot/Mavlink/CameraProtocol.cs,CameraProtocol,CalculateImagePointVector,626,10,named nowhere outside its own body
+ExtLibs/ArduPilot/Mavlink/Extension.cs,Extension,WrapText,18,30,named nowhere outside its own body
+ExtLibs/ArduPilot/Mavlink/GimbalManagerProtocol.cs,GimbalManagerProtocol,HasAllCapability,91,4,named nowhere outside its own body
+ExtLibs/ArduPilot/Mavlink/GimbalManagerProtocol.cs,GimbalManagerProtocol,SetRCYawLockAsync,177,20,named nowhere outside its own body
+ExtLibs/ArduPilot/Mavlink/GimbalManagerProtocol.cs,GimbalManagerProtocol,SetAnglesStream,257,15,named nowhere outside its own body
+ExtLibs/ArduPilot/Mavlink/GimbalManagerProtocol.cs,GimbalManagerProtocol,SetRatesStream,296,15,named nowhere outside its own body
+ExtLibs/ArduPilot/Mavlink/GimbalManagerProtocol.cs,GimbalManagerProtocol,SetROINoneAsync,331,9,named nowhere outside its own body
+ExtLibs/ArduPilot/Mavlink/GimbalManagerProtocol.cs,GimbalManagerProtocol,SetROISysIDAsync,341,15,named nowhere outside its own body
+ExtLibs/ArduPilot/Mavlink/GimbalProtocol.cs,GimbalProtocol,SetRCMode,51,6,named nowhere outside its own body
+ExtLibs/ArduPilot/Mavlink/GimbalProtocol.cs,GimbalProtocol,SetMotorState,58,5,named nowhere outside its own body
+ExtLibs/ArduPilot/Mavlink/GimbalProtocol.cs,GimbalProtocol,GetGimbalMode,64,28,named nowhere outside its own body
+ExtLibs/ArduPilot/Mavlink/GimbalProtocol.cs,GimbalProtocol,SetResetMode,93,40,named nowhere outside its own body
+ExtLibs/ArduPilot/Mavlink/GimbalProtocol.cs,GimbalProtocol,SetOrientation,134,34,named only in methods that are themselves dead: GimbalProtocol.SetResetMode (ExtLibs/ArduPilot/Mavlink/GimbalProtocol.cs:93)
+ExtLibs/ArduPilot/Mavlink/GimbalProtocol.cs,GimbalProtocol,mavlink_euler_to_quaternion,177,17,named only in methods that are themselves dead: GimbalProtocol.SetOrientation (ExtLibs/ArduPilot/Mavlink/GimbalProtocol.cs:134)
+ExtLibs/ArduPilot/Proximity.cs,directionState,GetClosest,184,13,named nowhere outside its own body
+ExtLibs/ArduPilot/Proximity.cs,directionState,GetWarnings,203,16,named nowhere outside its own body
+ExtLibs/ArduPilot/Serial.cs,Serial,println,15,7,named nowhere outside its own body
+ExtLibs/Utilities/Airports.cs,Airports,ReadOpenflights,109,41,named nowhere outside its own body
+ExtLibs/Utilities/Airports.cs,Airports,ReadPartow,217,29,named nowhere outside its own body
+ExtLibs/Utilities/Airports.cs,Airports,ReadUNLOCODE,247,39,named nowhere outside its own body
+ExtLibs/Utilities/AutoConnect.cs,AutoConnect,RaiseNewVideoStream,373,1,named nowhere outside its own body
+ExtLibs/Utilities/AutoConnect.cs,AutoConnect,RaiseNewMavlinkConnection,374,1,named nowhere outside its own body
+ExtLibs/Utilities/CleanDrivers.cs,CleanDrivers,devcon,21,24,named nowhere outside its own body
+ExtLibs/Utilities/CompassCalibrator.cs,CompassCalibrator,check_for_timeout,162,11,named nowhere outside its own body
+ExtLibs/Utilities/Crypto.cs,Crypto,SetBinaryKeys,74,5,named nowhere outside its own body
+ExtLibs/Utilities/Crypto.cs,Crypto,ExtractBinaryKeys,83,5,named nowhere outside its own body
+ExtLibs/Utilities/DFU.cs,DFU,GetSN,191,39,named nowhere outside its own body
+ExtLibs/Utilities/Download.cs,Download,CheckHTTPFileExistsAsync,555,7,named nowhere outside its own body
+ExtLibs/Utilities/Download.cs,Download,ParallelDownloadFile,582,74,named nowhere outside its own body
+ExtLibs/Utilities/EnumTranslator.cs,EnumTranslator,GetDisplayText,107,17,named nowhere outside its own body
+ExtLibs/Utilities/Extensions.cs,Extensions,Chunk,195,8,named nowhere outside its own body
+ExtLibs/Utilities/Extensions.cs,Extensions,ToEnumerable,239,5,named only in files dropped by ruling (D13 or a separate program): Plugins/example17-menuremove.cs
+ExtLibs/Utilities/Extensions.cs,Extensions,FromCString,317,13,named nowhere outside its own body
+ExtLibs/Utilities/Extensions.cs,Extensions,getbituEndian,332,5,"named only in methods that are themselves dead: Extensions.getbitsEndian (ExtLibs/Utilities/Extensions.cs:337), Extensions.GetBitOffsetLength (ExtLibs/Utilities/Extensions.cs:368)"
+ExtLibs/Utilities/Extensions.cs,Extensions,getbitsEndian,337,7,named only in methods that are themselves dead: Extensions.GetBitOffsetLength (ExtLibs/Utilities/Extensions.cs:368)
+ExtLibs/Utilities/Extensions.cs,Extensions,GetBitOffsetLength,368,27,"named only in files dropped by ruling (D13 or a separate program): ExtLibs/NMEA2000/NMEA2000pgns.cs, ExtLibs/NMEA2000/msggen.cs"
+ExtLibs/Utilities/Extensions.cs,Extensions,SaveJSON,431,4,named nowhere outside its own body
+ExtLibs/Utilities/Extensions.cs,Extensions,LoadJSON,436,4,named nowhere outside its own body
+ExtLibs/Utilities/Extensions.cs,Extensions,OrderedParallel,472,10,named nowhere outside its own body
+ExtLibs/Utilities/Extensions.cs,Extensions,MakeCharSize,535,8,named nowhere outside its own body
+ExtLibs/Utilities/Extensions.cs,Extensions,IterateTreeType,714,11,named nowhere outside its own body
+ExtLibs/Utilities/Extensions.cs,Extensions,IterateTree,726,12,named nowhere outside its own body
+ExtLibs/Utilities/Extensions.cs,Extensions,SwapBytes,872,7,named nowhere outside its own body
+ExtLibs/Utilities/Extensions.cs,Extensions,SwapBytes,880,5,named nowhere outside its own body
+ExtLibs/Utilities/Extensions.cs,Extensions,HexStringToByteArray,886,7,named only in files dropped by ruling (D13 or a separate program): ExtLibs/NMEA2000/ConvertCANLogToYDWG.cs
+ExtLibs/Utilities/Extensions.cs,Extensions,HexStringToSpacedHex,894,6,named only in files dropped by ruling (D13 or a separate program): ExtLibs/NMEA2000/ConvertCANLogToYDWG.cs
+ExtLibs/Utilities/Extensions.cs,Extensions,fromUnixTime,1009,4,"named only in files dropped by ruling (D13 or a separate program): plugins/Dowding/DowdingPlugin.cs, plugins/example5-latencytracker.cs"
+ExtLibs/Utilities/Extensions.cs,Extensions,fromUnixTime,1019,4,"named only in files dropped by ruling (D13 or a separate program): plugins/Dowding/DowdingPlugin.cs, plugins/example5-latencytracker.cs"
+ExtLibs/Utilities/Extensions.cs,Extensions,EvaluateMath,1038,39,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,NativeMethods,gst_version_string,134,13,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,NativeMethods,gst_buffer_extract,149,13,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,NativeMethods,gst_buffer_extract_dup,177,17,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,NativeMethods,gst_caps_to_string,475,20,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,NativeMethods,Utf8PtrToString,497,10,"named only in methods that are themselves dead: NativeMethods.Utf8PtrToString (ExtLibs/Utilities/GStreamer.cs:508), NativeMethods.PtrToStringGFree (ExtLibs/Utilities/GStreamer.cs:517), NativeMethods.PtrToStringGFree (ExtLibs/Utilities/GStreamer.cs:523)"
+ExtLibs/Utilities/GStreamer.cs,NativeMethods,Utf8PtrToString,508,8,"named only in methods that are themselves dead: NativeMethods.PtrToStringGFree (ExtLibs/Utilities/GStreamer.cs:517), NativeMethods.PtrToStringGFree (ExtLibs/Utilities/GStreamer.cs:523)"
+ExtLibs/Utilities/GStreamer.cs,NativeMethods,PtrToStringGFree,517,5,named only in methods that are themselves dead: NativeMethods.gst_caps_to_string (ExtLibs/Utilities/GStreamer.cs:475)
+ExtLibs/Utilities/GStreamer.cs,NativeMethods,PtrToStringGFree,523,10,named only in methods that are themselves dead: NativeMethods.gst_caps_to_string (ExtLibs/Utilities/GStreamer.cs:475)
+ExtLibs/Utilities/GStreamer.cs,AndroidNativeMethods,gst_version_string,576,1,named only in methods that are themselves dead: NativeMethods.gst_version_string (ExtLibs/Utilities/GStreamer.cs:134)
+ExtLibs/Utilities/GStreamer.cs,AndroidNativeMethods,gst_buffer_extract,579,1,named only in methods that are themselves dead: NativeMethods.gst_buffer_extract (ExtLibs/Utilities/GStreamer.cs:149)
+ExtLibs/Utilities/GStreamer.cs,AndroidNativeMethods,gst_buffer_extract_dup,585,2,named only in methods that are themselves dead: NativeMethods.gst_buffer_extract_dup (ExtLibs/Utilities/GStreamer.cs:177)
+ExtLibs/Utilities/GStreamer.cs,AndroidNativeMethods,gst_pipeline_new,589,1,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,AndroidNativeMethods,gst_element_factory_make,592,1,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,AndroidNativeMethods,gst_message_parse_error,595,1,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,AndroidNativeMethods,gst_message_get_stream_status_object,598,1,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,AndroidNativeMethods,gst_message_set_stream_status_object,618,1,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,AndroidNativeMethods,gst_caps_to_string,663,1,named only in methods that are themselves dead: NativeMethods.gst_caps_to_string (ExtLibs/Utilities/GStreamer.cs:475)
+ExtLibs/Utilities/GStreamer.cs,AndroidNativeMethods,gst_structure_free,686,1,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,AndroidNativeMethods,gst_app_sink_set_callbacks,699,2,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,LinuxNativeMethods,gst_version_string,732,1,named only in methods that are themselves dead: NativeMethods.gst_version_string (ExtLibs/Utilities/GStreamer.cs:134)
+ExtLibs/Utilities/GStreamer.cs,LinuxNativeMethods,gst_buffer_extract,735,1,named only in methods that are themselves dead: NativeMethods.gst_buffer_extract (ExtLibs/Utilities/GStreamer.cs:149)
+ExtLibs/Utilities/GStreamer.cs,LinuxNativeMethods,gst_buffer_extract_dup,741,2,named only in methods that are themselves dead: NativeMethods.gst_buffer_extract_dup (ExtLibs/Utilities/GStreamer.cs:177)
+ExtLibs/Utilities/GStreamer.cs,LinuxNativeMethods,gst_pipeline_new,745,1,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,LinuxNativeMethods,gst_element_factory_make,748,1,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,LinuxNativeMethods,gst_message_parse_error,751,1,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,LinuxNativeMethods,gst_message_get_stream_status_object,754,1,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,LinuxNativeMethods,gst_message_set_stream_status_object,774,1,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,LinuxNativeMethods,gst_caps_to_string,819,1,named only in methods that are themselves dead: NativeMethods.gst_caps_to_string (ExtLibs/Utilities/GStreamer.cs:475)
+ExtLibs/Utilities/GStreamer.cs,LinuxNativeMethods,gst_structure_free,842,1,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,LinuxNativeMethods,gst_app_sink_set_callbacks,855,2,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,WinNativeMethods,gst_version_string,905,1,named only in methods that are themselves dead: NativeMethods.gst_version_string (ExtLibs/Utilities/GStreamer.cs:134)
+ExtLibs/Utilities/GStreamer.cs,WinNativeMethods,gst_buffer_extract,908,1,named only in methods that are themselves dead: NativeMethods.gst_buffer_extract (ExtLibs/Utilities/GStreamer.cs:149)
+ExtLibs/Utilities/GStreamer.cs,WinNativeMethods,gst_buffer_extract_dup,917,2,named only in methods that are themselves dead: NativeMethods.gst_buffer_extract_dup (ExtLibs/Utilities/GStreamer.cs:177)
+ExtLibs/Utilities/GStreamer.cs,WinNativeMethods,gst_pipeline_new,921,1,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,WinNativeMethods,gst_element_factory_make,924,1,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,WinNativeMethods,gst_message_parse_error,927,1,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,WinNativeMethods,gst_message_get_stream_status_object,930,1,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,WinNativeMethods,gst_message_set_stream_status_object,950,1,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,WinNativeMethods,gst_caps_to_string,995,1,named only in methods that are themselves dead: NativeMethods.gst_caps_to_string (ExtLibs/Utilities/GStreamer.cs:475)
+ExtLibs/Utilities/GStreamer.cs,WinNativeMethods,gst_structure_free,1018,1,named nowhere outside its own body
+ExtLibs/Utilities/GStreamer.cs,WinNativeMethods,gst_app_sink_set_callbacks,1031,2,named nowhere outside its own body
+ExtLibs/Utilities/Kalman3D.cs,Kalman3D,Predicition,90,4,named nowhere outside its own body
+ExtLibs/Utilities/Matrix3.cs,Matrix3,to_euler_yxz,164,9,named nowhere outside its own body
+ExtLibs/Utilities/Matrix3.cs,Matrix3,rotateXY,245,17,named nowhere outside its own body
+ExtLibs/Utilities/Matrix3.cs,Matrix3,rotateXYinv,263,17,named nowhere outside its own body
+ExtLibs/Utilities/Quaternion.cs,Quaternion,is_nan,179,4,named nowhere outside its own body
+ExtLibs/Utilities/Quaternion.cs,Quaternion,rotation_matrix,188,25,named only in methods that are themselves dead: Quaternion.body_to_earth (ExtLibs/Utilities/Quaternion.cs:253)
+ExtLibs/Utilities/Quaternion.cs,Quaternion,rotation_matrix_norm,219,27,named nowhere outside its own body
+ExtLibs/Utilities/Quaternion.cs,Quaternion,body_to_earth,253,4,"named only in methods that are themselves dead: CameraProtocol.CalculateImagePointVector (ExtLibs/ArduPilot/Mavlink/CameraProtocol.cs:626), Quaternion.earth_to_body (ExtLibs/Utilities/Quaternion.cs:264)"
+ExtLibs/Utilities/Quaternion.cs,Quaternion,earth_to_body,264,4,named nowhere outside its own body
+ExtLibs/Utilities/Quaternion.cs,Quaternion,to_axis_angle,273,11,named nowhere outside its own body
+ExtLibs/Utilities/RLE.cs,Delta,delta_encode,275,10,named nowhere outside its own body
+ExtLibs/Utilities/RLE.cs,Delta,delta_decode,286,10,named nowhere outside its own body
+ExtLibs/Utilities/Spline2.cs,Spline2,update_spline,292,33,named nowhere outside its own body
+ExtLibs/Utilities/Tracking.cs,Tracking,AddEvent,65,34,named nowhere outside its own body
+ExtLibs/Utilities/Utils.cs,Utils,labs,58,4,named nowhere outside its own body
+ExtLibs/Utilities/Utils.cs,Utils,asinf,98,4,named only in methods that are themselves dead: Utils.safe_asin (ExtLibs/Utilities/Utils.cs:171)
+ExtLibs/Utilities/Utils.cs,Utils,sqrtf,133,4,named only in methods that are themselves dead: Utils.safe_sqrt (ExtLibs/Utilities/Utils.cs:193)
+ExtLibs/Utilities/Utils.cs,Utils,safe_asin,171,16,named nowhere outside its own body
+ExtLibs/Utilities/Utils.cs,Utils,safe_sqrt,193,9,named nowhere outside its own body
+ExtLibs/Utilities/Utils.cs,Utils,EarthRatesToBodyRates,466,23,named nowhere outside its own body
+ExtLibs/Utilities/Utils.cs,Utils,EarthRatesToBodyRatesRyan,490,28,named nowhere outside its own body
+ExtLibs/Utilities/Utils.cs,Utils,EarthRatesToBodyRatesMine,519,55,named nowhere outside its own body
+ExtLibs/Utilities/Utils.cs,Utils,OGLtoBCBF,575,45,named nowhere outside its own body
+ExtLibs/Utilities/Utils.cs,Utils,FLIGHTtoBCBF,631,15,named nowhere outside its own body
+ExtLibs/Utilities/Utils.cs,Utils,BodyRatesToEarthRates,647,28,named nowhere outside its own body
+ExtLibs/Utilities/ZeroConf.cs,ZeroConf,EnumerateAllServicesFromAllHosts,52,7,named nowhere outside its own body
+ExtLibs/Utilities/adsb.cs,Plane,pllalocal,490,22,named nowhere outside its own body
+ExtLibs/Utilities/adsb.cs,Crc32ModeS,ComputeChecksumBytesTraditional32,777,13,named nowhere outside its own body
+ExtLibs/Utilities/adsb.cs,Crc32ModeS,ComputeChecksumBytesTraditional88,791,25,named nowhere outside its own body
+ExtLibs/Utilities/paramchanges47.cs,ParamChanges47,changedByOldParam,137,4,named nowhere outside its own body
+ExtLibs/Utilities/paramchanges47.cs,ParamChanges47,changedByNewParam,145,6,named nowhere outside its own body
+Program.cs,Program,TraceMe,98,20,named only in files dropped by ruling (D13 or a separate program): plugins/example11-trace.cs
+Program.cs,Program,mono_threads_request_thread_dump,880,1,named nowhere outside its own body
+Utilities/ExtensionsMP.cs,ExtensionsMP,GetPercent,30,11,named nowhere outside its own body
+Utilities/ExtensionsMP.cs,ExtensionsMP,LogErrorFormat,61,6,named nowhere outside its own body
+Utilities/NativeLibrary.cs,NativeLibrary,dlsym,27,1,named nowhere outside its own body
+Utilities/ThemeManager.cs,ThemeManager,getQvNumberColor,321,22,named nowhere outside its own body
+Utilities/ThemeManager.cs,ThemeManager,doxamlgen,344,46,named nowhere outside its own body
+Utilities/Win32DeviceMgnt.cs,Win32DeviceMgmt,GetManufact,345,35,named nowhere outside its own body
+Utilities/XMLColor.cs,XmlColor,FromColor,27,4,named nowhere outside its own body
