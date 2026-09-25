@@ -60,14 +60,9 @@ use crate::mapview::MapViewport;
 use crate::ui::{action, panel, theme};
 use grid::{Grid, ROW_HEIGHT, TYPE_COLUMN};
 use modifier::Modifier;
-use view::{Scales, Zoom};
 
-/// How many fields the list shows before it stops.
-///
-/// A real log declares six hundred; showing all of them makes a list nobody scrolls to the bottom
-/// of. The search box is how a field is found, which is the same answer the parameter screen
-/// reached for the same reason.
-const SHOWN_FIELDS: usize = 200;
+use crate::config::failsafe::Lookup;
+use view::{Scales, Zoom};
 
 /// How wide the plot is, in columns.
 const COLUMNS: usize = 240;
@@ -261,6 +256,86 @@ pub struct Plotted {
     pub bit: Option<String>,
 }
 
+/// `get_param_value_string`: the option text of a parameter's value, "" for a parameter the
+/// vehicle lacks or a value with no documented option. `Convert.ToInt32` rounds a half to the
+/// even number.
+/// `// C#: Log/LogBrowse.cs:533-549`
+fn param_value_string(name: &str, parameters: &[(String, f64)], lookup: Lookup) -> String {
+    let Some(value) = parameters
+        .iter()
+        .find(|(param, _)| param == name)
+        .map(|(_, value)| *value)
+    else {
+        return String::new();
+    };
+    let rounded = value.round();
+    #[allow(clippy::float_cmp)] // an exact half
+    let as_int = if (value - value.trunc()).abs() == 0.5 && rounded % 2.0 != 0.0 {
+        rounded - value.signum()
+    } else {
+        rounded
+    };
+    #[allow(clippy::cast_possible_truncation)]
+    let as_int = as_int as i64;
+    lookup(name)
+        .and_then(|meta| meta.values.iter().find(|(key, _)| *key == as_int))
+        .map_or_else(String::new, |(_, text)| (*text).to_owned())
+}
+
+/// `get_extra_info`: what a field node's tooltip says, from the connected vehicle's parameters.
+/// `RCOU`'s fields carry their servo's function (`SERVOn_FUNCTION`'s option); `RCIN`'s the
+/// `RCMAP_*` axes the channel is mapped to, `FlightMode` when `FLTMODE_CH` is it, and the
+/// channel's `RCn_OPTION`, joined with ` + `. The channel number is the digits in the field's
+/// name; a field with none says nothing. Every other message says nothing.
+/// `// C#: Log/LogBrowse.cs:552-625`
+#[must_use]
+pub fn extra_info(
+    message: &str,
+    field: &str,
+    parameters: &[(String, f64)],
+    lookup: Lookup,
+) -> String {
+    let digits: String = field.chars().filter(char::is_ascii_digit).collect();
+    match message {
+        "RCOU" => param_value_string(&format!("SERVO{digits}_FUNCTION"), parameters, lookup),
+        "RCIN" => {
+            if digits.is_empty() {
+                return String::new();
+            }
+            let number: f64 = digits.parse().unwrap_or(0.0);
+            let value_of = |name: &str| {
+                parameters
+                    .iter()
+                    .find(|(param, _)| param == name)
+                    .map(|(_, value)| *value)
+            };
+            let mut words = String::new();
+            let mut join = |part: &str| {
+                if !words.is_empty() {
+                    words.push_str(" + ");
+                }
+                words.push_str(part);
+            };
+            for axis in ["ROLL", "PITCH", "THROTTLE", "YAW", "FORWARD", "LATERAL"] {
+                #[allow(clippy::float_cmp)] // the C# compares the doubles exactly
+                if value_of(&format!("RCMAP_{axis}")) == Some(number) {
+                    join(axis);
+                }
+            }
+            #[allow(clippy::float_cmp)]
+            if value_of("FLTMODE_CH") == Some(number) {
+                join("FlightMode");
+            }
+            let option = param_value_string(&format!("RC{digits}_OPTION"), parameters, lookup);
+            if !option.is_empty() {
+                join(&option);
+            }
+            words
+        }
+        _ => String::new(),
+    }
+}
+
 /// One child node of a bitmask field in the tree: `add_field_node`'s `new_bit_node`.
 /// `// C#: Log/LogBrowse.cs:687-696`
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -319,7 +394,7 @@ impl Plotted {
         axis: Axis,
         x_axis: XAxis,
     ) -> Self {
-        Self::modified(field, points, unit, axis, x_axis, None)
+        Self::modified(field, points, unit, axis, x_axis, None, "")
     }
 
     /// [`Self::new`] with the field's scaler and offset, if it has one: applied to each value
@@ -333,9 +408,17 @@ impl Plotted {
         axis: Axis,
         x_axis: XAxis,
         modifier: Option<&Modifier>,
+        tip: &str,
     ) -> Self {
-        let extra = modifier.map_or("", |modifier| modifier.command.as_str());
-        Self::built(field, points, unit, axis, x_axis, modifier, extra, None)
+        // `extra_label = " " + ToolTipText`, the modifier's text ahead of it; the space is
+        // dropped with an empty tooltip, as the bit's label drops it.
+        // `// C#: Log/LogBrowse.cs:1177, 1231-1234`
+        let mut extra = modifier.map_or_else(String::new, |modifier| modifier.command.clone());
+        if !tip.is_empty() {
+            extra.push(' ');
+            extra.push_str(tip);
+        }
+        Self::built(field, points, unit, axis, x_axis, modifier, &extra, None)
     }
 
     /// A bit of a bitmask field: its raw values through the bit's mask, `DataModifer(mask)` -
@@ -550,6 +633,10 @@ pub struct LogBrowse {
     /// `txt_info`: the description of the field the pointer last rested on, in a multi-line box
     /// that can be selected, copied from and typed in - the C# never reads it back.
     info: crate::textfield::TextField,
+    /// `ToolTipText` of each field node, by the field's name: `get_extra_info`'s words from the
+    /// connected vehicle's parameters - RCOU's servo functions, RCIN's mappings - empty for the
+    /// rest, and empty for every field until the window hands the parameters over.
+    tips: BTreeMap<String, String>,
     /// The child nodes `add_field_node` gave each bitmask field when the tree was built, by
     /// message and field: the same for every instance's node of the field.
     bits: BTreeMap<(String, String), Vec<BitNode>>,
@@ -678,6 +765,7 @@ impl LogBrowse {
                 info.set_multiline(true);
                 info
             },
+            tips: BTreeMap::new(),
             bits: BTreeMap::new(),
             expanded: std::collections::BTreeSet::new(),
         }
@@ -795,11 +883,26 @@ impl LogBrowse {
         let Some(log) = self.log.as_ref() else {
             return;
         };
+        let node = modifier::node_name(&field.message, field.instance, &field.field);
+        // "its already on the graph, abort": a curve whose label starts with `nodeName + " "` -
+        // a bit of a field that has a unit, `MSG.Field (unit).BIT`, blocks the field, where a
+        // bit of one without, `MSG.Field.BIT`, does not. The C# says nothing; ours says so on
+        // the status line, as it does for a bit.
+        // `// C#: Log/LogBrowse.cs:1135-1147`
+        let spaced = format!("{node} ");
+        if self
+            .plotted
+            .iter()
+            .any(|shown| shown.label.starts_with(&spaced))
+        {
+            self.status = Some(format!("{node} is already on the graph"));
+            return;
+        }
         // `GraphItem_GetList`: the type's records, through the index.
         // `// C#: Log/LogBrowse.cs:1488-1595`
         let points = log.extract_instance(&field.message, field.instance, &field.field);
         let unit = self.units.get(&field.message, &field.field);
-        let node = modifier::node_name(&field.message, field.instance, &field.field);
+        let tip = self.tip_of(field).to_owned();
         let plotted = Plotted::modified(
             field.clone(),
             &points,
@@ -807,6 +910,7 @@ impl LogBrowse {
             axis,
             self.x_axis(),
             self.modifiers.get(&node),
+            &tip,
         );
         self.status = Some(format!("{}: {} samples", plotted.label, points.len()));
         self.plotted.push(plotted);
@@ -823,6 +927,26 @@ impl LogBrowse {
             .iter()
             .find(|shown| shown.field.as_ref() == Some(field) && shown.bit.is_none())
             .map(|shown| shown.axis)
+    }
+
+    /// `add_field_node`'s `ToolTipText` for every field of the log: [`extra_info`] from the
+    /// connected vehicle's parameters, which the window hands over when the log is opened. The
+    /// C# reads `MainV2.comPort.MAV.param` as it builds the tree.
+    /// `// C#: Log/LogBrowse.cs:682-685`
+    pub fn add_field_tips(&mut self, parameters: &[(String, f64)], lookup: Lookup) {
+        self.tips.clear();
+        for field in &self.fields {
+            let tip = extra_info(&field.message, &field.field, parameters, lookup);
+            if !tip.is_empty() {
+                self.tips.insert(field.to_string(), tip);
+            }
+        }
+    }
+
+    /// A field node's `ToolTipText`, empty for most.
+    #[must_use]
+    pub fn tip_of(&self, field: &PlottableField) -> &str {
+        self.tips.get(&field.to_string()).map_or("", String::as_str)
     }
 
     /// `add_field_node`'s bit nodes for every field of the log, from `LogMetaData`: a field
@@ -1503,6 +1627,10 @@ impl LogBrowse {
         let none = || "none".to_owned();
         let mut facts = vec![("log.check.params".to_owned(), "false".to_owned())];
         for field in &self.fields {
+            let tip = self.tip_of(field);
+            if !tip.is_empty() {
+                facts.push((format!("log.field.{field}.tip"), tip.to_owned()));
+            }
             let bits = self.bits_of(field);
             if bits.is_empty() {
                 continue;
@@ -2620,7 +2748,6 @@ pub fn screen(
     browse: &LogBrowse,
     name: &crate::textfield::TextField,
     focus: &Focus<'_>,
-    search: &str,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
     div()
@@ -2679,11 +2806,7 @@ pub fn screen(
                 ),
         )
         // Right: the field tree, which is where LogBrowse puts it.
-        .children(
-            browse
-                .is_open()
-                .then(|| field_panel(browse, search, focus, cx)),
-        )
+        .children(browse.is_open().then(|| field_panel(browse, focus, cx)))
         .into_any_element()
 }
 
@@ -4318,27 +4441,20 @@ fn grid_panel(grid: &Grid, menu_open: bool, cx: &mut Context<MissionPlanner>) ->
     .into_any_element()
 }
 
-/// The field list, filtered by the search box.
+/// The field list: every field of the log, as `treeView1` lists every node, in a box that
+/// scrolls.
 ///
 /// A left click graphs a field on the left axis and a right click on the right, as the tree in
 /// `LogBrowse` does; either click on a plotted field removes it. A field on the right axis shows
 /// ` R` after its name, which is how the C# marks the curve too.
 fn field_panel(
     browse: &LogBrowse,
-    search: &str,
     focus: &Focus<'_>,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
-    let needle = search.trim().to_uppercase();
-    let matching: Vec<&PlottableField> = browse
-        .fields()
-        .iter()
-        .filter(|field| needle.is_empty() || field.to_string().to_uppercase().contains(&needle))
-        .collect();
-    let total = matching.len();
-
+    let total = browse.fields().len();
     let mut list = div().flex().flex_wrap().gap_1();
-    for field in matching.into_iter().take(SHOWN_FIELDS) {
+    for field in browse.fields() {
         let bits = browse.bits_of(field);
         if bits.is_empty() {
             list = list.child(field_chip(browse, field, cx));
@@ -4419,16 +4535,12 @@ fn field_panel(
                     .min_h(px(0.0))
                     .gap_2()
                     .overflow_y_scroll()
-                    .child(div().text_xs().text_color(rgb(theme::DIM)).child(
-                        if total > SHOWN_FIELDS {
-                            format!(
-                                "{total} fields, showing {SHOWN_FIELDS} - type in the box \
-                                     above to narrow"
-                            )
-                        } else {
-                            format!("{total} fields")
-                        },
-                    ))
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(theme::DIM))
+                            .child(format!("{total} fields")),
+                    )
                     .child(list),
             )
             .child(info),
@@ -4446,7 +4558,7 @@ fn field_chip(
     browse: &LogBrowse,
     field: &PlottableField,
     cx: &mut Context<MissionPlanner>,
-) -> gpui::Stateful<gpui::Div> {
+) -> AnyElement {
     let axis = browse.axis_of(field);
     let shown = axis.is_some();
     let label = field.to_string();
@@ -4457,7 +4569,7 @@ fn field_chip(
     let chosen_left = field.clone();
     let chosen_right = field.clone();
     let hovered = field.clone();
-    crate::probe::measured(format!("logfield-{label}"), div())
+    let chip = crate::probe::measured(format!("logfield-{label}"), div())
         .id(gpui::SharedString::from(format!("logfield-{label}")))
         .px_2()
         .py(px(1.0))
@@ -4500,7 +4612,19 @@ fn field_chip(
                     cx.notify();
                 }
             }),
-        )
+        );
+    let tip = browse.tip_of(field);
+    if tip.is_empty() {
+        return chip.into_any_element();
+    }
+    // `treeView1.ShowNodeToolTips = true`: the node's `ToolTipText`, `get_extra_info`'s words.
+    // `// C#: Log/LogBrowse.cs:685, 702`
+    let tip = gpui::SharedString::from(tip.to_owned());
+    chip.tooltip(move |_window, cx| -> gpui::AnyView {
+        let tip = tip.clone();
+        cx.new(|_| crate::config::rover_tuning::Tip(tip)).into()
+    })
+    .into_any_element()
 }
 
 /// A bit's chip under its field: `add_field_node`'s `new_bit_node`, its text the bit's name and
@@ -5934,5 +6058,187 @@ mod tests {
         assert_eq!(browse.info(), "System power flags");
         browse.hover_bit(&flags, "Vcc", Some(&meta));
         assert_eq!(browse.info(), "Flight board voltage");
+    }
+
+    /// `get_extra_info`: RCOU's channels carry their servo's function, RCIN's their mapped axes,
+    /// FlightMode and `RCn_OPTION` joined with ` + `, and every other message nothing.
+    /// `// C#: Log/LogBrowse.cs:533-549, 552-625`
+    #[test]
+    fn extra_info_is_the_servo_function_or_the_channels_mapping() {
+        use mp_params::{ParamMeta, UserLevel};
+        static META: [ParamMeta; 2] = [
+            ParamMeta {
+                name: "SERVO1_FUNCTION",
+                display_name: "SERVO1_FUNCTION",
+                description: "",
+                units: "",
+                range: None,
+                increment: None,
+                values: &[(0, "Disabled"), (33, "Motor1")],
+                bitmask: &[],
+                user_level: UserLevel::Standard,
+                reboot_required: false,
+            },
+            ParamMeta {
+                name: "RC7_OPTION",
+                display_name: "RC7_OPTION",
+                description: "",
+                units: "",
+                range: None,
+                increment: None,
+                values: &[(0, "Do Nothing"), (7, "Save WP")],
+                bitmask: &[],
+                user_level: UserLevel::Standard,
+                reboot_required: false,
+            },
+        ];
+        fn lookup(name: &str) -> Option<&'static ParamMeta> {
+            META.iter().find(|meta| meta.name == name)
+        }
+        let parameters: Vec<(String, f64)> = [
+            ("SERVO1_FUNCTION", 33.0),
+            ("SERVO2_FUNCTION", 99.0),
+            ("RCMAP_ROLL", 1.0),
+            ("RCMAP_PITCH", 2.0),
+            ("RCMAP_THROTTLE", 3.0),
+            ("RCMAP_YAW", 3.0),
+            ("FLTMODE_CH", 3.0),
+            ("RC7_OPTION", 7.0),
+        ]
+        .iter()
+        .map(|(name, value)| ((*name).to_owned(), *value))
+        .collect();
+        assert_eq!(extra_info("RCOU", "C1", &parameters, lookup), "Motor1");
+        // A value with no documented option, and a servo the vehicle has no parameter for.
+        assert_eq!(extra_info("RCOU", "C2", &parameters, lookup), "");
+        assert_eq!(extra_info("RCOU", "C9", &parameters, lookup), "");
+        assert_eq!(extra_info("RCIN", "C1", &parameters, lookup), "ROLL");
+        assert_eq!(
+            extra_info("RCIN", "C3", &parameters, lookup),
+            "THROTTLE + YAW + FlightMode"
+        );
+        assert_eq!(extra_info("RCIN", "C7", &parameters, lookup), "Save WP");
+        assert_eq!(extra_info("RCIN", "C5", &parameters, lookup), "");
+        // No digits in the field's name: nothing, as `rc_in_num.Length == 0` returns.
+        assert_eq!(extra_info("RCIN", "TimeUS", &parameters, lookup), "");
+        assert_eq!(extra_info("ATT", "Roll", &parameters, lookup), "");
+    }
+
+    /// The tips are the field nodes' `ToolTipText`, on the curve's label after the unit and in
+    /// the facts, and empty until the window hands the parameters over.
+    /// `// C#: Log/LogBrowse.cs:685, 1177, 1231-1234`
+    #[test]
+    fn a_fields_tip_goes_on_its_label_after_the_unit() {
+        fn lookup(name: &str) -> Option<&'static mp_params::ParamMeta> {
+            static META: mp_params::ParamMeta = mp_params::ParamMeta {
+                name: "SERVO1_FUNCTION",
+                display_name: "SERVO1_FUNCTION",
+                description: "",
+                units: "",
+                range: None,
+                increment: None,
+                values: &[(33, "Motor1")],
+                bitmask: &[],
+                user_level: mp_params::UserLevel::Standard,
+                reboot_required: false,
+            };
+            (name == META.name).then_some(&META)
+        }
+        let mut browse = LogBrowse::new();
+        browse.fields = vec![field("RCOU", "C1"), field("ATT", "Roll")];
+        assert_eq!(browse.tip_of(&field("RCOU", "C1")), "");
+        let parameters = vec![("SERVO1_FUNCTION".to_owned(), 33.0)];
+        browse.add_field_tips(&parameters, lookup);
+        assert_eq!(browse.tip_of(&field("RCOU", "C1")), "Motor1");
+        assert_eq!(browse.tip_of(&field("ATT", "Roll")), "");
+        let facts = browse.more_facts();
+        assert!(
+            facts.contains(&("log.field.RCOU.C1.tip".to_owned(), "Motor1".to_owned())),
+            "{facts:?}"
+        );
+        assert!(!facts.iter().any(|(key, _)| key == "log.field.ATT.Roll.tip"));
+        let unit = FieldUnit {
+            unit: "PWM".to_owned(),
+            multiplier: 1.0,
+        };
+        let plotted = Plotted::modified(
+            field("RCOU", "C1"),
+            &points(&[1500.0]),
+            &unit,
+            Axis::Right,
+            XAxis::Time,
+            None,
+            "Motor1",
+        );
+        assert_eq!(plotted.label, "RCOU.C1 (PWM) Motor1 R");
+        let plain = Plotted::modified(
+            field("RCOU", "C1"),
+            &points(&[1500.0]),
+            &unit,
+            Axis::Left,
+            XAxis::Time,
+            None,
+            "",
+        );
+        assert_eq!(plain.label, "RCOU.C1 (PWM)");
+    }
+
+    /// `GraphItem`'s abort the other way about: a plotted bit of a field that has a unit,
+    /// `MSG.Field (unit).BIT`, starts with `nodeName + " "` and blocks the field; a bit of one
+    /// without, `MSG.Field.BIT`, does not.
+    /// `// C#: Log/LogBrowse.cs:1135-1147`
+    #[test]
+    fn a_plotted_bit_of_a_field_with_a_unit_blocks_the_field() {
+        let mut browse = opened();
+        let roll = browse
+            .fields()
+            .iter()
+            .find(|field| field.message == "ATT" && field.field == "Roll")
+            .cloned()
+            .expect("ATT.Roll");
+        let bit = BitNode {
+            text: "X".to_owned(),
+            tip: String::new(),
+            mask: Some(1),
+        };
+        let with_unit = FieldUnit {
+            unit: "deg".to_owned(),
+            multiplier: 1.0,
+        };
+        browse.plotted.push(Plotted::of_bit(
+            roll.clone(),
+            &points(&[1.0]),
+            &with_unit,
+            Axis::Left,
+            XAxis::Time,
+            &bit,
+        ));
+        assert_eq!(browse.plotted[0].label, "ATT.Roll (deg).X");
+        browse.graph(&roll, Axis::Left);
+        assert_eq!(browse.plotted().len(), 1);
+        assert_eq!(browse.status(), Some("ATT.Roll is already on the graph"));
+        // Without a unit the bit's label has no space after the name: the field graphs.
+        browse.plotted.clear();
+        let no_unit = FieldUnit {
+            unit: String::new(),
+            multiplier: 1.0,
+        };
+        browse.plotted.push(Plotted::of_bit(
+            roll.clone(),
+            &points(&[1.0]),
+            &no_unit,
+            Axis::Left,
+            XAxis::Time,
+            &bit,
+        ));
+        browse.graph(&roll, Axis::Left);
+        assert_eq!(browse.plotted().len(), 2);
+    }
+
+    /// Every field of the log is listed, as the tree lists every node: no cap, no filter box.
+    #[test]
+    fn every_field_is_listed() {
+        let browse = opened();
+        assert!(browse.fields().len() > 200, "{}", browse.fields().len());
     }
 }

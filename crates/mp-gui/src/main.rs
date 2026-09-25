@@ -344,7 +344,6 @@ struct MissionPlanner {
     /// The log browser's `txt_info`.
     log_info_focus: gpui::FocusHandle,
     /// What has been typed into the log field search.
-    log_search: textfield::TextField,
     /// The result of the last comparison against a file, newest first.
     ///
     /// Held rather than applied. A comparison is something an operator reads before deciding, and
@@ -739,7 +738,6 @@ impl MissionPlanner {
             log_prompt_focus: cx.focus_handle(),
             log_screen_focus: cx.focus_handle(),
             log_info_focus: cx.focus_handle(),
-            log_search: textfield::TextField::new("filter fields"),
             param_differences: Vec::new(),
             radio_input: config::radio::RadioInput::default(),
             motor_test: config::motor_test::MotorTest::default(),
@@ -1574,6 +1572,11 @@ impl MissionPlanner {
         };
         let path = Self::plan_directory().join(leaf);
         self.log_browse.open(&path);
+        // `add_field_node`'s tooltips, from the connected vehicle's parameters.
+        // `// C#: Log/LogBrowse.cs:685`
+        let parameters = self.telemetry.view().parameters;
+        self.log_browse
+            .add_field_tips(&parameters, crate::metadata::lookup);
         // `LoadLog2` sets six of the strip's boxes from config.xml once the log is read.
         // `// C#: Log/LogBrowse.cs:444-449`
         if self.log_browse.is_open() {
@@ -3455,7 +3458,6 @@ impl Render for MissionPlanner {
                         info: &self.log_info_focus,
                         info_focused: self.log_info_focus.is_focused(window),
                     },
-                    self.log_search.value(),
                     cx,
                 ))
                 .into_any_element(),
