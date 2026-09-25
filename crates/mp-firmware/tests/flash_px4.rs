@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use mp_firmware::Firmware;
 use mp_firmware::detect::{PLEASE_UNPLUG_THE_BOARD_AND, ProbePort};
 use mp_firmware::flow::{
-    self, Buttons, Cx, Dialogue, FlashHost, LinkReboot, NO_NEED_TO_UPLOAD,
+    self, Buttons, Cx, Dialogue, FlashHost, LOST_COMMUNICATION, LinkReboot, NO_NEED_TO_UPLOAD,
     NO_RESPONSE_FROM_BOARD, Reached, SAME_FIRMWARE_QUESTION,
 };
 use mp_firmware::manifest::Fetch;
@@ -29,11 +29,24 @@ use common::MockBootloader;
 enum BenchPort {
     Board(Arc<Mutex<MockBootloader>>),
     Silent,
+    /// A board whose port fails after the identify: the sixth write and every read after it
+    /// are an I/O error.
+    Flaky(Arc<Mutex<MockBootloader>>, Arc<Mutex<usize>>),
 }
 
 impl Read for BenchPort {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
+            Self::Flaky(mock, writes) => {
+                if *writes.lock().expect("count") >= 6 {
+                    return Err(io::Error::other("the cable came out"));
+                }
+                let mut mock = mock.lock().expect("the bench");
+                if mock.outgoing.is_empty() {
+                    return Err(io::Error::new(io::ErrorKind::TimedOut, "nothing to read"));
+                }
+                mock.read(buf)
+            }
             Self::Board(mock) => {
                 let mut mock = mock.lock().expect("the bench");
                 if mock.outgoing.is_empty() {
@@ -49,6 +62,14 @@ impl Read for BenchPort {
 impl Write for BenchPort {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         match self {
+            Self::Flaky(mock, writes) => {
+                let mut count = writes.lock().expect("count");
+                *count += 1;
+                if *count >= 6 {
+                    return Err(io::Error::other("the cable came out"));
+                }
+                mock.lock().expect("the bench").write(buf)
+            }
             Self::Board(mock) => mock.lock().expect("the bench").write(buf),
             Self::Silent => Ok(buf.len()),
         }
@@ -63,14 +84,14 @@ impl ProbePort for BenchPort {
         Ok(())
     }
     fn discard_in_buffer(&mut self) -> io::Result<()> {
-        if let Self::Board(mock) = self {
+        if let Self::Board(mock) | Self::Flaky(mock, _) = self {
             mock.lock().expect("the bench").outgoing.clear();
         }
         Ok(())
     }
     fn bytes_to_read(&mut self) -> io::Result<usize> {
         Ok(match self {
-            Self::Board(mock) => mock.lock().expect("the bench").outgoing.len(),
+            Self::Board(mock) | Self::Flaky(mock, _) => mock.lock().expect("the bench").outgoing.len(),
             Self::Silent => 0,
         })
     }
@@ -84,6 +105,8 @@ struct Bench {
     ports: BTreeMap<String, Option<Arc<Mutex<MockBootloader>>>>,
     /// Boards that answer only after the reboot attempt.
     later: BTreeMap<String, Arc<Mutex<MockBootloader>>>,
+    /// Boards whose port breaks after the identify.
+    flaky: BTreeMap<String, Arc<Mutex<MockBootloader>>>,
     link: LinkReboot,
     reboots: usize,
     clock: Instant,
@@ -96,6 +119,7 @@ impl Bench {
         Self {
             ports: BTreeMap::new(),
             later: BTreeMap::new(),
+            flaky: BTreeMap::new(),
             link,
             reboots: 0,
             clock: Instant::now(),
@@ -123,6 +147,14 @@ impl Bench {
         self
     }
 
+    /// A board whose port breaks once the bootloader has been identified.
+    fn flaky_board(mut self, name: &str, mock: MockBootloader) -> Self {
+        self.ports.insert(name.to_owned(), None);
+        self.flaky
+            .insert(name.to_owned(), Arc::new(Mutex::new(mock)));
+        self
+    }
+
     fn board_at(&self, name: &str) -> Arc<Mutex<MockBootloader>> {
         self.ports
             .get(name)
@@ -142,6 +174,9 @@ impl FlashHost for Bench {
     fn open(&mut self, port: &str, baud: u32) -> io::Result<Self::Port> {
         assert_eq!(baud, 115_200, "the bootloader's baud");
         self.opened.push(port.to_owned());
+        if let Some(mock) = self.flaky.get(port) {
+            return Ok(BenchPort::Flaky(Arc::clone(mock), Arc::new(Mutex::new(0))));
+        }
         match self.ports.get(port) {
             Some(Some(mock)) => Ok(BenchPort::Board(Arc::clone(mock))),
             Some(None) => match self.later.get(port) {
@@ -318,6 +353,25 @@ fn another_boards_bootloader_is_passed_over_and_no_answer_in_thirty_seconds_is_a
     assert!(reached.flashed.is_none());
     // The clock ran the thirty seconds out.
     assert!(bench.ticks > 30);
+}
+
+/// The owner's ruling of 2026-09-25: a port that fails once the board is found says so on the
+/// status line and never in a box.
+#[test]
+fn a_port_that_breaks_after_the_identify_is_a_status_line_not_a_box() {
+    let fw = firmware(140, &[7u8; 1024]);
+    let mut bench = Bench::new(LinkReboot::NotSerial)
+        .flaky_board("/dev/ttyACM0", MockBootloader::new(140, 2_080_768));
+    let mut person = Person::default();
+    let mut reached = Reached::default();
+    let ok = flow::upload_px4(&mut cx(&mut person), &mut bench, &fw, &mut reached);
+    assert!(!ok);
+    assert!(person.shown.is_empty(), "no box: {:?}", person.shown);
+    assert_eq!(
+        person.progress.last().map(|(_, text)| text.as_str()),
+        Some(LOST_COMMUNICATION)
+    );
+    assert!(reached.flashed.is_none());
 }
 
 #[test]

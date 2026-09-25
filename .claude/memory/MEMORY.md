@@ -7,6 +7,7 @@ controlled; the per-project memory directory holds symlinks to them.
 - [NOT IN THE C#, NOT IN SCOPE](not-in-the-csharp-not-in-scope.md) — never invent a feature Mission Planner does not have; ask instead
 - [Port from the C# source](port-from-the-csharp-source.md) — references/missionplanner is the spec; read the .cs, never recall it
 - [Match the original layout](match-the-original-layout.md) — Buzz is the oracle on look and feel; default to MP's arrangement, read it from the .resx
+- [No dialogs for avoidable errors](no-dialogs-for-avoidable-errors.md) — an error the main window can show as state/connectivity/colour never gets a message box (Buzz, 2026-09-25)
 
 - [No foreground waiting](no-foreground-waiting.md) — background long operations, poll cheaply, never block the session
 - [GUI runs stay short](gui-runs-stay-short.md) — windows live ~5s, pinned to DP-1-3; never debug by re-running the GUI
@@ -19,3 +20,4 @@ controlled; the per-project memory directory holds symlinks to them.
 - [Worktree agents share the target dir](worktree-agents-share-the-target-dir.md) — touch a crate's lib.rs before an integration build while agents run
 - [Drop-downs escape the page](dropdowns-escape-the-page.md) — deferred+anchored, thirty rows, wheel-scrolled; the page clips anything else
 - [Kill by PID, not pattern](kill-by-pid-not-pattern.md) — pkill -f matches the calling shell; pgrep -fa, then kill the PIDs
+- [Bench CubeOrange](bench-cubeorange.md) — its Zephyr bootloader replaced with stock via the BMP on 2026-09-25; by-id path; MP_FIRMWARE_PORT; flash only on Buzz's go

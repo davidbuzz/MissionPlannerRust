@@ -11,7 +11,7 @@
 #
 # Run with the board's MAVLink interface as the link:
 #
-#   tools/gui-test.sh tests/gui/setup-bootloader-update-bench.gui -- serial:/dev/serial/by-id/usb-ArduPilot_CubeOrange_373532393330510F002E0019-if-mavlink:115200
+#   tools/gui-test.sh tests/gui/setup-bootloader-update-bench.gui -- serial:/dev/serial/by-id/usb-Hex_ProfiCNC_CubeOrange_19002E000F51303339323537-if00:115200
 
 env XDG_DATA_HOME $WORK
 env TMPDIR $WORK

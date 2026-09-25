@@ -1002,7 +1002,10 @@ pub const SAME_FIRMWARE_QUESTION: &str =
     "The board already has the same firmware version.\nUpload anyway?";
 /// The question's caption.
 pub const SAME_FIRMWARE_CAPTION: &str = "Same Firmware";
-/// The words when the port fails between finding the board and uploading.
+/// The words when the port fails between finding the board and uploading. The C# puts them in a
+/// message box ("lost comms" / "comms timeout"); here they go on the status line and never in a
+/// box - the owner's ruling of 2026-09-25: the link's state is always shown at the top right of
+/// the window, and a modal for it is noise. Permanently: no `Dialogue::show` carries this text.
 /// `// C#: Utilities/Firmware.cs:702, 710`
 pub const LOST_COMMUNICATION: &str = "lost communication with the board.";
 /// `UploadPX4`'s last words when no bootloader answered in time.
@@ -1066,7 +1069,7 @@ pub fn upload_px4<H: FlashHost>(
     cx.dialogue.progress(-1, "Scanning comports");
     while host.now() < deadline {
         for name in host.port_names() {
-            let Ok((mut uploader, board)) = identify_port(host, &name) else {
+            let Ok((uploader, board)) = identify_port(host, &name) else {
                 continue;
             };
             cx.dialogue.progress(-1, &format!("{name} Identify"));
@@ -1077,6 +1080,16 @@ pub fn upload_px4<H: FlashHost>(
             cx.dialogue.progress(-1, "Connecting");
             // "test if pausing here stops - System.TimeoutException: The write timed out."
             host.sleep(Duration::from_millis(500));
+            // `currentChecksum` gives the board a second for its CRC over the whole flash
+            // (`ReadTimeout = 1000`), and thirty for the external flash's; the identify's
+            // 50 ms would time out on it.
+            // `// C#: ExtLibs/px4uploader/Uploader.cs:812, 843`
+            let mut port = uploader.into_inner();
+            if port.set_read_timeout(Duration::from_secs(30)).is_err() {
+                cx.dialogue.progress(0, LOST_COMMUNICATION);
+                return false;
+            }
+            let mut uploader = Uploader::new(port);
             match uploader.same_firmware(firmware, &board) {
                 Ok(true) => {
                     if !cx.dialogue.ask(
@@ -1090,13 +1103,9 @@ pub fn upload_px4<H: FlashHost>(
                     }
                 }
                 Ok(false) => {}
-                Err(UploaderError::Io(error)) => {
-                    let caption = if error.kind() == io::ErrorKind::TimedOut {
-                        "comms timeout"
-                    } else {
-                        "lost comms"
-                    };
-                    cx.dialogue.show(LOST_COMMUNICATION, caption);
+                // An IOException or a TimeoutException: the C#'s two boxes, one status line here.
+                Err(UploaderError::Io(_)) => {
+                    cx.dialogue.progress(0, LOST_COMMUNICATION);
                     return false;
                 }
                 // Any other exception in `currentChecksum` lands in the C#'s bare `catch`:
@@ -1108,6 +1117,15 @@ pub fn upload_px4<H: FlashHost>(
                 }
             }
             cx.dialogue.progress(0, "Upload");
+            // The erase waits up to twenty seconds for the bootloader's sync, the CRC after
+            // programming twenty more: `__wait_for_bytes(1, 20)`, `__wait_for_bytes(4, 20)`.
+            // `// C#: ExtLibs/px4uploader/Uploader.cs:535, 791`
+            let mut port = uploader.into_inner();
+            if port.set_read_timeout(Duration::from_secs(20)).is_err() {
+                cx.dialogue.progress(0, LOST_COMMUNICATION);
+                return false;
+            }
+            let mut uploader = Uploader::new(port);
             let dialogue = &mut *cx.dialogue;
             #[allow(clippy::cast_possible_truncation)] // 0 to 100
             let outcome = uploader.upload(firmware, |fraction| {

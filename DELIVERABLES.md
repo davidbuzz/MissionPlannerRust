@@ -413,10 +413,15 @@ path: board detect, firmware catalogue, upload via px4/DFU/serial bootloaders.
   asserts every byte, and `tests/flash_px4.rs` driving `UploadPX4`'s whole sequence - the reboot
   into the bootloader, the thirty-second port scan, the same-firmware question, the upload and
   its words - over a bench of pretend ports (row 79). The Install Firmware page now takes that
-  path to this machine's real ports. **No board has been flashed yet**: the owner asked for the
-  bench CubeOrange on 2026-09-25, and `tests/gui/setup-firmware-flash-bench.gui` does it on his
-  explicit go for that flash; the CLI still offers `mpr firmware info` and `mpr firmware detect`
-  and nothing that writes. Board detection is
+  path to this machine's real ports, and **has flashed a real board**: on 2026-09-25 (13:52-13:55,
+  on the owner's explicit go) `tests/gui/setup-firmware-flash-bench.gui` wrote ArduCopter 4.7.1
+  stable to the bench CubeOrange through the page - reboot into the bootloader, scan, CRC compare,
+  erase, program, verify, reboot, "Upload Done" - and the board came back running it (PLAN.md §13.6
+  row 79 has every attempt, including the experimental bootloader that had to be replaced through
+  the owner's debugger first). Linux only so far; Windows and macOS remain. A port failing during
+  the flash is a status line, never a message box (the owner's ruling of the same day, a written
+  divergence from `Firmware.cs:702, 710`). The CLI still offers `mpr firmware info` and
+  `mpr firmware detect` and nothing that writes. Board detection is
   `Utilities/BoardDetect.cs` ported rule for rule (`crates/mp-firmware/src/detect.rs`), its probes
   proved against the px4 mock over a pty; all 16 `DetectBoardTest` calls are fixtures, and five of
   them fail against the C# itself, which the fixture records. A real Cube Orange running ArduPilot
@@ -433,7 +438,7 @@ path: board detect, firmware catalogue, upload via px4/DFU/serial bootloaders.
   offboard ellipsoid fit behind Live Calibration on the older compass page, the one calibration
   whose maths the DoD's 1e-6 clause is about; every calibration here is the onboard one, driven
   as the C# drives it.
-- **Tests:** `crates/mp-firmware/tests/board_detect.rs` (all 16 `DetectBoardTest` calls, the five that fail against the C# recorded), `firmware_upload.rs` (every byte against a strict px4 mock), `manifest.rs` and `legacy.rs` (the catalogues on fixtures); the calibration pages' unit tests inline in `mp-gui` and `mp-calibration`, and `tests/gui/config-accel.gui`, `config-compass.gui`, `config-radio.gui`, `config-motortest.gui`, `config-firmware.gui` and `config-firmware-legacy.gui` on SITL. Not yet: `tests/magcal_vectors.rs` and `tests/accelcal_vectors.rs` (`MagCalib.cs` is not ported), a DFU mock, and any flash of a real board.
+- **Tests:** `crates/mp-firmware/tests/board_detect.rs` (all 16 `DetectBoardTest` calls, the five that fail against the C# recorded), `firmware_upload.rs` (every byte against a strict px4 mock), `manifest.rs` and `legacy.rs` (the catalogues on fixtures); the calibration pages' unit tests inline in `mp-gui` and `mp-calibration`, and `tests/gui/config-accel.gui`, `config-compass.gui`, `config-radio.gui`, `config-motortest.gui`, `config-firmware.gui` and `config-firmware-legacy.gui` on SITL. Not yet: `tests/magcal_vectors.rs` and `tests/accelcal_vectors.rs` (`MagCalib.cs` is not ported), a DFU mock, and a real-board flash on Windows or macOS (Linux: 2026-09-25, `tests/gui/setup-firmware-flash-bench.gui`).
 
 ### D14. Log engine and analysis
 Dataflash (`.bin`/`.log`) and tlog parsing, log download, graphing, LogAnalyzer rules, DSP/FFT, exports
