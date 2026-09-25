@@ -23,8 +23,8 @@
 //!
 //! The layout is `ConfigBatteryMonitoring.resx`'s, every control at its `Location` in a 512 x 322
 //! page. The colours are this application's. `pictureBox5`, a photograph of a power module held
-//! in the `.resx`, is a box with the control's name in it: this repository carries none of
-//! Mission Planner's artwork.
+//! in the `.resx`, is drawn, zoomed, from `Resources.BR_APMPWRDEAN_2`: the same bytes
+//! ([`crate::pictures`]).
 //!
 //! The Sensor and HW Ver boxes are `DropDown` combos: their text takes typing, which no handler
 //! reads - only `SelectedIndexChanged` is wired - and which leaves no row selected, as the native
@@ -2168,10 +2168,16 @@ pub fn page(
     let enabled = controls.enabled;
     let mut body = div().relative().w(px(512.0)).h(px(322.0));
 
-    // `pictureBox5`'s photograph, held in the `.resx`, drawn as the control's name: no artwork
-    // is carried (a deliberate divergence).
-    // C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring.Designer.cs:120-126; ConfigBatteryMonitoring.resx:315
-    body = body.child(picture("pictureBox5", (3.0, 41.0, 97.0, 75.0)));
+    // `pictureBox5`'s photograph, held in the `.resx` as base64: the same bytes as
+    // `Resources.BR_APMPWRDEAN_2` (`Resources/BR-APMPWRDEAN-2.jpg`), which is drawn, zoomed.
+    // C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring.Designer.cs:123; ConfigBatteryMonitoring.resx:315, 627-628
+    body = body.child(picture(
+        "battery",
+        "pictureBox5",
+        (3.0, 41.0, 97.0, 75.0),
+        "BR_APMPWRDEAN_2",
+        crate::pictures::Layout::Zoom,
+    ));
 
     // The three combos and their labels, left column.
     let edit = |combo: ComboId| {

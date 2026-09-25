@@ -21,11 +21,13 @@
 //! 652 by 100 group, the types down the left of a 504 by 420 group, each control at its
 //! `Location`. The colours are this application's.
 //!
+//! The pictures are the C#'s ([`crate::pictures`], resources named in [`CLASSES`] and [`TYPES`]):
+//! each type's zoomed in its box at the opacity the C# gives it, each class button's stretched to
+//! 60 by 60 as `new Bitmap(image, 60, 60)` makes it; V Tail's box has no image in the C# and is
+//! empty here.
+//!
 //! What is not ported, and why:
 //!
-//! * the pictures. Each is a PNG in the C# tree, `Resources/` (paths in [`CLASSES`] and
-//!   [`TYPES`]); they are Mission Planner's artwork and not files this application ships, so each
-//!   is a box of the same size with the class or type's name in it. The fade still applies;
 //! * the fade itself, a 400 ms linear `Transition` (`ConfigFrameClassType.cs:295-300`), which is
 //!   drawn at the opacity it ends on;
 //! * `ConfigFrameType`, the page a copter older than 3.5 gets instead (`InitialSetup.cs:188`):
@@ -84,12 +86,12 @@ pub struct ClassButton {
     pub text: &'static str,
     /// Its `Location.X` in the group.
     pub x: f32,
-    /// The image the C# draws on it, as a file in the C# tree; the Undefined button has none.
+    /// The resource the C# draws on it ([`crate::pictures`]); the Undefined button has none.
     pub image: Option<&'static str>,
 }
 
 /// The Frame Class buttons, left to right.
-/// `// C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs:84-110, 318-336; ConfigFrameClassType.Designer.cs:255-340; ConfigFrameClassType.resx (radioButton*.Location, .Text); Properties/Resources.resx:376, 494, 316, 491, 623, 485, 319`
+/// `// C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs:27-33, 84-110, 318-336; ConfigFrameClassType.Designer.cs:255-340 (radioButton*.Image: 261, 272, 283, 294, 305, 316, 327); ConfigFrameClassType.resx (radioButton*.Location, .Text)`
 pub const CLASSES: [ClassButton; 8] = [
     ClassButton {
         class: 0,
@@ -101,43 +103,43 @@ pub const CLASSES: [ClassButton; 8] = [
         class: 1,
         text: "Quad",
         x: 86.0,
-        image: Some("Resources/FW icons 2013+logos-03.png"),
+        image: Some("FW_icons_2013_logos_03"),
     },
     ClassButton {
         class: 2,
         text: "Hexa",
         x: 166.0,
-        image: Some("Resources/FW icons 2013+logos-09.png"),
+        image: Some("FW_icons_2013_logos_09"),
     },
     ClassButton {
         class: 3,
         text: "Octa",
         x: 246.0,
-        image: Some("Resources/FW icons 2013+logos-12.png"),
+        image: Some("FW_icons_2013_logos_12"),
     },
     ClassButton {
         class: 4,
         text: "OctaQuad",
         x: 326.0,
-        image: Some("Resources/FW icons 2013+logos-06.png"),
+        image: Some("FW_icons_2013_logos_06"),
     },
     ClassButton {
         class: 5,
         text: "Y6",
         x: 406.0,
-        image: Some("Resources/FW icons 2013+logos-07.png"),
+        image: Some("FW_icons_2013_logos_07"),
     },
     ClassButton {
         class: 6,
         text: "Heli",
         x: 486.0,
-        image: Some("Resources/FW icons 2013+logos-13.png"),
+        image: Some("FW_icons_2013_logos_13"),
     },
     ClassButton {
         class: 7,
         text: "Tri",
         x: 566.0,
-        image: Some("Resources/FW icons 2013+logos-08.png"),
+        image: Some("FW_icons_2013_logos_08"),
     },
 ];
 
@@ -157,7 +159,7 @@ pub struct TypeOption {
     pub radio_at: (f32, f32),
     /// The picture's `Location` and `Size`.
     pub picture: (f32, f32, f32, f32),
-    /// The image the C# draws there, as a file in the C# tree. V Tail's picture box has none.
+    /// The resource the C# draws there ([`crate::pictures`]). V Tail's picture box has none.
     pub image: Option<&'static str>,
     /// Whether a click on the picture chooses the type: every picture but V Tail's is wired to
     /// `radioButtonType_CheckedChanged`.
@@ -165,7 +167,7 @@ pub struct TypeOption {
 }
 
 /// The Frame Type rows, in the order `DoType` and the click handler take them.
-/// `// C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs:178-277, 302-316; ConfigFrameClassType.Designer.cs:75-239; ConfigFrameClassType.resx (label1-9, radioButton_*, pictureBox* .Location, .Size, .Text); Properties/Resources.resx:470, 473, 157, 244, 530`
+/// `// C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs:178-277, 302-316; ConfigFrameClassType.Designer.cs:75-239 (pictureBox*.Image: 103, 112, 134, 156, 183); ConfigFrameClassType.resx (label1-9, radioButton_*, pictureBox* .Location, .Size, .SizeMode, .Text)`
 pub const TYPES: [TypeOption; 6] = [
     TypeOption {
         frame_type: 0,
@@ -174,7 +176,7 @@ pub const TYPES: [TypeOption; 6] = [
         label_at: (25.0, 38.0),
         radio_at: (62.0, 38.0),
         picture: (83.0, 9.0, 248.0, 75.0),
-        image: Some("Resources/frames_plus.png"),
+        image: Some("frames_plus"),
         picture_clicks: true,
     },
     TypeOption {
@@ -184,7 +186,7 @@ pub const TYPES: [TypeOption; 6] = [
         label_at: (8.0, 118.0),
         radio_at: (62.0, 118.0),
         picture: (83.0, 88.0, 406.0, 78.0),
-        image: Some("Resources/frames_x.png"),
+        image: Some("frames_x"),
         picture_clicks: true,
     },
     TypeOption {
@@ -194,7 +196,7 @@ pub const TYPES: [TypeOption; 6] = [
         label_at: (38.0, 203.0),
         radio_at: (62.0, 203.0),
         picture: (83.0, 173.0, 111.0, 78.0),
-        image: Some("Resources/new-3DR-04.png"),
+        image: Some("new_3DR_04"),
         picture_clicks: true,
     },
     TypeOption {
@@ -204,7 +206,7 @@ pub const TYPES: [TypeOption; 6] = [
         label_at: (38.0, 287.0),
         radio_at: (62.0, 287.0),
         picture: (83.0, 257.0, 111.0, 78.0),
-        image: Some("Resources/frames-h.png"),
+        image: Some("frames_h"),
         picture_clicks: true,
     },
     TypeOption {
@@ -214,7 +216,7 @@ pub const TYPES: [TypeOption; 6] = [
         label_at: (19.0, 371.0),
         radio_at: (62.0, 371.0),
         picture: (83.0, 341.0, 111.0, 77.0),
-        image: Some("Resources/FW icons Y6.png"),
+        image: Some("y6b"),
         picture_clicks: true,
     },
     TypeOption {
@@ -863,8 +865,7 @@ fn group(x: f32, y: f32, width: f32, height: f32, title: &'static str, enabled: 
         )
 }
 
-/// Where a picture would be: a box of its size with the name in it, since the PNG is Mission
-/// Planner's and not shipped here.
+/// Where a picture is when its resource is not carried: a box of its size with the name in it.
 fn placeholder(name: &str, enabled: bool) -> Div {
     div()
         .size_full()
@@ -894,20 +895,23 @@ fn class_button(
         (true, true) => theme::ACCENT,
         (true, false) => theme::TEXT,
     };
-    let picture = button.image.map(|_| {
-        div()
-            .w(px(60.0))
-            .h(px(48.0))
-            .child(placeholder(button.text, enabled))
+    // `new Bitmap(radioButton<Name>.Image, 60, 60)`: the image stretched to 60 by 60, above the
+    // text. C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs:27-33; ConfigFrameClassType.Designer.cs:261-327
+    let picture = button.image.map(|resource| {
+        let slot = div().w(px(60.0)).h(px(60.0)).flex_none();
+        let drawn = crate::pictures::image(resource, crate::pictures::Layout::Stretch);
+        crate::pictures::record("frame", &id, drawn.as_ref().map(|_| resource));
+        match drawn {
+            Some(image) => slot.child(image),
+            None => slot.child(placeholder(button.text, enabled)),
+        }
     });
     let body = crate::probe::measured(id.clone(), at(button.x, 18.0, 74.0, 74.0))
         .id(SharedString::from(id))
         .flex()
         .flex_col()
         .items_center()
-        .justify_end()
-        .gap_1()
-        .p(px(2.0))
+        .justify_center()
         .rounded_sm()
         .border_2()
         .border_color(rgb(if down { theme::ACCENT } else { theme::BORDER }))
@@ -915,7 +919,13 @@ fn class_button(
         .text_xs()
         .text_color(rgb(colour))
         .children(picture)
-        .child(div().w_full().child(button.text));
+        .child(
+            div()
+                .w_full()
+                .line_height(px(12.0))
+                .text_center()
+                .child(button.text),
+        );
     if enabled {
         let class = button.class;
         body.cursor_pointer()
@@ -999,6 +1009,18 @@ fn type_row(
 
     let (x, y, width, height) = option.picture;
     let id = format!("frame-picture-{value}");
+    // Each `PictureBoxWithPseudoOpacity`'s `Image`, zoomed; V Tail's has none and is empty.
+    // C#: GCSViews/ConfigurationView/ConfigFrameClassType.Designer.cs:103, 112, 134, 156, 183;
+    // ConfigFrameClassType.resx (pictureBox*.SizeMode)
+    let drawn = option
+        .image
+        .and_then(|resource| crate::pictures::image(resource, crate::pictures::Layout::ZoomImage));
+    crate::pictures::record("frame", &id, option.image.filter(|_| drawn.is_some()));
+    let content = match (drawn, option.image) {
+        (Some(image), _) => image,
+        (None, Some(_)) => placeholder(option.name, group_on).into_any_element(),
+        (None, None) => div().size_full().into_any_element(),
+    };
     let picture = crate::probe::measured(id.clone(), at(x, y, width, height))
         .id(SharedString::from(id))
         .opacity(if bright {
@@ -1006,7 +1028,7 @@ fn type_row(
         } else {
             DISABLED_OPACITY
         })
-        .child(placeholder(option.name, group_on));
+        .child(content);
     let picture = if group_on && option.picture_clicks {
         picture
             .cursor_pointer()

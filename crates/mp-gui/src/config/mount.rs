@@ -36,8 +36,8 @@
 //! those values, which finds Relay for 1 and Transistor for 4.
 //!
 //! The layout is `ConfigMount.resx`'s, every control at its `Location` in a 674 x 620 page. The
-//! four pictures (`Resources.cameraGimalPitch1`, `Roll1`, `Yaw` and `Shutter`) are boxes with the
-//! resource's name in them: this repository carries none of Mission Planner's artwork.
+//! four pictures show `Resources.cameraGimalPitch1`, `Roll1`, `Yaw` and `Shutter`, zoomed
+//! ([`crate::pictures`]).
 //!
 //! The Wiki link starts `CornflowerBlue` and fades, over 300 ms linearly, to `CornflowerBlue`
 //! when the mouse comes onto it and to `WhiteSmoke` when it leaves - `Transitions` interpolating
@@ -1377,13 +1377,37 @@ pub fn page(
         .relative()
         .w(px(674.0))
         .h(px(620.0))
-        // The four resources drawn as their names: no artwork is carried (a deliberate
-        // divergence).
-        // C#: GCSViews/ConfigurationView/ConfigMount.designer.cs:157, 170, 213, 1105
-        .child(picture("cameraGimalPitch1", (33.0, 47.0, 203.0, 112.0)))
-        .child(picture("cameraGimalRoll1", (33.0, 172.0, 203.0, 112.0)))
-        .child(picture("cameraGimalYaw", (33.0, 296.0, 203.0, 112.0)))
-        .child(picture("Shutter", (33.0, 435.0, 203.0, 112.0)))
+        // The four `BackgroundImage`s, each zoomed.
+        // C#: GCSViews/ConfigurationView/ConfigMount.designer.cs:157, 170, 213, 1105;
+        // ConfigMount.resx:121, 171, 372, 2367 (BackgroundImageLayout)
+        .child(picture(
+            "mount",
+            "cameraGimalPitch1",
+            (33.0, 47.0, 203.0, 112.0),
+            "cameraGimalPitch1",
+            crate::pictures::Layout::Zoom,
+        ))
+        .child(picture(
+            "mount",
+            "cameraGimalRoll1",
+            (33.0, 172.0, 203.0, 112.0),
+            "cameraGimalRoll1",
+            crate::pictures::Layout::Zoom,
+        ))
+        .child(picture(
+            "mount",
+            "cameraGimalYaw",
+            (33.0, 296.0, 203.0, 112.0),
+            "cameraGimalYaw",
+            crate::pictures::Layout::Zoom,
+        ))
+        .child(picture(
+            "mount",
+            "Shutter",
+            (33.0, 435.0, 203.0, 112.0),
+            "Shutter",
+            crate::pictures::Layout::Zoom,
+        ))
         .child(rule(17.0, 54.0, 516.0))
         .child(rule(17.0, 181.0, 516.0))
         .child(rule(17.0, 305.0, 516.0))

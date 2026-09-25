@@ -31,8 +31,7 @@
 //! feature not enabled - keep their boxes.
 //!
 //! The layout is `ConfigBatteryMonitoring2.resx`'s, every control at its `Location` in a 521 x 322
-//! page. `pictureBox5`'s image (`Resources.BR_APMPWRDEAN_2`) is a box with the resource's name in
-//! it: this repository carries none of Mission Planner's artwork.
+//! page. `pictureBox5` shows `Resources.BR_APMPWRDEAN_2`, zoomed ([`crate::pictures`]).
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -861,10 +860,15 @@ pub fn page(
         .relative()
         .w(px(521.0))
         .h(px(322.0))
-        // `Resources.BR_APMPWRDEAN_2`, drawn as its name: no artwork is carried (a deliberate
-        // divergence).
-        // C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring2.Designer.cs:84-91
-        .child(picture("BR_APMPWRDEAN_2", (3.0, 41.0, 97.0, 75.0)))
+        // `Resources.BR_APMPWRDEAN_2`, zoomed.
+        // C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring2.Designer.cs:87; ConfigBatteryMonitoring2.resx:231-232
+        .child(picture(
+            "battery2",
+            "BR_APMPWRDEAN_2",
+            (3.0, 41.0, 97.0, 75.0),
+            "BR_APMPWRDEAN_2",
+            crate::pictures::Layout::Zoom,
+        ))
         .child(label(106.0, 45.0, "Monitor", enabled))
         .child(label(106.0, 71.0, "Volt Pin", enabled))
         .child(label(106.0, 98.0, "Current Pin", enabled));

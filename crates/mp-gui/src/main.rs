@@ -31,6 +31,7 @@ mod mapview;
 mod metadata;
 mod params;
 mod payload;
+mod pictures;
 // ---- row 82 ----
 mod raw_params;
 // ---- end row 82 ----

@@ -415,7 +415,14 @@ pub fn page(airspeed: &Airspeed, cx: &mut Context<MissionPlanner>) -> AnyElement
         .h(px(120.0))
         .child(heading(7.0, 5.0, HEADING, enabled))
         .child(rule(3.0, 23.0, 644.0))
-        .child(picture("airspeed", (11.0, 35.0, 75.0, 75.0)));
+        .child(picture(
+            "airspeed",
+            "airspeed",
+            (11.0, 35.0, 75.0, 75.0),
+            // C#: GCSViews/ConfigurationView/ConfigHWAirspeed.Designer.cs:57; ConfigHWAirspeed.resx:153-154
+            "airspeed",
+            crate::pictures::Layout::Zoom,
+        ));
     if airspeed.enable_visible {
         body = body.child(check_box(
             "airspeed-ARSPD_ENABLE".to_owned(),

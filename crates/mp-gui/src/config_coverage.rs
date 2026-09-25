@@ -258,7 +258,8 @@ pub const PANELS: &[Panel] = &[
         //     whole catalogue; Load custom firmware by extension; each stops where it would write
         //     to a board - the upload, DFU, Force Bootloader and Bootloader Update are disabled, as
         //     nothing flashes in this build; not Ctrl+Q, the bootloader probe on a device's
-        //     arrival, nor FirmwareSelection's filter pickers; the vehicle pictures are named boxes",
+        //     arrival, nor FirmwareSelection's filter pickers; the vehicle pictures are the C#'s
+        //     images (crate::pictures)",
         ),
     ),
     panel(
@@ -280,7 +281,7 @@ pub const PANELS: &[Panel] = &[
         //     custom firmware, and the three links; each stops where it would write to a board -
         //     the upload and Force Bootloader are disabled, as nothing flashes in this build; not
         //     Ctrl+Q or Ctrl+P, nor the bootloader probe on a device's arrival; the pictures are
-        //     named boxes",
+        //     the C#'s images (crate::pictures)",
         ),
     ),
     panel(
@@ -329,15 +330,13 @@ pub const PANELS: &[Panel] = &[
         // C#: GCSViews/ConfigurationView/ConfigFrameType.cs:25-234 - Activate, DoChange, the 12
         // wirings with WinForms' CheckedChanged cascade, and SetFrameParam - and the Default
         // Settings group, Controls/DefaultSettings.cs:25-106, ported as config/default_settings.rs.
-        Partial(
-            at("crates/mp-gui/src/config/frame_type_legacy.rs", "fn page"),
-            "Activate on FRAME, the six radio buttons and pictures - all 12 wirings, the radio
-        //     buttons' CheckedChanged cascade in the Designer's order - the FRAME writes through
-        //     the retrying set, \"Set FRAME Failed\" on the status line; Default Settings listing
-        //     Tools/Frame_params from GitHub on Load, Load Params fetching the file into
-        //     ParamCompare and OnChange running Activate again; missing only the frame pictures,
-        //     named boxes rather than the C#'s PNGs, drawn at the opacity the 400 ms fade ends on",
-        ),
+        // Activate on FRAME, the six radio buttons and pictures - all 12 wirings, the radio
+        // buttons' CheckedChanged cascade in the Designer's order - the FRAME writes through the
+        // retrying set, "Set FRAME Failed" on the status line; Default Settings listing
+        // Tools/Frame_params from GitHub on Load, Load Params fetching the file into ParamCompare
+        // and OnChange running Activate again; the frame pictures are the C#'s images
+        // (crate::pictures), drawn at the opacity the 400 ms fade ends on.
+        Ours::Done(at("crates/mp-gui/src/config/frame_type_legacy.rs", "fn page")),
     ),
     panel(
         "ConfigFrameClassType",
@@ -349,15 +348,13 @@ pub const PANELS: &[Panel] = &[
             MANDATORY,
             "any with FRAME_CLASS; copter 3.5 and later",
         )],
-        // C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs:36-336, ported but for the
-        // frame pictures (the C#'s PNG resources, drawn as named boxes) and the "Other" button,
-        // which has no handler. The pre-3.5 page is ConfigFrameType's row.
-        Partial(
-            at("crates/mp-gui/src/config/frame_type.rs", "fn page"),
-            "the eight class buttons and six type rows from Common.ValidList, each click
-        //     writing FRAME_CLASS then FRAME_TYPE through the retrying set; the frame pictures
-        //     are named boxes, not the C#'s images",
-        ),
+        // C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs:36-336, ported whole: the eight
+        // class buttons with their 60 by 60 images and the six type rows with their pictures
+        // (crate::pictures), from Common.ValidList, each click writing FRAME_CLASS then
+        // FRAME_TYPE through the retrying set; the "Other" button drawn and not wired, as it has
+        // no handler. The pictures take the opacity the 400 ms fade ends on. The pre-3.5 page is
+        // ConfigFrameType's row.
+        Ours::Done(at("crates/mp-gui/src/config/frame_type.rs", "fn page")),
     ),
     panel(
         "ConfigAccelerometerCalibration",
@@ -611,7 +608,8 @@ pub const PANELS: &[Panel] = &[
         // and on Enter through the retrying set, the Low Battery alert and its three questions in
         // Settings.Instance and config.xml with InputBox's answer lists (:53-60, 565-601;
         // InputBox.cs:73-84, 178-184); write failures on the status line (the owner's ruling),
-        // the lists drawn deferred. The power-module photo is a named box: no artwork is carried.
+        // the lists drawn deferred. The power-module photo is the .resx's, the same bytes as
+        // Resources.BR_APMPWRDEAN_2 (crate::pictures).
         Ours::Done(at("crates/mp-gui/src/config/battery_monitor.rs", "fn page")),
     ),
     panel(
@@ -625,8 +623,8 @@ pub const PANELS: &[Panel] = &[
         // readings of the second battery, the page disabled for good without BATT2_MONITOR, MP
         // Alert on Low Battery with its three questions in the settings and InputBox's answer
         // lists (InputBox.cs:73-84, 178-184), the question taking the keyboard; write failures on
-        // the status line (the owner's ruling). The power module photo is a named box: no artwork
-        // is carried.
+        // the status line (the owner's ruling). The power module photo is
+        // Resources.BR_APMPWRDEAN_2 (crate::pictures).
         Ours::Done(at("crates/mp-gui/src/config/battery_monitor2.rs", "fn page")),
     ),
     panel(
@@ -655,8 +653,8 @@ pub const PANELS: &[Panel] = &[
         // combo (disabled on firmware that numbers its rangefinders, as in the C#), the
         // TeraRanger limits its handler sets with the trailing-space name, the 200 ms distance
         // and voltage readout; the combo's write failure and the unhandled-exception box a
-        // timeout raises go on the status line (the owner's ruling). The sonar picture is a named
-        // box: no artwork is carried.
+        // timeout raises go on the status line (the owner's ruling). The sonar picture is
+        // Resources.sonar (crate::pictures).
         Ours::Done(at("crates/mp-gui/src/config/rangefinder.rs", "fn page")),
     ),
     panel(
@@ -664,13 +662,11 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigHWAirspeed"),
         Some(1),
         &[setup(293, "Airspeed", OPTIONAL, ANY)],
-        // C#: GCSViews/ConfigurationView/ConfigHWAirspeed.cs:9-85
-        Partial(
-            at("crates/mp-gui/src/config/airspeed.rs", "fn page"),
-            "Enable and Use Airspeed, each shown only for its parameter, Enable's handler
-        //     writing before the control, the pin list and ARSPD_TYPE; the sensor picture is a
-        //     named box",
-        ),
+        // C#: GCSViews/ConfigurationView/ConfigHWAirspeed.cs:9-85, ported whole: Enable and Use
+        // Airspeed, each shown only for its parameter, Enable's handler writing before the
+        // control, the pin list and ARSPD_TYPE, and the sensor picture, Resources.airspeed
+        // (crate::pictures).
+        Ours::Done(at("crates/mp-gui/src/config/airspeed.rs", "fn page")),
     ),
     panel(
         "ConfigHWPX4Flow",
@@ -690,7 +686,7 @@ pub const PANELS: &[Panel] = &[
             at("crates/mp-gui/src/config/optical_flow.rs", "fn page"),
             "the legacy FLOW_ENABLE page or the new-style one: FLOW_TYPE, the yaw in degrees,
         //     the scalers and positions writing 300 ms after a change, the rover's height
-        //     override shown by the type's handler; the sensor picture is a named box, and a yaw
+        //     override shown by the type's handler, the sensor picture (crate::pictures); a yaw
         //     below -179 degrees is kept rather than written back as the C#'s Minimum does",
         ),
     ),
@@ -699,7 +695,7 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigHWOSD"),
         Some(1),
         &[setup(305, "OSD", OPTIONAL, ANY)],
-        // the heading, the MinimOSD's box, Enable Telemetry setting the 24 SR0/SR1/SR3 rates to 2 in one
+        // the heading, the MinimOSD's picture (crate::pictures), Enable Telemetry setting the 24 SR0/SR1/SR3 rates to 2 in one
         // try; its failure on the status line, not in a box (the owner's ruling)
         Ours::Done(at("crates/mp-gui/src/config/osd.rs", "fn page")),
     ),
@@ -714,7 +710,7 @@ pub const PANELS: &[Panel] = &[
         // stabilise, neutral and retract angles, the shutter's pulses; the page disabled without
         // CAM_TRIGG_TYPE, as on firmware from 4.3; the Wiki link and its Transitions colour fade;
         // "Failed to set Param" and the controls' write failures on the status line (the owner's
-        // ruling). The four gimbal pictures are named boxes: no artwork is carried.
+        // ruling). The four gimbal pictures are the C#'s images (crate::pictures).
         Ours::Done(at("crates/mp-gui/src/config/mount.rs", "fn page")),
     ),
     panel(
@@ -752,7 +748,8 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigHWParachute"),
         Some(1),
         &[setup(325, "Parachute", OPTIONAL, ANY)],
-        // Enable (CHUTE_ENABLED), the release type combo, the page's own Servo Num combo running
+        // The picture, Resources.Parachute over Resources.sonar (crate::pictures), Enable
+        // (CHUTE_ENABLED), the release type combo, the page's own Servo Num combo running
         // ensureDisabled then setting _FUNCTION 27, and the resting, deploy and minimum-altitude numbers
         // each writing its parameter 300 ms after a change
         Ours::Done(at("crates/mp-gui/src/config/parachute.rs", "fn page")),
@@ -1890,7 +1887,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (27, 17, 3, 2, 12)
+            (30, 14, 3, 2, 12)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

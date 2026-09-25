@@ -12,8 +12,8 @@
 //!   answer comes. Here each handler's calls are a [`Job`], run one call at a time in the order the
 //!   handlers ran, through the link's retrying set; what a `catch` or a `false` shows is carried
 //!   with each call.
-//! * The drawing the pages share: a named box where the C# has a picture, the five-pixel group
-//!   boxes that draw as rules, the 12-point headings, a text box.
+//! * The drawing the pages share: a picture where the C# has one ([`crate::pictures`]), the
+//!   five-pixel group boxes that draw as rules, the 12-point headings, a text box.
 //! * [`Optional`], the six page objects, and [`Focus`], their keyboard focus; the arms of
 //!   `setup.rs` and the lines of `main.rs` call into `impl MissionPlanner` here.
 
@@ -482,22 +482,8 @@ pub fn group(
         )
 }
 
-/// A `PictureBox`: the C#'s image is a resource this application does not carry, so the box is
-/// drawn at its place with the resource's name in it.
-#[must_use]
-pub fn picture(id: &'static str, (x, y, width, height): (f32, f32, f32, f32)) -> AnyElement {
-    crate::probe::measured(id, at(x, y, width, height))
-        .flex()
-        .items_center()
-        .justify_center()
-        .border_1()
-        .border_color(rgb(theme::BORDER))
-        .rounded_sm()
-        .text_xs()
-        .text_color(rgb(theme::DIM))
-        .child(id)
-        .into_any_element()
-}
+/// A `PictureBox` showing its resource: [`crate::pictures::picture`].
+pub use crate::pictures::picture;
 
 /// A plain button (`MyButton`) at its place; dimmed and inert while disabled.
 pub fn button(

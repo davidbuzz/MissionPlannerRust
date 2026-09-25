@@ -645,7 +645,14 @@ pub fn page(
         .h(px(360.0))
         .child(heading(7.0, 5.0, HEADING, enabled))
         .child(rule(3.0, 23.0, 644.0))
-        .child(picture("opticalflow", (11.0, 35.0, 75.0, 75.0)));
+        .child(picture(
+            "optflow",
+            "opticalflow",
+            (11.0, 35.0, 75.0, 75.0),
+            // C#: GCSViews/ConfigurationView/ConfigHWOptFlow.Designer.cs:72; ConfigHWOptFlow.resx:121-122
+            "opticalflow",
+            crate::pictures::Layout::Zoom,
+        ));
     for (x, y, text) in LABELS {
         body = body.child(label(x, y, text, enabled));
     }

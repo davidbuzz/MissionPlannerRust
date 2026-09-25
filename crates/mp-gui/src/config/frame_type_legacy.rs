@@ -37,11 +37,11 @@
 //! instead, by the owner's ruling of 2026-09-25 that an error the window can show as state gets
 //! no message box.
 //!
+//! The pictures are the C#'s ([`crate::pictures`], resources named in [`ROWS`]), each zoomed in
+//! its box at the opacity the C# gives it; V Tail's box has no image in the C# and is empty here.
+//!
 //! What is not ported, and why:
 //!
-//! * the pictures. Each is a PNG in the C# tree (`Resources/`, named in [`ROWS`]); this
-//!   application ships none of Mission Planner's artwork, so each is a box of its size with the
-//!   frame's name in it, at the opacity the C# gives it - as on [`crate::config::frame_type`];
 //! * the fade, a 400 ms linear `Transition` (`ConfigFrameType.cs:169-174`): drawn at the opacity
 //!   it ends on;
 //! * `MainV2.comPort.giveComport = false` in `Deactivate`: the flag that stops the C#'s own reader
@@ -145,12 +145,12 @@ pub struct Row {
     pub radio_at: (f32, f32),
     /// The picture's `Location` and `Size`.
     pub picture: Place,
-    /// The image the C# draws there, as a file in the C# tree; V Tail's has none.
+    /// The resource the C# draws there ([`crate::pictures`]); V Tail's has none.
     pub image: Option<&'static str>,
 }
 
 /// The six frames, in `DoChange`'s order.
-/// `// C#: GCSViews/ConfigurationView/ConfigFrameType.cs:53-152; ConfigFrameType.Designer.cs:66-244; ConfigFrameType.resx; ExtLibs/ArduPilot/Frame.cs:4-12; Properties/Resources.resx:470, 473, 157, 244, 530`
+/// `// C#: GCSViews/ConfigurationView/ConfigFrameType.cs:53-152; ConfigFrameType.Designer.cs:66-244 (pictureBox*.Image: 97, 106, 128, 150, 177); ConfigFrameType.resx; ExtLibs/ArduPilot/Frame.cs:4-12`
 pub const ROWS: [Row; 6] = [
     Row {
         frame: 0,
@@ -159,7 +159,7 @@ pub const ROWS: [Row; 6] = [
         label_at: (25.0, 38.0),
         radio_at: (62.0, 38.0),
         picture: (83.0, 9.0, 248.0, 75.0),
-        image: Some("Resources/frames_plus.png"),
+        image: Some("frames_plus"),
     },
     Row {
         frame: 1,
@@ -168,7 +168,7 @@ pub const ROWS: [Row; 6] = [
         label_at: (8.0, 118.0),
         radio_at: (62.0, 118.0),
         picture: (83.0, 88.0, 406.0, 78.0),
-        image: Some("Resources/frames_x.png"),
+        image: Some("frames_x"),
     },
     Row {
         frame: 2,
@@ -177,7 +177,7 @@ pub const ROWS: [Row; 6] = [
         label_at: (38.0, 203.0),
         radio_at: (62.0, 203.0),
         picture: (83.0, 173.0, 111.0, 78.0),
-        image: Some("Resources/new-3DR-04.png"),
+        image: Some("new_3DR_04"),
     },
     Row {
         frame: 3,
@@ -186,7 +186,7 @@ pub const ROWS: [Row; 6] = [
         label_at: (38.0, 287.0),
         radio_at: (62.0, 287.0),
         picture: (83.0, 257.0, 111.0, 78.0),
-        image: Some("Resources/frames-h.png"),
+        image: Some("frames_h"),
     },
     Row {
         frame: 10,
@@ -195,7 +195,7 @@ pub const ROWS: [Row; 6] = [
         label_at: (19.0, 371.0),
         radio_at: (62.0, 371.0),
         picture: (83.0, 341.0, 111.0, 77.0),
-        image: Some("Resources/FW icons Y6.png"),
+        image: Some("y6b"),
     },
     Row {
         frame: 4,
@@ -770,6 +770,30 @@ fn row(
     };
 
     let id = format!("framelegacy-picture-{value}");
+    // Each `PictureBoxWithPseudoOpacity`'s `Image`, zoomed; V Tail's has none and is empty.
+    // C#: GCSViews/ConfigurationView/ConfigFrameType.Designer.cs:97, 106, 128, 150, 177;
+    // ConfigFrameType.resx (pictureBox*.SizeMode)
+    let drawn = option
+        .image
+        .and_then(|resource| crate::pictures::image(resource, crate::pictures::Layout::ZoomImage));
+    crate::pictures::record("framelegacy", &id, option.image.filter(|_| drawn.is_some()));
+    let content = match (drawn, option.image) {
+        (Some(image), _) => image,
+        (None, Some(_)) => div()
+            .size_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .border_1()
+            .border_color(rgb(theme::BORDER))
+            .rounded_sm()
+            .bg(rgb(theme::BG))
+            .text_xs()
+            .text_color(rgb(if enabled { theme::TEXT } else { theme::DIM }))
+            .child(option.name)
+            .into_any_element(),
+        (None, None) => div().size_full().into_any_element(),
+    };
     let picture = crate::probe::measured(id.clone(), at(option.picture))
         .id(SharedString::from(id))
         .opacity(if bright {
@@ -777,20 +801,7 @@ fn row(
         } else {
             DISABLED_OPACITY
         })
-        .child(
-            div()
-                .size_full()
-                .flex()
-                .items_center()
-                .justify_center()
-                .border_1()
-                .border_color(rgb(theme::BORDER))
-                .rounded_sm()
-                .bg(rgb(theme::BG))
-                .text_xs()
-                .text_color(rgb(if enabled { theme::TEXT } else { theme::DIM }))
-                .child(option.name),
-        );
+        .child(content);
     let picture = if enabled {
         picture
             .cursor_pointer()

@@ -11,12 +11,12 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 27 | 17 | 3 | 2 | 12 | 569 |
+| 61 | 30 | 14 | 3 | 2 | 12 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings
         // in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 22 | 12 | 1 | 2 | 7 | 258 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 25 | 9 | 1 | 2 | 7 | 258 |
         //     15 |
 | CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 5 | 5 | 2 | 0 | 1 | 277 |
         //     1 |
@@ -58,7 +58,8 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
         //     whole catalogue; Load custom firmware by extension; each stops where it would write
         //     to a board - the upload, DFU, Force Bootloader and Bootloader Update are disabled, as
         //     nothing flashes in this build; not Ctrl+Q, the bootloader probe on a device's
-        //     arrival, nor FirmwareSelection's filter pickers; the vehicle pictures are named boxes |
+        //     arrival, nor FirmwareSelection's filter pickers; the vehicle pictures are the C#'s
+        //     images (crate::pictures) |
 | 173 | `ConfigFirmware` | Install Firmware Legacy |  | disconnected | 20 | partial: `crates/mp-gui/src/config/firmware_legacy.rs` `fn page` - every control at its .resx place; the firmware2.xml list loaded behind its progress
         //     dialog with each entry's git-version.txt, and each picture labelled and tagged as
         //     updateDisplayName does; a vehicle's click asks, detects the board from the device
@@ -67,19 +68,12 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
         //     custom firmware, and the three links; each stops where it would write to a board -
         //     the upload and Force Bootloader are disabled, as nothing flashes in this build; not
         //     Ctrl+Q or Ctrl+P, nor the bootloader probe on a device's arrival; the pictures are
-        //     named boxes |
+        //     the C#'s images (crate::pictures) |
 | 178 | `ConfigSecureAP` | Secure |  | disconnected | 4 | done: `crates/mp-gui/src/config/secure.rs` `fn page` |
 | 182 | `ConfigMandatory` | Mandatory Hardware |  | any | 0 | plumbing: the Mandatory Hardware heading of the list: one sentence, no controls |
 | 187 | `ConfigTradHeli4` | Heli Setup | Mandatory Hardware | heli | 0 | done: `crates/mp-gui/src/config/trad_heli.rs` `fn page` |
-| 188 | `ConfigFrameType` | Frame Type | Mandatory Hardware | copter before 3.5 | 12 | partial: `crates/mp-gui/src/config/frame_type_legacy.rs` `fn page` - Activate on FRAME, the six radio buttons and pictures - all 12 wirings, the radio
-        //     buttons' CheckedChanged cascade in the Designer's order - the FRAME writes through
-        //     the retrying set, "Set FRAME Failed" on the status line; Default Settings listing
-        //     Tools/Frame_params from GitHub on Load, Load Params fetching the file into
-        //     ParamCompare and OnChange running Activate again; missing only the frame pictures,
-        //     named boxes rather than the C#'s PNGs, drawn at the opacity the 400 ms fade ends on |
-| 189 | `ConfigFrameClassType` | Frame Type | Mandatory Hardware | any with FRAME_CLASS; copter 3.5 and later | 19 | partial: `crates/mp-gui/src/config/frame_type.rs` `fn page` - the eight class buttons and six type rows from Common.ValidList, each click
-        //     writing FRAME_CLASS then FRAME_TYPE through the retrying set; the frame pictures
-        //     are named boxes, not the C#'s images |
+| 188 | `ConfigFrameType` | Frame Type | Mandatory Hardware | copter before 3.5 | 12 | done: `crates/mp-gui/src/config/frame_type_legacy.rs` `fn page` |
+| 189 | `ConfigFrameClassType` | Frame Type | Mandatory Hardware | any with FRAME_CLASS; copter 3.5 and later | 19 | done: `crates/mp-gui/src/config/frame_type.rs` `fn page` |
 | 196 | `ConfigAccelerometerCalibration` | Accel Calibration | Mandatory Hardware | any | 3 | done: `crates/mp-gui/src/config/accel_calibration.rs` `fn page` |
 | 203 | `ConfigHWCompass2` | Compass | Mandatory Hardware | any with COMPASS_PRIO1_ID | 11 | done: `crates/mp-gui/src/config/compass.rs` `fn page` |
 | 206 | `ConfigHWCompass` | Compass | Mandatory Hardware | any without COMPASS_PRIO1_ID | 21 | partial: `crates/mp-gui/src/config/compass.rs` `fn page` - has the declination and its automatic box, learn, the primary compass, each
@@ -124,13 +118,11 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
         //     functions, Elevons, Save, Manual Control, Import and Export |
 | 285 | `ConfigCompassMot` | Compass/Motor Calib | Optional Hardware | any | 2 | done: `crates/mp-gui/src/config/compass_mot.rs` `fn page` |
 | 289 | `ConfigHWRangeFinder` | Range Finder | Optional Hardware | any | 2 | done: `crates/mp-gui/src/config/rangefinder.rs` `fn page` |
-| 293 | `ConfigHWAirspeed` | Airspeed | Optional Hardware | any | 1 | partial: `crates/mp-gui/src/config/airspeed.rs` `fn page` - Enable and Use Airspeed, each shown only for its parameter, Enable's handler
-        //     writing before the control, the pin list and ARSPD_TYPE; the sensor picture is a
-        //     named box |
+| 293 | `ConfigHWAirspeed` | Airspeed | Optional Hardware | any | 1 | done: `crates/mp-gui/src/config/airspeed.rs` `fn page` |
 | 297 | `ConfigHWPX4Flow` | PX4Flow | Optional Hardware | always | 1 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 | 301 | `ConfigHWOptFlow` | Optical Flow | Optional Hardware | any | 2 | partial: `crates/mp-gui/src/config/optical_flow.rs` `fn page` - the legacy FLOW_ENABLE page or the new-style one: FLOW_TYPE, the yaw in degrees,
         //     the scalers and positions writing 300 ms after a change, the rover's height
-        //     override shown by the type's handler; the sensor picture is a named box, and a yaw
+        //     override shown by the type's handler, the sensor picture (crate::pictures); a yaw
         //     below -179 degrees is kept rather than written back as the C#'s Minimum does |
 | 305 | `ConfigHWOSD` | OSD | Optional Hardware | any | 1 | done: `crates/mp-gui/src/config/osd.rs` `fn page` |
 | 309 | `ConfigMount` | Camera Gimbal | Optional Hardware | any | 5 | done: `crates/mp-gui/src/config/mount.rs` `fn page` |

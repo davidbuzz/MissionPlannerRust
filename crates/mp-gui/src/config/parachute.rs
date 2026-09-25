@@ -23,11 +23,11 @@
 //! first `Activate` writes nothing; a later one whose selection differs from the combo's runs the
 //! handler, as the C#'s `Text` setter raises `SelectedIndexChanged` then.
 //!
-//! The layout is `ConfigHWParachute.resx`'s, every control at its `Location` in a 650 x 212 page.
+//! The layout is `ConfigHWParachute.resx`'s, every control at its `Location` in a 650 x 212 page;
+//! `pictureBox3` shows `Resources.Parachute` over `Resources.sonar`, both zoomed
+//! ([`crate::pictures`]).
 //!
-//! What is not ported, and why: `pictureBox3`'s image (`Resources.Parachute` over
-//! `Resources.sonar`), resources this application does not carry - the box is drawn with its name.
-//! The first `*_FUNCTION` on 27 is the first in name order, the order this application keeps the
+//! What differs, and why: the first `*_FUNCTION` on 27 is the first in name order, the order this application keeps the
 //! vehicle's table in; the C#'s is the order the parameters arrived, which differs only for a
 //! vehicle with two outputs on 27.
 
@@ -39,7 +39,7 @@ use std::time::Instant;
 
 use gpui::{AnyElement, Context, KeyDownEvent, Window, div, prelude::*, px};
 
-use super::optional::{Job, Set, SetQueue, heading, label, message_box, picture, rule, value_of};
+use super::optional::{Job, Set, SetQueue, heading, label, message_box, rule, value_of};
 use super::rangefinder::unhandled;
 use crate::MissionPlanner;
 use crate::config::failsafe::Lookup;
@@ -587,7 +587,16 @@ pub fn page(
         .h(px(PAGE_SIZE.1))
         .child(heading(7.0, 5.0, HEADING, true))
         .child(rule(3.0, 21.0, 644.0))
-        .child(picture("Parachute", (11.0, 32.0, 75.0, 69.0)))
+        // `pictureBox3`: `Resources.sonar` as its `BackgroundImage`, zoomed, and
+        // `Resources.Parachute` as its `Image`, zoomed, over it.
+        // C#: GCSViews/ConfigurationView/ConfigHWParachute.Designer.cs:67, 69; ConfigHWParachute.resx:354-355, 414-415
+        .child(crate::pictures::layered(
+            "parachute",
+            "Parachute",
+            (11.0, 32.0, 75.0, 69.0),
+            ("sonar", crate::pictures::Layout::Zoom),
+            ("Parachute", crate::pictures::Layout::ZoomImage),
+        ))
         .child(check_box(
             "parachute-CHUTE_ENABLED".to_owned(),
             &parachute.enable,

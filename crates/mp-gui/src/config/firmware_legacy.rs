@@ -39,10 +39,10 @@
 //!   (`:108-129`): the C# sees them only while a control of the page has the keyboard, and
 //!   nothing on this page takes it;
 //! * `Instance_DeviceChanged` (`:66-106`), which opens every serial port with the bootloader's
-//!   identify when a device is plugged in - and whose answer nothing reads;
-//! * the pictures' artwork: each is a box with the vehicle's name, and its label beneath.
+//!   identify when a device is plugged in - and whose answer nothing reads.
 //!
-//! The colours are this application's.
+//! Each picture is its `Image`, zoomed as `ImageLabel`'s `PictureBox` zooms it
+//! ([`crate::pictures`]). The colours are this application's.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -112,8 +112,10 @@ pub struct Picture {
     pub control: &'static str,
     /// The id a test clicks, and the last part of its facts.
     pub id: &'static str,
-    /// What the picture shows, written in its place.
+    /// What the picture shows, written in its place when its image is not carried.
     pub name: &'static str,
+    /// Its `Image`, a `Properties.Resources` name ([`crate::pictures`]).
+    pub image: &'static str,
     /// Which picture `updateDisplayName` knows it as.
     pub slot: Slot,
     /// `Location`.
@@ -121,12 +123,13 @@ pub struct Picture {
 }
 
 /// The eleven, in the Designer's order of declaration.
-/// `// C#: GCSViews/ConfigurationView/ConfigFirmware.Designer.cs:55-77; ConfigFirmware.resx (*.Location)`
+/// `// C#: GCSViews/ConfigurationView/ConfigFirmware.Designer.cs:55-77, 84-260 (*.Image: 84, 94, 104, 114, 124, 150, 159, 168, 178, 237, 260); ConfigFirmware.resx (*.Location)`
 pub const PICTURES: [Picture; 11] = [
     Picture {
         control: "pictureBoxAPM",
         id: "fwl-apm",
         name: "Plane",
+        image: "APM_airframes_001",
         slot: Slot::Apm,
         at: (186.0, 0.0),
     },
@@ -134,6 +137,7 @@ pub const PICTURES: [Picture; 11] = [
         control: "pictureBoxQuad",
         id: "fwl-quad",
         name: "Quad",
+        image: "FW_icons_2013_logos_04",
         slot: Slot::Quad,
         at: (342.0, 0.0),
     },
@@ -141,6 +145,7 @@ pub const PICTURES: [Picture; 11] = [
         control: "pictureBoxHexa",
         id: "fwl-hexa",
         name: "Hexa",
+        image: "FW_icons_2013_logos_10",
         slot: Slot::Hexa,
         at: (498.0, 0.0),
     },
@@ -148,6 +153,7 @@ pub const PICTURES: [Picture; 11] = [
         control: "pictureBoxTri",
         id: "fwl-tri",
         name: "Tri",
+        image: "FW_icons_2013_logos_08",
         slot: Slot::Tri,
         at: (342.0, 176.0),
     },
@@ -155,6 +161,7 @@ pub const PICTURES: [Picture; 11] = [
         control: "pictureBoxY6",
         id: "fwl-y6",
         name: "Y6",
+        image: "y6a",
         slot: Slot::Y6,
         at: (498.0, 176.0),
     },
@@ -162,6 +169,7 @@ pub const PICTURES: [Picture; 11] = [
         control: "pictureBoxHeli",
         id: "fwl-heli",
         name: "Heli",
+        image: "APM_airframes_08",
         slot: Slot::Heli,
         at: (186.0, 176.0),
     },
@@ -169,6 +177,7 @@ pub const PICTURES: [Picture; 11] = [
         control: "pictureBoxOcta",
         id: "fwl-octa",
         name: "Octa",
+        image: "FW_icons_2013_logos_12",
         slot: Slot::Octa,
         at: (654.0, 176.0),
     },
@@ -176,6 +185,7 @@ pub const PICTURES: [Picture; 11] = [
         control: "pictureBoxOctaQuad",
         id: "fwl-octaquad",
         name: "Octa Quad",
+        image: "x8",
         slot: Slot::OctaQuad,
         at: (654.0, 0.0),
     },
@@ -183,6 +193,7 @@ pub const PICTURES: [Picture; 11] = [
         control: "pictureBoxRover",
         id: "fwl-rover",
         name: "Rover",
+        image: "rover_11",
         slot: Slot::Rover,
         at: (30.0, 0.0),
     },
@@ -190,6 +201,7 @@ pub const PICTURES: [Picture; 11] = [
         control: "pictureAntennaTracker",
         id: "fwl-tracker",
         name: "Antenna Tracker",
+        image: "Antenna_Tracker_01",
         slot: Slot::AntennaTracker,
         at: (30.0, 176.0),
     },
@@ -197,6 +209,7 @@ pub const PICTURES: [Picture; 11] = [
         control: "pictureBoxSub",
         id: "fwl-sub",
         name: "Sub",
+        image: "sub",
         slot: Slot::Sub,
         at: (810.0, 0.0),
     },
@@ -204,6 +217,10 @@ pub const PICTURES: [Picture; 11] = [
 
 /// A picture's size.
 const PICTURE: f32 = 150.0;
+
+/// `imageLabel1`'s `Image`: a Cube.
+/// `// C#: GCSViews/ConfigurationView/ConfigFirmware.Designer.cs:269`
+pub const CUBE_IMAGE: &str = "pixhawk2cube";
 
 /// `imageLabel1`, the Cube: its place and size.
 /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.resx (imageLabel1.Location, .Size)`
@@ -899,17 +916,22 @@ pub fn page(firmware: &FirmwareLegacy, cx: &mut Context<MissionPlanner>) -> AnyE
     }
     // `imageLabel1`: the Cube, a link to ProfiCNC.
     let (x, y, w, h) = CUBE;
+    // Its `PictureBox` and, under it, its empty `Label`.
     let cube = crate::probe::measured("fwl-cube", at(x, y, w, h))
         .id("fwl-cube")
         .flex()
-        .items_center()
-        .justify_center()
+        .flex_col()
         .rounded_md()
         .border_1()
         .border_color(rgb(theme::BORDER))
-        .text_sm()
-        .text_color(rgb(theme::DIM))
-        .child("Pixhawk 2 Cube");
+        .child(crate::pictures::image_label(
+            "firmware_legacy",
+            "fwl-cube",
+            CUBE_IMAGE,
+            "Pixhawk 2 Cube",
+            theme::DIM,
+        ))
+        .child(div().h(px(13.0)).mb_1());
     body = body.child(if live {
         cube.cursor_pointer()
             .on_click(cx.listener(|this, _event, _window, cx| {
@@ -1047,8 +1069,7 @@ pub fn page(firmware: &FirmwareLegacy, cx: &mut Context<MissionPlanner>) -> AnyE
     .into_any_element()
 }
 
-/// One `ImageLabel`: the vehicle's name where its picture would be, the entry's name under it,
-/// and the click.
+/// One `ImageLabel`: the vehicle's picture, the entry's name under it, and the click.
 fn image_label(
     firmware: &FirmwareLegacy,
     index: usize,
@@ -1068,16 +1089,14 @@ fn image_label(
         .border_1()
         .border_color(rgb(theme::BORDER))
         .bg(rgb(if tagged { theme::ACTION } else { theme::PANEL }))
-        .child(
-            div()
-                .flex_1()
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_lg()
-                .text_color(rgb(colour))
-                .child(picture.name),
-        )
+        // `PictureBox`: the rest, the `Image` zoomed.
+        .child(crate::pictures::image_label(
+            "firmware_legacy",
+            picture.id,
+            picture.image,
+            picture.name,
+            colour,
+        ))
         .child(
             div()
                 .h(px(13.0))

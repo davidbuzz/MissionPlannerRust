@@ -28,8 +28,8 @@
 //! (`mp_firmware::flow::Stop`). Beneath the page are the board it found, the firmware it chose,
 //! the file it downloaded and what the file says of itself, and an Upload button that is disabled
 //! and says why. The layout is `ConfigFirmwareManifest.Designer.cs`'s - every control at its
-//! `Location` and `Size` in a 946 x 375 page - with names in boxes where the `.resx` has pictures
-//! this application does not carry, and this application's colours.
+//! `Location` and `Size` in a 946 x 375 page - each picture its `Image`, zoomed as `ImageLabel`'s
+//! `PictureBox` zooms it ([`crate::pictures`]), and this application's colours.
 //!
 //! What is not here, and why:
 //!
@@ -154,8 +154,10 @@ pub struct Picture {
     pub control: &'static str,
     /// The id a test clicks, and the last part of its label's fact.
     pub id: &'static str,
-    /// What the picture shows, written in its place.
+    /// What the picture shows, written in its place when its image is not carried.
     pub name: &'static str,
+    /// Its `Image`, a `Properties.Resources` name ([`crate::pictures`]).
+    pub image: &'static str,
     /// Its `Tag`.
     pub mav_type: MavType,
     /// `Location`.
@@ -167,7 +169,7 @@ pub struct Picture {
 const fn picture(
     control: &'static str,
     id: &'static str,
-    name: &'static str,
+    (name, image): (&'static str, &'static str),
     mav_type: MavType,
     x: f32,
     y: f32,
@@ -176,20 +178,25 @@ const fn picture(
         control,
         id,
         name,
+        image,
         mav_type,
         x,
         y,
     }
 }
 
+/// `imageLabel1`'s `Image`: a Cube.
+/// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.Designer.cs:118`
+pub const CUBE_IMAGE: &str = "pixhawk2cube";
+
 /// The pictures, in the order `Activate` labels them - which matters: it stops at the first
 /// vehicle the release lacks (`First` throws), leaving that one and the rest unlabelled.
-/// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:32-42, 76-92; ConfigFirmwareManifest.Designer.cs:126-260`
+/// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:32-42, 76-92; ConfigFirmwareManifest.Designer.cs:126-260 (*.Image: 128, 140, 153, 164, 175, 187, 200, 213, 226, 239, 252)`
 pub const PICTURES: [Picture; 11] = [
     picture(
         "pictureAntennaTracker",
         "fw-tracker",
-        "Antenna Tracker",
+        ("Antenna Tracker", "Antenna_Tracker_01"),
         MavType::AntennaTracker,
         3.0,
         159.0,
@@ -197,7 +204,7 @@ pub const PICTURES: [Picture; 11] = [
     picture(
         "pictureBoxHeli",
         "fw-heli",
-        "Heli",
+        ("Heli", "APM_airframes_08"),
         MavType::Helicopter,
         159.0,
         159.0,
@@ -205,7 +212,7 @@ pub const PICTURES: [Picture; 11] = [
     picture(
         "pictureBoxSub",
         "fw-sub",
-        "Sub",
+        ("Sub", "sub"),
         MavType::Submarine,
         783.0,
         3.0,
@@ -213,7 +220,7 @@ pub const PICTURES: [Picture; 11] = [
     picture(
         "pictureBoxRover",
         "fw-rover",
-        "Rover",
+        ("Rover", "rover_11"),
         MavType::GroundRover,
         3.0,
         3.0,
@@ -221,7 +228,7 @@ pub const PICTURES: [Picture; 11] = [
     picture(
         "pictureBoxOctaQuad",
         "fw-octaquad",
-        "Octa Quad",
+        ("Octa Quad", "x8"),
         MavType::Copter,
         627.0,
         3.0,
@@ -229,16 +236,23 @@ pub const PICTURES: [Picture; 11] = [
     picture(
         "pictureBoxOcta",
         "fw-octa",
-        "Octa",
+        ("Octa", "FW_icons_2013_logos_12"),
         MavType::Copter,
         627.0,
         159.0,
     ),
-    picture("pictureBoxY6", "fw-y6", "Y6", MavType::Copter, 471.0, 159.0),
+    picture(
+        "pictureBoxY6",
+        "fw-y6",
+        ("Y6", "y6a"),
+        MavType::Copter,
+        471.0,
+        159.0,
+    ),
     picture(
         "pictureBoxTri",
         "fw-tri",
-        "Tri",
+        ("Tri", "FW_icons_2013_logos_08"),
         MavType::Copter,
         315.0,
         159.0,
@@ -246,7 +260,7 @@ pub const PICTURES: [Picture; 11] = [
     picture(
         "pictureBoxHexa",
         "fw-hexa",
-        "Hexa",
+        ("Hexa", "FW_icons_2013_logos_10"),
         MavType::Copter,
         471.0,
         3.0,
@@ -254,7 +268,7 @@ pub const PICTURES: [Picture; 11] = [
     picture(
         "pictureBoxQuad",
         "fw-quad",
-        "Quad",
+        ("Quad", "FW_icons_2013_logos_04"),
         MavType::Copter,
         315.0,
         3.0,
@@ -262,7 +276,7 @@ pub const PICTURES: [Picture; 11] = [
     picture(
         "pictureBoxPlane",
         "fw-plane",
-        "Plane",
+        ("Plane", "APM_airframes_001"),
         MavType::FixedWing,
         159.0,
         3.0,
@@ -1517,18 +1531,23 @@ pub fn page(firmware: &InstallFirmware, cx: &mut Context<MissionPlanner>) -> Any
     for (index, picture) in PICTURES.iter().enumerate() {
         body = body.child(image_label(firmware, index, picture, cx));
     }
-    // `imageLabel1`: a picture of a Cube, with no Click handler.
+    // `imageLabel1`: a picture of a Cube, with no Click handler, and an empty label under it.
+    // C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.Designer.cs:116-124
     body = body.child(
         at(783.0, 159.0, PICTURE, PICTURE)
             .flex()
-            .items_center()
-            .justify_center()
+            .flex_col()
             .rounded_md()
             .border_1()
             .border_color(rgb(theme::BORDER))
-            .text_sm()
-            .text_color(rgb(theme::DIM))
-            .child("Pixhawk 2 Cube"),
+            .child(crate::pictures::image_label(
+                "firmware",
+                "imageLabel1",
+                CUBE_IMAGE,
+                "Pixhawk 2 Cube",
+                theme::DIM,
+            ))
+            .child(div().h(px(13.0)).mb_1()),
     );
     // `progress` and `lbl_status`, which `fw_Progress1` moves.
     body = body.child(progress_bar(
@@ -1589,8 +1608,8 @@ pub fn page(firmware: &InstallFirmware, cx: &mut Context<MissionPlanner>) -> Any
     .into_any_element()
 }
 
-/// One `ImageLabel`: the vehicle's name where its picture would be, the label under it, and the
-/// click - inert until `Activate` has enabled it.
+/// One `ImageLabel`: the vehicle's picture, the label under it, and the click - inert until
+/// `Activate` has enabled it.
 fn image_label(
     firmware: &InstallFirmware,
     index: usize,
@@ -1609,16 +1628,14 @@ fn image_label(
         .border_1()
         .border_color(rgb(if picked { theme::ACCENT } else { theme::BORDER }))
         .bg(rgb(if enabled { theme::ACTION } else { theme::PANEL }))
-        .child(
-            div()
-                .flex_1()
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_lg()
-                .text_color(rgb(colour))
-                .child(picture.name),
-        )
+        // `PictureBox`: the rest, the `Image` zoomed.
+        .child(crate::pictures::image_label(
+            "firmware",
+            picture.id,
+            picture.image,
+            picture.name,
+            colour,
+        ))
         // `Label`: docked to the bottom, 13 high, centred.
         .child(
             div()

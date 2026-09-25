@@ -14,8 +14,7 @@
 //! rangefinders (`RNGFND1_TYPE`), and on it the combo stays disabled, as in the C#.
 //!
 //! The layout is `ConfigHWRangeFinder.resx`'s, every control at its `Location` in a 650 x 116 page.
-//! `pictureBox3`'s image (`Resources.sonar`) is drawn as a box with the resource's name in it:
-//! this repository carries none of Mission Planner's artwork.
+//! `pictureBox3` shows `Resources.sonar`, zoomed ([`crate::pictures`]).
 //!
 //! When the handler's `setParam` times out, its `TimeoutException` - the handler has no `try` -
 //! reaches `Program.handleException` (`Program.cs:717-800`), whose "Send Error" box is the
@@ -393,9 +392,15 @@ pub fn page(rangefinder: &RangeFinder, cx: &mut Context<MissionPlanner>) -> AnyE
         .h(px(116.0))
         .child(heading(7.0, 5.0, HEADING, enabled))
         .child(rule(3.0, 23.0, 644.0))
-        // `Resources.sonar`, drawn as its name: no artwork is carried (a deliberate divergence).
-        // C#: GCSViews/ConfigurationView/ConfigHWRangeFinder.Designer.cs:60-67
-        .child(picture("sonar", (11.0, 35.0, 75.0, 75.0)))
+        // `Resources.sonar`, zoomed.
+        // C#: GCSViews/ConfigurationView/ConfigHWRangeFinder.Designer.cs:63; ConfigHWRangeFinder.resx:159-160
+        .child(picture(
+            "rangefinder",
+            "sonar",
+            (11.0, 35.0, 75.0, 75.0),
+            "sonar",
+            crate::pictures::Layout::Zoom,
+        ))
         .child(combo_box(
             "rangefinder-RNGFND_TYPE".to_owned(),
             &kind,

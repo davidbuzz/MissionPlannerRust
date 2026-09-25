@@ -10,10 +10,8 @@
 //! A name the vehicle does not list is `setParam`'s false, which the handler ignores; a call
 //! that times out ends the handler with the box.
 //!
-//! The layout is `ConfigHWOSD.resx`'s, every control at its `Location` in a 650 x 119 page.
-//!
-//! What is not ported, and why: `pictureBox5`'s image (`Resources.MinimOSD`), a resource this
-//! application does not carry - the box is drawn with its name.
+//! The layout is `ConfigHWOSD.resx`'s, every control at its `Location` in a 650 x 119 page, and
+//! `pictureBox5` shows `Resources.MinimOSD`, zoomed, as its `BackgroundImage` ([`crate::pictures`]).
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -220,7 +218,14 @@ pub fn page(osd: &Osd, cx: &mut Context<MissionPlanner>) -> AnyElement {
         .h(px(PAGE_SIZE.1))
         .child(heading(7.0, 5.0, HEADING, true))
         .child(rule(3.0, 23.0, 644.0))
-        .child(picture("MinimOSD", (11.0, 35.0, 75.0, 75.0)))
+        // C#: GCSViews/ConfigurationView/ConfigHWOSD.Designer.cs:54; ConfigHWOSD.resx:177-178
+        .child(picture(
+            "osd",
+            "MinimOSD",
+            (11.0, 35.0, 75.0, 75.0),
+            "MinimOSD",
+            crate::pictures::Layout::Zoom,
+        ))
         .child(button(
             "osd-enable-telemetry",
             BUTTON,
