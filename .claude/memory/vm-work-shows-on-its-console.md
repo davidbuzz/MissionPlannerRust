@@ -25,6 +25,10 @@ Buzz's yes): at 1077x774 the planner's pages ran below the window and clicks hit
 `tools/win10/sitl-launch.ps1` is the Windows GUI job pattern - planner started with MP_FACTS and
 MP_PROBE, `-NoNewWindow`, window at (0,0) and made topmost before each user32 click.
 
+GUI scripts run in the VM through `tools/win10/gui-suite.ps1` / `gui-test.ps1` (the .gui language
+on user32; the VM's own Cygwin SITL for SITL scripts). **Budgets are doubled on Windows** (Buzz,
+2026-09-26: "double the timeout budget on windows") - `-BudgetScale 2` is the runner's default.
+
 **Why:** SSH sessions run in session 0 where nothing is visible; he wants to see what I am doing
 to his VM as it happens.
 
