@@ -28,9 +28,19 @@ pub fn list_ports() -> Vec<PortInfo> {
     enumerate::with_usb_metadata(names, device_node, &known)
 }
 
-/// What the `serialport` crate knows about each device node, for its USB ids. Its own list is not
-/// the one shown: its order is its own, and it has no by-id names.
+/// What the `serialport` crate knows about each device node, for its USB ids - on Windows with
+/// Windows' own record of each port over it, the hardware id, description and bus-reported name
+/// Mission Planner reads (`win32.rs`). Its own list is not the one shown: its order is its own,
+/// and it has no by-id names.
 fn usb_ports() -> Vec<PortInfo> {
+    let ports = crate_ports();
+    #[cfg(windows)]
+    let ports = crate::enumerate::with_windows_devices(ports, &crate::win32::com_ports());
+    ports
+}
+
+/// The `serialport` crate's list, as the crate reports it.
+fn crate_ports() -> Vec<PortInfo> {
     let Ok(ports) = serialport::available_ports() else {
         return Vec::new();
     };
@@ -44,6 +54,8 @@ fn usb_ports() -> Vec<PortInfo> {
                 serial_number: usb.serial_number,
                 manufacturer: usb.manufacturer,
                 product: usb.product,
+                hardware_id: None,
+                description: None,
             },
             _ => PortInfo::bare(p.port_name),
         })

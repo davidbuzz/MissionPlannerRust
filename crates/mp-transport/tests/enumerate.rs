@@ -61,6 +61,8 @@ impl DevListing {
                     serial_number: Some(serial.to_owned()),
                     manufacturer: Some(manufacturer.to_owned()),
                     product: Some(product.to_owned()),
+                    hardware_id: None,
+                    description: None,
                 });
             } else if let Some((path, target)) = line.split_once(" -> ") {
                 listing.entries.push(path.to_owned());

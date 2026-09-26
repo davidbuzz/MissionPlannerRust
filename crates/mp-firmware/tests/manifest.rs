@@ -361,9 +361,52 @@ fn a_port_as_it_is_enumerated_names_its_board() {
         serial_number: None,
         manufacturer: Some("CubePilot".to_owned()),
         product: Some("CubeOrange-BL".to_owned()),
+        hardware_id: None,
+        description: None,
     };
     let device = DeviceInfo::from_port(&port).expect("a USB port");
     assert_eq!(fixture().board_ids(&device, true), Some(vec![140]));
+}
+
+/// The same board on Windows, as the port list gives it with Windows' own record over the
+/// crate's (mp-transport's win32.rs, `Win32DeviceMgmt`'s fields): named by its bus-reported
+/// "CubeOrange"; and, where Windows reported no name and the product is the crate's friendly
+/// name, found by `SPDRP_HARDWAREID` - whose `&REV_0200&MI_00` after the PID is what the C#'s
+/// `VID_..&PID_..&` pattern needs, and what the id built from the VID and PID alone lacks. That
+/// lack was the owner's report of 2026-09-26: "none of 2 usb devices names a board" on Windows.
+/// `// C#: Utilities/Win32DeviceMgnt.cs:462-549; ExtLibs/ArduPilot/APFirmware.cs (GetBoardID)`
+#[test]
+fn a_windows_port_names_its_board_by_its_bus_name_or_its_hardware_id() {
+    let windows = |product: &str| PortInfo {
+        name: "COM4".to_owned(),
+        vid: Some(0x2dae),
+        pid: Some(0x1016),
+        serial_number: Some("19002E000F51303339323537".to_owned()),
+        manufacturer: Some("Microsoft".to_owned()),
+        product: Some(product.to_owned()),
+        hardware_id: Some(r"USB\VID_2DAE&PID_1016&REV_0200&MI_00".to_owned()),
+        description: Some("USB Serial Device".to_owned()),
+    };
+    let manifest = fixture();
+    let named = DeviceInfo::from_port(&windows("CubeOrange")).expect("a USB port");
+    assert_eq!(named.board.as_deref(), Some("CubeOrange"));
+    assert_eq!(named.description.as_deref(), Some("USB Serial Device"));
+    assert_eq!(named.hardwareid.as_deref(), Some(r"USB\VID_2DAE&PID_1016&REV_0200&MI_00"));
+    assert_eq!(manifest.board_ids(&named, true), Some(vec![140]));
+
+    let unnamed = DeviceInfo::from_port(&windows("USB Serial Device (COM4)")).expect("a USB port");
+    let by_id = manifest.board_ids(&unnamed, true).expect("found by the hardware id");
+    assert!(by_id.contains(&140), "{by_id:?}");
+
+    // Without Windows' record - the id built from the VID and PID - the pattern finds nothing,
+    // which is what the page said on Windows before.
+    let crate_only = PortInfo {
+        hardware_id: None,
+        description: None,
+        ..windows("USB Serial Device (COM4)")
+    };
+    let before = DeviceInfo::from_port(&crate_only).expect("a USB port");
+    assert_eq!(manifest.board_ids(&before, true), None);
 }
 
 // --- which firmware -----------------------------------------------------------------------------

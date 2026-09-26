@@ -4715,6 +4715,7 @@ dependencies = [
  "mp-mavlink-dialects",
  "serialport",
  "thiserror 2.0.20",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

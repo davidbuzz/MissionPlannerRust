@@ -56,8 +56,16 @@ pub struct PortInfo {
     pub serial_number: Option<String>,
     /// Manufacturer string.
     pub manufacturer: Option<String>,
-    /// Product string.
+    /// Product string: the name the device reports over USB. On Windows that is
+    /// `DEVPKEY_Device_BusReportedDeviceDesc` ([`with_windows_devices`]), what Mission Planner
+    /// calls the board, not the crate's `SPDRP_FRIENDLYNAME`.
     pub product: Option<String>,
+    /// Windows' `SPDRP_HARDWAREID`, the multi-string's first (`USB\VID_2DAE&PID_1016&REV_0200&MI_00`),
+    /// as Mission Planner's `DeviceInfo.hardwareid` holds it; `None` elsewhere.
+    pub hardware_id: Option<String>,
+    /// Windows' `SPDRP_DEVICEDESC` (`USB Serial Device`), Mission Planner's
+    /// `DeviceInfo.description`; `None` elsewhere.
+    pub description: Option<String>,
 }
 
 impl PortInfo {
@@ -71,6 +79,8 @@ impl PortInfo {
             serial_number: None,
             manufacturer: None,
             product: None,
+            hardware_id: None,
+            description: None,
         }
     }
 
@@ -291,6 +301,61 @@ pub fn display_text(port: &str, nice: &str) -> String {
     format!("{port} {nice}")
 }
 
+/// One COM port as Windows' SetupAPI records it, the fields `Win32DeviceMgmt.GetClassDevs` reads
+/// (see `win32.rs`, where they are read).
+/// `// C#: Utilities/Win32DeviceMgnt.cs:412-560`
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WindowsDevice {
+    /// `PortName` from the device's registry key (`COM4`).
+    pub name: String,
+    /// `SPDRP_DEVICEDESC`.
+    pub description: Option<String>,
+    /// `SPDRP_HARDWAREID`'s first string.
+    pub hardware_id: Option<String>,
+    /// `DEVPKEY_Device_BusReportedDeviceDesc`: the board, as `DeviceInfo.board`.
+    pub board: Option<String>,
+}
+
+/// Puts Windows' own record of each port over the `serialport` crate's: the hardware id and
+/// description Mission Planner reads, and the bus-reported name as the product, where the crate
+/// has `SPDRP_FRIENDLYNAME` ("USB Serial Device (COM4)"), which names no board. A port Windows'
+/// list lacks keeps what the crate said; the first device of a name wins, as `GetAllCOMPorts`
+/// lists USB devices before COM ports and the page takes the first.
+/// `// C#: Utilities/Win32DeviceMgnt.cs:392-409, 443-560`
+#[must_use]
+pub fn with_windows_devices(ports: Vec<PortInfo>, devices: &[WindowsDevice]) -> Vec<PortInfo> {
+    ports
+        .into_iter()
+        .map(|port| {
+            match devices
+                .iter()
+                .find(|device| device.name.eq_ignore_ascii_case(&port.name))
+            {
+                Some(device) => PortInfo {
+                    product: device.board.clone().or(port.product),
+                    hardware_id: device.hardware_id.clone(),
+                    description: device.description.clone(),
+                    ..port
+                },
+                None => port,
+            }
+        })
+        .collect()
+}
+
+/// The string a SetupAPI buffer holds, read as `Marshal.PtrToStringAuto` reads it: UTF-16 up to
+/// the first NUL - a `REG_MULTI_SZ`'s first string.
+#[must_use]
+pub fn utf16_to_first_nul(bytes: &[u8]) -> String {
+    let units: Vec<u16> = bytes
+        .chunks_exact(2)
+        .filter_map(|pair| <[u8; 2]>::try_from(pair).ok())
+        .map(u16::from_le_bytes)
+        .take_while(|unit| *unit != 0)
+        .collect();
+    String::from_utf16_lossy(&units)
+}
+
 /// Annotates the names the rules produced with what the OS knows about each device.
 ///
 /// `resolve` turns a name into the device node it stands for - a by-id symlink into
@@ -323,6 +388,60 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Windows' own record over the crate's: the bus-reported name becomes the product where the
+    /// crate had the friendly name, the hardware id and description come with it, the name is
+    /// matched without regard to case, and a port Windows did not list keeps what the crate said.
+    /// `// C#: Utilities/Win32DeviceMgnt.cs:443-560`
+    #[test]
+    fn windows_devices_name_the_board_the_crate_could_not() {
+        let crate_port = |name: &str| PortInfo {
+            name: name.to_owned(),
+            vid: Some(0x2dae),
+            pid: Some(0x1016),
+            serial_number: Some("19002E000F51303339323537".to_owned()),
+            manufacturer: Some("Microsoft".to_owned()),
+            product: Some(format!("USB Serial Device ({name})")),
+            hardware_id: None,
+            description: None,
+        };
+        let devices = [WindowsDevice {
+            name: "com4".to_owned(),
+            description: Some("USB Serial Device".to_owned()),
+            hardware_id: Some("USB\\VID_2DAE&PID_1016&REV_0200&MI_00".to_owned()),
+            board: Some("CubeOrange".to_owned()),
+        }];
+        let ports = with_windows_devices(vec![crate_port("COM4"), crate_port("COM9")], &devices);
+        assert_eq!(ports[0].product.as_deref(), Some("CubeOrange"));
+        assert_eq!(
+            ports[0].hardware_id.as_deref(),
+            Some("USB\\VID_2DAE&PID_1016&REV_0200&MI_00")
+        );
+        assert_eq!(ports[0].description.as_deref(), Some("USB Serial Device"));
+        assert_eq!(ports[0].vid, Some(0x2dae), "the crate's ids stay");
+        assert_eq!(ports[1], crate_port("COM9"));
+        // A device Windows reported no bus name for keeps the crate's product.
+        let unnamed = [WindowsDevice {
+            board: None,
+            ..devices[0].clone()
+        }];
+        let ports = with_windows_devices(vec![crate_port("COM4")], &unnamed);
+        assert_eq!(ports[0].product.as_deref(), Some("USB Serial Device (COM4)"));
+    }
+
+    /// A SetupAPI buffer read as `Marshal.PtrToStringAuto` reads it: UTF-16 to the first NUL, so
+    /// a `REG_MULTI_SZ` gives its first string and an odd trailing byte is ignored.
+    #[test]
+    fn a_setupapi_buffer_is_read_to_its_first_nul() {
+        let utf16 = |text: &str| -> Vec<u8> {
+            text.encode_utf16().flat_map(u16::to_le_bytes).collect()
+        };
+        let mut multi = utf16("USB\\VID_2DAE&PID_1016&REV_0200&MI_00\0USB\\VID_2DAE&PID_1016&MI_00\0\0");
+        multi.push(0x41);
+        assert_eq!(utf16_to_first_nul(&multi), "USB\\VID_2DAE&PID_1016&REV_0200&MI_00");
+        assert_eq!(utf16_to_first_nul(&utf16("COM4")), "COM4");
+        assert_eq!(utf16_to_first_nul(&[]), "");
+    }
 
     #[test]
     fn a_star_matches_any_run_including_none() {

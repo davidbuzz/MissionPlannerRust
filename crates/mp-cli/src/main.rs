@@ -2020,6 +2020,8 @@ mod tests {
             serial_number: None,
             manufacturer: None,
             product: Some(product.to_owned()),
+            hardware_id: None,
+            description: None,
         }
     }
 

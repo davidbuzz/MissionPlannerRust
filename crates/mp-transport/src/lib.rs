@@ -24,6 +24,8 @@ pub mod ntrip;
 pub mod replay;
 #[cfg(feature = "serial")]
 pub mod serial;
+#[cfg(all(windows, feature = "serial"))]
+mod win32;
 pub mod socket;
 pub mod testing;
 pub mod udp_client;

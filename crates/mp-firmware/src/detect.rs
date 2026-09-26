@@ -271,12 +271,11 @@ impl DeviceInfo {
 
     /// The record Windows would give Mission Planner for an enumerated port.
     ///
-    /// `hardwareid` takes Windows' form, upper-case hex (`USB\VID_2DAE&PID_1016`), because the
-    /// rules that read it only run on Windows and were written against it. The `&REV_xxxx` Windows
-    /// appends is left off: `PortInfo` does not carry the device release, and every rule matches a
-    /// prefix or a substring that ends before it.
-    ///
-    /// `PortInfo` has no Windows device description, so `description` is the product string, as
+    /// On Windows the port list carries what `Win32DeviceMgmt` reads, and this takes it as it is:
+    /// `hardwareid` Windows' `SPDRP_HARDWAREID` (`USB\VID_2DAE&PID_1016&REV_0200&MI_00`), `board`
+    /// the bus-reported name, `description` `SPDRP_DEVICEDESC`. Elsewhere `hardwareid` takes
+    /// Windows' form built from the VID and PID, upper-case hex (`USB\VID_2DAE&PID_1016`), because
+    /// the rules that read it were written against it, and `description` is the product string, as
     /// `Linux.cs:38` fills it.
     ///
     /// A port with no USB ids is not in the list at all (`None`). Neither of Mission Planner's
@@ -293,11 +292,20 @@ impl DeviceInfo {
         let (Some(vid), Some(pid)) = (port.vid, port.pid) else {
             return None;
         };
+        // On Windows, what `Win32DeviceMgmt` reads (mp-transport's `win32.rs`): `SPDRP_DEVICEDESC`,
+        // the bus-reported name as the board, and `SPDRP_HARDWAREID` - whose `&REV_...&MI_...`
+        // after the PID is what `vid_pid`'s `VID_..&PID_..&` pattern needs. Elsewhere the
+        // product for both, and the id built from the VID and PID.
+        // `// C#: Utilities/Win32DeviceMgnt.cs:462-549`
         Some(Self {
             name: Some(port.name.clone()),
-            description: port.product.clone(),
+            description: port.description.clone().or_else(|| port.product.clone()),
             board: port.product.clone(),
-            hardwareid: Some(hardware_id(vid, pid)),
+            hardwareid: Some(
+                port.hardware_id
+                    .clone()
+                    .unwrap_or_else(|| hardware_id(vid, pid)),
+            ),
         })
     }
 }

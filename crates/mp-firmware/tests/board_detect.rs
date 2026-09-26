@@ -271,6 +271,8 @@ fn usb(name: &str, vid: u16, pid: u16, product: &str) -> PortInfo {
         serial_number: Some("0123456789".to_owned()),
         manufacturer: None,
         product: Some(product.to_owned()),
+        hardware_id: None,
+        description: None,
     }
 }
 

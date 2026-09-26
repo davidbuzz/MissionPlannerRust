@@ -19,6 +19,16 @@ serial = ["dep:serialport"]
 thiserror.workspace = true
 serialport = { version = "4.10", optional = true }
 
+# Windows' own record of each COM port, as Mission Planner's Win32DeviceMgmt reads it (src/win32.rs);
+# the version the serialport crate already uses.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = [
+    "Win32_Foundation",
+    "Win32_Devices_DeviceAndDriverInstallation",
+    "Win32_Devices_Properties",
+    "Win32_System_Registry",
+] }
+
 [dev-dependencies]
 mp-mavlink.workspace = true
 mp-mavlink-dialects.workspace = true
