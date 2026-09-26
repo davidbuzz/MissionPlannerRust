@@ -31,11 +31,15 @@ setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="
 
 screen setup
 window 1600x1200
+# A bench run is minutes: the manifest's tens of megabytes, the download, the reboot, the thirty
+# seconds' scan and the upload.
+budget 400
 
 expect vehicle.connected false
 click setup-page-ConfigFirmwareManifest
 # The whole manifest, tens of megabytes, from the mirror or ardupilot.org.
 expect config.firmware.active true
+within 120
 expect config.firmware.manifest loaded
 expect config.firmware.board ~ CubeOrange
 expect config.firmware.board.ids ~ 140
@@ -48,6 +52,7 @@ expect config.firmware.selection.selected https://firmware.ardupilot.org/Copter/
 
 # The download, the reboot, the scan, the upload: a couple of minutes at most.
 click fw-select-upload
+within 300
 expect config.firmware.flow done
 expect config.firmware.apj.board_id 140
 expect config.firmware.stopped none
