@@ -305,16 +305,17 @@ fn enable_flies_the_saved_settings_and_disable_releases() {
     feeds.send(&init());
     feeds.send(&axis(0, 16_384));
     feeds.send(&axis(1, -32_767));
+    // The two axes are two reads, and a frame may go out between them: the one to judge is the
+    // frame carrying both.
     let mut last = None;
     until("the stick on the wire", || {
         if let Some(frame) = overrides_heard(&mut vehicle).last() {
             last = Some(*frame);
         }
-        last.is_some_and(|frame| frame[0] == 1375)
+        last.is_some_and(|frame| frame[0] == 1375 && frame[2] == 1000)
     });
     let frame = last.unwrap();
     assert_eq!(frame[1], u16::MAX, "channel 2's unsaved axis is not flown");
-    assert_eq!(frame[2], 1000, "throttle: Y at the bottom");
     assert_eq!(frame[3], u16::MAX);
     let _ = telemetry.take_reports();
 

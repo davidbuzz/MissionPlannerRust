@@ -12,7 +12,7 @@ env MP_CONFIG_XML $WORK/config.xml
 env XDG_DATA_HOME $WORK
 screen fly
 window 1600x1200
-budget 30
+budget 58
 # A first budget, set by hand until a passing run records one.
 
 # The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as
@@ -25,6 +25,15 @@ expect fly.tab tabActions
 click Stabilize
 expect vehicle.mode Stabilize
 expect vehicle.armed false
+# SITL passes its pre-arm checks once its EKF and GPS are ready (hud-health.gui): a SITL just
+# started refuses Arm until then, as a vehicle just powered does.
+within 60
+expect hud.prearm Ready to Arm
+# And Guided, which TakeOff switches to, wants a position once armed: ArduCopter refuses it
+# until its EKF has an absolute position from the GPS (position_ok) - disarmed, or in Stabilize,
+# where the copter is armed, it asks for none. A SITL a few seconds old has not got one yet.
+within 60
+expect fly.ekf.flags ~ pos_horiz_abs On
 
 # Armed in Stabilize, throttle down, as the owner armed it.
 click arm
