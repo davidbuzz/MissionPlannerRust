@@ -34,6 +34,17 @@ only with it saved or off.
 [[one-build-at-a-time]]) and is "aborted"; Buzz starts it and logs in - I do not start it
 (it would boot to the login screen and hold 12 GB for nothing).
 
+**2026-09-26 ~11:00 local: the whole laptop was rebooted.** The VM came back running with Buzz
+logged in at the console and sshd up (Automatic service), the clone at `C:\src\MissionPlannerRust`
+(at `eadb48a`, a debug `planner.exe` from 2026-09-25) and the toolchain intact. The transient
+`vmshare` was gone - re-added with `VBoxManage sharedfolder add tiny10 --name vmshare --hostpath
+/home/buzz/vmshare --automount --auto-mount-point S: --transient` (the guest reads
+`\\VBOXSVR\vmshare` at once; `S:` may need a new logon). A host reboot also empties `/tmp`, so
+every scratch target directory is gone and the next build is cold.
+
+**Work in the VM is watched:** jobs go through `tools/win10/vm-run.sh` into the "Claude at work"
+window on its desktop - see [[vm-work-shows-on-its-console]].
+
 **Lifecycle from here:** `VBoxManage startvm tiny10 --type gui`, `controlvm tiny10 savestate`,
 `snapshot tiny10 take <name>`; `VBoxManage guestcontrol tiny10 run/copyto` works too but wants
 the password on the command line, so SSH is the way. Take a snapshot before installing
