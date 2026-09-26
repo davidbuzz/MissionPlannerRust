@@ -63,6 +63,10 @@ click setup-page-ConfigRadioOutput
 expect setup.page ConfigRadioOutput
 click setup-page-ConfigSerial
 expect setup.page ConfigSerial
+# The page drawn before the next click: on Windows a click in its first frames was lost one run in
+# three (2026-09-26, NOT_DONE_YET_MATRIX.md), as a person would not click there.
+expect config.serial.active true
+expect config.serial.rows > 0
 click setup-page-ConfigESCCalibration
 expect setup.page ConfigESCCalibration
 

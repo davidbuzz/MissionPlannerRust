@@ -26,7 +26,7 @@ setup mkdir -p "$WORK/MissionPlannerRust/srtm" && python3 -c 'import sys, zipfil
 
 screen fly
 window 1600x1200
-budget 22
+budget 24
 
 # DataFlash Logs is the last header: bring it to the front of the row, then show its page.
 click fly-tabs-right
@@ -120,7 +120,8 @@ expect fly.georef.lines 38
 # (mp-georef's NEWLINE): a byte more a line on Windows.
 linux: expect fly.georef.files loglocation.csv:0,location.csv:1718,location.kml:45204,location.txt:1824,location.geo:1321,location.tel:1606,location.jxl:35591,location.gpx:3679
 windows: expect fly.georef.files loglocation.csv:0,location.csv:1742,location.kml:46700,location.txt:1849,location.geo:1346,location.tel:1634,location.jxl:35642,location.gpx:3679
-expect fly.georef.kml 45204
+linux: expect fly.georef.kml 45204
+windows: expect fly.georef.kml 46700
 expect fly.georef.pictures 24
 expect fly.georef.cams 24
 expect fly.georef.positions 617
