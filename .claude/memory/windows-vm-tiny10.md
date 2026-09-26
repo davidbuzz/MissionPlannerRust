@@ -59,9 +59,10 @@ laptop), then `git reset --hard origin/main` and a re-checkout (`git rm -r --cac
 measured - so the suite keeps one alive behind `tools/win10/sitl-relay.ps1`. Windows budgets live
 in `tools/win10/budgets.txt`, written by the suite after each run (the share's `win-budgets.txt`
 is taken into the repo, LF, ordinal order). Hold `build.lock` for the whole suite run: host builds
-beside it slowed the VM and 31 scripts hit their hard stop. The VM's screen is 1600x1200, which
-leaves ~1100 px for a 1200-high window - `plan-add-below` and `fly-actionsgrid` fail on that
-alone; a taller display was asked of Buzz.
+beside it slowed the VM and 31 scripts hit their hard stop. The VM's screen is 1640x1320 since
+2026-09-26 23:00 (setvideomodehint, Buzz's go), work area 1640x1280: a 1600x1200 window fits;
+at 1600x1200 it came out ~1100 high and `plan-add-below` and `setup-list` failed on that alone.
+It was set live: re-send the hint if a restart brings it back smaller.
 
 **Windows Defender Firewall prompt (Buzz, 2026-09-26):** every `ArduCopter.exe` at a new path
 shows "blocked some features of this app" the first time it opens its ports, and Buzz has to

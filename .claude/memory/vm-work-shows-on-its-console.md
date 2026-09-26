@@ -20,8 +20,9 @@ Installed by `install-console.ps1` over SSH; after editing `console-runner.ps1`,
 
 Each job runs in a PowerShell of its own (`powershell -File`) inside that window, so nothing a
 job sets (an environment variable, an `Add-Type`) leaks into the next. The VM's screen is
-1600x1200 since 2026-09-26 12:15 (`VBoxManage controlvm tiny10 setvideomodehint 1600 1200 32`,
-Buzz's yes): at 1077x774 the planner's pages ran below the window and clicks hit the taskbar.
+1640x1320 since 2026-09-26 23:00 (`VBoxManage controlvm tiny10 setvideomodehint 1640 1320 32`,
+on Buzz's "fix these known issues"; 1600x1200 before it, from 12:15): a scripts' 1600x1200 window
+needs ~1240 px with its title bar, and at 1200 plan-add-below and fly-actionsgrid ran off the bottom.
 `tools/win10/sitl-launch.ps1` is the Windows GUI job pattern - planner started with MP_FACTS and
 MP_PROBE, `-NoNewWindow`, window at (0,0) and made topmost before each user32 click.
 

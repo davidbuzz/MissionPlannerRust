@@ -188,6 +188,11 @@ pub fn actions_panel(
 ///
 /// The list is generated from the same parameter metadata the C# application reads, so mode 4 is
 /// Guided on a copter and ACRO on a plane without this code knowing anything about either.
+///
+/// Not the C#'s: its Actions tab picks the mode with `CMB_modes` and Set Mode in the grid. Kept by
+/// the owner's ruling of 2026-09-26 over restoring those - a mode is one click here where the
+/// drop-down takes three - the Actions page scrolling where the vehicle's modes run past its
+/// column.
 fn mode_controls(view: &TelemetryView, cx: &mut Context<MissionPlanner>) -> AnyElement {
     let modes = crate::telemetry::Telemetry::modes_for(view);
     if modes.is_empty() {

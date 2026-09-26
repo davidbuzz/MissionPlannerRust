@@ -7,6 +7,10 @@
 # DO_MOUNT_CONTROL's seventh parameter where it does not, as SITL does not; both are waited for.
 # Clear Track (4,3) takes the route flown off the map, which records it again from the next
 # position. Raw Sensor View (3,2) is a window of its own and is drawn dimmed.
+#
+# The page is not held to fit its column: below the grid are the port's mode buttons, one per mode
+# the vehicle offers, which the owner kept over the C#'s CMB_modes drop-down (2026-09-26) - with a
+# 4.8 SITL's modes they run a row past it, and the page scrolls.
 # `GCSViews/FlightData.cs:1101-1107, 1255-1271, 1392-1415, 2718-2729, GCSViews/FlightData.Designer.cs:747-770`
 #
 # Needs SITL (a copter): tools/gui-test.sh tests/gui/fly-actionsgrid.gui -- tcp:127.0.0.1:5760
@@ -20,7 +24,6 @@ budget 11
 expect vehicle.count > 0
 click fly-tab-actions
 expect fly.tab tabActions
-expect fly.page.overflow 0
 
 click fly-sendmsg
 expect fly.prompt Enter Message to be logged
@@ -47,7 +50,6 @@ click fly-mountmode-2
 expect fly.mountmode ~ 2 M
 click fly-mountmode
 expect fly.sent COMMAND_LONG MAV_CMD_DO_MOUNT_CONTROL 0,0,0,0,0,0,2
-expect fly.page.overflow 0
 
 # Clear Track takes the route recorded so far - one point while SITL stands still - and the next
 # position starts it again.
