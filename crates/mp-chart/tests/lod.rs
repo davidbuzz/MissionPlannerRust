@@ -1,9 +1,10 @@
 //! The index is invisible: every query through it gives what a pass over every sample gives.
 //!
-//! The chart draws a series as [`reduce`]'s columns, each a bar from its low to its high at its
-//! index across the plot, and fits its axes with [`auto_range`] over the window [`Series::extent`]
-//! gives. So if those three give the scan's answer, the line drawn is the same to the pixel: the
-//! same columns, the same lows and highs, the same range to place them in. These tests hold the
+//! The chart draws a series as the line through [`reduce`]'s columns - each column's first
+//! value, its low and high, and its last, at its index across the plot - and fits its axes with
+//! [`auto_range`] over the window [`Series::extent`] gives. So if those three give the scan's
+//! answer, the line drawn is the same to the pixel: the same columns, the same four values each,
+//! the same range to place them in. These tests hold the
 //! indexed queries to the scan - [`reduce_scan`], the reduction as it was first written, and the
 //! range and extent as they were first written, copied below - over series that roll, that
 //! repeat times, whose clock restarts, at the widths the log browser (240 columns) and the tuning

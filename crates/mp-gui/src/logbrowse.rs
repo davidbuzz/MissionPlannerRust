@@ -64,7 +64,7 @@ use modifier::Modifier;
 use crate::config::failsafe::Lookup;
 use view::{Scales, Zoom};
 
-/// How wide the plot is, in columns.
+/// How many columns a curve is reduced to before the plot has been laid out; after, one a pixel.
 const COLUMNS: usize = 240;
 
 /// Which axis a series is drawn against.
@@ -3368,38 +3368,21 @@ fn plot_panel(browse: &LogBrowse, cx: &mut Context<MissionPlanner>) -> AnyElemen
         );
     }
 
-    for (index, shown) in plotted.iter().enumerate() {
-        let Some(range) = axes.range_for(shown) else {
-            continue;
-        };
-        let colour = TRACE_COLOURS
-            .get(index % TRACE_COLOURS.len())
-            .copied()
-            .unwrap_or(theme::TEXT);
-        for column in mp_chart::reduce(&shown.series, from, to, COLUMNS) {
-            // A zoomed axis leaves some of a curve above or below the plot; what is off it is
-            // not drawn, as `IsClippedToChartRect` clips it.
-            if range.fraction(column.low) > 1.0 || range.fraction(column.high) < 0.0 {
-                continue;
-            }
-            #[allow(clippy::cast_precision_loss)]
-            let left = column.index as f32 / COLUMNS as f32;
-            #[allow(clippy::cast_possible_truncation)]
-            let top = (1.0 - range.fraction(column.high)).clamp(0.0, 1.0) as f32;
-            #[allow(clippy::cast_possible_truncation)]
-            let bottom = (1.0 - range.fraction(column.low)).clamp(0.0, 1.0) as f32;
-            let height = (bottom - top).max(0.004);
-            plot = plot.child(
-                div()
-                    .absolute()
-                    .left(relative(left))
-                    .top(relative(top))
-                    .w(px(1.5))
-                    .h(relative(height))
-                    .bg(rgb(colour)),
-            );
-        }
-    }
+    // Each curve a line through its points, reduced to a column a pixel of the plot as last
+    // laid out.
+    let lines = chart_lines(
+        plotted,
+        &axes,
+        from,
+        to,
+        chart_columns(browse.chart_size().0),
+    );
+    crate::facts::record("log.chart.lines", lines.len());
+    crate::facts::record(
+        "log.chart.points",
+        lines.iter().map(|line| line.points.len()).sum::<usize>(),
+    );
+    plot = plot.child(crate::plotline::element(lines));
 
     // The rectangle a left drag is drawing, dashed, as ZedGraph draws its reversible frame.
     if let Some((drag_from, drag_to)) = browse.zoom_drag() {
@@ -4038,7 +4021,7 @@ fn routes_element(
                     .iter()
                     .filter_map(|point| screen(point.latitude, point.longitude))
                     .collect();
-                paint_polyline(window, &points, route_pen(kind));
+                crate::plotline::paint_polyline(window, &points, route_pen(kind), 2.0);
             }
             for command in drawn.commands.iter().chain(&drawn.repeats) {
                 if let Some((x, y)) = screen(command.latitude, command.longitude) {
@@ -4056,25 +4039,46 @@ fn routes_element(
     .size_full()
 }
 
-/// A line through screen points, in chunks a gpui path can hold.
-fn paint_polyline(window: &mut gpui::Window, points: &[(f32, f32)], colour: gpui::Hsla) {
-    use gpui::{PathBuilder, point};
-    for chunk in points.chunks(60_000) {
-        if chunk.len() < 2 {
-            continue;
-        }
-        let mut builder = PathBuilder::stroke(px(2.0));
-        let mut chunk = chunk.iter();
-        if let Some((x, y)) = chunk.next() {
-            builder.move_to(point(px(*x), px(*y)));
-        }
-        for (x, y) in chunk {
-            builder.line_to(point(px(*x), px(*y)));
-        }
-        if let Ok(path) = builder.build() {
-            window.paint_path(path, colour);
-        }
+/// How many columns to reduce a curve to for a plot `width` pixels wide: one a pixel, and
+/// [`COLUMNS`] before the plot has been laid out.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // a window's width
+fn chart_columns(width: f32) -> usize {
+    if width >= 1.0 {
+        width.round() as usize
+    } else {
+        COLUMNS
     }
+}
+
+/// Every curve the chart draws, in its colour: the line through it as `AddCurve` makes a
+/// `LineItem` with no symbols, joining each point to the next - not a bar a column, which drew
+/// a sparse curve as "a left-to-right string of dots" (the owner's report of 2026-09-26). A curve
+/// with fewer than two points in view draws nothing, as a lone point with no symbol does not.
+/// `// C#: Log/LogBrowse.cs:1597-1690`
+fn chart_lines(
+    plotted: &[Plotted],
+    axes: &Axes,
+    from: f64,
+    to: f64,
+    columns: usize,
+) -> Vec<crate::plotline::Line> {
+    plotted
+        .iter()
+        .enumerate()
+        .filter_map(|(index, shown)| {
+            let range = axes.range_for(shown)?;
+            let colour = TRACE_COLOURS
+                .get(index % TRACE_COLOURS.len())
+                .copied()
+                .unwrap_or(theme::TEXT);
+            Some(crate::plotline::Line {
+                points: crate::plotline::curve(&shown.series, range, from, to, columns),
+                colour: rgb(colour).into(),
+                diamonds: false,
+            })
+        })
+        .filter(|line| !line.points.is_empty())
+        .collect()
 }
 
 /// `GMapMarkerWP`: a waypoint's marker, a round green head on a point, with its number.
@@ -4987,6 +4991,77 @@ mod tests {
             browse.plotted()[0].series.len() > 100,
             "the samples were extracted"
         );
+    }
+
+    /// The owner's report of 2026-09-26: Logs > PLOT drew each curve as "a left-to-right string
+    /// of dots", a bar a column with white space between. Each is now one line through its
+    /// points, as ZedGraph's `LineItem`: across the plot, left to right, within the auto-ranged
+    /// axis, never more than a column's four points a pixel.
+    #[test]
+    fn a_plotted_field_is_one_line_through_its_points() {
+        let mut browse = LogBrowse::new();
+        browse.open(&fixture());
+        let find = |name: &str| {
+            browse
+                .fields()
+                .iter()
+                .find(|field| field.message == "ATT" && field.field == name)
+                .expect("the field is in the fixture")
+                .clone()
+        };
+        let (roll, pitch) = (find("Roll"), find("Pitch"));
+        browse.toggle(&roll);
+        browse.graph(&pitch, Axis::Right);
+        let scales = browse.scales().expect("something is plotted");
+        let (from, to) = scales.x;
+        let axes = Axes {
+            left: scales.left,
+            right: scales.right,
+        };
+
+        let lines = chart_lines(browse.plotted(), &axes, from, to, 1200);
+        assert_eq!(lines.len(), 2);
+        for (line, shown) in lines.iter().zip(browse.plotted()) {
+            let points = &line.points;
+            assert!(
+                points.len() > 100,
+                "{} points for {} samples",
+                points.len(),
+                shown.series.len()
+            );
+            assert!(points.len() <= 4 * 1200 + 2);
+            assert!(
+                points.windows(2).all(|pair| pair[0].0 <= pair[1].0),
+                "left to right"
+            );
+            assert!(
+                points
+                    .iter()
+                    .all(|(x, y)| (0.0..=1.0).contains(x) && (0.0..=1.0).contains(y)),
+                "an axis fitted to the curve holds all of it"
+            );
+        }
+        assert_ne!(lines[0].colour, lines[1].colour, "each curve its own colour");
+
+        // A zoomed axis leaves the line off the plot above and below, placed beyond the edge for
+        // the clip to cut rather than run along it.
+        let series = &browse.plotted()[0].series;
+        let (low, high) = series
+            .samples()
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(low, high), sample| {
+                (low.min(sample.value), high.max(sample.value))
+            });
+        let middle = f64::midpoint(low, high);
+        let narrow = mp_chart::Range {
+            low: middle - (high - low) / 10.0,
+            high: middle + (high - low) / 10.0,
+        };
+        let line = crate::plotline::curve(series, narrow, from, to, 1200);
+        assert!(line.iter().any(|(_, y)| *y < 0.0));
+        assert!(line.iter().any(|(_, y)| *y > 1.0));
+
+        assert_eq!(chart_columns(0.0), COLUMNS, "before the plot is laid out");
+        assert_eq!(chart_columns(1234.4), 1234);
     }
 
     /// A click on a plotted field removes it, whichever button - unchecking in the C# tree.

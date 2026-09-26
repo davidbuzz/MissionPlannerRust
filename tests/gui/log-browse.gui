@@ -32,11 +32,16 @@ click logfield-ATT.Roll
 expect log.plotted 1
 expect log.plotted.right 0
 expect log.axes.left 1
+# Drawn as one line through its points, as AddCurve's LineItem with no symbols - it was a bar a
+# column, "a left-to-right string of dots" (the owner's report, 2026-09-26).
+expect log.chart.lines 1
+expect log.chart.points > 100
 
 # A right click puts a field on the other axis.
 click logfield-ATT.Pitch:right
 expect log.plotted 2
 expect log.plotted.right 1
+expect log.chart.lines 2
 
 # And a click on a plotted field, whichever button, removes it.
 click logfield-ATT.Roll:right

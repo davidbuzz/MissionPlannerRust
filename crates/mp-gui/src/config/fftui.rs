@@ -55,7 +55,7 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 
 use gpui::{
     AnyElement, Bounds, Context, FocusHandle, KeyDownEvent, Pixels, SharedString, Window, canvas,
-    div, prelude::*, px, relative, rgb,
+    div, prelude::*, px, rgb,
 };
 use mp_log::dataflash::{LogMessage, Value};
 use mp_log::fft;
@@ -1569,8 +1569,32 @@ fn number_box(
         .into_any_element()
 }
 
-/// One graph: its title, the plot of its curves reduced to a bar per pixel column, the axis
-/// titles, the legend when it shows, and the tooltip under the pointer.
+/// Each curve of a graph as a `LineItem` draws it: the line through its points, reduced to
+/// `columns` - one a pixel of the plot - with a hollow diamond at each where it is the FFT's
+/// `SymbolType.Diamond`. It was a bar a column, and a curve with fewer points than the plot has
+/// pixels a row of dots.
+/// `// C#: Controls/fftui.cs:81, 110, 327, 522-524`
+fn graph_lines(graph: &Graph, columns: usize) -> Vec<crate::plotline::Line> {
+    let Some((from, to)) = graph.x_range() else {
+        return Vec::new();
+    };
+    graph
+        .curves
+        .iter()
+        .filter_map(|curve| {
+            let range = graph.y_range(curve.y2)?;
+            Some(crate::plotline::Line {
+                points: crate::plotline::curve(&curve.series(), range, from, to, columns),
+                colour: rgb(curve.colour).into(),
+                diamonds: curve.symbols,
+            })
+        })
+        .filter(|line| !line.points.is_empty())
+        .collect()
+}
+
+/// One graph: its title, the plot of its curves as lines, the axis titles, the legend when it
+/// shows, and the tooltip under the pointer.
 fn graph_element(
     graph: &Graph,
     index: usize,
@@ -1621,35 +1645,7 @@ fn graph_element(
                 }
             }),
         );
-    if let Some((from, to)) = graph.x_range() {
-        for curve in &graph.curves {
-            let Some(range) = graph.y_range(curve.y2) else {
-                continue;
-            };
-            let series = curve.series();
-            for column in mp_chart::reduce(&series, from, to, columns) {
-                if range.fraction(column.low) > 1.0 || column.high < range.low {
-                    continue;
-                }
-                #[allow(clippy::cast_precision_loss)]
-                let left = column.index as f32 / columns as f32;
-                #[allow(clippy::cast_possible_truncation)]
-                let top = (1.0 - range.fraction(column.high)).clamp(0.0, 1.0) as f32;
-                #[allow(clippy::cast_possible_truncation)]
-                let bottom = (1.0 - range.fraction(column.low)).clamp(0.0, 1.0) as f32;
-                let tall = (bottom - top).max(0.006);
-                plot = plot.child(
-                    div()
-                        .absolute()
-                        .left(relative(left))
-                        .top(relative(top))
-                        .w(px(if curve.symbols { 3.0 } else { 1.5 }))
-                        .h(relative(tall))
-                        .bg(rgb(curve.colour)),
-                );
-            }
-        }
-    }
+    plot = plot.child(crate::plotline::element(graph_lines(graph, columns)));
     if let Some(text) = tooltip {
         plot = plot.child(
             crate::probe::measured(format!("fft-graph-{index}-tooltip"), div())
@@ -2597,5 +2593,26 @@ mod tests {
             hz: RATE_DEFAULT,
         });
         assert!(failed.is_err_and(|error| error.starts_with("/no/such/log.bin")));
+    }
+
+    /// Each curve is the line through its points - the FFT's with a diamond at each, as
+    /// `SymbolType.Diamond` - not a bar a column, which drew a curve with fewer points than the
+    /// plot has pixels as a row of dots.
+    #[test]
+    fn a_graph_draws_each_curve_as_a_line() {
+        let freqs: Vec<f64> = (0..50).map(f64::from).collect();
+        let values: Vec<f64> = freqs.iter().map(|freq| (freq / 5.0).sin()).collect();
+        let mut fft = Curve::line("FFT".to_owned(), 0xff_0000, &freqs, &values);
+        fft.symbols = true;
+        let average = Curve::line("Avg".to_owned(), 0x00_ff00, &freqs, &values);
+        let graph = Graph {
+            curves: vec![fft, average],
+            ..Graph::blank()
+        };
+        let lines = graph_lines(&graph, 600);
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].diamonds && !lines[1].diamonds);
+        assert!(lines.iter().all(|line| line.points.len() == 50));
+        assert!(graph_lines(&Graph::blank(), 600).is_empty());
     }
 }

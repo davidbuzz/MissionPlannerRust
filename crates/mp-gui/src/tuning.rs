@@ -5,15 +5,18 @@
 //! is the same thing.
 //!
 //! The arithmetic is in `mp_chart`, which has no gpui in it and its own tests. This module is the
-//! drawing, and it draws min/max bars rather than a polyline - gpui has no line primitive that
-//! does not go through CPU tessellation, and a bar per pixel column is both cheaper and, as
-//! `mp_chart` argues, incapable of hiding a one-sample spike.
+//! drawing: each series the line through it, as the C#'s `AddCurve(..., SymbolType.None)` draws
+//! it (`crate::plotline`). It was first a min/max bar a column, cheaper to lay out than a path is
+//! to tessellate, but ten seconds at 10 Hz is a hundred samples over 180 columns, and a bar each
+//! is a row of dots. The line goes through the same min/max reduction, so it cannot hide a
+//! one-sample spike either.
+//! `// C#: GCSViews/FlightData.cs:1940-2020`
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
 use gpui::{AnyElement, Context, div, prelude::*, px, rgb};
-use mp_chart::{Series, auto_range, reduce, window};
+use mp_chart::{Range, Series, auto_range, window};
 
 use crate::MissionPlanner;
 use crate::telemetry::TelemetryView;
@@ -26,7 +29,7 @@ use crate::ui::{action, panel, theme};
 /// whenever the link speeds up. Six hundred is ten seconds of the fastest stream anybody runs.
 const SAMPLES: usize = 600;
 
-/// How wide the plot is, in pixel columns.
+/// How many columns a series is reduced to across the plot.
 const COLUMNS: usize = 180;
 
 /// A field that can be plotted, and how to read it from a snapshot.
@@ -188,6 +191,23 @@ const TRACE_COLOURS: &[u32] = &[
     0x7f_ffcc,
 ];
 
+/// Each series the line through it over `from..to`, in its colour.
+fn lines(series: &[Series], range: Range, from: f64, to: f64) -> Vec<crate::plotline::Line> {
+    series
+        .iter()
+        .enumerate()
+        .map(|(index, series)| crate::plotline::Line {
+            points: crate::plotline::curve(series, range, from, to, COLUMNS),
+            colour: rgb(TRACE_COLOURS
+                .get(index % TRACE_COLOURS.len())
+                .copied()
+                .unwrap_or(theme::TEXT))
+            .into(),
+            diamonds: false,
+        })
+        .collect()
+}
+
 /// The tuning panel.
 pub fn panel_for(tuning: &Tuning, cx: &mut Context<MissionPlanner>) -> AnyElement {
     // Hidden until asked for, so a screen that already scrolls does not carry a plot nobody is
@@ -218,39 +238,14 @@ pub fn panel_for(tuning: &Tuning, cx: &mut Context<MissionPlanner>) -> AnyElemen
     let borrowed: Vec<&Series> = tuning.series().iter().collect();
     let range = auto_range(&borrowed, from, to);
 
-    // One absolutely positioned bar per column per series. At 180 columns and two series that is
-    // 360 elements, which gpui lays out without noticing; a polyline would go through lyon's CPU
-    // tessellator every frame for the same picture.
     let mut plot = div().relative().h(px(120.0)).w_full();
     if let Some(range) = range {
-        for (index, series) in tuning.series().iter().enumerate() {
-            let colour = TRACE_COLOURS
-                .get(index % TRACE_COLOURS.len())
-                .copied()
-                .unwrap_or(theme::TEXT);
-            for column in reduce(series, from, to, COLUMNS) {
-                // Fractions of the plot box, computed in f64 and narrowed once. `fraction` is
-                // clamped to 0..1, so every value here is inside a range f32 represents exactly
-                // enough for a pixel position.
-                #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
-                let left = column.index as f32 / COLUMNS as f32;
-                #[allow(clippy::cast_possible_truncation)]
-                let top = (1.0 - range.fraction(column.high)) as f32;
-                #[allow(clippy::cast_possible_truncation)]
-                let bottom = (1.0 - range.fraction(column.low)) as f32;
-                // A bar is given a floor, or a flat stretch of the trace vanishes entirely.
-                let height = (bottom - top).max(0.009);
-                plot = plot.child(
-                    div()
-                        .absolute()
-                        .left(gpui::relative(left))
-                        .top(gpui::relative(top))
-                        .w(px(1.5))
-                        .h(gpui::relative(height))
-                        .bg(rgb(colour)),
-                );
-            }
-        }
+        plot = plot.child(crate::plotline::element(lines(
+            tuning.series(),
+            range,
+            from,
+            to,
+        )));
     } else {
         plot = plot.child(
             div()
@@ -423,6 +418,34 @@ mod tests {
         tuning.toggle(999);
         assert_eq!(tuning.series().len(), 2);
         assert_eq!(tuning.series().len(), tuning.chosen.len());
+    }
+
+    /// Ten seconds of 10 Hz telemetry is a hundred samples over 180 columns: one line through
+    /// all of them, left to right, not a bar a column - which drew a row of dots.
+    #[test]
+    fn a_series_is_one_line_through_its_samples() {
+        let mut tuning = Tuning::new();
+        for step in 0..100 {
+            let at = f64::from(step) / 10.0;
+            tuning.series[0].push(at, at.sin());
+            tuning.series[1].push(at, at.cos());
+        }
+        let (from, to) = window(9.9);
+        let borrowed: Vec<&Series> = tuning.series().iter().collect();
+        let range = auto_range(&borrowed, from, to).expect("a range");
+        let drawn = lines(tuning.series(), range, from, to);
+        assert_eq!(drawn.len(), 2);
+        for line in &drawn {
+            assert_eq!(line.points.len(), 100, "a point a sample");
+            assert!(line.points.windows(2).all(|pair| pair[0].0 < pair[1].0));
+            assert!(
+                line.points
+                    .iter()
+                    .all(|(_, y)| (0.0..=1.0).contains(y)),
+                "the range holds the line"
+            );
+        }
+        assert_ne!(drawn[0].colour, drawn[1].colour);
     }
 
     /// Every field has a colour, including past the end of the table.

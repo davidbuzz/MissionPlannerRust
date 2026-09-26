@@ -42,6 +42,7 @@ mod raw_params_grid;
 mod scripts_tab;
 // ---- end ConfigRawParams remainder ----
 mod plan;
+mod plotline;
 mod planner_coverage;
 // ---- row 96 ----
 mod plugins_ui;

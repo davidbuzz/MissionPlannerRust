@@ -174,6 +174,50 @@ impl Series {
         found
     }
 
+    /// The samples a line through the window comes in from and goes out to: the one before the
+    /// window's first sample and the one after its last, in the order the series holds them - or,
+    /// when the window holds none, the two either side of it.
+    fn beside(&self, from: f64, to: f64) -> (Option<Sample>, Option<Sample>) {
+        let at = |position: usize| self.samples.get(position).copied();
+        if !self.index.searchable() {
+            let inside = |sample: &Sample| sample.at >= from && sample.at <= to;
+            return match (
+                self.samples.iter().position(inside),
+                self.samples.iter().rposition(inside),
+            ) {
+                (Some(first), Some(last)) => (first.checked_sub(1).and_then(at), at(last + 1)),
+                _ => self
+                    .samples
+                    .iter()
+                    .zip(self.samples.iter().skip(1))
+                    .find(|(one, next)| {
+                        (one.at < from && next.at > to) || (one.at > to && next.at < from)
+                    })
+                    .map_or((None, None), |(one, next)| (Some(*one), Some(*next))),
+            };
+        }
+        let mut reads = 0;
+        let (mut before, mut after, mut across) = (None, None, None);
+        let mut inside = false;
+        for (start, end) in self.index.runs(self.samples.len()) {
+            let (lo, hi) = self.window(start, end, from, to, &mut reads);
+            if lo < hi {
+                if !inside {
+                    before = (lo > start).then(|| at(lo - 1)).flatten();
+                    inside = true;
+                }
+                after = (hi < end).then(|| at(hi)).flatten();
+            } else if across.is_none() && lo > start && lo < end {
+                across = Some((at(lo - 1), at(lo)));
+            }
+        }
+        if inside {
+            (before, after)
+        } else {
+            across.unwrap_or((None, None))
+        }
+    }
+
     /// The positions `[lo, hi)` of a run's samples from `from` to `to` inclusive.
     fn window(
         &self,
@@ -216,7 +260,14 @@ impl Range {
     /// Where a value sits in the range, 0 at the bottom and 1 at the top.
     #[must_use]
     pub fn fraction(self, value: f64) -> f64 {
-        ((value - self.low) / self.span()).clamp(0.0, 1.0)
+        self.place(value).clamp(0.0, 1.0)
+    }
+
+    /// [`Range::fraction`] unclamped: below 0 or above 1 for a value off the range, so a line to
+    /// it keeps its slope up to the edge it is clipped at instead of running along the edge.
+    #[must_use]
+    pub fn place(self, value: f64) -> f64 {
+        (value - self.low) / self.span()
     }
 }
 
@@ -251,7 +302,12 @@ pub fn auto_range(series: &[&Series], from: f64, to: f64) -> Option<Range> {
     })
 }
 
-/// One pixel column of a reduced series: the lowest and highest value in it.
+/// One pixel column of a reduced series: the lowest and highest value in it, and the first and
+/// last, in the order the series holds them.
+///
+/// The four are what a line through every sample covers in that column - it comes in at the
+/// first, spans the lowest to the highest and leaves at the last - so a line through them
+/// ([`trace`]) is the line through every sample, to the pixel.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Column {
     /// Which column, from the left.
@@ -260,12 +316,17 @@ pub struct Column {
     pub low: f64,
     /// The highest value in this column.
     pub high: f64,
+    /// The value of the column's first sample.
+    pub first: f64,
+    /// The value of the column's last sample.
+    pub last: f64,
 }
 
 /// Reduces a series to at most `columns` min/max pairs over a time window.
 ///
-/// Columns with no samples are absent rather than zero, so a gap in telemetry draws as a gap
-/// instead of as a line to the axis - which is what it would mean.
+/// Columns with no samples are absent rather than zero: a gap in telemetry is no value, not a
+/// value of zero, and [`trace`] draws across it from the sample before to the sample after, as
+/// ZedGraph joins one point to the next however far apart.
 ///
 /// Through the series' index: each run's stretch inside the window found by search, then each
 /// column's stretch within it by search on the same expression [`reduce_scan`] places a sample
@@ -315,16 +376,27 @@ pub fn reduce_counted(series: &Series, from: f64, to: f64, columns: usize) -> (V
                 |at| column_of(at) > index,
                 &mut reads,
             );
-            if let (Some((low, high)), Some(slot)) = (
+            reads += 1;
+            if let (Some((low, high)), Some(end), Some(slot)) = (
                 series.index.min_max(samples, first, last, &mut reads),
+                last.checked_sub(1).and_then(|end| samples.get(end)),
                 out.get_mut(index),
             ) {
                 match slot {
                     Some(column) => {
                         column.low = column.low.min(low);
                         column.high = column.high.max(high);
+                        column.last = end.value;
                     }
-                    None => *slot = Some(Column { index, low, high }),
+                    None => {
+                        *slot = Some(Column {
+                            index,
+                            low,
+                            high,
+                            first: sample.value,
+                            last: end.value,
+                        });
+                    }
                 }
             }
             first = last;
@@ -356,18 +428,106 @@ pub fn reduce_scan(series: &Series, from: f64, to: f64, columns: usize) -> Vec<C
             Some(Some(column)) => {
                 column.low = column.low.min(sample.value);
                 column.high = column.high.max(sample.value);
+                column.last = sample.value;
             }
             Some(slot) => {
                 *slot = Some(Column {
                     index,
                     low: sample.value,
                     high: sample.value,
+                    first: sample.value,
+                    last: sample.value,
                 });
             }
             None => {}
         }
     }
     out.into_iter().flatten().collect()
+}
+
+/// The line through a series over a window, as ZedGraph draws a `LineItem` with no symbols: each
+/// sample joined to the next, across any gap in time, and on past the window's edges to the
+/// samples either side, where the plot clips it.
+///
+/// Through [`reduce`]'s columns, so it costs the plot's width however long the log: each column
+/// its first value, then its lowest and highest - the one nearer its first taken first - then
+/// its last, each at the column's middle, with a point that repeats the one before it left out. A
+/// column with one sample is one point, so a sparse series is a line through every sample; a
+/// dense one is the line through every sample to the pixel, spikes and all.
+///
+/// Each point is `(x, value)`, `x` the fraction of the way across the window. The samples beside
+/// the window are brought in to its edge along the line to them, so `x` stays within `0..=1` -
+/// ZedGraph refuses to draw to a point millions of pixels away (`Line.DrawCurve`), and a path
+/// that long is only thrown away by the clip. Fewer than two points is nothing to draw, as a
+/// single point with no symbol draws nothing in ZedGraph.
+/// `// C#: Log/LogBrowse.cs:1630-1631; ExtLibs/ZedGraph/ZedGraph/Line.cs:641-830`
+#[must_use]
+pub fn trace(series: &Series, from: f64, to: f64, columns: usize) -> Vec<(f64, f64)> {
+    let span = to - from;
+    if columns == 0 || !span.is_finite() || span <= 0.0 {
+        return Vec::new();
+    }
+    #[allow(clippy::cast_precision_loss)] // a column count is a viewport width
+    let width = columns as f64;
+    let mut points: Vec<(f64, f64)> = Vec::new();
+    let mut add = |point: (f64, f64)| {
+        if points.last() != Some(&point) {
+            points.push(point);
+        }
+    };
+    for column in reduce(series, from, to, columns) {
+        #[allow(clippy::cast_precision_loss)]
+        let x = (column.index as f64 + 0.5) / width;
+        let (near, far) = if (column.first - column.low).abs() <= (column.high - column.first).abs()
+        {
+            (column.low, column.high)
+        } else {
+            (column.high, column.low)
+        };
+        for value in [column.first, near, far, column.last] {
+            add((x, value));
+        }
+    }
+    let place = |sample: Sample| ((sample.at - from) / span, sample.value);
+    // Where the line from `outside` to `inside` crosses the edge at `edge`.
+    let crossing = |outside: (f64, f64), inside: (f64, f64), edge: f64| {
+        let run = inside.0 - outside.0;
+        if run.abs() < f64::EPSILON {
+            return (edge, inside.1);
+        }
+        (
+            edge,
+            outside.1 + (inside.1 - outside.1) * (edge - outside.0) / run,
+        )
+    };
+    let (before, after) = series.beside(from, to);
+    let (before, after) = (before.map(place), after.map(place));
+    match (points.first().copied(), points.last().copied()) {
+        (Some(first), Some(last)) => {
+            // A clock that went backwards can put either one on the wrong side; it is left out.
+            if let Some(before) = before.filter(|before| before.0 < 0.0) {
+                points.insert(0, crossing(before, first, 0.0));
+            }
+            if let Some(after) = after.filter(|after| after.0 > 1.0) {
+                points.push(crossing(after, last, 1.0));
+            }
+        }
+        // Nothing inside: the line between the two either side crosses the whole window.
+        _ => {
+            if let (Some(before), Some(after)) = (before, after) {
+                let (left, right) = if before.0 <= after.0 {
+                    (before, after)
+                } else {
+                    (after, before)
+                };
+                points = vec![crossing(left, right, 0.0), crossing(right, left, 1.0)];
+            }
+        }
+    }
+    if points.len() < 2 {
+        points.clear();
+    }
+    points
 }
 
 /// The window a rolling chart should show at a given moment.
@@ -451,7 +611,7 @@ mod tests {
         );
     }
 
-    /// A gap in telemetry is a gap, not a line to the axis.
+    /// A gap in telemetry is no value, not a zero to draw a line down to.
     #[test]
     fn a_column_with_no_samples_is_absent_rather_than_zero() {
         // Samples at the start and the end, nothing in the middle.
@@ -511,6 +671,100 @@ mod tests {
         let series = series_of(&[(0.0, 1.0)]);
         assert!(auto_range(&[&series], 100.0, 110.0).is_none());
         assert!(auto_range(&[], 0.0, 10.0).is_none());
+    }
+
+    fn close(one: f64, other: f64) -> bool {
+        (one - other).abs() < 1e-9
+    }
+
+    /// The owner's report of 2026-09-26: Logs > PLOT drew "a left-to-right string of dots" with
+    /// white space between them, because each column was drawn as a bar of its own. ZedGraph joins
+    /// every point to the next: a series with fewer samples than columns is a line through each.
+    #[test]
+    fn a_sparse_series_is_one_line_through_every_sample() {
+        let values = [(0.0, 1.0), (2.0, 3.0), (4.0, -2.0), (6.0, 5.0), (8.0, 0.5)];
+        let series = series_of(&values);
+        let points = trace(&series, 0.0, 10.0, 240);
+        assert_eq!(points.len(), values.len(), "{points:?}");
+        for ((x, value), (at, expected)) in points.iter().zip(values) {
+            assert!(close(*value, expected), "{points:?}");
+            // At its column's middle, half a column from where it was sampled at most.
+            assert!((x - at / 10.0).abs() <= 0.5 / 240.0 + 1e-12, "{points:?}");
+        }
+    }
+
+    /// A column holding many samples is where the line comes in, how far down and up it goes -
+    /// the nearer extreme first - and where it leaves: the line through every sample, to the
+    /// pixel, and a spike cannot hide in it.
+    #[test]
+    fn a_dense_column_is_its_first_its_extremes_and_its_last() {
+        let series = series_of(&[(0.0, 3.0), (0.1, 1.0), (0.2, 9.0), (0.3, 4.0)]);
+        let values: Vec<f64> = trace(&series, 0.0, 1.0, 1)
+            .into_iter()
+            .map(|(_, value)| value)
+            .collect();
+        assert_eq!(values, vec![3.0, 1.0, 9.0, 4.0]);
+        // A rising column comes in at its lowest and leaves at its highest: two points.
+        let rising = series_of(&[(0.0, 1.0), (0.1, 2.0), (0.2, 3.0)]);
+        let values: Vec<f64> = trace(&rising, 0.0, 1.0, 1)
+            .into_iter()
+            .map(|(_, value)| value)
+            .collect();
+        assert_eq!(values, vec![1.0, 3.0]);
+    }
+
+    /// A gap in time is crossed, as ZedGraph crosses it: one line from the last sample before to
+    /// the first after.
+    #[test]
+    fn a_gap_in_time_is_joined_across() {
+        let series = series_of(&[(0.0, 5.0), (0.1, 5.0), (9.9, 6.0), (10.0, 6.0)]);
+        let points = trace(&series, 0.0, 10.0, 10);
+        assert_eq!(points.len(), 2, "{points:?}");
+        assert!(close(points[0].1, 5.0) && close(points[1].1, 6.0), "{points:?}");
+        assert!(points[0].0 < 0.1 && points[1].0 > 0.9, "{points:?}");
+    }
+
+    /// Zoomed in, the line still comes in from the sample before the window and goes out to the
+    /// one after, cut at the edges where ZedGraph's is clipped.
+    #[test]
+    fn a_zoomed_window_is_crossed_from_the_samples_beside_it() {
+        let series = series_of(&[(0.0, 0.0), (10.0, 10.0), (20.0, 20.0)]);
+        let points = trace(&series, 5.0, 15.0, 100);
+        assert_eq!(points.len(), 3, "{points:?}");
+        assert!(close(points[0].0, 0.0) && close(points[2].0, 1.0), "{points:?}");
+        // On the line through the three, within the half column the middle point moved.
+        assert!((points[0].1 - 5.0).abs() < 0.1, "{points:?}");
+        assert!((points[2].1 - 15.0).abs() < 0.1, "{points:?}");
+    }
+
+    /// A window between two samples holds none, and the line between them crosses all of it.
+    #[test]
+    fn a_window_between_two_samples_is_crossed_by_the_line_between_them() {
+        let series = series_of(&[(0.0, 0.0), (10.0, 10.0)]);
+        assert_eq!(trace(&series, 4.0, 6.0, 240), vec![(0.0, 4.0), (1.0, 6.0)]);
+    }
+
+    /// A point with no symbol is nothing in ZedGraph, and nothing here.
+    #[test]
+    fn a_single_sample_draws_nothing() {
+        assert!(trace(&series_of(&[(5.0, 1.0)]), 0.0, 10.0, 240).is_empty());
+        assert!(trace(&series_of(&[]), 0.0, 10.0, 240).is_empty());
+        assert!(trace(&series_of(&[(1.0, 1.0), (2.0, 2.0)]), 5.0, 5.0, 240).is_empty());
+        assert!(trace(&series_of(&[(1.0, 1.0), (2.0, 2.0)]), 0.0, 10.0, 0).is_empty());
+    }
+
+    /// Off the axis, a value is placed beyond it so the line to it keeps its slope to the edge;
+    /// `fraction` still pins it to the edge for what must stay on the plot.
+    #[test]
+    fn a_value_off_the_range_is_placed_beyond_it() {
+        let range = Range {
+            low: 0.0,
+            high: 10.0,
+        };
+        assert!(close(range.place(20.0), 2.0));
+        assert!(close(range.place(-5.0), -0.5));
+        assert!(close(range.fraction(20.0), 1.0));
+        assert!(close(range.place(5.0), range.fraction(5.0)));
     }
 
     /// The window is ten seconds and does not roll until it has to.
