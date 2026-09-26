@@ -39,3 +39,10 @@ shell when the same tool call had *started* `sleep 300` — the literal text was
 command line too (exit 144 again). When start and kill share a command, keep the pid from `$!`
 and kill that; the pattern is only safe against the shell's own text when the target's literal
 command line is not written anywhere in the command that runs the pgrep.
+
+**Again 2026-09-26:** `pgrep -f "tools/sitl/start-sitl.s[h]"` in a kill loop matched the same
+command's *later* text (`setsid tools/sitl/start-sitl.sh` to start the next SITL) - the bracket
+does not help when the literal appears elsewhere in the same command. Now the SITL is started and
+stopped through scratchpad helpers that record the PIDs: `sitl-up.sh` (start-sitl.sh detached,
+waits for "sitl ready", writes `sitl.pids`) and `sitl-down.sh` (kills exactly those).
+

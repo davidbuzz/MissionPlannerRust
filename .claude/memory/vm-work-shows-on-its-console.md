@@ -36,3 +36,12 @@ to his VM as it happens.
 for the console's own plumbing (copying its scripts, restarting it) or when it is down. Buzz
 also keeps his own admin PowerShell box on the VM for commands I hand him to paste (the ones SSH
 cannot do); the console window is separate from it. See [[windows-vm-tiny10]].
+
+**A job that never ends (2026-09-26):** the console waits for EOF on a job's output, and every
+process started down the chain inherits that pipe (Start-Process with redirection passes all
+inheritable handles). The planner's SIMULATION page started a SITL during `sitl-launch.gui` that
+outlived the script, so the whole-suite job wrote its results and never "finished" - later jobs
+queued behind it. Find the orphan (`Get-CimInstance Win32_Process`, its ParentProcessId and
+command line) and stop it by PID; `gui-test.ps1` now ends anything started from a script's
+scratch directory. A job's output reaches the laptop only at its end when piped through `tail`.
+

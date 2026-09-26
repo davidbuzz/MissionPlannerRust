@@ -51,3 +51,15 @@ tiny10 --type gui` only to bring it back after something else stopped it; `VBoxM
 the password on the command line, so SSH is the way. Take a snapshot before installing
 toolchains. See [[delegate-to-opus-subagents]] (agents never open windows: that includes the
 VM's desktop) and [[gui-runs-stay-short]].
+
+**GUI suite in the VM (2026-09-26):** the clone at `C:\src\MissionPlannerRust` fetches
+`\\VBOXSVR\vmshare\mpr.bundle` (`git bundle create /home/buzz/vmshare/mpr.bundle main` on the
+laptop), then `git reset --hard origin/main` and a re-checkout (`git rm -r --cached . ; git reset
+--hard`) so `.gitattributes` applies. The Cygwin SITL exits within 3 s of its client leaving -
+measured - so the suite keeps one alive behind `tools/win10/sitl-relay.ps1`. Windows budgets live
+in `tools/win10/budgets.txt`, written by the suite after each run (the share's `win-budgets.txt`
+is taken into the repo, LF, ordinal order). Hold `build.lock` for the whole suite run: host builds
+beside it slowed the VM and 31 scripts hit their hard stop. The VM's screen is 1600x1200, which
+leaves ~1100 px for a 1200-high window - `plan-add-below` and `fly-actionsgrid` fail on that
+alone; a taller display was asked of Buzz.
+
