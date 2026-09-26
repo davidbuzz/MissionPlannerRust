@@ -9,8 +9,8 @@
 # (:548-572), Download reads it back into a folder (:324-379), Rename renames it in place
 # (:482-513) and Delete removes it (:450-480). Each is proved by the list the vehicle gives after.
 #
-# The scratch file is made here, under /tmp: the path boxes standing in for OpenFileDialog and
-# FolderBrowserDialog take typed text, which is not expanded as $WORK is.
+# The scratch file is made in the run's scratch directory: the path boxes standing in for
+# OpenFileDialog and FolderBrowserDialog take its path typed, $WORK expanded by the runner.
 #
 # Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm; its FTP root
 # is SITL's working directory. Run as
@@ -21,7 +21,7 @@
 # then puts "Failed to create directory" on the status line until a fresh SITL.
 
 env MP_CONFIG_XML $WORK/config.xml
-setup rm -rf /tmp/planner-mavftp && mkdir -p /tmp/planner-mavftp/down && printf 'hello from the mavftp page\n' > /tmp/planner-mavftp/hello.txt
+setup mkdir -p $WORK/mavftp/down && printf 'hello from the mavftp page\n' > $WORK/mavftp/hello.txt
 screen params
 window 1600x1200
 budget 28
@@ -70,7 +70,10 @@ expect config.mavftp.prompt none
 expect config.InputBoxFolderNameEnterfoldername mprtest
 expect config.mavftp.list ~ mprtest
 expect config.mavftp.item.mprtest.type Directory
-expect config.mavftp.status Ready
+# After a listing the C# sets "Ready" at once while the listing, awaited, reports "<dir> Ready"
+# (MavFTPUI.cs:543-545, MAVFtp.cs:1441) onto the label if 100 ms have passed since its last
+# update - so Mission Planner ends on either, by timing, and so does this.
+expect config.mavftp.status ~ Ready
 
 # Into it, and a file uploaded there: its CRC agrees, or the status line would say so.
 doubleclick mavftp-item-mprtest
@@ -79,7 +82,7 @@ expect config.mavftp.list.count 0
 click mavftp-list:right
 click mavftp-menu-upload
 expect config.mavftp.prompt Open
-type /tmp/planner-mavftp/hello.txt
+type $WORK/mavftp/hello.txt
 key Return
 expect config.mavftp.dialog none
 expect config.mavftp.list hello.txt
@@ -98,10 +101,10 @@ click mavftp-item-hello.txt:right
 click mavftp-menu-download
 expect config.mavftp.prompt Browse For Folder
 key ctrl+u
-type /tmp/planner-mavftp/down
+type $WORK/mavftp/down
 key Return
 expect config.mavftp.dialog none
-expect config.mavftp.status Ready
+expect config.mavftp.status ~ Ready
 
 # Renamed in place.
 click mavftp-item-hello.txt:right
@@ -117,7 +120,7 @@ expect config.mavftp.list renamed.txt
 click mavftp-item-renamed.txt:right
 click mavftp-menu-delete
 expect config.mavftp.list.count 0
-expect config.mavftp.status Ready
+expect config.mavftp.status ~ Ready
 
 # Sorting: the root's list by name, then back.
 click mavftp-node-/

@@ -558,7 +558,9 @@ function Expect-Once([string[]]$w, [bool]$say, [int]$lineNo) {
     }
     $want = ($w[2..($w.Count - 1)] -join ' ')
     if (-not $known) { if ($say) { Fail "line ${lineNo}: no such fact '$key'" }; return $false }
-    if ($got -eq $want) { if ($say) { Say "  ok   $key = $want" }; return $true }
+    # A path is written with / in the scripts, and Windows gives \ where the application joins one
+    # on: a separator matches either, as in a contains check.
+    if ($got.Replace('\', '/') -eq $want.Replace('\', '/')) { if ($say) { Say "  ok   $key = $want" }; return $true }
     if ($say) { Fail "line ${lineNo}: $key is '$got', expected '$want'" }
     return $false
 }
@@ -587,7 +589,10 @@ try {
     foreach ($raw in $lines) {
         $lineNo++
         if ($raw -match '^\s*#') { continue }
-        $line = ($raw -split '\s#', 2)[0].Trim()
+        # `$WORK` is the scratch directory on every line, as in `env` and `setup`: a path typed
+        # into a box or expected back is the run's own, not a fixed /tmp the planner reads as
+        # C:\tmp where Git Bash's setup wrote to the temporary folder.
+        $line = ($raw -split '\s#', 2)[0].Trim().Replace('$WORK', $WorkFwd)
         if (-not $line) { continue }
         $w = $line -split '\s+'
         Check-HardStop
@@ -712,6 +717,12 @@ try {
 } finally {
     $total = (Now-Ms) - $t0
     Stop-App
+    # Whatever the application started from the scratch directory - the SIMULATION page's SITL,
+    # fetched there by sitl-launch.gui - ends with the script. On Linux SITL ends with its parent
+    # (SITL_State.cpp checks getppid()); the Cygwin build outlives the planner, and one left
+    # running held the VM console's output open, so the suite's job never ended (2026-09-26).
+    Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($Work) } |
+        Stop-Process -Force -ErrorAction SilentlyContinue
     # The junctions first - removed as links, not followed - or the scratch directory's removal
     # would walk into itself.
     if ($Keep) {

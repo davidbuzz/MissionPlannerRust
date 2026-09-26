@@ -580,6 +580,10 @@ while IFS= read -r RAW; do
     # in the compass page's SENSOR_ID#1 device text, which is the C#'s own.
     case "$RAW" in \#*) continue ;; esac
     LINE="${RAW%%[[:space:]]#*}"
+    # `$WORK` is the scratch directory on every line, as in `env` and `setup`: a path typed into
+    # a box or expected back is the run's own, on every platform - not a fixed /tmp, which the
+    # Windows planner reads as C:\tmp where the setup wrote to the temporary folder.
+    LINE="${LINE//\$WORK/$WORK}"
     # shellcheck disable=SC2086 # deliberate word splitting into positional parameters
     set -- $LINE
     [ $# -eq 0 ] && continue

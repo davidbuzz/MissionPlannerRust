@@ -10,16 +10,16 @@
 # throws, which is said on the status line; Generate Key saves the key as PEM and the two .dat
 # files and warns; Private Key reads the .dat back; BootLoader and Firmware then save signed copies
 # beside the files. The file dialogs are typed paths. The files are the fixtures of
-# testdata/secure, copied to /tmp, where the signed copies and the key are written; the unit tests
+# testdata/secure, copied to the run's scratch directory ($WORK), where the signed copies and the key are written; the unit tests
 # in crates/mp-firmware/src/signed.rs hold the signing to Mission Planner's own output.
 
 env XDG_DATA_HOME $WORK
-setup cp testdata/secure/bl.bin /tmp/mpr-gui-secure-bl.bin
-setup cp testdata/secure/unsigned.apj /tmp/mpr-gui-secure-fw.apj
+setup cp testdata/secure/bl.bin $WORK/secure-bl.bin
+setup cp testdata/secure/unsigned.apj $WORK/secure-fw.apj
 
 screen setup
 window 1600x1200
-budget 19
+budget 21
 
 expect config.secure.active false
 expect setup.pages ~ ConfigSecureAP
@@ -38,10 +38,10 @@ expect config.secure.pubkey none
 # C#'s unhandled-exception box - is on the status line.
 click secure-but_bootloader
 expect config.secure.dialog Open
-type /tmp/mpr-gui-secure-bl.bin
+type $WORK/secure-bl.bin
 key Return
 expect config.secure.dialog none
-expect config.secure.bl /tmp/mpr-gui-secure-bl.bin
+expect config.secure.bl $WORK/secure-bl.bin
 expect status ~ NullReferenceException
 expect config.secure.message none
 
@@ -50,12 +50,12 @@ expect config.secure.message none
 click secure-but_generatekey
 expect config.secure.dialog Save As
 expect config.secure.key true
-type /tmp/mpr-gui-secure-key
+type $WORK/secure-key
 key Return
 expect config.secure.dialog none
-expect config.secure.written ~ /tmp/mpr-gui-secure-key.pem
-expect config.secure.written ~ /tmp/mpr-gui-secure-key_private_key.dat
-expect config.secure.written ~ /tmp/mpr-gui-secure-key_public_key.dat
+expect config.secure.written ~ $WORK/secure-key.pem
+expect config.secure.written ~ $WORK/secure-key_private_key.dat
+expect config.secure.written ~ $WORK/secure-key_public_key.dat
 expect config.secure.pubkey ~ =
 expect config.secure.message Protect your private key, if lost there is no method to get it back.
 click secure-message-ok
@@ -64,21 +64,21 @@ expect config.secure.message none
 # Private Key reads the .dat back.
 click secure-but_privkey
 expect config.secure.dialog Open
-type /tmp/mpr-gui-secure-key_private_key.dat
+type $WORK/secure-key_private_key.dat
 key Return
 expect config.secure.key true
 expect config.secure.pubkey ~ =
 
 # BootLoader and Firmware, signed beside themselves.
 click secure-but_bootloader
-type /tmp/mpr-gui-secure-bl.bin
+type $WORK/secure-bl.bin
 key Return
-expect config.secure.written /tmp/mpr-gui-secure-bl-signed.bin
+expect config.secure.written $WORK/secure-bl-signed.bin
 click secure-but_firmware
-type /tmp/mpr-gui-secure-fw.apj
+type $WORK/secure-fw.apj
 key Return
-expect config.secure.fwapj /tmp/mpr-gui-secure-fw.apj
-expect config.secure.written /tmp/mpr-gui-secure-fw-signed.apj
+expect config.secure.fwapj $WORK/secure-fw.apj
+expect config.secure.written $WORK/secure-fw-signed.apj
 
 # Another page - the Optional Hardware heading, which fetches nothing - and Secure is no longer the
 # page showing.
