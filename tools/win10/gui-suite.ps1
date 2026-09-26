@@ -83,6 +83,20 @@ foreach ($name in $Names) {
     # A script connecting to SITL through the screen's own boxes names no link (main-connect), and
     # says "Needs SITL" in its header instead.
     $needsSitl = $arg -eq 'tcp:127.0.0.1:5760' -or $text -match 'Needs SITL'
+    # A script that launches its own SITL on 5760 (sitl-launch) gets the port free: the suite's
+    # relay and its SITL stop, and the next script that needs SITL starts them again.
+    if ($text -match 'launches its own SITL') {
+        $needsSitl = $false
+        if ($relay) {
+            $status = Join-Path $SitlDir 'relay.status'
+            $sitlPid = if (Test-Path $status) { ((Get-Content $status) -split ' ')[0] } else { $null }
+            Stop-Process -Id $relay.Id -Force -ErrorAction SilentlyContinue
+            if ($sitlPid) { Stop-Process -Id $sitlPid -Force -ErrorAction SilentlyContinue }
+            Remove-Item $status -ErrorAction SilentlyContinue
+            $relay = $null
+            Start-Sleep -Seconds 1
+        }
+    }
     if ($needsSitl -and -not (Test-Path $Sitl)) {
         $line = "${name}: SKIP no SITL at $Sitl"; $counts.SKIP++; [void]$results.Add($line); Write-Output $line; continue
     }

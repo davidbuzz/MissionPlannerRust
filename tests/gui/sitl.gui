@@ -59,7 +59,10 @@ expect sitl.wipe false
 expect sitl.running false
 expect sitl.outcome none
 expect sitl.arguments none
-expect sitl.launcher manifest SITL_x86_64_linux_gnu
+# The launcher is the platform's, as the C# picks it: the manifest's build on Linux x64, the
+# Cygwin folder on Windows (SITL.cs:269-375).
+linux: expect sitl.launcher manifest SITL_x86_64_linux_gnu
+windows: expect sitl.launcher cygwin
 expect sitl.note none
 expect sitl.multilink ~ not ported
 

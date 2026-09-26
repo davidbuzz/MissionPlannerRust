@@ -23,15 +23,19 @@
 
 screen simulation
 window 1600x1200
-budget 17
+budget 19
 env XDG_DATA_HOME $WORK
 env MP_CONFIG_XML $WORK/config.xml
 # Stable, as `cmb_version` index 2: the copter release the manifest publishes a Linux SITL for.
 setup printf '<?xml version="1.0" encoding="utf-8"?><Config><sitl_download_version>2</sitl_download_version></Config>' > "$WORK/config.xml"
-setup if ss -Hltn 'sport = :5760' | grep -q .; then echo 'port 5760 is busy: this test launches its own SITL there; stop the one running first' >&2; exit 3; fi
+linux: setup if ss -Hltn 'sport = :5760' | grep -q .; then echo 'port 5760 is busy: this test launches its own SITL there; stop the one running first' >&2; exit 3; fi
+windows: setup if netstat -an | grep -qE ':5760 +[^ ]+ +LISTENING'; then echo 'port 5760 is busy: this test launches its own SITL there; stop the one running first' >&2; exit 3; fi
 
 expect screen simulation
-expect sitl.launcher manifest SITL_x86_64_linux_gnu
+# The launcher is the platform's, as the C# picks it: the manifest's build on Linux x64, the
+# Cygwin folder on Windows (SITL.cs:269-375).
+linux: expect sitl.launcher manifest SITL_x86_64_linux_gnu
+windows: expect sitl.launcher cygwin
 expect sitl.version Stable
 # The H marker's place, which the page reads back from the map at its zoom - a few metres
 # from the box's default text.

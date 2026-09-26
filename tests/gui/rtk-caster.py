@@ -21,6 +21,8 @@ import socket
 import sys
 import time
 
+import gui_background
+
 MOUNT = "RTCM3"
 CHUNK = 1000
 PERIOD = 0.1
@@ -79,6 +81,7 @@ def serve(listener, stream, work, started):
 
 
 def main():
+    child = gui_background.child_listener()
     parser = argparse.ArgumentParser()
     parser.add_argument("--work", required=True)
     parser.add_argument("--stream", required=True)
@@ -86,6 +89,9 @@ def main():
 
     with open(args.stream, "rb") as f:
         stream = f.read()
+    if child is not None:
+        serve(child, stream, args.work, time.monotonic())
+        return 0
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     listener.bind(("127.0.0.1", 0))
@@ -99,15 +105,12 @@ def main():
         f.write(config_xml(url, logs))
 
     # Into the background: the harness waits for this command, and the caster must outlive it.
-    if os.fork() > 0:
-        print(f"caster on {port}")
-        return 0
-    os.setsid()
-    devnull = os.open(os.devnull, os.O_RDWR)
-    for fd in (0, 1, 2):
-        os.dup2(devnull, fd)
-    serve(listener, stream, args.work, time.monotonic())
-    os._exit(0)
+    gui_background.serve_in_background(
+        listener,
+        f"caster on {port}",
+        lambda held: serve(held, stream, args.work, time.monotonic()),
+    )
+    return 0
 
 
 if __name__ == "__main__":

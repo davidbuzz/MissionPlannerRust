@@ -313,6 +313,18 @@ function Shot([string]$name) {
 $lines = Get-Content -LiteralPath $ScriptPath
 $envs = New-Object System.Collections.ArrayList
 $setups = New-Object System.Collections.ArrayList
+# A line may be for one platform: `windows: expect ...` runs here without its prefix, and
+# `linux:` or `macos:` lines are for the other runners - where the C# itself differs by platform
+# (the SITL page's launcher, the line ends a file is written with). $null for a line that is not
+# this platform's.
+function For-ThisPlatform([string]$text) {
+    if ($text -match '^(linux|windows|macos):\s*(.*)$') {
+        if ($Matches[1] -ne 'windows') { return $null }
+        return $Matches[2]
+    }
+    return $text
+}
+
 $tiles = 'off'
 $screen = $null
 $window = $null
@@ -322,6 +334,8 @@ foreach ($raw in $lines) {
     if ($raw -match '^\s*#') { continue }
     $line = ($raw -split '\s#', 2)[0].Trim()
     if (-not $line) { continue }
+    $line = For-ThisPlatform $line
+    if ($null -eq $line) { continue }
     $words = $line -split '\s+'
     switch ($words[0]) {
         'screen' { $screen = if ($words.Count -gt 1) { $words[1] } else { 'fly' } }
@@ -594,6 +608,8 @@ try {
         # C:\tmp where Git Bash's setup wrote to the temporary folder.
         $line = ($raw -split '\s#', 2)[0].Trim().Replace('$WORK', $WorkFwd)
         if (-not $line) { continue }
+        $line = For-ThisPlatform $line
+        if ($null -eq $line) { continue }
         $w = $line -split '\s+'
         Check-HardStop
         Write-Output ("t=+{0}s line {1}: {2}" -f (Secs ((Now-Ms) - $t0)), $lineNo, $line)

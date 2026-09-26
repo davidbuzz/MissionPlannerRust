@@ -27,6 +27,8 @@ import sys
 import threading
 import time
 
+import gui_background
+
 from pymavlink.dialects.v20 import ardupilotmega as mavlink
 
 LIFETIME = 300.0
@@ -193,11 +195,29 @@ def serve_client(client, vehicle, work, started):
             return
 
 
+def run(listener, work):
+    """The vehicle, answering one client at a time until its directory goes or LIFETIME ends."""
+    started = time.monotonic()
+    vehicle = Vehicle()
+    listener.settimeout(0.5)
+    while os.path.isdir(work) and time.monotonic() - started < LIFETIME:
+        try:
+            client, _ = listener.accept()
+        except socket.timeout:
+            continue
+        with client:
+            serve_client(client, vehicle, work, started)
+
+
 def main():
+    child = gui_background.child_listener()
     parser = argparse.ArgumentParser()
     parser.add_argument("--work", required=True)
     parser.add_argument("--port", type=int, default=5790)
     args = parser.parse_args()
+    if child is not None:
+        run(child, args.work)
+        return 0
 
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -215,24 +235,10 @@ def main():
     listener.listen(1)
 
     # Into the background: the harness waits for this command, and the vehicle must outlive it.
-    if os.fork() > 0:
-        print(f"legacy vehicle on {args.port}")
-        return 0
-    os.setsid()
-    devnull = os.open(os.devnull, os.O_RDWR)
-    for fd in (0, 1, 2):
-        os.dup2(devnull, fd)
-    started = time.monotonic()
-    vehicle = Vehicle()
-    listener.settimeout(0.5)
-    while os.path.isdir(args.work) and time.monotonic() - started < LIFETIME:
-        try:
-            client, _ = listener.accept()
-        except socket.timeout:
-            continue
-        with client:
-            serve_client(client, vehicle, args.work, started)
-    os._exit(0)
+    gui_background.serve_in_background(
+        listener, f"legacy vehicle on {args.port}", lambda held: run(held, args.work)
+    )
+    return 0
 
 
 if __name__ == "__main__":

@@ -67,8 +67,12 @@ expect fly.logs.convert.running none
 expect fly.logs.convert.last dflogtokml
 expect fly.logs.convert.error none
 expect fly.logs.convert.files ~ dataflash.bin.gpx:100
-expect fly.logs.convert.files ~ dataflash.bin0wp.txt:315
-expect fly.logs.convert.files ~ dataflash.bin.param:16473
+# The waypoint and parameter files end their lines as StreamWriter.WriteLine does, with the
+# platform's newline (mp-kml's NEWLINE): a byte more a line on Windows, 8 and 982 lines.
+linux: expect fly.logs.convert.files ~ dataflash.bin0wp.txt:315
+windows: expect fly.logs.convert.files ~ dataflash.bin0wp.txt:323
+linux: expect fly.logs.convert.files ~ dataflash.bin.param:16473
+windows: expect fly.logs.convert.files ~ dataflash.bin.param:17455
 expect fly.logs.convert.files ~ dataflash.kmz:
 
 # Create Matlab File: <log>-<lines>.mat beside it.

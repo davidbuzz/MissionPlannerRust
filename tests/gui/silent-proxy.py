@@ -17,6 +17,8 @@ import socket
 import sys
 import time
 
+import gui_background
+
 LIFETIME = 300.0
 
 
@@ -34,10 +36,14 @@ def serve(listener, work, started):
 
 
 def main():
+    child = gui_background.child_listener()
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--work", required=True)
     args = parser.parse_args()
+    if child is not None:
+        serve(child, args.work, time.monotonic())
+        return 0
 
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -45,15 +51,12 @@ def main():
     listener.listen(64)
 
     # Into the background: the harness waits for this command, and the proxy must outlive it.
-    if os.fork() > 0:
-        print(f"silent proxy on {args.port}")
-        return 0
-    os.setsid()
-    devnull = os.open(os.devnull, os.O_RDWR)
-    for fd in (0, 1, 2):
-        os.dup2(devnull, fd)
-    serve(listener, args.work, time.monotonic())
-    os._exit(0)
+    gui_background.serve_in_background(
+        listener,
+        f"silent proxy on {args.port}",
+        lambda held: serve(held, args.work, time.monotonic()),
+    )
+    return 0
 
 
 if __name__ == "__main__":

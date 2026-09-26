@@ -193,10 +193,23 @@ wait_publishes() {
 }
 SCAN_NO=0
 
+# A line may be for one platform: `linux: expect ...` runs here without its prefix, and
+# `windows:` or `macos:` lines are for the other runners - where the C# itself differs by
+# platform (the SITL page's launcher, the line ends a file is written with). Prints the line to
+# run, or fails for a line that is not this platform's.
+for_this_platform() {
+    case "$1" in
+        linux:*) printf '%s\n' "${1#linux:}" ;;
+        windows:*|macos:*) return 1 ;;
+        *) printf '%s\n' "$1" ;;
+    esac
+}
+
 # Read the directives that must be set before the application starts.
 while IFS= read -r LINE; do
     SCAN_NO=$((SCAN_NO + 1))
     LINE="${LINE%%#*}"
+    LINE=$(for_this_platform "$LINE") || continue
     # shellcheck disable=SC2086 # deliberate word splitting
     set -- $LINE
     case "${1:-}" in
@@ -584,6 +597,7 @@ while IFS= read -r RAW; do
     # a box or expected back is the run's own, on every platform - not a fixed /tmp, which the
     # Windows planner reads as C:\tmp where the setup wrote to the temporary folder.
     LINE="${LINE//\$WORK/$WORK}"
+    LINE=$(for_this_platform "$LINE") || continue
     # shellcheck disable=SC2086 # deliberate word splitting into positional parameters
     set -- $LINE
     [ $# -eq 0 ] && continue

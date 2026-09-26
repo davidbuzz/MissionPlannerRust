@@ -27,6 +27,9 @@ window 1600x1200
 budget 11
 env XDG_DATA_HOME $WORK
 env MP_CONFIG_XML $WORK/config.xml
+# The capture is mp_video over V4L2; the C#'s Windows capture, DirectShow, is not ported, so on
+# Windows the device list is empty whatever is plugged in (NOT_DONE_YET_MATRIX.md).
+windows: setup echo 'video capture on Windows (the C#'"'"'s DirectShow) is not ported' >&2; exit 3
 
 expect config.page ConfigPlanner
 expect config.planner.active true

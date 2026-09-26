@@ -12,3 +12,6 @@
 
 # The subagents' shared build directory.
 /target-agents
+
+# Python bytecode of the GUI scripts' helpers (tests/gui/gui_background.py and its importers).
+__pycache__/
