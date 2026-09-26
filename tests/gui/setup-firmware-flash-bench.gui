@@ -23,7 +23,10 @@ env XDG_DATA_HOME $WORK
 env TMPDIR $WORK
 # No saved link of this machine's: the application's own settings file is the test's, empty.
 env MP_SETTINGS $WORK/settings.conf
-env MP_FIRMWARE_PORT /dev/serial/by-id/usb-Hex_ProfiCNC_CubeOrange_19002E000F51303339323537-if00
+# The board's MAVLink interface (MI_00): its by-id device on Linux, COM4 in the tiny10 VM with the
+# board passed through (COM3 is its second interface, MI_02).
+linux: env MP_FIRMWARE_PORT /dev/serial/by-id/usb-Hex_ProfiCNC_CubeOrange_19002E000F51303339323537-if00
+windows: env MP_FIRMWARE_PORT COM4
 setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config></Config>' > "$WORK/Mission Planner/config.xml"
 
 screen setup

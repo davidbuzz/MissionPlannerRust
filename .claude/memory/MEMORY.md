@@ -9,6 +9,7 @@ controlled; the per-project memory directory holds symlinks to them.
 - [No callers, no port](no-callers-no-port.md) — a .cs file or function nobody calls is recorded out of scope, never ported (Buzz, 2026-09-25)
 - [Match the original layout](match-the-original-layout.md) — Buzz is the oracle on look and feel; default to MP's arrangement, read it from the .resx
 - [Mode buttons kept](mode-buttons-kept.md) — the flight screen's own mode buttons panel stays over the C#'s CMB_modes drop-down (Buzz, 2026-09-26)
+- [Windows unsafe rulings](windows-unsafe-rulings.md) — unsafe per file for Windows APIs: win32.rs yes, camera capture yes (one file), joystick not now (Buzz, 2026-09-27)
 - [No dialogs for avoidable errors](no-dialogs-for-avoidable-errors.md) — an error the main window can show as state/connectivity/colour never gets a message box (Buzz, 2026-09-25)
 - [Mute on language](mute-on-language.md) — English when `language` is empty; no i18n questions or reports until told otherwise (Buzz, 2026-09-25)
 - [Work the matrix in priority order](work-the-matrix-in-priority-order.md) — every "high" row of NOT_DONE_YET_MATRIX.md to 100% before any "med" row (Buzz, 2026-09-26)
