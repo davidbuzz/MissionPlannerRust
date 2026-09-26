@@ -24,7 +24,7 @@
 | crates/mp-log | Log analysis (loganalysis) reachable from the DataFlash Logs page | med | 60 |
 | crates/mp-gui/src/sitl | SITL screen: a real launch on macOS (Linux and Windows done) | med | 95 |
 | DELIVERABLES D20 | Installers, updates, crash reporting | med | 5 |
-| DELIVERABLES D19 | Per-message decoder fuzzing; macOS graphics smoke; the Windows GUI suite against a Linux headless run at one commit - first whole run 2026-09-26 at the VM's eb472ed: 121 pass, 5 over budget, 34 fail, 10 skip of 170; the runner's SITL now one for the suite behind tools/win10/sitl-relay.ps1 (the Cygwin build exits when its client leaves - measured), settled 30 s, 13 of the 33 then passed; Windows budgets measured into tools/win10/budgets.txt by the suite (owner: "successful test run time + 3 sec"); owed: the VM at main and rebuilt, a whole run, the Linux headless run at the same commit, the VM's screen taller than 1200 for 1600x1200 windows (owner's call) | med | 75 |
+| DELIVERABLES D19 | Per-message decoder fuzzing; macOS graphics smoke; the Windows GUI suite against a Linux headless run at one commit - done 2026-09-26 at 42c3ea8: Windows 142 pass + 4 over budget, 17 fail, 14 skip; Linux 166 pass, 8 fail, 3 skip; 143 pass on both, none of the Windows-only failures a planner defect (5 hard stops since retimed, 2 the VM's 1200-high screen, 3 no camera/GStreamer/wasm toolchain, sitl's Linux launcher expected, fly-resumemis's Land now given 30 s), 11 skipped for python3 in the VM. Owed: python3 in the VM and a taller VM screen (both the owner's call), fuzzing, macOS | med | 85 |
 
 | crates/mp-gui/src/fly.rs | Record HUD to AVI, and stop recording | low | 1 |
 | crates/mp-gui/src/fly.rs | RAW_Sensor window from the Actions grid | low | 1 |

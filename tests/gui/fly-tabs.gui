@@ -12,7 +12,7 @@
 
 screen fly
 window 1600x1200
-budget 29
+budget 31
 
 expect fly.tabs tabQuick,tabActions,tabPagemessages,tabActionsSimple,tabPagePreFlight,tabGauges,tabTransponder,tabStatus,tabServo,tabAuxFunction,tabScripts,tabPayload,tabTLogs,tablogbrowse
 expect fly.tabs.text Quick,Actions,Messages,Actions,PreFlight,Gauges,Transponder,Status,Servo/Relay,Aux Function,Scripts,Payload Control,Telemetry Logs,DataFlash Logs

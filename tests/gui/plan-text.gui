@@ -16,7 +16,7 @@ env MP_PLAN_DIR $WORK
 
 screen plan
 window 1600x1200
-budget 28
+budget 30
 expect mission.items 0
 
 # The map first: a press before its first paint records nothing.

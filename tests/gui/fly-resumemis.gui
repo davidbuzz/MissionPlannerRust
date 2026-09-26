@@ -64,8 +64,10 @@ expect fly.sent COMMAND_LONG MAV_CMD_NAV_TAKEOFF 0,0,0,0,0,0,10
 expect fly.ack MAV_CMD_NAV_TAKEOFF: failed
 expect fly.resume failed: The Command failed to execute
 
-# Down again.
+# Down again: Land comes down at 0.5 m/s (LAND_SPEED), from as high as the 10 m asked for -
+# how high it got depends on how long the steps above took - and disarms on the ground.
 click land
+within 30
 expect vehicle.armed false
 
 # Landed, the vehicle is left in Stabilize, as the next test finds a fresh SITL: Land is not a

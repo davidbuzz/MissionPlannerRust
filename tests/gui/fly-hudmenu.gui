@@ -19,7 +19,7 @@
 
 screen fly
 window 1600x1200
-budget 18
+budget 20
 
 expect fly.hud.menu false
 expect fly.swapped false
