@@ -72,6 +72,14 @@ $env:Path = @([Environment]::GetEnvironmentVariable('Path', 'Machine'),
 if (-not $env:CARGO_HOME) { $env:CARGO_HOME = Join-Path $env:USERPROFILE '.cargo' }
 if (-not $env:RUSTUP_HOME) { $env:RUSTUP_HOME = Join-Path $env:USERPROFILE '.rustup' }
 if (-not $env:GST_REGISTRY_1_0) { $env:GST_REGISTRY_1_0 = 'C:\setup\gstreamer-registry.x86_64.bin' }
+# And built before any script waits for frames: GStreamer's first run scans every plugin, longer
+# than a script waits in this VM, and a launcher stopped mid-scan writes no registry - so each
+# video script began the scan again and none got its frames (2026-09-26). Once, then kept.
+if (-not (Test-Path $env:GST_REGISTRY_1_0)) {
+    $inspect = @('C:\Program Files\gstreamer\1.0\msvc_x86_64\bin\gst-inspect-1.0.exe',
+        'C:\gstreamer\1.0\msvc_x86_64\bin\gst-inspect-1.0.exe') | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($inspect) { & $inspect coreelements 2>&1 | Out-Null }
+}
 $Bash = 'C:\Program Files\Git\bin\bash.exe'
 
 Add-Type @'
