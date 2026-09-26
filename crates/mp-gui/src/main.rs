@@ -530,6 +530,8 @@ struct MissionPlanner {
     firmware_legacy: config::firmware_legacy::FirmwareLegacy,
     /// The focus of the firmware pages' file dialog, both pages' Load custom firmware.
     firmware_focus: gpui::FocusHandle,
+    /// The Install Firmware page, for its Ctrl+Q (`ProcessCmdKey`).
+    firmware_page_focus: gpui::FocusHandle,
     /// CONFIG's Ateryx Pids page (`ConfigAteryx`), and the focus of its box being typed into.
     ateryx: config::ateryx::Ateryx,
     ateryx_focus: gpui::FocusHandle,
@@ -853,6 +855,7 @@ impl MissionPlanner {
             // ---- Firmware Legacy / Ateryx ----
             firmware_legacy: config::firmware_legacy::FirmwareLegacy::default(),
             firmware_focus: cx.focus_handle(),
+            firmware_page_focus: cx.focus_handle(),
             ateryx: config::ateryx::Ateryx::default(),
             ateryx_focus: cx.focus_handle(),
             // ---- end Firmware Legacy / Ateryx ----
@@ -1438,7 +1441,14 @@ impl MissionPlanner {
         }
         let port = self.connect_box.port.clone();
         let baud = self.connect_box.baud.clone();
-        if let Some(url) = connect::url(asking.kind, &port, &baud, &asking.answers) {
+        let url = connect::url(asking.kind, &port, &baud, &asking.answers);
+        // Asked for Install Firmware's Bootloader Update: its own link, not the window's.
+        if self.install_firmware.take_bl_asking() {
+            self.install_firmware
+                .bl_open(url.as_deref(), std::time::Instant::now());
+            return;
+        }
+        if let Some(url) = url {
             self.open_link(&url);
         }
     }
@@ -1575,8 +1585,13 @@ impl MissionPlanner {
             if yes {
                 self.connect_answered(window, cx);
             } else {
-                // "Canceled by request": the transport's Open throws, and nothing opens.
+                // "Canceled by request": the transport's Open throws, and nothing opens - for
+                // Bootloader Update, "Failed to find device on mavlink".
                 self.connect_box.asking = None;
+                if self.install_firmware.take_bl_asking() {
+                    self.install_firmware
+                        .bl_open(None, std::time::Instant::now());
+                }
             }
         }
         cx.notify();
@@ -2714,21 +2729,24 @@ impl Render for MissionPlanner {
         if let Some(status) = self.battery_monitor.take_status() {
             self.file_status = Some(status);
         }
-        // Install Firmware's catalogue arriving, and the page closing when the screen changes.
+        // Install Firmware's catalogue arriving, a device's arrival probed, the page closing when
+        // the screen changes; Force Bootloader's and Bootloader Update's links.
         self.install_firmware.tick(self.screen == Screen::Setup);
+        self.install_firmware_links();
         // Bootloader Update's second Yes: `doCommand(MAV_CMD.FLASH_BOOTLOADER, 0, 0, 0, 0,
         // 290876, 0, 0)`, waited for as the C# waits (once more after 25 s), then "Upgraded
         // bootloader" or "Failed to upgrade bootloader" - on the status line, where this
-        // application says what the C# puts in a message box.
-        // `// C#: GCSViews/ConfigurationView/ConfigFirmwareDisabled.cs:30-41;
-        // ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2753-2757`
+        // application says what the C# puts in a message box. Unanswered, `doCommand` throws,
+        // and the handler's `catch` shows the exception: its message here.
+        // `// C#: GCSViews/ConfigurationView/ConfigFirmwareDisabled.cs:30-44;
+        // ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2753-2757, 2784-2797`
         if self.install_firmware.take_bootloader_command()
             && let Some(id) = view.vehicle
         {
             let report = telemetry::Report {
-                accepted: Some("Upgraded bootloader".to_owned()),
-                refused: Some("Failed to upgrade bootloader".to_owned()),
-                timed_out: Some("Failed to upgrade bootloader".to_owned()),
+                accepted: Some(config::firmware::UPGRADED_BOOTLOADER.to_owned()),
+                refused: Some(config::firmware::FAILED_TO_UPGRADE_BOOTLOADER.to_owned()),
+                timed_out: Some(config::firmware::DO_COMMAND_TIMEOUT.to_owned()),
                 fallback: None,
             };
             self.telemetry.command(

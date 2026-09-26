@@ -231,35 +231,34 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigFirmwareDisabled"),
         Some(1),
         &[setup(169, "Install Firmware", TOP, CONNECTED)],
-        // C#: GCSViews/ConfigurationView/ConfigFirmwareDisabled.cs, on the Install Firmware page.
-        // ---- Firmware Legacy / Ateryx ----: Bootloader Update asks its two questions and stops
-        // at MAV_CMD_FLASH_BOOTLOADER (ConfigFirmwareDisabled.cs:18-45).
-        Partial(
-            at("crates/mp-gui/src/config/firmware.rs", "fn page"),
-            "the connected page's text; Bootloader Update asks its two questions and stops
-        //     before MAV_CMD_FLASH_BOOTLOADER, which rewrites the board's bootloader - nothing
-        //     flashes in this build",
-        ),
+        // C#: GCSViews/ConfigurationView/ConfigFirmwareDisabled.cs:14-45 and its .resx, on the
+        // Install Firmware page: the two labels, and Bootloader Update's two questions, then
+        // MAV_CMD_FLASH_BOOTLOADER over the window's link, its answer on the status line.
+        Ours::Done(at("crates/mp-gui/src/config/firmware.rs", "fn disabled_page")),
     ),
     panel(
         "ConfigFirmwareManifest",
         cv!("ConfigFirmwareManifest"),
         Some(16),
         &[setup(171, "Install Firmware", TOP, DISCONNECTED)],
-        // C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs, on the Install Firmware page.
-        // ---- Firmware Legacy / Ateryx ----: all 16 wirings; the flows stop at the board
-        // (mp_firmware::flow::Stop).
+        // C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs, on the Install Firmware page:
+        // all 16 wirings and Ctrl+Q; test/FirmwareSelection.xaml.cs whole; the px4 upload through
+        // mp_firmware::flow::upload_px4; the uploads that are not a px4 bootloader's stop at the
+        // board (mp_firmware::flow::Stop).
         Partial(
             at("crates/mp-gui/src/config/firmware.rs", "fn page"),
             "the catalogue fetched as APFirmware.GetList fetches it, each vehicle labelled with
-        //     the newest firmware of the release, Beta; a vehicle's click asks, runs LookForPort,
-        //     opens FirmwareSelection on the board's platform and downloads the file chosen with
-        //     the progress bar and status line, and UploadFlash reads it; All Options over the
-        //     whole catalogue; Load custom firmware by extension; each stops where it would write
-        //     to a board - the upload, DFU, Force Bootloader and Bootloader Update are disabled, as
-        //     nothing flashes in this build; not Ctrl+Q, the bootloader probe on a device's
-        //     arrival, nor FirmwareSelection's filter pickers; the vehicle pictures are the C#'s
-        //     images (crate::pictures)",
+        //     the newest firmware of the release, Beta, and DEV after Ctrl+Q's warning; a device
+        //     arriving probed for its bootloader on every port, its board id taken by LookForPort;
+        //     a vehicle's click asks, runs LookForPort, opens FirmwareSelection - its pickers
+        //     narrowing the list from the board's platform, Ignore undoing each - downloads the
+        //     file chosen with the progress bar and status line, and UploadFlash reboots the board
+        //     into its bootloader and writes it; All Options over the whole catalogue; Load custom
+        //     firmware by extension; Force Bootloader over the window's link; Bootloader Update
+        //     over a link of its own; the vehicle pictures are the C#'s images (crate::pictures);
+        //     not DFU, the STK500 upload and probes, VRBRAIN, Parrot or Solo, which stop where
+        //     they would write to a board and say that step is not ported, nor Tracking's
+        //     AddFW and AddTiming",
         ),
     ),
     panel(
@@ -1890,7 +1889,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (34, 11, 2, 2, 12)
+            (35, 10, 2, 2, 12)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

@@ -10,10 +10,12 @@
 //!
 //! Every one of those ends in a write to a board: a reboot into the bootloader and the px4
 //! upload, an STK500 upload through the serial port, a DFU flash, a push over the network to a
-//! Parrot or a Solo. Each flow here runs the C# in its order until the step that would open a
-//! port or send to a board, and stops there with a [`Stop`] saying which step that was. Nothing
-//! in this module opens a port: the board detection it runs is [`crate::detect::detect_board`]
-//! over a host that refuses to open one and ends the flow where the C# would have.
+//! Parrot or a Solo. The px4 upload is here whole ([`upload_px4`]), over the ports a
+//! [`FlashHost`] opens; each of the others runs the C# in its order until the step that would
+//! open a port or send to a board, and stops there with a [`Stop`] saying which step that was,
+//! the board detection it runs being [`crate::detect::detect_board`] over a host that refuses to
+//! open a port. [`probe_arrival`] is the Install Firmware page's identify of every port when a
+//! device arrives, over the ports its caller opens.
 //!
 //! The person the C# asks - its `CustomMessageBox`es - and its progress events are a
 //! [`Dialogue`], so the pages put them on screen and the tests script them.
@@ -30,10 +32,12 @@ use crate::detect::{
 use crate::firmware::Firmware;
 use crate::legacy::{Software, get_url};
 use crate::manifest::Fetch;
-use crate::uploader::{Board, Uploader, UploaderError};
+use crate::uploader::{Board, Chip, Uploader, UploaderError};
 
-/// What a page says in place of the upload.
-pub const NOT_ENABLED: &str = "flashing is not enabled in this build";
+/// Why a flow stops where it would write to a board: that step is not ported. The manifest
+/// page's px4 upload is ported ([`upload_px4`]); DFU, the STK500 upload and probes, VRBRAIN,
+/// Parrot and Solo are not, and neither is any upload of the legacy page.
+pub const NOT_PORTED: &str = "not ported to this application";
 
 /// `Strings.ERROR`. `// C#: ExtLibs/Strings/Strings.resx:130-132`
 pub const ERROR: &str = "Error";
@@ -172,10 +176,16 @@ impl Stop {
         }
     }
 
-    /// What a page says: the step, and that it is not taken.
+    /// What a page says: the step, and that it is not taken because it is not ported.
     #[must_use]
     pub fn text(&self) -> String {
-        format!("the next step would {}: {NOT_ENABLED}", self.step())
+        self.text_because(NOT_PORTED)
+    }
+
+    /// What a page says: the step, and why it is not taken.
+    #[must_use]
+    pub fn text_because(&self, why: &str) -> String {
+        format!("the next step would {}: {why}", self.step())
     }
 }
 
@@ -335,7 +345,7 @@ impl DetectHost for Probing<'_> {
     fn open(&mut self, port: &str, _baud: u32, _dtr: bool) -> io::Result<NoPort> {
         self.stop
             .get_or_insert_with(|| Stop::OpenPort(port.to_owned()));
-        Err(io::Error::other(NOT_ENABLED))
+        Err(io::Error::other(NOT_PORTED))
     }
 
     /// Each call past the probe's window, so a probe loop that is reached ends at once.
@@ -1028,6 +1038,86 @@ fn identify_port<H: FlashHost>(
     let mut uploader = Uploader::new(port);
     let board = uploader.identify()?;
     Ok((uploader, board))
+}
+
+/// A bootloader `Instance_DeviceChanged` found: its port and what its identify said.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FoundBoard {
+    /// The port it answered on: `detectedport`.
+    pub port: String,
+    /// `board_type` (`detectedboardid`), `board_rev`, `bl_rev`, `fw_maxsize`.
+    pub board: Board,
+    /// `chip` and `chip_desc`, read from bootloader revision 5.
+    pub chip: Chip,
+}
+
+impl FoundBoard {
+    /// What the page's status line says: `Found board type {0} brdrev {1} blrev {2} fwmax {3}
+    /// chip {5:X} chipdes {6} on {4}` - the numbers as the C#'s `int`s print, the chip in upper
+    /// case hex, the description empty when it was not read (null in the C#).
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:163-164`
+    #[must_use]
+    pub fn status(&self) -> String {
+        let int = |value: u32| i32::from_le_bytes(value.to_le_bytes());
+        // `fw_maxsize` was read as a word; the board holds it widened.
+        let flash = u32::try_from(self.board.flash_size).unwrap_or(u32::MAX);
+        format!(
+            "Found board type {} brdrev {} blrev {} fwmax {} chip {:X} chipdes {} on {}",
+            int(self.board.board_id),
+            int(self.board.board_revision),
+            int(self.board.bootloader_revision),
+            int(flash),
+            self.chip.chip,
+            self.chip.chip_desc,
+            self.port
+        )
+    }
+}
+
+/// How long each port is given to appear before it is opened: `Thread.Sleep(20)`, "time to
+/// appear".
+/// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:150-151`
+pub const ARRIVAL_SETTLE: Duration = Duration::from_millis(20);
+
+/// `Instance_DeviceChanged`'s task, on a device's arrival: every serial port at once, each on a
+/// thread of its own (`Parallel.ForEach`) - twenty milliseconds for it to appear, then opened at
+/// 115200 as `new Uploader(port, 115200)` opens it, with 50 ms timeouts, its input discarded and
+/// the bootloader's `identify()` sent. Each port that answers is handed to `found` as it
+/// answers, the port closed after; one that will not open or does not answer is passed over
+/// ("Not There.."). Returns once every port has been tried.
+/// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:142-179; ExtLibs/px4uploader/Uploader.cs:121-131, 158-165, 867-929`
+pub fn probe_arrival<P, O, F>(ports: &[String], open: O, found: F)
+where
+    P: ProbePort,
+    O: Fn(&str, u32) -> io::Result<P> + Sync,
+    F: Fn(FoundBoard) + Sync,
+{
+    std::thread::scope(|scope| {
+        for port in ports {
+            let (open, found) = (&open, &found);
+            scope.spawn(move || {
+                std::thread::sleep(ARRIVAL_SETTLE);
+                let Ok(mut serial) = open(port, BOOTLOADER_BAUD) else {
+                    return;
+                };
+                if serial.set_read_timeout(Duration::from_millis(50)).is_err()
+                    || serial.discard_in_buffer().is_err()
+                {
+                    return;
+                }
+                let mut uploader = Uploader::new(serial);
+                if let Ok((board, chip)) = uploader.identify_chip() {
+                    // `up.close()` before the label is set: the port dropped first.
+                    drop(uploader);
+                    found(FoundBoard {
+                        port: port.clone(),
+                        board,
+                        chip,
+                    });
+                }
+            });
+        }
+    });
 }
 
 /// `AttemptRebootToBootloader`: every port tried for a bootloader already answering - found,

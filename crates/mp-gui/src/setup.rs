@@ -678,6 +678,33 @@ impl Backstage {
         self.loaded
     }
 
+    /// The list, built, kept as it is under the link as it now is: a change `MainV2` shows no
+    /// screen again for.
+    pub fn rekey(&mut self, key: Key) {
+        if self.loaded.is_some() {
+            self.loaded = Some(key);
+        }
+    }
+
+    /// Whether the list is to be shown again this frame: the screen left, the link opened or
+    /// closed or the vehicle changed (`key` moved), or the Loading page seeing every parameter
+    /// in. `held` is the link moving under a page whose change `MainV2` does not show the screen
+    /// again for - Install Firmware's Force Bootloader, whose `MainV2.comPort.Open(false)` is not
+    /// `doConnect` - and keys the list to it instead.
+    /// `// C#: ExtLibs/Controls/MainSwitcher.cs:112-138; GCSViews/ConfigurationView/ConfigParamLoading.cs:44-48; GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:517; MainV2.cs:1419-1425, 1740-1748`
+    pub fn stale(&mut self, key: Key, showing: bool, got_all_params: bool, held: bool) -> bool {
+        let Some(loaded) = self.loaded else {
+            return false;
+        };
+        if showing && held && loaded != key {
+            self.rekey(key);
+        }
+        let loading = self
+            .page()
+            .is_some_and(|entry| entry.class == "ConfigParamLoading");
+        !showing || self.loaded != Some(key) || (loading && got_all_params)
+    }
+
     /// Whether a page has pages under it in this list.
     fn has_children(&self, index: usize) -> bool {
         self.built
@@ -798,22 +825,23 @@ impl MissionPlanner {
     /// Once a frame: shows a screen's list when the screen is shown, shows it again when
     /// `MainV2` would - the link opening or closing, the vehicle changing, or the Loading page's
     /// timer seeing every parameter in - and closes it when the screen is left, deactivating its
-    /// page as disposing the screen does.
+    /// page as disposing the screen does. Not while Install Firmware's Force Bootloader holds
+    /// the window's link: its `Open(false)` shows no screen again ([`Backstage::stale`]).
     /// `// C#: ExtLibs/Controls/MainSwitcher.cs:112-138; GCSViews/ConfigurationView/ConfigParamLoading.cs:44-48`
     pub(crate) fn backstage_tick(&mut self, view: &TelemetryView) {
         let key = Key::of(view);
         let got_all_params = Vehicle::of(view, None).got_all_params;
         for list in List::ALL {
             let showing = self.screen == screen_of(list);
-            let backstage = self.backstage(list);
-            let loading = backstage
-                .page()
-                .is_some_and(|entry| entry.class == "ConfigParamLoading");
-            let stale = backstage
-                .loaded()
-                .is_some_and(|loaded| !showing || loaded != key || (loading && got_all_params));
+            let held = matches!(list, List::Setup) && self.install_firmware.forcing();
+            let stale = self
+                .backstage_mut(list)
+                .stale(key, showing, got_all_params, held);
             if stale && let Some(old) = self.backstage_mut(list).close() {
                 self.deactivate_page(list, old);
+            }
+            if stale && matches!(list, List::Setup) {
+                self.install_firmware.screen_disposed();
             }
             if showing && self.backstage(list).loaded().is_none() {
                 let vehicle = Vehicle::of(view, self.telemetry.firmware_banner());
@@ -836,6 +864,9 @@ impl MissionPlanner {
                 && let Some(old) = self.backstage_mut(list).close()
             {
                 self.deactivate_page(list, old);
+                if matches!(list, List::Setup) {
+                    self.install_firmware.screen_disposed();
+                }
             }
         }
     }
@@ -1283,7 +1314,11 @@ impl MissionPlanner {
                 .children(crate::config::radio::page(&self.radio_input, cx))
                 .into_any_element(),
             "ConfigFirmwareManifest" | "ConfigFirmwareDisabled" => column()
-                .child(crate::config::firmware::page(&self.install_firmware, cx))
+                .child(crate::config::firmware::page(
+                    &self.install_firmware,
+                    &self.firmware_page_focus,
+                    cx,
+                ))
                 .into_any_element(),
             // ---- Firmware Legacy / Ateryx ----
             // Wider than the column: the Designer's page is 986 pixels.
@@ -2302,6 +2337,55 @@ mod tests {
         config.activate(raw);
         config.close();
         assert_eq!(config.load(&copter(&params), KEY), Some(raw));
+    }
+
+    /// The link opening under Install Firmware while Force Bootloader holds it (`held`) keeps the
+    /// manifest page, the list keyed to the link as it now is - `Open(false)` is not `doConnect`
+    /// and shows no screen again - where without it the same change shows the screen again. The
+    /// link closing once Force Bootloader is done shows it again, as the C#'s heartbeat loop does
+    /// for a port gone; leaving the screen closes it whatever.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:517; MainV2.cs:1419-1425, 1740-1748, 2973-2997`
+    #[test]
+    fn force_bootloaders_link_shows_no_screen_again_while_it_holds_it() {
+        let mut view = TelemetryView::disconnected("serial:/dev/ttyACM0:115200");
+        let idle = Key::of(&view);
+        view.connected = true;
+        view.vehicle = Some(VehicleId::new(1, 1));
+        let heard = Key::of(&view);
+        let manifest = index_of(List::Setup, "ConfigFirmwareManifest");
+
+        let mut setup = Backstage::new(List::Setup);
+        setup.load(&disconnected(), idle);
+        setup.activate(manifest);
+        assert!(!setup.stale(idle, true, true, false), "nothing moved");
+        assert!(!setup.stale(heard, true, true, true), "held: kept");
+        assert_eq!(setup.loaded(), Some(heard), "keyed to the link as it is");
+        assert_eq!(
+            setup.page().map(|entry| entry.class),
+            Some("ConfigFirmwareManifest")
+        );
+        assert!(
+            !setup.stale(heard, true, true, false),
+            "done, and still open: kept"
+        );
+        assert!(
+            setup.stale(idle, true, true, false),
+            "the link closed: shown again"
+        );
+        assert!(setup.stale(idle, false, true, true), "the screen left");
+
+        // Not held: the link opening shows the screen again.
+        let mut setup = Backstage::new(List::Setup);
+        setup.load(&disconnected(), idle);
+        setup.activate(manifest);
+        assert!(setup.stale(heard, true, true, false));
+        assert_eq!(setup.loaded(), Some(idle));
+
+        // A list not built is never stale, and is not keyed.
+        let mut unbuilt = Backstage::new(List::Setup);
+        assert!(!unbuilt.stale(heard, true, true, true));
+        unbuilt.rekey(heard);
+        assert_eq!(unbuilt.loaded(), None);
     }
 
     #[test]

@@ -659,11 +659,16 @@ fn the_c_sharp_replug_cases_read_the_board_from_the_bootloader() {
                 (opened.port.as_str(), opened.baud, opened.dtr),
                 ("COM7", 115_200, false)
             );
-            // Identify, and nothing else: GET_SYNC, then BL_REV, BOARD_ID, BOARD_REV, FLASH_SIZE.
+            // `identify()`, and nothing else: GET_SYNC, then BL_REV, BOARD_ID, BOARD_REV,
+            // FLASH_SIZE; and, as the mock is a revision 5 bootloader, GET_CHIP, GET_CHIP_DES,
+            // GET_SN at 0, 4 and 8, and EXTF_SIZE.
+            // `// C#: ExtLibs/px4uploader/Uploader.cs:867-921`
             assert_eq!(
                 opened.sent(),
                 [
-                    0x21, 0x20, 0x22, 1, 0x20, 0x22, 2, 0x20, 0x22, 3, 0x20, 0x22, 4, 0x20
+                    0x21, 0x20, 0x22, 1, 0x20, 0x22, 2, 0x20, 0x22, 3, 0x20, 0x22, 4, 0x20, 0x2c,
+                    0x20, 0x2e, 0x20, 0x2b, 0, 0, 0, 0, 0x20, 0x2b, 4, 0, 0, 0, 0x20, 0x2b, 8, 0,
+                    0, 0, 0x20, 0x22, 6, 0x20
                 ],
                 "{name}"
             );

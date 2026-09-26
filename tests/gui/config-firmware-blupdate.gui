@@ -1,0 +1,91 @@
+# Install Firmware's Force Bootloader failing, and Bootloader Update, on the manifest page.
+#
+# Bootloader Update (ConfigFirmwareManifest.cs:535-562): a
+# MAVLinkInterface of its own, connected by doConnect from the port box and the baud box - TCP's
+# transport asks its host and port first (ExtLibs/Comms/CommsTCPSerial.cs:112-125), through the
+# window's prompts - then, once Open has heard the copter, the two "BL Update" questions, then
+# doCommand(FLASH_BOOTLOADER, 0, 0, 0, 0, 290876, 0, 0), whose answer is said on the status line
+# (a box in the C#; the owner's ruling of 2026-09-25) and the link closed. SITL has no bootloader
+# to rewrite and refuses the command: "Failed to upgrade bootloader". The window's own link is
+# never opened, so the page stays the manifest page and CONNECT stays CONNECT.
+#
+# Divergences, written at their sites in crates/mp-gui/src/config/firmware.rs: doConnect's side
+# effects on the window (the port boxes dimmed, the button's image, the saved baud, the title bar,
+# the new-firmware check, SETUP shown again) are not done for this link - SETUP shown again would
+# close the page and the link it holds; Force Bootloader opens the port the port box shows.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760. Offline otherwise: the catalogue is the test fixture,
+# and the one USB device a CubeOrange by name, so nothing probes this machine's ports; the
+# settings are scratch ones, so nothing is opened at start-up. Run as
+#
+#   tools/gui-test.sh tests/gui/config-firmware-blupdate.gui
+
+env XDG_DATA_HOME $WORK
+env TMPDIR $WORK
+env MP_SETTINGS $WORK/settings.conf
+env MP_FIRMWARE_MANIFEST $WORK/manifest.json.gz
+env MP_FIRMWARE_MIRROR $WORK/web
+env MP_FIRMWARE_DEVICE CubeOrange-BL
+setup cp testdata/firmware/manifest.json.gz $WORK/manifest.json.gz
+setup mkdir -p "$WORK/web" "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config></Config>' > "$WORK/MissionPlannerRust/config.xml"
+
+screen setup
+window 1600x1200
+budget 16
+
+expect vehicle.connected false
+click setup-page-ConfigFirmwareManifest
+expect config.firmware.page manifest
+expect config.firmware.manifest loaded
+expect config.firmware.bl none
+
+# The port box on TCP.
+click main-port
+expect link.ports >= 5
+reveal main-port-list main-port-TCP
+click main-port-TCP
+expect link.port TCP
+
+# Force Bootloader (ConfigFirmwareManifest.cs:513-533) with the port box on TCP: Open(false) opens
+# the window's link's serial port - here the one the port box shows, a divergence at its site -
+# and a network kind is no serial port: "Failed to connect and send the reboot command" on the
+# status line (a box in the C#), nothing opened, the page still the manifest page. The reboot
+# itself is proved through the real link in the unit tests (firmware.rs manifest_link_tests), not
+# here, where it would reboot the suite's SITL.
+click fw-px4bl
+expect status Failed to connect and send the reboot command
+expect config.firmware.force none
+expect config.firmware.message none
+expect vehicle.connected false
+expect link.button CONNECT
+expect config.firmware.page manifest
+
+# doConnect(mav, "TCP", ...): TcpSerial.Open's two questions, for Bootloader Update's link.
+click fw-bootloaderupdate
+expect config.firmware.bl connecting
+expect link.prompt remote host
+key ctrl+u
+type 127.0.0.1
+key Return
+expect link.prompt remote Port
+key ctrl+u
+type 5760
+key Return
+expect link.prompt none
+
+# Open: the copter heard twice, then the first question; the second after its Yes.
+expect config.firmware.question Are you sure you want to upgrade the bootloader? This can brick your board
+expect config.firmware.bl asking
+expect vehicle.connected false
+click fw-question-yes
+expect config.firmware.question Are you sure you want to upgrade the bootloader? This can brick your board, Please allow 5 mins for this process
+click fw-question-yes
+expect config.firmware.question none
+
+# FLASH_BOOTLOADER refused, said on the status line, and the link closed.
+expect status Failed to upgrade bootloader
+expect config.firmware.bl none
+expect config.firmware.message none
+expect vehicle.connected false
+expect link.button CONNECT
+expect config.firmware.page manifest

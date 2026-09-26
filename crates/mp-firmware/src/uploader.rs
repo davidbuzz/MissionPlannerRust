@@ -95,10 +95,26 @@ impl<T: Read + Write> Uploader<T> {
         Ok(())
     }
 
+    /// Reads exactly `count` bytes as `__recv` does: a read of four or more that begins
+    /// `INSYNC INVALID` is the bootloader refusing the command, said as soon as those two bytes
+    /// are in rather than after a read timeout.
+    /// `// C#: ExtLibs/px4uploader/Uploader.cs:436-452`
+    fn recv_checked(&mut self, buffer: &mut [u8]) -> Result<(), UploaderError> {
+        if buffer.len() < 4 {
+            return self.recv(buffer);
+        }
+        let (head, tail) = buffer.split_at_mut(2);
+        self.recv(head)?;
+        if head == [Code::InSync.byte(), Code::Invalid.byte()] {
+            return Err(UploaderError::Invalid);
+        }
+        self.recv(tail)
+    }
+
     /// Reads a little-endian `i32`, as `__recv_int` does.
     fn recv_u32(&mut self) -> Result<u32, UploaderError> {
         let mut raw = [0u8; 4];
-        self.recv(&mut raw)?;
+        self.recv_checked(&mut raw)?;
         Ok(u32::from_le_bytes(raw))
     }
 
@@ -138,19 +154,113 @@ impl<T: Read + Write> Uploader<T> {
         Ok(value)
     }
 
-    /// Reads everything needed to decide whether a firmware can be flashed.
+    /// Reads everything needed to decide whether a firmware can be flashed: [`Uploader::identify_chip`]
+    /// without the chip.
     pub fn identify(&mut self) -> Result<Board, UploaderError> {
+        self.identify_chip().map(|(board, _)| board)
+    }
+
+    /// `identify()`, all of it: the sync, the bootloader's protocol revision (refused outside
+    /// [`BL_REV_MIN`] to [`BL_REV_MAX`]), the board's id, revision and flash size, and from
+    /// revision 5 the chip, its description, the serial number and the external flash size -
+    /// each of those in its own `try`, a failure answered with a sync and the rest read on, as
+    /// the C# reads them. The caller discards the port's input first, as `identify` does.
+    /// `// C#: ExtLibs/px4uploader/Uploader.cs:867-929`
+    pub fn identify_chip(&mut self) -> Result<(Board, Chip), UploaderError> {
         self.sync()?;
         let revision = self.info(Info::BootloaderRevision)?;
         if !(BL_REV_MIN..=BL_REV_MAX).contains(&revision) {
             return Err(UploaderError::UnsupportedRevision(revision));
         }
-        Ok(Board {
+        let board = Board {
             bootloader_revision: revision,
             board_id: self.info(Info::BoardId)?,
             board_revision: self.info(Info::BoardRevision)?,
             flash_size: self.info(Info::FlashSize)? as usize,
-        })
+        };
+        let mut chip = Chip::default();
+        if revision >= 5 {
+            // `try { chip = __getCHIP(); chip_desc = __getCHIPDES(); } catch { __sync(); }`: a
+            // sync that fails in the `catch` fails the identify.
+            match self.get_chip() {
+                Ok(id) => {
+                    chip.chip = id;
+                    match self.get_chip_description() {
+                        Ok(text) => chip.chip_desc = text,
+                        Err(_) => self.sync()?,
+                    }
+                }
+                Err(_) => self.sync()?,
+            }
+            match self.get_sn() {
+                Ok(sn) => chip.sn = sn,
+                Err(_) => self.sync()?,
+            }
+            match self.info(Info::ExternalFlashSize) {
+                Ok(size) => chip.extf_maxsize = size,
+                Err(_) => self.sync()?,
+            }
+        }
+        Ok((board, chip))
+    }
+
+    /// `__getCHIP`: the MCU's IDCODE.
+    /// `// C#: ExtLibs/px4uploader/Uploader.cs:404-410`
+    fn get_chip(&mut self) -> Result<u32, UploaderError> {
+        self.send(&command(Code::GetChip))?;
+        let value = self.recv_u32()?;
+        self.get_sync()?;
+        Ok(value)
+    }
+
+    /// `__getCHIPDES`: a length, then that many ASCII bytes when it is above zero.
+    ///
+    /// A length longer than any description is refused as a read that would time out, which is
+    /// how the C#'s `__recv(len)` ends for one the bootloader never sends - rather than asking
+    /// for that much memory first.
+    /// `// C#: ExtLibs/px4uploader/Uploader.cs:412-427`
+    fn get_chip_description(&mut self) -> Result<String, UploaderError> {
+        self.send(&command(Code::GetChipDes))?;
+        let length = i32::from_le_bytes(self.recv_u32()?.to_le_bytes());
+        let Ok(length) = usize::try_from(length) else {
+            self.get_sync()?;
+            return Ok(String::new());
+        };
+        if length == 0 {
+            self.get_sync()?;
+            return Ok(String::new());
+        }
+        if length > CHIP_DESCRIPTION_MAX {
+            return Err(UploaderError::Io(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "chip description longer than the bootloader sends",
+            )));
+        }
+        let mut bytes = vec![0u8; length];
+        self.recv_checked(&mut bytes)?;
+        self.get_sync()?;
+        // `ASCIIEncoding.ASCII.GetString`: a byte above 0x7f is `?`.
+        Ok(bytes
+            .iter()
+            .map(|&b| if b.is_ascii() { char::from(b) } else { '?' })
+            .collect())
+    }
+
+    /// `__get_sn`: the twelve bytes of the unique device id, a word at a time.
+    /// `// C#: ExtLibs/px4uploader/Uploader.cs:386-401`
+    fn get_sn(&mut self) -> Result<Vec<u8>, UploaderError> {
+        let mut sn = Vec::with_capacity(12);
+        for address in [0u32, 4, 8] {
+            let mut frame = vec![Code::GetSn.byte()];
+            frame.extend(address.to_le_bytes());
+            frame.push(Code::Eoc.byte());
+            self.send(&frame)?;
+            let mut word = [0u8; 4];
+            self.recv_checked(&mut word)?;
+            self.get_sync()?;
+            sn.extend(word);
+        }
+        Ok(sn)
     }
 
     /// Erases the program flash.
@@ -311,6 +421,25 @@ impl<T: Read + Write> Uploader<T> {
         self.reboot()?;
         Ok(board)
     }
+}
+
+/// The longest chip description [`Uploader::identify_chip`] reads. ArduPilot's bootloader sends
+/// a few dozen characters (`STM32H7[4|5]x,rev:V`).
+const CHIP_DESCRIPTION_MAX: usize = 1024;
+
+/// What `identify` reads of a bootloader of revision 5 or later beyond the [`Board`]: zero and
+/// empty where it was not read, as the C#'s fields are left.
+/// `// C#: ExtLibs/px4uploader/Uploader.cs:36-45, 895-918`
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Chip {
+    /// `chip`: `GET_CHIP`, the MCU's IDCODE.
+    pub chip: u32,
+    /// `chip_desc`: `GET_CHIP_DES`.
+    pub chip_desc: String,
+    /// `sn`: `GET_SN`'s twelve bytes.
+    pub sn: Vec<u8>,
+    /// `extf_maxsize`: `GET_DEVICE EXTF_SIZE`.
+    pub extf_maxsize: u32,
 }
 
 /// What a board says about itself.

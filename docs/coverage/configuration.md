@@ -11,12 +11,12 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 34 | 11 | 2 | 2 | 12 | 569 |
+| 61 | 35 | 10 | 2 | 2 | 12 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings
         // in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 27 | 7 | 1 | 2 | 7 | 258 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 28 | 6 | 1 | 2 | 7 | 258 |
         //     15 |
 | CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 7 | 4 | 1 | 0 | 1 | 277 |
         //     0 |
@@ -47,18 +47,19 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
 | line | page | title | under | vehicles | wirings | ours |
 |---:|---|---|---|---|---:|---|
 | 162 | `ConfigParamLoading` | Loading |  | connected, parameters still arriving | 2 | done: `crates/mp-gui/src/setup.rs` `fn param_loading_page` |
-| 169 | `ConfigFirmwareDisabled` | Install Firmware |  | connected | 1 | partial: `crates/mp-gui/src/config/firmware.rs` `fn page` - the connected page's text; Bootloader Update asks its two questions and stops
-        //     before MAV_CMD_FLASH_BOOTLOADER, which rewrites the board's bootloader - nothing
-        //     flashes in this build |
+| 169 | `ConfigFirmwareDisabled` | Install Firmware |  | connected | 1 | done: `crates/mp-gui/src/config/firmware.rs` `fn disabled_page` |
 | 171 | `ConfigFirmwareManifest` | Install Firmware |  | disconnected | 16 | partial: `crates/mp-gui/src/config/firmware.rs` `fn page` - the catalogue fetched as APFirmware.GetList fetches it, each vehicle labelled with
-        //     the newest firmware of the release, Beta; a vehicle's click asks, runs LookForPort,
-        //     opens FirmwareSelection on the board's platform and downloads the file chosen with
-        //     the progress bar and status line, and UploadFlash reads it; All Options over the
-        //     whole catalogue; Load custom firmware by extension; each stops where it would write
-        //     to a board - the upload, DFU, Force Bootloader and Bootloader Update are disabled, as
-        //     nothing flashes in this build; not Ctrl+Q, the bootloader probe on a device's
-        //     arrival, nor FirmwareSelection's filter pickers; the vehicle pictures are the C#'s
-        //     images (crate::pictures) |
+        //     the newest firmware of the release, Beta, and DEV after Ctrl+Q's warning; a device
+        //     arriving probed for its bootloader on every port, its board id taken by LookForPort;
+        //     a vehicle's click asks, runs LookForPort, opens FirmwareSelection - its pickers
+        //     narrowing the list from the board's platform, Ignore undoing each - downloads the
+        //     file chosen with the progress bar and status line, and UploadFlash reboots the board
+        //     into its bootloader and writes it; All Options over the whole catalogue; Load custom
+        //     firmware by extension; Force Bootloader over the window's link; Bootloader Update
+        //     over a link of its own; the vehicle pictures are the C#'s images (crate::pictures);
+        //     not DFU, the STK500 upload and probes, VRBRAIN, Parrot or Solo, which stop where
+        //     they would write to a board and say that step is not ported, nor Tracking's
+        //     AddFW and AddTiming |
 | 173 | `ConfigFirmware` | Install Firmware Legacy |  | disconnected | 20 | partial: `crates/mp-gui/src/config/firmware_legacy.rs` `fn page` - every control at its .resx place; the firmware2.xml list loaded behind its progress
         //     dialog with each entry's git-version.txt, and each picture labelled and tagged as
         //     updateDisplayName does; a vehicle's click asks, detects the board from the device

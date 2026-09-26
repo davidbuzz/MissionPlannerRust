@@ -78,7 +78,7 @@ expect config.firmware_legacy.apj.board_id 140
 expect config.firmware_legacy.apj.image 3000
 expect config.firmware_legacy.progress 100
 expect config.firmware_legacy.status Reading Hex File
-expect config.firmware_legacy.stopped the next step would reboot the board into its bootloader and upload the image: flashing is not enabled in this build
+expect config.firmware_legacy.stopped the next step would reboot the board into its bootloader and upload the image: not ported to this application
 
 # Load custom firmware: the box opens in the folder config.xml names; an .apj is a px4v3, read, and
 # stopped at the reboot; its folder is remembered.

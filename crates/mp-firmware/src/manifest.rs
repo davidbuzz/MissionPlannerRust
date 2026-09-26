@@ -908,8 +908,8 @@ pub struct Lookup {
 pub enum Outcome<'a> {
     /// One record: its URL, without asking.
     One(&'a FirmwareInfo),
-    /// Several: `FirmwareSelection` opens.
-    Choose(Selection<'a>),
+    /// Several: `FirmwareSelection` opens (boxed: its pickers are large beside a reference).
+    Choose(Box<Selection<'a>>),
     /// None: `Strings.No_firmware_available_for_this_board`.
     NoFirmware,
 }
@@ -930,7 +930,7 @@ impl Lookup {
         match self.items.as_slice() {
             [] => Outcome::NoFirmware,
             [one] => Outcome::One(one),
-            several => Outcome::Choose(Selection::new(several, &self.device)),
+            several => Outcome::Choose(Box::new(Selection::new(several, &self.device))),
         }
     }
 
@@ -948,69 +948,72 @@ impl Lookup {
 }
 
 /// `FirmwareSelection` as it opens for a device: "More than one choice exists. Please filter down
-/// to the desired selection."
+/// to the desired selection." - [`Pickers::open`] over borrowed records, as `LookForPort` and the
+/// command line read it.
 ///
-/// Its constructor lists every record, then sets the Platform picker to the device's product
-/// string with `-BL` removed. That filters the list when it names one of the records' platforms,
-/// and does nothing when it does not (a picker's `SelectedItem` cannot be an item it lacks). The
-/// Board ID, Type, USB ID, Bootloader ID and Format pickers are hidden for a device, and Version
-/// Type and Version when they offer one choice, as they do here. So the platform is the one
-/// filter, and the Firmwares picker holds the URLs that pass it - selected when there is exactly
-/// one.
+/// Its constructor runs the pickers' handler over every record, then sets the Platform picker to
+/// the device's product string with `-BL` removed. A platform the records have is selected, and
+/// its `SelectedIndexChanged` narrows the list to it; one they lack is held as `SelectedItem`
+/// without being shown or applied (see [`Picker`]), so the list stays whole. The Type, USB ID,
+/// Bootloader ID, Board ID and Format pickers are hidden for a device, and Version Type and
+/// Version when they offer one choice. The Firmwares picker holds the URLs that pass - selected
+/// when there is exactly one.
 /// `// C#: test/FirmwareSelection.xaml.cs:15-152`
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Selection<'a> {
-    /// The Platform picker's choice, when it took one.
+    /// The Platform picker's choice as it shows it: `None` when nothing is selected, including a
+    /// product string it holds but does not list.
     pub platform: Option<String>,
-    /// The records the pickers leave.
+    /// The records the pickers leave, as the Firmwares picker was last filled from them.
     pub matching: Vec<&'a FirmwareInfo>,
+    /// The pickers themselves.
+    pub pickers: Pickers,
 }
 
 /// More than this many and the Firmwares picker says so instead of listing them.
 /// `// C#: test/FirmwareSelection.xaml.cs:108`
 pub const SELECTION_LIMIT: usize = 100;
 
+/// The last item of every filter picker, which clears it.
+/// `// C#: test/FirmwareSelection.xaml.cs:170, 188-189`
+pub const IGNORE: &str = "Ignore";
+
+/// The Firmwares picker's line when nothing passes.
+/// `// C#: test/FirmwareSelection.xaml.cs:123`
+pub const NO_OPTIONS: &str = "No options to show";
+
+/// The Firmwares picker's line for [`SELECTION_LIMIT`] or more, before the count - the C#'s
+/// spelling.
+/// `// C#: test/FirmwareSelection.xaml.cs:117`
+pub const TOO_MANY_OPTIONS: &str = "To many options - apply more filters - ";
+
 impl<'a> Selection<'a> {
     /// The dialog as it opens for these records and this device.
     #[must_use]
     pub fn new(items: &'a [FirmwareInfo], device: &DeviceInfo) -> Self {
-        // The Platform picker's items. `a.Platform.ToString()` throws on a null platform, which
-        // `PopulatePicker` catches, leaving the picker empty.
-        let platforms: Option<Vec<&str>> = items.iter().map(|a| a.platform.as_deref()).collect();
-        let wanted = device
-            .board
-            .as_deref()
-            .map(|board| board.replace("-BL", ""));
-        let platform = wanted.filter(|wanted| {
-            platforms
-                .as_ref()
-                .is_some_and(|listed| listed.contains(&wanted.as_str()))
-        });
-        let matching = items
+        Self::of(items, Pickers::open(items, device))
+    }
+
+    /// The dialog in the state `pickers` hold, over the records they were opened with.
+    #[must_use]
+    pub fn of(items: &'a [FirmwareInfo], pickers: Pickers) -> Self {
+        let platform = pickers.picker(Filter::Platform).shown().map(str::to_owned);
+        let matching = pickers
+            .list
             .iter()
-            .filter(|a| {
-                platform
-                    .as_deref()
-                    .is_none_or(|chosen| a.platform.as_deref() == Some(chosen))
-            })
+            .filter_map(|&index| items.get(index))
             .collect();
-        Self { platform, matching }
+        Self {
+            platform,
+            matching,
+            pickers,
+        }
     }
 
     /// The Firmwares picker's items: each URL, or one line saying there are too many or none.
     #[must_use]
     pub fn results(&self) -> Vec<String> {
-        let count = self.matching.len();
-        if count == 0 {
-            vec!["No options to show".to_owned()]
-        } else if count < SELECTION_LIMIT {
-            self.matching
-                .iter()
-                .map(|a| a.url.clone().unwrap_or_default())
-                .collect()
-        } else {
-            vec![format!("To many options - apply more filters - {count}")]
-        }
+        self.pickers.result.items.clone()
     }
 
     /// The record selected as it opens: the only one, when there is only one.
@@ -1021,6 +1024,550 @@ impl<'a> Selection<'a> {
             _ => None,
         }
     }
+}
+
+/// One of `FirmwareSelection`'s filter pickers.
+/// `// C#: test/FirmwareSelection.xaml:8-27`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Filter {
+    /// `board_id`, "Board ID": `BoardId`.
+    BoardId,
+    /// `mavtype`, "Type": `MavType`.
+    MavType,
+    /// `versiontype`, "Version Type": `MavFirmwareVersionType`.
+    VersionType,
+    /// `format`, "Format": `Format` - listed, never applied (its `Where` is commented out).
+    Format,
+    /// `platform`, "Platform": `Platform`.
+    Platform,
+    /// `version`, "Version": `MavFirmwareVersion`.
+    Version,
+    /// `USBID`, "USB ID": any of `Usbid` containing it.
+    UsbId,
+    /// `bootloader_str`, "Bootloader ID": any of `BootloaderStr` containing it.
+    Bootloader,
+}
+
+impl Filter {
+    /// The order `OnSelectedIndexChanged` filters in and calls `PopulatePicker` in.
+    /// `// C#: test/FirmwareSelection.xaml.cs:67-105, 129-151`
+    pub const HANDLER: [Self; 8] = [
+        Self::BoardId,
+        Self::MavType,
+        Self::VersionType,
+        Self::Format,
+        Self::Platform,
+        Self::Version,
+        Self::UsbId,
+        Self::Bootloader,
+    ];
+
+    /// The order the `.xaml` stacks them in, top to bottom.
+    /// `// C#: test/FirmwareSelection.xaml:8-27`
+    pub const LAYOUT: [Self; 8] = [
+        Self::MavType,
+        Self::VersionType,
+        Self::Platform,
+        Self::Version,
+        Self::Format,
+        Self::UsbId,
+        Self::BoardId,
+        Self::Bootloader,
+    ];
+
+    /// Its label's text.
+    /// `// C#: test/FirmwareSelection.xaml:8, 10, 13, 15, 18, 20, 24, 26`
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::MavType => "Type",
+            Self::VersionType => "Version Type",
+            Self::Platform => "Platform",
+            Self::Version => "Version",
+            Self::Format => "Format",
+            Self::UsbId => "USB ID",
+            Self::BoardId => "Board ID",
+            Self::Bootloader => "Bootloader ID",
+        }
+    }
+
+    /// The picker's `x:Name`, lower case: the name a test finds it by.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::MavType => "mavtype",
+            Self::VersionType => "versiontype",
+            Self::Platform => "platform",
+            Self::Version => "version",
+            Self::Format => "format",
+            Self::UsbId => "usbid",
+            Self::BoardId => "board_id",
+            Self::Bootloader => "bootloader_str",
+        }
+    }
+
+    /// Whether a record passes this picker's selection. `Err` where the C#'s lambda throws: a
+    /// record with no version compared by `MavFirmwareVersion.ToString()`.
+    /// `// C#: test/FirmwareSelection.xaml.cs:67-105`
+    fn passes(self, record: &FirmwareInfo, chosen: &str) -> Result<bool, ()> {
+        Ok(match self {
+            Self::BoardId => record.board_id.to_string() == chosen,
+            Self::MavType => record.mav_type.as_deref() == Some(chosen),
+            Self::VersionType => record.mav_firmware_version_type.as_deref() == Some(chosen),
+            // `//FWList = FWList.Where(a => a.Format == (string) format.SelectedItem);`
+            Self::Format => true,
+            Self::Platform => record.platform.as_deref() == Some(chosen),
+            Self::Version => record.mav_firmware_version.ok_or(())?.to_string() == chosen,
+            // `a.Usbid.Any(b => b.Contains(...))`: a record without the array throws in the C#,
+            // where here it is empty and passes over; the published manifest's records carry
+            // both arrays, and these two pickers are hidden for a device.
+            Self::UsbId => record.usbid.iter().any(|b| b.contains(chosen)),
+            Self::Bootloader => record.bootloader_str.iter().any(|b| b.contains(chosen)),
+        })
+    }
+
+    /// What `PopulatePicker` is handed for this picker, over the records left: each value once,
+    /// in the order its `OrderBy` sorts them. `None` where the C#'s `Select` throws on a null -
+    /// which `PopulatePicker` catches, leaving the picker as it was - or `int.Parse` on a board
+    /// id past an `int`.
+    /// `// C#: test/FirmwareSelection.xaml.cs:129-151`
+    fn values(self, records: &[&FirmwareInfo]) -> Option<Vec<String>> {
+        let values: Vec<String> = match self {
+            Self::BoardId => {
+                let mut seen = std::collections::HashSet::new();
+                let mut keyed: Vec<(i32, String)> = Vec::new();
+                for record in records {
+                    if seen.insert(record.board_id) {
+                        let id = record.board_id.to_string();
+                        // `OrderBy(a => int.Parse(a))`.
+                        keyed.push((id.parse().ok()?, id));
+                    }
+                }
+                keyed.sort_by_key(|(key, _)| *key);
+                return Some(keyed.into_iter().map(|(_, id)| id).collect());
+            }
+            Self::MavType => records
+                .iter()
+                .map(|a| a.mav_type.clone())
+                .collect::<Option<_>>()?,
+            Self::VersionType => records
+                .iter()
+                .map(|a| a.mav_firmware_version_type.clone())
+                .collect::<Option<_>>()?,
+            Self::Format => records
+                .iter()
+                .map(|a| a.format.clone())
+                .collect::<Option<_>>()?,
+            Self::Platform => records
+                .iter()
+                .map(|a| a.platform.clone())
+                .collect::<Option<_>>()?,
+            Self::Version => records
+                .iter()
+                .map(|a| a.mav_firmware_version.map(|v| v.to_string()))
+                .collect::<Option<_>>()?,
+            // `Where(a => a.Usbid?.Length > 0).SelectMany(...)`.
+            Self::UsbId => records
+                .iter()
+                .flat_map(|a| a.usbid.iter().cloned())
+                .collect(),
+            Self::Bootloader => records
+                .iter()
+                .flat_map(|a| a.bootloader_str.iter().cloned())
+                .collect(),
+        };
+        // `Distinct()`: each once, where first seen. A set beside the list, as the published
+        // manifest runs to tens of thousands of records.
+        let mut seen = std::collections::HashSet::with_capacity(values.len());
+        let mut distinct: Vec<String> = Vec::new();
+        for value in values {
+            if seen.insert(value.clone()) {
+                distinct.push(value);
+            }
+        }
+        // `OrderBy(a => a)`: the current culture's comparer, a stable sort.
+        distinct.sort_by(|a, b| culture_compare(a, b));
+        Some(distinct)
+    }
+}
+
+/// A Xamarin.Forms `Picker` as `FirmwareSelection` drives it: its items, `SelectedIndex` and
+/// `SelectedItem`, and `IsVisible`.
+///
+/// Xamarin.Forms 5's rules (`Picker.cs`: the `SelectedItem` and `SelectedIndex` property-changed
+/// handlers, `ResetItems`, `OnItemsCollectionChanged`), on which the dialog's behaviour rests:
+/// setting `SelectedItem` sets `SelectedIndex` to that item's index in the list, -1 when the list
+/// lacks it; a changed `SelectedIndex` sets `SelectedItem` to the item there (null at -1) and
+/// raises `SelectedIndexChanged`. So an item the list lacks, set while nothing was selected, is
+/// kept as `SelectedItem` with the index still -1 and no event: nothing shows and nothing is
+/// filtered until the handler next runs for another reason, when it filters by it. Set while
+/// something was selected, it moves the index to -1, which nulls it and raises the event.
+/// Replacing `ItemsSource` clears the list first, which clamps the index to -1 and so nulls
+/// `SelectedItem`, raising the event only if something had been selected. An equal value changes
+/// nothing. The WinForms renderer (`PickerRenderer.cs`) mirrors the index into its `ComboBox` and
+/// the user's choice back, and adds nothing to these rules.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Picker {
+    /// `Items`: `ItemsSource` as `PopulatePicker` last set it, [`IGNORE`] last.
+    pub items: Vec<String>,
+    /// `SelectedIndex`; `None` is -1.
+    pub index: Option<usize>,
+    /// `SelectedItem`: the item at `index`, or one the list lacks, held (see above).
+    pub selected: Option<String>,
+    /// `IsVisible`.
+    pub visible: bool,
+}
+
+impl Picker {
+    /// A picker as `InitializeComponent` makes it: empty, nothing selected, visible.
+    fn new() -> Self {
+        Self {
+            visible: true,
+            ..Self::default()
+        }
+    }
+
+    /// The item it shows as selected: the one at its index.
+    #[must_use]
+    pub fn shown(&self) -> Option<&str> {
+        self.index
+            .and_then(|index| self.items.get(index))
+            .map(String::as_str)
+    }
+
+    /// `SelectedItem = item`. Whether `SelectedIndexChanged` was raised.
+    pub fn select_item(&mut self, item: Option<String>) -> bool {
+        if self.selected == item {
+            return false;
+        }
+        let index = item
+            .as_ref()
+            .and_then(|item| self.items.iter().position(|listed| listed == item));
+        self.selected = item;
+        self.select_index(index)
+    }
+
+    /// `SelectedIndex = index`, clamped to the list as `CoerceSelectedIndex` clamps it - past the
+    /// end is the last item, and an empty list has none: the user's choice, or
+    /// [`Picker::select_item`]'s. Whether `SelectedIndexChanged` was raised.
+    pub fn select_index(&mut self, index: Option<usize>) -> bool {
+        let last = self.items.len().checked_sub(1);
+        let index = index.and_then(|index| last.map(|last| index.min(last)));
+        if self.index == index {
+            return false;
+        }
+        self.index = index;
+        self.selected = index.and_then(|index| self.items.get(index).cloned());
+        true
+    }
+
+    /// `ItemsSource = items`. Whether `SelectedIndexChanged` was raised.
+    fn set_items(&mut self, items: Vec<String>) -> bool {
+        self.items = items;
+        self.selected = None;
+        self.index.take().is_some()
+    }
+
+    /// `Result.Items.Clear()`, then its items and selection.
+    fn fill(&mut self, items: Vec<String>, index: Option<usize>) {
+        self.items = items;
+        self.index = index.filter(|&index| index < self.items.len());
+        self.selected = self.index.and_then(|index| self.items.get(index).cloned());
+    }
+}
+
+/// The eight filter pickers, one to each [`Filter`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Filters {
+    board_id: Picker,
+    mav_type: Picker,
+    version_type: Picker,
+    format: Picker,
+    platform: Picker,
+    version: Picker,
+    usb_id: Picker,
+    bootloader: Picker,
+}
+
+impl Filters {
+    /// Each as `InitializeComponent` makes it.
+    fn new() -> Self {
+        Self {
+            board_id: Picker::new(),
+            mav_type: Picker::new(),
+            version_type: Picker::new(),
+            format: Picker::new(),
+            platform: Picker::new(),
+            version: Picker::new(),
+            usb_id: Picker::new(),
+            bootloader: Picker::new(),
+        }
+    }
+
+    /// A filter's picker.
+    const fn get(&self, filter: Filter) -> &Picker {
+        match filter {
+            Filter::BoardId => &self.board_id,
+            Filter::MavType => &self.mav_type,
+            Filter::VersionType => &self.version_type,
+            Filter::Format => &self.format,
+            Filter::Platform => &self.platform,
+            Filter::Version => &self.version,
+            Filter::UsbId => &self.usb_id,
+            Filter::Bootloader => &self.bootloader,
+        }
+    }
+
+    /// A filter's picker, to change.
+    const fn get_mut(&mut self, filter: Filter) -> &mut Picker {
+        match filter {
+            Filter::BoardId => &mut self.board_id,
+            Filter::MavType => &mut self.mav_type,
+            Filter::VersionType => &mut self.version_type,
+            Filter::Format => &mut self.format,
+            Filter::Platform => &mut self.platform,
+            Filter::Version => &mut self.version,
+            Filter::UsbId => &mut self.usb_id,
+            Filter::Bootloader => &mut self.bootloader,
+        }
+    }
+}
+
+/// `FirmwareSelection`'s state apart from its records: the eight filter pickers, the Firmwares
+/// picker (`Result`) and the records the filters last left. What a window keeps between frames,
+/// handing the records back in with each change.
+/// `// C#: test/FirmwareSelection.xaml.cs:15-194`
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pickers {
+    /// The filter pickers.
+    filters: Filters,
+    /// `Result`, the Firmwares picker: the URLs, or one line.
+    pub result: Picker,
+    /// The records the Firmwares picker was last filled from, by index into the records.
+    pub list: Vec<usize>,
+}
+
+impl Pickers {
+    /// The constructor, for a device: the handler over every record, the Platform picker set to
+    /// the device's product string without `-BL`, and the pickers a device does not need hidden -
+    /// Type, USB ID, Bootloader ID, Board ID and Format always, Version Type and Version when
+    /// they hold one choice and "Ignore". `LookForPort` always passes a device, a blank one for
+    /// All Options with no port.
+    /// `// C#: test/FirmwareSelection.xaml.cs:15-59; GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:211, 247`
+    #[must_use]
+    pub fn open(records: &[FirmwareInfo], device: &DeviceInfo) -> Self {
+        let mut pickers = Self {
+            filters: Filters::new(),
+            result: Picker::new(),
+            list: Vec::new(),
+        };
+        pickers.changed(records);
+        // `platform.SelectedItem = DevInfo.Value.board?.Replace("-BL", "")`.
+        let wanted = device
+            .board
+            .as_deref()
+            .map(|board| board.replace("-BL", ""));
+        if pickers.slot(Filter::Platform).select_item(wanted) {
+            pickers.changed(records);
+        }
+        for filter in [
+            Filter::MavType,
+            Filter::UsbId,
+            Filter::Bootloader,
+            Filter::BoardId,
+            Filter::Format,
+        ] {
+            pickers.slot(filter).visible = false;
+        }
+        for filter in [Filter::VersionType, Filter::Version] {
+            let picker = pickers.slot(filter);
+            if picker.items.len() == 2 {
+                picker.visible = false;
+            }
+        }
+        pickers
+    }
+
+    /// A filter picker.
+    #[must_use]
+    pub fn picker(&self, filter: Filter) -> &Picker {
+        self.filters.get(filter)
+    }
+
+    /// A filter picker, to change.
+    fn slot(&mut self, filter: Filter) -> &mut Picker {
+        self.filters.get_mut(filter)
+    }
+
+    /// The pickers showing, top to bottom.
+    pub fn visible(&self) -> impl Iterator<Item = Filter> + '_ {
+        Filter::LAYOUT
+            .into_iter()
+            .filter(|filter| self.picker(*filter).visible)
+    }
+
+    /// The user choosing row `index` of a filter picker's list: its `SelectedIndex`, and the
+    /// handler when that changed it.
+    pub fn choose(&mut self, records: &[FirmwareInfo], filter: Filter, index: usize) {
+        if self.slot(filter).select_index(Some(index)) {
+            self.changed(records);
+        }
+    }
+
+    /// The user choosing row `index` of the Firmwares list; its handler does nothing.
+    /// `// C#: test/FirmwareSelection.xaml.cs:196-199`
+    pub fn choose_result(&mut self, index: usize) {
+        self.result.select_index(Some(index));
+    }
+
+    /// "Upload Firmware": the Firmwares picker's `SelectedItem`, which becomes `FinalResult` - a
+    /// URL, or the line it holds in place of URLs; with nothing selected the button does nothing.
+    /// `// C#: test/FirmwareSelection.xaml.cs:201-211`
+    #[must_use]
+    pub fn final_result(&self) -> Option<&str> {
+        self.result.selected.as_deref()
+    }
+
+    /// `OnSelectedIndexChanged`: the records narrowed by each picker with a selection other than
+    /// "Ignore"; the Firmwares picker refilled - the URLs under a hundred, the only one selected,
+    /// else the "To many options" line, selected; "No options to show" added and selected when
+    /// none pass, the handler ending there - then `PopulatePicker` for each filter picker over the
+    /// records left.
+    ///
+    /// The C#'s `Where` chain is lazy, and its lambdas read each picker's `SelectedItem` when they
+    /// run rather than when the chain is built; here the list is taken once. It is the same list:
+    /// nothing during a handler changes the selection of a picker the chain filters by - the
+    /// nested handler `PopulatePicker` can raise only clears an "Ignore", which the chain skips,
+    /// or a hidden picker's selection, which a device's dialog never gives one.
+    ///
+    /// A record the version filter throws on ends the handler after `Result.Items.Clear()`, where
+    /// `FWList.Count()` first runs the chain; the exception then leaves the handler.
+    /// `// C#: test/FirmwareSelection.xaml.cs:63-152`
+    fn changed(&mut self, records: &[FirmwareInfo]) {
+        let applied: Vec<(Filter, String)> = Filter::HANDLER
+            .into_iter()
+            .filter_map(|filter| {
+                let chosen = self.picker(filter).selected.clone()?;
+                (chosen != IGNORE).then_some((filter, chosen))
+            })
+            .collect();
+        let mut list = Vec::new();
+        'records: for (index, record) in records.iter().enumerate() {
+            for (filter, chosen) in &applied {
+                match filter.passes(record, chosen) {
+                    Ok(true) => {}
+                    Ok(false) => continue 'records,
+                    Err(()) => {
+                        self.result.fill(Vec::new(), None);
+                        self.list.clear();
+                        return;
+                    }
+                }
+            }
+            list.push(index);
+        }
+        let count = list.len();
+        if count < SELECTION_LIMIT {
+            let urls = list
+                .iter()
+                .map(|&index| {
+                    records
+                        .get(index)
+                        .and_then(|a| a.url.clone())
+                        .unwrap_or_default()
+                })
+                .collect();
+            self.result.fill(urls, (count == 1).then_some(0));
+        } else {
+            self.result
+                .fill(vec![format!("{TOO_MANY_OPTIONS}{count}")], Some(0));
+        }
+        self.list.clone_from(&list);
+        if count == 0 {
+            self.result.fill(vec![NO_OPTIONS.to_owned()], Some(0));
+            return;
+        }
+        let left: Vec<&FirmwareInfo> = list
+            .iter()
+            .filter_map(|&index| records.get(index))
+            .collect();
+        for filter in Filter::HANDLER {
+            self.populate(records, filter, &left);
+        }
+    }
+
+    /// `PopulatePicker`: a hidden picker's selection nulled; a picker with no selection refilled
+    /// with the values left and "Ignore"; one whose selection is "Ignore" cleared - which raises
+    /// the handler again, nested, and refills it there. One whose values throw is left as it was.
+    /// A picker with a selection keeps its list: that is how a value chosen in one picker can
+    /// leave "No options to show" beside another's, until one of them is set to "Ignore".
+    /// `// C#: test/FirmwareSelection.xaml.cs:156-194`
+    fn populate(&mut self, records: &[FirmwareInfo], filter: Filter, left: &[&FirmwareInfo]) {
+        if !self.picker(filter).visible {
+            if self.slot(filter).select_item(None) {
+                self.changed(records);
+            }
+            return;
+        }
+        let Some(values) = filter.values(left) else {
+            // `list.ToList()` or `list.Count()` throws; the `catch` ends it.
+            return;
+        };
+        if self.picker(filter).selected.is_none() {
+            let mut pick = values;
+            pick.push(IGNORE.to_owned());
+            if self.slot(filter).set_items(pick) {
+                self.changed(records);
+            }
+        }
+        // `if (list.Count() == 1 && picker.SelectedIndex == -1) { //picker.SelectedIndex = 0; }`
+        if self.picker(filter).selected.as_deref() == Some(IGNORE)
+            && self.slot(filter).select_item(None)
+        {
+            self.changed(records);
+        }
+    }
+}
+
+/// The current culture's string order, `Comparer<string>.Default` as Mission Planner sorts with
+/// it on Windows (NLS word sort): hyphens and apostrophes passed over at first, other marks before
+/// digits and digits before letters, letters by letter regardless of case; then, for strings equal
+/// so far, lower case before upper at the first difference; then the one with fewer of the marks
+/// passed over first.
+fn culture_compare(a: &str, b: &str) -> std::cmp::Ordering {
+    fn weight(c: char) -> Option<(u8, char)> {
+        if c == '-' || c == '\'' {
+            None
+        } else if c.is_alphabetic() {
+            Some((2, c.to_lowercase().next().unwrap_or(c)))
+        } else if c.is_numeric() {
+            Some((1, c))
+        } else {
+            Some((0, c))
+        }
+    }
+    let primary = |s: &str| s.chars().filter_map(weight).collect::<Vec<_>>();
+    let kept = |s: &str| {
+        s.chars()
+            .filter(|c| weight(*c).is_some())
+            .collect::<Vec<_>>()
+    };
+    primary(a)
+        .cmp(&primary(b))
+        .then_with(|| {
+            kept(a)
+                .iter()
+                .zip(kept(b).iter())
+                .find(|(x, y)| x != y)
+                .map_or(std::cmp::Ordering::Equal, |(x, _)| {
+                    if x.is_lowercase() {
+                        std::cmp::Ordering::Less
+                    } else {
+                        std::cmp::Ordering::Greater
+                    }
+                })
+        })
+        .then_with(|| a.chars().count().cmp(&b.chars().count()))
 }
 
 /// Something that can fetch a URL's bytes: the network, or a file standing in for it.
@@ -1426,5 +1973,300 @@ mod tests {
         let manifest = Manifest::parse(text).expect("a BOM is dropped");
         assert_eq!(manifest.format_version, Version::parse("1.0.0"));
         assert!(Manifest::parse(br#"{"format-version":"1.0.0"}"#).is_err());
+    }
+}
+
+/// `FirmwareSelection`'s pickers over records made for the purpose, each step worked by hand
+/// from `test/FirmwareSelection.xaml.cs` and Xamarin.Forms' `Picker`.
+#[cfg(test)]
+mod picker_tests {
+    use super::*;
+
+    fn record(platform: &str, version_type: &str, version: &str, url: &str) -> FirmwareInfo {
+        FirmwareInfo {
+            board_id: 140,
+            mav_type: Some("Copter".to_owned()),
+            format: Some("apj".to_owned()),
+            url: Some(url.to_owned()),
+            mav_firmware_version_type: Some(version_type.to_owned()),
+            platform: Some(platform.to_owned()),
+            mav_firmware_version: Version::parse(version),
+            usbid: vec!["0x2DAE/0x1016".to_owned()],
+            bootloader_str: vec!["CubeOrange-BL".to_owned()],
+            ..FirmwareInfo::default()
+        }
+    }
+
+    /// Five builds for one board: two platforms, two releases, three versions.
+    fn records() -> Vec<FirmwareInfo> {
+        vec![
+            record("CubeOrange", "OFFICIAL", "4.7.1", "u/1"),
+            record("CubeOrange-bdshot", "OFFICIAL", "4.7.1", "u/2"),
+            record("CubeOrange", "BETA", "4.7.1", "u/3"),
+            record("CubeOrange", "OFFICIAL", "4.6.3", "u/4"),
+            record("CubeOrange-bdshot", "BETA", "4.8.0", "u/5"),
+        ]
+    }
+
+    fn items(pickers: &Pickers, filter: Filter) -> Vec<&str> {
+        pickers
+            .picker(filter)
+            .items
+            .iter()
+            .map(String::as_str)
+            .collect()
+    }
+
+    fn index_of(pickers: &Pickers, filter: Filter, item: &str) -> usize {
+        pickers
+            .picker(filter)
+            .items
+            .iter()
+            .position(|listed| listed == item)
+            .unwrap_or_else(|| panic!("{item} in {:?}", pickers.picker(filter).items))
+    }
+
+    /// The constructor for a CubeOrange: its platform chosen, the list narrowed to it, and only
+    /// the pickers with a choice left to make shown - Version Type, Platform, Version.
+    #[test]
+    fn a_device_opens_on_its_platform_with_the_pickers_that_still_choose() {
+        let records = records();
+        let pickers = Pickers::open(&records, &DeviceInfo::new("CubeOrange-BL", ""));
+        assert_eq!(
+            items(&pickers, Filter::Platform),
+            ["CubeOrange", "CubeOrange-bdshot", "Ignore"]
+        );
+        assert_eq!(pickers.picker(Filter::Platform).shown(), Some("CubeOrange"));
+        assert_eq!(pickers.result.items, ["u/1", "u/3", "u/4"]);
+        assert_eq!(pickers.final_result(), None, "three: none selected");
+        assert_eq!(
+            items(&pickers, Filter::VersionType),
+            ["BETA", "OFFICIAL", "Ignore"]
+        );
+        assert_eq!(
+            items(&pickers, Filter::Version),
+            ["4.6.3", "4.7.1", "Ignore"]
+        );
+        let shown: Vec<Filter> = pickers.visible().collect();
+        assert_eq!(
+            shown,
+            [Filter::VersionType, Filter::Platform, Filter::Version]
+        );
+        let selection = Selection::new(&records, &DeviceInfo::new("CubeOrange-BL", ""));
+        assert_eq!(selection.platform.as_deref(), Some("CubeOrange"));
+        assert_eq!(selection.results(), ["u/1", "u/3", "u/4"]);
+        assert_eq!(selection.selected(), None);
+    }
+
+    /// Each choice narrows the Firmwares list and refills the pickers still unset; the last one
+    /// left is selected, and is what Upload Firmware takes. "Ignore" undoes a picker's choice and
+    /// refills it from what the others leave.
+    #[test]
+    fn choices_narrow_the_list_and_ignore_undoes_them() {
+        let records = records();
+        let mut pickers = Pickers::open(&records, &DeviceInfo::new("CubeOrange-BL", ""));
+        let at = index_of(&pickers, Filter::Version, "4.7.1");
+        pickers.choose(&records, Filter::Version, at);
+        assert_eq!(pickers.result.items, ["u/1", "u/3"]);
+        assert_eq!(
+            items(&pickers, Filter::VersionType),
+            ["BETA", "OFFICIAL", "Ignore"]
+        );
+        assert_eq!(
+            items(&pickers, Filter::Version),
+            ["4.6.3", "4.7.1", "Ignore"],
+            "a picker with a choice keeps its list"
+        );
+        let at = index_of(&pickers, Filter::VersionType, "OFFICIAL");
+        pickers.choose(&records, Filter::VersionType, at);
+        assert_eq!(pickers.result.items, ["u/1"]);
+        assert_eq!(
+            pickers.final_result(),
+            Some("u/1"),
+            "the only one, selected"
+        );
+
+        // "Ignore" on Version: its choice gone, the list back to what the others leave, and the
+        // picker refilled from it by the handler its clearing raises.
+        let ignore = index_of(&pickers, Filter::Version, IGNORE);
+        pickers.choose(&records, Filter::Version, ignore);
+        assert_eq!(pickers.picker(Filter::Version).selected, None);
+        assert_eq!(pickers.result.items, ["u/1", "u/4"]);
+        assert_eq!(pickers.final_result(), None);
+        assert_eq!(
+            items(&pickers, Filter::Version),
+            ["4.6.3", "4.7.1", "Ignore"]
+        );
+        assert_eq!(
+            pickers.picker(Filter::VersionType).shown(),
+            Some("OFFICIAL")
+        );
+
+        // The same choice again is no change: no handler.
+        let before = pickers.clone();
+        let at = index_of(&pickers, Filter::VersionType, "OFFICIAL");
+        pickers.choose(&records, Filter::VersionType, at);
+        assert_eq!(pickers, before);
+
+        // A row the user picks in the Firmwares list is what Upload Firmware takes.
+        pickers.choose_result(1);
+        assert_eq!(pickers.final_result(), Some("u/4"));
+    }
+
+    /// Two choices that no record has together: "No options to show", selected - and the
+    /// pickers not refilled, so "Ignore" on one of them is the way back.
+    #[test]
+    fn choices_no_record_has_together_show_no_options() {
+        let records = records();
+        let mut pickers = Pickers::open(&records, &DeviceInfo::new("CubeOrange-BL", ""));
+        let at = index_of(&pickers, Filter::Version, "4.6.3");
+        pickers.choose(&records, Filter::Version, at);
+        assert_eq!(pickers.result.items, ["u/4"]);
+        let at = index_of(&pickers, Filter::Platform, "CubeOrange-bdshot");
+        pickers.choose(&records, Filter::Platform, at);
+        assert_eq!(pickers.result.items, [NO_OPTIONS]);
+        assert_eq!(pickers.final_result(), Some(NO_OPTIONS));
+        let ignore = index_of(&pickers, Filter::Version, IGNORE);
+        pickers.choose(&records, Filter::Version, ignore);
+        assert_eq!(pickers.result.items, ["u/2", "u/5"]);
+        assert_eq!(
+            items(&pickers, Filter::Version),
+            ["4.7.1", "4.8.0", "Ignore"]
+        );
+    }
+
+    /// A product string no record's platform is: held by the Platform picker, not shown, not
+    /// applied - until another picker's change runs the handler, which filters by it and finds
+    /// nothing. Choosing a platform replaces it.
+    #[test]
+    fn a_product_string_the_platforms_lack_is_held_and_applied_later() {
+        let records = records();
+        let mut pickers = Pickers::open(&records, &DeviceInfo::new("Pixhawk1-BL", ""));
+        assert_eq!(
+            pickers.picker(Filter::Platform).selected.as_deref(),
+            Some("Pixhawk1")
+        );
+        assert_eq!(pickers.picker(Filter::Platform).shown(), None);
+        assert_eq!(pickers.result.items, ["u/1", "u/2", "u/3", "u/4", "u/5"]);
+        assert_eq!(
+            Selection::new(&records, &DeviceInfo::new("Pixhawk1-BL", "")).platform,
+            None
+        );
+        let at = index_of(&pickers, Filter::VersionType, "OFFICIAL");
+        pickers.choose(&records, Filter::VersionType, at);
+        assert_eq!(pickers.result.items, [NO_OPTIONS]);
+        let at = index_of(&pickers, Filter::Platform, "CubeOrange");
+        pickers.choose(&records, Filter::Platform, at);
+        assert_eq!(pickers.result.items, ["u/1", "u/4"]);
+    }
+
+    /// A blank device - All Options with no port - chooses nothing; a hundred records or more are
+    /// one line, selected.
+    #[test]
+    fn a_blank_device_lists_everything_or_says_there_are_too_many() {
+        let records = records();
+        let pickers = Pickers::open(&records, &DeviceInfo::default());
+        assert_eq!(pickers.picker(Filter::Platform).selected, None);
+        assert_eq!(pickers.result.items.len(), 5);
+        let many: Vec<FirmwareInfo> = (0..120)
+            .map(|n| record("CubeOrange", "OFFICIAL", "4.7.1", &format!("u/{n}")))
+            .collect();
+        let pickers = Pickers::open(&many, &DeviceInfo::default());
+        assert_eq!(
+            pickers.result.items,
+            ["To many options - apply more filters - 120"]
+        );
+        assert_eq!(
+            pickers.final_result(),
+            Some("To many options - apply more filters - 120")
+        );
+        // One version, one release: those pickers hidden, as Platform is not.
+        let shown: Vec<Filter> = pickers.visible().collect();
+        assert_eq!(shown, [Filter::Platform]);
+    }
+
+    /// A record without a version: the Version picker is not filled while it is among those
+    /// left, and once a version is chosen, a handler that meets it throws after emptying the
+    /// Firmwares list.
+    #[test]
+    fn a_record_without_a_version_ends_the_handler_that_meets_it() {
+        let mut records = vec![
+            record("CubeOrange", "OFFICIAL", "4.7.1", "u/1"),
+            record("CubeOrange", "OFFICIAL", "4.6.3", "u/2"),
+            record("CubeOrange-bdshot", "OFFICIAL", "4.7.1", "u/3"),
+        ];
+        records[2].mav_firmware_version = None;
+        let mut pickers = Pickers::open(&records, &DeviceInfo::new("CubeOrange-BL", ""));
+        assert_eq!(
+            items(&pickers, Filter::Version),
+            ["4.6.3", "4.7.1", "Ignore"],
+            "filled once the platform left only versioned records"
+        );
+        let at = index_of(&pickers, Filter::Version, "4.7.1");
+        pickers.choose(&records, Filter::Version, at);
+        assert_eq!(pickers.result.items, ["u/1"]);
+        let ignore = index_of(&pickers, Filter::Platform, IGNORE);
+        pickers.choose(&records, Filter::Platform, ignore);
+        assert!(pickers.result.items.is_empty());
+        assert_eq!(pickers.final_result(), None);
+        assert_eq!(
+            pickers.picker(Filter::Platform).selected.as_deref(),
+            Some(IGNORE),
+            "the handler ended before PopulatePicker cleared it"
+        );
+    }
+
+    /// Xamarin.Forms' `Picker`, alone.
+    #[test]
+    fn a_picker_holds_an_item_it_lacks_only_while_nothing_is_selected() {
+        let mut picker = Picker::new();
+        assert!(!picker.set_items(vec!["a".to_owned(), "b".to_owned()]));
+        assert!(!picker.select_item(Some("z".to_owned())), "no event");
+        assert_eq!(
+            (picker.index, picker.selected.as_deref()),
+            (None, Some("z"))
+        );
+        assert!(picker.select_item(Some("b".to_owned())));
+        assert_eq!(picker.shown(), Some("b"));
+        assert!(picker.select_item(Some("z".to_owned())), "index to -1");
+        assert_eq!((picker.index, picker.selected.as_deref()), (None, None));
+        assert!(picker.select_index(Some(0)));
+        assert!(!picker.select_index(Some(0)), "the same index: no event");
+        assert!(picker.select_index(Some(9)), "past the end is the last");
+        assert_eq!(picker.shown(), Some("b"));
+        assert!(
+            picker.set_items(vec!["c".to_owned()]),
+            "a new source clears it"
+        );
+        assert_eq!((picker.index, picker.selected.as_deref()), (None, None));
+    }
+
+    /// The pickers' `OrderBy`: letters regardless of case, a hyphen passed over, numbers as text.
+    #[test]
+    fn the_pickers_sort_as_the_culture_does() {
+        let mut names = vec![
+            "fmuv3-bdshot",
+            "fmuv3a",
+            "CubeOrangePlus",
+            "CubeOrange-bdshot",
+            "cubeorange",
+            "CubeOrange",
+            "4.10.0",
+            "4.9.1",
+        ];
+        names.sort_by(|a, b| culture_compare(a, b));
+        assert_eq!(
+            names,
+            [
+                "4.10.0",
+                "4.9.1",
+                "cubeorange",
+                "CubeOrange",
+                "CubeOrange-bdshot",
+                "CubeOrangePlus",
+                "fmuv3a",
+                "fmuv3-bdshot",
+            ]
+        );
     }
 }

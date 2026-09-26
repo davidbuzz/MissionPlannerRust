@@ -1,15 +1,17 @@
 # Initial Setup's Install Firmware page labels each vehicle from the firmware catalogue, and a
-# vehicle's click downloads the file Mission Planner would flash to the board and reads it -
-# stopping where it would write to the board, which it never does.
+# vehicle's click downloads the file Mission Planner would flash to the board and reads it - here
+# stopping where it would write to the board, as the named device (MP_FIRMWARE_DEVICE) stands in
+# for this machine's ports and nothing opens them.
 #
 # ConfigFirmwareManifest.cs: Activate fetches the manifest (APFirmware.GetList) and writes the newest
-# firmware of the release under each vehicle picture, OFFICIAL until "Beta firmwares" is clicked.
-# A picture's click asks "Are you sure you want to upload ...?"; Yes runs LookForPort, which finds
-# the board from the USB product string and takes its firmware - through FirmwareSelection when
-# several files fit, which opens on the board's own platform and waits for "Upload Firmware" -
-# downloads it with the progress bar and status line following, and hands it to UploadFlash,
-# which reads it and stops before the reboot into the bootloader. Deactivate puts the release back
-# to OFFICIAL, and the catalogue, a static in the C#, is not fetched again.
+# firmware of the release under each vehicle picture, OFFICIAL until "Beta firmwares" is clicked,
+# DEV after Ctrl+Q and its warning (ProcessCmdKey, :399-408). A picture's click asks "Are you sure
+# you want to upload ...?"; Yes runs LookForPort, which finds the board from the USB product
+# string and takes its firmware - through FirmwareSelection when several files fit, which opens
+# on the board's own platform, its pickers narrowing the list and "Ignore" undoing each
+# (test/FirmwareSelection.xaml.cs), and waits for "Upload Firmware" - downloads it with the
+# progress bar and status line following, and hands it to UploadFlash, which reads it. Deactivate
+# puts the release back to OFFICIAL, and the catalogue, a static in the C#, is not fetched again.
 #
 # Self-contained and offline: the catalogue is testdata/firmware/manifest.json.gz, an excerpt of
 # the real manifest, served in place of the network; MP_FIRMWARE_MIRROR is a directory standing in
@@ -29,7 +31,7 @@ setup mkdir -p "$WORK/web/firmware.ardupilot.org/Copter/stable/CubeOrange" && cp
 
 screen setup
 window 1600x1200
-budget 12
+budget 21
 
 expect config.firmware.active false
 # Install Firmware is the first entry of InitialSetup's list, outside any heading; disconnected,
@@ -48,7 +50,7 @@ expect config.firmware.label.tracker AntennaTracker V4.7.1 OFFICIAL
 expect config.firmware.board CubeOrange-BL
 expect config.firmware.board.ids 140
 expect config.firmware.status Status
-expect config.firmware.upload disabled
+expect config.firmware.detected none
 
 # Copter, official: the question first; No does nothing.
 click fw-quad
@@ -58,7 +60,8 @@ expect config.firmware.question none
 expect config.firmware.vehicle none
 
 # Yes: three CubeOrange builds share board id 140, and FirmwareSelection opens on the board's own
-# platform, its one file selected.
+# platform, its one file selected. One release and one version among the three: only the
+# Platform picker shows (FirmwareSelection.xaml.cs:24-57).
 click fw-quad
 click fw-question-yes
 expect config.firmware.vehicle Copter
@@ -67,6 +70,11 @@ expect config.firmware.chosen https://firmware.ardupilot.org/Copter/stable/CubeO
 expect config.firmware.chosen.version 4.7.1
 expect config.firmware.selection 1
 expect config.firmware.selection.selected https://firmware.ardupilot.org/Copter/stable/CubeOrange/arducopter.apj
+expect config.firmware.selection.platform CubeOrange
+expect config.firmware.selection.platform.visible true
+expect config.firmware.selection.versiontype.visible false
+expect config.firmware.selection.version.visible false
+expect config.firmware.selection.mavtype.visible false
 expect config.firmware.message none
 
 # Upload Firmware: the download to a temporary file, read - board 140, a 3,000-byte image - and
@@ -81,7 +89,7 @@ expect config.firmware.apj.board_id 140
 expect config.firmware.apj.image 3000
 expect config.firmware.progress 100
 expect config.firmware.status Reading Hex File
-expect config.firmware.stopped the next step would reboot the board into its bootloader and upload the image: flashing is not enabled in this build
+expect config.firmware.stopped the next step would reboot the board into its bootloader and upload the image: no board is written while MP_FIRMWARE_DEVICE names the device
 
 # Beta firmwares: the labels and the choice follow the release. The beta heli build is the only
 # one for the board, so it downloads at once - and it is not in the mirror: "Failed download".
@@ -100,10 +108,47 @@ expect config.firmware.flow done
 expect config.firmware.download.url none
 
 # All Options: every record of the catalogue, and FirmwareSelection on the board's platform - its
-# 80 CubeOrange files, none selected, so Upload Firmware waits for a choice.
+# 80 CubeOrange files, none selected, so Upload Firmware waits for a choice. Four releases and two
+# versions among them: Version Type and Version show beside Platform; Type, USB ID, Board ID,
+# Bootloader ID and Format never do for a device.
 click fw-alloptions
 expect config.firmware.selection 80
 expect config.firmware.selection.selected none
+expect config.firmware.selection.platform CubeOrange
+expect config.firmware.selection.versiontype.visible true
+expect config.firmware.selection.version.visible true
+expect config.firmware.selection.mavtype.visible false
+expect config.firmware.selection.usbid.visible false
+expect config.firmware.selection.board_id.visible false
+expect config.firmware.selection.bootloader_str.visible false
+expect config.firmware.selection.format.visible false
+# BETA, DEV, OFFICIAL, STABLE-4.7.1 and Ignore; 4.7.1, 4.8.0 and Ignore.
+expect config.firmware.selection.versiontype.items 5
+expect config.firmware.selection.version.items 3
+
+# Version Type DEV (its second row): the 28 DEV files, and Version refilled from them - one
+# version and Ignore.
+click fw-select-versiontype
+expect config.firmware.selection.open fw-select-versiontype
+click fw-select-versiontype-1
+expect config.firmware.selection.open none
+expect config.firmware.selection.versiontype DEV
+expect config.firmware.selection 28
+expect config.firmware.selection.version.items 2
+
+# Ignore, its last row, undoes it: all 80 again, and Version refilled from them.
+click fw-select-versiontype
+click fw-select-versiontype-4
+expect config.firmware.selection.versiontype none
+expect config.firmware.selection 80
+expect config.firmware.selection.version.items 3
+
+# A row of the Firmwares list is what Upload Firmware would take; Close is the window's close
+# box, FinalResult left null.
+click fw-select-result
+expect config.firmware.selection.open fw-select-result
+click fw-select-result-0
+expect config.firmware.selection.selected ~ https://firmware.ardupilot.org/
 click fw-select-close
 expect config.firmware.selection 0
 
@@ -116,3 +161,21 @@ click setup-page-ConfigFirmwareManifest
 expect config.firmware.active true
 expect config.firmware.manifest.fetches 1
 expect config.firmware.label.quad Copter V4.7.1 OFFICIAL
+
+# Ctrl+Q, with the page holding the keyboard - it takes it when clicked: the trunk warning, and
+# its OK is the DEV release, every picture relabelled from the catalogue already held.
+click fw-status
+key ctrl+q
+expect config.firmware.message These are the latest trunk firmware, use at your own risk!!!
+expect config.firmware.release OFFICIAL
+click fw-message-ok
+expect config.firmware.message none
+expect config.firmware.release DEV
+expect config.firmware.label.quad Copter V4.8.0-dev DEV
+expect config.firmware.label.tracker AntennaTracker V4.8.0-dev DEV
+expect config.firmware.manifest.fetches 1
+
+# Deactivate: back to OFFICIAL.
+click setup-page-ConfigOptional
+expect config.firmware.active false
+expect config.firmware.release OFFICIAL

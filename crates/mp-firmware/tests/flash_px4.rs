@@ -29,16 +29,21 @@ use common::MockBootloader;
 enum BenchPort {
     Board(Arc<Mutex<MockBootloader>>),
     Silent,
-    /// A board whose port fails after the identify: the sixth write and every read after it
-    /// are an I/O error.
+    /// A board whose port fails after the identify: the write after [`IDENTIFY_WRITES`] and every
+    /// read after it are an I/O error.
     Flaky(Arc<Mutex<MockBootloader>>, Arc<Mutex<usize>>),
 }
+
+/// The writes of a revision 5 bootloader's `identify()`: the sync, the four infos, `GET_CHIP`,
+/// `GET_CHIP_DES`, `GET_SN` at 0, 4 and 8, and `EXTF_SIZE`.
+/// `// C#: ExtLibs/px4uploader/Uploader.cs:867-921`
+const IDENTIFY_WRITES: usize = 11;
 
 impl Read for BenchPort {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
             Self::Flaky(mock, writes) => {
-                if *writes.lock().expect("count") >= 6 {
+                if *writes.lock().expect("count") > IDENTIFY_WRITES {
                     return Err(io::Error::other("the cable came out"));
                 }
                 let mut mock = mock.lock().expect("the bench");
@@ -65,7 +70,7 @@ impl Write for BenchPort {
             Self::Flaky(mock, writes) => {
                 let mut count = writes.lock().expect("count");
                 *count += 1;
-                if *count >= 6 {
+                if *count > IDENTIFY_WRITES {
                     return Err(io::Error::other("the cable came out"));
                 }
                 mock.lock().expect("the bench").write(buf)
@@ -415,4 +420,111 @@ fn a_bootloader_already_answering_is_not_rebooted() {
     ));
     assert_eq!(bench.reboots, 0, "a board in its bootloader is left there");
     assert_eq!(statuses(&person).first(), Some(&"Scanning comports"));
+}
+
+/// `Instance_DeviceChanged` over the bench: every port tried at once - one with nothing behind
+/// it, one that is not there any more, one with a CubeOrange's bootloader - and the bootloader
+/// found with its chip, said on the status line as the C# formats it.
+/// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:142-179`
+#[test]
+fn a_device_arriving_finds_the_bootloader_with_its_chip_on_every_port_at_once() {
+    let bench = Mutex::new(
+        Bench::new(LinkReboot::NotSerial)
+            .empty_port("/dev/ttyS0")
+            .board("/dev/ttyACM0", MockBootloader::new(140, 2_080_768)),
+    );
+    let names = ["/dev/ttyS0", "/dev/ttyACM0", "/dev/gone"].map(str::to_owned);
+    let found = Mutex::new(Vec::new());
+    let started = Instant::now();
+    flow::probe_arrival(
+        &names,
+        |port, baud| bench.lock().expect("the bench").open(port, baud),
+        |board| found.lock().expect("found").push(board),
+    );
+    // Twenty milliseconds for each port to appear - at once, not one after another.
+    assert!(started.elapsed() >= flow::ARRIVAL_SETTLE);
+    let found = found.into_inner().expect("found");
+    let [board] = found.as_slice() else {
+        panic!("one bootloader: {found:?}");
+    };
+    assert_eq!(board.port, "/dev/ttyACM0");
+    assert_eq!(
+        (board.board.board_id, board.board.bootloader_revision),
+        (140, 5)
+    );
+    assert_eq!(board.chip.chip, 0x1003_6450);
+    assert_eq!(board.chip.chip_desc, "STM32H7[4|5]x,rev:V");
+    assert_eq!(
+        board.chip.sn,
+        b"\x00\x1d\x00\x2a\x32\x30\x51\x0b\x35\x38\x39\x38"
+    );
+    assert_eq!(
+        board.status(),
+        "Found board type 140 brdrev 0 blrev 5 fwmax 2080768 chip 10036450 chipdes \
+         STM32H7[4|5]x,rev:V on /dev/ttyACM0"
+    );
+    let bench = bench.into_inner().expect("the bench");
+    let mut opened = bench.opened.clone();
+    opened.sort();
+    assert_eq!(
+        opened,
+        ["/dev/gone", "/dev/ttyACM0", "/dev/ttyS0"],
+        "every port tried"
+    );
+    let mock = bench.board_at("/dev/ttyACM0");
+    let mock = mock.lock().expect("the board");
+    assert!(
+        mock.received.is_empty(),
+        "whole commands: {:?}",
+        mock.received
+    );
+    assert!(mock.outgoing.is_empty(), "every answer read");
+    assert!(!mock.erased, "a probe writes nothing");
+}
+
+/// A bootloader that refuses `GET_CHIP` - `INSYNC INVALID` - is synced again and read on, as
+/// the C#'s `catch { __sync(); }` does: no chip, the serial number and the rest still read. One
+/// before revision 5 is not asked for a chip at all.
+/// `// C#: ExtLibs/px4uploader/Uploader.cs:436-452, 895-918`
+#[test]
+fn a_bootloader_without_the_chip_is_found_without_it() {
+    let mut refusing = MockBootloader::new(140, 2_080_768);
+    refusing.refuse_chip = true;
+    let mut old = MockBootloader::new(9, 1_032_192);
+    old.info
+        .insert(mp_firmware::Info::BootloaderRevision.byte(), 4);
+    let bench = Mutex::new(
+        Bench::new(LinkReboot::NotSerial)
+            .board("/dev/ttyACM0", refusing)
+            .board("/dev/ttyACM1", old),
+    );
+    let names = ["/dev/ttyACM0", "/dev/ttyACM1"].map(str::to_owned);
+    let found = Mutex::new(Vec::new());
+    flow::probe_arrival(
+        &names,
+        |port, baud| bench.lock().expect("the bench").open(port, baud),
+        |board| found.lock().expect("found").push(board),
+    );
+    let mut found = found.into_inner().expect("found");
+    found.sort_by(|a, b| a.port.cmp(&b.port));
+    let statuses: Vec<String> = found.iter().map(flow::FoundBoard::status).collect();
+    assert_eq!(
+        statuses,
+        [
+            "Found board type 140 brdrev 0 blrev 5 fwmax 2080768 chip 0 chipdes  on /dev/ttyACM0",
+            "Found board type 9 brdrev 0 blrev 4 fwmax 1032192 chip 0 chipdes  on /dev/ttyACM1",
+        ]
+    );
+    assert_eq!(found[0].chip.sn.len(), 12, "read on after the sync");
+    assert!(
+        found[1].chip.sn.is_empty(),
+        "revision 4 has no serial number to ask"
+    );
+    let bench = bench.into_inner().expect("the bench");
+    for port in ["/dev/ttyACM0", "/dev/ttyACM1"] {
+        let mock = bench.board_at(port);
+        let mock = mock.lock().expect("the board");
+        assert!(mock.received.is_empty(), "{port}: {:?}", mock.received);
+        assert!(mock.outgoing.is_empty(), "{port}: every answer read");
+    }
 }

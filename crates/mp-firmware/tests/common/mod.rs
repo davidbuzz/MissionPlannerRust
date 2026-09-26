@@ -29,6 +29,14 @@ pub(crate) struct MockBootloader {
     pub(crate) crc_override: Option<u32>,
     /// How much flash the board claims.
     pub(crate) flash_size: usize,
+    /// What `GET_CHIP` returns: the MCU's IDCODE.
+    pub(crate) chip: u32,
+    /// What `GET_CHIP_DES` returns.
+    pub(crate) chip_desc: String,
+    /// What `GET_SN` returns, a word per address.
+    pub(crate) sn: [u8; 12],
+    /// Whether `GET_CHIP` is answered `INSYNC INVALID`, as a bootloader without it answers.
+    pub(crate) refuse_chip: bool,
 }
 
 impl MockBootloader {
@@ -49,6 +57,11 @@ impl MockBootloader {
             erased: false,
             crc_override: None,
             flash_size,
+            // A CubeOrange's STM32H743, as its bootloader describes it.
+            chip: 0x1003_6450,
+            chip_desc: "STM32H7[4|5]x,rev:V".to_owned(),
+            sn: *b"\x00\x1d\x00\x2a\x32\x30\x51\x0b\x35\x38\x39\x38",
+            refuse_chip: false,
         }
     }
 
@@ -171,6 +184,65 @@ impl MockBootloader {
                 let end = usize::try_from(length).unwrap_or(0).min(self.flash.len());
                 let crc = crc32(&self.flash[..end], 0);
                 self.reply_word(crc);
+            }
+            b if b == Code::GetChip.byte() => {
+                if self.received.len() < 2 {
+                    return false;
+                }
+                assert_eq!(
+                    self.received[1],
+                    Code::Eoc.byte(),
+                    "GET_CHIP must be terminated"
+                );
+                self.received.drain(..2);
+                if self.refuse_chip {
+                    self.outgoing.push_back(Code::InSync.byte());
+                    self.outgoing.push_back(Code::Invalid.byte());
+                } else {
+                    let chip = self.chip;
+                    self.reply_word(chip);
+                }
+            }
+            b if b == Code::GetChipDes.byte() => {
+                if self.received.len() < 2 {
+                    return false;
+                }
+                assert_eq!(
+                    self.received[1],
+                    Code::Eoc.byte(),
+                    "GET_CHIP_DES must be terminated"
+                );
+                self.received.drain(..2);
+                let text = self.chip_desc.clone().into_bytes();
+                self.outgoing
+                    .extend(u32::try_from(text.len()).unwrap_or(0).to_le_bytes());
+                self.outgoing.extend(text);
+                self.reply_ok();
+            }
+            b if b == Code::GetSn.byte() => {
+                if self.received.len() < 6 {
+                    return false;
+                }
+                assert_eq!(
+                    self.received[5],
+                    Code::Eoc.byte(),
+                    "GET_SN must be terminated"
+                );
+                let address = u32::from_le_bytes([
+                    self.received[1],
+                    self.received[2],
+                    self.received[3],
+                    self.received[4],
+                ]);
+                self.received.drain(..6);
+                let at = usize::try_from(address).unwrap_or(usize::MAX);
+                assert!(
+                    at + 4 <= self.sn.len(),
+                    "GET_SN past the serial number: {at}"
+                );
+                let word: Vec<u8> = self.sn[at..at + 4].to_vec();
+                self.outgoing.extend(word);
+                self.reply_ok();
             }
             b if b == Code::Reboot.byte() => {
                 if self.received.len() < 2 {

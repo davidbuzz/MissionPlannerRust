@@ -1,4 +1,4 @@
-//! Install Firmware: the first page of Initial Setup, without the flashing.
+//! Install Firmware: the first page of Initial Setup.
 //!
 //! Mission Planner lists two pages under that name and shows one: `ConfigFirmwareManifest` while
 //! no vehicle is connected, `ConfigFirmwareDisabled` while one is (`GCSViews/InitialSetup.cs:
@@ -13,46 +13,37 @@
 //! disables the pictures and the All Options and Beta links, fetches the firmware catalogue
 //! (`mp_firmware::manifest`) on a background task, and labels each picture with the newest
 //! firmware of its vehicle in the release being offered - `OFFICIAL` until Beta firmwares is
-//! clicked - enabling it as it goes. Clicking a picture asks "Are you sure you want to upload
-//! ...?"; Yes runs `LookForPort`, which finds the board among the USB devices and picks its
-//! firmware - one file outright, several through `FirmwareSelection`, which starts at the board's
-//! own platform and waits for "Upload Firmware" - downloads it to a temporary file with the
-//! progress bar and status line following, and hands it to `UploadFlash`. All Options is
-//! `LookForPort` over the whole catalogue. Load custom firmware opens a file and hands it to
-//! `UploadFlash` by its extension (`mp_firmware::flow::custom_manifest`).
+//! clicked, or `DEV` after Ctrl+Q and its warning - enabling it as it goes. Clicking a picture
+//! asks "Are you sure you want to upload ...?"; Yes runs `LookForPort`, which takes the board id a
+//! bootloader reported when a device arrived while the page showed, or finds the board among the
+//! USB devices, and picks its firmware - one file outright, several through `FirmwareSelection`,
+//! whose pickers narrow the list from the board's own platform and which waits for "Upload
+//! Firmware" - downloads it to a temporary file with the progress bar and status line following,
+//! and hands it to `UploadFlash`, which reboots the board into its bootloader and writes it
+//! (`mp_firmware::flow::upload_px4`). All Options is `LookForPort` over the whole catalogue. Load
+//! custom firmware opens a file and hands it to `UploadFlash` by its extension
+//! (`mp_firmware::flow::custom_manifest`). Force Bootloader opens the window's link and reboots
+//! the board into its bootloader; Bootloader Update opens a link of its own, asks twice, and sends
+//! `MAV_CMD_FLASH_BOOTLOADER`.
 //!
-//! Here all of that runs as the C# runs it - on a thread, with its questions and messages as
-//! modal boxes over the page - up to the step that would write to a board, and stops there:
-//! `UploadFlash` reads the file (`ProcessFirmware`) and stops before `AttemptRebootToBootloader`,
-//! and DFU, the STK500 probes and the bootloader probe are stops of their own
-//! (`mp_firmware::flow::Stop`). Beneath the page are the board it found, the firmware it chose,
-//! the file it downloaded and what the file says of itself, and an Upload button that is disabled
-//! and says why. The layout is `ConfigFirmwareManifest.Designer.cs`'s - every control at its
-//! `Location` and `Size` in a 946 x 375 page - each picture its `Image`, zoomed as `ImageLabel`'s
-//! `PictureBox` zooms it ([`crate::pictures`]), and this application's colours.
+//! All of it runs as the C# runs it - the flows on a thread, with their questions and messages as
+//! modal boxes over the page. The layout is `ConfigFirmwareManifest.Designer.cs`'s - every control
+//! at its `Location` and `Size` in a 946 x 375 page - each picture its `Image`, zoomed as
+//! `ImageLabel`'s `PictureBox` zooms it ([`crate::pictures`]), and this application's colours.
+//! Beneath the page are the board found, the firmware chosen, the file downloaded and what it says
+//! of itself.
 //!
 //! What is not here, and why:
 //!
-//! * the upload itself and Bootloader Update write to the board: the upload through
-//!   `flow::upload_px4` over this machine's ports (PLAN.md §13.6 row 79), Bootloader Update as
-//!   `doCommand(FLASH_BOOTLOADER)` from the window once its two "Are you sure" questions are
-//!   answered Yes. Force Bootloader is drawn dimmed;
-//! * `Ctrl+Q` for the `DEV` release (`ProcessCmdKey`, `ConfigFirmwareManifest.cs:399-408`): the
-//!   C# sees it only while a control of the page has the keyboard, and nothing on this page takes
-//!   it; the catalogue answers for `DEV`, and `headless-planner firmware list --release DEV` asks it;
-//! * the board id a bootloader reports when a device is plugged in while the page shows
-//!   (`Instance_DeviceChanged`, `:134-180`): reading it means opening every port and sending the
-//!   bootloader's identify. The board is found from the USB product string and ids alone, as
-//!   `LookForPort` does when that probe has found nothing;
-//! * `FirmwareSelection`'s filter pickers (`test/FirmwareSelection.xaml.cs:63-152`): the dialog
-//!   opens as the C#'s does for a device - its Result list at the board's own platform, the one
-//!   file selected when there is one - and a row can be chosen and "Upload Firmware" pressed, but
-//!   the Type, Version and Platform pickers that narrow a long list are not drawn;
+//! * the uploads that are not a px4 bootloader's: DFU, the STK500 upload and probes, VRBRAIN,
+//!   Parrot and Solo end where they would write to a board (`mp_firmware::flow::Stop`), the
+//!   report beneath saying which step that was and that it is not ported ([`stop_text`]);
 //! * `Tracking.AddFW` and `AddTiming`, Mission Planner's analytics.
 //!
 //! The device list is the port enumeration through `mp_firmware::detect::DeviceInfo::from_port`.
 //! [`DEVICE_ENV`] replaces it with one named device, so a test does not depend on what is plugged
-//! into the machine running it; with [`mp_firmware::manifest::OVERRIDE_ENV`] and
+//! into the machine running it - and then nothing opens this machine's ports: no upload, no probe
+//! on a device's arrival. With [`mp_firmware::manifest::OVERRIDE_ENV`] and
 //! [`mp_firmware::manifest::MIRROR_ENV`] a test runs offline.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
@@ -61,22 +52,24 @@
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
+use std::time::{Duration, Instant};
 
 use gpui::{
-    AnyElement, Context, Div, FocusHandle, KeyDownEvent, SharedString, Window, div, prelude::*, px,
-    rgb,
+    AnyElement, Context, Div, FocusHandle, KeyDownEvent, MouseButton, SharedString, Window, div,
+    prelude::*, px, rgb,
 };
 use mp_firmware::detect::{DeviceInfo, TransportPort, Win32SerialPort, open_serial};
-use mp_firmware::flow::{self, Buttons, Dialogue, FlashHost, LinkReboot, Reached};
+use mp_firmware::flow::{self, Buttons, Dialogue, FlashHost, FoundBoard, LinkReboot, Reached};
 use mp_firmware::manifest::{
-    self, Lookup, Manifest, MavType, NO_FIRMWARE, NO_PORT, Outcome, ReleaseType, Selection,
+    self, Filter, Lookup, Manifest, MavType, NO_FIRMWARE, NO_PORT, Outcome, Pickers, ReleaseType,
     icon_name,
 };
 
 use crate::MissionPlanner;
 use crate::settings::Persisted;
-use crate::telemetry::TelemetryView;
+use crate::telemetry::{Report, Telemetry, TelemetryView};
 use crate::textfield::{KeyOutcome, TextField};
 use crate::ui::{action, panel, theme};
 
@@ -92,8 +85,12 @@ pub const DEVICE_ENV: &str = "MP_FIRMWARE_DEVICE";
 /// unset. Never set in a shipped configuration.
 pub const PORT_ENV: &str = "MP_FIRMWARE_PORT";
 
-/// What the Upload button says for itself.
-pub const NOT_ENABLED: &str = flow::NOT_ENABLED;
+/// What the legacy page's Upload button says for itself: its uploads are not ported.
+pub const NOT_PORTED: &str = flow::NOT_PORTED;
+
+/// Why the manifest page's px4 upload stops before the board while [`DEVICE_ENV`] names the
+/// device: nothing opens this machine's ports then ([`Machine::flash`]).
+pub const NO_BOARD_WRITTEN: &str = "no board is written while MP_FIRMWARE_DEVICE names the device";
 
 /// `FirmwareSelection`'s heading, shown when several files fit the board.
 /// `// C#: test/FirmwareSelection.xaml:7`
@@ -125,9 +122,11 @@ const DISABLED_TEXT: &str = "You cannot load new firmware while connected via MA
                              Please press the Disconnect button at top right to end the current \
                              MAVLink session and enable the firmware loading screen.";
 
-/// `ConfigFirmwareDisabled.resx`'s `label2.Text`.
+/// `ConfigFirmwareDisabled.resx`'s `label2.Text`, beside Bootloader Update: the C#'s words, which
+/// say nothing of flashing being disabled.
 /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareDisabled.resx:187-188`
-const DISABLED_BOOTLOADER: &str = "Update the bootloader on your hardware to the newest available.";
+const UPDATE_THE_BOOTLOADER: &str =
+    "Update the bootloader on your hardware to the newest available.";
 
 /// `but_bootloaderupdate_Click`'s two questions, caption "BL Update".
 /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareDisabled.cs:26-30`
@@ -139,6 +138,48 @@ pub const BL_QUESTIONS: [&str; 2] = [
 
 /// Their caption. `// C#: GCSViews/ConfigurationView/ConfigFirmwareDisabled.cs:27`
 const BL_UPDATE: &str = "BL Update";
+
+/// `Strings.TrunkWarning`: Ctrl+Q's box, before the `DEV` release.
+/// `// C#: ExtLibs/Strings/Strings.resx:483-485; GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:403`
+pub const TRUNK_WARNING: &str = "These are the latest trunk firmware, use at your own risk!!!";
+
+/// `Strings.Trunk`: its caption. `// C#: ExtLibs/Strings/Strings.resx:480-482`
+pub const TRUNK: &str = "trunk";
+
+/// Force Bootloader's instruction once the reboot has gone out: a box, as the C#'s.
+/// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:522`
+pub const IGNORE_THE_UNPLUG: &str =
+    "Please ignore the unplug and plug back in when uploading flight firmware.";
+
+/// Force Bootloader's failure: a box in the C#, the status line here - the owner's ruling of
+/// 2026-09-25, no box for an error the window can show.
+/// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:531`
+pub const FORCE_FAILED: &str = "Failed to connect and send the reboot command";
+
+/// Bootloader Update's words when its link found no vehicle: a box in the C#, the status line
+/// here, as [`FORCE_FAILED`].
+/// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:544`
+pub const NO_DEVICE_ON_MAVLINK: &str = "Failed to find device on mavlink";
+
+/// `FLASH_BOOTLOADER` accepted. A box in the C#; the status line here, as the window says every
+/// command's outcome. `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:554; ConfigFirmwareDisabled.cs:34`
+pub const UPGRADED_BOOTLOADER: &str = "Upgraded bootloader";
+
+/// `FLASH_BOOTLOADER` refused. `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:558; ConfigFirmwareDisabled.cs:38`
+pub const FAILED_TO_UPGRADE_BOOTLOADER: &str = "Failed to upgrade bootloader";
+
+/// `doCommand`'s `TimeoutException` once its retry has gone unanswered, which the manifest
+/// page's handler does not catch: the application's error handler shows it in the C#, the status
+/// line here. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2784-2797`
+pub const DO_COMMAND_TIMEOUT: &str = "Timeout on read - doCommand";
+
+/// `MAVLinkInterface.CONNECT_TIMEOUT_SECONDS`' default: how long `Open` waits for heartbeats.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:325`
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// How often the manifest page's [`Watcher`] enumerates the serial ports while the page is
+/// active, to see a device arrive: the C#'s `WM_DEVICECHANGE` has no counterpart here.
+const ARRIVAL_POLL: Duration = Duration::from_millis(500);
 
 /// The page's size, `ConfigFirmwareManifest.Designer.cs:296`.
 const PAGE: (f32, f32) = (946.0, 375.0);
@@ -332,12 +373,6 @@ pub const LINKS: [Link; 5] = [
         "Lbl_devfw_Click",
     ),
 ];
-
-/// Why Force Bootloader and Bootloader Update do nothing here.
-pub const BOOTLOADER_DISABLED: &str = "Force Bootloader reboots the board into its bootloader \
-                                       (MAVLink doReboot) and Bootloader Update sends \
-                                       MAV_CMD_FLASH_BOOTLOADER: both write to a board, and \
-                                       flashing is not enabled in this build";
 
 // ---------------------------------------------------------------------------------------------
 // A flow on its thread, shared with the legacy page.
@@ -779,41 +814,111 @@ pub fn remember_folder(settings: &mut Persisted, file: &Path) -> String {
 /// What the background fetch sends back: the manifest, if one was had, and what went wrong.
 type Fetched = (Option<Manifest>, Vec<String>);
 
-/// `FirmwareSelection`, open over a lookup's records: its Result picker's selection.
+/// One of `FirmwareSelection`'s pickers: a filter, or `Result`, the Firmwares list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PickerId {
+    /// A filter picker.
+    Filter(Filter),
+    /// `Result`.
+    Result,
+}
+
+impl PickerId {
+    /// The id its box is drawn and clicked by; its rows add `-<index>`.
+    #[must_use]
+    pub fn id(self) -> String {
+        match self {
+            Self::Filter(filter) => format!("fw-select-{}", filter.name()),
+            Self::Result => "fw-select-result".to_owned(),
+        }
+    }
+}
+
+/// `FirmwareSelection`, open over a lookup's records: its pickers, and the one whose list is
+/// dropped down with the first row it shows.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Choosing {
     /// The records and the device.
     pub lookup: Lookup,
-    /// The Result row selected.
-    pub selected: Option<usize>,
+    /// The pickers.
+    pub pickers: Pickers,
+    /// The picker whose list is down, and its top row.
+    pub open: Option<(PickerId, usize)>,
 }
 
 impl Choosing {
-    /// The dialog as it opens: the one row selected when there is one - a file, or the line
-    /// saying there are too many or none.
-    /// `// C#: test/FirmwareSelection.xaml.cs:107-126`
+    /// The constructor: the pickers for the lookup's device over its records.
+    /// `// C#: test/FirmwareSelection.xaml.cs:15-59`
     fn open(lookup: Lookup) -> Self {
-        let rows = Selection::new(&lookup.items, &lookup.device)
-            .results()
-            .len();
+        let pickers = Pickers::open(&lookup.items, &lookup.device);
         Self {
             lookup,
-            selected: (rows == 1).then_some(0),
+            pickers,
+            open: None,
         }
     }
 
     /// The Result picker's rows.
     #[must_use]
-    pub fn results(&self) -> Vec<String> {
-        Selection::new(&self.lookup.items, &self.lookup.device).results()
+    pub fn results(&self) -> &[String] {
+        &self.pickers.result.items
     }
 
-    /// The Platform picker's choice, as the dialog opened it.
+    /// A picker.
     #[must_use]
-    pub fn platform(&self) -> Option<String> {
-        Selection::new(&self.lookup.items, &self.lookup.device).platform
+    pub fn picker(&self, id: PickerId) -> &manifest::Picker {
+        match id {
+            PickerId::Filter(filter) => self.pickers.picker(filter),
+            PickerId::Result => &self.pickers.result,
+        }
+    }
+
+    /// A picker's list dropped down, or put away when it is the one down: scrolled, as a
+    /// WinForms `ComboBox` drops its list, so the selected row shows.
+    pub fn toggle(&mut self, id: PickerId) {
+        if self.open.is_some_and(|(open, _)| open == id) {
+            self.open = None;
+            return;
+        }
+        let picker = self.picker(id);
+        let top = picker
+            .index
+            .unwrap_or(0)
+            .saturating_sub(LIST_ROWS - 1)
+            .min(picker.items.len().saturating_sub(LIST_ROWS));
+        self.open = Some((id, top));
+    }
+
+    /// The wheel over a dropped list: `lines` rows down, negative up, kept within the list.
+    pub fn scroll(&mut self, lines: i32) {
+        let Some((id, top)) = self.open else {
+            return;
+        };
+        let last = self.picker(id).items.len().saturating_sub(LIST_ROWS);
+        let rows = usize::try_from(lines.unsigned_abs()).unwrap_or(usize::MAX);
+        let top = if lines < 0 {
+            top.saturating_sub(rows)
+        } else {
+            top.saturating_add(rows).min(last)
+        };
+        self.open = Some((id, top));
+    }
+
+    /// A row of a dropped list chosen: the picker's `SelectedIndex`, and the list put away.
+    pub fn choose(&mut self, id: PickerId, row: usize) {
+        match id {
+            PickerId::Filter(filter) => self.pickers.choose(&self.lookup.items, filter, row),
+            PickerId::Result => self.pickers.choose_result(row),
+        }
+        self.open = None;
     }
 }
+
+/// How many rows a dropped list shows before it scrolls.
+const LIST_ROWS: usize = 30;
+
+/// A dropped list's row height.
+const LIST_ROW: f32 = 16.0;
 
 /// The page, and the catalogue it keeps.
 #[derive(Debug)]
@@ -862,10 +967,107 @@ pub struct InstallFirmware {
     bootloader: Option<usize>,
     /// The second Yes given: `FLASH_BOOTLOADER` is owed to the vehicle.
     bootloader_command: bool,
+    /// `flashdone`: set once `LookForPort`'s download is in and `UploadFlash` begins, cleared by
+    /// `Activate` and `Deactivate`; while set, a device arriving is not probed. Shared with the
+    /// flow's thread, which sets it.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:63, 131, 139-140, 335, 411`
+    flashdone: Arc<AtomicBool>,
+    /// The serial ports the page watches for a device's arrival - this machine's - or `None`: not
+    /// in a unit test, which may give its own, and not while [`DEVICE_ENV`] names the device.
+    watch_ports: Option<fn() -> Vec<String>>,
+    /// Arrivals heard and probed since the page was made, for a test to see one reach the probe.
+    arrivals: usize,
+    /// The page's flow threads still running, counted across `Activate` and `Deactivate`: a
+    /// flash left running when the page was left goes on scanning the ports for its bootloader,
+    /// and a probe holding one of them would fail its open. The C#'s page cannot be left mid-flash.
+    flows: Arc<std::sync::atomic::AtomicUsize>,
+    /// Whether Force Bootloader and Bootloader Update may open a serial port - where a real
+    /// board is - to reboot it or rewrite its bootloader: not while [`DEVICE_ENV`] names the
+    /// device, as no upload is then made either ([`NO_BOARD_WRITTEN`]).
+    opens_boards: bool,
+    /// `Instance_DeviceChanged` subscribed to `DeviceChanged`: from `Activate` to `Deactivate`.
+    watcher: Option<Watcher>,
+    /// The probes' threads' end of the channel, handed to each probe.
+    found_sender: Sender<FoundBoard>,
+    /// What the probes have found.
+    found_receiver: Receiver<FoundBoard>,
+    /// `detectedport` and `detectedboardid`: the bootloader the last probe found, which
+    /// `LookForPort` takes before the USB guess. Kept for the life of the SETUP screen, as the
+    /// C# page object keeps them.
+    found: Option<FoundBoard>,
+    /// Ctrl+Q's warning is showing; its OK goes on to the `DEV` release.
+    trunk: bool,
+    /// Force Bootloader, under way.
+    force: Option<Force>,
+    /// Bootloader Update on this page: its own link, under way.
+    bl: Option<BlLink>,
+    /// The window's connection prompts are asking the transport's questions for Bootloader
+    /// Update's link, not the window's.
+    bl_asking: bool,
+    /// What the page has to say on the window's status line.
+    status: Option<String>,
+}
+
+/// Force Bootloader after its click: `MainV2.comPort.Open(false)` waiting for the vehicle, then
+/// `doReboot(true, false)` waiting for its next heartbeat.
+/// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:513-533`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Force {
+    /// `Open`'s connect loop: a vehicle heard twice (four times when it is not component 1)
+    /// before the deadline.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:769-894`
+    Opening {
+        /// `CONNECT_TIMEOUT_SECONDS` after the click.
+        deadline: Instant,
+    },
+    /// `doReboot(true, false)`'s `getHeartBeat`: the heartbeat after `seen`, or 2.2 s.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2591-2605`
+    Heartbeat {
+        /// The vehicle's heartbeats when it began.
+        seen: u64,
+        /// When `getHeartBeat` gives up.
+        deadline: Instant,
+    },
+}
+
+/// How Force Bootloader ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ForceEnd {
+    /// The reboots went out (or there was no vehicle to send them to, which the C# does not
+    /// check): "Please ignore the unplug ..." shows.
+    Rebooted,
+    /// `Open` found no vehicle in time and closed the port: [`FORCE_FAILED`].
+    Failed,
+}
+
+/// Bootloader Update on the manifest page: the link `doConnect(mav, ...)` opened, and how far it
+/// has got.
+/// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:535-562`
+#[derive(Debug)]
+pub struct BlLink {
+    /// `mav`.
+    pub link: Telemetry,
+    /// Where it is.
+    pub stage: BlStage,
+}
+
+/// Where Bootloader Update's link has got.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlStage {
+    /// `Open`'s connect loop, as for Force Bootloader.
+    Opening {
+        /// `CONNECT_TIMEOUT_SECONDS` after it opened.
+        deadline: Instant,
+    },
+    /// One of the two "BL Update" questions.
+    Asking(usize),
+    /// `doCommand(FLASH_BOOTLOADER, ...)` waiting for its answer.
+    Commanding,
 }
 
 impl Default for InstallFirmware {
     fn default() -> Self {
+        let (found_sender, found_receiver) = channel();
         Self {
             open: false,
             connected: false,
@@ -889,7 +1091,111 @@ impl Default for InstallFirmware {
             path: None,
             bootloader: None,
             bootloader_command: false,
+            flashdone: Arc::new(AtomicBool::new(false)),
+            // A unit test never enumerates, let alone opens, this machine's ports.
+            watch_ports: (!cfg!(test) && std::env::var_os(DEVICE_ENV).is_none())
+                .then_some(port_identities as fn() -> Vec<String>),
+            arrivals: 0,
+            flows: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            opens_boards: std::env::var_os(DEVICE_ENV).is_none(),
+            watcher: None,
+            found_sender,
+            found_receiver,
+            found: None,
+            trunk: false,
+            force: None,
+            bl: None,
+            bl_asking: false,
+            status: None,
         }
+    }
+}
+
+/// Whether `Open`'s connect loop would be done: the vehicle shown heard twice from component 1,
+/// or four times from another.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:869-891`
+fn heard_enough(view: &TelemetryView) -> bool {
+    let (Some(vehicle), Some(state)) = (view.vehicle, view.state.as_deref()) else {
+        return false;
+    };
+    (state.heartbeats >= 2 && vehicle.compid == 1) || state.heartbeats >= 4
+}
+
+/// Whether a port has appeared since the last enumeration: `DBT_DEVICEARRIVAL`, as far as the
+/// serial ports show it. A divergence forced by the platform: the C# hears every device's
+/// arrival from Windows' `WM_DEVICECHANGE` and probes the ports on any, where here there is no
+/// such message and an arrival is seen only as a serial port new or changed (`port_identities`),
+/// so a device that brings none - a memory stick, say - starts no probe.
+/// `// C#: MainV2.cs:4520-4577; GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:134-137`
+#[must_use]
+pub fn arrived(seen: &[String], now: &[String]) -> bool {
+    now.iter().any(|port| !seen.contains(port))
+}
+
+/// `MainV2.DeviceChanged` as the manifest page hears it here: a thread enumerating the serial
+/// ports every [`ARRIVAL_POLL`] - off the UI thread, as the enumeration asks the OS for its
+/// devices (SetupAPI on Windows) - and sending the list each time a port has appeared since the
+/// enumeration before ([`arrived`]). Dropped, it stops: `DeviceChanged -= Instance_DeviceChanged`.
+/// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:47-48, 126, 134-137; MainV2.cs:4520-4577`
+#[derive(Debug)]
+struct Watcher {
+    /// Set when dropped; the thread ends at its next enumeration.
+    stop: Arc<AtomicBool>,
+    /// The ports at each arrival.
+    arrivals: Receiver<Vec<String>>,
+}
+
+impl Watcher {
+    /// Starts the thread over `enumerate`, the ports as they are now its first list. `None` when
+    /// the thread cannot be started, and then no arrival is heard.
+    fn start(
+        enumerate: impl Fn() -> Vec<String> + Send + 'static,
+        every: Duration,
+    ) -> Option<Self> {
+        let stop = Arc::new(AtomicBool::new(false));
+        let stopped = Arc::clone(&stop);
+        let (sender, arrivals) = channel();
+        std::thread::Builder::new()
+            .name("mp-firmware-ports".to_owned())
+            .spawn(move || {
+                let mut seen = enumerate();
+                loop {
+                    std::thread::sleep(every);
+                    if stopped.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    let now = enumerate();
+                    if arrived(&seen, &now) && sender.send(now.clone()).is_err() {
+                        return;
+                    }
+                    seen = now;
+                }
+            })
+            .ok()?;
+        Some(Self { stop, arrivals })
+    }
+}
+
+/// A flow thread counted in [`InstallFirmware`]'s `flows` for as long as it lives, however it
+/// ends - its closure dropped unrun too, when the thread cannot start.
+struct Running(Arc<std::sync::atomic::AtomicUsize>);
+
+impl Running {
+    fn new(count: &Arc<std::sync::atomic::AtomicUsize>) -> Self {
+        count.fetch_add(1, Ordering::SeqCst);
+        Self(Arc::clone(count))
+    }
+}
+
+impl Drop for Running {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+impl Drop for Watcher {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
     }
 }
 
@@ -898,6 +1204,16 @@ impl InstallFirmware {
     #[must_use]
     pub const fn is_open(&self) -> bool {
         self.open
+    }
+
+    /// Whether Force Bootloader is under way over the window's link, which its
+    /// `MainV2.comPort.Open(false)` opened or found open: while it is, the link opening or
+    /// closing shows no screen again (`MissionPlanner::backstage_tick`) - `Open` is not
+    /// `doConnect`, whose end shows the screen again, nor a disconnect.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:517; MainV2.cs:1115-1133, 1419-1425, 1740-1748; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:668-700, 809-814`
+    #[must_use]
+    pub const fn forcing(&self) -> bool {
+        self.force.is_some()
     }
 
     /// Opens the page if it is closed and closes it if it is open.
@@ -919,12 +1235,20 @@ impl InstallFirmware {
         }
     }
 
-    /// `Activate`: disables the pictures and links, then labels them from the catalogue - at
-    /// once when it is held, else when the fetch this starts has brought it.
+    /// `Activate`: subscribes to devices' arrivals, disables the pictures and links, clears
+    /// `flashdone`, then labels them from the catalogue - at once when it is held, else when the
+    /// fetch this starts has brought it.
     /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:45-94`
     pub fn activate(&mut self) {
+        // `DeviceChanged -= Instance_DeviceChanged; DeviceChanged += Instance_DeviceChanged`:
+        // arrivals from now on, against the ports there are now.
+        self.watcher = self
+            .watch_ports
+            .and_then(|ports| Watcher::start(ports, ARRIVAL_POLL));
         self.enabled = [false; 11];
         self.links_enabled = false;
+        // `flashdone = false`: a flow still running from before keeps its own flag.
+        self.flashdone = Arc::new(AtomicBool::new(false));
         self.picked = None;
         self.devices = devices();
         if self.manifest.is_some() {
@@ -934,24 +1258,53 @@ impl InstallFirmware {
         }
     }
 
-    /// `Deactivate`: back to the official release for next time. The page's boxes close with
-    /// it, and a flow still running answers No to whatever it asks next.
+    /// `Deactivate`: arrivals no longer heard, back to the official release for next time, and
+    /// `flashdone` cleared. The page's boxes close with it, a flow still running answers No to
+    /// whatever it asks next, and Bootloader Update's link closes - the C#'s handlers hold the
+    /// window until they end, so nothing of theirs outlives the page there.
     /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:124-132`
     pub fn close(&mut self) {
         self.open = false;
+        // `DeviceChanged -= Instance_DeviceChanged`.
+        self.watcher = None;
         self.release = ReleaseType::Official;
+        self.flashdone = Arc::new(AtomicBool::new(false));
         self.picked = None;
         self.confirm = None;
         self.selection = None;
         self.worker = None;
         self.messages.clear();
+        self.trunk = false;
         self.path = None;
         self.bootloader = None;
+        self.force = None;
+        self.bl = None;
     }
 
-    /// Once a frame: takes a finished fetch, hears the flow running, and closes the page when
-    /// the screen changes, as leaving Initial Setup deactivates its page.
+    /// The SETUP screen disposed and made anew - a connect, a disconnect, its tab clicked again -
+    /// where leaving the page only deactivates it: a new page object, with no bootloader found.
+    /// Kept across the page's own deactivations ([`Self::close`]), as the C#'s page object is.
+    /// `// C#: MainV2.cs:1329, 1347, 1422, 1745, 3179; ExtLibs/Controls/MainSwitcher.cs:112-135`
+    pub fn screen_disposed(&mut self) {
+        self.found = None;
+    }
+
+    /// Once a frame: takes a finished fetch, hears the flow running and the probes of a device's
+    /// arrival, watches the ports, and closes the page when the screen changes, as leaving
+    /// Initial Setup deactivates its page - and forgets the bootloader found, as leaving disposes
+    /// the screen and the page object with it (`HWConfig` is not a persistent screen).
+    /// `// C#: MainV2.cs:3179; ExtLibs/Controls/MainSwitcher.cs:112-135`
     pub fn tick(&mut self, on_setup: bool) {
+        while let Ok(board) = self.found_receiver.try_recv() {
+            self.found_board(board);
+        }
+        if on_setup {
+            if let Some(ports) = self.hear_arrival() {
+                self.device_arrived(ports);
+            }
+        } else {
+            self.found = None;
+        }
         if let Some(receiver) = &self.receiver {
             match receiver.try_recv() {
                 Ok((manifest, errors)) => {
@@ -977,6 +1330,68 @@ impl InstallFirmware {
         if self.open && !on_setup {
             self.close();
         }
+    }
+
+    /// What the [`Watcher`] has heard since the last frame: the serial ports as they were at the
+    /// latest arrival, for the probe, while the manifest page is active.
+    fn hear_arrival(&mut self) -> Option<Vec<String>> {
+        let watcher = self.watcher.as_ref()?;
+        let latest = watcher.arrivals.try_iter().last()?;
+        (self.open && !self.connected).then_some(latest)
+    }
+
+    /// `Instance_DeviceChanged(DBT_DEVICEARRIVAL)`: nothing once `flashdone`; else every serial
+    /// port probed for a bootloader on threads of their own (`flow::probe_arrival`), what they
+    /// find heard by [`InstallFirmware::tick`].
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:134-180`
+    fn device_arrived(&mut self, ports: Vec<String>) {
+        self.arrivals += 1;
+        let ports = ports
+            .iter()
+            .map(|entry| identity_port(entry).to_owned())
+            .collect();
+        self.probe(ports, |port, baud| open_serial(port, baud, false));
+    }
+
+    /// [`InstallFirmware::device_arrived`] over the ports `open` opens: this machine's, or a
+    /// test's.
+    fn probe<P, O>(&mut self, ports: Vec<String>, open: O)
+    where
+        P: mp_firmware::detect::ProbePort,
+        O: Fn(&str, u32) -> std::io::Result<P> + Send + Sync + 'static,
+    {
+        if self.flashdone.load(Ordering::Relaxed) {
+            return;
+        }
+        // A flow of an earlier activation still running - a flash the page was left during - is
+        // not the page's to probe around.
+        if self.worker.is_none() && self.flows.load(Ordering::SeqCst) > 0 {
+            return;
+        }
+        let found = self.found_sender.clone();
+        // `Task.Run(() => Parallel.ForEach(SerialPort.GetPortNames(), ...))`.
+        let _ = std::thread::Builder::new()
+            .name("mp-firmware-arrival".to_owned())
+            .spawn(move || {
+                flow::probe_arrival(&ports, open, |board| {
+                    let _ = found.send(board);
+                });
+            });
+    }
+
+    /// A probe's find: `lbl_status` says it - the bar left where it is - and it is
+    /// `detectedport` and `detectedboardid`, which the next `LookForPort` takes.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:163-171`
+    fn found_board(&mut self, board: FoundBoard) {
+        self.progress.status = board.status();
+        self.found = Some(board);
+    }
+
+    /// `detectedboardid`, as `LookForPort` reads it.
+    fn detected_board_id(&self) -> Option<i64> {
+        self.found
+            .as_ref()
+            .map(|found| i64::from(i32::from_le_bytes(found.board.board_id.to_le_bytes())))
     }
 
     /// The fetch `Activate` starts: `GetList` over the mirror and then ardupilot.org, on a
@@ -1037,16 +1452,32 @@ impl InstallFirmware {
             .find_map(|device| Some((device.clone(), manifest.board_ids(device, true)?)));
     }
 
+    /// Whether Force Bootloader and Bootloader Update refuse the port the port box names: a
+    /// serial port - where a board is - while [`DEVICE_ENV`] names the device, so no script
+    /// reboots or rewrites whatever is plugged into the machine running it. A network kind, the
+    /// SITL's, is not refused.
+    #[must_use]
+    pub fn refuses_port(&self, port: &str) -> bool {
+        !self.opens_boards
+            && !port.is_empty()
+            && crate::connect::kind(port) == crate::connect::Kind::Serial
+    }
+
     /// Whether the page takes a click: open on the manifest page, with no box over it.
-    fn live(&self) -> bool {
+    #[must_use]
+    pub fn live(&self) -> bool {
         self.open
             && !self.connected
             && self.confirm.is_none()
             && self.selection.is_none()
             && self.path.is_none()
             && self.messages.is_empty()
-            // The C#'s handlers hold the UI thread until the flow has ended.
+            // The C#'s handlers hold the UI thread until the flow has ended: the flows, Force
+            // Bootloader's and Bootloader Update's links, and the transport's questions.
             && self.worker.is_none()
+            && self.force.is_none()
+            && self.bl.is_none()
+            && !self.bl_asking
     }
 
     /// `PictureBox_Click`: "Are you sure you want to upload <label>?", caption `Continue`.
@@ -1078,17 +1509,23 @@ impl InstallFirmware {
         }
     }
 
-    /// `LookForPort(mavtype)` over the devices as they are now: no device with a board id says
-    /// "Failed to detect port"; one file is downloaded; several open `FirmwareSelection`; none
-    /// says "No firmware available" and then fails to download.
+    /// `LookForPort(mavtype)` over the devices as they are now, with the board id a probe found
+    /// when a device arrived (`devid = detectedboardid`, before the USB guess): no device with a
+    /// board id says "Failed to detect port"; one file is downloaded; several open
+    /// `FirmwareSelection`; none says "No firmware available" and then fails to download.
     /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:193-358`
     pub fn pick(&mut self, index: usize, settings: &Persisted) {
         let (Some(manifest), Some(picture)) = (self.manifest.clone(), PICTURES.get(index)) else {
             return;
         };
         self.devices = devices();
-        let lookup =
-            manifest.look_for_port(&self.devices, None, picture.mav_type, self.release, false);
+        let lookup = manifest.look_for_port(
+            &self.devices,
+            self.detected_board_id(),
+            picture.mav_type,
+            self.release,
+            false,
+        );
         self.picked = Some((index, lookup.clone()));
         self.after_lookup(lookup, settings);
     }
@@ -1104,8 +1541,13 @@ impl InstallFirmware {
             return;
         };
         self.devices = devices();
-        let lookup =
-            manifest.look_for_port(&self.devices, None, MavType::Copter, self.release, true);
+        let lookup = manifest.look_for_port(
+            &self.devices,
+            self.detected_board_id(),
+            MavType::Copter,
+            self.release,
+            true,
+        );
         self.picked = None;
         self.after_lookup(lookup, settings);
     }
@@ -1132,26 +1574,37 @@ impl InstallFirmware {
         }
     }
 
-    /// A Result row chosen in `FirmwareSelection`.
-    pub fn select(&mut self, row: usize) {
-        if let Some(choosing) = &mut self.selection
-            && row < choosing.results().len()
-        {
-            choosing.selected = Some(row);
+    /// A picker's box in `FirmwareSelection` clicked: its list dropped down, or put away.
+    pub fn toggle_picker(&mut self, id: PickerId) {
+        if let Some(choosing) = &mut self.selection {
+            choosing.toggle(id);
         }
     }
 
-    /// "Upload Firmware": the row selected is `FinalResult`, and the download goes on; with no
-    /// row selected the button does nothing.
+    /// A row of a dropped list chosen: the picker's `SelectedIndex`, and - for a filter - its
+    /// `SelectedIndexChanged`.
+    pub fn choose(&mut self, id: PickerId, row: usize) {
+        if let Some(choosing) = &mut self.selection {
+            choosing.choose(id, row);
+        }
+    }
+
+    /// The wheel over a dropped list.
+    pub fn scroll_picker(&mut self, lines: i32) {
+        if let Some(choosing) = &mut self.selection {
+            choosing.scroll(lines);
+        }
+    }
+
+    /// "Upload Firmware": the Firmwares picker's selection is `FinalResult`, and the download
+    /// goes on - with a URL, or with the line it holds in place of URLs, which fails as a
+    /// download; with nothing selected the button does nothing.
     /// `// C#: test/FirmwareSelection.xaml.cs:200-212; ConfigFirmwareManifest.cs:247-254`
     pub fn upload_selected(&mut self, settings: &Persisted) {
         let Some(choosing) = &self.selection else {
             return;
         };
-        let Some(url) = choosing
-            .selected
-            .and_then(|row| choosing.results().get(row).cloned())
-        else {
+        let Some(url) = choosing.pickers.final_result().map(str::to_owned) else {
             return;
         };
         let device = choosing.lookup.device.name.clone().unwrap_or_default();
@@ -1165,15 +1618,22 @@ impl InstallFirmware {
     }
 
     /// The download and `UploadFlash`, on their thread; after "No firmware available" when
-    /// `nothing` is set.
+    /// `nothing` is set. `flashdone` is set once the file is in, before the upload.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:319-337`
     fn download(&mut self, url: String, device: String, nothing: bool, settings: &Persisted) {
         let machine = Machine::here(settings);
+        let flashdone = Arc::clone(&self.flashdone);
+        let running = Running::new(&self.flows);
         self.worker = Worker::start("mp-firmware-download", move |dialogue| {
+            let _running = running;
             machine.run(dialogue, |cx, machine| {
                 if nothing {
                     cx.dialogue.show(NO_FIRMWARE, flow::ERROR);
                 }
                 let reached = flow::download_and_flash(cx, &url, &device);
+                if reached.file.is_some() {
+                    flashdone.store(true, Ordering::Relaxed);
+                }
                 if machine.flash {
                     let mut host = machine.host();
                     flow::flash_if_stopped(cx, &mut host, reached)
@@ -1192,6 +1652,174 @@ impl InstallFirmware {
         }
         self.release = ReleaseType::Beta;
         self.activate();
+    }
+
+    /// `ProcessCmdKey`: Ctrl+Q - Control and Q, nothing else held - shows `Strings.TrunkWarning`,
+    /// and its OK takes the page to the `DEV` release and runs `Activate` again. The C# sees the
+    /// key while a control of the page has the keyboard, and so it is here: the page takes the
+    /// keyboard when it is clicked. Whether the key was the page's.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:399-408`
+    pub fn key(&mut self, event: &KeyDownEvent) -> bool {
+        let keystroke = &event.keystroke;
+        let held = keystroke.modifiers;
+        let ctrl_q = keystroke.key.eq_ignore_ascii_case("q")
+            && held.control
+            && !held.alt
+            && !held.shift
+            && !held.platform
+            && !held.function;
+        if !ctrl_q || !self.live() {
+            return false;
+        }
+        self.trunk = true;
+        self.messages.push_back(Waiting {
+            text: TRUNK_WARNING.to_owned(),
+            caption: TRUNK.to_owned(),
+            buttons: None,
+        });
+        true
+    }
+
+    /// Force Bootloader after the window has opened its link, or found it open: `Open`'s wait
+    /// for the vehicle, or - the link already open, as `Open` then returns at once -
+    /// `doReboot`'s wait for its next heartbeat.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:517-521; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:668-671`
+    pub fn force_start(&mut self, already_open: bool, view: &TelemetryView, now: Instant) {
+        self.force = Some(if already_open {
+            Force::Heartbeat {
+                seen: heartbeats(view),
+                deadline: now + HEARTBEAT_WAIT,
+            }
+        } else {
+            Force::Opening {
+                deadline: now + CONNECT_TIMEOUT,
+            }
+        });
+    }
+
+    /// Force Bootloader's next step, once a frame over the window's link. `Open` done - the
+    /// vehicle heard enough - is `doReboot(true, false)`'s wait for the next heartbeat, and then
+    /// its reboots: `PREFLIGHT_REBOOT_SHUTDOWN` with param1 3 and then 1, each written twice
+    /// (`Telemetry::command`, as `reboot_to_bootloader` sends them), to the vehicle `Open` chose;
+    /// and the instruction's box, whether or not there was a vehicle, as the C# does not look at
+    /// `doReboot`'s answer. `Open` finding nothing in time closes the link: [`FORCE_FAILED`] on
+    /// the status line, and [`ForceEnd::Failed`] for the window to close its link.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:517-532; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:791-796, 2591-2618, 2758-2763`
+    pub fn force_tick(
+        &mut self,
+        telemetry: &mut Telemetry,
+        view: &TelemetryView,
+        now: Instant,
+    ) -> Option<ForceEnd> {
+        match self.force? {
+            Force::Opening { deadline } => {
+                if heard_enough(view) {
+                    self.force = Some(Force::Heartbeat {
+                        seen: heartbeats(view),
+                        deadline: now + HEARTBEAT_WAIT,
+                    });
+                    None
+                } else if now >= deadline || telemetry.error().is_some() || !view.connected {
+                    self.force = None;
+                    self.status = Some(FORCE_FAILED.to_owned());
+                    Some(ForceEnd::Failed)
+                } else {
+                    None
+                }
+            }
+            Force::Heartbeat { seen, deadline } => {
+                if heartbeats(view) <= seen && now < deadline {
+                    return None;
+                }
+                self.force = None;
+                // `if (MAV.sysid != 0 && MAV.compid != 0)`.
+                if let Some(id) = view.vehicle.filter(|id| id.sysid != 0 && id.compid != 0) {
+                    for message in [
+                        mp_link::commands::reboot_to_bootloader(id),
+                        mp_link::commands::reboot(id),
+                    ] {
+                        telemetry.command_message(&message, Report::default());
+                    }
+                }
+                // `CustomMessageBox.Show(text)`: its caption empty.
+                self.messages.push_back(Waiting {
+                    text: IGNORE_THE_UNPLUG.to_owned(),
+                    caption: String::new(),
+                    buttons: None,
+                });
+                Some(ForceEnd::Rebooted)
+            }
+        }
+    }
+
+    /// Bootloader Update on the manifest page, once `doConnect` has what it opens: the link from
+    /// the port box's `url`, waiting for `Open`'s heartbeats. `None` - `doConnect` opening
+    /// nothing, or a link that will not open - is "Failed to find device on mavlink" at once.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:537-546`
+    pub fn bl_open(&mut self, url: Option<&str>, now: Instant) {
+        if !self.open || self.connected {
+            return;
+        }
+        match url.and_then(|url| bl_link(url).map(|link| (link, url))) {
+            Some((link, _)) => {
+                self.bl = Some(BlLink {
+                    link,
+                    stage: BlStage::Opening {
+                        deadline: now + CONNECT_TIMEOUT,
+                    },
+                });
+            }
+            None => self.status = Some(NO_DEVICE_ON_MAVLINK.to_owned()),
+        }
+    }
+
+    /// Bootloader Update's next step, once a frame: `Open` done is the first "BL Update"
+    /// question; nothing heard in `CONNECT_TIMEOUT_SECONDS`, or the link gone, is "Failed to
+    /// find device on mavlink" and the link closed; the command's answer said on the status
+    /// line, and the link closed - `mav.Close()`.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:542-561`
+    pub fn bl_tick(&mut self, now: Instant) {
+        let Some(bl) = &mut self.bl else {
+            return;
+        };
+        match bl.stage {
+            BlStage::Opening { deadline } => {
+                let view = bl.link.view();
+                if heard_enough(&view) {
+                    bl.stage = BlStage::Asking(0);
+                } else if now >= deadline || bl.link.error().is_some() || !view.connected {
+                    self.bl = None;
+                    self.status = Some(NO_DEVICE_ON_MAVLINK.to_owned());
+                }
+            }
+            BlStage::Asking(_) => {}
+            BlStage::Commanding => {
+                if let Some(said) = bl.link.take_reports().into_iter().next() {
+                    self.status = Some(said);
+                    self.bl = None;
+                } else if !bl.link.view().connected {
+                    // The port gone under `doCommand`: its read throws, which the handler does
+                    // not catch; the window's own words for a failed link - said even when the
+                    // link has no error to give, as a link made over a transport has not.
+                    self.status = Some(bl.link.error().map_or_else(
+                        || "link failed: the link closed".to_owned(),
+                        |err| format!("link failed: {err}"),
+                    ));
+                    self.bl = None;
+                }
+            }
+        }
+    }
+
+    /// Whether the window's connection prompts were asking for Bootloader Update's link, once:
+    /// what their last answer, or their Cancel, is for.
+    pub fn take_bl_asking(&mut self) -> bool {
+        std::mem::take(&mut self.bl_asking)
+    }
+
+    /// What the page has to say on the window's status line, once.
+    pub fn take_status(&mut self) -> Option<String> {
+        self.status.take()
     }
 
     /// Load custom firmware: its file dialog, in the folder last used.
@@ -1236,7 +1864,9 @@ impl InstallFirmware {
         remember_folder(settings, &file);
         self.reached = None;
         let machine = Machine::here(settings);
+        let running = Running::new(&self.flows);
         self.worker = Worker::start("mp-firmware-custom", move |dialogue| {
+            let _running = running;
             machine.run(dialogue, |cx, machine| {
                 let reached = flow::custom_manifest(
                     cx,
@@ -1266,10 +1896,42 @@ impl InstallFirmware {
 
     /// A Bootloader Update question answered: Yes to the first asks the second; Yes to the second
     /// is `doCommand(FLASH_BOOTLOADER, 0, 0, 0, 0, 290876, 0, 0)`, which rewrites the board's
-    /// bootloader from the one its firmware carries - sent by the window, which owns the link,
-    /// once it sees [`InstallFirmware::take_bootloader_command`].
-    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareDisabled.cs:26-44`
+    /// bootloader from the one its firmware carries. On the connected page the window sends it,
+    /// owning the link, once it sees [`InstallFirmware::take_bootloader_command`]; on the manifest
+    /// page it goes over Bootloader Update's own link, to the vehicle its `Open` chose, and a No
+    /// closes that link.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareDisabled.cs:26-44; ConfigFirmwareManifest.cs:548-561`
     pub fn answer_bootloader(&mut self, yes: bool) {
+        if let Some(bl) = &mut self.bl
+            && let BlStage::Asking(at) = bl.stage
+        {
+            let vehicle = bl.link.view().vehicle;
+            match (yes, at, vehicle) {
+                (true, 0, _) => bl.stage = BlStage::Asking(1),
+                (true, _, Some(id)) => {
+                    // `doCommand`'s `TimeoutException` is not caught here, as the connected
+                    // page catches it: its words go to the status line. The link is closed
+                    // after it too, where the C#'s exception skips `mav?.Close()` and leaves the
+                    // port open until the object is collected - not a behaviour to keep.
+                    let report = Report {
+                        accepted: Some(UPGRADED_BOOTLOADER.to_owned()),
+                        refused: Some(FAILED_TO_UPGRADE_BOOTLOADER.to_owned()),
+                        timed_out: Some(DO_COMMAND_TIMEOUT.to_owned()),
+                        fallback: None,
+                    };
+                    bl.link.command(
+                        id,
+                        mp_link::requests::CMD_FLASH_BOOTLOADER,
+                        [0.0, 0.0, 0.0, 0.0, 290_876.0, 0.0, 0.0],
+                        report,
+                    );
+                    bl.stage = BlStage::Commanding;
+                }
+                // No, or no vehicle to send it to: `mav?.Close()`.
+                _ => self.bl = None,
+            }
+            return;
+        }
         match (self.bootloader.take(), yes) {
             (Some(0), true) => self.bootloader = Some(1),
             (Some(_), true) => self.bootloader_command = true,
@@ -1289,9 +1951,27 @@ impl InstallFirmware {
         }
     }
 
-    /// The page's own message box dismissed.
+    /// The page's own message box dismissed; Ctrl+Q's goes on to `REL_Type = DEV` and
+    /// `Activate()`.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:403-405`
     pub fn dismiss_message(&mut self) {
         self.messages.pop_front();
+        if self.trunk && self.messages.is_empty() {
+            self.trunk = false;
+            self.release = ReleaseType::Dev;
+            self.activate();
+        }
+    }
+
+    /// The Bootloader Update question showing: the connected page's, or the manifest page's.
+    fn bl_question(&self) -> Option<&'static str> {
+        let at = self.bootloader.or_else(|| {
+            self.bl.as_ref().and_then(|bl| match bl.stage {
+                BlStage::Asking(at) => Some(at),
+                _ => None,
+            })
+        })?;
+        BL_QUESTIONS.get(at).copied()
     }
 
     /// The device shown as the board: the one a click would use, or the one `LookForPort`
@@ -1325,11 +2005,7 @@ impl InstallFirmware {
     fn question(&self) -> Option<String> {
         self.confirm
             .map(|index| self.confirm_text(index))
-            .or_else(|| {
-                self.bootloader
-                    .and_then(|at| BL_QUESTIONS.get(at))
-                    .map(|text| (*text).to_owned())
-            })
+            .or_else(|| self.bl_question().map(str::to_owned))
             .or_else(|| {
                 self.worker
                     .as_ref()
@@ -1373,8 +2049,74 @@ pub fn devices() -> Vec<DeviceInfo> {
         .collect()
 }
 
-/// A flow's outcome as facts, under `prefix`.
+/// This machine's serial ports as the arrival watcher compares them: each port's name, a tab,
+/// then what its USB device says of itself - ids, serial number, product - so a device coming
+/// back under a name another had is an arrival too: after Force Bootloader the board's bootloader
+/// ("CubeOrange-BL") takes the COM number the board ("CubeOrange") had, perhaps within one poll,
+/// where `WM_DEVICECHANGE` tells the C# every time.
+fn port_identities() -> Vec<String> {
+    mp_transport::list_ports()
+        .into_iter()
+        .map(|port| {
+            format!(
+                "{}\t{:?}",
+                port.name,
+                (port.vid, port.pid, port.serial_number, port.product)
+            )
+        })
+        .collect()
+}
+
+/// The port's name in one of [`port_identities`]'s entries.
+fn identity_port(entry: &str) -> &str {
+    entry.split('\t').next().unwrap_or(entry)
+}
+
+/// How many heartbeats the vehicle shown has sent.
+fn heartbeats(view: &TelemetryView) -> u64 {
+    view.state.as_deref().map_or(0, |state| state.heartbeats)
+}
+
+/// The link `doConnect(mav, port, baud, false)` opens for Bootloader Update: recorded, as
+/// `doConnect` opens a `.tlog` for every link it connects; asking for no streams and sending no
+/// heartbeat, as nothing in the C# reads or announces a `MAVLinkInterface` that is not
+/// `MainV2.comPort` - `doCommand` reads its own answer. `None` when it will not open.
+/// `// C#: MainV2.cs:1591-1636`
+fn bl_link(url: &str) -> Option<Telemetry> {
+    let config = mp_link::LinkConfig {
+        record_path: Telemetry::recording_path(),
+        send_heartbeat: false,
+        stream_rate_hz: 0,
+        ..mp_link::LinkConfig::default()
+    };
+    mp_link::Link::connect(url, config)
+        .ok()
+        .map(|link| Telemetry::over(link, url))
+}
+
+/// A flow's outcome as facts, under `prefix`: a stop said as [`flow::Stop::text`] says it.
 pub fn record_reached(prefix: &str, reached: Option<&Reached>, running: bool) {
+    record_reached_saying(prefix, reached, running, flow::Stop::text);
+}
+
+/// What the Install Firmware pages say of a flow's stop: the px4 upload stops before the board
+/// only while [`DEVICE_ENV`] names the device ([`NO_BOARD_WRITTEN`]); the other stops are the
+/// steps that are not ported.
+#[must_use]
+pub fn stop_text(stop: &flow::Stop) -> String {
+    match stop {
+        flow::Stop::RebootToBootloader => stop.text_because(NO_BOARD_WRITTEN),
+        _ => stop.text(),
+    }
+}
+
+/// [`record_reached`], a stop said by `say`.
+fn record_reached_saying(
+    prefix: &str,
+    reached: Option<&Reached>,
+    running: bool,
+    say: fn(&flow::Stop) -> String,
+) {
     use crate::facts::record;
     record(
         format!("{prefix}.flow"),
@@ -1426,7 +2168,7 @@ pub fn record_reached(prefix: &str, reached: Option<&Reached>, running: bool) {
     );
     record(
         format!("{prefix}.stopped"),
-        text(reached.and_then(|r| r.stop.as_ref()).map(flow::Stop::text)),
+        text(reached.and_then(|r| r.stop.as_ref()).map(say)),
     );
 }
 
@@ -1520,12 +2262,60 @@ pub fn record_facts(page: &InstallFirmware, settings: &Persisted) {
         "config.firmware.selection.selected",
         page.selection
             .as_ref()
-            .and_then(|choosing| {
-                choosing
-                    .selected
-                    .and_then(|row| choosing.results().get(row).cloned())
-            })
-            .unwrap_or_else(|| "none".to_owned()),
+            .and_then(|choosing| choosing.pickers.final_result())
+            .unwrap_or("none"),
+    );
+    // Each filter picker: shown or not, how many items its list holds, and its `SelectedItem`.
+    for filter in Filter::LAYOUT {
+        let picker = page
+            .selection
+            .as_ref()
+            .map(|choosing| choosing.pickers.picker(filter));
+        let key = format!("config.firmware.selection.{}", filter.name());
+        record(
+            format!("{key}.visible"),
+            picker.is_some_and(|picker| picker.visible),
+        );
+        record(
+            format!("{key}.items"),
+            picker.map_or(0, |picker| picker.items.len()),
+        );
+        record(
+            key,
+            picker
+                .and_then(|picker| picker.selected.as_deref())
+                .unwrap_or("none"),
+        );
+    }
+    record(
+        "config.firmware.selection.open",
+        page.selection
+            .as_ref()
+            .and_then(|choosing| choosing.open)
+            .map_or_else(|| "none".to_owned(), |(id, _)| id.id()),
+    );
+    record(
+        "config.firmware.detected",
+        page.detected_board_id()
+            .map_or_else(|| "none".to_owned(), |id| id.to_string()),
+    );
+    record(
+        "config.firmware.force",
+        match page.force {
+            None => "none",
+            Some(Force::Opening { .. }) => "opening",
+            Some(Force::Heartbeat { .. }) => "heartbeat",
+        },
+    );
+    record(
+        "config.firmware.bl",
+        match page.bl.as_ref().map(|bl| bl.stage) {
+            None if page.bl_asking => "connecting",
+            None => "none",
+            Some(BlStage::Opening { .. }) => "opening",
+            Some(BlStage::Asking(_)) => "asking",
+            Some(BlStage::Commanding) => "commanding",
+        },
     );
     record("config.firmware.progress", page.progress.value);
     record("config.firmware.status", &page.progress.status);
@@ -1539,12 +2329,12 @@ pub fn record_facts(page: &InstallFirmware, settings: &Persisted) {
         "config.firmware.custom.dir",
         settings.get(FIRMWARE_FILE_DIRECTORY).unwrap_or("none"),
     );
-    record_reached(
+    record_reached_saying(
         "config.firmware",
         page.reached.as_ref(),
         page.worker.is_some(),
+        stop_text,
     );
-    record("config.firmware.upload", "disabled");
 }
 
 /// A box at a Designer `Location` and `Size`.
@@ -1610,8 +2400,13 @@ pub fn link_label(
     }
 }
 
-/// The page, while it is open.
-pub fn page(firmware: &InstallFirmware, cx: &mut Context<MissionPlanner>) -> AnyElement {
+/// The page, while it is open. The manifest page takes the keyboard when it is clicked, so its
+/// `ProcessCmdKey`'s Ctrl+Q reaches it (`focus`).
+pub fn page(
+    firmware: &InstallFirmware,
+    focus: &FocusHandle,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
     if firmware.connected {
         return disabled_page(firmware, cx).into_any_element();
     }
@@ -1678,8 +2473,23 @@ pub fn page(firmware: &InstallFirmware, cx: &mut Context<MissionPlanner>) -> Any
                 |this, _window, _cx| this.install_firmware.beta(),
                 cx,
             ),
-            // Force Bootloader and Bootloader Update: see [`BOOTLOADER_DISABLED`].
-            _ => link_label(id, text, (x, y), false, |_, _, _| {}, cx),
+            "fw-px4bl" => link_label(
+                id,
+                text,
+                (x, y),
+                live,
+                |this, _window, _cx| this.force_bootloader_clicked(),
+                cx,
+            ),
+            // `fw-bootloaderupdate`.
+            _ => link_label(
+                id,
+                text,
+                (x, y),
+                live,
+                |this, window, cx| this.manifest_bootloader_update(window, cx),
+                cx,
+            ),
         };
         body = body.child(element);
     }
@@ -1687,6 +2497,20 @@ pub fn page(firmware: &InstallFirmware, cx: &mut Context<MissionPlanner>) -> Any
     panel(
         "install firmware",
         div()
+            .id("fw-page")
+            .track_focus(focus)
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _window, cx| {
+                if this.install_firmware.key(event) {
+                    cx.stop_propagation();
+                    cx.notify();
+                }
+            }))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _event, window, cx| {
+                    window.focus(&this.firmware_page_focus, cx);
+                }),
+            )
             .flex()
             .flex_col()
             .gap_2()
@@ -1758,8 +2582,13 @@ pub fn line(label: &'static str, value: String, colour: u32) -> Div {
         .child(div().text_color(rgb(colour)).child(value))
 }
 
-/// Where a flow got, as lines of the report.
+/// Where a flow got, as lines of the report: a stop said as [`flow::Stop::text`] says it.
 pub fn reached_lines(reached: &Reached) -> Vec<Div> {
+    reached_lines_saying(reached, flow::Stop::text)
+}
+
+/// [`reached_lines`], a stop said by `say`.
+fn reached_lines_saying(reached: &Reached, say: fn(&flow::Stop) -> String) -> Vec<Div> {
     let mut lines = Vec::new();
     if let Some(board) = &reached.board {
         lines.push(line("Board", board.clone(), theme::TEXT));
@@ -1791,7 +2620,7 @@ pub fn reached_lines(reached: &Reached) -> Vec<Div> {
         lines.push(line("Image", format!("{length} bytes"), theme::TEXT));
     }
     if let Some(stop) = &reached.stop {
-        lines.push(line("Stopped", stop.text(), theme::WARN));
+        lines.push(line("Stopped", say(stop), theme::WARN));
     }
     if let Some(board) = &reached.flashed {
         lines.push(line(
@@ -1806,8 +2635,7 @@ pub fn reached_lines(reached: &Reached) -> Vec<Div> {
     lines
 }
 
-/// Beneath the page: the board, what a click chose, where the flow got, and the Upload button
-/// that stays disabled.
+/// Beneath the page: the board, what a click chose, and where the flow got.
 fn choice(firmware: &InstallFirmware) -> impl IntoElement {
     let board = match firmware.board() {
         Some((device, ids)) => format!(
@@ -1853,19 +2681,13 @@ fn choice(firmware: &InstallFirmware) -> impl IntoElement {
         }
     }
     if let Some(reached) = &firmware.reached {
-        column = column.children(reached_lines(reached));
+        column = column.children(reached_lines_saying(reached, stop_text));
     }
-
     column
-        .child(line(
-            "Bootloader",
-            BOOTLOADER_DISABLED.to_owned(),
-            theme::DIM,
-        ))
-        .child(upload_row("fw-upload"))
 }
 
-/// The Upload button, disabled, and why.
+/// The legacy page's Upload button, disabled, and why. The manifest page has none: no such
+/// control is in `ConfigFirmwareManifest.Designer.cs`.
 pub fn upload_row(id: &'static str) -> Div {
     div()
         .flex()
@@ -1877,7 +2699,7 @@ pub fn upload_row(id: &'static str) -> Div {
             div()
                 .text_xs()
                 .text_color(rgb(theme::DIM))
-                .child(NOT_ENABLED),
+                .child(NOT_PORTED),
         )
 }
 
@@ -1910,13 +2732,14 @@ fn disabled_page(firmware: &InstallFirmware, cx: &mut Context<MissionPlanner>) -
             at(156.0, 155.0, 313.0, 13.0)
                 .text_xs()
                 .text_color(rgb(theme::DIM))
-                .child(DISABLED_BOOTLOADER),
+                .child(UPDATE_THE_BOOTLOADER),
         );
-    let report = div()
-        .flex()
-        .flex_col()
-        .gap_1()
-        .children(firmware.reached.iter().flat_map(reached_lines));
+    let report = div().flex().flex_col().gap_1().children(
+        firmware
+            .reached
+            .iter()
+            .flat_map(|reached| reached_lines_saying(reached, stop_text)),
+    );
     panel(
         "install firmware",
         div().flex().flex_col().child(body).child(report),
@@ -2122,47 +2945,145 @@ pub fn path_box(
     .into_any_element()
 }
 
-/// `FirmwareSelection` over the page: its heading, the platform it opened on, the Result rows
-/// (`fw-select-<n>`), Upload Firmware and Close.
+/// A `Label` of `FirmwareSelection`'s stack.
+fn selection_label(text: &'static str) -> Div {
+    div().text_xs().text_color(rgb(theme::TEXT)).child(text)
+}
+
+/// A `Picker` of `FirmwareSelection`'s stack, as the WinForms renderer draws one - a drop-down
+/// list box (`ComboBoxStyle.DropDownList`) showing the selected item, blank with none - its
+/// `Margin="10"` and the stack's width; clicked, its list drops down over everything (priority 3,
+/// above the dialog's 2), thirty rows showing and the wheel moving them, a row's click its
+/// `SelectedIndex`.
+/// `// C#: test/FirmwareSelection.xaml:9-30; ExtLibs/Xamarin.Forms.Platform.WinForms/Renderers/PickerRenderer.cs:14-107`
+fn picker_box(choosing: &Choosing, id: PickerId, cx: &mut Context<MissionPlanner>) -> AnyElement {
+    let picker = choosing.picker(id);
+    let name = id.id();
+    let open = choosing.open.filter(|(open, _)| *open == id);
+    let mut cell = crate::probe::measured(name.clone(), div())
+        .id(SharedString::from(name.clone()))
+        .relative()
+        .m(px(10.0))
+        .h(px(21.0))
+        .px_1()
+        .flex()
+        .items_center()
+        .justify_between()
+        .rounded_sm()
+        .border_1()
+        .border_color(rgb(if open.is_some() {
+            theme::ACCENT
+        } else {
+            theme::BORDER
+        }))
+        .bg(rgb(theme::BG))
+        .text_xs()
+        .text_color(rgb(theme::TEXT))
+        .cursor_pointer()
+        .hover(|style| style.border_color(rgb(theme::ACCENT)))
+        .child(
+            div()
+                .whitespace_nowrap()
+                .overflow_hidden()
+                .child(picker.shown().unwrap_or("").to_owned()),
+        )
+        .child(div().text_size(px(7.0)).child("▼"))
+        .on_click(cx.listener(move |this, _event, _window, cx| {
+            this.install_firmware.toggle_picker(id);
+            cx.notify();
+        }));
+    if let Some((_, top)) = open {
+        let mut list = div()
+            .id(SharedString::from(format!("{name}-rows")))
+            .mt(px(22.0))
+            .min_w(px(510.0))
+            .flex()
+            .flex_col()
+            .bg(rgb(theme::PANEL))
+            .border_1()
+            .border_color(rgb(theme::ACCENT))
+            .occlude()
+            .on_scroll_wheel(
+                cx.listener(|this, event: &gpui::ScrollWheelEvent, _window, cx| {
+                    // Lines or pixels, by backend: taken as rows either way, a negative y the
+                    // wheel rolled towards the user - down.
+                    let delta = event.delta.pixel_delta(px(LIST_ROW));
+                    let rows = (f32::from(delta.y) / LIST_ROW).round();
+                    #[allow(clippy::cast_possible_truncation)] // a few rows a notch
+                    let rows = -(rows as i32);
+                    if rows != 0 {
+                        this.install_firmware.scroll_picker(rows);
+                        cx.notify();
+                    }
+                    cx.stop_propagation();
+                }),
+            );
+        for (row, item) in picker.items.iter().enumerate().skip(top).take(LIST_ROWS) {
+            let row_id = format!("{name}-{row}");
+            list = list.child(
+                crate::probe::measured(row_id.clone(), div())
+                    .id(SharedString::from(row_id))
+                    .flex_shrink_0()
+                    .h(px(LIST_ROW))
+                    .px_1()
+                    .whitespace_nowrap()
+                    .bg(rgb(if picker.index == Some(row) {
+                        theme::BORDER
+                    } else {
+                        theme::PANEL
+                    }))
+                    .text_color(rgb(theme::TEXT))
+                    .hover(|style| style.bg(rgb(theme::ACTION)))
+                    .child(item.clone())
+                    .on_click(cx.listener(move |this, _event, _window, cx| {
+                        this.install_firmware.choose(id, row);
+                        cx.notify();
+                    })),
+            );
+        }
+        cell = cell.child(
+            gpui::deferred(
+                gpui::anchored()
+                    .snap_to_window()
+                    .child(crate::probe::measured(format!("{name}-list"), div()).child(list)),
+            )
+            .with_priority(3),
+        );
+    }
+    cell.into_any_element()
+}
+
+/// `FirmwareSelection` over the page, as its `.xaml` stacks it in the 550-wide window
+/// `ShowXamarinControl` makes: the heading, each picker left showing under its label, the
+/// Firmwares label and picker, and Upload Firmware - with Close for the window's close box, which
+/// is `FinalResult` left null, "user canceled".
+/// `// C#: test/FirmwareSelection.xaml:6-32; GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:247-254; Utilities/ExtensionsMP.cs:82-104`
 fn selection_box(
     choosing: &Choosing,
     window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
-    let mut rows = div().flex().flex_col().max_h(px(400.0)).overflow_hidden();
-    for (row, result) in choosing.results().into_iter().enumerate() {
-        let id = format!("fw-select-{row}");
-        let selected = choosing.selected == Some(row);
-        rows = rows.child(
-            crate::probe::measured(id.clone(), div())
-                .id(SharedString::from(id))
-                .px_1()
-                .text_xs()
-                .whitespace_nowrap()
-                .bg(rgb(if selected {
-                    theme::BORDER
-                } else {
-                    theme::PANEL
-                }))
-                .text_color(rgb(theme::TEXT))
-                .cursor_pointer()
-                .hover(|style| style.bg(rgb(theme::ACTION)))
-                .child(result)
-                .on_click(cx.listener(move |this, _event, _window, cx| {
-                    this.install_firmware.select(row);
-                    cx.notify();
-                })),
-        );
+    let mut stack = div().flex().flex_col().gap(px(6.0)).child(
+        div()
+            .text_sm()
+            .text_color(rgb(theme::TEXT))
+            .child(MORE_THAN_ONE),
+    );
+    for filter in choosing.pickers.visible() {
+        stack = stack
+            .child(selection_label(filter.label()))
+            .child(picker_box(choosing, PickerId::Filter(filter), cx));
     }
-    let platform = choosing
-        .platform()
-        .unwrap_or_else(|| "(not chosen)".to_owned());
+    stack =
+        stack
+            .child(selection_label(PICK_A_FILE))
+            .child(picker_box(choosing, PickerId::Result, cx));
     let buttons = vec![
         action(
             "fw-select-upload",
             UPLOAD_FIRMWARE,
             theme::ACCENT,
-            choosing.selected.is_some(),
+            true,
             cx.listener(|this, _event: &(), _window, cx| {
                 this.install_firmware.upload_selected(&this.persisted);
                 cx.notify();
@@ -2189,20 +3110,7 @@ fn selection_box(
         .border_1()
         .border_color(rgb(theme::ACCENT))
         .rounded_md()
-        .child(
-            div()
-                .text_sm()
-                .text_color(rgb(theme::TEXT))
-                .child(MORE_THAN_ONE),
-        )
-        .child(line("Platform", platform, theme::TEXT))
-        .child(
-            div()
-                .text_xs()
-                .text_color(rgb(theme::DIM))
-                .child(PICK_A_FILE),
-        )
-        .child(rows)
+        .child(stack)
         .child(div().flex().justify_end().gap_2().children(buttons));
     let size = window.viewport_size();
     gpui::deferred(
@@ -2268,7 +3176,7 @@ pub fn overlay(
             cx,
         ));
     }
-    if let Some(text) = firmware.bootloader.and_then(|at| BL_QUESTIONS.get(at)) {
+    if let Some(text) = firmware.bl_question() {
         return Some(question_box(
             IDS,
             BL_UPDATE,
@@ -2303,6 +3211,131 @@ pub fn overlay(
         |this, ok| this.install_firmware.path_done(ok, &mut this.persisted),
         cx,
     ))
+}
+
+impl MissionPlanner {
+    /// `Lbl_px4bl_Click`: `MainV2.comPort.Open(false)` - the window's link, which returns at
+    /// once when it is open, else opened from the port box at the baud box's rate with no
+    /// parameters asked for - then the page's steps ([`InstallFirmware::force_tick`]). A port
+    /// that will not open is [`FORCE_FAILED`] on the status line.
+    ///
+    /// The C# opens `comPort.BaseStream` as it was last configured: the saved port at start-up,
+    /// the port last connected after that, at the baud box's rate. That is the port box's port
+    /// unless it was changed without connecting, which here opens the port the box shows. Its
+    /// stream after a network connect is that network link, reopened without its questions;
+    /// here only a serial port is opened - the port is where the board's bootloader will
+    /// appear - and a network kind in the box is [`FORCE_FAILED`], as the C#'s start-up
+    /// `SerialPort` named "TCP" fails to open. `Open` records nothing (`doConnect` makes the
+    /// logs), and neither does this.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:513-533; MainV2.cs:726-727, 781-792, 1561-1570, 4352-4358; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:668-700`
+    pub(crate) fn force_bootloader_clicked(&mut self) {
+        if !self.install_firmware.live() {
+            return;
+        }
+        let view = self.telemetry.view();
+        let open = view.connected && !view.target.starts_with("file:");
+        if !open {
+            let port = self.connect_box.port.clone();
+            let serial =
+                !port.is_empty() && crate::connect::kind(&port) == crate::connect::Kind::Serial;
+            if self.install_firmware.refuses_port(&port) {
+                self.file_status = Some(NO_BOARD_WRITTEN.to_owned());
+                return;
+            }
+            let url = format!("serial:{port}:{}", self.connect_box.baud);
+            let link = serial
+                .then(|| mp_link::Link::connect(&url, mp_link::LinkConfig::default()).ok())
+                .flatten();
+            let Some(link) = link else {
+                self.file_status = Some(FORCE_FAILED.to_owned());
+                return;
+            };
+            self.telemetry = Telemetry::over(link, &url);
+            // `Open(false)`: no parameter list, and no mission - reading it on connect is
+            // `doConnect`'s (`loadwpsonconnect`), not `Open`'s.
+            self.params_requested = true;
+            self.mission_requested = true;
+        }
+        let view = self.telemetry.view();
+        self.install_firmware
+            .force_start(open, &view, Instant::now());
+    }
+
+    /// `Lbl_bootloaderupdate_Click`: `doConnect(mav, CMB_serialport.Text, CMB_baudrate.Text,
+    /// false)` - for a network kind the transport's `Open` asks its questions first, through the
+    /// window's prompts, as the window's CONNECT asks them - then the page's steps
+    /// ([`InstallFirmware::bl_open`]). AUTO opens nothing here: `doConnect` starts the serial
+    /// scan, which is not ported and would connect the window's link, never `mav`.
+    ///
+    /// A divergence: of what `doConnect` does to the window as it opens `mav` - the port boxes
+    /// dimmed and the CONNECT button's image (both put back by `UpdateConnectIcon` within half a
+    /// second, the window's own `comPort` being closed), `{port}_BAUD` saved, the title bar
+    /// naming `mav`'s vehicle, the new-firmware check, and SETUP shown again, at once, as the
+    /// handler runs on the UI thread (`BeginInvokeIfRequired`) - none is done here. Showing SETUP
+    /// again deactivates this page, which here closes the link the page holds before its
+    /// questions are asked, where the C#'s handler runs on past its disposed page; the rest
+    /// describe a connection of the window's that there is not.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:535-546; MainV2.cs:1448-1840, 2459-2500; ExtLibs/Controls/ControlHelpers.cs:101-111`
+    pub(crate) fn manifest_bootloader_update(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.install_firmware.live() {
+            return;
+        }
+        let port = self.connect_box.port.clone();
+        let kind = crate::connect::kind(&port);
+        if self.install_firmware.refuses_port(&port) {
+            self.file_status = Some(NO_BOARD_WRITTEN.to_owned());
+            return;
+        }
+        let questions = crate::connect::questions(kind);
+        let Some(first) = questions.first().cloned() else {
+            let url = (!port.is_empty())
+                .then(|| crate::connect::url(kind, &port, &self.connect_box.baud, &[]))
+                .flatten();
+            self.install_firmware
+                .bl_open(url.as_deref(), Instant::now());
+            return;
+        };
+        self.install_firmware.bl_asking = true;
+        self.connect_box.asking = Some(crate::connect::Asking {
+            kind,
+            questions,
+            answers: Vec::new(),
+        });
+        self.connect_field
+            .set(self.persisted.get(first.key).unwrap_or(first.default));
+        self.connect_focus.focus(window, cx);
+    }
+
+    /// Once a frame, after the page's tick: Force Bootloader's and Bootloader Update's steps over
+    /// their links, and what the page has to say on the status line. Force Bootloader's `Open`
+    /// failing closes the window's link, as `Open` closes the port at its deadline - which shows
+    /// no screen again either, so SETUP's list is kept, keyed to the link closed.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:791-796`
+    pub(crate) fn install_firmware_links(&mut self) {
+        let now = Instant::now();
+        // The window's view - the mission copied with it - only while Force Bootloader is under
+        // way, not every frame of every screen.
+        let ended = if self.install_firmware.forcing() {
+            let view = self.telemetry.view();
+            self.install_firmware
+                .force_tick(&mut self.telemetry, &view, now)
+        } else {
+            None
+        };
+        if ended == Some(ForceEnd::Failed) {
+            self.telemetry = Telemetry::idle();
+            self.setup_list
+                .rekey(crate::setup::Key::of(&self.telemetry.view()));
+        }
+        self.install_firmware.bl_tick(now);
+        if let Some(status) = self.install_firmware.take_status() {
+            self.file_status = Some(status);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -2481,12 +3514,21 @@ mod tests {
         // Three files for board 140: FirmwareSelection opens, the board's platform selected.
         page.after_lookup(lookup, &Persisted::at(None));
         let choosing = page.selection.clone().expect("FirmwareSelection");
-        assert_eq!(choosing.platform().as_deref(), Some("CubeOrange"));
+        assert_eq!(
+            choosing.pickers.picker(Filter::Platform).shown(),
+            Some("CubeOrange")
+        );
         assert_eq!(
             choosing.results(),
             ["https://firmware.ardupilot.org/Copter/stable/CubeOrange/arducopter.apj"]
         );
-        assert_eq!(choosing.selected, Some(0));
+        assert_eq!(
+            choosing.pickers.final_result(),
+            Some("https://firmware.ardupilot.org/Copter/stable/CubeOrange/arducopter.apj")
+        );
+        // One release and one version among the three: only the Platform picker shows.
+        let shown: Vec<Filter> = choosing.pickers.visible().collect();
+        assert_eq!(shown, [Filter::Platform]);
         page.close_selection();
         assert!(page.selection.is_none(), "closed: user canceled");
         assert!(page.worker.is_none());
@@ -2563,11 +3605,489 @@ mod tests {
         );
         assert!(page.take_bootloader_command());
         assert!(!page.take_bootloader_command(), "owed once");
-        // The manifest page has no such button of its own: its link is dimmed.
-        let mut manifest = InstallFirmware::default();
+        // The connected page's handler does nothing on the manifest page, whose Bootloader
+        // Update opens a link of its own.
+        let mut manifest = InstallFirmware {
+            manifest: Some(Arc::new(fixture())),
+            ..InstallFirmware::default()
+        };
         manifest.open(false);
         manifest.bootloader_update(true);
         assert!(manifest.question().is_none());
+    }
+
+    fn key(key: &str, control: bool, shift: bool) -> KeyDownEvent {
+        let mut event = KeyDownEvent {
+            keystroke: gpui::Keystroke {
+                modifiers: gpui::Modifiers::default(),
+                key: key.to_owned(),
+                key_char: Some(key.to_owned()),
+            },
+            is_held: false,
+            prefer_character_input: false,
+        };
+        event.keystroke.modifiers.control = control;
+        event.keystroke.modifiers.shift = shift;
+        event
+    }
+
+    /// Ctrl+Q: "These are the latest trunk firmware ...", caption "trunk"; its OK is the `DEV`
+    /// release and `Activate` again. Q alone, or with Shift as well, is not it; nor is it heard
+    /// while a box is up. Deactivate goes back to OFFICIAL.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:399-408, 128-129`
+    #[test]
+    fn ctrl_q_warns_and_its_ok_offers_the_dev_release() {
+        let mut page = loaded("CubeOrange-BL");
+        assert!(!page.key(&key("q", false, false)), "Q alone");
+        assert!(!page.key(&key("q", true, true)), "Ctrl+Shift+Q");
+        assert!(!page.key(&key("s", true, false)), "Ctrl+S");
+        assert!(page.message().is_none());
+        assert!(page.key(&key("q", true, false)));
+        assert_eq!(
+            page.message()
+                .map(|waiting| (waiting.text.as_str(), waiting.caption.as_str())),
+            Some((TRUNK_WARNING, TRUNK))
+        );
+        assert_eq!(page.release, ReleaseType::Official, "not until its OK");
+        assert!(
+            !page.key(&key("q", true, false)),
+            "the box has the keyboard"
+        );
+        page.dismiss_message();
+        assert!(page.message().is_none());
+        assert_eq!(page.release, ReleaseType::Dev);
+        assert_eq!(page.labels[index_of("fw-quad")], "Copter V4.8.0-dev DEV");
+        assert_eq!(
+            page.labels[index_of("fw-tracker")],
+            "AntennaTracker V4.8.0-dev DEV"
+        );
+        // Another box's OK is only that.
+        page.messages.push_back(Waiting {
+            text: NO_PORT.to_owned(),
+            caption: flow::ERROR.to_owned(),
+            buttons: None,
+        });
+        page.dismiss_message();
+        assert_eq!(page.release, ReleaseType::Dev);
+        page.close();
+        assert_eq!(page.release, ReleaseType::Official);
+    }
+
+    /// All Options for a CubeOrange: its 80 files, on its own platform, and the pickers that
+    /// still choose - Version Type and Version - shown. A release chosen narrows the list and
+    /// refills Version; "Ignore" undoes it; a row of the Firmwares list is what Upload Firmware
+    /// takes.
+    /// `// C#: test/FirmwareSelection.xaml.cs:15-194`
+    #[test]
+    fn all_options_pickers_narrow_the_list_and_ignore_undoes_them() {
+        let mut page = loaded("CubeOrange-BL");
+        let manifest = page.manifest.clone().expect("the fixture");
+        let lookup = manifest.look_for_port(
+            &[DeviceInfo::new("CubeOrange-BL", "")],
+            None,
+            MavType::Copter,
+            ReleaseType::Official,
+            true,
+        );
+        page.after_lookup(lookup, &Persisted::at(None));
+        let shown = |page: &InstallFirmware| {
+            page.selection
+                .as_ref()
+                .map(|choosing| choosing.pickers.visible().collect::<Vec<_>>())
+        };
+        let results = |page: &InstallFirmware| {
+            page.selection
+                .as_ref()
+                .map_or(0, |choosing| choosing.results().len())
+        };
+        let items = |page: &InstallFirmware, filter: Filter| {
+            page.selection.as_ref().map_or_else(Vec::new, |choosing| {
+                choosing.pickers.picker(filter).items.clone()
+            })
+        };
+        assert_eq!(
+            shown(&page),
+            Some(vec![Filter::VersionType, Filter::Platform, Filter::Version])
+        );
+        assert_eq!(results(&page), 80);
+        assert_eq!(
+            items(&page, Filter::VersionType),
+            ["BETA", "DEV", "OFFICIAL", "STABLE-4.7.1", "Ignore"]
+        );
+        assert_eq!(items(&page, Filter::Version), ["4.7.1", "4.8.0", "Ignore"]);
+
+        let version_type = PickerId::Filter(Filter::VersionType);
+        page.toggle_picker(version_type);
+        assert_eq!(
+            page.selection.as_ref().and_then(|choosing| choosing.open),
+            Some((version_type, 0))
+        );
+        page.choose(version_type, 1);
+        assert_eq!(
+            page.selection.as_ref().and_then(|choosing| choosing.open),
+            None,
+            "a row's click puts the list away"
+        );
+        assert_eq!(results(&page), 28, "DEV");
+        assert_eq!(items(&page, Filter::Version), ["4.8.0", "Ignore"]);
+        page.choose(version_type, 4);
+        assert_eq!(results(&page), 80, "Ignore");
+        assert_eq!(items(&page, Filter::Version), ["4.7.1", "4.8.0", "Ignore"]);
+
+        page.choose(PickerId::Result, 2);
+        let chosen = page
+            .selection
+            .as_ref()
+            .and_then(|choosing| choosing.pickers.final_result().map(str::to_owned));
+        let third = page
+            .selection
+            .as_ref()
+            .and_then(|choosing| choosing.results().get(2).cloned());
+        assert!(chosen.is_some());
+        assert_eq!(chosen, third);
+    }
+
+    /// A dropped list longer than thirty rows scrolls on the wheel, within the list.
+    #[test]
+    fn a_long_list_drops_down_thirty_rows_at_a_time_and_scrolls() {
+        let mut page = loaded("CubeOrange-BL");
+        let manifest = page.manifest.clone().expect("the fixture");
+        let lookup = manifest.look_for_port(
+            &[DeviceInfo::new("CubeOrange-BL", "")],
+            None,
+            MavType::Copter,
+            ReleaseType::Official,
+            true,
+        );
+        page.after_lookup(lookup, &Persisted::at(None));
+        let result = PickerId::Result;
+        let count = page
+            .selection
+            .as_ref()
+            .map_or(0, |choosing| choosing.picker(result).items.len());
+        assert_eq!(count, 80, "the CubeOrange files");
+        assert!(count > LIST_ROWS);
+        page.toggle_picker(result);
+        page.scroll_picker(3);
+        let top = |page: &InstallFirmware| {
+            page.selection
+                .as_ref()
+                .and_then(|choosing| choosing.open)
+                .map(|(_, top)| top)
+        };
+        assert_eq!(top(&page), Some(3));
+        page.scroll_picker(1000);
+        assert_eq!(top(&page), Some(count - LIST_ROWS));
+        page.scroll_picker(-1000);
+        assert_eq!(top(&page), Some(0));
+        page.toggle_picker(result);
+        assert_eq!(top(&page), None, "clicked again: put away");
+    }
+
+    /// `DeviceChanged` here: the ports enumerated on a thread of their own, the first list the
+    /// ports there are at `Activate`; a port leaving is no arrival, a port appearing is one, sent
+    /// with the list; dropped - `Deactivate` - the thread enumerates no more. The page hears an
+    /// arrival while it is the manifest page, and not once it has closed.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:47-48, 126, 134-137`
+    #[test]
+    fn the_watcher_hears_a_port_appear_and_stops_with_the_page() {
+        use std::sync::Mutex;
+        use std::sync::atomic::AtomicUsize;
+        let ports = |names: &[&str]| names.iter().map(|&n| n.to_owned()).collect::<Vec<_>>();
+        let lists = Arc::new(Mutex::new(VecDeque::from([
+            ports(&["/dev/ttyS0", "/dev/ttyACM0"]),
+            ports(&["/dev/ttyS0", "/dev/ttyACM0"]),
+            ports(&["/dev/ttyS0"]),
+            ports(&["/dev/ttyS0", "/dev/ttyACM0"]),
+        ])));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let enumerate = {
+            let (lists, calls) = (Arc::clone(&lists), Arc::clone(&calls));
+            move || {
+                calls.fetch_add(1, Ordering::SeqCst);
+                lists
+                    .lock()
+                    .expect("the lists")
+                    .pop_front()
+                    .unwrap_or_else(|| ports(&["/dev/ttyS0", "/dev/ttyACM0"]))
+            }
+        };
+        let mut page = loaded("FT232R USB UART");
+        page.watcher = Watcher::start(enumerate, Duration::from_millis(5));
+        let watcher = page.watcher.as_ref().expect("the thread");
+        let arrival = watcher
+            .arrivals
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the port back is an arrival");
+        assert_eq!(arrival, ["/dev/ttyS0", "/dev/ttyACM0"]);
+        assert!(
+            watcher
+                .arrivals
+                .recv_timeout(Duration::from_millis(100))
+                .is_err(),
+            "the same ports again, or one fewer, are none"
+        );
+
+        // The page takes the latest arrival, once, for the probe.
+        lists.lock().expect("the lists").extend([
+            ports(&["/dev/ttyS0"]),
+            ports(&["/dev/ttyS0", "/dev/ttyUSB0"]),
+        ]);
+        crate::telemetry::scripted::until("the second arrival", || page.hear_arrival().is_some());
+        assert!(page.hear_arrival().is_none(), "heard once");
+
+        // Deactivate: the thread stops, and nothing more is heard.
+        page.close();
+        assert!(page.watcher.is_none());
+        std::thread::sleep(Duration::from_millis(50));
+        let after = calls.load(Ordering::SeqCst);
+        std::thread::sleep(Duration::from_millis(50));
+        assert_eq!(calls.load(Ordering::SeqCst), after, "no more enumerations");
+        assert!(page.hear_arrival().is_none());
+    }
+
+    /// A device's arrival: a port that was not there before; probed only while `flashdone` is
+    /// clear, every port on its own thread; what a probe finds is the status line and the board
+    /// id `LookForPort` takes before the USB guess.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:134-180, 213-229`
+    #[test]
+    fn a_device_arriving_is_probed_unless_the_flash_is_done_and_its_board_is_taken() {
+        use std::sync::atomic::AtomicUsize;
+        let seen = ["/dev/ttyS0".to_owned()];
+        assert!(!arrived(&seen, &["/dev/ttyS0".to_owned()]));
+        assert!(arrived(
+            &seen,
+            &["/dev/ttyS0".to_owned(), "/dev/ttyACM0".to_owned()]
+        ));
+        assert!(!arrived(&seen, &[]), "a port leaving is not an arrival");
+        // The same name back as another device - the board's bootloader after Force
+        // Bootloader - is an arrival; the probe is given the port's name alone.
+        let board = ["COM4\tCubeOrange".to_owned()];
+        assert!(arrived(&board, &["COM4\tCubeOrange-BL".to_owned()]));
+        assert_eq!(identity_port("COM4\tCubeOrange-BL"), "COM4");
+        assert_eq!(identity_port("/dev/ttyACM0"), "/dev/ttyACM0");
+
+        let mut page = loaded("FT232R USB UART");
+        let opened = Arc::new(AtomicUsize::new(0));
+        let ports = vec!["/dev/ttyS0".to_owned(), "/dev/ttyACM0".to_owned()];
+        let counter = Arc::clone(&opened);
+        let open = move |_port: &str, baud: u32| {
+            assert_eq!(baud, 115_200);
+            counter.fetch_add(1, Ordering::SeqCst);
+            Err::<TransportPort<mp_transport::SerialTransport>, _>(std::io::Error::other(
+                "not on this bench",
+            ))
+        };
+        page.flashdone.store(true, Ordering::Relaxed);
+        page.probe(ports.clone(), open.clone());
+        std::thread::sleep(Duration::from_millis(100));
+        assert_eq!(
+            opened.load(Ordering::SeqCst),
+            0,
+            "flashdone: nothing opened"
+        );
+        page.flashdone.store(false, Ordering::Relaxed);
+        page.probe(ports, open);
+        crate::telemetry::scripted::until("both ports tried", || {
+            opened.load(Ordering::SeqCst) == 2
+        });
+
+        // What a probe finds.
+        let board = FoundBoard {
+            port: "/dev/ttyACM0".to_owned(),
+            board: mp_firmware::uploader::Board {
+                bootloader_revision: 5,
+                board_id: 140,
+                board_revision: 0,
+                flash_size: 2_080_768,
+            },
+            chip: mp_firmware::uploader::Chip::default(),
+        };
+        page.found_sender
+            .send(board.clone())
+            .expect("the page's channel");
+        page.tick(true);
+        assert_eq!(page.progress.status, board.status());
+        assert_eq!(page.detected_board_id(), Some(140));
+        // The FTDI cable names no board; the id the bootloader gave does.
+        let manifest = page.manifest.clone().expect("the fixture");
+        let devices = [DeviceInfo::new("FT232R USB UART", "")];
+        assert!(
+            manifest
+                .look_for_port(
+                    &devices,
+                    None,
+                    MavType::Copter,
+                    ReleaseType::Official,
+                    false
+                )
+                .is_none()
+        );
+        let lookup = manifest
+            .look_for_port(
+                &devices,
+                page.detected_board_id(),
+                MavType::Copter,
+                ReleaseType::Official,
+                false,
+            )
+            .expect("the detected board");
+        assert_eq!(lookup.board_ids, [140]);
+        assert_eq!(lookup.items.len(), 3);
+        // Kept across Deactivate, forgotten with the SETUP screen.
+        page.close();
+        page.tick(true);
+        assert_eq!(page.detected_board_id(), Some(140));
+        page.tick(false);
+        assert_eq!(page.detected_board_id(), None);
+
+        // And forgotten when the SETUP screen is made anew while it shows - a connect or a
+        // disconnect - so the next board's firmware is not chosen by this one's id.
+        page.found_sender
+            .send(board.clone())
+            .expect("the page's channel");
+        page.tick(true);
+        assert_eq!(page.detected_board_id(), Some(140));
+        page.close();
+        page.screen_disposed();
+        page.tick(true);
+        assert_eq!(page.detected_board_id(), None);
+    }
+
+    /// A flash left running when the page was left keeps the ports: arrivals are not probed
+    /// around it once the page is back, until its thread ends.
+    #[test]
+    fn a_flash_left_running_is_not_probed_around() {
+        use std::sync::atomic::AtomicUsize;
+        let mut page = loaded("FT232R USB UART");
+        let opened = Arc::new(AtomicUsize::new(0));
+        let counting = |opened: &Arc<AtomicUsize>| {
+            let opened = Arc::clone(opened);
+            move |_: &str, _: u32| {
+                opened.fetch_add(1, Ordering::SeqCst);
+                Err::<TransportPort<mp_transport::SerialTransport>, _>(std::io::Error::other(
+                    "not on this bench",
+                ))
+            }
+        };
+        let left = Running::new(&page.flows);
+        page.worker = None;
+        page.probe(vec!["/dev/ttyACM0".to_owned()], counting(&opened));
+        std::thread::sleep(Duration::from_millis(100));
+        assert_eq!(opened.load(Ordering::SeqCst), 0, "probed around a running flash");
+        drop(left);
+        page.probe(vec!["/dev/ttyACM0".to_owned()], counting(&opened));
+        let until = Instant::now() + Duration::from_secs(5);
+        while opened.load(Ordering::SeqCst) == 0 {
+            assert!(Instant::now() < until, "not probed once the flash ended");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    /// The path a device's arrival takes: `Activate` starts watching the ports, a port appearing
+    /// is heard by the tick while the page is open, and every port is probed - here a port that
+    /// is not there, so nothing is opened and nothing found. Leaving the page stops the watching.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:45-48, 126, 134-180`
+    #[test]
+    fn a_port_arriving_is_heard_and_probed() {
+        static PLUGGED: AtomicBool = AtomicBool::new(false);
+        fn ports() -> Vec<String> {
+            if PLUGGED.load(Ordering::SeqCst) {
+                vec!["/dev/mp-test-no-such-port".to_owned()]
+            } else {
+                Vec::new()
+            }
+        }
+        let mut page = loaded("CubeOrange-BL");
+        page.watch_ports = Some(ports);
+        page.activate();
+        assert!(page.watcher.is_some(), "Activate watches the ports");
+        PLUGGED.store(true, Ordering::SeqCst);
+        let until = Instant::now() + Duration::from_secs(5);
+        while page.arrivals == 0 {
+            assert!(Instant::now() < until, "the arrival was never heard");
+            page.tick(true);
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(page.arrivals, 1);
+        assert_eq!(page.detected_board_id(), None, "nothing there to answer");
+        page.close();
+        assert!(page.watcher.is_none(), "Deactivate stops watching");
+    }
+
+    /// `flashdone` is set by `LookForPort`'s download, once the file is in; `Activate` clears
+    /// it.
+    #[test]
+    fn activate_clears_flashdone() {
+        let mut page = loaded("CubeOrange-BL");
+        page.flashdone.store(true, Ordering::Relaxed);
+        page.activate();
+        assert!(!page.flashdone.load(Ordering::Relaxed));
+    }
+
+    /// Bootloader Update on the manifest page with no link to open - AUTO, a cancelled
+    /// question - is "Failed to find device on mavlink" on the status line, not a box.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:542-546`
+    #[test]
+    fn bootloader_update_with_nothing_to_open_finds_no_device() {
+        let mut page = loaded("CubeOrange-BL");
+        page.bl_open(None, Instant::now());
+        assert_eq!(page.take_status().as_deref(), Some(NO_DEVICE_ON_MAVLINK));
+        assert!(page.bl.is_none());
+        assert!(page.message().is_none(), "no box");
+        assert!(page.take_status().is_none(), "said once");
+    }
+
+    /// While MP_FIRMWARE_DEVICE names the device, Force Bootloader and Bootloader Update open no
+    /// serial port - where a real board is, the bench CubeOrange among them - and a network kind,
+    /// the SITL's, is still theirs; with the machine's own devices, every port is.
+    #[test]
+    fn a_named_device_keeps_both_off_the_machines_serial_ports() {
+        let mut page = loaded("CubeOrange-BL");
+        page.opens_boards = false;
+        assert!(page.refuses_port("/dev/ttyACM0"));
+        assert!(page.refuses_port("COM4"));
+        assert!(!page.refuses_port("TCP"));
+        assert!(!page.refuses_port("UDP"));
+        assert!(
+            !page.refuses_port(""),
+            "nothing to open is the C#'s own no-device"
+        );
+        page.opens_boards = true;
+        assert!(!page.refuses_port("/dev/ttyACM0"));
+    }
+
+    /// What the page says of a stop: the px4 upload stops before the board only while
+    /// MP_FIRMWARE_DEVICE names the device, and says so; every other stop is a step that is not
+    /// ported, and says that. Nothing on this page says flashing is not enabled: this build
+    /// flashes (the bench CubeOrange, 2026-09-25).
+    #[test]
+    fn a_stop_says_why_its_step_was_not_taken() {
+        assert_eq!(
+            stop_text(&flow::Stop::RebootToBootloader),
+            "the next step would reboot the board into its bootloader and upload the image: no \
+             board is written while MP_FIRMWARE_DEVICE names the device"
+        );
+        assert_eq!(
+            stop_text(&flow::Stop::Dfu),
+            "the next step would flash the image through DFU: not ported to this application"
+        );
+        for stop in [
+            flow::Stop::BootloaderProbe,
+            flow::Stop::OpenPort("/dev/ttyUSB0".to_owned()),
+            flow::Stop::RebootToBootloader,
+            flow::Stop::ArduinoUpload("/dev/ttyUSB0".to_owned()),
+            flow::Stop::Vrbrain,
+            flow::Stop::Parrot,
+            flow::Stop::Solo,
+            flow::Stop::Dfu,
+            flow::Stop::FlashBootloader,
+        ] {
+            for said in [stop_text(&stop), stop.text()] {
+                assert!(!said.contains("not enabled"), "{said}");
+            }
+        }
+        assert_eq!(NOT_PORTED, "not ported to this application");
     }
 
     /// The product's path: the fetch on its thread, collected by `tick`, labelling the page.
@@ -2850,5 +4370,336 @@ mod reboot_to_bootloader_tests {
             LinkReboot::NoHeartbeat
         );
         assert_eq!(link.stats().frames_sent, 0);
+    }
+}
+
+/// Force Bootloader and the manifest page's Bootloader Update, over the real link to a scripted
+/// copter: what goes on the wire, and what the page says.
+#[cfg(test)]
+mod manifest_link_tests {
+    use std::time::{Duration, Instant};
+
+    use mp_link::ProtocolTimeouts;
+    use mp_link::requests::{CMD_FLASH_BOOTLOADER, CMD_PREFLIGHT_REBOOT_SHUTDOWN};
+    use mp_mavlink_dialects::all::MavMessage;
+
+    use super::{
+        BL_QUESTIONS, BlLink, BlStage, DO_COMMAND_TIMEOUT, FAILED_TO_UPGRADE_BOOTLOADER,
+        FORCE_FAILED, Force, ForceEnd, IGNORE_THE_UNPLUG, InstallFirmware, NO_DEVICE_ON_MAVLINK,
+        UPGRADED_BOOTLOADER, heartbeats,
+    };
+    use crate::telemetry::Telemetry;
+    use crate::telemetry::scripted::{VEHICLE, Vehicle, ack, until};
+
+    fn fast() -> ProtocolTimeouts {
+        ProtocolTimeouts::default().faster(20)
+    }
+
+    /// The manifest page, showing.
+    fn page() -> InstallFirmware {
+        InstallFirmware {
+            open: true,
+            ..InstallFirmware::default()
+        }
+    }
+
+    /// Each `PREFLIGHT_REBOOT_SHUTDOWN` the copter heard: param1 and confirmation.
+    fn reboots(vehicle: &Vehicle) -> Vec<(f32, u8)> {
+        vehicle
+            .heard
+            .iter()
+            .filter_map(|message| match message {
+                MavMessage::CommandLong(long) if long.command == CMD_PREFLIGHT_REBOOT_SHUTDOWN => {
+                    assert_eq!(
+                        (long.target_system, long.target_component),
+                        (VEHICLE.sysid, VEHICLE.compid)
+                    );
+                    Some((long.param1, long.confirmation))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `doReboot(true, false)`'s four frames.
+    const FOUR: [(f32, u8); 4] = [(3.0, 0), (3.0, 0), (1.0, 0), (1.0, 0)];
+
+    /// Ticks Force Bootloader until it ends, the copter's link read as it goes.
+    fn force_until_end(
+        page: &mut InstallFirmware,
+        telemetry: &mut Telemetry,
+        now: impl Fn() -> Instant,
+    ) -> Option<ForceEnd> {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            let view = telemetry.view();
+            if let Some(end) = page.force_tick(telemetry, &view, now()) {
+                return Some(end);
+            }
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        None
+    }
+
+    /// The window's link already open: `Open` returns at once, and `doReboot(true, false)` holds
+    /// its reboots until the copter's next heartbeat - then 3, 3, 1, 1, and the instruction's
+    /// box.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:517-522; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2591-2618, 2758-2763`
+    #[test]
+    fn the_link_open_the_next_heartbeat_brings_the_four_reboots_and_the_box() {
+        let (mut telemetry, mut vehicle) = Vehicle::connect(fast());
+        let mut page = page();
+        let view = telemetry.view();
+        let seen = heartbeats(&view);
+        page.force_start(true, &view, Instant::now());
+        assert!(matches!(page.force, Some(Force::Heartbeat { .. })));
+        assert!(!page.live(), "the handler holds the window");
+        assert!(page.forcing(), "SETUP is not shown again under it");
+        for _ in 0..20 {
+            let view = telemetry.view();
+            assert_eq!(page.force_tick(&mut telemetry, &view, Instant::now()), None);
+        }
+        std::thread::sleep(Duration::from_millis(100));
+        vehicle.read();
+        assert_eq!(reboots(&vehicle), [], "not before the next heartbeat");
+        vehicle.heartbeat();
+        until("the next heartbeat", || {
+            heartbeats(&telemetry.view()) > seen
+        });
+        assert_eq!(
+            force_until_end(&mut page, &mut telemetry, Instant::now),
+            Some(ForceEnd::Rebooted)
+        );
+        until("the four reboots", || {
+            vehicle.read();
+            reboots(&vehicle).len() >= 4
+        });
+        std::thread::sleep(fast().command.timeout * 3);
+        vehicle.read();
+        assert_eq!(reboots(&vehicle), FOUR);
+        assert_eq!(
+            page.message().map(|waiting| waiting.text.as_str()),
+            Some(IGNORE_THE_UNPLUG)
+        );
+        assert_eq!(page.take_status(), None, "no failure said");
+        assert!(!page.forcing(), "done");
+    }
+
+    /// The link opened by the click: `Open` waits for the copter's second heartbeat, then
+    /// `doReboot` for the one after; without it, 2.2 s on, the reboots go out anyway.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:869-891, 1197-1201, 2594-2614`
+    #[test]
+    fn a_link_opened_waits_for_two_heartbeats_then_reboots_when_the_next_does_not_come() {
+        let (mut telemetry, mut vehicle) = Vehicle::connect(fast());
+        let mut page = page();
+        let started = Instant::now();
+        let view = telemetry.view();
+        page.force_start(false, &view, started);
+        let view = telemetry.view();
+        assert_eq!(page.force_tick(&mut telemetry, &view, started), None);
+        assert!(
+            matches!(page.force, Some(Force::Opening { .. })),
+            "one heartbeat is not enough"
+        );
+        vehicle.heartbeat();
+        until("the second heartbeat", || {
+            let view = telemetry.view();
+            page.force_tick(&mut telemetry, &view, Instant::now());
+            matches!(page.force, Some(Force::Heartbeat { .. }))
+        });
+        // No third heartbeat: `getHeartBeat`'s 2.2 s pass.
+        let later = Instant::now() + Duration::from_millis(2300);
+        assert_eq!(
+            force_until_end(&mut page, &mut telemetry, || later),
+            Some(ForceEnd::Rebooted)
+        );
+        until("the four reboots", || {
+            vehicle.read();
+            reboots(&vehicle).len() >= 4
+        });
+        assert_eq!(reboots(&vehicle), FOUR);
+    }
+
+    /// Nothing heard before `CONNECT_TIMEOUT_SECONDS`: "Failed to connect and send the reboot
+    /// command" on the status line - no box - and nothing sent.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:524-532`
+    #[test]
+    fn nothing_heard_in_time_is_failed_to_connect_on_the_status_line() {
+        let (mut telemetry, mut vehicle) = Vehicle::connect(fast());
+        let mut page = page();
+        let started = Instant::now();
+        let view = telemetry.view();
+        page.force_start(false, &view, started);
+        let view = telemetry.view();
+        assert_eq!(
+            page.force_tick(&mut telemetry, &view, started + Duration::from_secs(31)),
+            Some(ForceEnd::Failed)
+        );
+        assert_eq!(page.take_status().as_deref(), Some(FORCE_FAILED));
+        assert!(page.message().is_none(), "no box");
+        assert!(page.force.is_none());
+        assert!(!page.forcing());
+        std::thread::sleep(Duration::from_millis(100));
+        vehicle.read();
+        assert_eq!(reboots(&vehicle), []);
+    }
+
+    /// Bootloader Update's link, as `doConnect` left it.
+    fn bl(telemetry: Telemetry) -> InstallFirmware {
+        let mut page = page();
+        page.bl = Some(BlLink {
+            link: telemetry,
+            stage: BlStage::Opening {
+                deadline: Instant::now() + Duration::from_secs(30),
+            },
+        });
+        page
+    }
+
+    /// Each `FLASH_BOOTLOADER` the copter heard: its param5, the magic number.
+    fn flash_commands(vehicle: &Vehicle) -> Vec<f32> {
+        vehicle
+            .heard
+            .iter()
+            .filter_map(|message| match message {
+                MavMessage::CommandLong(long) if long.command == CMD_FLASH_BOOTLOADER => {
+                    assert_eq!(
+                        (long.target_system, long.target_component),
+                        (VEHICLE.sysid, VEHICLE.compid)
+                    );
+                    Some(long.param5)
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Opened and heard twice: the first "BL Update" question, then the second, then
+    /// `doCommand(FLASH_BOOTLOADER, 0, 0, 0, 0, 290876, 0, 0)`; the copter's answer on the status
+    /// line - refused, "Failed to upgrade bootloader"; accepted, "Upgraded bootloader" - and the
+    /// link closed.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:548-561`
+    #[test]
+    fn two_yeses_send_flash_bootloader_and_the_answer_is_said() {
+        for (result, said) in [
+            (4u8, FAILED_TO_UPGRADE_BOOTLOADER),
+            (0, UPGRADED_BOOTLOADER),
+        ] {
+            let (telemetry, mut vehicle) = Vehicle::connect(fast());
+            let mut page = bl(telemetry);
+            page.bl_tick(Instant::now());
+            assert!(
+                page.question().is_none(),
+                "one heartbeat is not `Open` done"
+            );
+            vehicle.heartbeat();
+            until("the first question", || {
+                page.bl_tick(Instant::now());
+                page.question().is_some()
+            });
+            assert_eq!(page.question().as_deref(), Some(BL_QUESTIONS[0]));
+            page.answer_bootloader(true);
+            assert_eq!(page.question().as_deref(), Some(BL_QUESTIONS[1]));
+            vehicle.read();
+            assert!(
+                flash_commands(&vehicle).is_empty(),
+                "not before the second Yes"
+            );
+            page.answer_bootloader(true);
+            assert!(page.question().is_none());
+            until("the command", || {
+                vehicle.read();
+                !flash_commands(&vehicle).is_empty()
+            });
+            assert_eq!(flash_commands(&vehicle), [290_876.0]);
+            vehicle.send(&ack(CMD_FLASH_BOOTLOADER, result));
+            until("the answer", || {
+                page.bl_tick(Instant::now());
+                page.bl.is_none()
+            });
+            assert_eq!(page.take_status().as_deref(), Some(said));
+            assert!(page.message().is_none(), "the status line, not a box");
+        }
+    }
+
+    /// No to either question closes the link and sends nothing; nothing heard in time is
+    /// "Failed to find device on mavlink".
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:542-561`
+    #[test]
+    fn no_closes_the_link_and_silence_finds_no_device() {
+        let (telemetry, mut vehicle) = Vehicle::connect(fast());
+        let mut page = bl(telemetry);
+        vehicle.heartbeat();
+        until("the first question", || {
+            page.bl_tick(Instant::now());
+            page.question().is_some()
+        });
+        page.answer_bootloader(true);
+        page.answer_bootloader(false);
+        assert!(page.bl.is_none(), "mav.Close()");
+        assert!(page.question().is_none());
+        std::thread::sleep(Duration::from_millis(100));
+        vehicle.read();
+        assert!(flash_commands(&vehicle).is_empty());
+        assert_eq!(page.take_status(), None);
+
+        let (telemetry, _vehicle) = Vehicle::connect(fast());
+        let mut page = bl(telemetry);
+        page.bl_tick(Instant::now() + Duration::from_secs(31));
+        assert!(page.bl.is_none());
+        assert_eq!(page.take_status().as_deref(), Some(NO_DEVICE_ON_MAVLINK));
+    }
+
+    /// The link lost while the command waits: said on the status line in the window's words for
+    /// a failed link, never left silent - a link made over a transport has no error to give.
+    #[test]
+    fn a_link_lost_under_the_command_is_said() {
+        let (telemetry, mut vehicle) = Vehicle::connect(fast());
+        let mut page = bl(telemetry);
+        vehicle.heartbeat();
+        until("the first question", || {
+            page.bl_tick(Instant::now());
+            page.question().is_some()
+        });
+        page.answer_bootloader(true);
+        page.answer_bootloader(true);
+        vehicle.unplug();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while page.bl.is_some() && Instant::now() < deadline {
+            page.bl_tick(Instant::now());
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(page.bl.is_none());
+        let said = page.take_status().expect("something said");
+        assert_eq!(said, "link failed: the link closed", "no error of its own to give");
+    }
+
+    /// The command unanswered through its wait and its one retry: `doCommand`'s timeout, said
+    /// on the status line.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2753-2757, 2784-2797`
+    #[test]
+    fn an_unanswered_command_times_out_on_the_status_line() {
+        let (telemetry, mut vehicle) = Vehicle::connect(fast());
+        let mut page = bl(telemetry);
+        vehicle.heartbeat();
+        until("the first question", || {
+            page.bl_tick(Instant::now());
+            page.question().is_some()
+        });
+        page.answer_bootloader(true);
+        page.answer_bootloader(true);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while page.bl.is_some() && Instant::now() < deadline {
+            page.bl_tick(Instant::now());
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(page.bl.is_none());
+        assert_eq!(page.take_status().as_deref(), Some(DO_COMMAND_TIMEOUT));
+        vehicle.read();
+        assert_eq!(
+            flash_commands(&vehicle).len(),
+            2,
+            "sent, and sent once more"
+        );
     }
 }
