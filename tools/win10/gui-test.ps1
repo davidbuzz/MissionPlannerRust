@@ -672,7 +672,11 @@ try {
             'scroll' {
                 $direction = if ($w.Count -gt 2) { $w[2] } else { 'down' }
                 $notches = if ($w.Count -gt 3) { [int]$w[3] } else { 1 }
-                $gap = if ($w.Count -gt 4) { [int]$w[4] } else { 60 }
+                # 150 ms between notches, not 60: gpui's Windows backend drops an input message
+                # that arrives while its input callback is still out (`callbacks.input.take()`),
+                # and a debug build's frame in the VM can outlast 60 ms - log-zoom's two notches
+                # zoomed once one run in two (2026-09-27).
+                $gap = if ($w.Count -gt 4) { [int]$w[4] } else { 150 }
                 Raise-Window
                 $at = Resolve-Control $w[1]
                 if ($at) {
