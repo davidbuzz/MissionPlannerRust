@@ -15,9 +15,9 @@
 | crates/mp-gui/src/config | Onboard OSD page body (ConfigOSD) | med | 5 |
 | crates/mp-gui/src/config/compass_mot.rs | Owner's two open questions on firmware-refusal boxes | med | 90 |
 | crates/mp-log | Log analysis (loganalysis) reachable from the DataFlash Logs page | med | 60 |
-| crates/mp-gui/src/sitl | SITL screen: a real launch on Windows and macOS | med | 90 |
+| crates/mp-gui/src/sitl | SITL screen: a real launch on macOS (Linux and Windows done) | med | 95 |
 | DELIVERABLES D20 | Installers, updates, crash reporting | med | 5 |
-| DELIVERABLES D19 | Per-message decoder fuzzing; macOS graphics smoke; Windows GUI scripts (the runner is Linux only) | med | 60 |
+| DELIVERABLES D19 | Per-message decoder fuzzing; macOS graphics smoke; the Windows GUI suite's results against Linux (runner in tools/win10) | med | 70 |
 | crates/mp-gui/src/fly.rs | Record HUD to AVI, and stop recording | low | 1 |
 | crates/mp-gui/src/fly.rs | RAW_Sensor window from the Actions grid | low | 1 |
 | crates/mp-gui/src/fly.rs | Camera overlap toggle: CAMERA_FEEDBACK photo markers on map | low | 1 |

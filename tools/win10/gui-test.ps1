@@ -365,8 +365,12 @@ foreach ($setup in $setups) {
     $file = Join-Path $Work ".setup-$setupNo.sh"
     [IO.File]::WriteAllText($file, $setup[1] + "`n", (New-Object Text.UTF8Encoding($false)))
     Push-Location $Root
+    # A native program's stderr under 'Stop' is a terminating error in Windows PowerShell 5.1:
+    # a setup that said "python3: No such file" ended the run instead of skipping it.
+    $ErrorActionPreference = 'Continue'
     & $Bash $file.Replace('\', '/') 2>&1 | ForEach-Object { "setup: $_" }
     $status = $LASTEXITCODE
+    $ErrorActionPreference = 'Stop'
     Pop-Location
     if ($status -eq 127 -or $status -eq 3) {
         Write-Output "SKIP line $($setup[0]): setup exited $status, the test cannot run here: $($setup[1])"
