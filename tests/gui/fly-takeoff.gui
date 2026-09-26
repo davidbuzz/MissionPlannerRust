@@ -1,0 +1,64 @@
+# TakeOff, as the flight map menu's does it (takeOffToolStripMenuItem_Click): its box offers
+# takeoff_alt - 5 the first time - the answer is saved, the vehicle is put in Guided and then told
+# to take off. It does not arm; the pilot arms first. `GCSViews/FlightData.cs:5290-5315`
+#
+# The owner's bug report of 2026-09-26, "unable to get simulation to takeoff": the button then sent
+# the take-off alone, with no box and no Guided, and a copter armed in Stabilize refuses a take-off
+# outside Guided. This arms in Stabilize, as he did, and takes off.
+#
+# THIS FLIES SITL: it arms, climbs and lands. Needs a copter SITL:
+#   tools/gui-test.sh tests/gui/fly-takeoff.gui -- tcp:127.0.0.1:5760
+env MP_CONFIG_XML $WORK/config.xml
+env XDG_DATA_HOME $WORK
+screen fly
+window 1600x1200
+budget 30
+# A first budget, set by hand until a passing run records one.
+
+# The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as
+# tabControlactions.SelectedIndex = 0 has it. `GCSViews/FlightData.Designer.cs:595-611`
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
+click fly-tab-actions
+expect fly.tab tabActions
+click Stabilize
+expect vehicle.mode Stabilize
+expect vehicle.armed false
+
+# Armed in Stabilize, throttle down, as the owner armed it.
+click arm
+within 15
+expect vehicle.armed true
+
+# TakeOff's box, offering 5; 8 given.
+click takeoff
+expect fly.prompt Enter Takeoff Alt
+expect fly.prompt.value 5
+key ctrl+u
+type 8
+# Keystrokes reach the application through the input method (ibus, over XIM) and come back
+# after a round trip; a click does not. Settle, so the click cannot overtake the typing.
+click fly-prompt-ok
+expect fly.prompt none
+# setMode("GUIDED") first on the wire, then the take-off, which Guided lets the copter accept.
+expect fly.sent ~ MAV_CMD_DO_SET_MODE
+expect fly.sent ~ MAV_CMD_NAV_TAKEOFF 0,0,0,0,0,0,8
+expect vehicle.mode Guided
+within 10
+expect fly.ack MAV_CMD_NAV_TAKEOFF: accepted
+expect vehicle.armed true
+
+# The box offers what was last given.
+click takeoff
+expect fly.prompt.value 8
+click fly-prompt-cancel
+expect fly.prompt none
+
+# Down again, and left in Stabilize, as the next test finds a fresh SITL: Land is not a mode a
+# copter arms in, and a vehicle left there fails every later arming check.
+click land
+within 30
+expect vehicle.armed false
+click Stabilize
+expect vehicle.mode Stabilize

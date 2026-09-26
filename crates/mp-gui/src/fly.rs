@@ -32,12 +32,13 @@ use crate::ui::{action, action_sized, field, panel, theme};
 // else entirely: that one is how loud a STATUSTEXT was, this one is how bad a reading is.
 use mp_vehicle::health::Severity as Health;
 
-/// Default height for the takeoff button, in metres above home.
-///
-/// Mission Planner asks for this in a dialog every time. A fixed, visible default is better for a
-/// first pass than a text field nobody reads, and it is deliberately low: a wrong 10 is a hover,
-/// a wrong 100 is an incident.
+/// The height a right click on the map flies a vehicle still on the ground to, in metres above
+/// home.
 pub const TAKEOFF_ALTITUDE: f32 = 10.0;
+
+/// `Settings.Instance["takeoff_alt", "5"]`: TakeOff's box offers the height last given, or this.
+/// `// C#: GCSViews/FlightData.cs:5294`
+pub const TAKEOFF_ALT_DEFAULT: &str = "5";
 
 /// Width shared by the arm and force arm buttons.
 ///
@@ -111,13 +112,23 @@ pub fn actions_panel(
                 cx.notify();
             }),
         ))
+        // The map menu's TakeOff (`takeOffToolStripMenuItem`), which this application's map has
+        // no menu for: live while the link is open, as the handler asks only `BaseStream.IsOpen`,
+        // armed or not - it does not arm.
+        // `// C#: GCSViews/FlightData.cs:5290-5315; FlightData.resx:5443-5445`
         .child(action(
             "takeoff",
-            format!("take off {TAKEOFF_ALTITUDE:.0} m"),
+            "TakeOff",
             theme::ACCENT,
-            has_vehicle && armed,
-            cx.listener(|this, _event: &(), _window, cx| {
-                this.telemetry.takeoff(TAKEOFF_ALTITUDE);
+            has_vehicle,
+            cx.listener(|this, _event: &(), window, cx| {
+                let alt = this
+                    .persisted
+                    .get("takeoff_alt")
+                    .unwrap_or(TAKEOFF_ALT_DEFAULT)
+                    .to_owned();
+                this.fly_actions.ask(Prompt::TakeOff, &alt);
+                this.fly_focus.prompt.focus(window, cx);
                 cx.notify();
             }),
         ))
@@ -933,6 +944,9 @@ pub enum Prompt {
         /// The `MAV_FRAME` selected in the box.
         frame: u8,
     },
+    /// TakeOff's `InputBox.Show("Enter Alt", "Enter Takeoff Alt", ref alt)`.
+    /// `// C#: GCSViews/FlightData.cs:5296`
+    TakeOff,
     /// `InputBox.Show("POI", "Enter ID", ref output)`. `// C#: Utilities/POI.cs:73`
     PoiId,
     /// `InputBox.Show("Enter POI Coords", ...)`. `// C#: GCSViews/FlightData.cs:6014`
@@ -1001,7 +1015,7 @@ impl Prompt {
             Self::ResumeWarning => "Resume Mission",
             Self::ResumeAt => "Resume at",
             Self::FlyToCoords => "Enter Fly To Coords",
-            Self::FlyToHereAlt { .. } => "Enter Alt",
+            Self::FlyToHereAlt { .. } | Self::TakeOff => "Enter Alt",
             Self::PoiId => crate::poi::ID_TITLE,
             Self::PoiCoords => crate::poi::COORDS_TITLE,
             Self::LoadLog => "Load Log",
@@ -1040,6 +1054,7 @@ impl Prompt {
             Self::ResumeAt => "Resume mission at waypoint#".to_owned(),
             Self::FlyToCoords => "Please enter the coords 'lat;long;alt' or 'lat;long'".to_owned(),
             Self::FlyToHereAlt { .. } => "Enter Guided Mode Alt".to_owned(),
+            Self::TakeOff => "Enter Takeoff Alt".to_owned(),
             Self::PoiId => crate::poi::ID_TEXT.to_owned(),
             Self::PoiCoords => crate::poi::COORDS_TEXT.to_owned(),
             Self::LoadLog => "Telemetry log (*.tlog)".to_owned(),
@@ -1079,6 +1094,7 @@ impl Prompt {
                 | Self::SelectScript
                 | Self::FlyToCoords
                 | Self::FlyToHereAlt { .. }
+                | Self::TakeOff
                 | Self::PoiId
                 | Self::PoiCoords
                 | Self::LoadLog
@@ -1383,6 +1399,20 @@ pub fn set_mode_messages(
         commands::set_mode(target, *custom_mode),
         commands::set_mode(target, *custom_mode),
     ]
+}
+
+/// TakeOff's answer: `float.Parse(alt, CultureInfo.InvariantCulture)` - its `FormatException`,
+/// which the C# leaves to the application's last-chance handler, said here - and the messages of
+/// `setMode("GUIDED")` that go before the take-off (none for a vehicle whose family has no
+/// Guided, as `translateMode` refuses it).
+/// `// C#: GCSViews/FlightData.cs:5299-5305`
+pub fn takeoff_plan(
+    text: &str,
+    target: VehicleId,
+    family: Option<VehicleFamily>,
+) -> Result<(f32, Vec<MavMessage>), &'static str> {
+    let altitude = mp_mission::dotnet::parse_f32(text).ok_or(crate::plan::FORMAT_EXCEPTION)?;
+    Ok((altitude, set_mode_messages(target, family, "GUIDED")))
 }
 
 /// What `setGuidedModeWP` needs to know about the vehicle.
@@ -4167,6 +4197,11 @@ impl MissionPlanner {
                     self.fly_to_here_alt(&text, frame);
                 }
             }
+            Prompt::TakeOff => {
+                if accepted {
+                    self.fly_takeoff(&text);
+                }
+            }
             Prompt::PoiId => {
                 let pending = self.fly_data.pois.pending.take();
                 if accepted && let Some((lat, lng, alt)) = pending {
@@ -4370,6 +4405,27 @@ impl MissionPlanner {
                 frame,
             )
         });
+    }
+
+    /// TakeOff, once answered: the height saved as `takeoff_alt`, the vehicle put in Guided, and
+    /// `doCommand(TAKEOFF, 0, 0, 0, 0, 0, 0, alt)` - its answer not looked at, a timeout
+    /// "Command Failed". One press, in the C#'s order: `setMode`'s messages go straight onto the
+    /// wire and the take-off is the link's request, sent on its next pass, so the vehicle hears
+    /// Guided first. ArduCopter takes off only in Guided, which is why the C# sets it.
+    /// `// C#: GCSViews/FlightData.cs:5290-5315`
+    fn fly_takeoff(&mut self, text: &str) {
+        let view = self.telemetry.view();
+        let Some(target) = view.vehicle else {
+            return;
+        };
+        let sends = takeoff_plan(text, target, family(&view)).map(|(altitude, mut sends)| {
+            self.persisted
+                .set("takeoff_alt", mp_mission::dotnet::general_f32(altitude));
+            sends.push(commands::takeoff(target, altitude));
+            sends
+        });
+        let report = Report::on_timeout(error_box(strings::COMMAND_FAILED));
+        self.fly_send(sends.map_err(Refusal::error), &view, &report);
     }
 
     /// Fly To Here Alt, once answered: the height and frame the next Fly To Here uses, and - if
@@ -9773,6 +9829,85 @@ mod tests {
 
     /// The calls the C# blocks on become the link's retrying requests; what it sends and forgets
     /// goes once.
+    /// TakeOff's answer: `float.Parse` of it, and Guided's messages to go before the take-off -
+    /// none for a vehicle whose family has no Guided; a word that is not a number is the
+    /// `FormatException`'s message. Its box is the C#'s.
+    /// `// C#: GCSViews/FlightData.cs:5294-5305`
+    #[test]
+    fn takeoff_parses_its_height_and_puts_the_vehicle_in_guided_first() {
+        let t = target();
+        let copter = Some(VehicleFamily::Copter);
+        let (altitude, guided) = takeoff_plan("5", t, copter).expect("a height");
+        assert!((altitude - 5.0).abs() < f32::EPSILON);
+        assert_eq!(guided, set_mode_messages(t, copter, "GUIDED"));
+        assert_eq!(guided.len(), 3, "DO_SET_MODE, then SET_MODE twice");
+        let (altitude, _) = takeoff_plan("12.5", t, copter).expect("a height");
+        assert!((altitude - 12.5).abs() < f32::EPSILON);
+        assert!(matches!(
+            takeoff_plan("ten", t, copter),
+            Err(why) if why == crate::plan::FORMAT_EXCEPTION
+        ));
+        let (_, none) = takeoff_plan("5", t, None).expect("a height");
+        assert!(none.is_empty());
+        assert_eq!(Prompt::TakeOff.title(), "Enter Alt");
+        assert_eq!(Prompt::TakeOff.text(), "Enter Takeoff Alt");
+        assert!(Prompt::TakeOff.takes_text());
+        assert_eq!(TAKEOFF_ALT_DEFAULT, "5");
+    }
+
+    /// TakeOff on the wire, as the window's press sends it (`send_routed`): Guided's `DO_SET_MODE`
+    /// and two `SET_MODE`s straight out, then the take-off as the link's request - and the vehicle
+    /// hears them in that order, the request going out only on the link's next pass. ArduCopter refuses a take-off
+    /// outside Guided, which is what the owner met on 2026-09-26 with the button that sent the
+    /// take-off alone.
+    #[test]
+    fn takeoff_reaches_the_vehicle_after_guided() {
+        use crate::telemetry::scripted::{VEHICLE, Vehicle, until};
+        use mp_mavlink_dialects::all::MavMessage;
+        let (mut telemetry, mut vehicle) =
+            Vehicle::connect(mp_link::ProtocolTimeouts::default().faster(20));
+        let (altitude, mut sends) =
+            takeoff_plan("7", VEHICLE, Some(VehicleFamily::Copter)).expect("a height");
+        sends.push(commands::takeoff(VEHICLE, altitude));
+        let (sender, _) = telemetry.send_handle().expect("a link");
+        let report = Report::on_timeout(error_box(strings::COMMAND_FAILED));
+        let (requests, queued) = send_routed(&mut telemetry, &sender, &sends, &report, true);
+        assert!(queued);
+        assert_eq!(requests.len(), 1, "the take-off alone is waited on");
+        until("the take-off to be heard", || {
+            vehicle.read();
+            vehicle.count(|m| {
+                matches!(m, MavMessage::CommandLong(l) if l.command == commands::CMD_NAV_TAKEOFF)
+            }) > 0
+        });
+        let order: Vec<String> = vehicle
+            .heard
+            .iter()
+            .filter_map(|m| match m {
+                MavMessage::CommandLong(l)
+                    if [commands::CMD_DO_SET_MODE, commands::CMD_NAV_TAKEOFF]
+                        .contains(&l.command) =>
+                {
+                    Some(format!("cmd{}", l.command))
+                }
+                MavMessage::SetMode(mode) => Some(format!("mode{}", mode.custom_mode)),
+                _ => None,
+            })
+            .collect();
+        let takeoff = format!("cmd{}", commands::CMD_NAV_TAKEOFF);
+        let first_takeoff = order.iter().position(|m| *m == takeoff).expect("heard");
+        assert_eq!(
+            order[..first_takeoff],
+            [format!("cmd{}", commands::CMD_DO_SET_MODE), "mode4".to_owned(), "mode4".to_owned()],
+            "{order:?}"
+        );
+        let heard_altitude = vehicle.heard.iter().find_map(|m| match m {
+            MavMessage::CommandLong(l) if l.command == commands::CMD_NAV_TAKEOFF => Some(l.param7),
+            _ => None,
+        });
+        assert_eq!(heard_altitude, Some(7.0));
+    }
+
     #[test]
     fn the_calls_the_csharp_waits_on_become_requests_and_the_rest_go_once() {
         let t = target();

@@ -1150,6 +1150,28 @@ fn send_message(
 /// Both directions belong in a telemetry log. Mission Planner records what it sends as well as
 /// what it receives, and a recording missing every command the ground station sent is exactly the
 /// recording you cannot use to work out why a vehicle did what it did.
+/// Sends everything queued with [`Link::send`] and its senders, re-stamping each frame's
+/// sequence number here, where it is owned.
+fn drain_outbound(
+    outbound: &std::sync::mpsc::Receiver<Vec<u8>>,
+    tx_seq: &mut u8,
+    transport: &mut dyn Transport,
+    mut recorder: Option<&mut tlog::TlogWriter>,
+    stats: &mut LinkStats,
+) {
+    while let Ok(mut bytes) = outbound.try_recv() {
+        if let Some(seq) = bytes.get_mut(4) {
+            *seq = *tx_seq;
+            *tx_seq = tx_seq.wrapping_add(1);
+        }
+        // The checksum covers the sequence byte, so it must be recomputed after re-stamping.
+        if let Some(fixed) = restamp_checksum(&bytes) {
+            bytes = fixed;
+        }
+        send_frame(transport, recorder.as_deref_mut(), stats, &bytes);
+    }
+}
+
 fn send_frame(
     transport: &mut dyn Transport,
     recorder: Option<&mut tlog::TlogWriter>,
@@ -1808,6 +1830,18 @@ fn run_link(
             }
         }
 
+        // What the screens sent straight out before this pass, ahead of the requests they made
+        // after it: the C# writes to the port in call order, and `setMode` then `doCommand` -
+        // TakeOff's Guided and then its take-off - reached the vehicle take-off first when the
+        // queue was drained only at the end of the pass, and ArduCopter refused it (2026-09-26).
+        drain_outbound(
+            outbound,
+            &mut tx_seq,
+            transport.as_mut(),
+            recorder.as_mut(),
+            &mut stats,
+        );
+
         // Requests: pick up what the caller queued, send it, and retry what is outstanding.
         //
         // The pick-up happens under the table's lock. A caller looking a request up reads the
@@ -1929,18 +1963,14 @@ fn run_link(
             last_heartbeat = Instant::now();
         }
 
-        // Outbound queue. Re-stamp the sequence number here, where it is owned.
-        while let Ok(mut bytes) = outbound.try_recv() {
-            if let Some(seq) = bytes.get_mut(4) {
-                *seq = tx_seq;
-                tx_seq = tx_seq.wrapping_add(1);
-            }
-            // The checksum covers the sequence byte, so it must be recomputed after re-stamping.
-            if let Some(fixed) = restamp_checksum(&bytes) {
-                bytes = fixed;
-            }
-            send_frame(transport.as_mut(), recorder.as_mut(), &mut stats, &bytes);
-        }
+        // Outbound queue: what was queued during this pass.
+        drain_outbound(
+            outbound,
+            &mut tx_seq,
+            transport.as_mut(),
+            recorder.as_mut(),
+            &mut stats,
+        );
 
         // Flush the recording periodically so a crash costs seconds, not the whole flight.
         if let Some(writer) = recorder.as_mut()

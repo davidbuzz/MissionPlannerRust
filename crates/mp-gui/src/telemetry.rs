@@ -1516,21 +1516,6 @@ impl Telemetry {
         }
     }
 
-    /// Takes off to the given height above home.
-    ///
-    /// `takeOffToolStripMenuItem_Click`: `doCommand(TAKEOFF, ...)`, its answer not looked at, and
-    /// a timeout said as `Strings.CommandFailed`.
-    /// `// C#: GCSViews/FlightData.cs:5305-5313`
-    pub fn takeoff(&mut self, altitude_metres: f32) {
-        let Some(id) = self.target_id() else {
-            return;
-        };
-        self.command_message(
-            &commands::takeoff(id, altitude_metres),
-            Report::on_timeout(error_box(strings::COMMAND_FAILED)),
-        );
-    }
-
     /// Lands where the vehicle is.
     ///
     /// A `doCommand` waited on as the take-off is, with a timeout said the same way.
