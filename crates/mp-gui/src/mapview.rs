@@ -377,7 +377,11 @@ impl MapViewport {
     ///
     /// Positions are appended to the flight path only when the vehicle has actually moved. A
     /// hovering aircraft reports its position several times a second, and storing every report
-    /// would grow the path without drawing anything new.
+    /// would grow the path without drawing anything new. Nor is a position with a latitude or a
+    /// longitude of 0, as `FlightData` adds a route point only `if (cs.lat != 0 && cs.lng != 0)`:
+    /// a GPS reports 0, 0 until its fix, and the route would otherwise run from the Gulf of
+    /// Guinea to the vehicle (the owner saw it on 2026-09-26, the SITL started at Brisbane).
+    /// `// C#: GCSViews/FlightData.cs:3793-3797`
     pub fn observe(&mut self, position: LatLon, heading: Bearing) {
         let projected = position.to_web_mercator();
         self.vehicle = Some((projected, heading));
@@ -388,7 +392,9 @@ impl MapViewport {
         let moved = self.path.last().is_none_or(|last| {
             (last.x - projected.x).abs() > MOVED || (last.y - projected.y).abs() > MOVED
         });
-        if moved {
+        #[allow(clippy::float_cmp)] // the C#'s test is exact: 0 is what a GPS without a fix sends
+        let fixed = position.latitude() != 0.0 && position.longitude() != 0.0;
+        if moved && fixed {
             self.path.push(projected);
             self.path_extent = Some(Extent::grow(self.path_extent, projected));
         }
@@ -444,6 +450,14 @@ impl MapViewport {
     /// `// C#: GCSViews/FlightPlanner.cs:6663-6670, 4368-4381, 881-889`
     pub fn set_fence_return(&mut self, position: Option<LatLon>) {
         self.fence_return = position.map(LatLon::to_web_mercator);
+    }
+
+    /// Whether the flown route is drawn: on the flight screen, whose `route` it is, and not the
+    /// planner's map, which has none (`FlightPlanner.cs` draws no track).
+    /// `// C#: GCSViews/FlightData.cs:3771-3797`
+    #[must_use]
+    pub fn draws_flown_route(&self) -> bool {
+        !self.overlay_mode.is_some_and(|overlay| overlay.planner)
     }
 
     /// Clear Track: the flown route goes, and the map starts recording it again from the
@@ -2749,7 +2763,7 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
     map.track_paths = 0;
     map.track_path_failures = 0;
     map.drawn_points = 0;
-    if map.path.len() > 1 {
+    if map.draws_flown_route() && map.path.len() > 1 {
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let budget = (w * POINTS_PER_PIXEL).clamp(2.0, 1_000_000.0) as usize;
         let stride = map.path.len().div_ceil(budget).max(1);
@@ -3780,6 +3794,34 @@ mod tests {
             1,
             "the next position starts the route again"
         );
+    }
+
+    /// A position with a latitude or a longitude of 0 - a GPS before its fix - is no point of the
+    /// flown route, as `FlightData`'s `cs.lat != 0 && cs.lng != 0` keeps it out; the vehicle is
+    /// still shown where it is said to be. `// C#: GCSViews/FlightData.cs:3793-3797`
+    #[test]
+    fn a_position_at_zero_is_no_point_of_the_flown_route() {
+        let mut map = viewport();
+        let heading = Bearing(mp_units::Degrees(0.0));
+        for (lat, lng) in [(0.0, 0.0), (0.0, 153.0), (-27.5, 0.0)] {
+            map.observe(LatLon::new(lat, lng).expect("valid"), heading);
+        }
+        assert_eq!(map.path_len(), 0);
+        assert!(map.has_fix());
+        map.observe(LatLon::new(-27.5134, 153.0095).expect("valid"), heading);
+        map.observe(LatLon::new(0.0, 0.0).expect("valid"), heading);
+        map.observe(LatLon::new(-27.5140, 153.0100).expect("valid"), heading);
+        assert_eq!(map.path_len(), 2, "the fixes, and not the 0, 0 between them");
+    }
+
+    /// The flown route is the flight screen's: the planner's map draws none.
+    #[test]
+    fn only_the_flight_screen_draws_the_flown_route() {
+        let (planner, _, _) = hover_map(true);
+        assert!(!planner.draws_flown_route());
+        let (flight, _, _) = hover_map(false);
+        assert!(flight.draws_flown_route());
+        assert!(viewport().draws_flown_route(), "no overlay set: the flight screen's default");
     }
 
     /// The return location is a marker of its own, set and taken away.
