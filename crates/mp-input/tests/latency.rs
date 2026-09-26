@@ -27,9 +27,19 @@ use std::time::{Duration, Instant};
 
 use mp_input::mapping::{SAFE_MAX_US, SAFE_MIN_US};
 use mp_input::{
-    Binding, Cause, Frame, LatencyHistogram, MIN_INTERVAL, Mapping, RESEND, Reading, Source,
-    StickReader,
+    Cause, Frame, JoystickAxis, LatencyHistogram, MIN_INTERVAL, Mapping, RESEND, RcRanges, Reading,
+    Runtime, StickReader,
 };
+
+/// Channel 1 driven by axis 0 - `X` - with the vehicle's ranges given.
+fn channel_one_on_x(ranges: RcRanges) -> Mapping {
+    let mut mapping = Mapping {
+        ranges,
+        ..Mapping::default()
+    };
+    mapping.config.set_axis(1, JoystickAxis::X);
+    mapping
+}
 
 /// D15's bar.
 const TARGET: Duration = Duration::from_millis(5);
@@ -48,6 +58,21 @@ fn flying(mapping: Mapping) -> (StickReader, UnixStream, Receiver<(Instant, Fram
         true
     })
     .expect("threads start");
+    // The device opens as the kernel's does, saying where its sticks are; nothing is sent before
+    // that is read.
+    let mut feed = feed;
+    feed.write_all(&mp_input::event::encode(
+        0,
+        mp_input::event::AXIS | mp_input::event::INIT,
+        0,
+        0,
+    ))
+    .expect("the opening burst");
+    let until = Instant::now() + PATIENCE;
+    while reader.reading().axes.is_empty() {
+        assert!(Instant::now() < until, "the opening burst never arrived");
+        std::thread::sleep(Duration::from_millis(1));
+    }
     assert!(reader.set_enabled(true));
     // Switching on sends the current position at once; take it, so the first event's change is
     // not mistaken for it.
@@ -97,9 +122,7 @@ fn report(title: &str, samples: &mut [Duration], histogram: &LatencyHistogram) -
 #[test]
 fn an_isolated_movement_reaches_the_wire_within_five_milliseconds() {
     const EVENTS: usize = 1_000;
-    let mapping = Mapping {
-        bindings: vec![Binding::new(1, Source::Axis(0))],
-    };
+    let mapping = channel_one_on_x(RcRanges::default());
     let (reader, mut feed, frames) = flying(mapping);
 
     let mut histogram = LatencyHistogram::new();
@@ -161,38 +184,55 @@ fn an_isolated_movement_reaches_the_wire_within_five_milliseconds() {
 /// the newer position is, which is what coalescing means.
 #[test]
 fn a_stick_stirred_at_one_kilohertz_is_sent_at_most_every_floor_and_never_stale() {
-    const EVENTS: usize = 1_500;
-    // The widest range a binding may produce, so that one step of the raw axis is about one
-    // microsecond on the channel and every event below lands on a value of its own.
-    let binding = Binding {
-        min: SAFE_MIN_US,
-        max: SAFE_MAX_US,
-        ..Binding::new(1, Source::Axis(0))
+    // `pickchannel` puts every axis through -500 to 500 in whole steps, truncated - so the step
+    // either side of centre is twice as wide as the rest - and a sweep has at most 1001 distinct
+    // values. The events are the first `js` position of each of 990 of them, in order.
+    const EVENTS: usize = 990;
+    // The widest range a channel may have, so each of those steps is a distinct microsecond value.
+    let mapping = channel_one_on_x(RcRanges {
+        listed: true,
+        channels: vec![
+            None,
+            Some((
+                i32::from(SAFE_MIN_US),
+                i32::from(SAFE_MAX_US),
+                i32::from(SAFE_MAX_US) / 2,
+            )),
+        ],
+    });
+    let channel_of = |value: i16| {
+        let reading = Reading {
+            axes: vec![f32::from(value) / 32_767.0],
+            buttons: Vec::new(),
+        };
+        mapping
+            .overrides(&reading, Runtime::default())
+            .channels()
+            .get(1)
+            .unwrap()
     };
-    let values: Vec<i16> = (0..EVENTS)
-        .map(|index| i16::try_from(-30_000 + i32::try_from(index).unwrap() * 40).unwrap())
-        .collect();
+    let mut values: Vec<i16> = Vec::with_capacity(EVENTS);
+    let mut previous = None;
+    for position in -32_767..=32_767i16 {
+        let channel = channel_of(position);
+        if previous != Some(channel) {
+            previous = Some(channel);
+            values.push(position);
+            if values.len() == EVENTS {
+                break;
+            }
+        }
+    }
     // The channel value each event produces, through the same decoding the reader applies.
     let index_of: HashMap<u16, usize> = values
         .iter()
         .enumerate()
-        .map(|(index, &value)| {
-            let reading = Reading {
-                axes: vec![f32::from(value) / 32_767.0],
-                buttons: Vec::new(),
-            };
-            (binding.value(&reading), index)
-        })
+        .map(|(index, &value)| (channel_of(value), index))
         .collect();
     assert_eq!(index_of.len(), EVENTS, "two events share a channel value");
-    let last_value = binding.value(&Reading {
-        axes: vec![f32::from(values[EVENTS - 1]) / 32_767.0],
-        buttons: Vec::new(),
-    });
+    let last_value = channel_of(values[EVENTS - 1]);
 
-    let (reader, mut feed, frames) = flying(Mapping {
-        bindings: vec![binding],
-    });
+    let (reader, mut feed, frames) = flying(mapping.clone());
 
     let writer = thread::spawn(move || {
         let start = Instant::now();

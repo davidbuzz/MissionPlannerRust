@@ -450,6 +450,32 @@ pub fn rc_override(target: VehicleId, channels: [u16; 18]) -> MavMessage {
     })
 }
 
+/// `MANUAL_CONTROL` as the joystick sends it with Manual Control ticked: the four axes, -1000 to
+/// 1000, no buttons, and `target` as the caller gives it - Mission Planner fills it with the
+/// vehicle's component id (`rc.target = comPort.MAV.compid`), and so does its port.
+/// `// C#: MainV2.cs:2409-2435`
+#[must_use]
+pub fn manual_control(target: u8, x: i16, y: i16, z: i16, r: i16) -> MavMessage {
+    MavMessage::ManualControl(mp_mavlink_dialects::all::ManualControl {
+        x,
+        y,
+        z,
+        r,
+        buttons: 0,
+        target,
+        buttons2: 0,
+        enabled_extensions: 0,
+        s: 0,
+        t: 0,
+        aux1: 0,
+        aux2: 0,
+        aux3: 0,
+        aux4: 0,
+        aux5: 0,
+        aux6: 0,
+    })
+}
+
 // The flight screen's Actions tab and its map menu. Each builder below is one message a handler
 // in `GCSViews/FlightData.cs` sends, with the values the C# puts in it; the handler is cited on
 // each. The C# names the commands without the `MAV_CMD_` (and `NAV_`) prefix, so its

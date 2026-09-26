@@ -1032,6 +1032,12 @@ impl MissionPlanner {
             // C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:81-165, 1214-1222
             Some("ConfigSerialInjectGPS") => self.rtk_inject_activate(),
             // ---- end RTK/GPS Inject ----
+            // `Joystick_Load`, each time the page shows (`joystick.rs`).
+            // C#: Joystick/JoystickSetup.cs:28-129
+            Some("JoystickSetup") => {
+                self.sticks
+                    .load(crate::joystick::Host::Setup, &self.persisted);
+            }
             _ => {}
         }
     }
@@ -1160,6 +1166,8 @@ impl MissionPlanner {
             // C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:1224-1227
             Some("ConfigSerialInjectGPS") => self.rtk_inject_deactivate(),
             // ---- end RTK/GPS Inject ----
+            // C#: Joystick/JoystickSetup.cs:527-536
+            Some("JoystickSetup") => self.sticks.close(),
             _ => {}
         }
     }
@@ -1355,8 +1363,16 @@ impl MissionPlanner {
                     cx,
                 ))
                 .into_any_element(),
-            "JoystickSetup" => column()
-                .child(crate::joystick::panel_for(view, &self.sticks, cx))
+            // C#: Joystick/JoystickSetup.Designer.cs; JoystickSetup.resx
+            "JoystickSetup" => div()
+                .flex()
+                .flex_col()
+                .child(crate::joystick::page(
+                    &self.sticks,
+                    &self.joystick_focus,
+                    window,
+                    cx,
+                ))
                 .into_any_element(),
             "ConfigRawParams" => self.params_body(view, window, cx),
             // C#: GCSViews/ConfigurationView/ConfigPlanner.Designer.cs:29-994; ConfigPlanner.resx

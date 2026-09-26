@@ -144,7 +144,9 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "but_disablejoystick_Click",
         "Disable Joystick",
-        Done("joystick-enable"),
+        // The flight screen's "sticks flying - click to stop", shown while the sticks fly as the
+        // C#'s button is made visible then (FlightData.cs:3743), `Sticks::disable_joystick`.
+        Done("sticks-live"),
     ),
     row(
         "BUT_edit_selected",
@@ -179,7 +181,10 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUT_joystick_Click",
         "Joystick",
-        Done("joystick-refresh"),
+        // `new JoystickSetup().ShowUserControl()`: the Joystick Setup page, which this
+        // application shows under SETUP and from CONFIG's Planner rather than a second time from
+        // this tab (fly.rs, "The Actions tab").
+        Done("joystick-page"),
     ),
     row(
         "BUT_loadtelem",
@@ -1091,6 +1096,7 @@ mod tests {
         include_str!("telemetry.rs"),
         include_str!("tuning.rs"),
         include_str!("joystick.rs"),
+        include_str!("joystick/draw.rs"),
         include_str!("logbrowse.rs"),
         include_str!("plan.rs"),
         include_str!("mapview.rs"),

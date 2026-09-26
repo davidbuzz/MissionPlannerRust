@@ -303,7 +303,7 @@ pub fn modes_list(
 ///
 /// The bundled table is ArduCopter's, so for any other firmware only a file fetched for the
 /// connected vehicle speaks for it; without one this says nothing and [`modes_list`] falls back.
-fn documented_values(firmware: Firmware, name: &str) -> Option<Vec<(i64, String)>> {
+pub fn documented_values(firmware: Firmware, name: &str) -> Option<Vec<(i64, String)>> {
     if firmware != Firmware::ArduCopter2 && crate::metadata::documented() == 0 {
         return None;
     }

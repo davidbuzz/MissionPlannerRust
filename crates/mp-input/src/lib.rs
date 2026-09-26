@@ -8,22 +8,28 @@
 //! So the failsafe is not a feature of this module, it is the shape of it. Nothing here holds a
 //! value; every channel comes with a deadline, and a mapping that has not been fed produces a
 //! release rather than a repeat. The interesting code is `Failsafe` and the tests around it,
-//! and the mapping is the easy part.
+//! and the mapping is the easy part: Mission Planner's own (`JoystickBase.pickchannel`), with its
+//! settings kept in its own files ([`config`]).
 //!
 //! Getting a stick onto the wire fast is [`StickReader`]: a thread that blocks on the device and a
 //! thread that sends, so that neither the latency nor the failsafe depends on how quickly a user
 //! interface gets round to it. Its module documentation is the wiring guide.
 
+pub mod config;
 pub mod event;
 pub mod latency;
 pub mod mapping;
 pub mod reader;
+pub mod scripted;
 
 #[cfg(target_os = "linux")]
 pub mod linux;
 
+pub use config::{ButtonFunction, ConfigFiles, JoyButton, JoyChannel, JoystickAxis, JoystickConfig};
 pub use latency::LatencyHistogram;
-pub use mapping::{Axis, Binding, Channels, Mapping, Source};
+pub use mapping::{
+    ButtonEvent, ButtonTracker, Channels, ManualControl, Mapping, Overrides, RcRanges, Runtime,
+};
 pub use reader::{Cause, Frame, MIN_INTERVAL, RESEND, StickReader};
 
 use std::time::{Duration, Instant};

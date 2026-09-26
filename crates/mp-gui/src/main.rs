@@ -334,6 +334,8 @@ struct MissionPlanner {
     param_file_focus: gpui::FocusHandle,
     /// Joystick state: the device, the mapping and the failsafe.
     sticks: joystick::Sticks,
+    /// The keyboard for the joystick page's expo boxes, its forms' boxes and its file dialogs.
+    joystick_focus: gpui::FocusHandle,
     /// The primary flight display's inputs for this frame, and the clocks behind its banners.
     hud: hud::HudInputs,
     hud_timing: hud::Timing,
@@ -754,6 +756,7 @@ impl MissionPlanner {
             },
             param_file_focus: cx.focus_handle(),
             sticks: joystick::Sticks::new(),
+            joystick_focus: cx.focus_handle(),
             hud: hud::HudInputs::default(),
             hud_timing: hud::Timing::default(),
             metadata: metadata::Fetch::default(),
@@ -2647,8 +2650,9 @@ impl Render for MissionPlanner {
         let view = self.telemetry.view();
 
         // The sticks send from their own thread; this keeps them addressed to the vehicle being
-        // flown and notices a device that has gone. Once a frame, whether or not anything shows.
-        self.sticks.tick(self.telemetry.send_handle());
+        // flown, notices a device that has gone, runs the Joystick page's timer and does the
+        // button functions pressed. Once a frame, whether or not anything shows.
+        self.joystick_tick(&view);
         self.hud = self.hud_inputs(&view);
         // What the HUD's menu has set: the Russian flag and the user's items.
         self.fly_data
@@ -3160,6 +3164,7 @@ impl Render for MissionPlanner {
                 self.metadata.status.as_deref().unwrap_or("idle"),
             );
             facts::record("sticks.enabled", self.sticks.is_enabled());
+            joystick::record_facts(&self.sticks);
             // Frames the link accepted and the measured stick-to-link latency, so a test with a
             // device attached can prove frames go out and how fast.
             facts::record("sticks.sent", self.sticks.sent());
@@ -3544,6 +3549,12 @@ impl Render for MissionPlanner {
                     window,
                     cx,
                 ))
+                .children(joystick::overlay(
+                    &self.sticks,
+                    &self.joystick_focus,
+                    window,
+                    cx,
+                ))
                 .children(config::serial_ports::overlay(
                     &self.serial_ports,
                     window,
@@ -3710,7 +3721,7 @@ impl Render for MissionPlanner {
                                             .child("sticks flying - click to stop"),
                                     )
                                     .on_click(cx.listener(|this, _event, _window, cx| {
-                                        this.sticks.set_enabled(false);
+                                        this.sticks.disable_joystick();
                                         cx.notify();
                                     }))
                             }))

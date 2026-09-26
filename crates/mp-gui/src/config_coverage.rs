@@ -1083,10 +1083,16 @@ pub const OTHER_PAGES: &[Panel] = &[
         "Joystick/JoystickSetup.cs",
         Some(11),
         &[setup(280, "Joystick", OPTIONAL, ALWAYS)],
+        // C#: Joystick/JoystickSetup.cs:28-567 and the Joy_* forms, over JoystickBase.cs's
+        // pickchannel, Expo, mainloop, button functions and files in mp-input.
         Partial(
-            at(JOYSTICK_RS, "fn panel_for"),
-            "has the device list and Enable; missing the per-channel axis grid, the button
-        //     functions, Elevons, Save, Manual Control, Import and Export",
+            at(JOYSTICK_RS, "fn load"),
+            "all of the page - the device list, the sixteen channel rows with axis, Auto Detect,
+        //     bar, expo and reverse, the button rows with number, Detect, bar, function and the
+        //     seven Joy_* settings forms, Enable, Save, Elevons, Manual Control, Export and Import,
+        //     each button function sending what ProcessButtonEvent sends - flying a Linux js
+        //     device; missing: a device on Windows, where mp-input has no reader for DirectInput
+        //     (the C#'s JoystickWindows.cs), so the list is empty there",
         ),
     ),
     panel(

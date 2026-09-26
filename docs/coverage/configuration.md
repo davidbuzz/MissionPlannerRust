@@ -104,8 +104,12 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
 | 270 | `ConfigBatteryMonitoring` | Battery Monitor | Optional Hardware | any | 13 | done: `crates/mp-gui/src/config/battery_monitor.rs` `fn page` |
 | 271 | `ConfigBatteryMonitoring2` | Battery Monitor 2 | Optional Hardware | any | 10 | done: `crates/mp-gui/src/config/battery_monitor2.rs` `fn page` |
 | 276 | `ConfigDroneCAN` | DroneCAN/UAVCAN | Optional Hardware | always | 15 | **missing** |
-| 280 | `JoystickSetup` (`Joystick/JoystickSetup.cs`, not a panel) | Joystick | Optional Hardware | always | 11 | partial: `crates/mp-gui/src/joystick.rs` `fn panel_for` - has the device list and Enable; missing the per-channel axis grid, the button
-        //     functions, Elevons, Save, Manual Control, Import and Export |
+| 280 | `JoystickSetup` (`Joystick/JoystickSetup.cs`, not a panel) | Joystick | Optional Hardware | always | 11 | partial: `crates/mp-gui/src/joystick.rs` `fn load` - all of the page - the device list, the sixteen channel rows with axis, Auto Detect,
+        //     bar, expo and reverse, the button rows with number, Detect, bar, function and the
+        //     seven Joy_* settings forms, Enable, Save, Elevons, Manual Control, Export and Import,
+        //     each button function sending what ProcessButtonEvent sends - flying a Linux js
+        //     device; missing: a device on Windows, where mp-input has no reader for DirectInput
+        //     (the C#'s JoystickWindows.cs), so the list is empty there |
 | 285 | `ConfigCompassMot` | Compass/Motor Calib | Optional Hardware | any | 2 | done: `crates/mp-gui/src/config/compass_mot.rs` `fn page` |
 | 289 | `ConfigHWRangeFinder` | Range Finder | Optional Hardware | any | 2 | done: `crates/mp-gui/src/config/rangefinder.rs` `fn page` |
 | 293 | `ConfigHWAirspeed` | Airspeed | Optional Hardware | any | 1 | done: `crates/mp-gui/src/config/airspeed.rs` `fn page` |

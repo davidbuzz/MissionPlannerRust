@@ -1,0 +1,114 @@
+# Initial Setup's Joystick page, ported from Joystick/JoystickSetup.cs, with the engine it drives
+# (ExtLibs/ArduPilot/Joystick/JoystickBase.cs) in crates/mp-input.
+#
+# The claim: Joystick_Load lists the device, names the files it loads for the firmware (a copter's
+# with no vehicle heard) and fills the sixteen channel rows from them; the timer acquires the device,
+# makes a row per button (doButtontoUI) and moves each channel's bar with what pickchannel makes of
+# the stick; a row's axis, expo and reverse go to the joystick object as they change
+# (JoystickSetup.cs:91-106); a button row's function, button number and Settings form write the
+# function's settings (:329-487, Joy_Do_Set_Servo.cs); Save writes both files (:192-202, read back
+# here); Export zips them (:538-547); Enable starts the sticks and Disable hands control back.
+#
+# No joystick on this machine: MP_JOYSTICK_DEVICE stands in with a scripted one - two axes and three
+# buttons, centred and up as it opens, axis 0 pushed to half (16384) 8 s after it is opened, and
+# held - after the steps that read the centred stick, before the one that reads it pushed. The
+# data directory is a scratch one, so the files are this run's. No vehicle: the page needs none.
+# What goes on the wire - RC_CHANNELS_OVERRIDE through the reverse and expo, MANUAL_CONTROL, a
+# button's command, the release - is the unit tests' (crates/mp-gui/src/joystick/tests.rs, against
+# the link's scripted vehicle).
+
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+env MP_JOYSTICK_DEVICE Scripted Stick;0:a0=0;0:a1=0;0:b0=0;0:b1=0;0:b2=0;8000:a0=16384
+
+screen setup
+window 1600x1200
+budget 18
+
+expect config.joystick.active false
+# Joystick is listed under Optional Hardware, always (InitialSetup.cs:278-281).
+click setup-page-ConfigOptional
+click setup-page-JoystickSetup
+expect config.joystick.active true
+expect config.joystick.device Scripted Stick
+expect config.joystick.label Loaded Config for ArduCopter2
+expect config.joystick.acquired true
+expect config.joystick.buttons 3
+expect config.joystick.rc1.axis None
+expect config.joystick.enable Enable
+
+# Channel 1 given X: the bar shows the centred stick.
+click joystick-rc1-axis
+expect config.joystick.list rc1
+click joystick-rc1-axis-X
+expect config.joystick.list none
+expect config.joystick.rc1.axis X
+expect config.joystick.config.rc1.axis X
+expect config.joystick.rc1 1500
+
+# Expo 50 typed - each keystroke to the joystick as it is typed - and Reverse ticked.
+click joystick-rc1-expo
+key ctrl+u
+type 50
+expect config.joystick.rc1.expo 50
+expect config.joystick.config.rc1.expo 50
+click joystick-rc1-reverse
+expect config.joystick.rc1.reverse true
+expect config.joystick.config.rc1.reverse true
+
+# Button 1: Do_Set_Servo on the device's button 2, and its settings form.
+click joystick-but0-action
+click joystick-but0-action-Do_Set_Servo
+expect config.joystick.but0.function Do_Set_Servo
+expect config.joystick.config.but0.function Do_Set_Servo
+click joystick-but0-no
+click joystick-but0-no-2
+expect config.joystick.but0.buttonno 2
+expect config.joystick.config.but0.buttonno 2
+click joystick-but0-settings
+expect config.joystick.form Joy_Do_Set_Servo
+expect config.joystick.form.n0 0
+click joystick-form-n0-up
+expect config.joystick.form.n0 1
+expect config.joystick.config.but0.p1 1
+click joystick-form-n1-up
+expect config.joystick.form.n1 901
+expect config.joystick.config.but0.p2 901
+click joystick-form-close
+expect config.joystick.form none
+
+# The script pushes the stick to half: 16384 + 32767 is 249 of pickchannel's 500, reversed -249,
+# and the 50% expo's tent adds 124.5 back - 1375.5, the bar reads 1375; channel 2, given nothing,
+# stays at its trim.
+expect config.joystick.rc1 1375
+expect config.joystick.rc2 1500
+
+# Save: both files written where the joystick found them, and read back.
+click joystick-save
+expect config.joystick.saves 1
+expect config.joystick.files.axis ~ joystickaxisArduCopter2.xml
+expect config.joystick.saved.rc1.axis X
+expect config.joystick.saved.rc1.expo 50
+expect config.joystick.saved.rc1.reverse true
+expect config.joystick.saved.but0.function Do_Set_Servo
+expect config.joystick.saved.but0.buttonno 2
+expect config.joystick.saved.but0.p2 901
+
+# Export: the Save As box opens in the data directory; the two files go into the archive.
+click joystick-export
+expect config.joystick.path export
+type joy.joycfg
+click joystick-path-ok
+expect config.joystick.path none
+expect config.joystick.exported ~ joy.joycfg
+expect config.joystick.exported.files 2
+
+# Enable flies the saved settings; Disable hands control back.
+click joystick-enable
+expect config.joystick.enabled true
+expect config.joystick.enable Disable
+expect sticks.enabled true
+click joystick-enable
+expect config.joystick.enabled false
+expect config.joystick.enable Enable
+expect sticks.enabled false

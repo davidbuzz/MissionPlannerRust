@@ -13,8 +13,8 @@
 //! throws it away.
 //!
 //! What it measures is the reader's own histogram - from the oldest `read` a frame delivers to the
-//! sink returning - with the default gamepad mapping, so the sticks on axes 0, 1, 3 and 4 count and
-//! the triggers and buttons do not. A stick being moved is a stream of events, and every one that
+//! sink returning - with `X`, `Y`, `Rx` and `Ry` - axes 0, 1, 3 and 4, the two sticks of an
+//! XInput pad - on channels 1 to 4, so the sticks count and the triggers and buttons do not. A stick being moved is a stream of events, and every one that
 //! lands within `MIN_INTERVAL` of the last frame is held by the rate floor, so the bound here is a
 //! floor plus D15's 5 ms, as for the stirred fake device. D15's 5 ms itself is for an isolated
 //! movement, which a person cannot produce on demand; `latency.rs` measures that. The kernel waking that read comes before it and cannot be timed
@@ -29,7 +29,7 @@ use std::path::Path;
 use std::thread;
 use std::time::Duration;
 
-use mp_input::{MIN_INTERVAL, Mapping, Poll, StickReader};
+use mp_input::{JoystickAxis, MIN_INTERVAL, Mapping, Poll, StickReader};
 
 /// D15's bar, on top of the rate floor a moving stick is held by.
 const TARGET: Duration = Duration::from_millis(5);
@@ -50,7 +50,16 @@ fn a_real_stick_reaches_the_sink_within_a_floor_and_five_milliseconds() {
         .and_then(|text| text.parse().ok())
         .unwrap_or(10);
 
-    let reader = StickReader::open(&path, Mapping::gamepad(), |_frame| true)
+    let mut mapping = Mapping::default();
+    for (channel, axis) in [
+        (1, JoystickAxis::X),
+        (2, JoystickAxis::Y),
+        (3, JoystickAxis::Rx),
+        (4, JoystickAxis::Ry),
+    ] {
+        mapping.config.set_axis(channel, axis);
+    }
+    let reader = StickReader::open(&path, mapping, |_frame| true)
         .unwrap_or_else(|err| panic!("opening {path}: {err} (is the user in the 'input' group?)"));
     assert!(reader.set_enabled(true));
     println!("reading {path} for {seconds} s - move the sticks");

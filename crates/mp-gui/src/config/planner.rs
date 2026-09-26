@@ -2585,7 +2585,7 @@ impl MissionPlanner {
     /// The page, laid out as `ConfigPlanner.resx` lays it out.
     pub(crate) fn planner_page(
         &self,
-        view: &TelemetryView,
+        _view: &TelemetryView,
         window: &Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -2636,7 +2636,12 @@ impl MissionPlanner {
         if let Some(dialog) = dialog(planner, focus, window, cx) {
             body = body.child(dialog);
         } else if planner.joystick_open() {
-            body = body.child(joystick_window(view, &self.sticks, cx));
+            body = body.child(joystick_window(
+                &self.sticks,
+                &self.joystick_focus,
+                window,
+                cx,
+            ));
         }
         body.into_any_element()
     }
@@ -3114,18 +3119,20 @@ fn backdrop(id: &'static str, window: AnyElement) -> AnyElement {
         .into_any_element()
 }
 
-/// `new JoystickSetup().ShowUserControl()`: the joystick page in a window of its own size, 702 by
-/// 331, with no title and a close box.
-/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:552-555; Utilities/ExtensionsMP.cs:110-132;
+/// `new JoystickSetup().ShowUserControl()`: the joystick page in a window of its own size - 702 by
+/// 331, grown as the page grows its rows (`Ctl_SizeChanged`) - with no title and a close box.
+/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:552-555; Utilities/ExtensionsMP.cs:110-144;
 /// Joystick/JoystickSetup.resx ($this.Size)`
 fn joystick_window(
-    view: &TelemetryView,
     sticks: &crate::joystick::Sticks,
+    focus: &gpui::FocusHandle,
+    viewport: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
+    let (width, height) = crate::joystick::page_size(sticks);
     let window = div()
-        .w(px(702.0))
-        .min_h(px(331.0))
+        .w(px(width + 16.0))
+        .min_h(px(height))
         .flex()
         .flex_col()
         .bg(rgb(theme::PANEL))
@@ -3145,7 +3152,7 @@ fn joystick_window(
         .child(
             div()
                 .p_2()
-                .child(crate::joystick::panel_for(view, sticks, cx)),
+                .child(crate::joystick::page(sticks, focus, viewport, cx)),
         );
     backdrop(
         "planner-joystick-backdrop",

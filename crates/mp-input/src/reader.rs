@@ -16,8 +16,11 @@
 //! then throws the latency away twice: a loop that samples that state every 50 ms
 //! (`// C#: ExtLibs/ArduPilot/Joystick/JoystickBase.cs:1036`) and a send loop that wakes every
 //! 40 ms and sends if 50 ms have passed (`// C#: MainV2.cs:2249`, `:2356`, `:2446`). The channel
-//! arithmetic is unchanged from [`Mapping`]; what changed is the plumbing between the device and
-//! the sink.
+//! arithmetic is the C#'s, in [`Mapping`]; what changed is the plumbing between the device and
+//! the sink. The button functions `mainloop` checks on each pass are checked here as each read
+//! lands (`// C#: ExtLibs/ArduPilot/Joystick/JoystickBase.cs:1129-1131`): the button axes move
+//! their channel on this thread, and the rest wait in [`StickReader::take_button_events`] for
+//! the application, which has the link to do them with - as the C# hands them to the UI thread.
 //!
 //! # Wiring it in (for the GUI)
 //!
@@ -30,7 +33,7 @@
 //! // Choosing a device. The sink runs on the send thread, so it captures a Send handle to the
 //! // link and the target vehicle, puts frame.channels.0 in an RC_CHANNELS_OVERRIDE, and returns
 //! // whether the link took it. It must not block.
-//! let reader = StickReader::open(path, Mapping::gamepad(), move |frame| send(frame.channels.0))?;
+//! let reader = StickReader::open(path, mapping, move |frame| send(frame.channels.0))?;
 //!
 //! reader.set_enabled(true);   // "fly with sticks"; false returns control and sends the release
 //! reader.is_enabled();        // for the "sticks have control" label; goes false on its own
@@ -38,6 +41,8 @@
 //! reader.liveness();          // Poll::Alive / Poll::Gone, same meaning as Joystick::poll
 //! reader.reading();           // live axes and buttons for the panel, read at repaint
 //! reader.latency();           // LatencyHistogram of read-to-sent, for p50/p99 on screen
+//! reader.set_mapping(mapping); // the page's settings, the vehicle's RCn_* ranges
+//! reader.take_button_events(); // the button functions pressed since last asked
 //! reader.close();             // at shutdown: waits for the release frames to go out
 //! ```
 //!
@@ -67,6 +72,7 @@
 //! 50 ms loop fed it: while the device is alive it is fed, whether or not anything moved.
 
 use crate::event::{self, LEN as EVENT_LEN};
+use crate::mapping::{ButtonEvent, ButtonTracker, ManualControl, Runtime};
 use crate::{Channels, Failsafe, LatencyHistogram, Mapping, Poll, Reading};
 use std::io::{ErrorKind, Read};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
@@ -111,6 +117,16 @@ pub const MIN_INTERVAL: Duration = Duration::from_millis(20);
 /// than several stale ones.
 const READ_EVENTS: usize = 128;
 
+/// How many button presses wait for the application before the oldest are dropped. It takes them
+/// every frame; this only bounds a queue nobody is emptying.
+const BUTTON_EVENTS_KEPT: usize = 64;
+
+/// How old a button press may be when the application takes it. The C# runs a press's function
+/// at once, from the joystick's own loop (`_context.Send`); here the application takes presses
+/// once a frame, and a window that stops drawing - minimised, or hidden on a compositor that
+/// stops frame callbacks - would otherwise have its Arm or TakeOff done whenever it draws again.
+const BUTTON_EVENT_STALE: Duration = Duration::from_millis(500);
+
 /// How long to back off if the device turns out to be non-blocking.
 ///
 /// This reader expects a blocking device - it has a thread to spend on waiting. Handed a
@@ -136,6 +152,11 @@ pub enum Cause {
 pub struct Frame {
     /// What to put in the message, channels 1 to 18.
     pub channels: Channels,
+    /// With Manual Control ticked, what to send instead: a `MANUAL_CONTROL`. `None` for a release,
+    /// which is always an `RC_CHANNELS_OVERRIDE`, as `clearRCOverride` sends one whichever the
+    /// sticks were flying with.
+    /// `// C#: MainV2.cs:2274, 2407-2442; ExtLibs/ArduPilot/Joystick/JoystickBase.cs:294-364`
+    pub manual: Option<ManualControl>,
     /// When the read that produced the latest position returned, on the monotonic clock.
     ///
     /// `None` for a release, which carries no position, and before the device has said anything.
@@ -166,6 +187,12 @@ struct State {
     /// switched on or off, the device gone, the owner leaving, or the mapping changed.
     kicked: bool,
     mapping: Mapping,
+    /// The hats and button axes `pickchannel` reads, which the button axes move.
+    runtime: Runtime,
+    /// Which device buttons were down at the last read, for telling a press from a hold.
+    tracker: ButtonTracker,
+    /// Button functions pressed and not yet taken by the application.
+    events: std::collections::VecDeque<(Instant, ButtonEvent)>,
     failsafe: Failsafe,
     latency: LatencyHistogram,
 }
@@ -246,6 +273,9 @@ impl StickReader {
                 stopping: false,
                 kicked: false,
                 mapping,
+                runtime: Runtime::default(),
+                tracker: ButtonTracker::new(),
+                events: std::collections::VecDeque::new(),
                 failsafe: Failsafe::default(),
                 latency: LatencyHistogram::new(),
             }),
@@ -304,10 +334,19 @@ impl StickReader {
     /// Switching on a device that is gone is refused - it returns `false` - for the same reason the
     /// screen refuses to switch on with no device open. Switching off sends the release at once
     /// rather than at the next resend.
+    ///
+    /// Switching on starts the buttons and the button axes afresh, as Enable's new joystick
+    /// object does: nothing held, the axes back at `65535/2`.
+    /// `// C#: Joystick/JoystickSetup.cs:156; ExtLibs/ArduPilot/Joystick/JoystickBase.cs:21, 33-36`
     pub fn set_enabled(&self, enabled: bool) -> bool {
         let mut state = self.shared.lock();
         if enabled && (state.gone || state.stopping) {
             return false;
+        }
+        if enabled && !state.failsafe.is_enabled() {
+            state.runtime = Runtime::default();
+            state.tracker = ButtonTracker::new();
+            state.events.clear();
         }
         state.failsafe.set_enabled(enabled);
         state.kicked = true;
@@ -333,6 +372,28 @@ impl StickReader {
     #[must_use]
     pub fn reading(&self) -> Reading {
         self.shared.lock().reading.clone()
+    }
+
+    /// The hats and button axes as the buttons have left them.
+    #[must_use]
+    pub fn runtime(&self) -> Runtime {
+        self.shared.lock().runtime
+    }
+
+    /// The button functions pressed - and, for `Do_Set_Relay`, let go - since the last call, oldest
+    /// first, for the application to do. Only while overrides are on: `mainloop`, which checks
+    /// them, runs only while the joystick is enabled.
+    /// A press read more than [`BUTTON_EVENT_STALE`] ago is dropped rather than done late.
+    /// `// C#: ExtLibs/ArduPilot/Joystick/JoystickBase.cs:1032, 1129-1131`
+    pub fn take_button_events(&self) -> Vec<ButtonEvent> {
+        let now = Instant::now();
+        self.shared
+            .lock()
+            .events
+            .drain(..)
+            .filter(|(read_at, _)| now.saturating_duration_since(*read_at) <= BUTTON_EVENT_STALE)
+            .map(|(_, event)| event)
+            .collect()
     }
 
     /// Replaces the mapping. The new channels go out without waiting for the stick to move, if they
@@ -447,6 +508,21 @@ fn read_loop<R: Read>(mut device: R, shared: &Shared) {
                 state.reading.clone_from(&reading);
                 state.read_at = Some(read_at);
                 state.unsent_since.get_or_insert(read_at);
+                if state.failsafe.is_enabled() {
+                    let State {
+                        mapping,
+                        tracker,
+                        runtime,
+                        events,
+                        ..
+                    } = &mut *state;
+                    for event in tracker.process(&mapping.config, &reading.buttons, runtime) {
+                        if events.len() == BUTTON_EVENTS_KEPT {
+                            events.pop_front();
+                        }
+                        events.push_back((read_at, event));
+                    }
+                }
                 drop(state);
                 shared.wake.notify_all();
             }
@@ -470,7 +546,7 @@ where
 {
     let mut last_send: Option<Instant> = None;
     // The last stick position sent since overrides came on, for telling a change from a repeat.
-    let mut last_sticks: Option<Channels> = None;
+    let mut last_sticks: Option<(Channels, Option<ManualControl>)> = None;
     let mut state = shared.lock();
     loop {
         let now = Instant::now();
@@ -484,9 +560,11 @@ where
         if !state.failsafe.is_enabled() {
             last_sticks = None;
         }
-        let channels = state.mapping.channels(&state.reading);
-        let changed =
-            state.failsafe.is_live(now) && last_sticks.is_some_and(|last| last != channels);
+        let overrides = state.mapping.overrides(&state.reading, state.runtime);
+        let channels = overrides.channels();
+        let manual = state.mapping.manual_control.then(|| overrides.manual());
+        let changed = state.failsafe.is_live(now)
+            && last_sticks.is_some_and(|last| last != (channels, manual));
         if !changed {
             // Whatever was read since the last send moved nothing on the wire - an unmapped
             // button, a stick within one microsecond - so there is nothing waiting to be delivered.
@@ -494,6 +572,11 @@ where
         }
         let since_last = |interval| last_send.is_none_or(|at| now.duration_since(at) >= interval);
         let due = since_last(RESEND);
+        // Nothing read from the device yet: a frame now would put every axis at its centre -
+        // channel 3 at 1500, mid throttle - before the device's opening burst says where the
+        // sticks are. The C# waits after opening and then reads the real state
+        // (JoystickLinux.cs:150, JoystickBase.cs:1036); here the kick waits for the first read.
+        let unread = state.read_at.is_none();
         // After the lines above, an enabled failsafe is a live one, so a disabled one with frames
         // still to send is releasing.
         let releasing = !state.failsafe.is_enabled() && state.failsafe.releases_pending() > 0;
@@ -504,7 +587,7 @@ where
             // A change, or a kick (switched on, remapped), goes out at once unless something was
             // sent within MIN_INTERVAL; then it waits for the floor, and the kick stays set so the
             // wait cannot lose it.
-            ((state.kicked || changed) && since_last(MIN_INTERVAL)) || due
+            !unread && (((state.kicked || changed) && since_last(MIN_INTERVAL)) || due)
         };
 
         let outgoing = if send {
@@ -523,6 +606,11 @@ where
             };
             let frame = Frame {
                 channels,
+                manual: if cause == Cause::Release {
+                    None
+                } else {
+                    manual
+                },
                 read_at: if cause == Cause::Release {
                     None
                 } else {
@@ -540,7 +628,7 @@ where
             state = shared.lock();
             last_send = Some(sent_at);
             if cause != Cause::Release {
-                last_sticks = Some(channels);
+                last_sticks = Some((channels, frame.manual));
             }
             if sent
                 && cause == Cause::Changed
@@ -565,7 +653,9 @@ where
         if state.stopping && pending == 0 {
             return;
         }
-        state = if state.failsafe.is_enabled() || pending > 0 {
+        // Switched on but not yet read, there is nothing to send until the read thread publishes,
+        // and it wakes this thread when it does.
+        state = if (state.failsafe.is_enabled() && !unread) || pending > 0 {
             // A change or kick held by the floor is due when the floor passes; otherwise the next
             // thing due is the resend.
             let held = state.failsafe.is_enabled() && (changed || state.kicked);
@@ -593,8 +683,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::RELEASE_REPEATS;
+    use crate::config::{ButtonFunction, JoyButton, JoystickAxis};
     use crate::event::{AXIS, BUTTON, INIT};
-    use crate::{Binding, RELEASE_REPEATS, Source};
     use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 
     /// Long enough to wait for something that must happen, on a machine that is busy.
@@ -669,10 +760,26 @@ mod tests {
 
     /// Channel 1 on axis 0, so a test can move one number and watch it.
     fn one_axis() -> Mapping {
-        Mapping {
-            bindings: vec![Binding::new(1, Source::Axis(0))],
-        }
+        let mut mapping = Mapping::default();
+        mapping.config.set_axis(1, JoystickAxis::X);
+        mapping
     }
+
+    /// Channel 1 as `pickchannel` makes it for axis 0 at a `js` value.
+    fn channel_one(mapping: &Mapping, value: i16) -> u16 {
+        let reading = Reading {
+            axes: vec![f32::from(value) / 32_767.0],
+            buttons: Vec::new(),
+        };
+        mapping
+            .overrides(&reading, Runtime::default())
+            .channels()
+            .get(1)
+            .unwrap_or(0)
+    }
+
+    /// Full deflection forward: 65534 of 65535, so 1999 rather than 2000.
+    const FULL: u16 = 1999;
 
     fn axis(value: i16) -> Vec<u8> {
         event::encode(0, AXIS, 0, value).to_vec()
@@ -683,7 +790,30 @@ mod tests {
         rig_with(mapping, |_| true)
     }
 
+    /// A reader on a fake device that opens as the kernel's does, with a `JS_EVENT_INIT` burst -
+    /// axis 0 at its centre - read before this returns.
     fn rig_with(
+        mapping: Mapping,
+        accept: impl FnMut(&Frame) -> bool + Send + 'static,
+    ) -> (StickReader, Sender<std::io::Result<Vec<u8>>>, Wire) {
+        let (reader, feed, wire) = rig_unread(mapping, accept);
+        feed.send(Ok(event::encode(0, AXIS | INIT, 0, 0).to_vec()))
+            .expect("feed");
+        wait_for_read(&reader);
+        (reader, feed, wire)
+    }
+
+    /// Waits until the read thread has published its first read.
+    fn wait_for_read(reader: &StickReader) {
+        let until = Instant::now() + PATIENCE;
+        while reader.reading().axes.is_empty() {
+            assert!(Instant::now() < until, "the opening burst never arrived");
+            thread::sleep(Duration::from_millis(1));
+        }
+    }
+
+    /// A reader on a fake device that has sent nothing yet.
+    fn rig_unread(
         mapping: Mapping,
         mut accept: impl FnMut(&Frame) -> bool + Send + 'static,
     ) -> (StickReader, Sender<std::io::Result<Vec<u8>>>, Wire) {
@@ -710,6 +840,45 @@ mod tests {
         }
     }
 
+    /// Switched on before the device has said where its sticks are, nothing goes out until it has:
+    /// a throttle held at the bottom as Enable is clicked is sent at the bottom, never first at
+    /// mid (1500) because an unread axis counts as centred.
+    #[test]
+    fn nothing_is_sent_before_the_device_is_first_read() {
+        let mut mapping = Mapping::default();
+        mapping.config.set_axis(3, JoystickAxis::X);
+        let bottom = {
+            let reading = Reading {
+                axes: vec![-1.0],
+                buttons: Vec::new(),
+            };
+            mapping
+                .overrides(&reading, Runtime::default())
+                .channels()
+                .get(3)
+                .unwrap_or(0)
+        };
+        let (reader, feed, wire) = rig_unread(mapping, |_| true);
+        assert!(reader.set_enabled(true));
+        assert!(
+            wire.is_silent_for(RESEND * 2),
+            "a frame went out before the device was read"
+        );
+        feed.send(Ok(event::encode(0, AXIS | INIT, 0, -32_767).to_vec()))
+            .expect("feed");
+        let first = wire.next();
+        assert_ne!(
+            bottom,
+            crate::mapping::CENTRE_US,
+            "the bottom is not mid throttle"
+        );
+        assert_eq!(
+            first.channels.get(3),
+            Some(bottom),
+            "the throttle as it is held"
+        );
+    }
+
     /// Nothing is sent until the operator says so, however much the sticks move.
     #[test]
     fn nothing_is_sent_until_switched_on() {
@@ -733,7 +902,8 @@ mod tests {
 
         feed.send(Ok(axis(32_767))).expect("feed");
         let moved = wire.next_of(Cause::Changed);
-        assert_eq!(moved.channels.get(1), Some(crate::mapping::MAX_US));
+        assert_eq!(moved.channels.get(1), Some(FULL));
+        assert_eq!(moved.manual, None, "no Manual Control, no MANUAL_CONTROL");
         assert!(moved.read_at.is_some(), "a change says when it was read");
         // The sample is recorded after the sink returns; the next frame proves it has.
         assert_eq!(wire.next().cause, Cause::Refresh);
@@ -757,7 +927,7 @@ mod tests {
         );
         for frame in &frames {
             assert_eq!(frame.cause, Cause::Refresh, "{frame:?}");
-            assert_eq!(frame.channels.get(1), Some(crate::mapping::MAX_US));
+            assert_eq!(frame.channels.get(1), Some(FULL));
         }
         assert_eq!(reader.liveness(), Poll::Alive);
         assert!(reader.is_enabled());
@@ -832,10 +1002,7 @@ mod tests {
         feed.send(Err(std::io::ErrorKind::Interrupted.into()))
             .expect("feed");
         feed.send(Ok(axis(32_767))).expect("feed");
-        assert_eq!(
-            wire.next_of(Cause::Changed).channels.get(1),
-            Some(crate::mapping::MAX_US)
-        );
+        assert_eq!(wire.next_of(Cause::Changed).channels.get(1), Some(FULL));
         assert_eq!(reader.liveness(), Poll::Alive);
         assert!(reader.is_enabled());
     }
@@ -961,10 +1128,7 @@ mod tests {
         // A hundred events in one read, as a device delivers them after a stall.
         let burst: Vec<u8> = (0..100i16).flat_map(|step| axis(step * 300)).collect();
         feed.send(Ok(burst)).expect("feed");
-        let expected = Binding::new(1, Source::Axis(0)).value(&Reading {
-            axes: vec![f32::from(99i16 * 300) / 32_767.0],
-            buttons: Vec::new(),
-        });
+        let expected = channel_one(&one_axis(), 99 * 300);
         let changes: Vec<Frame> = wire
             .during(RESEND * 3)
             .into_iter()
@@ -987,10 +1151,7 @@ mod tests {
             feed.send(Ok(axis(step * 500))).expect("feed");
             thread::sleep(Duration::from_millis(1));
         }
-        let expected = Binding::new(1, Source::Axis(0)).value(&Reading {
-            axes: vec![f32::from(60i16 * 500) / 32_767.0],
-            buttons: Vec::new(),
-        });
+        let expected = channel_one(&one_axis(), 60 * 500);
         let changes: Vec<Frame> = wire
             .during(Duration::from_millis(400))
             .into_iter()
@@ -1145,14 +1306,12 @@ mod tests {
         feed.send(Ok(axis(32_767))).expect("feed");
         wait_for_axis(&reader, 1.0);
         assert!(reader.set_enabled(true));
-        assert_eq!(wire.next().channels.get(1), Some(crate::mapping::MAX_US));
-        let mut reversed = Binding::new(1, Source::Axis(0));
-        reversed.reversed = true;
-        reader.set_mapping(Mapping {
-            bindings: vec![reversed],
-        });
+        assert_eq!(wire.next().channels.get(1), Some(FULL));
+        let mut reversed = one_axis();
+        reversed.config.set_reverse(1, true);
+        reader.set_mapping(reversed);
         let changed = wire.next_of(Cause::Changed);
-        assert_eq!(changed.channels.get(1), Some(crate::mapping::MIN_US));
+        assert_eq!(changed.channels.get(1), Some(1001));
         // Recorded, if at all, before the sender moves on; the next frame proves it has.
         let _ = wire.next();
         assert_eq!(
@@ -1162,12 +1321,12 @@ mod tests {
         );
     }
 
-    /// A gamepad as it opens: the init burst puts the triggers at full deflection, and the default
-    /// mapping must still send centred sticks, with the unmapped channels ignored on each half by
-    /// that half's own convention.
+    /// A gamepad as it opens, triggers at full deflection, under a configuration nobody has made:
+    /// every channel is driven by nothing, so enabling sends "ignore" on all eighteen, each half by
+    /// its own convention - nothing is overridden until a channel is given an axis.
     #[test]
-    fn a_gamepad_opening_with_triggers_at_rest_sends_centred_sticks() {
-        let (reader, feed, wire) = rig(Mapping::gamepad());
+    fn a_new_configuration_overrides_nothing_whatever_the_sticks_say() {
+        let (reader, feed, wire) = rig(Mapping::default());
         let init: Vec<u8> = [0i16, 0, -32_767, 0, 0, -32_767]
             .into_iter()
             .zip(0u8..)
@@ -1181,18 +1340,142 @@ mod tests {
         }
         assert!(reader.set_enabled(true));
         let frame = wire.next();
-        for channel in 1..=4 {
-            assert_eq!(
-                frame.channels.get(channel),
-                Some(crate::mapping::CENTRE_US),
-                "channel {channel} moved with the sticks centred"
-            );
+        assert_eq!(frame.channels, Channels::ignored());
+    }
+
+    /// With Manual Control ticked the frame carries `MANUAL_CONTROL`'s axes; the release that
+    /// follows switching off carries none, and is the ordinary release.
+    #[test]
+    fn manual_control_frames_carry_the_axes_and_the_release_does_not() {
+        let mut mapping = one_axis();
+        mapping.manual_control = true;
+        let (reader, feed, wire) = rig(mapping);
+        assert!(reader.set_enabled(true));
+        let first = wire.next();
+        assert_eq!(first.manual.map(|manual| manual.x), Some(0));
+        feed.send(Ok(axis(16_384))).expect("feed");
+        let moved = wire.next_of(Cause::Changed);
+        // Half stick: 249 of 500, so 498 of 1000.
+        assert_eq!(moved.manual.map(|manual| manual.x), Some(498));
+        assert!(!reader.set_enabled(false));
+        let released = wire.next_of(Cause::Release);
+        assert_eq!(released.manual, None);
+        assert_eq!(released.channels, Channels::release());
+    }
+
+    fn button(number: u8, down: bool) -> Vec<u8> {
+        event::encode(0, BUTTON, number, i16::from(down)).to_vec()
+    }
+
+    /// A button function's press waits for the application while the sticks fly; while they do
+    /// not, nothing is kept - `mainloop` does not run.
+    #[test]
+    fn button_functions_wait_for_the_application_while_flying() {
+        let mut mapping = one_axis();
+        mapping.config.set_button(
+            0,
+            JoyButton {
+                buttonno: 2,
+                function: ButtonFunction::DoSetServo,
+                p1: 9.0,
+                p2: 1700.0,
+                ..JoyButton::unassigned()
+            },
+        );
+        let (reader, feed, wire) = rig(mapping);
+        feed.send(Ok(button(2, true))).expect("feed");
+        feed.send(Ok(button(2, false))).expect("feed");
+        let until = Instant::now() + PATIENCE;
+        while reader.reading().buttons.len() < 3 {
+            assert!(Instant::now() < until, "the button never arrived");
+            thread::sleep(Duration::from_millis(1));
         }
-        for channel in 5..=8 {
-            assert_eq!(frame.channels.get(channel), Some(u16::MAX), "{channel}");
+        assert!(reader.take_button_events().is_empty(), "not flying");
+
+        assert!(reader.set_enabled(true));
+        let _ = wire.next();
+        feed.send(Ok(button(2, true))).expect("feed");
+        let until = Instant::now() + PATIENCE;
+        let events = loop {
+            let events = reader.take_button_events();
+            if !events.is_empty() {
+                break events;
+            }
+            assert!(Instant::now() < until, "the press never arrived");
+            thread::sleep(Duration::from_millis(1));
+        };
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].slot, 0);
+        assert!(events[0].down);
+        assert_eq!(events[0].button.function, ButtonFunction::DoSetServo);
+        assert!((events[0].button.p2 - 1700.0).abs() < f32::EPSILON);
+    }
+
+    /// A press the application has not taken within half a second is dropped, not done late: an
+    /// Arm pressed while the window was not drawing does not fire when it draws again.
+    #[test]
+    fn a_stale_button_press_is_dropped() {
+        let mut mapping = one_axis();
+        mapping.config.set_button(
+            0,
+            JoyButton {
+                buttonno: 2,
+                function: ButtonFunction::DoSetServo,
+                ..JoyButton::unassigned()
+            },
+        );
+        let (reader, feed, wire) = rig(mapping);
+        assert!(reader.set_enabled(true));
+        let _ = wire.next();
+        feed.send(Ok(button(2, true))).expect("feed");
+        let until = Instant::now() + PATIENCE;
+        while reader.reading().buttons.len() < 3 {
+            assert!(Instant::now() < until, "the button never arrived");
+            thread::sleep(Duration::from_millis(1));
         }
-        for channel in 9..=18 {
-            assert_eq!(frame.channels.get(channel), Some(0), "{channel}");
-        }
+        thread::sleep(BUTTON_EVENT_STALE + Duration::from_millis(100));
+        assert!(
+            reader.take_button_events().is_empty(),
+            "a stale press was handed over"
+        );
+    }
+
+    /// A `Button_axis0` press moves its channel on the wire at once, as a change; switching on
+    /// again starts the axis afresh.
+    #[test]
+    fn a_button_axis_moves_its_channel() {
+        let mut mapping = Mapping::default();
+        mapping.config.set_axis(6, JoystickAxis::Custom1);
+        mapping.config.set_button(
+            3,
+            JoyButton {
+                buttonno: 0,
+                function: ButtonFunction::ButtonAxis0,
+                p1: 1100.0,
+                p2: 1900.0,
+                ..JoyButton::unassigned()
+            },
+        );
+        let (reader, feed, wire) = rig(mapping);
+        assert!(reader.set_enabled(true));
+        assert_eq!(
+            wire.next().channels.get(6),
+            Some(2000),
+            "65535/2 read as a PWM"
+        );
+        feed.send(Ok(button(0, true))).expect("feed");
+        // 1900 as `pickchannel` reads a PWM: 0.9f * 65535 is 58981.5 in single precision, 58981,
+        // which `map` makes 399.99 and the `(int)` 399 - 1899.
+        assert_eq!(wire.next_of(Cause::Changed).channels.get(6), Some(1899));
+        assert_eq!(reader.runtime().custom0, 1900);
+        feed.send(Ok(button(0, false))).expect("feed");
+        assert_eq!(wire.next_of(Cause::Changed).channels.get(6), Some(1100));
+        assert!(
+            reader.take_button_events().is_empty(),
+            "the axis is done here"
+        );
+        assert!(!reader.set_enabled(false));
+        assert!(reader.set_enabled(true));
+        assert_eq!(reader.runtime(), Runtime::default());
     }
 }

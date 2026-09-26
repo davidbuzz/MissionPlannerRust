@@ -18,12 +18,12 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `BUT_clear_track` | Click | `BUT_clear_track_Click` | Clear Track | done: `fly-cleartrack` |
 | `but_dflogtokml` | Click | `but_dflogtokml_Click` | Create KML + gpx | done: `fly-dflogtokml` |
 | `BUT_DFMavlink` | Click | `BUT_DFMavlink_Click` | Download DataFlash Log Via Mavlink | done: `fly-dfmavlink` |
-| `but_disablejoystick` | Click | `but_disablejoystick_Click` | Disable Joystick | done: `joystick-enable` |
+| `but_disablejoystick` | Click | `but_disablejoystick_Click` | Disable Joystick | done: `sticks-live` |
 | `BUT_edit_selected` | Click | `BUT_edit_selected_Click` | Edit Selected Script | done: `fly-script-edit` |
 | `BUT_georefimage` | Click | `BUT_georefimage_Click` | Geo Reference Images | done: `fly-georefimage` |
 | `BUT_GimbalVideo` | Click | `gimbalVideoPopOutToolStripMenuItem_Click` | Video Control | done: `fly-gimbal-video` |
 | `BUT_Homealt` | Click | `BUT_Homealt_Click` | Set Home Alt | done: `fly-homealt` |
-| `BUT_joystick` | Click | `BUT_joystick_Click` | Joystick | done: `joystick-refresh` |
+| `BUT_joystick` | Click | `BUT_joystick_Click` | Joystick | done: `joystick-page` |
 | `BUT_loadtelem` | Click | `BUT_loadtelem_Click` | Load Log | done: `fly-loadtelem` |
 | `BUT_log2kml` | Click | `BUT_log2kml_Click` | Tlog > Kml or Graph | elsewhere: headless-planner kml |
 | `BUT_loganalysis` | Click | `BUT_loganalysis_Click` | Auto Analysis | done: `fly-loganalysis` |
