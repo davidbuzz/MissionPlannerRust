@@ -67,7 +67,8 @@ alone; a taller display was asked of Buzz.
 shows "blocked some features of this app" the first time it opens its ports, and Buzz has to
 click **Allow access** at the VM - once for the suite's SITL in `Documents\MissionPlannerRust\sitl`,
 and on every run of `sitl.gui`/`sitl-launch.gui`, whose SITL is fetched into the run's scratch
-directory. Tell him before a run that will prompt; the prompt can take the runner's clicks.
-`Set-NetFirewallProfile -NotifyOnListen False` would stop it - his call, not done. Written up in
+directory. Turned off by local group policy on his ask the same day
+(`tools/win10/quiet-firewall.ps1`: NotifyOnListen False, gpupdate); a SITL from a new path then
+listened with no alert. If it ever prompts again, the policy was undone or reset. Written up in
 win10_vm_setup.md.
 

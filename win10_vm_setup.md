@@ -163,10 +163,17 @@ in a new place:
   it in place keeps the path, so it has not asked since.
 
 Until it is answered the prompt sits over the desktop, where the runner's clicks can land on it
-instead of the planner. Watch the VM's screen during the first SITL script of a run, and during
-`sitl` and `sitl-launch`. Turning the notification off
-(`Set-NetFirewallProfile -Profile Domain,Private,Public -NotifyOnListen False`, elevated) would
-stop the prompts; that changes the VM's firewall behaviour and is Buzz's call, not done.
+instead of the planner.
+
+**Turned off by policy, 2026-09-26 (Buzz's ask).** `tools/win10/quiet-firewall.ps1` sets
+`NotifyOnListen False` for the Domain, Private and Public profiles in the local group policy
+(`Set-NetFirewallProfile -PolicyStore localhost`) and refreshes policy (`gpupdate /target:computer
+/force`); the active store then reads `NotifyOnListen False` with the firewall still enabled and
+inbound still `Block` by default. Checked: a copy of `ArduCopter.exe` started from a path the
+firewall had never seen listened on its port and no "Windows Security Alert" appeared. A new
+program that listens is still blocked from connections off the VM - it is only no longer asked
+about - and everything the GUI suite does is loopback, which the firewall does not filter. Undo
+with the same command and `-NotifyOnListen NotConfigured`.
 
 ## Where the VM tooling lives
 
