@@ -8,11 +8,8 @@
 # saveRallyPointsToolStripMenuItem_Click has one branch, the legacy protocol: setParam RALLY_TOTAL
 # to the markers' count, then setRallyPoint per marker - RALLY_POINT, read back with
 # RALLY_FETCH_POINT - and "Failed to save rally point" when a read-back times out (:5936-5957;
-# MAVLinkInterface.cs:6346-6476). The SITL this runs against is ArduCopter 4.8.0-dev, built without
-# the legacy rally messages: it never answers RALLY_FETCH_POINT, so the C#'s Upload sets
-# RALLY_TOTAL and then fails on the first point, and so does this. (A firmware with the legacy
-# protocol takes the points; the link's side of that is requests::tests::a_rally_point_* and
-# plan.rs's upload_goes_through_the_link_as_the_c_sharp_sends_it.)
+# MAVLinkInterface.cs:6346-6476); the failure is requests::tests::a_rally_point_* and plan.rs's
+# tests.
 #
 # clearRallyPointsToolStripMenuItem_Click sets RALLY_TOTAL to 0 and clears the markers and
 # MAV.rallypoints (:2096-2110).
@@ -21,11 +18,17 @@
 # panel's rally write, so Download has a known list to read. The vehicle is left with RALLY_TOTAL
 # 0, as Clear Rally Points leaves it.
 #
-# Needs SITL (a copter): tools/gui-test.sh tests/gui/plan-rally-sitl.gui -- tcp:127.0.0.1:5760
+# The menu shows Rally Points only over a vehicle without MISSION_FENCE (:2680-2691) - not the
+# SITL, which is ArduCopter 4.8 and has no legacy rally messages either - so this runs against
+# tests/gui/legacy-vehicle.py, a copter that speaks the legacy protocols and the mission protocol
+# for every list, which the setup line starts.
+#
+# Run as: tools/gui-test.sh tests/gui/plan-rally-legacy.gui -- tcp:127.0.0.1:5790
 
 env MP_CONFIG_XML $WORK/config.xml
 env XDG_DATA_HOME $WORK
 env MP_PLAN_DIR $WORK
+setup python3 tests/gui/legacy-vehicle.py --work $WORK --port 5790
 
 screen params
 window 1600x1200
@@ -40,7 +43,7 @@ click raw-param-warning-again
 click raw-param-warning-ok
 
 click param-download
-expect params.held > 500
+expect params.held 9
 
 click tab-plan
 
@@ -63,7 +66,7 @@ expect plan.prompt none
 expect plan.rally.vehicle 2
 expect rally.points 2
 
-# A third marker, then Upload: RALLY_TOTAL goes to 3, and the first point is never read back.
+# A third marker, then Upload: RALLY_TOTAL goes to 3, and each point is sent and read back.
 click map@0.50x0.60:right
 click menu-rallyPoints
 click menu-setRallyPoint
@@ -73,13 +76,8 @@ click map@0.30x0.70:right
 click menu-rallyPoints
 click menu-saveRallyPoints
 expect plan.rally.upload busy
-# The upload runs the mission protocol's retries to their timeout before it reports.
-within 15
-expect plan.rally.upload ~ RALLY_TOTAL=3
-expect plan.rally.upload ~ ,0=timeout
-expect plan.prompt Error
-expect plan.prompt.text Failed to save rally point
-key Return
+within 10
+expect plan.rally.upload RALLY_TOTAL=3,0=set,1=set,2=set
 expect plan.prompt none
 
 # Clear Rally Points: RALLY_TOTAL to 0, the markers and the vehicle's list gone.

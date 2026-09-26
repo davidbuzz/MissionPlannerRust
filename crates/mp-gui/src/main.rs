@@ -1728,10 +1728,12 @@ impl MissionPlanner {
             .flatten()
     }
 
-    /// Pushes the geofence to the map after an edit.
+    /// Pushes the geofence to the map after an edit: `geofenceoverlay`'s polygon, its return
+    /// marker (`GeoFence Return`) and the exclusions.
     fn sync_map_fence(&self) {
         let mut map = self.map.borrow_mut();
         map.set_fence(self.plan.fence());
+        map.set_fence_return(self.plan.fence_return());
         map.set_fence_exclusions(self.plan.fence_exclusions());
     }
 
@@ -2046,6 +2048,7 @@ impl MissionPlanner {
             fence_error: fence_error.as_deref(),
             rally_points: self.plan.rally().len(),
             rally_error: rally_error.as_deref(),
+            fence_busy: self.plan.fence_busy(),
         };
         let actions = group != PlanGroup::Waypoints;
         let waypoints = group != PlanGroup::Actions;

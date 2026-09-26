@@ -6,7 +6,7 @@
 # and come back on the map when it is next drawn (:1014-1030). setParam returns false for a
 # parameter the vehicle has not listed, without sending, and with no vehicle it has listed none,
 # so each set is passed over and the clearing still happens. The return location stays: the C#
-# clears the overlay's polygons, not its markers. plan-fence-clear-sitl.gui clears a vehicle's.
+# clears the overlay's polygons, not its markers. plan-fence-clear-legacy.gui clears a vehicle's.
 
 env XDG_DATA_HOME $WORK
 env MP_PLAN_DIR $WORK

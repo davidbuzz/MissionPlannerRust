@@ -5,15 +5,18 @@
 # to set ..." and stops there; then the geofence goes from the map (GCSViews/FlightPlanner.cs:
 # 2112-2155). The sets go through the link's set_param with the C#'s retries, and plan.params is
 # what each did: NAME=0 echoed, or NAME=0 unchanged where the vehicle already held 0 - which
-# FENCE_ENABLE and FENCE_TOTAL do on a fresh SITL, and FENCE_ACTION (1, RTL and land) does not.
+# FENCE_ENABLE and FENCE_TOTAL do here, and FENCE_ACTION (1, RTL and land) does not.
 #
-# The vehicle is left with FENCE_ACTION 0, as the C# leaves it.
+# The menu shows Geo-Fence only over a vehicle without MISSION_FENCE (:2680-2691) - not the SITL,
+# which is ArduCopter 4.8 - so this runs against tests/gui/legacy-vehicle.py, which the setup line
+# starts.
 #
-# Needs SITL (a copter): tools/gui-test.sh tests/gui/plan-fence-clear-sitl.gui -- tcp:127.0.0.1:5760
+# Run as: tools/gui-test.sh tests/gui/plan-fence-clear-legacy.gui -- tcp:127.0.0.1:5790
 
 env MP_CONFIG_XML $WORK/config.xml
 env XDG_DATA_HOME $WORK
 env MP_PLAN_DIR $WORK
+setup python3 tests/gui/legacy-vehicle.py --work $WORK --port 5790
 
 screen params
 window 1600x1200
@@ -28,7 +31,7 @@ click raw-param-warning-again
 click raw-param-warning-ok
 
 click param-download
-expect params.held > 500
+expect params.held 9
 
 click tab-plan
 

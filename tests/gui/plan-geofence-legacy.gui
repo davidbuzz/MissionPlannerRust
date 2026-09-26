@@ -1,0 +1,97 @@
+# Geo-Fence > Upload and Download on a vehicle that speaks the legacy fence protocol.
+#
+# GeoFenceuploadToolStripMenuItem_Click checks the fence parameters, the return location, the
+# drawn polygon and the return location inside it; asks Min Alt and Max Alt only where the vehicle
+# lists FENCE_MINALT and FENCE_MAXALT (ArduCopter lists neither, so no box here); sets FENCE_ACTION
+# to 0 and FENCE_TOTAL to the corners plus two; sends the return location, each corner and the
+# first corner again with setFencePoint - FENCE_POINT, read back with FENCE_FETCH_POINT - puts
+# FENCE_ACTION back, and makes the drawn polygon the geofence; its progress window says each
+# point and closes without a word (GCSViews/FlightPlanner.cs:3691-3899; MAVLinkInterface.cs:
+# 5908-5967, 6415-6439). GeoFencedownloadToolStripMenuItem_Click, on a vehicle without
+# MAV_PROTOCOL_CAPABILITY_MISSION_FENCE, needs FENCE_ACTION and FENCE_TOTAL, says "Nothing to
+# download" for a FENCE_TOTAL of 1 or less, and otherwise clears the geofence and reads it back
+# with getFencePoint: the first point the return location, the rest - the closing point with them
+# - the geofence, shown without a word (:824-913).
+#
+# The menu shows Geo-Fence only over a vehicle without MISSION_FENCE (:2680-2691) - not the SITL,
+# which is ArduCopter 4.8 - so this runs against tests/gui/legacy-vehicle.py, a copter that speaks
+# the legacy protocols as firmware before 4.0 did, which the setup line starts.
+#
+# Run as: tools/gui-test.sh tests/gui/plan-geofence-legacy.gui -- tcp:127.0.0.1:5790
+env MP_CONFIG_XML $WORK/config.xml
+env XDG_DATA_HOME $WORK
+env MP_PLAN_DIR $WORK
+setup python3 tests/gui/legacy-vehicle.py --work $WORK --port 5790
+screen params
+window 1600x1200
+budget 12
+# A first budget, set by hand until a passing run records one.
+
+# RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
+# again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
+click raw-param-warning-again
+click raw-param-warning-ok
+click param-download
+expect params.held 9
+click tab-plan
+expect plan.fence.upload none
+expect plan.fence.download none
+
+# Four corners drawn with Polygon > Draw a Polygon, and the return location inside them.
+# The map first: a press before its first paint records nothing.
+expect map.ready true
+click map@0.35x0.35:right
+expect plan.menu.hidden none
+click menu-polygon
+click menu-addPolygonPoint2
+expect plan.draw draw-area
+click map@0.35x0.35
+click map@0.65x0.35
+click map@0.65x0.65
+click map@0.35x0.65
+expect survey.points 4
+click map@0.50x0.50:right
+click menu-geoFence
+click menu-setReturnLocation
+expect plan.fence.return ~ -35.
+
+# Upload: the sets, six points each read back, FENCE_ACTION put back, and nothing said at the end.
+click map@0.30x0.70:right
+click menu-geoFence
+click menu-GeoFenceupload
+expect plan.menu closed
+expect plan.draw draw-waypoints
+within 10
+expect plan.fence.upload done
+expect plan.fence.upload.calls FENCE_ACTION=0,FENCE_TOTAL=6,0=set,1=set,2=set,3=set,4=set,5=set,FENCE_ACTION=1
+expect plan.prompt none
+expect survey.points 0
+expect fence.points 4
+expect plan.fence.return ~ -35.
+
+# Download: FENCE_TOTAL is 6 now, so six points read back - the return location and five corners,
+# the closing one with them - and nothing said.
+click map@0.30x0.70:right
+click menu-geoFence
+click menu-GeoFencedownload
+within 10
+expect plan.fence.download 6
+expect plan.prompt none
+expect fence.points 5
+expect plan.fence.return ~ -35.
+
+# Geo-Fence > Clear sets FENCE_TOTAL to 0, and then Download has nothing to read.
+click map@0.30x0.70:right
+click menu-geoFence
+click menu-clear
+expect plan.params.busy false
+expect plan.params ~ FENCE_TOTAL=0
+click map@0.30x0.70:right
+click menu-geoFence
+click menu-GeoFencedownload
+expect plan.fence.download Nothing to download
+expect status ~ Nothing to download
+expect plan.prompt none

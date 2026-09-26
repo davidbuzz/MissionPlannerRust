@@ -1,0 +1,85 @@
+# Geo-Fence > Upload's refusals, on a vehicle (NOT_DONE_YET_MATRIX: GeoFence upload and download
+# menu items).
+#
+# GeoFenceuploadToolStripMenuItem_Click checks, in order: FENCE_ENABLE or FENCE_ACTION listed
+# ("Not Supported"), a return location ("No return location set"), a drawn polygon ("No polygon
+# drawn"), and the return location inside the polygon closed by its first corner, by pnpoly ("Your
+# return location is outside the polygon") (GCSViews/FlightPlanner.cs:3714-3759, 4987-5002). The
+# C# shows each in a message box; here each goes to the status line and plan.fence.upload, and no
+# box opens (the owner's ruling on avoidable errors). Nothing is sent to the vehicle for any of
+# them: plan.fence.upload.calls stays none.
+#
+# "Not Supported" needs a vehicle without the fence parameters; it is plan.rs's
+# upload_refuses_in_the_c_sharp_order.
+#
+# The menu shows Geo-Fence only over a vehicle without MISSION_FENCE (:2680-2691) - not the SITL,
+# which is ArduCopter 4.8 - so this runs against tests/gui/legacy-vehicle.py, which the setup line
+# starts.
+#
+# Run as: tools/gui-test.sh tests/gui/plan-geofence-upload-refusals.gui -- tcp:127.0.0.1:5790
+
+env MP_CONFIG_XML $WORK/config.xml
+env XDG_DATA_HOME $WORK
+env MP_PLAN_DIR $WORK
+setup python3 tests/gui/legacy-vehicle.py --work $WORK --port 5790
+
+screen params
+window 1600x1200
+budget 10
+# A first budget, set by hand until a passing run records one.
+# RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
+# again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
+click raw-param-warning-again
+click raw-param-warning-ok
+
+click param-download
+expect params.held 9
+
+click tab-plan
+# The map first: a press before its first paint records nothing.
+expect map.ready true
+
+# Nothing set: no return location.
+click map@0.30x0.70:right
+click menu-geoFence
+click menu-GeoFenceupload
+expect plan.menu closed
+expect plan.fence.upload No return location set
+expect status ~ No return location set
+expect plan.prompt none
+
+# A return location, no polygon.
+click map@0.20x0.20:right
+click menu-geoFence
+click menu-setReturnLocation
+expect plan.fence.return ~ -35.
+click map@0.30x0.70:right
+click menu-geoFence
+click menu-GeoFenceupload
+expect plan.fence.upload No polygon drawn
+expect status ~ No polygon drawn
+expect plan.prompt none
+
+# A polygon that does not hold the return location.
+click map@0.40x0.40:right
+click menu-polygon
+click menu-addPolygonPoint2
+click map@0.40x0.40
+click map@0.60x0.40
+click map@0.60x0.60
+click map@0.40x0.60
+expect survey.points 4
+click map@0.30x0.70:right
+click menu-geoFence
+click menu-GeoFenceupload
+expect plan.fence.upload Your return location is outside the polygon
+expect status ~ Your return location is outside the polygon
+expect plan.prompt none
+# polygongridmode off, the polygon kept, and nothing sent.
+expect plan.draw draw-waypoints
+expect survey.points 4
+expect plan.fence.upload.calls none
+expect fence.points 0

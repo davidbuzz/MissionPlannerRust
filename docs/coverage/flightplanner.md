@@ -4,13 +4,12 @@ Generated from `crates/mp-gui/src/planner_coverage.rs` by `cargo test -p mp-gui 
 
 | total | done | elsewhere | missing | plumbing | dropped |
 |---:|---:|---:|---:|---:|---:|
-| 121 | 103 | 0 | 6 | 12 | 0 |
+| 121 | 105 | 0 | 4 | 12 | 0 |
 
 Missing, by where the control sits:
 
 | group | missing |
 |---|---:|
-| Geo-Fence | 2 |
 | Map Tool | 2 |
 | planning panel | 2 |
 
@@ -79,8 +78,8 @@ Missing, by where the control sits:
 | `fromCurrentWaypointsToolStripMenuItem` | Click | `fromCurrentWaypointsMenuItem_Click` | From Current Waypoints | done: `menu-fromCurrentWaypoints` |
 | `offsetPolygonToolStripMenuItem2` | Click | `offsetPolygonToolStripMenuItem_Click` | Offset Polygon | done: `menu-offsetPolygon2` |
 | `areaToolStripMenuItem2` | Click | `areaToolStripMenuItem_Click` | Area | done: `menu-area2` |
-| `GeoFenceuploadToolStripMenuItem` | Click | `GeoFenceuploadToolStripMenuItem_Click` | Upload | **missing** |
-| `GeoFencedownloadToolStripMenuItem` | Click | `GeoFencedownloadToolStripMenuItem_Click` | Download | **missing** |
+| `GeoFenceuploadToolStripMenuItem` | Click | `GeoFenceuploadToolStripMenuItem_Click` | Upload | done: `menu-GeoFenceupload` |
+| `GeoFencedownloadToolStripMenuItem` | Click | `GeoFencedownloadToolStripMenuItem_Click` | Download | done: `menu-GeoFencedownload` |
 | `setReturnLocationToolStripMenuItem` | Click | `setReturnLocationToolStripMenuItem_Click` | Set Return Location | done: `menu-setReturnLocation` |
 | `loadFromFileToolStripMenuItem` | Click | `loadFromFileToolStripMenuItem_Click` | Load from File | done: `menu-loadFromFile` |
 | `saveToFileToolStripMenuItem` | Click | `saveToFileToolStripMenuItem_Click` | Save to File | done: `menu-saveToFile` |

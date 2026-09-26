@@ -1,0 +1,31 @@
+# The map menu over a vehicle that takes its fence and rally points as mission items: no Geo-Fence
+# and no Rally Points.
+#
+# contextMenuStrip1_Opening hides geoFenceToolStripMenuItem and rallyPointsToolStripMenuItem when
+# cs.capabilities has MAV_PROTOCOL_CAPABILITY_MISSION_FENCE (16384), and shows them otherwise
+# (GCSViews/FlightPlanner.cs:2680-2691). The SITL is ArduCopter 4.8: its AUTOPILOT_VERSION says
+# 0xfbef, which has that bit, so the menu opens without the two; the draw panel's geofence and
+# rally lists are how its fence and rally points are sent and read. With no vehicle the
+# capabilities are 0 and both show (plan-fence-clear.gui); over a vehicle without the bit they
+# work as the legacy protocols do (plan-geofence-legacy.gui, plan-rally-legacy.gui).
+#
+# Needs SITL (a copter): tools/gui-test.sh tests/gui/plan-menu-mission-fence-sitl.gui -- tcp:127.0.0.1:5760
+env MP_CONFIG_XML $WORK/config.xml
+env XDG_DATA_HOME $WORK
+env MP_PLAN_DIR $WORK
+screen plan
+window 1600x1200
+budget 5
+# A first budget, set by hand until a passing run records one.
+
+# The vehicle first: its capabilities come with AUTOPILOT_VERSION, which the link asks for once it
+# has heard the heartbeat.
+expect vehicle.count > 0
+# The map first: a press before its first paint records nothing.
+expect map.ready true
+click map@0.40x0.40:right
+expect plan.menu open
+expect plan.menu.hidden menu-geoFence,menu-rallyPoints
+# The rest of the menu is there: Polygon's drop-down opens.
+click menu-polygon
+expect plan.menu.submenu menu-polygon

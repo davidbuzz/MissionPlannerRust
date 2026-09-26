@@ -350,6 +350,20 @@ pub struct Plan {
     mission_ftp: Option<MissionFtp>,
     /// How many times a finished Write asked for the home position: `getHomePositionAsync`.
     home_requests: u32,
+    /// Geo-Fence > Upload while its altitude boxes are asked.
+    fence_ask: Option<FenceUploadAsk>,
+    /// Geo-Fence > Upload under way.
+    fence_upload: Option<FenceUpload>,
+    /// What the last Geo-Fence > Upload said: its refusal, its failure, or "done".
+    fence_upload_text: String,
+    /// What the last Geo-Fence > Upload's calls did, call by call.
+    fence_upload_results: String,
+    /// Geo-Fence > Download under way.
+    fence_download: Option<FenceDownloading>,
+    /// What the last Geo-Fence > Download said: the number of points or items read, or why none.
+    fence_download_text: String,
+    /// Words for the status line from Geo-Fence > Upload or Download, until the screen takes them.
+    fence_say: Option<String>,
 }
 
 /// A mission transfer over MAVFTP: `saveWPs`' and `getWPs`' `chk_usemavftp.Checked` branches,
@@ -1358,6 +1372,587 @@ impl RallyUpload {
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Geo-Fence > Upload and Download: the map menu's geofence, sent and read with the legacy
+// `FENCE_POINT` / `FENCE_FETCH_POINT` protocol and the `FENCE_*` parameters, as
+// `GeoFenceuploadToolStripMenuItem_Click` and `GeoFencedownloadToolStripMenuItem_Click` do.
+// ---------------------------------------------------------------------------------------------
+
+/// `MAV_PROTOCOL_CAPABILITY_MISSION_FENCE` (16384): a vehicle that takes its fence as mission
+/// items - every ArduPilot 4.x, the SITL here (capabilities 0xfbef) among them.
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs:7103`
+pub const CAPABILITY_MISSION_FENCE: u32 =
+    mp_mavlink_dialects::all::MavProtocolCapability::MAV_PROTOCOL_CAPABILITY_MISSION_FENCE.0;
+/// Geo-Fence > Upload and Download on a vehicle without the fence parameters.
+/// `// C#: GCSViews/FlightPlanner.cs:850-854, 3718-3724`
+pub const FENCE_NOT_SUPPORTED: &str = "Not Supported";
+/// `// C#: GCSViews/FlightPlanner.cs:3730-3736`
+pub const NO_RETURN_LOCATION: &str = "No return location set";
+/// `// C#: GCSViews/FlightPlanner.cs:3738-3742`
+pub const NO_POLYGON_DRAWN: &str = "No polygon drawn";
+/// `// C#: GCSViews/FlightPlanner.cs:3744-3755`
+pub const RETURN_OUTSIDE: &str = "Your return location is outside the polygon";
+/// `// C#: GCSViews/FlightPlanner.cs:3769-3773`
+pub const BAD_MIN_ALT: &str = "Bad Min Alt";
+/// `// C#: GCSViews/FlightPlanner.cs:3785-3789`
+pub const BAD_MAX_ALT: &str = "Bad Max Alt";
+/// `// C#: GCSViews/FlightPlanner.cs:3800-3806`
+pub const FENCE_ALT_FAILED: &str = "Failed to set min/max fence alt";
+/// `// C#: GCSViews/FlightPlanner.cs:3815-3819`
+pub const FENCE_ACTION_FAILED: &str = "Failed to set FENCE_ACTION";
+/// `// C#: GCSViews/FlightPlanner.cs:3830-3834`
+pub const FENCE_TOTAL_FAILED: &str = "Failed to set FENCE_TOTAL";
+/// `// C#: GCSViews/FlightPlanner.cs:3855-3859`
+pub const FENCE_RESTORE_FAILED: &str = "Failed to restore FENCE_ACTION";
+/// `// C#: GCSViews/FlightPlanner.cs:856-860`
+pub const NOTHING_TO_DOWNLOAD: &str = "Nothing to download";
+/// `// C#: GCSViews/FlightPlanner.cs:842-845, 874-878`
+pub const FENCE_POINT_FAILED: &str = "Failed to get fence point";
+/// `getFencePoint`'s `TimeoutException`, which `DoGeofencePointsUpload` does not catch and the
+/// progress reporter shows. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5942`
+pub const FENCE_POINT_TIMEOUT: &str = "Timeout on read - getFencePoint";
+/// `setFencePoint`'s exception once three sends have not read back the same.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6438`
+pub const FENCE_POINT_UNVERIFIED: &str = "Could not verify GeoFence Point";
+/// What the progress reporter shows for an exception its work threw, `ErrorMessage` unset as
+/// `DoGeofencePointsUpload` leaves it: "There was an unexpected error (" and the message.
+/// `// C#: Controls/ProgressReporterDialogue.cs:128, 226`
+#[must_use]
+pub fn unexpected_error(message: &str) -> String {
+    format!("There was an unexpected error ({message})")
+}
+/// `NullReferenceException`'s message: what `(float) MAV.param["FENCE_ACTION"]` throws on a
+/// vehicle that has `FENCE_ENABLE` and not `FENCE_ACTION`.
+pub const NULL_REFERENCE: &str = "Object reference not set to an instance of an object.";
+/// The progress reporter's words, `frmProgressReporter.UpdateProgressAndStatus(-1, ...)` and
+/// `DoGeofencePointsUpload`'s three.
+/// `// C#: GCSViews/FlightPlanner.cs:3698, 3704, 3710, 3839-3845`
+pub const SENDING_FENCE_POINTS: &str = "Sending fence points";
+/// `PRD.UpdateProgressAndStatus(0, "Sending return location")`.
+pub const SENDING_RETURN: &str = "Sending return location";
+/// `PRD.UpdateProgressAndStatus(a / pointcount * 100, "Sending polygon points")`.
+pub const SENDING_POLYGON: &str = "Sending polygon points";
+/// `PRD.UpdateProgressAndStatus(a / pointcount * 100, "Sending polygon close")`.
+pub const SENDING_CLOSE: &str = "Sending polygon close";
+
+/// `pnpoly`: whether (`testx`, `testy`) - a latitude and a longitude - is inside the polygon
+/// `array`, by the even-odd rule, each edge `i`-`j` counted when the point's longitude is between
+/// its ends and the point lies below the edge's latitude there. Ported as the C# writes it: the
+/// division is by the edge's longitude span, never zero where it is reached, as the first test
+/// fails for an edge whose ends share a longitude.
+/// `// C#: GCSViews/FlightPlanner.cs:4987-5002`
+#[must_use]
+pub fn pnpoly(array: &[LatLon], testx: f64, testy: f64) -> bool {
+    let mut c = false;
+    let Some(mut j) = array.last().copied() else {
+        return false;
+    };
+    for &i in array {
+        if ((i.longitude() > testy) != (j.longitude() > testy))
+            && (testx
+                < (j.latitude() - i.latitude()) * (testy - i.longitude())
+                    / (j.longitude() - i.longitude())
+                    + i.latitude())
+        {
+            c = !c;
+        }
+        j = i;
+    }
+    c
+}
+
+/// A parameter's value as the vehicle's list holds it, by name.
+fn listed(parameters: &[(String, f64)], name: &str) -> Option<f64> {
+    parameters
+        .iter()
+        .find(|(listed, _)| listed == name)
+        .map(|(_, value)| *value)
+}
+
+/// One of Geo-Fence > Upload's altitude boxes: its caption, its question, the text it offers,
+/// and which box it is.
+pub type FenceQuestion = (&'static str, &'static str, String, PromptKind);
+
+/// Geo-Fence > Upload once its checks have passed, while its altitude boxes are being asked.
+///
+/// `FENCE_MINALT` and `FENCE_MAXALT` are asked only on a vehicle that lists them (ArduPlane's);
+/// ArduCopter has neither, and nothing is asked there.
+/// `// C#: GCSViews/FlightPlanner.cs:3761-3793`
+#[derive(Debug, Clone, PartialEq)]
+pub struct FenceUploadAsk {
+    /// `geofenceoverlay.Markers[0].Position`.
+    return_point: LatLon,
+    /// `drawnpolygon.Points`.
+    polygon: Vec<LatLon>,
+    /// `FENCE_MINALT` as listed, and the answer once given.
+    min_alt: Option<(f64, Option<i32>)>,
+    /// `FENCE_MAXALT` likewise.
+    max_alt: Option<(f64, Option<i32>)>,
+    /// `MAV.param["FENCE_ACTION"]`, `None` where the vehicle lists only `FENCE_ENABLE`.
+    old_action: Option<f64>,
+}
+
+impl FenceUploadAsk {
+    /// The box to show next - its caption, question and the text it offers - or `None` once
+    /// every box the vehicle calls for has been answered. The offer is
+    /// `(int.Parse(param.ToString()) * CurrentState.multiplieralt).ToString("0")`: a parameter
+    /// holding a fraction is `int.Parse`'s `FormatException`.
+    /// `// C#: GCSViews/FlightPlanner.cs:3764-3793`
+    pub fn next_question(
+        &self,
+    ) -> Option<Result<FenceQuestion, &'static str>> {
+        let offer = |value: f64| -> Result<String, &'static str> {
+            if value.fract() != 0.0 || !value.is_finite() {
+                return Err(FORMAT_EXCEPTION);
+            }
+            // int.Parse, then int times float: a float, "0" rounding it to a whole number.
+            #[allow(clippy::cast_possible_truncation)]
+            let whole = value as i32;
+            #[allow(clippy::cast_precision_loss)]
+            let times = whole as f32 * MULTIPLIER_ALT;
+            Ok(format!("{:.0}", f64::from(times)))
+        };
+        if let Some((value, None)) = self.min_alt {
+            return Some(offer(value).map(|text| {
+                ("Min Alt", "Box Minimum Altitude?", text, PromptKind::FenceMinAlt)
+            }));
+        }
+        if let Some((value, None)) = self.max_alt {
+            return Some(offer(value).map(|text| {
+                ("Max Alt", "Box Maximum Altitude?", text, PromptKind::FenceMaxAlt)
+            }));
+        }
+        None
+    }
+
+    /// A box's OK: `int.TryParse`, or "Bad Min Alt" / "Bad Max Alt".
+    /// `// C#: GCSViews/FlightPlanner.cs:3769-3773, 3785-3789`
+    pub fn answer(&mut self, kind: &PromptKind, text: &str) -> Result<(), &'static str> {
+        let parsed = mp_mission::dotnet::parse_i32(text);
+        match kind {
+            PromptKind::FenceMinAlt => {
+                let (value, _) = self.min_alt.ok_or(BAD_MIN_ALT)?;
+                self.min_alt = Some((value, Some(parsed.ok_or(BAD_MIN_ALT)?)));
+            }
+            PromptKind::FenceMaxAlt => {
+                let (value, _) = self.max_alt.ok_or(BAD_MAX_ALT)?;
+                self.max_alt = Some((value, Some(parsed.ok_or(BAD_MAX_ALT)?)));
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+}
+
+/// `GeoFenceuploadToolStripMenuItem_Click`'s checks, in its order: the fence parameters, a return
+/// location, a drawn polygon, and the return location inside it.
+///
+/// The C#'s second check, "No polygon to upload" for `drawnpolygon == null`, is never true - the
+/// constructor makes `drawnpolygon` (`FlightPlanner.cs:278`) and nothing sets it to null - so it is
+/// not here. The polygon checked and sent is the drawn polygon's corners whether or not
+/// Geo-Fence > Clear took it off the map, as `drawnpolygon.Points` keeps them.
+/// `// C#: GCSViews/FlightPlanner.cs:3717-3755`
+pub fn fence_upload_checks(
+    plan: &Plan,
+    parameters: &[(String, f64)],
+) -> Result<FenceUploadAsk, &'static str> {
+    // FENCE_ENABLE ON COPTER, FENCE_ACTION ON PLANE.
+    let action = listed(parameters, "FENCE_ACTION");
+    if listed(parameters, "FENCE_ENABLE").is_none() && action.is_none() {
+        return Err(FENCE_NOT_SUPPORTED);
+    }
+    let return_point = plan.fence_return.ok_or(NO_RETURN_LOCATION)?;
+    if plan.polygon.is_empty() {
+        return Err(NO_POLYGON_DRAWN);
+    }
+    // The polygon closed by its first corner, and the return location tested against it.
+    let mut closed = plan.polygon.clone();
+    closed.extend(plan.polygon.first().copied());
+    if !pnpoly(&closed, return_point.latitude(), return_point.longitude()) {
+        return Err(RETURN_OUTSIDE);
+    }
+    Ok(FenceUploadAsk {
+        return_point,
+        polygon: plan.polygon.clone(),
+        min_alt: listed(parameters, "FENCE_MINALT").map(|value| (value, None)),
+        max_alt: listed(parameters, "FENCE_MAXALT").map(|value| (value, None)),
+        old_action: action,
+    })
+}
+
+/// One of Geo-Fence > Upload's blocking calls.
+#[derive(Debug, Clone, PartialEq)]
+enum FenceCall {
+    /// `setParam(name, value)`, and what a `TimeoutException` from it says.
+    Set {
+        name: &'static str,
+        value: f64,
+        on_timeout: &'static str,
+    },
+    /// `(float) MAV.param["FENCE_ACTION"]` on a vehicle without it.
+    NoAction,
+    /// `setFencePoint`, and what the progress reporter says as it goes.
+    Point {
+        set: mp_link::requests::FencePointSet,
+        status: &'static str,
+    },
+}
+
+/// What Geo-Fence > Upload puts on the wire next.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FenceDue {
+    /// `setParam`.
+    Param(&'static str, f64),
+    /// `setFencePoint`.
+    Point(mp_link::requests::FencePointSet),
+}
+
+/// How Geo-Fence > Upload ended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FenceUploadEnd {
+    /// `FENCE_ACTION` was put back: the drawn polygon becomes the geofence. `error` is what the
+    /// progress reporter showed, if a point failed - the C# goes on to put `FENCE_ACTION` back and
+    /// redraw all the same, as `RunBackgroundOperationAsync` returns after showing it.
+    Done {
+        /// The points' failure, if one failed.
+        error: Option<&'static str>,
+    },
+    /// A `setParam` threw where the handler catches it, says so and returns: nothing redrawn.
+    Stopped(&'static str),
+}
+
+/// Geo-Fence > Upload under way: `GeoFenceuploadToolStripMenuItem_Click` from its `setParam`s on,
+/// and `DoGeofencePointsUpload`, one blocking call at a time as the C# makes them.
+///
+/// `FENCE_MINALT` and `FENCE_MAXALT` to the answers where the vehicle lists them (the typed
+/// number as it is: the C# offers the parameter times `multiplieralt` and does not divide the
+/// answer back), `FENCE_ACTION` to 0, `FENCE_TOTAL` to the corners plus two; then `setFencePoint`
+/// for the return location, each corner and the first corner again, `count` the corners plus two
+/// as a `byte`; then `FENCE_ACTION` back as it was. A set the vehicle does not list is passed
+/// over, as `setParam` returns false for it; one that goes unanswered stops the upload with the
+/// handler's words. A point that times out or never reads back the same ends the points - the
+/// exception leaves `DoGeofencePointsUpload` - and the upload goes on to `FENCE_ACTION`.
+/// `// C#: GCSViews/FlightPlanner.cs:3691-3712, 3795-3898`
+#[derive(Debug, Clone)]
+pub struct FenceUpload {
+    calls: std::collections::VecDeque<FenceCall>,
+    /// The call in flight, once due.
+    current: Option<FenceCall>,
+    /// The request carrying it.
+    request: Option<mp_link::RequestId>,
+    /// The polygon sent, which becomes the geofence.
+    polygon: Vec<LatLon>,
+    /// The progress reporter's text.
+    status: &'static str,
+    /// What each call did: `NAME=value`, `NAME=value unchanged`, `NAME=unknown`, `NAME=timeout`;
+    /// `index=set`, `index=timeout`, `index=unverified`.
+    results: Vec<String>,
+    error: Option<&'static str>,
+    end: Option<FenceUploadEnd>,
+}
+
+impl FenceUpload {
+    /// The calls for an upload whose boxes have been answered.
+    #[must_use]
+    pub fn new(ask: FenceUploadAsk) -> Self {
+        let mut calls = std::collections::VecDeque::new();
+        if let Some((_, answer)) = ask.min_alt {
+            calls.push_back(FenceCall::Set {
+                name: "FENCE_MINALT",
+                value: f64::from(answer.unwrap_or(0)),
+                on_timeout: FENCE_ALT_FAILED,
+            });
+        }
+        if let Some((_, answer)) = ask.max_alt {
+            calls.push_back(FenceCall::Set {
+                name: "FENCE_MAXALT",
+                value: f64::from(answer.unwrap_or(0)),
+                on_timeout: FENCE_ALT_FAILED,
+            });
+        }
+        let Some(old_action) = ask.old_action else {
+            calls.push_back(FenceCall::NoAction);
+            return Self::with(calls, ask.polygon);
+        };
+        // points + return + close, `(byte)`.
+        #[allow(clippy::cast_possible_truncation)]
+        let pointcount = (ask.polygon.len() + 2) as u8;
+        calls.push_back(FenceCall::Set {
+            name: "FENCE_ACTION",
+            value: 0.0,
+            on_timeout: FENCE_ACTION_FAILED,
+        });
+        calls.push_back(FenceCall::Set {
+            name: "FENCE_TOTAL",
+            value: f64::from(pointcount),
+            on_timeout: FENCE_TOTAL_FAILED,
+        });
+        let point = |index: usize, at: LatLon, status: &'static str| {
+            // `byte a`, counted up from 0.
+            #[allow(clippy::cast_possible_truncation)]
+            let idx = index as u8;
+            FenceCall::Point {
+                set: mp_link::requests::FencePointSet {
+                    idx,
+                    count: pointcount,
+                    lat: at.latitude(),
+                    lng: at.longitude(),
+                },
+                status,
+            }
+        };
+        calls.push_back(point(0, ask.return_point, SENDING_RETURN));
+        for (index, corner) in ask.polygon.iter().enumerate() {
+            calls.push_back(point(index + 1, *corner, SENDING_POLYGON));
+        }
+        if let Some(first) = ask.polygon.first() {
+            calls.push_back(point(ask.polygon.len() + 1, *first, SENDING_CLOSE));
+        }
+        calls.push_back(FenceCall::Set {
+            name: "FENCE_ACTION",
+            value: old_action,
+            on_timeout: FENCE_RESTORE_FAILED,
+        });
+        Self::with(calls, ask.polygon)
+    }
+
+    fn with(calls: std::collections::VecDeque<FenceCall>, polygon: Vec<LatLon>) -> Self {
+        Self {
+            calls,
+            current: None,
+            request: None,
+            polygon,
+            status: "",
+            results: Vec::new(),
+            error: None,
+            end: None,
+        }
+    }
+
+    /// What to send now: none while a call is out, or once the upload has ended.
+    pub fn due(&mut self) -> Option<FenceDue> {
+        if self.request.is_some() || self.end.is_some() {
+            return None;
+        }
+        if self.current.is_none() {
+            let Some(call) = self.calls.pop_front() else {
+                self.end = Some(FenceUploadEnd::Done { error: self.error });
+                return None;
+            };
+            self.current = Some(call);
+        }
+        match self.current.clone()? {
+            FenceCall::Set { name, value, .. } => Some(FenceDue::Param(name, value)),
+            FenceCall::NoAction => {
+                self.current = None;
+                self.end = Some(FenceUploadEnd::Stopped(NULL_REFERENCE));
+                None
+            }
+            FenceCall::Point { set, status } => {
+                self.status = status;
+                Some(FenceDue::Point(set))
+            }
+        }
+    }
+
+    /// The call that is due has gone out, carried by `request`.
+    pub const fn sent(&mut self, request: mp_link::RequestId) {
+        self.request = Some(request);
+    }
+
+    /// The request carrying the call in flight.
+    #[must_use]
+    pub const fn in_flight(&self) -> Option<mp_link::RequestId> {
+        self.request
+    }
+
+    /// How the call in flight ended. `None` is one that could not be sent or whose request the
+    /// link no longer has - the link gone, as after Disconnect - which stops a set as its timeout
+    /// does: the C#'s `setParam` on a closed port finds the name (`Close` keeps `MAV.param`),
+    /// sends nothing and times out (`MAVLinkInterface.cs:1262-1264, 1765`). A parameter the list
+    /// does not hold is the link's `UnknownParameter`, passed over as `setParam`'s `false` is.
+    pub fn answer(&mut self, outcome: Option<mp_link::requests::RequestOutcome>) {
+        use mp_link::requests::RequestOutcome;
+        self.request = None;
+        let Some(call) = self.current.take() else {
+            return;
+        };
+        match call {
+            FenceCall::Set {
+                name,
+                value,
+                on_timeout,
+            } => match outcome {
+                Some(RequestOutcome::Accepted { value: echoed }) => {
+                    let value = echoed.map_or(value, |echoed| echoed.as_f64());
+                    self.results.push(format!("{name}={value}"));
+                }
+                Some(RequestOutcome::Unchanged) => {
+                    self.results.push(format!("{name}={value} unchanged"));
+                }
+                None | Some(RequestOutcome::TimedOut) => {
+                    self.results.push(format!("{name}=timeout"));
+                    self.calls.clear();
+                    self.end = Some(FenceUploadEnd::Stopped(on_timeout));
+                }
+                Some(_) => self.results.push(format!("{name}=unknown")),
+            },
+            FenceCall::Point { set, .. } => {
+                let idx = set.idx;
+                let failed = match outcome {
+                    Some(RequestOutcome::Accepted { .. }) => {
+                        self.results.push(format!("{idx}=set"));
+                        None
+                    }
+                    None | Some(RequestOutcome::TimedOut) => {
+                        self.results.push(format!("{idx}=timeout"));
+                        Some(FENCE_POINT_TIMEOUT)
+                    }
+                    Some(_) => {
+                        self.results.push(format!("{idx}=unverified"));
+                        Some(FENCE_POINT_UNVERIFIED)
+                    }
+                };
+                if let Some(error) = failed {
+                    // The exception leaves DoGeofencePointsUpload: no more points.
+                    self.error = Some(error);
+                    self.calls
+                        .retain(|call| !matches!(call, FenceCall::Point { .. }));
+                }
+            }
+            FenceCall::NoAction => {}
+        }
+    }
+
+    /// The progress reporter's text: the point being sent, or "Sending fence points" before one.
+    #[must_use]
+    pub fn status(&self) -> &'static str {
+        self.progress().unwrap_or(SENDING_FENCE_POINTS)
+    }
+
+    /// The progress window's text once it is up: the C# opens it after `FENCE_TOTAL` is set, so
+    /// while the parameters go there is none (`FlightPlanner.cs:3837-3847`).
+    #[must_use]
+    pub fn progress(&self) -> Option<&'static str> {
+        (!self.status.is_empty()).then_some(self.status)
+    }
+
+    /// The polygon being sent.
+    #[must_use]
+    pub fn polygon(&self) -> &[LatLon] {
+        &self.polygon
+    }
+
+    /// How the upload ended, once it has.
+    #[must_use]
+    pub const fn end(&self) -> Option<&FenceUploadEnd> {
+        self.end.as_ref()
+    }
+
+    /// What each call did, in order.
+    #[must_use]
+    pub fn results(&self) -> String {
+        self.results.join(",")
+    }
+}
+
+/// Geo-Fence > Download on a vehicle without `MISSION_FENCE`: `getFencePoint` from 0 while the
+/// index is below the count the last point read said, the first read counting as one. The first
+/// point is the return location and the rest the polygon - its closing point included, as the C#
+/// adds every point read to `geofencepolygon`. A point that is not read ends it: "Failed to get
+/// fence point", the geofence already cleared.
+/// `// C#: GCSViews/FlightPlanner.cs:827, 862-913`
+#[derive(Debug, Clone, Default)]
+pub struct FenceDownload {
+    /// `a`.
+    next: u8,
+    /// `count`, 1 until the first point says otherwise.
+    count: u8,
+    points: Vec<LatLon>,
+    request: Option<mp_link::RequestId>,
+    end: Option<Result<(), &'static str>>,
+}
+
+impl FenceDownload {
+    /// A download, point 0 due.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            count: 1,
+            ..Self::default()
+        }
+    }
+
+    /// The point to read now: none while one is out, or once the download has ended.
+    pub fn due(&mut self) -> Option<u8> {
+        if self.request.is_some() || self.end.is_some() {
+            return None;
+        }
+        if self.next >= self.count {
+            self.end = Some(Ok(()));
+            return None;
+        }
+        Some(self.next)
+    }
+
+    /// The read that is due has gone out, carried by `request`.
+    pub const fn sent(&mut self, request: mp_link::RequestId) {
+        self.request = Some(request);
+    }
+
+    /// The request carrying the read in flight.
+    #[must_use]
+    pub const fn in_flight(&self) -> Option<mp_link::RequestId> {
+        self.request
+    }
+
+    /// How the read in flight ended, and the point it read.
+    pub fn answer(
+        &mut self,
+        outcome: Option<mp_link::requests::RequestOutcome>,
+        read: Option<mp_link::requests::FencePointRead>,
+    ) {
+        self.request = None;
+        let point = match (outcome, read) {
+            (Some(mp_link::requests::RequestOutcome::Accepted { .. }), Some(read)) => {
+                LatLon::new(f64::from(read.lat), f64::from(read.lng))
+                    .ok()
+                    .map(|at| (at, read.count))
+            }
+            _ => None,
+        };
+        let Some((at, total)) = point else {
+            self.end = Some(Err(FENCE_POINT_FAILED));
+            return;
+        };
+        // `count = plla.total`.
+        self.count = total;
+        self.points.push(at);
+        self.next = self.next.saturating_add(1);
+    }
+
+    /// How the download ended, once it has.
+    #[must_use]
+    pub const fn end(&self) -> Option<Result<(), &'static str>> {
+        self.end
+    }
+
+    /// The points read, in order.
+    #[must_use]
+    pub fn points(&self) -> &[LatLon] {
+        &self.points
+    }
+}
+
+/// Which Geo-Fence > Download is under way.
+#[derive(Debug, Clone)]
+pub enum FenceDownloading {
+    /// `mav_mission.download(..., MAV_MISSION_TYPE.FENCE)`, for a vehicle with `MISSION_FENCE`.
+    Mission,
+    /// `getFencePoint`, one point at a time.
+    Points(FenceDownload),
+}
+
 /// Where the plan on screen came from.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub enum Origin {
@@ -2138,6 +2733,87 @@ impl Plan {
             return_point: Some(return_point),
             vertices,
         })
+    }
+
+    /// `polygongridmode = false`: Geo-Fence > Upload and Download stop the drawing of a polygon.
+    /// `// C#: GCSViews/FlightPlanner.cs:826, 3716`
+    pub fn leave_polygon_mode(&mut self) {
+        if self.draw_mode == DrawMode::Area {
+            self.draw_mode = DrawMode::Waypoints;
+        }
+    }
+
+    /// Whether Geo-Fence > Upload or Download is under way, its boxes included: one at a time, as
+    /// the C#'s modal calls allow.
+    #[must_use]
+    pub const fn fence_busy(&self) -> bool {
+        self.fence_ask.is_some() || self.fence_upload.is_some() || self.fence_download.is_some()
+    }
+
+    /// Geo-Fence > Upload says `text`: on the status line, and in its fact.
+    pub fn fence_upload_said(&mut self, text: &str) {
+        text.clone_into(&mut self.fence_upload_text);
+        self.fence_say = Some(text.to_owned());
+    }
+
+    /// Geo-Fence > Download says `text`.
+    pub fn fence_download_said(&mut self, text: &str) {
+        text.clone_into(&mut self.fence_download_text);
+        self.fence_say = Some(text.to_owned());
+    }
+
+    /// Geo-Fence > Upload ended as the C# ends it without a word - its progress window closed -
+    /// and its fact says `text`.
+    pub fn fence_upload_noted(&mut self, text: &str) {
+        text.clone_into(&mut self.fence_upload_text);
+    }
+
+    /// Geo-Fence > Download ended without a word, and its fact says `text`.
+    pub fn fence_download_noted(&mut self, text: &str) {
+        text.clone_into(&mut self.fence_download_text);
+    }
+
+    /// The end of Geo-Fence > Upload: the drawn polygon is off the map and emptied, and the
+    /// geofence is its corners. The return marker stays, as `geofenceoverlay.Markers` is not
+    /// cleared.
+    /// `// C#: GCSViews/FlightPlanner.cs:3861-3874`
+    pub fn fence_uploaded(&mut self, polygon: Vec<LatLon>) {
+        self.fence = polygon;
+        self.polygon.clear();
+        self.polygon_hidden = false;
+    }
+
+    /// The end of Geo-Fence > Download's point by point read: the first point is the return
+    /// location, the rest the geofence - the closing point, a copy of the first corner, with it.
+    /// `// C#: GCSViews/FlightPlanner.cs:881-892`
+    pub fn fence_downloaded(&mut self, points: &[LatLon]) {
+        if let Some((first, rest)) = points.split_first() {
+            self.fence_return = Some(*first);
+            self.fence = rest.to_vec();
+        }
+    }
+
+    /// What the last Geo-Fence > Upload said: while one runs, the progress reporter's text.
+    #[must_use]
+    pub fn fence_upload_text(&self) -> &str {
+        match &self.fence_upload {
+            Some(upload) => upload.status(),
+            None if self.fence_ask.is_some() => "asking",
+            None if self.fence_upload_text.is_empty() => "none",
+            None => &self.fence_upload_text,
+        }
+    }
+
+    /// What the last Geo-Fence > Download said: "busy" while one runs.
+    #[must_use]
+    pub fn fence_download_text(&self) -> &str {
+        if self.fence_download.is_some() {
+            "busy"
+        } else if self.fence_download_text.is_empty() {
+            "none"
+        } else {
+            &self.fence_download_text
+        }
     }
 
     /// The end of Geo-Fence > Clear, once its three sets are done: the geofence goes, and the drawn
@@ -3660,6 +4336,8 @@ pub struct DrawState<'a> {
     pub rally_points: usize,
     /// Why the rally points are unusable, if they are.
     pub rally_error: Option<&'a str>,
+    /// Geo-Fence > Upload or Download under way ([`Plan::fence_busy`]).
+    pub fence_busy: bool,
 }
 
 /// The draw panel.
@@ -3774,12 +4452,19 @@ fn survey_controls(state: &DrawState<'_>, cx: &mut Context<MissionPlanner>) -> i
 }
 
 /// Undo, clear, read and write for the geofence.
+///
+/// Read and write here are the mission protocol's fence list, `MAV_MISSION_TYPE_FENCE` - the C#'s
+/// Read and Write with `cmb_missiontype` set to FENCE - and were this port's only way to the
+/// vehicle's fence before the map menu's Geo-Fence > Upload and Download were ported; those speak
+/// the legacy `FENCE_POINT` protocol as the C#'s do ([`start_fence_upload`],
+/// [`start_fence_download`]), and Download reuses this read on a vehicle with `MISSION_FENCE`.
+/// Read and write wait while one of the menu's runs, as the C#'s modal calls would keep them.
 fn fence_controls(
     state: &DrawState<'_>,
     view: &TelemetryView,
     cx: &mut Context<MissionPlanner>,
 ) -> impl IntoElement {
-    let has_vehicle = view.vehicle.is_some();
+    let has_vehicle = view.vehicle.is_some() && !state.fence_busy;
     // Three is the fewest that encloses anything; the protocol and the vehicle both refuse fewer.
     let usable = state.fence_vertices >= 3;
 
@@ -4574,8 +5259,14 @@ pub fn map_click(
 /// false for it rather than throwing.
 /// `// C#: GCSViews/FlightPlanner.cs:2112-2155`
 fn start_fence_clear(this: &mut MissionPlanner) {
-    // One row at a time, as the C#'s blocking calls allow.
-    if this.plan.writes.is_some() {
+    begin_fence_clear(&mut this.plan);
+}
+
+/// [`start_fence_clear`] on the plan: the row of sets, unless one is under way.
+pub fn begin_fence_clear(plan: &mut Plan) {
+    // One row at a time, as the C#'s blocking calls allow - Geo-Fence > Upload and Download
+    // included, whose calls block the C#'s UI as these do.
+    if plan.writes.is_some() || plan.fence_busy() {
         return;
     }
     let step = |name: &'static str| {
@@ -4588,7 +5279,7 @@ fn start_fence_clear(this: &mut MissionPlanner) {
             },
         )
     };
-    this.plan.writes = Some(ParamWrites::new(
+    plan.writes = Some(ParamWrites::new(
         vec![
             step("FENCE_ENABLE"),
             step("FENCE_ACTION"),
@@ -4708,6 +5399,308 @@ fn step_rally_upload(
     }
 }
 
+/// Geo-Fence > Upload: `polygongridmode = false`, the handler's checks, then its altitude boxes if
+/// the vehicle calls for any, and the upload [`drive_fence`] moves on.
+///
+/// Every refusal here is an error the screen can show as state, so it goes to the status line
+/// and the `plan.fence.upload` fact, not to a message box as the C#'s `CustomMessageBox.Show`
+/// does (the owner's ruling of 2026-09-25); so do the upload's failures.
+///
+/// The draw panel's fence "write" (and "read") are a different thing: `cmb_missiontype` set to
+/// FENCE and the mission protocol's `MAV_MISSION_TYPE_FENCE` list, which this port offers on the
+/// draw panel. The menu's Upload is the legacy `FENCE_POINT` protocol, as the C#'s is.
+/// `// C#: GCSViews/FlightPlanner.cs:3714-3759`
+fn start_fence_upload(this: &mut MissionPlanner, view: &TelemetryView) {
+    begin_fence_upload(
+        &mut this.plan,
+        &mut this.plan_menus,
+        &view.parameters,
+        this.adopt_vehicle_fence,
+    );
+}
+
+/// [`start_fence_upload`] on the plan and its menus, with the vehicle's parameters and whether
+/// the draw panel's fence read is waiting for its list.
+pub fn begin_fence_upload(
+    plan: &mut Plan,
+    menus: &mut PlanMenus,
+    parameters: &[(String, f64)],
+    read_pending: bool,
+) {
+    plan.leave_polygon_mode();
+    // One at a time, as the C#'s modal calls allow: another Upload or Download, Geo-Fence >
+    // Clear's sets, or the draw panel's fence read waiting for its list.
+    if plan.fence_busy() || plan.writes.is_some() || read_pending {
+        return;
+    }
+    match fence_upload_checks(plan, parameters) {
+        Err(text) => plan.fence_upload_said(text),
+        Ok(ask) => {
+            plan.fence_ask = Some(ask);
+            menus.continue_fence_upload(plan);
+        }
+    }
+}
+
+/// Whether `cs.capabilities` carry `MAV_PROTOCOL_CAPABILITY_MISSION_FENCE`.
+#[must_use]
+pub const fn has_mission_fence(capabilities: u32) -> bool {
+    capabilities & CAPABILITY_MISSION_FENCE > 0
+}
+
+/// The vehicle's `cs.capabilities`, 0 with none heard.
+fn capabilities(view: &TelemetryView) -> u32 {
+    view.state
+        .as_ref()
+        .map_or(0, |state| state.autopilot_info.capabilities)
+}
+
+/// Geo-Fence > Download: `polygongridmode = false`; on a vehicle with `MISSION_FENCE`, the fence
+/// list through the mission protocol - "Please connect first" without a link, "Failed to get
+/// fence point" when it fails; otherwise "Not Supported" without `FENCE_ACTION` and `FENCE_TOTAL`,
+/// "Nothing to download" for a `FENCE_TOTAL` of 1 or less, and the geofence cleared and read point
+/// by point.
+///
+/// The C#'s mission branch throws its list away and leaves the geofence as it was: what it
+/// downloads reaches only `MAV.fencepoints`, which `processInfoFromStream` fills as the items
+/// pass (`MAVLinkInterface.cs:5641-5694`) - the link's fence points here - and `writeKML` draws
+/// as its own "fence" overlay in MISSION mode (`FlightPlanner.cs:1497-1517`). The branch is
+/// reached only when the capabilities change between the menu opening and the click, as the
+/// menu hides Geo-Fence over such a vehicle ([`HIDDEN_ON_MISSION_FENCE`]).
+/// `// C#: GCSViews/FlightPlanner.cs:824-913`
+fn start_fence_download(this: &mut MissionPlanner, view: &TelemetryView) {
+    let cleared = begin_fence_download(
+        &mut this.plan,
+        &this.telemetry,
+        view.connected,
+        capabilities(view),
+        &view.parameters,
+        this.adopt_vehicle_fence,
+    );
+    if cleared {
+        this.sync_map_fence();
+    }
+}
+
+/// [`start_fence_download`] on the plan, through `telemetry`: whether the geofence was cleared
+/// for a point by point read, which the map then shows.
+pub fn begin_fence_download(
+    plan: &mut Plan,
+    telemetry: &crate::telemetry::Telemetry,
+    connected: bool,
+    capabilities: u32,
+    parameters: &[(String, f64)],
+    read_pending: bool,
+) -> bool {
+    plan.leave_polygon_mode();
+    if plan.fence_busy() || plan.writes.is_some() || read_pending {
+        return false;
+    }
+    if has_mission_fence(capabilities) {
+        if !connected {
+            plan.fence_download_said(PLEASE_CONNECT);
+            return false;
+        }
+        if telemetry.download_fence() {
+            plan.fence_download = Some(FenceDownloading::Mission);
+        } else {
+            plan.fence_download_said(FENCE_POINT_FAILED);
+        }
+        return false;
+    }
+    let (Some(_), Some(total)) = (
+        listed(parameters, "FENCE_ACTION"),
+        listed(parameters, "FENCE_TOTAL"),
+    ) else {
+        plan.fence_download_said(FENCE_NOT_SUPPORTED);
+        return false;
+    };
+    // `int.Parse(MAV.param["FENCE_TOTAL"].ToString()) <= 1`.
+    if total <= 1.0 {
+        plan.fence_download_said(NOTHING_TO_DOWNLOAD);
+        return false;
+    }
+    // geofenceoverlay's polygons and markers, and geofencepolygon's points, cleared first.
+    plan.fence.clear();
+    plan.fence_return = None;
+    plan.fence_download = Some(FenceDownloading::Points(FenceDownload::new()));
+    true
+}
+
+/// Moves Geo-Fence > Upload and Download on, each frame, as far as they go without waiting, and
+/// does what each does at its end: the drawn polygon made the geofence, or the points read made
+/// it and its return location.
+///
+/// The status line carries what the C# shows: the progress window's text while points go, and
+/// each failure (the owner's ruling puts errors there, not in boxes). Success says nothing - the
+/// progress window closes, and the download shows no box - and only the facts record it.
+fn drive_fence(this: &mut MissionPlanner, view: &TelemetryView) {
+    let alt_box = this.plan_menus.prompt.as_ref().is_some_and(|prompt| {
+        matches!(prompt.kind, PromptKind::FenceMinAlt | PromptKind::FenceMaxAlt)
+    });
+    let changed = fence_frame(
+        &mut this.plan,
+        alt_box,
+        &this.telemetry,
+        view.connected,
+        &mut this.file_status,
+    );
+    if changed.fence {
+        this.sync_map_fence();
+    }
+    if changed.polygon {
+        this.sync_map_polygon();
+    }
+}
+
+/// What a frame of Geo-Fence > Upload and Download changed that the map shows.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct FenceChanged {
+    /// The geofence or its return location.
+    pub fence: bool,
+    /// The drawn polygon.
+    pub polygon: bool,
+}
+
+/// [`drive_fence`] on the plan, through `telemetry`, with the status line: whether the Min/Max
+/// Alt box is the one showing, and whether the link is up.
+pub fn fence_frame(
+    plan: &mut Plan,
+    alt_box: bool,
+    telemetry: &crate::telemetry::Telemetry,
+    connected: bool,
+    status_line: &mut Option<String>,
+) -> FenceChanged {
+    let mut changed = FenceChanged::default();
+    // The Min/Max Alt box replaced by another flow's box is that box's Cancel: `fence_ask`
+    // otherwise outlives it and the menu's Upload and Download stay refused.
+    if plan.fence_ask.is_some() && !alt_box {
+        plan.fence_ask = None;
+    }
+
+    if let Some(upload) = plan.fence_upload.as_mut() {
+        step_fence_upload(telemetry, upload);
+        let progress = upload.progress();
+        match upload.end().cloned() {
+            None => {
+                if let Some(progress) = progress {
+                    *status_line = Some(progress.to_owned());
+                }
+            }
+            Some(end) => {
+                let polygon = upload.polygon().to_vec();
+                plan.fence_upload_results = upload.results();
+                plan.fence_upload = None;
+                // The progress window's text goes with the window.
+                if progress.is_some_and(|text| status_line.as_deref() == Some(text)) {
+                    *status_line = None;
+                }
+                match end {
+                    FenceUploadEnd::Done { error } => {
+                        plan.fence_uploaded(polygon);
+                        changed.fence = true;
+                        changed.polygon = true;
+                        match error {
+                            Some(error) => plan.fence_upload_said(&unexpected_error(error)),
+                            None => plan.fence_upload_noted("done"),
+                        }
+                    }
+                    FenceUploadEnd::Stopped(text) => plan.fence_upload_said(text),
+                }
+            }
+        }
+    }
+
+    match plan.fence_download.as_mut() {
+        Some(FenceDownloading::Points(download)) => {
+            step_fence_download(telemetry, download);
+            if let Some(end) = download.end() {
+                let points = download.points().to_vec();
+                plan.fence_download = None;
+                match end {
+                    Ok(()) => {
+                        plan.fence_downloaded(&points);
+                        changed.fence = true;
+                        plan.fence_download_noted(&points.len().to_string());
+                    }
+                    Err(text) => plan.fence_download_said(text),
+                }
+            }
+        }
+        // `mav_mission.download(...).AwaitSync()`: its end, or its exception - the link gone
+        // among them, as the C#'s download throws on a closed port. The list itself goes
+        // nowhere but the link's fence points, as the C# throws it away.
+        Some(FenceDownloading::Mission) => match telemetry.fence_list() {
+            None if connected => {}
+            None | Some(Err(_)) => {
+                plan.fence_download = None;
+                plan.fence_download_said(FENCE_POINT_FAILED);
+            }
+            Some(Ok(items)) => {
+                plan.fence_download = None;
+                plan.fence_download_noted(&items.len().to_string());
+            }
+        },
+        None => {}
+    }
+
+    if let Some(text) = plan.fence_say.take() {
+        *status_line = Some(text);
+    }
+    changed
+}
+
+/// Moves an upload on as far as it goes without waiting: each answered call lets the next go,
+/// through the link - `setParam` for the parameters, `setFencePoint` for each point - until one
+/// is out or the upload has ended.
+fn step_fence_upload(telemetry: &crate::telemetry::Telemetry, upload: &mut FenceUpload) {
+    while upload.end().is_none() {
+        if let Some(request) = upload.in_flight() {
+            match telemetry.request(request) {
+                Some(request) => match request.outcome() {
+                    Some(outcome) => upload.answer(Some(outcome)),
+                    None => return,
+                },
+                None => upload.answer(None),
+            }
+            continue;
+        }
+        let sent = match upload.due() {
+            None => continue,
+            Some(FenceDue::Param(name, value)) => telemetry.write_parameter(name, value, false),
+            Some(FenceDue::Point(set)) => telemetry.set_fence_point(set),
+        };
+        match sent {
+            Some(request) => upload.sent(request),
+            None => upload.answer(None),
+        }
+    }
+}
+
+/// Moves a download on as far as it goes without waiting: each point read lets the next be
+/// asked for, through the link's `getFencePoint`, until one is out or the download has ended.
+fn step_fence_download(telemetry: &crate::telemetry::Telemetry, download: &mut FenceDownload) {
+    while download.end().is_none() {
+        if let Some(request) = download.in_flight() {
+            match telemetry.request(request) {
+                Some(request) => match request.outcome() {
+                    Some(outcome) => download.answer(Some(outcome), request.fence_point()),
+                    None => return,
+                },
+                None => download.answer(None, None),
+            }
+            continue;
+        }
+        let Some(idx) = download.due() else {
+            continue;
+        };
+        match telemetry.get_fence_point(idx) {
+            Some(request) => download.sent(request),
+            None => download.answer(None, None),
+        }
+    }
+}
+
 /// Moves the rows of parameter sets on, each frame, as far as they go without waiting: a Write
 /// whose upload has finished starts its sets, a set that has been answered lets the next one go,
 /// and a finished row does what follows it.
@@ -4718,6 +5711,7 @@ pub fn drive_writes(
     cx: &mut Context<MissionPlanner>,
 ) {
     drive_rally(this, view, window, cx);
+    drive_fence(this, view);
     drive_mission_ftp(this, view, window, cx);
     if let Some(pending) = this.plan.pending_write.as_mut() {
         match pending.upload_ended(view.transfer.as_ref(), &view.mission) {
@@ -5469,6 +6463,10 @@ pub enum MenuAction {
     FenceSaveToFile,
     /// `clearToolStripMenuItem_Click`.
     FenceClear,
+    /// `GeoFenceuploadToolStripMenuItem_Click`: Geo-Fence > Upload.
+    GeoFenceUpload,
+    /// `GeoFencedownloadToolStripMenuItem_Click`: Geo-Fence > Download.
+    GeoFenceDownload,
     /// `surveyGridToolStripMenuItem_Click`: the Survey (Grid) dialog, `survey_ui.rs`.
     SurveyGrid,
     /// `savePolygonToolStripMenuItem_Click`.
@@ -5607,7 +6605,8 @@ pub const MAP_MENU: &[MenuEntry] = {
     use MenuAction::{
         Area, ClearMission, ClearPolygon, ClearRallyPoints, CreateCircleSurvey, CreateSplineCircle,
         CreateWpCircle, DeleteWp, DrawPolygon, ElevationGraph, EnterUtmCoord, FenceClear,
-        FenceLoadFromFile, FenceSaveToFile, FromShp, GetRallyPoints, InsertAtCurrentPosition,
+        FenceLoadFromFile, FenceSaveToFile, FromShp, GeoFenceDownload, GeoFenceUpload,
+        GetRallyPoints, InsertAtCurrentPosition,
         InsertSplineWp, InsertWp, JumpStart, JumpWp, KmlOverlay, Land, LoadAndAppend, LoadKmlFile,
         LoadPolygon, LoadRallyFromFile, LoadShpFile, LoadWpFile, LoiterCircles, LoiterForever,
         LoiterTime, MeasureDistance, ModifyAlt, OffsetPolygon, PoiAdd, PoiDelete, PoiEdit,
@@ -5774,17 +6773,19 @@ pub const MAP_MENU: &[MenuEntry] = {
             "Geo-Fence",
             None,
             &[
+                // `// C#: GCSViews/FlightPlanner.cs:3714-3899`
                 item(
                     "menu-GeoFenceupload",
                     "GeoFenceuploadToolStripMenuItem",
                     "Upload",
-                    None,
+                    Some(GeoFenceUpload),
                 ),
+                // `// C#: GCSViews/FlightPlanner.cs:824-913`
                 item(
                     "menu-GeoFencedownload",
                     "GeoFencedownloadToolStripMenuItem",
                     "Download",
-                    None,
+                    Some(GeoFenceDownload),
                 ),
                 item(
                     "menu-setReturnLocation",
@@ -5818,12 +6819,12 @@ pub const MAP_MENU: &[MenuEntry] = {
             "rallyPointsToolStripMenuItem",
             "Rally Points",
             None,
-            // Shown whatever the vehicle: `contextMenuStrip1_Opening` hides this drop-down, and
-            // Geo-Fence, when the vehicle reports `MAV_PROTOCOL_CAPABILITY_MISSION_FENCE`
-            // (`FlightPlanner.cs:2680-2691`), and `rallyPointsToolStripMenuItem.Visible` follows
-            // `DisplayConfiguration.displayRallyPointsMenu` (`:1325`); neither is ported. The SITL
-            // here (ArduCopter 4.8.0-dev) reports capabilities 0xfbef, without that bit, so the C#
-            // shows it there too.
+            // Hidden with Geo-Fence over a vehicle that reports
+            // `MAV_PROTOCOL_CAPABILITY_MISSION_FENCE` (`contextMenuStrip1_Opening`,
+            // `FlightPlanner.cs:2680-2691`; [`HIDDEN_ON_MISSION_FENCE`]) - the SITL here
+            // (ArduCopter 4.8.0-dev, capabilities 0xfbef, bit 0x4000 set) among them.
+            // `rallyPointsToolStripMenuItem.Visible` also follows
+            // `DisplayConfiguration.displayRallyPointsMenu` (`:1325`), which is not ported.
             &[
                 // `// C#: GCSViews/FlightPlanner.cs:6635-6661`
                 item(
@@ -6203,6 +7204,22 @@ pub struct OpenMenu {
     pub marker: Option<u16>,
     /// Which top-level entry's drop-down is showing, by its index in [`MAP_MENU`].
     pub submenu: Option<usize>,
+    /// Whether the vehicle reported `MAV_PROTOCOL_CAPABILITY_MISSION_FENCE` when the menu
+    /// opened, which hides Geo-Fence and Rally Points (see [`shown`]).
+    pub mission_fence: bool,
+}
+
+/// The top-level entries `contextMenuStrip1_Opening` hides on a vehicle that reports
+/// `MAV_PROTOCOL_CAPABILITY_MISSION_FENCE` - one that takes its fence and rally points as mission
+/// items (every ArduPilot 4.x), which the draw panel's FENCE and RALLY lists send and read - and
+/// shows on any other, or with nothing connected (capabilities 0).
+/// `// C#: GCSViews/FlightPlanner.cs:2680-2691`
+pub const HIDDEN_ON_MISSION_FENCE: [&str; 2] = ["menu-geoFence", "menu-rallyPoints"];
+
+/// Whether a top-level entry shows in a menu opened over a vehicle with `MISSION_FENCE` or not.
+#[must_use]
+pub fn shown(entry: &MenuEntry, mission_fence: bool) -> bool {
+    !(mission_fence && HIDDEN_ON_MISSION_FENCE.contains(&entry.id))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -6844,6 +7861,10 @@ pub enum PromptKind {
         /// Where the text starts.
         position: LatLon,
     },
+    /// Geo-Fence > Upload's "Box Minimum Altitude?".
+    FenceMinAlt,
+    /// Geo-Fence > Upload's "Box Maximum Altitude?".
+    FenceMaxAlt,
 }
 
 /// What POI > Add or Edit asks the screen to do to the flight screen's list once its ID is typed.
@@ -7295,7 +8316,8 @@ struct Geocoding {
 
 impl PlanMenus {
     /// Opens the menu where the right button came up. `contextMenuStrip1_Opening` runs here: the
-    /// marker under the cursor decides Delete WP.
+    /// marker under the cursor decides Delete WP, and a vehicle with `MISSION_FENCE` hides
+    /// Geo-Fence and Rally Points ([`PlanMenus::open_for`]).
     pub fn open_at(&mut self, at: (f32, f32), position: LatLon, marker: Option<u16>) {
         self.zoom_menu = None;
         self.open = Some(OpenMenu {
@@ -7303,8 +8325,25 @@ impl PlanMenus {
             position,
             marker,
             submenu: None,
+            mission_fence: false,
         });
         self.dismissed_at = None;
+    }
+
+    /// [`PlanMenus::open_at`] over a vehicle whose `cs.capabilities` are `capabilities`: 0 with
+    /// nothing connected, as `MainV2.comPort.MAV` always exists in the C# and reads 0 then.
+    /// `// C#: GCSViews/FlightPlanner.cs:2667-2695`
+    pub fn open_for(
+        &mut self,
+        at: (f32, f32),
+        position: LatLon,
+        marker: Option<u16>,
+        capabilities: u32,
+    ) {
+        self.open_at(at, position, marker);
+        if let Some(menu) = self.open.as_mut() {
+            menu.mission_fence = has_mission_fence(capabilities);
+        }
     }
 
     /// Closes the menu because a press landed somewhere else.
@@ -8130,6 +9169,8 @@ impl PlanMenus {
             | MenuAction::LoadWpFile
             | MenuAction::SaveWpFile
             | MenuAction::FenceClear
+            | MenuAction::GeoFenceUpload
+            | MenuAction::GeoFenceDownload
             | MenuAction::SurveyGrid
             | MenuAction::GetRallyPoints
             | MenuAction::SaveRallyPoints
@@ -8444,8 +9485,42 @@ impl PlanMenus {
                 }
             }
             PromptKind::Message | PromptKind::HomeLatEnter => {}
+            PromptKind::FenceMinAlt | PromptKind::FenceMaxAlt => {
+                if let Some(ask) = plan.fence_ask.as_mut() {
+                    match ask.answer(&prompt.kind, &value) {
+                        Ok(()) => self.continue_fence_upload(plan),
+                        Err(text) => {
+                            plan.fence_ask = None;
+                            plan.fence_upload_said(text);
+                        }
+                    }
+                }
+            }
         }
         None
+    }
+
+    /// Geo-Fence > Upload's next box, or the upload itself once none is left: a parameter that
+    /// cannot be offered is `int.Parse`'s exception, and the upload goes no further.
+    /// `// C#: GCSViews/FlightPlanner.cs:3761-3793`
+    pub fn continue_fence_upload(&mut self, plan: &mut Plan) {
+        let Some(ask) = plan.fence_ask.as_ref() else {
+            return;
+        };
+        match ask.next_question() {
+            Some(Ok((title, text, offered, kind))) => {
+                self.ask(Prompt::input(title, text, offered, kind));
+            }
+            Some(Err(text)) => {
+                plan.fence_ask = None;
+                plan.fence_upload_said(text);
+            }
+            None => {
+                if let Some(ask) = plan.fence_ask.take() {
+                    plan.fence_upload = Some(FenceUpload::new(ask));
+                }
+            }
+        }
     }
 
     /// Cancel, or No: the handler returns - bar three whose C# goes on. Offset Polygon's
@@ -8478,6 +9553,9 @@ impl PlanMenus {
             PromptKind::TextRotation { position } => self.text_pending = Some(position),
             PromptKind::DefinePolygon => self.tell("Area", area_text(0.0)),
             PromptKind::Circle { .. } => self.circle_answers.clear(),
+            // `if (DialogResult.Cancel == InputBox.Show(...)) return;`.
+            // `// C#: GCSViews/FlightPlanner.cs:3766-3767, 3782-3783`
+            PromptKind::FenceMinAlt | PromptKind::FenceMaxAlt => plan.fence_ask = None,
             // No: `CMB_altmode.SelectedValue = (int) altmode.Relative`, and on with the write.
             PromptKind::WriteAltMode => {
                 self.write_answer = Some(WriteAnswer::RelativeThenContinue);
@@ -8527,9 +9605,7 @@ fn sync_everything(this: &MissionPlanner) {
     this.sync_map_fence();
     this.sync_map_rally();
     let mut map = this.map.borrow_mut();
-    map.set_fence_return(this.plan.fence_return());
     map.set_kml(this.plan.kml_overlay(), this.plan.kml_on_flight());
-    map.set_fence_exclusions(this.plan.fence_exclusions());
     map.set_tracker(tracker_marker(this));
     map.set_grid(this.plan.grid());
 }
@@ -9351,7 +10427,8 @@ pub fn open_map_menu(this: &mut MissionPlanner, x: f32, y: f32) {
     // The same reason as placing a waypoint: an edit made from the menu must not refit the view
     // and move the ground under the cursor.
     this.map.borrow_mut().freeze_view();
-    this.plan_menus.open_at((x, y), position, marker);
+    let held = capabilities(&this.telemetry.view());
+    this.plan_menus.open_for((x, y), position, marker, held);
 }
 
 /// Chooses an entry from the open menu, and focuses the dialog if it opened one.
@@ -9410,6 +10487,16 @@ fn choose_entry(
         MenuAction::FenceClear => {
             this.plan_menus.open = None;
             start_fence_clear(this);
+        }
+        MenuAction::GeoFenceUpload => {
+            this.plan_menus.open = None;
+            let view = this.telemetry.view();
+            start_fence_upload(this, &view);
+        }
+        MenuAction::GeoFenceDownload => {
+            this.plan_menus.open = None;
+            let view = this.telemetry.view();
+            start_fence_download(this, &view);
         }
         MenuAction::GetRallyPoints => {
             this.plan_menus.open = None;
@@ -9581,19 +10668,29 @@ const MENU_PADDING: f32 = 4.0;
 /// 190 px holds the widest entry, "From Current Waypoints", at this font with room to spare.
 const MENU_WIDTH: f32 = 190.0;
 
+/// The height of one entry: a row, or the separator.
+const fn entry_height(entry: &MenuEntry) -> f32 {
+    if entry.is_separator() {
+        MENU_SEPARATOR
+    } else {
+        MENU_ROW
+    }
+}
+
 /// The height of a column of entries: its padding, its border, and each row or separator.
 fn column_height(entries: &[MenuEntry]) -> f32 {
+    2.0 * MENU_PADDING + 2.0 + entries.iter().map(entry_height).sum::<f32>()
+}
+
+/// The height of [`MAP_MENU`]'s column as it opened: without Geo-Fence and Rally Points over a
+/// vehicle with `MISSION_FENCE`.
+fn map_menu_height(mission_fence: bool) -> f32 {
     2.0 * MENU_PADDING
         + 2.0
-        + entries
+        + MAP_MENU
             .iter()
-            .map(|entry| {
-                if entry.is_separator() {
-                    MENU_SEPARATOR
-                } else {
-                    MENU_ROW
-                }
-            })
+            .filter(|entry| shown(entry, mission_fence))
+            .map(entry_height)
             .sum::<f32>()
 }
 
@@ -9613,19 +10710,14 @@ fn dropdown_top(menu_top: f32, offset: f32, height: f32, viewport_height: f32) -
     aligned.min(lowest).max(-menu_top)
 }
 
-/// How far down the menu a top-level entry starts.
-fn menu_offset(index: usize) -> f32 {
+/// How far down the menu a top-level entry starts, the entries hidden above it not counted.
+fn menu_offset(index: usize, mission_fence: bool) -> f32 {
     MENU_PADDING
         + MAP_MENU
             .iter()
             .take(index)
-            .map(|entry| {
-                if entry.is_separator() {
-                    MENU_SEPARATOR
-                } else {
-                    MENU_ROW
-                }
-            })
+            .filter(|entry| shown(entry, mission_fence))
+            .map(entry_height)
             .sum::<f32>()
 }
 
@@ -9728,7 +10820,7 @@ fn map_menu(
     // ---- row 96 ----
     #[allow(clippy::cast_precision_loss)]
     let plugin_height = MENU_ROW * menus.plugin_entries.len() as f32;
-    let menu_height = column_height(MAP_MENU) + plugin_height;
+    let menu_height = map_menu_height(menu.mission_fence) + plugin_height;
     // ---- end row 96 ----
     let menu_left = menu.at.0.min(viewport_width - MENU_WIDTH).max(0.0);
     let menu_top = menu.at.1.min(viewport_height - menu_height).max(0.0);
@@ -9739,7 +10831,12 @@ fn map_menu(
         .and_then(|index| Some((index, MAP_MENU.get(index)?)))
         .map(|(index, entry)| {
             let height = column_height(entry.children);
-            let top = dropdown_top(menu_top, menu_offset(index), height, viewport_height);
+            let top = dropdown_top(
+                menu_top,
+                menu_offset(index, menu.mission_fence),
+                height,
+                viewport_height,
+            );
             (top, height)
         });
     let dropdown_contains = move |(x, y): (f32, f32)| {
@@ -9752,6 +10849,7 @@ fn map_menu(
     let mut rows: Vec<AnyElement> = MAP_MENU
         .iter()
         .enumerate()
+        .filter(|(_, entry)| shown(entry, menu.mission_fence))
         .map(|(index, entry)| {
             let enabled =
                 entry.is_live() && (entry.action != Some(MenuAction::DeleteWp) || delete_enabled);
@@ -10497,6 +11595,34 @@ pub fn record_facts(plan: &Plan, menus: &PlanMenus) {
         "plan.params.busy",
         plan.writes().is_some() || plan.pending_write.is_some(),
     );
+    // Geo-Fence > Upload and Download: what each last said - the progress reporter's text while
+    // an upload runs, "busy" while a download does - the upload's calls, and the geofence and its
+    // return location as `lat,lng`, `;` between corners.
+    record("plan.fence.upload", plan.fence_upload_text());
+    record(
+        "plan.fence.upload.calls",
+        if plan.fence_upload_results.is_empty() {
+            "none"
+        } else {
+            plan.fence_upload_results.as_str()
+        },
+    );
+    record("plan.fence.download", plan.fence_download_text());
+    record(
+        "plan.fence.points",
+        plan.fence()
+            .iter()
+            .map(|corner| format!("{},{}", corner.latitude(), corner.longitude()))
+            .collect::<Vec<_>>()
+            .join(";"),
+    );
+    record(
+        "plan.fence.return",
+        plan.fence_return().map_or_else(
+            || "none".to_owned(),
+            |at| format!("{},{}", at.latitude(), at.longitude()),
+        ),
+    );
     // The geofence's return location, as `latitude,longitude`.
     record(
         "fence.return",
@@ -10523,6 +11649,13 @@ pub fn record_facts(plan: &Plan, menus: &PlanMenus) {
             .map_or("none", |entry| entry.id),
     );
     record("plan.menu.delete", menus.delete_enabled());
+    record(
+        "plan.menu.hidden",
+        match menus.open {
+            Some(menu) if menu.mission_fence => HIDDEN_ON_MISSION_FENCE.join(","),
+            _ => "none".to_owned(),
+        },
+    );
     record(
         "plan.prompt",
         menus.prompt.as_ref().map_or("none", |prompt| {
@@ -13636,14 +14769,14 @@ mod tests {
         ids.sort_unstable();
         ids.dedup();
         assert_eq!(ids.len(), count);
-        assert!((menu_offset(0) - MENU_PADDING).abs() < f32::EPSILON);
+        assert!((menu_offset(0, false) - MENU_PADDING).abs() < f32::EPSILON);
         // After ten entries and the separator.
         let polygon = MAP_MENU
             .iter()
             .position(|entry| entry.control == "polygonToolStripMenuItem")
             .expect("Polygon");
         assert!(
-            (menu_offset(polygon) - (MENU_PADDING + 10.0 * MENU_ROW + MENU_SEPARATOR)).abs()
+            (menu_offset(polygon, false) - (MENU_PADDING + 10.0 * MENU_ROW + MENU_SEPARATOR)).abs()
                 < f32::EPSILON
         );
     }
@@ -13705,6 +14838,8 @@ mod tests {
                 "menu-fromCurrentWaypoints",
                 "menu-offsetPolygon2",
                 "menu-area2",
+                "menu-GeoFenceupload",
+                "menu-GeoFencedownload",
                 "menu-setReturnLocation",
                 "menu-loadFromFile",
                 "menu-saveToFile",
@@ -16024,5 +17159,909 @@ mod terrain_tests {
             elevation::facts(None),
             vec![("plan.elevation", "closed".to_owned())]
         );
+    }
+}
+#[cfg(test)]
+mod geofence_tests {
+    use super::*;
+    use mp_link::requests::{FencePointRead, FencePointSet, RequestOutcome};
+
+    fn at(lat: f64, lng: f64) -> LatLon {
+        LatLon::new(lat, lng).expect("a position")
+    }
+
+    /// Three corners about SITL's home, and a return location inside them.
+    fn triangle() -> Vec<LatLon> {
+        vec![at(-35.364, 149.164), at(-35.364, 149.168), at(-35.361, 149.166)]
+    }
+
+    fn inside() -> LatLon {
+        at(-35.3632, 149.1660)
+    }
+
+    fn params(list: &[(&str, f64)]) -> Vec<(String, f64)> {
+        list.iter()
+            .map(|(name, value)| ((*name).to_owned(), *value))
+            .collect()
+    }
+
+    /// ArduCopter's: `FENCE_ENABLE`, `FENCE_ACTION` 1, `FENCE_TOTAL`, no altitude box.
+    fn copter() -> Vec<(String, f64)> {
+        params(&[
+            ("FENCE_ENABLE", 0.0),
+            ("FENCE_ACTION", 1.0),
+            ("FENCE_TOTAL", 0.0),
+        ])
+    }
+
+    fn drawn(polygon: &[LatLon], return_point: Option<LatLon>) -> Plan {
+        let mut plan = Plan::default();
+        for corner in polygon {
+            plan.add_area_vertex(*corner);
+        }
+        if let Some(at) = return_point {
+            plan.set_fence_return(at);
+        }
+        plan
+    }
+
+    fn context() -> MenuContext {
+        MenuContext {
+            frame: AltitudeFrame::Relative,
+            vehicle: None,
+            takeoff_pitch: false,
+            copter: false,
+            tracker_alt: 0.0,
+        }
+    }
+
+    fn answer(plan: &mut Plan, menus: &mut PlanMenus, value: &str) {
+        menus
+            .prompt
+            .as_mut()
+            .and_then(|prompt| prompt.field.as_mut())
+            .expect("a prompt with a field")
+            .set(value);
+        menus.submit(plan, &context());
+    }
+
+    /// Every call an upload makes, answered `outcome` each, until it ends.
+    fn run(upload: &mut FenceUpload, mut outcome: impl FnMut(&FenceDue) -> RequestOutcome) {
+        let mut calls = 0;
+        while let Some(due) = upload.due() {
+            upload.answer(Some(outcome(&due)));
+            calls += 1;
+            assert!(calls < 100, "the upload never ended");
+        }
+    }
+
+    const ACCEPTED: RequestOutcome = RequestOutcome::Accepted { value: None };
+
+    /// `pnpoly`: the even-odd rule over latitude and longitude, whether or not the polygon is
+    /// closed by its first corner again.
+    #[test]
+    fn pnpoly_is_the_even_odd_rule() {
+        let square = [
+            at(-35.0, 149.0),
+            at(-35.0, 150.0),
+            at(-34.0, 150.0),
+            at(-34.0, 149.0),
+        ];
+        let mut closed = square.to_vec();
+        closed.push(square[0]);
+        for polygon in [&square[..], &closed[..]] {
+            assert!(pnpoly(polygon, -34.5, 149.5));
+            assert!(!pnpoly(polygon, -33.5, 149.5));
+            assert!(!pnpoly(polygon, -34.5, 150.5));
+        }
+        assert!(!pnpoly(&[], -34.5, 149.5));
+        let triangle = triangle();
+        assert!(pnpoly(&triangle, inside().latitude(), inside().longitude()));
+    }
+
+    /// The handler's checks in its order: the fence parameters, a return location, a drawn
+    /// polygon, the return location inside it.
+    #[test]
+    fn upload_refuses_in_the_c_sharp_order() {
+        let none = params(&[]);
+        let plan = drawn(&[], None);
+        assert_eq!(
+            fence_upload_checks(&plan, &none).err(),
+            Some(FENCE_NOT_SUPPORTED)
+        );
+        assert_eq!(
+            fence_upload_checks(&plan, &copter()).err(),
+            Some(NO_RETURN_LOCATION)
+        );
+        let plan = drawn(&[], Some(inside()));
+        assert_eq!(
+            fence_upload_checks(&plan, &copter()).err(),
+            Some(NO_POLYGON_DRAWN)
+        );
+        let plan = drawn(&triangle(), Some(at(-35.30, 149.20)));
+        assert_eq!(
+            fence_upload_checks(&plan, &copter()).err(),
+            Some(RETURN_OUTSIDE)
+        );
+        let plan = drawn(&triangle(), Some(inside()));
+        let ask = fence_upload_checks(&plan, &copter()).expect("an upload");
+        // ArduCopter lists neither altitude: nothing is asked.
+        assert_eq!(ask.next_question(), None);
+        // FENCE_ACTION alone (ArduPlane's) is enough too; the corners kept off the map by
+        // Geo-Fence > Clear are still `drawnpolygon.Points`.
+        let mut plan = drawn(&triangle(), Some(inside()));
+        plan.hide_polygon();
+        assert!(fence_upload_checks(&plan, &params(&[("FENCE_ACTION", 0.0)])).is_ok());
+    }
+
+    /// The sequence the C# makes: `FENCE_ACTION` 0, `FENCE_TOTAL` the corners plus two, the return
+    /// location, each corner, the first corner again - each with the count, and the progress
+    /// reporter's words - and `FENCE_ACTION` back; then done, the drawn polygon the geofence.
+    #[test]
+    fn upload_sets_the_parameters_then_every_point_then_the_action_back() {
+        let plan = drawn(&triangle(), Some(inside()));
+        let mut upload = FenceUpload::new(fence_upload_checks(&plan, &copter()).expect("ok"));
+        assert_eq!(upload.status(), SENDING_FENCE_POINTS);
+        let mut seen = Vec::new();
+        let mut statuses = Vec::new();
+        while let Some(due) = upload.due() {
+            if matches!(due, FenceDue::Point(_)) {
+                statuses.push(upload.status());
+            }
+            seen.push(due);
+            upload.answer(Some(ACCEPTED));
+        }
+        let corners = triangle();
+        let point = |idx: u8, at: LatLon| {
+            FenceDue::Point(FencePointSet {
+                idx,
+                count: 5,
+                lat: at.latitude(),
+                lng: at.longitude(),
+            })
+        };
+        assert_eq!(
+            seen,
+            vec![
+                FenceDue::Param("FENCE_ACTION", 0.0),
+                FenceDue::Param("FENCE_TOTAL", 5.0),
+                point(0, inside()),
+                point(1, corners[0]),
+                point(2, corners[1]),
+                point(3, corners[2]),
+                point(4, corners[0]),
+                FenceDue::Param("FENCE_ACTION", 1.0),
+            ]
+        );
+        assert_eq!(
+            statuses,
+            [
+                SENDING_RETURN,
+                SENDING_POLYGON,
+                SENDING_POLYGON,
+                SENDING_POLYGON,
+                SENDING_CLOSE
+            ]
+        );
+        assert_eq!(upload.end(), Some(&FenceUploadEnd::Done { error: None }));
+        assert_eq!(
+            upload.results(),
+            "FENCE_ACTION=0,FENCE_TOTAL=5,0=set,1=set,2=set,3=set,4=set,FENCE_ACTION=1"
+        );
+    }
+
+    /// A point that times out, or never reads back the same, ends the points - the exception
+    /// leaves `DoGeofencePointsUpload` - and the upload goes on to put `FENCE_ACTION` back and
+    /// redraw, the failure said.
+    #[test]
+    fn a_failed_point_ends_the_points_and_the_action_is_still_put_back() {
+        let plan = drawn(&triangle(), Some(inside()));
+        for (answer, said, word) in [
+            (RequestOutcome::TimedOut, FENCE_POINT_TIMEOUT, "timeout"),
+            (RequestOutcome::Sent, FENCE_POINT_UNVERIFIED, "unverified"),
+        ] {
+            let mut upload = FenceUpload::new(fence_upload_checks(&plan, &copter()).expect("ok"));
+            run(&mut upload, |due| match due {
+                FenceDue::Point(set) if set.idx == 1 => answer,
+                _ => ACCEPTED,
+            });
+            assert_eq!(upload.end(), Some(&FenceUploadEnd::Done { error: Some(said) }));
+            assert_eq!(
+                upload.results(),
+                format!("FENCE_ACTION=0,FENCE_TOTAL=5,0=set,1={word},FENCE_ACTION=1")
+            );
+        }
+    }
+
+    /// A set that goes unanswered stops the upload with the handler's words, nothing redrawn; one
+    /// the vehicle does not list is passed over, as `setParam` returns false for it.
+    #[test]
+    fn an_unanswered_set_stops_the_upload_with_the_handlers_words() {
+        let plan = drawn(&triangle(), Some(inside()));
+        for (name, said) in [
+            ("FENCE_ACTION", FENCE_ACTION_FAILED),
+            ("FENCE_TOTAL", FENCE_TOTAL_FAILED),
+        ] {
+            let mut upload = FenceUpload::new(fence_upload_checks(&plan, &copter()).expect("ok"));
+            run(&mut upload, |due| match due {
+                FenceDue::Param(set, _) if *set == name => RequestOutcome::TimedOut,
+                _ => ACCEPTED,
+            });
+            assert_eq!(upload.end(), Some(&FenceUploadEnd::Stopped(said)));
+        }
+        // The restore: every point sent, then "Failed to restore FENCE_ACTION".
+        let mut upload = FenceUpload::new(fence_upload_checks(&plan, &copter()).expect("ok"));
+        let mut restoring = false;
+        run(&mut upload, |due| match due {
+            FenceDue::Param("FENCE_ACTION", value) if *value == 1.0 => {
+                restoring = true;
+                RequestOutcome::TimedOut
+            }
+            _ => ACCEPTED,
+        });
+        assert!(restoring);
+        assert_eq!(upload.end(), Some(&FenceUploadEnd::Stopped(FENCE_RESTORE_FAILED)));
+        // FENCE_TOTAL not listed: passed over.
+        let mut upload = FenceUpload::new(fence_upload_checks(&plan, &copter()).expect("ok"));
+        run(&mut upload, |due| match due {
+            FenceDue::Param("FENCE_TOTAL", _) => RequestOutcome::UnknownParameter,
+            _ => ACCEPTED,
+        });
+        assert_eq!(upload.end(), Some(&FenceUploadEnd::Done { error: None }));
+        assert!(upload.results().contains("FENCE_TOTAL=unknown,0=set"));
+    }
+
+    /// A vehicle with `FENCE_ENABLE` and no `FENCE_ACTION`: `(float) MAV.param["FENCE_ACTION"]`
+    /// throws before anything is sent.
+    #[test]
+    fn no_fence_action_is_the_null_reference_before_any_send() {
+        let plan = drawn(&triangle(), Some(inside()));
+        let ask = fence_upload_checks(&plan, &params(&[("FENCE_ENABLE", 1.0)])).expect("ok");
+        let mut upload = FenceUpload::new(ask);
+        assert_eq!(upload.due(), None);
+        assert_eq!(upload.end(), Some(&FenceUploadEnd::Stopped(NULL_REFERENCE)));
+    }
+
+    /// ArduPlane's `FENCE_MINALT` and `FENCE_MAXALT`: "Min Alt" and "Max Alt" asked in turn, each
+    /// offering the parameter; a word that is not a whole number is "Bad Min Alt"; Cancel stops
+    /// the upload; the answers are set before `FENCE_ACTION`.
+    #[test]
+    fn a_plane_is_asked_its_box_altitudes_and_they_are_set_first() {
+        let plane = params(&[
+            ("FENCE_ACTION", 1.0),
+            ("FENCE_TOTAL", 0.0),
+            ("FENCE_MINALT", 10.0),
+            ("FENCE_MAXALT", 100.0),
+        ]);
+        let mut plan = drawn(&triangle(), Some(inside()));
+        let mut menus = PlanMenus::default();
+        plan.fence_ask = Some(fence_upload_checks(&plan, &plane).expect("ok"));
+        menus.continue_fence_upload(&mut plan);
+        let prompt = menus.prompt.as_ref().expect("Min Alt");
+        assert_eq!((prompt.title, prompt.text.as_str()), ("Min Alt", "Box Minimum Altitude?"));
+        assert_eq!(prompt.value(), "10");
+        answer(&mut plan, &mut menus, "15");
+        let prompt = menus.prompt.as_ref().expect("Max Alt");
+        assert_eq!((prompt.title, prompt.value()), ("Max Alt", "100"));
+        answer(&mut plan, &mut menus, "120");
+        assert!(menus.prompt.is_none());
+        assert!(plan.fence_ask.is_none());
+        let upload = plan.fence_upload.as_mut().expect("the upload");
+        assert_eq!(upload.due(), Some(FenceDue::Param("FENCE_MINALT", 15.0)));
+        upload.answer(Some(ACCEPTED));
+        assert_eq!(upload.due(), Some(FenceDue::Param("FENCE_MAXALT", 120.0)));
+        upload.answer(Some(ACCEPTED));
+        assert_eq!(upload.due(), Some(FenceDue::Param("FENCE_ACTION", 0.0)));
+
+        // "Bad Min Alt": said, and nothing sent.
+        let mut plan = drawn(&triangle(), Some(inside()));
+        let mut menus = PlanMenus::default();
+        plan.fence_ask = Some(fence_upload_checks(&plan, &plane).expect("ok"));
+        menus.continue_fence_upload(&mut plan);
+        answer(&mut plan, &mut menus, "ten");
+        assert!(menus.prompt.is_none());
+        assert!(!plan.fence_busy());
+        assert_eq!(plan.fence_upload_text(), BAD_MIN_ALT);
+        assert_eq!(plan.fence_say.as_deref(), Some(BAD_MIN_ALT));
+
+        // Cancel on the second box: `return`, nothing sent.
+        let mut plan = drawn(&triangle(), Some(inside()));
+        let mut menus = PlanMenus::default();
+        plan.fence_ask = Some(fence_upload_checks(&plan, &plane).expect("ok"));
+        menus.continue_fence_upload(&mut plan);
+        answer(&mut plan, &mut menus, "15");
+        let _ = menus.cancel(&mut plan);
+        assert!(!plan.fence_busy());
+    }
+
+    /// A parameter holding a fraction cannot be offered: `int.Parse("10.5")` throws.
+    #[test]
+    fn a_fractional_altitude_parameter_is_the_format_exception() {
+        let plan = drawn(&triangle(), Some(inside()));
+        let ask = fence_upload_checks(
+            &plan,
+            &params(&[("FENCE_ACTION", 1.0), ("FENCE_MINALT", 10.5)]),
+        )
+        .expect("ok");
+        assert_eq!(ask.next_question(), Some(Err(FORMAT_EXCEPTION)));
+    }
+
+    /// The end of the upload: the drawn polygon is the geofence and is gone from the map, the
+    /// return marker stays.
+    #[test]
+    fn an_uploaded_polygon_becomes_the_geofence() {
+        let mut plan = drawn(&triangle(), Some(inside()));
+        plan.fence_uploaded(triangle());
+        assert_eq!(plan.fence(), triangle().as_slice());
+        assert!(plan.polygon().is_empty());
+        assert_eq!(plan.fence_return(), Some(inside()));
+    }
+
+    fn read(lat: f32, lng: f32, count: u8) -> Option<FencePointRead> {
+        Some(FencePointRead { lat, lng, count })
+    }
+
+    /// Download point by point: the first read's count says how many; the first point is the
+    /// return location and the rest - the closing point with them - the geofence. A point that
+    /// does not come is "Failed to get fence point".
+    #[test]
+    fn download_reads_while_below_the_count_the_points_give() {
+        let mut download = FenceDownload::new();
+        let points = [
+            (-35.3632_f32, 149.166_f32),
+            (-35.364, 149.164),
+            (-35.364, 149.168),
+            (-35.361, 149.166),
+            (-35.364, 149.164),
+        ];
+        for (index, (lat, lng)) in points.iter().enumerate() {
+            assert_eq!(download.due(), Some(u8::try_from(index).expect("few")));
+            download.answer(Some(ACCEPTED), read(*lat, *lng, 5));
+        }
+        assert_eq!(download.due(), None);
+        assert_eq!(download.end(), Some(Ok(())));
+        let mut plan = Plan::default();
+        plan.fence_downloaded(download.points());
+        assert_eq!(plan.fence().len(), 4);
+        let back = plan.fence_return().expect("the return");
+        assert!((back.latitude() - -35.3632).abs() < 1e-5);
+
+        let mut download = FenceDownload::new();
+        let _ = download.due();
+        download.answer(Some(RequestOutcome::TimedOut), None);
+        assert_eq!(download.end(), Some(Err(FENCE_POINT_FAILED)));
+    }
+
+    /// The facts' words: the progress reporter's text while an upload runs, "busy" while a
+    /// download does, and what each last said.
+    #[test]
+    fn the_facts_say_what_each_last_said() {
+        let mut plan = drawn(&triangle(), Some(inside()));
+        assert_eq!(plan.fence_upload_text(), "none");
+        assert_eq!(plan.fence_download_text(), "none");
+        plan.fence_upload = Some(FenceUpload::new(
+            fence_upload_checks(&plan, &copter()).expect("ok"),
+        ));
+        assert_eq!(plan.fence_upload_text(), SENDING_FENCE_POINTS);
+        plan.fence_upload = None;
+        plan.fence_upload_said("done");
+        assert_eq!(plan.fence_upload_text(), "done");
+        plan.fence_download = Some(FenceDownloading::Mission);
+        assert_eq!(plan.fence_download_text(), "busy");
+        plan.fence_download = None;
+        plan.fence_download_said(NOTHING_TO_DOWNLOAD);
+        assert_eq!(plan.fence_download_text(), NOTHING_TO_DOWNLOAD);
+    }
+
+    /// Both entries do something now, where they were drawn dimmed.
+    #[test]
+    fn the_geofence_upload_and_download_entries_are_wired() {
+        let geofence = MAP_MENU
+            .iter()
+            .find(|entry| entry.id == "menu-geoFence")
+            .expect("Geo-Fence");
+        let action = |id: &str| {
+            geofence
+                .children
+                .iter()
+                .find(|entry| entry.id == id)
+                .and_then(|entry| entry.action)
+        };
+        assert_eq!(action("menu-GeoFenceupload"), Some(MenuAction::GeoFenceUpload));
+        assert_eq!(action("menu-GeoFencedownload"), Some(MenuAction::GeoFenceDownload));
+    }
+
+    /// `MAV_PROTOCOL_CAPABILITY_MISSION_FENCE` is 16384, the dialect's and the C#'s
+    /// (`Mavlink.cs:7103`), and the SITL's 0xfbef has it; 16 is `PARAM_ENCODE_BYTEWISE`.
+    #[test]
+    fn the_mission_fence_bit_is_16384_and_the_sitl_has_it() {
+        assert_eq!(CAPABILITY_MISSION_FENCE, 16384);
+        assert!(has_mission_fence(0xfbef));
+        assert!(!has_mission_fence(0));
+        assert!(!has_mission_fence(16));
+    }
+
+    /// `contextMenuStrip1_Opening`: over a vehicle with `MISSION_FENCE` the menu has no Geo-Fence
+    /// and no Rally Points, two rows shorter, and the entries below them move up; over one
+    /// without, or with nothing connected, both show.
+    #[test]
+    fn a_mission_fence_vehicle_hides_geofence_and_rally_points() {
+        let mut menus = PlanMenus::default();
+        menus.open_for((100.0, 100.0), inside(), None, 0xfbef);
+        let menu = menus.open.expect("open");
+        assert!(menu.mission_fence);
+        let entry = |id: &str| MAP_MENU.iter().position(|e| e.id == id).expect(id);
+        for id in HIDDEN_ON_MISSION_FENCE {
+            assert!(!shown(&MAP_MENU[entry(id)], true), "{id} hidden");
+            assert!(shown(&MAP_MENU[entry(id)], false), "{id} shown");
+        }
+        assert_eq!(MAP_MENU.iter().filter(|e| !shown(e, true)).count(), 2);
+        assert!(
+            (map_menu_height(false) - map_menu_height(true) - 2.0 * MENU_ROW).abs() < f32::EPSILON
+        );
+        // An entry below both moves up two rows; one above neither does not move.
+        let below = entry("menu-rallyPoints").max(entry("menu-geoFence")) + 1;
+        let above = entry("menu-rallyPoints").min(entry("menu-geoFence")) - 1;
+        assert!(
+            (menu_offset(below, false) - menu_offset(below, true) - 2.0 * MENU_ROW).abs()
+                < f32::EPSILON
+        );
+        assert!((menu_offset(above, false) - menu_offset(above, true)).abs() < f32::EPSILON);
+        menus.open_for((100.0, 100.0), inside(), None, 0);
+        assert!(!menus.open.expect("open").mission_fence);
+        menus.open_at((100.0, 100.0), inside(), None);
+        assert!(!menus.open.expect("open").mission_fence);
+    }
+
+    /// A set whose request the link cannot carry - the link gone - stops the upload as its
+    /// timeout does, where a parameter the vehicle does not list is passed over.
+    #[test]
+    fn a_set_the_link_cannot_carry_stops_as_a_timeout() {
+        let plan = drawn(&triangle(), Some(inside()));
+        let mut upload = FenceUpload::new(fence_upload_checks(&plan, &copter()).expect("ok"));
+        assert!(matches!(upload.due(), Some(FenceDue::Param("FENCE_ACTION", _))));
+        upload.answer(Some(ACCEPTED));
+        assert!(matches!(upload.due(), Some(FenceDue::Param("FENCE_TOTAL", _))));
+        upload.answer(None);
+        assert_eq!(upload.end(), Some(&FenceUploadEnd::Stopped(FENCE_TOTAL_FAILED)));
+        assert_eq!(upload.results(), "FENCE_ACTION=0,FENCE_TOTAL=timeout");
+        assert_eq!(upload.due(), None);
+    }
+
+    /// Upload, Download and Clear wait for one another, and for the draw panel's fence read, as
+    /// the C#'s modal calls keep them apart; and a Min/Max Alt box another box replaces is its
+    /// Cancel.
+    #[test]
+    fn upload_download_and_clear_wait_for_one_another() {
+        let telemetry = crate::telemetry::Telemetry::idle();
+        let mut menus = PlanMenus::default();
+        let mut plan = drawn(&triangle(), Some(inside()));
+        begin_fence_clear(&mut plan);
+        assert!(plan.writes.is_some());
+        begin_fence_upload(&mut plan, &mut menus, &copter(), false);
+        assert!(!plan.fence_busy());
+        assert_eq!(plan.fence_upload_text(), "none");
+        assert!(!begin_fence_download(&mut plan, &telemetry, true, 0, &copter(), false));
+        assert!(plan.fence_download.is_none());
+
+        let mut plan = drawn(&triangle(), Some(inside()));
+        plan.fence_download = Some(FenceDownloading::Points(FenceDownload::new()));
+        begin_fence_clear(&mut plan);
+        assert!(plan.writes.is_none());
+
+        let mut plan = drawn(&triangle(), Some(inside()));
+        begin_fence_upload(&mut plan, &mut menus, &copter(), true);
+        assert!(!plan.fence_busy());
+        let with_total = params(&[("FENCE_ACTION", 1.0), ("FENCE_TOTAL", 5.0)]);
+        assert!(!begin_fence_download(&mut plan, &telemetry, true, 0, &with_total, true));
+        assert!(plan.fence_download.is_none());
+
+        // A plane's Min Alt box, then another flow's message over it.
+        let plane = params(&[
+            ("FENCE_ACTION", 1.0),
+            ("FENCE_TOTAL", 0.0),
+            ("FENCE_MINALT", 10.0),
+            ("FENCE_MAXALT", 100.0),
+        ]);
+        let mut plan = drawn(&triangle(), Some(inside()));
+        begin_fence_upload(&mut plan, &mut menus, &plane, false);
+        assert!(plan.fence_busy());
+        let mut status = None;
+        let _ = fence_frame(&mut plan, true, &telemetry, false, &mut status);
+        assert!(plan.fence_busy(), "the box still up");
+        menus.say("", "another flow's message");
+        let _ = fence_frame(&mut plan, false, &telemetry, false, &mut status);
+        assert!(!plan.fence_busy());
+    }
+
+    /// Download on a vehicle without `MISSION_FENCE`: "Not Supported" without both parameters,
+    /// "Nothing to download" for a `FENCE_TOTAL` of 1, and nothing sent for either; with
+    /// `MISSION_FENCE` and no link, "Please connect first".
+    #[test]
+    fn download_refuses_as_the_c_sharp_does() {
+        let telemetry = crate::telemetry::Telemetry::idle();
+        let mut plan = Plan::default();
+        let no_action = params(&[("FENCE_ENABLE", 0.0), ("FENCE_TOTAL", 5.0)]);
+        assert!(!begin_fence_download(&mut plan, &telemetry, true, 0, &no_action, false));
+        assert_eq!(plan.fence_download_text(), FENCE_NOT_SUPPORTED);
+        let one = params(&[("FENCE_ACTION", 1.0), ("FENCE_TOTAL", 1.0)]);
+        assert!(!begin_fence_download(&mut plan, &telemetry, true, 0, &one, false));
+        assert_eq!(plan.fence_download_text(), NOTHING_TO_DOWNLOAD);
+        assert!(plan.fence_download.is_none());
+        assert!(!begin_fence_download(&mut plan, &telemetry, false, 0x4000, &[], false));
+        assert_eq!(plan.fence_download_text(), PLEASE_CONNECT);
+        assert!(plan.fence_download.is_none());
+    }
+
+    /// A scripted vehicle that answers the parameters and the legacy fence protocol, and the
+    /// mission protocol's fence list when it holds one.
+    struct FenceVehicle {
+        vehicle: crate::telemetry::scripted::Vehicle,
+        points: Vec<mp_mavlink_dialects::all::FencePoint>,
+        list: Option<Vec<(i32, i32)>>,
+        /// Whether it keeps the points it is sent, so a fetch reads them back.
+        keeps: bool,
+    }
+
+    impl FenceVehicle {
+        fn serve(&mut self) {
+            use crate::telemetry::scripted::{INT32, param};
+            use mp_mavlink_dialects::all::{FencePoint, MavMessage, MissionCount, MissionItemInt};
+            let fence = mp_mission::fence::MISSION_TYPE_FENCE;
+            for message in self.vehicle.read() {
+                match message {
+                    MavMessage::ParamSet(set) => {
+                        let name = mp_params::decode_param_id(&set.param_id);
+                        self.vehicle.send(&param(&name, set.param_value, INT32));
+                    }
+                    MavMessage::FencePoint(point) if self.keeps => {
+                        self.points.retain(|kept| kept.idx != point.idx);
+                        self.points.push(point);
+                    }
+                    MavMessage::FenceFetchPoint(fetch) => {
+                        if let Some(point) = self.points.iter().find(|kept| kept.idx == fetch.idx) {
+                            let point = FencePoint {
+                                target_system: 255,
+                                target_component: 190,
+                                ..*point
+                            };
+                            self.vehicle.send(&MavMessage::FencePoint(point));
+                        }
+                    }
+                    MavMessage::MissionRequestList(request) if request.mission_type == fence => {
+                        if let Some(list) = &self.list {
+                            self.vehicle.send(&MavMessage::MissionCount(MissionCount {
+                                count: u16::try_from(list.len()).expect("few"),
+                                target_system: 255,
+                                target_component: 190,
+                                mission_type: fence,
+                            }));
+                        }
+                    }
+                    MavMessage::MissionRequestInt(request) if request.mission_type == fence => {
+                        let item = self
+                            .list
+                            .as_ref()
+                            .and_then(|list| list.get(usize::from(request.seq)).copied());
+                        if let Some((x, y)) = item {
+                            self.vehicle.send(&MavMessage::MissionItemInt(MissionItemInt {
+                                param1: 3.0,
+                                param2: 0.0,
+                                param3: 0.0,
+                                param4: 0.0,
+                                x,
+                                y,
+                                z: 0.0,
+                                seq: request.seq,
+                                command: 5001,
+                                target_system: 255,
+                                target_component: 190,
+                                frame: 3,
+                                current: 0,
+                                autocontinue: 1,
+                                mission_type: fence,
+                            }));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    /// The link to a [`FenceVehicle`] that lists `FENCE_ACTION` and `FENCE_TOTAL`.
+    fn fence_vehicle(
+        list: Option<Vec<(i32, i32)>>,
+        keeps: bool,
+    ) -> (crate::telemetry::Telemetry, FenceVehicle) {
+        use crate::telemetry::scripted::{INT32, Vehicle, param, until};
+        let (telemetry, mut vehicle) = Vehicle::connect(fast());
+        vehicle.send(&param("FENCE_ACTION", 1.0, INT32));
+        vehicle.send(&param("FENCE_TOTAL", 0.0, INT32));
+        until("the fence parameters listed", || {
+            telemetry.holds_parameter("FENCE_ACTION") && telemetry.holds_parameter("FENCE_TOTAL")
+        });
+        let vehicle = FenceVehicle {
+            vehicle,
+            points: Vec::new(),
+            list,
+            keeps,
+        };
+        (telemetry, vehicle)
+    }
+
+    /// Frames of [`fence_frame`], the vehicle answering between them, until neither flow runs:
+    /// the status line as each frame left it, and what the last frame changed.
+    fn frames(
+        plan: &mut Plan,
+        telemetry: &crate::telemetry::Telemetry,
+        vehicle: &mut FenceVehicle,
+    ) -> (Vec<Option<String>>, FenceChanged) {
+        let mut status = None;
+        let mut seen = Vec::new();
+        let mut changed = FenceChanged::default();
+        crate::telemetry::scripted::until("the fence flows to end", || {
+            vehicle.serve();
+            changed = fence_frame(plan, false, telemetry, true, &mut status);
+            seen.push(status.clone());
+            plan.fence_upload.is_none() && plan.fence_download.is_none()
+        });
+        (seen, changed)
+    }
+
+    /// Through the real link, the menu's way: Upload shows the progress window's words while
+    /// points go and nothing before or after; Download point by point then makes the geofence and
+    /// its return location, the map told, and says nothing on the status line.
+    #[test]
+    fn the_menus_upload_and_download_run_through_the_link_and_say_only_what_the_c_sharp_shows() {
+        let (telemetry, mut vehicle) = fence_vehicle(None, true);
+        let mut menus = PlanMenus::default();
+        let mut plan = drawn(&triangle(), Some(inside()));
+        begin_fence_upload(&mut plan, &mut menus, &copter(), false);
+        let (seen, changed) = frames(&mut plan, &telemetry, &mut vehicle);
+        assert!(changed.fence && changed.polygon);
+        assert_eq!(plan.fence_upload_text(), "done");
+        assert_eq!(seen.last(), Some(&None), "nothing left on the status line");
+        let shown: Vec<&str> = seen.iter().flatten().map(String::as_str).collect();
+        assert!(shown.contains(&SENDING_RETURN), "{shown:?}");
+        assert!(!shown.contains(&SENDING_FENCE_POINTS), "{shown:?}");
+        assert!(!shown.contains(&"done"), "{shown:?}");
+        assert_eq!(plan.fence().len(), 3);
+
+        // The vehicle now holds five points, as FENCE_TOTAL says.
+        let with_total = params(&[("FENCE_ACTION", 1.0), ("FENCE_TOTAL", 5.0)]);
+        let mut back = Plan::default();
+        assert!(begin_fence_download(&mut back, &telemetry, true, 0, &with_total, false));
+        assert!(back.fence().is_empty() && back.fence_return().is_none());
+        let (seen, changed) = frames(&mut back, &telemetry, &mut vehicle);
+        assert!(changed.fence, "the map shows the geofence and its return location");
+        assert_eq!(back.fence().len(), 4, "the closing point with them");
+        let returned = back.fence_return().expect("the return location");
+        assert!((returned.latitude() - inside().latitude()).abs() < 1e-5);
+        assert_eq!(back.fence_download_text(), "5");
+        assert!(seen.iter().all(Option::is_none), "{seen:?}");
+    }
+
+    /// A point that is never read back: the progress reporter's "There was an unexpected error
+    /// (...)" on the status line, `FENCE_ACTION` put back all the same.
+    #[test]
+    fn a_point_never_read_back_is_the_progress_reporters_error() {
+        let (telemetry, mut vehicle) = fence_vehicle(None, false);
+        let mut menus = PlanMenus::default();
+        let mut plan = drawn(&triangle(), Some(inside()));
+        begin_fence_upload(&mut plan, &mut menus, &copter(), false);
+        let (seen, changed) = frames(&mut plan, &telemetry, &mut vehicle);
+        assert!(changed.fence, "the C# redraws after the progress reporter");
+        let said = unexpected_error(FENCE_POINT_TIMEOUT);
+        assert_eq!(said, "There was an unexpected error (Timeout on read - getFencePoint)");
+        assert_eq!(plan.fence_upload_text(), said);
+        assert_eq!(seen.last(), Some(&Some(said)));
+        assert!(plan.fence_upload_results.ends_with(",FENCE_ACTION=1"));
+    }
+
+    /// Download on a vehicle with `MISSION_FENCE`: the fence list through the mission protocol,
+    /// thrown away as the C# throws it - the geofence as it was, nothing said - its items in the
+    /// link's fence points; "Failed to get fence point" when the list does not come or the link
+    /// goes.
+    #[test]
+    fn a_mission_fence_download_leaves_the_geofence_and_fails_when_the_link_goes() {
+        let corners = vec![
+            (-353_600_000, 1_491_600_000),
+            (-353_700_000, 1_491_600_000),
+            (-353_650_000, 1_491_700_000),
+        ];
+        let (telemetry, mut vehicle) = fence_vehicle(Some(corners), true);
+        let mut plan = Plan {
+            fence: triangle(),
+            fence_return: Some(inside()),
+            ..Plan::default()
+        };
+        assert!(!begin_fence_download(&mut plan, &telemetry, true, 0xfbef, &[], false));
+        assert!(matches!(plan.fence_download, Some(FenceDownloading::Mission)));
+        let (seen, changed) = frames(&mut plan, &telemetry, &mut vehicle);
+        assert_eq!(changed, FenceChanged::default());
+        assert_eq!(plan.fence(), &triangle()[..]);
+        assert_eq!(plan.fence_return(), Some(inside()));
+        assert_eq!(plan.fence_download_text(), "3");
+        assert!(seen.iter().all(Option::is_none), "{seen:?}");
+        assert_eq!(telemetry.fence_points().len(), 3);
+
+        // No answer: the link's list request gives up, and so does Download.
+        let (telemetry, mut vehicle) = fence_vehicle(None, true);
+        let mut plan = Plan::default();
+        assert!(!begin_fence_download(&mut plan, &telemetry, true, 0xfbef, &[], false));
+        let (seen, _) = frames(&mut plan, &telemetry, &mut vehicle);
+        assert_eq!(plan.fence_download_text(), FENCE_POINT_FAILED);
+        assert_eq!(seen.last(), Some(&Some(FENCE_POINT_FAILED.to_owned())));
+
+        // Disconnect mid-download: the window's telemetry idle and the link down.
+        let (telemetry, _vehicle) = fence_vehicle(None, true);
+        let mut plan = Plan::default();
+        assert!(!begin_fence_download(&mut plan, &telemetry, true, 0xfbef, &[], false));
+        let idle = crate::telemetry::Telemetry::idle();
+        let mut status = None;
+        let _ = fence_frame(&mut plan, false, &idle, false, &mut status);
+        assert!(plan.fence_download.is_none() && !plan.fence_busy());
+        assert_eq!(status.as_deref(), Some(FENCE_POINT_FAILED));
+    }
+
+    /// The waits the scripted vehicle is driven with: the C#'s counts, a twentieth of its waits.
+    fn fast() -> mp_link::ProtocolTimeouts {
+        mp_link::ProtocolTimeouts::default().faster(20)
+    }
+
+    /// Upload and then Download through the real link, to a scripted ArduPilot that answers the
+    /// legacy protocol: `PARAM_SET` `FENCE_ACTION` and `FENCE_TOTAL`, each `FENCE_POINT` and the
+    /// `FENCE_FETCH_POINT` that reads it back, `FENCE_ACTION` again - in that order on the wire -
+    /// and the points read back one by one make the geofence and its return location.
+    #[test]
+    fn upload_and_download_go_through_the_link_as_the_c_sharp_sends_them() {
+        use crate::telemetry::scripted::{INT32, Vehicle, param, until};
+        use mp_mavlink_dialects::all::{FencePoint, MavMessage};
+
+        let (telemetry, mut vehicle) = Vehicle::connect(fast());
+        vehicle.send(&param("FENCE_ACTION", 1.0, INT32));
+        vehicle.send(&param("FENCE_TOTAL", 0.0, INT32));
+        until("the fence parameters listed", || {
+            telemetry.holds_parameter("FENCE_ACTION") && telemetry.holds_parameter("FENCE_TOTAL")
+        });
+        let mut held: Vec<FencePoint> = Vec::new();
+        let mut serve = |vehicle: &mut Vehicle| {
+            for message in vehicle.read() {
+                match message {
+                    MavMessage::ParamSet(set) => {
+                        let name = mp_params::decode_param_id(&set.param_id);
+                        vehicle.send(&param(&name, set.param_value, INT32));
+                    }
+                    MavMessage::FencePoint(point) => {
+                        held.retain(|kept| kept.idx != point.idx);
+                        held.push(point);
+                    }
+                    MavMessage::FenceFetchPoint(fetch) => {
+                        if let Some(point) = held.iter().find(|kept| kept.idx == fetch.idx) {
+                            vehicle.send(&MavMessage::FencePoint(FencePoint {
+                                target_system: 255,
+                                target_component: 190,
+                                ..*point
+                            }));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        };
+
+        let plan = drawn(&triangle(), Some(inside()));
+        let mut upload = FenceUpload::new(fence_upload_checks(&plan, &copter()).expect("ok"));
+        until("the upload to end", || {
+            serve(&mut vehicle);
+            step_fence_upload(&telemetry, &mut upload);
+            upload.end().is_some()
+        });
+        assert_eq!(upload.end(), Some(&FenceUploadEnd::Done { error: None }));
+        assert_eq!(
+            upload.results(),
+            "FENCE_ACTION=0,FENCE_TOTAL=5,0=set,1=set,2=set,3=set,4=set,FENCE_ACTION=1"
+        );
+        let order: Vec<String> = vehicle
+            .heard
+            .iter()
+            .filter_map(|message| match message {
+                MavMessage::ParamSet(set) => Some(format!(
+                    "{}={}",
+                    mp_params::decode_param_id(&set.param_id),
+                    set.param_value
+                )),
+                MavMessage::FencePoint(point) => Some(format!("point{}/{}", point.idx, point.count)),
+                MavMessage::FenceFetchPoint(fetch) => Some(format!("fetch{}", fetch.idx)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            order,
+            [
+                "FENCE_ACTION=0",
+                "FENCE_TOTAL=5",
+                "point0/5",
+                "fetch0",
+                "point1/5",
+                "fetch1",
+                "point2/5",
+                "fetch2",
+                "point3/5",
+                "fetch3",
+                "point4/5",
+                "fetch4",
+                "FENCE_ACTION=1",
+            ]
+        );
+
+        let mut download = FenceDownload::new();
+        until("the download to end", || {
+            serve(&mut vehicle);
+            step_fence_download(&telemetry, &mut download);
+            download.end().is_some()
+        });
+        assert_eq!(download.end(), Some(Ok(())));
+        let mut back = Plan::default();
+        back.fence_downloaded(download.points());
+        assert_eq!(back.fence().len(), 4);
+        for (got, sent) in back.fence().iter().zip(triangle().iter().chain(&triangle()[..1])) {
+            assert!((got.latitude() - sent.latitude()).abs() < 1e-5, "{got:?}");
+            assert!((got.longitude() - sent.longitude()).abs() < 1e-5, "{got:?}");
+        }
+        let home = back.fence_return().expect("the return location");
+        assert!((home.latitude() - inside().latitude()).abs() < 1e-5);
+    }
+
+    /// A vehicle that never answers `FENCE_FETCH_POINT` - ArduCopter 4.8's SITL, built without the
+    /// legacy protocol: the first point's fetch goes four times, "Timeout on read -
+    /// getFencePoint", and `FENCE_ACTION` is put back all the same.
+    #[test]
+    fn a_vehicle_without_the_legacy_protocol_times_out_on_the_return_point() {
+        use crate::telemetry::scripted::{INT32, Vehicle, param, until};
+        use mp_mavlink_dialects::all::MavMessage;
+
+        let (telemetry, mut vehicle) = Vehicle::connect(fast());
+        vehicle.send(&param("FENCE_ACTION", 1.0, INT32));
+        vehicle.send(&param("FENCE_TOTAL", 0.0, INT32));
+        until("the fence parameters listed", || {
+            telemetry.holds_parameter("FENCE_ACTION") && telemetry.holds_parameter("FENCE_TOTAL")
+        });
+        let plan = drawn(&triangle(), Some(inside()));
+        let mut upload = FenceUpload::new(fence_upload_checks(&plan, &copter()).expect("ok"));
+        until("the upload to end", || {
+            for message in vehicle.read() {
+                if let MavMessage::ParamSet(set) = message {
+                    let name = mp_params::decode_param_id(&set.param_id);
+                    vehicle.send(&param(&name, set.param_value, INT32));
+                }
+            }
+            step_fence_upload(&telemetry, &mut upload);
+            upload.end().is_some()
+        });
+        assert_eq!(
+            upload.end(),
+            Some(&FenceUploadEnd::Done {
+                error: Some(FENCE_POINT_TIMEOUT)
+            })
+        );
+        assert_eq!(
+            upload.results(),
+            "FENCE_ACTION=0,FENCE_TOTAL=5,0=timeout,FENCE_ACTION=1"
+        );
+        let _ = vehicle.read();
+        assert_eq!(
+            vehicle.count(|message| matches!(message, MavMessage::FenceFetchPoint(_))),
+            4
+        );
+
+        // And Download: point 0 never comes.
+        let mut download = FenceDownload::new();
+        until("the download to end", || {
+            step_fence_download(&telemetry, &mut download);
+            download.end().is_some()
+        });
+        assert_eq!(download.end(), Some(Err(FENCE_POINT_FAILED)));
     }
 }

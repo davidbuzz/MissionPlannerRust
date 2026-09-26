@@ -6,7 +6,7 @@
 
 | crates/mp-script | Scripts handed MAV, MainV2, screens, Ports, Joystick: agent's patch in its worktree, 19 review findings to fix before merge (getWP a whole-mission download, setWPTotal without resends, a hang when the link drops) | med | 50 |
 | crates/mp-script | Fourteen shipped scripts that import clr run: 10 reach their end or loop with the patch; merged with the row above | med | 50 |
-| crates/mp-gui/src/plan.rs | GeoFence upload and download menu items: agent's patch plus the review's fixes (MISSION_FENCE bit 16384, Geo-Fence and Rally hidden over such a vehicle, return marker, link drop), a legacy-protocol mock vehicle and four scripts; merge after the release build | med | 85 |
+| crates/mp-gui/src/plan.rs | GeoFence upload and download menu items: merged with the review's fixes (MISSION_FENCE bit 16384, Geo-Fence and Rally hidden over such a vehicle, return marker, link drop); its scripts against tests/gui/legacy-vehicle.py and the SITL owed a run | med | 90 |
 | crates/mp-gui/src/config/firmware.rs | Install Firmware connected page: Bootloader Update flow; the bench bootloader rewrite on the owner's go (agent working, continuing a stopped agent's worktree) | med | 60 |
 | crates/mp-gui/src/config/firmware.rs | Install Firmware manifest page: Ctrl+Q, FirmwareSelection's pickers, the bootloader probe, Force Bootloader, Bootloader Update, the stale "flashing is not enabled" texts - reported on Windows by the owner (agent working, continuing a stopped agent's worktree) | med | 70 |
 | crates/mp-gui/src/joystick.rs | Joystick Setup: per-channel axis grid, button functions, Elevons, Save, Manual Control, Import and Export (agent working, continuing a stopped agent's worktree) | med | 40 |

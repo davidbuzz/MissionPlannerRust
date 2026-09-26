@@ -15,7 +15,8 @@
 use std::time::Instant;
 
 use mp_mavlink_dialects::all::{
-    MavMessage, MissionSetCurrent, ParamSet, RallyFetchPoint, RallyPoint,
+    FenceFetchPoint, FencePoint, MavMessage, MissionSetCurrent, ParamSet, RallyFetchPoint,
+    RallyPoint,
 };
 use mp_params::{ParamTable, ParamType, ParamValue};
 use mp_vehicle::VehicleId;
@@ -114,6 +115,103 @@ pub enum RequestKind {
     /// time - until a `HOME_POSITION` arrives, three more times 700 ms apart.
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3343-3387`
     GetHomePosition,
+    /// `setFencePoint`: `FENCE_POINT`, then `getFencePoint` - `FENCE_FETCH_POINT` until the
+    /// vehicle sends that point back - and the point again if what came back is five metres or
+    /// more from what was sent, three times in all. See [`FencePointSet`].
+    SetFencePoint(FencePointSet),
+    /// `getFencePoint`: `FENCE_FETCH_POINT` for point `idx` until the vehicle sends it, three
+    /// more times 700 ms apart; what came is [`Request::fence_point`].
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5908-5967`
+    GetFencePoint {
+        /// The point's place, from 0: the return point, then the polygon's corners.
+        idx: u8,
+    },
+}
+
+/// One geofence point as `setFencePoint` puts it in a `mavlink_fence_point_t`: the position as
+/// `(float)` degrees, the count as the C#'s `byte`.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6415-6439`
+///
+/// What the machine does (`setFencePoint` `:6415-6439`, `getFencePoint` `:5908-5967`):
+///
+/// * `FENCE_POINT` goes out (`:6430`), then `FENCE_FETCH_POINT` for its index (`:5923`), waiting
+///   700 ms for a `FENCE_POINT` from the vehicle, of that index, addressed to this ground station
+///   and to `MAV_COMP_ID_MISSIONPLANNER` (`:5948-5957`), sending the fetch three more times
+///   (`:5926-5942`). A `FENCE_POINT` that is not that one is read past, not answered
+///   (`continue`, `:5954-5957`).
+/// * Every fetch unanswered ends [`RequestOutcome::TimedOut`]: `getFencePoint`'s
+///   `TimeoutException`, which `setFencePoint` does not catch, so no further round is made.
+/// * A point that came back within five metres of the one sent (`GetDistance`, `:6433`) ends
+///   [`RequestOutcome::Accepted`]; one further off sends the point and the fetch again, three
+///   times in all (`retry = 3`, `:6426-6436`), and then ends [`RequestOutcome::Sent`] - sent, not
+///   confirmed: the C#'s `throw new Exception("Could not verify GeoFence Point")` (`:6438`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FencePointSet {
+    /// `idx`: the point's place, from 0.
+    pub idx: u8,
+    /// `count`: how many points there are, return and closing point included.
+    pub count: u8,
+    /// Latitude, degrees, as the caller has it; the wire carries it as a `float`.
+    pub lat: f64,
+    /// Longitude, degrees, likewise.
+    pub lng: f64,
+}
+
+/// A `FENCE_POINT` that answered a `getFencePoint`: its position, and `count`, the C#'s `total`.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5959-5965`
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FencePointRead {
+    /// `fp.lat`.
+    pub lat: f32,
+    /// `fp.lng`.
+    pub lng: f32,
+    /// `fp.count`: how many points the vehicle holds.
+    pub count: u8,
+}
+
+/// How many times `setFencePoint` sends a point before it gives up on reading it back the same:
+/// `int retry = 3; while (retry > 0)`.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6426-6436`
+pub const FENCE_POINT_SENDS: u8 = 3;
+
+/// How close, in metres, a point read back must be to the one sent: `GetDistance(plla) < 5`.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6433`
+pub const FENCE_POINT_TOLERANCE: f64 = 5.0;
+
+/// The `FENCE_POINT` that sets `set` on `target`: `(float) plla.Lat`, `(float) plla.Lng`.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6417-6424`
+#[allow(clippy::cast_possible_truncation)] // the C#'s `(float)`
+fn fence_point(target: VehicleId, set: &FencePointSet) -> MavMessage {
+    MavMessage::FencePoint(FencePoint {
+        lat: set.lat as f32,
+        lng: set.lng as f32,
+        target_system: target.sysid,
+        target_component: target.compid,
+        idx: set.idx,
+        count: set.count,
+    })
+}
+
+/// The `FENCE_FETCH_POINT` that reads point `idx` of `target` back.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5916-5923`
+const fn fence_fetch(target: VehicleId, idx: u8) -> MavMessage {
+    MavMessage::FenceFetchPoint(FenceFetchPoint {
+        target_system: target.sysid,
+        target_component: target.compid,
+        idx,
+    })
+}
+
+/// Whether a point read back is the one sent: `newfp.plla.GetDistance(plla) < 5`. A position
+/// that is not one - out of range, not a number - is not.
+fn fence_point_matches(read: &FencePoint, set: &FencePointSet) -> bool {
+    let (Ok(back), Ok(sent)) = (
+        mp_units::LatLon::new(f64::from(read.lat), f64::from(read.lng)),
+        mp_units::LatLon::new(set.lat, set.lng),
+    ) else {
+        return false;
+    };
+    back.distance_to(sent).0 < FENCE_POINT_TOLERANCE
 }
 
 /// One rally point as `setRallyPoint` puts it in a `mavlink_rally_point_t`: the position as
@@ -264,8 +362,11 @@ pub struct Request {
     retries_left: u8,
     deadline: Instant,
     sends: u16,
-    /// A rally point's sends left after this one: `setRallyPoint`'s outer loop.
+    /// A rally point's sends left after this one: `setRallyPoint`'s outer loop; a fence
+    /// point's likewise, `setFencePoint`'s.
     attempts_left: u8,
+    /// The `FENCE_POINT` that answered a fence point's fetch.
+    fence_read: Option<FencePointRead>,
 }
 
 impl Request {
@@ -285,7 +386,15 @@ impl Request {
             deadline: Instant::now(),
             sends: 0,
             attempts_left: 0,
+            fence_read: None,
         }
+    }
+
+    /// The `FENCE_POINT` that answered a [`RequestKind::GetFencePoint`] or a
+    /// [`RequestKind::SetFencePoint`]'s read-back: the last one read, whether or not it matched.
+    #[must_use]
+    pub const fn fence_point(&self) -> Option<FencePointRead> {
+        self.fence_read
     }
 
     /// Where it is.
@@ -446,6 +555,18 @@ impl Request {
                 self.arm(message, timeouts.home_position, now);
                 Outgoing::Once(message)
             }
+            RequestKind::SetFencePoint(set) => {
+                let fetch = fence_fetch(target, set.idx);
+                let point = fence_point(target, set);
+                self.arm(fetch, timeouts.fence_fetch, now);
+                self.attempts_left = FENCE_POINT_SENDS - 1;
+                Outgoing::Pair(point, fetch)
+            }
+            RequestKind::GetFencePoint { idx } => {
+                let fetch = fence_fetch(target, *idx);
+                self.arm(fetch, timeouts.fence_fetch, now);
+                Outgoing::Once(fetch)
+            }
         };
         self.count(send)
     }
@@ -471,7 +592,9 @@ impl Request {
             | RequestKind::SetRallyPoint(_)
             | RequestKind::CommandInt { .. }
             | RequestKind::SetWp { .. }
-            | RequestKind::GetHomePosition => false,
+            | RequestKind::GetHomePosition
+            | RequestKind::SetFencePoint(_)
+            | RequestKind::GetFencePoint { .. } => false,
         };
         if matches {
             self.finish(RequestOutcome::Accepted { value: Some(value) });
@@ -627,6 +750,56 @@ impl Request {
             rally_point(target, &set),
             rally_fetch(target, set.idx),
         ))
+    }
+
+    /// A `FENCE_POINT` arrived from `from`; `to_us` is whether it is addressed to this ground
+    /// station and to `MAV_COMP_ID_MISSIONPLANNER`, which `getFencePoint` requires ("check this
+    /// gcs sent it", `:5953-5957`). Returns what to send: the point and the fetch again for a set
+    /// whose point came back five metres or more away. See [`FencePointSet`].
+    pub fn on_fence_point(
+        &mut self,
+        from: VehicleId,
+        to_us: bool,
+        point: &FencePoint,
+        now: Instant,
+    ) -> Outgoing {
+        if self.state != RequestState::Waiting || from != self.target || !to_us {
+            return Outgoing::Nothing;
+        }
+        let target = self.target;
+        let read = FencePointRead {
+            lat: point.lat,
+            lng: point.lng,
+            count: point.count,
+        };
+        match self.kind {
+            RequestKind::GetFencePoint { idx } if point.idx == idx => {
+                self.fence_read = Some(read);
+                self.finish(RequestOutcome::Accepted { value: None });
+                Outgoing::Nothing
+            }
+            RequestKind::SetFencePoint(set) if point.idx == set.idx => {
+                self.fence_read = Some(read);
+                if fence_point_matches(point, &set) {
+                    self.finish(RequestOutcome::Accepted { value: None });
+                    return Outgoing::Nothing;
+                }
+                if self.attempts_left == 0 {
+                    // "Could not verify GeoFence Point".
+                    self.finish(RequestOutcome::Sent);
+                    return Outgoing::Nothing;
+                }
+                // `retry--` and round again: the point, and a fresh `getFencePoint`.
+                self.attempts_left -= 1;
+                self.retries_left = self.policy.retries;
+                self.deadline = now + self.policy.timeout;
+                self.count(Outgoing::Pair(
+                    fence_point(target, &set),
+                    fence_fetch(target, set.idx),
+                ))
+            }
+            _ => Outgoing::Nothing,
+        }
     }
 
     /// Called every pass of the link loop: sends again, or gives up.
@@ -927,6 +1100,164 @@ mod tests {
         );
         assert_eq!(request.outcome(), Some(RequestOutcome::Sent));
         assert_eq!(request.sends(), 6);
+    }
+
+    fn fence_set() -> FencePointSet {
+        FencePointSet {
+            idx: 1,
+            count: 5,
+            lat: -35.363_262_1,
+            lng: 149.165_237_4,
+        }
+    }
+
+    /// A `FENCE_POINT` from the vehicle: point `idx` at `lat`, `lng`, addressed to the ground
+    /// station.
+    fn fence_echo(idx: u8, lat: f32, lng: f32) -> FencePoint {
+        FencePoint {
+            lat,
+            lng,
+            target_system: 255,
+            target_component: 190,
+            idx,
+            count: 5,
+        }
+    }
+
+    /// `setFencePoint`: the point as `(float)` degrees, then `getFencePoint`'s fetch of its index;
+    /// an answer for another ground station or another index is read past without a send, and the
+    /// point read back within five metres sets it.
+    #[test]
+    #[allow(clippy::cast_possible_truncation)]
+    fn a_fence_point_is_sent_then_fetched_and_set_when_it_reads_back_within_five_metres() {
+        let t = ProtocolTimeouts::default();
+        let t0 = Instant::now();
+        let set = fence_set();
+        let mut request = Request::new(target(), RequestKind::SetFencePoint(set));
+        let Outgoing::Pair(MavMessage::FencePoint(point), MavMessage::FenceFetchPoint(fetch)) =
+            request.begin(&t, None, true, t0)
+        else {
+            panic!("the point and its fetch");
+        };
+        assert_eq!(
+            (point.idx, point.count, point.lat, point.lng),
+            (1, 5, set.lat as f32, set.lng as f32)
+        );
+        assert_eq!((point.target_system, point.target_component), (1, 1));
+        assert_eq!((fetch.idx, fetch.target_system), (1, 1));
+        let answer = fence_echo(1, set.lat as f32, set.lng as f32);
+        assert_eq!(
+            request.on_fence_point(target(), false, &answer, t0),
+            Outgoing::Nothing
+        );
+        assert_eq!(
+            request.on_fence_point(target(), true, &fence_echo(0, 0.0, 0.0), t0),
+            Outgoing::Nothing
+        );
+        assert_eq!(
+            request.on_fence_point(VehicleId::new(2, 1), true, &answer, t0),
+            Outgoing::Nothing
+        );
+        assert_eq!(request.outcome(), None);
+        // Three metres north is within five.
+        let near = fence_echo(1, (set.lat + 0.000_027) as f32, set.lng as f32);
+        assert_eq!(
+            request.on_fence_point(target(), true, &near, t0),
+            Outgoing::Nothing
+        );
+        assert_eq!(
+            request.outcome(),
+            Some(RequestOutcome::Accepted { value: None })
+        );
+        assert_eq!(request.fence_point().map(|read| read.count), Some(5));
+        assert_eq!(request.sends(), 2);
+    }
+
+    /// A point read back five metres or more away is sent again with a fresh fetch, three sends
+    /// in all, and then left as sent: "Could not verify GeoFence Point".
+    #[test]
+    #[allow(clippy::cast_possible_truncation)]
+    fn a_fence_point_that_reads_back_elsewhere_is_sent_three_times() {
+        let t = ProtocolTimeouts::default();
+        let t0 = Instant::now();
+        let set = fence_set();
+        let mut request = Request::new(target(), RequestKind::SetFencePoint(set));
+        let _ = request.begin(&t, None, true, t0);
+        // Ten metres north.
+        let far = fence_echo(1, (set.lat + 0.000_09) as f32, set.lng as f32);
+        for _ in 0..2 {
+            assert!(matches!(
+                request.on_fence_point(target(), true, &far, t0),
+                Outgoing::Pair(MavMessage::FencePoint(_), MavMessage::FenceFetchPoint(_))
+            ));
+        }
+        assert_eq!(
+            request.on_fence_point(target(), true, &far, t0),
+            Outgoing::Nothing
+        );
+        assert_eq!(request.outcome(), Some(RequestOutcome::Sent));
+        assert_eq!(request.sends(), 6);
+    }
+
+    /// Unanswered, the fetch goes four times, 700 ms apart, and the point has timed out:
+    /// `getFencePoint`'s "Timeout on read - getFencePoint", which ends `setFencePoint` too.
+    #[test]
+    fn a_fence_point_never_read_back_times_out_after_four_fetches() {
+        let t = ProtocolTimeouts::default();
+        assert_eq!(t.fence_fetch.timeout, Duration::from_millis(700));
+        let t0 = Instant::now();
+        for kind in [
+            RequestKind::SetFencePoint(fence_set()),
+            RequestKind::GetFencePoint { idx: 1 },
+        ] {
+            let first_sends: u16 = if matches!(kind, RequestKind::SetFencePoint(_)) {
+                2
+            } else {
+                1
+            };
+            let mut request = Request::new(target(), kind);
+            let _ = request.begin(&t, None, true, t0);
+            for step in 1..=3u32 {
+                assert!(matches!(
+                    request.on_tick(t0 + t.fence_fetch.timeout * step),
+                    Outgoing::Once(MavMessage::FenceFetchPoint(FenceFetchPoint { idx: 1, .. }))
+                ));
+            }
+            assert_eq!(
+                request.on_tick(t0 + t.fence_fetch.timeout * 4),
+                Outgoing::Nothing
+            );
+            assert_eq!(request.outcome(), Some(RequestOutcome::TimedOut));
+            assert_eq!(request.sends(), first_sends + 3);
+        }
+    }
+
+    /// `getFencePoint` alone: the fetch, and the point of that index addressed to us ends it with
+    /// the position and the count the vehicle holds.
+    #[test]
+    fn a_fence_point_fetch_takes_the_point_of_its_index() {
+        let t = ProtocolTimeouts::default();
+        let t0 = Instant::now();
+        let mut request = Request::new(target(), RequestKind::GetFencePoint { idx: 2 });
+        assert!(matches!(
+            request.begin(&t, None, true, t0),
+            Outgoing::Once(MavMessage::FenceFetchPoint(FenceFetchPoint { idx: 2, .. }))
+        ));
+        let _ = request.on_fence_point(target(), true, &fence_echo(1, -35.0, 149.0), t0);
+        assert_eq!(request.outcome(), None);
+        let _ = request.on_fence_point(target(), true, &fence_echo(2, -35.5, 149.25), t0);
+        assert_eq!(
+            request.outcome(),
+            Some(RequestOutcome::Accepted { value: None })
+        );
+        assert_eq!(
+            request.fence_point(),
+            Some(FencePointRead {
+                lat: -35.5,
+                lng: 149.25,
+                count: 5
+            })
+        );
     }
 
     #[test]

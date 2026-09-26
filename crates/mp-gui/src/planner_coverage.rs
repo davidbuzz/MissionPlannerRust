@@ -513,14 +513,14 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "Click",
         "GeoFenceuploadToolStripMenuItem_Click",
         "Upload",
-        Missing,
+        Done("menu-GeoFenceupload"),
     ),
     row(
         "GeoFencedownloadToolStripMenuItem",
         "Click",
         "GeoFencedownloadToolStripMenuItem_Click",
         "Download",
-        Missing,
+        Done("menu-GeoFencedownload"),
     ),
     row(
         "setReturnLocationToolStripMenuItem",
@@ -1348,7 +1348,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (103, 0, 6, 12, 0)
+            (105, 0, 4, 12, 0)
         );
     }
 }

@@ -784,6 +784,49 @@ impl Telemetry {
         Some(link.set_rally_point(id, point))
     }
 
+    /// `mav_mission.download(..., MAV_MISSION_TYPE.FENCE)` from the vehicle being flown, which
+    /// [`Telemetry::fence_list`] then reads. False with no vehicle to ask.
+    /// `// C#: ExtLibs/ArduPilot/mav_mission.cs:14-63`
+    pub fn download_fence(&self) -> bool {
+        self.target()
+            .is_some_and(|(link, id)| link.download_list(id, mp_mission::fence::MISSION_TYPE_FENCE))
+    }
+
+    /// The last geofence transfer, once it has ended and nothing newer is waiting to start: its
+    /// items, or why it failed. `None` while one runs or is still queued, and with no link.
+    /// `// C#: ExtLibs/ArduPilot/mav_mission.cs:14-63`
+    #[must_use]
+    pub fn fence_list(&self) -> Option<Result<Vec<MissionItem>, String>> {
+        let (link, id) = self.target()?;
+        let fence = mp_mission::fence::MISSION_TYPE_FENCE;
+        if link.list_transfer_queued(id, fence) {
+            return None;
+        }
+        let transfer = link.list_transfer(id, fence)?;
+        match transfer.state() {
+            TransferState::Complete => Some(Ok(transfer.items().to_vec())),
+            TransferState::Failed(why) => Some(Err(why.to_string())),
+            _ => None,
+        }
+    }
+
+    /// `setFencePoint` on the vehicle being flown: `FENCE_POINT`, read back with
+    /// `FENCE_FETCH_POINT`, the link's retries between. `None` with no vehicle; the outcome is read
+    /// with [`Telemetry::request`].
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6415-6439`
+    pub fn set_fence_point(&self, point: mp_link::requests::FencePointSet) -> Option<RequestId> {
+        let (link, id) = self.target()?;
+        Some(link.set_fence_point(id, point))
+    }
+
+    /// `getFencePoint` on the vehicle being flown: `FENCE_FETCH_POINT` for point `idx`. `None`
+    /// with no vehicle; the point is the request's [`mp_link::requests::Request::fence_point`].
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5908-5967`
+    pub fn get_fence_point(&self, idx: u8) -> Option<RequestId> {
+        let (link, id) = self.target()?;
+        Some(link.get_fence_point(id, idx))
+    }
+
     /// The items of a finished transfer of one list, or nothing if it has not finished.
     ///
     /// Only when complete: a partial list read mid-transfer would be adopted as if it were the

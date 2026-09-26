@@ -52,6 +52,9 @@
 //!     sent up to 3 times (:6458), each read back with 3 retries, 700 ms (:6363, :6367);
 //!     `requests::RallyPointSet` says where it departs from the C#. Tests:
 //!     `requests::tests::a_rally_point_*`.
+//!   - `SetFencePoint` and `GetFencePoint`, `setFencePoint` and `getFencePoint`: the point sent
+//!     up to 3 times (:6426), each read back with 3 retries, 700 ms (:5926, :5930);
+//!     `requests::FencePointSet` says how. Tests: `requests::tests::a_fence_point_*`.
 //! * [`mission_transfer::MissionTransfer`] - mission, fence and rally alike.
 //!   - Download, `AwaitingCount` → `Downloading` → `Complete` or `Failed`: `getWPCountAsync` 6,
 //!     700 ms (:3297, :3301); `getWPAsync` 5, 2500 ms (:3459, :3463). Tests: `a_download_*`.
@@ -639,6 +642,20 @@ impl Link {
     /// `RALLY_FETCH_POINT`: `setRallyPoint`. See [`requests::RallyPointSet`].
     pub fn set_rally_point(&self, target: VehicleId, point: requests::RallyPointSet) -> RequestId {
         self.queue_request(target, RequestKind::SetRallyPoint(point))
+    }
+
+    /// Sets one geofence point with the legacy `FENCE_POINT` message and reads it back with
+    /// `FENCE_FETCH_POINT`: `setFencePoint`. See [`requests::FencePointSet`].
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6415-6439`
+    pub fn set_fence_point(&self, target: VehicleId, point: requests::FencePointSet) -> RequestId {
+        self.queue_request(target, RequestKind::SetFencePoint(point))
+    }
+
+    /// Reads one geofence point with `FENCE_FETCH_POINT`: `getFencePoint`. What came back is
+    /// [`Request::fence_point`] once the request is accepted.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5908-5967`
+    pub fn get_fence_point(&self, target: VehicleId, idx: u8) -> RequestId {
+        self.queue_request(target, RequestKind::GetFencePoint { idx })
     }
 
     /// Where a request is, or `None` if the link has forgotten it or never had it.
@@ -1505,6 +1522,21 @@ fn run_link(
                                         let now = Instant::now();
                                         for request in held.values_mut() {
                                             match request.on_rally_point(id, to_us, point, now) {
+                                                requests::Outgoing::Nothing => {}
+                                                send => request_sends.push(send),
+                                            }
+                                        }
+                                    }
+                                }
+                                // A fence point read back answers the set or the fetch that
+                                // asked for it (getFencePoint), if it is addressed to us.
+                                MavMessage::FencePoint(point) => {
+                                    let to_us = point.target_system == config.sysid
+                                        && point.target_component == config.compid;
+                                    if let Ok(mut held) = shared.requests.lock() {
+                                        let now = Instant::now();
+                                        for request in held.values_mut() {
+                                            match request.on_fence_point(id, to_us, point, now) {
                                                 requests::Outgoing::Nothing => {}
                                                 send => request_sends.push(send),
                                             }
