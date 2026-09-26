@@ -116,7 +116,10 @@ expect fly.georef.TXT_outputlog ~ CAM Msgs and Files discrepancy. Check it! file
 expect fly.georef.TXT_outputlog ~ Photo IMG_0024 processed from CAM Msg with 0 ms shutter lag. AMSL Alt 0.076 ms away offset: 36000.6
 expect fly.georef.TXT_outputlog ~ Start Processing
 expect fly.georef.lines 38
-expect fly.georef.files loglocation.csv:0,location.csv:1718,location.kml:45204,location.txt:1824,location.geo:1321,location.tel:1606,location.jxl:35591,location.gpx:3679
+# Every text file but the GPX ends its lines with the platform's newline, as the C#'s StreamWriter
+# (mp-georef's NEWLINE): a byte more a line on Windows.
+linux: expect fly.georef.files loglocation.csv:0,location.csv:1718,location.kml:45204,location.txt:1824,location.geo:1321,location.tel:1606,location.jxl:35591,location.gpx:3679
+windows: expect fly.georef.files loglocation.csv:0,location.csv:1742,location.kml:46700,location.txt:1849,location.geo:1346,location.tel:1634,location.jxl:35642,location.gpx:3679
 expect fly.georef.kml 45204
 expect fly.georef.pictures 24
 expect fly.georef.cams 24

@@ -64,6 +64,14 @@ $ErrorActionPreference = 'Stop'
 # installed since - Python for the setups' python3, 2026-09-26 - is on it for the setups at once.
 $env:Path = @([Environment]::GetEnvironmentVariable('Path', 'Machine'),
     [Environment]::GetEnvironmentVariable('Path', 'User')) -join ';'
+# What lives under the real profile stays found when a script gives the application a profile of
+# its own (`env XDG_DATA_HOME`, below): cargo and rustup, which plugins.gui's setup builds its wasm
+# plugins with ("can't find crate for `core`" under the script's empty .rustup), and GStreamer's
+# plugin registry, one for every script - under the script's LOCALAPPDATA it was built afresh each
+# run, which on Windows outlasts fly-gstreamer's wait for frames (2026-09-26).
+if (-not $env:CARGO_HOME) { $env:CARGO_HOME = Join-Path $env:USERPROFILE '.cargo' }
+if (-not $env:RUSTUP_HOME) { $env:RUSTUP_HOME = Join-Path $env:USERPROFILE '.rustup' }
+if (-not $env:GST_REGISTRY_1_0) { $env:GST_REGISTRY_1_0 = 'C:\setup\gstreamer-registry.x86_64.bin' }
 $Bash = 'C:\Program Files\Git\bin\bash.exe'
 
 Add-Type @'

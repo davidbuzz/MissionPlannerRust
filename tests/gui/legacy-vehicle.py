@@ -93,6 +93,15 @@ class Vehicle:
             for index, entry in enumerate(self.params):
                 if entry[0] == msg.param_id:
                     entry[1] = float(msg.param_value)
+                    if entry[0] == "RALLY_TOTAL":
+                        # ArduPilot's AP_Rally is one store for both protocols and RALLY_TOTAL its
+                        # length: Clear Rally Points' RALLY_TOTAL=0 empties the mission-protocol
+                        # list a Download reads as well as the legacy points.
+                        total = max(int(entry[1]), 0)
+                        self.lists[mavlink.MAV_MISSION_TYPE_RALLY] = self.lists.get(
+                            mavlink.MAV_MISSION_TYPE_RALLY, []
+                        )[:total]
+                        self.rally = {i: p for i, p in self.rally.items() if i < total}
                     self.param_value(mav, index)
                     break
         elif kind == "COMMAND_LONG":
