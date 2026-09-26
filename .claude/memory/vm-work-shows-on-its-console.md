@@ -18,6 +18,13 @@ Installed by `install-console.ps1` over SSH; after editing `console-runner.ps1`,
 `C:\setup` (with a UTF-8 BOM - PS 5.1 reads BOM-less scripts as ANSI) and restart the window
 (`Stop-Process` its `runner.pid`, `Start-ScheduledTask ClaudeConsole`).
 
+Each job runs in a PowerShell of its own (`powershell -File`) inside that window, so nothing a
+job sets (an environment variable, an `Add-Type`) leaks into the next. The VM's screen is
+1600x1200 since 2026-09-26 12:15 (`VBoxManage controlvm tiny10 setvideomodehint 1600 1200 32`,
+Buzz's yes): at 1077x774 the planner's pages ran below the window and clicks hit the taskbar.
+`tools/win10/sitl-launch.ps1` is the Windows GUI job pattern - planner started with MP_FACTS and
+MP_PROBE, `-NoNewWindow`, window at (0,0) and made topmost before each user32 click.
+
 **Why:** SSH sessions run in session 0 where nothing is visible; he wants to see what I am doing
 to his VM as it happens.
 

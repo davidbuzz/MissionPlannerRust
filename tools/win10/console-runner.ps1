@@ -6,9 +6,9 @@
 # tools/win10/vm-run.sh, which waits on console-wait.ps1 for the output and the exit code. A job's
 # output is kept in queue\done\<name>.out and its exit code in <name>.exit.
 #
-# A job is run in this window's session, so anything it starts - the planner's window - opens on
-# this desktop too. Objects a job writes are shown one at a time; a job that wants a table
-# writes `| Out-String` itself.
+# A job is run by a PowerShell of its own, in this window's console and session, so anything it
+# starts - the planner's window - opens on this desktop too, and nothing it sets or defines (an
+# environment variable, an Add-Type) outlives it. Its output is shown line by line.
 $ErrorActionPreference = 'Continue'
 $queue = 'C:\setup\queue'
 $done = Join-Path $queue 'done'
@@ -61,7 +61,7 @@ while ($true) {
     $global:LASTEXITCODE = 0
     $code = 0
     try {
-        & $job.FullName *>&1 | ForEach-Object {
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $job.FullName 2>&1 | ForEach-Object {
             $line = Format-Line $_
             if ($_ -is [Management.Automation.ErrorRecord]) { Write-Host $line -ForegroundColor Yellow } else { Write-Host $line }
             $writer.WriteLine($line)
