@@ -128,14 +128,26 @@ foreach ($name in $Names) {
                 $first = ($body | Select-String -Pattern '^FAIL|could not|setup exited|app exited|no window' | Select-Object -First 2 | ForEach-Object { $_.Line.Trim() }) -join ' | '
                 $line = "${name}: FAIL $first"; $counts.FAIL++
                 # A run whose one failure is the hard stop found nothing wrong but ran out of time,
-                # and so never records one: as tools/gui-budgets.py retime has it, its budget gets
-                # the margin and two more, for the next run to record over (plan-survey's 180
-                # lines, 2026-09-26).
+                # and so never records one. As tools/gui-budgets.py retime has it, the budget gets
+                # the margin and two more - or, where the script was well short of its end, the
+                # time it would have taken at the pace it went, from the last line it reached: a
+                # Windows run is two or three times the Linux one, and five seconds a run took
+                # setup-list, 83 s at line 141 of 194, many runs to reach (2026-09-26).
                 $fails = @($body | Where-Object { $_ -match '^FAIL' })
                 $used = $body | Select-String -Pattern 'budget ([0-9.]+) s from here' | Select-Object -First 1
                 if ($fails.Count -gt 0 -and $used -and @($fails | Where-Object { $_ -notmatch '^FAIL: hard stop' }).Count -eq 0) {
                     $seconds = [double]::Parse($used.Matches[0].Groups[1].Value, [Globalization.CultureInfo]::InvariantCulture)
-                    $measured[$name] = [int][Math]::Ceiling($seconds) + 5
+                    $budget = [int][Math]::Ceiling($seconds) + 5
+                    $reached = $body | Select-String -Pattern '^t=\+([0-9.]+)s line ([0-9]+):' | Select-Object -Last 1
+                    $total = @(Get-Content $script).Count
+                    if ($reached) {
+                        $at = [double]::Parse($reached.Matches[0].Groups[1].Value, [Globalization.CultureInfo]::InvariantCulture)
+                        $reachedLine = [int]$reached.Matches[0].Groups[2].Value
+                        if ($reachedLine -gt 0 -and $reachedLine -lt $total) {
+                            $budget = [Math]::Max($budget, [int][Math]::Ceiling($at * $total / $reachedLine) + 1)
+                        }
+                    }
+                    $measured[$name] = $budget
                 }
             }
         }

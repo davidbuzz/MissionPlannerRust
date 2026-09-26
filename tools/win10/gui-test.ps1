@@ -60,6 +60,10 @@ param(
     [string]$SitlParams = ''
 )
 $ErrorActionPreference = 'Stop'
+# PATH as the registry has it now, not as the console window inherited it at logon: a program
+# installed since - Python for the setups' python3, 2026-09-26 - is on it for the setups at once.
+$env:Path = @([Environment]::GetEnvironmentVariable('Path', 'Machine'),
+    [Environment]::GetEnvironmentVariable('Path', 'User')) -join ';'
 $Bash = 'C:\Program Files\Git\bin\bash.exe'
 
 Add-Type @'
