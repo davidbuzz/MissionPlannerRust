@@ -136,15 +136,44 @@ the planner. The first run, 2026-09-26: the window came up on the VirtualBox WDD
 (gpui's Direct3D 11 path), the link opened, 1,400 frames were heard, `vehicle.count` 1,
 `params.held` 1408, the flight screen with the HUD reading "Ready to Arm" and the SITL's
 banner in the Messages panel; 2,921 fact lines. That is the first Windows run of the
-application. The GUI test runner (`tools/gui-test.sh`) is Linux only (xdotool, X11), so the
-facts file and the screenshot are what a Windows run is judged by until a Windows driver of
-the same scripts exists.
+application.
+
+## The GUI suite in the VM
+
+`tools/win10/gui-test.ps1` runs one `tests/gui/*.gui` script on user32 as `tools/gui-test.sh`
+runs it on X11, and `tools/win10/gui-suite.ps1 -All` (or `-Names a,b`) runs the lot, one line a
+script, the results to `C:\setup\suite\results.txt` and the share's `win-suite-results.txt`.
+Jobs go through `tools/win10/vm-run.sh` so they show on the VM's console window. A script that
+needs SITL gets the VM's own - the Cygwin ArduCopter the planner's SIMULATION page fetched into
+`Documents\MissionPlannerRust\sitl` - one for the whole suite behind
+`tools/win10/sitl-relay.ps1`, as the Cygwin build exits when its client leaves. Each script's
+Windows budget is in `tools/win10/budgets.txt`, which the suite rewrites after every run.
+
+**Windows Defender Firewall asks about every ArduCopter.exe (Buzz, 2026-09-26).** The first
+time an `ArduCopter.exe` opens its TCP ports, Windows shows "Windows Defender Firewall has
+blocked some features of this app" for it, and somebody at the VM has to click **Allow
+access**. The firewall remembers the answer per program *path*, so it asks again for any copy
+in a new place:
+
+- the suite's SITL, `C:\Users\user\Documents\MissionPlannerRust\sitl\ArduCopter.exe` - once;
+- the SITL that `sitl.gui` and `sitl-launch.gui` have the planner fetch and start in the run's
+  own scratch directory (`%TEMP%\planner-work-*\...\sitl\ArduCopter.exe`) - a new path, and so
+  a new prompt, on every run of those two scripts;
+- `planner.exe` itself asked once, on its first run (answered Allow on 2026-09-26); rebuilding
+  it in place keeps the path, so it has not asked since.
+
+Until it is answered the prompt sits over the desktop, where the runner's clicks can land on it
+instead of the planner. Watch the VM's screen during the first SITL script of a run, and during
+`sitl` and `sitl-launch`. Turning the notification off
+(`Set-NetFirewallProfile -Profile Domain,Private,Public -NotifyOnListen False`, elevated) would
+stop the prompts; that changes the VM's firewall behaviour and is Buzz's call, not done.
 
 ## Where the VM tooling lives
 
 Everything written for the VM on the Linux side is in `tools/win10/` in this repository, not
-in the share or the VM alone: the toolchain installer above, and the build and run scripts
-that follow it. The share and `C:\setup\` hold copies.
+in the share or the VM alone: the toolchain installer above, the build and run scripts that
+follow it, the console (`console-runner.ps1`, `vm-run.sh`) and the GUI suite's runner, relay
+and budgets. The share and `C:\setup\` hold copies.
 
 ## What is recorded elsewhere
 

@@ -63,3 +63,11 @@ beside it slowed the VM and 31 scripts hit their hard stop. The VM's screen is 1
 leaves ~1100 px for a 1200-high window - `plan-add-below` and `fly-actionsgrid` fail on that
 alone; a taller display was asked of Buzz.
 
+**Windows Defender Firewall prompt (Buzz, 2026-09-26):** every `ArduCopter.exe` at a new path
+shows "blocked some features of this app" the first time it opens its ports, and Buzz has to
+click **Allow access** at the VM - once for the suite's SITL in `Documents\MissionPlannerRust\sitl`,
+and on every run of `sitl.gui`/`sitl-launch.gui`, whose SITL is fetched into the run's scratch
+directory. Tell him before a run that will prompt; the prompt can take the runner's clicks.
+`Set-NetFirewallProfile -NotifyOnListen False` would stop it - his call, not done. Written up in
+win10_vm_setup.md.
+
