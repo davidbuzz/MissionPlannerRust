@@ -1,9 +1,14 @@
 ---
 name: delegate-to-opus-subagents
-description: Buzz allows at most TWO Opus subagents at a time (2026-09-26, after the stop of 2026-09-25 17:35; the order was three, six, none, three, six, none, two); they never open windows, never commit, and get disjoint files
+description: NONE now - Buzz, 2026-09-27: "pls stop using subagents"; the two running then were finished and their work used, no more started (the order was three, six, none, three, six, none, two, none)
 metadata:
   type: feedback
 ---
+
+**STOP (current): "pls stop using subagents. when the current agents are done working, use their
+work but dont make more."** - Buzz, 2026-09-27. No Agent tool for coding, reviews or searches;
+the two agents running then (Legacy Force Bootloader, MAVLink Inspector) were let finish and their
+work reviewed and merged. Work items go through this session alone. Ask before starting one again.
 
 **"pls delegate coding tasks to at most 3 Opus 5 subagents"** — Buzz, 2026-09-23 14:08 UTC (the transcript's time; the question "are you capable of delegating coding tasks to Opus 5.1 as a sub agent?" came a minute before). Standing
 authorisation, with a cap of three concurrent - **raised to six** on 2026-09-23 16:05 UTC (02:05 on the 24th, local; commit b8f5d57): "pls delegate coding tasks to at most 6 Opus 5 subagents". **The stop below came after the raise**, not before it: the order is three → six → none.

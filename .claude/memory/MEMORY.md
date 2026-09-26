@@ -24,7 +24,7 @@ controlled; the per-project memory directory holds symlinks to them.
 - [Never stop after a commit](never-stop-after-a-commit.md) — chain to the next task; a commit is not an exit condition
 - [Verify before committing](verify-before-committing.md) — clippy is its own command, read it, then commit
 - [Autotests mandatory](autotests-mandatory.md) — every change ships with a test that fails if it stops working; test the path the product takes
-- [Delegate to Opus subagents](delegate-to-opus-subagents.md) — up to TWO at once since 2026-09-26 00:20 (Buzz); worktree each, disjoint files, never a window, never a commit
+- [No subagents](delegate-to-opus-subagents.md) — NONE since 2026-09-27 (Buzz: "pls stop using subagents"); the two then running finished and merged, no more
 - [Worktree agents share the target dir](worktree-agents-share-the-target-dir.md) — touch a crate's lib.rs before an integration build while agents run
 - [Drop-downs escape the page](dropdowns-escape-the-page.md) — deferred+anchored, thirty rows, wheel-scrolled; the page clips anything else
 - [Kill by PID, not pattern](kill-by-pid-not-pattern.md) — pkill -f matches the calling shell; pgrep -fa, then kill the PIDs
