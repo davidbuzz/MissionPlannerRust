@@ -46,13 +46,15 @@ use mp_link::requests::{
 use mp_link::{Link, LinkConfig, ProtocolTimeouts, RequestId, commands};
 use mp_mavlink::{FrameDecoder, encode_v2};
 use mp_mavlink_dialects::all::{
-    CommandAck, DIALECT, Heartbeat, HomePosition, MavMessage, MissionAck, MissionCurrent,
-    MissionRequest, ParamValue,
+    AutopilotVersion, CommandAck, DIALECT, FencePoint, Heartbeat, HomePosition, MavMessage,
+    MissionAck, MissionCurrent, MissionItem as MissionItemFloat, MissionItemInt, MissionRequest,
+    ParamValue,
 };
+use mp_params::ParamValue as ParamValueHeld;
 use mp_mission::{MISSION_TYPE_MISSION, MissionItem};
 use mp_transport::Transport;
 use mp_transport::testing::{Loopback, LoopbackEnd};
-use mp_vehicle::VehicleId;
+use mp_vehicle::{FenceItem, VehicleId};
 
 /// The vehicle every test talks to.
 const VEHICLE: VehicleId = VehicleId::new(1, 1);
@@ -2436,4 +2438,432 @@ fn get_home_position_asks_four_times_then_times_out_and_a_home_position_ends_it(
         Some(RequestOutcome::Accepted { value: None })
     );
     assert_eq!(peer.count(is_ask) - before, 2);
+}
+
+// ================================================================================================
+// A script's single-item reads and writes: getWPAsync, setWPTotalAsync
+// ================================================================================================
+
+/// An item from the vehicle, addressed to `to`: `MISSION_ITEM`, the float form.
+fn item_float(seq: u16, command: u16, x: f32, y: f32, to: VehicleId) -> MavMessage {
+    MavMessage::MissionItem(MissionItemFloat {
+        param1: 1.0,
+        param2: 2.0,
+        param3: 3.0,
+        param4: 4.0,
+        x,
+        y,
+        z: 584.0,
+        seq,
+        command,
+        target_system: to.sysid,
+        target_component: to.compid,
+        frame: 3,
+        current: 0,
+        autocontinue: 1,
+        mission_type: MISSION_TYPE_MISSION,
+    })
+}
+
+/// An item from the vehicle, addressed to the link: `MISSION_ITEM_INT`.
+fn item_int(seq: u16, command: u16, x: i32, y: i32, mission_type: u8) -> MavMessage {
+    MavMessage::MissionItemInt(MissionItemInt {
+        param1: 0.0,
+        param2: 0.0,
+        param3: 0.0,
+        param4: 0.0,
+        x,
+        y,
+        z: 20.0,
+        seq,
+        command,
+        target_system: GCS.sysid,
+        target_component: GCS.compid,
+        frame: 0,
+        current: 0,
+        autocontinue: 1,
+        mission_type,
+    })
+}
+
+/// A float `MISSION_REQUEST` the link sent: its sequence number and list.
+fn request_float_sent(message: &MavMessage) -> Option<(u16, u8)> {
+    match message {
+        MavMessage::MissionRequest(request) => Some((request.seq, request.mission_type)),
+        _ => None,
+    }
+}
+
+/// `getWPAsync`: `MISSION_REQUEST` for the item - the vehicle has not said it speaks
+/// `MISSION_INT` - six times 2.5 s apart (`retrys = 5`, :3459-3463), then "Timeout on read -
+/// getWP". Answered: an item of another sequence number asks again at once, without spending a
+/// retry (:3494-3498); one addressed to another ground station is read past, as a `MISSION_ACK`
+/// is (:3487-3491); the one asked for ends it with its fields, the float position as it came
+/// (:3500-3511). No mission transfer is started for it, nor a `MISSION_REQUEST_LIST` sent.
+#[test]
+fn get_wp_asks_six_times_then_times_out_and_the_item_asked_for_ends_it() {
+    let t = ProtocolTimeouts::default().faster(50);
+    let (link, mut peer) = link(t);
+    let is_request = |m: &MavMessage| matches!(m, MavMessage::MissionRequest(_));
+
+    let started = Instant::now();
+    let id = link.get_wp(VEHICLE, 0, MISSION_TYPE_MISSION);
+    drive(&mut peer, silent, || outcome(&link, id).is_some());
+    let took = started.elapsed();
+    assert_eq!(outcome(&link, id), Some(RequestOutcome::TimedOut));
+    assert_eq!(
+        peer.count(is_request),
+        usize::from(t.mission_item_request.sends())
+    );
+    assert_eq!(peer.count(is_request), 6);
+    assert!(took >= t.mission_item_request.timeout * 6, "took {took:?}");
+    assert_eq!(
+        peer.sent(request_float_sent),
+        vec![(0, MISSION_TYPE_MISSION); 6]
+    );
+
+    let before = peer.count(is_request);
+    let answered = link.get_wp(VEHICLE, 2, MISSION_TYPE_MISSION);
+    let mut asked = 0;
+    drive(
+        &mut peer,
+        |peer, message| {
+            if is_request(&message) {
+                asked += 1;
+                if asked == 1 {
+                    // Another item: asked for again at once.
+                    peer.send(&item_float(5, 16, -35.0, 149.0, GCS));
+                } else {
+                    peer.send_all(&[
+                        item_float(2, 16, -35.5, 149.5, VehicleId::new(7, 7)),
+                        mission_ack(MISSION_ACCEPTED),
+                        item_float(2, 16, -35.363_262, 149.165_24, GCS),
+                    ]);
+                }
+            }
+        },
+        || outcome(&link, answered).is_some(),
+    );
+    assert_eq!(
+        outcome(&link, answered),
+        Some(RequestOutcome::Accepted { value: None })
+    );
+    assert_eq!(peer.count(is_request) - before, 2);
+    let wp = link
+        .request(answered)
+        .and_then(|request| request.wp())
+        .expect("the item");
+    assert_eq!(
+        (wp.id, wp.params, wp.alt, wp.frame),
+        (16, [1.0, 2.0, 3.0, 4.0], 584.0, 3)
+    );
+    assert_eq!(
+        (wp.lat, wp.lng),
+        (f64::from(-35.363_262_f32), f64::from(149.165_24_f32))
+    );
+    assert!(link.mission_transfer(VEHICLE).is_none());
+    assert_eq!(
+        peer.count(|m| matches!(m, MavMessage::MissionRequestList(_))),
+        0
+    );
+}
+
+/// To a vehicle whose capabilities have `MISSION_INT`, `MISSION_REQUEST_INT`, of the list asked
+/// for (:3419-3436); the `MISSION_ITEM_INT`'s position over 1e7 for a command
+/// `Locationwp.isLocationCommand` names - `DO_SET_ROI`, outside the navigation block - and as it
+/// came for one it does not - `DO_SET_SERVO` (:3539-3547).
+#[test]
+fn get_wp_asks_a_mission_int_vehicle_with_request_int_and_scales_only_location_commands() {
+    const FENCE: u8 = 1;
+    const DO_SET_ROI: u16 = 201;
+    const DO_SET_SERVO: u16 = 183;
+    let t = ProtocolTimeouts::default().faster(50);
+    let (link, mut peer) = link(t);
+    peer.send(&MavMessage::AutopilotVersion(AutopilotVersion {
+        capabilities: u64::from(mp_link::requests::CAPABILITY_MISSION_INT),
+        uid: 0,
+        flight_sw_version: 0x0405_0700,
+        middleware_sw_version: 0,
+        os_sw_version: 0,
+        board_version: 0,
+        vendor_id: 0,
+        product_id: 0,
+        flight_custom_version: [0; 8],
+        middleware_custom_version: [0; 8],
+        os_custom_version: [0; 8],
+        uid2: [0; 18],
+    }));
+    wait_for("the capabilities", || {
+        link.vehicle(VEHICLE).is_some_and(|handle| {
+            handle.load().autopilot_info.capabilities & mp_link::requests::CAPABILITY_MISSION_INT
+                != 0
+        })
+    });
+    for (command, x, want) in [
+        (DO_SET_ROI, -353_632_620, -35.363_262),
+        (DO_SET_SERVO, 5, 5.0),
+    ] {
+        let id = link.get_wp(VEHICLE, 1, FENCE);
+        drive(
+            &mut peer,
+            |peer, message| {
+                if let MavMessage::MissionRequestInt(request) = message {
+                    assert_eq!((request.seq, request.mission_type), (1, FENCE));
+                    assert_eq!(
+                        (request.target_system, request.target_component),
+                        (VEHICLE.sysid, VEHICLE.compid)
+                    );
+                    peer.send(&item_int(1, command, x, 1_491_652_370, FENCE));
+                }
+            },
+            || outcome(&link, id).is_some(),
+        );
+        assert_eq!(
+            outcome(&link, id),
+            Some(RequestOutcome::Accepted { value: None })
+        );
+        let wp = link
+            .request(id)
+            .and_then(|request| request.wp())
+            .expect("the item");
+        assert_eq!(wp.id, command);
+        assert!((wp.lat - want).abs() < 1e-9, "{command}: {}", wp.lat);
+    }
+    assert_eq!(
+        peer.count(|m| matches!(m, MavMessage::MissionRequest(_))),
+        0
+    );
+}
+
+/// `setWPTotalAsync`: `MISSION_COUNT` four times 700 ms apart (`retrys = 3`, :3779-3795), then
+/// "Timeout on read - setWPTotal". Answered: a request for item 2, or one addressed to another
+/// ground station, is read past (:3808-3812); a request for item 0 ends it, and `WP_TOTAL`,
+/// `CMD_TOTAL` and `MIS_TOTAL` are held as the count less one (:3814-3828); an ack ends it too,
+/// and changes nothing (:3862-3876).
+#[test]
+fn set_wp_total_counts_four_times_then_times_out_and_the_first_request_ends_it() {
+    const TOTALS: [&str; 3] = ["WP_TOTAL", "CMD_TOTAL", "MIS_TOTAL"];
+    let t = ProtocolTimeouts::default().faster(40);
+    let (link, mut peer) = link(t);
+    peer.send_all(&[
+        param_value("WP_TOTAL", 3.0, PARAM_TYPE_INT32, 0, 3),
+        param_value("CMD_TOTAL", 3.0, PARAM_TYPE_INT32, 1, 3),
+        param_value("MIS_TOTAL", 3.0, PARAM_TYPE_INT32, 2, 3),
+    ]);
+    wait_for("the totals in the table", || {
+        link.params(VEHICLE)
+            .is_some_and(|table| TOTALS.iter().all(|name| table.get(name).is_some()))
+    });
+    // The three totals, as the table holds them: each the same, or `None`.
+    let wp_total = |link: &Link| {
+        let held: Vec<Option<f64>> = TOTALS
+            .iter()
+            .map(|name| {
+                link.params(VEHICLE)
+                    .and_then(|table| table.get(name))
+                    .map(ParamValueHeld::as_f64)
+            })
+            .collect();
+        held.iter().all(|value| *value == held[0]).then_some(held[0]).flatten()
+    };
+    let counted = |m: &MavMessage| match m {
+        MavMessage::MissionCount(count) => Some((count.count, count.mission_type)),
+        _ => None,
+    };
+
+    let started = Instant::now();
+    let id = link.set_wp_total(VEHICLE, 5, MISSION_TYPE_MISSION);
+    drive(&mut peer, silent, || outcome(&link, id).is_some());
+    let took = started.elapsed();
+    assert_eq!(outcome(&link, id), Some(RequestOutcome::TimedOut));
+    assert_eq!(peer.sent(counted), vec![(5, MISSION_TYPE_MISSION); 4]);
+    assert_eq!(usize::from(t.mission_count.sends()), 4);
+    assert!(took >= t.mission_count.timeout * 4, "took {took:?}");
+    assert_eq!(wp_total(&link), Some(3.0));
+
+    let before = peer.sent(counted).len();
+    let answered = link.set_wp_total(VEHICLE, 5, MISSION_TYPE_MISSION);
+    drive(
+        &mut peer,
+        |peer, message| {
+            if counted(&message).is_some() {
+                peer.send_all(&[
+                    mission_request_float(2),
+                    MavMessage::MissionRequest(MissionRequest {
+                        seq: 0,
+                        target_system: 7,
+                        target_component: 7,
+                        mission_type: MISSION_TYPE_MISSION,
+                    }),
+                ]);
+                std::thread::sleep(Duration::from_millis(5));
+                assert_eq!(outcome(&link, answered), None);
+                peer.send(&mission_request_float(0));
+            }
+        },
+        || outcome(&link, answered).is_some(),
+    );
+    assert_eq!(
+        outcome(&link, answered),
+        Some(RequestOutcome::Accepted { value: None })
+    );
+    assert_eq!(peer.sent(counted).len() - before, 1);
+    wait_for("the totals held as the count less one", || {
+        wp_total(&link) == Some(4.0)
+    });
+
+    let acked = link.set_wp_total(VEHICLE, 9, MISSION_TYPE_MISSION);
+    drive(
+        &mut peer,
+        |peer, message| {
+            if counted(&message).is_some() {
+                peer.send(&mission_ack(MISSION_NO_SPACE));
+            }
+        },
+        || outcome(&link, acked).is_some(),
+    );
+    assert_eq!(
+        outcome(&link, acked),
+        Some(RequestOutcome::Accepted { value: None })
+    );
+    assert_eq!(wp_total(&link), Some(4.0));
+}
+
+/// The vehicle's first request is `setWPTotal`'s alone, as the C#'s loop reads it off the port:
+/// the `setWP(0)` that follows sends item 0 once, and the vehicle's request for item 1 accepts
+/// it. There is no second item 0, which ArduPilot answers with `MAV_MISSION_INVALID_SEQUENCE`.
+/// For the geofence, the fence points the link holds are emptied when that request comes
+/// (:3830-3831).
+#[test]
+fn set_wp_total_takes_the_first_request_so_set_wp_sends_item_zero_once() {
+    const FENCE: u8 = 1;
+    let t = ProtocolTimeouts::default().faster(20);
+    let (link, mut peer) = link(t);
+    peer.send(&MavMessage::FencePoint(FencePoint {
+        lat: -35.0,
+        lng: 149.0,
+        target_system: GCS.sysid,
+        target_component: GCS.compid,
+        idx: 0,
+        count: 4,
+    }));
+    wait_for("a fence point held", || {
+        !link.fence_points(VEHICLE).is_empty()
+    });
+    let answer_count = |peer: &mut Peer, message: MavMessage| {
+        if let MavMessage::MissionCount(count) = message {
+            peer.send(&MavMessage::MissionRequest(MissionRequest {
+                seq: 0,
+                target_system: GCS.sysid,
+                target_component: GCS.compid,
+                mission_type: count.mission_type,
+            }));
+        }
+    };
+
+    // The mission's count leaves the fence alone (:3814-3828).
+    let mission_total = link.set_wp_total(VEHICLE, 2, MISSION_TYPE_MISSION);
+    drive(&mut peer, answer_count, || outcome(&link, mission_total).is_some());
+    assert_eq!(
+        outcome(&link, mission_total),
+        Some(RequestOutcome::Accepted { value: None })
+    );
+    std::thread::sleep(Duration::from_millis(20));
+    assert_eq!(link.fence_points(VEHICLE).len(), 1);
+
+    let total = link.set_wp_total(VEHICLE, 2, FENCE);
+    drive(&mut peer, answer_count, || outcome(&link, total).is_some());
+    assert_eq!(
+        outcome(&link, total),
+        Some(RequestOutcome::Accepted { value: None })
+    );
+    wait_for("the fence points emptied", || {
+        link.fence_points(VEHICLE).is_empty()
+    });
+
+    let is_item = |m: &MavMessage| matches!(m, MavMessage::MissionItem(_));
+    let MavMessage::MissionItem(change_alt) = commands::change_alt(VEHICLE, 25.0) else {
+        unreachable!("change_alt is a MISSION_ITEM")
+    };
+    // A return point and an inclusion vertex, as a script's `setWP(loc, i, frame, 0, 1, false,
+    // FENCE)` sends them.
+    let fence_item = |seq: u16, command: u16| {
+        MavMessage::MissionItem(MissionItemFloat {
+            seq,
+            command,
+            current: 0,
+            param1: 4.0,
+            x: -35.36,
+            y: 149.16,
+            mission_type: FENCE,
+            ..change_alt
+        })
+    };
+    let set = link.set_wp(VEHICLE, fence_item(0, 5000)).expect("an item");
+    drive(
+        &mut peer,
+        |peer, message| {
+            if is_item(&message) {
+                peer.send(&MavMessage::MissionRequest(MissionRequest {
+                    seq: 1,
+                    target_system: GCS.sysid,
+                    target_component: GCS.compid,
+                    mission_type: FENCE,
+                }));
+            }
+        },
+        || outcome(&link, set).is_some(),
+    );
+    assert_eq!(
+        outcome(&link, set),
+        Some(RequestOutcome::Accepted { value: None })
+    );
+    assert_eq!(peer.count(is_item), 1);
+
+    // Item 1, answered with an ack - a refusal, which files it all the same (:4108-4127).
+    let acked = link.set_wp(VEHICLE, fence_item(1, 5001)).expect("an item");
+    drive(
+        &mut peer,
+        |peer, message| {
+            if is_item(&message) {
+                peer.send(&MavMessage::MissionAck(MissionAck {
+                    target_system: GCS.sysid,
+                    target_component: GCS.compid,
+                    r#type: MISSION_ERROR,
+                    mission_type: FENCE,
+                }));
+            }
+        },
+        || outcome(&link, acked).is_some(),
+    );
+    assert_eq!(
+        outcome(&link, acked),
+        Some(RequestOutcome::Rejected(MISSION_ERROR))
+    );
+    // `(Locationwp) req` of the float item, back out as `(int)(lat * 1e7)`.
+    #[allow(clippy::cast_possible_truncation)]
+    let (x, y) = (
+        (f64::from(-35.36_f32) * 1e7) as i32,
+        (f64::from(149.16_f32) * 1e7) as i32,
+    );
+    wait_for("the fence refilled", || {
+        link.fence_points(VEHICLE).len() == 2
+    });
+    assert_eq!(
+        link.fence_points(VEHICLE),
+        [
+            FenceItem {
+                command: 5000,
+                param1: 4.0,
+                x,
+                y
+            },
+            FenceItem {
+                command: 5001,
+                param1: 4.0,
+                x,
+                y
+            },
+        ]
+    );
 }

@@ -85,7 +85,13 @@ pub struct ScriptRequirements {
     pub requirements: Vec<Requirement>,
     /// How many distinct .NET type references it makes. See [`Self::needs_dotnet`].
     dotnet_references: usize,
+    /// The .NET names it reaches, whole. See [`Self::dotnet_names`].
+    dotnet_names: Vec<String>,
 }
+
+/// The names under which IronPython hands a script .NET: its own bridge and the three
+/// namespaces the shipped scripts import from.
+pub const DOTNET_ROOTS: [&str; 4] = ["clr", "System", "MissionPlanner", "MAVLink"];
 
 impl ScriptRequirements {
     /// Scans one script's source.
@@ -142,7 +148,21 @@ impl ScriptRequirements {
             name: name.to_owned(),
             requirements: found,
             dotnet_references: count_dotnet_references(source),
+            dotnet_names: scan_dotnet_names(source),
         }
+    }
+
+    /// The .NET names this script reaches, whole, sorted and deduplicated: every dotted path
+    /// under [`DOTNET_ROOTS`] - `MissionPlanner.MainV2.speechEngine.SpeakAsync`,
+    /// `MAVLink.MAV_CMD.WAYPOINT`, `clr.AddReference` - and every name a `from ... import`
+    /// takes from one - `System.Byte`. Comments and string literals are skipped, so
+    /// `clr.AddReference("MissionPlanner.Utilities")` names `clr.AddReference` only.
+    ///
+    /// The measure of what a shim for the CLR has to answer to; like the rest of the scan it is
+    /// textual, and a name reached through `getattr` is not seen.
+    #[must_use]
+    pub fn dotnet_names(&self) -> &[String] {
+        &self.dotnet_names
     }
 
     /// Whether this script reaches into .NET directly, rather than through the scope bindings.
@@ -185,6 +205,81 @@ impl ScriptRequirements {
         out.dedup();
         out
     }
+}
+
+/// A line of code without its comment and with every string literal emptied: `'...'` and
+/// `"..."`, a backslash escaping the next character, as the corpus writes them.
+fn code_only(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    for c in line.chars() {
+        match quote {
+            Some(open) => {
+                if escaped {
+                    escaped = false;
+                } else if c == '\\' {
+                    escaped = true;
+                } else if c == open {
+                    quote = None;
+                    out.push(c);
+                }
+            }
+            None => {
+                if c == '#' {
+                    break;
+                }
+                if c == '\'' || c == '"' {
+                    quote = Some(c);
+                }
+                out.push(c);
+            }
+        }
+    }
+    out
+}
+
+/// See [`ScriptRequirements::dotnet_names`].
+fn scan_dotnet_names(source: &str) -> Vec<String> {
+    let is_root = |name: &str| {
+        DOTNET_ROOTS
+            .iter()
+            .any(|root| name == *root || name.starts_with(&format!("{root}.")))
+    };
+    let mut found: Vec<String> = Vec::new();
+    for line in source.lines() {
+        let code = code_only(line);
+        let trimmed = code.trim();
+        // `from System import Byte, Func`: the names it takes.
+        if let Some(rest) = trimmed.strip_prefix("from ")
+            && let Some((module, names)) = rest.split_once(" import ")
+            && is_root(module.trim())
+        {
+            for name in names.split(',') {
+                let name = name.split(" as ").next().unwrap_or("").trim();
+                if !name.is_empty() && name != "*" {
+                    found.push(format!("{}.{name}", module.trim()));
+                }
+            }
+            continue;
+        }
+        // Dotted paths: a run of identifier characters and dots that starts at a root.
+        let mut token = String::new();
+        for c in code.chars().chain(std::iter::once(' ')) {
+            if c.is_alphanumeric() || c == '_' || c == '.' {
+                token.push(c);
+                continue;
+            }
+            let name = token.trim_end_matches('.');
+            if name.contains('.') && is_root(name) {
+                found.push(name.to_owned());
+            }
+            token.clear();
+        }
+    }
+    found.sort();
+    found.dedup();
+    found
 }
 
 /// Counts the distinct ways a script reaches into .NET.
@@ -305,6 +400,38 @@ mod tests {
         );
         assert_eq!(scanned.surfaces(), vec![Surface::Screen]);
         assert_eq!(scanned.requirements.len(), 2);
+    }
+
+    /// The .NET names are whole dotted paths and the names a `from` takes; a path inside a
+    /// string, one in a comment and one that merely ends in a root are not.
+    #[test]
+    fn the_dotnet_names_a_script_reaches_are_listed_whole() {
+        let scanned = ScriptRequirements::scan(
+            "x.py",
+            concat!(
+                "import clr\n",
+                "clr.AddReference(\"MissionPlanner.Utilities\") # includes MAVLink.Nope\n",
+                "from System import Byte, Func as F\n",
+                "from MissionPlanner.Utilities import Locationwp\n",
+                "import MissionPlanner.Comms\n",
+                "id = int(MAVLink.MAV_CMD.WAYPOINT)\n",
+                "MissionPlanner.MainV2.speechEngine.SpeakAsync('test ' + cs.roll.ToString())\n",
+                "x = myMAVLink.MAV_CMD\n",
+                "from math import radians\n",
+            ),
+        );
+        assert_eq!(
+            scanned.dotnet_names(),
+            [
+                "MAVLink.MAV_CMD.WAYPOINT",
+                "MissionPlanner.Comms",
+                "MissionPlanner.MainV2.speechEngine.SpeakAsync",
+                "MissionPlanner.Utilities.Locationwp",
+                "System.Byte",
+                "System.Func",
+                "clr.AddReference",
+            ]
+        );
     }
 
     /// Every binding the C# creates is one the scan knows about, or the measurement has a hole.

@@ -168,6 +168,42 @@ pub fn uploaded(item: &MissionItem) -> FenceItem {
     }
 }
 
+/// An item this link sent on its own with `setWP` - a `MISSION_ITEM` or a `MISSION_ITEM_INT` -
+/// as `setWPAsync` files it in `fencepoints` once the vehicle has taken it: `(Locationwp) req`
+/// under its sequence number, for an item of the fence list that is neither a guided target
+/// (current 2) nor an altitude change (current 3). `None` for anything else.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4113-4127, 4146-4160, 4285-4300, 4323-4338`
+#[must_use]
+pub fn set_wp_item(message: &MavMessage) -> Option<(u16, FenceItem)> {
+    match message {
+        MavMessage::MissionItem(m) if m.mission_type == FENCE && !matches!(m.current, 2 | 3) => {
+            Some((
+                m.seq,
+                FenceItem {
+                    command: m.command,
+                    param1: m.param1,
+                    x: from_degrees(m.command, f64::from(m.x)),
+                    y: from_degrees(m.command, f64::from(m.y)),
+                },
+            ))
+        }
+        MavMessage::MissionItemInt(m)
+            if m.mission_type == FENCE && !matches!(m.current, 2 | 3) =>
+        {
+            Some((
+                m.seq,
+                FenceItem {
+                    command: m.command,
+                    param1: m.param1,
+                    x: through_degrees(m.command, m.x),
+                    y: through_degrees(m.command, m.y),
+                },
+            ))
+        }
+        _ => None,
+    }
+}
+
 /// `Locationwp.isLocationCommand`: whether `x` and `y` are a position, scaled by 1e7 on the way
 /// in and out of `Locationwp`. `// C#: ExtLibs/Utilities/locationwp.cs:39-56`
 fn is_location(command: u16) -> bool {

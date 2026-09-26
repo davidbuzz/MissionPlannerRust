@@ -15,8 +15,8 @@
 use std::time::Instant;
 
 use mp_mavlink_dialects::all::{
-    FenceFetchPoint, FencePoint, MavMessage, MissionSetCurrent, ParamSet, RallyFetchPoint,
-    RallyPoint,
+    FenceFetchPoint, FencePoint, MavMessage, MissionCount, MissionRequest, MissionRequestInt,
+    MissionSetCurrent, ParamSet, RallyFetchPoint, RallyPoint,
 };
 use mp_params::{ParamTable, ParamType, ParamValue};
 use mp_vehicle::VehicleId;
@@ -126,6 +126,106 @@ pub enum RequestKind {
         /// The point's place, from 0: the return point, then the polygon's corners.
         idx: u8,
     },
+    /// `getWPAsync`: one item of one list read on its own - `MISSION_REQUEST_INT` for it, or
+    /// `MISSION_REQUEST` to a vehicle without the `MISSION_INT` capability - until the vehicle
+    /// sends it, five more times 2.5 s apart; what came is [`Request::wp`]. See [`WpRead`].
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3413-3565`
+    GetWp {
+        /// `index`: the item's sequence number.
+        seq: u16,
+        /// `MAV_MISSION_TYPE`: the mission, the fence or the rally points.
+        mission_type: u8,
+        /// `use_int`: the vehicle's capabilities have `MAV_PROTOCOL_CAPABILITY_MISSION_INT`,
+        /// as the C# reads them when it is called (`:3419`).
+        use_int: bool,
+    },
+    /// `setWPTotalAsync`: `MISSION_COUNT` until the vehicle asks for item 0 or 1 - or
+    /// acknowledges the count - three more times 700 ms apart.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3764-3882`
+    ///
+    /// The vehicle's first request is taken by this request and by nothing else, as the C#'s
+    /// loop reads it off the port: the `setWP(0)` that follows never sees it, and so never sends
+    /// item 0 a second time for it. What the C# then does to its own bookkeeping the link thread
+    /// does where it has the same - see `run_link`'s `MISSION_REQUEST` arm.
+    SetWpTotal {
+        /// `wp_total`: how many items the list will have.
+        total: u16,
+        /// `MAV_MISSION_TYPE`.
+        mission_type: u8,
+    },
+}
+
+/// `MAV_PROTOCOL_CAPABILITY_MISSION_INT`: the vehicle speaks `MISSION_ITEM_INT`, and `getWP`
+/// asks it with `MISSION_REQUEST_INT`.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3419`
+pub const CAPABILITY_MISSION_INT: u32 = 4;
+
+/// The item a `getWP` read, as `getWPAsync` fills its `Locationwp` from it.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3495-3557`
+///
+/// What the machine does (`getWPAsync`, `:3413-3565`):
+///
+/// * the request goes out (`:3421-3451`) and is sent again every 2.5 s, five more times, and
+///   then the request ends [`RequestOutcome::TimedOut`]: "Timeout on read - getWP" (`:3459-3479`);
+/// * a `MISSION_ITEM` or `MISSION_ITEM_INT` from the vehicle asked, addressed to this ground
+///   station and to `MAV_COMP_ID_MISSIONPLANNER`, answers it (`:3487-3491`, `:3515-3519`) - one
+///   of another sequence number asks again at once, a `MISSION_REQUEST` after a `MISSION_ITEM`
+///   and a `MISSION_REQUEST_INT` after a `MISSION_ITEM_INT`, without spending a retry
+///   (`:3494-3498`, `:3522-3526`); anything else, a `MISSION_ACK` included, is read past;
+/// * from a `MISSION_ITEM` the position is the floats as they came; from a `MISSION_ITEM_INT`
+///   it is divided by 1e7 when the command is one `Locationwp.isLocationCommand` names, and taken
+///   as it came otherwise (`:3539-3547`; `ExtLibs/Utilities/locationwp.cs:39-56`).
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct WpRead {
+    /// `loc.id`, the `MAV_CMD`.
+    pub id: u16,
+    /// `loc.p1` to `loc.p4`.
+    pub params: [f32; 4],
+    /// `loc.lat`.
+    pub lat: f64,
+    /// `loc.lng`.
+    pub lng: f64,
+    /// `loc.alt`.
+    pub alt: f32,
+    /// `loc.frame`.
+    pub frame: u8,
+}
+
+/// The request `getWPAsync` sends for item `seq`: `mavlink_mission_request_int_t` or
+/// `mavlink_mission_request_t`, whose fields are the same.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3421-3451`
+const fn wp_request(target: VehicleId, seq: u16, mission_type: u8, int: bool) -> MavMessage {
+    if int {
+        MavMessage::MissionRequestInt(MissionRequestInt {
+            seq,
+            target_system: target.sysid,
+            target_component: target.compid,
+            mission_type,
+        })
+    } else {
+        MavMessage::MissionRequest(MissionRequest {
+            seq,
+            target_system: target.sysid,
+            target_component: target.compid,
+            mission_type,
+        })
+    }
+}
+
+/// A `MISSION_ITEM_INT`'s coordinate as `getWPAsync` puts it in a `Locationwp`: over 1e7 for a
+/// location command, as it came otherwise.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3539-3547`
+fn wp_coordinate(command: u16, value: i32) -> f64 {
+    let location = mp_mission::MissionItem {
+        command,
+        ..mp_mission::MissionItem::default()
+    }
+    .is_navigation();
+    if location {
+        f64::from(value) / 1.0e7
+    } else {
+        f64::from(value)
+    }
 }
 
 /// One geofence point as `setFencePoint` puts it in a `mavlink_fence_point_t`: the position as
@@ -367,6 +467,8 @@ pub struct Request {
     attempts_left: u8,
     /// The `FENCE_POINT` that answered a fence point's fetch.
     fence_read: Option<FencePointRead>,
+    /// The item that answered a `getWP`.
+    wp_read: Option<WpRead>,
 }
 
 impl Request {
@@ -387,7 +489,14 @@ impl Request {
             sends: 0,
             attempts_left: 0,
             fence_read: None,
+            wp_read: None,
         }
+    }
+
+    /// The item that answered a [`RequestKind::GetWp`], once it is accepted.
+    #[must_use]
+    pub const fn wp(&self) -> Option<WpRead> {
+        self.wp_read
     }
 
     /// The `FENCE_POINT` that answered a [`RequestKind::GetFencePoint`] or a
@@ -567,6 +676,28 @@ impl Request {
                 self.arm(fetch, timeouts.fence_fetch, now);
                 Outgoing::Once(fetch)
             }
+            RequestKind::GetWp {
+                seq,
+                mission_type,
+                use_int,
+            } => {
+                let request = wp_request(target, *seq, *mission_type, *use_int);
+                self.arm(request, timeouts.mission_item_request, now);
+                Outgoing::Once(request)
+            }
+            RequestKind::SetWpTotal {
+                total,
+                mission_type,
+            } => {
+                let count = MavMessage::MissionCount(MissionCount {
+                    count: *total,
+                    target_system: target.sysid,
+                    target_component: target.compid,
+                    mission_type: *mission_type,
+                });
+                self.arm(count, timeouts.mission_count, now);
+                Outgoing::Once(count)
+            }
         };
         self.count(send)
     }
@@ -594,7 +725,9 @@ impl Request {
             | RequestKind::SetWp { .. }
             | RequestKind::GetHomePosition
             | RequestKind::SetFencePoint(_)
-            | RequestKind::GetFencePoint { .. } => false,
+            | RequestKind::GetFencePoint { .. }
+            | RequestKind::GetWp { .. }
+            | RequestKind::SetWpTotal { .. } => false,
         };
         if matches {
             self.finish(RequestOutcome::Accepted { value: Some(value) });
@@ -642,13 +775,24 @@ impl Request {
     /// result: accepted, or the `MAV_MISSION_RESULT` the vehicle refused with (:4108-4112).
     ///
     /// Returns whether a set-WP took it, so the transfer machines do not read it as theirs.
+    ///
+    /// A `setWPTotal` takes one too, whatever its result, and ends as the C#'s loop returns on
+    /// it: without reading the result, and without the bookkeeping a request brings
+    /// (`:3862-3876`).
     pub fn on_mission_ack(&mut self, from: VehicleId, to_us: bool, result: u8) -> bool {
         if self.state != RequestState::Waiting
             || from != self.target
-            || !matches!(self.kind, RequestKind::SetWp { .. })
+            || !matches!(
+                self.kind,
+                RequestKind::SetWp { .. } | RequestKind::SetWpTotal { .. }
+            )
             || !to_us
         {
             return false;
+        }
+        if matches!(self.kind, RequestKind::SetWpTotal { .. }) {
+            self.finish(RequestOutcome::Accepted { value: None });
+            return true;
         }
         if result == crate::mission_transfer::MISSION_ACCEPTED {
             self.finish(RequestOutcome::Accepted { value: None });
@@ -662,9 +806,10 @@ impl Request {
     /// one addressed to this ground station asking for the item after the one sent is an
     /// acceptance (:4115-4143); any other says the vehicle is on another item, and the point goes
     /// again at once, spending a retry - `start = DateTime.MinValue` (:4177-4182) and the loop's
-    /// top resends or throws.
+    /// top resends or throws. For a `setWPTotal`, a request for item 0 or 1 addressed to this
+    /// ground station ends it.
     ///
-    /// Returns whether a set-WP took it, and what to send.
+    /// Returns whether a set-WP or a set-total took it, and what to send.
     pub fn on_mission_request(
         &mut self,
         from: VehicleId,
@@ -674,6 +819,15 @@ impl Request {
     ) -> (bool, Outgoing) {
         if self.state != RequestState::Waiting || from != self.target || !to_us {
             return (false, Outgoing::Nothing);
+        }
+        // `setWPTotalAsync`: a request for item 0 or 1 answers the count, of either message and
+        // whatever list it names (`:3804-3831`, `:3835-3861`); any other is read past.
+        if matches!(self.kind, RequestKind::SetWpTotal { .. }) {
+            if seq > 1 {
+                return (false, Outgoing::Nothing);
+            }
+            self.finish(RequestOutcome::Accepted { value: None });
+            return (true, Outgoing::Nothing);
         }
         let RequestKind::SetWp { item, seq: sent } = &self.kind else {
             return (false, Outgoing::Nothing);
@@ -690,6 +844,59 @@ impl Request {
         self.retries_left -= 1;
         self.deadline = now + self.policy.timeout;
         (true, self.count(Outgoing::Once(item)))
+    }
+
+    /// A `MISSION_ITEM` or `MISSION_ITEM_INT` arrived from `from`; `to_us` is whether it is
+    /// addressed to this ground station and to `MAV_COMP_ID_MISSIONPLANNER`, which `getWPAsync`
+    /// requires ("check this gcs sent it", `:3487-3491`, `:3515-3519`). The item asked for ends a
+    /// `getWP`, and is [`Request::wp`]; another asks for it again at once, as the C# does
+    /// without spending a retry or starting its wait again (`:3494-3498`, `:3522-3526`) - which
+    /// is what this returns. See [`WpRead`].
+    pub fn on_mission_item(&mut self, from: VehicleId, to_us: bool, item: &MavMessage) -> Outgoing {
+        if self.state != RequestState::Waiting || from != self.target || !to_us {
+            return Outgoing::Nothing;
+        }
+        let RequestKind::GetWp {
+            seq, mission_type, ..
+        } = self.kind
+        else {
+            return Outgoing::Nothing;
+        };
+        let (read, got, int) = match item {
+            MavMessage::MissionItem(wp) => (
+                WpRead {
+                    id: wp.command,
+                    params: [wp.param1, wp.param2, wp.param3, wp.param4],
+                    lat: f64::from(wp.x),
+                    lng: f64::from(wp.y),
+                    alt: wp.z,
+                    frame: wp.frame,
+                },
+                wp.seq,
+                false,
+            ),
+            MavMessage::MissionItemInt(wp) => (
+                WpRead {
+                    id: wp.command,
+                    params: [wp.param1, wp.param2, wp.param3, wp.param4],
+                    lat: wp_coordinate(wp.command, wp.x),
+                    lng: wp_coordinate(wp.command, wp.y),
+                    alt: wp.z,
+                    frame: wp.frame,
+                },
+                wp.seq,
+                true,
+            ),
+            _ => return Outgoing::Nothing,
+        };
+        if got != seq {
+            // "received a packet, but not what we requested".
+            let again = wp_request(self.target, seq, mission_type, int);
+            return self.count(Outgoing::Once(again));
+        }
+        self.wp_read = Some(read);
+        self.finish(RequestOutcome::Accepted { value: None });
+        Outgoing::Nothing
     }
 
     /// A `HOME_POSITION` arrived from `from`: it answers a `getHomePosition` (:3346-3355).
@@ -1487,6 +1694,211 @@ mod tests {
             (true, Outgoing::Nothing)
         );
         assert_eq!(worn.outcome(), Some(RequestOutcome::TimedOut));
+    }
+
+    /// An item as the vehicle sends it to this ground station.
+    fn item(seq: u16, command: u16, x: i32, int: bool, to_us_compid: u8) -> MavMessage {
+        if int {
+            MavMessage::MissionItemInt(mp_mavlink_dialects::all::MissionItemInt {
+                param1: 1.0,
+                param2: 0.0,
+                param3: 0.0,
+                param4: 0.0,
+                x,
+                y: x,
+                z: 30.0,
+                seq,
+                command,
+                target_system: 255,
+                target_component: to_us_compid,
+                frame: 3,
+                current: 0,
+                autocontinue: 1,
+                mission_type: 0,
+            })
+        } else {
+            #[allow(clippy::cast_precision_loss)]
+            let x = x as f32;
+            MavMessage::MissionItem(mp_mavlink_dialects::all::MissionItem {
+                param1: 1.0,
+                param2: 0.0,
+                param3: 0.0,
+                param4: 0.0,
+                x,
+                y: x,
+                z: 30.0,
+                seq,
+                command,
+                target_system: 255,
+                target_component: to_us_compid,
+                frame: 3,
+                current: 0,
+                autocontinue: 1,
+                mission_type: 0,
+            })
+        }
+    }
+
+    /// `getWPAsync`: the request of the vehicle's kind for that item and list, sent again as it
+    /// was every 2.5 s, five more times, then timed out (:3459-3479).
+    #[test]
+    fn get_wp_asks_for_its_item_six_times_then_times_out() {
+        let t = ProtocolTimeouts::default();
+        let t0 = Instant::now();
+        for use_int in [false, true] {
+            let mut request = Request::new(
+                target(),
+                RequestKind::GetWp {
+                    seq: 4,
+                    mission_type: 2,
+                    use_int,
+                },
+            );
+            let mut asked = Vec::new();
+            let mut record = |send: Outgoing| match send {
+                Outgoing::Once(MavMessage::MissionRequest(r)) if !use_int => {
+                    asked.push((r.seq, r.mission_type, r.target_system));
+                }
+                Outgoing::Once(MavMessage::MissionRequestInt(r)) if use_int => {
+                    asked.push((r.seq, r.mission_type, r.target_system));
+                }
+                Outgoing::Nothing => {}
+                other => panic!("{other:?}"),
+            };
+            record(request.begin(&t, None, true, t0));
+            for step in 1..=6u32 {
+                record(request.on_tick(t0 + t.mission_item_request.timeout * step));
+            }
+            assert_eq!(asked, vec![(4, 2, 1); 6]);
+            assert_eq!(request.outcome(), Some(RequestOutcome::TimedOut));
+            assert_eq!(request.wp(), None);
+        }
+    }
+
+    /// The item asked for, addressed to this ground station and `MAV_COMP_ID_MISSIONPLANNER`,
+    /// from the vehicle asked, ends it; another item asks again at once in the form it came in,
+    /// spending no retry (:3494-3498, :3522-3526); anything else is read past.
+    #[test]
+    fn get_wp_takes_only_its_item_and_asks_again_for_another() {
+        let t = ProtocolTimeouts::default();
+        let t0 = Instant::now();
+        let mut request = Request::new(
+            target(),
+            RequestKind::GetWp {
+                seq: 1,
+                mission_type: 0,
+                use_int: true,
+            },
+        );
+        let _ = request.begin(&t, None, true, t0);
+        // Another GCS's, another vehicle's, a set's ack: nothing.
+        assert_eq!(
+            request.on_mission_item(target(), false, &item(1, 16, 0, true, 190)),
+            Outgoing::Nothing
+        );
+        assert_eq!(
+            request.on_mission_item(VehicleId::new(2, 1), true, &item(1, 16, 0, true, 190)),
+            Outgoing::Nothing
+        );
+        assert!(!request.on_mission_ack(target(), true, 0));
+        assert_eq!(request.outcome(), None);
+        // Item 3 as a MISSION_ITEM: MISSION_REQUEST for 1 again, at once.
+        assert!(matches!(
+            request.on_mission_item(target(), true, &item(3, 16, 0, false, 190)),
+            Outgoing::Once(MavMessage::MissionRequest(MissionRequest { seq: 1, .. }))
+        ));
+        assert!(matches!(
+            request.on_mission_item(target(), true, &item(3, 16, 0, true, 190)),
+            Outgoing::Once(MavMessage::MissionRequestInt(MissionRequestInt { seq: 1, .. }))
+        ));
+        assert_eq!(request.sends(), 3);
+        // The retries are all still there: six more sends before the timeout.
+        let mut resent = 0;
+        for step in 1..=5u32 {
+            if request.on_tick(t0 + t.mission_item_request.timeout * step) != Outgoing::Nothing {
+                resent += 1;
+            }
+        }
+        assert_eq!(resent, 5);
+        assert_eq!(
+            request.on_mission_item(target(), true, &item(1, 201, -353_632_620, true, 190)),
+            Outgoing::Nothing
+        );
+        assert_eq!(
+            request.outcome(),
+            Some(RequestOutcome::Accepted { value: None })
+        );
+        let wp = request.wp().expect("the item");
+        assert_eq!((wp.id, wp.params[0], wp.alt, wp.frame), (201, 1.0, 30.0, 3));
+        assert!((wp.lat + 35.363_262).abs() < 1e-12, "{}", wp.lat);
+    }
+
+    /// `setWPTotalAsync`: `MISSION_COUNT` of the total and list, four times 700 ms apart, then
+    /// timed out (:3779-3795).
+    #[test]
+    fn set_wp_total_counts_four_times_then_times_out() {
+        let t = ProtocolTimeouts::default();
+        let t0 = Instant::now();
+        let mut request = Request::new(
+            target(),
+            RequestKind::SetWpTotal {
+                total: 7,
+                mission_type: 1,
+            },
+        );
+        let mut counts = Vec::new();
+        let mut record = |send: Outgoing| {
+            if let Outgoing::Once(MavMessage::MissionCount(count)) = send {
+                counts.push((count.count, count.mission_type));
+            }
+        };
+        record(request.begin(&t, None, true, t0));
+        for step in 1..=4u32 {
+            record(request.on_tick(t0 + t.mission_count.timeout * step));
+        }
+        assert_eq!(counts, vec![(7, 1); 4]);
+        assert_eq!(request.outcome(), Some(RequestOutcome::TimedOut));
+    }
+
+    /// A request for item 0 or 1 addressed to us ends it, and is taken from a set-WP; one for
+    /// another item is left to others; an ack to us ends it too (:3801-3876).
+    #[test]
+    fn set_wp_total_is_ended_by_the_first_request_or_an_ack() {
+        let t = ProtocolTimeouts::default();
+        let t0 = Instant::now();
+        let kind = RequestKind::SetWpTotal {
+            total: 3,
+            mission_type: 0,
+        };
+        for first in [0, 1] {
+            let mut request = Request::new(target(), kind.clone());
+            let _ = request.begin(&t, None, true, t0);
+            assert_eq!(
+                request.on_mission_request(target(), false, first, t0),
+                (false, Outgoing::Nothing)
+            );
+            assert_eq!(
+                request.on_mission_request(target(), true, 2, t0),
+                (false, Outgoing::Nothing)
+            );
+            assert_eq!(request.outcome(), None);
+            assert_eq!(
+                request.on_mission_request(target(), true, first, t0),
+                (true, Outgoing::Nothing)
+            );
+            assert_eq!(
+                request.outcome(),
+                Some(RequestOutcome::Accepted { value: None })
+            );
+        }
+        let mut acked = Request::new(target(), kind);
+        let _ = acked.begin(&t, None, true, t0);
+        assert!(!acked.on_mission_ack(target(), false, 0));
+        assert!(acked.on_mission_ack(target(), true, 4));
+        assert_eq!(
+            acked.outcome(),
+            Some(RequestOutcome::Accepted { value: None })
+        );
     }
 
     /// `getHomePositionAsync`: `doCommand(GET_HOME_POSITION, ..., false)` then again three

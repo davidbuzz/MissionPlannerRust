@@ -4496,7 +4496,11 @@ impl MissionPlanner {
     pub(crate) fn fly_tick(&mut self, view: &TelemetryView, window: &Window) {
         self.fly_data.playback.tick();
         // The Scripts tab: the run's output and end, and the requests its script has made.
-        if let Some(status) = self.fly_data.scripts.tick(&self.telemetry, view) {
+        if let Some(status) =
+            self.fly_data
+                .scripts
+                .tick(&self.telemetry, view, &mut self.fly_actions.guided)
+        {
             self.file_status = Some(status);
         }
         self.fly_xpdr_tick(view, window);

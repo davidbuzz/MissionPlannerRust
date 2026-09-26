@@ -29,7 +29,7 @@ try:
    rsock.bind((HOST,RPORT)) 
 except socket.error as msg:
    #print 'Bind failed. Error Code:'
-   sys.stderr.write("[ERROR] %s\n" % msg[1])
+   sys.stderr.write("[ERROR] %s\n" % msg.args[1])
    rsock.close()
    sys.exit()       
 
@@ -42,7 +42,7 @@ print('Guided Mode')
 #keep talking with the Mission Planner server 
 while 1:     
 
-    msg = rsock.recv(1024)
+    msg = rsock.recv(1024).decode()
     pattern = re.compile("[ ]")
     parameters = pattern.split(msg)
 

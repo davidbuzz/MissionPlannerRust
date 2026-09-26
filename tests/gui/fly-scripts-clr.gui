@@ -1,0 +1,54 @@
+# The Scripts tab running a shipped script that imports clr: `testdata/scripts/example4 wp.py`,
+# which writes a five-item mission item by item - `MAV.setWPTotal(5)`, five `MAV.setWP`s of
+# `Locationwp`s made with `Locationwp().Set(...)` and `Locationwp.x.SetValue(...)`, in
+# `MAVLink.MAV_FRAME.GLOBAL_RELATIVE_ALT`, and `MAV.setWPACK()`. Ported from Script.cs:35-53 (the
+# assemblies IronPython loads, the scope's `MAV`) and MAVLinkInterface.cs:2434-2450, 3753-4235,
+# through crates/mp-script/src/clr/shim.py and the tab's host (crates/mp-gui/src/scripts_tab.rs).
+#
+# The claim: the script runs to its end - its prints in the console, "done" last - and the
+# vehicle accepted all five items (`fly.script.wps`, counted from the link's set-WP requests
+# ending accepted). It replaces the vehicle's mission.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760. Run as
+#
+#   tools/gui-test.sh tests/gui/fly-scripts-clr.gui -- tcp:127.0.0.1:5760
+
+env MP_CONFIG_XML $WORK/config.xml
+screen fly
+window 1600x1200
+budget 20
+expect vehicle.connected true
+
+# Scripts is the eleventh tab, reached as fly-scripts.gui reaches it.
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+expect fly.tabs.first 10
+click fly-tab-scripts
+expect fly.tab tabScripts
+expect fly.script.status Script Status: No Script Running
+
+click fly-script-select
+expect fly.prompt Python script (*.py)
+type testdata/scripts/example4 wp.py
+expect fly.prompt.value testdata/scripts/example4 wp.py
+click fly-prompt-ok
+expect fly.script.selected Selected Script: testdata/scripts/example4 wp.py
+
+click fly-script-redirect
+expect fly.script.redirect true
+click fly-script-run
+expect fly.script.status Script Status: Finished (or aborted)
+expect fly.script.running false
+expect fly.script.result ok
+expect fly.script.console ~ set wp total
+expect fly.script.console ~ upload wp3
+expect fly.script.console ~ final ack | done
+expect fly.script.wps 5

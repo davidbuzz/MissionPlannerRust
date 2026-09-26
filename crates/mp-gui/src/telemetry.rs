@@ -827,6 +827,69 @@ impl Telemetry {
         Some(link.get_fence_point(id, idx))
     }
 
+    /// `getWP(sysid, compid, index, type)` on `target`: that one item of that list read on its
+    /// own, the link's retries between; no mission transfer is started or touched. `None`
+    /// without a link; the item is the request's [`mp_link::requests::Request::wp`].
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3398-3565`
+    pub fn get_wp(&self, target: VehicleId, index: u16, mission_type: u8) -> Option<RequestId> {
+        Some(self.link.as_ref()?.get_wp(target, index, mission_type))
+    }
+
+    /// `setWPTotal(sysid, compid, total, type)` on `target`: `MISSION_COUNT` until the vehicle
+    /// asks for the first item, the link's retries between. `None` without a link; the outcome
+    /// is read with [`Telemetry::request`].
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3753-3882`
+    pub fn set_wp_total(&self, target: VehicleId, total: u16, mission_type: u8) -> Option<RequestId> {
+        Some(self.link.as_ref()?.set_wp_total(target, total, mission_type))
+    }
+
+    /// `setParam(sysid, compid, name, value, force)` on `target`, for a caller that reads the
+    /// outcome itself with [`Telemetry::request`]. `None` without a link.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1628-1770`
+    pub fn write_parameter_on(
+        &self,
+        target: VehicleId,
+        name: &str,
+        value: f64,
+        force: bool,
+    ) -> Option<RequestId> {
+        Some(self.link.as_ref()?.set_param(target, name, value, force))
+    }
+
+    /// `BaseStream.IsOpen`: whether there is a link and its thread still runs - false once the
+    /// port has gone. Cheap: no view is taken.
+    #[must_use]
+    pub fn is_open(&self) -> bool {
+        self.link.as_ref().is_some_and(Link::is_running)
+    }
+
+    /// `MAVlist[sysid, compid].cs`: the state of the vehicle `id`, shown or not, if it has been
+    /// heard on the link.
+    #[must_use]
+    pub fn vehicle_state(&self, id: VehicleId) -> Option<Arc<VehicleState>> {
+        self.link
+            .as_ref()?
+            .vehicle(id)
+            .map(|handle| handle.load())
+    }
+
+    /// `MAVlist[sysid, compid].param[name].Value`: a parameter of the vehicle `id` as the link
+    /// holds it, shown or not.
+    #[must_use]
+    pub fn parameter_of(&self, id: VehicleId, name: &str) -> Option<f64> {
+        self.link
+            .as_ref()?
+            .params(id)?
+            .get(name)
+            .map(mp_params::ParamValue::as_f64)
+    }
+
+    /// A message as a builder made it - addressed within itself - onto the link, as the C#'s
+    /// `generatePacket` puts one. False without a link.
+    pub fn send(&self, message: &MavMessage) -> bool {
+        self.link.as_ref().is_some_and(|link| link.send(message))
+    }
+
     /// The items of a finished transfer of one list, or nothing if it has not finished.
     ///
     /// Only when complete: a partial list read mid-transfer would be adopted as if it were the
@@ -1908,14 +1971,19 @@ pub mod scripted {
 
         /// Sends a message as the autopilot.
         pub fn send(&mut self, message: &MavMessage) {
+            self.send_from(VEHICLE, message);
+        }
+
+        /// Sends a message as another vehicle on the same link.
+        pub fn send_from(&mut self, from: VehicleId, message: &MavMessage) {
             let mut payload = [0u8; 255];
             let len = message.encode(&mut payload);
             let mut frame = [0u8; mp_mavlink::MAX_FRAME_LEN];
             let n = encode_v2(
                 &mut frame,
                 self.seq,
-                VEHICLE.sysid,
-                VEHICLE.compid,
+                from.sysid,
+                from.compid,
                 message.id(),
                 &payload[..len],
                 message.crc_extra(),

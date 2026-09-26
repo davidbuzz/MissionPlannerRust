@@ -21,6 +21,8 @@ pub mod api;
 pub mod engine;
 pub mod inventory;
 
-pub use api::{Conditional, CsValue, ScriptApi, ScriptHost};
+pub use api::{
+    Conditional, CsValue, Locationwp, PositionTarget, ScriptApi, ScriptHost, Timeout, WpItem,
+};
 pub use engine::{ScriptRun, run_blocking};
 pub use inventory::{Requirement, ScriptRequirements, Surface};
