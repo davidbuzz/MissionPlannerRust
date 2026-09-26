@@ -45,8 +45,9 @@ every scratch target directory is gone and the next build is cold.
 **Work in the VM is watched:** jobs go through `tools/win10/vm-run.sh` into the "Claude at work"
 window on its desktop - see [[vm-work-shows-on-its-console]].
 
-**Lifecycle from here:** `VBoxManage startvm tiny10 --type gui`, `controlvm tiny10 savestate`,
-`snapshot tiny10 take <name>`; `VBoxManage guestcontrol tiny10 run/copyto` works too but wants
+**Lifecycle from here:** NEVER save, pause, power off or live-snapshot it - see
+[[never-save-the-vm]] ("SAVE = things IMMEDIATELY stop working, do not do"). `VBoxManage startvm
+tiny10 --type gui` only to bring it back after something else stopped it; `VBoxManage guestcontrol tiny10 run/copyto` works too but wants
 the password on the command line, so SSH is the way. Take a snapshot before installing
 toolchains. See [[delegate-to-opus-subagents]] (agents never open windows: that includes the
 VM's desktop) and [[gui-runs-stay-short]].

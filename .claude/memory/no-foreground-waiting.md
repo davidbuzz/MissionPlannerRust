@@ -26,3 +26,9 @@ times in one session. The only allowed shape: start the long job with `run_in_ba
 the `until` loop itself in a `run_in_background` call so the harness notifies me when it ends,
 and do other work in the meantime. Never a foreground `sleep` or poll loop, not even for a
 30-second build.
+
+**2026-09-26, Buzz: "do not foreground wait, including the win vm".** A `tools/win10/vm-run.sh`
+job run in the foreground - a build or test in the VM with a long timeout - is a foreground wait
+like any other, and he rejected one. Every VM job that takes more than a moment goes with
+`run_in_background: true`; its output streams into the task file, the console window shows it,
+and the notification says when it ends.

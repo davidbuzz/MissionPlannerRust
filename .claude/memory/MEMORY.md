@@ -12,6 +12,7 @@ controlled; the per-project memory directory holds symlinks to them.
 - [Mute on language](mute-on-language.md) — English when `language` is empty; no i18n questions or reports until told otherwise (Buzz, 2026-09-25)
 - [Work the matrix in priority order](work-the-matrix-in-priority-order.md) — every "high" row of NOT_DONE_YET_MATRIX.md to 100% before any "med" row (Buzz, 2026-09-26)
 
+- [NEVER save the VM](never-save-the-vm.md) — no savestate/pause/poweroff/live snapshot of tiny10 without Buzz's word: "SAVE = things IMMEDIATELY stop working, do not do" (2026-09-26)
 - [One build at a time](one-build-at-a-time.md) — one cargo build at a time under `flock <scratchpad>/build.lock`; with the VM up, debug at 4 jobs and NO release build (a release build beside the VM OOM-killed gnome-shell and the VM on 2026-09-26)
 - [Scratch target dirs fill the disk](scratch-target-dirs-fill-the-disk.md) — /tmp is the root disk, 96% full without me; target-solo hit 65 GB; prune planner-* incremental caches, old test binaries and finished agents' target dirs; df before big runs (2026-09-26)
 - [No foreground waiting](no-foreground-waiting.md) — background long operations, poll cheaply, never block the session

@@ -25,8 +25,10 @@ out clears it) and three minutes later the OOM killer killed the VirtualBox proc
 more memory per job than a debug build.
 
 **How to apply:**
-- With the VM up: no release build at all, and a debug build at `CARGO_BUILD_JOBS=4`. Release
-  builds (the storm gate needs one) wait for the VM to be saved or off, and run at 6 jobs.
+- With the VM up: a debug build at `CARGO_BUILD_JOBS=4`; a release build at 2-3 jobs inside
+  `systemd-run --user --scope -p MemoryMax=...` so the kernel kills the build, not the desktop or
+  the VM. NEVER save the VM for a build ([[never-save-the-vm]]: Buzz, 2026-09-26, "SAVE = things
+  IMMEDIATELY stop working, do not do"); 6 jobs only once he has turned the VM off himself.
 - A shared lock serialises every cargo run, mine and the agents': `flock <scratchpad>/build.lock
   env CARGO_BUILD_JOBS=6 CARGO_TARGET_DIR=... cargo ...`; GUI runs that must be quiet (the storm)
   hold the same lock.
@@ -44,3 +46,24 @@ more memory per job than a debug build.
   agents. After a crash: restart SITL, check `git status` (the tree survives), check each
   agent's worktree for partial work before resuming it. See [[delegate-to-opus-subagents]],
   [[no-foreground-waiting]].
+- Never edit the main tree's Rust sources while a build that will be shipped (the release into
+  dist/) compiles from it: on 2026-09-26 I changed mp-transport and mp-firmware mid-release and
+  could not say which version each crate was built from. Work in a worktree until it finishes.
+- Release beside the running VM, measured 2026-09-26: the canonical profile (fat LTO, 1 codegen
+  unit, debug=1) was OOM-killed at an 11 GB scope compiling mp-gui - VirtualBox's guest RAM does
+  not show in `ps` but leaves ~9 GB available. What fits: `CARGO_PROFILE_RELEASE_DEBUG=0` (dist is
+  stripped anyway), `CARGO_PROFILE_RELEASE_LTO=thin`, `CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16`,
+  2 jobs, `MemoryMax=8G`. Say so when handing the build over; fat LTO needs the VM off (his word).
+- **2026-09-26 13:08-13:12, the third memory crash, and how it happened** (Buzz: "mem issue - pls
+  check what kernel did"): (1) kernel global OOM killed the release's rustc at 11.2 GB - an 11 GB
+  scope cap is no protection when less than that is actually free; (2) systemd-oomd then killed
+  VS Code (`app-org.chromium.Chromium-<pid>.scope` IS VS Code's Electron), and with it this
+  session and both agents, because **every cargo I start runs inside VS Code's cgroup** (extension
+  host -> claude -> bash -> cargo): oomd blames the builds' memory on VS Code. And the VM was
+  compiling in the guest at the same time as a host build - guest builds grow VirtualBox from ~5 GB
+  toward its full 12 GB, host RAM the `ps` list never shows.
+  **How to apply:** every host build goes in its own scope, `systemd-run --user --scope -p
+  MemoryHigh=<n> -p MemoryMax=<n> -p OOMScoreAdjust=1000 ...`, sized from `free`'s *available*
+  minus a margin (never more than available), so pressure and kills land on the build, not VS
+  Code. Never a host build while the VM builds, and never a VM build while the host builds - one
+  or the other, checked before starting either.
