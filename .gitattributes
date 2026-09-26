@@ -1,0 +1,5 @@
+# Test fixtures are bytes, not text: a Windows checkout with core.autocrlf must not give them CRLF
+# line ends - the legacy firmware fixture grew from 654 to 664 bytes that way in the tiny10 VM,
+# and config-firmware.gui failed on its download size (2026-09-26).
+testdata/** -text
+crates/*/testdata/** -text
