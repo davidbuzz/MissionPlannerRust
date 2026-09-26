@@ -16,7 +16,8 @@
 # * The data directory is `Documents\MissionPlannerRust` on Windows (mp_settings, D11), so
 #   `env XDG_DATA_HOME dir` sets USERPROFILE to `dir\.home`, whose `Documents` is a junction to
 #   `dir`: the application then finds `dir\MissionPlannerRust`, where the script's setup put its
-#   config.xml. LOCALAPPDATA goes to `dir` too, and `env TMPDIR dir` sets TEMP and TMP.
+#   config.xml. LOCALAPPDATA and ProgramData (the data directory proper, as the C#'s) go to `dir`
+#   too, and `env TMPDIR dir` sets TEMP and TMP.
 # * A script that gives no data directory and no MP_CONFIG_XML gets an empty config.xml of its
 #   own, not a copy of the VM's: the VM's is the owner's, and one saved with a link to the
 #   laptop's SITL connected a test to it (2026-09-26).
@@ -34,16 +35,29 @@ param(
     [string]$Root = 'C:\src\MissionPlannerRust',
     [int]$ExpectWaitMs = 10000,
     [double]$HardStopMargin = 3,
-    # Every script's budget doubled on Windows (the owner, 2026-09-26: "double the timeout budget
-    # on windows"): the budgets were measured on the Linux machine, and here a debug build runs
-    # in a VM that shares its cores. Over-budget and the hard stop both count from the doubled one.
+    # The Windows budgets, one line per script, "name seconds": its time in a passing run here,
+    # which gui-suite.ps1 records after every run - tools\win10\budgets.txt by default.
+    [string]$Budgets = '',
+    # A script with no Windows time yet has its own budget, the Linux one, doubled (the owner,
+    # 2026-09-26: "double the timeout budget on windows"): the budgets were measured on the Linux
+    # machine, and here a debug build runs in a VM that shares its cores. Over-budget and the hard
+    # stop both count from the doubled one.
     [double]$BudgetScale = 2,
     # Budgets and the hard stop stretched by this much: the budgets were measured on the Linux
     # machine, and a debug build in a VM sharing that machine's cores runs slower. The time is
     # still reported, and a run over the script's own budget still says so.
     [double]$TimeScale = 1,
     # Leaves the scratch directory - the application's logs, config and data - for a look.
-    [switch]$Keep
+    [switch]$Keep,
+    # The SITL for a link to tcp:127.0.0.1:5760, from gui-suite.ps1: started in this directory
+    # whenever nothing listens there - before the setups, before the application starts and
+    # before a `restart` - and given time to settle (Ensure-Sitl). The Cygwin build exits when
+    # its client leaves - Mission Planner never reconnects - where the Linux suite's listens
+    # again; restarting it in one directory keeps its parameters, as the Linux one keeps them
+    # across the suite.
+    [string]$SitlExe = '',
+    [string]$SitlDir = '',
+    [string]$SitlParams = ''
 )
 $ErrorActionPreference = 'Stop'
 $Bash = 'C:\Program Files\Git\bin\bash.exe'
@@ -104,7 +118,9 @@ Add-Type -AssemblyName System.Drawing
 
 $ScriptPath = (Resolve-Path $Script).Path
 $ScriptName = [IO.Path]::GetFileName($ScriptPath)
-$Work = Join-Path $env:TEMP ('gui-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+# Named as tools/gui-test.sh names its scratch directory (`mktemp -t planner-work-XXXXXX`): a script
+# may check that a path the application shows is in it (fly-poi.gui).
+$Work = Join-Path $env:TEMP ('planner-work-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Path $Work | Out-Null
 $WorkFwd = $Work.Replace('\', '/')
 $FactsFile = Join-Path $Work '.facts'
@@ -320,7 +336,26 @@ foreach ($raw in $lines) {
     }
 }
 $ScriptBudget = $Budget
-$Budget = $Budget * $BudgetScale
+# The script's budget on Windows, once a passing run here has measured one (the owner,
+# 2026-09-26: "made so its successful test run time + 3 sec", as on Linux, where
+# tools/gui-budgets.py record keeps the scripts' own budgets); until then its own doubled.
+if (-not $Budgets) { $Budgets = Join-Path $Root 'tools\win10\budgets.txt' }
+$BaseName = [IO.Path]::GetFileNameWithoutExtension($ScriptName)
+$Measured = $null
+if (Test-Path $Budgets) {
+    foreach ($entry in Get-Content $Budgets) {
+        if ($entry -match '^(\S+)\s+([0-9.]+)\s*$' -and $Matches[1] -eq $BaseName) {
+            $Measured = [double]::Parse($Matches[2], [Globalization.CultureInfo]::InvariantCulture)
+        }
+    }
+}
+if ($null -ne $Measured) {
+    $Budget = $Measured
+    $BudgetFrom = "measured on Windows; the script's own is $ScriptBudget s"
+} else {
+    $Budget = $Budget * $BudgetScale
+    $BudgetFrom = "$BudgetScale x the script's $ScriptBudget s, not yet timed on Windows"
+}
 
 # The window: what the script asks for, no larger than the screen's work area allows.
 $areaW = [GuiInput]::GetSystemMetrics(16); $areaH = [GuiInput]::GetSystemMetrics(17)
@@ -352,9 +387,67 @@ foreach ($pair in $envs) {
         [void]$Junctions.Add($documents)
         $env:USERPROFILE = Join-Path $data '.home'
         $env:LOCALAPPDATA = $data
+        # And the data directory, which on Windows is CommonApplicationData's, as the C#'s
+        # (Settings.GetDataDirectory): left at C:\ProgramData, fly-camera read the terrain tiles a
+        # session by hand had fetched there, where the script's own directory has none.
+        $env:ProgramData = $data
     }
     if ($pair[0] -eq 'TMPDIR') { $env:TEMP = $pair[1].Replace('/', '\'); $env:TMP = $env:TEMP }
 }
+# The SITL, before the setups - a setup may talk to its second port, 5762 - and again before the
+# application starts. In the suite it is gui-suite.ps1's one SITL behind tools\win10\sitl-relay.ps1,
+# which keeps it running across scripts ("relay.status" in its directory); run alone, this starts
+# one whenever nothing listens, as Mission Planner starts it, `--serial0 tcp:0` (`SITL.cs:664`), so
+# it boots at once rather than waiting for its first client. Either way a SITL younger than
+# $SitlSettle seconds is given the rest to find its GPS, set its home and pass its prearm checks
+# before a script uses it: the Linux suite's has been up for minutes by then, and scripts run
+# against one seconds old found no home (`plan-home-marker-vehicle` kept its planned Brisbane
+# home), no position ("Bad Lat/Long") and "Not Ready to Arm" (the owner's report, 2026-09-26).
+$SitlSettle = 30
+function Ensure-Sitl {
+    $script:SitlWaitedMs = 0
+    if (-not $SitlExe) { return }
+    $status = Join-Path $SitlDir 'relay.status'
+    $started = $null
+    if (Test-Path $status) {
+        # The relay's SITL; between its exit and its restart the status names a process gone.
+        for ($i = 0; $i -lt 40 -and -not $started; $i++) {
+            $fields = @((Get-Content $status -ErrorAction SilentlyContinue) -split ' ')
+            if ($fields.Count -eq 2 -and (Get-Process -Id $fields[0] -ErrorAction SilentlyContinue)) {
+                $started = [DateTime]::Parse($fields[1], [Globalization.CultureInfo]::InvariantCulture,
+                    [Globalization.DateTimeStyles]::RoundtripKind).ToLocalTime()
+            } else {
+                Start-Sleep -Milliseconds 250
+            }
+        }
+    } else {
+        for ($attempt = 0; $attempt -lt 2; $attempt++) {
+            if (netstat -an | Select-String -Pattern ':5760\s+\S+\s+LISTENING') { break }
+            if ($attempt -eq 0) {
+                New-Item -ItemType Directory -Force -Path $SitlDir | Out-Null
+                Start-Process -FilePath $SitlExe -WorkingDirectory $SitlDir -WindowStyle Minimized `
+                    -ArgumentList @('--model', 'quad', '--speedup', '1', '--defaults', "`"$SitlParams`"", '--serial0', 'tcp:0') | Out-Null
+                Say "SITL started in $SitlDir"
+            }
+            for ($i = 0; $i -lt 60; $i++) {
+                if (netstat -an | Select-String -Pattern ':5760\s+\S+\s+LISTENING') { break }
+                Start-Sleep -Milliseconds 250
+            }
+        }
+        $sitl = Get-Process ArduCopter -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $SitlExe } |
+            Sort-Object StartTime | Select-Object -First 1
+        if ($sitl) { $started = $sitl.StartTime }
+    }
+    if (-not $started) { Say 'SITL did not come up'; return }
+    $wait = ($started.AddSeconds($SitlSettle) - (Get-Date)).TotalSeconds
+    if ($wait -gt 0) {
+        Say ("SITL settling for {0:N0} s" -f $wait)
+        $script:SitlWaitedMs = [int]($wait * 1000)
+        Start-Sleep -Milliseconds $script:SitlWaitedMs
+    }
+}
+Ensure-Sitl
+
 $setupNo = 0
 foreach ($setup in $setups) {
     $env:WORK = $WorkFwd
@@ -390,6 +483,7 @@ if (-not $env:MP_CONFIG_XML) {
 # ---- the application ----------------------------------------------------------------------------
 
 function Start-App {
+    Ensure-Sitl
     $arguments = @{ FilePath = $Exe; PassThru = $true; NoNewWindow = $true; WorkingDirectory = $Root
         RedirectStandardOutput = (Join-Path $Work 'stdout.log'); RedirectStandardError = (Join-Path $Work 'stderr.log') }
     if ($Link) { $arguments.ArgumentList = $Link }
@@ -436,7 +530,9 @@ function Expect-Once([string[]]$w, [bool]$say, [int]$lineNo) {
     $script:LastValue = $got
     if ($op -eq '~') {
         $want = ($w[3..($w.Count - 1)] -join ' ')
-        if ($got.Contains($want)) { if ($say) { Say "  ok   $key contains '$want'" }; return $true }
+        # A path is written with / in the scripts, and Windows gives \ where the application joins
+        # one on (Path.Combine, as the C# joins it): a separator matches either.
+        if ($got.Replace('\', '/').Contains($want.Replace('\', '/'))) { if ($say) { Say "  ok   $key contains '$want'" }; return $true }
         if ($say) { Fail "line ${lineNo}: $key is '$got', expected to contain '$want'" }
         return $false
     }
@@ -472,7 +568,7 @@ function Expect-Once([string[]]$w, [bool]$say, [int]$lineNo) {
 $tLaunch = Now-Ms
 Start-App
 $t0 = Now-Ms
-Write-Output "window after $(Secs ($t0 - $tLaunch)) s; budget $Budget s from here ($BudgetScale x the script's $ScriptBudget s)"
+Write-Output "window after $(Secs ($t0 - $tLaunch)) s; budget $Budget s from here ($BudgetFrom)"
 $hardStopMs = [long](($Budget * $TimeScale + $HardStopMargin) * 1000)
 
 function Check-HardStop {
@@ -591,6 +687,8 @@ try {
                 Set-Content -Path $ProbeFile -Value '' -ErrorAction SilentlyContinue
                 Write-Output "restarted after line $($lineNo - 1)"
                 Start-App
+                # A SITL that left with the application and settled again is not the script's time.
+                $t0 += $script:SitlWaitedMs
             }
             'within' { $script:NextWaitMs = [long]([double]$w[1] * 1000) }
             'expect' {

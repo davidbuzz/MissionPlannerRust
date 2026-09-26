@@ -7,8 +7,10 @@
 #   powershell -File tools\win10\gui-suite.ps1 -All
 #   powershell -File tools\win10\gui-suite.ps1 -Names plan-fence-clear,config-radio
 #
-# A script linked to tcp:127.0.0.1:5760 gets this VM's own SITL there, started once and kept, as
-# the Linux suite keeps tools/sitl's: the Cygwin ArduCopter the planner's SIMULATION page fetched
+# A script linked to tcp:127.0.0.1:5760, or whose header says it needs SITL, gets this VM's own
+# SITL there, one for the whole suite as the Linux suite keeps tools/sitl's one SITL - kept
+# running across scripts by tools\win10\sitl-relay.ps1: the Cygwin ArduCopter the planner's
+# SIMULATION page fetched
 # into Documents\MissionPlannerRust\sitl (ArduPilot's published Stable, where the Linux suite runs
 # a 4.8.0-dev build - a difference to look at before calling a failure Windows'), with
 # tools/sitl/params/copter.parm, in a scratch directory. The laptop's SITL is never used.
@@ -18,9 +20,11 @@ param(
     [string]$Root = 'C:\src\MissionPlannerRust',
     [string]$Out = 'C:\setup\suite',
     [int]$ScriptTimeout = 300,
-    # gui-test.ps1's -TimeScale: 2 by default, so a script is failed for what it found and not for
-    # a VM's pace; "PASS over budget" still marks one slower than its budget.
-    [double]$TimeScale = 2
+    # gui-test.ps1's -TimeScale, on top of its -BudgetScale 2: 1, so a script stops 3 s after its
+    # doubled budget, as the Linux runner stops one 3 s after its budget. It was 2, which with the
+    # doubling ran a failing script to four times its budget - plan-text's 28 s to a 115 s hard
+    # stop - and the owner asked for Windows to give up as quickly as Linux (2026-09-26).
+    [double]$TimeScale = 1
 )
 $ErrorActionPreference = 'Continue'
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
@@ -33,35 +37,35 @@ if ($All) {
 }
 $Sitl = Join-Path $env:USERPROFILE 'Documents\MissionPlannerRust\sitl\ArduCopter.exe'
 
-# Whether something listens on 127.0.0.1:5760. Not a MAVLink read, as tools/sitl/start-sitl.sh
-# makes on Linux: this SITL waits for its first client before it starts, and a check that was
-# that client left the next - the planner - unheard (2026-09-26).
-function Test-Sitl([int]$seconds = 5) {
-    $deadline = (Get-Date).AddSeconds($seconds)
-    do {
-        if (netstat -an | Select-String -Pattern ':5760\s+\S+\s+LISTENING') { return $true }
-        Start-Sleep -Milliseconds 250
-    } while ((Get-Date) -lt $deadline)
-    return $false
-}
-function Start-Sitl {
-    if (Test-Sitl 2) { return $true }
-    if (-not (Test-Path $Sitl)) { Write-Host "no SITL at ${Sitl}: the SIMULATION page fetches it"; return $false }
-    $dir = Join-Path $env:TEMP ('suite-sitl-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
-    New-Item -ItemType Directory -Path $dir | Out-Null
-    $params = Join-Path $Root 'tools\sitl\params\copter.parm'
-    $script:SitlProcess = Start-Process -FilePath $Sitl -WorkingDirectory $dir -WindowStyle Minimized -PassThru `
-        -ArgumentList @('--model', 'quad', '--speedup', '1', '--defaults', "`"$params`"")
-    for ($i = 0; $i -lt 30; $i++) {
-        Start-Sleep 2
-        if (Test-Sitl 3) { Write-Host "SITL up (pid $($script:SitlProcess.Id), in $dir)"; return $true }
-    }
-    Write-Host 'SITL did not come up'
-    return $false
+# One SITL directory for the suite, as the Linux suite runs one SITL throughout: gui-test.ps1
+# starts the simulator there whenever nothing listens on 5760, so its eeprom - the parameters
+# scripts set - carries from script to script.
+$SitlDir = Join-Path $env:TEMP ('suite-sitl-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+$SitlParams = Join-Path $Root 'tools\sitl\params\copter.parm'
+
+# One SITL for the suite, behind tools\win10\sitl-relay.ps1, started for the first script that
+# needs it: the Cygwin build exits when its client leaves, and the relay keeps it running from one
+# script to the next as the Linux suite's runs. Any SITL or relay an earlier run left is stopped.
+Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" |
+    Where-Object { $_.CommandLine -match 'sitl-relay\.ps1' } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+Get-Process ArduCopter -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $Sitl } | Stop-Process -Force -ErrorAction SilentlyContinue
+$relay = $null
+function Start-Relay {
+    $relayArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'tools\win10\sitl-relay.ps1',
+        '-SitlExe', "`"$Sitl`"", '-SitlDir', "`"$SitlDir`"", '-SitlParams', "`"$SitlParams`"")
+    $process = Start-Process powershell -ArgumentList $relayArgs -WindowStyle Minimized -PassThru
+    $status = Join-Path $SitlDir 'relay.status'
+    for ($i = 0; $i -lt 120 -and -not (Test-Path $status); $i++) { Start-Sleep -Milliseconds 250 }
+    Write-Host "SITL relay $($process.Id): $(if (Test-Path $status) { Get-Content $status } else { 'no SITL yet' })"
+    return $process
 }
 
 $results = New-Object System.Collections.ArrayList
 $counts = @{ PASS = 0; OVER = 0; FAIL = 0; SKIP = 0 }
+# Each passing script's Windows budget from this run: its time, rounded up with one to spare; a
+# script stopped by the hard stop alone, its budget and five more.
+$measured = @{}
 $started = Get-Date
 foreach ($name in $Names) {
     $script = "tests\gui\$name.gui"
@@ -76,12 +80,17 @@ foreach ($name in $Names) {
         $m = [regex]::Match($text, '(tcp:127\.0\.0\.1:5760|file:[^ ,\r\n]+\.tlog)')
         if ($m.Success) { $arg = $m.Groups[1].Value }
     }
-    if ($arg -eq 'tcp:127.0.0.1:5760' -and -not (Start-Sitl)) {
-        $line = "${name}: SKIP no SITL"; $counts.SKIP++; [void]$results.Add($line); Write-Output $line; continue
+    # A script connecting to SITL through the screen's own boxes names no link (main-connect), and
+    # says "Needs SITL" in its header instead.
+    $needsSitl = $arg -eq 'tcp:127.0.0.1:5760' -or $text -match 'Needs SITL'
+    if ($needsSitl -and -not (Test-Path $Sitl)) {
+        $line = "${name}: SKIP no SITL at $Sitl"; $counts.SKIP++; [void]$results.Add($line); Write-Output $line; continue
     }
+    if ($needsSitl -and -not $relay) { $relay = Start-Relay }
     $log = Join-Path $Out "gui-$name.log"
     $argsList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'tools\win10\gui-test.ps1', '-Script', $script, '-TimeScale', $TimeScale)
     if ($arg) { $argsList += @('-Link', $arg) }
+    if ($needsSitl) { $argsList += @('-SitlExe', "`"$Sitl`"", '-SitlDir', "`"$SitlDir`"", '-SitlParams', "`"$SitlParams`"") }
     $run = Start-Process powershell -ArgumentList $argsList -NoNewWindow -PassThru -RedirectStandardOutput $log -RedirectStandardError "$log.err"
     # Windows PowerShell reports no ExitCode for a process whose handle was not read while it ran.
     $null = $run.Handle
@@ -93,6 +102,10 @@ foreach ($name in $Names) {
         $body = (Get-Content $log -ErrorAction SilentlyContinue) + (Get-Content "$log.err" -ErrorAction SilentlyContinue)
         $took = ($body | Select-String -Pattern '^took ([0-9.]+) s' | Select-Object -Last 1)
         $took = if ($took) { $took.Matches[0].Groups[1].Value } else { '?' }
+        if ($took -ne '?' -and ($run.ExitCode -eq 0 -or $run.ExitCode -eq 4)) {
+            $seconds = [double]::Parse($took, [Globalization.CultureInfo]::InvariantCulture)
+            $measured[$name] = [int][Math]::Ceiling($seconds) + 1
+        }
         switch ($run.ExitCode) {
             0 { $line = "${name}: PASS $took s"; $counts.PASS++ }
             4 { $line = "${name}: PASS over budget $took s"; $counts.OVER++ }
@@ -100,6 +113,16 @@ foreach ($name in $Names) {
             default {
                 $first = ($body | Select-String -Pattern '^FAIL|could not|setup exited|app exited|no window' | Select-Object -First 2 | ForEach-Object { $_.Line.Trim() }) -join ' | '
                 $line = "${name}: FAIL $first"; $counts.FAIL++
+                # A run whose one failure is the hard stop found nothing wrong but ran out of time,
+                # and so never records one: as tools/gui-budgets.py retime has it, its budget gets
+                # the margin and two more, for the next run to record over (plan-survey's 180
+                # lines, 2026-09-26).
+                $fails = @($body | Where-Object { $_ -match '^FAIL' })
+                $used = $body | Select-String -Pattern 'budget ([0-9.]+) s from here' | Select-Object -First 1
+                if ($fails.Count -gt 0 -and $used -and @($fails | Where-Object { $_ -notmatch '^FAIL: hard stop' }).Count -eq 0) {
+                    $seconds = [double]::Parse($used.Matches[0].Groups[1].Value, [Globalization.CultureInfo]::InvariantCulture)
+                    $measured[$name] = [int][Math]::Ceiling($seconds) + 5
+                }
             }
         }
     }
@@ -110,7 +133,36 @@ $summary = "suite done in {0:N0} s: {1} pass, {2} pass over budget, {3} fail, {4
     ((Get-Date) - $started).TotalSeconds, $counts.PASS, $counts.OVER, $counts.FAIL, $counts.SKIP, $Names.Count
 Write-Output $summary
 [void]$results.Add($summary)
+
+# The Windows budgets, tools\win10\budgets.txt, which gui-test.ps1 reads: every script that passed
+# in this run - over its budget or not - gets its time rounded up with one to spare, the rule
+# tools/gui-budgets.py record keeps the Linux budgets by, and a run then stops three seconds past
+# it; the rest keep what they had. The file's comment lines are kept. Written here and to the
+# shared folder, from which it goes into the repository.
+$budgetsFile = Join-Path $Root 'tools\win10\budgets.txt'
+$comments = @(); $budgets = @{}
+if (Test-Path $budgetsFile) {
+    foreach ($entry in Get-Content $budgetsFile) {
+        if ($entry.StartsWith('#')) { $comments += $entry }
+        elseif ($entry -match '^(\S+)\s+([0-9.]+)\s*$') { $budgets[$Matches[1]] = [int][double]::Parse($Matches[2], [Globalization.CultureInfo]::InvariantCulture) }
+    }
+}
+$new = 0; $changed = 0
+foreach ($name in $measured.Keys) {
+    if (-not $budgets.ContainsKey($name)) { $new++ } elseif ($budgets[$name] -ne $measured[$name]) { $changed++ }
+    $budgets[$name] = $measured[$name]
+}
+# In ordinal order, as a sort on the laptop orders it, so the file changes only where a time does.
+$names = [string[]]@($budgets.Keys)
+[Array]::Sort($names, [StringComparer]::Ordinal)
+$lines = $comments + @($names | ForEach-Object { "$_ $($budgets[$_])" })
+[IO.File]::WriteAllLines($budgetsFile, [string[]]$lines)
+Copy-Item $budgetsFile \\VBOXSVR\vmshare\win-budgets.txt -ErrorAction SilentlyContinue
+$line = "budgets: $($measured.Count) measured in this run ($new new, $changed changed); $($budgets.Count) scripts have a Windows budget"
+Write-Output $line
+[void]$results.Add($line)
 $results | Set-Content (Join-Path $Out 'results.txt')
 Copy-Item (Join-Path $Out 'results.txt') \\VBOXSVR\vmshare\win-suite-results.txt -ErrorAction SilentlyContinue
-if ($script:SitlProcess -and -not $script:SitlProcess.HasExited) { Stop-Process -Id $script:SitlProcess.Id -Force -ErrorAction SilentlyContinue }
+if ($relay) { Stop-Process -Id $relay.Id -Force -ErrorAction SilentlyContinue }
+Get-Process ArduCopter -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $Sitl } | Stop-Process -Force -ErrorAction SilentlyContinue
 exit ([int]($counts.FAIL -gt 0))
