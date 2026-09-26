@@ -11,8 +11,8 @@ budget 4
 # A first budget, set by hand until a passing run records one.
 
 expect coverage.flightplanner.total 121
-expect coverage.flightplanner.done 103
-expect coverage.flightplanner.missing 6
+expect coverage.flightplanner.done 105
+expect coverage.flightplanner.missing 4
 expect plan.menu closed
 
 # The right button opens the menu, as MainMap.ContextMenuStrip does, and adds nothing.
