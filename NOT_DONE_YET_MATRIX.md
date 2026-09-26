@@ -1,7 +1,9 @@
 | Area or filename | Functional item | Priority | Progress |
 |---|---|---|---|
 | crates/mp-transport/src/win32.rs | Windows board detection: the port list takes SetupAPI's hardware id and bus-reported name as Win32DeviceMgmt reads them - Install Firmware found no board on Windows (owner's bug report 2026-09-26); code written, Windows test owed in the VM | high | 60 |
-| dist/ | Linux release app rebuilt at today's main (owner's ask): building beside the running VM, memory-capped | high | 50 |
+| dist/ | Linux release app rebuilt at today's main (owner's ask): built 2026-09-26 14:25 at 962cd28, thin LTO and no debuginfo to fit beside the VM (fat LTO needs the VM off) | high | 100 |
+| crates/mp-gui/src/plotline.rs | Logs > PLOT drew a string of dots (owner's bug report 2026-09-26): every ZedGraph curve - the log browser's, the tuning graph's, the FFT screen's - as a line through its points, clipped, the FFT's diamonds; log-browse.gui passed headless (ATT.Roll one line of 182 points) | high | 100 |
+| crates/mp-gui/src/glyph_text.rs | Plan > Text said "Error" on Windows: the font looked up with fontconfig, which Windows has not got; now the installed font's file or GDI+'s Microsoft Sans Serif; plan-text.gui owed a Windows run | high | 80 |
 
 
 | crates/mp-script | Scripts handed MAV, MainV2, screens, Ports, Joystick: agent's patch in its worktree, 19 review findings to fix before merge (getWP a whole-mission download, setWPTotal without resends, a hang when the link drops) | med | 50 |
@@ -22,7 +24,7 @@
 | crates/mp-log | Log analysis (loganalysis) reachable from the DataFlash Logs page | med | 60 |
 | crates/mp-gui/src/sitl | SITL screen: a real launch on macOS (Linux and Windows done) | med | 95 |
 | DELIVERABLES D20 | Installers, updates, crash reporting | med | 5 |
-| DELIVERABLES D19 | Per-message decoder fuzzing; macOS graphics smoke; the Windows GUI suite against a Linux headless run at one commit - runner in tools/win10, first run stopped at 18 of 171 by the VM restart for USB (15 pass), SITL restarts per client in the runner untested | med | 70 |
+| DELIVERABLES D19 | Per-message decoder fuzzing; macOS graphics smoke; the Windows GUI suite against a Linux headless run at one commit - first whole run 2026-09-26 at the VM's eb472ed: 121 pass, 5 over budget, 34 fail, 10 skip of 170; the runner's SITL now one for the suite behind tools/win10/sitl-relay.ps1 (the Cygwin build exits when its client leaves - measured), settled 30 s, 13 of the 33 then passed; Windows budgets measured into tools/win10/budgets.txt by the suite (owner: "successful test run time + 3 sec"); owed: the VM at main and rebuilt, a whole run, the Linux headless run at the same commit, the VM's screen taller than 1200 for 1600x1200 windows (owner's call) | med | 75 |
 
 | crates/mp-gui/src/fly.rs | Record HUD to AVI, and stop recording | low | 1 |
 | crates/mp-gui/src/fly.rs | RAW_Sensor window from the Actions grid | low | 1 |
