@@ -11,8 +11,15 @@
 # clicked, the CubeOrange build chosen and uploaded - UploadPX4 (Utilities/Firmware.cs:591-750):
 # AttemptRebootToBootloader opens the comport, hears the heartbeat, sends the reboot into the
 # bootloader and closes (:797-837); every port is scanned for thirty seconds for a bootloader with
-# the firmware's board id; the image is erased, programmed, verified by CRC and the board rebooted
-# - "Upload Done".
+# the firmware's board id; the board's flash CRC is compared with the image's, and where they
+# match - the board already runs this build - "Upload anyway?" is asked and answered Yes
+# (px4uploader/Uploader.cs:806-866); the image is erased, programmed, verified by CRC and the
+# board rebooted - "Upload Done".
+#
+# The board is expected to run the current stable build already: it is what this script leaves
+# on it. A board with any other firmware gets no question, and the script fails at the question's
+# line - flashed all the same, as the flow goes on without it (the first Windows run, 2026-09-27,
+# found the Linux run's 4.7.1 there and stopped for want of the answer).
 #
 # Needs the board on its MAVLink USB interface (the by-id device below) and nothing else holding it.
 # Run as
@@ -50,9 +57,13 @@ click fw-question-yes
 expect config.firmware.vehicle Copter
 expect config.firmware.selection.selected https://firmware.ardupilot.org/Copter/stable/CubeOrange/arducopter.apj
 
-# The download, the reboot, the scan, the upload: a couple of minutes at most.
+# The download, the reboot, the scan and the CRC: the board has this build, so the question.
 click fw-select-upload
-within 300
+within 240
+expect config.firmware.question ~ The board already has the same firmware version.
+click fw-question-yes
+# The erase, the programming and the verify.
+within 180
 expect config.firmware.flow done
 expect config.firmware.apj.board_id 140
 expect config.firmware.stopped none
