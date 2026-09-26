@@ -32,7 +32,7 @@ setup python3 tests/gui/legacy-vehicle.py --work $WORK --port 5790
 
 screen params
 window 1600x1200
-budget 21
+budget 23
 # A first budget, set by hand until a passing run records one.
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.

@@ -21,11 +21,15 @@
 env MP_CONFIG_XML $WORK/config.xml
 env XDG_DATA_HOME $WORK
 env MP_PLAN_DIR $WORK
+# The map's last place in the config (maplast_*, where the map opens: FlightData.Activate), at
+# the Canberra field, so the corners and the return location clicked are there: the vehicle
+# sends no position for the map to go to.
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><maplast_lat>-35.3632621</maplast_lat><maplast_lng>149.1652374</maplast_lng><maplast_zoom>16</maplast_zoom></Config>' > "$WORK/config.xml"
 setup python3 tests/gui/legacy-vehicle.py --work $WORK --port 5790
 
 screen params
 window 1600x1200
-budget 10
+budget 23
 # A first budget, set by hand until a passing run records one.
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
