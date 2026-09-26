@@ -5,7 +5,6 @@
 | crates/mp-gui/src/plan.rs | GeoFence upload and download menu items | med | 10 |
 | crates/mp-gui/src/config/firmware.rs | Install Firmware connected page: Bootloader Update flow | med | 60 |
 | crates/mp-gui/src/config/firmware.rs | Install Firmware manifest page: remaining wirings of 16 | med | 70 |
-| crates/mp-gui/src/config/rtk_inject.rs | RTK/GPS Inject: remaining wirings, script never run | med | 75 |
 | crates/mp-gui/src/joystick.rs | Joystick Setup: per-channel axis grid | med | 40 |
 | crates/mp-gui/src/config/advanced.rs | Advanced page: twelve buttons open windows not ported | med | 30 |
 | crates/mp-gui/src/config/friendly_params.rs | Standard Params page remainder | med | 80 |

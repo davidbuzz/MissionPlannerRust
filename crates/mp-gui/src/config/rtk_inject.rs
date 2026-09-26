@@ -52,8 +52,12 @@
 //! What is not ported: DroneCAN - the C# feeds every byte to `DroneCAN.ReadSLCAN` and injects the
 //! `uavcan.equipment.gnss.RTCMStream` it finds, and `ExtLibs/DroneCAN` is not in this application
 //! ([`CAN_DIMMED`]); the lines `DoConnect` writes for a CAN adapter on a serial port are written.
-//! `CommsSerialPipe`, the Windows named pipe a port name that is not a serial port falls back to,
-//! has no counterpart here. Of `rtcm3.cs`, the pseudoranges, phases and times of the observation
+//! `CommsSerialPipe`, which `DoConnect` falls back to when .NET's `SerialPort` refuses a port
+//! name (`ConfigSerialInjectGPS.cs:414-427`), has no counterpart here and needs none: it is a
+//! serial port opened through Win32's `CreateFile("\\.\<name>")` rather than a pipe, and
+//! [`mp_transport::SerialTransport`] already opens every name that call opens (the `serialport`
+//! crate uses the same call on Windows), so the first attempt cannot fail the way the fallback
+//! answers. Of `rtcm3.cs`, the pseudoranges, phases and times of the observation
 //! messages and the ephemeris of 1019, which nothing on the page reads.
 //!
 //! The colours are this application's; the lights keep the C#'s green and red.

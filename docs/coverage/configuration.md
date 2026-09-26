@@ -87,9 +87,11 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
 | 243 | `ConfigOptional` | Optional Hardware |  | always | 0 | plumbing: the Optional Hardware heading of the list: one sentence, no controls |
 | 251 | `ConfigSerialInjectGPS` | RTK/GPS Inject | Optional Hardware | always | 24 | partial: `crates/mp-gui/src/config/rtk_inject.rs` `fn page` - every control and handler, the read loop, the RTCM/SBP/UBX/NMEA parsers,
         //     GPS_RTCM_DATA and GPS_INJECT_DATA injection, cs.Base, the .gpsbase log, the u-blox,
-        //     Septentrio and Unicore set-up, the base positions; not DroneCAN over SLCAN
-        //     (ExtLibs/DroneCAN is not ported) nor the Windows named-pipe fallback
-        //     (CommsSerialPipe) |
+        //     Septentrio and Unicore set-up, the base positions; config-rtk.gui passes against
+        //     its own caster; not DroneCAN over SLCAN (ExtLibs/DroneCAN is not ported - the
+        //     DroneCAN page's row); CommsSerialPipe, the C#'s Win32 CreateFile fallback for a
+        //     port name .NET's SerialPort refuses, is not needed: SerialTransport opens those
+        //     names first time (rtk_inject.rs's module note) |
 | 254 | `ConfigCubeID` | CubeID Update | Optional Hardware | connected | 2 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 | 259 | `Sikradio` (`Radio/Sikradio.cs`, not a panel) | Sik Radio | Optional Hardware | always | 17 | **missing** |
 | 263 | `ConfigADSB` | ADSB | Mandatory Hardware | any | 5 | partial: `crates/mp-gui/src/config/adsb.rs` `fn page` - a RangeControl, bitmask or ValuesControl per documented ADSB_/AVD_ parameter,

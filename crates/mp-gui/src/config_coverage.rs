@@ -548,9 +548,11 @@ pub const PANELS: &[Panel] = &[
             at("crates/mp-gui/src/config/rtk_inject.rs", "fn page"),
             "every control and handler, the read loop, the RTCM/SBP/UBX/NMEA parsers,
         //     GPS_RTCM_DATA and GPS_INJECT_DATA injection, cs.Base, the .gpsbase log, the u-blox,
-        //     Septentrio and Unicore set-up, the base positions; not DroneCAN over SLCAN
-        //     (ExtLibs/DroneCAN is not ported) nor the Windows named-pipe fallback
-        //     (CommsSerialPipe)",
+        //     Septentrio and Unicore set-up, the base positions; config-rtk.gui passes against
+        //     its own caster; not DroneCAN over SLCAN (ExtLibs/DroneCAN is not ported - the
+        //     DroneCAN page's row); CommsSerialPipe, the C#'s Win32 CreateFile fallback for a
+        //     port name .NET's SerialPort refuses, is not needed: SerialTransport opens those
+        //     names first time (rtk_inject.rs's module note)",
         ),
     ),
     // ---- end RTK/GPS Inject ----
