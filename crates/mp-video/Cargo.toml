@@ -19,3 +19,13 @@ thiserror.workspace = true
 # build time, so a Linux build needs libclang and the kernel's UAPI headers (linux-libc-dev);
 # nothing links against them.
 v4l = { version = "0.14", default-features = false, features = ["v4l2"] }
+
+[target.'cfg(windows)'.dependencies]
+# Media Foundation for the Windows source, at the version gpui already builds; `windows-core`
+# named as well because the callback's `#[implement]` expands to paths under it.
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Media_MediaFoundation",
+    "Win32_System_Com",
+] }
+windows-core = "0.62"

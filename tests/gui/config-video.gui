@@ -8,7 +8,8 @@
 # where DirectShow gives the bare name (the owner's ruling: two nodes share the card) - and
 # binding the list selects the first, whose formats Video Format lists as the C#'s
 # GCSBitmapInfo reads, "<w> x <h> <fps> fps <fourcc>", the first selected (:296-360, 741-750,
-# 968-989). Start opens the device in that format; once it runs, video_device and video_options
+# 968-989). On Windows the devices are Media Foundation's, each by its bare friendly name, as
+# DirectShow's list names them. Start opens the device in that format; once it runs, video_device and video_options
 # are written as the two combos' indexes and frames arrive (:261-285); the flight screen's HUD
 # draws the latest one under everything (HUD.cs:1986-2013, FlightData.cs:1897-1900). Enable
 # HUD Overlay unticked sets hudon false, and the HUD paints the picture alone, its instruments
@@ -16,7 +17,7 @@
 # (:136-145); ticked again, the instruments are back. Stop ends the capture and the HUD's picture
 # goes with it (:287-294, Capture.cs:142-157), and the instruments are drawn whatever hudon is.
 #
-# Needs a V4L2 webcam that offers MJPEG or YUYV, and no other program holding it. It takes the
+# Needs a webcam that offers MJPEG or YUYV (YUY2 on Windows), and no other program holding it. It takes the
 # camera for a few seconds; nothing else. The unit tests in crates/mp-gui/src/config/planner.rs
 # run this script step for step against a scripted webcam laid out as this machine's. Run as
 #
@@ -27,9 +28,10 @@ window 1600x1200
 budget 11
 env XDG_DATA_HOME $WORK
 env MP_CONFIG_XML $WORK/config.xml
-# The capture is mp_video over V4L2; the C#'s Windows capture, DirectShow, is not ported, so on
-# Windows the device list is empty whatever is plugged in (NOT_DONE_YET_MATRIX.md).
-windows: setup echo 'video capture on Windows (the C#'"'"'s DirectShow) is not ported' >&2; exit 3
+# The capture is mp_video: V4L2 on Linux, Media Foundation on Windows. The tiny10 VM has no
+# camera unless one is passed through to it (VirtualBox's webcam passthrough is its Extension
+# Pack's), and without one there is nothing to list.
+windows: setup powershell -NoProfile -Command 'if (-not (Get-PnpDevice -Class Camera,Image -PresentOnly -ErrorAction SilentlyContinue)) { Write-Error "no camera on this machine"; exit 3 }'
 
 expect config.page ConfigPlanner
 expect config.planner.active true
@@ -44,7 +46,7 @@ expect hud.instruments true
 click planner-CMB_videosources
 expect config.planner.dropdown CMB_videosources
 expect config.planner.video.devices > 0
-expect config.planner.video.device ~ (/dev/video
+linux: expect config.planner.video.device ~ (/dev/video
 expect config.planner.video.modes > 0
 expect config.planner.video.mode ~ fps
 click planner-CMB_videosources-0

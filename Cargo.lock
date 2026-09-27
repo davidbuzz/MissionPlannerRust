@@ -4749,6 +4749,8 @@ dependencies = [
  "image",
  "thiserror 2.0.20",
  "v4l",
+ "windows 0.62.2",
+ "windows-core 0.62.2",
 ]
 
 [[package]]

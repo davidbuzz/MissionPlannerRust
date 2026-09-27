@@ -17,6 +17,10 @@
 //!   card name with the node after it ([`node_name`]: two nodes of one webcam share the card);
 //!   a device's formats and frame sizes as the Video Format list, in MJPEG and YUYV,
 //!   the two this crate decodes; frames from a memory-mapped stream.
+//! * `mediafoundation::MediaFoundationSource` on Windows: Media Foundation's video capture
+//!   devices by friendly name, as DirectShow's list names them; their native media types in
+//!   MJPEG and YUY2 as the Video Format list; frames from an asynchronous Source Reader. The
+//!   crate's one `unsafe` file, by the owner's ruling of 2026-09-27.
 //! * [`testing::FakeSource`], scripted devices, formats and frames, for the tests and the
 //!   screen's headless checks.
 //!
@@ -25,11 +29,12 @@
 //! Video, `ExtLibs/Utilities/GStreamer.cs`) and [`mjpeg::CaptureMjpeg`] (Set MJPEG source,
 //! `ExtLibs/Utilities/CaptureMJPEG.cs`).
 //!
-//! Windows' DirectShow (or Media Foundation) source is not written yet; the trait is where it
-//! goes. The label a format gets is the C#'s, with the fourcc where DirectShow had its analog
-//! video standard (`Standard`), which V4L2 has no counterpart for.
+//! macOS has no source yet. The label a format gets is the C#'s, with the fourcc where
+//! DirectShow had its analog video standard (`Standard`), which V4L2 and Media Foundation have
+//! no counterpart for.
 
-#![forbid(unsafe_code)]
+// No `unsafe` but in the Windows source's FFI, which allows it for its file alone.
+#![deny(unsafe_code)]
 
 use std::fmt;
 use std::path::PathBuf;
@@ -39,6 +44,8 @@ use std::thread::JoinHandle;
 
 pub mod convert;
 pub mod gstreamer;
+#[cfg(windows)]
+pub mod mediafoundation;
 pub mod mjpeg;
 pub mod multipart;
 pub mod testing;
@@ -439,14 +446,18 @@ impl Feed {
     }
 }
 
-/// The platform's source: V4L2 on Linux, nothing elsewhere yet.
+/// The platform's source: V4L2 on Linux, Media Foundation on Windows, nothing elsewhere yet.
 #[must_use]
 pub fn platform_source() -> Option<Arc<dyn Source>> {
     #[cfg(target_os = "linux")]
     {
         Some(Arc::new(v4l2::V4l2Source))
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(windows)]
+    {
+        Some(Arc::new(mediafoundation::MediaFoundationSource))
+    }
+    #[cfg(not(any(target_os = "linux", windows)))]
     {
         None
     }

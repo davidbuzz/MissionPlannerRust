@@ -831,13 +831,19 @@ mod tests {
             Path::new("/tmp"),
         );
         let root = "/data/gstreamer/1.0/x86_64";
+        // Joined with the platform's separator, as the C#'s Path.Combine joins them: `\` on
+        // Windows.
+        let (bin, lib) = (
+            Path::new(root).join("bin").display().to_string(),
+            Path::new(root).join("lib").display().to_string(),
+        );
         assert_eq!(
             env,
             [
-                ("PATH".to_owned(), format!("{root}/bin;{root}/lib;/windows")),
+                ("PATH".to_owned(), format!("{bin};{lib};/windows")),
                 ("GSTREAMER_ROOT".to_owned(), root.to_owned()),
                 ("GSTREAMER_1_0_ROOT_X86_64".to_owned(), root.to_owned()),
-                ("GST_PLUGIN_PATH".to_owned(), format!("{root}/lib")),
+                ("GST_PLUGIN_PATH".to_owned(), lib.clone()),
                 ("GST_DEBUG_DUMP_DOT_DIR".to_owned(), "/tmp".to_owned()),
             ]
         );
