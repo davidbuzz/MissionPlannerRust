@@ -4851,6 +4851,36 @@ mod tests {
 
     /// A script of this page, step for step, against the model, with `source`'s cameras:
     /// returns how many facts it checked and how many restarts it made.
+    /// A script line as this platform's runner takes it: a `linux:` or `windows:` line without
+    /// its prefix where it is that platform's, `None` where it is another's; any other line as
+    /// it is.
+    fn for_this_platform(line: &str) -> Option<&str> {
+        for (prefix, here) in [
+            ("linux:", cfg!(target_os = "linux")),
+            ("windows:", cfg!(windows)),
+        ] {
+            if let Some(rest) = line.strip_prefix(prefix) {
+                return here.then(|| rest.trim_start());
+            }
+        }
+        Some(line)
+    }
+
+    #[test]
+    fn a_platform_line_runs_on_its_platform_alone() {
+        let linux = for_this_platform("linux: expect a ~ (/dev/video");
+        let windows = for_this_platform("windows: setup exit 3");
+        if cfg!(target_os = "linux") {
+            assert_eq!(linux, Some("expect a ~ (/dev/video"));
+            assert_eq!(windows, None);
+        }
+        if cfg!(windows) {
+            assert_eq!(linux, None);
+            assert_eq!(windows, Some("setup exit 3"));
+        }
+        assert_eq!(for_this_platform("expect b 1"), Some("expect b 1"));
+    }
+
     fn run_script(script: &str, source: &FakeSource) -> (usize, usize) {
         // Two script tests run at once; each needs a scratch directory of its own, or one
         // removes the other's config.xml between its write and its read.
@@ -4882,6 +4912,11 @@ mod tests {
         for (number, line) in script.lines().enumerate() {
             let line = line.split('#').next().unwrap_or("").trim();
             let at = number + 1;
+            // A line for one platform, `linux: expect ...`, is this platform's without its
+            // prefix and not run on another: the runners' rule (tools/gui-test.sh).
+            let Some(line) = for_this_platform(line) else {
+                continue;
+            };
             if line == "restart" {
                 // `MainV2_FormClosing` on the CONFIG screen: `SaveConfig`, then a new process.
                 run.settings.save_config(SaveEvent::Close).expect("saved");
@@ -4894,8 +4929,9 @@ mod tests {
                 continue;
             };
             match (verb, rest) {
-                // The runner's own lines: where the run starts, its budget, one expect's wait.
-                ("screen" | "window" | "env" | "budget" | "within", _) => {}
+                // The runner's own lines: where the run starts, its budget, one expect's wait,
+                // and what it runs before the application.
+                ("screen" | "window" | "env" | "budget" | "within" | "setup", _) => {}
                 ("settle", seconds) => run.settle(seconds.parse().expect("seconds")),
                 // FLIGHT DATA: the page is hidden with its screen, then `SaveConfig`.
                 ("click", "tab-fly") => {
