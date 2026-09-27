@@ -1955,6 +1955,17 @@ pub mod scripted {
         /// The link alone, with the copter on its far end announced and seen: for what runs
         /// over a link without the screens, the firmware page's reboot.
         pub fn link(timeouts: ProtocolTimeouts) -> (Link, Self) {
+            let (link, mut vehicle) = Self::link_silent(timeouts);
+            vehicle.heartbeat();
+            until("the vehicle to be seen", || {
+                link.vehicles().contains(&VEHICLE)
+            });
+            (link, vehicle)
+        }
+
+        /// [`Self::link`] with nothing heard yet: the test sends the first heartbeat, from
+        /// whichever component it wants heard first.
+        pub fn link_silent(timeouts: ProtocolTimeouts) -> (Link, Self) {
             let (vehicle_side, gcs_side) = Loopback::pair();
             let config = LinkConfig {
                 send_heartbeat: false,
@@ -1963,16 +1974,12 @@ pub mod scripted {
                 ..LinkConfig::default()
             };
             let link = Link::from_transport(Box::new(gcs_side), config);
-            let mut vehicle = Self {
+            let vehicle = Self {
                 end: vehicle_side,
                 decoder: FrameDecoder::new(),
                 seq: 0,
                 heard: Vec::new(),
             };
-            vehicle.heartbeat();
-            until("the vehicle to be seen", || {
-                link.vehicles().contains(&VEHICLE)
-            });
             (link, vehicle)
         }
 

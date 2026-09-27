@@ -40,6 +40,23 @@ bootloader, scan, same-firmware check, erase, program, CRC verify, reboot: "Uplo
 be raised before the CRC check (1 s in the C#, `Uploader.cs:812`) and the erase (20 s, `:535`),
 or the board's CRC over 2 MB of flash reads as "lost communication".
 
+**From Windows, 2026-09-27 (Buzz's go):** passed through to tiny10 by a VirtualBox USB filter on
+vendor 2dae (both the application and `CubeOrange-BL` match); COM4 is MAVLink (MI_00), COM3 the
+second CDC port. Two things the first attempts taught:
+- It already runs the current stable (4.7.1, dbe79216), so after the scan the flow asks "The board
+  already has the same firmware version. Upload anyway?" - the bench script answers Yes. The
+  first attempt had no answer and sat on the question (the board held in its bootloader) until
+  the runner closed the planner.
+- It sends **two heartbeats**: the autopilot as 1:1 and an ADS-B receiver as 1:0 (type 27,
+  autopilot invalid). MP's `doReboot(true,false)` takes whichever comes next and sends nothing to
+  component 0, so half the flashes found no bootloader ("No Response from board"). Buzz ruled
+  (2026-09-27): the flash's reboot skips component-0 heartbeats, as MP's own Connect does.
+`python3 C:\setup\board-version.py COM4` in the VM reads its banner (pyserial installed there).
+
+**Not this board: the MR-VMU-RT1176 on the host's /dev/ttyACM0** (ArduPilot, 27b1:0004) is Buzz's
+arduzeph project's; another session flashes and reboots it all day (106 bootloader entries
+2026-09-26/27). Its reboots are not ours - nothing here opens ttyACM0 - and nothing here should.
+
 **Ruling (Buzz, 2026-09-25):** the "lost communication with the board." / "comms timeout" box is
 never shown; the words go on the status line only. The link's state is always at the top right.
 

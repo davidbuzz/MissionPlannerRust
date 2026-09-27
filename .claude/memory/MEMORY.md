@@ -28,7 +28,7 @@ controlled; the per-project memory directory holds symlinks to them.
 - [Worktree agents share the target dir](worktree-agents-share-the-target-dir.md) — touch a crate's lib.rs before an integration build while agents run
 - [Drop-downs escape the page](dropdowns-escape-the-page.md) — deferred+anchored, thirty rows, wheel-scrolled; the page clips anything else
 - [Kill by PID, not pattern](kill-by-pid-not-pattern.md) — pkill -f matches the calling shell; pgrep -fa, then kill the PIDs
-- [Bench CubeOrange](bench-cubeorange.md) — its Zephyr bootloader replaced with stock via the BMP on 2026-09-25; by-id path; MP_FIRMWARE_PORT; flash only on Buzz's go
+- [Bench CubeOrange](bench-cubeorange.md) — stock bootloader since 2026-09-25; by-id path, COM4 in the VM; its ADS-B heartbeat (1:0) and the same-firmware question; the host's MR-VMU is arduzeph's, not ours; flash only on Buzz's go
 - [Passwords remembered, plain](passwords-remembered-plain.md) — InputBox password answers are kept like any other; plain text boxes are fine for now
 - [Never edit a running script](never-edit-a-running-script.md) — bash reads scripts incrementally; a runner edited mid-suite breaks the test running at that moment
 - [VM work shows on its console](vm-work-shows-on-its-console.md) — every VM job through tools/win10/vm-run.sh into the visible "Claude at work" window, never bare SSH; Buzz watches (2026-09-26)

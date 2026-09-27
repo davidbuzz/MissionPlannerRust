@@ -525,7 +525,16 @@ const REBOOT_WAITS: RebootWaits = RebootWaits {
 ///
 /// All of it inside `task.Wait`'s 3 s is "Reboot to Bootloader"; a task still running then is
 /// "Please unplug the board" - the task goes on, and its reboots still go out, as here.
-/// `// C#: Utilities/Firmware.cs:797-837; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1153-1203, 2553-2559, 2591-2618, 2717, 2758-2763`
+///
+/// Divergence, the owner's ruling of 2026-09-27: the vehicle is one whose heartbeat is not a
+/// broadcast component's ([`rebootable_vehicle`]). `getHeartBeat` takes any heartbeat but a
+/// GCS's, and a Cube with an ADS-B receiver sends two - the autopilot's as component 1, the
+/// receiver's as component 0 (type ADSB, autopilot invalid) - so the C# took the receiver's
+/// about half the time, and then its `compid != 0` sent no reboot and the scan found no
+/// bootloader: "No Response from board" on the bench CubeOrange's second Windows flash. The
+/// C#'s own connect passes those heartbeats over ("no broadcast compid's (ping adsb)"); so does
+/// this.
+/// `// C#: Utilities/Firmware.cs:797-837; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:821-826, 1153-1203, 2553-2559, 2591-2618, 2717, 2758-2763`
 fn reboot_to_bootloader(
     link: &mp_link::Link,
     started: std::time::Instant,
@@ -536,7 +545,7 @@ fn reboot_to_bootloader(
     // `MainV2.comPort.getHeartBeat().Length > 0`, else "No HeartBeat found".
     let first = started + waits.heartbeat;
     let (id, handle) = loop {
-        if let Some(vehicle) = link.primary_vehicle() {
+        if let Some(vehicle) = rebootable_vehicle(link) {
             break vehicle;
         }
         if Instant::now() >= first {
@@ -578,6 +587,21 @@ fn reboot_to_bootloader(
     } else {
         LinkReboot::NoHeartbeat
     }
+}
+
+/// The vehicle the reboots go to: the autopilot, component 1, if it has been heard, else any
+/// component but 0 - a ping ADS-B receiver's broadcast id, which `Open`'s connect loop passes
+/// over and so does this ([`reboot_to_bootloader`]'s divergence).
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:821-826`
+fn rebootable_vehicle(
+    link: &mp_link::Link,
+) -> Option<(mp_vehicle::VehicleId, mp_vehicle::StateHandle)> {
+    let ids = link.vehicles();
+    let id = ids
+        .iter()
+        .find(|id| id.compid == 1)
+        .or_else(|| ids.iter().find(|id| id.compid != 0))?;
+    link.vehicle(*id).map(|handle| (*id, handle))
 }
 
 impl FlashHost for SerialHost {
@@ -4176,6 +4200,55 @@ mod reboot_to_bootloader_tests {
             vehicle.read();
             reboots(&vehicle).len() >= 4
         });
+        assert_eq!(reboots(&vehicle), FOUR);
+    }
+
+    /// A Cube with an ADS-B receiver: the receiver's heartbeat, component 0, heard first is
+    /// passed over - no reboot goes to it, and none goes out on it alone - and the autopilot's
+    /// next heartbeat after its first sends the four frames to the autopilot. The C# would have
+    /// sent nothing when the receiver's came first (the owner's ruling of 2026-09-27).
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:821-826, 2591-2614`
+    #[test]
+    fn an_adsb_receivers_heartbeat_is_passed_over() {
+        use mp_mavlink_dialects::all::Heartbeat;
+        use mp_vehicle::VehicleId;
+        let adsb = VehicleId::new(1, 0);
+        let receiver = MavMessage::Heartbeat(Heartbeat {
+            custom_mode: 0,
+            r#type: 27,
+            autopilot: 8,
+            base_mode: 0,
+            system_status: 0,
+            mavlink_version: 3,
+        });
+        let (link, mut vehicle) = Vehicle::link_silent(fast());
+        let waits = RebootWaits {
+            window: Duration::from_secs(5),
+            heartbeat: Duration::from_secs(4),
+        };
+        let reached = std::thread::scope(|scope| {
+            vehicle.send_from(adsb, &receiver);
+            until("the receiver to be seen", || link.vehicles().contains(&adsb));
+            let task = scope.spawn(|| reboot_to_bootloader(&link, Instant::now(), waits));
+            std::thread::sleep(Duration::from_millis(200));
+            vehicle.send_from(adsb, &receiver);
+            std::thread::sleep(Duration::from_millis(200));
+            vehicle.read();
+            assert_eq!(reboots(&vehicle), [], "sent on the receiver's heartbeats");
+            // The autopilot heard, then `doReboot`'s next heartbeat.
+            vehicle.heartbeat();
+            until("the autopilot to be seen", || link.vehicles().contains(&VEHICLE));
+            std::thread::sleep(Duration::from_millis(100));
+            vehicle.heartbeat();
+            let reached = task.join().expect("the task");
+            until("the four reboots", || {
+                vehicle.read();
+                reboots(&vehicle).len() >= 4
+            });
+            reached
+        });
+        assert_eq!(reached, LinkReboot::Rebooted);
+        // `reboots` checks each is addressed to the autopilot, not the receiver.
         assert_eq!(reboots(&vehicle), FOUR);
     }
 
