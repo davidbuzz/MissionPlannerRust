@@ -7,6 +7,8 @@ pub mod default_settings;
 pub mod esc_calibration;
 pub mod failsafe;
 pub mod firmware;
+// Force Bootloader, which both Install Firmware pages share.
+pub mod force_bootloader;
 pub mod flight_modes;
 pub mod frame_type;
 pub mod frame_type_legacy;
@@ -27,6 +29,7 @@ pub mod rangefinder;
 // ---- Basic Tuning / Advanced ----
 pub mod advanced;
 pub mod basic_tuning;
+pub mod mavlink_inspector;
 // ---- end Basic Tuning / Advanced ----
 // ---- Extended Tuning ----
 pub mod extended_tuning;

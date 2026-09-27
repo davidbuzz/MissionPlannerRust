@@ -23,7 +23,7 @@ config-failsafe 20
 config-fft 18
 config-firmware 16
 config-firmware-blupdate 11
-config-firmware-legacy 12
+config-firmware-legacy 16
 config-flightmodes 16
 config-frametype 8
 config-frametype-legacy 5

@@ -12,7 +12,7 @@
 #![allow(clippy::struct_excessive_bools)]
 
 use mp_mavlink::dialect::{MessageInfo, StaticDialect};
-use mp_mavlink::field::FieldValue;
+use mp_mavlink::field::{FieldInfo, FieldValue};
 use mp_mavlink::message::Message;
 use mp_mavlink::payload::{
     get_f32, get_f64, get_i8, get_i16, get_i32, get_i64, get_u8, get_u16, get_u32, get_u64,
@@ -12539,6 +12539,16 @@ impl Heartbeat {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("custom_mode", "uint32_t", 0, ""),
+        FieldInfo::new("type", "uint8_t", 0, ""),
+        FieldInfo::new("autopilot", "uint8_t", 0, ""),
+        FieldInfo::new("base_mode", "uint8_t", 0, ""),
+        FieldInfo::new("system_status", "uint8_t", 0, ""),
+        FieldInfo::new("mavlink_version", "uint8_t_mavlink_version", 0, ""),
+    ];
 }
 
 /// The general system state. If the system is following the MAVLink standard, the system state is mainly defined by three orthogonal states/modes: The system mode, which is either LOCKED (motors shut down and locked), MANUAL (system under RC control), GUIDED (system with autonomous position control, position setpoint controlled manually) or AUTO (system guided by path/waypoint planner). The NAV_MODE defined the current flight state: LIFTOFF (often an open-loop maneuver), LANDING, WAYPOINTS or VECTOR. This represents the internal navigation state machine. The system status shows whether the system is currently active or not and if an emergency occurred. During the CRITICAL and EMERGENCY states the MAV is still considered to be active, but should start emergency procedures autonomously. After a failure occurred it should first move from active to critical to allow manual intervention and then move to emergency after a certain timeout.
@@ -12673,6 +12683,23 @@ impl SysStatus {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("onboard_control_sensors_present", "uint32_t", 0, ""),
+        FieldInfo::new("onboard_control_sensors_enabled", "uint32_t", 0, ""),
+        FieldInfo::new("onboard_control_sensors_health", "uint32_t", 0, ""),
+        FieldInfo::new("load", "uint16_t", 0, "d%"),
+        FieldInfo::new("voltage_battery", "uint16_t", 0, "mV"),
+        FieldInfo::new("current_battery", "int16_t", 0, "cA"),
+        FieldInfo::new("drop_rate_comm", "uint16_t", 0, "c%"),
+        FieldInfo::new("errors_comm", "uint16_t", 0, ""),
+        FieldInfo::new("errors_count1", "uint16_t", 0, ""),
+        FieldInfo::new("errors_count2", "uint16_t", 0, ""),
+        FieldInfo::new("errors_count3", "uint16_t", 0, ""),
+        FieldInfo::new("errors_count4", "uint16_t", 0, ""),
+        FieldInfo::new("battery_remaining", "int8_t", 0, "%"),
+    ];
 }
 
 /// The system time is the time of the master clock, typically the computer clock of the main onboard computer.
@@ -12719,6 +12746,12 @@ impl SystemTime {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_unix_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+    ];
 }
 
 /// A ping message either requesting or responding to a ping. This allows to measure the system latencies, including serial port, radio modem and UDP connections. The ping microservice is documented at https://mavlink.io/en/services/ping.html
@@ -12778,6 +12811,14 @@ impl Ping {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("seq", "uint32_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+    ];
 }
 
 /// Request to control this MAV
@@ -12842,6 +12883,14 @@ impl ChangeOperatorControl {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("control_request", "uint8_t", 0, ""),
+        FieldInfo::new("version", "uint8_t", 0, "rad"),
+        FieldInfo::new("passkey", "char", 25, ""),
+    ];
 }
 
 /// Accept / deny control of this MAV
@@ -12896,6 +12945,13 @@ impl ChangeOperatorControlAck {
             ("ack", FieldValue::Unsigned(self.ack.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("gcs_system_id", "uint8_t", 0, ""),
+        FieldInfo::new("control_request", "uint8_t", 0, ""),
+        FieldInfo::new("ack", "uint8_t", 0, ""),
+    ];
 }
 
 /// Emit an encrypted signature / key identifying this system. PLEASE NOTE: This protocol has been kept simple, so transmitting the key requires an encrypted channel for true safety.
@@ -12937,6 +12993,9 @@ impl AuthKey {
             FieldValue::UnsignedArray(self.key.iter().map(|v| (*v).into()).collect()),
         )]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[FieldInfo::new("key", "char", 32, "")];
 }
 
 /// Set the system mode, as defined by enum MAV_MODE. There is no target component id as the mode is by definition for the overall aircraft, not only for one component.
@@ -12989,6 +13048,13 @@ impl SetMode {
             ("base_mode", FieldValue::Unsigned(self.base_mode.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("custom_mode", "uint32_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("base_mode", "uint8_t", 0, ""),
+    ];
 }
 
 /// Request to read the onboard parameter with the param_id string id. Onboard parameters are stored as key\[const char*\] -> value\[float\]. This allows to send a parameter to any other component (such as the GCS) without the need of previous knowledge of possible parameter names. Thus the same GCS can store different parameters for different autopilots. See also https://mavlink.io/en/services/parameter.html for a full documentation of QGroundControl and IMU code.
@@ -13053,6 +13119,14 @@ impl ParamRequestRead {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("param_index", "int16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("param_id", "char", 16, ""),
+    ];
 }
 
 /// Request all parameters of this component. After this request, all parameters are emitted. The parameter microservice is documented at https://mavlink.io/en/services/parameter.html
@@ -13102,6 +13176,12 @@ impl ParamRequestList {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+    ];
 }
 
 /// Emit the value of a onboard parameter. The inclusion of param_count and param_index in the message allows the recipient to keep track of received parameters and allows him to re-request missing parameters after a loss or timeout. The parameter microservice is documented at https://mavlink.io/en/services/parameter.html
@@ -13166,6 +13246,15 @@ impl ParamValue {
             ("param_type", FieldValue::Unsigned(self.param_type.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("param_value", "float", 0, ""),
+        FieldInfo::new("param_count", "uint16_t", 0, ""),
+        FieldInfo::new("param_index", "uint16_t", 0, ""),
+        FieldInfo::new("param_id", "char", 16, ""),
+        FieldInfo::new("param_type", "uint8_t", 0, ""),
+    ];
 }
 
 /// Set a parameter value (write new value to permanent storage). The receiving component should acknowledge the new parameter value by broadcasting a PARAM_VALUE message (broadcasting ensures that multiple GCS all have an up-to-date list of all parameters). If the sending GCS did not receive a PARAM_VALUE within its timeout time, it should re-send the PARAM_SET message. The parameter microservice is documented at https://mavlink.io/en/services/parameter.html.
@@ -13236,6 +13325,15 @@ impl ParamSet {
             ("param_type", FieldValue::Unsigned(self.param_type.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("param_value", "float", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("param_id", "char", 16, ""),
+        FieldInfo::new("param_type", "uint8_t", 0, ""),
+    ];
 }
 
 /// The global position, as returned by the Global Positioning System (GPS). This is NOT the global position estimate of the system, but rather a RAW sensor value. See message GLOBAL_POSITION_INT for the global position estimate.
@@ -13362,6 +13460,26 @@ impl GpsRawInt {
             ("yaw", FieldValue::Unsigned(self.yaw.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("alt", "int32_t", 0, "mm"),
+        FieldInfo::new("eph", "uint16_t", 0, ""),
+        FieldInfo::new("epv", "uint16_t", 0, ""),
+        FieldInfo::new("vel", "uint16_t", 0, "cm/s"),
+        FieldInfo::new("cog", "uint16_t", 0, "cdeg"),
+        FieldInfo::new("fix_type", "uint8_t", 0, ""),
+        FieldInfo::new("satellites_visible", "uint8_t", 0, ""),
+        FieldInfo::new("alt_ellipsoid", "int32_t", 0, "mm"),
+        FieldInfo::new("h_acc", "uint32_t", 0, "mm"),
+        FieldInfo::new("v_acc", "uint32_t", 0, "mm"),
+        FieldInfo::new("vel_acc", "uint32_t", 0, "mm/s"),
+        FieldInfo::new("hdg_acc", "uint32_t", 0, "degE5"),
+        FieldInfo::new("yaw", "uint16_t", 0, "cdeg"),
+    ];
 }
 
 /// The positioning status, as reported by GPS. This message is intended to display status information about each satellite visible to the receiver. See message GLOBAL_POSITION_INT for the global position estimate. This message can contain information for up to 20 satellites.
@@ -13462,6 +13580,16 @@ impl GpsStatus {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("satellites_visible", "uint8_t", 0, ""),
+        FieldInfo::new("satellite_prn", "uint8_t", 20, ""),
+        FieldInfo::new("satellite_used", "uint8_t", 20, ""),
+        FieldInfo::new("satellite_elevation", "uint8_t", 20, "deg"),
+        FieldInfo::new("satellite_azimuth", "uint8_t", 20, "deg"),
+        FieldInfo::new("satellite_snr", "uint8_t", 20, "dB"),
+    ];
 }
 
 /// The RAW IMU readings for the usual 9DOF sensor setup. This message should contain the scaled values to the described units
@@ -13554,6 +13682,21 @@ impl ScaledImu {
             ("temperature", FieldValue::Signed(self.temperature.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("xacc", "int16_t", 0, "mG"),
+        FieldInfo::new("yacc", "int16_t", 0, "mG"),
+        FieldInfo::new("zacc", "int16_t", 0, "mG"),
+        FieldInfo::new("xgyro", "int16_t", 0, "mrad/s"),
+        FieldInfo::new("ygyro", "int16_t", 0, "mrad/s"),
+        FieldInfo::new("zgyro", "int16_t", 0, "mrad/s"),
+        FieldInfo::new("xmag", "int16_t", 0, "mgauss"),
+        FieldInfo::new("ymag", "int16_t", 0, "mgauss"),
+        FieldInfo::new("zmag", "int16_t", 0, "mgauss"),
+        FieldInfo::new("temperature", "int16_t", 0, "cdegC"),
+    ];
 }
 
 /// The RAW IMU readings for a 9DOF sensor, which is identified by the id (default IMU1). This message should always contain the true raw values without any scaling to allow data capture and system debugging. On ArduPilot platforms, this message is identical to SCALED_IMU. By default, only RAW_IMU is sent via telemetry for historical reasons, SCALED_IMU can be requested.
@@ -13649,6 +13792,22 @@ impl RawImu {
             ("temperature", FieldValue::Signed(self.temperature.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("xacc", "int16_t", 0, "mG"),
+        FieldInfo::new("yacc", "int16_t", 0, "mG"),
+        FieldInfo::new("zacc", "int16_t", 0, "mG"),
+        FieldInfo::new("xgyro", "int16_t", 0, "mrad/s"),
+        FieldInfo::new("ygyro", "int16_t", 0, "mrad/s"),
+        FieldInfo::new("zgyro", "int16_t", 0, "mrad/s"),
+        FieldInfo::new("xmag", "int16_t", 0, "mgauss"),
+        FieldInfo::new("ymag", "int16_t", 0, "mgauss"),
+        FieldInfo::new("zmag", "int16_t", 0, "mgauss"),
+        FieldInfo::new("id", "uint8_t", 0, ""),
+        FieldInfo::new("temperature", "int16_t", 0, "cdegC"),
+    ];
 }
 
 /// The RAW pressure readings for the typical setup of one absolute pressure and one differential pressure sensor. The sensor values should be the raw, UNSCALED ADC values.
@@ -13707,6 +13866,15 @@ impl RawPressure {
             ("temperature", FieldValue::Signed(self.temperature.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("press_abs", "int16_t", 0, ""),
+        FieldInfo::new("press_diff1", "int16_t", 0, ""),
+        FieldInfo::new("press_diff2", "int16_t", 0, ""),
+        FieldInfo::new("temperature", "int16_t", 0, ""),
+    ];
 }
 
 /// The pressure readings for the typical setup of one absolute and differential pressure sensor. The units are as specified in each field.
@@ -13772,6 +13940,15 @@ impl ScaledPressure {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("press_abs", "float", 0, "hPa"),
+        FieldInfo::new("press_diff", "float", 0, "hPa"),
+        FieldInfo::new("temperature", "int16_t", 0, "cdegC"),
+        FieldInfo::new("temperature_press_diff", "int16_t", 0, "cdegC"),
+    ];
 }
 
 /// The attitude in the aeronautical frame (right-handed, Z-down, Y-right, X-front, ZYX, intrinsic).
@@ -13843,6 +14020,17 @@ impl Attitude {
             ("yawspeed", FieldValue::Float(self.yawspeed.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("roll", "float", 0, "rad"),
+        FieldInfo::new("pitch", "float", 0, "rad"),
+        FieldInfo::new("yaw", "float", 0, "rad"),
+        FieldInfo::new("rollspeed", "float", 0, "rad/s"),
+        FieldInfo::new("pitchspeed", "float", 0, "rad/s"),
+        FieldInfo::new("yawspeed", "float", 0, "rad/s"),
+    ];
 }
 
 /// The attitude in the aeronautical frame (right-handed, Z-down, X-front, Y-right), expressed as quaternion. Quaternion order is w, x, y, z and a zero rotation would be expressed as (1 0 0 0).
@@ -13930,6 +14118,19 @@ impl AttitudeQuaternion {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("q1", "float", 0, ""),
+        FieldInfo::new("q2", "float", 0, ""),
+        FieldInfo::new("q3", "float", 0, ""),
+        FieldInfo::new("q4", "float", 0, ""),
+        FieldInfo::new("rollspeed", "float", 0, "rad/s"),
+        FieldInfo::new("pitchspeed", "float", 0, "rad/s"),
+        FieldInfo::new("yawspeed", "float", 0, "rad/s"),
+        FieldInfo::new("repr_offset_q", "float", 4, ""),
+    ];
 }
 
 /// The filtered local position (e.g. fused computer vision and accelerometers). Coordinate frame is right-handed, Z-axis down (aeronautical frame, NED / north-east-down convention)
@@ -14001,6 +14202,17 @@ impl LocalPositionNed {
             ("vz", FieldValue::Float(self.vz.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("x", "float", 0, "m"),
+        FieldInfo::new("y", "float", 0, "m"),
+        FieldInfo::new("z", "float", 0, "m"),
+        FieldInfo::new("vx", "float", 0, "m/s"),
+        FieldInfo::new("vy", "float", 0, "m/s"),
+        FieldInfo::new("vz", "float", 0, "m/s"),
+    ];
 }
 
 /// The filtered global position (e.g. fused GPS and accelerometers). The position is in GPS-frame (right-handed, Z-up). It is designed as scaled integer message since the resolution of float is not sufficient.
@@ -14082,6 +14294,19 @@ impl GlobalPositionInt {
             ("hdg", FieldValue::Unsigned(self.hdg.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("alt", "int32_t", 0, "mm"),
+        FieldInfo::new("relative_alt", "int32_t", 0, "mm"),
+        FieldInfo::new("vx", "int16_t", 0, "cm/s"),
+        FieldInfo::new("vy", "int16_t", 0, "cm/s"),
+        FieldInfo::new("vz", "int16_t", 0, "cm/s"),
+        FieldInfo::new("hdg", "uint16_t", 0, "cdeg"),
+    ];
 }
 
 /// The scaled values of the RC channels received: (-100%) -10000, (0%) 0, (100%) 10000. Channels that are inactive should be set to UINT16_MAX.
@@ -14173,6 +14398,21 @@ impl RcChannelsScaled {
             ("rssi", FieldValue::Unsigned(self.rssi.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("chan1_scaled", "int16_t", 0, ""),
+        FieldInfo::new("chan2_scaled", "int16_t", 0, ""),
+        FieldInfo::new("chan3_scaled", "int16_t", 0, ""),
+        FieldInfo::new("chan4_scaled", "int16_t", 0, ""),
+        FieldInfo::new("chan5_scaled", "int16_t", 0, ""),
+        FieldInfo::new("chan6_scaled", "int16_t", 0, ""),
+        FieldInfo::new("chan7_scaled", "int16_t", 0, ""),
+        FieldInfo::new("chan8_scaled", "int16_t", 0, ""),
+        FieldInfo::new("port", "uint8_t", 0, ""),
+        FieldInfo::new("rssi", "uint8_t", 0, ""),
+    ];
 }
 
 /// The RAW values of the RC channels received. The standard PPM modulation is as follows: 1000 microseconds: 0%, 2000 microseconds: 100%. A value of UINT16_MAX implies the channel is unused. Individual receivers/transmitters might violate this specification.
@@ -14264,6 +14504,21 @@ impl RcChannelsRaw {
             ("rssi", FieldValue::Unsigned(self.rssi.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("chan1_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan2_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan3_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan4_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan5_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan6_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan7_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan8_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("port", "uint8_t", 0, ""),
+        FieldInfo::new("rssi", "uint8_t", 0, ""),
+    ];
 }
 
 /// Superseded by ACTUATOR_OUTPUT_STATUS. The RAW values of the servo outputs (for RC input from the remote, use the RC_CHANNELS messages). The standard PPM modulation is as follows: 1000 microseconds: 0%, 2000 microseconds: 100%.
@@ -14395,6 +14650,28 @@ impl ServoOutputRaw {
             ("servo16_raw", FieldValue::Unsigned(self.servo16_raw.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint32_t", 0, "us"),
+        FieldInfo::new("servo1_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("servo2_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("servo3_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("servo4_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("servo5_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("servo6_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("servo7_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("servo8_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("port", "uint8_t", 0, ""),
+        FieldInfo::new("servo9_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("servo10_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("servo11_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("servo12_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("servo13_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("servo14_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("servo15_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("servo16_raw", "uint16_t", 0, "us"),
+    ];
 }
 
 /// Request a partial list of mission items from the system/component. https://mavlink.io/en/services/mission.html. If start and end index are the same, just send one waypoint.
@@ -14464,6 +14741,15 @@ impl MissionRequestPartialList {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("start_index", "int16_t", 0, ""),
+        FieldInfo::new("end_index", "int16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("mission_type", "uint8_t", 0, ""),
+    ];
 }
 
 /// This message is sent to the MAV to write a partial list. If start index == end index, only one item will be transmitted / updated. If the start index is NOT 0 and above the current list size, this request should be REJECTED!
@@ -14533,6 +14819,15 @@ impl MissionWritePartialList {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("start_index", "int16_t", 0, ""),
+        FieldInfo::new("end_index", "int16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("mission_type", "uint8_t", 0, ""),
+    ];
 }
 
 /// Message encoding a mission item. This message is emitted to announce the presence of a mission item and to set a mission item on the system. The mission item can be either in x, y, z meters (type: LOCAL) or x:lat, y:lon, z:altitude. Local frame is Z-down, right handed (NED), global frame is Z-up, right handed (ENU). NaN may be used to indicate an optional/default value (e.g. to use the system's current latitude or yaw rather than a specific value). See also https://mavlink.io/en/services/mission.html.
@@ -14657,6 +14952,25 @@ impl MissionItem {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("param1", "float", 0, ""),
+        FieldInfo::new("param2", "float", 0, ""),
+        FieldInfo::new("param3", "float", 0, ""),
+        FieldInfo::new("param4", "float", 0, ""),
+        FieldInfo::new("x", "float", 0, ""),
+        FieldInfo::new("y", "float", 0, ""),
+        FieldInfo::new("z", "float", 0, ""),
+        FieldInfo::new("seq", "uint16_t", 0, ""),
+        FieldInfo::new("command", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("frame", "uint8_t", 0, ""),
+        FieldInfo::new("current", "uint8_t", 0, ""),
+        FieldInfo::new("autocontinue", "uint8_t", 0, ""),
+        FieldInfo::new("mission_type", "uint8_t", 0, ""),
+    ];
 }
 
 /// Request the information of the mission item with the sequence number seq. The response of the system to this message should be a MISSION_ITEM message. https://mavlink.io/en/services/mission.html
@@ -14721,6 +15035,14 @@ impl MissionRequest {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("seq", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("mission_type", "uint8_t", 0, ""),
+    ];
 }
 
 /// Set the mission item with sequence number seq as current item. This means that the MAV will continue to this mission item on the shortest path (not following the mission items in-between).
@@ -14775,6 +15097,13 @@ impl MissionSetCurrent {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("seq", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+    ];
 }
 
 /// Message that announces the sequence number of the current active mission item. The MAV will fly towards this mission item.
@@ -14838,6 +15167,14 @@ impl MissionCurrent {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("seq", "uint16_t", 0, ""),
+        FieldInfo::new("total", "uint16_t", 0, ""),
+        FieldInfo::new("mission_state", "uint8_t", 0, ""),
+        FieldInfo::new("mission_mode", "uint8_t", 0, ""),
+    ];
 }
 
 /// Request the overall list of mission items from the system/component.
@@ -14897,6 +15234,13 @@ impl MissionRequestList {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("mission_type", "uint8_t", 0, ""),
+    ];
 }
 
 /// This message is emitted as response to MISSION_REQUEST_LIST by the MAV and to initiate a write transaction. The GCS can then request the individual mission item based on the knowledge of the total number of waypoints.
@@ -14961,6 +15305,14 @@ impl MissionCount {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("count", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("mission_type", "uint8_t", 0, ""),
+    ];
 }
 
 /// Delete all mission items at once.
@@ -15020,6 +15372,13 @@ impl MissionClearAll {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("mission_type", "uint8_t", 0, ""),
+    ];
 }
 
 /// A certain mission item has been reached. The system will either hold this position (or circle on the orbit) or (if the autocontinue on the WP was set) continue to the next waypoint.
@@ -15056,6 +15415,9 @@ impl MissionItemReached {
     pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
         vec![("seq", FieldValue::Unsigned(self.seq.into()))]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[FieldInfo::new("seq", "uint16_t", 0, "")];
 }
 
 /// Acknowledgment message during waypoint handling. The type field states if this message is a positive ack (type=0) or if an error happened (type=non-zero).
@@ -15121,6 +15483,14 @@ impl MissionAck {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("type", "uint8_t", 0, ""),
+        FieldInfo::new("mission_type", "uint8_t", 0, ""),
+    ];
 }
 
 /// Sets the GPS coordinates of the vehicle local origin (0,0,0) position. Vehicle should emit GPS_GLOBAL_ORIGIN irrespective of whether the origin is changed. This enables transform between the local coordinate frame and the global (GPS) coordinate frame, which may be necessary when (for example) indoor and outdoor settings are connected and the MAV should move from in- to outdoor.
@@ -15183,6 +15553,15 @@ impl SetGpsGlobalOrigin {
             ("time_usec", FieldValue::Unsigned(self.time_usec)),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("latitude", "int32_t", 0, "degE7"),
+        FieldInfo::new("longitude", "int32_t", 0, "degE7"),
+        FieldInfo::new("altitude", "int32_t", 0, "mm"),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+    ];
 }
 
 /// Publishes the GPS coordinates of the vehicle local origin (0,0,0) position. Emitted whenever a new GPS-Local position mapping is requested or set - e.g. following SET_GPS_GLOBAL_ORIGIN message.
@@ -15237,6 +15616,14 @@ impl GpsGlobalOrigin {
             ("time_usec", FieldValue::Unsigned(self.time_usec)),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("latitude", "int32_t", 0, "degE7"),
+        FieldInfo::new("longitude", "int32_t", 0, "degE7"),
+        FieldInfo::new("altitude", "int32_t", 0, "mm"),
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+    ];
 }
 
 /// Bind a RC channel to a parameter. The parameter should change according to the RC channel value.
@@ -15335,6 +15722,19 @@ impl ParamMapRc {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("param_value0", "float", 0, ""),
+        FieldInfo::new("scale", "float", 0, ""),
+        FieldInfo::new("param_value_min", "float", 0, ""),
+        FieldInfo::new("param_value_max", "float", 0, ""),
+        FieldInfo::new("param_index", "int16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("param_id", "char", 16, ""),
+        FieldInfo::new("parameter_rc_channel_index", "uint8_t", 0, ""),
+    ];
 }
 
 /// Request the information of the mission item with the sequence number seq. The response of the system to this message should be a MISSION_ITEM_INT message. https://mavlink.io/en/services/mission.html
@@ -15399,6 +15799,14 @@ impl MissionRequestInt {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("seq", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("mission_type", "uint8_t", 0, ""),
+    ];
 }
 
 /// Checksum for the current mission, rally point or geofence plan, or for the "combined" plan (a GCS can use these checksums to determine if it has matching plans). This message must be broadcast with the appropriate checksum following any change to a mission, geofence or rally point definition (immediately after the MISSION_ACK that completes the upload sequence). It may also be requested using MAV_CMD_REQUEST_MESSAGE, where param 2 indicates the plan type for which the checksum is required. The checksum must be calculated on the autopilot, but may also be calculated by the GCS. The checksum uses the same CRC32 algorithm as MAVLink FTP (https://mavlink.io/en/services/ftp.html#crc32-implementation). The checksum for a mission, geofence or rally point definition is run over each item in the plan in seq order (excluding the home location if present in the plan), and covers the following fields (in order): frame, command, autocontinue, param1, param2, param3, param4, param5, param6, param7. The checksum for the whole plan (MAV_MISSION_TYPE_ALL) is calculated using the same approach, running over each sub-plan in the following order: mission, geofence then rally point.
@@ -15446,6 +15854,12 @@ impl MissionChecksum {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("checksum", "uint32_t", 0, ""),
+        FieldInfo::new("mission_type", "uint8_t", 0, ""),
+    ];
 }
 
 /// Set a safety zone (volume), which is defined by two corners of a cube. This message can be used to tell the MAV which setpoints/waypoints to accept and which to reject. Safety areas are often enforced by national or competition regulations.
@@ -15531,6 +15945,19 @@ impl SafetySetAllowedArea {
             ("frame", FieldValue::Unsigned(self.frame.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("p1x", "float", 0, "m"),
+        FieldInfo::new("p1y", "float", 0, "m"),
+        FieldInfo::new("p1z", "float", 0, "m"),
+        FieldInfo::new("p2x", "float", 0, "m"),
+        FieldInfo::new("p2y", "float", 0, "m"),
+        FieldInfo::new("p2z", "float", 0, "m"),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("frame", "uint8_t", 0, ""),
+    ];
 }
 
 /// Read out the safety zone the MAV currently assumes.
@@ -15600,6 +16027,17 @@ impl SafetyAllowedArea {
             ("frame", FieldValue::Unsigned(self.frame.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("p1x", "float", 0, "m"),
+        FieldInfo::new("p1y", "float", 0, "m"),
+        FieldInfo::new("p1z", "float", 0, "m"),
+        FieldInfo::new("p2x", "float", 0, "m"),
+        FieldInfo::new("p2y", "float", 0, "m"),
+        FieldInfo::new("p2z", "float", 0, "m"),
+        FieldInfo::new("frame", "uint8_t", 0, ""),
+    ];
 }
 
 /// The attitude in the aeronautical frame (right-handed, Z-down, X-front, Y-right), expressed as quaternion. Quaternion order is w, x, y, z and a zero rotation would be expressed as (1 0 0 0).
@@ -15673,6 +16111,16 @@ impl AttitudeQuaternionCov {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("q", "float", 4, ""),
+        FieldInfo::new("rollspeed", "float", 0, "rad/s"),
+        FieldInfo::new("pitchspeed", "float", 0, "rad/s"),
+        FieldInfo::new("yawspeed", "float", 0, "rad/s"),
+        FieldInfo::new("covariance", "float", 9, ""),
+    ];
 }
 
 /// The state of the navigation and position controller.
@@ -15749,6 +16197,18 @@ impl NavControllerOutput {
             ("wp_dist", FieldValue::Unsigned(self.wp_dist.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("nav_roll", "float", 0, "deg"),
+        FieldInfo::new("nav_pitch", "float", 0, "deg"),
+        FieldInfo::new("alt_error", "float", 0, "m"),
+        FieldInfo::new("aspd_error", "float", 0, "m/s"),
+        FieldInfo::new("xtrack_error", "float", 0, "m"),
+        FieldInfo::new("nav_bearing", "int16_t", 0, "deg"),
+        FieldInfo::new("target_bearing", "int16_t", 0, "deg"),
+        FieldInfo::new("wp_dist", "uint16_t", 0, "m"),
+    ];
 }
 
 /// The filtered global position (e.g. fused GPS and accelerometers). The position is in GPS-frame (right-handed, Z-up). It is designed as scaled integer message since the resolution of float is not sufficient. NOTE: This message is intended for onboard networks / companion computers and higher-bandwidth links and optimized for accuracy and completeness. Please use the GLOBAL_POSITION_INT message for a minimal subset.
@@ -15841,6 +16301,20 @@ impl GlobalPositionIntCov {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("alt", "int32_t", 0, "mm"),
+        FieldInfo::new("relative_alt", "int32_t", 0, "mm"),
+        FieldInfo::new("vx", "float", 0, "m/s"),
+        FieldInfo::new("vy", "float", 0, "m/s"),
+        FieldInfo::new("vz", "float", 0, "m/s"),
+        FieldInfo::new("covariance", "float", 36, ""),
+        FieldInfo::new("estimator_type", "uint8_t", 0, ""),
+    ];
 }
 
 /// The filtered local position (e.g. fused computer vision and accelerometers). Coordinate frame is right-handed, Z-axis down (aeronautical frame, NED / north-east-down convention)
@@ -15943,6 +16417,22 @@ impl LocalPositionNedCov {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("x", "float", 0, "m"),
+        FieldInfo::new("y", "float", 0, "m"),
+        FieldInfo::new("z", "float", 0, "m"),
+        FieldInfo::new("vx", "float", 0, "m/s"),
+        FieldInfo::new("vy", "float", 0, "m/s"),
+        FieldInfo::new("vz", "float", 0, "m/s"),
+        FieldInfo::new("ax", "float", 0, "m/s/s"),
+        FieldInfo::new("ay", "float", 0, "m/s/s"),
+        FieldInfo::new("az", "float", 0, "m/s/s"),
+        FieldInfo::new("covariance", "float", 45, ""),
+        FieldInfo::new("estimator_type", "uint8_t", 0, ""),
+    ];
 }
 
 /// The PPM values of the RC channels received. The standard PPM modulation is as follows: 1000 microseconds: 0%, 2000 microseconds: 100%. A value of UINT16_MAX implies the channel is unused. Individual receivers/transmitters might violate this specification.
@@ -16084,6 +16574,31 @@ impl RcChannels {
             ("rssi", FieldValue::Unsigned(self.rssi.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("chan1_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan2_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan3_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan4_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan5_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan6_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan7_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan8_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan9_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan10_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan11_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan12_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan13_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan14_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan15_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan16_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan17_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan18_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chancount", "uint8_t", 0, ""),
+        FieldInfo::new("rssi", "uint8_t", 0, ""),
+    ];
 }
 
 /// Request a data stream.
@@ -16154,6 +16669,15 @@ impl RequestDataStream {
             ("start_stop", FieldValue::Unsigned(self.start_stop.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("req_message_rate", "uint16_t", 0, "Hz"),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("req_stream_id", "uint8_t", 0, ""),
+        FieldInfo::new("start_stop", "uint8_t", 0, ""),
+    ];
 }
 
 /// Data stream status information.
@@ -16205,6 +16729,13 @@ impl DataStream {
             ("on_off", FieldValue::Unsigned(self.on_off.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("message_rate", "uint16_t", 0, "Hz"),
+        FieldInfo::new("stream_id", "uint8_t", 0, ""),
+        FieldInfo::new("on_off", "uint8_t", 0, ""),
+    ];
 }
 
 /// This message provides an API for manually controlling the vehicle using standard joystick axes nomenclature, along with a joystick-like input device. Unused axes can be disabled and buttons states are transmitted as individual on/off bits of a bitmask
@@ -16331,6 +16862,26 @@ impl ManualControl {
             ("aux6", FieldValue::Signed(self.aux6.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("x", "int16_t", 0, ""),
+        FieldInfo::new("y", "int16_t", 0, ""),
+        FieldInfo::new("z", "int16_t", 0, ""),
+        FieldInfo::new("r", "int16_t", 0, ""),
+        FieldInfo::new("buttons", "uint16_t", 0, ""),
+        FieldInfo::new("target", "uint8_t", 0, ""),
+        FieldInfo::new("buttons2", "uint16_t", 0, ""),
+        FieldInfo::new("enabled_extensions", "uint8_t", 0, ""),
+        FieldInfo::new("s", "int16_t", 0, ""),
+        FieldInfo::new("t", "int16_t", 0, ""),
+        FieldInfo::new("aux1", "int16_t", 0, ""),
+        FieldInfo::new("aux2", "int16_t", 0, ""),
+        FieldInfo::new("aux3", "int16_t", 0, ""),
+        FieldInfo::new("aux4", "int16_t", 0, ""),
+        FieldInfo::new("aux5", "int16_t", 0, ""),
+        FieldInfo::new("aux6", "int16_t", 0, ""),
+    ];
 }
 
 /// The RAW values of the RC channels sent to the MAV to override info received from the RC radio. The standard PPM modulation is as follows: 1000 microseconds: 0%, 2000 microseconds: 100%. Individual receivers/transmitters might violate this specification. Note carefully the semantic differences between the first 8 channels and the subsequent channels
@@ -16480,6 +17031,30 @@ impl RcChannelsOverride {
             ("chan18_raw", FieldValue::Unsigned(self.chan18_raw.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("chan1_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan2_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan3_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan4_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan5_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan6_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan7_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan8_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("chan9_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan10_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan11_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan12_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan13_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan14_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan15_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan16_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan17_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan18_raw", "uint16_t", 0, "us"),
+    ];
 }
 
 /// Message encoding a mission item. This message is emitted to announce the presence of a mission item and to set a mission item on the system. The mission item can be either in x, y, z meters (type: LOCAL) or x:lat, y:lon, z:altitude. Local frame is Z-down, right handed (NED), global frame is Z-up, right handed (ENU). NaN or INT32_MAX may be used in float/integer params (respectively) to indicate optional/default values (e.g. to use the component's current latitude, yaw rather than a specific value). See also https://mavlink.io/en/services/mission.html.
@@ -16604,6 +17179,25 @@ impl MissionItemInt {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("param1", "float", 0, ""),
+        FieldInfo::new("param2", "float", 0, ""),
+        FieldInfo::new("param3", "float", 0, ""),
+        FieldInfo::new("param4", "float", 0, ""),
+        FieldInfo::new("x", "int32_t", 0, ""),
+        FieldInfo::new("y", "int32_t", 0, ""),
+        FieldInfo::new("z", "float", 0, ""),
+        FieldInfo::new("seq", "uint16_t", 0, ""),
+        FieldInfo::new("command", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("frame", "uint8_t", 0, ""),
+        FieldInfo::new("current", "uint8_t", 0, ""),
+        FieldInfo::new("autocontinue", "uint8_t", 0, ""),
+        FieldInfo::new("mission_type", "uint8_t", 0, ""),
+    ];
 }
 
 /// Metrics typically displayed on a HUD for fixed wing aircraft.
@@ -16667,6 +17261,16 @@ impl VfrHud {
             ("throttle", FieldValue::Unsigned(self.throttle.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("airspeed", "float", 0, "m/s"),
+        FieldInfo::new("groundspeed", "float", 0, "m/s"),
+        FieldInfo::new("alt", "float", 0, "m"),
+        FieldInfo::new("climb", "float", 0, "m/s"),
+        FieldInfo::new("heading", "int16_t", 0, "deg"),
+        FieldInfo::new("throttle", "uint16_t", 0, "%"),
+    ];
 }
 
 /// Message encoding a command with parameters as scaled integers. Scaling depends on the actual command value. The command microservice is documented at https://mavlink.io/en/services/command.html
@@ -16776,6 +17380,23 @@ impl CommandInt {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("param1", "float", 0, ""),
+        FieldInfo::new("param2", "float", 0, ""),
+        FieldInfo::new("param3", "float", 0, ""),
+        FieldInfo::new("param4", "float", 0, ""),
+        FieldInfo::new("x", "int32_t", 0, ""),
+        FieldInfo::new("y", "int32_t", 0, ""),
+        FieldInfo::new("z", "float", 0, ""),
+        FieldInfo::new("command", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("frame", "uint8_t", 0, ""),
+        FieldInfo::new("current", "uint8_t", 0, ""),
+        FieldInfo::new("autocontinue", "uint8_t", 0, ""),
+    ];
 }
 
 /// Send a command with up to seven parameters to the MAV. The command microservice is documented at https://mavlink.io/en/services/command.html
@@ -16874,6 +17495,21 @@ impl CommandLong {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("param1", "float", 0, ""),
+        FieldInfo::new("param2", "float", 0, ""),
+        FieldInfo::new("param3", "float", 0, ""),
+        FieldInfo::new("param4", "float", 0, ""),
+        FieldInfo::new("param5", "float", 0, ""),
+        FieldInfo::new("param6", "float", 0, ""),
+        FieldInfo::new("param7", "float", 0, ""),
+        FieldInfo::new("command", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("confirmation", "uint8_t", 0, ""),
+    ];
 }
 
 /// Report status of a command. Includes feedback whether the command was executed. The command microservice is documented at https://mavlink.io/en/services/command.html
@@ -16952,6 +17588,16 @@ impl CommandAck {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("command", "uint16_t", 0, ""),
+        FieldInfo::new("result", "uint8_t", 0, ""),
+        FieldInfo::new("progress", "uint8_t", 0, ""),
+        FieldInfo::new("result_param2", "int32_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+    ];
 }
 
 /// Setpoint in roll, pitch, yaw and thrust from the operator
@@ -17026,6 +17672,17 @@ impl ManualSetpoint {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("roll", "float", 0, "rad/s"),
+        FieldInfo::new("pitch", "float", 0, "rad/s"),
+        FieldInfo::new("yaw", "float", 0, "rad/s"),
+        FieldInfo::new("thrust", "float", 0, ""),
+        FieldInfo::new("mode_switch", "uint8_t", 0, ""),
+        FieldInfo::new("manual_override_switch", "uint8_t", 0, ""),
+    ];
 }
 
 /// Sets a desired vehicle attitude. Used by an external controller to command the vehicle (manual controller or other system).
@@ -17128,6 +17785,19 @@ impl SetAttitudeTarget {
             ("type_mask", FieldValue::Unsigned(self.type_mask.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("q", "float", 4, ""),
+        FieldInfo::new("body_roll_rate", "float", 0, "rad/s"),
+        FieldInfo::new("body_pitch_rate", "float", 0, "rad/s"),
+        FieldInfo::new("body_yaw_rate", "float", 0, "rad/s"),
+        FieldInfo::new("thrust", "float", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("type_mask", "uint8_t", 0, ""),
+    ];
 }
 
 /// Reports the current commanded attitude of the vehicle as specified by the autopilot. This should match the commands sent in a SET_ATTITUDE_TARGET message if the vehicle is being controlled this way.
@@ -17214,6 +17884,17 @@ impl AttitudeTarget {
             ("type_mask", FieldValue::Unsigned(self.type_mask.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("q", "float", 4, ""),
+        FieldInfo::new("body_roll_rate", "float", 0, "rad/s"),
+        FieldInfo::new("body_pitch_rate", "float", 0, "rad/s"),
+        FieldInfo::new("body_yaw_rate", "float", 0, "rad/s"),
+        FieldInfo::new("thrust", "float", 0, ""),
+        FieldInfo::new("type_mask", "uint8_t", 0, ""),
+    ];
 }
 
 /// Sets a desired vehicle position in a local north-east-down coordinate frame. Used by an external controller to command the vehicle (manual controller or other system).
@@ -17341,6 +18022,26 @@ impl SetPositionTargetLocalNed {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("x", "float", 0, "m"),
+        FieldInfo::new("y", "float", 0, "m"),
+        FieldInfo::new("z", "float", 0, "m"),
+        FieldInfo::new("vx", "float", 0, "m/s"),
+        FieldInfo::new("vy", "float", 0, "m/s"),
+        FieldInfo::new("vz", "float", 0, "m/s"),
+        FieldInfo::new("afx", "float", 0, "m/s/s"),
+        FieldInfo::new("afy", "float", 0, "m/s/s"),
+        FieldInfo::new("afz", "float", 0, "m/s/s"),
+        FieldInfo::new("yaw", "float", 0, "rad"),
+        FieldInfo::new("yaw_rate", "float", 0, "rad/s"),
+        FieldInfo::new("type_mask", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("coordinate_frame", "uint8_t", 0, ""),
+    ];
 }
 
 /// Reports the current commanded vehicle position, velocity, and acceleration as specified by the autopilot. This should match the commands sent in SET_POSITION_TARGET_LOCAL_NED if the vehicle is being controlled this way.
@@ -17452,6 +18153,24 @@ impl PositionTargetLocalNed {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("x", "float", 0, "m"),
+        FieldInfo::new("y", "float", 0, "m"),
+        FieldInfo::new("z", "float", 0, "m"),
+        FieldInfo::new("vx", "float", 0, "m/s"),
+        FieldInfo::new("vy", "float", 0, "m/s"),
+        FieldInfo::new("vz", "float", 0, "m/s"),
+        FieldInfo::new("afx", "float", 0, "m/s/s"),
+        FieldInfo::new("afy", "float", 0, "m/s/s"),
+        FieldInfo::new("afz", "float", 0, "m/s/s"),
+        FieldInfo::new("yaw", "float", 0, "rad"),
+        FieldInfo::new("yaw_rate", "float", 0, "rad/s"),
+        FieldInfo::new("type_mask", "uint16_t", 0, ""),
+        FieldInfo::new("coordinate_frame", "uint8_t", 0, ""),
+    ];
 }
 
 /// Sets a desired vehicle position, velocity, and/or acceleration in a global coordinate system (WGS84). Used by an external controller to command the vehicle (manual controller or other system).
@@ -17579,6 +18298,26 @@ impl SetPositionTargetGlobalInt {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("lat_int", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon_int", "int32_t", 0, "degE7"),
+        FieldInfo::new("alt", "float", 0, "m"),
+        FieldInfo::new("vx", "float", 0, "m/s"),
+        FieldInfo::new("vy", "float", 0, "m/s"),
+        FieldInfo::new("vz", "float", 0, "m/s"),
+        FieldInfo::new("afx", "float", 0, "m/s/s"),
+        FieldInfo::new("afy", "float", 0, "m/s/s"),
+        FieldInfo::new("afz", "float", 0, "m/s/s"),
+        FieldInfo::new("yaw", "float", 0, "rad"),
+        FieldInfo::new("yaw_rate", "float", 0, "rad/s"),
+        FieldInfo::new("type_mask", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("coordinate_frame", "uint8_t", 0, ""),
+    ];
 }
 
 /// Reports the current commanded vehicle position, velocity, and acceleration as specified by the autopilot. This should match the commands sent in SET_POSITION_TARGET_GLOBAL_INT if the vehicle is being controlled this way.
@@ -17690,6 +18429,24 @@ impl PositionTargetGlobalInt {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("lat_int", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon_int", "int32_t", 0, "degE7"),
+        FieldInfo::new("alt", "float", 0, "m"),
+        FieldInfo::new("vx", "float", 0, "m/s"),
+        FieldInfo::new("vy", "float", 0, "m/s"),
+        FieldInfo::new("vz", "float", 0, "m/s"),
+        FieldInfo::new("afx", "float", 0, "m/s/s"),
+        FieldInfo::new("afy", "float", 0, "m/s/s"),
+        FieldInfo::new("afz", "float", 0, "m/s/s"),
+        FieldInfo::new("yaw", "float", 0, "rad"),
+        FieldInfo::new("yaw_rate", "float", 0, "rad/s"),
+        FieldInfo::new("type_mask", "uint16_t", 0, ""),
+        FieldInfo::new("coordinate_frame", "uint8_t", 0, ""),
+    ];
 }
 
 /// The offset in X, Y, Z and yaw between the LOCAL_POSITION_NED messages of MAV X and the global coordinate frame in NED coordinates. Coordinate frame is right-handed, Z-axis down (aeronautical frame, NED / north-east-down convention)
@@ -17761,6 +18518,17 @@ impl LocalPositionNedSystemGlobalOffset {
             ("yaw", FieldValue::Float(self.yaw.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("x", "float", 0, "m"),
+        FieldInfo::new("y", "float", 0, "m"),
+        FieldInfo::new("z", "float", 0, "m"),
+        FieldInfo::new("roll", "float", 0, "rad"),
+        FieldInfo::new("pitch", "float", 0, "rad"),
+        FieldInfo::new("yaw", "float", 0, "rad"),
+    ];
 }
 
 /// Sent from simulation to autopilot. This packet is useful for high throughput applications such as hardware in the loop simulations.
@@ -17874,6 +18642,26 @@ impl HilState {
             ("zacc", FieldValue::Signed(self.zacc.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("roll", "float", 0, "rad"),
+        FieldInfo::new("pitch", "float", 0, "rad"),
+        FieldInfo::new("yaw", "float", 0, "rad"),
+        FieldInfo::new("rollspeed", "float", 0, "rad/s"),
+        FieldInfo::new("pitchspeed", "float", 0, "rad/s"),
+        FieldInfo::new("yawspeed", "float", 0, "rad/s"),
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("alt", "int32_t", 0, "mm"),
+        FieldInfo::new("vx", "int16_t", 0, "cm/s"),
+        FieldInfo::new("vy", "int16_t", 0, "cm/s"),
+        FieldInfo::new("vz", "int16_t", 0, "cm/s"),
+        FieldInfo::new("xacc", "int16_t", 0, "mG"),
+        FieldInfo::new("yacc", "int16_t", 0, "mG"),
+        FieldInfo::new("zacc", "int16_t", 0, "mG"),
+    ];
 }
 
 /// Sent from autopilot to simulation. Hardware in the loop control outputs
@@ -17969,6 +18757,21 @@ impl HilControls {
             ("nav_mode", FieldValue::Unsigned(self.nav_mode.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("roll_ailerons", "float", 0, ""),
+        FieldInfo::new("pitch_elevator", "float", 0, ""),
+        FieldInfo::new("yaw_rudder", "float", 0, ""),
+        FieldInfo::new("throttle", "float", 0, ""),
+        FieldInfo::new("aux1", "float", 0, ""),
+        FieldInfo::new("aux2", "float", 0, ""),
+        FieldInfo::new("aux3", "float", 0, ""),
+        FieldInfo::new("aux4", "float", 0, ""),
+        FieldInfo::new("mode", "uint8_t", 0, ""),
+        FieldInfo::new("nav_mode", "uint8_t", 0, ""),
+    ];
 }
 
 /// Sent from simulation to autopilot. The RAW values of the RC channels received. The standard PPM modulation is as follows: 1000 microseconds: 0%, 2000 microseconds: 100%. Individual receivers/transmitters might violate this specification.
@@ -18072,6 +18875,24 @@ impl HilRcInputsRaw {
             ("rssi", FieldValue::Unsigned(self.rssi.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("chan1_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan2_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan3_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan4_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan5_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan6_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan7_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan8_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan9_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan10_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan11_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("chan12_raw", "uint16_t", 0, "us"),
+        FieldInfo::new("rssi", "uint8_t", 0, ""),
+    ];
 }
 
 /// Sent from autopilot to simulation. Hardware in the loop control outputs (replacement for HIL_CONTROLS)
@@ -18131,6 +18952,14 @@ impl HilActuatorControls {
             ("mode", FieldValue::Unsigned(self.mode.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("flags", "uint64_t", 0, ""),
+        FieldInfo::new("controls", "float", 16, ""),
+        FieldInfo::new("mode", "uint8_t", 0, ""),
+    ];
 }
 
 /// Optical flow from a flow sensor (e.g. optical mouse sensor)
@@ -18225,6 +19054,20 @@ impl OpticalFlow {
             ("flow_rate_y", FieldValue::Float(self.flow_rate_y.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("flow_comp_m_x", "float", 0, "m/s"),
+        FieldInfo::new("flow_comp_m_y", "float", 0, "m/s"),
+        FieldInfo::new("ground_distance", "float", 0, "m"),
+        FieldInfo::new("flow_x", "int16_t", 0, "rad/s"),
+        FieldInfo::new("flow_y", "int16_t", 0, "rad/s"),
+        FieldInfo::new("sensor_id", "uint8_t", 0, ""),
+        FieldInfo::new("quality", "uint8_t", 0, ""),
+        FieldInfo::new("flow_rate_x", "float", 0, "rad/s"),
+        FieldInfo::new("flow_rate_y", "float", 0, "rad/s"),
+    ];
 }
 
 /// Global position/attitude estimate from a vision source.
@@ -18313,6 +19156,19 @@ impl GlobalVisionPositionEstimate {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("usec", "uint64_t", 0, "us"),
+        FieldInfo::new("x", "float", 0, "m"),
+        FieldInfo::new("y", "float", 0, "m"),
+        FieldInfo::new("z", "float", 0, "m"),
+        FieldInfo::new("roll", "float", 0, "rad"),
+        FieldInfo::new("pitch", "float", 0, "rad"),
+        FieldInfo::new("yaw", "float", 0, "rad"),
+        FieldInfo::new("covariance", "float", 21, ""),
+        FieldInfo::new("reset_counter", "uint8_t", 0, ""),
+    ];
 }
 
 /// Local position/attitude estimate from a vision source.
@@ -18401,6 +19257,19 @@ impl VisionPositionEstimate {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("usec", "uint64_t", 0, "us"),
+        FieldInfo::new("x", "float", 0, "m"),
+        FieldInfo::new("y", "float", 0, "m"),
+        FieldInfo::new("z", "float", 0, "m"),
+        FieldInfo::new("roll", "float", 0, "rad"),
+        FieldInfo::new("pitch", "float", 0, "rad"),
+        FieldInfo::new("yaw", "float", 0, "rad"),
+        FieldInfo::new("covariance", "float", 21, ""),
+        FieldInfo::new("reset_counter", "uint8_t", 0, ""),
+    ];
 }
 
 /// Speed estimate from a vision source.
@@ -18474,6 +19343,16 @@ impl VisionSpeedEstimate {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("usec", "uint64_t", 0, "us"),
+        FieldInfo::new("x", "float", 0, "m/s"),
+        FieldInfo::new("y", "float", 0, "m/s"),
+        FieldInfo::new("z", "float", 0, "m/s"),
+        FieldInfo::new("covariance", "float", 9, ""),
+        FieldInfo::new("reset_counter", "uint8_t", 0, ""),
+    ];
 }
 
 /// Global position estimate from a Vicon motion system source.
@@ -18553,6 +19432,18 @@ impl ViconPositionEstimate {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("usec", "uint64_t", 0, "us"),
+        FieldInfo::new("x", "float", 0, "m"),
+        FieldInfo::new("y", "float", 0, "m"),
+        FieldInfo::new("z", "float", 0, "m"),
+        FieldInfo::new("roll", "float", 0, "rad"),
+        FieldInfo::new("pitch", "float", 0, "rad"),
+        FieldInfo::new("yaw", "float", 0, "rad"),
+        FieldInfo::new("covariance", "float", 21, ""),
+    ];
 }
 
 /// The IMU readings in SI units in NED body frame
@@ -18673,6 +19564,26 @@ impl HighresImu {
             ("id", FieldValue::Unsigned(self.id.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("xacc", "float", 0, "m/s/s"),
+        FieldInfo::new("yacc", "float", 0, "m/s/s"),
+        FieldInfo::new("zacc", "float", 0, "m/s/s"),
+        FieldInfo::new("xgyro", "float", 0, "rad/s"),
+        FieldInfo::new("ygyro", "float", 0, "rad/s"),
+        FieldInfo::new("zgyro", "float", 0, "rad/s"),
+        FieldInfo::new("xmag", "float", 0, "gauss"),
+        FieldInfo::new("ymag", "float", 0, "gauss"),
+        FieldInfo::new("zmag", "float", 0, "gauss"),
+        FieldInfo::new("abs_pressure", "float", 0, "hPa"),
+        FieldInfo::new("diff_pressure", "float", 0, "hPa"),
+        FieldInfo::new("pressure_alt", "float", 0, ""),
+        FieldInfo::new("temperature", "float", 0, "degC"),
+        FieldInfo::new("fields_updated", "uint16_t", 0, ""),
+        FieldInfo::new("id", "uint8_t", 0, ""),
+    ];
 }
 
 /// Optical flow from an angular rate flow sensor (e.g. PX4FLOW or mouse sensor)
@@ -18781,6 +19692,22 @@ impl OpticalFlowRad {
             ("quality", FieldValue::Unsigned(self.quality.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("integration_time_us", "uint32_t", 0, "us"),
+        FieldInfo::new("integrated_x", "float", 0, "rad"),
+        FieldInfo::new("integrated_y", "float", 0, "rad"),
+        FieldInfo::new("integrated_xgyro", "float", 0, "rad"),
+        FieldInfo::new("integrated_ygyro", "float", 0, "rad"),
+        FieldInfo::new("integrated_zgyro", "float", 0, "rad"),
+        FieldInfo::new("time_delta_distance_us", "uint32_t", 0, "us"),
+        FieldInfo::new("distance", "float", 0, "m"),
+        FieldInfo::new("temperature", "int16_t", 0, "cdegC"),
+        FieldInfo::new("sensor_id", "uint8_t", 0, ""),
+        FieldInfo::new("quality", "uint8_t", 0, ""),
+    ];
 }
 
 /// The IMU readings in SI units in NED body frame
@@ -18901,6 +19828,26 @@ impl HilSensor {
             ("id", FieldValue::Unsigned(self.id.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("xacc", "float", 0, "m/s/s"),
+        FieldInfo::new("yacc", "float", 0, "m/s/s"),
+        FieldInfo::new("zacc", "float", 0, "m/s/s"),
+        FieldInfo::new("xgyro", "float", 0, "rad/s"),
+        FieldInfo::new("ygyro", "float", 0, "rad/s"),
+        FieldInfo::new("zgyro", "float", 0, "rad/s"),
+        FieldInfo::new("xmag", "float", 0, "gauss"),
+        FieldInfo::new("ymag", "float", 0, "gauss"),
+        FieldInfo::new("zmag", "float", 0, "gauss"),
+        FieldInfo::new("abs_pressure", "float", 0, "hPa"),
+        FieldInfo::new("diff_pressure", "float", 0, "hPa"),
+        FieldInfo::new("pressure_alt", "float", 0, ""),
+        FieldInfo::new("temperature", "float", 0, "degC"),
+        FieldInfo::new("fields_updated", "uint32_t", 0, ""),
+        FieldInfo::new("id", "uint8_t", 0, ""),
+    ];
 }
 
 /// Status of simulation environment, if used
@@ -19051,6 +19998,33 @@ impl SimState {
             ("lon_int", FieldValue::Signed(self.lon_int.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("q1", "float", 0, ""),
+        FieldInfo::new("q2", "float", 0, ""),
+        FieldInfo::new("q3", "float", 0, ""),
+        FieldInfo::new("q4", "float", 0, ""),
+        FieldInfo::new("roll", "float", 0, ""),
+        FieldInfo::new("pitch", "float", 0, ""),
+        FieldInfo::new("yaw", "float", 0, ""),
+        FieldInfo::new("xacc", "float", 0, "m/s/s"),
+        FieldInfo::new("yacc", "float", 0, "m/s/s"),
+        FieldInfo::new("zacc", "float", 0, "m/s/s"),
+        FieldInfo::new("xgyro", "float", 0, "rad/s"),
+        FieldInfo::new("ygyro", "float", 0, "rad/s"),
+        FieldInfo::new("zgyro", "float", 0, "rad/s"),
+        FieldInfo::new("lat", "float", 0, "deg"),
+        FieldInfo::new("lon", "float", 0, "deg"),
+        FieldInfo::new("alt", "float", 0, "m"),
+        FieldInfo::new("std_dev_horz", "float", 0, ""),
+        FieldInfo::new("std_dev_vert", "float", 0, ""),
+        FieldInfo::new("vn", "float", 0, "m/s"),
+        FieldInfo::new("ve", "float", 0, "m/s"),
+        FieldInfo::new("vd", "float", 0, "m/s"),
+        FieldInfo::new("lat_int", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon_int", "int32_t", 0, "degE7"),
+    ];
 }
 
 /// Status generated by radio and injected into MAVLink stream.
@@ -19119,6 +20093,17 @@ impl RadioStatus {
             ("remnoise", FieldValue::Unsigned(self.remnoise.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("rxerrors", "uint16_t", 0, ""),
+        FieldInfo::new("fixed", "uint16_t", 0, ""),
+        FieldInfo::new("rssi", "uint8_t", 0, ""),
+        FieldInfo::new("remrssi", "uint8_t", 0, ""),
+        FieldInfo::new("txbuf", "uint8_t", 0, "%"),
+        FieldInfo::new("noise", "uint8_t", 0, ""),
+        FieldInfo::new("remnoise", "uint8_t", 0, ""),
+    ];
 }
 
 /// File transfer protocol message: https://mavlink.io/en/services/ftp.html.
@@ -19186,6 +20171,14 @@ impl FileTransferProtocol {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("target_network", "uint8_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("payload", "uint8_t", 251, ""),
+    ];
 }
 
 /// Time synchronization message.
@@ -19229,6 +20222,12 @@ impl Timesync {
             ("ts1", FieldValue::Signed(self.ts1)),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("tc1", "int64_t", 0, ""),
+        FieldInfo::new("ts1", "int64_t", 0, ""),
+    ];
 }
 
 /// Camera-IMU triggering and synchronisation message.
@@ -19272,6 +20271,12 @@ impl CameraTrigger {
             ("seq", FieldValue::Unsigned(self.seq.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("seq", "uint32_t", 0, ""),
+    ];
 }
 
 /// The global position, as returned by the Global Positioning System (GPS). This is NOT the global position estimate of the system, but rather a RAW sensor value. See message GLOBAL_POSITION_INT for the global position estimate.
@@ -19385,6 +20390,25 @@ impl HilGps {
             ("yaw", FieldValue::Unsigned(self.yaw.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("alt", "int32_t", 0, "mm"),
+        FieldInfo::new("eph", "uint16_t", 0, ""),
+        FieldInfo::new("epv", "uint16_t", 0, ""),
+        FieldInfo::new("vel", "uint16_t", 0, "cm/s"),
+        FieldInfo::new("vn", "int16_t", 0, "cm/s"),
+        FieldInfo::new("ve", "int16_t", 0, "cm/s"),
+        FieldInfo::new("vd", "int16_t", 0, "cm/s"),
+        FieldInfo::new("cog", "uint16_t", 0, "cdeg"),
+        FieldInfo::new("fix_type", "uint8_t", 0, ""),
+        FieldInfo::new("satellites_visible", "uint8_t", 0, ""),
+        FieldInfo::new("id", "uint8_t", 0, ""),
+        FieldInfo::new("yaw", "uint16_t", 0, "cdeg"),
+    ];
 }
 
 /// Simulated optical flow from a flow sensor (e.g. PX4FLOW or optical mouse sensor)
@@ -19493,6 +20517,22 @@ impl HilOpticalFlow {
             ("quality", FieldValue::Unsigned(self.quality.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("integration_time_us", "uint32_t", 0, "us"),
+        FieldInfo::new("integrated_x", "float", 0, "rad"),
+        FieldInfo::new("integrated_y", "float", 0, "rad"),
+        FieldInfo::new("integrated_xgyro", "float", 0, "rad"),
+        FieldInfo::new("integrated_ygyro", "float", 0, "rad"),
+        FieldInfo::new("integrated_zgyro", "float", 0, "rad"),
+        FieldInfo::new("time_delta_distance_us", "uint32_t", 0, "us"),
+        FieldInfo::new("distance", "float", 0, "m"),
+        FieldInfo::new("temperature", "int16_t", 0, "cdegC"),
+        FieldInfo::new("sensor_id", "uint8_t", 0, ""),
+        FieldInfo::new("quality", "uint8_t", 0, ""),
+    ];
 }
 
 /// Sent from simulation to autopilot, avoids in contrast to HIL_STATE singularities. This packet is useful for high throughput applications such as hardware in the loop simulations.
@@ -19622,6 +20662,26 @@ impl HilStateQuaternion {
             ("zacc", FieldValue::Signed(self.zacc.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("attitude_quaternion", "float", 4, ""),
+        FieldInfo::new("rollspeed", "float", 0, "rad/s"),
+        FieldInfo::new("pitchspeed", "float", 0, "rad/s"),
+        FieldInfo::new("yawspeed", "float", 0, "rad/s"),
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("alt", "int32_t", 0, "mm"),
+        FieldInfo::new("vx", "int16_t", 0, "cm/s"),
+        FieldInfo::new("vy", "int16_t", 0, "cm/s"),
+        FieldInfo::new("vz", "int16_t", 0, "cm/s"),
+        FieldInfo::new("ind_airspeed", "uint16_t", 0, "cm/s"),
+        FieldInfo::new("true_airspeed", "uint16_t", 0, "cm/s"),
+        FieldInfo::new("xacc", "int16_t", 0, "mG"),
+        FieldInfo::new("yacc", "int16_t", 0, "mG"),
+        FieldInfo::new("zacc", "int16_t", 0, "mG"),
+    ];
 }
 
 /// The RAW IMU readings for secondary 9DOF sensor setup. This message should contain the scaled values to the described units
@@ -19714,6 +20774,21 @@ impl ScaledImu2 {
             ("temperature", FieldValue::Signed(self.temperature.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("xacc", "int16_t", 0, "mG"),
+        FieldInfo::new("yacc", "int16_t", 0, "mG"),
+        FieldInfo::new("zacc", "int16_t", 0, "mG"),
+        FieldInfo::new("xgyro", "int16_t", 0, "mrad/s"),
+        FieldInfo::new("ygyro", "int16_t", 0, "mrad/s"),
+        FieldInfo::new("zgyro", "int16_t", 0, "mrad/s"),
+        FieldInfo::new("xmag", "int16_t", 0, "mgauss"),
+        FieldInfo::new("ymag", "int16_t", 0, "mgauss"),
+        FieldInfo::new("zmag", "int16_t", 0, "mgauss"),
+        FieldInfo::new("temperature", "int16_t", 0, "cdegC"),
+    ];
 }
 
 /// Request a list of available logs. On some systems calling this may stop on-board logging until LOG_REQUEST_END is called. If there are no log files available this request shall be answered with one LOG_ENTRY message with id = 0 and num_logs = 0.
@@ -19773,6 +20848,14 @@ impl LogRequestList {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("start", "uint16_t", 0, ""),
+        FieldInfo::new("end", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+    ];
 }
 
 /// Reply to LOG_REQUEST_LIST
@@ -19834,6 +20917,15 @@ impl LogEntry {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_utc", "uint32_t", 0, "s"),
+        FieldInfo::new("size", "uint32_t", 0, "bytes"),
+        FieldInfo::new("id", "uint16_t", 0, ""),
+        FieldInfo::new("num_logs", "uint16_t", 0, ""),
+        FieldInfo::new("last_log_num", "uint16_t", 0, ""),
+    ];
 }
 
 /// Request a chunk of a log
@@ -19898,6 +20990,15 @@ impl LogRequestData {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("ofs", "uint32_t", 0, ""),
+        FieldInfo::new("count", "uint32_t", 0, "bytes"),
+        FieldInfo::new("id", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+    ];
 }
 
 /// Reply to LOG_REQUEST_DATA
@@ -19956,6 +21057,14 @@ impl LogData {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("ofs", "uint32_t", 0, ""),
+        FieldInfo::new("id", "uint16_t", 0, ""),
+        FieldInfo::new("count", "uint8_t", 0, "bytes"),
+        FieldInfo::new("data", "uint8_t", 90, ""),
+    ];
 }
 
 /// Erase all logs
@@ -20005,6 +21114,12 @@ impl LogErase {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+    ];
 }
 
 /// Stop log transfer and resume normal logging
@@ -20054,6 +21169,12 @@ impl LogRequestEnd {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+    ];
 }
 
 /// Data for injecting into the onboard GPS (used for DGPS)
@@ -20118,6 +21239,14 @@ impl GpsInjectData {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("len", "uint8_t", 0, "bytes"),
+        FieldInfo::new("data", "uint8_t", 110, ""),
+    ];
 }
 
 /// Second GPS data.
@@ -20254,6 +21383,28 @@ impl Gps2Raw {
             ("hdg_acc", FieldValue::Unsigned(self.hdg_acc.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("alt", "int32_t", 0, "mm"),
+        FieldInfo::new("dgps_age", "uint32_t", 0, "ms"),
+        FieldInfo::new("eph", "uint16_t", 0, ""),
+        FieldInfo::new("epv", "uint16_t", 0, ""),
+        FieldInfo::new("vel", "uint16_t", 0, "cm/s"),
+        FieldInfo::new("cog", "uint16_t", 0, "cdeg"),
+        FieldInfo::new("fix_type", "uint8_t", 0, ""),
+        FieldInfo::new("satellites_visible", "uint8_t", 0, ""),
+        FieldInfo::new("dgps_numch", "uint8_t", 0, ""),
+        FieldInfo::new("yaw", "uint16_t", 0, "cdeg"),
+        FieldInfo::new("alt_ellipsoid", "int32_t", 0, "mm"),
+        FieldInfo::new("h_acc", "uint32_t", 0, "mm"),
+        FieldInfo::new("v_acc", "uint32_t", 0, "mm"),
+        FieldInfo::new("vel_acc", "uint32_t", 0, "mm/s"),
+        FieldInfo::new("hdg_acc", "uint32_t", 0, "degE5"),
+    ];
 }
 
 /// Power supply status
@@ -20303,6 +21454,13 @@ impl PowerStatus {
             ("flags", FieldValue::Unsigned(self.flags.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("Vcc", "uint16_t", 0, "mV"),
+        FieldInfo::new("Vservo", "uint16_t", 0, "mV"),
+        FieldInfo::new("flags", "uint16_t", 0, ""),
+    ];
 }
 
 /// Control a serial port. This can be used for raw access to an onboard serial peripheral such as a GPS or telemetry radio. It is designed to make it possible to update the devices firmware via MAVLink messages or change the devices settings. A message with zero bytes can be used to change just the baudrate.
@@ -20373,6 +21531,16 @@ impl SerialControl {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("baudrate", "uint32_t", 0, "bits/s"),
+        FieldInfo::new("timeout", "uint16_t", 0, "ms"),
+        FieldInfo::new("device", "uint8_t", 0, ""),
+        FieldInfo::new("flags", "uint8_t", 0, ""),
+        FieldInfo::new("count", "uint8_t", 0, "bytes"),
+        FieldInfo::new("data", "uint8_t", 70, ""),
+    ];
 }
 
 /// RTK GPS data. Gives information on the relative baseline calculation the GPS is reporting
@@ -20493,6 +21661,23 @@ impl GpsRtk {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_last_baseline_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("tow", "uint32_t", 0, "ms"),
+        FieldInfo::new("baseline_a_mm", "int32_t", 0, "mm"),
+        FieldInfo::new("baseline_b_mm", "int32_t", 0, "mm"),
+        FieldInfo::new("baseline_c_mm", "int32_t", 0, "mm"),
+        FieldInfo::new("accuracy", "uint32_t", 0, ""),
+        FieldInfo::new("iar_num_hypotheses", "int32_t", 0, ""),
+        FieldInfo::new("wn", "uint16_t", 0, ""),
+        FieldInfo::new("rtk_receiver_id", "uint8_t", 0, ""),
+        FieldInfo::new("rtk_health", "uint8_t", 0, ""),
+        FieldInfo::new("rtk_rate", "uint8_t", 0, "Hz"),
+        FieldInfo::new("nsats", "uint8_t", 0, ""),
+        FieldInfo::new("baseline_coords_type", "uint8_t", 0, ""),
+    ];
 }
 
 /// RTK GPS data. Gives information on the relative baseline calculation the GPS is reporting
@@ -20613,6 +21798,23 @@ impl Gps2Rtk {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_last_baseline_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("tow", "uint32_t", 0, "ms"),
+        FieldInfo::new("baseline_a_mm", "int32_t", 0, "mm"),
+        FieldInfo::new("baseline_b_mm", "int32_t", 0, "mm"),
+        FieldInfo::new("baseline_c_mm", "int32_t", 0, "mm"),
+        FieldInfo::new("accuracy", "uint32_t", 0, ""),
+        FieldInfo::new("iar_num_hypotheses", "int32_t", 0, ""),
+        FieldInfo::new("wn", "uint16_t", 0, ""),
+        FieldInfo::new("rtk_receiver_id", "uint8_t", 0, ""),
+        FieldInfo::new("rtk_health", "uint8_t", 0, ""),
+        FieldInfo::new("rtk_rate", "uint8_t", 0, "Hz"),
+        FieldInfo::new("nsats", "uint8_t", 0, ""),
+        FieldInfo::new("baseline_coords_type", "uint8_t", 0, ""),
+    ];
 }
 
 /// The RAW IMU readings for 3rd 9DOF sensor setup. This message should contain the scaled values to the described units
@@ -20705,6 +21907,21 @@ impl ScaledImu3 {
             ("temperature", FieldValue::Signed(self.temperature.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("xacc", "int16_t", 0, "mG"),
+        FieldInfo::new("yacc", "int16_t", 0, "mG"),
+        FieldInfo::new("zacc", "int16_t", 0, "mG"),
+        FieldInfo::new("xgyro", "int16_t", 0, "mrad/s"),
+        FieldInfo::new("ygyro", "int16_t", 0, "mrad/s"),
+        FieldInfo::new("zgyro", "int16_t", 0, "mrad/s"),
+        FieldInfo::new("xmag", "int16_t", 0, "mgauss"),
+        FieldInfo::new("ymag", "int16_t", 0, "mgauss"),
+        FieldInfo::new("zmag", "int16_t", 0, "mgauss"),
+        FieldInfo::new("temperature", "int16_t", 0, "cdegC"),
+    ];
 }
 
 /// Handshake message to initiate, control and stop image streaming when using the Image Transmission Protocol: https://mavlink.io/en/services/image_transmission.html.
@@ -20774,6 +21991,17 @@ impl DataTransmissionHandshake {
             ("jpg_quality", FieldValue::Unsigned(self.jpg_quality.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("size", "uint32_t", 0, "bytes"),
+        FieldInfo::new("width", "uint16_t", 0, ""),
+        FieldInfo::new("height", "uint16_t", 0, ""),
+        FieldInfo::new("packets", "uint16_t", 0, ""),
+        FieldInfo::new("type", "uint8_t", 0, ""),
+        FieldInfo::new("payload", "uint8_t", 0, "bytes"),
+        FieldInfo::new("jpg_quality", "uint8_t", 0, "%"),
+    ];
 }
 
 /// Data packet for images sent using the Image Transmission Protocol: https://mavlink.io/en/services/image_transmission.html.
@@ -20822,6 +22050,12 @@ impl EncapsulatedData {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("seqnr", "uint16_t", 0, ""),
+        FieldInfo::new("data", "uint8_t", 253, ""),
+    ];
 }
 
 /// Distance sensor information for an onboard rangefinder.
@@ -20944,6 +22178,22 @@ impl DistanceSensor {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("min_distance", "uint16_t", 0, "cm"),
+        FieldInfo::new("max_distance", "uint16_t", 0, "cm"),
+        FieldInfo::new("current_distance", "uint16_t", 0, "cm"),
+        FieldInfo::new("type", "uint8_t", 0, ""),
+        FieldInfo::new("id", "uint8_t", 0, ""),
+        FieldInfo::new("orientation", "uint8_t", 0, ""),
+        FieldInfo::new("covariance", "uint8_t", 0, "cm^2"),
+        FieldInfo::new("horizontal_fov", "float", 0, "rad"),
+        FieldInfo::new("vertical_fov", "float", 0, "rad"),
+        FieldInfo::new("quaternion", "float", 4, ""),
+        FieldInfo::new("signal_quality", "uint8_t", 0, "%"),
+    ];
 }
 
 /// Request for terrain data and terrain status. See terrain protocol docs: https://mavlink.io/en/services/terrain.html
@@ -21000,6 +22250,14 @@ impl TerrainRequest {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("mask", "uint64_t", 0, ""),
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("grid_spacing", "uint16_t", 0, "m"),
+    ];
 }
 
 /// Terrain data sent from GCS. The lat/lon and grid_spacing must be the same as a lat/lon from a TERRAIN_REQUEST. See terrain protocol docs: https://mavlink.io/en/services/terrain.html
@@ -21066,6 +22324,15 @@ impl TerrainData {
             ("gridbit", FieldValue::Unsigned(self.gridbit.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("grid_spacing", "uint16_t", 0, "m"),
+        FieldInfo::new("data", "int16_t", 16, "m"),
+        FieldInfo::new("gridbit", "uint8_t", 0, ""),
+    ];
 }
 
 /// Request that the vehicle report terrain height at the given location (expected response is a TERRAIN_REPORT). Used by GCS to check if vehicle has all terrain data needed for a mission.
@@ -21109,6 +22376,12 @@ impl TerrainCheck {
             ("lon", FieldValue::Signed(self.lon.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon", "int32_t", 0, "degE7"),
+    ];
 }
 
 /// Streamed from drone to report progress of terrain map download (initiated by TERRAIN_REQUEST), or sent as a response to a TERRAIN_CHECK request. See terrain protocol docs: https://mavlink.io/en/services/terrain.html
@@ -21183,6 +22456,17 @@ impl TerrainReport {
             ("loaded", FieldValue::Unsigned(self.loaded.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("terrain_height", "float", 0, "m"),
+        FieldInfo::new("current_height", "float", 0, "m"),
+        FieldInfo::new("spacing", "uint16_t", 0, ""),
+        FieldInfo::new("pending", "uint16_t", 0, ""),
+        FieldInfo::new("loaded", "uint16_t", 0, ""),
+    ];
 }
 
 /// Barometer readings for 2nd barometer
@@ -21248,6 +22532,15 @@ impl ScaledPressure2 {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("press_abs", "float", 0, "hPa"),
+        FieldInfo::new("press_diff", "float", 0, "hPa"),
+        FieldInfo::new("temperature", "int16_t", 0, "cdegC"),
+        FieldInfo::new("temperature_press_diff", "int16_t", 0, "cdegC"),
+    ];
 }
 
 /// Motion capture attitude and position
@@ -21322,6 +22615,16 @@ impl AttPosMocap {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("q", "float", 4, ""),
+        FieldInfo::new("x", "float", 0, "m"),
+        FieldInfo::new("y", "float", 0, "m"),
+        FieldInfo::new("z", "float", 0, "m"),
+        FieldInfo::new("covariance", "float", 21, ""),
+    ];
 }
 
 /// Set the vehicle attitude and body angular rates.
@@ -21391,6 +22694,15 @@ impl SetActuatorControlTarget {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("controls", "float", 8, ""),
+        FieldInfo::new("group_mlx", "uint8_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+    ];
 }
 
 /// Set the vehicle attitude and body angular rates.
@@ -21444,6 +22756,13 @@ impl ActuatorControlTarget {
             ("group_mlx", FieldValue::Unsigned(self.group_mlx.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("controls", "float", 8, ""),
+        FieldInfo::new("group_mlx", "uint8_t", 0, ""),
+    ];
 }
 
 /// The current system altitude.
@@ -21530,6 +22849,17 @@ impl Altitude {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("altitude_monotonic", "float", 0, "m"),
+        FieldInfo::new("altitude_amsl", "float", 0, "m"),
+        FieldInfo::new("altitude_local", "float", 0, "m"),
+        FieldInfo::new("altitude_relative", "float", 0, "m"),
+        FieldInfo::new("altitude_terrain", "float", 0, "m"),
+        FieldInfo::new("bottom_clearance", "float", 0, "m"),
+    ];
 }
 
 /// The autopilot is requesting a resource (file, binary, other type of data)
@@ -21601,6 +22931,15 @@ impl ResourceRequest {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("request_id", "uint8_t", 0, ""),
+        FieldInfo::new("uri_type", "uint8_t", 0, ""),
+        FieldInfo::new("uri", "uint8_t", 120, ""),
+        FieldInfo::new("transfer_type", "uint8_t", 0, ""),
+        FieldInfo::new("storage", "uint8_t", 120, ""),
+    ];
 }
 
 /// Barometer readings for 3rd barometer
@@ -21666,6 +23005,15 @@ impl ScaledPressure3 {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("press_abs", "float", 0, "hPa"),
+        FieldInfo::new("press_diff", "float", 0, "hPa"),
+        FieldInfo::new("temperature", "int16_t", 0, "cdegC"),
+        FieldInfo::new("temperature_press_diff", "int16_t", 0, "cdegC"),
+    ];
 }
 
 /// Current motion information from a designated system
@@ -21782,6 +23130,21 @@ impl FollowTarget {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("timestamp", "uint64_t", 0, "ms"),
+        FieldInfo::new("custom_state", "uint64_t", 0, ""),
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("alt", "float", 0, "m"),
+        FieldInfo::new("vel", "float", 3, "m/s"),
+        FieldInfo::new("acc", "float", 3, "m/s/s"),
+        FieldInfo::new("attitude_q", "float", 4, ""),
+        FieldInfo::new("rates", "float", 3, ""),
+        FieldInfo::new("position_cov", "float", 3, ""),
+        FieldInfo::new("est_capabilities", "uint8_t", 0, ""),
+    ];
 }
 
 /// The smoothed, monotonic system state used to feed the control loops of the system.
@@ -21915,6 +23278,27 @@ impl ControlSystemState {
             ("yaw_rate", FieldValue::Float(self.yaw_rate.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("x_acc", "float", 0, "m/s/s"),
+        FieldInfo::new("y_acc", "float", 0, "m/s/s"),
+        FieldInfo::new("z_acc", "float", 0, "m/s/s"),
+        FieldInfo::new("x_vel", "float", 0, "m/s"),
+        FieldInfo::new("y_vel", "float", 0, "m/s"),
+        FieldInfo::new("z_vel", "float", 0, "m/s"),
+        FieldInfo::new("x_pos", "float", 0, "m"),
+        FieldInfo::new("y_pos", "float", 0, "m"),
+        FieldInfo::new("z_pos", "float", 0, "m"),
+        FieldInfo::new("airspeed", "float", 0, "m/s"),
+        FieldInfo::new("vel_variance", "float", 3, ""),
+        FieldInfo::new("pos_variance", "float", 3, ""),
+        FieldInfo::new("q", "float", 4, ""),
+        FieldInfo::new("roll_rate", "float", 0, "rad/s"),
+        FieldInfo::new("pitch_rate", "float", 0, "rad/s"),
+        FieldInfo::new("yaw_rate", "float", 0, "rad/s"),
+    ];
 }
 
 /// Battery information
@@ -22062,6 +23446,24 @@ impl BatteryStatus {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("current_consumed", "int32_t", 0, "mAh"),
+        FieldInfo::new("energy_consumed", "int32_t", 0, "hJ"),
+        FieldInfo::new("temperature", "int16_t", 0, "cdegC"),
+        FieldInfo::new("voltages", "uint16_t", 10, "mV"),
+        FieldInfo::new("current_battery", "int16_t", 0, "cA"),
+        FieldInfo::new("id", "uint8_t", 0, ""),
+        FieldInfo::new("battery_function", "uint8_t", 0, ""),
+        FieldInfo::new("type", "uint8_t", 0, ""),
+        FieldInfo::new("battery_remaining", "int8_t", 0, "%"),
+        FieldInfo::new("time_remaining", "int32_t", 0, "s"),
+        FieldInfo::new("charge_state", "uint8_t", 0, ""),
+        FieldInfo::new("voltages_ext", "uint16_t", 4, "mV"),
+        FieldInfo::new("mode", "uint8_t", 0, ""),
+        FieldInfo::new("fault_bitmask", "uint32_t", 0, ""),
+    ];
 }
 
 /// Version and capability of autopilot software. This should be emitted in response to a request with MAV_CMD_REQUEST_MESSAGE.
@@ -22201,6 +23603,22 @@ impl AutopilotVersion {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("capabilities", "uint64_t", 0, ""),
+        FieldInfo::new("uid", "uint64_t", 0, ""),
+        FieldInfo::new("flight_sw_version", "uint32_t", 0, ""),
+        FieldInfo::new("middleware_sw_version", "uint32_t", 0, ""),
+        FieldInfo::new("os_sw_version", "uint32_t", 0, ""),
+        FieldInfo::new("board_version", "uint32_t", 0, ""),
+        FieldInfo::new("vendor_id", "uint16_t", 0, ""),
+        FieldInfo::new("product_id", "uint16_t", 0, ""),
+        FieldInfo::new("flight_custom_version", "uint8_t", 8, ""),
+        FieldInfo::new("middleware_custom_version", "uint8_t", 8, ""),
+        FieldInfo::new("os_custom_version", "uint8_t", 8, ""),
+        FieldInfo::new("uid2", "uint8_t", 18, ""),
+    ];
 }
 
 /// The location of a landing target. See: https://mavlink.io/en/services/landing_target.html
@@ -22321,6 +23739,24 @@ impl LandingTarget {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("angle_x", "float", 0, "rad"),
+        FieldInfo::new("angle_y", "float", 0, "rad"),
+        FieldInfo::new("distance", "float", 0, "m"),
+        FieldInfo::new("size_x", "float", 0, "rad"),
+        FieldInfo::new("size_y", "float", 0, "rad"),
+        FieldInfo::new("target_num", "uint8_t", 0, ""),
+        FieldInfo::new("frame", "uint8_t", 0, ""),
+        FieldInfo::new("x", "float", 0, "m"),
+        FieldInfo::new("y", "float", 0, "m"),
+        FieldInfo::new("z", "float", 0, "m"),
+        FieldInfo::new("q", "float", 4, ""),
+        FieldInfo::new("type", "uint8_t", 0, ""),
+        FieldInfo::new("position_valid", "uint8_t", 0, ""),
+    ];
 }
 
 /// Offsets and calibrations values for hardware sensors. This makes it easier to debug the calibration process.
@@ -22417,6 +23853,22 @@ impl SensorOffsets {
             ("mag_ofs_z", FieldValue::Signed(self.mag_ofs_z.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("mag_declination", "float", 0, "rad"),
+        FieldInfo::new("raw_press", "int32_t", 0, ""),
+        FieldInfo::new("raw_temp", "int32_t", 0, ""),
+        FieldInfo::new("gyro_cal_x", "float", 0, ""),
+        FieldInfo::new("gyro_cal_y", "float", 0, ""),
+        FieldInfo::new("gyro_cal_z", "float", 0, ""),
+        FieldInfo::new("accel_cal_x", "float", 0, ""),
+        FieldInfo::new("accel_cal_y", "float", 0, ""),
+        FieldInfo::new("accel_cal_z", "float", 0, ""),
+        FieldInfo::new("mag_ofs_x", "int16_t", 0, ""),
+        FieldInfo::new("mag_ofs_y", "int16_t", 0, ""),
+        FieldInfo::new("mag_ofs_z", "int16_t", 0, ""),
+    ];
 }
 
 /// Set the magnetometer offsets
@@ -22481,6 +23933,15 @@ impl SetMagOffsets {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("mag_ofs_x", "int16_t", 0, ""),
+        FieldInfo::new("mag_ofs_y", "int16_t", 0, ""),
+        FieldInfo::new("mag_ofs_z", "int16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+    ];
 }
 
 /// State of autopilot RAM.
@@ -22530,6 +23991,13 @@ impl Meminfo {
             ("freemem32", FieldValue::Unsigned(self.freemem32.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("brkval", "uint16_t", 0, ""),
+        FieldInfo::new("freemem", "uint16_t", 0, "bytes"),
+        FieldInfo::new("freemem32", "uint32_t", 0, "bytes"),
+    ];
 }
 
 /// Raw ADC output.
@@ -22593,6 +24061,16 @@ impl ApAdc {
             ("adc6", FieldValue::Unsigned(self.adc6.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("adc1", "uint16_t", 0, ""),
+        FieldInfo::new("adc2", "uint16_t", 0, ""),
+        FieldInfo::new("adc3", "uint16_t", 0, ""),
+        FieldInfo::new("adc4", "uint16_t", 0, ""),
+        FieldInfo::new("adc5", "uint16_t", 0, ""),
+        FieldInfo::new("adc6", "uint16_t", 0, ""),
+    ];
 }
 
 /// Configure on-board Camera Control System.
@@ -22696,6 +24174,21 @@ impl DigicamConfigure {
             ("extra_param", FieldValue::Unsigned(self.extra_param.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("extra_value", "float", 0, ""),
+        FieldInfo::new("shutter_speed", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("mode", "uint8_t", 0, ""),
+        FieldInfo::new("aperture", "uint8_t", 0, ""),
+        FieldInfo::new("iso", "uint8_t", 0, ""),
+        FieldInfo::new("exposure_type", "uint8_t", 0, ""),
+        FieldInfo::new("command_id", "uint8_t", 0, ""),
+        FieldInfo::new("engine_cut_off", "uint8_t", 0, "ds"),
+        FieldInfo::new("extra_param", "uint8_t", 0, ""),
+    ];
 }
 
 /// Control on-board Camera Control System to take shots.
@@ -22785,6 +24278,20 @@ impl DigicamControl {
             ("extra_param", FieldValue::Unsigned(self.extra_param.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("extra_value", "float", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("session", "uint8_t", 0, ""),
+        FieldInfo::new("zoom_pos", "uint8_t", 0, ""),
+        FieldInfo::new("zoom_step", "int8_t", 0, ""),
+        FieldInfo::new("focus_lock", "uint8_t", 0, ""),
+        FieldInfo::new("shot", "uint8_t", 0, ""),
+        FieldInfo::new("command_id", "uint8_t", 0, ""),
+        FieldInfo::new("extra_param", "uint8_t", 0, ""),
+    ];
 }
 
 /// Message to configure a camera mount, directional antenna, etc.
@@ -22855,6 +24362,16 @@ impl MountConfigure {
             ("stab_yaw", FieldValue::Unsigned(self.stab_yaw.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("mount_mode", "uint8_t", 0, ""),
+        FieldInfo::new("stab_roll", "uint8_t", 0, ""),
+        FieldInfo::new("stab_pitch", "uint8_t", 0, ""),
+        FieldInfo::new("stab_yaw", "uint8_t", 0, ""),
+    ];
 }
 
 /// Message to control a camera mount, directional antenna, etc.
@@ -22927,6 +24444,16 @@ impl MountControl {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("input_a", "int32_t", 0, ""),
+        FieldInfo::new("input_b", "int32_t", 0, ""),
+        FieldInfo::new("input_c", "int32_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("save_position", "uint8_t", 0, ""),
+    ];
 }
 
 /// Message with some status from autopilot to GCS about camera or antenna mount.
@@ -22998,6 +24525,16 @@ impl MountStatus {
             ("mount_mode", FieldValue::Unsigned(self.mount_mode.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("pointing_a", "int32_t", 0, "cdeg"),
+        FieldInfo::new("pointing_b", "int32_t", 0, "cdeg"),
+        FieldInfo::new("pointing_c", "int32_t", 0, "cdeg"),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("mount_mode", "uint8_t", 0, ""),
+    ];
 }
 
 /// A fence point. Used to set a point when from GCS -> MAV. Also used to return a point from MAV -> GCS.
@@ -23067,6 +24604,16 @@ impl FencePoint {
             ("count", FieldValue::Unsigned(self.count.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("lat", "float", 0, "deg"),
+        FieldInfo::new("lng", "float", 0, "deg"),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("idx", "uint8_t", 0, ""),
+        FieldInfo::new("count", "uint8_t", 0, ""),
+    ];
 }
 
 /// Request a current fence point from MAV.
@@ -23121,6 +24668,13 @@ impl FenceFetchPoint {
             ("idx", FieldValue::Unsigned(self.idx.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("idx", "uint8_t", 0, ""),
+    ];
 }
 
 /// Status of geo-fencing. Sent in extended status stream when fencing enabled.
@@ -23191,6 +24745,15 @@ impl FenceStatus {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("breach_time", "uint32_t", 0, "ms"),
+        FieldInfo::new("breach_count", "uint16_t", 0, ""),
+        FieldInfo::new("breach_status", "uint8_t", 0, ""),
+        FieldInfo::new("breach_type", "uint8_t", 0, ""),
+        FieldInfo::new("breach_mitigation", "uint8_t", 0, ""),
+    ];
 }
 
 /// Status of DCM attitude estimator.
@@ -23259,6 +24822,17 @@ impl Ahrs {
             ("error_yaw", FieldValue::Float(self.error_yaw.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("omegaIx", "float", 0, "rad/s"),
+        FieldInfo::new("omegaIy", "float", 0, "rad/s"),
+        FieldInfo::new("omegaIz", "float", 0, "rad/s"),
+        FieldInfo::new("accel_weight", "float", 0, ""),
+        FieldInfo::new("renorm_val", "float", 0, ""),
+        FieldInfo::new("error_rp", "float", 0, ""),
+        FieldInfo::new("error_yaw", "float", 0, ""),
+    ];
 }
 
 /// Status of simulation environment, if used.
@@ -23347,6 +24921,21 @@ impl Simstate {
             ("lng", FieldValue::Signed(self.lng.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("roll", "float", 0, "rad"),
+        FieldInfo::new("pitch", "float", 0, "rad"),
+        FieldInfo::new("yaw", "float", 0, "rad"),
+        FieldInfo::new("xacc", "float", 0, "m/s/s"),
+        FieldInfo::new("yacc", "float", 0, "m/s/s"),
+        FieldInfo::new("zacc", "float", 0, "m/s/s"),
+        FieldInfo::new("xgyro", "float", 0, "rad/s"),
+        FieldInfo::new("ygyro", "float", 0, "rad/s"),
+        FieldInfo::new("zgyro", "float", 0, "rad/s"),
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lng", "int32_t", 0, "degE7"),
+    ];
 }
 
 /// Status of key hardware.
@@ -23390,6 +24979,12 @@ impl Hwstatus {
             ("I2Cerr", FieldValue::Unsigned(self.i2cerr.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("Vcc", "uint16_t", 0, "mV"),
+        FieldInfo::new("I2Cerr", "uint8_t", 0, ""),
+    ];
 }
 
 /// Status generated by radio.
@@ -23458,6 +25053,17 @@ impl Radio {
             ("remnoise", FieldValue::Unsigned(self.remnoise.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("rxerrors", "uint16_t", 0, ""),
+        FieldInfo::new("fixed", "uint16_t", 0, ""),
+        FieldInfo::new("rssi", "uint8_t", 0, ""),
+        FieldInfo::new("remrssi", "uint8_t", 0, ""),
+        FieldInfo::new("txbuf", "uint8_t", 0, "%"),
+        FieldInfo::new("noise", "uint8_t", 0, ""),
+        FieldInfo::new("remnoise", "uint8_t", 0, ""),
+    ];
 }
 
 /// Status of AP_Limits. Sent in extended status stream when AP_Limits is enabled.
@@ -23561,6 +25167,19 @@ impl LimitsStatus {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("last_trigger", "uint32_t", 0, "ms"),
+        FieldInfo::new("last_action", "uint32_t", 0, "ms"),
+        FieldInfo::new("last_recovery", "uint32_t", 0, "ms"),
+        FieldInfo::new("last_clear", "uint32_t", 0, "ms"),
+        FieldInfo::new("breach_count", "uint16_t", 0, ""),
+        FieldInfo::new("limits_state", "uint8_t", 0, ""),
+        FieldInfo::new("mods_enabled", "uint8_t", 0, ""),
+        FieldInfo::new("mods_required", "uint8_t", 0, ""),
+        FieldInfo::new("mods_triggered", "uint8_t", 0, ""),
+    ];
 }
 
 /// Wind estimation.
@@ -23609,6 +25228,13 @@ impl Wind {
             ("speed_z", FieldValue::Float(self.speed_z.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("direction", "float", 0, "deg"),
+        FieldInfo::new("speed", "float", 0, "m/s"),
+        FieldInfo::new("speed_z", "float", 0, "m/s"),
+    ];
 }
 
 /// Data packet, size 16.
@@ -23662,6 +25288,13 @@ impl Data16 {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("type", "uint8_t", 0, ""),
+        FieldInfo::new("len", "uint8_t", 0, "bytes"),
+        FieldInfo::new("data", "uint8_t", 16, ""),
+    ];
 }
 
 /// Data packet, size 32.
@@ -23715,6 +25348,13 @@ impl Data32 {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("type", "uint8_t", 0, ""),
+        FieldInfo::new("len", "uint8_t", 0, "bytes"),
+        FieldInfo::new("data", "uint8_t", 32, ""),
+    ];
 }
 
 /// Data packet, size 64.
@@ -23768,6 +25408,13 @@ impl Data64 {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("type", "uint8_t", 0, ""),
+        FieldInfo::new("len", "uint8_t", 0, "bytes"),
+        FieldInfo::new("data", "uint8_t", 64, ""),
+    ];
 }
 
 /// Data packet, size 96.
@@ -23821,6 +25468,13 @@ impl Data96 {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("type", "uint8_t", 0, ""),
+        FieldInfo::new("len", "uint8_t", 0, "bytes"),
+        FieldInfo::new("data", "uint8_t", 96, ""),
+    ];
 }
 
 /// Rangefinder reporting.
@@ -23864,6 +25518,12 @@ impl Rangefinder {
             ("voltage", FieldValue::Float(self.voltage.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("distance", "float", 0, "m"),
+        FieldInfo::new("voltage", "float", 0, "V"),
+    ];
 }
 
 /// Airspeed auto-calibration.
@@ -23960,6 +25620,22 @@ impl AirspeedAutocal {
             ("Pcz", FieldValue::Float(self.pcz.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("vx", "float", 0, "m/s"),
+        FieldInfo::new("vy", "float", 0, "m/s"),
+        FieldInfo::new("vz", "float", 0, "m/s"),
+        FieldInfo::new("diff_pressure", "float", 0, "Pa"),
+        FieldInfo::new("EAS2TAS", "float", 0, ""),
+        FieldInfo::new("ratio", "float", 0, ""),
+        FieldInfo::new("state_x", "float", 0, ""),
+        FieldInfo::new("state_y", "float", 0, ""),
+        FieldInfo::new("state_z", "float", 0, ""),
+        FieldInfo::new("Pax", "float", 0, ""),
+        FieldInfo::new("Pby", "float", 0, ""),
+        FieldInfo::new("Pcz", "float", 0, ""),
+    ];
 }
 
 /// A rally point. Used to set a point when from GCS -> MAV. Also used to return a point from MAV -> GCS.
@@ -24050,6 +25726,20 @@ impl RallyPoint {
             ("flags", FieldValue::Unsigned(self.flags.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lng", "int32_t", 0, "degE7"),
+        FieldInfo::new("alt", "int16_t", 0, "m"),
+        FieldInfo::new("break_alt", "int16_t", 0, "m"),
+        FieldInfo::new("land_dir", "uint16_t", 0, "cdeg"),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("idx", "uint8_t", 0, ""),
+        FieldInfo::new("count", "uint8_t", 0, ""),
+        FieldInfo::new("flags", "uint8_t", 0, ""),
+    ];
 }
 
 /// Request a current rally point from MAV. MAV should respond with a RALLY_POINT message. MAV should not respond if the request is invalid.
@@ -24104,6 +25794,13 @@ impl RallyFetchPoint {
             ("idx", FieldValue::Unsigned(self.idx.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("idx", "uint8_t", 0, ""),
+    ];
 }
 
 /// Status of compassmot calibration.
@@ -24179,6 +25876,16 @@ impl CompassmotStatus {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("current", "float", 0, "A"),
+        FieldInfo::new("CompensationX", "float", 0, ""),
+        FieldInfo::new("CompensationY", "float", 0, ""),
+        FieldInfo::new("CompensationZ", "float", 0, ""),
+        FieldInfo::new("throttle", "uint16_t", 0, "d%"),
+        FieldInfo::new("interference", "uint16_t", 0, "%"),
+    ];
 }
 
 /// Status of secondary AHRS filter if available.
@@ -24242,6 +25949,16 @@ impl Ahrs2 {
             ("lng", FieldValue::Signed(self.lng.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("roll", "float", 0, "rad"),
+        FieldInfo::new("pitch", "float", 0, "rad"),
+        FieldInfo::new("yaw", "float", 0, "rad"),
+        FieldInfo::new("altitude", "float", 0, "m"),
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lng", "int32_t", 0, "degE7"),
+    ];
 }
 
 /// Camera Event.
@@ -24324,6 +26041,19 @@ impl CameraStatus {
             ("event_id", FieldValue::Unsigned(self.event_id.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("p1", "float", 0, ""),
+        FieldInfo::new("p2", "float", 0, ""),
+        FieldInfo::new("p3", "float", 0, ""),
+        FieldInfo::new("p4", "float", 0, ""),
+        FieldInfo::new("img_idx", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("cam_idx", "uint8_t", 0, ""),
+        FieldInfo::new("event_id", "uint8_t", 0, ""),
+    ];
 }
 
 /// Camera Capture Feedback.
@@ -24435,6 +26165,24 @@ impl CameraFeedback {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lng", "int32_t", 0, "degE7"),
+        FieldInfo::new("alt_msl", "float", 0, "m"),
+        FieldInfo::new("alt_rel", "float", 0, "m"),
+        FieldInfo::new("roll", "float", 0, "deg"),
+        FieldInfo::new("pitch", "float", 0, "deg"),
+        FieldInfo::new("yaw", "float", 0, "deg"),
+        FieldInfo::new("foc_len", "float", 0, "mm"),
+        FieldInfo::new("img_idx", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("cam_idx", "uint8_t", 0, ""),
+        FieldInfo::new("flags", "uint8_t", 0, ""),
+        FieldInfo::new("completed_captures", "uint16_t", 0, ""),
+    ];
 }
 
 /// 2nd Battery status
@@ -24481,6 +26229,12 @@ impl Battery2 {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("voltage", "uint16_t", 0, "mV"),
+        FieldInfo::new("current_battery", "int16_t", 0, "cA"),
+    ];
 }
 
 /// Status of third AHRS filter if available. This is for ANU research group (Ali and Sean).
@@ -24564,6 +26318,20 @@ impl Ahrs3 {
             ("v4", FieldValue::Float(self.v4.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("roll", "float", 0, "rad"),
+        FieldInfo::new("pitch", "float", 0, "rad"),
+        FieldInfo::new("yaw", "float", 0, "rad"),
+        FieldInfo::new("altitude", "float", 0, "m"),
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lng", "int32_t", 0, "degE7"),
+        FieldInfo::new("v1", "float", 0, ""),
+        FieldInfo::new("v2", "float", 0, ""),
+        FieldInfo::new("v3", "float", 0, ""),
+        FieldInfo::new("v4", "float", 0, ""),
+    ];
 }
 
 /// Request the autopilot version from the system/component.
@@ -24613,6 +26381,12 @@ impl AutopilotVersionRequest {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+    ];
 }
 
 /// Send a block of log data to remote location.
@@ -24678,6 +26452,14 @@ impl RemoteLogDataBlock {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("seqno", "uint32_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("data", "uint8_t", 200, ""),
+    ];
 }
 
 /// Send Status of each log block that autopilot board might have sent.
@@ -24738,6 +26520,14 @@ impl RemoteLogBlockStatus {
             ("status", FieldValue::Unsigned(self.status.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("seqno", "uint32_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("status", "uint8_t", 0, ""),
+    ];
 }
 
 /// Control vehicle LEDs.
@@ -24812,6 +26602,16 @@ impl LedControl {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("instance", "uint8_t", 0, ""),
+        FieldInfo::new("pattern", "uint8_t", 0, ""),
+        FieldInfo::new("custom_len", "uint8_t", 0, ""),
+        FieldInfo::new("custom_bytes", "uint8_t", 24, ""),
+    ];
 }
 
 /// Reports progress of compass calibration.
@@ -24901,6 +26701,19 @@ impl MagCalProgress {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("direction_x", "float", 0, ""),
+        FieldInfo::new("direction_y", "float", 0, ""),
+        FieldInfo::new("direction_z", "float", 0, ""),
+        FieldInfo::new("compass_id", "uint8_t", 0, ""),
+        FieldInfo::new("cal_mask", "uint8_t", 0, ""),
+        FieldInfo::new("cal_status", "uint8_t", 0, ""),
+        FieldInfo::new("attempt", "uint8_t", 0, ""),
+        FieldInfo::new("completion_pct", "uint8_t", 0, "%"),
+        FieldInfo::new("completion_mask", "uint8_t", 10, ""),
+    ];
 }
 
 /// Reports results of completed compass calibration. Sent until MAG_CAL_ACK received.
@@ -25040,6 +26853,28 @@ impl MagCalReport {
             ("scale_factor", FieldValue::Float(self.scale_factor.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("fitness", "float", 0, "mgauss"),
+        FieldInfo::new("ofs_x", "float", 0, ""),
+        FieldInfo::new("ofs_y", "float", 0, ""),
+        FieldInfo::new("ofs_z", "float", 0, ""),
+        FieldInfo::new("diag_x", "float", 0, ""),
+        FieldInfo::new("diag_y", "float", 0, ""),
+        FieldInfo::new("diag_z", "float", 0, ""),
+        FieldInfo::new("offdiag_x", "float", 0, ""),
+        FieldInfo::new("offdiag_y", "float", 0, ""),
+        FieldInfo::new("offdiag_z", "float", 0, ""),
+        FieldInfo::new("compass_id", "uint8_t", 0, ""),
+        FieldInfo::new("cal_mask", "uint8_t", 0, ""),
+        FieldInfo::new("cal_status", "uint8_t", 0, ""),
+        FieldInfo::new("autosaved", "uint8_t", 0, ""),
+        FieldInfo::new("orientation_confidence", "float", 0, ""),
+        FieldInfo::new("old_orientation", "uint8_t", 0, ""),
+        FieldInfo::new("new_orientation", "uint8_t", 0, ""),
+        FieldInfo::new("scale_factor", "float", 0, ""),
+    ];
 }
 
 /// EKF Status message including flags and variances.
@@ -25128,6 +26963,17 @@ impl EkfStatusReport {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("velocity_variance", "float", 0, ""),
+        FieldInfo::new("pos_horiz_variance", "float", 0, ""),
+        FieldInfo::new("pos_vert_variance", "float", 0, ""),
+        FieldInfo::new("compass_variance", "float", 0, ""),
+        FieldInfo::new("terrain_alt_variance", "float", 0, ""),
+        FieldInfo::new("flags", "uint16_t", 0, ""),
+        FieldInfo::new("airspeed_variance", "float", 0, ""),
+    ];
 }
 
 /// PID tuning information.
@@ -25209,6 +27055,19 @@ impl PidTuning {
             ("PDmod", FieldValue::Float(self.pdmod.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("desired", "float", 0, ""),
+        FieldInfo::new("achieved", "float", 0, ""),
+        FieldInfo::new("FF", "float", 0, ""),
+        FieldInfo::new("P", "float", 0, ""),
+        FieldInfo::new("I", "float", 0, ""),
+        FieldInfo::new("D", "float", 0, ""),
+        FieldInfo::new("axis", "uint8_t", 0, ""),
+        FieldInfo::new("SRate", "float", 0, ""),
+        FieldInfo::new("PDmod", "float", 0, ""),
+    ];
 }
 
 /// Deepstall path planning.
@@ -25305,6 +27164,20 @@ impl Deepstall {
             ("stage", FieldValue::Unsigned(self.stage.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("landing_lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("landing_lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("path_lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("path_lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("arc_entry_lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("arc_entry_lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("altitude", "float", 0, "m"),
+        FieldInfo::new("expected_travel_distance", "float", 0, "m"),
+        FieldInfo::new("cross_track_error", "float", 0, "m"),
+        FieldInfo::new("stage", "uint8_t", 0, ""),
+    ];
 }
 
 /// 3 axis gimbal measurements.
@@ -25422,6 +27295,22 @@ impl GimbalReport {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("delta_time", "float", 0, "s"),
+        FieldInfo::new("delta_angle_x", "float", 0, "rad"),
+        FieldInfo::new("delta_angle_y", "float", 0, "rad"),
+        FieldInfo::new("delta_angle_z", "float", 0, "rad"),
+        FieldInfo::new("delta_velocity_x", "float", 0, "m/s"),
+        FieldInfo::new("delta_velocity_y", "float", 0, "m/s"),
+        FieldInfo::new("delta_velocity_z", "float", 0, "m/s"),
+        FieldInfo::new("joint_roll", "float", 0, "rad"),
+        FieldInfo::new("joint_el", "float", 0, "rad"),
+        FieldInfo::new("joint_az", "float", 0, "rad"),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+    ];
 }
 
 /// Control message for rate gimbal.
@@ -25495,6 +27384,15 @@ impl GimbalControl {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("demanded_rate_x", "float", 0, "rad/s"),
+        FieldInfo::new("demanded_rate_y", "float", 0, "rad/s"),
+        FieldInfo::new("demanded_rate_z", "float", 0, "rad/s"),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+    ];
 }
 
 /// 100 Hz gimbal torque command telemetry.
@@ -25568,6 +27466,15 @@ impl GimbalTorqueCmdReport {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("rl_torque_cmd", "int16_t", 0, ""),
+        FieldInfo::new("el_torque_cmd", "int16_t", 0, ""),
+        FieldInfo::new("az_torque_cmd", "int16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+    ];
 }
 
 /// Heartbeat from a HeroBus attached GoPro.
@@ -25622,6 +27529,13 @@ impl GoproHeartbeat {
             ("flags", FieldValue::Unsigned(self.flags.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("status", "uint8_t", 0, ""),
+        FieldInfo::new("capture_mode", "uint8_t", 0, ""),
+        FieldInfo::new("flags", "uint8_t", 0, ""),
+    ];
 }
 
 /// Request a GOPRO_COMMAND response from the GoPro.
@@ -25677,6 +27591,13 @@ impl GoproGetRequest {
             ("cmd_id", FieldValue::Unsigned(self.cmd_id.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("cmd_id", "uint8_t", 0, ""),
+    ];
 }
 
 /// Response from a GOPRO_COMMAND get request.
@@ -25732,6 +27653,13 @@ impl GoproGetResponse {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("cmd_id", "uint8_t", 0, ""),
+        FieldInfo::new("status", "uint8_t", 0, ""),
+        FieldInfo::new("value", "uint8_t", 4, ""),
+    ];
 }
 
 /// Request to set a GOPRO_COMMAND with a desired.
@@ -25797,6 +27725,14 @@ impl GoproSetRequest {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("cmd_id", "uint8_t", 0, ""),
+        FieldInfo::new("value", "uint8_t", 4, ""),
+    ];
 }
 
 /// Response from a GOPRO_COMMAND set request.
@@ -25842,6 +27778,12 @@ impl GoproSetResponse {
             ("status", FieldValue::Unsigned(self.status.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("cmd_id", "uint8_t", 0, ""),
+        FieldInfo::new("status", "uint8_t", 0, ""),
+    ];
 }
 
 /// Accelerometer and Gyro biases from the navigation filter
@@ -25910,6 +27852,17 @@ impl NavFilterBias {
             ("gyro_2", FieldValue::Float(self.gyro_2.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("usec", "uint64_t", 0, ""),
+        FieldInfo::new("accel_0", "float", 0, ""),
+        FieldInfo::new("accel_1", "float", 0, ""),
+        FieldInfo::new("accel_2", "float", 0, ""),
+        FieldInfo::new("gyro_0", "float", 0, ""),
+        FieldInfo::new("gyro_1", "float", 0, ""),
+        FieldInfo::new("gyro_2", "float", 0, ""),
+    ];
 }
 
 /// Complete set of calibration parameters for the radio
@@ -26003,6 +27956,16 @@ impl RadioCalibration {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("aileron", "uint16_t", 3, ""),
+        FieldInfo::new("elevator", "uint16_t", 3, ""),
+        FieldInfo::new("rudder", "uint16_t", 3, ""),
+        FieldInfo::new("gyro", "uint16_t", 2, ""),
+        FieldInfo::new("pitch", "uint16_t", 5, ""),
+        FieldInfo::new("throttle", "uint16_t", 5, ""),
+    ];
 }
 
 /// System status specific to ualberta uav
@@ -26051,6 +28014,13 @@ impl UalbertaSysStatus {
             ("pilot", FieldValue::Unsigned(self.pilot.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("mode", "uint8_t", 0, ""),
+        FieldInfo::new("nav_mode", "uint8_t", 0, ""),
+        FieldInfo::new("pilot", "uint8_t", 0, ""),
+    ];
 }
 
 /// Message encoding a command with parameters as scaled integers and additional metadata. Scaling depends on the actual command value.
@@ -26173,6 +28143,25 @@ impl CommandIntStamped {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("vehicle_timestamp", "uint64_t", 0, ""),
+        FieldInfo::new("utc_time", "uint32_t", 0, ""),
+        FieldInfo::new("param1", "float", 0, ""),
+        FieldInfo::new("param2", "float", 0, ""),
+        FieldInfo::new("param3", "float", 0, ""),
+        FieldInfo::new("param4", "float", 0, ""),
+        FieldInfo::new("x", "int32_t", 0, ""),
+        FieldInfo::new("y", "int32_t", 0, ""),
+        FieldInfo::new("z", "float", 0, ""),
+        FieldInfo::new("command", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("frame", "uint8_t", 0, ""),
+        FieldInfo::new("current", "uint8_t", 0, ""),
+        FieldInfo::new("autocontinue", "uint8_t", 0, ""),
+    ];
 }
 
 /// Send a command with up to seven parameters to the MAV and additional metadata
@@ -26284,6 +28273,23 @@ impl CommandLongStamped {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("vehicle_timestamp", "uint64_t", 0, ""),
+        FieldInfo::new("utc_time", "uint32_t", 0, ""),
+        FieldInfo::new("param1", "float", 0, ""),
+        FieldInfo::new("param2", "float", 0, ""),
+        FieldInfo::new("param3", "float", 0, ""),
+        FieldInfo::new("param4", "float", 0, ""),
+        FieldInfo::new("param5", "float", 0, ""),
+        FieldInfo::new("param6", "float", 0, ""),
+        FieldInfo::new("param7", "float", 0, ""),
+        FieldInfo::new("command", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("confirmation", "uint8_t", 0, ""),
+    ];
 }
 
 /// EFI status output
@@ -26453,6 +28459,29 @@ impl EfiStatus {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("ecu_index", "float", 0, ""),
+        FieldInfo::new("rpm", "float", 0, ""),
+        FieldInfo::new("fuel_consumed", "float", 0, "cm^3"),
+        FieldInfo::new("fuel_flow", "float", 0, "cm^3/min"),
+        FieldInfo::new("engine_load", "float", 0, "%"),
+        FieldInfo::new("throttle_position", "float", 0, "%"),
+        FieldInfo::new("spark_dwell_time", "float", 0, "ms"),
+        FieldInfo::new("barometric_pressure", "float", 0, "kPa"),
+        FieldInfo::new("intake_manifold_pressure", "float", 0, "kPa"),
+        FieldInfo::new("intake_manifold_temperature", "float", 0, "degC"),
+        FieldInfo::new("cylinder_head_temperature", "float", 0, "degC"),
+        FieldInfo::new("ignition_timing", "float", 0, "deg"),
+        FieldInfo::new("injection_time", "float", 0, "ms"),
+        FieldInfo::new("exhaust_gas_temperature", "float", 0, "degC"),
+        FieldInfo::new("throttle_out", "float", 0, "%"),
+        FieldInfo::new("pt_compensation", "float", 0, ""),
+        FieldInfo::new("health", "uint8_t", 0, ""),
+        FieldInfo::new("ignition_voltage", "float", 0, "V"),
+        FieldInfo::new("fuel_pressure", "float", 0, "kPa"),
+    ];
 }
 
 /// RPM sensor output.
@@ -26496,6 +28525,12 @@ impl Rpm {
             ("rpm2", FieldValue::Float(self.rpm2.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("rpm1", "float", 0, ""),
+        FieldInfo::new("rpm2", "float", 0, ""),
+    ];
 }
 
 /// Estimator status message including flags, innovation test ratios and estimated accuracies. The flags message is an integer bitmask containing information on which EKF outputs are valid. See the ESTIMATOR_STATUS_FLAGS enum definition for further information. The innovation test ratios show the magnitude of the sensor innovation divided by the innovation check threshold. Under normal operation the innovation test ratios should be below 0.5 with occasional values up to 1.0. Values greater than 1.0 should be rare under normal operation and indicate that a measurement has been rejected by the filter. The user should be notified if an innovation test ratio greater than 1.0 is recorded. Notifications for values in the range between 0.5 and 1.0 should be optional and controllable by the user.
@@ -26592,6 +28627,20 @@ impl EstimatorStatus {
             ("flags", FieldValue::Unsigned(self.flags.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("vel_ratio", "float", 0, ""),
+        FieldInfo::new("pos_horiz_ratio", "float", 0, ""),
+        FieldInfo::new("pos_vert_ratio", "float", 0, ""),
+        FieldInfo::new("mag_ratio", "float", 0, ""),
+        FieldInfo::new("hagl_ratio", "float", 0, ""),
+        FieldInfo::new("tas_ratio", "float", 0, ""),
+        FieldInfo::new("pos_horiz_accuracy", "float", 0, "m"),
+        FieldInfo::new("pos_vert_accuracy", "float", 0, "m"),
+        FieldInfo::new("flags", "uint16_t", 0, ""),
+    ];
 }
 
 /// Wind covariance estimate from vehicle.
@@ -26676,6 +28725,19 @@ impl WindCov {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("wind_x", "float", 0, "m/s"),
+        FieldInfo::new("wind_y", "float", 0, "m/s"),
+        FieldInfo::new("wind_z", "float", 0, "m/s"),
+        FieldInfo::new("var_horiz", "float", 0, "m/s"),
+        FieldInfo::new("var_vert", "float", 0, "m/s"),
+        FieldInfo::new("wind_alt", "float", 0, "m"),
+        FieldInfo::new("horiz_accuracy", "float", 0, "m"),
+        FieldInfo::new("vert_accuracy", "float", 0, "m"),
+    ];
 }
 
 /// GPS sensor input message. This is a raw sensor value sent by the GPS. This is NOT the global position estimate of the system.
@@ -26824,6 +28886,29 @@ impl GpsInput {
             ("yaw", FieldValue::Unsigned(self.yaw.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("time_week_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("alt", "float", 0, "m"),
+        FieldInfo::new("hdop", "float", 0, ""),
+        FieldInfo::new("vdop", "float", 0, ""),
+        FieldInfo::new("vn", "float", 0, "m/s"),
+        FieldInfo::new("ve", "float", 0, "m/s"),
+        FieldInfo::new("vd", "float", 0, "m/s"),
+        FieldInfo::new("speed_accuracy", "float", 0, "m/s"),
+        FieldInfo::new("horiz_accuracy", "float", 0, "m"),
+        FieldInfo::new("vert_accuracy", "float", 0, "m"),
+        FieldInfo::new("ignore_flags", "uint16_t", 0, ""),
+        FieldInfo::new("time_week", "uint16_t", 0, ""),
+        FieldInfo::new("gps_id", "uint8_t", 0, ""),
+        FieldInfo::new("fix_type", "uint8_t", 0, ""),
+        FieldInfo::new("satellites_visible", "uint8_t", 0, ""),
+        FieldInfo::new("yaw", "uint16_t", 0, "cdeg"),
+    ];
 }
 
 /// RTCM message for injecting into the onboard GPS (used for DGPS)
@@ -26877,6 +28962,13 @@ impl GpsRtcmData {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("flags", "uint8_t", 0, ""),
+        FieldInfo::new("len", "uint8_t", 0, "bytes"),
+        FieldInfo::new("data", "uint8_t", 180, ""),
+    ];
 }
 
 /// Message appropriate for high latency connections like Iridium
@@ -27048,6 +29140,34 @@ impl HighLatency {
             ("wp_num", FieldValue::Unsigned(self.wp_num.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("custom_mode", "uint32_t", 0, ""),
+        FieldInfo::new("latitude", "int32_t", 0, "degE7"),
+        FieldInfo::new("longitude", "int32_t", 0, "degE7"),
+        FieldInfo::new("roll", "int16_t", 0, "cdeg"),
+        FieldInfo::new("pitch", "int16_t", 0, "cdeg"),
+        FieldInfo::new("heading", "uint16_t", 0, "cdeg"),
+        FieldInfo::new("heading_sp", "int16_t", 0, "cdeg"),
+        FieldInfo::new("altitude_amsl", "int16_t", 0, "m"),
+        FieldInfo::new("altitude_sp", "int16_t", 0, "m"),
+        FieldInfo::new("wp_distance", "uint16_t", 0, "m"),
+        FieldInfo::new("base_mode", "uint8_t", 0, ""),
+        FieldInfo::new("landed_state", "uint8_t", 0, ""),
+        FieldInfo::new("throttle", "int8_t", 0, "%"),
+        FieldInfo::new("airspeed", "uint8_t", 0, "m/s"),
+        FieldInfo::new("airspeed_sp", "uint8_t", 0, "m/s"),
+        FieldInfo::new("groundspeed", "uint8_t", 0, "m/s"),
+        FieldInfo::new("climb_rate", "int8_t", 0, "m/s"),
+        FieldInfo::new("gps_nsat", "uint8_t", 0, ""),
+        FieldInfo::new("gps_fix_type", "uint8_t", 0, ""),
+        FieldInfo::new("battery_remaining", "uint8_t", 0, "%"),
+        FieldInfo::new("temperature", "int8_t", 0, "degC"),
+        FieldInfo::new("temperature_air", "int8_t", 0, "degC"),
+        FieldInfo::new("failsafe", "uint8_t", 0, ""),
+        FieldInfo::new("wp_num", "uint8_t", 0, ""),
+    ];
 }
 
 /// Message appropriate for high latency connections like Iridium (version 2)
@@ -27237,6 +29357,37 @@ impl HighLatency2 {
             ("custom2", FieldValue::Signed(self.custom2.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("timestamp", "uint32_t", 0, "ms"),
+        FieldInfo::new("latitude", "int32_t", 0, "degE7"),
+        FieldInfo::new("longitude", "int32_t", 0, "degE7"),
+        FieldInfo::new("custom_mode", "uint16_t", 0, ""),
+        FieldInfo::new("altitude", "int16_t", 0, "m"),
+        FieldInfo::new("target_altitude", "int16_t", 0, "m"),
+        FieldInfo::new("target_distance", "uint16_t", 0, "dam"),
+        FieldInfo::new("wp_num", "uint16_t", 0, ""),
+        FieldInfo::new("failure_flags", "uint16_t", 0, ""),
+        FieldInfo::new("type", "uint8_t", 0, ""),
+        FieldInfo::new("autopilot", "uint8_t", 0, ""),
+        FieldInfo::new("heading", "uint8_t", 0, "deg/2"),
+        FieldInfo::new("target_heading", "uint8_t", 0, "deg/2"),
+        FieldInfo::new("throttle", "uint8_t", 0, "%"),
+        FieldInfo::new("airspeed", "uint8_t", 0, "m/s*5"),
+        FieldInfo::new("airspeed_sp", "uint8_t", 0, "m/s*5"),
+        FieldInfo::new("groundspeed", "uint8_t", 0, "m/s*5"),
+        FieldInfo::new("windspeed", "uint8_t", 0, "m/s*5"),
+        FieldInfo::new("wind_heading", "uint8_t", 0, "deg/2"),
+        FieldInfo::new("eph", "uint8_t", 0, "dm"),
+        FieldInfo::new("epv", "uint8_t", 0, "dm"),
+        FieldInfo::new("temperature_air", "int8_t", 0, "degC"),
+        FieldInfo::new("climb_rate", "int8_t", 0, "dm/s"),
+        FieldInfo::new("battery", "int8_t", 0, "%"),
+        FieldInfo::new("custom0", "int8_t", 0, ""),
+        FieldInfo::new("custom1", "int8_t", 0, ""),
+        FieldInfo::new("custom2", "int8_t", 0, ""),
+    ];
 }
 
 /// Vibration levels and accelerometer clipping
@@ -27305,6 +29456,17 @@ impl Vibration {
             ("clipping_2", FieldValue::Unsigned(self.clipping_2.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("vibration_x", "float", 0, ""),
+        FieldInfo::new("vibration_y", "float", 0, ""),
+        FieldInfo::new("vibration_z", "float", 0, ""),
+        FieldInfo::new("clipping_0", "uint32_t", 0, ""),
+        FieldInfo::new("clipping_1", "uint32_t", 0, ""),
+        FieldInfo::new("clipping_2", "uint32_t", 0, ""),
+    ];
 }
 
 /// This message can be requested by sending the MAV_CMD_GET_HOME_POSITION command. The position the system will return to and land on. The position is set automatically by the system during the takeoff in case it was not explicitly set by the operator before or after. The global and local positions encode the position in the respective coordinate frames, while the q parameter encodes the orientation of the surface. Under normal conditions it describes the heading and terrain slope, which can be used by the aircraft to adjust the approach. The approach 3D vector describes the point to which the system should fly in normal flight mode and then perform a landing sequence along the vector.
@@ -27399,6 +29561,21 @@ impl HomePosition {
             ("time_usec", FieldValue::Unsigned(self.time_usec)),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("latitude", "int32_t", 0, "degE7"),
+        FieldInfo::new("longitude", "int32_t", 0, "degE7"),
+        FieldInfo::new("altitude", "int32_t", 0, "mm"),
+        FieldInfo::new("x", "float", 0, "m"),
+        FieldInfo::new("y", "float", 0, "m"),
+        FieldInfo::new("z", "float", 0, "m"),
+        FieldInfo::new("q", "float", 4, ""),
+        FieldInfo::new("approach_x", "float", 0, "m"),
+        FieldInfo::new("approach_y", "float", 0, "m"),
+        FieldInfo::new("approach_z", "float", 0, "m"),
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+    ];
 }
 
 /// The position the system will return to and land on. The position is set automatically by the system during the takeoff in case it was not explicitly set by the operator before or after. The global and local positions encode the position in the respective coordinate frames, while the q parameter encodes the orientation of the surface. Under normal conditions it describes the heading and terrain slope, which can be used by the aircraft to adjust the approach. The approach 3D vector describes the point to which the system should fly in normal flight mode and then perform a landing sequence along the vector.
@@ -27501,6 +29678,22 @@ impl SetHomePosition {
             ("time_usec", FieldValue::Unsigned(self.time_usec)),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("latitude", "int32_t", 0, "degE7"),
+        FieldInfo::new("longitude", "int32_t", 0, "degE7"),
+        FieldInfo::new("altitude", "int32_t", 0, "mm"),
+        FieldInfo::new("x", "float", 0, "m"),
+        FieldInfo::new("y", "float", 0, "m"),
+        FieldInfo::new("z", "float", 0, "m"),
+        FieldInfo::new("q", "float", 4, ""),
+        FieldInfo::new("approach_x", "float", 0, "m"),
+        FieldInfo::new("approach_y", "float", 0, "m"),
+        FieldInfo::new("approach_z", "float", 0, "m"),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+    ];
 }
 
 /// The interval between messages for a particular MAVLink message ID. This message is sent in response to the MAV_CMD_REQUEST_MESSAGE command with param1=244 (this message) and param2=message_id (the id of the message for which the interval is required). It may also be sent in response to MAV_CMD_GET_MESSAGE_INTERVAL. This interface replaces DATA_STREAM.
@@ -27544,6 +29737,12 @@ impl MessageInterval {
             ("message_id", FieldValue::Unsigned(self.message_id.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("interval_us", "int32_t", 0, "us"),
+        FieldInfo::new("message_id", "uint16_t", 0, ""),
+    ];
 }
 
 /// Provides state for additional features
@@ -27592,6 +29791,12 @@ impl ExtendedSysState {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("vtol_state", "uint8_t", 0, ""),
+        FieldInfo::new("landed_state", "uint8_t", 0, ""),
+    ];
 }
 
 /// The location and information of an ADSB vehicle
@@ -27710,6 +29915,23 @@ impl AdsbVehicle {
             ("tslc", FieldValue::Unsigned(self.tslc.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("ICAO_address", "uint32_t", 0, ""),
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("altitude", "int32_t", 0, "mm"),
+        FieldInfo::new("heading", "uint16_t", 0, "cdeg"),
+        FieldInfo::new("hor_velocity", "uint16_t", 0, "cm/s"),
+        FieldInfo::new("ver_velocity", "int16_t", 0, "cm/s"),
+        FieldInfo::new("flags", "uint16_t", 0, ""),
+        FieldInfo::new("squawk", "uint16_t", 0, ""),
+        FieldInfo::new("altitude_type", "uint8_t", 0, ""),
+        FieldInfo::new("callsign", "char", 9, ""),
+        FieldInfo::new("emitter_type", "uint8_t", 0, ""),
+        FieldInfo::new("tslc", "uint8_t", 0, "s"),
+    ];
 }
 
 /// Information about a potential collision
@@ -27793,6 +30015,17 @@ impl Collision {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("id", "uint32_t", 0, ""),
+        FieldInfo::new("time_to_minimum_delta", "float", 0, "s"),
+        FieldInfo::new("altitude_minimum_delta", "float", 0, "m"),
+        FieldInfo::new("horizontal_minimum_delta", "float", 0, "m"),
+        FieldInfo::new("src", "uint8_t", 0, ""),
+        FieldInfo::new("action", "uint8_t", 0, ""),
+        FieldInfo::new("threat_level", "uint8_t", 0, ""),
+    ];
 }
 
 /// Message implementing parts of the V2 payload specs in V1 frames for transitional support.
@@ -27868,6 +30101,15 @@ impl V2Extension {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("message_type", "uint16_t", 0, ""),
+        FieldInfo::new("target_network", "uint8_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("payload", "uint8_t", 249, ""),
+    ];
 }
 
 /// Send raw controller memory. The use of this message is discouraged for normal packets, but a quite efficient way for testing new messages and getting experimental debug output.
@@ -27926,6 +30168,14 @@ impl MemoryVect {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("address", "uint16_t", 0, ""),
+        FieldInfo::new("ver", "uint8_t", 0, ""),
+        FieldInfo::new("type", "uint8_t", 0, ""),
+        FieldInfo::new("value", "int8_t", 32, ""),
+    ];
 }
 
 /// To debug something using a named 3D vector.
@@ -27989,6 +30239,15 @@ impl DebugVect {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("x", "float", 0, ""),
+        FieldInfo::new("y", "float", 0, ""),
+        FieldInfo::new("z", "float", 0, ""),
+        FieldInfo::new("name", "char", 10, ""),
+    ];
 }
 
 /// Send a key-value pair as float. The use of this message is discouraged for normal packets, but a quite efficient way for testing new messages and getting experimental debug output.
@@ -28045,6 +30304,13 @@ impl NamedValueFloat {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("value", "float", 0, ""),
+        FieldInfo::new("name", "char", 10, ""),
+    ];
 }
 
 /// Send a key-value pair as integer. The use of this message is discouraged for normal packets, but a quite efficient way for testing new messages and getting experimental debug output.
@@ -28101,6 +30367,13 @@ impl NamedValueInt {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("value", "int32_t", 0, ""),
+        FieldInfo::new("name", "char", 10, ""),
+    ];
 }
 
 /// Status text message. These messages are printed in yellow in the COMM console of QGroundControl. WARNING: They consume quite some bandwidth, so use only for important status and error messages. If implemented wisely, these messages are buffered on the MCU and sent only at a limited rate (e.g. 10 Hz).
@@ -28162,6 +30435,14 @@ impl Statustext {
             ("chunk_seq", FieldValue::Unsigned(self.chunk_seq.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("severity", "uint8_t", 0, ""),
+        FieldInfo::new("text", "char", 50, ""),
+        FieldInfo::new("id", "uint16_t", 0, ""),
+        FieldInfo::new("chunk_seq", "uint8_t", 0, ""),
+    ];
 }
 
 /// Send a debug value. The index is used to discriminate between values. These values show up in the plot of QGroundControl as DEBUG N.
@@ -28213,6 +30494,13 @@ impl Debug {
             ("ind", FieldValue::Unsigned(self.ind.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("value", "float", 0, ""),
+        FieldInfo::new("ind", "uint8_t", 0, ""),
+    ];
 }
 
 /// Setup a MAVLink2 signing key. If called with secret_key of all zero and zero initial_timestamp will disable signing
@@ -28280,6 +30568,14 @@ impl SetupSigning {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("initial_timestamp", "uint64_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("secret_key", "uint8_t", 32, ""),
+    ];
 }
 
 /// Report button state change.
@@ -28334,6 +30630,13 @@ impl ButtonChange {
             ("state", FieldValue::Unsigned(self.state.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("last_change_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("state", "uint8_t", 0, ""),
+    ];
 }
 
 /// Control vehicle tone generation (buzzer).
@@ -28404,6 +30707,14 @@ impl PlayTune {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("tune", "char", 30, ""),
+        FieldInfo::new("tune2", "char", 200, ""),
+    ];
 }
 
 /// Information about a camera. Can be requested with a MAV_CMD_REQUEST_MESSAGE command.
@@ -28553,6 +30864,24 @@ impl CameraInformation {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("firmware_version", "uint32_t", 0, ""),
+        FieldInfo::new("focal_length", "float", 0, "mm"),
+        FieldInfo::new("sensor_size_h", "float", 0, "mm"),
+        FieldInfo::new("sensor_size_v", "float", 0, "mm"),
+        FieldInfo::new("flags", "uint32_t", 0, ""),
+        FieldInfo::new("resolution_h", "uint16_t", 0, "pix"),
+        FieldInfo::new("resolution_v", "uint16_t", 0, "pix"),
+        FieldInfo::new("cam_definition_version", "uint16_t", 0, ""),
+        FieldInfo::new("vendor_name", "uint8_t", 32, ""),
+        FieldInfo::new("model_name", "uint8_t", 32, ""),
+        FieldInfo::new("lens_id", "uint8_t", 0, ""),
+        FieldInfo::new("cam_definition_uri", "char", 140, ""),
+        FieldInfo::new("gimbal_device_id", "uint8_t", 0, ""),
+    ];
 }
 
 /// Settings of a camera. Can be requested with a MAV_CMD_REQUEST_MESSAGE command.
@@ -28612,6 +30941,14 @@ impl CameraSettings {
             ("focusLevel", FieldValue::Float(self.focuslevel.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("mode_id", "uint8_t", 0, ""),
+        FieldInfo::new("zoomLevel", "float", 0, ""),
+        FieldInfo::new("focusLevel", "float", 0, ""),
+    ];
 }
 
 /// Information about a storage medium. This message is sent in response to a request with MAV_CMD_REQUEST_MESSAGE and whenever the status of the storage changes (STORAGE_STATUS). Use MAV_CMD_REQUEST_MESSAGE.param2 to indicate the index/id of requested storage: 0 for all, 1 for first, 2 for second, etc.
@@ -28724,6 +31061,21 @@ impl StorageInformation {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("total_capacity", "float", 0, "MiB"),
+        FieldInfo::new("used_capacity", "float", 0, "MiB"),
+        FieldInfo::new("available_capacity", "float", 0, "MiB"),
+        FieldInfo::new("read_speed", "float", 0, "MiB/s"),
+        FieldInfo::new("write_speed", "float", 0, "MiB/s"),
+        FieldInfo::new("storage_id", "uint8_t", 0, ""),
+        FieldInfo::new("storage_count", "uint8_t", 0, ""),
+        FieldInfo::new("status", "uint8_t", 0, ""),
+        FieldInfo::new("type", "uint8_t", 0, ""),
+        FieldInfo::new("name", "char", 32, ""),
+    ];
 }
 
 /// Information about the status of a capture. Can be requested with a MAV_CMD_REQUEST_MESSAGE command.
@@ -28811,6 +31163,17 @@ impl CameraCaptureStatus {
             ("image_count", FieldValue::Signed(self.image_count.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("image_interval", "float", 0, "s"),
+        FieldInfo::new("recording_time_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("available_capacity", "float", 0, "MiB"),
+        FieldInfo::new("image_status", "uint8_t", 0, ""),
+        FieldInfo::new("video_status", "uint8_t", 0, ""),
+        FieldInfo::new("image_count", "int32_t", 0, ""),
+    ];
 }
 
 /// Information about a captured image. This is emitted every time a message is captured. It may be re-requested using MAV_CMD_REQUEST_MESSAGE, using param2 to indicate the sequence number for the missing image.
@@ -28916,6 +31279,21 @@ impl CameraImageCaptured {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_utc", "uint64_t", 0, "us"),
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("alt", "int32_t", 0, "mm"),
+        FieldInfo::new("relative_alt", "int32_t", 0, "mm"),
+        FieldInfo::new("q", "float", 4, ""),
+        FieldInfo::new("image_index", "int32_t", 0, ""),
+        FieldInfo::new("camera_id", "uint8_t", 0, ""),
+        FieldInfo::new("capture_result", "int8_t", 0, ""),
+        FieldInfo::new("file_url", "char", 205, ""),
+    ];
 }
 
 /// Information about flight since last arming.
@@ -28978,6 +31356,14 @@ impl FlightInformation {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("arming_time_utc", "uint64_t", 0, "us"),
+        FieldInfo::new("takeoff_time_utc", "uint64_t", 0, "us"),
+        FieldInfo::new("flight_uuid", "uint64_t", 0, ""),
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+    ];
 }
 
 /// Orientation of a mount
@@ -29040,6 +31426,15 @@ impl MountOrientation {
             ("yaw_absolute", FieldValue::Float(self.yaw_absolute.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("roll", "float", 0, "deg"),
+        FieldInfo::new("pitch", "float", 0, "deg"),
+        FieldInfo::new("yaw", "float", 0, "deg"),
+        FieldInfo::new("yaw_absolute", "float", 0, "deg"),
+    ];
 }
 
 /// A message containing logged data (see also MAV_CMD_LOGGING_START)
@@ -29117,6 +31512,16 @@ impl LoggingData {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("sequence", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("length", "uint8_t", 0, "bytes"),
+        FieldInfo::new("first_message_offset", "uint8_t", 0, "bytes"),
+        FieldInfo::new("data", "uint8_t", 249, ""),
+    ];
 }
 
 /// A message containing logged data which requires a LOGGING_ACK to be sent back
@@ -29194,6 +31599,16 @@ impl LoggingDataAcked {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("sequence", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("length", "uint8_t", 0, "bytes"),
+        FieldInfo::new("first_message_offset", "uint8_t", 0, "bytes"),
+        FieldInfo::new("data", "uint8_t", 249, ""),
+    ];
 }
 
 /// An ack for a LOGGING_DATA_ACKED message
@@ -29248,6 +31663,13 @@ impl LoggingAck {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("sequence", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+    ];
 }
 
 /// Information about video stream. It may be requested using MAV_CMD_REQUEST_MESSAGE, where param2 indicates the video stream id: 0 for all streams, 1 for first, 2 for second, etc.
@@ -29366,6 +31788,23 @@ impl VideoStreamInformation {
             ("encoding", FieldValue::Unsigned(self.encoding.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("framerate", "float", 0, "Hz"),
+        FieldInfo::new("bitrate", "uint32_t", 0, "bits/s"),
+        FieldInfo::new("flags", "uint16_t", 0, ""),
+        FieldInfo::new("resolution_h", "uint16_t", 0, "pix"),
+        FieldInfo::new("resolution_v", "uint16_t", 0, "pix"),
+        FieldInfo::new("rotation", "uint16_t", 0, "deg"),
+        FieldInfo::new("hfov", "uint16_t", 0, "deg"),
+        FieldInfo::new("stream_id", "uint8_t", 0, ""),
+        FieldInfo::new("count", "uint8_t", 0, ""),
+        FieldInfo::new("type", "uint8_t", 0, ""),
+        FieldInfo::new("name", "char", 32, ""),
+        FieldInfo::new("uri", "char", 160, ""),
+        FieldInfo::new("encoding", "uint8_t", 0, ""),
+    ];
 }
 
 /// Information about the status of a video stream. It may be requested using MAV_CMD_REQUEST_MESSAGE.
@@ -29446,6 +31885,18 @@ impl VideoStreamStatus {
             ("stream_id", FieldValue::Unsigned(self.stream_id.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("framerate", "float", 0, "Hz"),
+        FieldInfo::new("bitrate", "uint32_t", 0, "bits/s"),
+        FieldInfo::new("flags", "uint16_t", 0, ""),
+        FieldInfo::new("resolution_h", "uint16_t", 0, "pix"),
+        FieldInfo::new("resolution_v", "uint16_t", 0, "pix"),
+        FieldInfo::new("rotation", "uint16_t", 0, "deg"),
+        FieldInfo::new("hfov", "uint16_t", 0, "deg"),
+        FieldInfo::new("stream_id", "uint8_t", 0, ""),
+    ];
 }
 
 /// Information about the field of view of a camera. Can be requested with a MAV_CMD_REQUEST_MESSAGE command.
@@ -29537,6 +31988,20 @@ impl CameraFovStatus {
             ("vfov", FieldValue::Float(self.vfov.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("lat_camera", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon_camera", "int32_t", 0, "degE7"),
+        FieldInfo::new("alt_camera", "int32_t", 0, "mm"),
+        FieldInfo::new("lat_image", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon_image", "int32_t", 0, "degE7"),
+        FieldInfo::new("alt_image", "int32_t", 0, "mm"),
+        FieldInfo::new("q", "float", 4, ""),
+        FieldInfo::new("hfov", "float", 0, "deg"),
+        FieldInfo::new("vfov", "float", 0, "deg"),
+    ];
 }
 
 /// Camera tracking status, sent while in active tracking. Use MAV_CMD_SET_MESSAGE_INTERVAL to define message interval.
@@ -29629,6 +32094,20 @@ impl CameraTrackingImageStatus {
             ("target_data", FieldValue::Unsigned(self.target_data.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("point_x", "float", 0, ""),
+        FieldInfo::new("point_y", "float", 0, ""),
+        FieldInfo::new("radius", "float", 0, ""),
+        FieldInfo::new("rec_top_x", "float", 0, ""),
+        FieldInfo::new("rec_top_y", "float", 0, ""),
+        FieldInfo::new("rec_bottom_x", "float", 0, ""),
+        FieldInfo::new("rec_bottom_y", "float", 0, ""),
+        FieldInfo::new("tracking_status", "uint8_t", 0, ""),
+        FieldInfo::new("tracking_mode", "uint8_t", 0, ""),
+        FieldInfo::new("target_data", "uint8_t", 0, ""),
+    ];
 }
 
 /// Camera tracking status, sent while in active tracking. Use MAV_CMD_SET_MESSAGE_INTERVAL to define message interval.
@@ -29731,6 +32210,23 @@ impl CameraTrackingGeoStatus {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("alt", "float", 0, "m"),
+        FieldInfo::new("h_acc", "float", 0, "m"),
+        FieldInfo::new("v_acc", "float", 0, "m"),
+        FieldInfo::new("vel_n", "float", 0, "m/s"),
+        FieldInfo::new("vel_e", "float", 0, "m/s"),
+        FieldInfo::new("vel_d", "float", 0, "m/s"),
+        FieldInfo::new("vel_acc", "float", 0, "m/s"),
+        FieldInfo::new("dist", "float", 0, "m"),
+        FieldInfo::new("hdg", "float", 0, "rad"),
+        FieldInfo::new("hdg_acc", "float", 0, "rad"),
+        FieldInfo::new("tracking_status", "uint8_t", 0, ""),
+    ];
 }
 
 /// Camera absolute thermal range. This can be streamed when the associated `VIDEO_STREAM_STATUS.flag` bit `VIDEO_STREAM_STATUS_FLAGS_THERMAL_RANGE_ENABLED` is set, but a GCS may choose to only request it for the current active stream. Use MAV_CMD_SET_MESSAGE_INTERVAL to define message interval (param3 indicates the stream id of the current camera, or 0 for all streams, param4 indicates the target camera_device_id for autopilot-attached cameras or 0 for MAVLink cameras).
@@ -29815,6 +32311,19 @@ impl CameraThermalRange {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("max", "float", 0, "degC"),
+        FieldInfo::new("max_point_x", "float", 0, ""),
+        FieldInfo::new("max_point_y", "float", 0, ""),
+        FieldInfo::new("min", "float", 0, "degC"),
+        FieldInfo::new("min_point_x", "float", 0, ""),
+        FieldInfo::new("min_point_y", "float", 0, ""),
+        FieldInfo::new("stream_id", "uint8_t", 0, ""),
+        FieldInfo::new("camera_device_id", "uint8_t", 0, ""),
+    ];
 }
 
 /// Information about a high level gimbal manager. This message should be requested by a ground station using MAV_CMD_REQUEST_MESSAGE.
@@ -29900,6 +32409,19 @@ impl GimbalManagerInformation {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("cap_flags", "uint32_t", 0, ""),
+        FieldInfo::new("roll_min", "float", 0, "rad"),
+        FieldInfo::new("roll_max", "float", 0, "rad"),
+        FieldInfo::new("pitch_min", "float", 0, "rad"),
+        FieldInfo::new("pitch_max", "float", 0, "rad"),
+        FieldInfo::new("yaw_min", "float", 0, "rad"),
+        FieldInfo::new("yaw_max", "float", 0, "rad"),
+        FieldInfo::new("gimbal_device_id", "uint8_t", 0, ""),
+    ];
 }
 
 /// Current status about a high level gimbal manager. This message should be broadcast at a low regular rate (e.g. 5Hz).
@@ -29987,6 +32509,17 @@ impl GimbalManagerStatus {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("flags", "uint32_t", 0, ""),
+        FieldInfo::new("gimbal_device_id", "uint8_t", 0, ""),
+        FieldInfo::new("primary_control_sysid", "uint8_t", 0, ""),
+        FieldInfo::new("primary_control_compid", "uint8_t", 0, ""),
+        FieldInfo::new("secondary_control_sysid", "uint8_t", 0, ""),
+        FieldInfo::new("secondary_control_compid", "uint8_t", 0, ""),
+    ];
 }
 
 /// High level message to control a gimbal's attitude. This message is to be sent to the gimbal manager (e.g. from a ground station). Angles and rates can be set to NaN according to use case.
@@ -30084,6 +32617,18 @@ impl GimbalManagerSetAttitude {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("flags", "uint32_t", 0, ""),
+        FieldInfo::new("q", "float", 4, ""),
+        FieldInfo::new("angular_velocity_x", "float", 0, "rad/s"),
+        FieldInfo::new("angular_velocity_y", "float", 0, "rad/s"),
+        FieldInfo::new("angular_velocity_z", "float", 0, "rad/s"),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("gimbal_device_id", "uint8_t", 0, ""),
+    ];
 }
 
 /// Information about a low level gimbal. This message should be requested by the gimbal manager or a ground station using MAV_CMD_REQUEST_MESSAGE. The maximum angles and rates are the limits by hardware. However, the limits by software used are likely different/smaller and dependent on mode/settings/etc..
@@ -30229,6 +32774,26 @@ impl GimbalDeviceInformation {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("uid", "uint64_t", 0, ""),
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("firmware_version", "uint32_t", 0, ""),
+        FieldInfo::new("hardware_version", "uint32_t", 0, ""),
+        FieldInfo::new("roll_min", "float", 0, "rad"),
+        FieldInfo::new("roll_max", "float", 0, "rad"),
+        FieldInfo::new("pitch_min", "float", 0, "rad"),
+        FieldInfo::new("pitch_max", "float", 0, "rad"),
+        FieldInfo::new("yaw_min", "float", 0, "rad"),
+        FieldInfo::new("yaw_max", "float", 0, "rad"),
+        FieldInfo::new("cap_flags", "uint16_t", 0, ""),
+        FieldInfo::new("custom_cap_flags", "uint16_t", 0, ""),
+        FieldInfo::new("vendor_name", "char", 32, ""),
+        FieldInfo::new("model_name", "char", 32, ""),
+        FieldInfo::new("custom_name", "char", 32, ""),
+        FieldInfo::new("gimbal_device_id", "uint8_t", 0, ""),
+    ];
 }
 
 /// Low level message to control a gimbal device's attitude. This message is to be sent from the gimbal manager to the gimbal device component. The quaternion and angular velocities can be set to NaN according to use case. For the angles encoded in the quaternion and the angular velocities holds: If the flag GIMBAL_DEVICE_FLAGS_YAW_IN_VEHICLE_FRAME is set, then they are relative to the vehicle heading (vehicle frame). If the flag GIMBAL_DEVICE_FLAGS_YAW_IN_EARTH_FRAME is set, then they are relative to absolute North (earth frame). If neither of these flags are set, then (for backwards compatibility) it holds: If the flag GIMBAL_DEVICE_FLAGS_YAW_LOCK is set, then they are relative to absolute North (earth frame), else they are relative to the vehicle heading (vehicle frame). Setting both GIMBAL_DEVICE_FLAGS_YAW_IN_VEHICLE_FRAME and GIMBAL_DEVICE_FLAGS_YAW_IN_EARTH_FRAME is not allowed. These rules are to ensure backwards compatibility. New implementations should always set either GIMBAL_DEVICE_FLAGS_YAW_IN_VEHICLE_FRAME or GIMBAL_DEVICE_FLAGS_YAW_IN_EARTH_FRAME.
@@ -30318,6 +32883,17 @@ impl GimbalDeviceSetAttitude {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("q", "float", 4, ""),
+        FieldInfo::new("angular_velocity_x", "float", 0, "rad/s"),
+        FieldInfo::new("angular_velocity_y", "float", 0, "rad/s"),
+        FieldInfo::new("angular_velocity_z", "float", 0, "rad/s"),
+        FieldInfo::new("flags", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+    ];
 }
 
 /// Message reporting the status of a gimbal device. This message should be broadcast by a gimbal device component at a low regular rate (e.g. 5 Hz). For the angles encoded in the quaternion and the angular velocities holds: If the flag GIMBAL_DEVICE_FLAGS_YAW_IN_VEHICLE_FRAME is set, then they are relative to the vehicle heading (vehicle frame). If the flag GIMBAL_DEVICE_FLAGS_YAW_IN_EARTH_FRAME is set, then they are relative to absolute North (earth frame). If neither of these flags are set, then (for backwards compatibility) it holds: If the flag GIMBAL_DEVICE_FLAGS_YAW_LOCK is set, then they are relative to absolute North (earth frame), else they are relative to the vehicle heading (vehicle frame). Other conditions of the flags are not allowed. The quaternion and angular velocities in the other frame can be calculated from delta_yaw and delta_yaw_velocity as q_earth = q_delta_yaw * q_vehicle and w_earth = w_delta_yaw_velocity + w_vehicle (if not NaN). If neither the GIMBAL_DEVICE_FLAGS_YAW_IN_VEHICLE_FRAME nor the GIMBAL_DEVICE_FLAGS_YAW_IN_EARTH_FRAME flag is set, then (for backwards compatibility) the data in the delta_yaw and delta_yaw_velocity fields are to be ignored. New implementations should always set either GIMBAL_DEVICE_FLAGS_YAW_IN_VEHICLE_FRAME or GIMBAL_DEVICE_FLAGS_YAW_IN_EARTH_FRAME, and always should set delta_yaw and delta_yaw_velocity either to the proper value or NaN.
@@ -30448,6 +33024,22 @@ impl GimbalDeviceAttitudeStatus {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("q", "float", 4, ""),
+        FieldInfo::new("angular_velocity_x", "float", 0, "rad/s"),
+        FieldInfo::new("angular_velocity_y", "float", 0, "rad/s"),
+        FieldInfo::new("angular_velocity_z", "float", 0, "rad/s"),
+        FieldInfo::new("failure_flags", "uint32_t", 0, ""),
+        FieldInfo::new("flags", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("delta_yaw", "float", 0, "rad"),
+        FieldInfo::new("delta_yaw_velocity", "float", 0, "rad/s"),
+        FieldInfo::new("gimbal_device_id", "uint8_t", 0, ""),
+    ];
 }
 
 /// Low level message containing autopilot state relevant for a gimbal device. This message is to be sent from the autopilot to the gimbal device component. The data of this message are for the gimbal device's estimator corrections, in particular horizon compensation, as well as indicates autopilot control intentions, e.g. feed forward angular control in the z-axis.
@@ -30578,6 +33170,23 @@ impl AutopilotStateForGimbalDevice {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_us", "uint64_t", 0, "us"),
+        FieldInfo::new("q", "float", 4, ""),
+        FieldInfo::new("q_estimated_delay_us", "uint32_t", 0, "us"),
+        FieldInfo::new("vx", "float", 0, "m/s"),
+        FieldInfo::new("vy", "float", 0, "m/s"),
+        FieldInfo::new("vz", "float", 0, "m/s"),
+        FieldInfo::new("v_estimated_delay_us", "uint32_t", 0, "us"),
+        FieldInfo::new("feed_forward_angular_velocity_z", "float", 0, "rad/s"),
+        FieldInfo::new("estimator_status", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("landed_state", "uint8_t", 0, ""),
+        FieldInfo::new("angular_velocity_z", "float", 0, "rad/s"),
+    ];
 }
 
 /// Set gimbal manager pitch and yaw angles (high rate message). This message is to be sent to the gimbal manager (e.g. from a ground station) and will be ignored by gimbal devices. Angles and rates can be set to NaN according to use case. Use MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW for low-rate adjustments that require confirmation.
@@ -30661,6 +33270,18 @@ impl GimbalManagerSetPitchyaw {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("flags", "uint32_t", 0, ""),
+        FieldInfo::new("pitch", "float", 0, "rad"),
+        FieldInfo::new("yaw", "float", 0, "rad"),
+        FieldInfo::new("pitch_rate", "float", 0, "rad/s"),
+        FieldInfo::new("yaw_rate", "float", 0, "rad/s"),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("gimbal_device_id", "uint8_t", 0, ""),
+    ];
 }
 
 /// High level message to control a gimbal manually. The angles or angular rates are unitless; the actual rates will depend on internal gimbal manager settings/configuration (e.g. set by parameters). This message is to be sent to the gimbal manager (e.g. from a ground station). Angles and rates can be set to NaN according to use case.
@@ -30744,6 +33365,18 @@ impl GimbalManagerSetManualControl {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("flags", "uint32_t", 0, ""),
+        FieldInfo::new("pitch", "float", 0, ""),
+        FieldInfo::new("yaw", "float", 0, ""),
+        FieldInfo::new("pitch_rate", "float", 0, ""),
+        FieldInfo::new("yaw_rate", "float", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("gimbal_device_id", "uint8_t", 0, ""),
+    ];
 }
 
 /// Airspeed information from a sensor.
@@ -30803,6 +33436,15 @@ impl Airspeed {
             ("flags", FieldValue::Unsigned(self.flags.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("airspeed", "float", 0, "m/s"),
+        FieldInfo::new("raw_press", "float", 0, "hPa"),
+        FieldInfo::new("temperature", "int16_t", 0, "cdegC"),
+        FieldInfo::new("id", "uint8_t", 0, ""),
+        FieldInfo::new("flags", "uint8_t", 0, ""),
+    ];
 }
 
 /// Configure WiFi AP SSID, password, and mode. This message is re-emitted as an acknowledgement by the AP. The message may also be explicitly requested using MAV_CMD_REQUEST_MESSAGE
@@ -30856,6 +33498,12 @@ impl WifiConfigAp {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("ssid", "char", 32, ""),
+        FieldInfo::new("password", "char", 64, ""),
+    ];
 }
 
 /// The location and information of an AIS vessel
@@ -31002,6 +33650,27 @@ impl AisVessel {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("MMSI", "uint32_t", 0, ""),
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("COG", "uint16_t", 0, "cdeg"),
+        FieldInfo::new("heading", "uint16_t", 0, "cdeg"),
+        FieldInfo::new("velocity", "uint16_t", 0, "cm/s"),
+        FieldInfo::new("dimension_bow", "uint16_t", 0, "m"),
+        FieldInfo::new("dimension_stern", "uint16_t", 0, "m"),
+        FieldInfo::new("tslc", "uint16_t", 0, "s"),
+        FieldInfo::new("flags", "uint16_t", 0, ""),
+        FieldInfo::new("turn_rate", "int8_t", 0, "cdeg/s"),
+        FieldInfo::new("navigational_status", "uint8_t", 0, ""),
+        FieldInfo::new("type", "uint8_t", 0, ""),
+        FieldInfo::new("dimension_port", "uint8_t", 0, "m"),
+        FieldInfo::new("dimension_starboard", "uint8_t", 0, "m"),
+        FieldInfo::new("callsign", "char", 7, ""),
+        FieldInfo::new("name", "char", 20, ""),
+    ];
 }
 
 /// General status information of an UAVCAN node. Please refer to the definition of the UAVCAN message "uavcan.protocol.NodeStatus" for the background information. The UAVCAN specification is available at http://uavcan.org.
@@ -31070,6 +33739,16 @@ impl UavcanNodeStatus {
             ("sub_mode", FieldValue::Unsigned(self.sub_mode.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("uptime_sec", "uint32_t", 0, "s"),
+        FieldInfo::new("vendor_specific_status_code", "uint16_t", 0, ""),
+        FieldInfo::new("health", "uint8_t", 0, ""),
+        FieldInfo::new("mode", "uint8_t", 0, ""),
+        FieldInfo::new("sub_mode", "uint8_t", 0, ""),
+    ];
 }
 
 /// General information describing a particular UAVCAN node. Please refer to the definition of the UAVCAN service "uavcan.protocol.GetNodeInfo" for the background information. This message should be emitted by the system whenever a new node appears online, or an existing node reboots. Additionally, it can be emitted upon request from the other end of the MAVLink channel (see MAV_CMD_UAVCAN_GET_NODE_INFO). It is also not prohibited to emit this message unconditionally at a low frequency. The UAVCAN specification is available at http://uavcan.org.
@@ -31173,6 +33852,19 @@ impl UavcanNodeInfo {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("uptime_sec", "uint32_t", 0, "s"),
+        FieldInfo::new("sw_vcs_commit", "uint32_t", 0, ""),
+        FieldInfo::new("name", "char", 80, ""),
+        FieldInfo::new("hw_version_major", "uint8_t", 0, ""),
+        FieldInfo::new("hw_version_minor", "uint8_t", 0, ""),
+        FieldInfo::new("hw_unique_id", "uint8_t", 16, ""),
+        FieldInfo::new("sw_version_major", "uint8_t", 0, ""),
+        FieldInfo::new("sw_version_minor", "uint8_t", 0, ""),
+    ];
 }
 
 /// Request to read the value of a parameter with either the param_id string id or param_index. PARAM_EXT_VALUE should be emitted in response.
@@ -31237,6 +33929,14 @@ impl ParamExtRequestRead {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("param_index", "int16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("param_id", "char", 16, ""),
+    ];
 }
 
 /// Request all parameters of this component. All parameters should be emitted in response as PARAM_EXT_VALUE.
@@ -31286,6 +33986,12 @@ impl ParamExtRequestList {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+    ];
 }
 
 /// Emit the value of a parameter. The inclusion of param_count and param_index in the message allows the recipient to keep track of received parameters and allows them to re-request missing parameters after a loss or timeout.
@@ -31355,6 +34061,15 @@ impl ParamExtValue {
             ("param_type", FieldValue::Unsigned(self.param_type.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("param_count", "uint16_t", 0, ""),
+        FieldInfo::new("param_index", "uint16_t", 0, ""),
+        FieldInfo::new("param_id", "char", 16, ""),
+        FieldInfo::new("param_value", "char", 128, ""),
+        FieldInfo::new("param_type", "uint8_t", 0, ""),
+    ];
 }
 
 /// Set a parameter value. In order to deal with message loss (and retransmission of PARAM_EXT_SET), when setting a parameter value and the new value is the same as the current value, you will immediately get a PARAM_ACK_ACCEPTED response. If the current state is PARAM_ACK_IN_PROGRESS, you will accordingly receive a PARAM_ACK_IN_PROGRESS in response.
@@ -31430,6 +34145,15 @@ impl ParamExtSet {
             ("param_type", FieldValue::Unsigned(self.param_type.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("param_id", "char", 16, ""),
+        FieldInfo::new("param_value", "char", 128, ""),
+        FieldInfo::new("param_type", "uint8_t", 0, ""),
+    ];
 }
 
 /// Response from a PARAM_EXT_SET message.
@@ -31498,6 +34222,14 @@ impl ParamExtAck {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("param_id", "char", 16, ""),
+        FieldInfo::new("param_value", "char", 128, ""),
+        FieldInfo::new("param_type", "uint8_t", 0, ""),
+        FieldInfo::new("param_result", "uint8_t", 0, ""),
+    ];
 }
 
 /// Obstacle distances in front of the sensor, starting from the left in increment degrees to the right
@@ -31592,6 +34324,19 @@ impl ObstacleDistance {
             ("frame", FieldValue::Unsigned(self.frame.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("distances", "uint16_t", 72, "cm"),
+        FieldInfo::new("min_distance", "uint16_t", 0, "cm"),
+        FieldInfo::new("max_distance", "uint16_t", 0, "cm"),
+        FieldInfo::new("sensor_type", "uint8_t", 0, ""),
+        FieldInfo::new("increment", "uint8_t", 0, "deg"),
+        FieldInfo::new("increment_f", "float", 0, "deg"),
+        FieldInfo::new("angle_offset", "float", 0, "deg"),
+        FieldInfo::new("frame", "uint8_t", 0, ""),
+    ];
 }
 
 /// Odometry message to communicate odometry information with an external interface. Fits ROS REP 147 standard for aerial vehicles (http://www.ros.org/reps/rep-0147.html).
@@ -31750,6 +34495,28 @@ impl Odometry {
             ("quality", FieldValue::Signed(self.quality.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("x", "float", 0, "m"),
+        FieldInfo::new("y", "float", 0, "m"),
+        FieldInfo::new("z", "float", 0, "m"),
+        FieldInfo::new("q", "float", 4, ""),
+        FieldInfo::new("vx", "float", 0, "m/s"),
+        FieldInfo::new("vy", "float", 0, "m/s"),
+        FieldInfo::new("vz", "float", 0, "m/s"),
+        FieldInfo::new("rollspeed", "float", 0, "rad/s"),
+        FieldInfo::new("pitchspeed", "float", 0, "rad/s"),
+        FieldInfo::new("yawspeed", "float", 0, "rad/s"),
+        FieldInfo::new("pose_covariance", "float", 21, ""),
+        FieldInfo::new("velocity_covariance", "float", 21, ""),
+        FieldInfo::new("frame_id", "uint8_t", 0, ""),
+        FieldInfo::new("child_frame_id", "uint8_t", 0, ""),
+        FieldInfo::new("reset_counter", "uint8_t", 0, ""),
+        FieldInfo::new("estimator_type", "uint8_t", 0, ""),
+        FieldInfo::new("quality", "int8_t", 0, "%"),
+    ];
 }
 
 /// Describe a trajectory using an array of up-to 5 waypoints in the local frame (MAV_FRAME_LOCAL_NED).
@@ -31917,6 +34684,24 @@ impl TrajectoryRepresentationWaypoints {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("pos_x", "float", 5, "m"),
+        FieldInfo::new("pos_y", "float", 5, "m"),
+        FieldInfo::new("pos_z", "float", 5, "m"),
+        FieldInfo::new("vel_x", "float", 5, "m/s"),
+        FieldInfo::new("vel_y", "float", 5, "m/s"),
+        FieldInfo::new("vel_z", "float", 5, "m/s"),
+        FieldInfo::new("acc_x", "float", 5, "m/s/s"),
+        FieldInfo::new("acc_y", "float", 5, "m/s/s"),
+        FieldInfo::new("acc_z", "float", 5, "m/s/s"),
+        FieldInfo::new("pos_yaw", "float", 5, "rad"),
+        FieldInfo::new("vel_yaw", "float", 5, "rad/s"),
+        FieldInfo::new("command", "uint16_t", 5, ""),
+        FieldInfo::new("valid_points", "uint8_t", 0, ""),
+    ];
 }
 
 /// Describe a trajectory using an array of up-to 5 bezier control points in the local frame (MAV_FRAME_LOCAL_NED).
@@ -32013,6 +34798,17 @@ impl TrajectoryRepresentationBezier {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("pos_x", "float", 5, "m"),
+        FieldInfo::new("pos_y", "float", 5, "m"),
+        FieldInfo::new("pos_z", "float", 5, "m"),
+        FieldInfo::new("delta", "float", 5, "s"),
+        FieldInfo::new("pos_yaw", "float", 5, "rad"),
+        FieldInfo::new("valid_points", "uint8_t", 0, ""),
+    ];
 }
 
 /// Status of the Iridium SBD link.
@@ -32104,6 +34900,18 @@ impl IsbdLinkStatus {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("timestamp", "uint64_t", 0, "us"),
+        FieldInfo::new("last_heartbeat", "uint64_t", 0, "us"),
+        FieldInfo::new("failed_sessions", "uint16_t", 0, ""),
+        FieldInfo::new("successful_sessions", "uint16_t", 0, ""),
+        FieldInfo::new("signal_quality", "uint8_t", 0, ""),
+        FieldInfo::new("ring_pending", "uint8_t", 0, ""),
+        FieldInfo::new("tx_session_pending", "uint8_t", 0, ""),
+        FieldInfo::new("rx_session_pending", "uint8_t", 0, ""),
+    ];
 }
 
 /// RPM sensor data message.
@@ -32147,6 +34955,12 @@ impl RawRpm {
             ("index", FieldValue::Unsigned(self.index.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("frequency", "float", 0, "rpm"),
+        FieldInfo::new("index", "uint8_t", 0, ""),
+    ];
 }
 
 /// The global position resulting from GPS and sensor fusion.
@@ -32280,6 +35094,28 @@ impl UtmGlobalPosition {
             ("flags", FieldValue::Unsigned(self.flags.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time", "uint64_t", 0, "us"),
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("alt", "int32_t", 0, "mm"),
+        FieldInfo::new("relative_alt", "int32_t", 0, "mm"),
+        FieldInfo::new("next_lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("next_lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("next_alt", "int32_t", 0, "mm"),
+        FieldInfo::new("vx", "int16_t", 0, "cm/s"),
+        FieldInfo::new("vy", "int16_t", 0, "cm/s"),
+        FieldInfo::new("vz", "int16_t", 0, "cm/s"),
+        FieldInfo::new("h_acc", "uint16_t", 0, "mm"),
+        FieldInfo::new("v_acc", "uint16_t", 0, "mm"),
+        FieldInfo::new("vel_acc", "uint16_t", 0, "cm/s"),
+        FieldInfo::new("update_rate", "uint16_t", 0, "cs"),
+        FieldInfo::new("uas_id", "uint8_t", 18, ""),
+        FieldInfo::new("flight_state", "uint8_t", 0, ""),
+        FieldInfo::new("flags", "uint8_t", 0, ""),
+    ];
 }
 
 /// Parameter set/get error. Returned from a MAVLink node in response to an error in the parameter protocol, for example failing to set a parameter because it does not exist.
@@ -32350,6 +35186,15 @@ impl ParamError {
             ("error", FieldValue::Unsigned(self.error.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("param_index", "int16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("param_id", "char", 16, ""),
+        FieldInfo::new("error", "uint8_t", 0, ""),
+    ];
 }
 
 /// Large debug/prototyping array. The message uses the maximum available payload for data. The array_id and name fields are used to discriminate between messages in code and in user interfaces (respectively). Do not use in production code.
@@ -32414,6 +35259,14 @@ impl DebugFloatArray {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("array_id", "uint16_t", 0, ""),
+        FieldInfo::new("name", "char", 10, ""),
+        FieldInfo::new("data", "float", 58, ""),
+    ];
 }
 
 /// Smart Battery information (static/infrequent update). Use for updates from: smart battery to flight stack, flight stack to GCS. Use BATTERY_STATUS for smart battery frequent updates.
@@ -32586,6 +35439,27 @@ impl SmartBatteryInfo {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("capacity_full_specification", "int32_t", 0, "mAh"),
+        FieldInfo::new("capacity_full", "int32_t", 0, "mAh"),
+        FieldInfo::new("cycle_count", "uint16_t", 0, ""),
+        FieldInfo::new("weight", "uint16_t", 0, "g"),
+        FieldInfo::new("discharge_minimum_voltage", "uint16_t", 0, "mV"),
+        FieldInfo::new("charging_minimum_voltage", "uint16_t", 0, "mV"),
+        FieldInfo::new("resting_minimum_voltage", "uint16_t", 0, "mV"),
+        FieldInfo::new("id", "uint8_t", 0, ""),
+        FieldInfo::new("battery_function", "uint8_t", 0, ""),
+        FieldInfo::new("type", "uint8_t", 0, ""),
+        FieldInfo::new("serial_number", "char", 16, ""),
+        FieldInfo::new("device_name", "char", 50, ""),
+        FieldInfo::new("charging_maximum_voltage", "uint16_t", 0, "mV"),
+        FieldInfo::new("cells_in_series", "uint8_t", 0, ""),
+        FieldInfo::new("discharge_maximum_current", "uint32_t", 0, "mA"),
+        FieldInfo::new("discharge_maximum_burst_current", "uint32_t", 0, "mA"),
+        FieldInfo::new("manufacture_date", "char", 11, ""),
+    ];
 }
 
 /// Telemetry of power generation system. Alternator or mechanical generator.
@@ -32696,6 +35570,21 @@ impl GeneratorStatus {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("status", "uint64_t", 0, ""),
+        FieldInfo::new("battery_current", "float", 0, "A"),
+        FieldInfo::new("load_current", "float", 0, "A"),
+        FieldInfo::new("power_generated", "float", 0, "W"),
+        FieldInfo::new("bus_voltage", "float", 0, "V"),
+        FieldInfo::new("bat_current_setpoint", "float", 0, "A"),
+        FieldInfo::new("runtime", "uint32_t", 0, "s"),
+        FieldInfo::new("time_until_maintenance", "int32_t", 0, "s"),
+        FieldInfo::new("generator_speed", "uint16_t", 0, "rpm"),
+        FieldInfo::new("rectifier_temperature", "int16_t", 0, "degC"),
+        FieldInfo::new("generator_temperature", "int16_t", 0, "degC"),
+    ];
 }
 
 /// The raw values of the actuator outputs (e.g. on Pixhawk, from MAIN, AUX ports). This message supersedes SERVO_OUTPUT_RAW.
@@ -32749,6 +35638,13 @@ impl ActuatorOutputStatus {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("active", "uint32_t", 0, ""),
+        FieldInfo::new("actuator", "float", 32, ""),
+    ];
 }
 
 /// Reports the on/off state of relays, as controlled by MAV_CMD_DO_SET_RELAY.
@@ -32800,6 +35696,13 @@ impl RelayStatus {
             ("present", FieldValue::Unsigned(self.present.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("on", "uint16_t", 0, ""),
+        FieldInfo::new("present", "uint16_t", 0, ""),
+    ];
 }
 
 /// Message for transporting "arbitrary" variable-length data from one component to another (broadcast is not forbidden, but discouraged). The encoding of the data is usually extension specific, i.e. determined by the source, and is usually not documented as part of the MAVLink specification.
@@ -32876,6 +35779,15 @@ impl Tunnel {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("payload_type", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("payload_length", "uint8_t", 0, ""),
+        FieldInfo::new("payload", "uint8_t", 128, ""),
+    ];
 }
 
 /// A forwarded CAN frame as requested by MAV_CMD_CAN_FORWARD.
@@ -32950,6 +35862,16 @@ impl CanFrame {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("id", "uint32_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("bus", "uint8_t", 0, ""),
+        FieldInfo::new("len", "uint8_t", 0, ""),
+        FieldInfo::new("data", "uint8_t", 8, ""),
+    ];
 }
 
 /// A forwarded CANFD frame as requested by MAV_CMD_CAN_FORWARD. These are separated from CAN_FRAME as they need different handling (eg. TAO handling)
@@ -33024,6 +35946,16 @@ impl CanfdFrame {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("id", "uint32_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("bus", "uint8_t", 0, ""),
+        FieldInfo::new("len", "uint8_t", 0, ""),
+        FieldInfo::new("data", "uint8_t", 64, ""),
+    ];
 }
 
 /// Modify the filter of what CAN messages to forward over the mavlink. This can be used to make CAN forwarding work well on low bandwidth links. The filtering is applied on bits 8 to 24 of the CAN id (2nd and 3rd bytes) which corresponds to the DroneCAN message ID for DroneCAN. Filters with more than 16 IDs can be constructed by sending multiple CAN_FILTER_MODIFY messages.
@@ -33099,6 +36031,16 @@ impl CanFilterModify {
             ("num_ids", FieldValue::Unsigned(self.num_ids.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("ids", "uint16_t", 16, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("bus", "uint8_t", 0, ""),
+        FieldInfo::new("operation", "uint8_t", 0, ""),
+        FieldInfo::new("num_ids", "uint8_t", 0, ""),
+    ];
 }
 
 /// RC channel outputs from a MAVLink RC receiver for input to a flight controller or other components (allows an RC receiver to connect via MAVLink instead of some other protocol such as PPM-Sum or S.BUS). Note that this is not intended to be an over-the-air format, and does not replace RC_CHANNELS and similar messages reported by the flight controller. The target_system field should normally be set to the system id of the system to control, typically the flight controller. The target_component field can normally be set to 0, so that all components of the system can receive the message. The channels array field can publish up to 32 channels; the number of channel items used in the array is specified in the count field. The time_last_update_ms field contains the timestamp of the last received valid channels data in the receiver's time domain. The count field indicates the first index of the channel array that is not used for channel data (this and later indexes are zero-filled). The RADIO_RC_CHANNELS_FLAGS_OUTDATED flag is set by the receiver if the channels data is not up-to-date (for example, if new data from the transmitter could not be validated so the last valid data is resent). The RADIO_RC_CHANNELS_FLAGS_FAILSAFE failsafe flag is set by the receiver if the receiver's failsafe condition is met (implementation dependent, e.g., connection to the RC radio is lost). In this case time_last_update_ms still contains the timestamp of the last valid channels data, but the content of the channels data is not defined by the protocol (it is up to the implementation of the receiver). For instance, the channels data could contain failsafe values configured in the receiver; the default is to carry the last valid data. Note: The RC channels fields are extensions to ensure that they are located at the end of the serialized payload and subject to MAVLink's trailing-zero trimming.
@@ -33178,6 +36120,16 @@ impl RadioRcChannels {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_last_update_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("flags", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("count", "uint8_t", 0, ""),
+        FieldInfo::new("channels", "int16_t", 32, ""),
+    ];
 }
 
 /// Get information about a particular flight modes. The message can be enumerated or requested for a particular mode using MAV_CMD_REQUEST_MESSAGE. Specify 0 in param2 to request that the message is emitted for all available modes or the specific index for just one mode. The modes must be available/settable for the current vehicle/frame type. Each modes should only be emitted once (even if it is both standard and custom).
@@ -33254,6 +36206,16 @@ impl AvailableModes {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("custom_mode", "uint32_t", 0, ""),
+        FieldInfo::new("properties", "uint32_t", 0, ""),
+        FieldInfo::new("number_modes", "uint8_t", 0, ""),
+        FieldInfo::new("mode_index", "uint8_t", 0, ""),
+        FieldInfo::new("standard_mode", "uint8_t", 0, ""),
+        FieldInfo::new("mode_name", "char", 35, ""),
+    ];
 }
 
 /// Get the current mode. This should be emitted on any mode change, and broadcast at low rate (nominally 0.5 Hz). It may be requested using MAV_CMD_REQUEST_MESSAGE.
@@ -33309,6 +36271,13 @@ impl CurrentMode {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("custom_mode", "uint32_t", 0, ""),
+        FieldInfo::new("intended_custom_mode", "uint32_t", 0, ""),
+        FieldInfo::new("standard_mode", "uint8_t", 0, ""),
+    ];
 }
 
 /// A change to the sequence number indicates that the set of AVAILABLE_MODES has changed. A receiver must re-request all available modes whenever the sequence number changes. This is only emitted after the first change and should then be broadcast at low rate (nominally 0.3 Hz) and on change.
@@ -33345,6 +36314,9 @@ impl AvailableModesMonitor {
     pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
         vec![("seq", FieldValue::Unsigned(self.seq.into()))]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[FieldInfo::new("seq", "uint8_t", 0, "")];
 }
 
 /// Information about key components of GNSS receivers, like signal authentication, interference and system errors.
@@ -33467,6 +36439,22 @@ impl GnssIntegrity {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("system_errors", "uint32_t", 0, ""),
+        FieldInfo::new("raim_hfom", "uint16_t", 0, "cm"),
+        FieldInfo::new("raim_vfom", "uint16_t", 0, "cm"),
+        FieldInfo::new("id", "uint8_t", 0, ""),
+        FieldInfo::new("authentication_state", "uint8_t", 0, ""),
+        FieldInfo::new("jamming_state", "uint8_t", 0, ""),
+        FieldInfo::new("spoofing_state", "uint8_t", 0, ""),
+        FieldInfo::new("raim_state", "uint8_t", 0, ""),
+        FieldInfo::new("corrections_quality", "uint8_t", 0, ""),
+        FieldInfo::new("system_status_summary", "uint8_t", 0, ""),
+        FieldInfo::new("gnss_signal_quality", "uint8_t", 0, ""),
+        FieldInfo::new("post_processing_quality", "uint8_t", 0, ""),
+    ];
 }
 
 /// Voltage and current sensor data
@@ -33532,6 +36520,14 @@ impl SensPower {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("adc121_vspb_volt", "float", 0, "V"),
+        FieldInfo::new("adc121_cspb_amp", "float", 0, "A"),
+        FieldInfo::new("adc121_cs1_amp", "float", 0, "A"),
+        FieldInfo::new("adc121_cs2_amp", "float", 0, "A"),
+    ];
 }
 
 /// Maximum Power Point Tracker (MPPT) sensor data for solar module power performance tracking
@@ -33639,6 +36635,23 @@ impl SensMppt {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("mppt_timestamp", "uint64_t", 0, "us"),
+        FieldInfo::new("mppt1_volt", "float", 0, "V"),
+        FieldInfo::new("mppt1_amp", "float", 0, "A"),
+        FieldInfo::new("mppt2_volt", "float", 0, "V"),
+        FieldInfo::new("mppt2_amp", "float", 0, "A"),
+        FieldInfo::new("mppt3_volt", "float", 0, "V"),
+        FieldInfo::new("mppt3_amp", "float", 0, "A"),
+        FieldInfo::new("mppt1_pwm", "uint16_t", 0, "us"),
+        FieldInfo::new("mppt2_pwm", "uint16_t", 0, "us"),
+        FieldInfo::new("mppt3_pwm", "uint16_t", 0, "us"),
+        FieldInfo::new("mppt1_status", "uint8_t", 0, ""),
+        FieldInfo::new("mppt2_status", "uint8_t", 0, ""),
+        FieldInfo::new("mppt3_status", "uint8_t", 0, ""),
+    ];
 }
 
 /// ASL-fixed-wing controller data
@@ -33806,6 +36819,35 @@ impl AslctrlData {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("timestamp", "uint64_t", 0, "us"),
+        FieldInfo::new("h", "float", 0, ""),
+        FieldInfo::new("hRef", "float", 0, ""),
+        FieldInfo::new("hRef_t", "float", 0, ""),
+        FieldInfo::new("PitchAngle", "float", 0, "deg"),
+        FieldInfo::new("PitchAngleRef", "float", 0, "deg"),
+        FieldInfo::new("q", "float", 0, ""),
+        FieldInfo::new("qRef", "float", 0, ""),
+        FieldInfo::new("uElev", "float", 0, ""),
+        FieldInfo::new("uThrot", "float", 0, ""),
+        FieldInfo::new("uThrot2", "float", 0, ""),
+        FieldInfo::new("nZ", "float", 0, ""),
+        FieldInfo::new("AirspeedRef", "float", 0, "m/s"),
+        FieldInfo::new("YawAngle", "float", 0, "deg"),
+        FieldInfo::new("YawAngleRef", "float", 0, "deg"),
+        FieldInfo::new("RollAngle", "float", 0, "deg"),
+        FieldInfo::new("RollAngleRef", "float", 0, "deg"),
+        FieldInfo::new("p", "float", 0, ""),
+        FieldInfo::new("pRef", "float", 0, ""),
+        FieldInfo::new("r", "float", 0, ""),
+        FieldInfo::new("rRef", "float", 0, ""),
+        FieldInfo::new("uAil", "float", 0, ""),
+        FieldInfo::new("uRud", "float", 0, ""),
+        FieldInfo::new("aslctrl_mode", "uint8_t", 0, ""),
+        FieldInfo::new("SpoilersEngaged", "uint8_t", 0, ""),
+    ];
 }
 
 /// ASL-fixed-wing controller debug data
@@ -33894,6 +36936,21 @@ impl AslctrlDebug {
             ("i8_2", FieldValue::Unsigned(self.i8_2.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("i32_1", "uint32_t", 0, ""),
+        FieldInfo::new("f_1", "float", 0, ""),
+        FieldInfo::new("f_2", "float", 0, ""),
+        FieldInfo::new("f_3", "float", 0, ""),
+        FieldInfo::new("f_4", "float", 0, ""),
+        FieldInfo::new("f_5", "float", 0, ""),
+        FieldInfo::new("f_6", "float", 0, ""),
+        FieldInfo::new("f_7", "float", 0, ""),
+        FieldInfo::new("f_8", "float", 0, ""),
+        FieldInfo::new("i8_1", "uint8_t", 0, ""),
+        FieldInfo::new("i8_2", "uint8_t", 0, ""),
+    ];
 }
 
 /// Extended state information for ASLUAVs
@@ -33955,6 +37012,14 @@ impl AsluavStatus {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("Motor_rpm", "float", 0, ""),
+        FieldInfo::new("LED_status", "uint8_t", 0, ""),
+        FieldInfo::new("SATCOM_status", "uint8_t", 0, ""),
+        FieldInfo::new("Servo_status", "uint8_t", 8, ""),
+    ];
 }
 
 /// Extended EKF state estimates for ASLUAVs
@@ -34023,6 +37088,17 @@ impl EkfExt {
             ("alpha", FieldValue::Float(self.alpha.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("timestamp", "uint64_t", 0, "us"),
+        FieldInfo::new("Windspeed", "float", 0, "m/s"),
+        FieldInfo::new("WindDir", "float", 0, "rad"),
+        FieldInfo::new("WindZ", "float", 0, "m/s"),
+        FieldInfo::new("Airspeed", "float", 0, "m/s"),
+        FieldInfo::new("beta", "float", 0, "rad"),
+        FieldInfo::new("alpha", "float", 0, "rad"),
+    ];
 }
 
 /// Off-board controls/commands for ASLUAVs
@@ -34099,6 +37175,18 @@ impl AslObctrl {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("timestamp", "uint64_t", 0, "us"),
+        FieldInfo::new("uElev", "float", 0, ""),
+        FieldInfo::new("uThrot", "float", 0, ""),
+        FieldInfo::new("uThrot2", "float", 0, ""),
+        FieldInfo::new("uAilL", "float", 0, ""),
+        FieldInfo::new("uAilR", "float", 0, ""),
+        FieldInfo::new("uRud", "float", 0, ""),
+        FieldInfo::new("obctrl_status", "uint8_t", 0, ""),
+    ];
 }
 
 /// Atmospheric sensors (temperature, humidity, ...)
@@ -34147,6 +37235,13 @@ impl SensAtmos {
             ("Humidity", FieldValue::Float(self.humidity.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("timestamp", "uint64_t", 0, "us"),
+        FieldInfo::new("TempAmbient", "float", 0, "degC"),
+        FieldInfo::new("Humidity", "float", 0, "%"),
+    ];
 }
 
 /// Battery pack monitoring data for Li-Ion batteries
@@ -34288,6 +37383,25 @@ impl SensBatmon {
             ("SoC", FieldValue::Unsigned(self.soc.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("batmon_timestamp", "uint64_t", 0, "us"),
+        FieldInfo::new("temperature", "float", 0, "degC"),
+        FieldInfo::new("safetystatus", "uint32_t", 0, ""),
+        FieldInfo::new("operationstatus", "uint32_t", 0, ""),
+        FieldInfo::new("voltage", "uint16_t", 0, "mV"),
+        FieldInfo::new("current", "int16_t", 0, "mA"),
+        FieldInfo::new("batterystatus", "uint16_t", 0, ""),
+        FieldInfo::new("serialnumber", "uint16_t", 0, ""),
+        FieldInfo::new("cellvoltage1", "uint16_t", 0, "mV"),
+        FieldInfo::new("cellvoltage2", "uint16_t", 0, "mV"),
+        FieldInfo::new("cellvoltage3", "uint16_t", 0, "mV"),
+        FieldInfo::new("cellvoltage4", "uint16_t", 0, "mV"),
+        FieldInfo::new("cellvoltage5", "uint16_t", 0, "mV"),
+        FieldInfo::new("cellvoltage6", "uint16_t", 0, "mV"),
+        FieldInfo::new("SoC", "uint8_t", 0, ""),
+    ];
 }
 
 /// Fixed-wing soaring (i.e. thermal seeking) data
@@ -34464,6 +37578,35 @@ impl FwSoaringData {
             ("valid", FieldValue::Unsigned(self.valid.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("timestamp", "uint64_t", 0, "ms"),
+        FieldInfo::new("timestampModeChanged", "uint64_t", 0, "ms"),
+        FieldInfo::new("xW", "float", 0, "m/s"),
+        FieldInfo::new("xR", "float", 0, "m"),
+        FieldInfo::new("xLat", "float", 0, "deg"),
+        FieldInfo::new("xLon", "float", 0, "deg"),
+        FieldInfo::new("VarW", "float", 0, ""),
+        FieldInfo::new("VarR", "float", 0, ""),
+        FieldInfo::new("VarLat", "float", 0, ""),
+        FieldInfo::new("VarLon", "float", 0, ""),
+        FieldInfo::new("LoiterRadius", "float", 0, "m"),
+        FieldInfo::new("LoiterDirection", "float", 0, ""),
+        FieldInfo::new("DistToSoarPoint", "float", 0, "m"),
+        FieldInfo::new("vSinkExp", "float", 0, "m/s"),
+        FieldInfo::new("z1_LocalUpdraftSpeed", "float", 0, "m/s"),
+        FieldInfo::new("z2_DeltaRoll", "float", 0, "deg"),
+        FieldInfo::new("z1_exp", "float", 0, ""),
+        FieldInfo::new("z2_exp", "float", 0, ""),
+        FieldInfo::new("ThermalGSNorth", "float", 0, "m/s"),
+        FieldInfo::new("ThermalGSEast", "float", 0, "m/s"),
+        FieldInfo::new("TSE_dot", "float", 0, "m/s"),
+        FieldInfo::new("DebugVar1", "float", 0, ""),
+        FieldInfo::new("DebugVar2", "float", 0, ""),
+        FieldInfo::new("ControlMode", "uint8_t", 0, ""),
+        FieldInfo::new("valid", "uint8_t", 0, ""),
+    ];
 }
 
 /// Monitoring of sensorpod status
@@ -34552,6 +37695,18 @@ impl SensorpodStatus {
             ("cpu_temp", FieldValue::Unsigned(self.cpu_temp.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("timestamp", "uint64_t", 0, "ms"),
+        FieldInfo::new("free_space", "uint16_t", 0, ""),
+        FieldInfo::new("visensor_rate_1", "uint8_t", 0, ""),
+        FieldInfo::new("visensor_rate_2", "uint8_t", 0, ""),
+        FieldInfo::new("visensor_rate_3", "uint8_t", 0, ""),
+        FieldInfo::new("visensor_rate_4", "uint8_t", 0, ""),
+        FieldInfo::new("recording_nodes_count", "uint8_t", 0, ""),
+        FieldInfo::new("cpu_temp", "uint8_t", 0, "degC"),
+    ];
 }
 
 /// Monitoring of power board status
@@ -34678,6 +37833,22 @@ impl SensPowerBoard {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("timestamp", "uint64_t", 0, "us"),
+        FieldInfo::new("pwr_brd_system_volt", "float", 0, "V"),
+        FieldInfo::new("pwr_brd_servo_volt", "float", 0, "V"),
+        FieldInfo::new("pwr_brd_digital_volt", "float", 0, "V"),
+        FieldInfo::new("pwr_brd_mot_l_amp", "float", 0, "A"),
+        FieldInfo::new("pwr_brd_mot_r_amp", "float", 0, "A"),
+        FieldInfo::new("pwr_brd_analog_amp", "float", 0, "A"),
+        FieldInfo::new("pwr_brd_digital_amp", "float", 0, "A"),
+        FieldInfo::new("pwr_brd_ext_amp", "float", 0, "A"),
+        FieldInfo::new("pwr_brd_aux_amp", "float", 0, "A"),
+        FieldInfo::new("pwr_brd_status", "uint8_t", 0, ""),
+        FieldInfo::new("pwr_brd_led_status", "uint8_t", 0, ""),
+    ];
 }
 
 /// Status of GSM modem (connected to onboard computer)
@@ -34754,6 +37925,17 @@ impl GsmLinkStatus {
             ("rsrq", FieldValue::Unsigned(self.rsrq.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("timestamp", "uint64_t", 0, "us"),
+        FieldInfo::new("gsm_modem_type", "uint8_t", 0, ""),
+        FieldInfo::new("gsm_link_type", "uint8_t", 0, ""),
+        FieldInfo::new("rssi", "uint8_t", 0, ""),
+        FieldInfo::new("rsrp_rscp", "uint8_t", 0, ""),
+        FieldInfo::new("sinr_ecio", "uint8_t", 0, ""),
+        FieldInfo::new("rsrq", "uint8_t", 0, ""),
+    ];
 }
 
 /// Status of the SatCom link
@@ -34845,6 +38027,18 @@ impl SatcomLinkStatus {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("timestamp", "uint64_t", 0, "us"),
+        FieldInfo::new("last_heartbeat", "uint64_t", 0, "us"),
+        FieldInfo::new("failed_sessions", "uint16_t", 0, ""),
+        FieldInfo::new("successful_sessions", "uint16_t", 0, ""),
+        FieldInfo::new("signal_quality", "uint8_t", 0, ""),
+        FieldInfo::new("ring_pending", "uint8_t", 0, ""),
+        FieldInfo::new("tx_session_pending", "uint8_t", 0, ""),
+        FieldInfo::new("rx_session_pending", "uint8_t", 0, ""),
+    ];
 }
 
 /// Calibrated airflow angle measurements
@@ -34912,6 +38106,15 @@ impl SensorAirflowAngles {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("timestamp", "uint64_t", 0, "us"),
+        FieldInfo::new("angleofattack", "float", 0, "deg"),
+        FieldInfo::new("sideslip", "float", 0, "deg"),
+        FieldInfo::new("angleofattack_valid", "uint8_t", 0, ""),
+        FieldInfo::new("sideslip_valid", "uint8_t", 0, ""),
+    ];
 }
 
 /// Cumulative distance traveled for each reported wheel.
@@ -34962,6 +38165,13 @@ impl WheelDistance {
             ("count", FieldValue::Unsigned(self.count.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("distance", "double", 16, "m"),
+        FieldInfo::new("count", "uint8_t", 0, ""),
+    ];
 }
 
 /// Winch status.
@@ -35036,6 +38246,18 @@ impl WinchStatus {
             ("temperature", FieldValue::Signed(self.temperature.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("line_length", "float", 0, "m"),
+        FieldInfo::new("speed", "float", 0, "m/s"),
+        FieldInfo::new("tension", "float", 0, "kg"),
+        FieldInfo::new("voltage", "float", 0, "V"),
+        FieldInfo::new("current", "float", 0, "A"),
+        FieldInfo::new("status", "uint32_t", 0, ""),
+        FieldInfo::new("temperature", "int16_t", 0, "degC"),
+    ];
 }
 
 /// Static data to configure the ADS-B transponder (send within 10 sec of a POR and every 10 sec thereafter)
@@ -35128,6 +38350,18 @@ impl UavionixAdsbOutCfg {
             ("rfSelect", FieldValue::Unsigned(self.rfselect.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("ICAO", "uint32_t", 0, ""),
+        FieldInfo::new("stallSpeed", "uint16_t", 0, "cm/s"),
+        FieldInfo::new("callsign", "char", 9, ""),
+        FieldInfo::new("emitterType", "uint8_t", 0, ""),
+        FieldInfo::new("aircraftSize", "uint8_t", 0, ""),
+        FieldInfo::new("gpsOffsetLat", "uint8_t", 0, ""),
+        FieldInfo::new("gpsOffsetLon", "uint8_t", 0, ""),
+        FieldInfo::new("rfSelect", "uint8_t", 0, ""),
+    ];
 }
 
 /// Dynamic data used to generate ADS-B out transponder data (send at 5Hz)
@@ -35250,6 +38484,26 @@ impl UavionixAdsbOutDynamic {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("utcTime", "uint32_t", 0, "s"),
+        FieldInfo::new("gpsLat", "int32_t", 0, "degE7"),
+        FieldInfo::new("gpsLon", "int32_t", 0, "degE7"),
+        FieldInfo::new("gpsAlt", "int32_t", 0, "mm"),
+        FieldInfo::new("baroAltMSL", "int32_t", 0, "mbar"),
+        FieldInfo::new("accuracyHor", "uint32_t", 0, "mm"),
+        FieldInfo::new("accuracyVert", "uint16_t", 0, "cm"),
+        FieldInfo::new("accuracyVel", "uint16_t", 0, "mm/s"),
+        FieldInfo::new("velVert", "int16_t", 0, "cm/s"),
+        FieldInfo::new("velNS", "int16_t", 0, "cm/s"),
+        FieldInfo::new("VelEW", "int16_t", 0, "cm/s"),
+        FieldInfo::new("state", "uint16_t", 0, ""),
+        FieldInfo::new("squawk", "uint16_t", 0, ""),
+        FieldInfo::new("gpsFix", "uint8_t", 0, ""),
+        FieldInfo::new("numSats", "uint8_t", 0, ""),
+        FieldInfo::new("emergencyStatus", "uint8_t", 0, ""),
+    ];
 }
 
 /// Transceiver heartbeat with health report (updated every 10s)
@@ -35287,6 +38541,9 @@ impl UavionixAdsbTransceiverHealthReport {
     pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
         vec![("rfHealth", FieldValue::Unsigned(self.rfhealth.into()))]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[FieldInfo::new("rfHealth", "uint8_t", 0, "")];
 }
 
 /// Aircraft Registration.
@@ -35328,6 +38585,9 @@ impl UavionixAdsbOutCfgRegistration {
             FieldValue::UnsignedArray(self.registration.iter().map(|v| (*v).into()).collect()),
         )]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[FieldInfo::new("registration", "char", 9, "")];
 }
 
 /// Flight Identification for ADSB-Out vehicles.
@@ -35369,6 +38629,9 @@ impl UavionixAdsbOutCfgFlightid {
             FieldValue::UnsignedArray(self.flight_id.iter().map(|v| (*v).into()).collect()),
         )]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[FieldInfo::new("flight_id", "char", 9, "")];
 }
 
 /// Request messages.
@@ -35408,6 +38671,10 @@ impl UavionixAdsbGet {
             FieldValue::Unsigned(self.reqmessageid.into()),
         )]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] =
+        &[FieldInfo::new("ReqMessageId", "uint32_t", 0, "")];
 }
 
 /// Control message with all data sent in UCP control message.
@@ -35482,6 +38749,16 @@ impl UavionixAdsbOutControl {
             ("x_bit", FieldValue::Unsigned(self.x_bit.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("baroAltMSL", "int32_t", 0, "mbar"),
+        FieldInfo::new("squawk", "uint16_t", 0, ""),
+        FieldInfo::new("state", "uint8_t", 0, ""),
+        FieldInfo::new("emergencyStatus", "uint8_t", 0, ""),
+        FieldInfo::new("flight_id", "char", 8, ""),
+        FieldInfo::new("x_bit", "uint8_t", 0, ""),
+    ];
 }
 
 /// Status message with information from UCP Heartbeat and Status messages.
@@ -35553,6 +38830,16 @@ impl UavionixAdsbOutStatus {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("squawk", "uint16_t", 0, ""),
+        FieldInfo::new("state", "uint8_t", 0, ""),
+        FieldInfo::new("NIC_NACp", "uint8_t", 0, ""),
+        FieldInfo::new("boardTemp", "uint8_t", 0, ""),
+        FieldInfo::new("fault", "uint8_t", 0, ""),
+        FieldInfo::new("flight_id", "char", 8, ""),
+    ];
 }
 
 /// Composite EFI and Governor data from Loweheiser equipment. This message is created by the EFI unit based on its own data and data received from a governor attached to that EFI unit.
@@ -35722,6 +39009,33 @@ impl LoweheiserGovEfi {
             ("efi_index", FieldValue::Unsigned(self.efi_index.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("volt_batt", "float", 0, "V"),
+        FieldInfo::new("curr_batt", "float", 0, "A"),
+        FieldInfo::new("curr_gen", "float", 0, "A"),
+        FieldInfo::new("curr_rot", "float", 0, "A"),
+        FieldInfo::new("fuel_level", "float", 0, "l"),
+        FieldInfo::new("throttle", "float", 0, "%"),
+        FieldInfo::new("runtime", "uint32_t", 0, "s"),
+        FieldInfo::new("until_maintenance", "int32_t", 0, "s"),
+        FieldInfo::new("rectifier_temp", "float", 0, "degC"),
+        FieldInfo::new("generator_temp", "float", 0, "degC"),
+        FieldInfo::new("efi_batt", "float", 0, "V"),
+        FieldInfo::new("efi_rpm", "float", 0, "rpm"),
+        FieldInfo::new("efi_pw", "float", 0, "ms"),
+        FieldInfo::new("efi_fuel_flow", "float", 0, ""),
+        FieldInfo::new("efi_fuel_consumed", "float", 0, "l"),
+        FieldInfo::new("efi_baro", "float", 0, "kPa"),
+        FieldInfo::new("efi_mat", "float", 0, "degC"),
+        FieldInfo::new("efi_clt", "float", 0, "degC"),
+        FieldInfo::new("efi_tps", "float", 0, "%"),
+        FieldInfo::new("efi_exhaust_gas_temperature", "float", 0, "degC"),
+        FieldInfo::new("generator_status", "uint16_t", 0, ""),
+        FieldInfo::new("efi_status", "uint16_t", 0, ""),
+        FieldInfo::new("efi_index", "uint8_t", 0, ""),
+    ];
 }
 
 /// Read registers for a device.
@@ -35818,6 +39132,20 @@ impl DeviceOpRead {
             ("bank", FieldValue::Unsigned(self.bank.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("request_id", "uint32_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("bustype", "uint8_t", 0, ""),
+        FieldInfo::new("bus", "uint8_t", 0, ""),
+        FieldInfo::new("address", "uint8_t", 0, ""),
+        FieldInfo::new("busname", "char", 40, ""),
+        FieldInfo::new("regstart", "uint8_t", 0, ""),
+        FieldInfo::new("count", "uint8_t", 0, ""),
+        FieldInfo::new("bank", "uint8_t", 0, ""),
+    ];
 }
 
 /// Read registers reply.
@@ -35887,6 +39215,16 @@ impl DeviceOpReadReply {
             ("bank", FieldValue::Unsigned(self.bank.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("request_id", "uint32_t", 0, ""),
+        FieldInfo::new("result", "uint8_t", 0, ""),
+        FieldInfo::new("regstart", "uint8_t", 0, ""),
+        FieldInfo::new("count", "uint8_t", 0, ""),
+        FieldInfo::new("data", "uint8_t", 128, ""),
+        FieldInfo::new("bank", "uint8_t", 0, ""),
+    ];
 }
 
 /// Write registers for a device.
@@ -35993,6 +39331,21 @@ impl DeviceOpWrite {
             ("bank", FieldValue::Unsigned(self.bank.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("request_id", "uint32_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("bustype", "uint8_t", 0, ""),
+        FieldInfo::new("bus", "uint8_t", 0, ""),
+        FieldInfo::new("address", "uint8_t", 0, ""),
+        FieldInfo::new("busname", "char", 40, ""),
+        FieldInfo::new("regstart", "uint8_t", 0, ""),
+        FieldInfo::new("count", "uint8_t", 0, ""),
+        FieldInfo::new("data", "uint8_t", 128, ""),
+        FieldInfo::new("bank", "uint8_t", 0, ""),
+    ];
 }
 
 /// Write registers reply.
@@ -36036,6 +39389,12 @@ impl DeviceOpWriteReply {
             ("result", FieldValue::Unsigned(self.result.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("request_id", "uint32_t", 0, ""),
+        FieldInfo::new("result", "uint8_t", 0, ""),
+    ];
 }
 
 /// Send a secure command. Data should be signed with a private key corresponding with a public key known to the recipient. Signature should be over the concatenation of the sequence number (little-endian format), the operation (little-endian format) the data and the session key. For SECURE_COMMAND_GET_SESSION_KEY the session key should be zero length. The data array consists of the data followed by the signature. The sum of the data_length and the sig_length cannot be more than 220. The format of the data is command specific.
@@ -36116,6 +39475,17 @@ impl SecureCommand {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("sequence", "uint32_t", 0, ""),
+        FieldInfo::new("operation", "uint32_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("data_length", "uint8_t", 0, ""),
+        FieldInfo::new("sig_length", "uint8_t", 0, ""),
+        FieldInfo::new("data", "uint8_t", 220, ""),
+    ];
 }
 
 /// Reply from secure command.
@@ -36181,6 +39551,15 @@ impl SecureCommandReply {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("sequence", "uint32_t", 0, ""),
+        FieldInfo::new("operation", "uint32_t", 0, ""),
+        FieldInfo::new("result", "uint8_t", 0, ""),
+        FieldInfo::new("data_length", "uint8_t", 0, ""),
+        FieldInfo::new("data", "uint8_t", 220, ""),
+    ];
 }
 
 /// Adaptive Controller tuning information.
@@ -36280,6 +39659,23 @@ impl AdapTuning {
             ("axis", FieldValue::Unsigned(self.axis.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("desired", "float", 0, "deg/s"),
+        FieldInfo::new("achieved", "float", 0, "deg/s"),
+        FieldInfo::new("error", "float", 0, ""),
+        FieldInfo::new("theta", "float", 0, ""),
+        FieldInfo::new("omega", "float", 0, ""),
+        FieldInfo::new("sigma", "float", 0, ""),
+        FieldInfo::new("theta_dot", "float", 0, ""),
+        FieldInfo::new("omega_dot", "float", 0, ""),
+        FieldInfo::new("sigma_dot", "float", 0, ""),
+        FieldInfo::new("f", "float", 0, ""),
+        FieldInfo::new("f_dot", "float", 0, ""),
+        FieldInfo::new("u", "float", 0, ""),
+        FieldInfo::new("axis", "uint8_t", 0, ""),
+    ];
 }
 
 /// Camera vision based attitude and position deltas.
@@ -36351,6 +39747,15 @@ impl VisionPositionDelta {
             ("confidence", FieldValue::Float(self.confidence.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("time_delta_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("angle_delta", "float", 3, "rad"),
+        FieldInfo::new("position_delta", "float", 3, "m"),
+        FieldInfo::new("confidence", "float", 0, "%"),
+    ];
 }
 
 /// Angle of Attack and Side Slip Angle.
@@ -36399,6 +39804,13 @@ impl AoaSsa {
             ("SSA", FieldValue::Float(self.ssa.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("AOA", "float", 0, "deg"),
+        FieldInfo::new("SSA", "float", 0, "deg"),
+    ];
 }
 
 /// ESC Telemetry Data for ESCs 1 to 4, matching data sent by BLHeli ESCs.
@@ -36492,6 +39904,16 @@ impl EscTelemetry1To4 {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("voltage", "uint16_t", 4, "cV"),
+        FieldInfo::new("current", "uint16_t", 4, "cA"),
+        FieldInfo::new("totalcurrent", "uint16_t", 4, "mAh"),
+        FieldInfo::new("rpm", "uint16_t", 4, "rpm"),
+        FieldInfo::new("count", "uint16_t", 4, ""),
+        FieldInfo::new("temperature", "uint8_t", 4, "degC"),
+    ];
 }
 
 /// ESC Telemetry Data for ESCs 5 to 8, matching data sent by BLHeli ESCs.
@@ -36585,6 +40007,16 @@ impl EscTelemetry5To8 {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("voltage", "uint16_t", 4, "cV"),
+        FieldInfo::new("current", "uint16_t", 4, "cA"),
+        FieldInfo::new("totalcurrent", "uint16_t", 4, "mAh"),
+        FieldInfo::new("rpm", "uint16_t", 4, "rpm"),
+        FieldInfo::new("count", "uint16_t", 4, ""),
+        FieldInfo::new("temperature", "uint8_t", 4, "degC"),
+    ];
 }
 
 /// ESC Telemetry Data for ESCs 9 to 12, matching data sent by BLHeli ESCs.
@@ -36678,6 +40110,16 @@ impl EscTelemetry9To12 {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("voltage", "uint16_t", 4, "cV"),
+        FieldInfo::new("current", "uint16_t", 4, "cA"),
+        FieldInfo::new("totalcurrent", "uint16_t", 4, "mAh"),
+        FieldInfo::new("rpm", "uint16_t", 4, "rpm"),
+        FieldInfo::new("count", "uint16_t", 4, ""),
+        FieldInfo::new("temperature", "uint8_t", 4, "degC"),
+    ];
 }
 
 /// Configure an OSD parameter slot.
@@ -36773,6 +40215,20 @@ impl OsdParamConfig {
             ("config_type", FieldValue::Unsigned(self.config_type.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("request_id", "uint32_t", 0, ""),
+        FieldInfo::new("min_value", "float", 0, ""),
+        FieldInfo::new("max_value", "float", 0, ""),
+        FieldInfo::new("increment", "float", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("osd_screen", "uint8_t", 0, ""),
+        FieldInfo::new("osd_index", "uint8_t", 0, ""),
+        FieldInfo::new("param_id", "char", 16, ""),
+        FieldInfo::new("config_type", "uint8_t", 0, ""),
+    ];
 }
 
 /// Configure OSD parameter reply.
@@ -36817,6 +40273,12 @@ impl OsdParamConfigReply {
             ("result", FieldValue::Unsigned(self.result.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("request_id", "uint32_t", 0, ""),
+        FieldInfo::new("result", "uint8_t", 0, ""),
+    ];
 }
 
 /// Read a configured an OSD parameter slot.
@@ -36881,6 +40343,15 @@ impl OsdParamShowConfig {
             ("osd_index", FieldValue::Unsigned(self.osd_index.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("request_id", "uint32_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("osd_screen", "uint8_t", 0, ""),
+        FieldInfo::new("osd_index", "uint8_t", 0, ""),
+    ];
 }
 
 /// Read configured OSD parameter reply.
@@ -36956,6 +40427,17 @@ impl OsdParamShowConfigReply {
             ("config_type", FieldValue::Unsigned(self.config_type.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("request_id", "uint32_t", 0, ""),
+        FieldInfo::new("min_value", "float", 0, ""),
+        FieldInfo::new("max_value", "float", 0, ""),
+        FieldInfo::new("increment", "float", 0, ""),
+        FieldInfo::new("result", "uint8_t", 0, ""),
+        FieldInfo::new("param_id", "char", 16, ""),
+        FieldInfo::new("config_type", "uint8_t", 0, ""),
+    ];
 }
 
 /// Obstacle located as a 3D vector.
@@ -37039,6 +40521,19 @@ impl ObstacleDistance3d {
             ("frame", FieldValue::Unsigned(self.frame.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("x", "float", 0, "m"),
+        FieldInfo::new("y", "float", 0, "m"),
+        FieldInfo::new("z", "float", 0, "m"),
+        FieldInfo::new("min_distance", "float", 0, "m"),
+        FieldInfo::new("max_distance", "float", 0, "m"),
+        FieldInfo::new("obstacle_id", "uint16_t", 0, ""),
+        FieldInfo::new("sensor_type", "uint8_t", 0, ""),
+        FieldInfo::new("frame", "uint8_t", 0, ""),
+    ];
 }
 
 /// Water depth
@@ -37130,6 +40625,21 @@ impl WaterDepth {
             ("healthy", FieldValue::Unsigned(self.healthy.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lng", "int32_t", 0, "degE7"),
+        FieldInfo::new("alt", "float", 0, "m"),
+        FieldInfo::new("roll", "float", 0, "rad"),
+        FieldInfo::new("pitch", "float", 0, "rad"),
+        FieldInfo::new("yaw", "float", 0, "rad"),
+        FieldInfo::new("distance", "float", 0, "m"),
+        FieldInfo::new("temperature", "float", 0, "degC"),
+        FieldInfo::new("id", "uint8_t", 0, ""),
+        FieldInfo::new("healthy", "uint8_t", 0, ""),
+    ];
 }
 
 /// The MCU status, giving MCU temperature and voltage. The min and max voltages are to allow for detecting power supply instability.
@@ -37197,6 +40707,15 @@ impl McuStatus {
             ("id", FieldValue::Unsigned(self.id.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("MCU_temperature", "int16_t", 0, "cdegC"),
+        FieldInfo::new("MCU_voltage", "uint16_t", 0, "mV"),
+        FieldInfo::new("MCU_voltage_min", "uint16_t", 0, "mV"),
+        FieldInfo::new("MCU_voltage_max", "uint16_t", 0, "mV"),
+        FieldInfo::new("id", "uint8_t", 0, ""),
+    ];
 }
 
 /// ESC Telemetry Data for ESCs 13 to 16, matching data sent by BLHeli ESCs.
@@ -37290,6 +40809,16 @@ impl EscTelemetry13To16 {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("voltage", "uint16_t", 4, "cV"),
+        FieldInfo::new("current", "uint16_t", 4, "cA"),
+        FieldInfo::new("totalcurrent", "uint16_t", 4, "mAh"),
+        FieldInfo::new("rpm", "uint16_t", 4, "rpm"),
+        FieldInfo::new("count", "uint16_t", 4, ""),
+        FieldInfo::new("temperature", "uint8_t", 4, "degC"),
+    ];
 }
 
 /// ESC Telemetry Data for ESCs 17 to 20, matching data sent by BLHeli ESCs.
@@ -37383,6 +40912,16 @@ impl EscTelemetry17To20 {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("voltage", "uint16_t", 4, "cV"),
+        FieldInfo::new("current", "uint16_t", 4, "cA"),
+        FieldInfo::new("totalcurrent", "uint16_t", 4, "mAh"),
+        FieldInfo::new("rpm", "uint16_t", 4, "rpm"),
+        FieldInfo::new("count", "uint16_t", 4, ""),
+        FieldInfo::new("temperature", "uint8_t", 4, "degC"),
+    ];
 }
 
 /// ESC Telemetry Data for ESCs 21 to 24, matching data sent by BLHeli ESCs.
@@ -37476,6 +41015,16 @@ impl EscTelemetry21To24 {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("voltage", "uint16_t", 4, "cV"),
+        FieldInfo::new("current", "uint16_t", 4, "cA"),
+        FieldInfo::new("totalcurrent", "uint16_t", 4, "mAh"),
+        FieldInfo::new("rpm", "uint16_t", 4, "rpm"),
+        FieldInfo::new("count", "uint16_t", 4, ""),
+        FieldInfo::new("temperature", "uint8_t", 4, "degC"),
+    ];
 }
 
 /// ESC Telemetry Data for ESCs 25 to 28, matching data sent by BLHeli ESCs.
@@ -37569,6 +41118,16 @@ impl EscTelemetry25To28 {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("voltage", "uint16_t", 4, "cV"),
+        FieldInfo::new("current", "uint16_t", 4, "cA"),
+        FieldInfo::new("totalcurrent", "uint16_t", 4, "mAh"),
+        FieldInfo::new("rpm", "uint16_t", 4, "rpm"),
+        FieldInfo::new("count", "uint16_t", 4, ""),
+        FieldInfo::new("temperature", "uint8_t", 4, "degC"),
+    ];
 }
 
 /// ESC Telemetry Data for ESCs 29 to 32, matching data sent by BLHeli ESCs.
@@ -37662,6 +41221,16 @@ impl EscTelemetry29To32 {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("voltage", "uint16_t", 4, "cV"),
+        FieldInfo::new("current", "uint16_t", 4, "cA"),
+        FieldInfo::new("totalcurrent", "uint16_t", 4, "mAh"),
+        FieldInfo::new("rpm", "uint16_t", 4, "rpm"),
+        FieldInfo::new("count", "uint16_t", 4, ""),
+        FieldInfo::new("temperature", "uint8_t", 4, "degC"),
+    ];
 }
 
 /// Send a key-value pair as string. The use of this message is discouraged for normal packets, but a quite efficient way for testing new messages and getting experimental debug output.
@@ -37723,6 +41292,13 @@ impl NamedValueString {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("name", "char", 10, ""),
+        FieldInfo::new("value", "char", 64, ""),
+    ];
 }
 
 /// Data for filling the OpenDroneID Basic ID message. This and the below messages are primarily meant for feeding data to/from an OpenDroneID implementation. E.g. https://github.com/opendroneid/opendroneid-core-c. These messages are compatible with the ASTM F3411 Remote ID standard and the ASD-STAN prEN 4709-002 Direct Remote ID standard. Additional information and usage of these messages is documented at https://mavlink.io/en/services/opendroneid.html.
@@ -37804,6 +41380,16 @@ impl OpenDroneIdBasicId {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("id_or_mac", "uint8_t", 20, ""),
+        FieldInfo::new("id_type", "uint8_t", 0, ""),
+        FieldInfo::new("ua_type", "uint8_t", 0, ""),
+        FieldInfo::new("uas_id", "uint8_t", 20, ""),
+    ];
 }
 
 /// Data for filling the OpenDroneID Location message. The float data types are 32-bit IEEE 754. The Location message provides the location, altitude, direction and speed of the aircraft.
@@ -37980,6 +41566,29 @@ impl OpenDroneIdLocation {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("latitude", "int32_t", 0, "degE7"),
+        FieldInfo::new("longitude", "int32_t", 0, "degE7"),
+        FieldInfo::new("altitude_barometric", "float", 0, "m"),
+        FieldInfo::new("altitude_geodetic", "float", 0, "m"),
+        FieldInfo::new("height", "float", 0, "m"),
+        FieldInfo::new("timestamp", "float", 0, "s"),
+        FieldInfo::new("direction", "uint16_t", 0, "cdeg"),
+        FieldInfo::new("speed_horizontal", "uint16_t", 0, "cm/s"),
+        FieldInfo::new("speed_vertical", "int16_t", 0, "cm/s"),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("id_or_mac", "uint8_t", 20, ""),
+        FieldInfo::new("status", "uint8_t", 0, ""),
+        FieldInfo::new("height_reference", "uint8_t", 0, ""),
+        FieldInfo::new("horizontal_accuracy", "uint8_t", 0, ""),
+        FieldInfo::new("vertical_accuracy", "uint8_t", 0, ""),
+        FieldInfo::new("barometer_accuracy", "uint8_t", 0, ""),
+        FieldInfo::new("speed_accuracy", "uint8_t", 0, ""),
+        FieldInfo::new("timestamp_accuracy", "uint8_t", 0, ""),
+    ];
 }
 
 /// Data for filling the OpenDroneID Authentication message. The Authentication Message defines a field that can provide a means of authenticity for the identity of the UAS (Unmanned Aircraft System). The Authentication message can have two different formats. For data page 0, the fields PageCount, Length and TimeStamp are present and AuthData is only 17 bytes. For data page 1 through 15, PageCount, Length and TimeStamp are not present and the size of AuthData is 23 bytes.
@@ -38086,6 +41695,19 @@ impl OpenDroneIdAuthentication {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("timestamp", "uint32_t", 0, "s"),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("id_or_mac", "uint8_t", 20, ""),
+        FieldInfo::new("authentication_type", "uint8_t", 0, ""),
+        FieldInfo::new("data_page", "uint8_t", 0, ""),
+        FieldInfo::new("last_page_index", "uint8_t", 0, ""),
+        FieldInfo::new("length", "uint8_t", 0, "bytes"),
+        FieldInfo::new("authentication_data", "uint8_t", 23, ""),
+    ];
 }
 
 /// Data for filling the OpenDroneID Self ID message. The Self ID Message is an opportunity for the operator to (optionally) declare their identity and purpose of the flight. This message can provide additional information that could reduce the threat profile of a UA (Unmanned Aircraft) flying in a particular area or manner. This message can also be used to provide optional additional clarification in an emergency/remote ID system failure situation.
@@ -38164,6 +41786,15 @@ impl OpenDroneIdSelfId {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("id_or_mac", "uint8_t", 20, ""),
+        FieldInfo::new("description_type", "uint8_t", 0, ""),
+        FieldInfo::new("description", "char", 23, ""),
+    ];
 }
 
 /// Data for filling the OpenDroneID System message. The System Message contains general system information including the operator location/altitude and possible aircraft group and/or category/class information.
@@ -38302,6 +41933,25 @@ impl OpenDroneIdSystem {
             ("class_eu", FieldValue::Unsigned(self.class_eu.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("operator_latitude", "int32_t", 0, "degE7"),
+        FieldInfo::new("operator_longitude", "int32_t", 0, "degE7"),
+        FieldInfo::new("area_ceiling", "float", 0, "m"),
+        FieldInfo::new("area_floor", "float", 0, "m"),
+        FieldInfo::new("operator_altitude_geo", "float", 0, "m"),
+        FieldInfo::new("timestamp", "uint32_t", 0, "s"),
+        FieldInfo::new("area_count", "uint16_t", 0, ""),
+        FieldInfo::new("area_radius", "uint16_t", 0, "m"),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("id_or_mac", "uint8_t", 20, ""),
+        FieldInfo::new("operator_location_type", "uint8_t", 0, ""),
+        FieldInfo::new("classification_type", "uint8_t", 0, ""),
+        FieldInfo::new("category_eu", "uint8_t", 0, ""),
+        FieldInfo::new("class_eu", "uint8_t", 0, ""),
+    ];
 }
 
 /// Data for filling the OpenDroneID Operator ID message, which contains the CAA (Civil Aviation Authority) issued operator ID.
@@ -38380,6 +42030,15 @@ impl OpenDroneIdOperatorId {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("id_or_mac", "uint8_t", 20, ""),
+        FieldInfo::new("operator_id_type", "uint8_t", 0, ""),
+        FieldInfo::new("operator_id", "char", 20, ""),
+    ];
 }
 
 /// An OpenDroneID message pack is a container for multiple encoded OpenDroneID messages (i.e. not in the format given for the above message descriptions but after encoding into the compressed OpenDroneID byte format). Used e.g. when transmitting on Bluetooth 5.0 Long Range/Extended Advertising or on WiFi Neighbor Aware Networking or on WiFi Beacon.
@@ -38465,6 +42124,16 @@ impl OpenDroneIdMessagePack {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("id_or_mac", "uint8_t", 20, ""),
+        FieldInfo::new("single_message_size", "uint8_t", 0, "bytes"),
+        FieldInfo::new("msg_pack_size", "uint8_t", 0, ""),
+        FieldInfo::new("messages", "uint8_t", 225, ""),
+    ];
 }
 
 /// Status from the transmitter telling the flight controller if the remote ID system is ready for arming.
@@ -38514,6 +42183,12 @@ impl OpenDroneIdArmStatus {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("status", "uint8_t", 0, ""),
+        FieldInfo::new("error", "char", 50, ""),
+    ];
 }
 
 /// Update the data in the OPEN_DRONE_ID_SYSTEM message with new location information. This can be sent to update the location information for the operator when no other information in the SYSTEM message has changed. This message allows for efficient operation on radio links which have limited uplink bandwidth while meeting requirements for update frequency of the operator location.
@@ -38592,6 +42267,16 @@ impl OpenDroneIdSystemUpdate {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("operator_latitude", "int32_t", 0, "degE7"),
+        FieldInfo::new("operator_longitude", "int32_t", 0, "degE7"),
+        FieldInfo::new("operator_altitude_geo", "float", 0, "m"),
+        FieldInfo::new("timestamp", "uint32_t", 0, "s"),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+    ];
 }
 
 /// Temperature and humidity from hygrometer.
@@ -38640,6 +42325,13 @@ impl HygrometerSensor {
             ("id", FieldValue::Unsigned(self.id.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("temperature", "int16_t", 0, "cdegC"),
+        FieldInfo::new("humidity", "uint16_t", 0, "c%"),
+        FieldInfo::new("id", "uint8_t", 0, ""),
+    ];
 }
 
 /// Test all field types
@@ -38835,6 +42527,32 @@ impl TestTypes {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("u64", "uint64_t", 0, ""),
+        FieldInfo::new("s64", "int64_t", 0, ""),
+        FieldInfo::new("d", "double", 0, ""),
+        FieldInfo::new("u64_array", "uint64_t", 3, ""),
+        FieldInfo::new("s64_array", "int64_t", 3, ""),
+        FieldInfo::new("d_array", "double", 3, ""),
+        FieldInfo::new("u32", "uint32_t", 0, ""),
+        FieldInfo::new("s32", "int32_t", 0, ""),
+        FieldInfo::new("f", "float", 0, ""),
+        FieldInfo::new("u32_array", "uint32_t", 3, ""),
+        FieldInfo::new("s32_array", "int32_t", 3, ""),
+        FieldInfo::new("f_array", "float", 3, ""),
+        FieldInfo::new("u16", "uint16_t", 0, ""),
+        FieldInfo::new("s16", "int16_t", 0, ""),
+        FieldInfo::new("u16_array", "uint16_t", 3, ""),
+        FieldInfo::new("s16_array", "int16_t", 3, ""),
+        FieldInfo::new("c", "char", 0, ""),
+        FieldInfo::new("s", "char", 10, ""),
+        FieldInfo::new("u8", "uint8_t", 0, ""),
+        FieldInfo::new("s8", "int8_t", 0, ""),
+        FieldInfo::new("u8_array", "uint8_t", 3, ""),
+        FieldInfo::new("s8_array", "int8_t", 3, ""),
+    ];
 }
 
 /// Array test #0.
@@ -38913,6 +42631,15 @@ impl ArrayTest0 {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("ar_u32", "uint32_t", 4, ""),
+        FieldInfo::new("ar_u16", "uint16_t", 4, ""),
+        FieldInfo::new("v1", "uint8_t", 0, ""),
+        FieldInfo::new("ar_i8", "int8_t", 4, ""),
+        FieldInfo::new("ar_u8", "uint8_t", 4, ""),
+    ];
 }
 
 /// Array test #1.
@@ -38954,6 +42681,9 @@ impl ArrayTest1 {
             FieldValue::UnsignedArray(self.ar_u32.iter().map(|v| (*v).into()).collect()),
         )]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[FieldInfo::new("ar_u32", "uint32_t", 4, "")];
 }
 
 /// Array test #3.
@@ -39002,6 +42732,12 @@ impl ArrayTest3 {
             ("v", FieldValue::Unsigned(self.v.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("ar_u32", "uint32_t", 4, ""),
+        FieldInfo::new("v", "uint8_t", 0, ""),
+    ];
 }
 
 /// Array test #4.
@@ -39050,6 +42786,12 @@ impl ArrayTest4 {
             ("v", FieldValue::Unsigned(self.v.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("ar_u32", "uint32_t", 4, ""),
+        FieldInfo::new("v", "uint8_t", 0, ""),
+    ];
 }
 
 /// Array test #5.
@@ -39103,6 +42845,12 @@ impl ArrayTest5 {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("c1", "char", 5, ""),
+        FieldInfo::new("c2", "char", 5, ""),
+    ];
 }
 
 /// Array test #6.
@@ -39238,6 +42986,22 @@ impl ArrayTest6 {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("ar_d", "double", 2, ""),
+        FieldInfo::new("v3", "uint32_t", 0, ""),
+        FieldInfo::new("ar_u32", "uint32_t", 2, ""),
+        FieldInfo::new("ar_i32", "int32_t", 2, ""),
+        FieldInfo::new("ar_f", "float", 2, ""),
+        FieldInfo::new("v2", "uint16_t", 0, ""),
+        FieldInfo::new("ar_u16", "uint16_t", 2, ""),
+        FieldInfo::new("ar_i16", "int16_t", 2, ""),
+        FieldInfo::new("v1", "uint8_t", 0, ""),
+        FieldInfo::new("ar_u8", "uint8_t", 2, ""),
+        FieldInfo::new("ar_i8", "int8_t", 2, ""),
+        FieldInfo::new("ar_c", "char", 32, ""),
+    ];
 }
 
 /// Array test #7.
@@ -39358,6 +43122,19 @@ impl ArrayTest7 {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("ar_d", "double", 2, ""),
+        FieldInfo::new("ar_f", "float", 2, ""),
+        FieldInfo::new("ar_u32", "uint32_t", 2, ""),
+        FieldInfo::new("ar_i32", "int32_t", 2, ""),
+        FieldInfo::new("ar_u16", "uint16_t", 2, ""),
+        FieldInfo::new("ar_i16", "int16_t", 2, ""),
+        FieldInfo::new("ar_u8", "uint8_t", 2, ""),
+        FieldInfo::new("ar_i8", "int8_t", 2, ""),
+        FieldInfo::new("ar_c", "char", 32, ""),
+    ];
 }
 
 /// Array test #8.
@@ -39413,6 +43190,13 @@ impl ArrayTest8 {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("ar_d", "double", 2, ""),
+        FieldInfo::new("v3", "uint32_t", 0, ""),
+        FieldInfo::new("ar_u16", "uint16_t", 2, ""),
+    ];
 }
 
 /// ICAROUS heartbeat
@@ -39450,6 +43234,9 @@ impl IcarousHeartbeat {
     pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
         vec![("status", FieldValue::Unsigned(self.status.into()))]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[FieldInfo::new("status", "uint8_t", 0, "")];
 }
 
 /// Kinematic multi bands (track) output from Daidalus
@@ -39568,6 +43355,26 @@ impl IcarousKinematicBands {
             ("type5", FieldValue::Unsigned(self.type5.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("min1", "float", 0, "deg"),
+        FieldInfo::new("max1", "float", 0, "deg"),
+        FieldInfo::new("min2", "float", 0, "deg"),
+        FieldInfo::new("max2", "float", 0, "deg"),
+        FieldInfo::new("min3", "float", 0, "deg"),
+        FieldInfo::new("max3", "float", 0, "deg"),
+        FieldInfo::new("min4", "float", 0, "deg"),
+        FieldInfo::new("max4", "float", 0, "deg"),
+        FieldInfo::new("min5", "float", 0, "deg"),
+        FieldInfo::new("max5", "float", 0, "deg"),
+        FieldInfo::new("numBands", "int8_t", 0, ""),
+        FieldInfo::new("type1", "uint8_t", 0, ""),
+        FieldInfo::new("type2", "uint8_t", 0, ""),
+        FieldInfo::new("type3", "uint8_t", 0, ""),
+        FieldInfo::new("type4", "uint8_t", 0, ""),
+        FieldInfo::new("type5", "uint8_t", 0, ""),
+    ];
 }
 
 /// Raw RC Data
@@ -39609,6 +43416,9 @@ impl CubepilotRawRc {
             FieldValue::UnsignedArray(self.rc_raw.iter().map(|v| (*v).into()).collect()),
         )]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[FieldInfo::new("rc_raw", "uint8_t", 32, "")];
 }
 
 /// Information about video stream
@@ -39693,6 +43503,18 @@ impl HerelinkVideoStreamInformation {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("framerate", "float", 0, "Hz"),
+        FieldInfo::new("bitrate", "uint32_t", 0, "bits/s"),
+        FieldInfo::new("resolution_h", "uint16_t", 0, "pix"),
+        FieldInfo::new("resolution_v", "uint16_t", 0, "pix"),
+        FieldInfo::new("rotation", "uint16_t", 0, "deg"),
+        FieldInfo::new("camera_id", "uint8_t", 0, ""),
+        FieldInfo::new("status", "uint8_t", 0, ""),
+        FieldInfo::new("uri", "char", 230, ""),
+    ];
 }
 
 /// Herelink Telemetry
@@ -39761,6 +43583,17 @@ impl HerelinkTelem {
             ("rssi", FieldValue::Unsigned(self.rssi.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("rf_freq", "uint32_t", 0, ""),
+        FieldInfo::new("link_bw", "uint32_t", 0, ""),
+        FieldInfo::new("link_rate", "uint32_t", 0, ""),
+        FieldInfo::new("snr", "int16_t", 0, ""),
+        FieldInfo::new("cpu_temp", "int16_t", 0, ""),
+        FieldInfo::new("board_temp", "int16_t", 0, ""),
+        FieldInfo::new("rssi", "uint8_t", 0, ""),
+    ];
 }
 
 /// Start firmware update with encapsulated data.
@@ -39820,6 +43653,14 @@ impl CubepilotFirmwareUpdateStart {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("size", "uint32_t", 0, "bytes"),
+        FieldInfo::new("crc", "uint32_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+    ];
 }
 
 /// offset response to encapsulated data.
@@ -39874,6 +43715,13 @@ impl CubepilotFirmwareUpdateResp {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("offset", "uint32_t", 0, "bytes"),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+    ];
 }
 
 /// Authorization package
@@ -39927,6 +43775,12 @@ impl AirlinkAuth {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("login", "char", 50, ""),
+        FieldInfo::new("password", "char", 50, ""),
+    ];
 }
 
 /// Response to the authorization request
@@ -39964,6 +43818,9 @@ impl AirlinkAuthResponse {
     pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
         vec![("resp_type", FieldValue::Unsigned(self.resp_type.into()))]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[FieldInfo::new("resp_type", "uint8_t", 0, "")];
 }
 
 /// Addition to message AUTOPILOT_STATE_FOR_GIMBAL_DEVICE.
@@ -40036,6 +43893,16 @@ impl AutopilotStateForGimbalDeviceExt {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_us", "uint64_t", 0, "us"),
+        FieldInfo::new("wind_x", "float", 0, "m/s"),
+        FieldInfo::new("wind_y", "float", 0, "m/s"),
+        FieldInfo::new("wind_correction_angle", "float", 0, "rad"),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+    ];
 }
 
 /// Information about a gimbal manager. This message should be requested by a ground station using MAV_CMD_REQUEST_MESSAGE. It mirrors some fields of the GIMBAL_DEVICE_INFORMATION message, but not all. If the additional information is desired, also GIMBAL_DEVICE_INFORMATION should be requested.
@@ -40122,6 +43989,19 @@ impl Storm32GimbalManagerInformation {
             ("gimbal_id", FieldValue::Unsigned(self.gimbal_id.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("device_cap_flags", "uint32_t", 0, ""),
+        FieldInfo::new("manager_cap_flags", "uint32_t", 0, ""),
+        FieldInfo::new("roll_min", "float", 0, "rad"),
+        FieldInfo::new("roll_max", "float", 0, "rad"),
+        FieldInfo::new("pitch_min", "float", 0, "rad"),
+        FieldInfo::new("pitch_max", "float", 0, "rad"),
+        FieldInfo::new("yaw_min", "float", 0, "rad"),
+        FieldInfo::new("yaw_max", "float", 0, "rad"),
+        FieldInfo::new("gimbal_id", "uint8_t", 0, ""),
+    ];
 }
 
 /// Message reporting the current status of a gimbal manager. This message should be broadcast at a low regular rate (e.g. 1 Hz, may be increase momentarily to e.g. 5 Hz for a period of 1 sec after a change).
@@ -40190,6 +44070,15 @@ impl Storm32GimbalManagerStatus {
             ("profile", FieldValue::Unsigned(self.profile.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("device_flags", "uint16_t", 0, ""),
+        FieldInfo::new("manager_flags", "uint16_t", 0, ""),
+        FieldInfo::new("gimbal_id", "uint8_t", 0, ""),
+        FieldInfo::new("supervisor", "uint8_t", 0, ""),
+        FieldInfo::new("profile", "uint8_t", 0, ""),
+    ];
 }
 
 /// Message to a gimbal manager to control the gimbal attitude. Angles and rates can be set to NaN according to use case. A gimbal device is never to react to this message.
@@ -40302,6 +44191,20 @@ impl Storm32GimbalManagerControl {
             ("client", FieldValue::Unsigned(self.client.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("q", "float", 4, ""),
+        FieldInfo::new("angular_velocity_x", "float", 0, "rad/s"),
+        FieldInfo::new("angular_velocity_y", "float", 0, "rad/s"),
+        FieldInfo::new("angular_velocity_z", "float", 0, "rad/s"),
+        FieldInfo::new("device_flags", "uint16_t", 0, ""),
+        FieldInfo::new("manager_flags", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("gimbal_id", "uint8_t", 0, ""),
+        FieldInfo::new("client", "uint8_t", 0, ""),
+    ];
 }
 
 /// Message to a gimbal manager to control the gimbal tilt and pan angles. Angles and rates can be set to NaN according to use case. A gimbal device is never to react to this message.
@@ -40400,6 +44303,20 @@ impl Storm32GimbalManagerControlPitchyaw {
             ("client", FieldValue::Unsigned(self.client.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("pitch", "float", 0, "rad"),
+        FieldInfo::new("yaw", "float", 0, "rad"),
+        FieldInfo::new("pitch_rate", "float", 0, "rad/s"),
+        FieldInfo::new("yaw_rate", "float", 0, "rad/s"),
+        FieldInfo::new("device_flags", "uint16_t", 0, ""),
+        FieldInfo::new("manager_flags", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("gimbal_id", "uint8_t", 0, ""),
+        FieldInfo::new("client", "uint8_t", 0, ""),
+    ];
 }
 
 /// Message to a gimbal manager to correct the gimbal roll angle. This message is typically used to manually correct for a tilted horizon in operation. A gimbal device is never to react to this message.
@@ -40465,6 +44382,15 @@ impl Storm32GimbalManagerCorrectRoll {
             ("client", FieldValue::Unsigned(self.client.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("roll", "float", 0, "rad"),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("gimbal_id", "uint8_t", 0, ""),
+        FieldInfo::new("client", "uint8_t", 0, ""),
+    ];
 }
 
 /// Information about the shot operation.
@@ -40509,6 +44435,12 @@ impl QshotStatus {
             ("shot_state", FieldValue::Unsigned(self.shot_state.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("mode", "uint16_t", 0, ""),
+        FieldInfo::new("shot_state", "uint16_t", 0, ""),
+    ];
 }
 
 /// Frsky SPort passthrough multi packet container.
@@ -40565,6 +44497,13 @@ impl FrskyPassthroughArray {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("count", "uint8_t", 0, ""),
+        FieldInfo::new("packet_buf", "uint8_t", 240, ""),
+    ];
 }
 
 /// Parameter multi param value container.
@@ -40634,6 +44573,15 @@ impl ParamValueArray {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("param_count", "uint16_t", 0, ""),
+        FieldInfo::new("param_index_first", "uint16_t", 0, ""),
+        FieldInfo::new("flags", "uint16_t", 0, ""),
+        FieldInfo::new("param_array_len", "uint8_t", 0, ""),
+        FieldInfo::new("packet_buf", "uint8_t", 248, ""),
+    ];
 }
 
 /// Radio link statistics for a MAVLink RC receiver or transmitter and other links. Tx: ground-side device, Rx: vehicle-side device. The message is normally emitted in regular time intervals upon each actual or expected reception of an over-the-air data packet on the link. A MAVLink RC receiver should emit it shortly after it emits a RADIO_RC_CHANNELS message (if it is emitting that message). Per default, rssi values are in MAVLink units: 0 represents weakest signal, 254 represents maximum signal, UINT8_MAX represents unknown. The RADIO_LINK_STATS_FLAGS_RSSI_DBM flag is set if the rssi units are negative dBm: 1..254 correspond to -1..-254 dBm, 0 represents no reception, UINT8_MAX represents unknown. The target_system field should normally be set to the system id of the system the link is connected to, typically the flight controller. The target_component field can normally be set to 0, so that all components of the system can receive the message. Note: The frequency fields are extensions to ensure that they are located at the end of the serialized payload and subject to MAVLink's trailing-zero trimming.
@@ -40756,6 +44704,26 @@ impl MlrsRadioLinkStats {
             ("frequency2", FieldValue::Float(self.frequency2.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("flags", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("rx_LQ_rc", "uint8_t", 0, "c%"),
+        FieldInfo::new("rx_LQ_ser", "uint8_t", 0, "c%"),
+        FieldInfo::new("rx_rssi1", "uint8_t", 0, ""),
+        FieldInfo::new("rx_snr1", "int8_t", 0, ""),
+        FieldInfo::new("tx_LQ_ser", "uint8_t", 0, "c%"),
+        FieldInfo::new("tx_rssi1", "uint8_t", 0, ""),
+        FieldInfo::new("tx_snr1", "int8_t", 0, ""),
+        FieldInfo::new("rx_rssi2", "uint8_t", 0, ""),
+        FieldInfo::new("rx_snr2", "int8_t", 0, ""),
+        FieldInfo::new("tx_rssi2", "uint8_t", 0, ""),
+        FieldInfo::new("tx_snr2", "int8_t", 0, ""),
+        FieldInfo::new("frequency1", "float", 0, "Hz"),
+        FieldInfo::new("frequency2", "float", 0, "Hz"),
+    ];
 }
 
 /// Radio link information. Tx: ground-side device, Rx: vehicle-side device. The values of the fields in this message do normally not or only slowly change with time, and for most times the message can be send at a low rate, like 0.2 Hz. If values change then the message should temporarily be send more often to inform the system about the changes. The target_system field should normally be set to the system id of the system the link is connected to, typically the flight controller. The target_component field can normally be set to 0, so that all components of the system can receive the message.
@@ -40894,6 +44862,24 @@ impl MlrsRadioLinkInformation {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("tx_frame_rate", "uint16_t", 0, "Hz"),
+        FieldInfo::new("rx_frame_rate", "uint16_t", 0, "Hz"),
+        FieldInfo::new("tx_ser_data_rate", "uint16_t", 0, ""),
+        FieldInfo::new("rx_ser_data_rate", "uint16_t", 0, ""),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("type", "uint8_t", 0, ""),
+        FieldInfo::new("mode", "uint8_t", 0, ""),
+        FieldInfo::new("tx_power", "int8_t", 0, "dBm"),
+        FieldInfo::new("rx_power", "int8_t", 0, "dBm"),
+        FieldInfo::new("mode_str", "char", 6, ""),
+        FieldInfo::new("band_str", "char", 6, ""),
+        FieldInfo::new("tx_receive_sensitivity", "uint8_t", 0, ""),
+        FieldInfo::new("rx_receive_sensitivity", "uint8_t", 0, ""),
+    ];
 }
 
 /// Injected by a radio link endpoint into the MAVLink stream for purposes of flow control. Should be emitted only by components with component id MAV_COMP_ID_TELEMETRY_RADIO.
@@ -40958,6 +44944,15 @@ impl MlrsRadioLinkFlowControl {
             ("txbuf", FieldValue::Unsigned(self.txbuf.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("tx_ser_rate", "uint16_t", 0, "bytes/s"),
+        FieldInfo::new("rx_ser_rate", "uint16_t", 0, "bytes/s"),
+        FieldInfo::new("tx_used_ser_bandwidth", "uint8_t", 0, "c%"),
+        FieldInfo::new("rx_used_ser_bandwidth", "uint8_t", 0, "c%"),
+        FieldInfo::new("txbuf", "uint8_t", 0, "c%"),
+    ];
 }
 
 /// AVSS PRS system status.
@@ -41028,6 +45023,15 @@ impl AvssPrsSysStatus {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("error_status", "uint32_t", 0, ""),
+        FieldInfo::new("battery_status", "uint32_t", 0, ""),
+        FieldInfo::new("arm_status", "uint8_t", 0, ""),
+        FieldInfo::new("charge_status", "uint8_t", 0, ""),
+    ];
 }
 
 /// Drone position.
@@ -41097,6 +45101,16 @@ impl AvssDronePosition {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("alt", "int32_t", 0, "mm"),
+        FieldInfo::new("ground_alt", "float", 0, "m"),
+        FieldInfo::new("barometer_alt", "float", 0, "m"),
+    ];
 }
 
 /// Drone IMU data. Quaternion order is w, x, y, z and a zero rotation would be expressed as (1 0 0 0).
@@ -41188,6 +45202,21 @@ impl AvssDroneImu {
             ("zgyro", FieldValue::Float(self.zgyro.into())),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("q1", "float", 0, ""),
+        FieldInfo::new("q2", "float", 0, ""),
+        FieldInfo::new("q3", "float", 0, ""),
+        FieldInfo::new("q4", "float", 0, ""),
+        FieldInfo::new("xacc", "float", 0, "m/s/s"),
+        FieldInfo::new("yacc", "float", 0, "m/s/s"),
+        FieldInfo::new("zacc", "float", 0, "m/s/s"),
+        FieldInfo::new("xgyro", "float", 0, "rad/s"),
+        FieldInfo::new("ygyro", "float", 0, "rad/s"),
+        FieldInfo::new("zgyro", "float", 0, "rad/s"),
+    ];
 }
 
 /// Drone operation mode.
@@ -41245,6 +45274,13 @@ impl AvssDroneOperationMode {
             ),
         ]
     }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("M300_operation_mode", "uint8_t", 0, ""),
+        FieldInfo::new("horsefly_operation_mode", "uint8_t", 0, ""),
+    ];
 }
 
 /// Any message in this dialect.
@@ -44291,6 +48327,372 @@ impl MavMessage {
             Self::AvssDronePosition(m) => m.fields(),
             Self::AvssDroneImu(m) => m.fields(),
             Self::AvssDroneOperationMode(m) => m.fields(),
+        }
+    }
+
+    /// Every field's XML type and units, in the order `fields` lists them.
+    #[must_use]
+    pub const fn field_info(&self) -> &'static [FieldInfo] {
+        match self {
+            Self::Heartbeat(_) => Heartbeat::FIELD_INFO,
+            Self::SysStatus(_) => SysStatus::FIELD_INFO,
+            Self::SystemTime(_) => SystemTime::FIELD_INFO,
+            Self::Ping(_) => Ping::FIELD_INFO,
+            Self::ChangeOperatorControl(_) => ChangeOperatorControl::FIELD_INFO,
+            Self::ChangeOperatorControlAck(_) => ChangeOperatorControlAck::FIELD_INFO,
+            Self::AuthKey(_) => AuthKey::FIELD_INFO,
+            Self::SetMode(_) => SetMode::FIELD_INFO,
+            Self::ParamRequestRead(_) => ParamRequestRead::FIELD_INFO,
+            Self::ParamRequestList(_) => ParamRequestList::FIELD_INFO,
+            Self::ParamValue(_) => ParamValue::FIELD_INFO,
+            Self::ParamSet(_) => ParamSet::FIELD_INFO,
+            Self::GpsRawInt(_) => GpsRawInt::FIELD_INFO,
+            Self::GpsStatus(_) => GpsStatus::FIELD_INFO,
+            Self::ScaledImu(_) => ScaledImu::FIELD_INFO,
+            Self::RawImu(_) => RawImu::FIELD_INFO,
+            Self::RawPressure(_) => RawPressure::FIELD_INFO,
+            Self::ScaledPressure(_) => ScaledPressure::FIELD_INFO,
+            Self::Attitude(_) => Attitude::FIELD_INFO,
+            Self::AttitudeQuaternion(_) => AttitudeQuaternion::FIELD_INFO,
+            Self::LocalPositionNed(_) => LocalPositionNed::FIELD_INFO,
+            Self::GlobalPositionInt(_) => GlobalPositionInt::FIELD_INFO,
+            Self::RcChannelsScaled(_) => RcChannelsScaled::FIELD_INFO,
+            Self::RcChannelsRaw(_) => RcChannelsRaw::FIELD_INFO,
+            Self::ServoOutputRaw(_) => ServoOutputRaw::FIELD_INFO,
+            Self::MissionRequestPartialList(_) => MissionRequestPartialList::FIELD_INFO,
+            Self::MissionWritePartialList(_) => MissionWritePartialList::FIELD_INFO,
+            Self::MissionItem(_) => MissionItem::FIELD_INFO,
+            Self::MissionRequest(_) => MissionRequest::FIELD_INFO,
+            Self::MissionSetCurrent(_) => MissionSetCurrent::FIELD_INFO,
+            Self::MissionCurrent(_) => MissionCurrent::FIELD_INFO,
+            Self::MissionRequestList(_) => MissionRequestList::FIELD_INFO,
+            Self::MissionCount(_) => MissionCount::FIELD_INFO,
+            Self::MissionClearAll(_) => MissionClearAll::FIELD_INFO,
+            Self::MissionItemReached(_) => MissionItemReached::FIELD_INFO,
+            Self::MissionAck(_) => MissionAck::FIELD_INFO,
+            Self::SetGpsGlobalOrigin(_) => SetGpsGlobalOrigin::FIELD_INFO,
+            Self::GpsGlobalOrigin(_) => GpsGlobalOrigin::FIELD_INFO,
+            Self::ParamMapRc(_) => ParamMapRc::FIELD_INFO,
+            Self::MissionRequestInt(_) => MissionRequestInt::FIELD_INFO,
+            Self::MissionChecksum(_) => MissionChecksum::FIELD_INFO,
+            Self::SafetySetAllowedArea(_) => SafetySetAllowedArea::FIELD_INFO,
+            Self::SafetyAllowedArea(_) => SafetyAllowedArea::FIELD_INFO,
+            Self::AttitudeQuaternionCov(_) => AttitudeQuaternionCov::FIELD_INFO,
+            Self::NavControllerOutput(_) => NavControllerOutput::FIELD_INFO,
+            Self::GlobalPositionIntCov(_) => GlobalPositionIntCov::FIELD_INFO,
+            Self::LocalPositionNedCov(_) => LocalPositionNedCov::FIELD_INFO,
+            Self::RcChannels(_) => RcChannels::FIELD_INFO,
+            Self::RequestDataStream(_) => RequestDataStream::FIELD_INFO,
+            Self::DataStream(_) => DataStream::FIELD_INFO,
+            Self::ManualControl(_) => ManualControl::FIELD_INFO,
+            Self::RcChannelsOverride(_) => RcChannelsOverride::FIELD_INFO,
+            Self::MissionItemInt(_) => MissionItemInt::FIELD_INFO,
+            Self::VfrHud(_) => VfrHud::FIELD_INFO,
+            Self::CommandInt(_) => CommandInt::FIELD_INFO,
+            Self::CommandLong(_) => CommandLong::FIELD_INFO,
+            Self::CommandAck(_) => CommandAck::FIELD_INFO,
+            Self::ManualSetpoint(_) => ManualSetpoint::FIELD_INFO,
+            Self::SetAttitudeTarget(_) => SetAttitudeTarget::FIELD_INFO,
+            Self::AttitudeTarget(_) => AttitudeTarget::FIELD_INFO,
+            Self::SetPositionTargetLocalNed(_) => SetPositionTargetLocalNed::FIELD_INFO,
+            Self::PositionTargetLocalNed(_) => PositionTargetLocalNed::FIELD_INFO,
+            Self::SetPositionTargetGlobalInt(_) => SetPositionTargetGlobalInt::FIELD_INFO,
+            Self::PositionTargetGlobalInt(_) => PositionTargetGlobalInt::FIELD_INFO,
+            Self::LocalPositionNedSystemGlobalOffset(_) => {
+                LocalPositionNedSystemGlobalOffset::FIELD_INFO
+            }
+            Self::HilState(_) => HilState::FIELD_INFO,
+            Self::HilControls(_) => HilControls::FIELD_INFO,
+            Self::HilRcInputsRaw(_) => HilRcInputsRaw::FIELD_INFO,
+            Self::HilActuatorControls(_) => HilActuatorControls::FIELD_INFO,
+            Self::OpticalFlow(_) => OpticalFlow::FIELD_INFO,
+            Self::GlobalVisionPositionEstimate(_) => GlobalVisionPositionEstimate::FIELD_INFO,
+            Self::VisionPositionEstimate(_) => VisionPositionEstimate::FIELD_INFO,
+            Self::VisionSpeedEstimate(_) => VisionSpeedEstimate::FIELD_INFO,
+            Self::ViconPositionEstimate(_) => ViconPositionEstimate::FIELD_INFO,
+            Self::HighresImu(_) => HighresImu::FIELD_INFO,
+            Self::OpticalFlowRad(_) => OpticalFlowRad::FIELD_INFO,
+            Self::HilSensor(_) => HilSensor::FIELD_INFO,
+            Self::SimState(_) => SimState::FIELD_INFO,
+            Self::RadioStatus(_) => RadioStatus::FIELD_INFO,
+            Self::FileTransferProtocol(_) => FileTransferProtocol::FIELD_INFO,
+            Self::Timesync(_) => Timesync::FIELD_INFO,
+            Self::CameraTrigger(_) => CameraTrigger::FIELD_INFO,
+            Self::HilGps(_) => HilGps::FIELD_INFO,
+            Self::HilOpticalFlow(_) => HilOpticalFlow::FIELD_INFO,
+            Self::HilStateQuaternion(_) => HilStateQuaternion::FIELD_INFO,
+            Self::ScaledImu2(_) => ScaledImu2::FIELD_INFO,
+            Self::LogRequestList(_) => LogRequestList::FIELD_INFO,
+            Self::LogEntry(_) => LogEntry::FIELD_INFO,
+            Self::LogRequestData(_) => LogRequestData::FIELD_INFO,
+            Self::LogData(_) => LogData::FIELD_INFO,
+            Self::LogErase(_) => LogErase::FIELD_INFO,
+            Self::LogRequestEnd(_) => LogRequestEnd::FIELD_INFO,
+            Self::GpsInjectData(_) => GpsInjectData::FIELD_INFO,
+            Self::Gps2Raw(_) => Gps2Raw::FIELD_INFO,
+            Self::PowerStatus(_) => PowerStatus::FIELD_INFO,
+            Self::SerialControl(_) => SerialControl::FIELD_INFO,
+            Self::GpsRtk(_) => GpsRtk::FIELD_INFO,
+            Self::Gps2Rtk(_) => Gps2Rtk::FIELD_INFO,
+            Self::ScaledImu3(_) => ScaledImu3::FIELD_INFO,
+            Self::DataTransmissionHandshake(_) => DataTransmissionHandshake::FIELD_INFO,
+            Self::EncapsulatedData(_) => EncapsulatedData::FIELD_INFO,
+            Self::DistanceSensor(_) => DistanceSensor::FIELD_INFO,
+            Self::TerrainRequest(_) => TerrainRequest::FIELD_INFO,
+            Self::TerrainData(_) => TerrainData::FIELD_INFO,
+            Self::TerrainCheck(_) => TerrainCheck::FIELD_INFO,
+            Self::TerrainReport(_) => TerrainReport::FIELD_INFO,
+            Self::ScaledPressure2(_) => ScaledPressure2::FIELD_INFO,
+            Self::AttPosMocap(_) => AttPosMocap::FIELD_INFO,
+            Self::SetActuatorControlTarget(_) => SetActuatorControlTarget::FIELD_INFO,
+            Self::ActuatorControlTarget(_) => ActuatorControlTarget::FIELD_INFO,
+            Self::Altitude(_) => Altitude::FIELD_INFO,
+            Self::ResourceRequest(_) => ResourceRequest::FIELD_INFO,
+            Self::ScaledPressure3(_) => ScaledPressure3::FIELD_INFO,
+            Self::FollowTarget(_) => FollowTarget::FIELD_INFO,
+            Self::ControlSystemState(_) => ControlSystemState::FIELD_INFO,
+            Self::BatteryStatus(_) => BatteryStatus::FIELD_INFO,
+            Self::AutopilotVersion(_) => AutopilotVersion::FIELD_INFO,
+            Self::LandingTarget(_) => LandingTarget::FIELD_INFO,
+            Self::SensorOffsets(_) => SensorOffsets::FIELD_INFO,
+            Self::SetMagOffsets(_) => SetMagOffsets::FIELD_INFO,
+            Self::Meminfo(_) => Meminfo::FIELD_INFO,
+            Self::ApAdc(_) => ApAdc::FIELD_INFO,
+            Self::DigicamConfigure(_) => DigicamConfigure::FIELD_INFO,
+            Self::DigicamControl(_) => DigicamControl::FIELD_INFO,
+            Self::MountConfigure(_) => MountConfigure::FIELD_INFO,
+            Self::MountControl(_) => MountControl::FIELD_INFO,
+            Self::MountStatus(_) => MountStatus::FIELD_INFO,
+            Self::FencePoint(_) => FencePoint::FIELD_INFO,
+            Self::FenceFetchPoint(_) => FenceFetchPoint::FIELD_INFO,
+            Self::FenceStatus(_) => FenceStatus::FIELD_INFO,
+            Self::Ahrs(_) => Ahrs::FIELD_INFO,
+            Self::Simstate(_) => Simstate::FIELD_INFO,
+            Self::Hwstatus(_) => Hwstatus::FIELD_INFO,
+            Self::Radio(_) => Radio::FIELD_INFO,
+            Self::LimitsStatus(_) => LimitsStatus::FIELD_INFO,
+            Self::Wind(_) => Wind::FIELD_INFO,
+            Self::Data16(_) => Data16::FIELD_INFO,
+            Self::Data32(_) => Data32::FIELD_INFO,
+            Self::Data64(_) => Data64::FIELD_INFO,
+            Self::Data96(_) => Data96::FIELD_INFO,
+            Self::Rangefinder(_) => Rangefinder::FIELD_INFO,
+            Self::AirspeedAutocal(_) => AirspeedAutocal::FIELD_INFO,
+            Self::RallyPoint(_) => RallyPoint::FIELD_INFO,
+            Self::RallyFetchPoint(_) => RallyFetchPoint::FIELD_INFO,
+            Self::CompassmotStatus(_) => CompassmotStatus::FIELD_INFO,
+            Self::Ahrs2(_) => Ahrs2::FIELD_INFO,
+            Self::CameraStatus(_) => CameraStatus::FIELD_INFO,
+            Self::CameraFeedback(_) => CameraFeedback::FIELD_INFO,
+            Self::Battery2(_) => Battery2::FIELD_INFO,
+            Self::Ahrs3(_) => Ahrs3::FIELD_INFO,
+            Self::AutopilotVersionRequest(_) => AutopilotVersionRequest::FIELD_INFO,
+            Self::RemoteLogDataBlock(_) => RemoteLogDataBlock::FIELD_INFO,
+            Self::RemoteLogBlockStatus(_) => RemoteLogBlockStatus::FIELD_INFO,
+            Self::LedControl(_) => LedControl::FIELD_INFO,
+            Self::MagCalProgress(_) => MagCalProgress::FIELD_INFO,
+            Self::MagCalReport(_) => MagCalReport::FIELD_INFO,
+            Self::EkfStatusReport(_) => EkfStatusReport::FIELD_INFO,
+            Self::PidTuning(_) => PidTuning::FIELD_INFO,
+            Self::Deepstall(_) => Deepstall::FIELD_INFO,
+            Self::GimbalReport(_) => GimbalReport::FIELD_INFO,
+            Self::GimbalControl(_) => GimbalControl::FIELD_INFO,
+            Self::GimbalTorqueCmdReport(_) => GimbalTorqueCmdReport::FIELD_INFO,
+            Self::GoproHeartbeat(_) => GoproHeartbeat::FIELD_INFO,
+            Self::GoproGetRequest(_) => GoproGetRequest::FIELD_INFO,
+            Self::GoproGetResponse(_) => GoproGetResponse::FIELD_INFO,
+            Self::GoproSetRequest(_) => GoproSetRequest::FIELD_INFO,
+            Self::GoproSetResponse(_) => GoproSetResponse::FIELD_INFO,
+            Self::NavFilterBias(_) => NavFilterBias::FIELD_INFO,
+            Self::RadioCalibration(_) => RadioCalibration::FIELD_INFO,
+            Self::UalbertaSysStatus(_) => UalbertaSysStatus::FIELD_INFO,
+            Self::CommandIntStamped(_) => CommandIntStamped::FIELD_INFO,
+            Self::CommandLongStamped(_) => CommandLongStamped::FIELD_INFO,
+            Self::EfiStatus(_) => EfiStatus::FIELD_INFO,
+            Self::Rpm(_) => Rpm::FIELD_INFO,
+            Self::EstimatorStatus(_) => EstimatorStatus::FIELD_INFO,
+            Self::WindCov(_) => WindCov::FIELD_INFO,
+            Self::GpsInput(_) => GpsInput::FIELD_INFO,
+            Self::GpsRtcmData(_) => GpsRtcmData::FIELD_INFO,
+            Self::HighLatency(_) => HighLatency::FIELD_INFO,
+            Self::HighLatency2(_) => HighLatency2::FIELD_INFO,
+            Self::Vibration(_) => Vibration::FIELD_INFO,
+            Self::HomePosition(_) => HomePosition::FIELD_INFO,
+            Self::SetHomePosition(_) => SetHomePosition::FIELD_INFO,
+            Self::MessageInterval(_) => MessageInterval::FIELD_INFO,
+            Self::ExtendedSysState(_) => ExtendedSysState::FIELD_INFO,
+            Self::AdsbVehicle(_) => AdsbVehicle::FIELD_INFO,
+            Self::Collision(_) => Collision::FIELD_INFO,
+            Self::V2Extension(_) => V2Extension::FIELD_INFO,
+            Self::MemoryVect(_) => MemoryVect::FIELD_INFO,
+            Self::DebugVect(_) => DebugVect::FIELD_INFO,
+            Self::NamedValueFloat(_) => NamedValueFloat::FIELD_INFO,
+            Self::NamedValueInt(_) => NamedValueInt::FIELD_INFO,
+            Self::Statustext(_) => Statustext::FIELD_INFO,
+            Self::Debug(_) => Debug::FIELD_INFO,
+            Self::SetupSigning(_) => SetupSigning::FIELD_INFO,
+            Self::ButtonChange(_) => ButtonChange::FIELD_INFO,
+            Self::PlayTune(_) => PlayTune::FIELD_INFO,
+            Self::CameraInformation(_) => CameraInformation::FIELD_INFO,
+            Self::CameraSettings(_) => CameraSettings::FIELD_INFO,
+            Self::StorageInformation(_) => StorageInformation::FIELD_INFO,
+            Self::CameraCaptureStatus(_) => CameraCaptureStatus::FIELD_INFO,
+            Self::CameraImageCaptured(_) => CameraImageCaptured::FIELD_INFO,
+            Self::FlightInformation(_) => FlightInformation::FIELD_INFO,
+            Self::MountOrientation(_) => MountOrientation::FIELD_INFO,
+            Self::LoggingData(_) => LoggingData::FIELD_INFO,
+            Self::LoggingDataAcked(_) => LoggingDataAcked::FIELD_INFO,
+            Self::LoggingAck(_) => LoggingAck::FIELD_INFO,
+            Self::VideoStreamInformation(_) => VideoStreamInformation::FIELD_INFO,
+            Self::VideoStreamStatus(_) => VideoStreamStatus::FIELD_INFO,
+            Self::CameraFovStatus(_) => CameraFovStatus::FIELD_INFO,
+            Self::CameraTrackingImageStatus(_) => CameraTrackingImageStatus::FIELD_INFO,
+            Self::CameraTrackingGeoStatus(_) => CameraTrackingGeoStatus::FIELD_INFO,
+            Self::CameraThermalRange(_) => CameraThermalRange::FIELD_INFO,
+            Self::GimbalManagerInformation(_) => GimbalManagerInformation::FIELD_INFO,
+            Self::GimbalManagerStatus(_) => GimbalManagerStatus::FIELD_INFO,
+            Self::GimbalManagerSetAttitude(_) => GimbalManagerSetAttitude::FIELD_INFO,
+            Self::GimbalDeviceInformation(_) => GimbalDeviceInformation::FIELD_INFO,
+            Self::GimbalDeviceSetAttitude(_) => GimbalDeviceSetAttitude::FIELD_INFO,
+            Self::GimbalDeviceAttitudeStatus(_) => GimbalDeviceAttitudeStatus::FIELD_INFO,
+            Self::AutopilotStateForGimbalDevice(_) => AutopilotStateForGimbalDevice::FIELD_INFO,
+            Self::GimbalManagerSetPitchyaw(_) => GimbalManagerSetPitchyaw::FIELD_INFO,
+            Self::GimbalManagerSetManualControl(_) => GimbalManagerSetManualControl::FIELD_INFO,
+            Self::Airspeed(_) => Airspeed::FIELD_INFO,
+            Self::WifiConfigAp(_) => WifiConfigAp::FIELD_INFO,
+            Self::AisVessel(_) => AisVessel::FIELD_INFO,
+            Self::UavcanNodeStatus(_) => UavcanNodeStatus::FIELD_INFO,
+            Self::UavcanNodeInfo(_) => UavcanNodeInfo::FIELD_INFO,
+            Self::ParamExtRequestRead(_) => ParamExtRequestRead::FIELD_INFO,
+            Self::ParamExtRequestList(_) => ParamExtRequestList::FIELD_INFO,
+            Self::ParamExtValue(_) => ParamExtValue::FIELD_INFO,
+            Self::ParamExtSet(_) => ParamExtSet::FIELD_INFO,
+            Self::ParamExtAck(_) => ParamExtAck::FIELD_INFO,
+            Self::ObstacleDistance(_) => ObstacleDistance::FIELD_INFO,
+            Self::Odometry(_) => Odometry::FIELD_INFO,
+            Self::TrajectoryRepresentationWaypoints(_) => {
+                TrajectoryRepresentationWaypoints::FIELD_INFO
+            }
+            Self::TrajectoryRepresentationBezier(_) => TrajectoryRepresentationBezier::FIELD_INFO,
+            Self::IsbdLinkStatus(_) => IsbdLinkStatus::FIELD_INFO,
+            Self::RawRpm(_) => RawRpm::FIELD_INFO,
+            Self::UtmGlobalPosition(_) => UtmGlobalPosition::FIELD_INFO,
+            Self::ParamError(_) => ParamError::FIELD_INFO,
+            Self::DebugFloatArray(_) => DebugFloatArray::FIELD_INFO,
+            Self::SmartBatteryInfo(_) => SmartBatteryInfo::FIELD_INFO,
+            Self::GeneratorStatus(_) => GeneratorStatus::FIELD_INFO,
+            Self::ActuatorOutputStatus(_) => ActuatorOutputStatus::FIELD_INFO,
+            Self::RelayStatus(_) => RelayStatus::FIELD_INFO,
+            Self::Tunnel(_) => Tunnel::FIELD_INFO,
+            Self::CanFrame(_) => CanFrame::FIELD_INFO,
+            Self::CanfdFrame(_) => CanfdFrame::FIELD_INFO,
+            Self::CanFilterModify(_) => CanFilterModify::FIELD_INFO,
+            Self::RadioRcChannels(_) => RadioRcChannels::FIELD_INFO,
+            Self::AvailableModes(_) => AvailableModes::FIELD_INFO,
+            Self::CurrentMode(_) => CurrentMode::FIELD_INFO,
+            Self::AvailableModesMonitor(_) => AvailableModesMonitor::FIELD_INFO,
+            Self::GnssIntegrity(_) => GnssIntegrity::FIELD_INFO,
+            Self::SensPower(_) => SensPower::FIELD_INFO,
+            Self::SensMppt(_) => SensMppt::FIELD_INFO,
+            Self::AslctrlData(_) => AslctrlData::FIELD_INFO,
+            Self::AslctrlDebug(_) => AslctrlDebug::FIELD_INFO,
+            Self::AsluavStatus(_) => AsluavStatus::FIELD_INFO,
+            Self::EkfExt(_) => EkfExt::FIELD_INFO,
+            Self::AslObctrl(_) => AslObctrl::FIELD_INFO,
+            Self::SensAtmos(_) => SensAtmos::FIELD_INFO,
+            Self::SensBatmon(_) => SensBatmon::FIELD_INFO,
+            Self::FwSoaringData(_) => FwSoaringData::FIELD_INFO,
+            Self::SensorpodStatus(_) => SensorpodStatus::FIELD_INFO,
+            Self::SensPowerBoard(_) => SensPowerBoard::FIELD_INFO,
+            Self::GsmLinkStatus(_) => GsmLinkStatus::FIELD_INFO,
+            Self::SatcomLinkStatus(_) => SatcomLinkStatus::FIELD_INFO,
+            Self::SensorAirflowAngles(_) => SensorAirflowAngles::FIELD_INFO,
+            Self::WheelDistance(_) => WheelDistance::FIELD_INFO,
+            Self::WinchStatus(_) => WinchStatus::FIELD_INFO,
+            Self::UavionixAdsbOutCfg(_) => UavionixAdsbOutCfg::FIELD_INFO,
+            Self::UavionixAdsbOutDynamic(_) => UavionixAdsbOutDynamic::FIELD_INFO,
+            Self::UavionixAdsbTransceiverHealthReport(_) => {
+                UavionixAdsbTransceiverHealthReport::FIELD_INFO
+            }
+            Self::UavionixAdsbOutCfgRegistration(_) => UavionixAdsbOutCfgRegistration::FIELD_INFO,
+            Self::UavionixAdsbOutCfgFlightid(_) => UavionixAdsbOutCfgFlightid::FIELD_INFO,
+            Self::UavionixAdsbGet(_) => UavionixAdsbGet::FIELD_INFO,
+            Self::UavionixAdsbOutControl(_) => UavionixAdsbOutControl::FIELD_INFO,
+            Self::UavionixAdsbOutStatus(_) => UavionixAdsbOutStatus::FIELD_INFO,
+            Self::LoweheiserGovEfi(_) => LoweheiserGovEfi::FIELD_INFO,
+            Self::DeviceOpRead(_) => DeviceOpRead::FIELD_INFO,
+            Self::DeviceOpReadReply(_) => DeviceOpReadReply::FIELD_INFO,
+            Self::DeviceOpWrite(_) => DeviceOpWrite::FIELD_INFO,
+            Self::DeviceOpWriteReply(_) => DeviceOpWriteReply::FIELD_INFO,
+            Self::SecureCommand(_) => SecureCommand::FIELD_INFO,
+            Self::SecureCommandReply(_) => SecureCommandReply::FIELD_INFO,
+            Self::AdapTuning(_) => AdapTuning::FIELD_INFO,
+            Self::VisionPositionDelta(_) => VisionPositionDelta::FIELD_INFO,
+            Self::AoaSsa(_) => AoaSsa::FIELD_INFO,
+            Self::EscTelemetry1To4(_) => EscTelemetry1To4::FIELD_INFO,
+            Self::EscTelemetry5To8(_) => EscTelemetry5To8::FIELD_INFO,
+            Self::EscTelemetry9To12(_) => EscTelemetry9To12::FIELD_INFO,
+            Self::OsdParamConfig(_) => OsdParamConfig::FIELD_INFO,
+            Self::OsdParamConfigReply(_) => OsdParamConfigReply::FIELD_INFO,
+            Self::OsdParamShowConfig(_) => OsdParamShowConfig::FIELD_INFO,
+            Self::OsdParamShowConfigReply(_) => OsdParamShowConfigReply::FIELD_INFO,
+            Self::ObstacleDistance3d(_) => ObstacleDistance3d::FIELD_INFO,
+            Self::WaterDepth(_) => WaterDepth::FIELD_INFO,
+            Self::McuStatus(_) => McuStatus::FIELD_INFO,
+            Self::EscTelemetry13To16(_) => EscTelemetry13To16::FIELD_INFO,
+            Self::EscTelemetry17To20(_) => EscTelemetry17To20::FIELD_INFO,
+            Self::EscTelemetry21To24(_) => EscTelemetry21To24::FIELD_INFO,
+            Self::EscTelemetry25To28(_) => EscTelemetry25To28::FIELD_INFO,
+            Self::EscTelemetry29To32(_) => EscTelemetry29To32::FIELD_INFO,
+            Self::NamedValueString(_) => NamedValueString::FIELD_INFO,
+            Self::OpenDroneIdBasicId(_) => OpenDroneIdBasicId::FIELD_INFO,
+            Self::OpenDroneIdLocation(_) => OpenDroneIdLocation::FIELD_INFO,
+            Self::OpenDroneIdAuthentication(_) => OpenDroneIdAuthentication::FIELD_INFO,
+            Self::OpenDroneIdSelfId(_) => OpenDroneIdSelfId::FIELD_INFO,
+            Self::OpenDroneIdSystem(_) => OpenDroneIdSystem::FIELD_INFO,
+            Self::OpenDroneIdOperatorId(_) => OpenDroneIdOperatorId::FIELD_INFO,
+            Self::OpenDroneIdMessagePack(_) => OpenDroneIdMessagePack::FIELD_INFO,
+            Self::OpenDroneIdArmStatus(_) => OpenDroneIdArmStatus::FIELD_INFO,
+            Self::OpenDroneIdSystemUpdate(_) => OpenDroneIdSystemUpdate::FIELD_INFO,
+            Self::HygrometerSensor(_) => HygrometerSensor::FIELD_INFO,
+            Self::TestTypes(_) => TestTypes::FIELD_INFO,
+            Self::ArrayTest0(_) => ArrayTest0::FIELD_INFO,
+            Self::ArrayTest1(_) => ArrayTest1::FIELD_INFO,
+            Self::ArrayTest3(_) => ArrayTest3::FIELD_INFO,
+            Self::ArrayTest4(_) => ArrayTest4::FIELD_INFO,
+            Self::ArrayTest5(_) => ArrayTest5::FIELD_INFO,
+            Self::ArrayTest6(_) => ArrayTest6::FIELD_INFO,
+            Self::ArrayTest7(_) => ArrayTest7::FIELD_INFO,
+            Self::ArrayTest8(_) => ArrayTest8::FIELD_INFO,
+            Self::IcarousHeartbeat(_) => IcarousHeartbeat::FIELD_INFO,
+            Self::IcarousKinematicBands(_) => IcarousKinematicBands::FIELD_INFO,
+            Self::CubepilotRawRc(_) => CubepilotRawRc::FIELD_INFO,
+            Self::HerelinkVideoStreamInformation(_) => HerelinkVideoStreamInformation::FIELD_INFO,
+            Self::HerelinkTelem(_) => HerelinkTelem::FIELD_INFO,
+            Self::CubepilotFirmwareUpdateStart(_) => CubepilotFirmwareUpdateStart::FIELD_INFO,
+            Self::CubepilotFirmwareUpdateResp(_) => CubepilotFirmwareUpdateResp::FIELD_INFO,
+            Self::AirlinkAuth(_) => AirlinkAuth::FIELD_INFO,
+            Self::AirlinkAuthResponse(_) => AirlinkAuthResponse::FIELD_INFO,
+            Self::AutopilotStateForGimbalDeviceExt(_) => {
+                AutopilotStateForGimbalDeviceExt::FIELD_INFO
+            }
+            Self::Storm32GimbalManagerInformation(_) => Storm32GimbalManagerInformation::FIELD_INFO,
+            Self::Storm32GimbalManagerStatus(_) => Storm32GimbalManagerStatus::FIELD_INFO,
+            Self::Storm32GimbalManagerControl(_) => Storm32GimbalManagerControl::FIELD_INFO,
+            Self::Storm32GimbalManagerControlPitchyaw(_) => {
+                Storm32GimbalManagerControlPitchyaw::FIELD_INFO
+            }
+            Self::Storm32GimbalManagerCorrectRoll(_) => Storm32GimbalManagerCorrectRoll::FIELD_INFO,
+            Self::QshotStatus(_) => QshotStatus::FIELD_INFO,
+            Self::FrskyPassthroughArray(_) => FrskyPassthroughArray::FIELD_INFO,
+            Self::ParamValueArray(_) => ParamValueArray::FIELD_INFO,
+            Self::MlrsRadioLinkStats(_) => MlrsRadioLinkStats::FIELD_INFO,
+            Self::MlrsRadioLinkInformation(_) => MlrsRadioLinkInformation::FIELD_INFO,
+            Self::MlrsRadioLinkFlowControl(_) => MlrsRadioLinkFlowControl::FIELD_INFO,
+            Self::AvssPrsSysStatus(_) => AvssPrsSysStatus::FIELD_INFO,
+            Self::AvssDronePosition(_) => AvssDronePosition::FIELD_INFO,
+            Self::AvssDroneImu(_) => AvssDroneImu::FIELD_INFO,
+            Self::AvssDroneOperationMode(_) => AvssDroneOperationMode::FIELD_INFO,
         }
     }
 

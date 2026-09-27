@@ -35,7 +35,7 @@ setup printf '<?xml version="1.0" encoding="utf-8"?><Config><FirmwareFileDirecto
 
 screen setup
 window 1600x1200
-budget 13
+budget 18
 
 expect config.firmware_legacy.active false
 # Disconnected, InitialSetup lists Install Firmware Legacy after Install Firmware
@@ -125,6 +125,26 @@ expect config.firmware_legacy.url https://github.com/ArduPilot/binary/raw/master
 expect config.firmware_legacy.list failed
 expect config.firmware_legacy.history hidden
 click fwl-loading-close
+
+# Force Bootloader (ConfigFirmware.cs:619-639, the manifest page's handler line for line, and run
+# as that page runs it): Open(false) opens the window's link's serial port - here the one the port
+# box shows - and the port box on TCP is no serial port: "Failed to connect and send the reboot
+# command" on the status line (a box in the C#), nothing opened, the page still showing. The
+# reboot itself is proved through a real link in the unit tests (firmware_legacy.rs
+# force_bootloader_tests), not here; a serial port here would be refused while MP_FIRMWARE_DEVICE
+# names the device, whatever is plugged into this machine.
+expect config.firmware_legacy.force none
+click main-port
+expect link.ports >= 5
+reveal main-port-list main-port-TCP
+click main-port-TCP
+expect link.port TCP
+click fwl-px4bl
+expect status Failed to connect and send the reboot command
+expect config.firmware_legacy.force none
+expect config.firmware_legacy.message none
+expect vehicle.connected false
+expect config.firmware_legacy.active true
 
 # Choosing another entry deactivates the page.
 click setup-page-ConfigOptional

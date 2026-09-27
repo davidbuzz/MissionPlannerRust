@@ -10,12 +10,14 @@
 # each, in the .resx's order. Each opens a window of its own (ConfigAdvanced.cs:22-127). FFT's,
 # Controls/fftui.cs, is ported: FFT opens it with no vehicle (`new fftui().Show()`,
 # ConfigAdvanced.cs:114-117), and "Run all imus - IMU1-3 MSG" on testdata/dataflash.bin draws
-# the GYR and ACC graphs, as tests/gui/config-fft.gui has it from the FFT Setup page. The other
-# twelve are dimmed - the Warnings Manager, MAVLink Inspector, proximity, signing keys, MAVLink
-# mirror, NMEA output, Follow Me, parameter regeneration, moving base, log anonymiser,
-# spectrogram and support proxy windows are not in this application - and the script clicks
-# none of them; config/advanced.rs's tests hold the controls to the Designer and the .resx and
-# each handler to the window its row names.
+# the GYR and ACC graphs, as tests/gui/config-fft.gui has it from the FFT Setup page. The MAVLink
+# Inspector's, Controls/MAVLinkInspector.cs, is ported too, and its button is enabled; it lists
+# what a link carries, so tests/gui/config-mavlink-inspector.gui drives it with SITL and this
+# script does not click it. The other eleven are dimmed - the Warnings Manager, proximity,
+# signing keys, MAVLink mirror, NMEA output, Follow Me, parameter regeneration, moving base, log
+# anonymiser, spectrogram and support proxy windows are not in this application - and the script
+# clicks none of them; config/advanced.rs's tests hold the controls to the Designer and the .resx
+# and each handler to the window its row names.
 #
 # Run from the repository root, where the log's path is typed relative to.
 
@@ -37,8 +39,8 @@ expect config.advanced.text The following pages are for advanced configutation o
 expect config.advanced.buttons Warning Manager,MAVLink Inspector,Proximity,Mavlink Signing,Mavlink Mirror,NMEA,Follow Me,Param gen,Moving Base,Anon Log,FFT,Spectrogram,Support Proxy
 expect config.advanced.labels ~ Enable custom warnings based on a set of conditions|View decoded mavlink data
 expect config.advanced.labels ~ |Share connection with support engineer
-expect config.advanced.buttons.enabled FFT
-expect config.advanced.dimmed ~ but_mavinspector: the MAVLink Inspector window (Controls/MAVLinkInspector.cs) is not ported
+expect config.advanced.buttons.enabled MAVLink Inspector,FFT
+expect config.advanced.dimmed ~ but_warningmanager: the Warnings Manager window (Warnings/WarningsManager.cs) is not ported; but_proximity:
 expect config.advanced.dimmed ~ but_anonlog: anonymising a log (ExtLibs/Utilities/Privacy.cs) is not ported; BUT_spect:
 expect config.fft.window false
 

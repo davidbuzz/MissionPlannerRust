@@ -1807,6 +1807,31 @@ impl Telemetry {
         self.target().map(|(link, id)| (link.sender(), id))
     }
 
+    /// `MainV2.comPort.OnPacketReceived += handler` and `OnPacketSent += handler`: every packet
+    /// the link reads or writes, told to `handler` on the link thread until the subscription is
+    /// dropped. `None` with no link: the C#'s `comPort` is there before a connection, and a
+    /// subscriber that wants one asks again once there is ([`Telemetry::carries`]).
+    /// `// C#: Controls/MAVLinkInspector.cs:34, 427-428`
+    pub fn on_packet(
+        &self,
+        handler: impl FnMut(&mp_link::inspector::Packet) + Send + 'static,
+    ) -> Option<mp_link::inspector::PacketSubscription> {
+        self.link.as_ref().map(|link| link.on_packet(handler))
+    }
+
+    /// Whether `subscription` is to the link this telemetry has now: false once a connect or a
+    /// reopen has put another in its place, where the C#'s one `comPort` keeps its subscribers.
+    pub fn carries(&self, subscription: &mp_link::inspector::PacketSubscription) -> bool {
+        self.link
+            .as_ref()
+            .is_some_and(|link| link.carries(subscription))
+    }
+
+    /// Whether there is a link to subscribe to.
+    pub const fn has_link(&self) -> bool {
+        self.link.is_some()
+    }
+
     /// `MainV2.comPort.MAV.Camera`: the shown vehicle's camera, and the vehicle.
     /// `// C#: Controls/GimbalVideoControl.cs:53-63`
     pub fn camera(&self) -> Option<(VehicleId, mp_link::camera::Camera)> {

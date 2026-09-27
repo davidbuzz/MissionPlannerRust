@@ -82,6 +82,7 @@ pub mod fence_points;
 pub mod ftp;
 pub mod gimbal_manager;
 pub mod inject;
+pub mod inspector;
 pub mod messages;
 pub mod mission_transfer;
 pub mod param_download;
@@ -331,6 +332,8 @@ struct Shared {
     /// `CameraProtocol.VideoStreams`: every `VIDEO_STREAM_INFORMATION` a started camera reported,
     /// by its system, component and stream id.
     video_streams: Mutex<BTreeMap<(u8, u8, u8), mp_mavlink_dialects::all::VideoStreamInformation>>,
+    /// `OnPacketReceived` and `OnPacketSent`'s subscribers (see [`inspector`]).
+    packets: inspector::Subscribers,
 }
 
 /// A field the C#'s screens write into `MainV2.comPort.MAV.cs` from outside it.
@@ -1127,6 +1130,23 @@ impl Link {
         }
     }
 
+    /// `OnPacketReceived += handler` and `OnPacketSent += handler` at once: `handler` hears
+    /// every packet the link reads and every one it writes, [`inspector::Packet::sent`] telling
+    /// which, on the link thread, until the subscription is dropped - the C#'s `-=`.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:69-86, 114-130`
+    pub fn on_packet(
+        &self,
+        handler: impl FnMut(&inspector::Packet) + Send + 'static,
+    ) -> inspector::PacketSubscription {
+        inspector::PacketSubscription::new(&self.shared, Box::new(handler))
+    }
+
+    /// Whether `subscription` is to this link, rather than to one it replaced.
+    #[must_use]
+    pub fn carries(&self, subscription: &inspector::PacketSubscription) -> bool {
+        subscription.is_on(&self.shared)
+    }
+
     /// How the link describes itself right now, e.g. `udp:0.0.0.0:14550 <-> 127.0.0.1:52341`.
     #[must_use]
     pub fn description(&self) -> String {
@@ -1174,6 +1194,7 @@ fn forget_finished_requests(held: &mut BTreeMap<RequestId, Request>) {
 
 /// Encodes a message from this link, numbers it, and writes it to the transport and recording.
 fn send_message(
+    packets: &inspector::Subscribers,
     transport: &mut dyn Transport,
     recorder: Option<&mut tlog::TlogWriter>,
     stats: &mut LinkStats,
@@ -1202,7 +1223,7 @@ fn send_message(
     *tx_seq = tx_seq.wrapping_add(1);
     frame
         .get(..n)
-        .is_some_and(|bytes| send_frame(transport, recorder, stats, bytes))
+        .is_some_and(|bytes| send_frame(packets, transport, recorder, stats, bytes))
 }
 
 /// Writes a frame to the transport and to the recording, if one is running.
@@ -1213,6 +1234,7 @@ fn send_message(
 /// Sends everything queued with [`Link::send`] and its senders, re-stamping each frame's
 /// sequence number here, where it is owned.
 fn drain_outbound(
+    packets: &inspector::Subscribers,
     outbound: &std::sync::mpsc::Receiver<Vec<u8>>,
     tx_seq: &mut u8,
     transport: &mut dyn Transport,
@@ -1228,11 +1250,15 @@ fn drain_outbound(
         if let Some(fixed) = restamp_checksum(&bytes) {
             bytes = fixed;
         }
-        send_frame(transport, recorder.as_deref_mut(), stats, &bytes);
+        send_frame(packets, transport, recorder.as_deref_mut(), stats, &bytes);
     }
 }
 
+/// Writes one frame, records it, and tells the packet subscribers it went: `generatePacket`'s
+/// write, `SaveToTlog`, then `OnPacketSent`, which the C# raises once the write has not thrown.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1440-1461`
 fn send_frame(
+    packets: &inspector::Subscribers,
     transport: &mut dyn Transport,
     recorder: Option<&mut tlog::TlogWriter>,
     stats: &mut LinkStats,
@@ -1247,6 +1273,9 @@ fn send_frame(
         // A failed write to the log must not stop the link. The recording is a record of the
         // flight; the flight matters more.
         let _ = writer.write_frame(bytes);
+    }
+    if packets.any() {
+        packets.sent(bytes);
     }
     true
 }
@@ -1324,6 +1353,13 @@ fn run_link(
                             let _ = writer.write_frame(frame.raw);
                         }
                         if let Some(msg) = MavMessage::decode(frame.msgid, frame.payload) {
+                            // `OnPacketReceived`, for whoever listens: the MAVLink Inspector.
+                            // C#: MAVLinkInterface.cs:5367-5369
+                            if shared.packets.any() {
+                                shared.packets.notify(&inspector::Packet::received(
+                                    frame, msg, sent_at, arrived,
+                                ));
+                            }
                             let id = registry.apply_at(
                                 frame.sysid,
                                 frame.compid,
@@ -1802,6 +1838,7 @@ fn run_link(
                 // `getDatastream` sends each one twice. C#: MAVLinkInterface.cs:3262-3263
                 for _ in 0..2 {
                     send_message(
+                        &shared.packets,
                         transport.as_mut(),
                         recorder.as_mut(),
                         &mut stats,
@@ -1821,6 +1858,7 @@ fn run_link(
         protocols::tick(shared, Instant::now(), &mut protocol_starts, &mut protocol_sends);
         for message in protocol_sends.drain(..) {
             send_message(
+                &shared.packets,
                 transport.as_mut(),
                 recorder.as_mut(),
                 &mut stats,
@@ -1835,6 +1873,7 @@ fn run_link(
         ftp::tick(shared, Instant::now(), &mut ftp_sends);
         for (id, payload) in ftp_sends.drain(..) {
             send_message(
+                &shared.packets,
                 transport.as_mut(),
                 recorder.as_mut(),
                 &mut stats,
@@ -1876,6 +1915,7 @@ fn run_link(
                 Action::SendItems(items) => {
                     for item in items {
                         send_message(
+                            &shared.packets,
                             transport.as_mut(),
                             recorder.as_mut(),
                             &mut stats,
@@ -1905,6 +1945,7 @@ fn run_link(
                 Action::Nothing => continue,
             };
             send_message(
+                &shared.packets,
                 transport.as_mut(),
                 recorder.as_mut(),
                 &mut stats,
@@ -1932,6 +1973,7 @@ fn run_link(
                 ParamAction::Nothing => {}
                 ParamAction::RequestList => {
                     send_message(
+                        &shared.packets,
                         transport.as_mut(),
                         recorder.as_mut(),
                         &mut stats,
@@ -1945,6 +1987,7 @@ fn run_link(
                 ParamAction::RequestIndices(burst) => {
                     for index in burst.as_slice() {
                         send_message(
+                            &shared.packets,
                             transport.as_mut(),
                             recorder.as_mut(),
                             &mut stats,
@@ -1962,6 +2005,7 @@ fn run_link(
         // TakeOff's Guided and then its take-off - reached the vehicle take-off first when the
         // queue was drained only at the end of the pass, and ArduCopter refused it (2026-09-26).
         drain_outbound(
+            &shared.packets,
             outbound,
             &mut tx_seq,
             transport.as_mut(),
@@ -2019,6 +2063,7 @@ fn run_link(
             };
             for message in messages.iter().flatten() {
                 send_message(
+                    &shared.packets,
                     transport.as_mut(),
                     recorder.as_mut(),
                     &mut stats,
@@ -2084,7 +2129,13 @@ fn run_link(
             ) {
                 tx_seq = tx_seq.wrapping_add(1);
                 if let Some(bytes) = frame.get(..n) {
-                    send_frame(transport.as_mut(), recorder.as_mut(), &mut stats, bytes);
+                    send_frame(
+                        &shared.packets,
+                        transport.as_mut(),
+                        recorder.as_mut(),
+                        &mut stats,
+                        bytes,
+                    );
                 }
             }
             last_heartbeat = Instant::now();
@@ -2092,6 +2143,7 @@ fn run_link(
 
         // Outbound queue: what was queued during this pass.
         drain_outbound(
+            &shared.packets,
             outbound,
             &mut tx_seq,
             transport.as_mut(),

@@ -277,10 +277,11 @@ pub const PANELS: &[Panel] = &[
         //     updateDisplayName does; a vehicle's click asks, detects the board from the device
         //     list, chooses the entry's URL for it (CubeBlack, ChibiOS), downloads firmware.hex
         //     and reads it; Pick previous firmware from FirmwareHistory.txt, Beta firmwares, Load
-        //     custom firmware, and the three links; each stops where it would write to a board -
-        //     the upload and Force Bootloader are disabled, as nothing flashes in this build; not
-        //     Ctrl+Q or Ctrl+P, nor the bootloader probe on a device's arrival; the pictures are
-        //     the C#'s images (crate::pictures)",
+        //     custom firmware, and the three links; Force Bootloader over the window's link, the
+        //     manifest page's handler shared (config/force_bootloader.rs); each flow stops where
+        //     it would write to a board - this page's upload is not ported; not Ctrl+Q or Ctrl+P,
+        //     nor the bootloader probe on a device's arrival; the pictures are the C#'s images
+        //     (crate::pictures)",
         ),
     ),
     panel(
@@ -777,15 +778,19 @@ pub const PANELS: &[Panel] = &[
         Some(13),
         &[setup(342, "Advanced", TOP, "always, Advanced view")],
         // C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:18-127 and its .resx - drawn whole;
-        // every button opens a window of its own. FFT's (Controls/fftui.cs) is ported, and FFT
-        // opens it (:114-117); each other is dimmed with the window it would open as the reason.
+        // every button opens a window of its own. FFT's (Controls/fftui.cs) and the MAVLink
+        // Inspector's (Controls/MAVLinkInspector.cs) are ported, and their buttons open them
+        // (:27-30, :114-117); each other is dimmed with the window it would open as the reason.
         Partial(
             at("crates/mp-gui/src/config/advanced.rs", "fn page"),
             "the text and the thirteen buttons with their labels at the table's places; FFT
-        //     opens the FFT window (config/fftui.rs), 1 of the 13 wirings; the other twelve
-        //     dimmed - the Warnings Manager, MAVLink Inspector, proximity, signing keys, MAVLink
-        //     mirror, NMEA output, Follow Me, parameter regeneration, moving base, log
-        //     anonymiser, spectrogram and support proxy windows they open are not ported",
+        //     opens the FFT window (config/fftui.rs) and MAVLink Inspector the inspector
+        //     (config/mavlink_inspector.rs: the tree of each system, component, message with its
+        //     rate and bytes a second, and field with its value and .NET type, every 333 ms;
+        //     Show GCS Traffic; Graph It's history question and live graph of a field), 2 of the
+        //     13 wirings; the other eleven dimmed - the Warnings Manager, proximity, signing
+        //     keys, MAVLink mirror, NMEA output, Follow Me, parameter regeneration, moving base,
+        //     log anonymiser, spectrogram and support proxy windows they open are not ported",
         ),
     ),
     panel(

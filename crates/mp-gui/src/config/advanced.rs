@@ -12,15 +12,21 @@
 //! Follow Me, the parameter documentation regenerated from ArduPilot's source, the moving base, a
 //! log anonymised, the FFT and spectrogram plots, and the support proxy. Each is a form of its own
 //! in the C# (`Warnings/WarningsManager.cs`, `Controls/MAVLinkInspector.cs` and the rest, named at
-//! [`ROWS`]), a port of its own. FFT's, `Controls/fftui.cs`, is ported (`config/fftui.rs`), and
-//! its button opens it: the same window the FFT Setup page's FFT opens, held with that page
-//! (`config/fft.rs`), since both handlers are the one line `new fftui().Show()`. The others are
-//! not in this application, so their buttons are drawn dimmed, with the window each would open as
-//! the reason.
+//! [`ROWS`]), a port of its own. Two are ported, and their buttons open them:
+//!
+//! * FFT's, `Controls/fftui.cs` (`config/fftui.rs`): the same window the FFT Setup page's FFT
+//!   opens, held with that page (`config/fft.rs`), since both handlers are the one line
+//!   `new fftui().Show()`;
+//! * the MAVLink Inspector's, `Controls/MAVLinkInspector.cs` (`config/mavlink_inspector.rs`),
+//!   `new MAVLinkInspector(MainV2.comPort).Show()`, held with SETUP's other small pages
+//!   (`config/extra_setup.rs`).
+//!
+//! The others are not in this application, so their buttons are drawn dimmed, with the window
+//! each would open as the reason.
 //!
 //! What differs: `Show()` makes a modeless form, and a second click a second form beside the
-//! first; the window here is drawn over SETUP, modal, and a second click - of this FFT or the FFT
-//! Setup page's - replaces it with a fresh one, as `config/fft.rs` has it.
+//! first; each window here is drawn over SETUP, modal, and a second click replaces it with a
+//! fresh one - for FFT, of this FFT or the FFT Setup page's, as `config/fft.rs` has it.
 //!
 //! The colours are this application's.
 
@@ -30,6 +36,7 @@
 use gpui::{AnyElement, Context, Div, SharedString, div, prelude::*, px, rgb};
 
 use super::fft::Fft;
+use super::mavlink_inspector::InspectorWindow;
 use crate::MissionPlanner;
 use crate::ui::{panel, theme};
 
@@ -136,7 +143,8 @@ pub const ROWS: [Row; 13] = [
         "the Warnings Manager window (Warnings/WarningsManager.cs)", None),
     row("but_mavinspector", "MAVLink Inspector", "but_mavinspector_Click", "label3",
         "View decoded mavlink data being sent and received", (260.0, 18.0),
-        "the MAVLink Inspector window (Controls/MAVLinkInspector.cs)", None),
+        "the MAVLink Inspector window (Controls/MAVLinkInspector.cs)",
+        Some("config/mavlink_inspector.rs")),
     row("but_proximity", "Proximity", "but_proximity_Click", "label4",
         "View the data from a 360 lidar", (152.0, 18.0),
         "the proximity window (Controls/ProximityControl.cs)", None),
@@ -212,11 +220,22 @@ pub fn record_facts(showing: bool) {
     );
 }
 
-/// A button clicked: what its handler does, for the one whose window is here - `but_fft_Click`,
-/// `new fftui().Show()`, with nothing asked of the vehicle first. True when it did something.
-/// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:114-117`
-pub fn click(button: &str, fft: &mut Fft) -> bool {
+/// A button clicked: what its handler does, for the two whose windows are here -
+/// `but_mavinspector_Click`, `new MAVLinkInspector(MainV2.comPort).Show()`, and `but_fft_Click`,
+/// `new fftui().Show()` - neither asking anything of the vehicle first. True when it did
+/// something.
+/// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:27-30, 114-117`
+pub fn click(
+    button: &str,
+    fft: &mut Fft,
+    inspector: &mut InspectorWindow,
+    now: std::time::Instant,
+) -> bool {
     match button {
+        "but_mavinspector" => {
+            inspector.show(now);
+            true
+        }
         "but_fft" => {
             fft.show_window();
             true
@@ -235,8 +254,8 @@ fn at((x, y, width, height): (f32, f32, f32, f32)) -> Div {
         .h(px(height))
 }
 
-/// A button in its cell: FFT's opening its window, the others dimmed - the window each opens is
-/// not in this application (see `opens`).
+/// A button in its cell: MAVLink Inspector's and FFT's opening their windows, the others dimmed -
+/// the window each opens is not in this application (see `opens`).
 /// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:22-127`
 fn button(row: Row, y: f32, cx: &mut Context<MissionPlanner>) -> AnyElement {
     let (bx, by, bw, bh) = BUTTON_IN_CELL;
@@ -258,7 +277,13 @@ fn button(row: Row, y: f32, cx: &mut Context<MissionPlanner>) -> AnyElement {
             .hover(|style| style.border_color(rgb(theme::ACCENT)))
             .on_click(cx.listener(move |this, _event, window, cx| {
                 window.blur(cx);
-                if click(row.button, &mut this.extra.fft) {
+                let pages = &mut this.extra;
+                if click(
+                    row.button,
+                    &mut pages.fft,
+                    &mut pages.inspector,
+                    std::time::Instant::now(),
+                ) {
                     cx.notify();
                 }
             }))
@@ -270,7 +295,8 @@ fn button(row: Row, y: f32, cx: &mut Context<MissionPlanner>) -> AnyElement {
     }
 }
 
-/// The page, as the `.resx` lays it out: FFT opening the FFT window, every other button dimmed.
+/// The page, as the `.resx` lays it out: MAVLink Inspector and FFT opening their windows, every
+/// other button dimmed.
 /// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.Designer.cs:29-266; ConfigAdvanced.resx`
 pub fn page(cx: &mut Context<MissionPlanner>) -> AnyElement {
     let mut table = at(TABLE);
@@ -479,33 +505,57 @@ mod tests {
     }
 
     /// FFT is `new fftui().Show()` - the FFT Setup page's handler word for word - so it opens the
-    /// window that page opens, with no vehicle and no page shown first; every other button does
-    /// nothing.
-    /// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:114-117; ConfigFFT.cs:162-165`
+    /// window that page opens; MAVLink Inspector is `new MAVLinkInspector(MainV2.comPort)
+    /// .Show()`, which opens the inspector; neither needs a vehicle or a page shown first, and
+    /// every other button does nothing.
+    /// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:27-30, 114-117; ConfigFFT.cs:162-165`
     #[test]
-    fn fft_opens_the_fft_window_and_the_others_nothing() {
+    fn fft_and_the_inspector_open_their_windows_and_the_others_nothing() {
+        let now = std::time::Instant::now();
         for row in ROWS {
             let mut fft = Fft::default();
-            assert_eq!(click(row.button, &mut fft), row.enabled(), "{}", row.button);
-            assert_eq!(fft.window.is_some(), row.enabled(), "{}", row.button);
-            assert_eq!(fft.opened, usize::from(row.enabled()));
+            let mut inspector = InspectorWindow::default();
+            assert_eq!(
+                click(row.button, &mut fft, &mut inspector, now),
+                row.enabled(),
+                "{}",
+                row.button
+            );
+            let fft_row = row.button == "but_fft";
+            let inspector_row = row.button == "but_mavinspector";
+            assert_eq!(fft.window.is_some(), fft_row, "{}", row.button);
+            assert_eq!(fft.opened, usize::from(fft_row));
             assert!(!fft.is_active(), "the FFT Setup page is not shown by it");
+            assert_eq!(inspector.window.is_some(), inspector_row, "{}", row.button);
+            assert_eq!(inspector.opened, usize::from(inspector_row));
         }
         // A second click, a fresh window: the Designer's Magnitude unticked again.
         let mut fft = Fft::default();
-        click("but_fft", &mut fft);
+        let mut inspector = InspectorWindow::default();
+        click("but_fft", &mut fft, &mut inspector, now);
         if let Some(window) = fft.window.as_mut() {
             window.toggle_magnitude();
         }
-        click("but_fft", &mut fft);
+        click("but_fft", &mut fft, &mut inspector, now);
         assert_eq!(fft.opened, 2);
         assert!(fft.window.as_ref().is_some_and(|window| !window.magnitude));
+        // And the inspector's: "Show GCS Traffic" unticked and the history 50 again.
+        click("but_mavinspector", &mut fft, &mut inspector, now);
+        if let Some(window) = inspector.window.as_mut() {
+            window.toggle_gcs_traffic();
+            window.history = 7;
+        }
+        click("but_mavinspector", &mut fft, &mut inspector, now);
+        assert_eq!(inspector.opened, 2);
+        assert!(inspector.window.as_ref().is_some_and(|window| {
+            !window.gcs_traffic() && window.history == 50 && window.tree.is_empty()
+        }));
         let enabled: Vec<&str> = ROWS
             .iter()
             .filter(|row| row.enabled())
             .map(|row| row.button)
             .collect();
-        assert_eq!(enabled, ["but_fft"]);
+        assert_eq!(enabled, ["but_mavinspector", "but_fft"]);
     }
 
     /// Each enabled row's port is where it says, and its handler is the same `Show()` as the one

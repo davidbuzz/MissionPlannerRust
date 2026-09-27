@@ -117,7 +117,7 @@ pub fn emit_dialect(dialect: &Dialect) -> String {
          #![allow(clippy::doc_markdown)]\n\
          #![allow(clippy::struct_excessive_bools)]\n\n\
          use mp_mavlink::dialect::{{MessageInfo, StaticDialect}};\n\
-         use mp_mavlink::field::FieldValue;\n\
+         use mp_mavlink::field::{{FieldInfo, FieldValue}};\n\
          use mp_mavlink::message::Message;\n\
          use mp_mavlink::payload::{{get_f32, get_f64, get_i16, get_i32, get_i64, get_i8, get_u16, get_u32, get_u64, get_u8, put_bytes}};\n\n",
         dialect.name, dialect.name
@@ -455,7 +455,25 @@ fn emit_messages(dialect: &Dialect, out: &mut String) {
             }
         }
         let _ = writeln!(out, "        ]");
-        let _ = writeln!(out, "    }}");
+        let _ = writeln!(out, "    }}\n");
+        // Each field's XML type and units beside its value, for a screen that shows them: the
+        // MAVLink Inspector's type column and Graph It's axis title.
+        let _ = writeln!(
+            out,
+            "    /// Every field's XML type and units, in wire order, as `fields` names them."
+        );
+        let _ = writeln!(out, "    pub const FIELD_INFO: &'static [FieldInfo] = &[");
+        for field in &ordered {
+            let _ = writeln!(
+                out,
+                "        FieldInfo::new(\"{}\", \"{}\", {}, \"{}\"),",
+                field.name,
+                field.base_type,
+                field.array_len.unwrap_or(0),
+                escape(&field.units)
+            );
+        }
+        let _ = writeln!(out, "    ];");
         let _ = writeln!(out, "}}\n");
     }
 }
@@ -569,6 +587,26 @@ fn emit_dispatch(dialect: &Dialect, out: &mut String) {
     for msg in dialect.messages.values() {
         let variant = pascal_case(&msg.name);
         let _ = writeln!(out, "            Self::{variant}(m) => m.fields(),");
+    }
+    let _ = writeln!(out, "        }}");
+    let _ = writeln!(out, "    }}\n");
+
+    let _ = writeln!(
+        out,
+        "    /// Every field's XML type and units, in the order `fields` lists them."
+    );
+    let _ = writeln!(out, "    #[must_use]");
+    let _ = writeln!(
+        out,
+        "    pub const fn field_info(&self) -> &'static [FieldInfo] {{"
+    );
+    let _ = writeln!(out, "        match self {{");
+    for msg in dialect.messages.values() {
+        let variant = pascal_case(&msg.name);
+        let _ = writeln!(
+            out,
+            "            Self::{variant}(_) => {variant}::FIELD_INFO,"
+        );
     }
     let _ = writeln!(out, "        }}");
     let _ = writeln!(out, "    }}\n");

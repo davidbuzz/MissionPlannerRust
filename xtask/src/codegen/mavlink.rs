@@ -39,6 +39,8 @@ pub struct Field {
     pub extension: bool,
     /// Enum this field refers to, if any.
     pub enum_name: Option<String>,
+    /// The `units` attribute, empty where there is none.
+    pub units: String,
     /// Documentation text.
     pub description: String,
 }
@@ -340,6 +342,7 @@ fn parse_into(path: &Path, out: &mut Dialect, seen: &mut HashSet<PathBuf>) -> Re
                     array_len,
                     extension: in_extensions,
                     enum_name: child.attribute("enum").map(ToOwned::to_owned),
+                    units: child.attribute("units").unwrap_or("").to_owned(),
                     description: child.text().unwrap_or("").trim().to_owned(),
                 });
             }

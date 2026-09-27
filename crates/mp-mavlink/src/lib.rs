@@ -24,7 +24,7 @@ pub mod signing;
 
 pub use decoder::{DecodeStats, FrameDecoder};
 pub use dialect::{Dialect, MessageInfo, StaticDialect};
-pub use field::FieldValue;
+pub use field::{FieldInfo, FieldValue};
 pub use frame::{
     EncodeError, Frame, INCOMPAT_FLAG_SIGNED, MAX_FRAME_LEN, MAX_PAYLOAD_LEN, MavVersion,
     ParseError, SIGNATURE_LEN, STX_V1, STX_V2, encode_v1, encode_v2, parse, trim_payload,

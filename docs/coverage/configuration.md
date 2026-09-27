@@ -65,10 +65,11 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
         //     updateDisplayName does; a vehicle's click asks, detects the board from the device
         //     list, chooses the entry's URL for it (CubeBlack, ChibiOS), downloads firmware.hex
         //     and reads it; Pick previous firmware from FirmwareHistory.txt, Beta firmwares, Load
-        //     custom firmware, and the three links; each stops where it would write to a board -
-        //     the upload and Force Bootloader are disabled, as nothing flashes in this build; not
-        //     Ctrl+Q or Ctrl+P, nor the bootloader probe on a device's arrival; the pictures are
-        //     the C#'s images (crate::pictures) |
+        //     custom firmware, and the three links; Force Bootloader over the window's link, the
+        //     manifest page's handler shared (config/force_bootloader.rs); each flow stops where
+        //     it would write to a board - this page's upload is not ported; not Ctrl+Q or Ctrl+P,
+        //     nor the bootloader probe on a device's arrival; the pictures are the C#'s images
+        //     (crate::pictures) |
 | 178 | `ConfigSecureAP` | Secure |  | disconnected | 4 | done: `crates/mp-gui/src/config/secure.rs` `fn page` |
 | 182 | `ConfigMandatory` | Mandatory Hardware |  | any | 0 | plumbing: the Mandatory Hardware heading of the list: one sentence, no controls |
 | 187 | `ConfigTradHeli4` | Heli Setup | Mandatory Hardware | heli | 0 | done: `crates/mp-gui/src/config/trad_heli.rs` `fn page` |
@@ -129,10 +130,13 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
 | 333 | `TrackerUI` (`Antenna/TrackerUI.cs`, not a panel) | Antenna Tracker | Optional Hardware | always | 0 | **missing** |
 | 337 | `ConfigFFT` | FFT Setup | Optional Hardware | any | no Designer | done: `crates/mp-gui/src/config/fft.rs` `fn page` |
 | 342 | `ConfigAdvanced` | Advanced |  | always, Advanced view | 13 | partial: `crates/mp-gui/src/config/advanced.rs` `fn page` - the text and the thirteen buttons with their labels at the table's places; FFT
-        //     opens the FFT window (config/fftui.rs), 1 of the 13 wirings; the other twelve
-        //     dimmed - the Warnings Manager, MAVLink Inspector, proximity, signing keys, MAVLink
-        //     mirror, NMEA output, Follow Me, parameter regeneration, moving base, log
-        //     anonymiser, spectrogram and support proxy windows they open are not ported |
+        //     opens the FFT window (config/fftui.rs) and MAVLink Inspector the inspector
+        //     (config/mavlink_inspector.rs: the tree of each system, component, message with its
+        //     rate and bytes a second, and field with its value and .NET type, every 333 ms;
+        //     Show GCS Traffic; Graph It's history question and live graph of a field), 2 of the
+        //     13 wirings; the other eleven dimmed - the Warnings Manager, proximity, signing
+        //     keys, MAVLink mirror, NMEA output, Follow Me, parameter regeneration, moving base,
+        //     log anonymiser, spectrogram and support proxy windows they open are not ported |
 | 346 | `ConfigTerminal` | Terminal | Advanced | always, Advanced view | 12 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 | 351 | `ConfigREPL` | Script REPL | Advanced | connected, Advanced view | 4 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 

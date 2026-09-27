@@ -26,15 +26,21 @@
 //! * Beta firmwares: "These are beta firmware, use at your own risk!!!", then the `dev` list;
 //! * Load custom firmware: a file, its board by extension or detection, `UploadFlash`;
 //! * Download firmwares and the licence line open firmware.ardupilot.org; the motor setup link
-//!   and the Cube open theirs.
+//!   and the Cube open theirs;
+//! * Force Bootloader (`lbl_px4bl_Click`, `:619-639`): `MainV2.comPort.Open(false)`, then
+//!   `doReboot(true, false)` and "Please ignore the unplug and plug back in when uploading flight
+//!   firmware." - the manifest page's handler line for line, so the page holds the same
+//!   [`ForceBootloader`] the manifest page does: the window's link opened from the port box, or
+//!   found open, the board rebooted into its bootloader, the box over this page, and "Failed to
+//!   connect and send the reboot command" on the status line (a box in the C#).
 //!
 //! The flows run on a thread with their questions as boxes over the page, as the manifest page's
 //! do (`firmware.rs`), and stop at the step that would write to a board
 //! (`mp_firmware::flow::Stop`). Not here, and why:
 //!
-//! * the upload itself, and Force Bootloader, which opens the MAVLink port and reboots the board
-//!   into its bootloader (`lbl_px4bl_Click`, `:619-639`): flashing is not enabled in this build.
-//!   The link is drawn, dimmed;
+//! * the upload itself - `UploadFlash`'s reboot into the bootloader and the write - which is not
+//!   ported for this page's flows: each says the step it stopped at, and the Upload button
+//!   beneath is dimmed;
 //! * `Ctrl+Q` (the trunk list) and `Ctrl+P` (the first `px4` entry's upload), `ProcessCmdKey`
 //!   (`:108-129`): the C# sees them only while a control of the page has the keyboard, and
 //!   nothing on this page takes it;
@@ -61,6 +67,7 @@ use super::firmware::{
     message_box, path_box, progress_bar, question_box, reached_lines, record_reached,
     remember_folder, upload_row,
 };
+use super::force_bootloader::{ForceBootloader, Page as ForcePage};
 use super::servo_output::{Combo, dropdown};
 use crate::MissionPlanner;
 use crate::settings::Persisted;
@@ -96,12 +103,6 @@ pub const PROFICNC: &str =
 /// `Strings.BetaWarning` and `Strings.Beta`.
 /// `// C#: ExtLibs/Strings/Strings.resx:462-467`
 pub const BETA_WARNING: (&str, &str) = ("These are beta firmware, use at your own risk!!!", "Beta");
-
-/// Why Force Bootloader does nothing here.
-pub const FORCE_BOOTLOADER_DISABLED: &str = "Force Bootloader opens the port and reboots the \
-                                             board into its bootloader (MAVLink doReboot): a \
-                                             write to a board, and flashing is not enabled in \
-                                             this build";
 
 /// A vehicle picture: its Designer name, the id a test clicks, what it shows, which of
 /// `updateDisplayName`'s pictures it is, and its `Location`. Every one is 150 x 150.
@@ -398,6 +399,9 @@ pub struct FirmwareLegacy {
     path: Option<PathBox>,
     /// The URL the last link opened.
     opened: Option<&'static str>,
+    /// Force Bootloader: its steps over the window's link, its box and its failure - the
+    /// manifest page's handler too ([`ForceBootloader`]).
+    force: ForceBootloader,
     /// Where the list is read from: `None` is `mp_firmware::manifest::fetcher` - the network, or
     /// the fixtures a script names - and `Some` a mirror directory, for a unit test.
     source: Option<std::path::PathBuf>,
@@ -426,6 +430,7 @@ impl Default for FirmwareLegacy {
             messages: VecDeque::new(),
             path: None,
             opened: None,
+            force: ForceBootloader::default(),
             source: None,
         }
     }
@@ -447,11 +452,41 @@ impl FirmwareLegacy {
         }
     }
 
-    /// `Deactivate`: it unsubscribes from device arrivals, which are not heard here.
+    /// `Deactivate`: it unsubscribes from device arrivals, which are not heard here. Force
+    /// Bootloader stops and its box closes, as they do when the manifest page is left
+    /// ([`ForceBootloader::cancel`]).
     /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:665-673`
     pub fn deactivate(&mut self) {
         self.open = false;
         self.history_open = false;
+        self.force.cancel();
+    }
+
+    /// The screen kept under a new key: Force Bootloader's `Open(false)` moved the window's link,
+    /// for which `MainV2` shows no screen again, so the page object is the same one
+    /// ([`crate::setup::Backstage::rekey`]).
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:623; MainV2.cs:1419-1425, 1740-1748`
+    pub fn rekey(&mut self, key: Key) {
+        if self.made_for.is_some() {
+            self.made_for = Some(key);
+        }
+    }
+
+    /// Whether the page's Force Bootloader is under way over the window's link
+    /// ([`ForceBootloader::forcing`]): SETUP is not shown again under it.
+    #[must_use]
+    pub const fn forcing(&self) -> bool {
+        self.force.forcing()
+    }
+
+    /// The page's Force Bootloader, for the window to click and drive.
+    pub fn force_bootloader(&mut self) -> &mut ForceBootloader {
+        &mut self.force
+    }
+
+    /// What the page has to say on the window's status line, once: its Force Bootloader's.
+    pub fn take_status(&mut self) -> Option<String> {
+        self.force.take_status()
     }
 
     /// The page object let go with its screen; `softwares`, a static, stays.
@@ -557,13 +592,16 @@ impl FirmwareLegacy {
         }
     }
 
-    /// Whether the page takes a click: open, with nothing over it and no flow running.
-    fn live(&self) -> bool {
+    /// Whether the page takes a click: open, with nothing over it and no flow running - Force
+    /// Bootloader's handler holds the window as the flows' do, and its box is over the page.
+    #[must_use]
+    pub fn live(&self) -> bool {
         self.open
             && self.loading.is_none()
             && self.messages.is_empty()
             && self.path.is_none()
             && self.worker.is_none()
+            && !self.force.busy()
     }
 
     /// `pictureBoxFW_Click`: a picture with no entry says "Error loading firmware file"; one with
@@ -776,13 +814,14 @@ impl FirmwareLegacy {
             .filter(|waiting| waiting.buttons.is_some())
     }
 
-    /// The message showing: the flow's, or the page's own.
+    /// The message showing: the flow's, the page's own, or Force Bootloader's.
     fn message(&self) -> Option<&Waiting> {
         self.worker
             .as_ref()
             .and_then(|worker| worker.waiting.as_ref())
             .filter(|waiting| waiting.buttons.is_none())
             .or_else(|| self.messages.front().map(|(waiting, _)| waiting))
+            .or_else(|| self.force.message())
     }
 
     /// Where the list stands.
@@ -889,6 +928,7 @@ pub fn record_facts(page: &FirmwareLegacy, settings: &Persisted, listed: bool) {
         "config.firmware_legacy.opened",
         page.opened.unwrap_or("none"),
     );
+    record("config.firmware_legacy.force", page.force.fact());
     record_reached(
         "config.firmware_legacy",
         page.reached.as_ref(),
@@ -1005,8 +1045,16 @@ pub fn page(firmware: &FirmwareLegacy, cx: &mut Context<MissionPlanner>) -> AnyE
                 },
                 cx,
             ),
-            // Force Bootloader: see [`FORCE_BOOTLOADER_DISABLED`].
-            "fwl-px4bl" => link_label(id, text, (x, y), false, |_, _, _| {}, cx),
+            // `lbl_px4bl_Click`: the manifest page's Force Bootloader.
+            // C#: GCSViews/ConfigurationView/ConfigFirmware.cs:619-639
+            "fwl-px4bl" => link_label(
+                id,
+                text,
+                (x, y),
+                live,
+                |this, _window, _cx| this.force_bootloader_clicked(ForcePage::Legacy),
+                cx,
+            ),
             // `label1` and `label2`, which do nothing.
             _ if handler.is_none() => crate::probe::measured(id, at(x, y, 400.0, 13.0))
                 .text_xs()
@@ -1052,11 +1100,6 @@ pub fn page(firmware: &FirmwareLegacy, cx: &mut Context<MissionPlanner>) -> AnyE
             theme::DIM,
         ));
     }
-    report = report.child(line(
-        "Bootloader",
-        FORCE_BOOTLOADER_DISABLED.to_owned(),
-        theme::DIM,
-    ));
     panel(
         "install firmware legacy",
         div()
@@ -1190,6 +1233,16 @@ pub fn overlay(
             waiting,
             window,
             |this| this.firmware_legacy.dismiss_message(),
+            cx,
+        ));
+    }
+    // Force Bootloader's instruction, over this page.
+    if let Some(waiting) = firmware.force.message() {
+        return Some(message_box(
+            IDS,
+            waiting,
+            window,
+            |this| this.firmware_legacy.force.dismiss(),
             cx,
         ));
     }
@@ -1537,5 +1590,389 @@ mod tests {
         }
         assert_eq!(page.reached, Some(Reached::default()), "No: nothing more");
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// Every fact the script asserts on is recorded - here, or by the flows' report the manifest
+    /// page shares (`firmware.rs`, `record_reached`) - and each control it clicks is drawn here.
+    #[test]
+    fn the_gui_script_names_facts_and_controls_this_page_has() {
+        let script = include_str!("../../../../tests/gui/config-firmware-legacy.gui");
+        let source = include_str!("firmware_legacy.rs");
+        let reached = include_str!("firmware.rs");
+        let mut facts = 0;
+        let mut clicks = 0;
+        for line in script.lines() {
+            let line = line.split('#').next().unwrap_or("");
+            let mut words = line.split_whitespace();
+            match (words.next(), words.next()) {
+                (Some("expect"), Some(key)) if key.starts_with("config.firmware_legacy.") => {
+                    let rest = key.trim_start_matches("config.firmware_legacy.");
+                    // A picture's label or tag: `config.firmware_legacy.{kind}.{key}`.
+                    let picture = rest.split_once('.').is_some_and(|(kind, name)| {
+                        source.contains(&format!("\"config.firmware_legacy.{kind}.{{key}}\""))
+                            && PICTURES
+                                .iter()
+                                .any(|picture| picture.id == format!("fwl-{name}"))
+                    });
+                    assert!(
+                        source.contains(&format!("\"{key}\""))
+                            || picture
+                            || reached.contains(&format!("\"{{prefix}}.{rest}\"")),
+                        "{key} is not recorded"
+                    );
+                    facts += 1;
+                }
+                (Some("click"), Some(id)) if id.starts_with("fwl-") => {
+                    // A drop-down's entry is its box's id and its index.
+                    let base = id
+                        .rsplit_once('-')
+                        .filter(|(_, tail)| tail.chars().all(|c| c.is_ascii_digit()))
+                        .map_or(id, |(base, _)| base);
+                    assert!(source.contains(&format!("\"{base}\"")), "{id} is not drawn");
+                    clicks += 1;
+                }
+                _ => {}
+            }
+        }
+        assert!(facts >= 40, "{facts} facts");
+        assert!(clicks >= 10, "{clicks} clicks");
+        assert!(
+            script.contains("\nclick fwl-px4bl\n"),
+            "the script clicks Force Bootloader"
+        );
+    }
+}
+
+/// Force Bootloader on the legacy page - `lbl_px4bl_Click`, the manifest page's handler line for
+/// line, so the page holds the same [`ForceBootloader`] - over the real link to a scripted copter:
+/// the click, what goes on the wire, the box over this page and what is said on the status line.
+#[cfg(test)]
+mod force_bootloader_tests {
+    use std::time::{Duration, Instant};
+
+    use mp_link::ProtocolTimeouts;
+    use mp_link::requests::CMD_PREFLIGHT_REBOOT_SHUTDOWN;
+    use mp_mavlink_dialects::all::MavMessage;
+    use mp_vehicle::VehicleId;
+
+    use super::FirmwareLegacy;
+    use crate::config::firmware::NO_BOARD_WRITTEN;
+    use crate::config::force_bootloader::{FORCE_FAILED, Force, ForceEnd, IGNORE_THE_UNPLUG};
+    use crate::setup::Key;
+    use crate::telemetry::scripted::{VEHICLE, Vehicle, until};
+    use crate::telemetry::{Telemetry, TelemetryView};
+
+    fn fast() -> ProtocolTimeouts {
+        ProtocolTimeouts::default().faster(20)
+    }
+
+    /// The key of the window with no link.
+    fn idle() -> Key {
+        Key::of(&TelemetryView::disconnected("test"))
+    }
+
+    /// The page showing, as `Activate` leaves it once its list is in: nothing over it.
+    fn page() -> FirmwareLegacy {
+        FirmwareLegacy {
+            made_for: Some(idle()),
+            open: true,
+            firstrun: false,
+            ..FirmwareLegacy::default()
+        }
+    }
+
+    /// Each `PREFLIGHT_REBOOT_SHUTDOWN` the copter heard: param1 and confirmation.
+    fn reboots(vehicle: &Vehicle) -> Vec<(f32, u8)> {
+        vehicle
+            .heard
+            .iter()
+            .filter_map(|message| match message {
+                MavMessage::CommandLong(long) if long.command == CMD_PREFLIGHT_REBOOT_SHUTDOWN => {
+                    assert_eq!(
+                        (long.target_system, long.target_component),
+                        (VEHICLE.sysid, VEHICLE.compid)
+                    );
+                    Some((long.param1, long.confirmation))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `doReboot(true, false)`'s four frames.
+    const FOUR: [(f32, u8); 4] = [(3.0, 0), (3.0, 0), (1.0, 0), (1.0, 0)];
+
+    /// Ticks the page's Force Bootloader until it ends, as the window does once a frame.
+    fn until_end(
+        page: &mut FirmwareLegacy,
+        telemetry: &mut Telemetry,
+        now: impl Fn() -> Instant,
+    ) -> Option<ForceEnd> {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            let view = telemetry.view();
+            if let Some(end) = page.force.tick(telemetry, &view, now()) {
+                return Some(end);
+            }
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        None
+    }
+
+    /// The click with no link: `Open(false)` opens the port box's serial port at the baud box's
+    /// rate as the window's link, waits for the copter's second heartbeat, then `doReboot` for
+    /// the next - then 3, 3, 1, 1, and "Please ignore the unplug ..." over this page until its
+    /// OK. The handler holds the page, and SETUP, until it is done.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:619-629; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:668-700, 869-891, 2591-2618, 2758-2763`
+    #[test]
+    fn the_click_opens_the_port_and_reboots_the_board_into_its_bootloader() {
+        let (link, mut vehicle) = Vehicle::link(fast());
+        let mut page = page();
+        assert!(page.live());
+        let mut opened = Vec::new();
+        let mut telemetry = page
+            .force
+            .click(
+                &Telemetry::idle().view(),
+                "/dev/ttyACM0",
+                "115200",
+                Instant::now(),
+                |url| {
+                    opened.push(url.to_owned());
+                    Some(link)
+                },
+            )
+            .expect("the window's link, opened");
+        assert_eq!(
+            opened,
+            ["serial:/dev/ttyACM0:115200"],
+            "the port box's port at the baud box's rate"
+        );
+        assert!(telemetry.view().connected, "the link over the port opened");
+        assert!(matches!(page.force.state(), Some(Force::Opening { .. })));
+        assert!(page.forcing(), "SETUP is not shown again under it");
+        assert!(!page.live(), "the handler holds the page");
+
+        let view = telemetry.view();
+        assert_eq!(page.force.tick(&mut telemetry, &view, Instant::now()), None);
+        assert!(
+            matches!(page.force.state(), Some(Force::Opening { .. })),
+            "one heartbeat is not `Open` done"
+        );
+        vehicle.heartbeat();
+        until("the second heartbeat", || {
+            let view = telemetry.view();
+            page.force.tick(&mut telemetry, &view, Instant::now());
+            matches!(page.force.state(), Some(Force::Heartbeat { .. }))
+        });
+        std::thread::sleep(Duration::from_millis(50));
+        vehicle.read();
+        assert_eq!(reboots(&vehicle), [], "not before the next heartbeat");
+        vehicle.heartbeat();
+        assert_eq!(
+            until_end(&mut page, &mut telemetry, Instant::now),
+            Some(ForceEnd::Rebooted)
+        );
+        until("the four reboots", || {
+            vehicle.read();
+            reboots(&vehicle).len() >= 4
+        });
+        std::thread::sleep(fast().command.timeout * 3);
+        vehicle.read();
+        assert_eq!(reboots(&vehicle), FOUR);
+
+        assert_eq!(
+            page.message()
+                .map(|waiting| (waiting.text.as_str(), waiting.caption.as_str())),
+            Some((IGNORE_THE_UNPLUG, "")),
+            "`CustomMessageBox.Show(text)`, over this page"
+        );
+        assert_eq!(page.take_status(), None, "no failure said");
+        assert!(!page.forcing(), "done");
+        assert!(!page.live(), "the box is over the page");
+        // Its OK, as the box's button does it.
+        page.force.dismiss();
+        assert!(page.message().is_none());
+        assert!(page.live());
+    }
+
+    /// The window's link already open: `Open` returns at once and opens nothing; `doReboot`
+    /// waits for the next heartbeat, or 2.2 s, and the reboots go out.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:623-627; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:668-671, 1197-1201, 2594-2614`
+    #[test]
+    fn the_link_open_opens_nothing_and_reboots() {
+        let (mut telemetry, mut vehicle) = Vehicle::connect(fast());
+        let mut page = page();
+        let started = Instant::now();
+        let view = telemetry.view();
+        let opened = page
+            .force
+            .click(&view, "/dev/ttyACM0", "115200", started, |url| {
+                panic!("{url} opened under an open link")
+            });
+        assert!(opened.is_none());
+        assert!(matches!(page.force.state(), Some(Force::Heartbeat { .. })));
+        let later = started + Duration::from_millis(2300);
+        assert_eq!(
+            until_end(&mut page, &mut telemetry, || later),
+            Some(ForceEnd::Rebooted)
+        );
+        until("the four reboots", || {
+            vehicle.read();
+            reboots(&vehicle).len() >= 4
+        });
+        assert_eq!(reboots(&vehicle), FOUR);
+        assert_eq!(
+            page.message().map(|waiting| waiting.text.as_str()),
+            Some(IGNORE_THE_UNPLUG)
+        );
+    }
+
+    /// Nothing heard before `CONNECT_TIMEOUT_SECONDS`: "Failed to connect and send the reboot
+    /// command" on the status line - no box - nothing sent, and the window to close its link.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:630-638; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:791-796`
+    #[test]
+    fn nothing_heard_in_time_is_failed_to_connect_on_the_status_line() {
+        let (link, mut vehicle) = Vehicle::link(fast());
+        let mut page = page();
+        let started = Instant::now();
+        let mut telemetry = page
+            .force
+            .click(&Telemetry::idle().view(), "COM4", "57600", started, |_| {
+                Some(link)
+            })
+            .expect("opened");
+        let view = telemetry.view();
+        assert_eq!(
+            page.force
+                .tick(&mut telemetry, &view, started + Duration::from_secs(31)),
+            Some(ForceEnd::Failed)
+        );
+        assert_eq!(page.take_status().as_deref(), Some(FORCE_FAILED));
+        assert_eq!(page.take_status(), None, "said once");
+        assert!(page.message().is_none(), "no box");
+        assert!(!page.forcing());
+        assert!(page.live());
+        std::thread::sleep(Duration::from_millis(100));
+        vehicle.read();
+        assert_eq!(reboots(&vehicle), []);
+    }
+
+    /// A port that is no serial port - a network kind, or none - or one that will not open is
+    /// the handler's `catch`: "Failed to connect and send the reboot command" on the status line
+    /// (a box in the C#), and nothing under way.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:623-638`
+    #[test]
+    fn a_port_that_will_not_open_is_failed_to_connect_on_the_status_line() {
+        let view = Telemetry::idle().view();
+        for port in ["TCP", "UDP", ""] {
+            let mut page = page();
+            let opened = page
+                .force
+                .click(&view, port, "115200", Instant::now(), |url| {
+                    panic!("{url}: no serial port to open")
+                });
+            assert!(opened.is_none());
+            assert_eq!(page.take_status().as_deref(), Some(FORCE_FAILED), "{port}");
+            assert!(page.message().is_none(), "no box");
+            assert!(!page.forcing());
+        }
+        let mut page = page();
+        let mut tried = 0;
+        let opened = page
+            .force
+            .click(&view, "/dev/ttyUSB7", "115200", Instant::now(), |_| {
+                tried += 1;
+                None
+            });
+        assert!(opened.is_none());
+        assert_eq!(tried, 1);
+        assert_eq!(page.take_status().as_deref(), Some(FORCE_FAILED));
+        assert!(!page.forcing());
+    }
+
+    /// While MP_FIRMWARE_DEVICE names the device, the legacy page opens no serial port either -
+    /// where a real board is - and says why; a network kind is still the handler's own failure.
+    #[test]
+    fn a_named_device_opens_no_serial_port_from_this_page() {
+        let view = Telemetry::idle().view();
+        let mut page = page();
+        page.force.opens_boards = false;
+        let opened = page
+            .force
+            .click(&view, "/dev/ttyACM0", "115200", Instant::now(), |url| {
+                panic!("{url} opened while MP_FIRMWARE_DEVICE names the device")
+            });
+        assert!(opened.is_none());
+        assert_eq!(page.take_status().as_deref(), Some(NO_BOARD_WRITTEN));
+        assert!(!page.forcing());
+        let opened = page
+            .force
+            .click(&view, "TCP", "115200", Instant::now(), |url| {
+                panic!("{url} opened")
+            });
+        assert!(opened.is_none());
+        assert_eq!(page.take_status().as_deref(), Some(FORCE_FAILED));
+    }
+
+    /// Leaving the page stops what is under way and closes its box, as leaving the manifest page
+    /// does.
+    #[test]
+    fn leaving_the_page_stops_it_and_closes_its_box() {
+        let (mut telemetry, mut vehicle) = Vehicle::connect(fast());
+        let mut page = page();
+        let view = telemetry.view();
+        page.force.start(false, &view, Instant::now());
+        page.deactivate();
+        assert!(!page.forcing());
+        vehicle.heartbeat();
+        let view = telemetry.view();
+        assert_eq!(page.force.tick(&mut telemetry, &view, Instant::now()), None);
+
+        let mut page = self::page();
+        let view = telemetry.view();
+        page.force.start(true, &view, Instant::now());
+        let later = Instant::now() + Duration::from_millis(2300);
+        assert_eq!(
+            until_end(&mut page, &mut telemetry, || later),
+            Some(ForceEnd::Rebooted)
+        );
+        assert!(page.message().is_some());
+        page.deactivate();
+        assert!(page.message().is_none(), "the box goes with the page");
+    }
+
+    /// The link Force Bootloader opened moves SETUP's key without showing the screen again, so
+    /// the page object is kept under the new key - leaving the page and coming back finds the
+    /// same one, its labels and all - where a new screen would be a new object.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:623; MainV2.cs:1419-1425, 1740-1748`
+    #[test]
+    fn the_page_object_is_kept_under_the_link_it_opened() {
+        let mut view = TelemetryView::disconnected("serial:/dev/ttyACM0:115200");
+        view.connected = true;
+        view.vehicle = Some(VehicleId::new(1, 1));
+        let heard = Key::of(&view);
+        assert_ne!(heard, idle());
+
+        let mut kept = page();
+        kept.labels[0] = "ArduPlane Stable".to_owned();
+        kept.rekey(heard);
+        kept.deactivate();
+        kept.tick(heard, true);
+        assert_eq!(kept.labels[0], "ArduPlane Stable", "the same page object");
+        assert!(!kept.firstrun);
+
+        // Not kept: the screen shown again for the link is a new page object.
+        let mut shown_again = page();
+        shown_again.labels[0] = "ArduPlane Stable".to_owned();
+        shown_again.deactivate();
+        shown_again.tick(heard, true);
+        assert!(shown_again.labels[0].is_empty());
+        assert!(shown_again.firstrun);
+
+        // A page object not made is not made by it.
+        let mut unmade = FirmwareLegacy::default();
+        unmade.rekey(heard);
+        assert_eq!(unmade.made_for, None);
     }
 }

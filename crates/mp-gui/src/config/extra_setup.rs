@@ -14,7 +14,9 @@ use std::time::Instant;
 
 use gpui::{AnyElement, Context, FocusHandle, Window, div, prelude::*};
 
-use super::{compass_mot, fft, gps_order, hw_ids, initial_params, osd, parachute};
+use super::{
+    compass_mot, fft, gps_order, hw_ids, initial_params, mavlink_inspector, osd, parachute,
+};
 use crate::MissionPlanner;
 use crate::config::servo_output::{ERROR_TITLE, Message};
 use crate::setup::Key;
@@ -83,6 +85,8 @@ pub struct ExtraSetup {
     pub initial_params: initial_params::InitialParams,
     /// FFT Setup, and the FFT window it opens.
     pub fft: fft::Fft,
+    /// The MAVLink Inspector the Advanced page opens (`config/mavlink_inspector.rs`).
+    pub inspector: mavlink_inspector::InspectorWindow,
 }
 
 /// The keyboard focus of the pages' boxes: Parachute's number being typed into, and Initial
@@ -96,6 +100,8 @@ pub struct Focus {
     pub fft_number: FocusHandle,
     /// The FFT window's file dialog or rate question.
     pub fft_prompt: FocusHandle,
+    /// The MAVLink Inspector's "Points of history?".
+    pub inspector_prompt: FocusHandle,
 }
 
 impl Focus {
@@ -106,6 +112,7 @@ impl Focus {
             text: cx.focus_handle(),
             fft_number: cx.focus_handle(),
             fft_prompt: cx.focus_handle(),
+            inspector_prompt: cx.focus_handle(),
         }
     }
 }
@@ -119,6 +126,7 @@ pub fn record_facts(pages: &ExtraSetup, view: &TelemetryView) {
     compass_mot::record_facts(&pages.compass_mot);
     initial_params::record_facts(&pages.initial_params);
     fft::record_facts(&pages.fft, view);
+    mavlink_inspector::record_facts(&pages.inspector);
 }
 
 impl MissionPlanner {
@@ -222,6 +230,8 @@ impl MissionPlanner {
         {
             ui.leave();
         }
+        // The MAVLink Inspector's subscriptions and timers, while it is open.
+        pages.inspector.tick(telemetry, now);
         // The link errors the C# boxes go on the status line instead (the owner's ruling); the
         // page never draws them, since they leave its queue in the tick before the frame.
         let mut status = None;
@@ -266,6 +276,9 @@ impl MissionPlanner {
         let pages = &self.extra;
         let focus = &self.extra_focus;
         fft::overlay(&pages.fft, &focus.fft_number, &focus.fft_prompt, window, cx)
+            .or_else(|| {
+                mavlink_inspector::overlay(&pages.inspector, &focus.inspector_prompt, window, cx)
+            })
             .or_else(|| parachute::overlay(&pages.parachute, window, cx))
             .or_else(|| osd::overlay(&pages.osd, window, cx))
             .or_else(|| gps_order::overlay(&pages.gps_order, window, cx))

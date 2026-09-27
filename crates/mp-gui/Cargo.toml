@@ -39,6 +39,8 @@ mp-terrain.workspace = true
 mp-mission.workspace = true
 mp-tiles.workspace = true
 mp-mavlink-dialects.workspace = true
+# The MAVLink Inspector's field values and declarations: mp_mavlink::field.
+mp-mavlink.workspace = true
 mp-input.workspace = true
 mp-chart.workspace = true
 mp-log.workspace = true

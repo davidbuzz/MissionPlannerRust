@@ -2730,7 +2730,8 @@ impl Render for MissionPlanner {
             self.file_status = Some(status);
         }
         // Install Firmware's catalogue arriving, a device's arrival probed, the page closing when
-        // the screen changes; Force Bootloader's and Bootloader Update's links.
+        // the screen changes; Force Bootloader's link - either Install Firmware page's - and
+        // Bootloader Update's.
         self.install_firmware.tick(self.screen == Screen::Setup);
         self.install_firmware_links();
         // Bootloader Update's second Yes: `doCommand(MAV_CMD.FLASH_BOOTLOADER, 0, 0, 0, 0,

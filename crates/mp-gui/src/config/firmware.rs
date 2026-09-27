@@ -23,7 +23,8 @@
 //! (`mp_firmware::flow::upload_px4`). All Options is `LookForPort` over the whole catalogue. Load
 //! custom firmware opens a file and hands it to `UploadFlash` by its extension
 //! (`mp_firmware::flow::custom_manifest`). Force Bootloader opens the window's link and reboots
-//! the board into its bootloader; Bootloader Update opens a link of its own, asks twice, and sends
+//! the board into its bootloader - the legacy page's handler too, so both pages hold the one in
+//! `force_bootloader.rs`; Bootloader Update opens a link of its own, asks twice, and sends
 //! `MAV_CMD_FLASH_BOOTLOADER`.
 //!
 //! All of it runs as the C# runs it - the flows on a thread, with their questions and messages as
@@ -67,6 +68,7 @@ use mp_firmware::manifest::{
     icon_name,
 };
 
+use super::force_bootloader::{ForceBootloader, Page as ForcePage};
 use crate::MissionPlanner;
 use crate::settings::Persisted;
 use crate::telemetry::{Report, Telemetry, TelemetryView};
@@ -146,18 +148,8 @@ pub const TRUNK_WARNING: &str = "These are the latest trunk firmware, use at you
 /// `Strings.Trunk`: its caption. `// C#: ExtLibs/Strings/Strings.resx:480-482`
 pub const TRUNK: &str = "trunk";
 
-/// Force Bootloader's instruction once the reboot has gone out: a box, as the C#'s.
-/// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:522`
-pub const IGNORE_THE_UNPLUG: &str =
-    "Please ignore the unplug and plug back in when uploading flight firmware.";
-
-/// Force Bootloader's failure: a box in the C#, the status line here - the owner's ruling of
-/// 2026-09-25, no box for an error the window can show.
-/// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:531`
-pub const FORCE_FAILED: &str = "Failed to connect and send the reboot command";
-
 /// Bootloader Update's words when its link found no vehicle: a box in the C#, the status line
-/// here, as [`FORCE_FAILED`].
+/// here, as Force Bootloader's [`FORCE_FAILED`](super::force_bootloader::FORCE_FAILED).
 /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:544`
 pub const NO_DEVICE_ON_MAVLINK: &str = "Failed to find device on mavlink";
 
@@ -175,7 +167,7 @@ pub const DO_COMMAND_TIMEOUT: &str = "Timeout on read - doCommand";
 
 /// `MAVLinkInterface.CONNECT_TIMEOUT_SECONDS`' default: how long `Open` waits for heartbeats.
 /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:325`
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+pub(super) const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// How often the manifest page's [`Watcher`] enumerates the serial ports while the page is
 /// active, to see a device arrive: the C#'s `WM_DEVICECHANGE` has no counterpart here.
@@ -494,7 +486,7 @@ const REBOOT_WINDOW: std::time::Duration = std::time::Duration::from_secs(3);
 /// How long `getHeartBeat` reads for a vehicle's heartbeat before it gives up: 2.2 s (or 200
 /// packets read, which a board sending only heartbeats never reaches).
 /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1197`
-const HEARTBEAT_WAIT: std::time::Duration = std::time::Duration::from_millis(2200);
+pub(super) const HEARTBEAT_WAIT: std::time::Duration = std::time::Duration::from_millis(2200);
 
 /// How long the link thread may take to write the reboots before the port is closed under them:
 /// not the C#'s, whose writes are on the calling thread and done when `doCommand` returns; ours
@@ -981,10 +973,6 @@ pub struct InstallFirmware {
     /// flash left running when the page was left goes on scanning the ports for its bootloader,
     /// and a probe holding one of them would fail its open. The C#'s page cannot be left mid-flash.
     flows: Arc<std::sync::atomic::AtomicUsize>,
-    /// Whether Force Bootloader and Bootloader Update may open a serial port - where a real
-    /// board is - to reboot it or rewrite its bootloader: not while [`DEVICE_ENV`] names the
-    /// device, as no upload is then made either ([`NO_BOARD_WRITTEN`]).
-    opens_boards: bool,
     /// `Instance_DeviceChanged` subscribed to `DeviceChanged`: from `Activate` to `Deactivate`.
     watcher: Option<Watcher>,
     /// The probes' threads' end of the channel, handed to each probe.
@@ -997,8 +985,9 @@ pub struct InstallFirmware {
     found: Option<FoundBoard>,
     /// Ctrl+Q's warning is showing; its OK goes on to the `DEV` release.
     trunk: bool,
-    /// Force Bootloader, under way.
-    force: Option<Force>,
+    /// Force Bootloader: its steps over the window's link, its box and its failure - the
+    /// legacy page's handler too ([`ForceBootloader`]).
+    force: ForceBootloader,
     /// Bootloader Update on this page: its own link, under way.
     bl: Option<BlLink>,
     /// The window's connection prompts are asking the transport's questions for Bootloader
@@ -1006,38 +995,6 @@ pub struct InstallFirmware {
     bl_asking: bool,
     /// What the page has to say on the window's status line.
     status: Option<String>,
-}
-
-/// Force Bootloader after its click: `MainV2.comPort.Open(false)` waiting for the vehicle, then
-/// `doReboot(true, false)` waiting for its next heartbeat.
-/// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:513-533`
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Force {
-    /// `Open`'s connect loop: a vehicle heard twice (four times when it is not component 1)
-    /// before the deadline.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:769-894`
-    Opening {
-        /// `CONNECT_TIMEOUT_SECONDS` after the click.
-        deadline: Instant,
-    },
-    /// `doReboot(true, false)`'s `getHeartBeat`: the heartbeat after `seen`, or 2.2 s.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2591-2605`
-    Heartbeat {
-        /// The vehicle's heartbeats when it began.
-        seen: u64,
-        /// When `getHeartBeat` gives up.
-        deadline: Instant,
-    },
-}
-
-/// How Force Bootloader ended.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ForceEnd {
-    /// The reboots went out (or there was no vehicle to send them to, which the C# does not
-    /// check): "Please ignore the unplug ..." shows.
-    Rebooted,
-    /// `Open` found no vehicle in time and closed the port: [`FORCE_FAILED`].
-    Failed,
 }
 
 /// Bootloader Update on the manifest page: the link `doConnect(mav, ...)` opened, and how far it
@@ -1097,13 +1054,12 @@ impl Default for InstallFirmware {
                 .then_some(port_identities as fn() -> Vec<String>),
             arrivals: 0,
             flows: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
-            opens_boards: std::env::var_os(DEVICE_ENV).is_none(),
             watcher: None,
             found_sender,
             found_receiver,
             found: None,
             trunk: false,
-            force: None,
+            force: ForceBootloader::default(),
             bl: None,
             bl_asking: false,
             status: None,
@@ -1114,7 +1070,7 @@ impl Default for InstallFirmware {
 /// Whether `Open`'s connect loop would be done: the vehicle shown heard twice from component 1,
 /// or four times from another.
 /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:869-891`
-fn heard_enough(view: &TelemetryView) -> bool {
+pub(super) fn heard_enough(view: &TelemetryView) -> bool {
     let (Some(vehicle), Some(state)) = (view.vehicle, view.state.as_deref()) else {
         return false;
     };
@@ -1206,14 +1162,16 @@ impl InstallFirmware {
         self.open
     }
 
-    /// Whether Force Bootloader is under way over the window's link, which its
-    /// `MainV2.comPort.Open(false)` opened or found open: while it is, the link opening or
-    /// closing shows no screen again (`MissionPlanner::backstage_tick`) - `Open` is not
-    /// `doConnect`, whose end shows the screen again, nor a disconnect.
-    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:517; MainV2.cs:1115-1133, 1419-1425, 1740-1748; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:668-700, 809-814`
+    /// Whether the page's Force Bootloader is under way over the window's link
+    /// ([`ForceBootloader::forcing`]): SETUP is not shown again under it.
     #[must_use]
     pub const fn forcing(&self) -> bool {
-        self.force.is_some()
+        self.force.forcing()
+    }
+
+    /// The page's Force Bootloader, for the window to click and drive.
+    pub fn force_bootloader(&mut self) -> &mut ForceBootloader {
+        &mut self.force
     }
 
     /// Opens the page if it is closed and closes it if it is open.
@@ -1277,7 +1235,7 @@ impl InstallFirmware {
         self.trunk = false;
         self.path = None;
         self.bootloader = None;
-        self.force = None;
+        self.force.cancel();
         self.bl = None;
     }
 
@@ -1452,15 +1410,13 @@ impl InstallFirmware {
             .find_map(|device| Some((device.clone(), manifest.board_ids(device, true)?)));
     }
 
-    /// Whether Force Bootloader and Bootloader Update refuse the port the port box names: a
-    /// serial port - where a board is - while [`DEVICE_ENV`] names the device, so no script
-    /// reboots or rewrites whatever is plugged into the machine running it. A network kind, the
-    /// SITL's, is not refused.
+    /// Whether Bootloader Update refuses the port the port box names: as Force Bootloader does
+    /// ([`ForceBootloader::refuses_port`]) - a serial port, where a board is, while
+    /// [`DEVICE_ENV`] names the device, so no script rewrites whatever is plugged into the
+    /// machine running it.
     #[must_use]
     pub fn refuses_port(&self, port: &str) -> bool {
-        !self.opens_boards
-            && !port.is_empty()
-            && crate::connect::kind(port) == crate::connect::Kind::Serial
+        self.force.refuses_port(port)
     }
 
     /// Whether the page takes a click: open on the manifest page, with no box over it.
@@ -1473,9 +1429,10 @@ impl InstallFirmware {
             && self.path.is_none()
             && self.messages.is_empty()
             // The C#'s handlers hold the UI thread until the flow has ended: the flows, Force
-            // Bootloader's and Bootloader Update's links, and the transport's questions.
+            // Bootloader's and Bootloader Update's links, and the transport's questions. Force
+            // Bootloader's box is a box over the page.
             && self.worker.is_none()
-            && self.force.is_none()
+            && !self.force.busy()
             && self.bl.is_none()
             && !self.bl_asking
     }
@@ -1680,78 +1637,6 @@ impl InstallFirmware {
         true
     }
 
-    /// Force Bootloader after the window has opened its link, or found it open: `Open`'s wait
-    /// for the vehicle, or - the link already open, as `Open` then returns at once -
-    /// `doReboot`'s wait for its next heartbeat.
-    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:517-521; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:668-671`
-    pub fn force_start(&mut self, already_open: bool, view: &TelemetryView, now: Instant) {
-        self.force = Some(if already_open {
-            Force::Heartbeat {
-                seen: heartbeats(view),
-                deadline: now + HEARTBEAT_WAIT,
-            }
-        } else {
-            Force::Opening {
-                deadline: now + CONNECT_TIMEOUT,
-            }
-        });
-    }
-
-    /// Force Bootloader's next step, once a frame over the window's link. `Open` done - the
-    /// vehicle heard enough - is `doReboot(true, false)`'s wait for the next heartbeat, and then
-    /// its reboots: `PREFLIGHT_REBOOT_SHUTDOWN` with param1 3 and then 1, each written twice
-    /// (`Telemetry::command`, as `reboot_to_bootloader` sends them), to the vehicle `Open` chose;
-    /// and the instruction's box, whether or not there was a vehicle, as the C# does not look at
-    /// `doReboot`'s answer. `Open` finding nothing in time closes the link: [`FORCE_FAILED`] on
-    /// the status line, and [`ForceEnd::Failed`] for the window to close its link.
-    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:517-532; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:791-796, 2591-2618, 2758-2763`
-    pub fn force_tick(
-        &mut self,
-        telemetry: &mut Telemetry,
-        view: &TelemetryView,
-        now: Instant,
-    ) -> Option<ForceEnd> {
-        match self.force? {
-            Force::Opening { deadline } => {
-                if heard_enough(view) {
-                    self.force = Some(Force::Heartbeat {
-                        seen: heartbeats(view),
-                        deadline: now + HEARTBEAT_WAIT,
-                    });
-                    None
-                } else if now >= deadline || telemetry.error().is_some() || !view.connected {
-                    self.force = None;
-                    self.status = Some(FORCE_FAILED.to_owned());
-                    Some(ForceEnd::Failed)
-                } else {
-                    None
-                }
-            }
-            Force::Heartbeat { seen, deadline } => {
-                if heartbeats(view) <= seen && now < deadline {
-                    return None;
-                }
-                self.force = None;
-                // `if (MAV.sysid != 0 && MAV.compid != 0)`.
-                if let Some(id) = view.vehicle.filter(|id| id.sysid != 0 && id.compid != 0) {
-                    for message in [
-                        mp_link::commands::reboot_to_bootloader(id),
-                        mp_link::commands::reboot(id),
-                    ] {
-                        telemetry.command_message(&message, Report::default());
-                    }
-                }
-                // `CustomMessageBox.Show(text)`: its caption empty.
-                self.messages.push_back(Waiting {
-                    text: IGNORE_THE_UNPLUG.to_owned(),
-                    caption: String::new(),
-                    buttons: None,
-                });
-                Some(ForceEnd::Rebooted)
-            }
-        }
-    }
-
     /// Bootloader Update on the manifest page, once `doConnect` has what it opens: the link from
     /// the port box's `url`, waiting for `Open`'s heartbeats. `None` - `doConnect` opening
     /// nothing, or a link that will not open - is "Failed to find device on mavlink" at once.
@@ -1817,9 +1702,10 @@ impl InstallFirmware {
         std::mem::take(&mut self.bl_asking)
     }
 
-    /// What the page has to say on the window's status line, once.
+    /// What the page has to say on the window's status line, once: its own, then its Force
+    /// Bootloader's.
     pub fn take_status(&mut self) -> Option<String> {
-        self.status.take()
+        self.status.take().or_else(|| self.force.take_status())
     }
 
     /// Load custom firmware: its file dialog, in the folder last used.
@@ -1999,6 +1885,7 @@ impl InstallFirmware {
             .and_then(|worker| worker.waiting.as_ref())
             .filter(|waiting| waiting.buttons.is_none())
             .or_else(|| self.messages.front())
+            .or_else(|| self.force.message())
     }
 
     /// The question showing: the page's own confirmation or Bootloader Update's, or the flow's.
@@ -2073,7 +1960,7 @@ fn identity_port(entry: &str) -> &str {
 }
 
 /// How many heartbeats the vehicle shown has sent.
-fn heartbeats(view: &TelemetryView) -> u64 {
+pub(super) fn heartbeats(view: &TelemetryView) -> u64 {
     view.state.as_deref().map_or(0, |state| state.heartbeats)
 }
 
@@ -2299,14 +2186,7 @@ pub fn record_facts(page: &InstallFirmware, settings: &Persisted) {
         page.detected_board_id()
             .map_or_else(|| "none".to_owned(), |id| id.to_string()),
     );
-    record(
-        "config.firmware.force",
-        match page.force {
-            None => "none",
-            Some(Force::Opening { .. }) => "opening",
-            Some(Force::Heartbeat { .. }) => "heartbeat",
-        },
-    );
+    record("config.firmware.force", page.force.fact());
     record(
         "config.firmware.bl",
         match page.bl.as_ref().map(|bl| bl.stage) {
@@ -2478,7 +2358,7 @@ pub fn page(
                 text,
                 (x, y),
                 live,
-                |this, _window, _cx| this.force_bootloader_clicked(),
+                |this, _window, _cx| this.force_bootloader_clicked(ForcePage::Manifest),
                 cx,
             ),
             // `fw-bootloaderupdate`.
@@ -3176,6 +3056,16 @@ pub fn overlay(
             cx,
         ));
     }
+    // Force Bootloader's instruction.
+    if let Some(waiting) = firmware.force.message() {
+        return Some(message_box(
+            IDS,
+            waiting,
+            window,
+            |this| this.install_firmware.force.dismiss(),
+            cx,
+        ));
+    }
     if let Some(text) = firmware.bl_question() {
         return Some(question_box(
             IDS,
@@ -3214,53 +3104,6 @@ pub fn overlay(
 }
 
 impl MissionPlanner {
-    /// `Lbl_px4bl_Click`: `MainV2.comPort.Open(false)` - the window's link, which returns at
-    /// once when it is open, else opened from the port box at the baud box's rate with no
-    /// parameters asked for - then the page's steps ([`InstallFirmware::force_tick`]). A port
-    /// that will not open is [`FORCE_FAILED`] on the status line.
-    ///
-    /// The C# opens `comPort.BaseStream` as it was last configured: the saved port at start-up,
-    /// the port last connected after that, at the baud box's rate. That is the port box's port
-    /// unless it was changed without connecting, which here opens the port the box shows. Its
-    /// stream after a network connect is that network link, reopened without its questions;
-    /// here only a serial port is opened - the port is where the board's bootloader will
-    /// appear - and a network kind in the box is [`FORCE_FAILED`], as the C#'s start-up
-    /// `SerialPort` named "TCP" fails to open. `Open` records nothing (`doConnect` makes the
-    /// logs), and neither does this.
-    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:513-533; MainV2.cs:726-727, 781-792, 1561-1570, 4352-4358; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:668-700`
-    pub(crate) fn force_bootloader_clicked(&mut self) {
-        if !self.install_firmware.live() {
-            return;
-        }
-        let view = self.telemetry.view();
-        let open = view.connected && !view.target.starts_with("file:");
-        if !open {
-            let port = self.connect_box.port.clone();
-            let serial =
-                !port.is_empty() && crate::connect::kind(&port) == crate::connect::Kind::Serial;
-            if self.install_firmware.refuses_port(&port) {
-                self.file_status = Some(NO_BOARD_WRITTEN.to_owned());
-                return;
-            }
-            let url = format!("serial:{port}:{}", self.connect_box.baud);
-            let link = serial
-                .then(|| mp_link::Link::connect(&url, mp_link::LinkConfig::default()).ok())
-                .flatten();
-            let Some(link) = link else {
-                self.file_status = Some(FORCE_FAILED.to_owned());
-                return;
-            };
-            self.telemetry = Telemetry::over(link, &url);
-            // `Open(false)`: no parameter list, and no mission - reading it on connect is
-            // `doConnect`'s (`loadwpsonconnect`), not `Open`'s.
-            self.params_requested = true;
-            self.mission_requested = true;
-        }
-        let view = self.telemetry.view();
-        self.install_firmware
-            .force_start(open, &view, Instant::now());
-    }
-
     /// `Lbl_bootloaderupdate_Click`: `doConnect(mav, CMB_serialport.Text, CMB_baudrate.Text,
     /// false)` - for a network kind the transport's `Open` asks its questions first, through the
     /// window's prompts, as the window's CONNECT asks them - then the page's steps
@@ -3310,29 +3153,18 @@ impl MissionPlanner {
         self.connect_focus.focus(window, cx);
     }
 
-    /// Once a frame, after the page's tick: Force Bootloader's and Bootloader Update's steps over
-    /// their links, and what the page has to say on the status line. Force Bootloader's `Open`
-    /// failing closes the window's link, as `Open` closes the port at its deadline - which shows
-    /// no screen again either, so SETUP's list is kept, keyed to the link closed.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:791-796`
+    /// Once a frame, after the page's tick: Force Bootloader's steps over the window's link -
+    /// either Install Firmware page's ([`MissionPlanner::force_bootloader_tick`]) - and Bootloader
+    /// Update's over its own, and what the two pages have to say on the status line.
     pub(crate) fn install_firmware_links(&mut self) {
         let now = Instant::now();
-        // The window's view - the mission copied with it - only while Force Bootloader is under
-        // way, not every frame of every screen.
-        let ended = if self.install_firmware.forcing() {
-            let view = self.telemetry.view();
-            self.install_firmware
-                .force_tick(&mut self.telemetry, &view, now)
-        } else {
-            None
-        };
-        if ended == Some(ForceEnd::Failed) {
-            self.telemetry = Telemetry::idle();
-            self.setup_list
-                .rekey(crate::setup::Key::of(&self.telemetry.view()));
-        }
+        self.force_bootloader_tick(now);
         self.install_firmware.bl_tick(now);
-        if let Some(status) = self.install_firmware.take_status() {
+        let said = [
+            self.install_firmware.take_status(),
+            self.firmware_legacy.take_status(),
+        ];
+        for status in said.into_iter().flatten() {
             self.file_status = Some(status);
         }
     }
@@ -4044,7 +3876,7 @@ mod tests {
     #[test]
     fn a_named_device_keeps_both_off_the_machines_serial_ports() {
         let mut page = loaded("CubeOrange-BL");
-        page.opens_boards = false;
+        page.force.opens_boards = false;
         assert!(page.refuses_port("/dev/ttyACM0"));
         assert!(page.refuses_port("COM4"));
         assert!(!page.refuses_port("TCP"));
@@ -4053,7 +3885,7 @@ mod tests {
             !page.refuses_port(""),
             "nothing to open is the C#'s own no-device"
         );
-        page.opens_boards = true;
+        page.force.opens_boards = true;
         assert!(!page.refuses_port("/dev/ttyACM0"));
     }
 
@@ -4385,9 +4217,9 @@ mod manifest_link_tests {
 
     use super::{
         BL_QUESTIONS, BlLink, BlStage, DO_COMMAND_TIMEOUT, FAILED_TO_UPGRADE_BOOTLOADER,
-        FORCE_FAILED, Force, ForceEnd, IGNORE_THE_UNPLUG, InstallFirmware, NO_DEVICE_ON_MAVLINK,
-        UPGRADED_BOOTLOADER, heartbeats,
+        InstallFirmware, NO_DEVICE_ON_MAVLINK, UPGRADED_BOOTLOADER, heartbeats,
     };
+    use crate::config::force_bootloader::{FORCE_FAILED, Force, ForceEnd, IGNORE_THE_UNPLUG};
     use crate::telemetry::Telemetry;
     use crate::telemetry::scripted::{VEHICLE, Vehicle, ack, until};
 
@@ -4433,7 +4265,7 @@ mod manifest_link_tests {
         let deadline = Instant::now() + Duration::from_secs(5);
         while Instant::now() < deadline {
             let view = telemetry.view();
-            if let Some(end) = page.force_tick(telemetry, &view, now()) {
+            if let Some(end) = page.force.tick(telemetry, &view, now()) {
                 return Some(end);
             }
             std::thread::sleep(Duration::from_millis(2));
@@ -4451,13 +4283,13 @@ mod manifest_link_tests {
         let mut page = page();
         let view = telemetry.view();
         let seen = heartbeats(&view);
-        page.force_start(true, &view, Instant::now());
-        assert!(matches!(page.force, Some(Force::Heartbeat { .. })));
+        page.force.start(true, &view, Instant::now());
+        assert!(matches!(page.force.state(), Some(Force::Heartbeat { .. })));
         assert!(!page.live(), "the handler holds the window");
         assert!(page.forcing(), "SETUP is not shown again under it");
         for _ in 0..20 {
             let view = telemetry.view();
-            assert_eq!(page.force_tick(&mut telemetry, &view, Instant::now()), None);
+            assert_eq!(page.force.tick(&mut telemetry, &view, Instant::now()), None);
         }
         std::thread::sleep(Duration::from_millis(100));
         vehicle.read();
@@ -4483,6 +4315,10 @@ mod manifest_link_tests {
         );
         assert_eq!(page.take_status(), None, "no failure said");
         assert!(!page.forcing(), "done");
+        assert!(!page.live(), "the box is over the page");
+        page.force.dismiss();
+        assert!(page.message().is_none());
+        assert!(page.live(), "OK, and the page is the user's again");
     }
 
     /// The link opened by the click: `Open` waits for the copter's second heartbeat, then
@@ -4494,18 +4330,18 @@ mod manifest_link_tests {
         let mut page = page();
         let started = Instant::now();
         let view = telemetry.view();
-        page.force_start(false, &view, started);
+        page.force.start(false, &view, started);
         let view = telemetry.view();
-        assert_eq!(page.force_tick(&mut telemetry, &view, started), None);
+        assert_eq!(page.force.tick(&mut telemetry, &view, started), None);
         assert!(
-            matches!(page.force, Some(Force::Opening { .. })),
+            matches!(page.force.state(), Some(Force::Opening { .. })),
             "one heartbeat is not enough"
         );
         vehicle.heartbeat();
         until("the second heartbeat", || {
             let view = telemetry.view();
-            page.force_tick(&mut telemetry, &view, Instant::now());
-            matches!(page.force, Some(Force::Heartbeat { .. }))
+            page.force.tick(&mut telemetry, &view, Instant::now());
+            matches!(page.force.state(), Some(Force::Heartbeat { .. }))
         });
         // No third heartbeat: `getHeartBeat`'s 2.2 s pass.
         let later = Instant::now() + Duration::from_millis(2300);
@@ -4529,15 +4365,16 @@ mod manifest_link_tests {
         let mut page = page();
         let started = Instant::now();
         let view = telemetry.view();
-        page.force_start(false, &view, started);
+        page.force.start(false, &view, started);
         let view = telemetry.view();
         assert_eq!(
-            page.force_tick(&mut telemetry, &view, started + Duration::from_secs(31)),
+            page.force
+                .tick(&mut telemetry, &view, started + Duration::from_secs(31)),
             Some(ForceEnd::Failed)
         );
         assert_eq!(page.take_status().as_deref(), Some(FORCE_FAILED));
         assert!(page.message().is_none(), "no box");
-        assert!(page.force.is_none());
+        assert!(page.force.state().is_none());
         assert!(!page.forcing());
         std::thread::sleep(Duration::from_millis(100));
         vehicle.read();

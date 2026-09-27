@@ -1,0 +1,97 @@
+# The MAVLink Inspector, ported from Controls/MAVLinkInspector.cs, which SETUP's Advanced page's
+# "MAVLink Inspector" button opens (GCSViews/ConfigurationView/ConfigAdvanced.cs:27-30).
+#
+# The claims: the window opens with Graph It disabled, "Show GCS Traffic" unticked, the history 50
+# and nothing heard (MAVLinkInspector.cs:28-50, 176-272). At its 333 ms timer's ticks the tree
+# lists "Vehicle 1", under it "Comp 1 MAV_COMP_ID_AUTOPILOT1", and under that each message the
+# vehicle sends, its name, rate, id and bytes a second - "HEARTBEAT (1.0 Hz, " then the id and
+# "21Bps" - and under a message its fields' names, values and .NET types (:57-174). The facts
+# carry the id in their keys, as a `#` in a line here starts a comment. Selecting ATTITUDE's
+# roll enables Graph It (:322-337); Graph It asks "Points of history?" and OK opens a graph of
+# ATTITUDE.roll, its Y axis "[rad]", which fills as ATTITUDE comes, and disables Graph It
+# (:341-446). Ticking "Show GCS Traffic" adds what this application sends - its heartbeat from
+# 255/190 - as "Vehicle 255", "Comp 190 MAV_COMP_ID_MISSIONPLANNER" (:448-457). The close box
+# ends it, and the Advanced page stays.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm, which streams
+# ATTITUDE once asked. Run from the repository root as
+#
+#   tools/gui-test.sh tests/gui/config-mavlink-inspector.gui -- tcp:127.0.0.1:5760
+#
+# Not yet run: the budget is a guess, set by hand until a passing run records one.
+
+screen setup
+window 1600x1200
+budget 15
+# A config.xml of its own, so the "Points of history?" answer this script gives is not kept in
+# the settings of the machine running it.
+env MP_CONFIG_XML $WORK/config.xml
+
+# The vehicle first, and its parameters, which are fetched as it is heard: the SETUP list is
+# built again when they are in, and a click before that is a click the list may forget.
+expect vehicle.count > 0
+expect params.held > 1000
+expect config.inspector.window false
+click setup-page-ConfigAdvanced
+expect setup.page ConfigAdvanced
+expect config.advanced.buttons.enabled MAVLink Inspector,FFT
+
+# The constructor: nothing heard yet, Graph It disabled.
+click advanced-but_mavinspector
+expect config.inspector.window true
+expect config.inspector.opened 1
+expect config.inspector.graphit false
+expect config.inspector.gcstraffic false
+expect config.inspector.history 50
+expect config.inspector.prompt none
+expect config.inspector.graphs 0
+
+# The timer's ticks: the vehicle, its autopilot, and what it sends.
+expect config.inspector.updates > 0
+expect config.inspector.vehicles Vehicle 1
+expect config.inspector.components.1 ~ Comp 1 MAV_COMP_ID_AUTOPILOT1
+expect config.inspector.messages.1.1 > 5
+expect config.inspector.message.1.1.0 ~ HEARTBEAT (
+expect config.inspector.message.1.1.0 ~ Bps
+expect config.inspector.message.1.1.30 ~ ATTITUDE (
+
+# The tree opened down to ATTITUDE's fields, sorted by name: pitch first.
+expect config.inspector.row.0 Vehicle 1
+click inspector-toggle-1
+expect config.inspector.row.1 ~ Comp 1 MAV_COMP_ID_AUTOPILOT1
+click inspector-toggle-1-1
+click inspector-toggle-1-1-30
+expect config.inspector.type.1.1.30.roll System.Single
+expect config.inspector.type.1.1.30.time_boot_ms System.UInt32
+expect config.inspector.value.1.1.30.time_boot_ms > 0
+
+# A field selected: Graph It enabled, the path kept.
+click inspector-node-1-1-30-roll
+expect config.inspector.graphit true
+expect config.inspector.selected ~ ATTITUDE (
+expect config.inspector.selected ~ roll
+
+# Graph It: the question, OK with 50, and the graph of ATTITUDE.roll filling.
+click inspector-graphit
+expect config.inspector.prompt Points of history?
+click inspector-points-ok
+expect config.inspector.prompt none
+expect config.inspector.graphs 1
+expect config.inspector.graphit false
+expect config.inspector.graph.0.curves ATTITUDE.roll
+expect config.inspector.graph.0.yaxis [rad]
+expect config.inspector.graph.0.points > 3
+click inspector-graph-0-close
+expect config.inspector.graphs 0
+
+# Show GCS Traffic: this application's own packets, from 255/190.
+click inspector-gcstraffic
+expect config.inspector.gcstraffic true
+expect config.inspector.vehicles Vehicle 1,Vehicle 255
+expect config.inspector.components.255 Comp 190 MAV_COMP_ID_MISSIONPLANNER
+
+# The close box; the page stays.
+click inspector-close
+expect config.inspector.window false
+expect setup.page ConfigAdvanced
+expect config.advanced.active true

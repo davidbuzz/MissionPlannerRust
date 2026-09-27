@@ -689,9 +689,9 @@ impl Backstage {
     /// Whether the list is to be shown again this frame: the screen left, the link opened or
     /// closed or the vehicle changed (`key` moved), or the Loading page seeing every parameter
     /// in. `held` is the link moving under a page whose change `MainV2` does not show the screen
-    /// again for - Install Firmware's Force Bootloader, whose `MainV2.comPort.Open(false)` is not
-    /// `doConnect` - and keys the list to it instead.
-    /// `// C#: ExtLibs/Controls/MainSwitcher.cs:112-138; GCSViews/ConfigurationView/ConfigParamLoading.cs:44-48; GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:517; MainV2.cs:1419-1425, 1740-1748`
+    /// again for - Force Bootloader on either Install Firmware page, whose
+    /// `MainV2.comPort.Open(false)` is not `doConnect` - and keys the list to it instead.
+    /// `// C#: ExtLibs/Controls/MainSwitcher.cs:112-138; GCSViews/ConfigurationView/ConfigParamLoading.cs:44-48; GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:517; ConfigFirmware.cs:623; MainV2.cs:1419-1425, 1740-1748`
     pub fn stale(&mut self, key: Key, showing: bool, got_all_params: bool, held: bool) -> bool {
         let Some(loaded) = self.loaded else {
             return false;
@@ -825,18 +825,27 @@ impl MissionPlanner {
     /// Once a frame: shows a screen's list when the screen is shown, shows it again when
     /// `MainV2` would - the link opening or closing, the vehicle changing, or the Loading page's
     /// timer seeing every parameter in - and closes it when the screen is left, deactivating its
-    /// page as disposing the screen does. Not while Install Firmware's Force Bootloader holds
-    /// the window's link: its `Open(false)` shows no screen again ([`Backstage::stale`]).
-    /// `// C#: ExtLibs/Controls/MainSwitcher.cs:112-138; GCSViews/ConfigurationView/ConfigParamLoading.cs:44-48`
+    /// page as disposing the screen does. Not while Force Bootloader - either Install Firmware
+    /// page's - holds the window's link: its `Open(false)` shows no screen again
+    /// ([`Backstage::stale`]), and the legacy page object, which belongs to the screen, is kept
+    /// under the new key with the list.
+    /// `// C#: ExtLibs/Controls/MainSwitcher.cs:112-138; GCSViews/ConfigurationView/ConfigParamLoading.cs:44-48; GCSViews/ConfigurationView/ConfigFirmware.cs:623; ConfigFirmwareManifest.cs:517`
     pub(crate) fn backstage_tick(&mut self, view: &TelemetryView) {
         let key = Key::of(view);
         let got_all_params = Vehicle::of(view, None).got_all_params;
         for list in List::ALL {
             let showing = self.screen == screen_of(list);
-            let held = matches!(list, List::Setup) && self.install_firmware.forcing();
+            let held = matches!(list, List::Setup)
+                && crate::config::force_bootloader::holds_setup(
+                    &self.install_firmware,
+                    &self.firmware_legacy,
+                );
             let stale = self
                 .backstage_mut(list)
                 .stale(key, showing, got_all_params, held);
+            if showing && held {
+                self.firmware_legacy.rekey(key);
+            }
             if stale && let Some(old) = self.backstage_mut(list).close() {
                 self.deactivate_page(list, old);
             }
