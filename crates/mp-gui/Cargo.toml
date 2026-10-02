@@ -35,6 +35,8 @@ mp-script.workspace = true
 # The WebAssembly plugin host (PLAN.md §13.6 row 96): `PluginLoader` and the plugin thread, whose
 # requests plugins_ui.rs serves.
 mp-plugin-host.workspace = true
+# The DroneCAN/UAVCAN page (config/dronecan.rs): ExtLibs/DroneCAN's protocol and node.
+mp-dronecan.workspace = true
 mp-terrain.workspace = true
 mp-mission.workspace = true
 mp-tiles.workspace = true

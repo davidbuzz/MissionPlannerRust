@@ -1,0 +1,25 @@
+[package]
+name = "mp-dronecan"
+description = "DroneCAN (UAVCAN v0): the transfers, the message subset and the node Mission Planner's DroneCAN page runs, over SLCAN, MAVLink CAN forwarding and multicast"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# CAN_FRAME, CANFD_FRAME and CAN_FILTER_MODIFY: the MAVLink side of the CAN forwarding.
+mp-mavlink-dialects.workspace = true
+# The multicast bus (`StartmcastCAN`): `ReuseAddress` before the bind and the group joined on the
+# chosen interface, as the C#'s `UdpClient` sets them; std's `UdpSocket` cannot set the first.
+# Already in the tree.
+socket2 = "0.6"
+
+# `NetworkInterface.GetAllNetworkInterfaces()` for the multicast interface list: getifaddrs.
+# nix 0.30 is already in the tree with "net" (rustpython-vm and -stdlib enable it), so this adds
+# no new build of it.
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.30", default-features = false, features = ["net"] }

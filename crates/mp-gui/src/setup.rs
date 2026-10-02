@@ -1067,6 +1067,8 @@ impl MissionPlanner {
                 | "ConfigInitialParams"
                 | "ConfigFFT"),
             ) => self.extra_setup_activate(class),
+            // C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:39-57
+            Some("ConfigDroneCAN") => self.extra_setup_activate("ConfigDroneCAN"),
             // ---- end SETUP's small pages ----
             // ---- RTK/GPS Inject ----
             // C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:81-165, 1214-1222
@@ -1201,6 +1203,8 @@ impl MissionPlanner {
                 | "ConfigInitialParams"
                 | "ConfigFFT"),
             ) => self.extra_setup_deactivate(class),
+            // C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:680-684
+            Some("ConfigDroneCAN") => self.extra_setup_deactivate("ConfigDroneCAN"),
             // ---- end SETUP's small pages ----
             // ---- RTK/GPS Inject ----
             // C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:1224-1227
@@ -1482,6 +1486,8 @@ impl MissionPlanner {
             "ConfigInitialParams" => self.extra_setup_page(class, window, cx),
             // C#: GCSViews/ConfigurationView/ConfigFFT.cs:71-157
             "ConfigFFT" => self.extra_setup_page(class, window, cx),
+            // C#: GCSViews/ConfigurationView/ConfigDroneCAN.Designer.cs:29-695
+            "ConfigDroneCAN" => self.extra_setup_page(class, window, cx),
             // ---- end SETUP's small pages ----
             // ---- RTK/GPS Inject ----
             // C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.Designer.cs:29-783;

@@ -74,3 +74,5 @@ pub mod trad_heli;
 pub mod fft;
 pub mod fftui;
 // ---- end FFT Setup ----
+// DroneCAN/UAVCAN (`config/dronecan.rs`, over `crates/mp-dronecan`).
+pub mod dronecan;

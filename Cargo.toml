@@ -41,6 +41,7 @@ mp-chart = { path = "crates/mp-chart" }
 mp-script = { path = "crates/mp-script" }
 mp-video = { path = "crates/mp-video" }
 mp-plugin-host = { path = "crates/mp-plugin-host" }
+mp-dronecan = { path = "crates/mp-dronecan" }
 thiserror = "2"
 sha2 = "0.10"
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }

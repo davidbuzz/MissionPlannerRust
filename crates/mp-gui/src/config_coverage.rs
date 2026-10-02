@@ -627,7 +627,20 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigDroneCAN"),
         Some(15),
         &[setup(276, "DroneCAN/UAVCAN", OPTIONAL, ALWAYS)],
-        Missing,
+        // C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:30-1751 and its Designer, over
+        // ExtLibs/DroneCAN as crates/mp-dronecan; Controls/DroneCANParams.cs as its parameter
+        // window: 14 of the 15 wirings whole, the Inspector's click without its window
+        Partial(
+            at("crates/mp-gui/src/config/dronecan.rs", "fn page"),
+            "the interface list, Connect over MAVLinkCAN1/2 (CAN_FORWARD each second, CAN_FRAME
+        //     both ways), SLCAN (the CPORT/TIMOUT/DRIVER writes, the link's port taken, the
+        //     adapter opened) and MCastCan1/2; node 127 heard by itself; the node grid, details and
+        //     debug grid; the node menu's Parameters (the parameter window), Restart, Update and
+        //     Update Beta (CubePilot's server, the manifest, a .bin or .apj), both passthroughs;
+        //     Filter, Stats, Check for Updates, Log, Exit SLCAN; not the Inspector's window
+        //     (Controls/DroneCANInspector.cs), nor the parameter window's Compare Params and Reset
+        //     to Default, which act on the autopilot",
+        ),
     ),
     panel(
         "ConfigCompassMot",
@@ -1855,7 +1868,7 @@ mod tests {
             );
             checked += 1;
         }
-        assert_eq!(checked, 47);
+        assert_eq!(checked, 48);
     }
 
     /// The committed report matches the table.
@@ -1887,7 +1900,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (38, 7, 2, 2, 12)
+            (38, 8, 1, 2, 12)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

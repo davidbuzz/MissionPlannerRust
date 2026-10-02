@@ -99,6 +99,8 @@ pub struct ExtraSetup {
     /// The Support Proxy the Advanced page opens, and the mirror it starts
     /// (`config/support_proxy.rs`).
     pub support_proxy: support_proxy::SupportProxy,
+    /// DroneCAN/UAVCAN (`config/dronecan.rs`).
+    pub dronecan: super::dronecan::DroneCan,
 }
 
 /// The keyboard focus of the pages' boxes: Parachute's number being typed into, and Initial
@@ -168,6 +170,7 @@ pub fn record_facts(pages: &ExtraSetup, view: &TelemetryView) {
     auth_keys::record_facts(&pages.auth_keys);
     spectrogram::record_facts(&pages.spectrogram);
     support_proxy::record_facts(&pages.support_proxy);
+    super::dronecan::record_facts(&pages.dronecan);
 }
 
 impl MissionPlanner {
@@ -200,6 +203,8 @@ impl MissionPlanner {
                     .fft
                     .activate(&view.parameters, key, crate::metadata::lookup);
             }
+            // C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:39-57
+            "ConfigDroneCAN" => self.dronecan_activate(),
             _ => {}
         }
     }
@@ -218,6 +223,8 @@ impl MissionPlanner {
             "ConfigInitialParams" => self.extra.initial_params.hide(),
             // C#: GCSViews/ConfigurationView/ConfigFFT.cs:66-69
             "ConfigFFT" => self.extra.fft.hide(),
+            // C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:680-684
+            "ConfigDroneCAN" => self.extra.dronecan.deactivate(),
             _ => {}
         }
     }
@@ -239,6 +246,7 @@ impl MissionPlanner {
             "ConfigCompassMot" => compass_mot::page(&pages.compass_mot, cx),
             "ConfigInitialParams" => initial_params::page(&pages.initial_params, focus, window, cx),
             "ConfigFFT" => fft::page(&pages.fft, &focus.number, &focus.fft_track, window, cx),
+            "ConfigDroneCAN" => super::dronecan::page(&pages.dronecan, cx),
             _ => div().into_any_element(),
         }
     }
@@ -354,6 +362,8 @@ impl MissionPlanner {
         if status.is_some() {
             self.file_status = status;
         }
+        // DroneCAN/UAVCAN: its bus, its node, and the port SLCAN takes from the link.
+        self.dronecan_tick(view);
     }
 
     /// The box, question or dialog one of the six is showing, over the whole window.
@@ -396,6 +406,7 @@ impl MissionPlanner {
             .or_else(|| gps_order::overlay(&pages.gps_order, window, cx))
             .or_else(|| compass_mot::overlay(&pages.compass_mot, window, cx))
             .or_else(|| initial_params::overlay(&pages.initial_params, window, cx))
+            .or_else(|| super::dronecan::overlay(&pages.dronecan, window, cx))
     }
 }
 

@@ -1,0 +1,143 @@
+# Initial Setup's DroneCAN/UAVCAN page, ported from GCSViews/ConfigurationView/ConfigDroneCAN.cs
+# over crates/mp-dronecan (ExtLibs/DroneCAN).
+#
+# The claim: Activate binds the interface list again - SLCAN chosen, the network list hidden
+# (ConfigDroneCAN.cs:39-57, 1685-1700); Connect on MAVLinkCAN1 empties the node grid, disables the
+# lists, says "Disconnect", enables Filter and starts StartMavlinkCAN - MAV_CMD_CAN_FORWARD for bus 1
+# a second later and every second after, the vehicle's CAN_FRAMEs to our node 127 and its frames
+# back as CAN_FRAMEs on bus 0 (:85-196, 1637-1683). Our node's own NodeStatus is heard by itself
+# (InvokeMessageReceived), so node 127 is a row: "?" with the status's numbers, then OK and
+# OPERATIONAL, then - its GetNodeInfo answered by itself - "org.missionplanner" (:293-460;
+# DroneCAN.cs:300-386). The Menu cell opens the node's menu; Parameters asks node 127 for its
+# parameters behind "Getting Params", which our node does not answer, so after two seconds the
+# parameter window opens empty (:657-671; DroneCAN.cs:534-602). Filter's window lists all 155
+# message types and its "ALL" box sends CAN_FILTER_MODIFY once the forwarding loop runs
+# (:782-866). Stats opens its window (:1394-1478). Inspector, not ported, says so on the status
+# line. Disconnect, and leaving the page, stop the bus (:673-709).
+#
+# What it cannot check: SITL has no DroneCAN node of its own on a CAN bus it forwards (CAN_FORWARD
+# goes unanswered or refused, and no CAN_FRAME comes back), so the grid holds only node 127 -
+# nodes heard from the bus, their info and parameters, firmware updates and the passthroughs are
+# the unit tests' (config::dronecan, mp-dronecan's jobs and node tests). SLCAN would take this
+# script's own MAVLink port, and the multicast buses need a SITL started with a multicast CAN bus;
+# neither is driven here.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run as
+#
+#   tools/gui-test.sh tests/gui/config-dronecan.gui -- tcp:127.0.0.1:5760
+
+screen params
+window 1600x1200
+budget 25
+# A first budget, set by hand until a passing run records one.
+# A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
+# suppressed by the settings of the machine running it.
+env MP_CONFIG_XML $WORK/config.xml
+env MP_LOG_DIR $WORK
+# RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
+# again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget
+# (vehicle.connected only says the link is open).
+expect vehicle.count > 0
+click raw-param-warning-again
+click raw-param-warning-ok
+
+click tab-setup
+expect config.dronecan.active false
+click setup-page-ConfigOptional
+click setup-page-ConfigDroneCAN
+expect setup.page ConfigDroneCAN
+expect config.dronecan.active true
+expect config.dronecan.interface SLCAN
+expect config.dronecan.network.visible false
+expect config.dronecan.button Connect
+expect config.dronecan.connected false
+expect config.dronecan.lists.enabled true
+expect config.dronecan.exitslcan true
+expect config.dronecan.log false
+expect config.dronecan.bus none
+expect config.dronecan.window none
+
+# The interface list: MAVLinkCAN1.
+click dronecan-interface
+click dronecan-interface-list-1
+expect config.dronecan.interface MAVLinkCAN1
+expect config.dronecan.network.visible false
+
+# Connect: the forwarding loop and our node.
+click dronecan-connect
+expect config.dronecan.button Disconnect
+expect config.dronecan.connected true
+expect config.dronecan.lists.enabled false
+expect config.dronecan.filter.enabled true
+expect config.dronecan.bus MAVLinkCAN1
+expect config.dronecan.node.running true
+expect config.dronecan.forwards > 1
+expect config.dronecan.run true
+expect config.dronecan.frames.sent > 1
+# Node 127, heard from itself: its row, then its words, then its name.
+expect config.dronecan.nodes 1
+expect config.dronecan.node.127.health OK
+expect config.dronecan.node.127.mode OPERATIONAL
+expect config.dronecan.node.127.name org.missionplanner
+expect config.dronecan.node.127.swversion ~ 0.1.
+
+# The row, and its menu.
+click dronecan-row-127
+expect config.dronecan.current 127
+click dronecan-row-127-menu
+expect config.dronecan.menu true
+click dronecan-menu-parameters
+expect config.dronecan.menu false
+expect config.dronecan.progress Getting Params
+# Nobody answers param.GetSet for node 127: two seconds, then the window, empty.
+expect config.dronecan.window params
+expect config.dronecan.progress none
+expect config.dronecan.params.node 127
+expect config.dronecan.params.rows 0
+click dronecan-params-close
+expect config.dronecan.window none
+
+# Restart: four requests a second apart, the answer not looked at.
+click dronecan-row-127-menu
+click dronecan-menu-restart
+expect config.dronecan.restarts 1
+expect config.dronecan.restarts 0
+
+# Filter: every type, the page's ticked; ALL sends CAN_FILTER_MODIFY.
+click dronecan-filter
+expect config.dronecan.window filter
+expect config.dronecan.filter.boxes 155
+expect config.dronecan.filter.sent 0
+click dronecan-filter-all
+expect config.dronecan.filter.sent 1
+click dronecan-filter-close
+expect config.dronecan.window none
+
+# Stats.
+click dronecan-stats
+expect config.dronecan.window stats
+click dronecan-stats-close
+expect config.dronecan.window none
+
+# Inspector is not ported: the status line says so, and nothing opens.
+click dronecan-inspector
+expect config.dronecan.window none
+
+# Disconnect: the bus stopped, the lists back.
+click dronecan-connect
+expect config.dronecan.button Connect
+expect config.dronecan.connected false
+expect config.dronecan.bus none
+expect config.dronecan.lists.enabled true
+expect config.dronecan.node.running false
+# The rows stay until the next Connect empties them.
+expect config.dronecan.nodes 1
+
+# Connect again and leave the page: Deactivate is Disconnect.
+click dronecan-connect
+expect config.dronecan.bus MAVLinkCAN1
+click setup-page-ConfigOptional
+expect config.dronecan.active false
+expect config.dronecan.bus none
+expect config.dronecan.button Connect

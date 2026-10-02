@@ -11,13 +11,13 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 38 | 7 | 2 | 2 | 12 | 569 |
+| 61 | 38 | 8 | 1 | 2 | 12 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings
         // in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 29 | 5 | 1 | 2 | 7 | 258 |
-        //     15 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 29 | 6 | 0 | 2 | 7 | 258 |
+        //     0 |
 | CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 9 | 2 | 1 | 0 | 1 | 277 |
         //     0 |
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 |
@@ -31,7 +31,6 @@ The largest missing panels, by wirings:
 
 | panel | title | wirings |
 |---|---|---:|
-| `ConfigDroneCAN` | DroneCAN/UAVCAN | 15 |
 | `ConfigOSD` | Onboard OSD | 0 |
 
 Vehicles: **any** is a connected vehicle whose parameter list is whole
@@ -100,7 +99,14 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
 | 266 | `ConfigGPSOrder` | CAN GPS Order | Optional Hardware | any | 1 | done: `crates/mp-gui/src/config/gps_order.rs` `fn page` |
 | 270 | `ConfigBatteryMonitoring` | Battery Monitor | Optional Hardware | any | 13 | done: `crates/mp-gui/src/config/battery_monitor.rs` `fn page` |
 | 271 | `ConfigBatteryMonitoring2` | Battery Monitor 2 | Optional Hardware | any | 10 | done: `crates/mp-gui/src/config/battery_monitor2.rs` `fn page` |
-| 276 | `ConfigDroneCAN` | DroneCAN/UAVCAN | Optional Hardware | always | 15 | **missing** |
+| 276 | `ConfigDroneCAN` | DroneCAN/UAVCAN | Optional Hardware | always | 15 | partial: `crates/mp-gui/src/config/dronecan.rs` `fn page` - the interface list, Connect over MAVLinkCAN1/2 (CAN_FORWARD each second, CAN_FRAME
+        //     both ways), SLCAN (the CPORT/TIMOUT/DRIVER writes, the link's port taken, the
+        //     adapter opened) and MCastCan1/2; node 127 heard by itself; the node grid, details and
+        //     debug grid; the node menu's Parameters (the parameter window), Restart, Update and
+        //     Update Beta (CubePilot's server, the manifest, a .bin or .apj), both passthroughs;
+        //     Filter, Stats, Check for Updates, Log, Exit SLCAN; not the Inspector's window
+        //     (Controls/DroneCANInspector.cs), nor the parameter window's Compare Params and Reset
+        //     to Default, which act on the autopilot |
 | 280 | `JoystickSetup` (`Joystick/JoystickSetup.cs`, not a panel) | Joystick | Optional Hardware | always | 11 | partial: `crates/mp-gui/src/joystick.rs` `fn load` - all of the page - the device list, the sixteen channel rows with axis, Auto Detect,
         //     bar, expo and reverse, the button rows with number, Detect, bar, function and the
         //     seven Joy_* settings forms, Enable, Save, Elevons, Manual Control, Export and Import,

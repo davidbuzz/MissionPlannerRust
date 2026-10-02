@@ -4473,6 +4473,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mp-dronecan"
+version = "0.1.0"
+dependencies = [
+ "mp-mavlink-dialects",
+ "nix 0.30.1",
+ "socket2",
+]
+
+[[package]]
 name = "mp-firmware"
 version = "0.1.0"
 dependencies = [
@@ -4536,6 +4545,7 @@ dependencies = [
  "lzma-rs",
  "mp-calibration",
  "mp-chart",
+ "mp-dronecan",
  "mp-firmware",
  "mp-ftp",
  "mp-georef",
