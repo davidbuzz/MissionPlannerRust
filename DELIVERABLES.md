@@ -101,9 +101,9 @@ logs/geo → render → ui-kit → screens → app → extensions → tools), wi
   over `cargo metadata`; clippy, rustfmt and `deny.toml` are enforced; the release profile is LTO fat
   with one codegen unit and the dev profile optimises dependencies; MSRV 1.95.0 and edition 2024 are
   pinned; `cargo xtask` is an alias in `.cargo/config.toml`. **Not yet:** the three-OS CI matrix has
-  never run (no remote); no PGO hook; the cold and incremental build budgets are unmeasured; attribution
+  never run (no remote); no PGO hook; the build budgets measured 2026-10-03 by `tools/build-budget.sh` (16 jobs, the dependencies fetched, nothing else building): cold `cargo check --workspace` 237 s - **over the 90 s asked for**, the dependencies' own checking being most of it (the 2.6 GB check directory is theirs); incremental 4.6 s with a leaf of mp-gui touched and 5.1 s with mp-units (L0) touched, at the 5 s line; attribution
   is not generated (no `about.toml`); `cargo-deny` runs from the workflow and no test wraps it.
-- **Tests:** `xtask/tests/graph.rs` (exists: the layer rules, no upward edge, no cycle, each rule proven able to fail); `xtask/tests/licences.rs` and `xtask/tests/build_budget.rs` not yet; no proc-macro crate exists, so no `trybuild`; the CI matrix builds all three OSes on every PR once there is a remote for it to run on.
+- **Tests:** `xtask/tests/graph.rs` (exists: the layer rules, no upward edge, no cycle, each rule proven able to fail); `xtask/tests/licences.rs` not yet; the build budget is `tools/build-budget.sh`, not a test - a cold check of the workspace inside `cargo test` would be four minutes under the target directory's lock, so the figures are measured by the script and recorded here; no proc-macro crate exists, so no `trybuild`; the CI matrix builds all three OSes on every PR once there is a remote for it to run on.
 
 ### D2. MAVLink protocol crate
 Generated message set (common + ardupilotmega + all dialects Mission Planner ships), MAVLink v1/v2,

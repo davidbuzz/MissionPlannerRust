@@ -50,7 +50,7 @@
 | tools/sitl/wasm | Node bridge from the WASM SITL's SERIAL0 to tcp:5760: awaiting the owner's word - PLAN.md section 12 D21 (2026-09-25) calls it 'a short task awaiting his word' after he built the modules himself; the exports to bridge (ardupilot_serial_read/write/read_available, ardupilot_malloc) and the smoke tests that drive them are in tools/sitl/wasm/README.md | low | 40 |
 | CI, macOS | First macOS run of the application | low | 5 |
 | DELIVERABLES D18 | Translation factory beyond the ledger | low | 30 |
-| DELIVERABLES D1 | Crate splits the plan names (mp-log, mp-geo, mp-map, mp-ui...) | low | 55 |
+| DELIVERABLES D1 | Crate splits the plan names (mp-log, mp-geo, mp-map, mp-ui...). The build budgets measured 2026-10-03 by tools/build-budget.sh: cold `cargo check --workspace` 237 s against the 90 s asked for (the dependencies' checking is most of it), incremental 4.6 s with a leaf of mp-gui touched and 5.1 s with mp-units touched against 5 s. Left: the splits, the three-OS CI (no remote), the PGO hook, attribution (cargo-about is not installed), a test around cargo-deny | low | 58 |
 | crates/mp-gui (row 73) | mp-ui, the widget facade crate | low | 30 |
 | DELIVERABLES D15 | Swarm, HIL and speech | low | 5 |
 
