@@ -1143,7 +1143,6 @@ impl MapViewport {
 
     /// How many mission waypoints are drawn.
     #[must_use]
-    #[allow(dead_code)] // surfaced in the status strip when a mission is loaded
     pub fn mission_len(&self) -> usize {
         self.mission.len()
     }

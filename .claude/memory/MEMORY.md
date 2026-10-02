@@ -22,6 +22,7 @@ controlled; the per-project memory directory holds symlinks to them.
 - [GUI tests take the mouse](gui-tests-take-the-mouse.md) — on the desktop, scripts drive the real pointer: only on Buzz's word, stop means now; `tools/gui-headless.sh` runs them on Xvfb :99 with lavapipe and touches nothing of his
 - [Verify edits applied](verify-edits-applied.md) — a replacement that matches nothing looks like success
 - [Never stop after a commit](never-stop-after-a-commit.md) — chain to the next task; a commit is not an exit condition
+- [rustfmt follows children](rustfmt-follows-children.md) — rustfmt on main.rs/lib.rs rewrites every module they declare and the tree is not fmt-clean: format leaf files, revert the rest (2026-10-03)
 - [Verify before committing](verify-before-committing.md) — clippy is its own command, read it, then commit
 - [Autotests mandatory](autotests-mandatory.md) — every change ships with a test that fails if it stops working; test the path the product takes
 - [No new subagents](delegate-to-opus-subagents.md) — NONE new since 2026-10-02 (Buzz: "when each of these current subagents is finished it job, dont create new ones"); the six running then finish and are merged by me

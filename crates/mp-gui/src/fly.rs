@@ -3804,12 +3804,12 @@ impl MissionPlanner {
         self.fly_send(sends, &view, report)
     }
 
-    /// `CMB_setwp_Click`: the list rebuilt, and opened.
+    /// `CMB_setwp_Click`: the list rebuilt from the totals and `MAV.wps.Count`, and opened.
     /// `// C#: GCSViews/FlightData.cs:2542-2582`
     fn fly_setwp_list_click(&mut self) {
         let view = self.telemetry.view();
         self.fly_actions
-            .refresh_setwp(&view.parameters, view.mission.len());
+            .refresh_setwp(&view.parameters, view.wps.len());
         self.fly_actions.setwp_open = !self.fly_actions.setwp_open;
         self.fly_actions.action_open = false;
         self.fly_actions.mount_open = false;

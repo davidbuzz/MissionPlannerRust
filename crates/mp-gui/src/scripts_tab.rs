@@ -37,14 +37,11 @@
 //!
 //! What the C# keeps that this does not, or keeps otherwise:
 //!
-//! * `MAVState.wps` and `rallypoints`, the mission and the rally points as the link's traffic
-//!   has shown them, which the C#'s `setWPTotal` empties and each accepted `setWP` fills, and
-//!   the first of which its flight map draws: the port keeps neither - the map draws the mission
-//!   a transfer read - so a script's mission `setWP`s reach the vehicle and not the map until
-//!   the mission is read. `fencepoints` it keeps, in the link: a script's fence `setWPTotal`
-//!   empties it and each fence `setWP` the vehicle takes refills it, as the C#'s do; and
-//!   `setWPTotal`'s `WP_TOTAL`, `CMD_TOTAL` and `MIS_TOTAL` (mp-link's `wp_total_answered` and
-//!   `file_fence_point`).
+//! * `MAVState.wps`, `rallypoints` and `fencepoints`, the lists as the link's traffic has shown
+//!   them, which a script's `setWPTotal` empties and each `setWP` the vehicle takes refills, as
+//!   the C#'s do, and the first two of which the flight map draws while no plan is being edited:
+//!   kept in the link (mp-link's `mission_points` and `fence_points`, `wp_total_answered` and
+//!   `file_set_wp`), with `setWPTotal`'s `WP_TOTAL`, `CMD_TOTAL` and `MIS_TOTAL`.
 //! * `GuidedMode`, which `setGuidedModeWP` and `setWP` with current 2 update, is the flight
 //!   screen's own (`fly::Actions::guided`), updated from here when the C# updates it.
 //! * A link that stops while a script waits on it ends the wait at once in the member's
@@ -505,7 +502,11 @@ impl ScriptHost for GuiScriptHost {
 
     fn set_wp_ack(&mut self, target: (u8, u8), kind: u8) {
         // `type = 0`, accepted. `// C#: MAVLinkInterface.cs:2441-2449`
-        self.send(&mp_link::commands::send_mission_ack(vehicle(target), 0, kind));
+        self.send(&mp_link::commands::send_mission_ack(
+            vehicle(target),
+            0,
+            kind,
+        ));
     }
 
     fn set_wp_current(&mut self, target: (u8, u8), seq: u16) -> Result<bool, Timeout> {
@@ -700,13 +701,13 @@ pub fn service(request: &Request, answers: &Answers<'_>) -> (Option<Reply>, Opti
         // table - `setGuidedModeWP` reads `cs.firmware`.
         Request::CsField(name) => (
             Some(Reply::Field(
-                crate::plugins_ui::cs_value(answers.state, answers.connected, name).map(
-                    |value| match value {
+                crate::plugins_ui::cs_value(answers.state, answers.connected, name).map(|value| {
+                    match value {
                         mp_plugin_host::CsValue::Number(number) => CsValue::Number(number),
                         mp_plugin_host::CsValue::Text(text) => CsValue::Text(text),
                         mp_plugin_host::CsValue::Flag(flag) => CsValue::Flag(flag),
-                    },
-                ),
+                    }
+                }),
             )),
             None,
         ),
@@ -730,7 +731,10 @@ pub fn service(request: &Request, answers: &Answers<'_>) -> (Option<Reply>, Opti
 const fn reads_the_view(request: &Request) -> bool {
     matches!(
         request,
-        Request::GetParam(_) | Request::ChangeMode(_) | Request::HasMessage(_) | Request::CsField(_)
+        Request::GetParam(_)
+            | Request::ChangeMode(_)
+            | Request::HasMessage(_)
+            | Request::CsField(_)
     )
 }
 
@@ -865,9 +869,10 @@ impl ScriptsTab {
             abort: Arc::clone(&self.abort),
             speech,
         };
-        let name = path
-            .file_name()
-            .map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().into_owned());
+        let name = path.file_name().map_or_else(
+            || path.display().to_string(),
+            |n| n.to_string_lossy().into_owned(),
+        );
         self.console.clear();
         self.console_shown = self.redirect;
         self.result = None;
@@ -946,7 +951,10 @@ impl ScriptsTab {
                 params,
             } => telemetry
                 .command(target, command, params, Report::default())
-                .map(|id| Waiting::Command { id, reply: reply.clone() }),
+                .map(|id| Waiting::Command {
+                    id,
+                    reply: reply.clone(),
+                }),
             // `doReboot(true)`: 3, into the bootloader, through `doCommand` as a plain reboot
             // goes. `// C#: MAVLinkInterface.cs:2555-2564`
             Request::Reboot { .. } => telemetry
@@ -959,7 +967,10 @@ impl ScriptsTab {
                         Report::default(),
                     )
                 })
-                .map(|id| Waiting::Command { id, reply: reply.clone() }),
+                .map(|id| Waiting::Command {
+                    id,
+                    reply: reply.clone(),
+                }),
             Request::SetWp { target, item } => telemetry
                 .set_wp(target, mission_item(target, &item), Report::default())
                 .map(|id| Waiting::SetWp {
@@ -969,7 +980,10 @@ impl ScriptsTab {
                 }),
             Request::SetWpCurrent { target, seq } => telemetry
                 .set_current_waypoint(target, seq, Report::default())
-                .map(|id| Waiting::SetCurrent { id, reply: reply.clone() }),
+                .map(|id| Waiting::SetCurrent {
+                    id,
+                    reply: reply.clone(),
+                }),
             _ => None,
         };
         match started {
@@ -1098,16 +1112,13 @@ impl ScriptsTab {
                 Request::CsFieldOf { target, ref name } => {
                     // `MAVlist[sysid, compid].cs`, from that vehicle's own state.
                     let state = telemetry.vehicle_state(target);
-                    let value = crate::plugins_ui::cs_value(
-                        state.as_deref(),
-                        telemetry.is_open(),
-                        name,
-                    )
-                    .map(|value| match value {
-                        mp_plugin_host::CsValue::Number(number) => CsValue::Number(number),
-                        mp_plugin_host::CsValue::Text(text) => CsValue::Text(text),
-                        mp_plugin_host::CsValue::Flag(flag) => CsValue::Flag(flag),
-                    });
+                    let value =
+                        crate::plugins_ui::cs_value(state.as_deref(), telemetry.is_open(), name)
+                            .map(|value| match value {
+                                mp_plugin_host::CsValue::Number(number) => CsValue::Number(number),
+                                mp_plugin_host::CsValue::Text(text) => CsValue::Text(text),
+                                mp_plugin_host::CsValue::Flag(flag) => CsValue::Flag(flag),
+                            });
                     let _ = reply.send(Reply::Field(value));
                     continue;
                 }
@@ -1225,7 +1236,10 @@ impl ScriptsTab {
         );
         // `MAV.setWP`s the vehicle accepted this run, and what `SpeakAsync` last had to say.
         record("fly.script.wps", self.wps_accepted);
-        record("fly.script.speech", self.spoken.as_deref().unwrap_or("none"));
+        record(
+            "fly.script.speech",
+            self.spoken.as_deref().unwrap_or("none"),
+        );
     }
 }
 
@@ -1298,10 +1312,9 @@ impl Waiting {
         let mut guided = None;
         let answer = match (self, outcome) {
             // `Script.ChangeParam`: as before, true only when the vehicle took it.
-            (Self::Write { .. }, outcome) => Reply::Bool(matches!(
-                outcome,
-                Some(RequestOutcome::Accepted { .. })
-            )),
+            (Self::Write { .. }, outcome) => {
+                Reply::Bool(matches!(outcome, Some(RequestOutcome::Accepted { .. })))
+            }
             (_, Some(RequestOutcome::TimedOut) | None) => timed_out(&member),
             // `getWPAsync`: the item the vehicle sent. `// C#: MAVLinkInterface.cs:3500-3557`
             (Self::GetWp { .. }, Some(RequestOutcome::Accepted { .. })) => request
@@ -1390,7 +1403,12 @@ pub fn page(tab: &ScriptsTab, cx: &mut Context<MissionPlanner>) -> AnyElement {
         } else {
             PAGE_SIZE.1
         }))
-        .child(label(STATUS_LABEL_AT.0, STATUS_LABEL_AT.1, tab.status, true))
+        .child(label(
+            STATUS_LABEL_AT.0,
+            STATUS_LABEL_AT.1,
+            tab.status,
+            true,
+        ))
         .child(label(
             SELECTED_LABEL_AT.0,
             SELECTED_LABEL_AT.1,
@@ -1439,7 +1457,9 @@ pub fn page(tab: &ScriptsTab, cx: &mut Context<MissionPlanner>) -> AnyElement {
                 !running,
                 |this, _window, cx| {
                     let telemetry = &this.telemetry;
-                    this.fly_data.scripts.run_pressed(telemetry, &this.persisted);
+                    this.fly_data
+                        .scripts
+                        .run_pressed(telemetry, &this.persisted);
                     if this.fly_data.scripts.is_running() {
                         serve_while_running(cx);
                     }
@@ -1524,7 +1544,6 @@ fn console(tab: &ScriptsTab, cx: &mut Context<MissionPlanner>) -> AnyElement {
         .into_any_element()
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1563,7 +1582,10 @@ mod tests {
         // `cs.firmware`, which `setGuidedModeWP` reads, and `BaseStream.IsOpen`.
         assert_eq!(
             service(&Request::CsField("firmware".to_owned()), &answers),
-            (Some(Reply::Field(Some(CsValue::Text("ArduCopter2".to_owned())))), None)
+            (
+                Some(Reply::Field(Some(CsValue::Text("ArduCopter2".to_owned())))),
+                None
+            )
         );
         assert_eq!(
             service(&Request::IsOpen, &answers),
@@ -1677,7 +1699,11 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
         }
         assert!(tab.result.as_ref().is_some_and(Result::is_err));
-        assert!(tab.console.starts_with("Error running script "), "{}", tab.console);
+        assert!(
+            tab.console.starts_with("Error running script "),
+            "{}",
+            tab.console
+        );
         assert!(
             status
                 .as_deref()
@@ -1820,7 +1846,17 @@ mod tests {
         let summary: Vec<(u16, u16, u8, f32, f32, f32, f32)> = items
             .into_inner()
             .iter()
-            .map(|item| (item.seq, item.command, item.frame, item.param1, item.x, item.y, item.z))
+            .map(|item| {
+                (
+                    item.seq,
+                    item.command,
+                    item.frame,
+                    item.param1,
+                    item.x,
+                    item.y,
+                    item.z,
+                )
+            })
             .collect();
         // Each item once, in order: none sent again.
         assert_eq!(
@@ -1931,7 +1967,8 @@ mod tests {
         );
         let transfer = telemetry.view().transfer.expect("the operator's Write");
         assert!(
-            transfer.label.starts_with("writing item") || transfer.label.starts_with("transfer failed"),
+            transfer.label.starts_with("writing item")
+                || transfer.label.starts_with("transfer failed"),
             "{}",
             transfer.label
         );
@@ -1999,7 +2036,10 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert_eq!(targets, vec![(2, 1); usize::from(timeouts.mission_item_request.sends())]);
+        assert_eq!(
+            targets,
+            vec![(2, 1); usize::from(timeouts.mission_item_request.sends())]
+        );
     }
 
     /// The link stopping - the cable pulled - while a script waits in `setParam` ends the wait
@@ -2013,9 +2053,7 @@ mod tests {
         let (mut telemetry, vehicle) = Vehicle::connect(mp_link::ProtocolTimeouts::default());
         let vehicle = std::cell::RefCell::new(vehicle);
         vehicle.borrow_mut().send(&param("RTL_ALT", 1500.0, 6));
-        crate::telemetry::scripted::until("RTL_ALT held", || {
-            telemetry.holds_parameter("RTL_ALT")
-        });
+        crate::telemetry::scripted::until("RTL_ALT held", || telemetry.holds_parameter("RTL_ALT"));
         let mut tab = ScriptsTab::default();
         let started = Instant::now();
         run_served(
@@ -2047,7 +2085,11 @@ mod tests {
             "Timeout on read - setParam RTL_ALT\nFalse False\n"
         );
         // Not the C#'s four 700 ms waits, nor the tab's own five minutes.
-        assert!(started.elapsed() < Duration::from_secs(2), "{:?}", started.elapsed());
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "{:?}",
+            started.elapsed()
+        );
     }
 
     /// The Abort button ends a script waiting on the link: the vehicle never answers its
@@ -2066,20 +2108,29 @@ mod tests {
             (false, false),
         );
         let mut pressed = None;
-        serve_until_ended(&mut tab, &mut telemetry, &mut GuidedMode::default(), |tab| {
-            let asked = vehicle
-                .read()
-                .iter()
-                .any(|message| matches!(message, MavMessage::MissionRequest(_)));
-            if asked && pressed.is_none() {
-                tab.abort_pressed();
-                pressed = Some(Instant::now());
-            }
-        });
+        serve_until_ended(
+            &mut tab,
+            &mut telemetry,
+            &mut GuidedMode::default(),
+            |tab| {
+                let asked = vehicle
+                    .read()
+                    .iter()
+                    .any(|message| matches!(message, MavMessage::MissionRequest(_)));
+                if asked && pressed.is_none() {
+                    tab.abort_pressed();
+                    pressed = Some(Instant::now());
+                }
+            },
+        );
         assert_eq!(tab.result, Some(Ok(())));
         assert_eq!(tab.console, "");
         let pressed = pressed.expect("the getWP asked");
-        assert!(pressed.elapsed() < Duration::from_secs(2), "{:?}", pressed.elapsed());
+        assert!(
+            pressed.elapsed() < Duration::from_secs(2),
+            "{:?}",
+            pressed.elapsed()
+        );
     }
 
     /// `MAV` follows the window's link as it stands, not as it stood at Run: a script started
@@ -2367,7 +2418,11 @@ mod tests {
             for message in vehicle.read() {
                 if let MavMessage::MissionItem(item) = message {
                     assert_eq!(item.current, 2);
-                    let result = if results.is_empty() { 0 } else { results.remove(0) };
+                    let result = if results.is_empty() {
+                        0
+                    } else {
+                        results.remove(0)
+                    };
                     vehicle.send(&MavMessage::MissionAck(MissionAck {
                         target_system: 255,
                         target_component: 190,
@@ -2441,7 +2496,10 @@ mod tests {
                 frame: 3,
             }
         );
-        assert_eq!(modes_heard(&vehicle.into_inner().heard), [(1, 15), (1, 15), (1, 15)]);
+        assert_eq!(
+            modes_heard(&vehicle.into_inner().heard),
+            [(1, 15), (1, 15), (1, 15)]
+        );
     }
 
     /// With the port closed, `setParam` decides as `setParamAsync` does before it sends, from
@@ -2498,10 +2556,8 @@ mod tests {
     /// `// C#: MainV2.cs:658, 1005-1006`
     #[test]
     fn run_reads_the_speech_settings() {
-        let path = std::env::temp_dir().join(format!(
-            "mp-scripts-speech-{}.py",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("mp-scripts-speech-{}.py", std::process::id()));
         std::fs::write(
             &path,
             "print(MainV2.speechEnable, MainV2.speech_armed_only)\n",
@@ -2591,20 +2647,31 @@ mod tests {
         );
         eprintln!("example4: {:?}\n{}", tab.result, tab.console);
         assert_eq!(tab.result, Some(Ok(())));
-        assert!(tab.console.ends_with("final ack\ndone\n"), "{}", tab.console);
+        assert!(
+            tab.console.ends_with("final ack\ndone\n"),
+            "{}",
+            tab.console
+        );
         assert_eq!(tab.wps_accepted, 5);
         let mission = read_back(&telemetry);
         eprintln!("read back: {mission:#?}");
         assert_eq!(mission.len(), 5);
         let takeoff = &mission[1];
-        assert_eq!((takeoff.command, takeoff.param1, takeoff.z), (22, 15.0, 50.0));
-        for (item, (lat, lng, alt)) in mission[2..]
-            .iter()
-            .zip([(-35.0, 117.8, 50.0), (-35.0, 117.89, 50.0), (-35.0, 117.85, 20.0)])
-        {
+        assert_eq!(
+            (takeoff.command, takeoff.param1, takeoff.z),
+            (22, 15.0, 50.0)
+        );
+        for (item, (lat, lng, alt)) in mission[2..].iter().zip([
+            (-35.0, 117.8, 50.0),
+            (-35.0, 117.89, 50.0),
+            (-35.0, 117.85, 20.0),
+        ]) {
             assert_eq!(item.command, 16);
             assert_eq!(item.frame, 3);
-            assert!((item.x - lat).abs() < 1e-5 && (item.y - lng).abs() < 1e-5, "{item:?}");
+            assert!(
+                (item.x - lat).abs() < 1e-5 && (item.y - lng).abs() < 1e-5,
+                "{item:?}"
+            );
             assert!((item.z - alt).abs() < 1e-3, "{item:?}");
         }
 
@@ -2618,7 +2685,11 @@ mod tests {
         );
         eprintln!("TAKEOFF: {:?}\n{}", tab.result, tab.console);
         assert!(tab.console.starts_with("GPS PASSED."), "{}", tab.console);
-        let error = tab.result.clone().expect("ended").expect_err("the TypeError");
+        let error = tab
+            .result
+            .clone()
+            .expect("ended")
+            .expect_err("the TypeError");
         assert!(
             error.contains("TypeError: setWPCurrent() takes exactly 3 arguments (1 given)"),
             "{error}"
@@ -2655,6 +2726,10 @@ mod tests {
         assert!(tab.console.starts_with("0.0\nFalse\n"), "{}", tab.console);
         // `cs.lat` with no vehicle: the field is not there, an AttributeError.
         assert!(tab.result.as_ref().is_some_and(Result::is_err));
-        assert!(tab.console.contains("cs has no field 'lat'"), "{}", tab.console);
+        assert!(
+            tab.console.contains("cs has no field 'lat'"),
+            "{}",
+            tab.console
+        );
     }
 }

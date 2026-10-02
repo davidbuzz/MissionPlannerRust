@@ -7,7 +7,11 @@
 #
 # The claim: the script runs to its end - its prints in the console, "done" last - and the
 # vehicle accepted all five items (`fly.script.wps`, counted from the link's set-WP requests
-# ending accepted). It replaces the vehicle's mission.
+# ending accepted). It replaces the vehicle's mission, and `MAV.wps` - the link's snapshot of what
+# the vehicle holds, which each accepted setWP fills (MAVLinkInterface.cs:4146-4160, 4196-4206) -
+# holds the five, so the flight map draws them as FlightData's overlay does (FlightData.cs:
+# 3810-3843): `map.mission` is the four with a position, home among them; the TAKEOFF at 0,0 has
+# none.
 #
 # Needs SITL copter on tcp:127.0.0.1:5760. Run as
 #
@@ -16,7 +20,7 @@
 env MP_CONFIG_XML $WORK/config.xml
 screen fly
 window 1600x1200
-budget 20
+budget 15
 expect vehicle.connected true
 
 # Scripts is the eleventh tab, reached as fly-scripts.gui reaches it.
@@ -52,3 +56,5 @@ expect fly.script.console ~ set wp total
 expect fly.script.console ~ upload wp3
 expect fly.script.console ~ final ack | done
 expect fly.script.wps 5
+expect vehicle.wps 5
+expect map.mission 4

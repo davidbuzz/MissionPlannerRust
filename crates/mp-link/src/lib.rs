@@ -85,6 +85,7 @@ pub mod inject;
 pub mod inspector;
 pub mod messages;
 pub mod mirror;
+pub mod mission_points;
 pub mod mission_transfer;
 pub mod param_download;
 pub mod param_fetch;
@@ -314,6 +315,8 @@ struct Shared {
     ftp: Mutex<BTreeMap<VehicleId, mp_ftp::mavftp::MavFtp>>,
     /// `MAVState.fencepoints` for every vehicle (see [`fence_points`]).
     fence_points: Mutex<fence_points::FencePoints>,
+    /// `MAVState.wps` and `MAVState.rallypoints` for every vehicle (see [`mission_points`]).
+    mission_points: Mutex<mission_points::MissionPoints>,
     /// What the screens write into a vehicle's state, for the link thread to apply.
     state_writes: Mutex<Vec<(VehicleId, StateWrite)>>,
     stats: Mutex<LinkStats>,
@@ -841,6 +844,36 @@ impl Link {
             .lock()
             .map(|held| held.items(target))
             .unwrap_or_default()
+    }
+
+    /// A vehicle's mission as the traffic on this link has shown it, in sequence order:
+    /// `MAVState.wps`, which the flight screen draws and counts (see [`mission_points`]).
+    #[must_use]
+    pub fn wps(&self, target: VehicleId) -> Vec<MissionItem> {
+        self.shared
+            .mission_points
+            .lock()
+            .map(|held| held.wps(target))
+            .unwrap_or_default()
+    }
+
+    /// A vehicle's rally points as the traffic on this link has shown them, in sequence order:
+    /// `MAVState.rallypoints`, which the flight screen draws (see [`mission_points`]).
+    #[must_use]
+    pub fn rally_points(&self, target: VehicleId) -> Vec<MissionItem> {
+        self.shared
+            .mission_points
+            .lock()
+            .map(|held| held.rally_points(target))
+            .unwrap_or_default()
+    }
+
+    /// `MAV.rallypoints.Clear()`, as Clear Rally Points does it beside its markers.
+    /// `// C#: GCSViews/FlightPlanner.cs:2108-2109`
+    pub fn clear_rally_points(&self, target: VehicleId) {
+        if let Ok(mut held) = self.shared.mission_points.lock() {
+            held.clear(target, mission_points::MISSION_TYPE_RALLY);
+        }
     }
 
     /// Sets a vehicle's stream rates, [`mp_vehicle::VehicleState::rates`], as the Planner page's
@@ -1450,19 +1483,25 @@ fn run_link(
                                 protocols::detected(shared, id, arrived, &mut protocol_starts);
                             }
                             protocols::observe(shared, id, &msg);
-                            // The fence the vehicle holds, as MAVState.fencepoints has it: from
-                            // this link's own upload, before the transfer moves on, and from
-                            // whatever passes (see `fence_points`).
-                            file_fence_upload(shared, id, gcs, &msg);
+                            // The fence, the mission and the rally points the vehicle holds, as
+                            // MAVState.fencepoints, wps and rallypoints have them: from this
+                            // link's own upload, before the transfer moves on, and from whatever
+                            // passes (see `fence_points` and `mission_points`).
+                            file_list_upload(shared, id, gcs, &msg);
                             if matches!(
                                 msg,
                                 MavMessage::MissionCount(_)
                                     | MavMessage::MissionItem(_)
                                     | MavMessage::MissionItemInt(_)
                                     | MavMessage::FencePoint(_)
-                            ) && let Ok(mut held) = shared.fence_points.lock()
-                            {
-                                held.observe(frame.sysid, frame.compid, config.sysid, &msg);
+                                    | MavMessage::RallyPoint(_)
+                            ) {
+                                if let Ok(mut held) = shared.fence_points.lock() {
+                                    held.observe(frame.sysid, frame.compid, config.sysid, &msg);
+                                }
+                                if let Ok(mut held) = shared.mission_points.lock() {
+                                    held.observe(frame.sysid, frame.compid, config.sysid, &msg);
+                                }
                             }
                             // A set-WP of one item (setWPAsync) waits for the vehicle's ack or
                             // its request for the item after; the C# holds the port for that
@@ -1487,12 +1526,15 @@ fn run_link(
                                                 if request.on_mission_ack(id, addressed, m.r#type) {
                                                     taken = true;
                                                     // setWPAsync files its item on any ack.
-                                                    filed = set_wp_filed(request);
+                                                    filed = set_wp_filed(
+                                                        request,
+                                                        mission_points::Finish::Ack,
+                                                    );
                                                     break;
                                                 }
                                             }
                                         }
-                                        file_fence_point(shared, id, filed);
+                                        file_set_wp(shared, id, filed);
                                     }
                                     MavMessage::MissionRequest(MissionRequest {
                                         seq,
@@ -1527,24 +1569,29 @@ fn run_link(
                                                         counted = Some((total, mission_type));
                                                     }
                                                     // setWPAsync files its item when the
-                                                    // vehicle asks for the next with
-                                                    // MISSION_REQUEST; the INT request files
-                                                    // no fence point.
-                                                    if matches!(msg, MavMessage::MissionRequest(_))
-                                                        && matches!(
-                                                            request.outcome(),
-                                                            Some(requests::RequestOutcome::Accepted {
-                                                                ..
-                                                            })
-                                                        )
-                                                    {
-                                                        filed = set_wp_filed(request);
+                                                    // vehicle asks for the next - where, by
+                                                    // which request (mission_points::Finish).
+                                                    if matches!(
+                                                        request.outcome(),
+                                                        Some(requests::RequestOutcome::Accepted {
+                                                            ..
+                                                        })
+                                                    ) {
+                                                        let finish = if matches!(
+                                                            msg,
+                                                            MavMessage::MissionRequest(_)
+                                                        ) {
+                                                            mission_points::Finish::Request
+                                                        } else {
+                                                            mission_points::Finish::RequestInt
+                                                        };
+                                                        filed = set_wp_filed(request, finish);
                                                     }
                                                     break;
                                                 }
                                             }
                                         }
-                                        file_fence_point(shared, id, filed);
+                                        file_set_wp(shared, id, filed);
                                         if let Some((total, mission_type)) = counted {
                                             wp_total_answered(shared, id, total, mission_type);
                                         }
@@ -2287,31 +2334,39 @@ fn expose_handles<'a>(
     }
 }
 
-/// What this link's own fence upload does to the vehicle's `fencepoints`, read before the transfer
-/// moves on: the vehicle's first request, for item 0 or 1, clears it (`setWPTotalAsync`, either
-/// request message), and a `MISSION_REQUEST` for the item after the one last sent - or any
-/// `MISSION_ACK` - files that one (`setWPAsync`). Only answers addressed to this ground station
-/// count, as the C# checks.
+/// What this link's own upload of a list does to the vehicle's copy of it - `wps`, `fencepoints`
+/// or `rallypoints`, as the transfer's type names - read before the transfer moves on: the
+/// vehicle's first request, for item 0 or 1, clears it (`setWPTotalAsync`, either request
+/// message), and a `MISSION_REQUEST` for the item after the one last sent, or any `MISSION_ACK`,
+/// files that one (`setWPAsync`). Only answers addressed to this ground station count, as the C#
+/// checks.
 ///
-/// A `MISSION_REQUEST_INT` files nothing, as in the C#: its `setWPAsync` for an `_INT` item has
-/// no branch for that message, and the one for a float item files only mission items from it
-/// (`:4183-4215`). Against a vehicle that asks with it, only the last item - acknowledged - is
-/// filed, until the fence is read back.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3801-3830, 3832-3861, 4098-4133,
-/// 4134-4182, 4273-4309, 4310-4346`
-fn file_fence_upload(shared: &Arc<Shared>, id: VehicleId, gcs: VehicleId, msg: &MavMessage) {
-    const FENCE: u8 = mp_mission::fence::MISSION_TYPE_FENCE;
-    // (the item asked for, whether a request may file, to whom it is addressed)
-    let (asked, files, target) = match msg {
-        MavMessage::MissionRequestInt(m) if m.mission_type == FENCE => {
-            (Some(m.seq), false, (m.target_system, m.target_component))
-        }
-        MavMessage::MissionRequest(m) if m.mission_type == FENCE => {
-            (Some(m.seq), true, (m.target_system, m.target_component))
-        }
-        MavMessage::MissionAck(m) if m.mission_type == FENCE => {
-            (None, true, (m.target_system, m.target_component))
-        }
+/// A `MISSION_REQUEST_INT` files nothing, as in the C#: its `setWPAsync` for an `_INT` item - the
+/// one this link's transfers send - has no branch for that message. Against a vehicle that asks
+/// with it, only the last item - acknowledged - is filed, until the list is read back.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3801-3830, 3832-3861, 4273-4309,
+/// 4310-4346`
+fn file_list_upload(shared: &Arc<Shared>, id: VehicleId, gcs: VehicleId, msg: &MavMessage) {
+    // (the item asked for, whether a request may file, to whom it is addressed, the list)
+    let (asked, files, target, kind) = match msg {
+        MavMessage::MissionRequestInt(m) => (
+            Some(m.seq),
+            false,
+            (m.target_system, m.target_component),
+            m.mission_type,
+        ),
+        MavMessage::MissionRequest(m) => (
+            Some(m.seq),
+            true,
+            (m.target_system, m.target_component),
+            m.mission_type,
+        ),
+        MavMessage::MissionAck(m) => (
+            None,
+            true,
+            (m.target_system, m.target_component),
+            m.mission_type,
+        ),
         _ => return,
     };
     if target != (gcs.sysid, gcs.compid) {
@@ -2320,7 +2375,7 @@ fn file_fence_upload(shared: &Arc<Shared>, id: VehicleId, gcs: VehicleId, msg: &
     let Ok(transfers) = shared.missions.lock() else {
         return;
     };
-    let Some(transfer) = transfers.get(&(id, FENCE)) else {
+    let Some(transfer) = transfers.get(&(id, kind)) else {
         return;
     };
     let mission_transfer::TransferState::Uploading { last_requested } = *transfer.state() else {
@@ -2329,9 +2384,7 @@ fn file_fence_upload(shared: &Arc<Shared>, id: VehicleId, gcs: VehicleId, msg: &
     let filed = match (last_requested, asked) {
         // setWPTotalAsync: the first request answers the count.
         (None, Some(0 | 1)) => {
-            if let Ok(mut held) = shared.fence_points.lock() {
-                held.clear(id);
-            }
+            clear_list(shared, id, kind);
             return;
         }
         // setWPAsync: on to the next item, or the ack, files the one sent.
@@ -2339,59 +2392,97 @@ fn file_fence_upload(shared: &Arc<Shared>, id: VehicleId, gcs: VehicleId, msg: &
         (Some(sent), None) => sent,
         _ => return,
     };
-    if let Some(item) = transfer.items().get(usize::from(filed))
-        && let Ok(mut held) = shared.fence_points.lock()
-    {
-        held.store(id, item.seq, fence_points::uploaded(item));
+    if let Some(item) = transfer.items().get(usize::from(filed)) {
+        if kind == mp_mission::fence::MISSION_TYPE_FENCE {
+            if let Ok(mut held) = shared.fence_points.lock() {
+                held.store(id, item.seq, fence_points::uploaded(item));
+            }
+        } else if let Ok(mut held) = shared.mission_points.lock() {
+            held.store(id, kind, item.seq, mission_points::uploaded(item));
+        }
     }
 }
 
-/// What `setWPTotalAsync` does once the vehicle has asked for the first item, where the link keeps
-/// the same: for the mission, `WP_TOTAL`, `CMD_TOTAL` and `MIS_TOTAL` - those the vehicle has
-/// listed - held as `total - 1`; for the geofence, `fencepoints` emptied.
+/// `wps.Clear()`, `fencepoints.Clear()` or `rallypoints.Clear()`, as `mission_type` names.
+fn clear_list(shared: &Shared, id: VehicleId, mission_type: u8) {
+    if mission_type == mp_mission::fence::MISSION_TYPE_FENCE {
+        if let Ok(mut held) = shared.fence_points.lock() {
+            held.clear(id);
+        }
+    } else if let Ok(mut held) = shared.mission_points.lock() {
+        held.clear(id, mission_type);
+    }
+}
+
+/// What `setWPTotalAsync` does once the vehicle has asked for the first item: for the mission,
+/// `WP_TOTAL`, `CMD_TOTAL` and `MIS_TOTAL` - those the vehicle has listed - held as `total - 1`
+/// and `wps` emptied; for the geofence, `fencepoints` emptied; for the rally points,
+/// `rallypoints`.
 ///
-/// **Not ported, for want of the same:** the C# also empties `MAVState.wps` for the mission and
-/// `rallypoints` for the rally points; the link keeps neither list - the screens hold the mission
-/// a transfer read. And the C# writes the totals into `MAV.param`, the vehicle being flown; this
-/// writes them into the table of the vehicle asked, which is that one whenever a script asks.
+/// The C# writes the totals into `MAV.param`, the vehicle being flown; this writes them into the
+/// table of the vehicle asked, which is that one whenever a script asks.
 /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3811-3828, 3842-3859`
 fn wp_total_answered(shared: &Shared, id: VehicleId, total: u16, mission_type: u8) {
-    if mission_type == MISSION_TYPE_MISSION {
-        if let Ok(mut tables) = shared.params.lock()
-            && let Some(table) = tables.get_mut(&id)
-        {
-            for name in ["WP_TOTAL", "CMD_TOTAL", "MIS_TOTAL"] {
-                if let Some(held) = table.get(name) {
-                    // `MAV.param[name].Value = wp_total - 1`: the value in the parameter's own
-                    // type; the index it was listed at and the count stay as they were.
-                    let value = ParamValue::from_f64(f64::from(total) - 1.0, held.param_type());
-                    table.insert(name.to_owned(), value, u16::MAX, 0);
-                }
+    if mission_type == MISSION_TYPE_MISSION
+        && let Ok(mut tables) = shared.params.lock()
+        && let Some(table) = tables.get_mut(&id)
+    {
+        for name in ["WP_TOTAL", "CMD_TOTAL", "MIS_TOTAL"] {
+            if let Some(held) = table.get(name) {
+                // `MAV.param[name].Value = wp_total - 1`: the value in the parameter's own
+                // type; the index it was listed at and the count stay as they were.
+                let value = ParamValue::from_f64(f64::from(total) - 1.0, held.param_type());
+                table.insert(name.to_owned(), value, u16::MAX, 0);
             }
         }
-    } else if mission_type == mp_mission::fence::MISSION_TYPE_FENCE
-        && let Ok(mut held) = shared.fence_points.lock()
-    {
-        held.clear(id);
     }
+    clear_list(shared, id, mission_type);
 }
 
-/// The fence point a finished set-WP files, if its item is one: see
-/// [`fence_points::set_wp_item`].
-fn set_wp_filed(request: &Request) -> Option<(u16, FenceItem)> {
-    match &request.kind {
-        RequestKind::SetWp { item, .. } if request.is_finished() => fence_points::set_wp_item(item),
-        _ => None,
-    }
+/// What a finished set-WP files, if its item is one of a list's: see
+/// [`fence_points::set_wp_item`] and [`mission_points::set_wp_item`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Filed {
+    /// `fencepoints[seq]`.
+    Fence(u16, FenceItem),
+    /// `wps[seq]` or `rallypoints[seq]`, as the type names.
+    List(u8, u16, MissionItem),
 }
 
-/// `fencepoints[req.seq] = (Locationwp) req`, for a set-WP's item of the fence list.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4113-4127, 4146-4160`
-fn file_fence_point(shared: &Shared, id: VehicleId, filed: Option<(u16, FenceItem)>) {
-    if let Some((seq, item)) = filed
-        && let Ok(mut held) = shared.fence_points.lock()
+/// What a set-WP ended by `finish` files, if anything.
+fn set_wp_filed(request: &Request, finish: mission_points::Finish) -> Option<Filed> {
+    let RequestKind::SetWp { item, .. } = &request.kind else {
+        return None;
+    };
+    if !request.is_finished() {
+        return None;
+    }
+    // The fence's item is filed on an ack or a MISSION_REQUEST, never on the INT request.
+    if finish != mission_points::Finish::RequestInt
+        && let Some((seq, fence)) = fence_points::set_wp_item(item)
     {
-        held.store(id, seq, item);
+        return Some(Filed::Fence(seq, fence));
+    }
+    mission_points::set_wp_item(item, finish)
+        .map(|(list, seq, filed)| Filed::List(list, seq, filed))
+}
+
+/// `wps[req.seq]`, `fencepoints[req.seq]` or `rallypoints[req.seq]` `= (Locationwp) req`, for a
+/// set-WP's item.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4113-4127, 4146-4160, 4196-4206`
+fn file_set_wp(shared: &Shared, id: VehicleId, filed: Option<Filed>) {
+    match filed {
+        Some(Filed::Fence(seq, item)) => {
+            if let Ok(mut held) = shared.fence_points.lock() {
+                held.store(id, seq, item);
+            }
+        }
+        Some(Filed::List(list, seq, item)) => {
+            if let Ok(mut held) = shared.mission_points.lock() {
+                held.store(id, list, seq, item);
+            }
+        }
+        None => {}
     }
 }
 

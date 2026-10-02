@@ -2960,7 +2960,7 @@ impl Render for MissionPlanner {
         } else {
             plan::flight_map_home(
                 view.state.as_ref().and_then(|state| state.home),
-                !view.mission.is_empty(),
+                !view.wps.is_empty(),
                 self.plan.planned_home_location(),
             )
         };
@@ -3097,8 +3097,24 @@ impl Render for MissionPlanner {
             facts::record("rally.points", self.plan.rally().len());
             // The rally pins the map draws: `rallypointoverlay`'s markers.
             facts::record("map.rally", self.map.borrow().rally_count());
+            // The mission waypoints the map draws, and the vehicle's lists as the link holds
+            // them: `MAV.wps.Count` and `MAV.rallypoints.Count`.
+            facts::record("map.mission", self.map.borrow().mission_len());
+            facts::record("vehicle.wps", view.wps.len());
+            facts::record("vehicle.rally", view.rally_points.len());
             facts::record("vehicle.connected", view.connected);
             facts::record("vehicle.count", view.vehicle_count);
+            // `cs.HomeLocation`, once the vehicle has sent HOME_POSITION.
+            facts::record(
+                "vehicle.home",
+                view.state
+                    .as_ref()
+                    .and_then(|state| state.home)
+                    .map_or_else(
+                        || "none".to_owned(),
+                        |home| format!("{},{}", home.latitude(), home.longitude()),
+                    ),
+            );
             facts::record("link.frames", view.frames);
             // What the link was opened on and why it is not open, for a script that finds no
             // vehicle: `MainV2.comPort.BaseStream.PortName` and `OpenBg`'s exception.
@@ -3391,6 +3407,14 @@ impl Render for MissionPlanner {
             // `processToScreen` ends with `setWPParams`.
             // `// C#: GCSViews/FlightPlanner.cs:5630`
             self.plan.set_wp_params(&view.parameters);
+            // The read's item 0 as the vehicle sent it: its home, or 0,0 while it has none.
+            facts::record(
+                "mission.read.home",
+                view.mission.first().map_or_else(
+                    || "none".to_owned(),
+                    |item| format!("{},{}", item.x, item.y),
+                ),
+            );
             self.file_status = Some(format!(
                 "read {} items from the vehicle",
                 view.mission.len()
@@ -3398,17 +3422,29 @@ impl Render for MissionPlanner {
         }
 
         // The map shows the plan being edited when there is one, and what the vehicle holds
-        // otherwise. Showing the vehicle's mission while the operator draws a different one is
-        // how people fly the mission they thought they had replaced. While the Survey (Grid)
-        // dialog is open it is the dialog's map, showing its grid.
+        // otherwise - `MAV.wps`, the mission as the link's traffic has shown it: read, written,
+        // or put there by a script's `setWP`s, which is what the C#'s flight map draws. Showing
+        // the vehicle's mission while the operator draws a different one is how people fly the
+        // mission they thought they had replaced. While the Survey (Grid) dialog is open it is
+        // the dialog's map, showing its grid.
+        // `// C#: GCSViews/FlightData.cs:3810-3843`
         if let Some((preview, _)) = self.survey_preview() {
             self.map.borrow_mut().set_mission(&preview);
         } else if self.plan.is_empty() {
-            if !view.mission.is_empty() {
-                self.map.borrow_mut().set_mission(&view.mission);
-            }
+            self.map.borrow_mut().set_mission(&view.wps);
         } else {
             self.map.borrow_mut().set_mission(self.plan.items());
+        }
+        // The rally markers likewise: the plan's while it has any, else the vehicle's as the
+        // traffic has shown them - `MAV.rallypoints`, which the flight screen draws.
+        // `// C#: GCSViews/FlightData.cs:3898-3905`
+        if self.plan.rally().is_empty() {
+            let positions: Vec<mp_units::LatLon> = view
+                .rally_points
+                .iter()
+                .filter_map(|item| item.position().ok().flatten())
+                .collect();
+            self.map.borrow_mut().set_rally(&positions);
         }
 
         // Other aircraft. Read every frame because the link forgets stale ones on read, and a

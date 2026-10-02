@@ -8,37 +8,43 @@
 # Needs SITL: tools/gui-test.sh tests/gui/fly-setwp.gui -- tcp:127.0.0.1:5760
 # The setup writes a five-item mission to SITL through its second port, 5762, before the window
 # opens, so the list and the index are known.
+#
+# Whether the read asks "Reset Home to loaded coords" is the vehicle's to decide, so the script
+# does not: the question comes when item 0 - ArduPilot's home - differs from the Home Location
+# boxes, and not at all while that home is still 0,0, which a freshly started SITL's is until its
+# EKF has an origin, some seconds after boot (FlightPlanner.cs:5640-5660, the latitude-0 rule at
+# :5643). Escape answers a question that came and does nothing to a screen without one, and the
+# boxes keep the saved planned home either way. Expecting the question lost the race until
+# 2026-10-03: a warm SITL asks, a fresh one does not.
 
+setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-27.5133897</TXT_homelat><TXT_homelng>153.0094079</TXT_homelng><TXT_homealt>19.28</TXT_homealt></Config>' > "$WORK/MissionPlannerRust/config.xml"
 setup printf 'QGC WPL 110\n0\t1\t0\t16\t0\t0\t0\t0\t-35.363262\t149.165237\t584.09\t1\n1\t0\t3\t22\t0\t0\t0\t0\t0\t0\t10\t1\n2\t0\t3\t16\t0\t0\t0\t0\t-35.3629\t149.165237\t10\t1\n3\t0\t3\t178\t0\t5\t0\t0\t0\t0\t0\t1\n4\t0\t3\t16\t0\t0\t0\t0\t-35.3625\t149.1657\t10\t1\n' > $WORK/mission.waypoints
 setup cargo run -q -p mp-cli --bin headless-planner -- mission tcp:127.0.0.1:5762 $WORK/mission.waypoints
 
-screen fly
+screen plan
 window 1600x1200
-budget 7
+budget 6
 
-# The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as
-# tabControlactions.SelectedIndex = 0 has it. `GCSViews/FlightData.Designer.cs:595-611`
 # The vehicle first: a click before its first heartbeat is a click the screen may forget
 # (vehicle.connected only says the link is open).
 expect vehicle.count > 0
+
+# Read the vehicle's mission so the list has something to count. Item 0 is home and goes to
+# the Home Location boxes, not the rows - asked about or not, see above - and the four rows after
+# home are the mission.
+click plan-read
+expect mission.items 4
+key Escape
+expect plan.prompt none
+click tab-fly
+# The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as
+# tabControlactions.SelectedIndex = 0 has it. `GCSViews/FlightData.Designer.cs:595-611`
 click fly-tab-actions
 expect fly.tab tabActions
 
 # Before the list is opened it holds only the Designer's item.
 expect fly.setwp.items 1
 expect fly.setwp.selected 0 (Home)
-
-# Read the vehicle's mission so the list has something to count. Item 0 is home and goes to
-# the Home Location boxes, not the rows: with the boxes empty, processToScreen asks "Reset Home
-# to loaded coords" (GCSViews/FlightPlanner.cs:5640-5660), and the four rows after home are the
-# mission. Yes takes the home, as an operator would.
-click tab-plan
-click plan-read
-expect mission.items 4
-expect plan.prompt Reset Home Coords
-click plan-prompt-ok
-expect plan.prompt none
-click tab-fly
 
 # Five items held: "0 (Home)" and 1 to 5.
 click fly-setwp-list

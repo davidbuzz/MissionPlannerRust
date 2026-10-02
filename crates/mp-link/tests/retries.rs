@@ -48,10 +48,10 @@ use mp_mavlink::{FrameDecoder, encode_v2};
 use mp_mavlink_dialects::all::{
     AutopilotVersion, CommandAck, DIALECT, FencePoint, Heartbeat, HomePosition, MavMessage,
     MissionAck, MissionCurrent, MissionItem as MissionItemFloat, MissionItemInt, MissionRequest,
-    ParamValue,
+    MissionRequestInt, ParamValue,
 };
-use mp_params::ParamValue as ParamValueHeld;
 use mp_mission::{MISSION_TYPE_MISSION, MissionItem};
+use mp_params::ParamValue as ParamValueHeld;
 use mp_transport::Transport;
 use mp_transport::testing::{Loopback, LoopbackEnd};
 use mp_vehicle::{FenceItem, VehicleId};
@@ -2664,7 +2664,10 @@ fn set_wp_total_counts_four_times_then_times_out_and_the_first_request_ends_it()
                     .map(ParamValueHeld::as_f64)
             })
             .collect();
-        held.iter().all(|value| *value == held[0]).then_some(held[0]).flatten()
+        held.iter()
+            .all(|value| *value == held[0])
+            .then_some(held[0])
+            .flatten()
     };
     let counted = |m: &MavMessage| match m {
         MavMessage::MissionCount(count) => Some((count.count, count.mission_type)),
@@ -2763,7 +2766,9 @@ fn set_wp_total_takes_the_first_request_so_set_wp_sends_item_zero_once() {
 
     // The mission's count leaves the fence alone (:3814-3828).
     let mission_total = link.set_wp_total(VEHICLE, 2, MISSION_TYPE_MISSION);
-    drive(&mut peer, answer_count, || outcome(&link, mission_total).is_some());
+    drive(&mut peer, answer_count, || {
+        outcome(&link, mission_total).is_some()
+    });
     assert_eq!(
         outcome(&link, mission_total),
         Some(RequestOutcome::Accepted { value: None })
@@ -2866,4 +2871,190 @@ fn set_wp_total_takes_the_first_request_so_set_wp_sends_item_zero_once() {
             },
         ]
     );
+}
+
+/// `MAVState.wps` and `rallypoints`, as a script's `setWPTotal` and `setWP`s fill them: the first
+/// request empties the list named, a `MISSION_REQUEST` for the item after or an ack files the
+/// item sent under its own list, and the float path's `MISSION_REQUEST_INT` branch files `wps`
+/// whatever the list (:3811-3828, 4113-4127, 4146-4160, 4196-4206). A `MISSION_ITEM_INT` passing
+/// on the stream is held too (:5671-5698), and Clear Rally Points empties the rally list
+/// (FlightPlanner.cs:2109).
+#[test]
+fn set_wp_fills_the_mission_and_rally_lists_as_the_csharp_does() {
+    const RALLY: u8 = 2;
+    const RALLY_POINT: u16 = 5100;
+    const WAYPOINT: u16 = 16;
+    let t = ProtocolTimeouts::default().faster(20);
+    let (link, mut peer) = link(t);
+    // A mission item passing on the stream - another ground station's download - is held.
+    peer.send(&MavMessage::MissionItemInt(MissionItemInt {
+        param1: 0.0,
+        param2: 0.0,
+        param3: 0.0,
+        param4: 0.0,
+        x: -353_632_621,
+        y: 1_491_652_374,
+        z: 10.0,
+        seq: 3,
+        command: WAYPOINT,
+        target_system: GCS.sysid,
+        target_component: GCS.compid,
+        frame: 3,
+        current: 0,
+        autocontinue: 1,
+        mission_type: MISSION_TYPE_MISSION,
+    }));
+    wait_for("a waypoint held", || link.wps(VEHICLE).len() == 1);
+    assert_eq!(link.wps(VEHICLE)[0].x, -35.363_262_1);
+
+    let answer_count = |peer: &mut Peer, message: MavMessage| {
+        if let MavMessage::MissionCount(count) = message {
+            peer.send(&MavMessage::MissionRequest(MissionRequest {
+                seq: 0,
+                target_system: GCS.sysid,
+                target_component: GCS.compid,
+                mission_type: count.mission_type,
+            }));
+        }
+    };
+    // setWPTotal for the mission empties wps (:3827).
+    let total = link.set_wp_total(VEHICLE, 3, MISSION_TYPE_MISSION);
+    drive(&mut peer, answer_count, || outcome(&link, total).is_some());
+    wait_for("wps emptied", || link.wps(VEHICLE).is_empty());
+
+    let MavMessage::MissionItem(change_alt) = commands::change_alt(VEHICLE, 25.0) else {
+        unreachable!("change_alt is a MISSION_ITEM")
+    };
+    let float_item = |seq: u16, command: u16, current: u8, mission_type: u8| {
+        MavMessage::MissionItem(MissionItemFloat {
+            seq,
+            command,
+            current,
+            param1: 0.0,
+            x: -35.36,
+            y: 149.16,
+            z: 50.0,
+            mission_type,
+            ..change_alt
+        })
+    };
+    let request = |seq: u16, mission_type: u8| {
+        MavMessage::MissionRequest(MissionRequest {
+            seq,
+            target_system: GCS.sysid,
+            target_component: GCS.compid,
+            mission_type,
+        })
+    };
+    let request_int = |seq: u16, mission_type: u8| {
+        MavMessage::MissionRequestInt(MissionRequestInt {
+            seq,
+            target_system: GCS.sysid,
+            target_component: GCS.compid,
+            mission_type,
+        })
+    };
+    let ack = |mission_type: u8| {
+        MavMessage::MissionAck(MissionAck {
+            target_system: GCS.sysid,
+            target_component: GCS.compid,
+            r#type: MISSION_ACCEPTED,
+            mission_type,
+        })
+    };
+    /// One `setWP`, the vehicle answering its item with `answer`.
+    fn set(link: &Link, peer: &mut Peer, item: MavMessage, answer: MavMessage) {
+        let id = link.set_wp(VEHICLE, item).expect("an item");
+        drive(
+            peer,
+            |peer, message| {
+                if matches!(message, MavMessage::MissionItem(_)) {
+                    peer.send(&answer);
+                }
+            },
+            || outcome(link, id).is_some(),
+        );
+        assert_eq!(
+            outcome(link, id),
+            Some(RequestOutcome::Accepted { value: None })
+        );
+    }
+
+    // Item 0, answered by a request for item 1: filed in wps (:4146-4160).
+    set(
+        &link,
+        &mut peer,
+        float_item(0, WAYPOINT, 0, MISSION_TYPE_MISSION),
+        request(1, MISSION_TYPE_MISSION),
+    );
+    wait_for("item 0 filed", || link.wps(VEHICLE).len() == 1);
+    // Item 1, answered by a MISSION_REQUEST_INT: the float path files wps from it too (:4206).
+    set(
+        &link,
+        &mut peer,
+        float_item(1, WAYPOINT, 0, MISSION_TYPE_MISSION),
+        request_int(2, MISSION_TYPE_MISSION),
+    );
+    wait_for("item 1 filed", || link.wps(VEHICLE).len() == 2);
+    // A guided target (current 2), acknowledged: GuidedMode's, filed in no list (:4113-4116).
+    set(
+        &link,
+        &mut peer,
+        float_item(2, WAYPOINT, 2, MISSION_TYPE_MISSION),
+        ack(MISSION_TYPE_MISSION),
+    );
+    std::thread::sleep(Duration::from_millis(20));
+    assert_eq!(link.wps(VEHICLE).len(), 2);
+    // A rally point, acknowledged: filed in rallypoints (:4124-4126).
+    set(
+        &link,
+        &mut peer,
+        float_item(0, RALLY_POINT, 0, RALLY),
+        ack(RALLY),
+    );
+    wait_for("the rally point filed", || {
+        link.rally_points(VEHICLE).len() == 1
+    });
+    assert_eq!(link.wps(VEHICLE).len(), 2);
+    // A rally point answered by a MISSION_REQUEST_INT lands in wps: that branch names no list.
+    set(
+        &link,
+        &mut peer,
+        float_item(1, RALLY_POINT, 0, RALLY),
+        request_int(2, RALLY),
+    );
+    wait_for("the rally item in wps", || {
+        link.wps(VEHICLE)[1].command == RALLY_POINT
+    });
+    assert_eq!(link.rally_points(VEHICLE).len(), 1);
+    // `(Locationwp) req` of the float item, back out over 1e7.
+    #[allow(clippy::cast_possible_truncation)]
+    let x = f64::from((f64::from(-35.36_f32) * 1e7) as i32) / 1e7;
+    let filed = link.wps(VEHICLE)[0];
+    assert_eq!(
+        (filed.seq, filed.command, filed.x, filed.z),
+        (0, WAYPOINT, x, 50.0)
+    );
+    assert_eq!(link.rally_points(VEHICLE)[0].x, x);
+
+    // setWPTotal for the rally points empties rallypoints and leaves wps (:3829).
+    let total = link.set_wp_total(VEHICLE, 0, RALLY);
+    drive(&mut peer, answer_count, || outcome(&link, total).is_some());
+    wait_for("rallypoints emptied", || {
+        link.rally_points(VEHICLE).is_empty()
+    });
+    assert_eq!(link.wps(VEHICLE).len(), 2);
+    // Clear Rally Points' `MAV.rallypoints.Clear()`.
+    set(
+        &link,
+        &mut peer,
+        float_item(0, RALLY_POINT, 0, RALLY),
+        ack(RALLY),
+    );
+    wait_for("the rally point filed again", || {
+        link.rally_points(VEHICLE).len() == 1
+    });
+    link.clear_rally_points(VEHICLE);
+    assert!(link.rally_points(VEHICLE).is_empty());
+    assert_eq!(link.wps(VEHICLE).len(), 2);
 }

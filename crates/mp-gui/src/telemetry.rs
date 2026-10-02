@@ -81,6 +81,15 @@ pub struct TelemetryView {
     /// mission of one. `tests/gui/fly-setwp.gui` found it: a five-item mission read back as one
     /// row once the download published its progress.
     pub mission_complete: bool,
+    /// The vehicle's mission as the link's traffic has shown it - `MAV.wps`: a download's items
+    /// as they arrive, an upload's as the vehicle takes them, a script's `setWP`s - which the
+    /// flight screen draws when no plan is being edited, and counts for its Set WP list.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVState.cs:313; GCSViews/FlightData.cs:2571-2576, 3810-3843`
+    pub wps: Vec<MissionItem>,
+    /// The vehicle's rally points likewise - `MAV.rallypoints` - which the flight screen draws
+    /// when the plan has none of its own.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVState.cs:315; GCSViews/FlightData.cs:3898-3905`
+    pub rally_points: Vec<MissionItem>,
     /// Recent `STATUSTEXT` and `COMMAND_ACK` lines, newest last.
     pub messages: Vec<LogMessage>,
     /// How many messages the link had to discard to stay bounded.
@@ -143,6 +152,8 @@ impl TelemetryView {
             vehicle_count: 0,
             mission: Vec::new(),
             mission_complete: false,
+            wps: Vec::new(),
+            rally_points: Vec::new(),
             messages: Vec::new(),
             messages_dropped: 0,
             transfer: None,
@@ -557,6 +568,10 @@ impl Telemetry {
         let mission_complete = transfer
             .as_ref()
             .is_some_and(|transfer| matches!(transfer.state(), TransferState::Complete));
+        let (wps, rally_points) = primary.as_ref().map_or_else(
+            || (Vec::new(), Vec::new()),
+            |(id, _)| (link.wps(*id), link.rally_points(*id)),
+        );
         let transfer = transfer.as_ref().map(|transfer| {
             let label = match transfer.state() {
                 TransferState::Idle => "idle".to_owned(),
@@ -593,6 +608,8 @@ impl Telemetry {
             vehicle_count: vehicles.len(),
             mission,
             mission_complete,
+            wps,
+            rally_points,
             messages: {
                 let from = self
                     .messages_shown_from
@@ -778,6 +795,14 @@ impl Telemetry {
     #[must_use]
     pub fn rally_items(&self) -> Vec<MissionItem> {
         self.completed_list(mp_mission::fence::MISSION_TYPE_RALLY)
+    }
+
+    /// `MAV.rallypoints.Clear()`, Clear Rally Points' second clearing, beside its markers'.
+    /// `// C#: GCSViews/FlightPlanner.cs:2108-2109`
+    pub fn clear_rally_points(&self) {
+        if let Some((link, id)) = self.target() {
+            link.clear_rally_points(id);
+        }
     }
 
     /// `mav_mission.download(..., MAV_MISSION_TYPE.RALLY)` from the vehicle being flown, which

@@ -32,7 +32,7 @@ setup python3 tests/gui/legacy-vehicle.py --work $WORK --port 5790
 
 screen params
 window 1600x1200
-budget 23
+budget 18
 # A first budget, set by hand until a passing run records one.
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
@@ -64,6 +64,7 @@ click menu-getRallyPoints
 expect plan.rally.downloading false
 expect plan.prompt none
 expect plan.rally.vehicle 2
+expect vehicle.rally 2
 expect rally.points 2
 
 # A third marker, then Upload: RALLY_TOTAL goes to 3, and each point is sent and read back.
@@ -79,6 +80,8 @@ expect plan.rally.upload busy
 within 10
 expect plan.rally.upload RALLY_TOTAL=3,0=set,1=set,2=set
 expect plan.prompt none
+# Each point's read-back, a RALLY_POINT, was filed in MAV.rallypoints (MAVLinkInterface.cs:5728).
+expect vehicle.rally 3
 
 # Clear Rally Points: RALLY_TOTAL to 0, the markers and the vehicle's list gone.
 click map@0.30x0.70:right
@@ -89,6 +92,7 @@ expect plan.params ~ RALLY_TOTAL=0
 expect rally.points 0
 expect map.rally 0
 expect plan.rally.vehicle 0
+expect vehicle.rally 0
 
 # And the vehicle agrees: Download reads nothing.
 click map@0.30x0.70:right

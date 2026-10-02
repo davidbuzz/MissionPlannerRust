@@ -206,7 +206,7 @@ pub fn set_wp_item(message: &MavMessage) -> Option<(u16, FenceItem)> {
 
 /// `Locationwp.isLocationCommand`: whether `x` and `y` are a position, scaled by 1e7 on the way
 /// in and out of `Locationwp`. `// C#: ExtLibs/Utilities/locationwp.cs:39-56`
-fn is_location(command: u16) -> bool {
+pub(crate) fn is_location(command: u16) -> bool {
     MissionItem {
         command,
         ..MissionItem::default()
@@ -216,7 +216,7 @@ fn is_location(command: u16) -> bool {
 
 /// A `mavlink_mission_item_int_t`'s coordinate into `Locationwp` and back: times 1e-7, then times
 /// 1e7 and truncated, for a position. `// C#: ExtLibs/Utilities/locationwp.cs:96-119, 153-176`
-fn through_degrees(command: u16, value: i32) -> i32 {
+pub(crate) fn through_degrees(command: u16, value: i32) -> i32 {
     let degrees = if is_location(command) {
         f64::from(value) * 1.0e-7
     } else {
@@ -227,7 +227,7 @@ fn through_degrees(command: u16, value: i32) -> i32 {
 
 /// `Locationwp`'s coordinate as `Convert(.., isint: true)` writes it: times 1e7 for a position,
 /// then `(int)`. `// C#: ExtLibs/Utilities/locationwp.cs:153-176`
-fn from_degrees(command: u16, degrees: f64) -> i32 {
+pub(crate) fn from_degrees(command: u16, degrees: f64) -> i32 {
     if is_location(command) {
         truncate(degrees * 1.0e7)
     } else {

@@ -1498,9 +1498,7 @@ impl FenceUploadAsk {
     /// `(int.Parse(param.ToString()) * CurrentState.multiplieralt).ToString("0")`: a parameter
     /// holding a fraction is `int.Parse`'s `FormatException`.
     /// `// C#: GCSViews/FlightPlanner.cs:3764-3793`
-    pub fn next_question(
-        &self,
-    ) -> Option<Result<FenceQuestion, &'static str>> {
+    pub fn next_question(&self) -> Option<Result<FenceQuestion, &'static str>> {
         let offer = |value: f64| -> Result<String, &'static str> {
             if value.fract() != 0.0 || !value.is_finite() {
                 return Err(FORMAT_EXCEPTION);
@@ -1514,12 +1512,22 @@ impl FenceUploadAsk {
         };
         if let Some((value, None)) = self.min_alt {
             return Some(offer(value).map(|text| {
-                ("Min Alt", "Box Minimum Altitude?", text, PromptKind::FenceMinAlt)
+                (
+                    "Min Alt",
+                    "Box Minimum Altitude?",
+                    text,
+                    PromptKind::FenceMinAlt,
+                )
             }));
         }
         if let Some((value, None)) = self.max_alt {
             return Some(offer(value).map(|text| {
-                ("Max Alt", "Box Maximum Altitude?", text, PromptKind::FenceMaxAlt)
+                (
+                    "Max Alt",
+                    "Box Maximum Altitude?",
+                    text,
+                    PromptKind::FenceMaxAlt,
+                )
             }));
         }
         None
@@ -5536,7 +5544,10 @@ pub fn begin_fence_download(
 /// progress window closes, and the download shows no box - and only the facts record it.
 fn drive_fence(this: &mut MissionPlanner, view: &TelemetryView) {
     let alt_box = this.plan_menus.prompt.as_ref().is_some_and(|prompt| {
-        matches!(prompt.kind, PromptKind::FenceMinAlt | PromptKind::FenceMaxAlt)
+        matches!(
+            prompt.kind,
+            PromptKind::FenceMinAlt | PromptKind::FenceMaxAlt
+        )
     });
     let changed = fence_frame(
         &mut this.plan,
@@ -5773,6 +5784,7 @@ pub fn drive_writes(
                     }
                     AfterWrites::ClearRally => {
                         this.plan.clear_rally_points();
+                        this.telemetry.clear_rally_points();
                         this.sync_map_rally();
                     }
                     AfterWrites::Nothing => {}
@@ -6606,13 +6618,12 @@ pub const MAP_MENU: &[MenuEntry] = {
         Area, ClearMission, ClearPolygon, ClearRallyPoints, CreateCircleSurvey, CreateSplineCircle,
         CreateWpCircle, DeleteWp, DrawPolygon, ElevationGraph, EnterUtmCoord, FenceClear,
         FenceLoadFromFile, FenceSaveToFile, FromShp, GeoFenceDownload, GeoFenceUpload,
-        GetRallyPoints, InsertAtCurrentPosition,
-        InsertSplineWp, InsertWp, JumpStart, JumpWp, KmlOverlay, Land, LoadAndAppend, LoadKmlFile,
-        LoadPolygon, LoadRallyFromFile, LoadShpFile, LoadWpFile, LoiterCircles, LoiterForever,
-        LoiterTime, MeasureDistance, ModifyAlt, OffsetPolygon, PoiAdd, PoiDelete, PoiEdit,
-        PolygonFromWaypoints, ReverseWps, Rtl, SavePolygon, SaveRallyPoints, SaveRallyToFile,
-        SaveWpFile, SetHomeHere, SetRallyPoint, SetReturnLocation, SetRoi, SurveyGrid, Takeoff,
-        Text, TrackerHome, ZoomTo,
+        GetRallyPoints, InsertAtCurrentPosition, InsertSplineWp, InsertWp, JumpStart, JumpWp,
+        KmlOverlay, Land, LoadAndAppend, LoadKmlFile, LoadPolygon, LoadRallyFromFile, LoadShpFile,
+        LoadWpFile, LoiterCircles, LoiterForever, LoiterTime, MeasureDistance, ModifyAlt,
+        OffsetPolygon, PoiAdd, PoiDelete, PoiEdit, PolygonFromWaypoints, ReverseWps, Rtl,
+        SavePolygon, SaveRallyPoints, SaveRallyToFile, SaveWpFile, SetHomeHere, SetRallyPoint,
+        SetReturnLocation, SetRoi, SurveyGrid, Takeoff, Text, TrackerHome, ZoomTo,
     };
     &[
         item(
@@ -11034,7 +11045,11 @@ fn prompt_dialog(
         .flex_col()
         .gap_2()
         // A file question is half again as wide, for the path it takes (the owner, 2026-09-25).
-        .w(px(if prompt.is_file_dialog() { 510.0 } else { 340.0 }))
+        .w(px(if prompt.is_file_dialog() {
+            510.0
+        } else {
+            340.0
+        }))
         .p_3()
         .bg(rgb(theme::PANEL))
         .border_1()
@@ -17172,7 +17187,11 @@ mod geofence_tests {
 
     /// Three corners about SITL's home, and a return location inside them.
     fn triangle() -> Vec<LatLon> {
-        vec![at(-35.364, 149.164), at(-35.364, 149.168), at(-35.361, 149.166)]
+        vec![
+            at(-35.364, 149.164),
+            at(-35.364, 149.168),
+            at(-35.361, 149.166),
+        ]
     }
 
     fn inside() -> LatLon {
@@ -17365,7 +17384,10 @@ mod geofence_tests {
                 FenceDue::Point(set) if set.idx == 1 => answer,
                 _ => ACCEPTED,
             });
-            assert_eq!(upload.end(), Some(&FenceUploadEnd::Done { error: Some(said) }));
+            assert_eq!(
+                upload.end(),
+                Some(&FenceUploadEnd::Done { error: Some(said) })
+            );
             assert_eq!(
                 upload.results(),
                 format!("FENCE_ACTION=0,FENCE_TOTAL=5,0=set,1={word},FENCE_ACTION=1")
@@ -17400,7 +17422,10 @@ mod geofence_tests {
             _ => ACCEPTED,
         });
         assert!(restoring);
-        assert_eq!(upload.end(), Some(&FenceUploadEnd::Stopped(FENCE_RESTORE_FAILED)));
+        assert_eq!(
+            upload.end(),
+            Some(&FenceUploadEnd::Stopped(FENCE_RESTORE_FAILED))
+        );
         // FENCE_TOTAL not listed: passed over.
         let mut upload = FenceUpload::new(fence_upload_checks(&plan, &copter()).expect("ok"));
         run(&mut upload, |due| match due {
@@ -17438,7 +17463,10 @@ mod geofence_tests {
         plan.fence_ask = Some(fence_upload_checks(&plan, &plane).expect("ok"));
         menus.continue_fence_upload(&mut plan);
         let prompt = menus.prompt.as_ref().expect("Min Alt");
-        assert_eq!((prompt.title, prompt.text.as_str()), ("Min Alt", "Box Minimum Altitude?"));
+        assert_eq!(
+            (prompt.title, prompt.text.as_str()),
+            ("Min Alt", "Box Minimum Altitude?")
+        );
         assert_eq!(prompt.value(), "10");
         answer(&mut plan, &mut menus, "15");
         let prompt = menus.prompt.as_ref().expect("Max Alt");
@@ -17567,8 +17595,14 @@ mod geofence_tests {
                 .find(|entry| entry.id == id)
                 .and_then(|entry| entry.action)
         };
-        assert_eq!(action("menu-GeoFenceupload"), Some(MenuAction::GeoFenceUpload));
-        assert_eq!(action("menu-GeoFencedownload"), Some(MenuAction::GeoFenceDownload));
+        assert_eq!(
+            action("menu-GeoFenceupload"),
+            Some(MenuAction::GeoFenceUpload)
+        );
+        assert_eq!(
+            action("menu-GeoFencedownload"),
+            Some(MenuAction::GeoFenceDownload)
+        );
     }
 
     /// `MAV_PROTOCOL_CAPABILITY_MISSION_FENCE` is 16384, the dialect's and the C#'s
@@ -17619,11 +17653,20 @@ mod geofence_tests {
     fn a_set_the_link_cannot_carry_stops_as_a_timeout() {
         let plan = drawn(&triangle(), Some(inside()));
         let mut upload = FenceUpload::new(fence_upload_checks(&plan, &copter()).expect("ok"));
-        assert!(matches!(upload.due(), Some(FenceDue::Param("FENCE_ACTION", _))));
+        assert!(matches!(
+            upload.due(),
+            Some(FenceDue::Param("FENCE_ACTION", _))
+        ));
         upload.answer(Some(ACCEPTED));
-        assert!(matches!(upload.due(), Some(FenceDue::Param("FENCE_TOTAL", _))));
+        assert!(matches!(
+            upload.due(),
+            Some(FenceDue::Param("FENCE_TOTAL", _))
+        ));
         upload.answer(None);
-        assert_eq!(upload.end(), Some(&FenceUploadEnd::Stopped(FENCE_TOTAL_FAILED)));
+        assert_eq!(
+            upload.end(),
+            Some(&FenceUploadEnd::Stopped(FENCE_TOTAL_FAILED))
+        );
         assert_eq!(upload.results(), "FENCE_ACTION=0,FENCE_TOTAL=timeout");
         assert_eq!(upload.due(), None);
     }
@@ -17641,7 +17684,14 @@ mod geofence_tests {
         begin_fence_upload(&mut plan, &mut menus, &copter(), false);
         assert!(!plan.fence_busy());
         assert_eq!(plan.fence_upload_text(), "none");
-        assert!(!begin_fence_download(&mut plan, &telemetry, true, 0, &copter(), false));
+        assert!(!begin_fence_download(
+            &mut plan,
+            &telemetry,
+            true,
+            0,
+            &copter(),
+            false
+        ));
         assert!(plan.fence_download.is_none());
 
         let mut plan = drawn(&triangle(), Some(inside()));
@@ -17653,7 +17703,14 @@ mod geofence_tests {
         begin_fence_upload(&mut plan, &mut menus, &copter(), true);
         assert!(!plan.fence_busy());
         let with_total = params(&[("FENCE_ACTION", 1.0), ("FENCE_TOTAL", 5.0)]);
-        assert!(!begin_fence_download(&mut plan, &telemetry, true, 0, &with_total, true));
+        assert!(!begin_fence_download(
+            &mut plan,
+            &telemetry,
+            true,
+            0,
+            &with_total,
+            true
+        ));
         assert!(plan.fence_download.is_none());
 
         // A plane's Min Alt box, then another flow's message over it.
@@ -17682,13 +17739,24 @@ mod geofence_tests {
         let telemetry = crate::telemetry::Telemetry::idle();
         let mut plan = Plan::default();
         let no_action = params(&[("FENCE_ENABLE", 0.0), ("FENCE_TOTAL", 5.0)]);
-        assert!(!begin_fence_download(&mut plan, &telemetry, true, 0, &no_action, false));
+        assert!(!begin_fence_download(
+            &mut plan, &telemetry, true, 0, &no_action, false
+        ));
         assert_eq!(plan.fence_download_text(), FENCE_NOT_SUPPORTED);
         let one = params(&[("FENCE_ACTION", 1.0), ("FENCE_TOTAL", 1.0)]);
-        assert!(!begin_fence_download(&mut plan, &telemetry, true, 0, &one, false));
+        assert!(!begin_fence_download(
+            &mut plan, &telemetry, true, 0, &one, false
+        ));
         assert_eq!(plan.fence_download_text(), NOTHING_TO_DOWNLOAD);
         assert!(plan.fence_download.is_none());
-        assert!(!begin_fence_download(&mut plan, &telemetry, false, 0x4000, &[], false));
+        assert!(!begin_fence_download(
+            &mut plan,
+            &telemetry,
+            false,
+            0x4000,
+            &[],
+            false
+        ));
         assert_eq!(plan.fence_download_text(), PLEASE_CONNECT);
         assert!(plan.fence_download.is_none());
     }
@@ -17744,23 +17812,24 @@ mod geofence_tests {
                             .as_ref()
                             .and_then(|list| list.get(usize::from(request.seq)).copied());
                         if let Some((x, y)) = item {
-                            self.vehicle.send(&MavMessage::MissionItemInt(MissionItemInt {
-                                param1: 3.0,
-                                param2: 0.0,
-                                param3: 0.0,
-                                param4: 0.0,
-                                x,
-                                y,
-                                z: 0.0,
-                                seq: request.seq,
-                                command: 5001,
-                                target_system: 255,
-                                target_component: 190,
-                                frame: 3,
-                                current: 0,
-                                autocontinue: 1,
-                                mission_type: fence,
-                            }));
+                            self.vehicle
+                                .send(&MavMessage::MissionItemInt(MissionItemInt {
+                                    param1: 3.0,
+                                    param2: 0.0,
+                                    param3: 0.0,
+                                    param4: 0.0,
+                                    x,
+                                    y,
+                                    z: 0.0,
+                                    seq: request.seq,
+                                    command: 5001,
+                                    target_system: 255,
+                                    target_component: 190,
+                                    frame: 3,
+                                    current: 0,
+                                    autocontinue: 1,
+                                    mission_type: fence,
+                                }));
                         }
                     }
                     _ => {}
@@ -17831,10 +17900,20 @@ mod geofence_tests {
         // The vehicle now holds five points, as FENCE_TOTAL says.
         let with_total = params(&[("FENCE_ACTION", 1.0), ("FENCE_TOTAL", 5.0)]);
         let mut back = Plan::default();
-        assert!(begin_fence_download(&mut back, &telemetry, true, 0, &with_total, false));
+        assert!(begin_fence_download(
+            &mut back,
+            &telemetry,
+            true,
+            0,
+            &with_total,
+            false
+        ));
         assert!(back.fence().is_empty() && back.fence_return().is_none());
         let (seen, changed) = frames(&mut back, &telemetry, &mut vehicle);
-        assert!(changed.fence, "the map shows the geofence and its return location");
+        assert!(
+            changed.fence,
+            "the map shows the geofence and its return location"
+        );
         assert_eq!(back.fence().len(), 4, "the closing point with them");
         let returned = back.fence_return().expect("the return location");
         assert!((returned.latitude() - inside().latitude()).abs() < 1e-5);
@@ -17853,7 +17932,10 @@ mod geofence_tests {
         let (seen, changed) = frames(&mut plan, &telemetry, &mut vehicle);
         assert!(changed.fence, "the C# redraws after the progress reporter");
         let said = unexpected_error(FENCE_POINT_TIMEOUT);
-        assert_eq!(said, "There was an unexpected error (Timeout on read - getFencePoint)");
+        assert_eq!(
+            said,
+            "There was an unexpected error (Timeout on read - getFencePoint)"
+        );
         assert_eq!(plan.fence_upload_text(), said);
         assert_eq!(seen.last(), Some(&Some(said)));
         assert!(plan.fence_upload_results.ends_with(",FENCE_ACTION=1"));
@@ -17876,8 +17958,18 @@ mod geofence_tests {
             fence_return: Some(inside()),
             ..Plan::default()
         };
-        assert!(!begin_fence_download(&mut plan, &telemetry, true, 0xfbef, &[], false));
-        assert!(matches!(plan.fence_download, Some(FenceDownloading::Mission)));
+        assert!(!begin_fence_download(
+            &mut plan,
+            &telemetry,
+            true,
+            0xfbef,
+            &[],
+            false
+        ));
+        assert!(matches!(
+            plan.fence_download,
+            Some(FenceDownloading::Mission)
+        ));
         let (seen, changed) = frames(&mut plan, &telemetry, &mut vehicle);
         assert_eq!(changed, FenceChanged::default());
         assert_eq!(plan.fence(), &triangle()[..]);
@@ -17889,7 +17981,14 @@ mod geofence_tests {
         // No answer: the link's list request gives up, and so does Download.
         let (telemetry, mut vehicle) = fence_vehicle(None, true);
         let mut plan = Plan::default();
-        assert!(!begin_fence_download(&mut plan, &telemetry, true, 0xfbef, &[], false));
+        assert!(!begin_fence_download(
+            &mut plan,
+            &telemetry,
+            true,
+            0xfbef,
+            &[],
+            false
+        ));
         let (seen, _) = frames(&mut plan, &telemetry, &mut vehicle);
         assert_eq!(plan.fence_download_text(), FENCE_POINT_FAILED);
         assert_eq!(seen.last(), Some(&Some(FENCE_POINT_FAILED.to_owned())));
@@ -17897,7 +17996,14 @@ mod geofence_tests {
         // Disconnect mid-download: the window's telemetry idle and the link down.
         let (telemetry, _vehicle) = fence_vehicle(None, true);
         let mut plan = Plan::default();
-        assert!(!begin_fence_download(&mut plan, &telemetry, true, 0xfbef, &[], false));
+        assert!(!begin_fence_download(
+            &mut plan,
+            &telemetry,
+            true,
+            0xfbef,
+            &[],
+            false
+        ));
         let idle = crate::telemetry::Telemetry::idle();
         let mut status = None;
         let _ = fence_frame(&mut plan, false, &idle, false, &mut status);
@@ -17972,7 +18078,9 @@ mod geofence_tests {
                     mp_params::decode_param_id(&set.param_id),
                     set.param_value
                 )),
-                MavMessage::FencePoint(point) => Some(format!("point{}/{}", point.idx, point.count)),
+                MavMessage::FencePoint(point) => {
+                    Some(format!("point{}/{}", point.idx, point.count))
+                }
                 MavMessage::FenceFetchPoint(fetch) => Some(format!("fetch{}", fetch.idx)),
                 _ => None,
             })
@@ -18006,7 +18114,11 @@ mod geofence_tests {
         let mut back = Plan::default();
         back.fence_downloaded(download.points());
         assert_eq!(back.fence().len(), 4);
-        for (got, sent) in back.fence().iter().zip(triangle().iter().chain(&triangle()[..1])) {
+        for (got, sent) in back
+            .fence()
+            .iter()
+            .zip(triangle().iter().chain(&triangle()[..1]))
+        {
             assert!((got.latitude() - sent.latitude()).abs() < 1e-5, "{got:?}");
             assert!((got.longitude() - sent.longitude()).abs() < 1e-5, "{got:?}");
         }
