@@ -27,6 +27,207 @@ use mp_mission::MissionItem;
 use mp_tiles::store::{TileAnswer, TileStore};
 use mp_units::{Bearing, LatLon, TileId, WebMercator, tiles};
 
+/// Which of Mission Planner's vehicle markers the flight map draws: `Common.getMAVMarker`'s choice
+/// by the vehicle's `MAV_TYPE` - and, where the C# asks the firmware, by the types that firmware
+/// flies.
+/// `// C#: Common.cs:71-215`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MarkerKind {
+    /// `GMapMarkerPlane`: `FIXED_WING`, or any VTOL type.
+    Plane,
+    /// `GMapMarkerRover`: `GROUND_ROVER`.
+    Rover,
+    /// `GMapMarkerBoat`: `SURFACE_BOAT`.
+    Boat,
+    /// `GMapMarkerSub`: `SUBMARINE`.
+    Sub,
+    /// `GMapMarkerHeli`: `HELICOPTER`.
+    Heli,
+    /// `GMapMarkerAntennaTracker`: the ArduTracker firmware, `ANTENNA_TRACKER` here.
+    Tracker,
+    /// `GMapMarkerSingle`: `COAXIAL`.
+    Single,
+    /// `GMapMarkerQuad`: `QUADROTOR`, or the ArduCopter firmware - the copter frames here.
+    Quad,
+    /// `GMarkerGoogle`'s green dot: a type the C# has no marker for.
+    #[default]
+    Dot,
+}
+
+impl MarkerKind {
+    /// Every marker, for the tests.
+    #[cfg(test)]
+    pub const ALL: [Self; 9] = [
+        Self::Plane,
+        Self::Rover,
+        Self::Boat,
+        Self::Sub,
+        Self::Heli,
+        Self::Tracker,
+        Self::Single,
+        Self::Quad,
+        Self::Dot,
+    ];
+
+    /// The bitmap a marker draws, and the size it draws it at: `Resources.rover` (70 by 70),
+    /// `boat` (21 by 59), `heli` (60 by 60), `sub` scaled to 59 by 59, `redsinglecopter2` (59 by
+    /// 59), and the tracker's `Antenna_Tracker_01` at 40 by 40. The quad and the plane are drawn,
+    /// the dot has none.
+    /// `// C#: ExtLibs/Maps/GMapMarkerRover.cs:12-14, 80; GMapMarkerBoat.cs:12-14; GMapMarkerHeli.cs:12;
+    /// GMapMarkerSub.cs:12-13; GMapMarkerSingle.cs:12; GMapMarkerAntennaTracker.cs:12, 43`
+    #[must_use]
+    pub const fn icon(self) -> Option<(&'static str, (f32, f32))> {
+        match self {
+            Self::Rover => Some(("rover", (70.0, 70.0))),
+            Self::Boat => Some(("boat", (21.0, 59.0))),
+            Self::Heli => Some(("heli", (60.0, 60.0))),
+            Self::Sub => Some(("sub", (59.0, 59.0))),
+            Self::Single => Some(("redsinglecopter2", (59.0, 59.0))),
+            Self::Tracker => Some(("Antenna_Tracker_01", (40.0, 40.0))),
+            Self::Plane | Self::Quad | Self::Dot => None,
+        }
+    }
+
+    /// The marker for a `MAV_TYPE`, in the order the C# asks: a plane or VTOL, a rover, a boat,
+    /// a submarine, a helicopter, the tracker, a single copter, a copter, else the dot. The C#
+    /// asks the firmware for ArduTracker and ArduCopter; the firmware's types stand for it here.
+    /// `// C#: Common.cs:71-215`
+    #[must_use]
+    pub const fn of(mav_type: u8) -> Self {
+        match mav_type {
+            1 | 19..=25 => Self::Plane,
+            10 => Self::Rover,
+            11 => Self::Boat,
+            12 => Self::Sub,
+            4 => Self::Heli,
+            5 => Self::Tracker,
+            3 => Self::Single,
+            2 | 13 | 14 | 15 | 29 => Self::Quad,
+            _ => Self::Dot,
+        }
+    }
+
+    /// Its name, for a fact.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Plane => "plane",
+            Self::Rover => "rover",
+            Self::Boat => "boat",
+            Self::Sub => "sub",
+            Self::Heli => "heli",
+            Self::Tracker => "tracker",
+            Self::Single => "single",
+            Self::Quad => "quad",
+            Self::Dot => "dot",
+        }
+    }
+
+    /// Which of the four bearing lines this marker's `OnRender` draws, when its setting is on:
+    /// every marker the heading (red), the course (black) and the target (orange); the plane,
+    /// rover, boat and sub the nav bearing (green) too; the tracker its two, settings or not.
+    /// `// C#: ExtLibs/Maps/GMapMarkerQuad.cs:132-149; GMapMarkerPlane.cs:82-102; GMapMarkerRover.cs:46-66;
+    /// GMapMarkerBoat.cs:43-63; GMapMarkerSub.cs:43-63; GMapMarkerHeli.cs:38-53; GMapMarkerSingle.cs:38-53;
+    /// GMapMarkerAntennaTracker.cs:31-40`
+    #[must_use]
+    pub fn lines(self, settings: &MarkerSettings) -> Vec<&'static str> {
+        let mut lines = Vec::new();
+        if self == Self::Tracker {
+            return vec!["heading", "target"];
+        }
+        if self == Self::Dot {
+            return lines;
+        }
+        if settings.heading {
+            lines.push("heading");
+        }
+        if settings.nav_bearing
+            && matches!(self, Self::Plane | Self::Rover | Self::Boat | Self::Sub)
+        {
+            lines.push("nav_bearing");
+        }
+        if settings.cog {
+            lines.push("cog");
+        }
+        if settings.target {
+            lines.push("target");
+        }
+        lines
+    }
+}
+
+/// What the marker draws besides where it is and which way it points: `getMAVMarker`'s other
+/// arguments, read from `MAV.cs` and `MAV.param` each update.
+/// `// C#: Common.cs:71-215`
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MarkerDetails {
+    /// Which marker.
+    pub kind: MarkerKind,
+    /// `cs.groundcourse`, degrees: the black line.
+    pub cog: f32,
+    /// `cs.nav_bearing`, degrees: the green line, and the quad's `Target` (orange).
+    pub nav_bearing: f32,
+    /// `cs.target_bearing`, degrees: the orange line of the plane, rover, boat, sub and tracker.
+    pub target: f32,
+    /// `MAV.sysid`: the quad's and single's number, and the plane's colour.
+    pub sysid: u8,
+    /// `AVD_W_DIST_XY`, metres, for the quad's orange circle; `-1` without the parameter.
+    pub warn: f32,
+    /// `AVD_F_DIST_XY`, metres, for the quad's red circle; `-1` without.
+    pub danger: f32,
+    /// `cs.radius` in metres, the plane's turn radius for its arc.
+    pub radius: f32,
+}
+
+impl Default for MarkerDetails {
+    /// The markers' fields before `getMAVMarker` sets them: the bearings `-1`, which the C# draws
+    /// as a line all the same.
+    fn default() -> Self {
+        Self {
+            kind: MarkerKind::Dot,
+            cog: -1.0,
+            nav_bearing: -1.0,
+            target: -1.0,
+            sysid: 0,
+            warn: -1.0,
+            danger: -1.0,
+            radius: -1.0,
+        }
+    }
+}
+
+/// `GMapMarkerBase`'s statics, which `MainV2` reads from the settings and the Planner page's
+/// check boxes set: the bearing lines' length and which of them are drawn.
+/// `// C#: ExtLibs/Maps/GMapMarkerBase.cs:12-17; MainV2.cs:3855-3860`
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MarkerSettings {
+    /// `GMapMarkerBase_length`: 500 pixels.
+    pub length: f32,
+    /// `GMapMarkerBase_DisplayCOG`.
+    pub cog: bool,
+    /// `GMapMarkerBase_DisplayHeading`.
+    pub heading: bool,
+    /// `GMapMarkerBase_DisplayNavBearing`.
+    pub nav_bearing: bool,
+    /// `GMapMarkerBase_DisplayRadius`.
+    pub radius: bool,
+    /// `GMapMarkerBase_DisplayTarget`.
+    pub target: bool,
+}
+
+impl Default for MarkerSettings {
+    fn default() -> Self {
+        Self {
+            length: 500.0,
+            cog: true,
+            heading: true,
+            nav_bearing: true,
+            radius: true,
+            target: true,
+        }
+    }
+}
+
 /// A synthetic flight track and the state needed to draw it.
 pub struct MapViewport {
     /// Track points in normalised 0..1 space, scaled to the viewport when painted.
@@ -64,8 +265,12 @@ pub struct MapViewport {
     /// time on a long track (`crates/mp-units/benches/pan_zoom.rs`, `fit_scan_1m`). The path only
     /// grows, so its rectangle only widens, one point at a time.
     path_extent: Option<Extent>,
-    /// Where the vehicle is now, and which way it is pointing.
+    /// Where the vehicle is now, and which way it is pointing: `cs.yaw`, the marker's `Heading`.
     vehicle: Option<(WebMercator, Bearing)>,
+    /// The rest of what the vehicle's marker draws: which marker, its other bearings, the radii.
+    marker: MarkerDetails,
+    /// The Planner page's `GMapMarkerBase_*` settings: the lines' length and which are drawn.
+    marker_settings: MarkerSettings,
     /// Home, where the screen showing the map puts it: the planner's Home Location boxes, or the
     /// vehicle's home on the flight screen. Drawn as the C#'s "H" marker.
     home: Option<WebMercator>,
@@ -270,6 +475,8 @@ impl MapViewport {
             path: Vec::new(),
             path_extent: None,
             vehicle: None,
+            marker: MarkerDetails::default(),
+            marker_settings: MarkerSettings::default(),
             home: None,
             home_position: None,
             home_label_drawn: false,
@@ -385,7 +592,26 @@ impl MapViewport {
     pub fn observe(&mut self, position: LatLon, heading: Bearing) {
         let projected = position.to_web_mercator();
         self.vehicle = Some((projected, heading));
+        self.note_moved(position, projected);
+    }
 
+    /// What the vehicle's marker draws besides where it is and which way it points, and the
+    /// Planner page's settings for it; handed over with each snapshot, as `getMAVMarker` reads
+    /// them from `MAV.cs` each update.
+    pub fn set_marker(&mut self, details: MarkerDetails, settings: MarkerSettings) {
+        self.marker = details;
+        self.marker_settings = settings;
+    }
+
+    /// The marker as it will be drawn, for the tests.
+    #[cfg(test)]
+    #[must_use]
+    pub const fn marker(&self) -> &MarkerDetails {
+        &self.marker
+    }
+
+    /// A position observed: appended to the flight path when the vehicle has moved.
+    fn note_moved(&mut self, position: LatLon, projected: WebMercator) {
         // A world-space threshold of 1e-8 is roughly a metre near the equator - small enough to
         // trace a taxi, large enough to reject GPS jitter on a stationary vehicle.
         const MOVED: f64 = 1e-8;
@@ -608,7 +834,11 @@ impl MapViewport {
     /// the default's.
     /// `// C#: GCSViews/FlightData.cs:524-548, 4242-4253; FlightData.Designer.cs:2859`
     pub fn start_at(&mut self, at: LatLon, zoom: f64) {
-        let zoom = if zoom.is_finite() { zoom.clamp(1.0, 18.0) } else { 3.0 };
+        let zoom = if zoom.is_finite() {
+            zoom.clamp(1.0, 18.0)
+        } else {
+            3.0
+        };
         self.start = Some((at.to_web_mercator(), zoom));
     }
 
@@ -625,9 +855,7 @@ impl MapViewport {
     /// 256 * 2^z pixels, so the viewport spans `w / (256 * 2^z)` of it - what `gmap_zoom`
     /// reads back as `z`.
     fn idle_view(&self, w: f32, h: f32) -> (f64, f64, f64, f64) {
-        let (centre, zoom) = self
-            .start
-            .unwrap_or((WebMercator { x: 0.5, y: 0.5 }, 3.0));
+        let (centre, zoom) = self.start.unwrap_or((WebMercator { x: 0.5, y: 0.5 }, 3.0));
         let span = f64::from(w.max(1.0)) / (256.0 * 2f64.powf(zoom));
         let height = span * f64::from(h) / f64::from(w).max(1.0);
         (centre.x - span / 2.0, centre.y - height / 2.0, span, height)
@@ -777,7 +1005,7 @@ impl MapViewport {
     }
 
     /// Converts a window position into one relative to the map viewport.
-    fn to_viewport(&self, x: f32, y: f32) -> (f32, f32) {
+    pub(crate) fn to_viewport(&self, x: f32, y: f32) -> (f32, f32) {
         (x - self.last_origin.0, y - self.last_origin.1)
     }
 
@@ -1977,6 +2205,25 @@ impl MapViewport {
                 join(hovered.into_iter().map(MarkerTag::text).collect(), ","),
             ),
             ("map.tooltip", join(self.tooltips_drawn.clone(), "|")),
+            ("map.vehicle.kind", self.marker.kind.name().to_owned()),
+            (
+                "map.vehicle.heading",
+                self.vehicle
+                    .map_or_else(none, |(_, heading)| format!("{:.0}", heading.degrees())),
+            ),
+            (
+                "map.vehicle.lines",
+                join(
+                    self.marker
+                        .kind
+                        .lines(&self.marker_settings)
+                        .into_iter()
+                        .map(str::to_owned)
+                        .collect(),
+                    ",",
+                ),
+            ),
+            ("map.vehicle.sysid", self.marker.sysid.to_string()),
         ]
     }
 }
@@ -3107,31 +3354,429 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
         map.tooltips_drawn.push(text);
     }
 
-    // The vehicle, as an arrow pointing where it is heading. Bearing is clockwise from north and
-    // screen y grows downward, so north is -y and east is +x.
+    // The vehicle, as Mission Planner's marker for its type draws it.
     let phase_vehicle = Instant::now();
     if let Some((position, heading)) = map.vehicle {
         let at = to_screen(position);
+        let m2pixelwidth = map.metres_to_pixels().map(|(across, _)| across);
         #[allow(clippy::cast_possible_truncation)]
-        let theta = (heading.degrees() as f32).to_radians();
-        let arm = |angle_deg: f32, radius: f32| -> Point<Pixels> {
-            let a = theta + angle_deg.to_radians();
-            point(at.x + px(a.sin() * radius), at.y - px(a.cos() * radius))
-        };
-
-        let mut nose = PathBuilder::fill();
-        nose.move_to(arm(0.0, 12.0));
-        nose.line_to(arm(140.0, 9.0));
-        nose.line_to(arm(180.0, 3.0));
-        nose.line_to(arm(-140.0, 9.0));
-        nose.line_to(arm(0.0, 12.0));
-        if let Ok(path) = nose.build() {
-            window.paint_path(path, Hsla::from(rgb(0xf8_51_49)));
-        }
+        let heading = heading.degrees() as f32;
+        paint_vehicle(
+            window,
+            cx,
+            bounds,
+            at,
+            heading,
+            &map.marker,
+            &map.marker_settings,
+            m2pixelwidth,
+        );
     }
     map.phases[3] = phase_vehicle.elapsed();
 
     map.record(started.elapsed());
+}
+
+/// `GMapMarkerQuad`'s green and blue: `ColorFromHex("8dc63f")`, `("00aeef")`.
+const QUAD_GREEN: u32 = 0x8d_c6_3f;
+/// The quad's blue arm.
+const QUAD_BLUE: u32 = 0x00_ae_ef;
+/// The sysid's `Color.Red` and the heading line's.
+const MARKER_RED: u32 = 0xff_00_00;
+/// `Color.Green`, the nav bearing line.
+const MARKER_GREEN: u32 = 0x00_80_00;
+/// `Color.Orange`, the target line and the quad's warn circle.
+const MARKER_ORANGE: u32 = 0xff_a5_00;
+/// `Color.HotPink`, the plane's radius arc.
+const MARKER_HOT_PINK: u32 = 0xff_69_b4;
+/// `GMarkerGoogleType.green_dot`'s green, for a type without a marker.
+const MARKER_DOT: u32 = 0x00_c8_00;
+
+/// `GMapMarkerPlane.plane`: the outline, in its 56-wide bitmap's pixels, nose up.
+/// `// C#: ExtLibs/Maps/GMapMarkerPlane.cs:15-40`
+const PLANE_OUTLINE: [(f32, f32); 22] = [
+    (28.0, 0.0),
+    (32.0, 13.0),
+    (53.0, 27.0),
+    (55.0, 32.0),
+    (31.0, 28.0),
+    (30.0, 35.0),
+    (30.0, 43.0),
+    (37.0, 48.0),
+    (37.0, 50.0),
+    (29.0, 50.0),
+    (29.0, 53.0),
+    (27.0, 53.0),
+    (27.0, 50.0),
+    (19.0, 50.0),
+    (19.0, 48.0),
+    (26.0, 43.0),
+    (26.0, 35.0),
+    (25.0, 28.0),
+    (1.0, 32.0),
+    (3.0, 27.0),
+    (24.0, 13.0),
+    (28.0, 0.0),
+];
+
+/// The plane's colour by `which`, `sysid - 1`: `which % 7` as the C#'s `int` remainder has it -
+/// a `which` below zero matches none of the seven and leaves the plane white.
+/// `// C#: ExtLibs/Maps/GMapMarkerPlane.cs:163-178`
+#[must_use]
+pub fn plane_colour(which: i32) -> u32 {
+    match which % 7 {
+        0 => MARKER_RED,
+        1 => 0x00_00_00,
+        2 => 0x00_00_ff,
+        3 => 0x0032_cd32,
+        4 => 0xff_ff_00,
+        5 => MARKER_ORANGE,
+        6 => 0xff_c0_cb,
+        _ => 0xff_ff_ff,
+    }
+}
+
+/// A point `(x, y)` in a marker's frame - the point at the origin, y downward - turned
+/// `degrees` clockwise about it, as `RotateTransform(heading)` turns the frame.
+fn turned(at: Point<Pixels>, (x, y): (f32, f32), degrees: f32) -> Point<Pixels> {
+    let (sin, cos) = degrees.to_radians().sin_cos();
+    point(
+        at.x + px(y.mul_add(-sin, x * cos)),
+        at.y + px(y.mul_add(cos, x * sin)),
+    )
+}
+
+/// A stroked polyline through `points`.
+fn stroke_through(window: &mut Window, points: &[Point<Pixels>], width: f32, colour: u32) {
+    let mut iter = points.iter();
+    let Some(first) = iter.next() else {
+        return;
+    };
+    let mut builder = PathBuilder::stroke(px(width));
+    builder.move_to(*first);
+    for p in iter {
+        builder.line_to(*p);
+    }
+    if let Ok(path) = builder.build() {
+        window.paint_path(path, Hsla::from(rgb(colour)));
+    }
+}
+
+/// A filled polygon through `points`.
+fn fill_through(window: &mut Window, points: &[Point<Pixels>], colour: Hsla) {
+    let mut iter = points.iter();
+    let Some(first) = iter.next() else {
+        return;
+    };
+    let mut builder = PathBuilder::fill();
+    builder.move_to(*first);
+    for p in iter {
+        builder.line_to(*p);
+    }
+    builder.line_to(*first);
+    if let Ok(path) = builder.build() {
+        window.paint_path(path, colour);
+    }
+}
+
+/// `DrawArc` of the circle in the square at `(left, top)` of side `2 * radius`, from `start`
+/// degrees clockwise from the x axis through `sweep` degrees, as the frame's points.
+fn arc_points(
+    at: Point<Pixels>,
+    frame: f32,
+    (left, top): (f32, f32),
+    radius: f32,
+    start: f32,
+    sweep: f32,
+) -> Vec<Point<Pixels>> {
+    let centre = (left + radius, top + radius);
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let segments = ((sweep.abs() / 6.0).ceil() as usize).clamp(1, 120);
+    (0..=segments)
+        .map(|i| {
+            #[allow(clippy::cast_precision_loss)]
+            let angle = (start + sweep * i as f32 / segments as f32).to_radians();
+            turned(
+                at,
+                (
+                    radius.mul_add(angle.cos(), centre.0),
+                    radius.mul_add(angle.sin(), centre.1),
+                ),
+                frame,
+            )
+        })
+        .collect()
+}
+
+/// A text at a point, as `DrawString` puts its top left there.
+fn paint_text(
+    window: &mut Window,
+    cx: &mut App,
+    at: Point<Pixels>,
+    text: &str,
+    size: f32,
+    colour: u32,
+    monospace: bool,
+) {
+    let mut font = window.text_style().font();
+    font.weight = gpui::FontWeight::BOLD;
+    if monospace {
+        font.family = "monospace".into();
+    }
+    let run = TextRun {
+        len: text.len(),
+        font,
+        color: Hsla::from(rgb(colour)),
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+    };
+    let line = window.text_system().shape_line(
+        SharedString::from(text.to_owned()),
+        px(size),
+        &[run],
+        None,
+    );
+    let _ = line.paint(at, px(size * 1.2), TextAlign::Left, None, window, cx);
+}
+
+/// The vehicle's marker at `at`, as its `OnRender` draws it: the bearing lines from the point,
+/// each `length` long - the heading red, the nav bearing green, the course black, the target
+/// orange - then the vehicle turned to its heading: the quad's four motors, arms and body drawn,
+/// the plane's outline filled in its sysid's colour over a shadow, the rover, boat, heli, sub and
+/// single copter as their bitmaps, the tracker's icon upright, and a green dot for a type with no
+/// marker. The quad adds its sysid and the avoidance radii; the plane its turn radius arc.
+///
+/// Divergences: the sysid is drawn upright, where the C# turns it with the frame; the dot is a
+/// drawn circle, not GMap's bitmap; the map is never rotated here (`Overlay.Control.Bearing` 0).
+/// `// C#: ExtLibs/Maps/GMapMarkerQuad.cs:120-254; GMapMarkerPlane.cs:66-187; GMapMarkerRover.cs:33-93;
+/// GMapMarkerBoat.cs:30-90; GMapMarkerSub.cs:30-90; GMapMarkerHeli.cs:26-79; GMapMarkerSingle.cs:26-85;
+/// GMapMarkerAntennaTracker.cs:22-45`
+#[allow(clippy::too_many_arguments)] // the frame, the point, the three readings and the scale
+fn paint_vehicle(
+    window: &mut Window,
+    cx: &mut App,
+    clip: Bounds<Pixels>,
+    at: Point<Pixels>,
+    heading: f32,
+    details: &MarkerDetails,
+    settings: &MarkerSettings,
+    m2pixelwidth: Option<f64>,
+) {
+    let kind = details.kind;
+    let length = if kind == MarkerKind::Tracker {
+        500.0
+    } else {
+        settings.length
+    };
+    // `DrawLine(pen, 0, 0, cos((b - 90) deg) * length, sin((b - 90) deg) * length)`.
+    let line = |window: &mut Window, bearing: f32, colour: u32| {
+        let angle = (bearing - 90.0).to_radians();
+        let end = point(
+            at.x + px(angle.cos() * length),
+            at.y + px(angle.sin() * length),
+        );
+        stroke_through(window, &[at, end], 2.0, colour);
+    };
+    for which in kind.lines(settings) {
+        match which {
+            "heading" => line(window, heading, MARKER_RED),
+            "nav_bearing" => line(window, details.nav_bearing, MARKER_GREEN),
+            "cog" => line(window, details.cog, 0x00_00_00),
+            // The quad's `Target` is `cs.nav_bearing`; the others' `cs.target_bearing`.
+            "target" => line(
+                window,
+                if kind == MarkerKind::Quad {
+                    details.nav_bearing
+                } else {
+                    details.target
+                },
+                MARKER_ORANGE,
+            ),
+            _ => {}
+        }
+    }
+    let scale = window.scale_factor();
+    // A bitmap marker: the image turned about the point `(-width / 2, -width / 2)` puts on the
+    // vehicle - the C#'s rectangle, which takes the width for both.
+    let bitmap = |window: &mut Window, resource: &'static str, (w, h): (f32, f32)| {
+        let pivot = ((w / 2.0).floor(), (w / 2.0).floor());
+        let Some((render, side)) =
+            crate::pictures::rotated(resource, (w, h), pivot, heading, scale)
+        else {
+            return;
+        };
+        let target = Bounds {
+            origin: point(at.x - px(side / 2.0), at.y - px(side / 2.0)),
+            size: size(px(side), px(side)),
+        };
+        let _ = window.paint_image(clip, target, Corners::default(), render, 0, false);
+    };
+    match kind {
+        MarkerKind::Quad => {
+            let frame = |p: (f32, f32)| turned(at, p, heading);
+            // The motors, 20 across with a 5 across hub, at the arms' ends: `(35, 12)`,
+            // `(35, 57)`, `(57, 35)` and `(12, 35)` of the 70-pixel icon the point centres.
+            for motor in [(0.0, -23.0), (0.0, 22.0), (22.0, 0.0), (-23.0, 0.0)] {
+                for radius in [10.0_f32, 2.5] {
+                    let ring: Vec<Point<Pixels>> = (0..=24)
+                        .map(|i| {
+                            #[allow(clippy::cast_precision_loss)]
+                            let angle = std::f32::consts::TAU * i as f32 / 24.0;
+                            frame((
+                                radius.mul_add(angle.cos(), motor.0),
+                                radius.mul_add(angle.sin(), motor.1),
+                            ))
+                        })
+                        .collect();
+                    stroke_through(window, &ring, 3.0, QUAD_GREEN);
+                }
+            }
+            stroke_through(
+                window,
+                &[frame((0.0, -23.0)), frame((0.0, 0.0))],
+                3.0,
+                QUAD_BLUE,
+            );
+            stroke_through(
+                window,
+                &[frame((0.0, 1.0)), frame((0.0, 22.0))],
+                3.0,
+                QUAD_GREEN,
+            );
+            stroke_through(
+                window,
+                &[frame((22.0, 0.0)), frame((-23.0, 0.0))],
+                3.0,
+                QUAD_GREEN,
+            );
+            fill_through(
+                window,
+                &[
+                    frame((-3.0, -5.0)),
+                    frame((2.0, -5.0)),
+                    frame((2.0, 3.0)),
+                    frame((-3.0, 3.0)),
+                ],
+                Hsla::from(rgb(QUAD_GREEN)),
+            );
+            paint_text(
+                window,
+                cx,
+                point(at.x - px(8.0), at.y - px(8.0)),
+                &details.sysid.to_string(),
+                15.0,
+                MARKER_RED,
+                true,
+            );
+            // The avoidance radii: a circle of `m2pixelwidth * 2 * warn` across in orange,
+            // `danger`'s in red; nothing for a circle the map's scale makes no pixels of, and
+            // nothing after a warn circle that does.
+            if let Some(m2pixelwidth) = m2pixelwidth {
+                for (metres, colour) in
+                    [(details.warn, MARKER_ORANGE), (details.danger, MARKER_RED)]
+                {
+                    #[allow(clippy::cast_possible_truncation)]
+                    let dimension = (m2pixelwidth * f64::from(metres) * 2.0) as i32;
+                    if dimension == 0 {
+                        break;
+                    }
+                    if m2pixelwidth > 0.001 && metres > 0.0 {
+                        #[allow(clippy::cast_precision_loss)]
+                        let radius = dimension as f32 / 2.0;
+                        let ring: Vec<Point<Pixels>> = (0..=72)
+                            .map(|i| {
+                                #[allow(clippy::cast_precision_loss)]
+                                let angle = std::f32::consts::TAU * i as f32 / 72.0;
+                                point(
+                                    at.x + px(radius * angle.cos()),
+                                    at.y + px(radius * angle.sin()),
+                                )
+                            })
+                            .collect();
+                        stroke_through(window, &ring, 1.0, colour);
+                    }
+                }
+            }
+        }
+        MarkerKind::Plane => {
+            // `DisplayRadius`: the turn the plane is making, HotPink, from its course.
+            if settings.radius
+                && let Some(m2pixelwidth) = m2pixelwidth
+            {
+                #[allow(clippy::cast_possible_truncation)]
+                let m2pixelwidth = m2pixelwidth as f32;
+                let radius = details.radius;
+                let alpha = (100.0 * m2pixelwidth / radius).to_degrees();
+                let scaled = radius * m2pixelwidth;
+                let cog = details.cog;
+                if radius < -1.0 && alpha < -1.0 {
+                    let p1 = cog.to_radians().cos().mul_add(scaled, scaled);
+                    let p2 = cog.to_radians().sin().mul_add(scaled, scaled);
+                    let points = arc_points(at, 0.0, (p1, p2), scaled.abs(), cog, alpha);
+                    stroke_through(window, &points, 2.0, MARKER_HOT_PINK);
+                } else if radius > 1.0 && alpha > 1.0 {
+                    let p1 = (cog - 180.0).to_radians().cos().mul_add(scaled, scaled);
+                    let p2 = (cog - 180.0).to_radians().sin().mul_add(scaled, scaled);
+                    let points = arc_points(at, 0.0, (-p1, -p2), scaled, cog - 180.0, alpha);
+                    stroke_through(window, &points, 2.0, MARKER_HOT_PINK);
+                }
+            }
+            let shadow: Vec<Point<Pixels>> = PLANE_OUTLINE
+                .iter()
+                .map(|(x, y)| turned(at, (x - 26.0, y - 26.0), heading))
+                .collect();
+            fill_through(window, &shadow, Hsla::from(gpui::rgba(0x0000_0032)));
+            let plane: Vec<Point<Pixels>> = PLANE_OUTLINE
+                .iter()
+                .map(|(x, y)| turned(at, (x - 28.0, y - 28.0), heading))
+                .collect();
+            fill_through(
+                window,
+                &plane,
+                Hsla::from(rgb(plane_colour(i32::from(details.sysid) - 1))),
+            );
+        }
+        MarkerKind::Rover | MarkerKind::Boat | MarkerKind::Heli | MarkerKind::Sub => {
+            if let Some((resource, size)) = kind.icon() {
+                bitmap(window, resource, size);
+            }
+        }
+        MarkerKind::Single => {
+            if let Some((resource, size)) = kind.icon() {
+                bitmap(window, resource, size);
+            }
+            paint_text(
+                window,
+                cx,
+                point(at.x - px(8.0), at.y - px(8.0)),
+                &details.sysid.to_string(),
+                15.0,
+                MARKER_RED,
+                true,
+            );
+        }
+        // `DrawImage(icon, -20, -20, 40, 40)`: upright, whatever the heading.
+        MarkerKind::Tracker => {
+            if let Some((resource, (w, h))) = kind.icon() {
+                let target = Bounds {
+                    origin: point(at.x - px(w / 2.0), at.y - px(h / 2.0)),
+                    size: size(px(w), px(h)),
+                };
+                let _ = crate::pictures::paint_stretched(resource, clip, target, window);
+            }
+        }
+        MarkerKind::Dot => {
+            let dot: Vec<Point<Pixels>> = (0..=24)
+                .map(|i| {
+                    #[allow(clippy::cast_precision_loss)]
+                    let angle = std::f32::consts::TAU * i as f32 / 24.0;
+                    point(at.x + px(6.0 * angle.cos()), at.y + px(6.0 * angle.sin()))
+                })
+                .collect();
+            fill_through(window, &dot, Hsla::from(rgb(MARKER_DOT)));
+        }
+    }
 }
 
 /// Paints one frame of the map into `bounds`.
@@ -3359,7 +4004,10 @@ mod tests {
         map.last_origin = (0.0, 0.0);
         let (x, y, width, height) = map.idle_view(800.0, 600.0);
         map.last_view = Some((x, y, width, height));
-        assert!(map.camera.is_none(), "a start position is not a chosen view: it follows");
+        assert!(
+            map.camera.is_none(),
+            "a start position is not a chosen view: it follows"
+        );
         let (at, zoom) = map.position_and_zoom().expect("a position and zoom");
         assert!((zoom - 16.0).abs() < 1e-6, "zoom {zoom}");
         assert!((at.latitude() - canberra.latitude()).abs() < 1e-6);
@@ -3374,7 +4022,10 @@ mod tests {
 
         // A vehicle heard: the fit frames it, ahead of the idle view.
         map.observe(canberra, Bearing::default());
-        map.observe(LatLon::new(-35.37, 149.17).expect("near"), Bearing::default());
+        map.observe(
+            LatLon::new(-35.37, 149.17).expect("near"),
+            Bearing::default(),
+        );
         assert!(map.camera.is_none(), "still following");
         assert!(map.view_box().is_some(), "the vehicle's track is framed");
 
@@ -3723,6 +4374,131 @@ mod tests {
         LatLon::new(-35.363, 149.165).expect("valid")
     }
 
+    /// `getMAVMarker`'s choice for each `MAV_TYPE`, in the C#'s order of asking: the VTOL types
+    /// are planes, the copter frames quads, a helicopter and a single copter their own, a type
+    /// with no marker the dot.
+    /// `// C#: Common.cs:71-215`
+    #[test]
+    fn the_marker_is_the_csharps_for_the_vehicles_type() {
+        use MarkerKind::{Boat, Dot, Heli, Plane, Quad, Rover, Single, Sub, Tracker};
+        assert_eq!(MarkerKind::of(1), Plane);
+        for vtol in 19..=25 {
+            assert_eq!(MarkerKind::of(vtol), Plane, "MAV_TYPE {vtol}");
+        }
+        assert_eq!(MarkerKind::of(10), Rover);
+        assert_eq!(MarkerKind::of(11), Boat);
+        assert_eq!(MarkerKind::of(12), Sub);
+        assert_eq!(MarkerKind::of(4), Heli);
+        assert_eq!(MarkerKind::of(5), Tracker);
+        assert_eq!(MarkerKind::of(3), Single);
+        for copter in [2, 13, 14, 15, 29] {
+            assert_eq!(MarkerKind::of(copter), Quad, "MAV_TYPE {copter}");
+        }
+        assert_eq!(MarkerKind::of(0), Dot);
+        assert_eq!(MarkerKind::of(6), Dot, "a GCS");
+        assert_eq!(MarkerKind::default(), Dot);
+    }
+
+    /// Which lines each marker draws, and the Planner page's switches over them: the quad has
+    /// no nav bearing line, the plane has all four, the tracker its two whatever the settings.
+    #[test]
+    fn the_markers_lines_follow_the_settings() {
+        let all = MarkerSettings::default();
+        assert_eq!(MarkerKind::Quad.lines(&all), ["heading", "cog", "target"]);
+        assert_eq!(
+            MarkerKind::Plane.lines(&all),
+            ["heading", "nav_bearing", "cog", "target"]
+        );
+        assert_eq!(MarkerKind::Heli.lines(&all), ["heading", "cog", "target"]);
+        assert_eq!(MarkerKind::Tracker.lines(&all), ["heading", "target"]);
+        assert!(MarkerKind::Dot.lines(&all).is_empty());
+        let none = MarkerSettings {
+            cog: false,
+            heading: false,
+            nav_bearing: false,
+            target: false,
+            ..all
+        };
+        assert!(MarkerKind::Rover.lines(&none).is_empty());
+        assert_eq!(MarkerKind::Tracker.lines(&none), ["heading", "target"]);
+        let cog_only = MarkerSettings {
+            heading: false,
+            nav_bearing: false,
+            target: false,
+            ..all
+        };
+        assert_eq!(MarkerKind::Boat.lines(&cog_only), ["cog"]);
+    }
+
+    /// The plane's colour is its sysid's: sysid 1 red, 2 black, ... 8 red again; a sysid of 0
+    /// matches none of the seven and is white, as the C#'s `-1 % 7` matches none.
+    #[test]
+    fn the_planes_colour_is_its_sysids() {
+        assert_eq!(plane_colour(0), MARKER_RED);
+        assert_eq!(plane_colour(1), 0x00_00_00);
+        assert_eq!(plane_colour(7), MARKER_RED);
+        assert_eq!(plane_colour(-1), 0xff_ff_ff);
+    }
+
+    /// A marker frame's point turned to a heading: at heading 90 the nose, which points up at 0,
+    /// points east; at 180 down.
+    #[test]
+    fn a_frames_point_turns_with_the_heading() {
+        let at = point(px(100.0), px(100.0));
+        let nose = (0.0, -10.0);
+        let east = turned(at, nose, 90.0);
+        assert!((f32::from(east.x) - 110.0).abs() < 1e-3, "{east:?}");
+        assert!((f32::from(east.y) - 100.0).abs() < 1e-3, "{east:?}");
+        let south = turned(at, nose, 180.0);
+        assert!((f32::from(south.x) - 100.0).abs() < 1e-3, "{south:?}");
+        assert!((f32::from(south.y) - 110.0).abs() < 1e-3, "{south:?}");
+        // `DrawArc` from 0 through 90 degrees of a circle of radius 10 at the origin's square:
+        // from east round to south.
+        let arc = arc_points(at, 0.0, (-10.0, -10.0), 10.0, 0.0, 90.0);
+        let first = arc.first().expect("a start");
+        let last = arc.last().expect("an end");
+        assert!(
+            (f32::from(first.x) - 110.0).abs() < 1e-3 && (f32::from(first.y) - 100.0).abs() < 1e-3
+        );
+        assert!(
+            (f32::from(last.x) - 100.0).abs() < 1e-3 && (f32::from(last.y) - 110.0).abs() < 1e-3
+        );
+    }
+
+    /// What the window hands the map is what the facts say: the marker's kind, its lines, its
+    /// sysid and the heading it turns to.
+    #[test]
+    fn the_facts_name_the_marker() {
+        let mut map = MapViewport::new(0, 0);
+        let get = |map: &MapViewport, key: &str| {
+            map.facts()
+                .into_iter()
+                .find(|(k, _)| *k == key)
+                .map(|(_, v)| v)
+                .expect(key)
+        };
+        assert_eq!(get(&map, "map.vehicle.kind"), "dot");
+        assert_eq!(get(&map, "map.vehicle.heading"), "none");
+        assert_eq!(get(&map, "map.vehicle.lines"), "none");
+        map.observe(canberra(), Bearing(mp_units::Degrees(271.6)));
+        map.set_marker(
+            MarkerDetails {
+                kind: MarkerKind::of(2),
+                sysid: 1,
+                ..MarkerDetails::default()
+            },
+            MarkerSettings {
+                target: false,
+                ..MarkerSettings::default()
+            },
+        );
+        assert_eq!(map.marker().kind, MarkerKind::Quad);
+        assert_eq!(get(&map, "map.vehicle.kind"), "quad");
+        assert_eq!(get(&map, "map.vehicle.heading"), "272");
+        assert_eq!(get(&map, "map.vehicle.lines"), "heading,cog");
+        assert_eq!(get(&map, "map.vehicle.sysid"), "1");
+    }
+
     /// Home is where the screen put it, and goes when the screen says there is none: the two
     /// screens sharing this map draw different homes, so a stale one must not linger.
     #[test]
@@ -3811,7 +4587,11 @@ mod tests {
         map.observe(LatLon::new(-27.5134, 153.0095).expect("valid"), heading);
         map.observe(LatLon::new(0.0, 0.0).expect("valid"), heading);
         map.observe(LatLon::new(-27.5140, 153.0100).expect("valid"), heading);
-        assert_eq!(map.path_len(), 2, "the fixes, and not the 0, 0 between them");
+        assert_eq!(
+            map.path_len(),
+            2,
+            "the fixes, and not the 0, 0 between them"
+        );
     }
 
     /// The flown route is the flight screen's: the planner's map draws none.
@@ -3821,7 +4601,10 @@ mod tests {
         assert!(!planner.draws_flown_route());
         let (flight, _, _) = hover_map(false);
         assert!(flight.draws_flown_route());
-        assert!(viewport().draws_flown_route(), "no overlay set: the flight screen's default");
+        assert!(
+            viewport().draws_flown_route(),
+            "no overlay set: the flight screen's default"
+        );
     }
 
     /// The return location is a marker of its own, set and taken away.

@@ -8,7 +8,7 @@
 # COMMAND_INT on OK, and asks for the home position whatever the answer, as the C#'s
 # getHomePositionAsync is outside its if. Before the map has been pressed the point is (0, 0),
 # PointLatLng's default, which has no tile: "No SRTM data for this area". The C#'s menu is on the
-# map; this application's map menu entries are the row under the Actions grid, so the map is
+# map; here the entries are the map's right-click menu, contextMenuStripMap, so the map is
 # pressed first and the entry chosen after.
 # `GCSViews/FlightData.cs:58, 4478-4509, 4789-4811, 4852-4885, ExtLibs/Utilities/srtm.cs:104-275`
 #
@@ -20,7 +20,7 @@ env XDG_DATA_HOME $WORK
 setup mkdir -p "$WORK/MissionPlannerRust/srtm" && python3 -c 'import sys; open(sys.argv[1], "wb").write(bytes([2, 72]) * (1201 * 1201))' "$WORK/MissionPlannerRust/srtm/S36E149.hgt"
 screen fly
 window 1600x1200
-budget 11
+budget 15
 
 # The vehicle first: a click before its first heartbeat is a click the screen may forget
 # (vehicle.connected only says the link is open).
@@ -29,25 +29,28 @@ click fly-tab-actions
 expect fly.tab tabActions
 expect fly.page.overflow 0
 
-# Not pressed yet: (0, 0), and no tile there.
-click fly-setekforigin
-expect status Error: No SRTM data for this area
-expect fly.sent nothing: No SRTM data for this area
-click fly-sethome
-expect fly.prompt none
-expect status Error: No SRTM data for this area
-
 # Press the map: that is where the entries act.
 # The map first: a press before its first paint records nothing.
 expect map.ready true
-click map@0.5x0.5
+click map@0.5x0.5:right
 expect fly.mousedown ~ ;
+expect fly.menu map
+hover fly-sethome-dropdown
+expect fly.menu.sub fly-sethome-dropdown
 
+click map@0.5x0.5:right
+expect fly.menu map
+hover fly-sethome-dropdown
+expect fly.menu.sub fly-sethome-dropdown
 click fly-setekforigin
 expect fly.sent ~ SET_GPS_GLOBAL_ORIGIN lat=-353
 expect fly.sent ~ alt=584000
 
 # Cancel still asks for home.
+click map@0.5x0.5:right
+expect fly.menu map
+hover fly-sethome-dropdown
+expect fly.menu.sub fly-sethome-dropdown
 click fly-sethome
 expect fly.prompt This will reset the onboard home position (effects RTL etc). Are you Sure?
 click fly-prompt-cancel
@@ -55,6 +58,10 @@ expect fly.prompt none
 expect fly.sent COMMAND_LONG MAV_CMD_GET_HOME_POSITION 0,0,0,0,0,0,0
 
 # OK moves home to the point pressed, at the tile's height, and asks for it back.
+click map@0.5x0.5:right
+expect fly.menu map
+hover fly-sethome-dropdown
+expect fly.menu.sub fly-sethome-dropdown
 click fly-sethome
 click fly-prompt-ok
 expect fly.prompt none
@@ -63,6 +70,8 @@ expect fly.sent ~ z=584 frame=0; COMMAND_LONG MAV_CMD_GET_HOME_POSITION 0,0,0,0,
 expect fly.mousedown.home < 2
 
 # Point Camera Coords with only a latitude and longitude takes the terrain's height there.
+click map@0.5x0.5:right
+expect fly.menu map
 click fly-pointcameracoords
 expect fly.prompt Please enter the coords 'lat;long;alt(abs)' or 'lat;long'
 key minus

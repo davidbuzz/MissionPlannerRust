@@ -2263,8 +2263,11 @@ pub fn map_place(
                 && let Some(resized) = resized
             {
                 let (x, y, w, h) = resized.map;
+                // The map itself, small: its right button opens `contextMenuStripMap` as the
+                // full map's does, through the map's own handler.
                 place = place.child(
-                    div()
+                    crate::probe::measured("fly-gimbal-minimap", div())
+                        .id("fly-gimbal-minimap")
                         .absolute()
                         .left(px(x as f32))
                         .top(px(y as f32))
@@ -2501,10 +2504,12 @@ fn video_box(
             MouseButton::Right,
             cx.listener(|this, event: &MouseUpEvent, window, cx| {
                 video_click(this, event, keys::MOUSE_RIGHT, window, cx);
-                // `VideoBox.ContextMenuStrip`: the menu where the button came up.
+                // `VideoBox.ContextMenuStrip`: the menu where the button came up - this one, not
+                // the map's under the box, whose own right button opens `contextMenuStripMap`.
                 if let Some(control) = this.fly_data.gimbal_video.control.as_mut() {
                     control.menu = Some((f32::from(event.position.x), f32::from(event.position.y)));
                 }
+                cx.stop_propagation();
                 cx.notify();
             }),
         )

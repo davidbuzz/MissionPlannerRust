@@ -95,7 +95,7 @@ macro_rules! embedded {
 /// `// C#: Properties/Resources.resx` (the file each resource names) and `Resources.Designer.cs`
 /// (the property each resource is); `ExtLibs/Controls/HUDT.resx` and `HUDT.Designer.cs` for the
 /// HUD's; `GCSViews/SITL.resx` for SITL's.
-pub const IMAGES: [Embedded; 64] = [
+pub const IMAGES: [Embedded; 68] = [
     embedded!("APM_airframes_001", "APM_airframes_001.png"),
     embedded!("APM_airframes_08", "APM_airframes_08.png"),
     embedded!("Antenna_Tracker_01", "Antenna_Tracker_01.png"),
@@ -157,6 +157,7 @@ pub const IMAGES: [Embedded; 64] = [
     embedded!("cameraGimalPitch1", "cameraGimalPitch1.png"),
     embedded!("cameraGimalRoll1", "cameraGimalRoll1.png"),
     embedded!("cameraGimalYaw", "cameraGimalYaw.png"),
+    embedded!("boat", "boat.png"),
     embedded!("down", "down.png"),
     embedded!("ekf_green", "ekf_green.png"),
     embedded!("ekf_red", "ekf_red.png"),
@@ -164,6 +165,7 @@ pub const IMAGES: [Embedded; 64] = [
     embedded!("frames_h", "frames_h.png"),
     embedded!("frames_plus", "frames_plus.png"),
     embedded!("frames_x", "frames_x.png"),
+    embedded!("heli", "heli.png"),
     embedded!("new_3DR_04", "new_3DR_04.png"),
     embedded!("nofix_wide", "nofix_wide.png"),
     embedded!("nogps_wide", "nogps_wide.png"),
@@ -171,6 +173,10 @@ pub const IMAGES: [Embedded; 64] = [
     embedded!("pixhawk2cube", "pixhawk2cube.jpg"),
     embedded!("prearm_green", "prearm_green.png"),
     embedded!("prearm_red", "prearm_red.png"),
+    embedded!("redsinglecopter2", "redsinglecopter2.png"),
+    // `MissionPlanner.Maps.Resources.rover`, the flight map's rover marker: `car.png` in
+    // `ExtLibs/Maps/Resources.resx`, carried under the resource's name as the rest are.
+    embedded!("rover", "rover.png"),
     embedded!("rover_11", "rover_11.png"),
     embedded!("rtkfixed_wide", "rtkfixed_wide.png"),
     embedded!("rtkfloat_wide", "rtkfloat_wide.png"),
@@ -445,6 +451,123 @@ pub fn resampled(source: &RgbaImage, width: u32, height: u32) -> RgbaImage {
     }
 }
 
+/// `image` turned `degrees` clockwise about `pivot` - a point in its pixels - into a square whose
+/// centre is the pivot and which holds the image at any angle: what `RotateTransform(heading)`
+/// then `DrawImage` at the pivot's negative draws, for a map marker's icon. Each pixel of the
+/// square is the image sampled bilinearly, alpha premultiplied, where that pixel was before the
+/// turn, and nothing where that is outside the image. Straight RGBA; the side comes back too.
+#[must_use]
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
+pub fn turned(image: &RgbaImage, pivot: (f32, f32), degrees: f32) -> (RgbaImage, u32) {
+    let (w, h) = (image.width() as f32, image.height() as f32);
+    let reach = [(0.0, 0.0), (w, 0.0), (0.0, h), (w, h)]
+        .iter()
+        .map(|(x, y)| (x - pivot.0).hypot(y - pivot.1))
+        .fold(0.0_f32, f32::max);
+    let side = (reach * 2.0).ceil() as u32 + 2;
+    let (sin, cos) = degrees.to_radians().sin_cos();
+    let centre = side as f32 / 2.0;
+    let mut out = RgbaImage::new(side, side);
+    for (dx, dy, pixel) in out.enumerate_pixels_mut() {
+        let u = dx as f32 + 0.5 - centre;
+        let v = dy as f32 + 0.5 - centre;
+        // The turn undone: where this pixel of the square was in the image. A positive angle
+        // turns clockwise with y downward, as GDI+'s does.
+        let sx = v.mul_add(sin, u * cos) + pivot.0 - 0.5;
+        let sy = v.mul_add(cos, -u * sin) + pivot.1 - 0.5;
+        *pixel = image::Rgba(sample(image, sx, sy));
+    }
+    (out, side)
+}
+
+/// The image at (`x`, `y`), between its pixels: the four around the point weighed by distance,
+/// each colour weighed by its alpha as well, so a clear pixel lends no colour to its neighbour;
+/// clear outside the image.
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
+fn sample(image: &RgbaImage, x: f32, y: f32) -> [u8; 4] {
+    let (x0, y0) = (x.floor(), y.floor());
+    let (fx, fy) = (x - x0, y - y0);
+    let mut sum = [0.0_f32; 4];
+    for (ix, wx) in [(x0, 1.0 - fx), (x0 + 1.0, fx)] {
+        for (iy, wy) in [(y0, 1.0 - fy), (y0 + 1.0, fy)] {
+            let weight = wx * wy;
+            if weight <= 0.0
+                || ix < 0.0
+                || iy < 0.0
+                || ix >= image.width() as f32
+                || iy >= image.height() as f32
+            {
+                continue;
+            }
+            let [r, g, b, a] = image.get_pixel(ix as u32, iy as u32).0;
+            let alpha = f32::from(a) / 255.0 * weight;
+            sum[0] += f32::from(r) * alpha;
+            sum[1] += f32::from(g) * alpha;
+            sum[2] += f32::from(b) * alpha;
+            sum[3] += f32::from(a) * weight;
+        }
+    }
+    if sum[3] <= 0.0 {
+        return [0; 4];
+    }
+    let alpha = sum[3] / 255.0;
+    let channel = |value: f32| (value / alpha).round().clamp(0.0, 255.0) as u8;
+    [
+        channel(sum[0]),
+        channel(sum[1]),
+        channel(sum[2]),
+        sum[3].round().clamp(0.0, 255.0) as u8,
+    ]
+}
+
+/// A resource drawn `width` by `height` logical pixels with its point `pivot` on a marker's
+/// point and the whole turned `degrees` clockwise about it: the image to paint, and the side of
+/// the square it fills, in logical pixels. Made for each whole degree on first use and kept, so
+/// gpui's atlas keeps each; `None` when the resource is not carried or does not decode.
+#[must_use]
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+pub fn rotated(
+    resource: &'static str,
+    (width, height): (f32, f32),
+    pivot: (f32, f32),
+    degrees: f32,
+    scale: f32,
+) -> Option<(Arc<RenderImage>, f32)> {
+    type Key = (&'static str, u32, u32, i32);
+    type Turned = HashMap<Key, (Arc<RenderImage>, u32)>;
+    static ROTATED: OnceLock<Mutex<Turned>> = OnceLock::new();
+    let turn = (degrees.rem_euclid(360.0).round() as i32) % 360;
+    let (device_width, device_height) = (device(width * scale), device(height * scale));
+    let source = decoded(resource)?;
+    let mut cache = ROTATED.get_or_init(Mutex::default).lock().ok()?;
+    let (render, side) = cache
+        .entry((resource, device_width, device_height, turn))
+        .or_insert_with(|| {
+            let base = resampled(&source, device_width, device_height);
+            let (mut pixels, side) = turned(&base, (pivot.0 * scale, pivot.1 * scale), turn as f32);
+            // gpui's frames are BGRA in an `RgbaImage`, as `render_image` makes them.
+            for pixel in pixels.pixels_mut() {
+                pixel.0.swap(0, 2);
+            }
+            (
+                Arc::new(RenderImage::new(vec![image::Frame::new(pixels)])),
+                side,
+            )
+        })
+        .clone();
+    #[allow(clippy::cast_precision_loss)] // a square's side in pixels
+    let logical = side as f32 / scale.max(f32::EPSILON);
+    Some((render, logical))
+}
+
 /// A resource at a size in device pixels, made on first use and kept, so its `ImageId` - which
 /// is what gpui's sprite atlas keys on - is the same every frame.
 fn sized(resource: &'static str, width: u32, height: u32) -> Option<Arc<RenderImage>> {
@@ -706,6 +829,38 @@ mod tests {
     use super::*;
     use crate::config_coverage::source::csharp;
 
+    /// An image turned about a pivot: a 4 by 4 with its one red pixel top right, turned 90
+    /// degrees clockwise about its centre, has the pixel bottom right; the square holds the
+    /// image at any angle; an image turned 0 is itself, centred.
+    #[test]
+    fn an_image_turns_clockwise_about_its_pivot() {
+        let mut image = RgbaImage::new(4, 4);
+        for pixel in image.pixels_mut() {
+            *pixel = image::Rgba([0, 0, 255, 255]);
+        }
+        image.put_pixel(3, 0, image::Rgba([255, 0, 0, 255]));
+        let (same, side) = turned(&image, (2.0, 2.0), 0.0);
+        assert!(side >= 6 && side % 2 == 0, "{side}");
+        let offset = (side - 4) / 2;
+        assert_eq!(same.get_pixel(offset + 3, offset).0, [255, 0, 0, 255]);
+        assert_eq!(same.get_pixel(offset, offset).0, [0, 0, 255, 255]);
+        assert_eq!(same.get_pixel(0, 0).0, [0, 0, 0, 0], "clear outside");
+        let (quarter, _) = turned(&image, (2.0, 2.0), 90.0);
+        assert_eq!(
+            quarter.get_pixel(offset + 3, offset + 3).0,
+            [255, 0, 0, 255]
+        );
+        assert_eq!(quarter.get_pixel(offset + 3, offset).0, [0, 0, 255, 255]);
+        // The marker icons the flight map turns are carried.
+        for resource in ["rover", "boat", "heli", "sub", "redsinglecopter2"] {
+            let (render, side) =
+                rotated(resource, (20.0, 20.0), (10.0, 10.0), 45.0, 1.0).expect(resource);
+            assert!(side >= 28.0, "{resource}: {side}");
+            assert_eq!(render.size(0).width.0, render.size(0).height.0);
+        }
+        assert!(rotated("no_such_resource", (20.0, 20.0), (10.0, 10.0), 0.0, 1.0).is_none());
+    }
+
     /// Every carried image decodes, from the file its name says, and is carried once.
     #[test]
     fn every_embedded_image_decodes() {
@@ -733,7 +888,7 @@ mod tests {
         names.sort_unstable();
         names.dedup();
         assert_eq!(names.len(), IMAGES.len(), "a resource carried twice");
-        assert_eq!(total, 817_266, "the images embedded, in bytes");
+        assert_eq!(total, 825_941, "the images embedded, in bytes");
         assert!(decoded("no_such_resource").is_none());
     }
 
@@ -770,13 +925,21 @@ mod tests {
         for icon in crate::hud::Icon::ALL {
             assert!(bytes(icon.resource()).is_some(), "{icon:?} is not carried");
         }
+        for kind in crate::mapview::MarkerKind::ALL {
+            if let Some((resource, _)) = kind.icon() {
+                assert!(bytes(resource).is_some(), "{kind:?} is not carried");
+            }
+        }
         for embedded in IMAGES {
             assert!(
                 SITES.iter().any(|site| site.resource == embedded.resource)
                     || crate::hud::Icon::ALL
                         .iter()
-                        .any(|icon| icon.resource() == embedded.resource),
-                "{} is carried but no site or HUD picture shows it",
+                        .any(|icon| icon.resource() == embedded.resource)
+                    || crate::mapview::MarkerKind::ALL
+                        .iter()
+                        .any(|kind| kind.icon().is_some_and(|(r, _)| r == embedded.resource)),
+                "{} is carried but no site, HUD picture or map marker shows it",
                 embedded.resource
             );
         }

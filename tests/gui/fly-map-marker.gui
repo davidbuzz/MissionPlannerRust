@@ -1,0 +1,27 @@
+# The vehicle on the flight map, drawn as Mission Planner's marker for its type - ported from
+# Common.getMAVMarker and ExtLibs/Maps/GMapMarkerQuad.cs - after the owner's report of 2026-10-02
+# that it was a red arrow "that looks like a mouse cursor, not like a quadcopter or plane or rover".
+#
+# The claim: SITL's copter (MAV_TYPE QUADROTOR, sysid 1) is a GMapMarkerQuad (Common.cs:188-215):
+# four motors and arms turned to cs.yaw, its sysid beside it, and from its point the heading line
+# (red), the course (black) and its Target - cs.nav_bearing - (orange), each GMapMarkerBase.length
+# long; a quad draws no nav-bearing line (GMapMarkerQuad.cs:132-149). With no settings written the
+# Planner page's GMapMarkerBase_Display* are all on (MainV2.cs:3855-3860). The heading is the
+# marker's Heading, cs.yaw, as degrees from 0 to 360.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760. Run as
+#
+#   tools/gui-test.sh tests/gui/fly-map-marker.gui -- tcp:127.0.0.1:5760
+
+env MP_CONFIG_XML $WORK/config.xml
+screen fly
+window 1600x1200
+budget 7
+
+expect vehicle.count > 0
+expect map.ready true
+expect map.vehicle.kind quad
+expect map.vehicle.sysid 1
+expect map.vehicle.lines heading,cog,target
+expect map.vehicle.heading >= 0
+expect map.vehicle.heading < 360

@@ -22,7 +22,7 @@ env XDG_DATA_HOME $WORK
 setup mkdir -p "$WORK/MissionPlannerRust/srtm" && python3 -c 'import sys; open(sys.argv[1], "wb").write(bytes([2, 72]) * (1201 * 1201))' "$WORK/MissionPlannerRust/srtm/S36E149.hgt"
 screen fly
 window 1600x1200
-budget 7
+budget 8
 
 # The first quick view is cs.alt, as it starts; the second is made cs.HomeAlt.
 expect fly.quick.1 alt
@@ -42,7 +42,10 @@ expect fly.tab tabActions
 # Home asked for: the map pressed, Set Home Here, Cancel - home is not moved.
 # The map first: a press before its first paint records nothing.
 expect map.ready true
-click map@0.5x0.5
+click map@0.5x0.5:right
+expect fly.menu map
+hover fly-sethome-dropdown
+expect fly.menu.sub fly-sethome-dropdown
 click fly-sethome
 expect fly.prompt This will reset the onboard home position (effects RTL etc). Are you Sure?
 click fly-prompt-cancel

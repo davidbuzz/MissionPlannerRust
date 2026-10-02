@@ -4,7 +4,7 @@
 # and adds its points to the ones there are; Save File writes them as SaveFile writes poi.txt. The
 # C#'s dialogs are the platform's; here the path is typed, into a box that starts in the folder
 # poi.txt is kept in, which is a scratch one through XDG_DATA_HOME. The C#'s menu is on the map;
-# this application's map menu entries are the row under the Actions grid.
+# the entries are the map's right-click menu, under Add Poi.
 # `Utilities/POI.cs:143-207, GCSViews/FlightData.cs:3362-3365, 4741-4744`
 #
 # Self-contained, no link: tools/gui-test.sh tests/gui/fly-poifile.gui
@@ -13,13 +13,17 @@ env XDG_DATA_HOME $WORK
 setup mkdir -p "$WORK/MissionPlannerRust" && printf '%s\t%s\t%s\r\n' -35.3625 149.1655 gate -35.3640 149.1640 mast > "$WORK/MissionPlannerRust/extra.txt"
 screen fly
 window 1600x1200
-budget 17
+budget 22
 
 expect fly.poi.count 0
 click fly-tab-actions
 expect fly.tab tabActions
 expect fly.page.overflow 0
 
+click map@0.5x0.5:right
+expect fly.menu map
+hover fly-poi-add
+expect fly.menu.sub fly-poi-add
 click fly-poi-load
 expect fly.prompt Poi File
 expect fly.prompt.value ~ MissionPlannerRust/
@@ -30,6 +34,10 @@ expect fly.poi.count 2
 expect fly.poi.list ~ gate -35.3625;149.1655
 expect fly.poi.list ~ mast -35.364;149.164
 
+click map@0.5x0.5:right
+expect fly.menu map
+hover fly-poi-add
+expect fly.menu.sub fly-poi-add
 click fly-poi-save
 expect fly.prompt Poi File
 type saved.txt
@@ -38,12 +46,20 @@ expect status ~ Save File:
 expect status ~ saved.txt
 
 # Loaded back, its points are added to the two there are.
+click map@0.5x0.5:right
+expect fly.menu map
+hover fly-poi-add
+expect fly.menu.sub fly-poi-add
 click fly-poi-load
 type saved.txt
 click fly-prompt-ok
 expect fly.poi.count 4
 
 # A file that is not there is said, and adds nothing.
+click map@0.5x0.5:right
+expect fly.menu map
+hover fly-poi-add
+expect fly.menu.sub fly-poi-add
 click fly-poi-load
 type missing.txt
 click fly-prompt-ok
@@ -51,6 +67,10 @@ expect status ~ missing.txt
 expect fly.poi.count 4
 
 # Cancel closes the box and reads nothing.
+click map@0.5x0.5:right
+expect fly.menu map
+hover fly-poi-add
+expect fly.menu.sub fly-poi-add
 click fly-poi-load
 type extra.txt
 click fly-prompt-cancel

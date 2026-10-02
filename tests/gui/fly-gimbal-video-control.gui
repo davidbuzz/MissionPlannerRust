@@ -21,11 +21,15 @@ env XDG_DATA_HOME $WORK
 env MP_CONFIG_XML $WORK/config.xml
 screen fly
 window 1600x1200
-budget 19
+budget 20
 
 expect vehicle.count > 0
 click fly-tab-actions
 expect fly.tab tabActions
+click map@0.5x0.5:right
+expect fly.menu map
+hover fly-gimbalvideo
+expect fly.menu.sub fly-gimbalvideo
 click fly-gimbalvideo-full
 expect fly.gimbal.video full
 expect fly.gimbal.map mini

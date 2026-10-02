@@ -2520,48 +2520,6 @@ fn list_chip(
         .into_any_element()
 }
 
-/// An entry of the map's menu, drawn as the menu's small type rather than as a command button:
-/// the menu is a column of them in the C#, and here a row that wraps. Dimmed, a click says why it
-/// does nothing, as the HUD menu's dimmed rows do.
-fn menu_entry(
-    id: &'static str,
-    label: &'static str,
-    dimmed: Option<&'static str>,
-    cx: &mut Context<MissionPlanner>,
-    on_click: impl Fn(&mut MissionPlanner, &mut Window, &mut Context<MissionPlanner>) + 'static,
-) -> AnyElement {
-    let base = crate::probe::measured(id, div())
-        .id(id)
-        .px_2()
-        .py(px(1.0))
-        .rounded_sm()
-        .border_1()
-        .text_xs()
-        .child(label);
-    match dimmed {
-        None => base
-            .bg(rgb(theme::ACTION))
-            .border_color(rgb(theme::ACCENT))
-            .text_color(rgb(theme::ACCENT))
-            .cursor_pointer()
-            .hover(|style| style.bg(rgb(theme::BORDER)))
-            .on_click(cx.listener(move |this, _event, window, cx| {
-                on_click(this, window, cx);
-                cx.notify();
-            }))
-            .into_any_element(),
-        Some(why) => base
-            .bg(rgb(theme::PANEL))
-            .border_color(rgb(theme::BORDER))
-            .text_color(rgb(theme::DIM))
-            .on_click(cx.listener(move |this, _event, _window, cx| {
-                this.file_status = Some(format!("{label} is not ported: {why}"));
-                cx.notify();
-            }))
-            .into_any_element(),
-    }
-}
-
 /// Why Camera Overlap is dimmed. `// C#: GCSViews/FlightData.cs:4003-4082, 4457-4471`
 const NO_PHOTOS: &str = "it shows or hides the overlap of the camera's photo footprints, and the \
                          CAMERA_FEEDBACK photo markers, photosoverlay, are not drawn here";
@@ -2933,176 +2891,6 @@ fn actions_tab(
         body = body.child(list);
     }
 
-    // The map's context menu in the C#, `contextMenuStripMap`, in its order. This application's
-    // map has no menu - a right click flies there, which is the menu's Fly To Here, and the
-    // planner is the FLIGHT PLAN tab and TakeOff a button over the grid - so the rest of its
-    // entries are here, under the grid, acting where the map was last pressed as the C#'s act
-    // where it was pressed to open the menu. Set Home Here's drop-down is its two entries, and
-    // Gimbal Video's its three (`gimbal_video.rs`). The row wraps where the column is too narrow
-    // for them all.
-    // `// C#: GCSViews/FlightData.Designer.cs:2518-2531, 2612-2630`
-    body = body.child(
-        div()
-            .flex()
-            .flex_wrap()
-            .items_center()
-            .gap_1()
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(theme::DIM))
-                    .child("map menu"),
-            )
-            .child(menu_entry(
-                "fly-flytohere-alt",
-                "Fly To Here Alt",
-                None,
-                cx,
-                |this, window, cx| {
-                    this.fly_ask_guided_alt();
-                    this.fly_focus.prompt.focus(window, cx);
-                },
-            ))
-            .child(menu_entry(
-                "fly-flytocoords",
-                "Fly To Coords",
-                None,
-                cx,
-                |this, window, cx| {
-                    this.fly_actions.ask(Prompt::FlyToCoords, "");
-                    this.fly_focus.prompt.focus(window, cx);
-                },
-            ))
-            .child(menu_entry(
-                "fly-pointcamerahere",
-                "Point Camera Here",
-                None,
-                cx,
-                |this, window, cx| this.fly_ask_point_camera_here(window, cx),
-            ))
-            .child(menu_entry(
-                "fly-pointcameracoords",
-                "Point Camera Coords",
-                None,
-                cx,
-                |this, window, cx| {
-                    this.fly_actions.ask(Prompt::PointCameraCoords, "");
-                    this.fly_focus.prompt.focus(window, cx);
-                },
-            ))
-            .child(menu_entry(
-                "fly-triggercamera",
-                "Trigger Camera NOW",
-                None,
-                cx,
-                |this, _window, _cx| this.fly_trigger_camera(),
-            ))
-            .child(menu_entry(
-                "fly-setekforigin",
-                "Set EKF Origin Here",
-                None,
-                cx,
-                |this, _window, _cx| this.fly_set_ekf_origin(),
-            ))
-            .child(menu_entry(
-                "fly-sethome",
-                "Set Home Here",
-                None,
-                cx,
-                |this, window, cx| this.fly_ask_set_home(window, cx),
-            ))
-            .child(menu_entry(
-                "fly-cameraoverlap",
-                "Camera Overlap",
-                Some(NO_PHOTOS),
-                cx,
-                |_this, _window, _cx| {},
-            ))
-            // `jumpToTagToolStripMenuItem`. `// C#: GCSViews/FlightData.Designer.cs:2645-2649`
-            .child(menu_entry(
-                "fly-jumptotag",
-                "Jump To Tag",
-                None,
-                cx,
-                |this, window, cx| {
-                    this.fly_actions.ask(Prompt::JumpToTag, "");
-                    this.fly_focus.prompt.focus(window, cx);
-                },
-            ))
-            // `gimbalVideoToolStripMenuItem`'s Full Sized, Mini and Pop Out.
-            // `// C#: GCSViews/FlightData.Designer.cs:2651-2675`
-            .child(menu_entry(
-                "fly-gimbalvideo-full",
-                "Gimbal Video: Full Sized",
-                None,
-                cx,
-                |this, window, cx| this.gimbal_video_full_sized(window, cx),
-            ))
-            .child(menu_entry(
-                "fly-gimbalvideo-mini",
-                "Mini",
-                None,
-                cx,
-                |this, window, cx| this.gimbal_video_mini(window, cx),
-            ))
-            .child(menu_entry(
-                "fly-gimbalvideo-popout",
-                "Pop Out",
-                None,
-                cx,
-                |this, window, cx| this.gimbal_video_pop_out(window, cx),
-            )),
-    );
-    // The menu's POI entry and its drop-down: Add Poi at the point the map was last pressed,
-    // Delete the one under it, Save File and Load File, and Coords.
-    // `// C#: GCSViews/FlightData.Designer.cs:2553-2586`
-    body = body.child(
-        div()
-            .flex()
-            .flex_wrap()
-            .items_center()
-            .gap_1()
-            .child(div().text_xs().text_color(rgb(theme::DIM)).child("POI"))
-            .child(menu_entry(
-                "fly-poi-add",
-                "Add Poi",
-                None,
-                cx,
-                |this, window, cx| this.poi_add(window, cx),
-            ))
-            .child(menu_entry(
-                "fly-poi-delete",
-                "Delete",
-                None,
-                cx,
-                |this, _window, _cx| this.poi_delete(),
-            ))
-            .child(menu_entry(
-                "fly-poi-save",
-                "Save File",
-                None,
-                cx,
-                |this, window, cx| this.poi_ask_file(Prompt::PoiSave, window, cx),
-            ))
-            .child(menu_entry(
-                "fly-poi-load",
-                "Load File",
-                None,
-                cx,
-                |this, window, cx| this.poi_ask_file(Prompt::PoiLoad, window, cx),
-            ))
-            .child(menu_entry(
-                "fly-poi-coords",
-                "Coords",
-                None,
-                cx,
-                |this, window, cx| {
-                    this.fly_actions.ask(Prompt::PoiCoords, "");
-                    this.fly_focus.prompt.focus(window, cx);
-                },
-            )),
-    );
-
     if let Some(resume) = &tab.resume {
         let colour = match resume.phase() {
             ResumePhase::Failed(_) => theme::ALERT,
@@ -3185,7 +2973,11 @@ pub fn prompt_dialog(
         .flex_col()
         .gap_2()
         // A file question is half again as wide, for the path it takes (the owner, 2026-09-25).
-        .w(px(if prompt.is_file_dialog() { 510.0 } else { 340.0 }))
+        .w(px(if prompt.is_file_dialog() {
+            510.0
+        } else {
+            340.0
+        }))
         .p_3()
         .bg(rgb(theme::PANEL))
         .border_1()
@@ -4663,6 +4455,10 @@ pub struct FlightData {
     /// `MouseDownStart`: where the flight map was last pressed, and where that was in the window.
     /// `// C#: GCSViews/FlightData.cs:2956-2959`
     pub mouse_down_start: Option<(mp_units::LatLon, (f32, f32))>,
+    /// `CurrentPOIMarker`: the POI under the pointer when the map's menu opened, which Delete
+    /// removes - found then, not when Delete is chosen, as the map may have moved under the
+    /// point since (it follows the vehicle). `// C#: GCSViews/FlightData.cs:5014-5019`
+    pub current_poi: Option<usize>,
     /// Where the HUD was laid out, for its click zones.
     pub hud_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
     /// `hud1.bgimage`: the camera's latest frame, which the HUD draws under everything, set
@@ -4680,6 +4476,8 @@ pub struct FlightData {
     pub swapped: bool,
     /// The strip's or the quick views' context menu, where the right button came up.
     pub menu: Option<(MenuKind, (f32, f32))>,
+    /// The entry whose drop-down the pointer has opened, while the map's menu is up.
+    pub menu_sub: Option<MenuEntry>,
     /// Customize's list while its form is open: each page, and whether it is checked.
     pub customizing: Option<Vec<(Page, bool)>>,
     /// Set View Count's columns, between its two questions.
@@ -4975,6 +4773,7 @@ impl FlightData {
             ekf_open: false,
             vibration_open: false,
             mouse_down_start: None,
+            current_poi: None,
             hud_bounds: Rc::new(Cell::new(None)),
             camera: None,
             conversions: Conversions::default(),
@@ -4982,6 +4781,7 @@ impl FlightData {
             hud_settings: HudSettings::default(),
             swapped: false,
             menu: None,
+            menu_sub: None,
             customizing: None,
             quick_cols: None,
             pending_home: None,
@@ -5188,6 +4988,7 @@ impl FlightData {
             "fly.menu",
             self.menu.map_or("none", |(kind, _)| kind.name()),
         );
+        crate::facts::record("fly.menu.sub", self.menu_sub.map_or("none", MenuEntry::id));
         crate::facts::record(
             "fly.customize",
             self.customizing.as_ref().map_or_else(
@@ -7346,7 +7147,7 @@ pub fn overlays(
         shown.push(customize_form(list, window, cx));
     }
     if let Some(menu) = data.menu {
-        shown.push(context_menu(menu, window, cx));
+        shown.push(context_menu(menu, data.menu_sub, window, cx));
     }
     shown
 }
@@ -7742,6 +7543,10 @@ pub enum MenuKind {
     /// `contextMenuStripQuickView`, on each quick view: Set View Count and Undock.
     /// `// C#: GCSViews/FlightData.Designer.cs:636, 647-660`
     Quick,
+    /// `contextMenuStripMap`, on the map: Fly To Here and the twelve after it, three with
+    /// drop-downs. The entries act where the map was pressed to open it, `MouseDownStart`.
+    /// `// C#: GCSViews/FlightData.Designer.cs:2518-2531; GCSViews/FlightData.cs:2956-2959`
+    Map,
 }
 
 /// An entry of one of those menus.
@@ -7755,10 +7560,55 @@ pub enum MenuEntry {
     SetViewCount,
     /// `undockToolStripMenuItem`, dropped: one window.
     Undock,
+    /// `goHereToolStripMenuItem`: Fly To Here.
+    GoHere,
+    /// `flyToHereAltToolStripMenuItem`.
+    FlyToHereAlt,
+    /// `flyToCoordsToolStripMenuItem`.
+    FlyToCoords,
+    /// `addPoiToolStripMenuItem`, with its drop-down of four.
+    AddPoi,
+    /// `deleteToolStripMenuItem`, under Add Poi.
+    PoiDelete,
+    /// `saveFileToolStripMenuItem`, under Add Poi.
+    PoiSaveFile,
+    /// `loadFileToolStripMenuItem`, under Add Poi.
+    PoiLoadFile,
+    /// `poiatcoordsToolStripMenuItem`, under Add Poi.
+    PoiCoords,
+    /// `pointCameraHereToolStripMenuItem`.
+    PointCameraHere,
+    /// `PointCameraCoordsToolStripMenuItem1`.
+    PointCameraCoords,
+    /// `triggerCameraToolStripMenuItem`.
+    TriggerCamera,
+    /// `flightPlannerToolStripMenuItem`.
+    FlightPlanner,
+    /// `setHomeHereToolStripMenuItem`: no handler of its own, a drop-down of two.
+    SetHomeHere,
+    /// `setEKFHomeHereToolStripMenuItem`, under Set Home Here.
+    SetEkfOriginHere,
+    /// `setHomeHereToolStripMenuItem1`, under Set Home Here.
+    SetHomeHere1,
+    /// `takeOffToolStripMenuItem`.
+    TakeOff,
+    /// `onOffCameraOverlapToolStripMenuItem`, dimmed: the photo footprints are not ported.
+    CameraOverlap,
+    /// `jumpToTagToolStripMenuItem`.
+    JumpToTag,
+    /// `gimbalVideoToolStripMenuItem`: no handler of its own, a drop-down of three.
+    GimbalVideo,
+    /// `gimbalVideoFullSizedToolStripMenuItem`, under Gimbal Video.
+    GimbalVideoFullSized,
+    /// `gimbalVideoMiniToolStripMenuItem`, under Gimbal Video.
+    GimbalVideoMini,
+    /// `gimbalVideoPopOutToolStripMenuItem`, under Gimbal Video.
+    GimbalVideoPopOut,
 }
 
 impl MenuEntry {
     /// The entry's text in the `.resx`.
+    /// `// C#: GCSViews/FlightData.resx:5350-5480`
     #[must_use]
     pub const fn text(self) -> &'static str {
         match self {
@@ -7766,6 +7616,27 @@ impl MenuEntry {
             Self::MultiLine => "MultiLine",
             Self::SetViewCount => "Set View Count",
             Self::Undock => "Undock",
+            Self::GoHere => "Fly To Here",
+            Self::FlyToHereAlt => "Fly To Here Alt",
+            Self::FlyToCoords => "Fly To Coords",
+            Self::AddPoi => "Add Poi",
+            Self::PoiDelete => "Delete",
+            Self::PoiSaveFile => "Save File",
+            Self::PoiLoadFile => "Load File",
+            Self::PoiCoords => "Coords",
+            Self::PointCameraHere => "Point Camera Here",
+            Self::PointCameraCoords => "Point Camera Coords",
+            Self::TriggerCamera => "Trigger Camera NOW",
+            Self::FlightPlanner => "Flight Planner",
+            Self::SetHomeHere | Self::SetHomeHere1 => "Set Home Here",
+            Self::SetEkfOriginHere => "Set EKF Origin Here",
+            Self::TakeOff => "TakeOff",
+            Self::CameraOverlap => "Camera Overlap",
+            Self::JumpToTag => "Jump To Tag",
+            Self::GimbalVideo => "Gimbal Video",
+            Self::GimbalVideoFullSized => "Full Sized",
+            Self::GimbalVideoMini => "Mini",
+            Self::GimbalVideoPopOut => "Pop Out",
         }
     }
 
@@ -7777,6 +7648,28 @@ impl MenuEntry {
             Self::MultiLine => "fly-tabs-multiline",
             Self::SetViewCount => "fly-quick-setviewcount",
             Self::Undock => "fly-quick-undock",
+            Self::GoHere => "fly-flytohere",
+            Self::FlyToHereAlt => "fly-flytohere-alt",
+            Self::FlyToCoords => "fly-flytocoords",
+            Self::AddPoi => "fly-poi-add",
+            Self::PoiDelete => "fly-poi-delete",
+            Self::PoiSaveFile => "fly-poi-save",
+            Self::PoiLoadFile => "fly-poi-load",
+            Self::PoiCoords => "fly-poi-coords",
+            Self::PointCameraHere => "fly-pointcamerahere",
+            Self::PointCameraCoords => "fly-pointcameracoords",
+            Self::TriggerCamera => "fly-triggercamera",
+            Self::FlightPlanner => "fly-flightplanner",
+            Self::SetHomeHere => "fly-sethome-dropdown",
+            Self::SetEkfOriginHere => "fly-setekforigin",
+            Self::SetHomeHere1 => "fly-sethome",
+            Self::TakeOff => "fly-menu-takeoff",
+            Self::CameraOverlap => "fly-cameraoverlap",
+            Self::JumpToTag => "fly-jumptotag",
+            Self::GimbalVideo => "fly-gimbalvideo",
+            Self::GimbalVideoFullSized => "fly-gimbalvideo-full",
+            Self::GimbalVideoMini => "fly-gimbalvideo-mini",
+            Self::GimbalVideoPopOut => "fly-gimbalvideo-popout",
         }
     }
 
@@ -7785,6 +7678,29 @@ impl MenuEntry {
     pub const fn dimmed(self) -> Option<&'static str> {
         match self {
             Self::Undock => Some("one window: nothing to undock from"),
+            Self::CameraOverlap => Some(NO_PHOTOS),
+            _ => None,
+        }
+    }
+
+    /// The entry's `DropDownItems`, for the three that have them; the pointer over the entry
+    /// opens them beside it.
+    /// `// C#: GCSViews/FlightData.Designer.cs:2555-2559, 2612-2614, 2651-2654`
+    #[must_use]
+    pub const fn dropdown(self) -> Option<&'static [Self]> {
+        match self {
+            Self::AddPoi => Some(&[
+                Self::PoiDelete,
+                Self::PoiSaveFile,
+                Self::PoiLoadFile,
+                Self::PoiCoords,
+            ]),
+            Self::SetHomeHere => Some(&[Self::SetEkfOriginHere, Self::SetHomeHere1]),
+            Self::GimbalVideo => Some(&[
+                Self::GimbalVideoFullSized,
+                Self::GimbalVideoMini,
+                Self::GimbalVideoPopOut,
+            ]),
             _ => None,
         }
     }
@@ -7797,6 +7713,21 @@ impl MenuKind {
         match self {
             Self::Tabs => &[MenuEntry::Customize, MenuEntry::MultiLine],
             Self::Quick => &[MenuEntry::SetViewCount, MenuEntry::Undock],
+            Self::Map => &[
+                MenuEntry::GoHere,
+                MenuEntry::FlyToHereAlt,
+                MenuEntry::FlyToCoords,
+                MenuEntry::AddPoi,
+                MenuEntry::PointCameraHere,
+                MenuEntry::PointCameraCoords,
+                MenuEntry::TriggerCamera,
+                MenuEntry::FlightPlanner,
+                MenuEntry::SetHomeHere,
+                MenuEntry::TakeOff,
+                MenuEntry::CameraOverlap,
+                MenuEntry::JumpToTag,
+                MenuEntry::GimbalVideo,
+            ],
         }
     }
 
@@ -7806,6 +7737,7 @@ impl MenuKind {
         match self {
             Self::Tabs => "tabs",
             Self::Quick => "quick",
+            Self::Map => "map",
         }
     }
 }
@@ -8020,21 +7952,24 @@ impl MissionPlanner {
     /// the grid, so it is the marker under the last press.
     /// `// C#: GCSViews/FlightData.cs:2632-2638, Utilities/POI.cs:84-100`
     fn poi_delete(&mut self) {
-        let Some((_, press)) = self.fly_data.mouse_down_start else {
-            return;
-        };
-        let drawn: Vec<Option<(f32, f32)>> = {
-            let map = self.map.borrow();
-            self.fly_data
-                .pois
-                .points()
-                .iter()
-                .map(|poi| poi.position().and_then(|at| map.screen_of(at)))
-                .collect()
-        };
-        if let Some(index) = crate::poi::under(&drawn, press) {
+        if let Some(index) = self.fly_data.current_poi.take() {
             self.fly_data.pois.delete(index);
         }
+    }
+
+    /// The POI drawn under `press`, a window point: `CurrentPOIMarker`, as the pointer entering a
+    /// marker sets it. Found when the map's menu opens.
+    /// `// C#: GCSViews/FlightData.cs:5014-5019; Utilities/POI.cs:87-102`
+    pub(crate) fn poi_under_press(&self, press: (f32, f32)) -> Option<usize> {
+        let map = self.map.borrow();
+        let drawn: Vec<Option<(f32, f32)>> = self
+            .fly_data
+            .pois
+            .points()
+            .iter()
+            .map(|poi| poi.position().and_then(|at| map.screen_of(at)))
+            .collect();
+        crate::poi::under(&drawn, press)
     }
 
     /// Coords, once answered: the typed point, then its ID asked for as Add Poi asks.
@@ -8219,11 +8154,72 @@ impl MissionPlanner {
     /// `ToolStripMenuItem`'s click closes it, and the entry does what the C#'s handler does.
     fn fly_menu_entry(&mut self, entry: MenuEntry, window: &mut Window, cx: &mut Context<Self>) {
         self.fly_data.menu = None;
+        self.fly_data.menu_sub = None;
         if let Some(why) = entry.dimmed() {
             self.file_status = Some(format!("{} is not ported: {why}", entry.text()));
             return;
         }
         match entry {
+            // `goHereToolStripMenuItem_Click`: the guided move to where the menu was opened.
+            // `// C#: GCSViews/FlightData.cs:3082-3113`
+            MenuEntry::GoHere => {
+                if let Some((at, _)) = self.fly_data.mouse_down_start {
+                    self.fly_here(at);
+                } else {
+                    self.file_status = Some(format!("Error: {}", strings::BAD_COORDS));
+                }
+            }
+            MenuEntry::FlyToHereAlt => {
+                self.fly_ask_guided_alt();
+                self.fly_focus.prompt.focus(window, cx);
+            }
+            MenuEntry::FlyToCoords => {
+                self.fly_actions.ask(Prompt::FlyToCoords, "");
+                self.fly_focus.prompt.focus(window, cx);
+            }
+            MenuEntry::AddPoi => self.poi_add(window, cx),
+            MenuEntry::PoiDelete => self.poi_delete(),
+            MenuEntry::PoiSaveFile => self.poi_ask_file(Prompt::PoiSave, window, cx),
+            MenuEntry::PoiLoadFile => self.poi_ask_file(Prompt::PoiLoad, window, cx),
+            MenuEntry::PoiCoords => {
+                self.fly_actions.ask(Prompt::PoiCoords, "");
+                self.fly_focus.prompt.focus(window, cx);
+            }
+            MenuEntry::PointCameraHere => self.fly_ask_point_camera_here(window, cx),
+            MenuEntry::PointCameraCoords => {
+                self.fly_actions.ask(Prompt::PointCameraCoords, "");
+                self.fly_focus.prompt.focus(window, cx);
+            }
+            MenuEntry::TriggerCamera => self.fly_trigger_camera(),
+            // `flightPlannerToolStripMenuItem_Click`: `MainV2.View.ShowScreen("FlightPlanner")`,
+            // the FLIGHT PLAN tab here.
+            // `// C#: GCSViews/FlightData.cs:2862-2897`
+            MenuEntry::FlightPlanner => self.choose_screen(crate::Screen::Plan),
+            // The two with drop-downs and no handler of their own: the pointer opens the
+            // drop-down, a click does nothing.
+            MenuEntry::SetHomeHere | MenuEntry::GimbalVideo => {}
+            MenuEntry::SetEkfOriginHere => self.fly_set_ekf_origin(),
+            MenuEntry::SetHomeHere1 => self.fly_ask_set_home(window, cx),
+            // `takeOffToolStripMenuItem_Click`: the Actions grid's TakeOff button, which this
+            // application has as well.
+            // `// C#: GCSViews/FlightData.cs:5290-5315`
+            MenuEntry::TakeOff => {
+                let alt = self
+                    .persisted
+                    .get("takeoff_alt")
+                    .unwrap_or(TAKEOFF_ALT_DEFAULT)
+                    .to_owned();
+                self.fly_actions.ask(Prompt::TakeOff, &alt);
+                self.fly_focus.prompt.focus(window, cx);
+            }
+            MenuEntry::CameraOverlap => {}
+            MenuEntry::JumpToTag => {
+                self.fly_actions.ask(Prompt::JumpToTag, "");
+                self.fly_focus.prompt.focus(window, cx);
+            }
+            MenuEntry::GimbalVideoFullSized => self.gimbal_video_full_sized(window, cx),
+            MenuEntry::GimbalVideoMini => self.gimbal_video_mini(window, cx),
+            MenuEntry::GimbalVideoPopOut => self.gimbal_video_pop_out(window, cx),
             MenuEntry::MultiLine => self.fly_pages.toggle_multiline(),
             // `customForm.ShowDialog()`: the list, over everything, until it is closed.
             MenuEntry::Customize => {
@@ -8403,15 +8399,35 @@ impl MissionPlanner {
 }
 
 /// One row of the strip's or the quick views' menu, as the HUD menu's rows are drawn.
-fn menu_row(entry: MenuEntry, cx: &mut Context<MissionPlanner>) -> AnyElement {
+/// `in_dropdown`: a row of an entry's drop-down, over which the drop-down stays open; over a
+/// row of the menu itself, the drop-down follows the pointer - open for an entry that has one,
+/// closed for one that has not - as WinForms' do.
+fn menu_row(entry: MenuEntry, in_dropdown: bool, cx: &mut Context<MissionPlanner>) -> AnyElement {
     let base = crate::probe::measured(entry.id(), div())
         .id(entry.id())
         .h(px(HUD_MENU_ROW))
         .px_2()
         .flex()
         .items_center()
+        .justify_between()
         .text_xs()
         .child(entry.text())
+        // `DropDownItems`: the arrow WinForms draws on an entry that has them, and the pointer
+        // over the entry opens them beside it; over another entry, they close.
+        .children(
+            entry
+                .dropdown()
+                .map(|_| div().text_size(px(8.0)).child("▶")),
+        )
+        .on_hover(cx.listener(move |this, hovered: &bool, _window, cx| {
+            if *hovered && !in_dropdown {
+                let was = this.fly_data.menu_sub;
+                this.fly_data.menu_sub = entry.dropdown().map(|_| entry);
+                if was != this.fly_data.menu_sub {
+                    cx.notify();
+                }
+            }
+        }))
         .on_click(cx.listener(move |this, _event, window, cx| {
             this.fly_menu_entry(entry, window, cx);
             cx.notify();
@@ -8433,28 +8449,60 @@ fn close_menu(
 ) -> impl Fn(&gpui::MouseDownEvent, &mut Window, &mut gpui::App) + 'static {
     cx.listener(|this, _event: &gpui::MouseDownEvent, _window, cx| {
         this.fly_data.menu = None;
+        this.fly_data.menu_sub = None;
         cx.notify();
     })
 }
 
-/// The strip's or the quick views' context menu, where the right button came up, moved in to fit
-/// the window. A press anywhere else closes it and goes no further.
+/// The strip's, the quick views' or the map's context menu, where the right button came up,
+/// moved in to fit the window; `sub`, an entry's drop-down the pointer has opened, beside that
+/// entry. A press anywhere else closes it and goes no further.
 fn context_menu(
     (kind, (x, y)): (MenuKind, (f32, f32)),
+    sub: Option<MenuEntry>,
     window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
     let size = window.viewport_size();
     let entries = kind.entries();
-    #[allow(clippy::cast_precision_loss)] // two rows
+    #[allow(clippy::cast_precision_loss)] // a dozen rows at most
     let height = 2.0f32.mul_add(HUD_MENU_PADDING, 2.0) + entries.len() as f32 * HUD_MENU_ROW;
     let left = x.min(f32::from(size.width) - HUD_MENU_WIDTH).max(0.0);
     let top = y.min(f32::from(size.height) - height).max(0.0);
-    let rows = entries.iter().map(|entry| menu_row(*entry, cx)).collect();
+    let rows = entries
+        .iter()
+        .map(|entry| menu_row(*entry, false, cx))
+        .collect();
     let id = match kind {
         MenuKind::Tabs => "fly-tabs-menu",
         MenuKind::Quick => "fly-quick-menu",
+        MenuKind::Map => "fly-map-menu",
     };
+    // The drop-down's column starts level with its entry, to the right of the menu, moved in
+    // to fit the window as the menu is.
+    let dropdown = sub
+        .and_then(|parent| Some((parent, parent.dropdown()?)))
+        .and_then(|(parent, items)| {
+            let index = entries.iter().position(|entry| *entry == parent)?;
+            #[allow(clippy::cast_precision_loss)]
+            let sub_top = top + HUD_MENU_PADDING + index as f32 * HUD_MENU_ROW;
+            #[allow(clippy::cast_precision_loss)]
+            let sub_height =
+                2.0f32.mul_add(HUD_MENU_PADDING, 2.0) + items.len() as f32 * HUD_MENU_ROW;
+            let sub_left = (left + HUD_MENU_WIDTH).min(f32::from(size.width) - HUD_MENU_WIDTH);
+            let sub_top = sub_top.min(f32::from(size.height) - sub_height).max(0.0);
+            let sub_rows = items
+                .iter()
+                .map(|entry| menu_row(*entry, true, cx))
+                .collect();
+            Some(
+                div()
+                    .absolute()
+                    .left(px(sub_left))
+                    .top(px(sub_top))
+                    .child(hud_menu_column("fly-map-menu-dropdown", sub_rows)),
+            )
+        });
     gpui::deferred(
         gpui::anchored()
             .position(gpui::point(px(0.0), px(0.0)))
@@ -8478,10 +8526,12 @@ fn context_menu(
                             .left(px(left))
                             .top(px(top))
                             .child(hud_menu_column(id, rows)),
-                    ),
+                    )
+                    .children(dropdown),
             ),
     )
-    .with_priority(2)
+    // Over everything on the screen, the gimbal video included: a context menu is topmost.
+    .with_priority(5)
     .into_any_element()
 }
 
@@ -9907,7 +9957,11 @@ mod tests {
         let first_takeoff = order.iter().position(|m| *m == takeoff).expect("heard");
         assert_eq!(
             order[..first_takeoff],
-            [format!("cmd{}", commands::CMD_DO_SET_MODE), "mode4".to_owned(), "mode4".to_owned()],
+            [
+                format!("cmd{}", commands::CMD_DO_SET_MODE),
+                "mode4".to_owned(),
+                "mode4".to_owned()
+            ],
             "{order:?}"
         );
         let heard_altitude = vehicle.heard.iter().find_map(|m| match m {
@@ -11241,10 +11295,10 @@ mod tests {
             .collect()
     }
 
-    /// The strip's menu and the quick views' menu are the Designer's, in its order, with the
-    /// `.resx`'s words.
+    /// The strip's menu, the quick views' menu and the map's are the Designer's, in its order and
+    /// with its drop-downs, with the `.resx`'s words.
     #[test]
-    fn the_strip_and_quick_view_menus_are_the_designers() {
+    fn the_strip_quick_view_and_map_menus_are_the_designers() {
         let (Some(designer), Some(resx)) = (
             csharp("GCSViews/FlightData.Designer.cs"),
             csharp("GCSViews/FlightData.resx"),
@@ -11257,7 +11311,70 @@ mod tests {
             MenuEntry::MultiLine => "multiLineToolStripMenuItem",
             MenuEntry::SetViewCount => "setViewCountToolStripMenuItem",
             MenuEntry::Undock => "undockToolStripMenuItem",
+            MenuEntry::GoHere => "goHereToolStripMenuItem",
+            MenuEntry::FlyToHereAlt => "flyToHereAltToolStripMenuItem",
+            MenuEntry::FlyToCoords => "flyToCoordsToolStripMenuItem",
+            MenuEntry::AddPoi => "addPoiToolStripMenuItem",
+            MenuEntry::PoiDelete => "deleteToolStripMenuItem",
+            MenuEntry::PoiSaveFile => "saveFileToolStripMenuItem",
+            MenuEntry::PoiLoadFile => "loadFileToolStripMenuItem",
+            MenuEntry::PoiCoords => "poiatcoordsToolStripMenuItem",
+            MenuEntry::PointCameraHere => "pointCameraHereToolStripMenuItem",
+            MenuEntry::PointCameraCoords => "PointCameraCoordsToolStripMenuItem1",
+            MenuEntry::TriggerCamera => "triggerCameraToolStripMenuItem",
+            MenuEntry::FlightPlanner => "flightPlannerToolStripMenuItem",
+            MenuEntry::SetHomeHere => "setHomeHereToolStripMenuItem",
+            MenuEntry::SetEkfOriginHere => "setEKFHomeHereToolStripMenuItem",
+            MenuEntry::SetHomeHere1 => "setHomeHereToolStripMenuItem1",
+            MenuEntry::TakeOff => "takeOffToolStripMenuItem",
+            MenuEntry::CameraOverlap => "onOffCameraOverlapToolStripMenuItem",
+            MenuEntry::JumpToTag => "jumpToTagToolStripMenuItem",
+            MenuEntry::GimbalVideo => "gimbalVideoToolStripMenuItem",
+            MenuEntry::GimbalVideoFullSized => "gimbalVideoFullSizedToolStripMenuItem",
+            MenuEntry::GimbalVideoMini => "gimbalVideoMiniToolStripMenuItem",
+            MenuEntry::GimbalVideoPopOut => "gimbalVideoPopOutToolStripMenuItem",
         };
+        // Each entry with a drop-down has the Designer's items, in its order, with its words.
+        for (parent, header) in [
+            (
+                MenuEntry::AddPoi,
+                "this.addPoiToolStripMenuItem.DropDownItems.AddRange(",
+            ),
+            (
+                MenuEntry::SetHomeHere,
+                "this.setHomeHereToolStripMenuItem.DropDownItems.AddRange(",
+            ),
+            (
+                MenuEntry::GimbalVideo,
+                "this.gimbalVideoToolStripMenuItem.DropDownItems.AddRange(",
+            ),
+        ] {
+            let items = parent.dropdown().expect("a drop-down");
+            assert_eq!(
+                designer_items(&designer, header),
+                items
+                    .iter()
+                    .map(|entry| control(*entry))
+                    .collect::<Vec<_>>()
+            );
+            for entry in items {
+                assert_eq!(
+                    resx_text(&resx, control(*entry)).as_deref(),
+                    Some(entry.text()),
+                    "{entry:?}"
+                );
+            }
+        }
+        for entry in MenuKind::Map.entries() {
+            assert_eq!(
+                entry.dropdown().is_some(),
+                matches!(
+                    entry,
+                    MenuEntry::AddPoi | MenuEntry::SetHomeHere | MenuEntry::GimbalVideo
+                ),
+                "{entry:?}"
+            );
+        }
         for (kind, header) in [
             (
                 MenuKind::Tabs,
@@ -11267,6 +11384,7 @@ mod tests {
                 MenuKind::Quick,
                 "this.contextMenuStripQuickView.Items.AddRange(",
             ),
+            (MenuKind::Map, "this.contextMenuStripMap.Items.AddRange("),
         ] {
             assert_eq!(
                 designer_items(&designer, header),
@@ -11284,6 +11402,29 @@ mod tests {
         }
         assert!(MenuEntry::Undock.dimmed().is_some(), "one window");
         assert!(MenuEntry::SetViewCount.dimmed().is_none());
+        assert!(
+            MenuEntry::CameraOverlap.dimmed().is_some(),
+            "no photo footprints"
+        );
+        assert!(MenuEntry::GoHere.dimmed().is_none());
+        // Every entry has an id of its own.
+        let mut ids: Vec<&str> = MenuKind::Map
+            .entries()
+            .iter()
+            .flat_map(|entry| {
+                std::iter::once(entry.id()).chain(
+                    entry
+                        .dropdown()
+                        .into_iter()
+                        .flatten()
+                        .map(|entry| entry.id()),
+                )
+            })
+            .collect();
+        let count = ids.len();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), count, "an id shared");
     }
 
     /// Set Home Here takes a height from a tile or the sea and refuses anything else; OK sends

@@ -42,8 +42,8 @@ mod raw_params_grid;
 mod scripts_tab;
 // ---- end ConfigRawParams remainder ----
 mod plan;
-mod plotline;
 mod planner_coverage;
+mod plotline;
 // ---- row 96 ----
 mod plugins_ui;
 // ---- end row 96 ----
@@ -1865,65 +1865,94 @@ impl MissionPlanner {
                     .hover(|style| style.text_color(rgb(theme::TEXT)))
                     .child(screen.label())
                     .on_click(cx.listener(move |this, _event, _window, cx| {
-                        // `MainSwitcher.ShowScreen` deactivates the screen showing first, the
-                        // same one again included: the planning screen's `Deactivate` is its
-                        // `config(true)`.
-                        // `// C#: ExtLibs/Controls/MainSwitcher.cs:112-125; GCSViews/FlightPlanner.cs:340-344`
-                        if this.screen == Screen::Plan {
-                            this.persisted
-                                .planner_deactivated(&this.plan, this.altitude_frame);
-                        }
-                        // `FlightData.Deactivate` keeps the map's place for the next start.
-                        // `// C#: GCSViews/FlightData.cs:662-664`
-                        if this.screen == Screen::Fly {
-                            this.persisted
-                                .flight_data_deactivated(this.map.borrow().position_and_zoom());
-                        }
-                        // ---- SITL ----
-                        if this.screen == Screen::Sitl {
-                            this.sitl.deactivate();
-                        }
-                        // ---- end SITL ----
-                        // ---- Display view (row 71) ----
-                        // SETUP and CONFIG are made anew when shown again.
-                        if this.screen == screen {
-                            this.show_screen_again(screen);
-                        }
-                        // ---- end Display view ----
-                        this.screen = screen;
-                        if screen == Screen::Plan {
-                            plan::activate(this);
-                        }
-                        // ---- SITL ----
-                        if screen == Screen::Sitl {
-                            this.sitl_activate();
-                        }
-                        // ---- end SITL ----
-                        // Remembered here rather than at exit: gpui gives no reliable hook for a
-                        // window closing, and a ground station is as likely to be killed as
-                        // closed.
-                        this.remember();
-                        // FLIGHT DATA and FLIGHT PLAN save Mission Planner's config.xml once the
-                        // screen is shown; SETUP and CONFIG do not.
-                        // `// C#: MainV2.cs:1309-1323`
-                        match screen {
-                            Screen::Fly => this.save_config(settings::SaveEvent::FlightData),
-                            Screen::Plan => this.save_config(settings::SaveEvent::FlightPlanner),
-                            Screen::Setup
-                            | Screen::Config
-                            | Screen::Sitl
-                            | Screen::Params
-                            | Screen::Logs => {}
-                        }
+                        this.choose_screen(screen);
                         cx.notify();
                     })),
             );
         }
         strip
     }
+
+    /// A screen chosen, from its tab or from a menu: `MainSwitcher.ShowScreen`.
+    pub(crate) fn choose_screen(&mut self, screen: Screen) {
+        let this = self;
+        {
+            // `MainSwitcher.ShowScreen` deactivates the screen showing first, the
+            // same one again included: the planning screen's `Deactivate` is its
+            // `config(true)`.
+            // `// C#: ExtLibs/Controls/MainSwitcher.cs:112-125; GCSViews/FlightPlanner.cs:340-344`
+            if this.screen == Screen::Plan {
+                this.persisted
+                    .planner_deactivated(&this.plan, this.altitude_frame);
+            }
+            // `FlightData.Deactivate` keeps the map's place for the next start.
+            // `// C#: GCSViews/FlightData.cs:662-664`
+            if this.screen == Screen::Fly {
+                this.persisted
+                    .flight_data_deactivated(this.map.borrow().position_and_zoom());
+            }
+            // ---- SITL ----
+            if this.screen == Screen::Sitl {
+                this.sitl.deactivate();
+            }
+            // ---- end SITL ----
+            // ---- Display view (row 71) ----
+            // SETUP and CONFIG are made anew when shown again.
+            if this.screen == screen {
+                this.show_screen_again(screen);
+            }
+            // ---- end Display view ----
+            this.screen = screen;
+            if screen == Screen::Plan {
+                plan::activate(this);
+            }
+            // ---- SITL ----
+            if screen == Screen::Sitl {
+                this.sitl_activate();
+            }
+            // ---- end SITL ----
+            // Remembered here rather than at exit: gpui gives no reliable hook for a
+            // window closing, and a ground station is as likely to be killed as
+            // closed.
+            this.remember();
+            // FLIGHT DATA and FLIGHT PLAN save Mission Planner's config.xml once the
+            // screen is shown; SETUP and CONFIG do not.
+            // `// C#: MainV2.cs:1309-1323`
+            match screen {
+                Screen::Fly => this.save_config(settings::SaveEvent::FlightData),
+                Screen::Plan => this.save_config(settings::SaveEvent::FlightPlanner),
+                Screen::Setup | Screen::Config | Screen::Sitl | Screen::Params | Screen::Logs => {}
+            }
+        }
+    }
 }
 
 impl MissionPlanner {
+    /// `GMapMarkerBase`'s statics as `MainV2` reads them from the settings - `GetInt32
+    /// ("GMapMarkerBase_length", 500)` and `GetBoolean("GMapMarkerBase_Display*", true)` - which
+    /// the Planner page's check boxes write.
+    /// `// C#: MainV2.cs:3855-3860; GCSViews/ConfigurationView/ConfigPlanner.cs:1080-1108`
+    fn marker_settings(&self) -> mapview::MarkerSettings {
+        let flag = |key: &str| {
+            self.persisted
+                .get(key)
+                .is_none_or(|value| !value.trim().eq_ignore_ascii_case("false"))
+        };
+        let length = self
+            .persisted
+            .get("GMapMarkerBase_length")
+            .and_then(|value| value.trim().parse::<f32>().ok())
+            .unwrap_or(500.0);
+        mapview::MarkerSettings {
+            length,
+            cog: flag("GMapMarkerBase_DisplayCOG"),
+            heading: flag("GMapMarkerBase_DisplayHeading"),
+            nav_bearing: flag("GMapMarkerBase_DisplayNavBearing"),
+            radius: flag("GMapMarkerBase_DisplayRadius"),
+            target: flag("GMapMarkerBase_DisplayTarget"),
+        }
+    }
+
     /// The primary flight display's inputs for this frame.
     ///
     /// The clocks - how long since arming, since the mode changed, since a message was raised -
@@ -2507,24 +2536,30 @@ impl MissionPlanner {
                             window.refresh();
                         }
                     })
-                    // Right-click opens the planning map's menu, `MainMap.ContextMenuStrip`, and
-                    // commands a guided move while flying. Not left-click in either case: left is
-                    // pan, and a gesture that both moves the map and commits something would fire
-                    // on every failed drag - which while flying means the aircraft moves.
-                    // `// C#: GCSViews/FlightPlanner.Designer.cs:875`
+                    // Right-click opens the map's menu: the planning map's
+                    // `MainMap.ContextMenuStrip`, or the flight map's `contextMenuStripMap`,
+                    // whose entries act where it was opened (`MouseDownStart`). Not left-click:
+                    // left is pan, and a gesture that both moves the map and commits something
+                    // would fire on every failed drag.
+                    // `// C#: GCSViews/FlightPlanner.Designer.cs:875; GCSViews/FlightData.Designer.cs:2518-2531, 2975`
                     .on_mouse_up(
                         MouseButton::Right,
                         cx.listener(move |this, event: &gpui::MouseUpEvent, window, cx| {
                             let (x, y) = (f32::from(event.position.x), f32::from(event.position.y));
+                            // The map's, and nobody else's: WinForms gives the button to the
+                            // topmost control, so the gimbal video under the mini map does not
+                            // open its own menu as well (`VideoBox.ContextMenuStrip`), whose
+                            // backdrop would then take the next click.
+                            cx.stop_propagation();
                             if planning {
                                 plan::leave_panel_boxes(this, window, cx);
                                 plan::open_map_menu(this, x, y);
                             } else {
                                 let position = this.map.borrow().position_at(x, y);
                                 this.fly_data.mouse_down_start = position.map(|at| (at, (x, y)));
-                                if let Some(position) = position {
-                                    this.fly_here(position);
-                                }
+                                this.fly_data.current_poi = this.poi_under_press((x, y));
+                                this.fly_data.menu = Some((fly::MenuKind::Map, (x, y)));
+                                this.fly_data.menu_sub = None;
                             }
                             cx.notify();
                         }),
@@ -3297,12 +3332,40 @@ impl Render for MissionPlanner {
         self.tuning.sample(&view);
 
         // Feed the map from the same snapshot the panels read, so the two can never disagree
-        // about where the vehicle is.
+        // about where the vehicle is. The marker is `getMAVMarker`'s for the vehicle's type, its
+        // `Heading` `cs.yaw` - ATTITUDE's yaw as degrees from 0 to 360, not GLOBAL_POSITION_INT's
+        // heading - and the avoidance radii its `AVD_W_DIST_XY` and `AVD_F_DIST_XY`, both or
+        // neither. `// C#: Common.cs:71-215`
         if let Some(state) = view.state.as_ref() {
+            let yaw = quick::value("yaw", state).unwrap_or(0.0);
+            let parameter = |name: &str| {
+                view.parameters
+                    .iter()
+                    .find(|(held, _)| held == name)
+                    .map(|(_, value)| *value)
+            };
+            let (warn, danger) = match (parameter("AVD_W_DIST_XY"), parameter("AVD_F_DIST_XY")) {
+                #[allow(clippy::cast_possible_truncation)] // `(int)` of the parameters' values
+                (Some(w), Some(f)) => ((w as i32) as f32, (f as i32) as f32),
+                _ => (-1.0, -1.0),
+            };
+            #[allow(clippy::cast_possible_truncation)] // `(float)` of the C#'s double
+            let details = mapview::MarkerDetails {
+                kind: mapview::MarkerKind::of(state.vehicle_type),
+                cog: state.gps.course,
+                nav_bearing: state.nav.bearing,
+                target: state.nav.target_bearing,
+                sysid: state.sysid,
+                warn,
+                danger,
+                radius: quick::value("radius", state).unwrap_or(0.0) as f32,
+            };
+            let settings = self.marker_settings();
             let mut map = self.map.borrow_mut();
             if let Some(position) = state.position {
-                map.observe(position, state.heading);
+                map.observe(position, mp_units::Bearing(mp_units::Degrees(yaw)));
             }
+            map.set_marker(details, settings);
         }
 
         // A completed download replaces the plan only if the operator asked for one. Otherwise it

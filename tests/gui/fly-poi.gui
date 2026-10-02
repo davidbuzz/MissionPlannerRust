@@ -4,8 +4,8 @@
 # Coords asks for 'lat;long;alt' or 'lat;long', each read as a float, then for the ID; Delete
 # removes the marker under the press. Every change is saved to poi.txt in the user data
 # directory, which the flight screen reads when it starts - here a scratch one, through
-# XDG_DATA_HOME. The C#'s menu opens on the map; this application's map menu entries are the row
-# under the Actions grid, so the map is pressed first and the entry chosen after.
+# XDG_DATA_HOME. The entries are the map's right-click menu, contextMenuStripMap: Add Poi on it,
+# the other four in its drop-down, each acting where the menu was opened.
 # `GCSViews/FlightData.cs:1007-1010, 2632-2638, 2956-2959, 6011-6038, Utilities/POI.cs`
 #
 # Plays the recorded copter flight so the map has a view to press on, and needs no vehicle. Run
@@ -19,7 +19,7 @@ env XDG_DATA_HOME $WORK
 setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config><maplast_lat>-35.3632621</maplast_lat><maplast_lng>149.1652374</maplast_lng><maplast_zoom>16</maplast_zoom></Config>' > "$WORK/MissionPlannerRust/config.xml"
 screen fly
 window 1600x1200
-budget 17
+budget 19
 
 expect fly.poi.count 0
 expect fly.poi.file ~ MissionPlannerRust/poi.txt
@@ -29,10 +29,9 @@ expect fly.poi.file ~ planner-work-
 # Press the map: that is where Add Poi adds. A press freezes the view, so the point stays put.
 # The map first: a press before its first paint records nothing.
 expect map.ready true
-click map@0.5x0.5
+click map@0.5x0.5:right
 expect fly.mousedown ~ ;
-click fly-tab-actions
-expect fly.tab tabActions
+expect fly.menu map
 click fly-poi-add
 expect fly.prompt Enter ID
 type tower
@@ -41,10 +40,24 @@ click fly-prompt-ok
 expect fly.prompt none
 expect fly.poi.count 1
 expect fly.poi.list ~ tower -35.
+
+# Delete, from the menu opened over it: the POI under the press goes (POI.cs:87-102).
+click fly-poi-0@0.5x0.5:right
+expect fly.mousedown ~ ;
+expect fly.menu map
+hover fly-poi-add
+expect fly.menu.sub fly-poi-add
+click fly-poi-delete
+expect fly.poi.count 0
+expect fly.poi.error none
 # Saved as it was added.
 expect fly.poi.error none
 
 # Coords, with no altitude: two floats, widened - so -35.36 is -35.3600006103516.
+click map@0.5x0.5:right
+expect fly.menu map
+hover fly-poi-add
+expect fly.menu.sub fly-poi-add
 click fly-poi-coords
 expect fly.prompt Please enter the coords 'lat;long;alt' or 'lat;long'
 key minus
@@ -54,17 +67,16 @@ click fly-prompt-ok
 expect fly.prompt Enter ID
 type gate
 click fly-prompt-ok
-expect fly.poi.count 2
+expect fly.poi.count 1
 expect fly.poi.list ~ gate -35.3600006103516;149.160003662109
 
 # Delete takes the marker under the press: pressing where the tower went finds the tower.
-click map@0.5x0.5
-click fly-poi-delete
-expect fly.poi.count 1
-expect fly.poi.list ~ gate
-expect fly.poi.error none
 
 # Coords that are not two or three numbers are Invalid Field, and add nothing.
+click map@0.5x0.5:right
+expect fly.menu map
+hover fly-poi-add
+expect fly.menu.sub fly-poi-add
 click fly-poi-coords
 type nonsense
 click fly-prompt-ok

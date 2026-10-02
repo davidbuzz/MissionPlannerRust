@@ -8,7 +8,7 @@
 # or three parts is Invalid Field. Trigger Camera NOW is setDigicamControl, DO_DIGICAM_CONTROL
 # waited for. Camera Overlap works on the CAMERA_FEEDBACK photo markers, which this map does not
 # draw: it is dimmed and says so. The C#'s menu is on the map; this application's map menu entries
-# are the row under the Actions grid, so the map is pressed first and the entry chosen after.
+# are the map's right-click menu, contextMenuStripMap, each acting where the menu was opened.
 # `GCSViews/FlightData.cs:4457-4546, 5381-5391, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4557-4569`
 #
 # Needs SITL (a copter): tools/gui-test.sh tests/gui/fly-camera.gui -- tcp:127.0.0.1:5760
@@ -16,7 +16,7 @@
 env XDG_DATA_HOME $WORK
 screen fly
 window 1600x1200
-budget 21
+budget 26
 
 # The vehicle first: a click before its first heartbeat is a click the screen may forget
 # (vehicle.connected only says the link is open).
@@ -25,26 +25,23 @@ click fly-tab-actions
 expect fly.tab tabActions
 expect fly.page.overflow 0
 
-# Not pressed yet: the height is asked, then (0, 0) is refused.
-click fly-pointcamerahere
-expect fly.prompt Enter Target Alt (Relative to home)
-expect fly.prompt.value 0
-click fly-prompt-ok
-expect fly.prompt none
-expect fly.sent nothing: Bad Lat/Long
-expect status Error: Bad Lat/Long
 
 # The map first: a press before its first paint records nothing.
 expect map.ready true
-click map@0.5x0.5
+click map@0.5x0.5:right
 expect fly.mousedown ~ ;
+expect fly.menu map
 
+click map@0.5x0.5:right
+expect fly.menu map
 click fly-pointcamerahere
 key ctrl+u
 type high
 click fly-prompt-ok
 expect fly.sent nothing: Bad Alt
 
+click map@0.5x0.5:right
+expect fly.menu map
 click fly-pointcamerahere
 key ctrl+u
 type 20
@@ -55,6 +52,8 @@ expect fly.sent ~ z=20 frame=3
 expect fly.ack ~ MAV_CMD_DO_SET_ROI:
 
 # Three parts: the height above sea level, each part a float.
+click map@0.5x0.5:right
+expect fly.menu map
 click fly-pointcameracoords
 expect fly.prompt Please enter the coords 'lat;long;alt(abs)' or 'lat;long'
 key minus
@@ -64,12 +63,16 @@ click fly-prompt-ok
 expect fly.sent COMMAND_INT MAV_CMD_DO_SET_ROI 0,0,0,0 x=-353600006 y=1491600036 z=600 frame=0
 
 # Two parts: the terrain's height, which with no tile in the data directory is 0.
+click map@0.5x0.5:right
+expect fly.menu map
 click fly-pointcameracoords
 key minus
 type 35.36;149.16
 click fly-prompt-ok
 expect fly.sent COMMAND_INT MAV_CMD_DO_SET_ROI 0,0,0,0 x=-353600006 y=1491600036 z=0 frame=0
 
+click map@0.5x0.5:right
+expect fly.menu map
 click fly-pointcameracoords
 type nonsense
 click fly-prompt-ok
@@ -77,10 +80,14 @@ expect status Error: Invalid Field
 expect fly.sent nothing: Invalid Field
 
 # Trigger Camera NOW: DO_DIGICAM_CONTROL with its shot in the fifth parameter, waited for.
+click map@0.5x0.5:right
+expect fly.menu map
 click fly-triggercamera
 expect fly.sent COMMAND_LONG MAV_CMD_DO_DIGICAM_CONTROL 0,0,0,0,1,0,0
 expect fly.ack ~ MAV_CMD_DO_DIGICAM_CONTROL:
 
 # Camera Overlap: dimmed, and a click says why.
+click map@0.5x0.5:right
+expect fly.menu map
 click fly-cameraoverlap
 expect status ~ Camera Overlap is not ported

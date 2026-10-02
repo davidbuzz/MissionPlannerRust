@@ -291,9 +291,25 @@ pub fn layer(
     pois: &Pois,
     map: std::rc::Rc<std::cell::RefCell<crate::mapview::MapViewport>>,
 ) -> impl gpui::IntoElement {
-    use gpui::Styled as _;
+    use gpui::{ParentElement as _, Styled as _};
     let points: Vec<LatLon> = pois.points().iter().filter_map(Poi::position).collect();
-    gpui::canvas(
+    // Each marker's rectangle, `fly-poi-<index>`, measured for the harness: the pointer over it is
+    // the pointer over the C#'s marker (`OnMarkerEnter`'s `CurrentPOIMarker`), which the map's
+    // menu acts on. Where the map drew the point last frame, in the layer's own coordinates;
+    // nothing listens on them.
+    let boxes: Vec<(usize, f32, f32)> = {
+        let map = map.borrow();
+        points
+            .iter()
+            .enumerate()
+            .filter_map(|(index, at)| {
+                let (x, y) = map.screen_of(*at)?;
+                let (x, y) = map.to_viewport(x, y);
+                Some((index, x, y))
+            })
+            .collect()
+    };
+    let painter = gpui::canvas(
         |_bounds, _window, _cx| (),
         move |bounds, (), window, _cx| {
             let spots: Vec<(f32, f32)> = {
@@ -306,7 +322,20 @@ pub fn layer(
         },
     )
     .absolute()
-    .size_full()
+    .size_full();
+    gpui::div()
+        .absolute()
+        .size_full()
+        .child(painter)
+        .children(boxes.into_iter().map(|(index, x, y)| {
+            crate::probe::measured(format!("fly-poi-{index}"), gpui::div())
+                .absolute()
+                .left(px(x - MARKER / 2.0))
+                .top(px(y - MARKER))
+                .w(px(MARKER))
+                .h(px(MARKER))
+                .child(gpui::div().size_full())
+        }))
 }
 
 /// Paints the markers: a red dot on a stem whose foot is the point, as `red_dot` pictures it.

@@ -10,7 +10,7 @@
 
 screen fly
 window 1600x1200
-budget 9
+budget 10
 
 # The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as
 # tabControlactions.SelectedIndex = 0 has it. `GCSViews/FlightData.Designer.cs:595-611`
@@ -24,6 +24,8 @@ expect fly.tab tabActions
 click Stabilize
 expect vehicle.mode Stabilize
 
+click map@0.5x0.5:right
+expect fly.menu map
 click fly-flytocoords
 expect fly.prompt Please enter the coords 'lat;long;alt' or 'lat;long'
 # The minus as a key: `xdotool type -35...` would read the text as an option.
@@ -45,6 +47,8 @@ expect vehicle.mode Guided
 expect fly.guided.frame 3
 
 # Cancelling sends nothing: the empty text is Invalid Field, as in the C#.
+click map@0.5x0.5:right
+expect fly.menu map
 click fly-flytocoords
 click fly-prompt-cancel
 expect fly.sent nothing: Invalid Field
