@@ -35,12 +35,12 @@
 //!   connect and send the reboot command" on the status line (a box in the C#).
 //!
 //! The flows run on a thread with their questions as boxes over the page, as the manifest page's
-//! do (`firmware.rs`), and stop at the step that would write to a board
-//! (`mp_firmware::flow::Stop`). Not here, and why:
+//! do (`firmware.rs`). `UploadFlash` is the manifest page's: a px4-family board is rebooted into
+//! its bootloader and written through `mp_firmware::flow::upload_px4` over the serial host - not
+//! while `MP_FIRMWARE_DEVICE` stands in for the machine, when the flow stops before the reboot
+//! and says so - and the uploads this application does not make (STK500, VRBRAIN, Parrot, Solo)
+//! stop at their step (`mp_firmware::flow::Stop`) and say it is not ported. Not here, and why:
 //!
-//! * the upload itself - `UploadFlash`'s reboot into the bootloader and the write - which is not
-//!   ported for this page's flows: each says the step it stopped at, and the Upload button
-//!   beneath is dimmed;
 //! * `Ctrl+Q` (the trunk list) and `Ctrl+P` (the first `px4` entry's upload), `ProcessCmdKey`
 //!   (`:108-129`): the C# sees them only while a control of the page has the keyboard, and
 //!   nothing on this page takes it;
@@ -64,8 +64,8 @@ use mp_firmware::legacy::{self, Picture as Slot, Software};
 
 use super::firmware::{
     BoxIds, FIRMWARE_FILE_DIRECTORY, Machine, PathBox, Progress, Waiting, Worker, line, link_label,
-    message_box, path_box, progress_bar, question_box, reached_lines, record_reached,
-    remember_folder, upload_row,
+    message_box, path_box, progress_bar, question_box, reached_lines, record_reached_saying,
+    remember_folder, stop_text,
 };
 use super::force_bootloader::{ForceBootloader, Page as ForcePage};
 use super::servo_output::{Combo, dropdown};
@@ -629,14 +629,22 @@ impl FirmwareLegacy {
         let machine = Machine::here(settings);
         self.worker = Worker::start("mp-firmware-legacy", move |dialogue| {
             machine.run(dialogue, |cx, machine| {
-                flow::find_firmware(
+                let reached = flow::find_firmware(
                     cx,
                     &machine.comport,
                     &entry,
                     &history,
                     &machine.devices,
                     &machine.rows,
-                )
+                );
+                // `UploadFlash`: a px4-family board written, as the manifest page writes it.
+                // `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:460-463; Utilities/Firmware.cs:591-750`
+                if machine.flash {
+                    let mut host = machine.host();
+                    flow::flash_if_stopped(cx, &mut host, reached)
+                } else {
+                    reached
+                }
             })
         });
     }
@@ -779,7 +787,21 @@ impl FirmwareLegacy {
         let machine = Machine::here(settings);
         self.worker = Worker::start("mp-firmware-legacy-custom", move |dialogue| {
             machine.run(dialogue, |cx, machine| {
-                flow::custom_legacy(cx, &machine.comport, &file, &machine.devices, &machine.rows)
+                let reached = flow::custom_legacy(
+                    cx,
+                    &machine.comport,
+                    &file,
+                    &machine.devices,
+                    &machine.rows,
+                );
+                // `UploadFlash(comport, file, board)`, as a vehicle's click has it.
+                // `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:590-593`
+                if machine.flash {
+                    let mut host = machine.host();
+                    flow::flash_if_stopped(cx, &mut host, reached)
+                } else {
+                    reached
+                }
             })
         });
     }
@@ -929,12 +951,13 @@ pub fn record_facts(page: &FirmwareLegacy, settings: &Persisted, listed: bool) {
         page.opened.unwrap_or("none"),
     );
     record("config.firmware_legacy.force", page.force.fact());
-    record_reached(
+    // A stop before the reboot is the device door's, said as the manifest page says it.
+    record_reached_saying(
         "config.firmware_legacy",
         page.reached.as_ref(),
         page.worker.is_some(),
+        stop_text,
     );
-    record("config.firmware_legacy.upload", "disabled");
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1102,12 +1125,7 @@ pub fn page(firmware: &FirmwareLegacy, cx: &mut Context<MissionPlanner>) -> AnyE
     }
     panel(
         "install firmware legacy",
-        div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(body)
-            .child(report.child(upload_row("fwl-upload"))),
+        div().flex().flex_col().gap_2().child(body).child(report),
     )
     .into_any_element()
 }

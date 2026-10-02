@@ -278,10 +278,11 @@ pub const PANELS: &[Panel] = &[
         //     list, chooses the entry's URL for it (CubeBlack, ChibiOS), downloads firmware.hex
         //     and reads it; Pick previous firmware from FirmwareHistory.txt, Beta firmwares, Load
         //     custom firmware, and the three links; Force Bootloader over the window's link, the
-        //     manifest page's handler shared (config/force_bootloader.rs); each flow stops where
-        //     it would write to a board - this page's upload is not ported; not Ctrl+Q or Ctrl+P,
-        //     nor the bootloader probe on a device's arrival; the pictures are the C#'s images
-        //     (crate::pictures)",
+        //     manifest page's handler shared (config/force_bootloader.rs); UploadFlash the
+        //     manifest page's too - a px4-family board rebooted into its bootloader and written
+        //     through mp_firmware::flow::upload_px4, the other boards' uploads stopping as not
+        //     ported; not Ctrl+Q or Ctrl+P, nor the bootloader probe on a device's arrival; the
+        //     pictures are the C#'s images (crate::pictures)",
         ),
     ),
     panel(

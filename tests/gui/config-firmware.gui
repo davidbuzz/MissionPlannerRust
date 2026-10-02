@@ -31,7 +31,7 @@ setup mkdir -p "$WORK/web/firmware.ardupilot.org/Copter/stable/CubeOrange" && cp
 
 screen setup
 window 1600x1200
-budget 21
+budget 19
 
 expect config.firmware.active false
 # Install Firmware is the first entry of InitialSetup's list, outside any heading; disconnected,

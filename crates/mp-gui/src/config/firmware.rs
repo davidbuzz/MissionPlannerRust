@@ -88,6 +88,7 @@ pub const DEVICE_ENV: &str = "MP_FIRMWARE_DEVICE";
 pub const PORT_ENV: &str = "MP_FIRMWARE_PORT";
 
 /// What the legacy page's Upload button says for itself: its uploads are not ported.
+#[cfg(test)]
 pub const NOT_PORTED: &str = flow::NOT_PORTED;
 
 /// Why the manifest page's px4 upload stops before the board while [`DEVICE_ENV`] names the
@@ -2005,11 +2006,6 @@ fn bl_link(url: &str) -> Option<Telemetry> {
         .map(|link| Telemetry::over(link, url))
 }
 
-/// A flow's outcome as facts, under `prefix`: a stop said as [`flow::Stop::text`] says it.
-pub fn record_reached(prefix: &str, reached: Option<&Reached>, running: bool) {
-    record_reached_saying(prefix, reached, running, flow::Stop::text);
-}
-
 /// What the Install Firmware pages say of a flow's stop: the px4 upload stops before the board
 /// only while [`DEVICE_ENV`] names the device ([`NO_BOARD_WRITTEN`]); the other stops are the
 /// steps that are not ported.
@@ -2021,8 +2017,9 @@ pub fn stop_text(stop: &flow::Stop) -> String {
     }
 }
 
-/// [`record_reached`], a stop said by `say`.
-fn record_reached_saying(
+/// What a page says of its flow, for a script: `<prefix>.flow`, the board, the download, the file
+/// read and where the flow stopped - a stop said by `say`.
+pub fn record_reached_saying(
     prefix: &str,
     reached: Option<&Reached>,
     running: bool,
@@ -2588,23 +2585,6 @@ fn choice(firmware: &InstallFirmware) -> impl IntoElement {
         column = column.children(reached_lines_saying(reached, stop_text));
     }
     column
-}
-
-/// The legacy page's Upload button, disabled, and why. The manifest page has none: no such
-/// control is in `ConfigFirmwareManifest.Designer.cs`.
-pub fn upload_row(id: &'static str) -> Div {
-    div()
-        .flex()
-        .items_center()
-        .gap_2()
-        .pt_1()
-        .child(action(id, "Upload", theme::ACCENT, false, |_, _, _| {}))
-        .child(
-            div()
-                .text_xs()
-                .text_color(rgb(theme::DIM))
-                .child(NOT_PORTED),
-        )
 }
 
 /// `ConfigFirmwareDisabled`: the explanation, and Bootloader Update - its two questions, then
@@ -3830,7 +3810,11 @@ mod tests {
         page.worker = None;
         page.probe(vec!["/dev/ttyACM0".to_owned()], counting(&opened));
         std::thread::sleep(Duration::from_millis(100));
-        assert_eq!(opened.load(Ordering::SeqCst), 0, "probed around a running flash");
+        assert_eq!(
+            opened.load(Ordering::SeqCst),
+            0,
+            "probed around a running flash"
+        );
         drop(left);
         page.probe(vec!["/dev/ttyACM0".to_owned()], counting(&opened));
         let until = Instant::now() + Duration::from_secs(5);
@@ -4228,7 +4212,9 @@ mod reboot_to_bootloader_tests {
         };
         let reached = std::thread::scope(|scope| {
             vehicle.send_from(adsb, &receiver);
-            until("the receiver to be seen", || link.vehicles().contains(&adsb));
+            until("the receiver to be seen", || {
+                link.vehicles().contains(&adsb)
+            });
             let task = scope.spawn(|| reboot_to_bootloader(&link, Instant::now(), waits));
             std::thread::sleep(Duration::from_millis(200));
             vehicle.send_from(adsb, &receiver);
@@ -4237,7 +4223,9 @@ mod reboot_to_bootloader_tests {
             assert_eq!(reboots(&vehicle), [], "sent on the receiver's heartbeats");
             // The autopilot heard, then `doReboot`'s next heartbeat.
             vehicle.heartbeat();
-            until("the autopilot to be seen", || link.vehicles().contains(&VEHICLE));
+            until("the autopilot to be seen", || {
+                link.vehicles().contains(&VEHICLE)
+            });
             std::thread::sleep(Duration::from_millis(100));
             vehicle.heartbeat();
             let reached = task.join().expect("the task");
@@ -4581,7 +4569,10 @@ mod manifest_link_tests {
         }
         assert!(page.bl.is_none());
         let said = page.take_status().expect("something said");
-        assert_eq!(said, "link failed: the link closed", "no error of its own to give");
+        assert_eq!(
+            said, "link failed: the link closed",
+            "no error of its own to give"
+        );
     }
 
     /// The command unanswered through its wait and its one retry: `doCommand`'s timeout, said

@@ -59,11 +59,12 @@ expect config.firmware_legacy.label.tracker Antenna Tracker
 expect config.firmware_legacy.tag.quad ArduCopter V4.7.1 Quad
 expect config.firmware_legacy.history hidden
 expect config.firmware_legacy.history.label true
-expect config.firmware_legacy.upload disabled
 
 # The Quad: the question, then the flow on its thread. The device rules name a ChibiOS bootloader
 # called CubeOrange; its URL is the entry's fmuv2 one with the board put in; the file is
-# downloaded and read (board 140, a 3,000-byte image); and the flow stops before the reboot.
+# downloaded and read (board 140, a 3,000-byte image); and the flow stops before the reboot, as
+# every px4 upload does while MP_FIRMWARE_DEVICE stands in for the machine - with a board it would
+# go on through upload_px4, as the manifest page's does.
 click fwl-quad
 expect config.firmware_legacy.question Are you sure you want to upload ArduCopter V4.7.1 Quad?
 click fwl-question-yes
@@ -78,7 +79,7 @@ expect config.firmware_legacy.apj.board_id 140
 expect config.firmware_legacy.apj.image 3000
 expect config.firmware_legacy.progress 100
 expect config.firmware_legacy.status Reading Hex File
-expect config.firmware_legacy.stopped the next step would reboot the board into its bootloader and upload the image: not ported to this application
+expect config.firmware_legacy.stopped the next step would reboot the board into its bootloader and upload the image: no board is written while MP_FIRMWARE_DEVICE names the device
 
 # Load custom firmware: the box opens in the folder config.xml names; an .apj is a px4v3, read, and
 # stopped at the reboot; its folder is remembered.
