@@ -4573,6 +4573,7 @@ dependencies = [
  "regex",
  "roxmltree 0.20.0",
  "serde_json",
+ "sha1_smol",
  "ttf-parser",
  "unic-langid",
 ]

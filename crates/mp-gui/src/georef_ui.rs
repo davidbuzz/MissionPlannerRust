@@ -23,13 +23,15 @@
 //!   The markers are painted over [`crate::mapview`]'s map through its public
 //!   [`MapViewport::screen_of`], as the log browser's pin is; the map draws the imagery.
 //!
+//! Location Kml (`BUT_networklinkgeoref`) opens `m3u/GeoRefnetworklink.kml`, a network link to the
+//! built-in web server (`crate::http_server`), which serves the KML `httpGeoRefKML` hands it and
+//! the photos from the folder; the file is Mission Planner's, beside the program, or written under
+//! the data directory when it is not there.
+//!
 //! Not ported, each for its reason: the photo `pictureBox1` shows when its pin is clicked (drawn
-//! dimmed; the click is taken, and the photo's path is what it would show); Location Kml
-//! (`BUT_networklinkgeoref`, drawn dimmed), which opens `m3u/GeoRefnetworklink.kml`, a network
-//! link to Mission Planner's built-in web server (`Utilities/httpserver.cs`), which this
-//! application does not have - the KML the server would serve is kept, as `httpGeoRefKML` keeps
-//! it; and the "Report this Error???" question of the box an uncaught exception shows, which sends
-//! a report to Mission Planner's server.
+//! dimmed; the click is taken, and the photo's path is what it would show); and the "Report this
+//! Error???" question of the box an uncaught exception shows, which sends a report to Mission
+//! Planner's server.
 //! `// C#: GeoRef/georefimage.cs, GeoRef/Georefimage.Designer.cs, GeoRef/georefimage.resx`
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
@@ -218,13 +220,11 @@ pub const WIRINGS: &[(&str, &str, &str, &str)] = &[
         "BUT_browselog_Click",
         "browse_log",
     ),
-    // Not ported: the network link reads the built-in web server, which this application does
-    // not have. The button is drawn dimmed.
     (
         "BUT_networklinkgeoref",
         "Click",
         "BUT_networklinkgeoref_Click",
-        "",
+        "georef_network_link",
     ),
     (
         "RDIO_TimeOffset",
@@ -983,6 +983,8 @@ pub struct Form {
     files: Option<Vec<(String, u64)>>,
     /// `httpserver.georefkml`: the KML `httpGeoRefKML` is handed.
     kml: Option<String>,
+    /// The network link file Location Kml last opened.
+    network_link: Option<String>,
     /// The files in the `geotagged` folder after the last GeoTag Images.
     geotagged: Option<usize>,
     /// `myGMAP1`.
@@ -1044,6 +1046,7 @@ impl Form {
             offset: None,
             files: None,
             kml: None,
+            network_link: None,
             geotagged: None,
             map: Rc::new(RefCell::new(MapViewport::new(0, 0))),
             contents: Rc::new(MapContents::default()),
@@ -1135,7 +1138,7 @@ impl Form {
             "txt_basealt" => self.base_alt_enabled,
             "BUT_doit" => self.doit_enabled,
             "BUT_Geotagimages" => self.geotag_enabled,
-            "BUT_networklinkgeoref" | "pictureBox1" => false,
+            "pictureBox1" => false,
             _ => true,
         }
     }
@@ -1813,6 +1816,19 @@ pub struct GeorefUi {
 }
 
 impl GeorefUi {
+    /// `httpserver.georefkml` and `georefimagepath`, for the server: the KML the last Pre-process
+    /// handed `httpGeoRefKML`, and the photo folder with its separator.
+    /// `// C#: GeoRef/georefimage.cs:252-256`
+    #[must_use]
+    pub fn http_kml(&self) -> Option<(&str, String)> {
+        let form = self.form.as_ref()?;
+        let kml = form.kml.as_deref()?;
+        Some((
+            kml,
+            format!("{}{}", form.text(Field::JpgDir), std::path::MAIN_SEPARATOR),
+        ))
+    }
+
     /// Closed.
     pub fn new(cx: &mut Context<MissionPlanner>) -> Self {
         Self {
@@ -2711,9 +2727,13 @@ pub fn window(
             cx,
         ))
         // Location Kml: `Process.Start` of `m3u/GeoRefnetworklink.kml`, a network link to the
-        // built-in web server, which is not ported; drawn dimmed, it takes no click.
-        // `// C#: GeoRef/georefimage.cs:321-325`
-        .child(button(form, "BUT_networklinkgeoref", |_this| {}, cx))
+        // built-in web server. `// C#: GeoRef/georefimage.cs:321-325`
+        .child(button(
+            form,
+            "BUT_networklinkgeoref",
+            MissionPlanner::georef_network_link,
+            cx,
+        ))
         .child(button(
             form,
             "BUT_Geotagimages",
@@ -2788,6 +2808,48 @@ const ENABLED_FACTS: [&str; 7] = [
     "BUT_networklinkgeoref",
 ];
 
+impl MissionPlanner {
+    /// `BUT_networklinkgeoref_Click`: `Process.Start` of `m3u/GeoRefnetworklink.kml` beside the
+    /// program - Mission Planner's network link to `/georefnetwork.kml` - or, when it is not
+    /// beside this program, the same file written under the data directory; what the desktop
+    /// could not open goes on the status line.
+    /// `// C#: GeoRef/georefimage.cs:321-325; m3u/GeoRefnetworklink.kml`
+    pub(crate) fn georef_network_link(&mut self) {
+        let beside = crate::help::install_dir()
+            .join("m3u")
+            .join("GeoRefnetworklink.kml");
+        let path = if beside.is_file() {
+            beside
+        } else {
+            let Some(data) = mp_settings::data_directory() else {
+                self.file_status =
+                    Some("no data directory to write the network link to".to_owned());
+                return;
+            };
+            let written = data.join("m3u").join("GeoRefnetworklink.kml");
+            if let Some(dir) = written.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            if let Err(why) = std::fs::write(&written, crate::http_server::GEOREF_NETWORK_LINK_KML)
+            {
+                self.file_status = Some(format!("could not write {}: {why}", written.display()));
+                return;
+            }
+            written
+        };
+        match crate::scripts_tab::open_with_shell(&path) {
+            Ok(()) => {
+                if let Some(form) = self.georef.form.as_mut() {
+                    form.network_link = Some(path.display().to_string());
+                }
+            }
+            Err(why) => {
+                self.file_status = Some(format!("could not open {}: {why}", path.display()));
+            }
+        }
+    }
+}
+
 /// Facts a UI test asserts on: whether the form shows, every control as it reads and whether it
 /// is enabled, the text box and its lines, the run under way and the last, the offset, the
 /// report files by name and size, the geotagged copies, what `GeoRefImageBase` holds, what the
@@ -2850,6 +2912,10 @@ pub fn record_facts(georef: &GeorefUi) {
         ),
     );
     record("fly.georef.kml", form.kml.as_ref().map_or(0, String::len));
+    record(
+        "fly.georef.networklink",
+        form.network_link.as_deref().unwrap_or("none"),
+    );
     record(
         "fly.georef.geotagged",
         form.geotagged
@@ -3139,12 +3205,7 @@ mod tests {
         ours.sort();
         assert_eq!(wired, ours);
         let source = include_str!("georef_ui.rs");
-        for (control, _, _, handler) in WIRINGS {
-            if handler.is_empty() {
-                assert_eq!(*control, "BUT_networklinkgeoref");
-                assert!(!form.enabled(control));
-                continue;
-            }
+        for (_, _, _, handler) in WIRINGS {
             assert!(source.contains(&format!("fn {handler}(")), "{handler}");
         }
     }
@@ -3684,6 +3745,7 @@ mod tests {
             "prompt",
             "prompt.text",
             "editing",
+            "networklink",
         ]
         .map(ToOwned::to_owned)
         .to_vec();

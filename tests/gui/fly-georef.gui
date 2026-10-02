@@ -20,6 +20,7 @@
 # Needs no link: tools/gui-test.sh tests/gui/fly-georef.gui
 
 env MP_LOG_DIR $WORK/logs
+env MP_OPEN_WITH_SHELL_LOG $WORK/opened.txt
 env XDG_DATA_HOME $WORK
 setup mkdir -p $WORK/logs && cp testdata/georef/camera.bin testdata/georef/photos/*.jpg $WORK/logs/
 setup mkdir -p "$WORK/MissionPlannerRust/srtm" && python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' testdata/srtm/S28E153.hgt.zip "$WORK/MissionPlannerRust/srtm"
@@ -61,7 +62,7 @@ expect fly.georef.PANEL_TIME_OFFSET.enabled False
 expect fly.georef.PANEL_SHUTTER_LAG.enabled True
 expect fly.georef.txt_basealt.enabled False
 expect fly.georef.BUT_Geotagimages.enabled False
-expect fly.georef.BUT_networklinkgeoref.enabled False
+expect fly.georef.BUT_networklinkgeoref.enabled True
 expect fly.georef.num_camerarotation 90
 expect fly.georef.num_hfov 200
 expect fly.georef.num_vfov 130
@@ -130,6 +131,13 @@ expect fly.georef.BUT_Geotagimages.enabled True
 expect fly.georef.map.route 617
 expect fly.georef.map.cams 24
 expect fly.georef.map.photos 24
+
+# Location Kml: the network link to the built-in server's georefnetwork.kml opened with the desktop
+# (the harness's door writes what would have opened), the file written under the data directory
+# as the program has none beside it.
+expect fly.georef.networklink none
+click georef-BUT_networklinkgeoref
+expect fly.georef.networklink ~ GeoRefnetworklink.kml
 
 # GeoTag Images: a tagged copy of each matched photo in the folder's geotagged folder.
 click georef-BUT_Geotagimages

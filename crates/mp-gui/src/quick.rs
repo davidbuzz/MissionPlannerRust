@@ -679,6 +679,32 @@ fn dist_to_home(s: &VehicleState) -> f64 {
 /// `Type.GetProperties` does not return. `// C#: ExtLibs/ArduPilot/CurrentState.cs:119`
 const FIELDS_NOT_PROPERTIES: &[&str] = &["hilch5", "hilch6", "hilch7", "hilch8", "lastautowp"];
 
+/// `JsonConvert.SerializeObject(MAV.cs)` as far as this application holds `CurrentState`: every
+/// numeric property with a reader, by its C# name, in the readers' order - the HTTP server's
+/// websocket sends it five times a second. A value that is not a number is JSON's `null`, where
+/// Json.NET writes `NaN`.
+#[must_use]
+pub(crate) fn current_state_json(state: &VehicleState) -> String {
+    let mut out = String::with_capacity(8 * 1024);
+    out.push('{');
+    for (index, (name, read)) in READERS.iter().chain(DERIVED).enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        let value = read(state);
+        out.push('"');
+        out.push_str(name);
+        out.push_str("\":");
+        if value.is_finite() {
+            out.push_str(&value.to_string());
+        } else {
+            out.push_str("null");
+        }
+    }
+    out.push('}');
+    out
+}
+
 /// What a view bound to `name` shows now, or `None` for a property this application does not
 /// hold.
 #[must_use]

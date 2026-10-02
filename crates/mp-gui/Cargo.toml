@@ -56,6 +56,8 @@ mp-georef.workspace = true
 # The Full Parameter List's Load Presaved: GitHubContent's JSON answers, and the file's base64
 # content inside one. Both already compiled for mp-firmware.
 base64.workspace = true
+# The built-in HTTP server's WebSocket handshake (Utilities/httpserver.cs), SHA-1 of the key.
+sha1_smol.workspace = true
 # The signing keys' store, `authkeys.xml`, encrypted as `ExtLibs/Utilities/Crypto.cs` encrypts it
 # (config/auth_keys.rs).
 aes.workspace = true

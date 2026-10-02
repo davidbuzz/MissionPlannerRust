@@ -4433,7 +4433,7 @@ pub fn send_routed(
 }
 
 /// `setGuidedModeWP` for the vehicle being flown, as a press's sends.
-fn guided_sends(
+pub(crate) fn guided_sends(
     actions: &mut Actions,
     target: VehicleId,
     view: &TelemetryView,

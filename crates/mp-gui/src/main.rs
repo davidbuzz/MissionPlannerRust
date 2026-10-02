@@ -27,6 +27,7 @@ mod georef_ui;
 mod glyph_text;
 // ---- end Geo Reference ----
 mod help;
+mod http_server;
 mod hud;
 mod i18n;
 mod inject_map;
@@ -323,6 +324,8 @@ struct MissionPlanner {
     plan_menus: plan::PlanMenus,
     /// Inject Custom Map's run, while one is on.
     inject_map: Option<inject_map::Injection>,
+    /// The built-in HTTP server, `MainV2`'s `httpthread`.
+    http: http_server::Host,
     /// What View KML's last click did: the URL opened, or why it was not.
     kml_link: Option<Result<(), String>>,
     /// Focus for those dialogs, which take the keyboard while they show.
@@ -775,6 +778,7 @@ impl MissionPlanner {
             plan_name_focus: cx.focus_handle(),
             plan_menus: plan::PlanMenus::default(),
             inject_map: None,
+            http: http_server::Host::start(),
             kml_link: None,
             plan_prompt_focus: cx.focus_handle(),
             survey: survey_ui::SurveyUi::new(cx),
@@ -958,6 +962,8 @@ impl MissionPlanner {
         }
         self.persisted.observe_quick_views(&self.fly_data.quick);
         self.save_config(settings::SaveEvent::Close);
+        // "closing httpthread": `httpserver.Stop()`. `// C#: MainV2.cs:2104-2108`
+        self.http.server.stop();
     }
 
     /// The directory missions are read from and written to.
@@ -3032,6 +3038,8 @@ impl Render for MissionPlanner {
         self.fly_tick(&view, window);
         // The RAW Sensor window's 10 ms sample.
         self.raw_sensor_tick(&view);
+        // The built-in HTTP server's clients: their commands, the packet tap, the snapshot.
+        self.http_tick(&view);
         // ---- row 96 ----
         // The plugins' snapshot, and what they did and asked since the last frame.
         self.plugins_tick(&view, window, cx);
@@ -3327,6 +3335,7 @@ impl Render for MissionPlanner {
             }
             plan::record_facts(&self.plan, &self.plan_menus);
             inject_map::record_facts(self.inject_map.as_ref());
+            self.http.server.record_facts();
             facts::record(
                 "plan.kml.link",
                 match &self.kml_link {

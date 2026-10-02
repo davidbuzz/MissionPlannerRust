@@ -1,0 +1,26 @@
+# The built-in HTTP server, Utilities/httpserver.cs, ported in crates/mp-gui/src/http_server.rs:
+# started with the window on 56781 (here MP_HTTP_PORT's 56999, the harness's door), it answers the
+# index, network.kml, location.kml, wps.kml, /mavlink/'s JSON, 404 for /command_long, and a
+# loopback client's /guided?lat=&lng=&alt= as setGuidedModeWP - the guided waypoint sent to the
+# vehicle (SET_POSITION_TARGET_GLOBAL_INT for a copter, after the mode change).
+#
+# tests/gui/http-client.py asks those seven in the background once the port answers; the planner's
+# facts count them and name the last. Plays the recorded copter flight for a vehicle to send to.
+# Run from the repository root:
+#   tools/gui-test.sh tests/gui/http-server.gui -- file:testdata/mavlink/autotest.tlog
+
+env MP_HTTP_PORT 56999
+setup python3 tests/gui/http-client.py --port 56999 --work $WORK
+
+screen fly
+window 1600x1200
+budget 3
+
+expect http.listening 56999
+expect http.failure none
+expect vehicle.count >= 1
+
+# The client's seven requests, the guided one last; the waypoint on the wire.
+expect http.requests >= 7
+expect http.last ~ /guided?lat=-35.363&lng=149.165&alt=30
+expect fly.sent ~ SET_POSITION_TARGET_GLOBAL_INT
